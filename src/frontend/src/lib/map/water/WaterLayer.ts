@@ -3,6 +3,7 @@
 // container rather than on the stage the way fog's two quads do (waterShader.ts
 // explains why at length).
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, UniformGroup } from 'pixi.js';
+import { noiseLatticeTexture } from '../shaderNoise';
 import { FOAM_REACH_TILES, NEAR_SPAN_TILES, groundSquash, type WaterMask } from './waterMask';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
 import { WATER_FRAGMENT, WATER_VERTEX } from './waterShader';
@@ -479,6 +480,7 @@ export class WaterLayer {
           uWaterDry: placeholderDryTexture().source,
           uRiverFlow: placeholderRiverFlowTexture().source,
           uRiverPsi: placeholderRiverFlowTexture().source,
+          uNoiseLattice: noiseLatticeTexture().source,
         },
       }),
     });

@@ -94,6 +94,29 @@ describe('explored hexes stay within exploredRadius of their settlement', () => 
     }
   });
 
+  it('keeps holding after the settlement loses its sight: explored ground is remembered, not forgotten', () => {
+    const model = new WorldModel(20260824);
+    const at = model.findLandfall({ q: 0, r: 0 })!;
+    const settlement = model.foundSettlement('p1', 'You', 'Home', at);
+    const radius = model.exploredRadius(settlement);
+    const explored = exploredHexes(model, at);
+    expect(explored.length).toBeGreaterThan(0);
+
+    settlement.level = 0; // Longhouse destroyed: no vision discs any more
+    model.claimTerritory(settlement.id);
+
+    expect(model.visionDiscsFor(settlement)).toEqual([]);
+    expect(model.exploredRadius(settlement)).toBe(radius);
+    expect(exploredHexes(model, at)).toEqual(explored);
+    for (const hex of explored) {
+      expect(hexDistance(hex, { q: settlement.q, r: settlement.r }), `${hex.q},${hex.r}`).toBeLessThanOrEqual(
+        model.exploredRadius(settlement),
+      );
+    }
+    // The ramp still measures from the remembered ring: just past it is 1 hex beyond, not deep fog.
+    expect(model.distanceBeyondExplored(at.q + radius + 1, at.r)).toBeLessThanOrEqual(1);
+  });
+
   it('keeps every stored explored key inside the swept box, so the sweep above is not missing any', () => {
     // Guards the test itself: if a future change explored something past ±80 of the settlement,
     // the assertions above would pass by never looking at it.

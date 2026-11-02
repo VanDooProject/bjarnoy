@@ -3646,7 +3646,9 @@ export class HexMapRenderer {
    * explored hex is itself within `exploredRadius` of the settlement that
    * explored it: `exploredHexesFor` walks each vision disc out to
    * `disc.radius + FOG_SCOUT_RING`, and `exploredRadius` is the max over those
-   * same discs of `distance(settlement, disc) + disc.radius + FOG_SCOUT_RING`,
+   * same discs, and every disc the settlement ever explored from (so losing
+   * sight never shrinks it), of
+   * `distance(settlement, disc) + disc.radius + FOG_SCOUT_RING`,
    * which bounds it by the triangle inequality. Settlements are never removed
    * from the model, so no explored hex can outlive the source that covers it.
    *

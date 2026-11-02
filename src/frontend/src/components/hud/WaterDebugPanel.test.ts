@@ -14,6 +14,8 @@ describe('WaterDebugPanel', () => {
   });
 
   it('offers every bog lake foam style in a dropdown, starting on micro curls, and sets the style the renderer reads', async () => {
+    // Foam lines ship off; the dropdown is live once they are switched on.
+    waterDebugFlags.bogLakeFoam = true;
     const wrapper = mount(WaterDebugPanel);
     const select = wrapper.get('[data-testid="bog-lake-foam-style"]');
     expect(select.findAll('option').map((o) => o.text())).toEqual([...BOG_LAKE_FOAM_STYLES]);
@@ -24,8 +26,7 @@ describe('WaterDebugPanel', () => {
     wrapper.unmount();
   });
 
-  it('disables the dropdown while the foam look is off', async () => {
-    waterDebugFlags.bogLakeFoam = false;
+  it('disables the dropdown while the foam look is off (the default)', async () => {
     const wrapper = mount(WaterDebugPanel);
     expect(wrapper.get('[data-testid="bog-lake-foam-style"]').attributes('disabled')).toBeDefined();
     wrapper.unmount();

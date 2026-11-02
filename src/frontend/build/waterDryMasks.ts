@@ -18,6 +18,7 @@ import { hasRiverWater, riverMaskHalf, riverTexelCount, RIVER_MASK_MIN_TEXELS } 
 import {
   LAKE_FRAME_RE,
   LAKE_REFERENCE_FRAME_RE,
+  LAKE_TOP_FRAME_RE,
   REFERENCE_FRAME_RE,
   SOURCE_H,
   SOURCE_W,
@@ -75,8 +76,13 @@ async function readBaseCanvases(): Promise<Map<string, { canvas: Uint8Array; tri
     if (tile && (tile.w !== SOURCE_W || tile.h !== SOURCE_H || tile.topFaceY !== TOP_FACE_Y || tile.topFaceH !== TOP_FACE_H)) {
       throw new Error(`waterDryMasks: ${jsonName} has tile geometry ${JSON.stringify(tile)}, dryMaskCore assumes ${SOURCE_W}x${SOURCE_H} with the top face at ${TOP_FACE_Y}+${TOP_FACE_H}`);
     }
+    // The base frames, plus the bog lake frames' top layers (their lily pads and islands are cut out of the lake wet mask).
     const names = Object.entries(manifest.frames).filter(
-      ([name, f]) => name.endsWith('_base') && f.bjarnoy?.layer === 'base' && !f.rotated && f.sourceSize.w === SOURCE_W && f.sourceSize.h === SOURCE_H,
+      ([name, f]) =>
+        ((name.endsWith('_base') && f.bjarnoy?.layer === 'base') || (LAKE_TOP_FRAME_RE.test(name) && f.bjarnoy?.layer === 'top')) &&
+        !f.rotated &&
+        f.sourceSize.w === SOURCE_W &&
+        f.sourceSize.h === SOURCE_H,
     );
     if (names.length === 0) continue;
     const { data, info } = await sharp(join(ATLAS_DIR, jsonName.replace(/\.json$/, '.webp')))
@@ -159,13 +165,16 @@ export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
   const seaCells: MaskCell[] = [];
   const lakeCells: MaskCell[] = [];
   for (const [name, { canvas, trim }] of bases) {
+    // A lake top layer only feeds its base frame's wet mask; it is no frame of its own.
+    if (LAKE_TOP_FRAME_RE.test(name)) continue;
     const orientation = orientationOf(name);
     // Every bog lake frame gets a wet mask, the plain lake included: the family name decides, not a match ratio.
     if (LAKE_FRAME_RE.test(name)) {
       const reference = orientation ? lakeReferenceByOrientation.get(orientation) : undefined;
       if (!reference) continue;
       const rect = cellSourceRect(trim);
-      lakeCells.push({ name, rect, mask: cropHalf(lakeWetMaskHalf(canvas, reference), rect) });
+      const top = bases.get(name.replace(/_base$/, ''))?.canvas;
+      lakeCells.push({ name, rect, mask: cropHalf(lakeWetMaskHalf(canvas, reference, top), rect) });
       continue;
     }
     if (REFERENCE_FRAME_RE.test(name)) continue;

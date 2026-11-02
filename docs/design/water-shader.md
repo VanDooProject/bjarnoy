@@ -479,6 +479,8 @@ One `GlProgram`, one fragment shader, both effects inside it, each behind a
 uniform. Following `fogShader.ts`'s conventions exactly (no `#version`,
 `in`/`out`, `finalColor`).
 
+Noise: map shaders take `hash`/`noise` from `shaderNoise.ts` (`NOISE_LATTICE_GLSL`, lattice values from a texture), never a float ALU hash such as `fract(p * vec2(123.34, 456.21))` - those are not bit-stable on Mali GPUs and seam along the lattice lines. `hash` takes whole-number input only; `shaderNoise.test.ts` enforces it.
+
 ### 4.1 Sea body — `uSeaBody`
 
 World mode only. Base colour ramped by the mask's R channel: shallow teal at
@@ -992,7 +994,7 @@ distance also reads this:
 
 Settlement view only. The lake water of the bog (terrain `lake` and the `boglake`, `boglake_inlet`, `boglake_shore`, `boglake_half`,
 `boglake_mouth` families) gets a second shader, `bogLakeShader.ts`, drawn by `BogLakeLayer.ts`: a wind gust that travels over the lake in
-exactly the phase of the forest sway clips next to it. Three looks, each behind its own flag, all on by default (the lake's base colour is
+exactly the phase of the forest sway clips next to it. Three looks, each behind its own flag, all **off** by default (the lakes ship with the blops only) (the lake's base colour is
 dark navy, about rgb(16-24, 32-40, 56-72)). Between gusts the water is left calm. From bottom to top:
 
 - **Cat's paws**: darker matte patches where the gust roughens the surface, with a fine grain inside, drifting downwind.
@@ -1031,7 +1033,8 @@ dominant: `b > r + 15 && b > g + 5`, which leaves out the tile prism's side face
 repeats it within `DRY_PIXEL_EPS` (`lakeWetMaskHalf`). Measured over the vendored art that is exactly the lake water: shore 4235 of 4238
 pixels, half 8334 of 8354, inlet all, and 2196 of 4707 on the mouth, whose brighter creek water is excluded on purpose (the effect is for
 lakes, not creeks). The 0/1 map is eroded by one source pixel (the bank outline stays clear; `dryMaskHalf` grows instead) and box-downsampled
-to half resolution. The `virtual:water-dry-masks` module bakes it for every `boglake*` frame, always (the family name decides, not a match
+to half resolution. The frame's own top layer (`boglake*` without `_base`: lily pads, reed islands, reeds, which the game draws over the
+water) is cut out too, grown by one source pixel, so nothing on the lake is placed under them. The `virtual:water-dry-masks` module bakes it for every `boglake*` frame, always (the family name decides, not a match
 ratio), into a second atlas, `lake`; both atlases go through one packing and PNG encoding function.
 
 At runtime `WaterDryLayer('lake')` (the same class as the sea's dry layer, only its atlas differs) draws those masks, placed like the tile
@@ -1044,7 +1047,7 @@ the open water is `lake`).
 weir, which sit in the top layer, draw over it. World mode never shows it. Output is a premultiplied overlay, same blending as `WaterLayer`.
 
 **Switches.** Hidden with `waterDebugFlags.water` (this is what the e2e `mapLayers: { water: false }` opt-out flips), follows
-`setSuppressed` (landing preview, `deepFogOnly`) and is **hidden** while the player's own "Wind on lakes" motion setting is off (`motionPreferences.lakes`, `setLakeMotion`; under 'auto' it follows the device's reduced-motion setting). Water motion does not affect it. Unlike the sea it is not frozen: a still gust band reads as a fault, not as calm water. The
+`setSuppressed` (landing preview, `deepFogOnly`) and is **hidden** while the player's own "Lake motion" setting is off (`motionPreferences.lakes`, `setLakeMotion`; storage key `bjarnoy.motion.lakes`; under 'auto' it follows the device's reduced-motion setting). The setting covers all lake motion: the gusts and the blops. Water motion does not affect it. Unlike the sea it is not frozen: a still gust band reads as a fault, not as calm water. The
 clock is `animClockMs`, passed in from the renderer's tick (not `performance.now()`), so the gust shares the forest's clock. No environment
 checks.
 
@@ -1058,6 +1061,20 @@ checks.
 | `float uBandHalf` | half-width of the gust band, in periods (0.16) |
 | `float uFoam`, `uSheen`, `uCatsPaws` | 0 turns the look off, else its strength |
 | `float uFoamWidth`, `uFoamSpacing` | foam line half-width as a share of the spacing (0.04), spacing in world units (15) |
+| `vec2 uLakeOrigin`, `uLakeSize` | the world rect the lake mask covers (min corner, size): maps a world point onto the mask for point samples |
+| `float uBlops`, `uBlopDensity`, `uBlopSize` | blops strength (0 = off), chance a cell's cycle shows its curl (1), curl size multiplier (1) |
+
+**Blops.** Independent of the wind (not gated by the gust band): micro curls that appear at random spots on the lake, grow and drift,
+then fade. Each blop is one thin crescent ")" drawn by `curlShape`, the same mark as the micro curls foam style, and every blop faces the
+same way. Its size varies per blop (9 world units ring radius times 0.6-1.4, times `bogLakeBlopSize`); over its life (2.4-3.2 s) the
+ring grows from 55 % to 130 % of that size while the curl drifts toward its bulge (+x) by 1.6 times the size, fading in over the first
+12 % and out over the last 55 %. Line about 1 unit, near-white, alpha up to 0.85. The shader runs a jittered grid of cells `0.4 * TILE_W`
+(about 67 world units) square; each cell has its own cycle (period 3.2-4.2 s, random phase) and, per cycle, a fresh random start spot
+(hashed from the cycle index). The whole path is checked against `uLakeMask` (start and end centres, the far ends, and above and below the
+middle, at 75 % of the curl's reach, must read above 0.9) and the blop skipped otherwise, so a curl neither touches the bank nor slides
+under a reed island or lily pad (the lake mask has those cut out, see below). `bogLakeBlopDensity` is the chance (0..1) a cycle shows its
+curl: 1 is about one curl per hex of lake, the shipped 0.5 about one per two hexes (about 4 on the 10-hex demo lake). Flag `bogLakeBlops`,
+tuning `bogLakeBlopsStrength` (1), `bogLakeBlopDensity` (0.5), `bogLakeBlopSize` (1).
 
 ### 4.4e River flow — `uRiverFlow`, `uRiverPsi`
 
@@ -1287,9 +1304,10 @@ export interface WaterDebugFlags {
   /** §3.3's code-side split of the unsplit tall art. Off reproduces the artifact it fixes. */
   legacyTileSplit: boolean;     // default true
   /** Bog lakes, inside the forest wind gust (§4.4d): white foam lines, a soft sheen, cat's paws. */
-  bogLakeFoam: boolean;         // default true
-  bogLakeSheen: boolean;        // default true
-  bogLakeCatsPaws: boolean;     // default true
+  bogLakeFoam: boolean;         // default false
+  bogLakeSheen: boolean;        // default false
+  bogLakeCatsPaws: boolean;     // default false
+  bogLakeBlops: boolean;        // default true — micro curls appearing at random on the lake, independent of the wind
 }
 export interface WaterDebugTuning {
   foamWidthHexes: number;  // 0.3 — the band is in world units, so this is sized
@@ -1302,6 +1320,9 @@ export interface WaterDebugTuning {
   bogLakeFoamStrength: number;     // 1 — multipliers on the lake gust's looks (§4.4d)
   bogLakeSheenStrength: number;    // 1
   bogLakeCatsPawsStrength: number; // 1
+  bogLakeBlopsStrength: number;    // 1
+  bogLakeBlopDensity: number;      // 0.5 — chance a cell's cycle shows its curl (1 = about one per hex)
+  bogLakeBlopSize: number;         // 1 — curl size multiplier (ring radius 9 world units)
   bogLakeFoamWidth: number;        // 0.04 — foam line half-width, share of the spacing
   bogLakeFoamSpacing: number;      // 15 — world units between foam lines
   bogLakeBandHalf: number;         // 0.16 — gust band half-width, in periods
