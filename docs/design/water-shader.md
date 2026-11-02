@@ -1018,8 +1018,13 @@ along each edge crossing, the flow crosses every in and out edge perpendicular t
 there, with no seam-specific code.
 
 The flow texture (`RiverFlowLayer`) is RGBA8 per frame cell: R,G the unit direction `* 0.5 + 0.5` in art space (+y down),
-B the intensity (distance to the bank over 4 texels, so the streaks fade out at the shore; a dry texel within 3 texels of an in or out edge segment is not a bank, because the art's water stops a texel or two short of the top face edge and that rim would otherwise fade every seam to nothing), A 255 inside the hex top face and 0
-outside. Top faces tessellate exactly (§3.4), so this clipping alone resolves the cells of neighbouring hexes that overlap. Cells
+B the intensity (distance to the bank over 4 texels, so the streaks fade out at the shore; a dry texel within 3 texels of an in or out edge segment is not a bank, because the art's water stops a texel or two short of the top face edge and that rim would otherwise fade every seam to nothing), A 255 on the water texels of the hex
+top face and of a 2-texel rim past its in and out edges (`FACE_PAD_TEXELS`), and all four 0 everywhere else, dry texels inside
+the face included. Clipped exactly to the face, a cell left a strip along every seam without flow: the art's water stops a texel
+or two short of the face edge, so what shows there is the neighbouring hex's skirt water. The rim carries the flow over that
+strip, and because the cell is transparent where it is dry, its own dry strip does not cover the rim of the cell next to it. Past
+an edge the water does not cross there is no rim, so a river's skirt water is never drawn onto a neighbouring land hex. Where two
+rims overlap, both cross the shared edge at a right angle, so it does not matter which is drawn last. Cells
 are cached per `frame|out edge|in edges|fade edge` and drawn into one render texture over the water mask's rect, placed and sized
 exactly like the dry mask cells (`MaskRenderTarget` is the shared drawing half), and bound as `uRiverFlow` with the same `vUV`.
 World mode, and the time before the masks have loaded, bind a 1x1 texture of zeros.
@@ -1050,7 +1055,7 @@ sampler2D uWaterMask
 sampler2D uWaterTaint              taint field (§4.4c), single channel
 sampler2D uWaterNoFoam             river-mouth no-foam field, single channel; foam *= 1 - it
 sampler2D uWaterDry                art dry mask (§4.4b), render texture over the mask's rect; alpha is the mask; caustics and foam *= 1 - it
-sampler2D uRiverFlow               river flow field (§4.4d), render texture over the mask's rect; rg direction, b intensity, a inside the hex top face
+sampler2D uRiverFlow               river flow field (§4.4d), render texture over the mask's rect; rg direction, b intensity, a where the hex has flow (its top face plus a 2-texel rim past the in and out edges)
 float uRiverFlowOn, uShowRiverFlow 0/1: the streaks; debug: colour the river by direction
 float uRiverCycle, uRiverSpeed     phase cycles per second; pattern units slid per cycle
 float uRiverAlpha, uRiverScale;  vec3 uRiverColor   streak opacity; pattern units per world unit; streak colour

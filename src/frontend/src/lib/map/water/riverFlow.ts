@@ -135,8 +135,22 @@ const NEIGHBOURS: readonly (readonly [number, number])[] = [
   [0, -1],
 ];
 
-/** Which texels are inside the top face (centre in the polygon), and which are passable (inside, padded by one texel). */
-function faceMasks(input: RiverFlowInput): { inside: Uint8Array; passable: Uint8Array } {
+/**
+ * Texels past an in or out edge of the top face that still belong to the hex's cell. The art's own water stops 1-2 texels
+ * short of the face edge, and what shows at a seam is the neighbouring hex's skirt under it; a cell clipped exactly to its
+ * face leaves that strip without flow, a dark line along every seam. Only the edges the water crosses get the rim: past any
+ * other edge lies a neighbour's land, which the river's own skirt water must not be drawn onto. The rims of two
+ * neighbouring river cells overlap; the field crosses the shared edge at a right angle in both, so whichever is drawn last
+ * makes no difference.
+ */
+export const FACE_PAD_TEXELS = 2;
+
+/**
+ * Which texels are inside the top face (centre in the polygon), `padded` (inside plus one texel all round: where edge seeds
+ * are picked, so the rim does not move the seed band off the face), which are passable for the solver (padded plus the
+ * rim along the in and out edges), and which the cell covers (inside plus that rim).
+ */
+function faceMasks(input: RiverFlowInput): { inside: Uint8Array; padded: Uint8Array; passable: Uint8Array; cover: Uint8Array } {
   const { cw, ch, polygon } = input;
   const inside = new Uint8Array(cw * ch);
   for (let y = 0; y < ch; y++) {
@@ -144,22 +158,38 @@ function faceMasks(input: RiverFlowInput): { inside: Uint8Array; passable: Uint8
       if (pointInPolygon(x + 0.5, y + 0.5, polygon)) inside[y * cw + x] = 1;
     }
   }
-  const passable = new Uint8Array(cw * ch);
+  const flowEdges = [...input.inEdges, input.outEdge];
+  const cover = inside.slice();
   for (let y = 0; y < ch; y++) {
     for (let x = 0; x < cw; x++) {
-      for (let dy = -1; dy <= 1 && !passable[y * cw + x]; dy++) {
+      const p = y * cw + x;
+      if (cover[p]) continue;
+      for (const e of flowEdges) {
+        if (distToSegment(x + 0.5, y + 0.5, polygon[e]!, polygon[(e + 1) % polygon.length]!) <= FACE_PAD_TEXELS) {
+          cover[p] = 1;
+          break;
+        }
+      }
+    }
+  }
+  const padded = new Uint8Array(cw * ch);
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      for (let dy = -1; dy <= 1 && !padded[y * cw + x]; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
           const xx = x + dx;
           const yy = y + dy;
           if (xx >= 0 && xx < cw && yy >= 0 && yy < ch && inside[yy * cw + xx]) {
-            passable[y * cw + x] = 1;
+            padded[y * cw + x] = 1;
             break;
           }
         }
       }
     }
   }
-  return { inside, passable };
+  const passable = new Uint8Array(cw * ch);
+  for (let p = 0; p < passable.length; p++) passable[p] = padded[p]! | cover[p]!;
+  return { inside, padded, passable, cover };
 }
 
 
@@ -249,7 +279,7 @@ export function riverGeodesicDistance(input: RiverFlowInput, edge: number): Floa
  */
 export function riverPotential(input: RiverFlowInput): { phi: Float64Array; sweeps: number } {
   const { mask, cw, ch, inEdges, outEdge } = input;
-  const { passable } = faceMasks(input);
+  const { padded, passable } = faceMasks(input);
   const n = cw * ch;
   const isWater = (p: number) => passable[p] === 1 && mask[p]! >= WATER_THRESHOLD;
   const fixed = new Uint8Array(n);
@@ -257,12 +287,12 @@ export function riverPotential(input: RiverFlowInput): { phi: Float64Array; swee
   const hasIn = inEdges.some((e) => e !== outEdge);
   for (const e of inEdges) {
     if (e === outEdge) continue;
-    for (const p of edgeSeeds(input, passable, e)) {
+    for (const p of edgeSeeds(input, padded, e)) {
       fixed[p] = 1;
       phi[p] = 1;
     }
   }
-  for (const p of edgeSeeds(input, passable, outEdge)) {
+  for (const p of edgeSeeds(input, padded, outEdge)) {
     fixed[p] = 1;
     phi[p] = 0;
   }
@@ -366,13 +396,13 @@ function smoothstep(e0: number, e1: number, x: number): number {
 /**
  * The flow texture of one river frame cell: RGBA8, `cw * ch * 4` bytes, premultiplied.
  *
- * R, G = unit flow direction * 0.5 + 0.5 (art space, +y down; 0.5 where not water). B = intensity: the distance to the bank
- * over `BANK_FADE_TEXELS`, 0 off water. A = 255 inside the top face, 0 outside. Top faces tessellate exactly, so cells of
- * neighbouring hexes that overlap outside their own face never draw over each other.
+ * R, G = unit flow direction * 0.5 + 0.5 (art space, +y down). B = intensity: the distance to the bank
+ * over `BANK_FADE_TEXELS`. A = 255 on the water texels with a direction inside the top face and its rim along the in and out edges
+ * (`FACE_PAD_TEXELS`), all four 0 elsewhere.
  */
 export function computeRiverFlow(input: RiverFlowInput): Uint8Array {
   const { mask, cw, ch, fadeEdge } = input;
-  const { inside, passable } = faceMasks(input);
+  const { inside, passable, cover } = faceMasks(input);
   const isWater = (x: number, y: number) => x >= 0 && x < cw && y >= 0 && y < ch && mask[y * cw + x]! >= WATER_THRESHOLD && passable[y * cw + x] === 1;
   const bank = distanceToBank(input, passable);
   const { phi } = riverPotential(input);
@@ -395,11 +425,12 @@ export function computeRiverFlow(input: RiverFlowInput): Uint8Array {
       const gy = axis(u, d, here, u ? phi[p - cw]! : 0, d ? phi[p + cw]! : 0);
       vx[p] = -gx;
       vy[p] = -gy;
-      // Inside a seed band the potential is constant: no direction yet, filled from the band's inner side below.
-      has[p] = Math.hypot(gx, gy) > 1e-9 ? 1 : 0;
+      // Inside a seed band the potential is constant: no direction yet, filled from the band's inner side below. So is the
+      // rim past the face: beyond the seed band it is a dead end whose potential is flat up to solver noise.
+      has[p] = inside[p] && Math.hypot(gx, gy) > 1e-9 ? 1 : 0;
     }
   }
-  // Fill the texels without a direction (the seed bands, exact stagnation points) from their nearest water neighbours that
+  // Fill the texels without a direction (the seed bands, the rim past the face, exact stagnation points) from their nearest water neighbours that
   // have one, ring by ring, so the flow keeps crossing the edge perpendicular to it.
   for (let pass = 0; pass < 8; pass++) {
     const filled: number[] = [];
@@ -439,16 +470,16 @@ export function computeRiverFlow(input: RiverFlowInput): Uint8Array {
   for (let y = 0; y < ch; y++) {
     for (let x = 0; x < cw; x++) {
       const p = y * cw + x;
-      if (!inside[p]) continue;
-      const o = p * 4;
-      out[o] = 128;
-      out[o + 1] = 128;
-      out[o + 3] = 255;
+      if (!cover[p]) continue;
       if (!isWater(x, y) || !has[p]) continue;
       const dx = vx[p]!;
       const dy = vy[p]!;
       const len = Math.hypot(dx, dy);
       if (len < 1e-9) continue;
+      // Opaque only where there is flow: a dry texel of this cell (the strip along its edge where the art's water stops
+      // short) must not cover the neighbouring river cell's rim, which is the water actually seen there.
+      const o = p * 4;
+      out[o + 3] = 255;
       let intensity = Math.min(1, Math.max(0, bank[p]! / BANK_FADE_TEXELS));
       if (fade) intensity *= 1 - smoothstep(0, fadeLength, fade[p]!);
       out[o] = Math.round(((dx / len) * 0.5 + 0.5) * 255);

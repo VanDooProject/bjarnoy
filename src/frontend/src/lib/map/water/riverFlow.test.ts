@@ -23,9 +23,10 @@ function input(mask: Uint8Array, outEdge: number, fadeEdge?: number): RiverFlowI
   return { mask, cw: CW, ch: CH, polygon: POLYGON, inEdges: [outEdge === TOP ? BOTTOM : TOP], outEdge, fadeEdge };
 }
 
-/** Flow direction (-1..1) at a texel. */
+/** Flow direction (-1..1) at a texel; (0, 0) where the cell has no flow (alpha 0). */
 function dirAt(flow: Uint8Array, x: number, y: number, cw = CW): { x: number; y: number; b: number; a: number } {
   const o = (y * cw + x) * 4;
+  if (flow[o + 3] === 0) return { x: 0, y: 0, b: 0, a: 0 };
   return { x: (flow[o]! / 255) * 2 - 1, y: (flow[o + 1]! / 255) * 2 - 1, b: flow[o + 2]! / 255, a: flow[o + 3]! };
 }
 
@@ -51,11 +52,24 @@ describe('computeRiverFlow on a synthetic straight channel', () => {
     expect(dirAt(flow, 20, 22).b).toBe(0);
   });
 
-  it('is transparent outside the top face and opaque inside', () => {
+  it('is opaque on the water of the face, transparent on dry texels and beyond the face', () => {
     const flow = computeRiverFlow(input(channel(), BOTTOM));
     expect(dirAt(flow, 50, 22).a).toBe(255);
     expect(dirAt(flow, 2, 2).a).toBe(0);
-    expect(dirAt(flow, 50, 47).a).toBe(0);
+    // Past a side the water does not cross (edge 0, the left side), there is no rim: that neighbour is land.
+    expect(dirAt(flow, 0, 25).a).toBe(0);
+    // A dry texel inside the face is transparent too, so it never covers the neighbouring cell's rim drawn under it.
+    const o = (22 * CW + 20) * 4;
+    expect(flow[o + 3]).toBe(0);
+  });
+
+  it('carries the flow into the rim past the face edge, so neighbouring cells leave no gap at the seam', () => {
+    const flow = computeRiverFlow(input(channel(), BOTTOM));
+    // The bottom side of the face is y = 46; y = 47 is the rim the next hex's cell also covers.
+    const rim = dirAt(flow, 50, 47);
+    expect(rim.a).toBe(255);
+    expect(rim.b).toBeGreaterThan(0.9);
+    expect(rim.y).toBeGreaterThan(0.9);
   });
 
   it('still flows upstream of a full-width non-water bridge, with the right sign', () => {
@@ -139,7 +153,7 @@ function streamline(f: RiverFrame & { inEdges: readonly number[] }, outEdge: num
     const tx = Math.floor(x);
     const ty = Math.floor(y);
     if (tx < 0 || ty < 0 || tx >= f.cw || ty >= f.ch) break;
-    // Off the water the field encodes no direction (0.5, 0.5): steer by the closest texel that has one, within 3 texels.
+    // Off the water the field has no flow (alpha 0): steer by the closest texel that has one, within 3 texels.
     let d = dirAt(flow, tx, ty, f.cw);
     for (let r = 1; r <= 3 && Math.hypot(d.x, d.y) <= 0.5; r++) {
       for (let dy = -r; dy <= r; dy++) {
@@ -188,12 +202,21 @@ describe.skipIf(!vendoredArt)('computeRiverFlow on the vendored art', () => {
   };
   const water = (f: RiverFrame, x: number, y: number) => f.mask[y * f.cw + x]! >= WATER_THRESHOLD;
   /** Water texels of the face within `reach` of edge `e` and within `span` of its midpoint, with intensity above `minB`. */
-  const nearEdge = (f: RiverFrame, flow: Uint8Array, e: number, reach: number, span: number, minB = 0) => {
+  /** Whether a point is on the face's side of edge `e` (not in the rim past it). */
+  const faceSide = (f: RiverFrame, e: number, x: number, y: number) => {
+    const a = f.polygon[e]!;
+    const b = f.polygon[(e + 1) % 6]!;
+    const c = f.polygon.reduce((s, p) => ({ x: s.x + p.x / 6, y: s.y + p.y / 6 }), { x: 0, y: 0 });
+    const side = (px: number, py: number) => (b.x - a.x) * (py - a.y) - (b.y - a.y) * (px - a.x);
+    return side(x, y) * side(c.x, c.y) > 0;
+  };
+  const nearEdge = (f: RiverFrame, flow: Uint8Array, e: number, reach: number, span: number, minB = 0, faceOnly = false) => {
     const m = mid(f, e);
     const found: { x: number; y: number; d: ReturnType<typeof dirAt> }[] = [];
     for (let y = 0; y < f.ch; y++) {
       for (let x = 0; x < f.cw; x++) {
         if (!water(f, x, y) || flow[(y * f.cw + x) * 4 + 3] !== 255 || distToEdge(f, e, x + 0.5, y + 0.5) > reach || Math.hypot(x + 0.5 - m.x, y + 0.5 - m.y) > span) continue;
+        if (faceOnly && !faceSide(f, e, x + 0.5, y + 0.5)) continue;
         const d = dirAt(flow, x, y, f.cw);
         if (d.b > minB) found.push({ x, y, d });
       }
@@ -298,8 +321,9 @@ describe.skipIf(!vendoredArt)('computeRiverFlow on the vendored art', () => {
     const flow = computeRiverFlow({ ...f, inEdges: arms, outEdge: out });
     for (const arm of arms) {
       const inward = outward(f, arm);
-      // The arm meets its edge obliquely, so the texels next to the bank lean: the median is within 10 degrees and four fifths are within 25.
-      const offs = nearEdge(f, flow, arm, 3, 6, 0.5).map((t) => degrees(t.d, { x: -inward.x, y: -inward.y }));
+      // The arm meets its edge obliquely, so the texels next to the bank lean: the median is within 10 degrees and four fifths are within 25. Measured on the face only: the rim past the edge copies its
+      // direction from the face's texels next to it, bank lean included.
+      const offs = nearEdge(f, flow, arm, 3, 6, 0.5, true).map((t) => degrees(t.d, { x: -inward.x, y: -inward.y }));
       expect(offs.length, `arm ${arm}`).toBeGreaterThan(5);
       expect([...offs].sort((a, b) => a - b)[offs.length >> 1], `arm ${arm}`).toBeLessThan(10);
       expect([...offs].sort((a, b) => a - b)[Math.floor(offs.length * 0.8)], `arm ${arm}`).toBeLessThan(25);
