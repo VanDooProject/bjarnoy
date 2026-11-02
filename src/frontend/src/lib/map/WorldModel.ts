@@ -23,7 +23,7 @@ import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
 import type { PalisadePiece } from './palisadeTiles';
 import { campHexBuildable } from './campRules';
 import type { CampStateResponse } from '../../api/types';
-import { claimRadiusForLevel, type ClaimDisc } from './shoreline';
+import { longhouseDiscs, type ClaimDisc } from './shoreline';
 import { claimsWithGiants } from './territory';
 import { realmFromDiscs, resolveRealm, type ConnectedRealm } from './realmChain';
 import { validateTradeRatio } from '../trade/tradeRatio';
@@ -1314,10 +1314,10 @@ export class WorldModel {
    * `HexMapRenderer.rebuildSettlementLabels`). Fog radius
    * (`visibleHexes`/`exploredRadius`) is tower-aware via `visionDiscsFor`
    * instead. HUD territory-size readouts use `claimedHexCount` instead,
-   * which also accounts for towers.
+   * which also accounts for towers. 0 when the Longhouse is destroyed (`longhouseDiscs` has no disc then).
    */
   borderRadius(settlement: Settlement): number {
-    return claimRadiusForLevel(settlement.level);
+    return longhouseDiscs(settlement, settlement.level)[0]?.radius ?? 0;
   }
 
   /**
@@ -1381,7 +1381,9 @@ export class WorldModel {
    * `ToTowerVisionSource` pair: kept as its own formula rather than reusing
    * `claimDiscsFor`'s tower radius, even though both currently compute the
    * same number, for the same "fog vision and building-claim radius aren't
-   * guaranteed to move together" reason that backend class documents.
+   * guaranteed to move together" reason that backend class documents. A settlement whose Longhouse is destroyed has no
+   * centre disc (`longhouseDiscs`, the same decision the claim makes) and so sees nothing around its centre; its towers
+   * still see while chained to another Longhouse of the player's.
    */
   visionDiscsFor(settlement: Settlement): ClaimDisc[] {
     // Odin's Ravens widen the claim's own disc and every tower's alike
@@ -1390,7 +1392,7 @@ export class WorldModel {
     // A tower cut off from every longhouse of the player's realm sees nothing (and gets no Ravens rings either).
     const realm = this.realmOf(settlement);
     return [
-      { q: settlement.q, r: settlement.r, radius: this.borderRadius(settlement) + ravens },
+      ...longhouseDiscs(settlement, settlement.level).map((d) => ({ ...d, radius: d.radius + ravens })),
       ...(this.settlementTowers.get(settlement.id) ?? []).filter((t) => realm.isTowerConnected(settlement.id, t)).map((t) => ({
         q: t.q,
         r: t.r,
