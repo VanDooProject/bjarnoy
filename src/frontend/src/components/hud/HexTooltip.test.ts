@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { useWorldStore } from '../../stores/world';
 import { mount } from '@vue/test-utils';
 import HexTooltip from './HexTooltip.vue';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
@@ -15,6 +17,8 @@ const grass = (screenX: number, screenY: number): HoverInfo =>
     coord: { q: 1, r: 2 },
     subject: { kind: 'terrain', terrain: 'grass', wasted: false, isRiver: false },
   }) as HoverInfo;
+
+beforeEach(() => setActivePinia(createPinia()));
 
 describe('HexTooltip', () => {
   // The tooltip jumps on every hex change. Moving it with left/top re-laid
@@ -100,6 +104,22 @@ describe('HexTooltip building stats match the backend rules', () => {
 
   it('shows a tower\'s visible radius (level + 1, FogVisionRadii.TowerVisibleRadius) and explored radius (level + 3)', () => {
     expect(text(building('tower', 4))).toContain('Vision radius 5 (explored 7)');
+  });
+});
+
+describe('HexTooltip production at world speed', () => {
+  it('multiplies a producer\'s hourly output by the world speed factor', () => {
+    useWorldStore().worldSpeedFactor = 4;
+    const info = {
+      screenX: 0,
+      screenY: 0,
+      coord: { q: 1, r: 2 },
+      subject: { kind: 'building', buildingType: 'farm', level: 1 },
+      stats: { output: { kind: 'resourceRate', resource: 'food', amount: 40 } },
+      owner: { settlementName: 'Hvit', ownerName: 'Ulf', mine: true },
+    } as HoverInfo;
+    const wrapper = mount(HexTooltip, { props: { info }, global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] } });
+    expect(wrapper.text()).toContain('+160 Food/h');
   });
 });
 

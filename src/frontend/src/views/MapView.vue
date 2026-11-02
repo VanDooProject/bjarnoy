@@ -851,7 +851,7 @@ function tileInfo(tile: Tile): RingInfo {
     // Like the hover tooltip, stats are for the player's own buildings only.
     if (mine) {
       const stats = buildingStatsAt(tile.buildingType, level, tile, tileAt);
-      if (stats.output) rows.push({ label: t('hud.hoverTooltip.output'), value: formatOutput(stats.output) });
+      if (stats.output) rows.push({ label: t('hud.hoverTooltip.output'), value: formatOutput(scaleOutput(stats.output, world.worldSpeedFactor)) });
       if (stats.modifier) rows.push({ label: t('hud.hoverTooltip.modifier'), value: formatModifier(stats.modifier) });
     }
     return {

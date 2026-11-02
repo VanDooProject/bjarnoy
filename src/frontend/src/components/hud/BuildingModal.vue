@@ -19,6 +19,7 @@ import { formatFullNumber } from '../../lib/hud/compactNumber';
 import { useWorldStore } from '../../stores/world';
 import {
   buildingStatsAt,
+  scaleOutput,
   buildingUpgradeCost,
   SHRINE_BUILDING_TYPES,
 } from '../../lib/map/buildingEconomy';
@@ -225,7 +226,9 @@ const buildingStats = computed(() =>
 const currentStats = computed(() =>
   buildingStats.value
     ? {
-        output: buildingStats.value.output ? formatBuildingOutput(buildingStats.value.output, t) : undefined,
+        output: buildingStats.value.output
+          ? formatBuildingOutput(scaleOutput(buildingStats.value.output, world.worldSpeedFactor), t)
+          : undefined,
         modifier: buildingStats.value.modifier ? formatBuildingModifier(buildingStats.value.modifier, t) : undefined,
       }
     : undefined,
