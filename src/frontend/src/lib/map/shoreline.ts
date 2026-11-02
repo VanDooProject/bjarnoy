@@ -61,6 +61,15 @@ export function claimRadiusForLevel(longhouseLevel: number): number {
 }
 
 /**
+ * Mirrors `Settlement.LonghouseDisc`: the settlement's Longhouse (centre) claim disc — as a list so callers spread it —
+ * or no disc at all when its Longhouse is destroyed (level 0): such a settlement has no claim, not even its centre hex.
+ * The one place the client decides this (`claimDiscs` and `resolveRealm` both read it).
+ */
+export function longhouseDiscs(center: AxialCoord, longhouseLevel: number): ClaimDisc[] {
+  return longhouseLevel <= 0 ? [] : [{ q: center.q, r: center.r, radius: claimRadiusForLevel(longhouseLevel) }];
+}
+
+/**
  * Mirrors `Settlement.cs`'s `TowerClaimRadius(int towerLevel)` (backed by
  * `BuildingCatalogue`'s Tower `ClaimRadius = level`, the same number
  * `building-catalogue.json`'s `tower` entries carry in their own
@@ -94,7 +103,7 @@ export function claimDiscs(
   towers: Array<{ q: number; r: number; level: number }>,
 ): ClaimDisc[] {
   return [
-    { q: center.q, r: center.r, radius: claimRadiusForLevel(longhouseLevel) },
+    ...longhouseDiscs(center, longhouseLevel),
     ...towers.map((t) => ({ q: t.q, r: t.r, radius: towerClaimRadiusForLevel(t.level) })),
   ];
 }
