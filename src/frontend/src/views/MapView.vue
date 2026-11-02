@@ -31,6 +31,7 @@ import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
+import { WORLD_HASH } from '../lib/mapModeRoute';
 import { useAuthStore } from '../stores/auth';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
@@ -93,15 +94,16 @@ const buildingCatalogue = useBuildingCatalogueStore();
 const route = useRoute();
 const router = useRouter();
 
-// One view/one persistent renderer serves both /world and /settlement now
-// (docs/design/zoom-transition.md §5, option (a)) — the zoom-driven
+// One view/one persistent renderer serves both the settlement and the world
+// map on one route (`/settlement`, world mode marked by `#world` — see
+// lib/mapModeRoute.ts; docs/design/zoom-transition.md §5, option (a)) — the zoom-driven
 // transition needs the same HexMapRenderer instance to survive the switch
 // (no teardown/flash, fog persists uninterrupted), which two independently-
 // mounted views/renderers per route could never give it. `mode` is derived
-// from the route rather than tracked as separate local state, so a nav-button
-// click, browser back/forward, or a direct URL load all agree with the
+// from the route rather than tracked as separate local state, so a zoom
+// crossing, a nav click, browser back/forward, or a direct URL load all agree with the
 // renderer on what to show.
-const mode = computed<RenderMode>(() => (route.name === 'world' ? 'world' : 'settlement'));
+const mode = computed<RenderMode>(() => (route.hash === WORLD_HASH ? 'world' : 'settlement'));
 // World map's own sea backdrop (must match WorldMapCanvas.vue's — that
 // component is still used standalone by AdminWorldReseedView's world
 // preview, which has no settlement/ring-menu UI to merge and so keeps its
@@ -116,7 +118,7 @@ const WORLD_SEA_BACKGROUND = 'radial-gradient(115% 100% at 45% 40%, #2a92ae 0%, 
 let zoomDrivenTransition = false;
 function onZoomModeChange(next: RenderMode) {
   zoomDrivenTransition = true;
-  router.push(next === 'settlement' ? '/settlement' : '/world');
+  router.push({ path: '/settlement', hash: next === 'world' ? WORLD_HASH : '' });
 }
 
 // ?debug=1 surfaces FogDebugPanel — same idea as window.__fogDebug (main.ts)

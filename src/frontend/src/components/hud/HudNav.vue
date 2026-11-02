@@ -21,6 +21,7 @@ import { DEMO_MODE } from '../../config';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
 import ReturningPlayerMenu from './ReturningPlayerMenu.vue';
+import HudNavLink from './HudNavLink.vue';
 import type { MessageSchema } from '../../i18n/schema';
 
 // Finding #8: the hide-links-on-mobile rule below only makes sense where a
@@ -152,6 +153,7 @@ function onMenuEntryClick(entry: HudNavEntry, close: () => void) {
   close();
   entry.go();
 }
+const profileHref = computed(() => router.resolve('/profile').href);
 function goToProfile() {
   closeAccountMenu();
   router.push(profileLocation(router));
@@ -189,15 +191,16 @@ watch(() => route.fullPath, closeAccountMenu);
       'hud-nav--with-resources': hasResourceBar,
     }"
   >
-    <button
+    <HudNavLink
       v-for="entry in primary"
       :key="entry.id"
+      :href="entry.href"
       class="link"
       :class="{ active: entry.active }"
-      @click="entry.go()"
+      @navigate="entry.go()"
     >
       {{ t(entry.labelKey) }}
-    </button>
+    </HudNavLink>
     <LocaleSwitcher />
     <!-- Logged in, the avatar opens a small account dropdown — Profile
          (issue #42) or Log out (player logout/login gate: `useLogout`
@@ -225,24 +228,24 @@ watch(() => route.fullPath, closeAccountMenu);
              refactored to a place of their own later, like the onboarding
              quests were. -->
         <div v-if="secondary.length" class="menu-entries">
-          <button
+          <HudNavLink
             v-for="entry in secondary"
             :key="entry.id"
-            type="button"
+            :href="entry.href"
             role="menuitem"
             class="row row-entry"
             :class="{ active: entry.active }"
             :data-testid="`menu-entry-${entry.id}`"
-            @click="onMenuEntryClick(entry, closeAccountMenu)"
+            @navigate="onMenuEntryClick(entry, closeAccountMenu)"
           >
             {{ t(entry.labelKey) }}
             <span v-if="entry.badge > 0" class="badge">{{ entry.badge }}</span>
-          </button>
+          </HudNavLink>
           <div class="divider" role="separator" />
         </div>
-        <button type="button" role="menuitem" class="row" data-testid="account-menu-profile" @click="goToProfile">
+        <HudNavLink :href="profileHref" role="menuitem" class="row" data-testid="account-menu-profile" @navigate="goToProfile">
           {{ t('hud.accountMenu.profile') }}
-        </button>
+        </HudNavLink>
         <button type="button" role="menuitem" class="row" data-testid="account-menu-logout" @click="onLogoutClick">
           {{ t('hud.accountMenu.logout') }}
         </button>
@@ -264,19 +267,19 @@ watch(() => route.fullPath, closeAccountMenu);
                quests were. -->
           <div v-if="secondary.length" class="menu-entries">
             <div class="divider" role="separator" />
-            <button
+            <HudNavLink
               v-for="entry in secondary"
               :key="entry.id"
-              type="button"
+              :href="entry.href"
               role="menuitem"
               class="row row-entry"
               :class="{ active: entry.active }"
               :data-testid="`menu-entry-${entry.id}`"
-              @click="onMenuEntryClick(entry, close)"
+              @navigate="onMenuEntryClick(entry, close)"
             >
               {{ t(entry.labelKey) }}
               <span v-if="entry.badge > 0" class="badge">{{ entry.badge }}</span>
-            </button>
+            </HudNavLink>
           </div>
         </template>
         <template #nudge>
@@ -299,6 +302,7 @@ watch(() => route.fullPath, closeAccountMenu);
 .link {
   background: transparent;
   border: none;
+  text-decoration: none;
   color: var(--muted);
   padding: 0;
   cursor: pointer;
@@ -446,6 +450,8 @@ watch(() => route.fullPath, closeAccountMenu);
   transform: rotate(45deg);
 }
 .row {
+  display: block;
+  text-decoration: none;
   background: transparent;
   border: none;
   border-radius: 6px;

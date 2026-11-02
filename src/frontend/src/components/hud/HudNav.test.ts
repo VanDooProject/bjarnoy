@@ -18,14 +18,13 @@ import enHud from '../../i18n/locales/en/hud.json';
 import enOnboarding from '../../i18n/locales/en/onboarding.json';
 
 // Named the same as the real router (router/index.ts) for the routes this
-// file's tests actually care about — HudNav's `landing`/`world` v-ifs key off
+// file's tests actually care about — HudNav's `landing` v-if key off
 // `route.name`, which a bare `path` list (with no `name`) can never satisfy.
 function testRouter() {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
       { path: '/', name: 'landing', component: { template: '<div />' } },
-      { path: '/world', name: 'world', component: { template: '<div />' } },
       { path: '/leaderboards', name: 'leaderboards', component: { template: '<div />' } },
       { path: '/reports', name: 'reports', component: { template: '<div />' } },
       { path: '/guild', name: 'guild', component: { template: '<div />' } },
@@ -164,37 +163,17 @@ describe('HudNav auth gating', () => {
     expect(wrapper.find('[data-testid="account-menu"] [data-testid="menu-entry-leaderboards"]').exists()).toBe(true);
   });
 
-  it('hides World map when neither authenticated nor founded', async () => {
+  it('has no World map link, even for a founded, logged-in player (world mode is reached by zooming)', async () => {
+    usePlayerStore().hasFoundedSettlement = true;
+    authenticate(useAuthStore());
     const wrapper = await mountHudNav('/settlement');
+    await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
     expect(wrapper.text()).not.toContain('World map');
-  });
-
-  it('hides World map when authenticated but not founded', async () => {
-    const auth = useAuthStore();
-    authenticate(auth);
-    const wrapper = await mountHudNav('/settlement');
-    expect(wrapper.text()).not.toContain('World map');
-  });
-
-  it('hides World map when founded but not authenticated', async () => {
-    const player = usePlayerStore();
-    player.hasFoundedSettlement = true;
-    const wrapper = await mountHudNav('/settlement');
-    expect(wrapper.text()).not.toContain('World map');
-  });
-
-  it('shows World map only once both authenticated and founded', async () => {
-    const player = usePlayerStore();
-    player.hasFoundedSettlement = true;
-    const auth = useAuthStore();
-    authenticate(auth);
-    const wrapper = await mountHudNav('/settlement');
-    expect(wrapper.text()).toContain('World map');
   });
 });
 
 // landing-page-defects.md L1: both links are guard-dead on any pre-founding
-// route (`/world` bounces straight back to `/`, see router/index.ts) or a
+// route (guarded routes bounce straight back to `/`, see router/index.ts) or a
 // self-link (`route.name === 'landing'`) — this is independent of
 // LandingView's own header swap (LandingView.test.ts doesn't exist; that
 // half is covered by e2e/landing.spec.ts instead, since it needs the real
@@ -290,20 +269,6 @@ describe('HudNav "Name your jarl" trigger', () => {
 describe('HudNav link visibility', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
-  });
-
-  it('hides World map before founding — the router guard bounces it straight back', async () => {
-    const wrapper = await mountHudNav('/');
-    expect(wrapper.text()).not.toContain('World map');
-  });
-
-  it('shows World map once founded and authenticated', async () => {
-    const player = usePlayerStore();
-    player.hasFoundedSettlement = true;
-    const auth = useAuthStore();
-    authenticate(auth);
-    const wrapper = await mountHudNav('/settlement');
-    expect(wrapper.text()).toContain('World map');
   });
 
   it('hides the Landing self-link while already on the landing route', async () => {
@@ -449,7 +414,7 @@ describe('HudNav unclaimed-realm trigger label', () => {
 
 // The secondary destinations (Leaderboards, Messages, Reports, Alliance, Docs)
 // have no room inline next to the resource pills: they live in the avatar
-// menu at every desktop width, and only Settlement / World map stay inline.
+// menu at every desktop width, and only Settlement stays inline.
 describe('HudNav secondary entries in the avatar menu', () => {
   const secondaryIds = ['leaderboards', 'messages', 'reports', 'guild', 'docs'];
 
@@ -461,11 +426,11 @@ describe('HudNav secondary entries in the avatar menu', () => {
     return wrapper.findAll('.hud-nav > .link').map((b) => b.text());
   }
 
-  it('logged in: only Settlement and World map stay inline, the rest are rows of the account menu', async () => {
+  it('logged in: only Settlement stays inline, the rest are rows of the account menu', async () => {
     authenticate(useAuthStore());
     usePlayerStore().hasFoundedSettlement = true;
     const wrapper = await mountHudNav('/settlement');
-    expect(inlineLinkTexts(wrapper)).toEqual(['Settlement', 'World map']);
+    expect(inlineLinkTexts(wrapper)).toEqual(['Settlement']);
     expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
 
     await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
@@ -474,6 +439,19 @@ describe('HudNav secondary entries in the avatar menu', () => {
     // Above Profile / Log out.
     const rows = menu.findAll('[role="menuitem"]').map((b) => b.attributes('data-testid'));
     expect(rows.indexOf('menu-entry-docs')).toBeLessThan(rows.indexOf('account-menu-profile'));
+  });
+
+  it('logged in: rows are real links with hrefs, so Ctrl/Cmd-click can open them in a new tab', async () => {
+    authenticate(useAuthStore());
+    usePlayerStore().hasFoundedSettlement = true;
+    const wrapper = await mountHudNav('/settlement');
+    await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+    const leaderboards = wrapper.find('[data-testid="menu-entry-leaderboards"]');
+    expect(leaderboards.element.tagName).toBe('A');
+    expect(leaderboards.attributes('href')).toBe('/leaderboards');
+    const profile = wrapper.find('[data-testid="account-menu-profile"]');
+    expect(profile.element.tagName).toBe('A');
+    expect(profile.attributes('href')).toBe('/profile');
   });
 
   it('logged in: a row navigates and closes the menu', async () => {
