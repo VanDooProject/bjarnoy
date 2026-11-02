@@ -168,6 +168,52 @@ describe('AdminWorldsView', () => {
     );
   });
 
+  it('shows dates as text in the UI language layout and sends them back as ISO', async () => {
+    const startsAt = new Date(2026, 2, 5, 19, 30);
+    const wrapper = await mountView([world({ startsAt: startsAt.toISOString() })]);
+    adminUpdateWorldSettings.mockResolvedValue(world());
+
+    const field = wrapper.find('input#starts-world-1');
+    expect((field.element as HTMLInputElement).value).toBe('2026-03-05 19:30');
+    expect((field.element as HTMLInputElement).placeholder).toBe('YYYY-MM-DD HH:mm');
+
+    await wrapper.find('input#endboss-world-1').setValue('2026-04-01 08:15');
+    await wrapper.find('.actions button').trigger('click');
+    await flushPromises();
+
+    expect(adminUpdateWorldSettings).toHaveBeenCalledWith(
+      'world-1',
+      expect.objectContaining({
+        startsAt: startsAt.toISOString(),
+        endbossAt: new Date(2026, 3, 1, 8, 15).toISOString(),
+      }),
+    );
+  });
+
+  it('clears a date when its field is emptied', async () => {
+    const wrapper = await mountView([world({ startsAt: new Date(2026, 2, 5, 19, 30).toISOString() })]);
+    adminUpdateWorldSettings.mockResolvedValue(world());
+
+    await wrapper.find('input#starts-world-1').setValue('');
+    await wrapper.find('.actions button').trigger('click');
+    await flushPromises();
+
+    expect(adminUpdateWorldSettings).toHaveBeenCalledWith('world-1', expect.objectContaining({ startsAt: null }));
+  });
+
+  it('shows an inline error for an unreadable date and does not save', async () => {
+    const wrapper = await mountView();
+
+    await wrapper.find('input#starts-world-1').setValue('05.03.2026 19:30');
+    expect(wrapper.find('.datetime-error').text()).toContain('YYYY-MM-DD HH:mm');
+
+    await wrapper.find('.actions button').trigger('click');
+    await flushPromises();
+
+    expect(adminUpdateWorldSettings).not.toHaveBeenCalled();
+    expect(wrapper.find('.panel .error').exists()).toBe(true);
+  });
+
   it('refuses a name too short to be a world name without calling the API', async () => {
     const wrapper = await mountView([]);
 

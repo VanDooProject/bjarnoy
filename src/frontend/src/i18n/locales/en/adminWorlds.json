@@ -66,5 +66,6 @@
   },
   "graceMinutes": "Grace (min)",
   "reseedLink": "Reseed map…",
-  "confirmRunState": "{label} world \"{name}\"?"
+  "confirmRunState": "{label} world \"{name}\"?",
+  "dateInvalid": "Use the format {pattern}."
 }

@@ -2,11 +2,13 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
+import DateTimeField from '../../components/admin/DateTimeField.vue';
 import type { AdminWorldResponse } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
+import { dateTimePattern, formatDateTime, parseDateTime } from '../../lib/dateTimeFormat';
 import { DEFAULT_GENERATION } from '../../lib/map/worldGenerator';
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const worlds = ref<AdminWorldResponse[]>([]);
 const loading = ref(true);
@@ -30,29 +32,14 @@ const drafts = reactive<Record<string, Draft>>({});
 function draftFor(world: AdminWorldResponse): Draft {
   return {
     speedFactor: String(world.speedFactor),
-    startsAt: toLocalInput(world.startsAt),
+    startsAt: formatDateTime(world.startsAt, locale.value),
     joinsClosed: world.joinsClosed,
     frozenIslesEnabled: world.frozenIslesEnabled,
-    endbossAt: toLocalInput(world.endbossAt),
+    endbossAt: formatDateTime(world.endbossAt, locale.value),
     graceMinutes: '0',
     saving: false,
     error: null,
   };
-}
-
-// <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in local time, and
-// hands back the same shape — round-trip through Date to convert to/from
-// the ISO 8601 the backend sends/expects.
-function toLocalInput(iso: string | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function fromLocalInput(local: string): string | null {
-  if (!local) return null;
-  return new Date(local).toISOString();
 }
 
 // Creating a world (issue #105). Its own draft, separate from the per-world
@@ -130,15 +117,22 @@ async function saveSettings(world: AdminWorldResponse) {
     return;
   }
 
+  const startsAt = parseDateTime(draft.startsAt, locale.value);
+  const endbossAt = parseDateTime(draft.endbossAt, locale.value);
+  if (!startsAt.ok || !endbossAt.ok) {
+    draft.error = t('adminWorlds.dateInvalid', { pattern: dateTimePattern(locale.value) });
+    return;
+  }
+
   draft.saving = true;
   draft.error = null;
   try {
     const updated = await api.adminUpdateWorldSettings(world.id, {
       speedFactor,
-      startsAt: fromLocalInput(draft.startsAt),
+      startsAt: startsAt.iso,
       joinsClosed: draft.joinsClosed,
       frozenIslesEnabled: draft.frozenIslesEnabled,
-      endbossAt: fromLocalInput(draft.endbossAt),
+      endbossAt: endbossAt.iso,
     });
     applyUpdated(updated);
   } catch (err) {
@@ -252,7 +246,7 @@ async function setRunState(world: AdminWorldResponse, action: string) {
         />
 
         <label :for="`starts-${world.id}`">{{ $t('adminWorlds.fields.startsAt') }}</label>
-        <input :id="`starts-${world.id}`" v-model="drafts[world.id].startsAt" type="datetime-local" />
+        <DateTimeField :id="`starts-${world.id}`" v-model="drafts[world.id].startsAt" />
 
         <label :for="`closed-${world.id}`">{{ $t('adminWorlds.fields.closedToNewPlayers') }}</label>
         <input :id="`closed-${world.id}`" v-model="drafts[world.id].joinsClosed" type="checkbox" />
@@ -261,7 +255,7 @@ async function setRunState(world: AdminWorldResponse, action: string) {
         <input :id="`frozen-${world.id}`" v-model="drafts[world.id].frozenIslesEnabled" type="checkbox" />
 
         <label :for="`endboss-${world.id}`">{{ $t('adminWorlds.fields.endbossAt') }}</label>
-        <input :id="`endboss-${world.id}`" v-model="drafts[world.id].endbossAt" type="datetime-local" />
+        <DateTimeField :id="`endboss-${world.id}`" v-model="drafts[world.id].endbossAt" />
       </div>
 
       <p v-if="drafts[world.id]?.error" class="error">{{ drafts[world.id].error }}</p>
@@ -328,6 +322,9 @@ async function setRunState(world: AdminWorldResponse, action: string) {
 .fields label {
   font-size: 13px;
   color: var(--muted);
+}
+.fields .datetime-field {
+  align-items: flex-start;
 }
 .fields input[type='checkbox'] {
   justify-self: start;
