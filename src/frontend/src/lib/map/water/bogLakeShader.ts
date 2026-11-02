@@ -41,6 +41,14 @@ uniform float uFoamWidth;
 uniform float uFoamSpacing;
 // Foam line style (design round 4): 0 strands, 1 tapered strands, 2 crest + shadow, 3 micro curls, 4 ring arcs, 5 glint squiggles.
 uniform float uFoamStyle;
+// The world rect the lake mask covers: its top-left corner and its size (vUV 0..1 maps linearly onto it).
+uniform vec2 uLakeOrigin;
+uniform vec2 uLakeSize;
+// Blops (not gust-gated, ignore the wind): strength, 0 = off; density = chance a cell's cycle shows its curl.
+uniform float uBlops;
+uniform float uBlopDensity;
+// Blop curl size multiplier (1 = ring radius 9 world units).
+uniform float uBlopSize;
 
 // bogLakeGust.ts gustPhase, with the time term already in uGustTime: the same wave the forest sway frames are drawn in.
 const float GUST_WAVELENGTH = ${glFloat(GUST_WAVELENGTH)};
@@ -77,6 +85,16 @@ float gustEnvelope(vec2 w) {
   d -= floor(d + 0.5);
   float e = 1.0 - smoothstep(0.0, max(uBandHalf, 0.001), abs(d));
   return e * e * (3.0 - 2.0 * e);
+}
+
+// The micro curl: a thin crescent ")" opening toward -x, p relative to its centre in world units, ring radius rad, the line fading
+// out between lineIn and lineOut world units from the ring. Squashed in y like the ground. Shared by the micro curls foam style and
+// the blops, so both draw the same mark.
+float curlShape(vec2 p, float rad, float lineIn, float lineOut) {
+  p *= vec2(1.0, 0.6);
+  float ring = abs(length(p) - rad);
+  float arc = 1.0 - smoothstep(0.4, 1.6, abs(atan(p.y, p.x)));
+  return (1.0 - smoothstep(lineIn, lineOut, ring)) * arc;
 }
 
 // Distance to the nearest crest line across the wind, in world units, and the line's index: the crests are wiggly lines roughly
@@ -122,12 +140,8 @@ vec2 foamLook(vec2 w, float t) {
     float h = hash21(id + 0.7);
     if (h < 0.4) return vec2(0.0);
     vec2 centre = (id + 0.25 + 0.5 * vec2(hash21(id + 1.3), hash21(id + 2.9))) * cell;
-    vec2 p = (q - centre) * vec2(1.0, 0.6);
     float rad = cell * (0.22 + 0.12 * hash21(id + 4.1));
-    float ring = abs(length(p) - rad);
-    float ang = atan(p.y, p.x);
-    float arc = 1.0 - smoothstep(0.4, 1.6, abs(ang));
-    float curl = (1.0 - smoothstep(halfW * 0.25, halfW * 0.7, ring)) * arc;
+    float curl = curlShape(q - centre, rad, halfW * 0.25, halfW * 0.7);
     float beat = smoothstep(0.25, 0.85, 0.5 + 0.5 * sin(t * (1.2 + 1.5 * h) + h * 30.0));
     return vec2(curl * beat * 0.9, 0.0);
   }
@@ -159,6 +173,54 @@ vec2 foamLook(vec2 w, float t) {
   return vec2(thread * seg * 0.9, 0.0);
 }
 
+
+// Lake mask at a world-unit offset from the pixel (the mask is 1 render-texture px per world unit, so this is a point sample).
+float maskAt(vec2 w, vec2 off) {
+  return texture(uLakeMask, (w + off - uLakeOrigin) / uLakeSize).a;
+}
+
+// Blops: micro curls (curlShape) that appear at random spots, all facing the same way, and fade again — about one per hex at a time.
+// A jittered grid of hex-sized cells, each with its own cycle (period, phase) and a fresh random spot per cycle; a cycle shows its curl
+// with probability uBlopDensity. The spot must sit well inside the water, else that cycle shows nothing, and the spot is inset so a curl
+// never reaches the next cell.
+float blops(vec2 w, float t) {
+  // Cells smaller than a hex (TILE_W 168 -> ~67 world units square): spots near the bank or an island fail the water check, so at density
+  // 1 this lands at about one curl per hex of lake; the shipped density (0.5) shows about half that.
+  float cell = uTileW * 0.4;
+  vec2 id = floor(w / cell);
+  float h = hash21(id + 3.3);
+  float period = 3.2 + 1.0 * h;
+  float tt = t + hash21(id + 8.8) * period;
+  float cycle = floor(tt / period);
+  float local = fract(tt / period) * period;
+  float lifeSec = 2.4 + 0.8 * hash21(id + cycle * 1.7);
+  if (local > lifeSec) return 0.0;
+  if (hash21(id * 1.3 + cycle * 7.1 + 0.4) > uBlopDensity) return 0.0;
+  // Size varies per blop; over its life the curl grows from 55 % to 130 % of it and drifts toward its bulge (+x) by 1.6 times it.
+  float size = 9.0 * uBlopSize * (0.6 + 0.8 * hash21(id + cycle * 5.3));
+  float rMax = size * 1.3;
+  float driftMax = size * 1.6;
+  // The curl's whole path: up to rMax across (plus the drift) and rMax / 0.6 up and down (squashed in y), plus its line and a margin.
+  vec2 reach2 = vec2(rMax + 4.0, rMax / 0.6 + 4.0);
+  float reach = reach2.y + driftMax;
+  float inset = min(0.45, reach / cell);
+  vec2 start = (id + inset + (1.0 - 2.0 * inset) * vec2(hash21(id + cycle * 2.3 + 1.1), hash21(id + cycle * 3.9 + 5.7))) * cell;
+  vec2 mid = start + vec2(driftMax * 0.5, 0.0);
+  if (dot(w - mid, w - mid) > reach * reach) return 0.0;
+  // The water along the path, a little inside the curl's reach: the lake mask has the banks and the art on the water (lily pads, reed
+  // islands) cut out, so a curl neither touches a bank nor slides under an island.
+  vec2 probe = reach2 * 0.75;
+  vec2 end = start + vec2(driftMax, 0.0);
+  if (maskAt(start, vec2(0.0)) < 0.9 || maskAt(end, vec2(0.0)) < 0.9) return 0.0;
+  if (maskAt(start, vec2(-probe.x, 0.0)) < 0.9 || maskAt(end, vec2(probe.x, 0.0)) < 0.9) return 0.0;
+  if (maskAt(mid, vec2(0.0, probe.y)) < 0.9 || maskAt(mid, vec2(0.0, -probe.y)) < 0.9) return 0.0;
+  float age = local / lifeSec;
+  float rad = size * mix(0.55, 1.3, age);
+  vec2 centre = start + vec2(driftMax * age, 0.0);
+  float life = smoothstep(0.0, 0.12, age) * (1.0 - smoothstep(0.45, 1.0, age));
+  return curlShape(w - centre, rad, 0.6, 1.5) * life * 0.85;
+}
+
 // Premultiplied colour c at alpha a.
 vec4 over(vec3 c, float a) { return vec4(c * a, a); }
 
@@ -167,39 +229,45 @@ vec4 stack(vec4 a, vec4 b) { return a + b * (1.0 - a.a); }
 
 void main() {
   float lake = texture(uLakeMask, vUV).a;
-  if (lake < 0.01 || (uFoam <= 0.0 && uSheen <= 0.0 && uCatsPaws <= 0.0)) {
+  bool gustLooks = uFoam > 0.0 || uSheen > 0.0 || uCatsPaws > 0.0;
+  if (lake < 0.01 || (!gustLooks && uBlops <= 0.0)) {
     finalColor = vec4(0.0);
     return;
   }
   vec2 w = vWorld;
-  float env = gustEnvelope(w);
-  if (env <= 0.0) {
-    finalColor = vec4(0.0);
-    return;
-  }
   float t = uTime;
-  vec2 drift = vec2(-t * 40.0, 0.0);
   vec4 acc = vec4(0.0);
 
-  // Cat's paws: matte darker patches where the wind roughens the surface, with a fine grain inside. Bottom of the stack.
-  if (uCatsPaws > 0.0) {
-    float n = fbm((w + drift * 1.5) * vec2(0.02, 0.03));
-    float paws = smoothstep(0.42, 0.55, n) * env;
-    float grain = vnoise(w * vec2(0.6, 0.25) + vec2(-t * 9.0, 0.0));
-    acc = vec4(vec3(0.0), clamp(uCatsPaws * paws * (0.26 + 0.1 * grain), 0.0, 1.0));
+  // The wind gust looks, only inside the gust band.
+  float env = gustLooks ? gustEnvelope(w) : 0.0;
+  if (env > 0.0) {
+    vec2 drift = vec2(-t * 40.0, 0.0);
+
+    // Cat's paws: matte darker patches where the wind roughens the surface, with a fine grain inside. Bottom of the stack.
+    if (uCatsPaws > 0.0) {
+      float n = fbm((w + drift * 1.5) * vec2(0.02, 0.03));
+      float paws = smoothstep(0.42, 0.55, n) * env;
+      float grain = vnoise(w * vec2(0.6, 0.25) + vec2(-t * 9.0, 0.0));
+      acc = vec4(vec3(0.0), clamp(uCatsPaws * paws * (0.26 + 0.1 * grain), 0.0, 1.0));
+    }
+
+    // Soft sheen: a broad, almost featureless lightening that sweeps across with the gust.
+    if (uSheen > 0.0) {
+      float n = 0.65 + 0.35 * vnoise(w * 0.008 + vec2(t * 0.05, 0.0));
+      acc = stack(over(vec3(0.42, 0.60, 0.78), clamp(uSheen * env * n * 0.3, 0.0, 1.0)), acc);
+    }
+
+    // Foam lines (foamLook, uFoamStyle): light crests across the wind, sliding downwind; style 2 adds a dark trough line.
+    if (uFoam > 0.0) {
+      vec2 f = foamLook(w, t);
+      acc = stack(vec4(vec3(0.0), clamp(uFoam * f.y * env, 0.0, 1.0)), acc);
+      acc = stack(over(vec3(0.92, 0.95, 0.97), clamp(uFoam * f.x * env, 0.0, 1.0)), acc);
+    }
   }
 
-  // Soft sheen: a broad, almost featureless lightening that sweeps across with the gust.
-  if (uSheen > 0.0) {
-    float n = 0.65 + 0.35 * vnoise(w * 0.008 + vec2(t * 0.05, 0.0));
-    acc = stack(over(vec3(0.42, 0.60, 0.78), clamp(uSheen * env * n * 0.3, 0.0, 1.0)), acc);
-  }
-
-  // Foam lines (foamLook, uFoamStyle): light crests across the wind, sliding downwind; style 2 adds a dark trough line. Top of the stack.
-  if (uFoam > 0.0) {
-    vec2 f = foamLook(w, t);
-    acc = stack(vec4(vec3(0.0), clamp(uFoam * f.y * env, 0.0, 1.0)), acc);
-    acc = stack(over(vec3(0.92, 0.95, 0.97), clamp(uFoam * f.x * env, 0.0, 1.0)), acc);
+  // Blops: independent of the wind, top of the stack.
+  if (uBlops > 0.0) {
+    acc = stack(over(vec3(0.94, 0.97, 0.98), clamp(uBlops * blops(w, t), 0.0, 1.0)), acc);
   }
 
   finalColor = acc * lake;

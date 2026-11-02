@@ -6,15 +6,19 @@
 // pixels that are not plain water, and packs all masks into one grey+alpha PNG (alpha = dry).
 // Every bog lake `_base` frame gets a wet mask (the lake water in it, `lakeWetMaskHalf`) packed into a second PNG,
 // served as the module's `lake` atlas (docs/design/water-shader.md, "Bog lakes").
-// The result is computed once per build / dev-server start and cached.
+// `virtual:river-water-masks` serves the river water masks (docs/design/water-shader.md §4.4e): every river, bog creek and
+// river building `_base` frame's painted water (riverMaskCore.ts), packed the same way.
+// The results are computed once per build / dev-server start and cached.
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import type { Plugin } from 'vite';
+import { hasRiverWater, riverMaskHalf, riverTexelCount, RIVER_MASK_MIN_TEXELS } from '../src/lib/map/water/riverMaskCore.ts';
 import {
   LAKE_FRAME_RE,
   LAKE_REFERENCE_FRAME_RE,
+  LAKE_TOP_FRAME_RE,
   REFERENCE_FRAME_RE,
   SOURCE_H,
   SOURCE_W,
@@ -34,7 +38,7 @@ import {
 } from '../src/lib/map/water/dryMaskCore.ts';
 
 const VIRTUAL_ID = 'virtual:water-dry-masks';
-const RESOLVED_ID = '\0' + VIRTUAL_ID;
+const RIVER_ID = 'virtual:river-water-masks';
 const ATLAS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../vendor/bg_assets_hextile/atlas');
 /** Width of the packed mask atlas in texels. */
 const ATLAS_WIDTH = 2048;
@@ -53,8 +57,17 @@ interface Manifest {
   meta?: { bjarnoy?: { tile?: { w: number; h: number; topFaceY: number; topFaceH: number } } };
 }
 
-/** Every non-showcase page's `_base` frames (the ones drawn under the water mesh), as full 200x300 RGBA canvases. */
-async function loadBaseCanvases(): Promise<Map<string, { canvas: Uint8Array; trim: SourceRect }>> {
+/**
+ * Every non-showcase page's `_base` frames (the ones drawn under the water mesh), as full 200x300 RGBA canvases. Decoded once
+ * and shared by both virtual modules (and the river tests' fixtures).
+ */
+export function loadBaseCanvases(): Promise<Map<string, { canvas: Uint8Array; trim: SourceRect }>> {
+  baseCanvases ??= readBaseCanvases();
+  return baseCanvases;
+}
+let baseCanvases: Promise<Map<string, { canvas: Uint8Array; trim: SourceRect }>> | null = null;
+
+async function readBaseCanvases(): Promise<Map<string, { canvas: Uint8Array; trim: SourceRect }>> {
   const result = new Map<string, { canvas: Uint8Array; trim: SourceRect }>();
   const pages = readdirSync(ATLAS_DIR).filter((f) => f.endsWith('.json') && !f.includes('showcase'));
   for (const jsonName of pages) {
@@ -63,8 +76,13 @@ async function loadBaseCanvases(): Promise<Map<string, { canvas: Uint8Array; tri
     if (tile && (tile.w !== SOURCE_W || tile.h !== SOURCE_H || tile.topFaceY !== TOP_FACE_Y || tile.topFaceH !== TOP_FACE_H)) {
       throw new Error(`waterDryMasks: ${jsonName} has tile geometry ${JSON.stringify(tile)}, dryMaskCore assumes ${SOURCE_W}x${SOURCE_H} with the top face at ${TOP_FACE_Y}+${TOP_FACE_H}`);
     }
+    // The base frames, plus the bog lake frames' top layers (their lily pads and islands are cut out of the lake wet mask).
     const names = Object.entries(manifest.frames).filter(
-      ([name, f]) => name.endsWith('_base') && f.bjarnoy?.layer === 'base' && !f.rotated && f.sourceSize.w === SOURCE_W && f.sourceSize.h === SOURCE_H,
+      ([name, f]) =>
+        ((name.endsWith('_base') && f.bjarnoy?.layer === 'base') || (LAKE_TOP_FRAME_RE.test(name) && f.bjarnoy?.layer === 'top')) &&
+        !f.rotated &&
+        f.sourceSize.w === SOURCE_W &&
+        f.sourceSize.h === SOURCE_H,
     );
     if (names.length === 0) continue;
     const { data, info } = await sharp(join(ATLAS_DIR, jsonName.replace(/\.json$/, '.webp')))
@@ -147,13 +165,16 @@ export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
   const seaCells: MaskCell[] = [];
   const lakeCells: MaskCell[] = [];
   for (const [name, { canvas, trim }] of bases) {
+    // A lake top layer only feeds its base frame's wet mask; it is no frame of its own.
+    if (LAKE_TOP_FRAME_RE.test(name)) continue;
     const orientation = orientationOf(name);
     // Every bog lake frame gets a wet mask, the plain lake included: the family name decides, not a match ratio.
     if (LAKE_FRAME_RE.test(name)) {
       const reference = orientation ? lakeReferenceByOrientation.get(orientation) : undefined;
       if (!reference) continue;
       const rect = cellSourceRect(trim);
-      lakeCells.push({ name, rect, mask: cropHalf(lakeWetMaskHalf(canvas, reference), rect) });
+      const top = bases.get(name.replace(/_base$/, ''))?.canvas;
+      lakeCells.push({ name, rect, mask: cropHalf(lakeWetMaskHalf(canvas, reference, top), rect) });
       continue;
     }
     if (REFERENCE_FRAME_RE.test(name)) continue;
@@ -169,18 +190,31 @@ export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
   return { ...sea, lake };
 }
 
+/** Computes every river water mask (river, bog creek and river building frames with painted river water) and packs them into one PNG. */
+export async function buildRiverWaterMasks(): Promise<MaskAtlasData> {
+  const bases = await loadBaseCanvases();
+  const cells: MaskCell[] = [];
+  for (const [name, { canvas, trim }] of bases) {
+    if (!hasRiverWater(name) || riverTexelCount(canvas) < RIVER_MASK_MIN_TEXELS) continue;
+    const rect = cellSourceRect(trim);
+    cells.push({ name, rect, mask: cropHalf(riverMaskHalf(canvas), rect) });
+  }
+  return packMaskAtlas(cells);
+}
+
 export function waterDryMasksPlugin(): Plugin {
-  let cached: Promise<WaterDryMasksData> | null = null;
+  const cache = new Map<string, Promise<unknown>>();
+  const builders: Record<string, () => Promise<unknown>> = { [VIRTUAL_ID]: buildWaterDryMasks, [RIVER_ID]: buildRiverWaterMasks };
   return {
     name: 'water-dry-masks',
     resolveId(id) {
-      return id === VIRTUAL_ID ? RESOLVED_ID : null;
+      return Object.hasOwn(builders, id) ? '\0' + id : null;
     },
     async load(id) {
-      if (id !== RESOLVED_ID) return null;
-      cached ??= buildWaterDryMasks();
-      const data = await cached;
-      return `export default ${JSON.stringify(data)};`;
+      const virtualId = id.startsWith('\0') ? id.slice(1) : '';
+      if (!Object.hasOwn(builders, virtualId)) return null;
+      if (!cache.has(virtualId)) cache.set(virtualId, builders[virtualId]());
+      return `export default ${JSON.stringify(await cache.get(virtualId))};`;
     },
   };
 }

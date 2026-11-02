@@ -50,7 +50,7 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
       await page.waitForTimeout(15);
       if (!page.url().includes('#world')) break;
     }
-    await expect(page).toHaveURL(/\/settlement$/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/, { timeout: 10_000 });
 
     // Continuity: the camera crossed the threshold mid-gesture, not via a
     // reset — it should be somewhere past where it started, not snapped to
@@ -133,7 +133,7 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     await expect(world.canvas).toHaveCount(1);
 
     await clickNav(page, 'Settlement');
-    await expect(page).toHaveURL(/\/settlement$/);
+    await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
     await waitForMapReady(page);
     await expect(page.locator('canvas')).toHaveCount(1);
 

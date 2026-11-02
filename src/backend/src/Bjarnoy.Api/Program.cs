@@ -271,6 +271,28 @@ await using (var adminSeedScope = app.Services.CreateAsyncScope())
         logger);
 }
 
+// The frontend build writes build-id.txt next to index.html (build/buildId.ts). Stamping it on every
+// response lets an open tab notice a deploy happened and load the new build. Absent in a local run
+// (empty wwwroot), where there is no header.
+var buildIdFile = app.Environment.WebRootFileProvider.GetFileInfo("build-id.txt");
+if (buildIdFile.Exists)
+{
+    using var buildIdReader = new StreamReader(buildIdFile.CreateReadStream());
+    var appBuildId = (await buildIdReader.ReadToEndAsync()).Trim();
+    if (appBuildId.Length > 0)
+    {
+        app.Use((context, next) =>
+        {
+            context.Response.OnStarting(() =>
+            {
+                context.Response.Headers["X-App-Build"] = appBuildId;
+                return Task.CompletedTask;
+            });
+            return next(context);
+        });
+    }
+}
+
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 

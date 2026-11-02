@@ -23,8 +23,9 @@ namespace Bjarnoy.Domain.Combat;
 /// <param name="SettlementRazed">
 /// True when the target was the Longhouse and <paramref name="LevelAfter"/>
 /// is 0 — per the design doc, a settlement with no Longhouse is "razed": its
-/// <see cref="Settlement.ClaimRadius"/> falls to its level-0 floor for free
-/// (see <see cref="Settlement.ClaimRadius"/>'s remarks); a sieged Tower's own
+/// settlement then has no claim at all (<see cref="Settlement.LonghouseDisc"/>
+/// yields no disc for level 0), and its towers stay connected only through another Longhouse of the same player
+/// (<see cref="ConnectedRealm"/>); a sieged Tower's own
 /// satellite disc collapses the same way, for the same reason — a
 /// destroyed/removed Tower is simply gone from <c>UpdatedBuildings</c>, and
 /// <see cref="Settlement.Claims"/> only ever reads the discs of buildings
@@ -64,8 +65,8 @@ public sealed record SiegeOutcome(
 /// <remarks>
 /// <para>
 /// Settlement conquest/capture is explicitly out of scope for issue #40
-/// phase 5 — razing (reducing the Longhouse to 0, which shrinks
-/// <see cref="Settlement.ClaimRadius"/> to its floor for free) is as far as
+/// phase 5 — razing (reducing the Longhouse to 0, which ends the
+/// settlement's own claim — <see cref="Settlement.LonghouseDisc"/>) is as far as
 /// this goes. Forcibly recalling guest (<see cref="Armies.ArmyMission.Support"/>)
 /// armies from a settlement razed out from under them is reasonable future
 /// polish, deliberately not implemented here — a razed settlement with no

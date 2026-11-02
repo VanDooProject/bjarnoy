@@ -49,6 +49,7 @@ const tocLinks = computed(() =>
         <template #level1>{{ claimRadiusForLevel(1) }}</template>
         <template #level2>{{ claimRadiusForLevel(2) }}</template>
       </i18n-t>
+      <p class="text">{{ $t('docs.realm.claim.destroyed') }}</p>
     </section>
 
     <section id="towers" class="block">

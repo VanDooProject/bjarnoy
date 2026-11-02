@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Tests;
@@ -53,7 +54,7 @@ public class FogVisionRadiiTests
     {
         var coord = new HexCoord(4, -1);
 
-        var source = FogVisionRadii.ToVisionSource(coord, longhouseLevel: 3);
+        var source = FogVisionRadii.ToVisionSource(coord, longhouseLevel: 3)!.Value;
 
         Assert.Equal(coord, source.Coord);
         Assert.Equal(FogVisionRadii.ExploredRadius(3), source.ExploredRadius);
@@ -63,8 +64,8 @@ public class FogVisionRadiiTests
     [Fact]
     public void Odins_ravens_add_rings_to_the_settlements_and_a_towers_explored_and_visible_radii()
     {
-        var plain = FogVisionRadii.ToVisionSource(HexCoord.Origin, longhouseLevel: 3);
-        var ravens = FogVisionRadii.ToVisionSource(HexCoord.Origin, longhouseLevel: 3, bonusRings: 10);
+        var plain = FogVisionRadii.ToVisionSource(HexCoord.Origin, longhouseLevel: 3)!.Value;
+        var ravens = FogVisionRadii.ToVisionSource(HexCoord.Origin, longhouseLevel: 3, bonusRings: 10)!.Value;
         var plainTower = FogVisionRadii.ToTowerVisionSource(new HexCoord(2, 0), towerLevel: 2);
         var ravensTower = FogVisionRadii.ToTowerVisionSource(new HexCoord(2, 0), towerLevel: 2, bonusRings: 10);
 
@@ -74,5 +75,23 @@ public class FogVisionRadiiTests
         Assert.Equal(plainTower.VisibleRadius + 10, ravensTower.VisibleRadius);
         Assert.Equal(FogVisionRadii.ArmyVisionRadiusHexes + 10, FogVisionRadii.ArmyVisionRadius(10));
         Assert.Equal(FogVisionRadii.ArmyVisionRadiusHexes, FogVisionRadii.ArmyVisionRadius());
+    }
+
+    [Fact]
+    public void A_settlement_whose_longhouse_is_destroyed_has_no_centre_vision_source()
+    {
+        Assert.Null(FogVisionRadii.ToVisionSource(new HexCoord(4, -1), longhouseLevel: 0));
+        Assert.Null(FogVisionRadii.ToVisionSource(new HexCoord(4, -1), longhouseLevel: 0, bonusRings: 10));
+    }
+
+    [Fact]
+    public void A_standing_longhouse_has_a_centre_vision_source_exactly_when_it_has_a_claim_disc()
+    {
+        for (var level = 0; level <= 10; level++)
+        {
+            Assert.Equal(
+                Settlement.LonghouseDisc(HexCoord.Origin, level) is not null,
+                FogVisionRadii.ToVisionSource(HexCoord.Origin, level) is not null);
+        }
     }
 }

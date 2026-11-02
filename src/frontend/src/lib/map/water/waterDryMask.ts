@@ -8,7 +8,8 @@
 // the water mask and keeps caustics and foam off whatever is dry.
 //
 // The bog lake layer (bogLakeShader.ts) reuses all of it: the same class draws the lake *wet* masks (`virtual:water-dry-masks`' `lake` atlas)
-// of the lake hexes into a render texture of its own, over the lakes' bounding rect (`entriesWorldBounds`).
+// of the lake hexes into a render texture of its own, over the lakes' bounding rect (`entriesWorldBounds`). The river flow layer
+// (riverFlowLayer.ts) shares the drawing half, `MaskRenderTarget`.
 import { Container, ImageSource, Matrix, Rectangle, RenderTexture, Sprite, Texture, type Renderer } from 'pixi.js';
 import { REFERENCE_FRAME_RE, SOURCE_H, SOURCE_W, type DryMaskFrame, type MaskAtlasData } from './dryMaskCore';
 
@@ -41,9 +42,9 @@ export function artCanvasWorldRect(origin: { x: number; y: number }, tileWidth: 
   return { x: origin.x, y: origin.y, w: SOURCE_W * k, h: SOURCE_H * k };
 }
 
-/** Render-texture size and scale (pixels per world unit) for a world rect: `DRY_RT_PIXELS_PER_UNIT`, capped so the long side fits `DRY_RT_MAX_SIDE`. */
-export function dryRenderTargetSize(worldW: number, worldH: number): { width: number; height: number; scale: number } {
-  const scale = Math.min(DRY_RT_PIXELS_PER_UNIT, DRY_RT_MAX_SIDE / Math.max(worldW, worldH));
+/** Render-texture size and scale (pixels per world unit) for a world rect: `DRY_RT_PIXELS_PER_UNIT`, capped so the long side fits `maxSide`. */
+export function dryRenderTargetSize(worldW: number, worldH: number, maxSide: number = DRY_RT_MAX_SIDE): { width: number; height: number; scale: number } {
+  const scale = Math.min(DRY_RT_PIXELS_PER_UNIT, maxSide / Math.max(worldW, worldH));
   return { width: Math.max(1, Math.ceil(worldW * scale)), height: Math.max(1, Math.ceil(worldH * scale)), scale };
 }
 
@@ -127,6 +128,72 @@ export function entriesWorldBounds(entries: readonly DryEntry[], tileWidth: numb
   return { minX, minY, maxX, maxY };
 }
 
+/** One sprite drawn into a mask render texture: a texture, the world rect it covers, and a tint. */
+export interface MaskPlacement {
+  texture: Texture;
+  rect: WorldRect;
+  tint: number;
+}
+
+/**
+ * A render texture over a world rect, filled with sprites placed in world space: the shared drawing half of the mask layers
+ * below and the river flow layer (`riverFlowLayer.ts`).
+ */
+export class MaskRenderTarget {
+  private readonly container = new Container();
+  private pool: Sprite[] = [];
+  private target: RenderTexture | null = null;
+  private readonly maxSide: number;
+
+  /** `maxSide`: the longest side of the render texture, in pixels. */
+  constructor(maxSide: number = DRY_RT_MAX_SIDE) {
+    this.maxSide = maxSide;
+  }
+
+  /** The render texture, or null before the first `render`. */
+  get texture(): Texture | null {
+    return this.target;
+  }
+
+  /** Clears the target and draws `placements` into it over `rect`, in order (later ones over earlier ones). Returns the (possibly new) texture to bind. */
+  render(renderer: Renderer, rect: { minX: number; minY: number; maxX: number; maxY: number }, placements: readonly MaskPlacement[]): Texture {
+    const { width, height, scale } = dryRenderTargetSize(rect.maxX - rect.minX, rect.maxY - rect.minY, this.maxSide);
+    if (!this.target) {
+      this.target = RenderTexture.create({ width, height, resolution: 1, scaleMode: 'linear' });
+    } else if (this.target.width !== width || this.target.height !== height) {
+      // Resized in place: the shader stays bound to the same source, so there is nothing to swap or retire.
+      this.target.source.resize(width, height, 1);
+    }
+
+    let used = 0;
+    for (const { texture, rect: worldRect, tint } of placements) {
+      const sprite = (this.pool[used] ??= new Sprite());
+      sprite.texture = texture;
+      sprite.tint = tint;
+      sprite.position.set(worldRect.x, worldRect.y);
+      sprite.width = worldRect.w;
+      sprite.height = worldRect.h;
+      if (!sprite.parent) this.container.addChild(sprite);
+      used++;
+    }
+    for (let i = used; i < this.pool.length; i++) {
+      if (this.pool[i].parent) this.container.removeChild(this.pool[i]);
+    }
+
+    // World -> render-texture pixels: scale, then shift the rect's top-left to the origin.
+    const transform = new Matrix(scale, 0, 0, scale, -rect.minX * scale, -rect.minY * scale);
+    renderer.render({ container: this.container, target: this.target, transform, clear: true, clearColor: [0, 0, 0, 0] });
+    return this.target;
+  }
+
+  destroy(): void {
+    this.container.destroy({ children: true });
+    this.pool = [];
+    this.target?.destroy(true);
+    this.target = null;
+  }
+}
+
 /**
  * Owns a mask render texture and the sprites drawn into it: the sea hexes' dry mask (`kind` 'dry', the default) or the bog lakes' wet
  * mask (`kind` 'lake').
@@ -135,9 +202,7 @@ export function entriesWorldBounds(entries: readonly DryEntry[], tileWidth: numb
  * change, never per frame.
  */
 export class WaterDryLayer {
-  private readonly container = new Container();
-  private pool: Sprite[] = [];
-  private target: RenderTexture | null = null;
+  private readonly target = new MaskRenderTarget();
   private masks: LoadedMasks | null = null;
 
   private readonly kind: MaskKind;
@@ -157,7 +222,7 @@ export class WaterDryLayer {
 
   /** The render texture the water shader samples, or null before the first `draw`. */
   get texture(): Texture | null {
-    return this.target;
+    return this.target.texture;
   }
 
   /**
@@ -167,49 +232,21 @@ export class WaterDryLayer {
    */
   draw(renderer: Renderer, rect: { minX: number; minY: number; maxX: number; maxY: number }, entries: readonly DryEntry[], tileWidth: number): Texture | null {
     const masks = this.masks;
-    if (!masks) return this.target;
-    const { width, height, scale } = dryRenderTargetSize(rect.maxX - rect.minX, rect.maxY - rect.minY);
-    if (!this.target) {
-      this.target = RenderTexture.create({ width, height, resolution: 1, scaleMode: 'linear' });
-    } else if (this.target.width !== width || this.target.height !== height) {
-      // Resized in place: the shader stays bound to the same source, so there is nothing to swap or retire.
-      this.target.source.resize(width, height, 1);
-    }
-
-    let used = 0;
-    const place = (texture: Texture, worldRect: WorldRect, tint: number) => {
-      const sprite = (this.pool[used] ??= new Sprite());
-      sprite.texture = texture;
-      sprite.tint = tint;
-      sprite.position.set(worldRect.x, worldRect.y);
-      sprite.width = worldRect.w;
-      sprite.height = worldRect.h;
-      if (!sprite.parent) this.container.addChild(sprite);
-      used++;
-    };
+    if (!masks) return this.target.texture;
+    const placements: MaskPlacement[] = [];
     for (const entry of entries) {
       const name = entry.texture.label ?? '';
       if (this.kind === 'dry' && REFERENCE_FRAME_RE.test(name)) continue;
       const frame = masks.data.frames[name];
-      if (frame) place(cellTexture(masks, name, frame), dryCellWorldRect(entry, frame, tileWidth), 0xffffff);
+      if (frame) placements.push({ texture: cellTexture(masks, name, frame), rect: dryCellWorldRect(entry, frame, tileWidth), tint: 0xffffff });
       // Sea-hex art that is not plain water and has no mask: all of it is dry. Black tint keeps rgb 0 and the art's own alpha, which is what the shader reads.
       // (A lake frame without a mask has no lake water to show: it draws nothing.)
-      else if (this.kind === 'dry') place(entry.texture, artCanvasWorldRect(entry, tileWidth), 0x000000);
+      else if (this.kind === 'dry') placements.push({ texture: entry.texture, rect: artCanvasWorldRect(entry, tileWidth), tint: 0x000000 });
     }
-    for (let i = used; i < this.pool.length; i++) {
-      if (this.pool[i].parent) this.container.removeChild(this.pool[i]);
-    }
-
-    // World -> render-texture pixels: scale, then shift the rect's top-left to the origin.
-    const transform = new Matrix(scale, 0, 0, scale, -rect.minX * scale, -rect.minY * scale);
-    renderer.render({ container: this.container, target: this.target, transform, clear: true, clearColor: [0, 0, 0, 0] });
-    return this.target;
+    return this.target.render(renderer, rect, placements);
   }
 
   destroy(): void {
-    this.container.destroy({ children: true });
-    this.pool = [];
-    this.target?.destroy(true);
-    this.target = null;
+    this.target.destroy();
   }
 }

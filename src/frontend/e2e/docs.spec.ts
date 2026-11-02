@@ -223,7 +223,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     const caption = page.getByTestId("island-caption");
     await expect(caption).toHaveText("Point at a hex to see what it is.");
 
-    // Hovering the island (its locked preview camera fits the whole island
+    // Hovering the island (its camera starts fitted to the whole island
     // to the canvas, so its own centre — the Utgard shrine, still living at
     // stage 0 — is a safe bet for "somewhere on the island") swaps the
     // caption away from the hint text and to the actual translated name, not
@@ -407,14 +407,19 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(lastSection).toBeInViewport();
     expect(await view.noHorizontalOverflow()).toBe(true);
 
-    // The example island has a locked camera: a click on it does not hand it the wheel, the page still scrolls.
+    // The example island can be zoomed: a plain wheel over it scrolls the page until the reader presses on the map, then the
+    // wheel zooms the map (the page stays put) until the pointer leaves it.
     const island = page.locator(".bog-island");
     await island.scrollIntoViewIfNeeded();
-    await island.click();
     const scrolledBefore = await view.scrollTop();
     await island.hover();
     await page.mouse.wheel(0, 300);
     await expect.poll(() => view.scrollTop()).not.toBe(scrolledBefore);
+    await island.click();
+    const engagedAt = await view.scrollTop();
+    await page.mouse.wheel(0, -300);
+    await page.waitForTimeout(300);
+    expect(await view.scrollTop()).toBe(engagedAt);
 
     // The example island comes first, above the separate tiles.
     expect(

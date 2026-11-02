@@ -7,11 +7,12 @@ import { createTestI18n } from '../../test/i18n';
 import enLanding from '../../i18n/locales/en/landing.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
 
-function mountChecklist(hasFounded: boolean, placedTypes: string[] = []) {
+function mountChecklist(hasFounded: boolean, placedTypes: string[] = [], canFocus = false) {
   return mount(OnboardingChecklist, {
     props: {
       guidance: deriveOnboardingGuidance(hasFounded, placedTypes as never),
       hasFounded,
+      canFocus,
     },
     global: { plugins: [createTestI18n({ landing: enLanding, catalogue: enCatalogue })] },
   });
@@ -65,5 +66,19 @@ describe('OnboardingChecklist', () => {
     expect(rows).toHaveLength(3);
     expect(rows.filter((row) => row.classes().includes('done'))).toHaveLength(2);
     expect(rows.filter((row) => row.classes().includes('current'))).toHaveLength(1);
+  });
+
+  it('tapping the current step emits focus (the arrow pokes its target)', async () => {
+    const wrapper = mountChecklist(true, ['longhouse', 'reindeerherder'], true);
+    const buttons = wrapper.findAll('button.tray-item');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].classes()).toContain('current');
+    await buttons[0].trigger('click');
+    expect(wrapper.emitted('focus')).toHaveLength(1);
+  });
+
+  it('the current step is no button while there is no arrow to poke', () => {
+    const wrapper = mountChecklist(true, ['longhouse'], false);
+    expect(wrapper.find('button').exists()).toBe(false);
   });
 });

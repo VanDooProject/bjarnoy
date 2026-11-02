@@ -46,7 +46,14 @@ export const test = base.extend<{
   mapMotion: MapMotion;
   motionPrompt: 'dismissed' | 'unset';
   graphicsSettings: void;
+  expectedConsoleErrors: RegExp | null;
 }>({
+  /**
+   * Console/page errors a spec provokes on purpose (e.g. the 404 of a chunk it
+   * removed); matching ones don't fail the forbidConsoleErrors check.
+   */
+  expectedConsoleErrors: [null, { option: true }],
+
   /**
    * The map's "Smooth edges" setting (lib/perf/antialiasPreference.ts), set
    * the way a player sets it: through its own localStorage key, before the
@@ -179,11 +186,14 @@ export const test = base.extend<{
   ],
 
   forbidConsoleErrors: [
-    async ({ page }, use) => {
+    async ({ page, expectedConsoleErrors }, use) => {
       const errors: string[] = [];
-      page.on('pageerror', (err) => errors.push(err.message));
+      const expected = (text: string) => expectedConsoleErrors?.test(text) ?? false;
+      page.on('pageerror', (err) => {
+        if (!expected(err.message)) errors.push(err.message);
+      });
       page.on('console', (msg) => {
-        if (msg.type() === 'error' && !isEnvironmentNoise(msg.text())) errors.push(msg.text());
+        if (msg.type() === 'error' && !isEnvironmentNoise(msg.text()) && !expected(msg.text())) errors.push(msg.text());
       });
 
       await use();

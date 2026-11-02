@@ -84,6 +84,9 @@ export const LAKE_REFERENCE_FRAME_RE = /^boglake_(E|NE|NW|SE|SW|W)_base$/;
 /** Every bog lake `_base` frame: the plain lake, `inlet`, `shore`, `half` and `mouth` families, with or without art variants. */
 export const LAKE_FRAME_RE = /^boglake(_(inlet|shore|half|mouth))?_(E|NE|NW|SE|SW|W)(_variant\d+)?_base$/;
 
+/** A bog lake frame's top layer (lily pads, reed islands, reeds): the `_base` frame's name without `_base`. */
+export const LAKE_TOP_FRAME_RE = /^boglake(_(inlet|shore|half|mouth))?_(E|NE|NW|SE|SW|W)(_variant\d+)?$/;
+
 /** The orientation token of a frame name, or null. */
 export function orientationOf(frameName: string): string | null {
   return /_(E|NE|NW|SE|SW|W)_/.exec(frameName)?.[1] ?? null;
@@ -202,12 +205,21 @@ export function isLakeWaterPixel(reference: Canvas, i: number): boolean {
  * bank, the rocks, a creek's brighter water and the prism's sides are all not wet. The 0/1 map is eroded by one source
  * pixel (the opposite of `dryMaskHalf`'s growth: the effect stays off the bank outline) and box-downsampled 2x2, which
  * makes the edge soft. Output is `(SOURCE_W / 2) * (SOURCE_H / 2)` bytes, 255 = wet.
+ *
+ * `top` is the frame's top layer (lily pads, reed islands, reeds), drawn over the water in the game: its opaque pixels, grown by one
+ * source pixel, are not wet either, so nothing on the lake (a blop) is placed under them and peeks out around them.
  */
-export function lakeWetMaskHalf(art: Canvas, reference: Canvas, width = SOURCE_W, height = SOURCE_H): Uint8Array {
+export function lakeWetMaskHalf(art: Canvas, reference: Canvas, top?: Canvas, width = SOURCE_W, height = SOURCE_H): Uint8Array {
   const wet = new Uint8Array(width * height);
   for (let p = 0; p < wet.length; p++) {
     const i = p * 4;
     if (isLakeWaterPixel(reference, i) && isSame(art, reference, i, DRY_PIXEL_EPS)) wet[p] = 1;
+  }
+  if (top) {
+    const covered = new Uint8Array(width * height);
+    for (let p = 0; p < covered.length; p++) covered[p] = top[p * 4 + 3] >= OPAQUE_ALPHA ? 1 : 0;
+    const grown = morph(covered, width, height, 1, true);
+    for (let p = 0; p < wet.length; p++) if (grown[p]) wet[p] = 0;
   }
   return downsampleHalf(morph(wet, width, height, 1, false), width, height);
 }

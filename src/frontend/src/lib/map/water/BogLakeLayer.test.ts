@@ -73,6 +73,15 @@ describe('BogLakeLayer', () => {
 
   it('turns each look off with its own flag and scales it with its strength', () => {
     const layer = new BogLakeLayer(TILE_W);
+    // The gust looks ship off: only the blops show by default.
+    layer.tick(0);
+    expect(uniformsOf(layer).uFoam).toBe(0);
+    expect(uniformsOf(layer).uSheen).toBe(0);
+    expect(uniformsOf(layer).uCatsPaws).toBe(0);
+
+    waterDebugFlags.bogLakeFoam = true;
+    waterDebugFlags.bogLakeSheen = true;
+    waterDebugFlags.bogLakeCatsPaws = true;
     layer.tick(0);
     expect(uniformsOf(layer).uFoam).toBe(1);
     expect(uniformsOf(layer).uSheen).toBe(1);
@@ -91,6 +100,30 @@ describe('BogLakeLayer', () => {
     layer.tick(0);
     expect(uniformsOf(layer).uSheen).toBe(0);
     expect(uniformsOf(layer).uCatsPaws).toBe(0);
+  });
+
+  it('turns blops off with their flag and scales them, density included', () => {
+    const layer = new BogLakeLayer(TILE_W);
+    layer.tick(0);
+    expect(uniformsOf(layer).uBlops).toBe(1);
+    expect(uniformsOf(layer).uBlopDensity).toBe(0.5);
+    waterDebugTuning.bogLakeBlopsStrength = 1.5;
+    waterDebugTuning.bogLakeBlopDensity = 0.5;
+    waterDebugTuning.bogLakeBlopSize = 1.4;
+    layer.tick(0);
+    expect(uniformsOf(layer).uBlops).toBe(1.5);
+    expect(uniformsOf(layer).uBlopDensity).toBe(0.5);
+    expect(uniformsOf(layer).uBlopSize).toBe(1.4);
+    waterDebugFlags.bogLakeBlops = false;
+    layer.tick(0);
+    expect(uniformsOf(layer).uBlops).toBe(0);
+  });
+
+  it('gives the shader the lake mask\'s world rect', () => {
+    const layer = new BogLakeLayer(TILE_W);
+    layer.setLake(lakeTexture(), { minX: 10, minY: 20, maxX: 110, maxY: 220 });
+    expect(Array.from(uniformsOf(layer).uLakeOrigin as Float32Array)).toEqual([10, 20]);
+    expect(Array.from(uniformsOf(layer).uLakeSize as Float32Array)).toEqual([100, 200]);
   });
 
   it('passes the foam line width and spacing and the band width through', () => {

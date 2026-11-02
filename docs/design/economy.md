@@ -210,6 +210,17 @@ play.
   does not count against the tower limit while cut off; once it is connected
   again it counts, even if that puts you over the limit (you then can't build
   more towers).
+- **A destroyed longhouse ends the settlement's claim.** A settlement whose
+  Longhouse is destroyed claims nothing at all, not even its centre hex (it
+  contributes no disc to the chain). Its towers stay connected only if they
+  stand within the claim of another Longhouse of yours, directly or through
+  a chain of connected towers; otherwise they are cut off like any other
+  cut-off tower.
+- **A destroyed longhouse also ends the settlement's centre sight.** The settlement's centre vision disc (explored and
+  visible ring, Odin's Ravens included) follows the same decision as its claim (`Settlement.LonghouseDisc`; server
+  `FogVisionRadii.ToVisionSource`, client `WorldModel.visionDiscsFor`): without a standing Longhouse there is no disc, so
+  nothing around the centre is seen or newly explored. Towers still chained to another Longhouse of yours keep their own
+  sight and Ravens rings; armies' own sight is unaffected. Ground explored earlier stays explored.
 - **How a tower claims:** a tower claims every hex within its level of
   itself (level 1 its neighbours, level 2 two rings, …), centred on the
   tower. It has to be built inside the realm, which includes ground another

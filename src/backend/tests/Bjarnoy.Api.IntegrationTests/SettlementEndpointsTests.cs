@@ -92,6 +92,30 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_settlement_whose_longhouse_is_destroyed_claims_nothing()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        var before = (await GetAsync(client, settlement.Id))!;
+        Assert.Equal(2, before.ClaimRadius);
+        Assert.NotEmpty(Assert.Single(before.Realm).Discs);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            db.PlacedBuildings.RemoveRange(
+                db.PlacedBuildings.Where(b => b.SettlementId == settlement.Id && b.Type == BuildingType.Longhouse));
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var after = (await GetAsync(client, settlement.Id))!;
+
+        Assert.Equal(0, after.LonghouseLevel);
+        Assert.Equal(0, after.ClaimRadius);
+        Assert.Empty(Assert.Single(after.Realm).Discs);
+    }
+
+    [Fact]
     public async Task A_plot_that_is_not_a_start_position_is_refused()
     {
         using var client = Client();
