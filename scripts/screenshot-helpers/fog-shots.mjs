@@ -22,7 +22,7 @@ mkdirSync(outDir, { recursive: true });
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-// The world map stops click HudNav's "World map" button, which needs a player session.
+// Logged in, like the e2e suite's world-map specs.
 await loginDemoPlayer(page);
 page.on('pageerror', (e) => console.log('[pageerror]', String(e).slice(0, 400)));
 
@@ -43,7 +43,7 @@ if (await skip.count()) {
   await page.waitForTimeout(600);
 }
 
-await page.getByRole('button', { name: 'Settlement', exact: true }).click();
+await page.getByRole('link', { name: 'Settlement', exact: true }).click();
 await page.waitForTimeout(2500);
 await shoot('settlement');
 
@@ -60,7 +60,10 @@ await shoot('settlement_panned');
 await page.waitForTimeout(4000);
 await shoot('settlement_panned_t4s');
 
-await page.getByRole('button', { name: 'World map', exact: true }).click();
+// World mode is /settlement#world (players reach it by zooming out).
+await page.evaluate(() => {
+  window.location.hash = 'world';
+});
 await page.waitForTimeout(2500);
 await shoot('world_map');
 

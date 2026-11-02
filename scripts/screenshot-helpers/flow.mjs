@@ -66,7 +66,7 @@ await shoot(page, 'landfall');
 
 // Design handoff "2a": onboarding no longer forces a modal here, so nothing
 // blocks going straight to the settlement view.
-await page.getByRole('button', { name: 'Settlement', exact: true }).click(); // HudNav tab
+await page.getByRole('link', { name: 'Settlement', exact: true }).click(); // HudNav tab
 // The settlement map takes ~5 s to draw on headless chromium's software renderer (2 s left the
 // "Loading map" overlay in the shot).
 await page.waitForTimeout(8000);
