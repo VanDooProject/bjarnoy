@@ -1117,9 +1117,7 @@ two hexes of a seam and the arms of a confluence agree there:
   neighbour: on both sides along the crossing); a bank that reaches the edge stays one. `B` is that distance over
   `RIVER_CENTRE_TEXELS` (0 at the bank, 1 in the middle), times the lake fade below. `computeRiverFlow` keeps its own `B` over
   `BANK_FADE_TEXELS = 4` and no context.
-- With the neighbour known, a rim texel past an edge is drawn only where the neighbour's own art shows water, or within
-  `SEAM_STRIP_TEXELS = 1.5` of the seam line with the neighbour's water just beyond it (otherwise ripples sat on the neighbour's grass at
-  a bank corner).
+- With the neighbour known, a rim texel past an edge is drawn only within `SEAM_STRIP_TEXELS = 1.5` of the seam line, where the neighbour's own art shows water or has water just beyond it (the neighbour's face draws the rest; a wider rim put blocks of this cell's marks on the neighbour's grass and over water that spills over its cliff).
 
 **The stream function.** `streamFunction` solves `psi` for the streaks: harmonic in ground space with the same operator,
 conducting over water, the dry strip where the art's water stops short of an edge, and the labelled banks.
@@ -1173,7 +1171,7 @@ edge), so the lake end of the hex is still.
 - 2, cartoon bands: a lighter shallow band along each bank (inner edge at `B` about 0.3, wobbled by noise), soft translucent lobed
   patches (alpha 0.22), short glints. A patch is a hashed-cell blob with a jittered centre, stretched along the flow, its edge wobbled
   by noise that travels with it; a cell holds no more than its own middle (a lobe that reached its border was cut straight).
-- 3, flow streaks: white only. Lanes `psi * 36`, a line each with its own presence (denser near banks), width and alpha (0.85..0.6),
+- 3, flow streaks: white only. Gradients of `psi` (line width, flow direction) are taken on the mapped `psi`, not the raw one, so they stay smooth across seams between cells of different range. Lanes `psi * 36`, a line each with its own presence (denser near banks), width and alpha (0.85..0.6),
   kept at 1 to 2 world px by the local `|grad psi|` times the lane scale, so lanes far up a chain of confluences do not get
   thinner. The lines are static streamlines; each line's brightness follows `cos(theta' + lane offset)` (0.25 + 0.75 of a smoothstep),
   so its bright dashes travel along it with the crests. Plus small ovals ("specks") drifting downstream.
@@ -1190,7 +1188,8 @@ that the bands cross the channel and are continuous across seams. `riverFlow` of
 **Known not to match.**
 - The ripple rate differs across a seam by up to a third (each cell rounds its own `N`); lanes of `psi` and the ripples are otherwise continuous.
 - A bank texel's water 4 texels or so spills past a non-flow edge over the cliff (e.g. the bog creek's SE wedge) and gets no flow.
-- Across a seam between cells of different `psi` range, the filtered mapping bytes can bend a line over one texel.
+- Across a seam between cells of different `psi` range, the filtered mapping bytes can bend a line over one texel, and the mapped `psi` itself differs by up to about half a lane there (a small kink in a few lines at confluence seams).
+- Reeds painted over the water of a bog creek are not water by colour, so they count as bank: the bank band of the cartoon bands thickens around them.
 - Measured on recorded clips (`motion` cross-correlation of the marks), streaks and bands move at about half to two thirds of the
   ripples' screen speed on the river and the bog creek, in the right direction in every pair measured; the drifts are calibrated by `gain`,
   not by the nominal speed.

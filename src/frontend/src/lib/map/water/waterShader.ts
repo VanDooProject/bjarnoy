@@ -558,64 +558,60 @@ vec4 riverOver(vec4 a, vec4 b) {
   return b + a * (1.0 - b.a);
 }
 
-// The stream function psi (0 on the right bank looking downstream, 1 on the left), the psi texture's blue channel: its contour
-// lines are the streamlines. A lane coordinate is psi times a lane count the same for every cell, so lanes continue across seams.
-float riverPsi() {
-  vec4 f = texture(uRiverPsi, riverUV());
-  return f.a > 0.5 ? f.b / f.a : 0.5;
-}
+// The stream function psi (0 on the right bank looking downstream, 1 on the left) is the psi texture's blue channel, full range per
+// cell; its contour lines are the streamlines. The lane coordinate is the mapped psi times a lane count, the same for every cell.
 
-// The cell's lane mapping, from the psi texture's red and green bytes (RiverFlow.encodePsiRange): offset and signed scale, so that
-// offset + scale * psi is the cell's psi in the stream function of the whole drawn river (continuous across a confluence seam).
-vec2 riverPsiMapping() {
-  vec4 f = texture(uRiverPsi, riverUV());
+// The mapping bytes of the psi texture at a uv: offset and signed scale, so that offset + scale * psi is the cell's psi in the stream
+// function of the whole drawn river (continuous across a confluence seam; RiverFlow.encodePsiRange).
+vec2 riverPsiMappingAt(vec4 f) {
   if (f.a < 0.5) return vec2(0.0, 1.0);
   vec2 bytes = floor(f.rg / f.a * 255.0 + 0.5);
   float negative = bytes.y >= 128.0 ? 1.0 : 0.0;
   float scale = exp2(-(bytes.y - 128.0 * negative) / 16.0) * (1.0 - 2.0 * negative);
   return vec2(bytes.x / 128.0, scale);
 }
+vec2 riverPsiMapping() {
+  return riverPsiMappingAt(texture(uRiverPsi, riverUV()));
+}
+
+// The mapped psi at a uv (0.5 where the hex has no flow): taps for gradients must be mapped, not raw, or the gradient across a seam
+// between cells of different range jumps by the ratio of their scales (it made the lines fat and blocky near such seams).
+float riverMappedAt(vec2 uv, float fallback) {
+  vec4 f = texture(uRiverPsi, uv);
+  if (f.a < 0.5) return fallback;
+  vec2 m = riverPsiMappingAt(f);
+  return m.x + m.y * (f.b / f.a);
+}
 
 // The lane coordinate: the mapped psi times the lane count.
 float riverLaneCoord(float lanes) {
-  vec2 m = riverPsiMapping();
-  return (m.x + m.y * riverPsi()) * lanes;
+  return riverMappedAt(riverUV(), 0.5) * lanes;
 }
 
-// How many world units one lane of psi is wide here (1 / (|grad psi| * lanes)), from two more taps: psi is only 8 bits, so this is
-// good for a line's width (a few percent off is invisible) but not for the lane coordinate itself.
+// The gradient of the mapped psi on the ground, per world unit, by central differences over 2 * h world units.
+vec2 riverMappedGradient(float h) {
+  vec2 uv = riverUV();
+  float p0 = riverMappedAt(uv, 0.5);
+  float xm = riverMappedAt(uv - vec2(h * uRiverRect.z, 0.0), p0);
+  float xp = riverMappedAt(uv + vec2(h * uRiverRect.z, 0.0), p0);
+  float ym = riverMappedAt(uv - vec2(0.0, h * uRiverRect.w), p0);
+  float yp = riverMappedAt(uv + vec2(0.0, h * uRiverRect.w), p0);
+  // d/dY = squash * d/dy on the ground
+  return vec2(xp - xm, (yp - ym) * uGroundSquash) / (2.0 * h);
+}
+
+// How many world units one lane is wide here: 1 / (|grad of the mapped psi| * lanes). Lanes far up a chain of confluences are
+// narrow; the line width is kept in world px from this.
 float riverLaneWidth(float lanes) {
-  const float H = 8.0;
-  vec2 uv = riverUV();
-  float p0 = riverPsi();
-  vec4 fx = texture(uRiverPsi, uv + vec2(H * uRiverRect.z, 0.0));
-  vec4 fy = texture(uRiverPsi, uv + vec2(0.0, H * uRiverRect.w));
-  float px = fx.a > 0.5 ? fx.b / fx.a : p0;
-  float py = fy.a > 0.5 ? fy.b / fy.a : p0;
-  // The lane width in world units follows the mapped psi, whose slope is the cell's own times |scale|: lanes far up a chain of
-  // confluences are narrow, and the lines should not get thinner with them.
-  float g = length(vec2(px - p0, (py - p0) * uGroundSquash)) / H * abs(riverPsiMapping().y);
-  return 1.0 / max(g * lanes, 1e-3);
+  return 1.0 / max(length(riverMappedGradient(8.0)) * lanes, 1e-3);
 }
 
-// The direction of the flow, on the ground: perpendicular to the gradient of the stream function psi, which is smooth (the ripple
-// phase wraps within a few texels and cannot be differenced over a useful stretch). psi is 0 on the bank to the right looking
-// downstream and 1 on the left, so the gradient points to the left of the flow: down = (-grad.y, grad.x). Central differences
-// over 16 world units; not normalised (the caller decides what a flat psi means).
+// The direction of the flow, on the ground: perpendicular to the gradient of psi, which rises to the left of the flow
+// (the cell's own psi: 0 on the right bank), so down = (-grad.y, grad.x), with the mapping's sign undone. Central differences over
+// 16 world units; not normalised (the caller decides what a flat psi means).
 vec2 riverDown() {
-  const float H = 8.0;
-  vec2 uv = riverUV();
-  float p0 = riverPsi();
-  vec4 xm = texture(uRiverPsi, uv - vec2(H * uRiverRect.z, 0.0));
-  vec4 xp = texture(uRiverPsi, uv + vec2(H * uRiverRect.z, 0.0));
-  vec4 ym = texture(uRiverPsi, uv - vec2(0.0, H * uRiverRect.w));
-  vec4 yp = texture(uRiverPsi, uv + vec2(0.0, H * uRiverRect.w));
-  float pxm = xm.a > 0.5 ? xm.b / xm.a : p0;
-  float pxp = xp.a > 0.5 ? xp.b / xp.a : p0;
-  float pym = ym.a > 0.5 ? ym.b / ym.a : p0;
-  float pyp = yp.a > 0.5 ? yp.b / yp.a : p0;
-  vec2 grad = vec2(pxp - pxm, (pyp - pym) * uGroundSquash); // d/dY = squash * d/dy on the ground
-  return vec2(-grad.y, grad.x) / (2.0 * H);
+  vec2 grad = riverMappedGradient(8.0) * (riverPsiMapping().y < 0.0 ? -1.0 : 1.0);
+  return vec2(-grad.y, grad.x);
 }
 
 // Style 1, toon strands: long thin light and dark strands along the flow (noise across the stream from centre, which is
@@ -771,14 +767,17 @@ vec4 riverStreaks(vec2 cs, float centre, vec2 ground) {
   float h2 = hash(vec2(mod(lane, 289.0), 11.3));
   float present = step(mix(0.52, 0.25, nearBank), h1);
   // A line is about 1 to 2 world px wide whatever the lane: a cell with a small share of psi (an upstream arm) has wide lanes.
-  float halfWidth = min(0.85, (0.9 + 0.8 * h2) / riverLaneWidth(36.0));
+  float laneWidth = riverLaneWidth(36.0);
+  float halfWidth = min(0.55, (0.9 + 0.8 * h2) / laneWidth);
   float across = abs(fract(laneCoord) - 0.5) * 2.0;
-  float body = 1.0 - smoothstep(halfWidth, halfWidth + 0.15, across);
+  // The edge is about a world px wide whatever the lane: a fixed fraction of a narrow lane is under a pixel and steps with the grid.
+  float soft = clamp(1.0 / laneWidth, 0.15, 0.45);
+  float body = 1.0 - smoothstep(halfWidth, halfWidth + soft, across);
   // The lines are streamlines and stay put; the bright part of each travels along it with the ripple crests: brightness follows
   // cos(theta' + a lane offset), theta' = theta + uRiverSpeed * t, so it moves at the crests' speed in their direction.
   vec2 pn = riverPhaseNow(cs);
   float offset = h2 * 6.2831853;
-  float bright = smoothstep(-0.2, 0.55, pn.x * cos(offset) - pn.y * sin(offset));
+  float bright = smoothstep(0.0, 0.7, pn.x * cos(offset) - pn.y * sin(offset));
   float alpha = mix(0.85, 0.6, h2) * (0.25 + 0.75 * bright);
   float streak = body * present * smoothstep(0.02, 0.1, centre);
   vec4 col = vec4(vec3(1.0), 1.0) * alpha * streak;

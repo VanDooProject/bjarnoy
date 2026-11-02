@@ -18,6 +18,8 @@ export interface SeamCell {
   dy: number;
   out: TileOrientation;
   ins: TileOrientation[];
+  /** The cell's psi range in the whole river's, when the chain it belongs to is longer than the pair (as `RiverFlowLayer` composes it). */
+  range?: [number, number];
 }
 
 /** The direction from a hex to its neighbour at that world offset. */
@@ -48,6 +50,10 @@ export const SEAM_PAIRS: readonly [SeamCell, SeamCell][] = [
   [{ name: 'rivertile_y_narrow_SE_base', dx: 0, dy: 0, out: 'W', ins: ['E', 'SE'] }, { name: 'rivertile_bend120_meander_SE_base', dx: 126, dy: 38.64, out: 'W', ins: ['SE'] }],
   [{ name: 'rivertile_bend120_meander_SE_base', dx: 0, dy: 0, out: 'W', ins: ['SE'] }, { name: 'rivertile_bend180_island_W_base', dx: 0, dy: 77.28, out: 'NW', ins: ['SE'] }],
   [{ name: 'rivertile_bend180_island_W_base', dx: 0, dy: 0, out: 'NW', ins: ['SE'] }, { name: 'rivertile_bend_NW_base', dx: 0, dy: 77.28, out: 'NW', ins: ['E'] }],
+  // Real confluence seams (the seam-shots `confluence` view): an arm into the wide Y, and the Y into the next cell.
+  // (with the ranges the layer composes for them in the demo world: the Y's own range is [0.5, 1], an arm's a half of that.)
+  [{ name: 'rivertile_bend180_meander_SW_base', dx: 0, dy: 0, out: 'NE', ins: ['SW'], range: [0.75, 1] }, { name: 'rivertile_ywide_E_base', dx: 126, dy: -38.64, out: 'NW', ins: ['SW', 'E'], range: [0.5, 1] }],
+  [{ name: 'rivertile_bend_W_base', dx: 0, dy: 0, out: 'NE', ins: ['SE'], range: [0.5, 1] }, { name: 'rivertile_ywide_E_base', dx: 0, dy: 77.28, out: 'NW', ins: ['SW', 'E'], range: [0.5, 1] }],
   // Bog creeks (the bogcreek frames of the demo world): a river into a creek, and two creek hexes.
   [{ name: 'rivertile_bend180_island_NW_base', dx: 0, dy: 0, out: 'W', ins: ['E'] }, { name: 'bogcreek_NW_variant002_base', dx: 126, dy: 38.64, out: 'W', ins: ['E'] }],
   [{ name: 'bogcreek_NW_variant002_base', dx: 0, dy: 0, out: 'W', ins: ['E'] }, { name: 'bogcreek_bend_SE_variant002_base', dx: 126, dy: 38.64, out: 'W', ins: ['SE'] }],
@@ -93,7 +99,7 @@ export async function composePair(pair: readonly [SeamCell, SeamCell], withConte
       const arm = confluenceArmRanges(frame.polygon, topFaceEdgeIndex(partner.out), partner.ins.map(topFaceEdgeIndex)).get((edges[i]! + 3) % 6);
       if (arm) psiRange = arm;
     }
-    const flow = computeRiverRipple({ ...frame, inEdges: cell.ins.map(topFaceEdgeIndex), outEdge: topFaceEdgeIndex(cell.out), context, psiRange });
+    const flow = computeRiverRipple({ ...frame, inEdges: cell.ins.map(topFaceEdgeIndex), outEdge: topFaceEdgeIndex(cell.out), context, psiRange: cell.range ?? psiRange });
     const { face, rim } = splitFaceAndRim(flow.data, flow.inside);
     const psiParts = splitFaceAndRim(flow.psi, flow.inside);
     return { cell, frame, x: placed[i]!.x, y: placed[i]!.y, seamEdge: edges[i]!, face, rim, psiFace: psiParts.face, psiRim: psiParts.rim };

@@ -77,7 +77,7 @@ describe.skipIf(!vendoredArt)('river flow across the seams of real neighbouring 
     for (const pair of SEAM_PAIRS) {
       const cells = await composePair(pair, true);
       const pairs = overlaps(cells);
-      expect(pairs.length, pair[0].name).toBeGreaterThan(30);
+      expect(pairs.length, pair[0].name).toBeGreaterThan(8);
       let max = 0;
       for (const o of pairs) max = Math.max(max, Math.abs(o.rim[o.ro + 2]! - o.face[o.fo + 2]!) / 255);
       report.push(`${pair[0].name.slice(9, 26)}|${pair[1].name.slice(9, 26)}: ${max.toFixed(3)}`);

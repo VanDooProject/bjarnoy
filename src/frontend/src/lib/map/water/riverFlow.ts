@@ -563,11 +563,13 @@ function solveRiver(input: RiverFlowInput) {
       const j = yy + c.margin;
       return i >= 0 && j >= 0 && i < c.w && j < c.h && c.neighbour[j * c.w + i]! >= WATER_THRESHOLD;
     };
-    if (nbr(x, y)) return true;
-    // The strip where the neighbour's water stops short of the seam: close to the edge, with its water just further on.
+    // Only along the seam line: the neighbour's own face draws its water further in, and where it draws none (the water that spills over
+    // its cliff past a non-flow edge) a rim texel there would show a wide block of this cell's marks with a straight edge.
     const a = input.polygon[e]!;
     const b = input.polygon[(e + 1) % input.polygon.length]!;
     if (distToSegment(x + 0.5, y + 0.5, a, b) > SEAM_STRIP_TEXELS) return false;
+    if (nbr(x, y)) return true;
+    // The strip where the neighbour's water stops short of the seam, with its water just further on.
     const n = crossingDirection(input.polygon, e);
     for (let step = 1; step <= EDGE_RIM_TEXELS + 1; step++) if (nbr(Math.round(x + n.x * step), Math.round(y + n.y * step))) return true;
     return false;
