@@ -107,6 +107,9 @@ const SLIDERS: {
   { key: 'waveSpeed', label: 'Wave speed', needs: 'midWaterWaves', range: WAVE_SPEED, format: (v) => `${v.toFixed(1)}\u00d7` },
 ];
 
+// Debug-only panel text, like LABELS and SLIDERS above.
+const FOAM_STYLE_LABEL = 'Bog lake foam: style';
+
 watch([flags, tuning], () => emit('change'), { flush: 'post' });
 </script>
 
@@ -118,7 +121,7 @@ watch([flags, tuning], () => emit('change'), { flush: 'post' });
     </label>
 
     <label class="row slider-row" :class="{ disabled: !flags.bogLakeFoam }">
-      <span class="slider-label">Bog lake foam: style</span>
+      <span class="slider-label">{{ FOAM_STYLE_LABEL }}</span>
       <select v-model.number="tuning.bogLakeFoamStyle" :disabled="!flags.bogLakeFoam" data-testid="bog-lake-foam-style">
         <option v-for="(name, index) in BOG_LAKE_FOAM_STYLES" :key="name" :value="index">{{ name }}</option>
       </select>
