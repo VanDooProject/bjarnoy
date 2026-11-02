@@ -105,7 +105,7 @@ export const waterDebugFlags: WaterDebugFlags = {
   showWaterMask: false,
   riverFlow: true,
   showRiverFlow: false,
-  riverStyle: 2,
+  riverStyle: 4,
   legacyTileSplit: true,
 };
 
@@ -215,7 +215,7 @@ export const waterDebugTuning: WaterDebugTuning = {
   riverBrightness: 1,
   riverSpeed: 1,
   riverArc: 1,
-  riverStreakMix: 0.4,
+  riverStreakMix: 0.25,
 };
 
 /**

@@ -359,19 +359,19 @@ describe('WaterLayer', () => {
     layer.tick(16);
     expect(u.uRiverFlowOn).toBe(0);
     expect(u.uShowRiverFlow).toBe(1);
-    // The cartoon bands are the default look, and the streaks' share over them is 0.4.
-    expect(u.uRiverStyle).toBe(2);
-    expect(u.uRiverStreakMix).toBeCloseTo(0.4, 9);
-    waterDebugFlags.riverStyle = 4;
-    waterDebugTuning.riverStreakMix = 0.25;
-    layer.tick(32);
+    // The default look is the cartoon bands with the flow streaks over them at a quarter of their alpha.
     expect(u.uRiverStyle).toBe(4);
     expect(u.uRiverStreakMix).toBeCloseTo(0.25, 9);
+    waterDebugFlags.riverStyle = 2;
+    waterDebugTuning.riverStreakMix = 0.4;
+    layer.tick(32);
+    expect(u.uRiverStyle).toBe(2);
+    expect(u.uRiverStreakMix).toBeCloseTo(0.4, 9);
     waterDebugFlags.riverStyle = 3;
     layer.tick(48);
     expect(u.uRiverStyle).toBe(3);
-    waterDebugFlags.riverStyle = 2;
-    waterDebugTuning.riverStreakMix = 0.4;
+    waterDebugFlags.riverStyle = 4;
+    waterDebugTuning.riverStreakMix = 0.25;
     expect(u.uRiverAlpha).toBeCloseTo(alpha * 2, 9);
     expect(u.uRiverSpeed).toBeCloseTo(speed * 0.5, 9);
     expect(u.uRiverArc).toBeCloseTo(arc * 2, 9);
