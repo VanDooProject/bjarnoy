@@ -9,17 +9,25 @@ import type { MessageSchema } from '../../i18n/schema';
 import { useHexMapRenderer } from '../../composables/useHexMapRenderer';
 import { StaticWorldModel } from '../../lib/map/StaticWorldModel';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
-import { UTGARD_CENTRE, buildUtgardExampleTiles, utgardExampleKindOf } from '../../lib/docs/utgardExample';
+import {
+  UTGARD_CENTRE,
+  buildUtgardExampleStreams,
+  buildUtgardExampleTiles,
+  utgardExampleKindOf,
+} from '../../lib/docs/utgardExample';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const world = new StaticWorldModel(buildUtgardExampleTiles());
+world.setRivers(buildUtgardExampleStreams());
 
 const NAME_KEY = {
   utgard: 'docs.wastedLands.island.giantWasted',
   wall: 'docs.wastedLands.defences.walls.heading',
   gate: 'docs.wastedLands.defences.pieces.gate',
   tower: 'docs.wastedLands.defences.watchtower.heading',
+  mountain: 'docs.wastedLands.tiles.mountain.wasted',
+  lava: 'docs.wastedLands.tiles.river.wasted',
   wasteland: 'docs.wastedLands.tiles.grass.wasted',
   coast: 'docs.tiles.entries.coastalWater.title',
 } as const;
@@ -45,7 +53,7 @@ useHexMapRenderer(canvas, container, {
 const captionText = computed(() => {
   const info = hovered.value;
   if (!info) return t('docs.wastedLands.defences.example.hoverHint');
-  return t(NAME_KEY[utgardExampleKindOf(world.getTile(info.coord.q, info.coord.r))]);
+  return t(NAME_KEY[utgardExampleKindOf(world.getTile(info.coord.q, info.coord.r), world.getRiverTile(info.coord.q, info.coord.r))]);
 });
 </script>
 

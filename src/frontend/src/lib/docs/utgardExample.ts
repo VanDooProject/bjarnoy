@@ -4,11 +4,12 @@
 // (`Tile.utgardWall` / `Tile.jotunTower`, see `WorldModel.setUtgardWalls`), so the game's own renderer draws them the way it does on a
 // real wasted island. Only the island itself (land out to radius 9 round Utgard's anchor, a bay cutting into the east side to the outer
 // ring so a wall run ends at the shore) is laid out by hand.
-import { coordKey, neighbors, type AxialCoord } from '../hex/coords';
+import { coordKey, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import { InnerRingLevel, InnerRingRadius, OuterRingLevel, OuterRingRadius, placeEndgame } from '../map/endgamePlacement';
 import { giantCoverage } from '../map/giantTiles';
 import { UtgardFamily } from '../map/giantPlacement';
-import type { Terrain, Tile } from '../map/types';
+import { generateRivers } from '../map/riverGenerator';
+import type { RiverTile, Terrain, Tile } from '../map/types';
 import { DEFAULT_GENERATION, defaultOrientation, variantForTerrain, wastedVariantAt, type WorldSeed } from '../map/worldGenerator';
 
 export const UTGARD_EXAMPLE_WORLD: WorldSeed = { seed: 5, generation: DEFAULT_GENERATION };
@@ -35,17 +36,76 @@ const BAY: readonly AxialCoord[] = [
 ];
 const BAY_KEYS = new Set(BAY.map(coordKey));
 
-/** The island's terrain by hex: land out to `LAND_RADIUS`, the bay as sea. */
+/**
+ * Two small mountain ranges (clusters of two or more hexes, what a spring needs), far enough out that none of them is one of
+ * Utgard's seven hexes. The lava streams are traced from them by the game's own river generator.
+ */
+const MOUNTAINS: readonly AxialCoord[] = [
+  { q: -5, r: 2 },
+  { q: -5, r: 3 },
+  { q: 2, r: -5 },
+  { q: 3, r: -5 },
+];
+const MOUNTAIN_KEYS = new Set(MOUNTAINS.map(coordKey));
+
+/** The island's terrain by hex: land out to `LAND_RADIUS`, the bay as sea, the two ranges as mountain. */
 function terrainOf(c: AxialCoord): Terrain {
-  return Math.max(Math.abs(c.q), Math.abs(c.r), Math.abs(-c.q - c.r)) > LAND_RADIUS || BAY_KEYS.has(coordKey(c)) ? 'sea' : 'grass';
+  if (Math.max(Math.abs(c.q), Math.abs(c.r), Math.abs(-c.q - c.r)) > LAND_RADIUS || BAY_KEYS.has(coordKey(c))) return 'sea';
+  return MOUNTAIN_KEYS.has(coordKey(c)) ? 'mountain' : 'grass';
 }
 
-export type UtgardExampleKind = 'utgard' | 'wall' | 'gate' | 'tower' | 'wasteland' | 'coast';
+/**
+ * The river generator's `depthAt` of a hand-built island: it grows toward the coast (the tracer prefers the higher value, like the
+ * game's `wastedDepthAt`), so it is the island's greatest inland distance minus a hex's own distance to the nearest sea hex. `null`
+ * for the sea.
+ */
+function depthOf(land: ReadonlySet<string>): (c: AxialCoord) => number | null {
+  const depth = new Map<string, number>();
+  let frontier = [...land].map(parseKey).filter((c) => neighbors(c).some((n) => !land.has(coordKey(n))));
+  for (const c of frontier) depth.set(coordKey(c), 1);
+  for (let d = 2; frontier.length > 0; d++) {
+    const next: AxialCoord[] = [];
+    for (const c of frontier) {
+      for (const n of neighbors(c)) {
+        if (land.has(coordKey(n)) && !depth.has(coordKey(n))) {
+          depth.set(coordKey(n), d);
+          next.push(n);
+        }
+      }
+    }
+    frontier = next;
+  }
+  const deepest = Math.max(...depth.values());
+  return (c) => (depth.has(coordKey(c)) ? deepest + 1 - depth.get(coordKey(c))! : null);
+}
 
-export function utgardExampleKindOf(tile: Tile): UtgardExampleKind {
+/** The island's land hexes (Utgard's seven included). */
+function landHexes(): AxialCoord[] {
+  const land: AxialCoord[] = [];
+  for (let q = -LAND_RADIUS; q <= LAND_RADIUS; q++) {
+    for (let r = Math.max(-LAND_RADIUS, -q - LAND_RADIUS); r <= Math.min(LAND_RADIUS, -q + LAND_RADIUS); r++) {
+      if (terrainOf({ q, r }) !== 'sea') land.push({ q, r });
+    }
+  }
+  return land;
+}
+
+/** The island's lava streams, traced by the game's own generator (`generateRivers`, wasted) over the hand-built land. */
+export function buildUtgardExampleStreams(): RiverTile[] {
+  const land = landHexes();
+  const landKeys = new Set(land.map(coordKey));
+  return generateRivers(land, terrainOf, depthOf(landKeys), (c) => landKeys.has(coordKey(c)), UTGARD_EXAMPLE_WORLD.seed, 0, true, false);
+}
+
+export type UtgardExampleKind = 'utgard' | 'wall' | 'gate' | 'tower' | 'mountain' | 'lava' | 'wasteland' | 'coast';
+
+/** What a hovered hex is; `stream` is the lava stream on it, if any (a stream's art replaces the ground under it). */
+export function utgardExampleKindOf(tile: Tile, stream?: RiverTile): UtgardExampleKind {
   if (tile.giant) return 'utgard';
+  if (stream) return 'lava';
   if (tile.utgardWall) return tile.utgardWall.isGate ? 'gate' : 'wall';
   if (tile.jotunTower) return 'tower';
+  if (tile.terrain === 'mountain') return 'mountain';
   return tile.terrain === 'sea' ? 'coast' : 'wasteland';
 }
 
@@ -68,19 +128,15 @@ export function buildUtgardExampleTiles(): Tile[] {
       ...extra,
     });
   };
-  const land: AxialCoord[] = [];
+  const land = landHexes();
   for (let q = -LAND_RADIUS; q <= LAND_RADIUS; q++) {
-    for (let r = Math.max(-LAND_RADIUS, -q - LAND_RADIUS); r <= Math.min(LAND_RADIUS, -q + LAND_RADIUS); r++) {
-      const c = { q, r };
-      const terrain = terrainOf(c);
-      place(c, terrain);
-      if (terrain !== 'sea') land.push(c);
-    }
+    for (let r = Math.max(-LAND_RADIUS, -q - LAND_RADIUS); r <= Math.min(LAND_RADIUS, -q + LAND_RADIUS); r++) place({ q, r }, terrainOf({ q, r }));
   }
   for (const { coord, part } of giantCoverage(UTGARD_CENTRE)) {
     place(coord, 'grass', { orientation: 'SE', giant: { family: 'giantutgard', anchor: UTGARD_CENTRE, part, orientation: 'SE' } });
   }
-  const sites = placeEndgame(land, terrainOf, () => false, [{ anchor: UTGARD_CENTRE, family: UtgardFamily }], new Set(), UTGARD_EXAMPLE_WORLD.seed, 0);
+  const streamKeys = new Set(buildUtgardExampleStreams().map(coordKey));
+  const sites = placeEndgame(land, terrainOf, (c) => streamKeys.has(coordKey(c)), [{ anchor: UTGARD_CENTRE, family: UtgardFamily }], new Set(), UTGARD_EXAMPLE_WORLD.seed, 0);
   for (const w of sites.walls) {
     const tile = tiles.get(coordKey(w.coord))!;
     tile.utgardWall = { ring: w.ring, piece: w.piece, dir: w.dir, isGate: w.isGate, level: w.level };

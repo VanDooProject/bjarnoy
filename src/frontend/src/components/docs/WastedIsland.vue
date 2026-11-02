@@ -18,7 +18,7 @@ import { useHexMapRenderer } from '../../composables/useHexMapRenderer';
 import { StaticWorldModel } from '../../lib/map/StaticWorldModel';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import type { AxialCoord } from '../../lib/hex/coords';
-import { buildIslandTiles, delayFraction, islandHexInfo, type IslandKind } from '../../lib/docs/wastedIsland';
+import { buildIslandStreams, buildIslandTiles, delayFraction, islandHexInfo, type IslandKind } from '../../lib/docs/wastedIsland';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -38,6 +38,7 @@ const reducedMotion =
 // `setTiles` plus the exposed renderer's `forceRebuild`, the way the real
 // game mutates its WorldModel and re-renders rather than re-mounting.
 const world = new StaticWorldModel(buildIslandTiles(rotation.value, stage.value));
+world.setRivers(buildIslandStreams(rotation.value, stage.value));
 
 // The hovered hex, plus which rotation it was hovered *at* — a hex's
 // identity (kind/turnsAt) is looked up per-rotation (islandHexInfo), and the
@@ -86,6 +87,7 @@ const captionText = computed(() => {
   const h = hovered.value;
   const info = h ? islandHexInfo(h.rotation, h.coord) : undefined;
   if (!info) return t('docs.wastedLands.island.hoverHint');
+  if (h && world.getRiverTile(h.coord.q, h.coord.r)) return t('docs.wastedLands.tiles.river.wasted');
   return t(tileNameKey(info.kind, stage.value >= info.turnsAt));
 });
 
@@ -95,6 +97,7 @@ const captionText = computed(() => {
 // ring by ring from the centre out).
 watch(stage, (newStage) => {
   world.setTiles(buildIslandTiles(rotation.value, newStage));
+  world.setRivers(buildIslandStreams(rotation.value, newStage));
   renderer.value?.forceRebuild({
     transition: {
       durationMs: reducedMotion ? 0 : 700,
@@ -106,6 +109,7 @@ watch(stage, (newStage) => {
 function rotate(delta: number): void {
   rotation.value = (((rotation.value + delta) % 6) + 6) % 6;
   world.setTiles(buildIslandTiles(rotation.value, stage.value));
+  world.setRivers(buildIslandStreams(rotation.value, stage.value));
   // No transition here: a rotation swaps every hex's screen position, not
   // just its texture — a cross-fade would read as every tile's art
   // dissolving in place while the whole island silently jumps underneath it,
