@@ -7,6 +7,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -180,6 +181,12 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
             .GetStatusAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Dormant unless a test arms it: provokes a lost write race on one settlement (see
+    /// <see cref="SettlementRaceInterceptor"/>), for the background jobs that run outside any request.
+    /// </summary>
+    public SettlementRaceInterceptor Race { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -258,6 +265,7 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Time);
+            services.ConfigureDbContext<GameDbContext>(options => options.AddInterceptors(Race));
         });
     }
 

@@ -185,6 +185,7 @@ public sealed class SettlementService(
     TimeProvider timeProvider,
     IPlotReservationStore reservations,
     CampService campService,
+    ConcurrentWriteExecutor concurrentWriteExecutor,
     ILogger<SettlementService> logger)
 {
     /// <summary>
@@ -233,6 +234,7 @@ public sealed class SettlementService(
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly IPlotReservationStore _reservations = reservations;
     private readonly CampService _campService = campService;
+    private readonly ConcurrentWriteExecutor _concurrentWriteExecutor = concurrentWriteExecutor;
     private readonly ILogger<SettlementService> _logger = logger;
 
     /// <summary>
@@ -1778,8 +1780,15 @@ public sealed class SettlementService(
     /// <summary>
     /// The periodic sweep: for every world that accepts commands, applies the realm state to the settlements that have a step due
     /// (<see cref="PlayerRealms.DueForRealmStepAsync"/>), so decay happens (and a reconnected building starts working) even when
-    /// nobody looks at the settlement. One world failing never stops the others.
+    /// nobody looks at the settlement. One world failing never stops the others, and one settlement losing a write race never stops
+    /// the rest of its world: each settlement is its own unit of work through <see cref="ConcurrentWriteExecutor"/> (retried against
+    /// fresh state), and one that still conflicts is skipped until the next sweep.
     /// </summary>
+    /// <remarks>
+    /// Only the hosted service and tests call this, never a request already running inside the executor, so the executor (which is
+    /// not re-entrant) is safe to use here. <see cref="ReconcileRealmAsync"/> shares <see cref="ApplyRealmStateAsync"/> but is
+    /// called from inside such requests, so the executor wraps the call here, not <see cref="ApplyRealmStateAsync"/> itself.
+    /// </remarks>
     /// <returns>How many settlements changed.</returns>
     public async Task<int> SweepRealmStateAsync(CancellationToken cancellationToken = default)
     {
@@ -1802,9 +1811,21 @@ public sealed class SettlementService(
                     _dbContext, world.Id, giants, clock.ToGameTime(wall), world.SpeedFactor, cancellationToken).ConfigureAwait(false);
                 foreach (var id in due)
                 {
-                    if (await ApplyRealmStateAsync(id, cancellationToken).ConfigureAwait(false))
+                    try
                     {
-                        changed++;
+                        if (await _concurrentWriteExecutor.ExecuteAsync(
+                            ct => ApplyRealmStateAsync(id, ct), cancellationToken).ConfigureAwait(false))
+                        {
+                            changed++;
+                        }
+                    }
+                    catch (ConcurrentUpdateException ex)
+                    {
+                        _logger.LogInformation(ex, "Realm sweep of settlement {SettlementId} lost a write race; will retry next sweep.", id);
+                    }
+                    finally
+                    {
+                        _dbContext.ChangeTracker.Clear();
                     }
                 }
             }

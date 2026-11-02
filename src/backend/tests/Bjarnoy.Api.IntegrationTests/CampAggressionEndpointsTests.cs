@@ -45,23 +45,40 @@ public sealed class CampAggressionEndpointsTests : IAsyncLifetime
     private sealed record Setup(
         Guid WorldId, SettlementResponse Settlement, Guid IslandId, Dictionary<(int Q, int R), string> Terrain);
 
-    /// <summary>A founded settlement with <paramref name="axemen"/> axemen in its garrison; no camp yet.</summary>
-    private async Task<Setup> FoundAsync(HttpClient client, int axemen)
+    /// <summary>
+    /// A founded settlement with <paramref name="axemen"/> axemen in its garrison; no camp yet. Pass
+    /// <paramref name="worldId"/> and another <paramref name="ownerId"/> for a second player's settlement in the same world,
+    /// on the first start position the founding spacing accepts.
+    /// </summary>
+    private async Task<Setup> FoundAsync(HttpClient client, int axemen, Guid? worldId = null, string ownerId = OwnerId)
     {
-        var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
+        worldId ??= (await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct)).Id;
+        var world = new { Id = worldId.Value };
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
-        var island = islands!.First(i => i.StartPositions.Count > 0);
-        var plot = island.StartPositions[0];
 
-        var founded = await client.PostJsonAsync(
-            $"/api/v1/worlds/{world.Id}/settlements",
-            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Bjornstad", "Ulf", OwnerId),
-            Ct);
-        Assert.Equal(HttpStatusCode.Created, founded.StatusCode);
+        HttpResponseMessage? founded = null;
+        IslandResponse? island = null;
+        TileCoordinate? plot = null;
+        foreach (var (candidateIsland, candidate) in islands!.SelectMany(i => i.StartPositions.Select(p => (Island: i, Plot: p))))
+        {
+            founded = await client.PostJsonAsync(
+                $"/api/v1/worlds/{world.Id}/settlements",
+                new FoundSettlementRequest(candidateIsland.Id, candidate.Q, candidate.R, "Bjornstad", "Ulf", ownerId),
+                Ct);
+            if (founded.StatusCode == HttpStatusCode.Created)
+            {
+                island = candidateIsland;
+                plot = candidate;
+                break;
+            }
+        }
+
+        Assert.NotNull(plot);
+        Assert.Equal(HttpStatusCode.Created, founded!.StatusCode);
         var settlement = await founded.ReadStrictAsync<SettlementResponse>(Ct);
         client.DefaultRequestHeaders.Remove("X-Owner-Id");
-        client.DefaultRequestHeaders.Add("X-Owner-Id", OwnerId);
+        client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
 
         var chunk = await client.GetFromJsonAsync<TileChunkResponse>(
             $"/api/v1/worlds/{world.Id}/tiles?qMin={plot.Q - 10}&qMax={plot.Q + 10}&rMin={plot.R - 10}&rMax={plot.R + 10}",
@@ -74,7 +91,7 @@ public sealed class CampAggressionEndpointsTests : IAsyncLifetime
             await db.SaveChangesAsync(Ct);
         }
 
-        return new Setup(world.Id, settlement, island.Id, chunk!.Tiles.ToDictionary(t => (t.Q, t.R), t => t.Terrain));
+        return new Setup(world.Id, settlement, island!.Id, chunk!.Tiles.ToDictionary(t => (t.Q, t.R), t => t.Terrain));
     }
 
     private async Task PlantCampAsync(Setup setup, HexCoord hex, string family = CampFamilies.Wolfden, int level = 1)
@@ -394,6 +411,73 @@ public sealed class CampAggressionEndpointsTests : IAsyncLifetime
         Assert.Empty((await TowersAsync(setup.Settlement.Id, neighbours[1])).Buildings);
         var report = Assert.Single((await CampReportsAsync(client, setup.Settlement.Id))!);
         Assert.True(report.TowerBurned);
+    }
+
+    [Fact]
+    public async Task An_attack_that_loses_a_write_race_once_is_re_run_and_fought_exactly_once()
+    {
+        using var client = Client();
+        var setup = await FoundAsync(client, axemen: 20);
+        var neighbours = GrassNeighbours(setup);
+        await PlantCampAsync(setup, neighbours[0]);
+        await StandTowerAsync(setup.Settlement.Id, neighbours[1]);
+
+        // A player's write lands on the settlement after the burn has read it, before the attack commits.
+        _factory.Race.Arm(
+            setup.Settlement.Id,
+            () => SettlementRaceInterceptor.BumpAsync(_factory.Services, setup.Settlement.Id, Ct),
+            repeat: false);
+
+        Assert.Equal(1, await ScanAsync(setup.WorldId));
+
+        Assert.Equal(1, _factory.Race.Fired);
+        Assert.Empty((await TowersAsync(setup.Settlement.Id, neighbours[1])).Buildings);
+        var report = Assert.Single((await CampReportsAsync(client, setup.Settlement.Id))!);
+        Assert.True(report.TowerBurned);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task An_attack_that_keeps_losing_a_write_race_does_not_stop_the_other_attacks_in_the_world(int conflictingIndex)
+    {
+        using var firstClient = Client();
+        using var secondClient = Client();
+        var first = await FoundAsync(firstClient, axemen: 20);
+        var second = await FoundAsync(secondClient, axemen: 20, first.WorldId, "bjorn-player");
+        var firstNeighbours = GrassNeighbours(first);
+        var secondNeighbours = GrassNeighbours(second);
+        await PlantCampAsync(first, firstNeighbours[0]);
+        await StandTowerAsync(first.Settlement.Id, firstNeighbours[1]);
+        await PlantCampAsync(second, secondNeighbours[0]);
+        await StandTowerAsync(second.Settlement.Id, secondNeighbours[1]);
+
+        (Setup Setup, HexCoord Tower, HttpClient Client)[] sides =
+            [(first, firstNeighbours[1], firstClient), (second, secondNeighbours[1], secondClient)];
+        var conflicting = sides[conflictingIndex];
+        var other = sides[1 - conflictingIndex];
+
+        // Whichever attack comes first, the one on `conflicting` loses every attempt (3 of them).
+        _factory.Race.Arm(
+            conflicting.Setup.Settlement.Id,
+            () => SettlementRaceInterceptor.BumpAsync(_factory.Services, conflicting.Setup.Settlement.Id, Ct),
+            repeat: true);
+        var fought = await ScanAsync(first.WorldId);
+        _factory.Race.Disarm();
+
+        Assert.Equal(ConcurrentWriteExecutor.MaxAttempts, _factory.Race.Fired);
+        Assert.Equal(1, fought);
+        Assert.Empty((await TowersAsync(other.Setup.Settlement.Id, other.Tower)).Buildings);
+        Assert.Single((await CampReportsAsync(other.Client, other.Setup.Settlement.Id))!);
+
+        // Nothing of the lost attack landed: the tower stands, no report, and the camp is not calm yet.
+        Assert.Single((await TowersAsync(conflicting.Setup.Settlement.Id, conflicting.Tower)).Buildings);
+        Assert.Empty((await CampReportsAsync(conflicting.Client, conflicting.Setup.Settlement.Id))!);
+
+        // The next scan, with no race, fights it.
+        Assert.Equal(1, await ScanAsync(first.WorldId));
+        Assert.Empty((await TowersAsync(conflicting.Setup.Settlement.Id, conflicting.Tower)).Buildings);
+        Assert.Single((await CampReportsAsync(conflicting.Client, conflicting.Setup.Settlement.Id))!);
     }
 
     [Fact]
