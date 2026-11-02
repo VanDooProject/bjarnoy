@@ -75,11 +75,10 @@ export interface RiverFlowInput {
    */
   context?: BankContext;
   /**
-   * Where this cell's stream function sits in its downstream cell's: its own psi (0 right bank, 1 left bank) is mapped to
-   * `lo + (hi - lo) * psi`. A cell feeding one arm of a confluence takes that arm's share of the confluence's range
-   * (`confluenceArmRanges`), so psi is continuous across that seam. Default [0, 1]. `RiverFlowLayer` does not use it (see
-   * docs/design/water-shader.md §4.4e): composed up a chain of confluences the shares shrink to 1/8 and less, the 8-bit psi then has
-   * 32 levels for its 36 lanes and the lanes get wide and sparse.
+   * Where this cell's stream function sits in the stream function of the whole drawn river: its own psi (0 right bank, 1 left
+   * bank, kept full range in the texture) is mapped to `lo + (hi - lo) * psi`, stored per cell as bytes (`encodePsiRange`). A cell
+   * feeding one arm of a confluence takes that arm's share of the confluence's range (`confluenceArmRanges`, composed up the
+   * chain), so the lanes continue across that seam. Default [0, 1].
    */
   psiRange?: readonly [number, number];
 }
@@ -946,6 +945,23 @@ function streamFunction(input: RiverFlowInput, passable: Uint8Array, isWaterP: (
  * value) at the in crossing, in the cell's own psi. A single in edge takes [0, 1]; the arms of a confluence share it, in the order
  * they come walking the face boundary from the out edge (`j / k` .. `(j + 1) / k`, flipped as `streamFunction` flips them).
  */
+/**
+ * The psi texture's red and green bytes for a cell's range (`psiRange`: the cell's psi 0..1 maps to `lo + (hi - lo) * psi` in the
+ * psi of the whole river): R = offset * 128, G = round(log2(1 / |scale|) * 16), plus 128 when the scale is negative. Offsets and
+ * scales are fractions j / 2^n (arms of a confluence share its range in halves), exact in this encoding down to 7 levels.
+ */
+export function encodePsiRange([lo, hi]: readonly [number, number]): [number, number] {
+  const scale = hi - lo;
+  const magnitude = Math.min(127, Math.max(0, Math.round(Math.log2(1 / Math.max(Math.abs(scale), 1e-6)) * 16)));
+  return [Math.min(255, Math.max(0, Math.round(lo * 128))), magnitude + (scale < 0 ? 128 : 0)];
+}
+
+/** The inverse of `encodePsiRange`: [offset, scale]. */
+export function decodePsiRange(r: number, g: number): [number, number] {
+  const negative = g >= 128;
+  return [r / 128, (negative ? -1 : 1) * 2 ** (-(g - (negative ? 128 : 0)) / 16)];
+}
+
 export function confluenceArmRanges(polygon: readonly Point[], outEdge: number, inEdges: readonly number[]): Map<number, [number, number]> {
   const out = new Map<number, [number, number]>();
   const arms = inEdges.filter((e) => e !== outEdge).sort((a, b) => (((a - outEdge) % 6) + 6) % 6 - (((b - outEdge) % 6) + 6) % 6);
@@ -1037,7 +1053,7 @@ export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; p
 
   const out = new Uint8Array(cw * ch * 4);
   const psiOut = new Uint8Array(cw * ch * 4);
-  const [psiLo, psiHi] = input.psiRange ?? [0, 1];
+  const [psiR, psiG] = encodePsiRange(input.psiRange ?? [0, 1]);
   const psi = streamFunction(input, passable, (q) => isWater(q % cw, Math.floor(q / cw)), seedEdge, bank, phi);
   for (let y = 0; y < ch; y++) {
     for (let x = 0; x < cw; x++) {
@@ -1065,7 +1081,9 @@ export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; p
       out[o + 1] = Math.round((Math.sin(theta) * 0.5 + 0.5) * 255);
       out[o + 2] = Math.round(intensityAt(p, RIVER_CENTRE_TEXELS) * 255);
       out[o + 3] = 255;
-      psiOut[o + 2] = Math.round(Math.min(1, Math.max(0, psiLo + (psiHi - psiLo) * psi[p]!)) * 255);
+      psiOut[o] = psiR;
+      psiOut[o + 1] = psiG;
+      psiOut[o + 2] = Math.round(Math.min(1, Math.max(0, psi[p]!)) * 255);
       psiOut[o + 3] = 255;
     }
   }

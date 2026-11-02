@@ -12,7 +12,7 @@ import type { RiverTile, BogTile, TileOrientation } from '../types';
 import { topFaceEdgeIndex } from '../riverPath';
 import { SOURCE_W, type DryMaskFrame, type WaterDryMasksData } from './dryMaskCore';
 import { dryCellWorldRect, MaskRenderTarget, type MaskPlacement } from './waterDryMask';
-import { buildBankContext, computeRiverRipple, topFacePolygonTexels, type PlacedMask } from './riverFlow';
+import { buildBankContext, computeRiverRipple, confluenceArmRanges, topFacePolygonTexels, type PlacedMask } from './riverFlow';
 
 /** One river or bog-creek hex's base art, as drawn, and where its water goes. */
 export interface RiverFlowEntry {
@@ -161,7 +161,7 @@ export class RiverFlowLayer {
    * version of it. Drawn in one pass, whichever hex came later overwrote up to `FACE_PAD_TEXELS` of the other's face: a
    * second, shifted seam inside the neighbour.
    */
-  private cellTextures(masks: LoadedRiverMasks, name: string, frame: DryMaskFrame, entry: RiverFlowEntry, tileWidth: number): { face: Texture; rim: Texture; psiFace: Texture; psiRim: Texture } {
+  private cellTextures(masks: LoadedRiverMasks, name: string, frame: DryMaskFrame, entry: RiverFlowEntry, tileWidth: number, psiRange: readonly [number, number]): { face: Texture; rim: Texture; psiFace: Texture; psiRim: Texture } {
     const outEdge = topFaceEdgeIndex(entry.outDirection);
     const inEdges = entry.inDirections.map(topFaceEdgeIndex).sort((a, b) => a - b);
     const fadeEdge = entry.fadeDirection ? topFaceEdgeIndex(entry.fadeDirection) : undefined;
@@ -171,7 +171,7 @@ export class RiverFlowLayer {
       .map((n) => ({ edge: topFaceEdgeIndex(n.direction), n }))
       .filter(({ n }) => masks.data.frames[n.name])
       .sort((a, b) => a.edge - b.edge);
-    const key = `${name}|${outEdge}|${inEdges.join(',')}|${fadeEdge ?? ''}|${neighbours.map(({ edge, n }) => `${edge}:${n.name}`).join(',')}`;
+    const key = `${name}|${outEdge}|${inEdges.join(',')}|${fadeEdge ?? ''}|${neighbours.map(({ edge, n }) => `${edge}:${n.name}`).join(',')}|${psiRange[0]},${psiRange[1]}`;
     let pair = this.cells.get(key);
     if (!pair) {
       const { mask, cw, ch } = cropAtlasCell(masks.alpha, masks.data.width, frame);
@@ -187,7 +187,7 @@ export class RiverFlowLayer {
         }),
         2 * k,
       );
-      const flow = computeRiverRipple({ mask, cw, ch, polygon, inEdges, outEdge, fadeEdge, context });
+      const flow = computeRiverRipple({ mask, cw, ch, polygon, inEdges, outEdge, fadeEdge, context, psiRange });
       const { face, rim } = splitFaceAndRim(flow.data, flow.inside);
       const psiParts = splitFaceAndRim(flow.psi, flow.inside);
       const texture = (data: Uint8Array) =>
@@ -212,6 +212,26 @@ export class RiverFlowLayer {
   draw(renderer: Renderer, entries: readonly RiverFlowEntry[], tileWidth: number): Texture | null {
     const masks = this.masks;
     if (!masks) return this.target.texture;
+    // Each cell's psi range in the stream function of the whole river: a cell feeding an arm of a confluence takes that arm's share of
+    // the confluence's own range, composed up the chain of drawn cells (a cell with no confluence downstream keeps [0, 1]).
+    const byPosition = new Map(entries.map((e) => [`${e.x},${e.y}`, e]));
+    const ranges = new Map<RiverFlowEntry, readonly [number, number]>();
+    const polygon = topFacePolygonTexels(0, 0);
+    const rangeOf = (entry: RiverFlowEntry, depth = 0): readonly [number, number] => {
+      const known = ranges.get(entry);
+      if (known) return known;
+      let range: readonly [number, number] = [0, 1];
+      const outNeighbour = entry.neighbours?.find((n) => n.direction === entry.outDirection);
+      const down = outNeighbour ? byPosition.get(`${outNeighbour.x},${outNeighbour.y}`) : undefined;
+      if (down && depth < 32) {
+        const arm = confluenceArmRanges(polygon, topFaceEdgeIndex(down.outDirection), down.inDirections.map(topFaceEdgeIndex)).get((topFaceEdgeIndex(entry.outDirection) + 3) % 6);
+        const [lo, hi] = rangeOf(down, depth + 1);
+        if (arm) range = [lo + (hi - lo) * arm[0], lo + (hi - lo) * arm[1]];
+        else range = [lo, hi];
+      }
+      ranges.set(entry, range);
+      return range;
+    };
     const rims: MaskPlacement[] = [];
     const faces: MaskPlacement[] = [];
     const psiRims: MaskPlacement[] = [];
@@ -220,7 +240,7 @@ export class RiverFlowLayer {
       const name = entry.texture.label ?? '';
       const frame = masks.data.frames[name];
       if (!frame) continue;
-      const { face, rim, psiFace, psiRim } = this.cellTextures(masks, name, frame, entry, tileWidth);
+      const { face, rim, psiFace, psiRim } = this.cellTextures(masks, name, frame, entry, tileWidth, rangeOf(entry));
       const rect = dryCellWorldRect(entry, frame, tileWidth);
       rims.push({ texture: rim, rect, tint: 0xffffff });
       faces.push({ texture: face, rect, tint: 0xffffff });

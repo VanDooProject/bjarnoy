@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeRiverFlow, computeRiverRipple, GROUND_SQUASH, riverStreamFunction, RIPPLE_WAVELENGTH_TEXELS, RIVER_CENTRE_TEXELS, riverGeodesicDistance, riverPotential, SEED_REACH, topFacePolygonTexels, WATER_THRESHOLD, type RiverFlowInput } from './riverFlow';
+import { computeRiverFlow, computeRiverRipple, decodePsiRange, encodePsiRange, GROUND_SQUASH, riverStreamFunction, RIPPLE_WAVELENGTH_TEXELS, RIVER_CENTRE_TEXELS, riverGeodesicDistance, riverPotential, SEED_REACH, topFacePolygonTexels, WATER_THRESHOLD, type RiverFlowInput } from './riverFlow';
 import { topFaceEdgeIndex } from '../riverPath';
 import { riverFrameInput, vendoredArt, type RiverFrame } from './riverArtFixture';
 
@@ -886,4 +886,22 @@ describe.skipIf(!vendoredArt)('riverStreamFunction round a real island', () => {
       expect(parallel / checked, `${name}: ${parallel} of ${checked}`).toBeGreaterThan(0.75);
     }
   }, 120_000);
+});
+
+describe('the psi texture\'s lane mapping bytes', () => {
+  it('round-trips the ranges of confluence arms exactly, flipped ones included', () => {
+    for (const range of [[0, 1], [0, 0.5], [0.5, 1], [1, 0.5], [0.5, 0], [0.25, 0.5], [0.875, 1], [0.375, 0.5], [0.0078125, 0.015625]] as const) {
+      const [r, g] = encodePsiRange(range);
+      const [offset, scale] = decodePsiRange(r, g);
+      expect(offset, `${range}`).toBeCloseTo(range[0], 9);
+      expect(scale, `${range}`).toBeCloseTo(range[1] - range[0], 9);
+    }
+  });
+
+  it('keeps the psi channel of a covered texel full range whatever the mapping', () => {
+    const { psi } = computeRiverRipple({ ...input(channel(), BOTTOM), psiRange: [0.5, 1] });
+    const [offset, scale] = decodePsiRange(psi[(22 * CW + 41) * 4]!, psi[(22 * CW + 41) * 4 + 1]!);
+    expect([offset, scale]).toEqual([0.5, 0.5]);
+    expect(psi[(22 * CW + 58) * 4 + 2]! / 255).toBeGreaterThan(0.85);
+  });
 });

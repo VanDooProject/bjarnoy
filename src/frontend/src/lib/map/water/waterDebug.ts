@@ -82,8 +82,8 @@ export interface WaterDebugFlags {
    */
   showRiverFlow: boolean;
   /**
-   * The look of the river overlay (§4.4e "Styles"): 0 ripple arcs, 1 toon strands, 2 cartoon bands (what ships), 3 flow streaks, 4 bands with the
-   * streaks over them. The others are alternatives to compare in the debug panel.
+   * The look of the river overlay (§4.4e "Looks"): 0 ripple arcs, 1 toon strands, 2 cartoon bands, 3 flow streaks, 4 bands with the
+   * streaks over them (what ships). The others are alternatives to compare in the debug panel.
    */
   riverStyle: number;
   /**

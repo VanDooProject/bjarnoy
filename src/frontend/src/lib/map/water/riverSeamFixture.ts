@@ -4,7 +4,7 @@
 import { topFaceEdgeIndex } from '../riverPath';
 import type { TileOrientation } from '../types';
 import { riverFrameInput, type RiverFrame } from './riverArtFixture';
-import { buildBankContext, computeRiverRipple, confluenceArmRanges, type PlacedMask } from './riverFlow';
+import { buildBankContext, computeRiverRipple, confluenceArmRanges, decodePsiRange, type PlacedMask } from './riverFlow';
 import { splitFaceAndRim } from './riverFlowLayer';
 
 /** Tile art drawn 168 wide for 200 source px. */
@@ -116,7 +116,10 @@ export function sampleComposite(cells: readonly ComposedCell[], wx: number, wy: 
       const norm = Math.hypot(rawCos, rawSin) || 1;
       const cos = rawCos / norm;
       const sin = rawSin / norm;
-      res = { b: d[o + 2]! / 255, theta: Math.atan2(sin, cos), who, pass, cos, sin };
+      // The psi texture's bytes are the cell's psi in B and its lane mapping in R, G: `b` is the mapped psi there (the lane coordinate
+      // over the lane count), which is what must be continuous across a seam.
+      const [offset, scale] = psi ? decodePsiRange(d[o]!, d[o + 1]!) : [0, 1];
+      res = { b: offset + scale * (d[o + 2]! / 255), theta: Math.atan2(sin, cos), who, pass, cos, sin };
     });
   }
   return res;

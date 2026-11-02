@@ -46,7 +46,7 @@
  */
 export const RIVER_DRIFT = {
   speck: { grid: 5, shift: 4, rate: 0.9, gain: 1.28 },
-  patch: { grid: 0.25, shift: 0.46, rate: 0.5, gain: 1.6 },
+  patch: { grid: 0.15, shift: 0.28, rate: 0.5, gain: 1.6 },
 } as const;
 const glsl = (v: number): string => v.toFixed(3);
 
@@ -565,6 +565,23 @@ float riverPsi() {
   return f.a > 0.5 ? f.b / f.a : 0.5;
 }
 
+// The cell's lane mapping, from the psi texture's red and green bytes (RiverFlow.encodePsiRange): offset and signed scale, so that
+// offset + scale * psi is the cell's psi in the stream function of the whole drawn river (continuous across a confluence seam).
+vec2 riverPsiMapping() {
+  vec4 f = texture(uRiverPsi, riverUV());
+  if (f.a < 0.5) return vec2(0.0, 1.0);
+  vec2 bytes = floor(f.rg / f.a * 255.0 + 0.5);
+  float negative = bytes.y >= 128.0 ? 1.0 : 0.0;
+  float scale = exp2(-(bytes.y - 128.0 * negative) / 16.0) * (1.0 - 2.0 * negative);
+  return vec2(bytes.x / 128.0, scale);
+}
+
+// The lane coordinate: the mapped psi times the lane count.
+float riverLaneCoord(float lanes) {
+  vec2 m = riverPsiMapping();
+  return (m.x + m.y * riverPsi()) * lanes;
+}
+
 // How many world units one lane of psi is wide here (1 / (|grad psi| * lanes)), from two more taps: psi is only 8 bits, so this is
 // good for a line's width (a few percent off is invisible) but not for the lane coordinate itself.
 float riverLaneWidth(float lanes) {
@@ -575,7 +592,9 @@ float riverLaneWidth(float lanes) {
   vec4 fy = texture(uRiverPsi, uv + vec2(0.0, H * uRiverRect.w));
   float px = fx.a > 0.5 ? fx.b / fx.a : p0;
   float py = fy.a > 0.5 ? fy.b / fy.a : p0;
-  float g = length(vec2(px - p0, (py - p0) * uGroundSquash)) / H;
+  // The lane width in world units follows the mapped psi, whose slope is the cell's own times |scale|: lanes far up a chain of
+  // confluences are narrow, and the lines should not get thinner with them.
+  float g = length(vec2(px - p0, (py - p0) * uGroundSquash)) / H * abs(riverPsiMapping().y);
   return 1.0 / max(g * lanes, 1e-3);
 }
 
@@ -608,7 +627,7 @@ vec4 riverStrands(vec2 cs, float centre, vec2 ground) {
   float turn = atan(p.y, p.x);
   // Lanes: B cut into thin strips (about 3 texels), nudged by noise so they are not exact contours. Most lanes are empty; a
   // present lane has its own width, tone and dash pattern.
-  float laneCoord = riverPsi() * 10.0 + (noise(ground * k * 2.5) - 0.5) * 0.8;
+  float laneCoord = riverLaneCoord(10.0) + (noise(ground * k * 2.5) - 0.5) * 0.8;
   float lane = floor(laneCoord);
   float h1 = hash(vec2(mod(lane, 289.0), 3.7));
   float h2 = hash(vec2(lane, 11.3));
@@ -677,9 +696,11 @@ float riverLobes(vec2 grid, vec2 down, float cycles, float shift) {
     vec2 g = grid - down * c * shift + (i == 0 ? 0.0 : 31.0);
     vec2 cell = mod(floor(g), 289.0);
     float h = hash(cell);
-    vec2 o = fract(g) - (vec2(hash(cell + 1.7), hash(cell + 9.3)) * 0.4 + 0.3);
-    float radius = 0.2 + 0.1 * hash(cell + 4.1);
-    float d = length(vec2(dot(o, down) / 1.5, dot(o, side))) / radius;
+    // Centre in the middle fifth of the cell and a reach (radius * stretch * the edge wobble) under 0.4 cells: a lobe that reached
+    // its cell's border was cut there, a straight edge across the channel.
+    vec2 o = fract(g) - (vec2(hash(cell + 1.7), hash(cell + 9.3)) * 0.2 + 0.4);
+    float radius = 0.12 + 0.06 * hash(cell + 4.1);
+    float d = length(vec2(dot(o, down) / 1.3, dot(o, side))) / radius;
     float wavy = (noiseQuintic(g * 4.0 + cell) - 0.5) * 0.7;
     total += smoothstep(1.0, 0.7, d + wavy) * step(0.35, h) * w;
   }
@@ -744,7 +765,7 @@ float riverDrift(vec2 grid, vec2 down, float cycles, float shift, float along, f
 vec4 riverStreaks(vec2 cs, float centre, vec2 ground) {
   float k = uRiverScale;
   float nearBank = 1.0 - smoothstep(0.0, 0.35, centre);
-  float laneCoord = riverPsi() * 36.0 + (noise(ground * k * 2.5) - 0.5) * 0.8;
+  float laneCoord = riverLaneCoord(36.0) + (noise(ground * k * 2.5) - 0.5) * 0.8;
   float lane = floor(laneCoord);
   float h1 = hash(vec2(mod(lane, 289.0), 3.7));
   float h2 = hash(vec2(mod(lane, 289.0), 11.3));

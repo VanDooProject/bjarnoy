@@ -1059,101 +1059,143 @@ checks.
 | `float uFoam`, `uSheen`, `uCatsPaws` | 0 turns the look off, else its strength |
 | `float uFoamWidth`, `uFoamSpacing` | foam line half-width as a share of the spacing (0.04), spacing in world units (15) |
 
-### 4.4e River flow — `uRiverFlow`
+### 4.4e River flow — `uRiverFlow`, `uRiverPsi`
 
-The painted river, stream and bog-creek water is still. In the settlement view the shader draws thin light ripple bands on it
-that cross the channel and slide downstream. Not covered: lava streams (`wasted` rivers), frozen rivers, bog lakes (all stay still) and the world map.
-The way the water runs comes from the data and the art, the ripples from the shader.
+Scope. The painted river, stream and bog-creek water is still art. In the settlement view the shader draws moving marks on it: by
+default cartoon bands with faint flow streaks over them (§ Looks below). Covered: `rivertile*` and the buildings drawn on a river hex, `bogcreek*` and
+the creek mouth of a bog lake. Not covered: lava streams (`wasted` rivers), frozen rivers, plain bog lakes (§4.4d) and the world
+map (it binds 1x1 textures of zeros). Which way the water runs comes from the tile data and the art; the marks come from the shader.
 
-**Which pixels are river water: by colour, at build time.** `build/waterDryMasks.ts` serves a second virtual module,
-`virtual:river-water-masks`, with the same data shape as the dry masks (§4.4b): one half-resolution mask cell per frame,
-packed into one grey+alpha PNG. `riverMaskCore.ts` decides per pixel: opaque and `b > r + 40 && b >= g`. Measured on the art,
-river and creek water is navy (about 16,48..64,96..128) and stream water cyan (about 64..80,144..160,160..192); grass, sand,
-rock and cliff skirts are red- or green-led and fail it. The 0/1 map is closed (grow 1, shrink 1) to fill the pinholes of the
-dithered render, then box-downsampled 2x2. Only the `_base` frames of these families get a mask:
-`^(rivertile|bogcreek|boglake_mouth|sawmill|sawmillriver|sawmillbend|sawmillbend60|cropmill|hammerschmiede|riverbridge|bearrapids)(_|$)`
-(`frozenriver*`, `lavastream*` and plain `boglake*` are not in it), and only when at least 50 full-resolution texels are water.
+**Water pixels: by colour, at build time.** `build/waterDryMasks.ts` (`buildRiverWaterMasks`, packed by `packMaskAtlas`) serves
+`virtual:river-water-masks`: one half-resolution mask cell per frame, one grey+alpha PNG, the data shape of §4.4b.
+`riverMaskCore.ts` decides per full-resolution pixel: opaque and `b > r + 40 && b >= g`. River and creek water is navy (about
+16,48..64,96..128), stream water cyan (about 64..80,144..160,160..192); grass, sand, rock and cliff skirts are red- or green-led and
+fail it. The 0/1 map is closed (grow 1, shrink 1) to fill the pinholes of the dithered render, then box-downsampled 2x2. Only
+`_base` frames of `^(rivertile|bogcreek|boglake_mouth|sawmill|sawmillriver|sawmillbend|sawmillbend60|cropmill|hammerschmiede|riverbridge|bearrapids)(_|$)`
+get a mask, and only with at least 50 water texels at full resolution. A texel is water at mask value 128.
 
-**Which way is downstream: from the data.** A river tile flows towards its `outDirection`; a `mouth` without one towards
-`WorldModel.seaFacingDirectionOf`; a bog tile of kind `creek`, `creekspring` or `mouth` towards its `outDirection`. A hex
-without an out direction does not flow. Inside the hex the flow is a **potential flow** solved over
-the frame's painted water (`riverFlow.ts`), so meanders, the 60-degree loop, islands and Y confluences are followed as painted:
+**Downstream: from the data.** A river tile flows towards its `outDirection` and takes its `inDirections` as inflows; a `mouth`
+without an out direction flows towards `WorldModel.seaFacingDirectionOf`; a bog tile of kind `creek`, `creekspring` or `mouth`
+uses its own `outDirection` and `inDirections`. A hex without an out direction does not flow (`riverFlowOf`). A direction is polygon
+edge `topFaceEdgeIndex(direction)` of the hex top face (`(3 - index in TILE_ORIENTATIONS + 6) % 6`, shared with `riverPath.ts`).
+`HexMapRenderer` also gives every flow entry the neighbouring flow entry behind each of its in and out edges (`neighbours`: frame name and
+sprite position).
 
-0. **Everything is solved on the ground.** The art is isometric: the top face is drawn `s = groundSquash` (about 0.531, 92 over 173.2) as tall as the ground it lies on. The potential, the direction, the distances and the crossing direction of an edge are therefore computed in ground space `(x, y / s)`. In screen texels the Laplacian is `phi_xx + s^2 phi_yy = 0` (vertical links conduct `s^2` as much); the flow direction is the ground velocity mapped back to the screen, `(-phi_x, -s^2 phi_y)`; fast marching and the bank-distance chamfer count a vertical step as `1/s`. "Texels" in the constants below are ground texels. The water crosses an edge along the line from the hex centre to the edge midpoint (the ground normal, projected), not along the screen perpendicular of the edge: on the four slanted edges the two are about 30 degrees apart, which showed as a diagonal band of the wrong direction on the seam.
+**Ground space.** The art is isometric: a top face is drawn `GROUND_SQUASH = groundSquash(...)` (about 0.531) as tall as the ground
+it lies on. Everything below is solved or measured on the ground, `(x, y / s)` for a screen texel `(x, y)`: in screen texels the
+Laplacian is `f_xx + s^2 f_yy` (vertical links conduct `s^2` as much), a vertical step counts `1 / s`, and the direction in which water
+crosses an edge is the line from the hex centre to the edge midpoint (the ground normal projected), not the screen perpendicular,
+which is about 30 degrees off on the four slanted edges. Lengths in texels are ground texels of the half-resolution cell (a tile is
+about 100 of them). Cell coordinates, the top face polygon (`topFacePolygonTexels`) and the mask crops follow `dryMaskCore`.
 
-1. Passable texels are those inside the hex top face, padded by one texel. Edges are polygon edge
-   `(3 - index of the direction in TILE_ORIENTATIONS + 6) % 6` of the top face (`topFaceEdgeIndex`, shared with `riverPath.ts`);
-   the in edges come from `inDirections` of the river or bog tile, the out edge as above.
-2. Dirichlet seeds: the water texels within 2 texels of the water closest to an edge segment. The potential is 1 at the seeds of
-   every in edge and 0 at the seeds of the out edge. Normally that water touches the edge; the river delta's canvas is trimmed a
-   few texels short of it.
-3. The potential is harmonic in between and has no flux through the banks: a link between two water texels conducts 1, a link that
-   touches a dry texel `1 / NON_WATER_COST = 1/40`. That keeps the banks nearly closed walls, yet a bridge deck or a mill wheel
-   that spans the whole channel (`riverbridge*`, `sawmill*`) still conducts, so the upstream half is not cut off, and the field
-   does not leak across the grass neck of the bend60 loop. A hex without an in edge (a spring, a bog creek spring) has a uniform
-   source on its water instead (`laplacian = -1`) and 0 at the out edge. Solved by red-black SOR (omega 1.9, stop when no texel
-   moves by more than 1e-5), a few ms per frame; cells are cached.
-4. The direction is `-grad` of the potential over water neighbours (central differences, one-sided at the bank), normalised. Inside
-   a seed band the potential is constant, and the rim past the face is a dead end beyond it; both take the edge's crossing
-   direction (its normal: out of the face at the out edge, into it at an in edge). The neighbouring hex sets the same normal on
-   the same edge, so the two match exactly at the seam. Filling them from their neighbours instead (an earlier version) let the
-   ends of the band against a bank take the bank's direction, which showed as off-colour spots along the seams.
+**The potential.** `riverPotential` solves a harmonic potential `phi` over the passable texels (inside the top face, padded by
+one texel, plus a rim of `FACE_PAD_TEXELS = 7` past the in and out edges, the stretch the art's water spills over): 1 on the seed
+texels of every in edge, 0 on those of the out edge, no flux through the banks. Seeds are the water texels within `SEED_REACH = 2`
+of the water nearest to the edge segment (the delta's canvas stops a few texels short of its edge). A link between two water texels
+conducts 1, any other link `1 / NON_WATER_COST = 1/40`, so banks are nearly closed walls while a bridge deck or mill wheel that
+spans the channel still conducts. A cell without an in edge (a spring) has a uniform source on its water (`laplacian = -1`)
+instead. Red-black SOR, omega 1.9, until no texel moves by more than 1e-5 (at most 6000 sweeps), shared with the stream function
+(`solveLaplace`). Why not a geodesic distance: it points sideways at the banks, jumps at every seam and has a cut locus (the two
+shortest-path families meet on a ridge upstream of an island), a singularity in the direction. The flow direction
+(`computeRiverFlow`, `-grad phi` in ground space) is kept as the reference the tests check; nothing draws it.
 
-Why a potential and not a geodesic distance (the first version): a distance field points sideways into the channel at the banks
-and along the in edge, so the direction jumped at every hex seam, and it has a cut locus: upstream of an island the two
-shortest-path families meet on a ridge whose end is a singularity (the full hue wheel in the debug view, streaks radiating from a
-point). The potential has no cut locus, stagnation points sit on an island's shore, and because the boundary value is constant
-along each edge crossing, the flow crosses every in and out edge perpendicular to it: the two hexes that share an edge agree
-there, with no seam-specific **The ripple phase: the potential itself.** The potential `phi` (1 at the in edges, 0 at the out edge, constant in the seed
-bands and in the rim past an edge) is the stream coordinate. Its contour lines cross the channel, bend round islands and
-meanders and spread where the channel widens, and the water runs across them from high to low. The ripple phase per texel is
-`theta = 2 pi * N * phi` with an **integer N per cell**: `theta` is then a multiple of 2 pi on every in and out edge, so the two
-hexes at a seam agree there and the arms of a confluence agree with each other, with no seam-specific code (the rim past an edge is
-handled below). `N = max(1, round(L / RIPPLE_WAVELENGTH_TEXELS))`
-with `RIPPLE_WAVELENGTH_TEXELS = 12` (one tile width is about 100 texels of the half-resolution cell) and `L` the channel length:
-the mean geodesic distance (no bank penalty) from the out edge seeds to the in edge seed texels. A cell without an in edge (a spring:
-`phi` solves the uniform-source case) normalises `phi` by its maximum over the water first and uses the maximum geodesic distance
-over the water as `L`. **Flat bands.** The potential is constant in the seed bands and the rim, so `theta` there would be a flat strip, and a crest passing through it would light a wide band along every seam. In the bands and the rim `theta` therefore runs on linearly past the edge line, `+-2 pi N / L` per texel of depth (up into the face at the out edge, down at an in edge): it is still 0 mod 2 pi on the edge line, and the two hexes of a seam continue each other's phase through it. The potential proper starts at the inner side of the bands, so its phase is shifted by what the bands used up (`(1 - phi) * rate * outDepth - phi * rate * inDepth`), which keeps the phase continuous where band and interior meet.
+**The phase.** `computeRiverRipple` gives each texel a ripple phase `theta` that is 0 mod 2 pi on every in and out edge line, so the
+two hexes of a seam and the arms of a confluence agree there:
+- `dOut` and `dIn` are geodesic distances (fast marching, anisotropic, no bank penalty) to the out edge and to the nearest in
+  edge; along the stream `s = dOut / (dIn + dOut)` is 0 on the out edge, 1 on every in edge and advances evenly with distance (the
+  potential itself runs faster where the channel narrows, which made ripple spacing jump at seams). A spring uses
+  `dOut / max dOut`. Water the distance fields do not reach gets no flow.
+- `theta = 2 pi N s` with an integer `N = max(1, round(L / RIPPLE_WAVELENGTH_TEXELS))`, `RIPPLE_WAVELENGTH_TEXELS = 12`, `L` the
+  mean geodesic distance from the out seeds to the in seeds (the maximum over the water for a spring).
+- The seed bands and the rim are flat in `s`, so there `theta` runs on linearly past the edge line, `+-2 pi N / L` per texel of
+  depth (rising up the stream at the out edge, falling at an in edge; 0 mod 2 pi on the line). The interior is shifted by what the bands
+  used: `(1 - s) * rate * outDepth - s * rate * inDepth`, `inDepth` that of the nearest in edge.
+- Ground distance to the bank, `B`: measured on a grid `RIVER_CENTRE_TEXELS = 16` larger on every side (`buildBankContext`), where
+  within that reach of an in or out edge that has a neighbour the neighbour's water mask is added on both sides of the edge line,
+  so both hexes of a seam see the same water and measure the same `B` (they differed by up to 0.9 without it). A dry texel within
+  `EDGE_RIM_TEXELS = 3` of an in or out edge is no bank where the art's water stops short of the edge (water inward of it, with a
+  neighbour: on both sides along the crossing); a bank that reaches the edge stays one. `B` is that distance over
+  `RIVER_CENTRE_TEXELS` (0 at the bank, 1 in the middle), times the lake fade below. `computeRiverFlow` keeps its own `B` over
+  `BANK_FADE_TEXELS = 4` and no context.
+- With the neighbour known, a rim texel past an edge is drawn only where the neighbour's own art shows water, or within
+  `SEAM_STRIP_TEXELS = 1.5` of the seam line with the neighbour's water just beyond it (otherwise ripples sat on the neighbour's grass at
+  a bank corner).
 
-The flow direction (`computeRiverFlow`, the negative gradient of `phi`) is no longer drawn; it stays as the
-reference the tests check the potential against.
+**The stream function.** `streamFunction` solves `psi` for the streaks: harmonic in ground space with the same operator,
+conducting over water, the dry strip where the art's water stops short of an edge, and the labelled banks.
+- Banks: the dry texels `B` counts as bank. The face boundary is split by the in and out crossings into arcs, walked in polygon
+  order from the out crossing. Each bank texel is labelled by the arc it is nearest to (flood fill). Which arc is the right-hand one
+  is decided on the ground from the out edge's flow direction, so both hexes of a seam agree. `psi` is 0 on the bank to the right
+  looking downstream and 1 on the left; the banks between the `k` arms of a confluence take `j / k`. A spring splits its one arc into
+  a 0 half and a 1 half.
+- Crossings: `psi` is fixed along each in and out crossing, linear in the position along the edge from the bank value before it to
+  the one after it, on the edge line only (texels within 0.75 of the line). The stretch of the edge is measured on the union of
+  both hexes' water, so both cells give the same values; the band and rim texels come from the solve, so streamlines cross a seam
+  along the ground normal.
+- Islands: a bank no arc reaches. Left free, zero flux through it made the contours meet the shore at a right angle (spokes), so it
+  is solved free once, then fixed at `psi` of its upstream tip (the island texel with the highest `phi`, averaged over the water
+  within 2 texels), and solved again: the streamlines wrap round it.
+- Confluences: an arm's own `psi` runs 0..1, but the confluence gives its arms `j / k` shares. `confluenceArmRanges` gives each in
+  edge's `(lo, hi)`; `RiverFlowLayer` composes them up the chain of drawn entries (`rangeOf`), so every cell has a range
+  `[lo, hi]` in the `psi` of the whole river (default [0, 1], and reversed ranges occur). The cell's `psi` stays full range; the
+  range is stored as a mapping (below), and the shader's lane coordinate is `(lo + (hi - lo) * psi) * lanes`, which is continuous
+  across the seam.
 
-The ripple texture (`RiverFlowLayer`, `computeRiverRipple`) is RGBA8 per frame cell: R,G = `cos theta`, `sin theta` `* 0.5 + 0.5`
-(a filtering-safe encoding, unlike a wrapped phase, which would smear across the 2 pi jump), B the distance to the bank over `RIVER_CENTRE_TEXELS = 16` (0 at the bank, 1 in the middle; the shader fades the ripples out at the shore over the first quarter of it, the same 4 texels as before, and bows the crests with the rest, see below; a dry texel within 3 texels of an in or out edge segment is not a bank, because
-the art's water stops a texel or two short of the top face edge and that rim would otherwise fade every seam to nothing), A 255 on the
-water texels of the hex top face and of a 7-texel rim past its in and out edges (`FACE_PAD_TEXELS`: the art's water spills up to about 6.5 texels past the face at the corners and past those edges), and all four 0 everywhere else,
-dry texels inside the face included. Clipped exactly to the face, a cell left a strip along every seam without flow: the art's water
-stops a texel or two short of the face edge, so what shows there is the neighbouring hex's skirt water. The rim carries the ripples
-over that strip, and because the cell is transparent where it is dry, its own dry strip does not cover the rim of the cell next to
-it. Past an edge the water does not cross there is no rim, so a river's skirt water is never drawn onto a neighbouring land hex.
-Where two rims overlap, both continue the same phase, so it does not matter which is drawn last. Cells are cached per
-`frame|out edge|in edges|fade edge` and drawn into one render texture over the water mask's rect, placed and sized exactly like the
-dry mask cells (`MaskRenderTarget` is the shared drawing half), and bound as `uRiverFlow` with the same `vUV`. World mode, and the
-time before the masks have loaded, bind a 1x1 texture of zeros.
+**Textures.** Both are RGBA8 render textures over the river cells' own box (not the water mask's region: `RiverFlowLayer.rect`,
+bound as `uRiverRect = (minX, minY, 1 / width, 1 / height)`, `RIVER_RT_MAX_SIDE = 4096` px on the long side), premultiplied, drawn
+by `MaskRenderTarget` with the cells placed like the dry mask cells (`dryCellWorldRect`).
+- `uRiverFlow`: R, G = `cos theta`, `sin theta` * 0.5 + 0.5 (a wrapped angle would smear across the jump; the shader renormalises
+  the filtered pair), B = `B`, A = 255 where the cell has flow, 0 elsewhere.
+- `uRiverPsi`, same rect and UVs: B = `psi` (8 bits), R = `lo * 128`, G = `round(log2(1 / |hi - lo|) * 16)` plus 128 when `hi < lo`
+  (`encodePsiRange` / `decodePsiRange`; exact for the dyadic ranges of confluences, 7 levels deep), A as above. Linear filtering
+  blends the mapping bytes across a seam between cells of different range, over about one texel.
+- Each cell is two textures, its own top face and its rim past the in and out edges, drawn all rims first and then all faces, so a rim
+  never overwrites the neighbour's face. A cell's pixels are transparent where it is dry, so its dry strip does not cover the
+  neighbour's rim. Past an edge the water does not cross there is no rim: a river's skirt water is never drawn onto a land hex.
+- Cells are cached per `frame|out edge|in edges|fade edge|neighbour frame per edge|psi range`.
+- A river flow texture is rebuilt when the water mask is applied or the base entries change, never per frame.
 
-**Lakes stay still.** A bog `boglake_mouth` hex joins a creek to a lake. Its flow fades away from the creek edge (the one of
-in/out that is not a lake edge): the intensity is multiplied by `1 - smoothstep(0, half a hex width, geodesic distance from the
-creek edge)` (the one place a geodesic distance remains: it is an intensity fade, not a direction).
+**Lakes stay still.** A bog `boglake_mouth` hex joins a creek to a lake: its intensity is multiplied by
+`1 - smoothstep(0, half a hex width, geodesic distance from the creek edge)` (the creek edge is the one of in/out that is not a lake
+edge), so the lake end of the hex is still.
 
-**Arcs, not straight lines.** `theta` is 0 along the whole edge line, so with one phase for the whole width a crest would cross every seam as a straight line along the hex edge (and the contours meet an island's shore at a right angle, spokes). The shader lags the crests towards the banks: `theta' = theta + uRiverSpeed * uTime - uRiverArc * (1 - B)^2 * 2 pi`, `uRiverArc = 0.35` of a period. The middle of the channel (B = 1) is ahead, the banks lag, so a crest bows downstream in the middle. Both hexes of a seam have nearly the same B there, so the lag is near-continuous and the crest stays one arc across the seam. The direction cell (`computeRiverFlow`) keeps its 4-texel B.
+**Looks.** The painted water is the base in every look; `riverOverlay` returns premultiplied colour from `uRiverFlow` and
+`uRiverPsi`. `waterDebugFlags.riverStyle` (`uRiverStyle`), a select in the debug panel: 0 ripple arcs, 1 toon strands,
+2 cartoon bands, 3 flow streaks, **4 bands + streaks (default)**. `uRiverAlpha` is `RIVER_ALPHA = 0.5` times
+`riverBrightness`, `uRiverColor` `0xcce9ff`, `uRiverScale` the noise cells per world unit (6 per tile).
+- Common: the phase `theta' = theta + uRiverSpeed * uTime`, `uRiverSpeed = 0.8 * 2 pi` rad/s (`riverSpeed` scales it), moves
+  towards the out edge; the marks fade in over the first quarter of `B` (4 texels). The flow direction on the ground used by the drifting
+  marks is perpendicular to `grad psi` (central differences over 16 world units): `psi` rises to the left of the flow, so `down = (-grad.y, grad.x)` (`riverDown`).
+- 0, ripple arcs: thin crests where `cos theta'` is near 1 (`smoothstep(0.85, 0.985, .)`, about a fifth of a wavelength), broken up
+  by world-space noise, lagging at the banks by `uRiverArc * (1 - B)^2` periods (`uRiverArc = 0.35`, `riverArc` scales it), so crests
+  bow downstream in the middle and none runs straight along a seam.
+- 1, toon strands: `psi` lanes (`psi * 10`, thick, light and dark), curly white foam where `B` is small, sparkles.
+- 2, cartoon bands: a lighter shallow band along each bank (inner edge at `B` about 0.3, wobbled by noise), soft translucent lobed
+  patches (alpha 0.22), short glints. A patch is a hashed-cell blob with a jittered centre, stretched along the flow, its edge wobbled
+  by noise that travels with it; a cell holds no more than its own middle (a lobe that reached its border was cut straight).
+- 3, flow streaks: white only. Lanes `psi * 36`, a line each with its own presence (denser near banks), width and alpha (0.85..0.6),
+  kept at 1 to 2 world px by the local `|grad psi|` times the lane scale, so lanes far up a chain of confluences do not get
+  thinner. The lines are static streamlines; each line's brightness follows `cos(theta' + lane offset)` (0.25 + 0.75 of a smoothstep),
+  so its bright dashes travel along it with the crests. Plus small ovals ("specks") drifting downstream.
+- 4: the bands with style 3 over them at `riverStreakMix` (`waterDebugTuning`, default 0.25) times its alpha; a panel slider.
+- Motion. Dashes ride the fast phase, so they move at the crests' speed by construction. Specks and patches are carried by a
+  drift (`riverDrift`, `riverLobes`): two layers of a hashed grid half a cycle apart, each shifted along the flow and faded by a triangle that is
+  zero when it resets (a continuous noise field cross-faded this way shows no net motion). Speed in world units per second =
+  `shift * rate / (grid * uRiverScale)`, `RIVER_DRIFT` in `waterShader.ts`; `gain` is the factor the recorded clips needed on top of
+  the ripples' `0.8 * 12 texels * 1.68` so the visible marks match the crests, checked in `WaterLayer.test.ts`.
 
-**In the shader.** Painted river water is land as far as the water mask knows, so the river branch sits before the land
-`discard`: where `!water` and the flow texture's alpha is set, the pixel is the river overlay (where its intensity B is above
-0.01). The shader renormalises the filtered `(cos, sin)` pair and rotates it by time, `theta' = theta + uRiverSpeed * uTime`
-(`cos theta' = cos theta cos d - sin theta sin d`). Because `phi` falls downstream, the crests (`theta' = 0`, i.e. `phi` decreasing
-over time) move towards the out edge. The ripples fade in with `smoothstep(0, 4/16, B)`. A crest is `smoothstep(0.85, 0.985, cos theta')`, about a fifth of a wavelength wide, broken up
-along the band by low-frequency world-space noise (`uRiverScale`, 6 cells per tile) so it reads as ripples and not stripes. Alpha is
-`crest * broken * B * uRiverAlpha`, colour `uRiverColor` (light cyan-white). The speed is 0.8 periods per second; a period is about
-an eighth of a tile (12 texels), the real length differs a little per cell because `N` is rounded.
+**Debug views.** `showRiverFlow` colours the river by the static ripple phase (hue `theta`, brightness the intensity): it shows
+that the bands cross the channel and are continuous across seams. `riverFlow` off draws nothing (the painted water is still).
 
-**Styles.** The ripple arcs above are the default (`waterDebugFlags.riverStyle = 0`, uniform `uRiverStyle`). Two alternatives for comparison are in the debug panel's "River style" select, drawn by the same `riverOverlay` from the same texture (the phase on its circle for moving along the stream, B as the cross-stream coordinate, ground noise to hide the per-wavelength repeat): 1 *toon strands* (long light and dark strands along the flow, curly white foam where B is small, sparkles) and 2 *cartoon bands* (a lighter shallow band along each bank with a wobbly inner edge, large see-through lobed patches, short glints stretched along the flow, whose direction comes from two extra taps of the flow texture, `uRiverUVPerWorld`). A fourth, 3 *flow streaks* (the Ronja tutorial look), draws only white marks on the bare painted water: long thin streaks (lanes of B about a texel wide, each with its own width, alpha and run of dashes) and small ovals drifting downstream, denser near banks and islands. Its dashes run on a **slow phase**: `computeRiverRipple` also returns `slow`, the same cell with its own whole number of periods `N' = max(1, round(L / (4 * wavelength)))` (`SLOW_PHASE_FACTOR`), the same 0 mod 2 pi on every in and out edge line, band run-on and band shifts; `RiverFlowLayer` draws it into a second render texture over the same rect (`uRiverSlow`, same UVs). A second texture rather than packing: the first one has no spare channel (cos and sin of the phase, B, and the coverage in A), and packing the slow phase into B or A would cost precision or the coverage test. With only 1 to 3 slow periods per cell the rate differs by up to 2x across a seam (1.5 on average). Streaks follow **streamlines**: each cell also solves a stream function psi (`streamFunction` in `riverFlow.ts`): harmonic in ground space like the potential, 0 on the bank to the right looking downstream and 1 on the left (decided on the ground from the out edge, so both hexes of a seam agree), `j / k` on the banks between the arms of a confluence, 0 and 1 on either side of a spring's out crossing. Banks are the dry texels `distanceToBank` counts as banks, labelled by the face-boundary arc they are nearest to. Along each in and out crossing psi is fixed linearly with the position on the edge line (the stretch of the edge measured on the union of both hexes' water), on the edge line only, so the streamlines cross a seam along the ground normal and agree on both sides. An island (a bank no arc reaches) is a streamline: it is first left free, then fixed at the psi of its upstream tip (the island texel with the highest potential) and the field solved again, so the streamlines wrap round it and split at the tip (zero flux through it made them meet the shore at a right angle, spokes). psi is the slow texture's blue channel (8 bits); lanes are `psi * 36` (style 1: `* 10`) so they continue across seams, with a line's width kept at 1 to 2 world px from the local `|grad psi|`. `confluenceArmRanges` / `RiverFlowInput.psiRange` can map an arm cell's psi into its share of the confluence's, which makes psi continuous across a confluence seam (tested); `RiverFlowLayer` does not apply it, because composed up a chain of confluences the shares shrink to an eighth and less and the 8-bit psi then has too few levels per lane (the streaks came out wide and sparse). So there is a lane jump at confluence seams.
-**Default and mix.** The default look is **4, bands + streaks** (`waterDebugFlags.riverStyle`): the cartoon bands (style 2) with the flow streaks (style 3) over them at `waterDebugTuning.riverStreakMix` (default 0.25) times their alpha. The other looks are debug-panel alternatives for comparison. Everything that drifts (cartoon patches, the streaks' dashes, the specks) is carried by one helper along the flow direction taken from the slow phase, at the ripples' along-stream speed (`RIVER_DRIFT` in `waterShader.ts`, checked in `WaterLayer.test.ts`); the dashes are ovals of a drifting grid laid over the stream-function lanes, not a pattern keyed to the slow phase (a line sliding along itself shows no motion, and the phase's speed share is only known to a percent, times a clock of tens of seconds: grain).
-
-
-`showRiverFlow` (debug) replaces the ripples with the static phase: hue is `theta`, brightness the intensity. It is how to check
-that the bands cross the channel and are continuous across hex seams.
-
-ould.
+**Known not to match.**
+- The ripple rate differs across a seam by up to a third (each cell rounds its own `N`); lanes of `psi` and the ripples are otherwise continuous.
+- A bank texel's water 4 texels or so spills past a non-flow edge over the cliff (e.g. the bog creek's SE wedge) and gets no flow.
+- Across a seam between cells of different `psi` range, the filtered mapping bytes can bend a line over one texel.
+- Measured on recorded clips (`motion` cross-correlation of the marks), streaks and bands move at about half to two thirds of the
+  ripples' screen speed on the river and the bog creek, in the right direction in every pair measured; the drifts are calibrated by `gain`,
+  not by the nominal speed.
+- A faint horizontal line at some seams is in the painted art (it shows with the overlay off).
+- Water that no edge's distance field reaches gets no marks.
 
 ### 4.4 Uniforms
 
@@ -1165,12 +1207,12 @@ sampler2D uWaterTaint              taint field (§4.4c), single channel
 sampler2D uWaterNoFoam             river-mouth no-foam field, single channel; foam *= 1 - it
 sampler2D uWaterDry                art dry mask (§4.4b), render texture over the mask's rect; alpha is the mask; caustics and foam *= 1 - it
 sampler2D uRiverFlow               river flow field (§4.4e), render texture over the river cells' own rect; rg cos/sin of the ripple phase, b distance to the bank, a where the hex has flow
-sampler2D uRiverPsi                stream function psi (§4.4e), same rect and UVs as uRiverFlow
+sampler2D uRiverPsi                stream function (§4.4e), same rect and UVs as uRiverFlow; b psi, r g the cell's lane mapping, a where the hex has flow
 vec4  uRiverRect                   the river textures' world rect: (minX, minY, 1 / width, 1 / height)
 float uRiverStyle                  0 ripple arcs, 1 toon strands, 2 cartoon bands, 3 flow streaks, 4 bands + streaks (the default)
 float uRiverStreakMix              style 4: the streaks' alpha over the bands (0.25)
 float uRiverFlowOn, uShowRiverFlow 0/1: the river overlay; debug: colour the river by ripple phase
-float uRiverSpeed, uRiverArc       ripple phase rotation, radians per second; periods the crests lag at the banks
+float uRiverSpeed, uRiverArc       ripple phase rotation, radians per second; periods the crests lag at the banks (style 0)
 float uRiverAlpha, uRiverScale;  vec3 uRiverColor   overlay opacity; noise cells per world unit; crest colour
 vec3  uTaintShallowColor, uTaintDeepColor, uTaintFoamColor
 float uTime, uWaveTime            base clock; wave clock, scaled by waveSpeed
@@ -1237,10 +1279,12 @@ export interface WaterDebugFlags {
   legacyWaveSquiggles: boolean; // default true
   /** Debug: render the water mask's channels instead of water. */
   showWaterMask: boolean;       // default false
-  /** The moving ripples on river, stream and bog-creek water (§4.4e). */
+  /** The moving marks on river, stream and bog-creek water (§4.4e). */
   riverFlow: boolean;           // default true
-  /** Debug: colour river pixels by flow direction (hue) and intensity (brightness). */
+  /** Debug: colour river pixels by the static ripple phase (hue) and intensity (brightness). */
   showRiverFlow: boolean;       // default false
+  /** The river look (§4.4e): 0 ripple arcs, 1 toon strands, 2 cartoon bands, 3 flow streaks, 4 bands + streaks. A select in the panel. */
+  riverStyle: number;           // default 4
   /** §3.3's code-side split of the unsplit tall art. Off reproduces the artifact it fixes. */
   legacyTileSplit: boolean;     // default true
   /** Bog lakes, inside the forest wind gust (§4.4d): white foam lines, a soft sheen, cat's paws. */
@@ -1289,9 +1333,10 @@ export interface WaterDebugTuning {
   causticFineBrightness: number; // 1
   causticFineDensity: number;    // 1
   causticFinePhase: number;      // 17s — see §4.2e.
-  riverBrightness: number;       // 1 — multiplier on the river ripples' opacity (§4.4e)
-  riverSpeed: number;            // 1 — multiplier on the river ripples' speed (rotation of the ripple phase)
+  riverBrightness: number;       // 1 — multiplier on the river marks' opacity (§4.4e)
+  riverSpeed: number;            // 1 — multiplier on the ripple phase's rotation (the crests' and dashes' speed)
   riverArc: number;              // 1 — multiplier on how far the crests lag at the banks (0 = straight crests)
+  riverStreakMix: number;        // 0.25 — the flow streaks' share of their alpha over the cartoon bands (style 4)
   // None of the seven touches the shadow pools. Brightness would darken the
   // water if it did, and the pools' density is a level in a field, not a count.
 }
