@@ -320,22 +320,24 @@ describe('WaterLayer', () => {
     layer.setRiverFlowTexture(null);
     expect(Array.from(uniformsOf(layer).uRiverRect as Float32Array)).toEqual([0, 0, 1, 1]);
 
-    // The slow phase is bound with the texture, and falls back to the placeholder without it.
-    const slow = new Texture({ source: new BufferImageSource({ resource: new Uint8Array([128, 128, 255, 255]), width: 1, height: 1 }) });
-    layer.setRiverFlowTexture(texture, { minX: 0, minY: 0, maxX: 2, maxY: 2 }, slow);
-    expect(resources.uRiverSlow).toBe(slow.source);
+    // The stream function texture is bound with the texture, and falls back to the placeholder without it.
+    const psiTexture = new Texture({ source: new BufferImageSource({ resource: new Uint8Array([128, 128, 255, 255]), width: 1, height: 1 }) });
+    layer.setRiverFlowTexture(texture, { minX: 0, minY: 0, maxX: 2, maxY: 2 }, psiTexture);
+    expect(resources.uRiverPsi).toBe(psiTexture.source);
     layer.setRiverFlowTexture(texture, { minX: 0, minY: 0, maxX: 2, maxY: 2 });
-    expect(resources.uRiverSlow).toBe(placeholder);
+    expect(resources.uRiverPsi).toBe(placeholder);
   });
 
-  it('carries everything that drifts on the river downstream at about the speed of the ripples (within 10 %)', () => {
+  it('carries the specks and patches at the ripples\' speed times the gain measured on the clips (within 10 %)', () => {
     const k = RIVER_NOISE_PER_TILE / TILE_W; // the river noise scale, per world unit (uRiverScale)
     const texelWorld = (2 * TILE_W) / 200; // a flow cell texel: 2 source px of the 200 px art
     // Ripples: periods per second times the wavelength in world units. Drifts: shift * rate / (grid * k) world units per second.
+    // `gain` is what scripts/motion measurements on recorded clips needed on top of that so the visible marks match the crests
+    // (cross-fading features shows less motion than the nominal speed).
     const ripples = RIVER_SPEED_TURNS_PER_SECOND * RIPPLE_WAVELENGTH_TEXELS * texelWorld;
     for (const [name, d] of Object.entries(RIVER_DRIFT)) {
       const speed = (d.shift * d.rate) / (d.grid * k);
-      expect(Math.abs(speed / ripples - 1), `${name}: ${speed.toFixed(1)} against ${ripples.toFixed(1)} world units per second`).toBeLessThan(0.1);
+      expect(Math.abs(speed / d.gain / ripples - 1), `${name}: ${speed.toFixed(1)} against ${ripples.toFixed(1)} world units per second`).toBeLessThan(0.1);
     }
   });
 

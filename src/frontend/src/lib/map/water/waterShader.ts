@@ -45,9 +45,8 @@
  * match the ripples' (`RIVER_SPEED_TURNS_PER_SECOND` periods per second of `RIPPLE_WAVELENGTH_TEXELS` texels).
  */
 export const RIVER_DRIFT = {
-  dash: { grid: 1.5, shift: 1.6, rate: 0.55 },
-  speck: { grid: 5, shift: 4, rate: 0.7 },
-  patch: { grid: 0.3, shift: 0.6, rate: 0.28 },
+  speck: { grid: 5, shift: 4, rate: 0.9, gain: 1.28 },
+  patch: { grid: 0.25, shift: 0.46, rate: 0.5, gain: 1.6 },
 } as const;
 const glsl = (v: number): string => v.toFixed(3);
 
@@ -81,7 +80,7 @@ uniform sampler2D uWaterTaint;
 uniform sampler2D uWaterNoFoam;
 uniform sampler2D uWaterDry;
 uniform sampler2D uRiverFlow;
-uniform sampler2D uRiverSlow;
+uniform sampler2D uRiverPsi;
 
 uniform float uTime;
 uniform float uWaveTime;
@@ -559,10 +558,10 @@ vec4 riverOver(vec4 a, vec4 b) {
   return b + a * (1.0 - b.a);
 }
 
-// The stream function psi (0 on the right bank looking downstream, 1 on the left), the slow texture's blue channel: its contour
+// The stream function psi (0 on the right bank looking downstream, 1 on the left), the psi texture's blue channel: its contour
 // lines are the streamlines. A lane coordinate is psi times a lane count the same for every cell, so lanes continue across seams.
 float riverPsi() {
-  vec4 f = texture(uRiverSlow, riverUV());
+  vec4 f = texture(uRiverPsi, riverUV());
   return f.a > 0.5 ? f.b / f.a : 0.5;
 }
 
@@ -572,35 +571,32 @@ float riverLaneWidth(float lanes) {
   const float H = 8.0;
   vec2 uv = riverUV();
   float p0 = riverPsi();
-  vec4 fx = texture(uRiverSlow, uv + vec2(H * uRiverRect.z, 0.0));
-  vec4 fy = texture(uRiverSlow, uv + vec2(0.0, H * uRiverRect.w));
+  vec4 fx = texture(uRiverPsi, uv + vec2(H * uRiverRect.z, 0.0));
+  vec4 fy = texture(uRiverPsi, uv + vec2(0.0, H * uRiverRect.w));
   float px = fx.a > 0.5 ? fx.b / fx.a : p0;
   float py = fy.a > 0.5 ? fy.b / fy.a : p0;
   float g = length(vec2(px - p0, (py - p0) * uGroundSquash)) / H;
   return 1.0 / max(g * lanes, 1e-3);
 }
 
-// The direction of the flow from the slow phase: its gradient over a wide stretch (central differences over 32 world units), which is smooth where the fast
-// phase's, taken over 3, quantises into patches of equal direction. Used to carry the cartoon patches and the specks downstream.
-vec2 riverSlowGradient() {
-  const float H = 16.0;
+// The direction of the flow, on the ground: perpendicular to the gradient of the stream function psi, which is smooth (the ripple
+// phase wraps within a few texels and cannot be differenced over a useful stretch). psi is 0 on the bank to the right looking
+// downstream and 1 on the left, so the gradient points to the left of the flow: down = (-grad.y, grad.x). Central differences
+// over 16 world units; not normalised (the caller decides what a flat psi means).
+vec2 riverDown() {
+  const float H = 8.0;
   vec2 uv = riverUV();
-  vec4 f0 = texture(uRiverSlow, uv);
-  vec2 c0 = f0.a > 0.5 ? (f0.rg / f0.a) * 2.0 - 1.0 : vec2(1.0, 0.0);
-  c0 /= max(length(c0), 1e-3);
-  vec4 xm = texture(uRiverSlow, uv - vec2(H * uRiverRect.z, 0.0));
-  vec4 xp = texture(uRiverSlow, uv + vec2(H * uRiverRect.z, 0.0));
-  vec4 ym = texture(uRiverSlow, uv - vec2(0.0, H * uRiverRect.w));
-  vec4 yp = texture(uRiverSlow, uv + vec2(0.0, H * uRiverRect.w));
-  vec2 cxm = xm.a > 0.5 ? (xm.rg / xm.a) * 2.0 - 1.0 : c0;
-  vec2 cxp = xp.a > 0.5 ? (xp.rg / xp.a) * 2.0 - 1.0 : c0;
-  vec2 cym = ym.a > 0.5 ? (ym.rg / ym.a) * 2.0 - 1.0 : c0;
-  vec2 cyp = yp.a > 0.5 ? (yp.rg / yp.a) * 2.0 - 1.0 : c0;
-  cxm /= max(length(cxm), 1e-3);
-  cxp /= max(length(cxp), 1e-3);
-  cym /= max(length(cym), 1e-3);
-  cyp /= max(length(cyp), 1e-3);
-  return vec2(cxm.x * cxp.y - cxm.y * cxp.x, (cym.x * cyp.y - cym.y * cyp.x) * uGroundSquash) / (2.0 * H);
+  float p0 = riverPsi();
+  vec4 xm = texture(uRiverPsi, uv - vec2(H * uRiverRect.z, 0.0));
+  vec4 xp = texture(uRiverPsi, uv + vec2(H * uRiverRect.z, 0.0));
+  vec4 ym = texture(uRiverPsi, uv - vec2(0.0, H * uRiverRect.w));
+  vec4 yp = texture(uRiverPsi, uv + vec2(0.0, H * uRiverRect.w));
+  float pxm = xm.a > 0.5 ? xm.b / xm.a : p0;
+  float pxp = xp.a > 0.5 ? xp.b / xp.a : p0;
+  float pym = ym.a > 0.5 ? ym.b / ym.a : p0;
+  float pyp = yp.a > 0.5 ? yp.b / yp.a : p0;
+  vec2 grad = vec2(pxp - pxm, (pyp - pym) * uGroundSquash); // d/dY = squash * d/dy on the ground
+  return vec2(-grad.y, grad.x) / (2.0 * H);
 }
 
 // Style 1, toon strands: long thin light and dark strands along the flow (noise across the stream from centre, which is
@@ -670,6 +666,26 @@ float fbmRotated(vec2 p) {
   return sum;
 }
 
+// Lobed blobs of a hashed cell grid carried downstream (see riverDrift): one per cell with a probability, centre jittered, stretched
+// along the flow, with a wavy edge from noise sampled in the carried grid coordinates, so the wobble travels with the blob.
+float riverLobes(vec2 grid, vec2 down, float cycles, float shift) {
+  vec2 side = vec2(-down.y, down.x);
+  float total = 0.0;
+  for (int i = 0; i < 2; i++) {
+    float c = fract(cycles + (i == 0 ? 0.0 : 0.5));
+    float w = 1.0 - abs(1.0 - 2.0 * c);
+    vec2 g = grid - down * c * shift + (i == 0 ? 0.0 : 31.0);
+    vec2 cell = mod(floor(g), 289.0);
+    float h = hash(cell);
+    vec2 o = fract(g) - (vec2(hash(cell + 1.7), hash(cell + 9.3)) * 0.4 + 0.3);
+    float radius = 0.2 + 0.1 * hash(cell + 4.1);
+    float d = length(vec2(dot(o, down) / 1.5, dot(o, side))) / radius;
+    float wavy = (noiseQuintic(g * 4.0 + cell) - 0.5) * 0.7;
+    total += smoothstep(1.0, 0.7, d + wavy) * step(0.35, h) * w;
+  }
+  return min(total, 1.0);
+}
+
 // Style 2, cartoon bands: a lighter shallow band along each bank with a wobbly inner edge, large see-through lobed patches
 // drifting downstream, and small white glints stretched along the flow.
 vec4 riverBands(vec2 cs, float centre, vec2 ground) {
@@ -680,22 +696,13 @@ vec4 riverBands(vec2 cs, float centre, vec2 ground) {
   float edge = 0.3 + wobble * 0.08;
   float band = 1.0 - smoothstep(edge - 0.05, edge + 0.05, centre);
   vec4 col = vec4(vec3(0.42, 0.72, 0.9) * 0.6, 0.6) * band;
-  // Patches: big lobes of low-frequency noise drifting downstream. Moved along the flow (minus the phase gradient: the phase
-  // grows upstream), two layers half a cycle apart and cross-faded, so the drift never jumps back. Shifting the noise by the
-  // phase instead lined the patch edges up with the phase contours: straight bars across the channel.
-  // Soft normalisation: where the gradient is tiny (a flat stretch of the phase) its direction is noise, so it shifts nothing.
-  vec2 down = -riverSlowGradient();
-  down /= length(down) + 0.03;
-  // One cycle carries a patch along by RIVER_DRIFT.patch.shift cells, at about the ripples' speed.
-  float cycle = uTime * ${glsl(RIVER_DRIFT.patch.rate)};
-  float c0 = fract(cycle);
-  float c1 = fract(cycle + 0.5);
-  vec2 warp = vec2(noiseQuintic(ground * k * 0.8), noiseQuintic(ground * k * 0.8 + 9.0)) - 0.5;
-  vec2 base = ground * k * ${glsl(RIVER_DRIFT.patch.grid)} + warp * 1.4;
-  float f0 = fbmRotated(base - down * c0 * ${glsl(RIVER_DRIFT.patch.shift)} + 5.0);
-  float f1 = fbmRotated(base - down * c1 * ${glsl(RIVER_DRIFT.patch.shift)} + 23.0);
-  float f = mix(f0, f1, abs(1.0 - 2.0 * c0));
-  float patch = smoothstep(0.46, 0.62, f) * smoothstep(0.0, 0.08, centre);
+  // Patches: soft lobed blobs, each a drifting object (a hashed cell with a jittered centre, stretched along the flow, its edge
+  // wobbled by noise that travels with it), faded in and out like the specks. A continuous noise field cross-faded between two
+  // layers shows no net motion (the centroid of the blend stays put), and an fbm with a hard threshold did not translate in
+  // measurements; discrete blobs do.
+  vec2 down = riverDown();
+  down /= length(down) + 0.0005;
+  float patch = riverLobes(ground * k * ${glsl(RIVER_DRIFT.patch.grid)}, down, uTime * ${glsl(RIVER_DRIFT.patch.rate)}, ${glsl(RIVER_DRIFT.patch.shift)}) * smoothstep(0.0, 0.08, centre);
   col = riverOver(col, vec4(vec3(0.75, 0.94, 1.0) * 0.22, 0.22) * patch);
   // Glints: ellipses along the flow (the phase gradient points across it), shown while the wave passes their cell.
   vec2 g = ground * k * 14.0;
@@ -733,7 +740,7 @@ float riverDrift(vec2 grid, vec2 down, float cycles, float shift, float along, f
 
 // Style 3, flow streaks: many long thin white streaks along the flow on the bare painted water, and a few small white ovals drifting
 // downstream; denser near the banks and round islands. A streak is a lane of B (about a texel wide, so 1 to 2 px at zoom 1) with
-// its own width, shown where drifting ovals cover it, a few ripples long.
+// its own width, brighter where the ripple phase says so.
 vec4 riverStreaks(vec2 cs, float centre, vec2 ground) {
   float k = uRiverScale;
   float nearBank = 1.0 - smoothstep(0.0, 0.35, centre);
@@ -746,18 +753,17 @@ vec4 riverStreaks(vec2 cs, float centre, vec2 ground) {
   float halfWidth = min(0.85, (0.9 + 0.8 * h2) / riverLaneWidth(36.0));
   float across = abs(fract(laneCoord) - 0.5) * 2.0;
   float body = 1.0 - smoothstep(halfWidth, halfWidth + 0.15, across);
-  // The flow direction (smooth, from the slow phase over a wide stretch) carries both the dashes and the specks downstream.
-  vec2 down = -riverSlowGradient();
-  down /= max(length(down), 1e-6);
-  // Dashes: where an elongated oval of a grid carried downstream lies. The lines of psi stay put; a dash is the part of a line an oval
-  // covers, so it travels along the line, and an oval spans a few neighbouring lines, so they dash together, like bundles of streaks.
-  // (A pattern sliding along a continuous line shows no motion, and one keyed to the phase of the flow was grainy: its speed share
-  // is only known to a percent, times a clock of tens of seconds.)
-  float dash = riverDrift(ground * k * ${glsl(RIVER_DRIFT.dash.grid)}, down, uTime * ${glsl(RIVER_DRIFT.dash.rate)}, ${glsl(RIVER_DRIFT.dash.shift)}, 0.9, 0.38, 0.62 - 0.2 * nearBank);
-  float alpha = mix(0.85, 0.6, smoothstep(0.0, 1.0, h2));
-  float streak = body * dash * present * smoothstep(0.02, 0.1, centre);
+  // The lines are streamlines and stay put; the bright part of each travels along it with the ripple crests: brightness follows
+  // cos(theta' + a lane offset), theta' = theta + uRiverSpeed * t, so it moves at the crests' speed in their direction.
+  vec2 pn = riverPhaseNow(cs);
+  float offset = h2 * 6.2831853;
+  float bright = smoothstep(-0.2, 0.55, pn.x * cos(offset) - pn.y * sin(offset));
+  float alpha = mix(0.85, 0.6, h2) * (0.25 + 0.75 * bright);
+  float streak = body * present * smoothstep(0.02, 0.1, centre);
   vec4 col = vec4(vec3(1.0), 1.0) * alpha * streak;
   // Specks: small ovals along the flow, a few more near the banks.
+  vec2 down = riverDown();
+  down /= length(down) + 0.0005;
   float specks = riverDrift(ground * k * ${glsl(RIVER_DRIFT.speck.grid)}, down, uTime * ${glsl(RIVER_DRIFT.speck.rate)}, ${glsl(RIVER_DRIFT.speck.shift)}, 0.34, 0.13, 0.93 - 0.04 * nearBank);
   col = riverOver(col, vec4(vec3(1.0), 1.0) * specks * 0.85 * smoothstep(0.02, 0.1, centre));
   return col * (uRiverAlpha / 0.5);

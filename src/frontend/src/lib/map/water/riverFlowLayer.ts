@@ -129,10 +129,10 @@ export class RiverFlowLayer {
   // Larger than the dry mask's 2048 px: the river cells' box spans a whole region of the map, and a flow texel is 1.7 world units, so at
   // 2048 px over several thousand units the fine marks (streak lines, stream function lanes) were sampled coarser than the data.
   private readonly target = new MaskRenderTarget(RIVER_RT_MAX_SIDE);
-  /** The same cells' slow phase (`computeRiverRipple`'s `slow`), over the same rect, so it is read with the same UVs. */
-  private readonly slowTarget = new MaskRenderTarget(RIVER_RT_MAX_SIDE);
+  /** The same cells' stream function (`computeRiverRipple`'s `psi`, in the blue channel), over the same rect, so it is read with the same UVs. */
+  private readonly psiTarget = new MaskRenderTarget(RIVER_RT_MAX_SIDE);
   private masks: LoadedRiverMasks | null = null;
-  private readonly cells = new Map<string, { face: Texture; rim: Texture; slowFace: Texture; slowRim: Texture }>();
+  private readonly cells = new Map<string, { face: Texture; rim: Texture; psiFace: Texture; psiRim: Texture }>();
   private drawnRect: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
 
   /** The masks are lazily decoded; resolves when `draw` can use them. */
@@ -149,9 +149,9 @@ export class RiverFlowLayer {
     return this.target.texture;
   }
 
-  /** The slow phase's render texture (same rect and UVs as `texture`), or null before the first `draw`. */
-  get slowTexture(): Texture | null {
-    return this.slowTarget.texture;
+  /** The stream function's render texture (same rect and UVs as `texture`), or null before the first `draw`. */
+  get psiTexture(): Texture | null {
+    return this.psiTarget.texture;
   }
 
   /**
@@ -161,7 +161,7 @@ export class RiverFlowLayer {
    * version of it. Drawn in one pass, whichever hex came later overwrote up to `FACE_PAD_TEXELS` of the other's face: a
    * second, shifted seam inside the neighbour.
    */
-  private cellTextures(masks: LoadedRiverMasks, name: string, frame: DryMaskFrame, entry: RiverFlowEntry, tileWidth: number): { face: Texture; rim: Texture; slowFace: Texture; slowRim: Texture } {
+  private cellTextures(masks: LoadedRiverMasks, name: string, frame: DryMaskFrame, entry: RiverFlowEntry, tileWidth: number): { face: Texture; rim: Texture; psiFace: Texture; psiRim: Texture } {
     const outEdge = topFaceEdgeIndex(entry.outDirection);
     const inEdges = entry.inDirections.map(topFaceEdgeIndex).sort((a, b) => a - b);
     const fadeEdge = entry.fadeDirection ? topFaceEdgeIndex(entry.fadeDirection) : undefined;
@@ -189,10 +189,10 @@ export class RiverFlowLayer {
       );
       const flow = computeRiverRipple({ mask, cw, ch, polygon, inEdges, outEdge, fadeEdge, context });
       const { face, rim } = splitFaceAndRim(flow.data, flow.inside);
-      const slow = splitFaceAndRim(flow.slow, flow.inside);
+      const psiParts = splitFaceAndRim(flow.psi, flow.inside);
       const texture = (data: Uint8Array) =>
         new Texture({ source: new BufferImageSource({ resource: data, width: cw, height: ch, scaleMode: 'linear', addressMode: 'clamp-to-edge' }) });
-      pair = { face: texture(face), rim: texture(rim), slowFace: texture(slow.face), slowRim: texture(slow.rim) };
+      pair = { face: texture(face), rim: texture(rim), psiFace: texture(psiParts.face), psiRim: texture(psiParts.rim) };
       this.cells.set(key, pair);
     }
     return pair;
@@ -214,32 +214,32 @@ export class RiverFlowLayer {
     if (!masks) return this.target.texture;
     const rims: MaskPlacement[] = [];
     const faces: MaskPlacement[] = [];
-    const slowRims: MaskPlacement[] = [];
-    const slowFaces: MaskPlacement[] = [];
+    const psiRims: MaskPlacement[] = [];
+    const psiFaces: MaskPlacement[] = [];
     for (const entry of entries) {
       const name = entry.texture.label ?? '';
       const frame = masks.data.frames[name];
       if (!frame) continue;
-      const { face, rim, slowFace, slowRim } = this.cellTextures(masks, name, frame, entry, tileWidth);
+      const { face, rim, psiFace, psiRim } = this.cellTextures(masks, name, frame, entry, tileWidth);
       const rect = dryCellWorldRect(entry, frame, tileWidth);
       rims.push({ texture: rim, rect, tint: 0xffffff });
       faces.push({ texture: face, rect, tint: 0xffffff });
-      slowRims.push({ texture: slowRim, rect, tint: 0xffffff });
-      slowFaces.push({ texture: slowFace, rect, tint: 0xffffff });
+      psiRims.push({ texture: psiRim, rect, tint: 0xffffff });
+      psiFaces.push({ texture: psiFace, rect, tint: 0xffffff });
     }
     this.drawnRect = boundsOf(faces.map((p) => p.rect));
-    this.slowTarget.render(renderer, this.drawnRect, [...slowRims, ...slowFaces]);
+    this.psiTarget.render(renderer, this.drawnRect, [...psiRims, ...psiFaces]);
     return this.target.render(renderer, this.drawnRect, [...rims, ...faces]);
   }
 
   destroy(): void {
     this.target.destroy();
-    this.slowTarget.destroy();
-    for (const { face, rim, slowFace, slowRim } of this.cells.values()) {
+    this.psiTarget.destroy();
+    for (const { face, rim, psiFace, psiRim } of this.cells.values()) {
       face.destroy(true);
       rim.destroy(true);
-      slowFace.destroy(true);
-      slowRim.destroy(true);
+      psiFace.destroy(true);
+      psiRim.destroy(true);
     }
     this.cells.clear();
   }

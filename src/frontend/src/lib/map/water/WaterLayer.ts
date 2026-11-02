@@ -475,7 +475,7 @@ export class WaterLayer {
           uWaterNoFoam: placeholderNoFoamTexture().source,
           uWaterDry: placeholderDryTexture().source,
           uRiverFlow: placeholderRiverFlowTexture().source,
-          uRiverSlow: placeholderRiverFlowTexture().source,
+          uRiverPsi: placeholderRiverFlowTexture().source,
         },
       }),
     });
@@ -603,9 +603,9 @@ export class WaterLayer {
    * not the water mask's). `null` goes back to the 1x1 "no river" texture. The texture is owned by the caller, not
    * destroyed here.
    */
-  setRiverFlowTexture(texture: Texture | null, rect: { minX: number; minY: number; maxX: number; maxY: number } | null = null, slow: Texture | null = null): void {
+  setRiverFlowTexture(texture: Texture | null, rect: { minX: number; minY: number; maxX: number; maxY: number } | null = null, psi: Texture | null = null): void {
     this.mesh.shader!.resources.uRiverFlow = (texture ?? placeholderRiverFlowTexture()).source;
-    this.mesh.shader!.resources.uRiverSlow = (texture && slow ? slow : placeholderRiverFlowTexture()).source;
+    this.mesh.shader!.resources.uRiverPsi = (texture && psi ? psi : placeholderRiverFlowTexture()).source;
     const r = texture && rect ? rect : { minX: 0, minY: 0, maxX: 1, maxY: 1 };
     this.uniforms.uniforms.uRiverRect = new Float32Array([r.minX, r.minY, 1 / (r.maxX - r.minX), 1 / (r.maxY - r.minY)]);
   }

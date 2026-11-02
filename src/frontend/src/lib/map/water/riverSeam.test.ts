@@ -132,42 +132,6 @@ describe.skipIf(!vendoredArt)('river flow across the seams of real neighbouring 
     expect(totals.after, JSON.stringify(totals)).toBeLessThan(totals.before);
   }, 300_000);
 
-  it('(h) gives the slow phase the same seam guarantees: a whole turn on the seam line, and about the same rate on both sides', async () => {
-    const ratiosAll: number[] = [];
-    for (const pair of SEAM_PAIRS) {
-      const cells = await composePair(pair, true);
-      const ratios: number[] = [];
-      for (let t = 0.3; t <= 0.71; t += 0.05) {
-        const line = seamLine(cells, t);
-        const theta = (k: number) => sampleComposite(cells, line.x + line.step.x * k, line.y + line.step.y * k, true)?.theta;
-        // On the seam line the slow phase is 0 mod 2 pi (it turns less than 0.3 rad per ground texel, and the sample is within a texel of it).
-        const onLine = sampleComposite(cells, line.x, line.y, true);
-        if (onLine) expect(onLine.cos, `${pair[0].name} t=${t}`).toBeGreaterThan(0.8);
-        const rate = (ks: number[]) => {
-          let total = 0;
-          for (let i = 1; i < ks.length; i++) {
-            const u = theta(ks[i - 1]!);
-            const v = theta(ks[i]!);
-            if (u === undefined || v === undefined) return NaN;
-            let d = v - u;
-            while (d > Math.PI) d -= 2 * Math.PI;
-            while (d < -Math.PI) d += 2 * Math.PI;
-            total += d;
-          }
-          return Math.abs(total) / (ks.length - 1);
-        };
-        const l = rate([-5, -4, -3, -2, -1]);
-        const r = rate([1, 2, 3, 4, 5]);
-        if (Number.isFinite(l) && Number.isFinite(r) && Math.min(l, r) > 0.02) ratios.push(Math.max(l, r) / Math.min(l, r));
-      }
-      expect(ratios.length, pair[0].name).toBeGreaterThan(2);
-      ratios.sort((a, b) => a - b);
-      ratiosAll.push(ratios[ratios.length >> 1]!);
-    }
-    // Each cell rounds its own number of periods, and the slow phase has only 1 to 3 of them per cell, so the rate differs by up to 2x across a seam (1.5 on average): looser than (c).
-    expect(ratiosAll.reduce((a, b) => a + b, 0) / ratiosAll.length, ratiosAll.map((r) => r.toFixed(2)).join(' ')).toBeLessThan(1.7);
-  }, 300_000);
-
   it('(i) keeps the stream function continuous across every seam, confluences included (the jump beyond the local slope is within 0.1)', async () => {
     for (const pair of SEAM_PAIRS) {
       const cells = await composePair(pair, true);

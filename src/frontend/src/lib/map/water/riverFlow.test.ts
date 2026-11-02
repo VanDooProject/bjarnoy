@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeRiverFlow, computeRiverRipple, GROUND_SQUASH, riverStreamFunction, SLOW_PHASE_FACTOR, RIPPLE_WAVELENGTH_TEXELS, RIVER_CENTRE_TEXELS, riverGeodesicDistance, riverPotential, SEED_REACH, topFacePolygonTexels, WATER_THRESHOLD, type RiverFlowInput } from './riverFlow';
+import { computeRiverFlow, computeRiverRipple, GROUND_SQUASH, riverStreamFunction, RIPPLE_WAVELENGTH_TEXELS, RIVER_CENTRE_TEXELS, riverGeodesicDistance, riverPotential, SEED_REACH, topFacePolygonTexels, WATER_THRESHOLD, type RiverFlowInput } from './riverFlow';
 import { topFaceEdgeIndex } from '../riverPath';
 import { riverFrameInput, vendoredArt, type RiverFrame } from './riverArtFixture';
 
@@ -511,23 +511,6 @@ describe('computeRiverRipple on a synthetic straight channel', () => {
     const perTexel = (2 * Math.PI * periods) / 44;
     expect(phaseAt(data, 50, 0, CW)!.cos).toBeGreaterThan(Math.cos(1.3 * perTexel * 0.5));
     expect(phaseAt(data, 50, CH - 3, CW)!.cos).toBeGreaterThan(Math.cos(1.3 * perTexel * 0.5));
-  });
-});
-
-describe('computeRiverRipple slow phase', () => {
-  it('has its own whole number of periods, fewer than the fast phase, and covers the same texels', () => {
-    const { data, slow, periods, slowPeriods } = computeRiverRipple(input(channel(), BOTTOM));
-    expect(slowPeriods).toBeGreaterThanOrEqual(1);
-    expect(slowPeriods).toBeLessThan(periods);
-    expect(Math.abs(slowPeriods - periods / SLOW_PHASE_FACTOR)).toBeLessThanOrEqual(1);
-    for (let p = 0; p < CW * CH; p++) {
-      expect(slow[p * 4 + 3]).toBe(data[p * 4 + 3]);
-    }
-    // 0 mod 2 pi on the out edge's line, like the fast phase.
-    const o = ((CH - 3) * CW + 50) * 4;
-    const cosv = slow[o]! / 127.5 - 1;
-    const sinv = slow[o + 1]! / 127.5 - 1;
-    expect(cosv / Math.hypot(cosv, sinv)).toBeGreaterThan(0.8);
   });
 });
 
