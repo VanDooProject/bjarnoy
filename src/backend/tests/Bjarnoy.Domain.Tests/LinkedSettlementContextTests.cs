@@ -37,8 +37,9 @@ public sealed class LinkedSettlementContextTests
     };
 
     private static LinkedQueueContext Context(
-        int slots = 0, IReadOnlyList<BuildOrder>? queue = null, int lh = 0, int towerLimit = 0, int towers = 0) =>
-        new(slots, queue ?? [], lh, towerLimit, towers);
+        int slots = 0, IReadOnlyList<BuildOrder>? queue = null, int lh = 0, int towerLimit = 0, int towers = 0,
+        IReadOnlyList<PlacedBuilding>? buildings = null) =>
+        new(slots, queue ?? [], lh, towerLimit, towers, buildings ?? []);
 
     [Fact]
     public void Without_a_linked_context_slots_are_the_own_slots()
@@ -112,6 +113,24 @@ public sealed class LinkedSettlementContextTests
 
         var together = linked.PlanBuild(BuildingType.Tower, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
         Assert.NotEqual(BuildRejection.LonghouseTooLow, together.Rejection);
+    }
+
+    [Fact]
+    public void PlanBuild_counts_a_prerequisite_standing_in_another_member()
+    {
+        var own = Found(4);
+        var herder = new PlacedBuilding(new HexCoord(3, 0), BuildingType.ReindeerHerder, 3);
+        var low = new PlacedBuilding(new HexCoord(3, 0), BuildingType.ReindeerHerder, 2);
+
+        var alone = own.PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 5);
+        var tooLow = (own with { Linked = Context(buildings: [low]) })
+            .PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 5);
+        var together = (own with { Linked = Context(buildings: [herder]) })
+            .PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 5);
+
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, alone.Rejection);
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, tooLow.Rejection);
+        Assert.True(together.Accepted, $"expected accept, got {together.Rejection}");
     }
 
     [Fact]

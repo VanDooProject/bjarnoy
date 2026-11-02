@@ -1453,7 +1453,11 @@ public sealed record Settlement
         // answer.
         foreach (var prerequisite in definition.Prerequisites)
         {
-            if (HighestLevelOf(prerequisite.Type) < prerequisite.Level)
+            // A linked realm is one realm: a prerequisite standing in another member counts.
+            var highest = Math.Max(
+                HighestLevelOf(prerequisite.Type),
+                Linked?.OtherBuildings.Where(b => b.Type == prerequisite.Type && b.IsFunctioning).Select(b => b.Level).DefaultIfEmpty(0).Max() ?? 0);
+            if (highest < prerequisite.Level)
             {
                 return BuildDecision.Rejected(BuildRejection.RequiredBuildingTooLow, prerequisite);
             }
@@ -2728,9 +2732,11 @@ public sealed record SettleResult(
 /// <param name="GroupLonghouseLevel">The highest Longhouse level in the linked realm.</param>
 /// <param name="OtherTowerLimit">Sum of the other members' tower limits.</param>
 /// <param name="OtherTowerCount">The other members' towers counting against the limit (connected standing plus queued).</param>
+/// <param name="OtherBuildings">The other members' standing buildings, read for build prerequisites.</param>
 public sealed record LinkedQueueContext(
     int OtherConstructionSlots,
     IReadOnlyList<BuildOrder> OtherQueue,
     int GroupLonghouseLevel,
     int OtherTowerLimit,
-    int OtherTowerCount);
+    int OtherTowerCount,
+    IReadOnlyList<PlacedBuilding> OtherBuildings);
