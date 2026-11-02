@@ -16,10 +16,12 @@ export function useLogout() {
   const player = usePlayerStore();
 
   async function logout() {
-    // Read before auth.logout() clears the session — that's the only place
-    // this account's username is available client-side.
     const lastAccountName = auth.user?.userName ?? '';
-    await auth.logout();
+    // Not auth.logout(): that also drops the in-memory access token, and the
+    // HUD polls keep running against the (claimed, JWT-only) realm until the
+    // full load below replaces this page — each would come back 403. The
+    // load drops the token with the rest of the in-memory state.
+    await auth.revokeSession();
     player.forgetLocalIdentity(lastAccountName);
     window.location.assign('/');
   }

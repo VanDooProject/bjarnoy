@@ -38,7 +38,8 @@ public static class PageConsoleErrors
 
         page.Response += (_, response) =>
         {
-            if (response.Ok)
+            // 304 is a conditional fetch answered from cache, not a failure.
+            if (response.Ok || response.Status == 304)
             {
                 return;
             }
