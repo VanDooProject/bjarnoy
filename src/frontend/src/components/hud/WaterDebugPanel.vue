@@ -101,6 +101,7 @@ const SLIDERS: {
   { key: 'bogLakeSheenStrength', label: 'Bog lake sheen: strength', needs: 'bogLakeSheen', range: BOG_LAKE_STRENGTH, format: times },
   { key: 'bogLakeCatsPawsStrength', label: "Bog lake cat's paws: strength", needs: 'bogLakeCatsPaws', range: BOG_LAKE_STRENGTH, format: times },
   { key: 'tileAnimationSpeed', label: 'Forest sway + lake gust: playback speed', needs: 'water', range: { min: 0, max: 1.5, step: 0.05 }, format: times },
+  { key: 'bogLakeGustPhaseOffset', label: 'Bog lake gust: phase offset', needs: 'water', range: { min: -0.5, max: 0.5, step: 0.01 }, format: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(2)} period (${(v * 16).toFixed(1)} frames)` },
   { key: 'bogLakeBandHalf', label: 'Bog lake gust: band half-width', needs: 'water', range: { min: 0.05, max: 0.5, step: 0.01 }, format: (v) => `${v.toFixed(2)} period` },
   { key: 'waveSpeed', label: 'Wave speed', needs: 'midWaterWaves', range: WAVE_SPEED, format: (v) => `${v.toFixed(1)}\u00d7` },
 ];

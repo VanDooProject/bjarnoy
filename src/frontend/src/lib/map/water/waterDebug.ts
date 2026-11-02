@@ -197,6 +197,8 @@ export interface WaterDebugTuning {
    * slow down together, so they stay in step. 1 is what ships; 0 pauses them.
    */
   tileAnimationSpeed: number;
+  /** Shifts the bog lake gust against the forest sway, in gust periods (0 = on the trees' furthest lean, the measured `GUST_PEAK_PHASE`). */
+  bogLakeGustPhaseOffset: number;
 }
 
 export const waterDebugTuning: WaterDebugTuning = {
@@ -220,6 +222,7 @@ export const waterDebugTuning: WaterDebugTuning = {
   bogLakeFoamSpacing: 15,
   bogLakeBandHalf: GUST_BAND_HALF_WIDTH,
   tileAnimationSpeed: 1,
+  bogLakeGustPhaseOffset: 0,
 };
 
 /**

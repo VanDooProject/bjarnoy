@@ -89,6 +89,7 @@ export class BogLakeLayer {
     u.uFoamWidth = waterDebugTuning.bogLakeFoamWidth;
     u.uFoamSpacing = waterDebugTuning.bogLakeFoamSpacing;
     u.uBandHalf = waterDebugTuning.bogLakeBandHalf;
+    u.uGustPeak = GUST_PEAK_PHASE + waterDebugTuning.bogLakeGustPhaseOffset;
     this.mesh.visible = waterDebugFlags.water && this.hasLake && !this.suppressed && !this.motionOff;
   }
 

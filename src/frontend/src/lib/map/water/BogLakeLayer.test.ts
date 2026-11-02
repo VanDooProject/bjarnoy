@@ -104,6 +104,13 @@ describe('BogLakeLayer', () => {
     expect(uniformsOf(layer).uBandHalf).toBe(0.3);
   });
 
+  it('shifts the gust peak by the debug phase offset', () => {
+    const layer = new BogLakeLayer(TILE_W);
+    waterDebugTuning.bogLakeGustPhaseOffset = -0.1;
+    layer.tick(0);
+    expect(uniformsOf(layer).uGustPeak).toBeCloseTo(GUST_PEAK_PHASE - 0.1, 9);
+  });
+
   it('runs the gust on the forests\' clock', () => {
     const layer = new BogLakeLayer(TILE_W);
     layer.tick(2500);
