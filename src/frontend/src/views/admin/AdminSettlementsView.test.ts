@@ -108,6 +108,7 @@ function detail(overrides: Partial<SettlementResponse> = {}): SettlementResponse
     nextFeast: null,
     quests: [],
     world: { state: 'running', running: true, acceptsCommands: true, gameTime: '2026-01-01T00:00:00Z' },
+    realm: [{ settlementId: 'settlement-1', discs: [{ q: 0, r: 0, radius: 1 }] }],
     ...overrides,
   };
 }

@@ -186,6 +186,13 @@ if (migrationCommand == MigrationCommandKind.None)
         builder.Services.AddHostedService<CampAggressionHostedService>();
     }
 
+    // Buildings outside the realm decay: the sweep that applies the realm state to settlements nobody is looking at
+    // (SettlementService.SweepRealmStateAsync). Tests that drive it by hand switch the timer off with RealmSweep:Enabled=false.
+    if (builder.Configuration.GetValue("RealmSweep:Enabled", true))
+    {
+        builder.Services.AddHostedService<RealmStateHostedService>();
+    }
+
     // The leaderboard/weekly-stats aggregation job (issue #43) — same "the
     // migrator never serves requests" reasoning as the endboss trigger above.
     // Tests that drive LeaderboardService by hand switch the timer off with
@@ -262,6 +269,28 @@ await using (var adminSeedScope = app.Services.CreateAsyncScope())
         Environment.GetEnvironmentVariable("ADMIN_BOOTSTRAP_USERNAME"),
         Environment.GetEnvironmentVariable("ADMIN_BOOTSTRAP_PASSWORD"),
         logger);
+}
+
+// The frontend build writes build-id.txt next to index.html (build/buildId.ts). Stamping it on every
+// response lets an open tab notice a deploy happened and load the new build. Absent in a local run
+// (empty wwwroot), where there is no header.
+var buildIdFile = app.Environment.WebRootFileProvider.GetFileInfo("build-id.txt");
+if (buildIdFile.Exists)
+{
+    using var buildIdReader = new StreamReader(buildIdFile.CreateReadStream());
+    var appBuildId = (await buildIdReader.ReadToEndAsync()).Trim();
+    if (appBuildId.Length > 0)
+    {
+        app.Use((context, next) =>
+        {
+            context.Response.OnStarting(() =>
+            {
+                context.Response.Headers["X-App-Build"] = appBuildId;
+                return Task.CompletedTask;
+            });
+            return next(context);
+        });
+    }
 }
 
 app.UseExceptionHandler();

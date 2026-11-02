@@ -1,3 +1,5 @@
+using Bjarnoy.Domain.World;
+
 namespace Bjarnoy.Infrastructure.Entities;
 
 /// <summary>
@@ -34,6 +36,14 @@ public class IslandEntity
     /// <see cref="Persistence.HexListConverter"/> for the encoding.
     /// </remarks>
     public List<HexPoint> StartPositions { get; set; } = [];
+
+    /// <summary>
+    /// The distinct 64 x 64 fog chunks (<see cref="FogChunkLayout"/>) this island's land hexes fall in, computed at world
+    /// generation. An island counts as "seen" by a player when they have explored anything in one of these chunks — the
+    /// cutoff the camp endpoints use (<c>docs/design/wildlife-camps.md</c>). Empty for islands generated before the
+    /// column existed: their camps are simply not sent until the world is reseeded.
+    /// </summary>
+    public List<FogChunkCoord> FogChunks { get; set; } = [];
 
     /// <summary>
     /// <see cref="StartPositions"/> minus any that stands on a river hex. Worlds generated before start positions

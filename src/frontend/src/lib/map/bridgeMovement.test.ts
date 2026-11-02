@@ -88,6 +88,14 @@ describe('bridge movement (mirror of BridgeMovementTests.cs)', () => {
     expect(cost(strip(), bridges(3), STRANGER)).not.toBeNull();
   });
 
+  it('opens a guarded bridge outside its owner realm to a stranger', () => {
+    const terrain = strip();
+    const outside: StandingBridges = new Map([[coordKey(SPAN), { level: 4, owner: OWNER, outsideRealm: true }]]);
+
+    expect(cost(terrain, bridges(4), STRANGER)).toBeNull();
+    expect(cost(terrain, outside, STRANGER)).not.toBeNull();
+  });
+
   it('never changes the price of a stream', () => {
     const terrain = strip();
     const ctx = ctxFor(terrain, bridges(1), OWNER, () => false);

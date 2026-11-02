@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import type { ResourceLine, SettlementResponse } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
+import { useUnsavedInput } from '../../composables/useUnsavedInput';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -15,6 +16,7 @@ const emit = defineEmits<{ granted: [settlement: SettlementResponse] }>();
 
 // Signed deltas: a negative value removes resources (see GrantResourcesRequest).
 const deltas = reactive({ wood: 0, stone: 0, food: 0, iron: 0 });
+useUnsavedInput(() => Object.values(deltas).some((delta) => delta !== 0));
 const saving = ref(false);
 const error = ref<string | null>(null);
 // Issue #98: a positive grant that `ResourcePool.Adjust` clamped to capacity

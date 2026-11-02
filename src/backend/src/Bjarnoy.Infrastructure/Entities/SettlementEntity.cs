@@ -139,6 +139,18 @@ public class SettlementEntity
     /// <summary>Whether the garrison ever held the quest troops (<see cref="Settlement.TroopsTrained"/>).</summary>
     public bool TroopsTrained { get; set; }
 
+    /// <summary>
+    /// Optimistic-concurrency token (issue #341). Every request loads the
+    /// whole settlement, acts on a domain snapshot and writes it all back, so
+    /// without a token two overlapping requests silently overwrite each
+    /// other's stock, queue and garrison. <c>GameDbContext</c> replaces it with
+    /// a fresh value whenever the settlement <em>or any of its child rows</em>
+    /// changes, so a save from a stale read fails with
+    /// <c>DbUpdateConcurrencyException</c> and <c>ConcurrentWriteExecutor</c>
+    /// re-runs the request against fresh state.
+    /// </summary>
+    public Guid Version { get; set; }
+
     public ResourceAmounts Stock => new(StockWood, StockStone, StockFood, StockIron);
 
     public ResourceAmounts Rate => new(RateWood, RateStone, RateFood, RateIron);
@@ -185,7 +197,8 @@ public class SettlementEntity
             .. Buildings
                 .Where(b => BuildingCatalogue.MaxLevelFor(Merged(b.Type)) > 0)
                 .OrderBy(b => b.Q).ThenBy(b => b.R)
-                .Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), Merged(b.Type), Math.Min(b.Level, BuildingCatalogue.MaxLevelFor(Merged(b.Type))))),
+                .Select(b => new PlacedBuilding(
+                    new HexCoord(b.Q, b.R), Merged(b.Type), Math.Min(b.Level, BuildingCatalogue.MaxLevelFor(Merged(b.Type))), b.OutsideRealmSince)),
         ],
         Queue =
         [
@@ -310,12 +323,14 @@ public class SettlementEntity
                     R = placed.Coord.R,
                     Type = placed.Type,
                     Level = placed.Level,
+                    OutsideRealmSince = placed.OutsideRealmSince,
                 });
             }
             else
             {
                 existing.Type = placed.Type;
                 existing.Level = placed.Level;
+                existing.OutsideRealmSince = placed.OutsideRealmSince;
             }
         }
     }
@@ -464,8 +479,14 @@ public class PlacedBuildingEntity
 
     public int Level { get; set; }
 
+    /// <summary>
+    /// Game instant the building's hex stopped being inside the player's realm (<see cref="PlacedBuilding.OutsideRealmSince"/>);
+    /// null while it is inside.
+    /// </summary>
+    public DateTimeOffset? OutsideRealmSince { get; set; }
+
     /// <summary>The domain value of this building (stored columns as they are, no catalogue clamp).</summary>
-    public PlacedBuilding ToPlacedBuilding() => new(new HexCoord(Q, R), Type, Level);
+    public PlacedBuilding ToPlacedBuilding() => new(new HexCoord(Q, R), Type, Level, OutsideRealmSince);
 }
 
 /// <summary>A build in progress. Completes by clock; nothing advances it.</summary>

@@ -38,7 +38,7 @@ public class FieldBattleResolverTests
         var centre = new HexCoord(0, 0);
         // Inside the longhouse's reach, so the tower is connected and claims (the chain rule).
         var tower = new PlacedBuilding(new HexCoord(2, 0), BuildingType.Tower, Level: 4);
-        var buildings = new[] { tower };
+        var buildings = new[] { new PlacedBuilding(centre, BuildingType.Longhouse, Level: 3), tower };
 
         var claim = FieldBattleResolver.ClaimAt(tower.Coord, centre, buildings);
 
@@ -82,6 +82,15 @@ public class FieldBattleResolverTests
         Assert.True(cutOff.Claims);
         Assert.Equal(0.0, cutOff.DefenseBonusPercent);
         Assert.Equal(BuildingCatalogue.TowerDefenseBonusPercent(5) * 0.5, connected.DefenseBonusPercent);
+    }
+
+    [Fact]
+    public void ClaimAt_returns_none_for_a_settlement_whose_longhouse_is_destroyed()
+    {
+        var centre = new HexCoord(0, 0);
+
+        Assert.Equal(FieldBattleClaim.None, FieldBattleResolver.ClaimAt(centre, centre, []));
+        Assert.Equal(FieldBattleClaim.None, FieldBattleResolver.ClaimAt(new HexCoord(1, 0), centre, []));
     }
 
     [Fact]

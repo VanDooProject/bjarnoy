@@ -17,8 +17,10 @@ import { FEAST_HOURS, feastCost, feastRenown } from '../../lib/economy/feasts';
 import { formatCountdown } from '../../composables/useQueueOrders';
 import { formatFullNumber } from '../../lib/hud/compactNumber';
 import { useWorldStore } from '../../stores/world';
+import { isOutsideRealm, secondsToNextLevelLoss, formatDecayWait } from '../../lib/map/realmDecay';
 import {
   buildingStatsAt,
+  scaleOutput,
   buildingUpgradeCost,
   SHRINE_BUILDING_TYPES,
 } from '../../lib/map/buildingEconomy';
@@ -50,6 +52,11 @@ function shrineSlotsFor(level: number): number {
   if (clamped >= 3) return 2;
   return 1;
 }
+
+// A building outside the realm has no function and loses levels (docs/design/economy.md section 5). The server marks it
+// (`outsideRealmSince`); this window only shows the state, and offers nothing that state refuses (no upgrade, no runes, no feast).
+const placedHere = computed(() => world.hud.buildings.find((b) => b.q === props.tile.q && b.r === props.tile.r));
+const outsideRealm = computed(() => props.mine && !!props.tile.buildingType && isOutsideRealm(placedHere.value));
 
 const isShrine = computed(() => SHRINE_BUILDING_TYPES.has(props.tile.buildingType ?? ''));
 // Level 0 is the foundation stub while the shrine is still under
@@ -128,6 +135,15 @@ onMounted(() => {
   if (isTownSquare.value && props.mine && !DEMO_MODE) void world.loadRenownLive();
 });
 onBeforeUnmount(() => clearInterval(feastTimer));
+const levelLossIn = computed(() =>
+  outsideRealm.value ? secondsToNextLevelLoss(placedHere.value, world.hud.queueFetchedAt, nowMs.value) : null,
+);
+const outsideRealmLine = computed(() =>
+  levelLossIn.value === null
+    ? t('hud.buildingModal.outsideRealm')
+    : t('hud.buildingModal.outsideRealmLosesIn', { time: formatDecayWait(levelLossIn.value, locale.value) }),
+);
+
 const feastRemaining = computed(() => {
   const f = runningFeast.value;
   if (!f || f.endsInSeconds === null) return null;
@@ -225,7 +241,9 @@ const buildingStats = computed(() =>
 const currentStats = computed(() =>
   buildingStats.value
     ? {
-        output: buildingStats.value.output ? formatBuildingOutput(buildingStats.value.output, t) : undefined,
+        output: buildingStats.value.output
+          ? formatBuildingOutput(scaleOutput(buildingStats.value.output, world.worldSpeedFactor), t)
+          : undefined,
         modifier: buildingStats.value.modifier ? formatBuildingModifier(buildingStats.value.modifier, t) : undefined,
       }
     : undefined,
@@ -305,7 +323,8 @@ const actionLabel = computed(() => {
           <button class="close" @click="emit('close')">{{ t('hud.buildingModal.close') }}</button>
         </div>
 
-        <p v-if="!mine && tile.buildingType" class="desc">
+        <p v-if="outsideRealm" class="desc outside-realm" data-testid="outside-realm">{{ outsideRealmLine }}</p>
+        <p v-else-if="!mine && tile.buildingType" class="desc">
           {{ t('hud.buildingModal.descHeldByOther') }}
         </p>
         <p v-else-if="!mine" class="desc">{{ t('hud.buildingModal.descOutsideBorder') }}</p>
@@ -314,7 +333,7 @@ const actionLabel = computed(() => {
           {{ tile.buildingType ? t('hud.buildingModal.descUpgrade') : t('hud.buildingModal.descBuildEmpty') }}
         </p>
 
-        <dl v-if="currentStats && (currentStats.output || currentStats.modifier)" class="stats">
+        <dl v-if="!outsideRealm && currentStats && (currentStats.output || currentStats.modifier)" class="stats">
           <template v-if="currentStats.output">
             <dt>{{ t('hud.hoverTooltip.output') }}</dt>
             <dd>{{ currentStats.output }}</dd>
@@ -325,7 +344,7 @@ const actionLabel = computed(() => {
           </template>
         </dl>
 
-        <div v-if="isShrine && mine && shrineBuilt" class="runes">
+        <div v-if="isShrine && mine && shrineBuilt && !outsideRealm" class="runes">
           <div class="runes-head">
             {{ t('hud.buildingModal.runesSlotted', { slotted: slottedRunes.length, total: shrineSlots }) }}
           </div>
@@ -355,7 +374,7 @@ const actionLabel = computed(() => {
           </template>
         </div>
 
-        <div v-if="isTownSquare && mine" class="feast" data-testid="feast">
+        <div v-if="isTownSquare && mine && !outsideRealm" class="feast" data-testid="feast">
           <div class="runes-head">{{ t('hud.buildingModal.feastTitle') }}</div>
           <p class="desc feast-desc">{{ t('hud.buildingModal.feastDesc') }}</p>
           <dl class="stats">
@@ -407,10 +426,10 @@ const actionLabel = computed(() => {
           </button>
         </div>
 
-        <div v-if="mine && buildable && waitingOrderHere" class="actions">
+        <div v-if="mine && buildable && waitingOrderHere && !outsideRealm" class="actions">
           <p class="desc queued-note">{{ t('hud.buildingModal.queuedNote') }}</p>
         </div>
-        <div v-else-if="mine && buildable && tile.buildingType" class="actions">
+        <div v-else-if="mine && buildable && tile.buildingType && !outsideRealm" class="actions">
           <div class="cost">{{ t('hud.buildingModal.upgradeCost') }}: {{ costLine }}</div>
           <p v-if="!canAfford" class="desc afford-note">
             {{ t('hud.buildingModal.notEnoughResources') }}

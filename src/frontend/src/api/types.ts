@@ -140,6 +140,8 @@ export interface CampStateResponse {
   q: number;
   r: number;
   family: string;
+  /** The camp tile's own orientation, so a camp first learned about from this poll can be added to the model. */
+  orientation: string;
   level: number;
   effectiveLevel: number;
   strong: boolean;
@@ -307,6 +309,14 @@ export interface PlacedBuildingResponse {
   level: number;
   /** Which art-pack rotation to render with — set only for a building whose art has a fixed connection to something around it (e.g. the fishing hut's dock). */
   orientation?: string | null;
+  /**
+   * Game instant the building's hex stopped being inside the player's realm — from then on it has no function and loses levels
+   * (docs/design/economy.md section 5, "Buildings outside the realm decay"). Null/absent while it is inside. The server owns the
+   * rule; the client only shows it (`lib/map/realmDecay.ts`).
+   */
+  outsideRealmSince?: string | null;
+  /** Seconds until the next level is lost while outside the realm; null while inside, with a frozen world clock, or in a rival's view. */
+  nextLevelLossInSeconds?: number | null;
 }
 
 export interface BuildOrderResponse {
@@ -395,6 +405,19 @@ export interface QuestResponse {
   reward: ResourceLine;
 }
 
+/** One connected claim disc of a realm, exactly as the server resolves it. */
+export interface ClaimDiscResponse {
+  q: number;
+  r: number;
+  radius: number;
+}
+
+/** One settlement of the caller's realm with its connected claim discs (longhouse disc first, then each connected tower's disc). */
+export interface RealmMemberResponse {
+  settlementId: string;
+  discs: ClaimDiscResponse[];
+}
+
 export interface SettlementResponse {
   id: string;
   worldId: string;
@@ -420,6 +443,8 @@ export interface SettlementResponse {
   /** The onboarding quests, in presentation order. */
   quests: QuestResponse[];
   world: WorldClockResponse;
+  /** Every settlement of the selected settlement's realm (itself first) with its connected claim discs; only the caller's own. */
+  realm: RealmMemberResponse[];
 }
 
 export interface SettlementSummary {
@@ -430,6 +455,8 @@ export interface SettlementSummary {
   r: number;
   longhouseLevel: number;
   islandId: string;
+  /** Whether the settlement belongs to the caller. */
+  mine: boolean;
 }
 
 /**
@@ -443,6 +470,8 @@ export interface WorldWall {
   level: number;
   settlementId: string;
   ownerUserId: string | null;
+  /** The wall's hex lies outside its owner's realm: a gate there has no function and is open to every army. */
+  outsideRealm?: boolean;
 }
 
 /**
@@ -649,6 +678,8 @@ export interface AdminWorldResponse {
   startsAt: string | null;
   joinsClosed: boolean;
   frozenIslesEnabled: boolean;
+  /** Left out of every public world list for non-admins. */
+  hidden: boolean;
   endbossAt: string | null;
   endbossTriggeredAt: string | null;
   runState: string;
@@ -729,10 +760,12 @@ export interface WorldGenerationSettingsOverrides {
  * `Optional<T>` PATCH semantics (see `Bjarnoy.Api.Json.Optional`).
  */
 export interface UpdateWorldSettingsRequest {
+  name?: string;
   speedFactor?: number;
   startsAt?: string | null;
   joinsClosed?: boolean;
   frozenIslesEnabled?: boolean;
+  hidden?: boolean;
   endbossAt?: string | null;
 }
 
@@ -1457,8 +1490,8 @@ export interface UnitCountRequest {
 /**
  * `waypoints`: ordered intermediate hexes, empty/omitted for a direct route.
  * `destination`: required for `mission: 'move'` (the default); ignored for
- * attack/support/raid, whose destination is always the target settlement's
- * own hex. `provisions`: food loaded onto the army, capped by carry capacity
+ * attack/support/raid, whose destination is the target settlement's own hex
+ * (a fleet attack/raid sails to `targetBuildingCoord` instead). `provisions`: food loaded onto the army, capped by carry capacity
  * and what the settlement can afford.
  */
 export interface DispatchArmyRequest {
@@ -1545,9 +1578,9 @@ export interface ArmySummary {
 
 /**
  * Mirrors `GuestArmySummary` (issue #40 phase 4) — a Support army as its
- * *host* settlement sees it: counts only, since the host cannot command a
- * guest garrison (no recall/action buttons on this view — only the owner,
- * reading their own settlement's `armies`, can recall it). `ownerSettlementId`
+ * *host* settlement sees it: counts only, with no route or provisions (the host can only send a
+ * guest home, via `sendGuestHome`; its owner recalls it from their own
+ * settlement's `armies`). `ownerSettlementId`
  * is the guest's home, not its current location (which is always the
  * settlement `getSettlementGuests` was asked about).
  */

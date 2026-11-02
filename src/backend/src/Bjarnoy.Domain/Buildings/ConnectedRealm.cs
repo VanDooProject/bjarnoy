@@ -17,7 +17,7 @@ public readonly record struct RealmSettlement(Guid Id, HexCoord Centre, IReadOnl
 /// <remarks>
 /// Pure: the caller hands over every settlement of one player on one island (and nothing else; another player's
 /// longhouse never connects your towers, a tower on another island never connects). Starting from every longhouse disc
-/// (<see cref="Settlement.ClaimRadiusForLonghouseLevel"/>), any standing tower (level 1 or more) whose own hex lies
+/// (<see cref="Settlement.LonghouseDisc"/>; a settlement whose Longhouse is destroyed has none), any standing tower (level 1 or more) whose own hex lies
 /// inside a disc already reached joins, and its disc (<see cref="Settlement.TowerClaimRadius"/>) with it, until nothing
 /// changes. A level-0 stub claims nothing (radius 0) and never joins. The client mirrors this in
 /// <c>lib/map/realmChain.ts</c>.
@@ -40,7 +40,10 @@ public sealed class ConnectedRealm
     /// <summary>Every connected disc of the player's settlements on the island (longhouse discs and connected towers' discs).</summary>
     public IReadOnlyList<(HexCoord Centre, int Radius)> AllDiscs => _allDiscs;
 
-    /// <summary>The connected discs <paramref name="settlementId"/> contributes: its longhouse disc first, then its connected towers'.</summary>
+    /// <summary>The ids of the settlements this realm was resolved from.</summary>
+    public IReadOnlyCollection<Guid> SettlementIds => _discsBySettlement.Keys;
+
+    /// <summary>The connected discs <paramref name="settlementId"/> contributes: its longhouse disc first (none when its Longhouse is destroyed), then its connected towers'.</summary>
     public IReadOnlyList<(HexCoord Centre, int Radius)> DiscsOf(Guid settlementId) =>
         _discsBySettlement.TryGetValue(settlementId, out var discs) ? discs : [];
 
@@ -95,9 +98,14 @@ public sealed class ConnectedRealm
         foreach (var settlement in list)
         {
             var longhouseLevel = settlement.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
-            var centreDisc = (settlement.Centre, Settlement.ClaimRadiusForLonghouseLevel(longhouseLevel));
-            discs[settlement.Id] = [centreDisc];
-            reached.Add(centreDisc);
+            var centreDisc = Settlement.LonghouseDisc(settlement.Centre, longhouseLevel);
+            discs[settlement.Id] = [];
+            if (centreDisc is { } disc)
+            {
+                discs[settlement.Id].Add(disc);
+                reached.Add(disc);
+            }
+
             foreach (var building in settlement.Buildings)
             {
                 if (building.Type == BuildingType.Tower && building.Level >= 1)

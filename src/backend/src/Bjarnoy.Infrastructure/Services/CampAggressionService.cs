@@ -21,19 +21,21 @@ public sealed class CampAggressionService(
     GameDbContext dbContext,
     CampService campService,
     SettlementService settlementService,
+    ConcurrentWriteExecutor concurrentWriteExecutor,
     TimeProvider timeProvider,
     ILogger<CampAggressionService> logger)
 {
     private readonly GameDbContext _dbContext = dbContext;
     private readonly CampService _campService = campService;
     private readonly SettlementService _settlementService = settlementService;
+    private readonly ConcurrentWriteExecutor _concurrentWriteExecutor = concurrentWriteExecutor;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<CampAggressionService> _logger = logger;
 
     /// <summary>
     /// Runs <see cref="ProcessWorldAsync"/> for every world that currently accepts commands (a paused world's game
     /// clock stands still, so its camps do not act), at that world's game time. One world failing never stops the
-    /// others; a concurrent write (<see cref="DbUpdateConcurrencyException"/>) just retries on the next scan.
+    /// others; a concurrent write that outlasts the per-attack retries just waits for the next scan.
     /// </summary>
     /// <returns>How many camp attacks were fought.</returns>
     public async Task<int> ProcessDueWorldsAsync(CancellationToken cancellationToken = default)
@@ -54,7 +56,7 @@ public sealed class CampAggressionService(
             {
                 fought += await ProcessWorldAsync(world.Id, clock.ToGameTime(wall), cancellationToken).ConfigureAwait(false);
             }
-            catch (DbUpdateConcurrencyException ex)
+            catch (Exception ex) when (ex is DbUpdateConcurrencyException or ConcurrentUpdateException)
             {
                 _dbContext.ChangeTracker.Clear();
                 _logger.LogInformation(ex, "Camp aggression in world {WorldId} lost a write race; will retry next scan.", world.Id);
@@ -92,14 +94,37 @@ public sealed class CampAggressionService(
         var active = strong.Where(c => !realm.HasBuilding(c.Camp.Coord)).Select(c => (c.Camp, c.State)).ToList();
         var attacks = CampTowerThreat.Due(active, realm.InsideRealm, towers, now);
 
+        var fought = 0;
         foreach (var attack in attacks)
         {
             var state = active.First(c => c.Camp.Coord == attack.Camp.Coord).State;
-            await FightAsync(worldId, attack, state, realm, now, cancellationToken).ConfigureAwait(false);
-            _dbContext.ChangeTracker.Clear();
+
+            // One attack (fight, report and the realm reconcile after a burnt tower) is one unit of work: it commits all or
+            // nothing and is re-run against fresh state when a player's write beats it to a settlement. An attack that still
+            // conflicts after the retries is skipped (the camp stays due) so it does not stop the world's other attacks.
+            try
+            {
+                await _concurrentWriteExecutor.ExecuteAsync(
+                    async ct =>
+                    {
+                        await FightAsync(worldId, attack, state, realm, now, ct).ConfigureAwait(false);
+                        return true;
+                    },
+                    cancellationToken).ConfigureAwait(false);
+                fought++;
+            }
+            catch (ConcurrentUpdateException ex)
+            {
+                _logger.LogInformation(
+                    ex, "Camp attack at {Camp} on {Tower} lost a write race; will retry next scan.", attack.Camp.Coord, attack.Tower.Hex);
+            }
+            finally
+            {
+                _dbContext.ChangeTracker.Clear();
+            }
         }
 
-        return attacks.Count;
+        return fought;
     }
 
     /// <summary>
@@ -194,6 +219,13 @@ public sealed class CampAggressionService(
         _dbContext.CampReports.Add(CampReportEntity.FromDomain(report));
 
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // The burnt tower no longer claims its ground: buildings it chained into the realm stop working at once, in every
+        // settlement of the player.
+        if (burned)
+        {
+            await _settlementService.ReconcileRealmAsync(tower.SettlementId, cancellationToken).ConfigureAwait(false);
+        }
 
         _logger.LogInformation(
             "{Family} camp at {Camp} attacked the {Kind} tower at {Tower} of settlement {SettlementId}: {Winner} won "

@@ -74,6 +74,16 @@ export const WATER_MATCH_MIN_RATIO = 0.4;
 /** Reference (plain water) base frames: the art a sea hex is compared against. */
 export const REFERENCE_FRAME_RE = /^(coastalwatertile|watertile|taintedwater|blacksandcoast|icecoast)_(E|NE|NW|SE|SW|W)_base$/;
 
+/**
+ * Reference frames of the bog lake: the plain lake tile of each orientation. Every other `boglake*` frame (inlet, shore,
+ * half, mouth, art variants) is compared against the one of its own orientation to find the lake water in it
+ * (docs/design/water-shader.md, "Bog lakes").
+ */
+export const LAKE_REFERENCE_FRAME_RE = /^boglake_(E|NE|NW|SE|SW|W)_base$/;
+
+/** Every bog lake `_base` frame: the plain lake, `inlet`, `shore`, `half` and `mouth` families, with or without art variants. */
+export const LAKE_FRAME_RE = /^boglake(_(inlet|shore|half|mouth))?_(E|NE|NW|SE|SW|W)(_variant\d+)?_base$/;
+
 /** The orientation token of a frame name, or null. */
 export function orientationOf(frameName: string): string | null {
   return /_(E|NE|NW|SE|SW|W)_/.exec(frameName)?.[1] ?? null;
@@ -136,59 +146,7 @@ export function bestReference(art: Canvas, references: readonly Canvas[]): { ind
   return best;
 }
 
-/**
- * Luminance darkening at which art-painted water shadow counts as full shade. A soft shadow in the art is a few percent darker
- * than the plain water (it stays below `DRY_PIXEL_EPS`, so it is not dry). Light through clear water does not appear in shade,
- * so the darkening becomes a shade factor; a quarter darker reads as deep shade, so it maps to the full 1 and anything softer
- * scales linearly: a faint shadow dims caustics and foam a little, a deep one removes the caustics.
- */
-export const SHADOW_FULL_DARKENING = 0.25;
-
-/** Radius (source px) of the box blur smoothing the shadow channel; the render is dithered, so raw per-pixel darkening is speckled. */
-export const SHADOW_BLUR_RADIUS = 2;
-
-/** Rec.709 luma of the pixel at byte offset `i`. */
-function luma(c: Canvas, i: number): number {
-  return 0.2126 * c[i] + 0.7152 * c[i + 1] + 0.0722 * c[i + 2];
-}
-
-/** Box blur of radius `radius` (square window, outside the canvas counts as 0), separable. */
-function boxBlur(src: Float32Array, width: number, height: number, radius: number): Float32Array {
-  const n = 2 * radius + 1;
-  const tmp = new Float32Array(src.length);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      let sum = 0;
-      for (let d = -radius; d <= radius; d++) {
-        const xx = x + d;
-        if (xx >= 0 && xx < width) sum += src[y * width + xx];
-      }
-      tmp[y * width + x] = sum / n;
-    }
-  }
-  const out = new Float32Array(src.length);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      let sum = 0;
-      for (let d = -radius; d <= radius; d++) {
-        const yy = y + d;
-        if (yy >= 0 && yy < height) sum += tmp[yy * width + x];
-      }
-      out[y * width + x] = sum / n;
-    }
-  }
-  return out;
-}
-
-/** The two half-resolution mask channels of one frame; both are `(SOURCE_W / 2) * (SOURCE_H / 2)` bytes. */
-export interface ArtMasksHalf {
-  /** 255 = dry (not plain water). */
-  dry: Uint8Array;
-  /** 255 = full shade painted on the water by the art (`SHADOW_FULL_DARKENING` or more darker than the plain water). */
-  shadow: Uint8Array;
-}
-
-/** Box-downsamples a full-canvas 0..1 map 2x2 to bytes. */
+/** Box-downsamples a full-canvas 0/1 map 2x2 to bytes. */
 function downsampleHalf(map: ArrayLike<number>, width: number, height: number): Uint8Array {
   const halfW = width >> 1;
   const halfH = height >> 1;
@@ -203,48 +161,55 @@ function downsampleHalf(map: ArrayLike<number>, width: number, height: number): 
 }
 
 /**
- * The dry and shadow masks of `art` against `reference`, at half resolution.
+ * The dry mask of `art` against `reference`, at half resolution.
  *
  * Dry = art opaque AND (reference transparent OR RGB differs by more than
  * `DRY_PIXEL_EPS`). The 0/1 map is closed and grown by one source pixel (so the
  * shader stops just outside the object's outline, not on it), cleared below the
  * top face's front edges (`aboveFrontEdges`) and box-downsampled 2x2,
- * which makes the edge soft.
- *
- * Shadow = where art and reference are both opaque and the pixel is not dry, the
- * Rec.709 luma darkening `max(0, lumRef - lumArt) / max(lumRef, 1)` divided by
- * `SHADOW_FULL_DARKENING` and clamped to 0..1; dry pixels and brighter pixels
- * are 0. Blurred by `SHADOW_BLUR_RADIUS`, then cleared below the front edges and
- * downsampled like dry. The shader dims caustics and darkens foam by it.
- *
- * 255 = fully dry / fully shaded.
+ * which makes the edge soft. Output is `(SOURCE_W / 2) * (SOURCE_H / 2)` bytes,
+ * 255 = dry.
  */
-export function artMasksHalf(art: Canvas, reference: Canvas, width = SOURCE_W, height = SOURCE_H): ArtMasksHalf {
+export function dryMaskHalf(art: Canvas, reference: Canvas, width = SOURCE_W, height = SOURCE_H): Uint8Array {
   const dry = new Uint8Array(width * height);
-  const shade = new Float32Array(width * height);
   for (let p = 0; p < dry.length; p++) {
     const i = p * 4;
     if (art[i + 3] < OPAQUE_ALPHA) continue;
-    const isDry = reference[i + 3] < OPAQUE_ALPHA || !isSame(art, reference, i, DRY_PIXEL_EPS);
-    dry[p] = isDry ? 1 : 0;
-    if (isDry) continue;
-    const lumRef = luma(reference, i);
-    const darkening = Math.max(0, lumRef - luma(art, i)) / Math.max(lumRef, 1);
-    shade[p] = Math.min(1, darkening / SHADOW_FULL_DARKENING);
+    dry[p] = reference[i + 3] < OPAQUE_ALPHA || !isSame(art, reference, i, DRY_PIXEL_EPS) ? 1 : 0;
   }
 
   // Close (grow 2, shrink 1): fills the pinholes the dithered render leaves inside an object and leaves the mask 1 px wider
   // than the object, so neither foam nor caustics show a seam along its edge.
   const dilated = morph(morph(dry, width, height, 2, true), width, height, 1, false);
-  const shadow = boxBlur(shade, width, height, SHADOW_BLUR_RADIUS);
   for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (aboveFrontEdges(x, y)) continue;
-      dilated[y * width + x] = 0;
-      shadow[y * width + x] = 0;
-    }
+    for (let x = 0; x < width; x++) if (!aboveFrontEdges(x, y)) dilated[y * width + x] = 0;
   }
-  return { dry: downsampleHalf(dilated, width, height), shadow: downsampleHalf(shadow, width, height) };
+  return downsampleHalf(dilated, width, height);
+}
+
+/**
+ * Whether the reference pixel at byte offset `i` is lake water: opaque and blue-dominant. The blue test is what keeps the
+ * tile prism's side faces (which repeat the reference as well, but are earth, not water) out of the lake mask.
+ */
+export function isLakeWaterPixel(reference: Canvas, i: number): boolean {
+  return reference[i + 3] >= OPAQUE_ALPHA && reference[i + 2] > reference[i] + 15 && reference[i + 2] > reference[i + 1] + 5;
+}
+
+/**
+ * The lake wet mask of `art` against `reference` (the plain lake tile of the same orientation), at half resolution.
+ *
+ * Wet = the reference pixel is lake water (`isLakeWaterPixel`) AND the art repeats it within `DRY_PIXEL_EPS`, so the
+ * bank, the rocks, a creek's brighter water and the prism's sides are all not wet. The 0/1 map is eroded by one source
+ * pixel (the opposite of `dryMaskHalf`'s growth: the effect stays off the bank outline) and box-downsampled 2x2, which
+ * makes the edge soft. Output is `(SOURCE_W / 2) * (SOURCE_H / 2)` bytes, 255 = wet.
+ */
+export function lakeWetMaskHalf(art: Canvas, reference: Canvas, width = SOURCE_W, height = SOURCE_H): Uint8Array {
+  const wet = new Uint8Array(width * height);
+  for (let p = 0; p < wet.length; p++) {
+    const i = p * 4;
+    if (isLakeWaterPixel(reference, i) && isSame(art, reference, i, DRY_PIXEL_EPS)) wet[p] = 1;
+  }
+  return downsampleHalf(morph(wet, width, height, 1, false), width, height);
 }
 
 /** Where a frame's mask cell sits in the packed atlas, and which part of the source canvas it covers. */
@@ -259,14 +224,22 @@ export interface DryMaskFrame {
   sh: number;
 }
 
-/** What the `virtual:water-dry-masks` module exports. */
-export interface WaterDryMasksData {
-  /** `data:image/png;base64,...` — an RGBA PNG: R is the shadow channel, G and B are 0, A is the dry mask. */
+/** One packed mask atlas and where each frame's cell sits in it. */
+export interface MaskAtlasData {
+  /** `data:image/png;base64,...` — a grey+alpha PNG; alpha is the mask (dry for the sea, wet for the lakes). */
   url: string;
   /** Atlas size in texels. */
   width: number;
   height: number;
   frames: Record<string, DryMaskFrame>;
+}
+
+/**
+ * What the `virtual:water-dry-masks` module exports: the sea hexes' dry masks, plus under `lake` the bog lakes' wet masks
+ * (`lakeWetMaskHalf`, a grey+alpha PNG whose alpha is the mask) in an atlas of their own.
+ */
+export interface WaterDryMasksData extends MaskAtlasData {
+  lake: MaskAtlasData;
 }
 
 /** A frame's trim rect on the source canvas (the atlas's `spriteSourceSize`). */

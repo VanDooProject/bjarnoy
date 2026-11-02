@@ -5,6 +5,7 @@
 import { hexDistance, type AxialCoord } from '../hex/coords';
 import type { DispatchArmyRequest, FieldOrderRequest, HexPoint, UnitDefinitionResponse } from '../../api/types';
 import { i18n } from '../../i18n';
+import { isShoreBuildingHex, type TerrainLookup } from '../map/shoreline';
 
 /**
  * Converts an ordered list of clicked hexes into the shape `DispatchArmyRequest`
@@ -58,7 +59,8 @@ export function buildMoveDispatchRequest(
  * catapults hit on arrival — see `DispatchArmyRequest.targetBuildingCoord`'s
  * own comment. Omit (or pass `null`/`undefined`) for "no preference", the
  * same as never having picked one; `SiegeResolver` then falls back to a
- * seeded random pick server-side. Not validated here against the target's
+ * seeded random pick server-side. A fleet must always name one (a building on
+ * the target's shore; the server rejects the dispatch without it). Not validated here against the target's
  * actual layout — that can change before the army arrives — only forwarded
  * as-is.
  */
@@ -89,7 +91,8 @@ export function buildAttackDispatchRequest(
  * Builds a `hunt`-mission `DispatchArmyRequest` against a wildlife camp: the camp's own hex is the
  * `destination` (the server walks to the nearest reachable neighbour when the hex itself is not
  * walkable) and `route` holds only intermediate waypoints. `null` without units or a camp target.
- * Land units only is enforced by the UI (`isHuntUnit`) and by the server (`HuntRequiresLandUnits`).
+ * Land units only against land camps and ships only against a water camp (the whale road) is enforced by the UI
+ * (`isHuntUnit`) and by the server (`HuntRequiresLandUnits` / `HuntRequiresFleet`).
  */
 export function buildHuntDispatchRequest(
   unitCounts: Record<string, number>,
@@ -112,10 +115,23 @@ export function buildHuntDispatchRequest(
   };
 }
 
-/** Whether a unit type may join a hunt — land units only, ships cannot hunt. */
-export function isHuntUnit(type: string, byType: Record<string, UnitDefinitionResponse>): boolean {
+/**
+ * Whether a unit type may join a hunt: land units against a land camp, ships only against a water camp (`atSea`,
+ * the whale road).
+ */
+export function isHuntUnit(type: string, byType: Record<string, UnitDefinitionResponse>, atSea = false): boolean {
   const definition = byType[type];
-  return !!definition && definition.class !== 'ship';
+  if (!definition) return false;
+  return atSea ? definition.class === 'ship' : definition.class !== 'ship';
+}
+
+/** Whether a garrison holds any unit that may hunt the camp (`atSea`: ships for a water camp, land units otherwise). */
+export function garrisonCanHunt(
+  garrison: ReadonlyArray<{ unit: string; count: number }>,
+  byType: Record<string, UnitDefinitionResponse>,
+  atSea: boolean,
+): boolean {
+  return garrison.some((g) => g.count > 0 && isHuntUnit(g.unit, byType, atSea));
 }
 
 /**
@@ -275,6 +291,30 @@ export function canSiegeDamage(
 /** Whether a unit type is a ram-like engine: one that can breach walls. */
 export function breachesWalls(type: string, byType: Record<string, UnitDefinitionResponse>): boolean {
   return byType[type]?.siegeTargets?.includes('walls') ?? false;
+}
+
+/**
+ * Whether the dispatch needs the player to name a building of the target settlement. A fleet attack is always sent at
+ * one building on the target's shore (`'required'`); a land attack may name a building for its siege engines to hit
+ * (`'optional'`, only worth offering when siege engines are along); everything else names none.
+ */
+export type TargetBuildingPickerMode = 'none' | 'optional' | 'required';
+
+export function targetBuildingPickerMode(
+  mission: string | undefined,
+  hasTargetSettlement: boolean,
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+  selection: FleetSelectionKind,
+): TargetBuildingPickerMode {
+  if (mission !== 'attack' || !hasTargetSettlement) return 'none';
+  if (selection === 'fleet') return 'required';
+  return hasSiegeEngineSelected(unitCounts, byType) ? 'optional' : 'none';
+}
+
+/** The buildings a fleet can be sent at: only those on the target's shore (see `isShoreBuildingHex`). */
+export function shoreBuildings<T extends { q: number; r: number }>(buildings: T[], terrain: TerrainLookup): T[] {
+  return buildings.filter((b) => isShoreBuildingHex({ q: b.q, r: b.r }, terrain));
 }
 
 /**

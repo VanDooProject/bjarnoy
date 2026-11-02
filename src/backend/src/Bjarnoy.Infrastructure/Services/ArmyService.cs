@@ -106,6 +106,9 @@ public sealed class ArmyService(
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly SettlementService _settlementService = settlementService;
+
+    /// <summary>Settlements a siege changed during the settle in progress; <see cref="SettleAndFoldAsync"/> reconciles their realm once the settle is saved.</summary>
+    private readonly HashSet<Guid> _realmDirty = [];
     private readonly RenownService _renownService = renownService;
     private readonly AuthService _authService = authService;
     private readonly FieldBattleService _fieldBattleService = fieldBattleService;
@@ -231,6 +234,7 @@ public sealed class ArmyService(
         // Army.PlanDispatch (targetCampCoord stays null); otherwise the route may end beside a camp whose own
         // hex is not walkable.
         HexCoord? targetCampCoord = null;
+        var targetCampIsWater = false;
         if (mission == ArmyMission.Hunt)
         {
             var camp = await _campService.FindCampAsync(settlement.WorldId, effectiveDestination, now, cancellationToken)
@@ -238,10 +242,13 @@ public sealed class ArmyService(
             if (camp is { } found)
             {
                 targetCampCoord = found.Camp.Coord;
+                targetCampIsWater = found.Camp.IsWater;
+                // A water camp (the whale road) is hunted by a fleet, whose route ends on the camp's own sea hex.
                 effectiveDestination = Army.HuntRouteDestination(
                     found.Camp.Coord,
                     Army.TrainingSite(settled.Centre, settled.Buildings, unitCounts),
-                    sampler.TerrainAt);
+                    sampler.TerrainAt,
+                    isFleet: found.Camp.IsWater);
             }
         }
 
@@ -274,9 +281,13 @@ public sealed class ArmyService(
                 .AccrueAsync(settlement.UserId, settlement.WorldId, now, cancellationToken)
                 .ConfigureAwait(false);
             renownAndSlotAllowed = RenownThresholds.AllowsAnotherSettlement(existingSettlementCount, renownTotal);
-            // AccrueAsync just moved this settlement's finished-feast renown onto
-            // the account and zeroed it on the tracked entity; the domain
-            // snapshot taken before that must not write it back.
+            // Not a race workaround, and the concurrency token cannot replace
+            // it: AccrueAsync zeroes PendingFeastRenown on the *same tracked
+            // entity* in this same DbContext, while `settled` is a domain
+            // snapshot taken before that. ApplyDomain would write the old
+            // value straight back within this one request, crediting the
+            // feast a second time on the next accrual. There is no second
+            // writer here for a version check to catch.
             settled = settled with { PendingFeastRenown = 0 };
 
             var claimedSettlements = await _settlementService
@@ -291,7 +302,7 @@ public sealed class ArmyService(
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimDiscs,
             isHexFoundable, renownAndSlotAllowed, settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide,
-            dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord);
+            dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater);
 
         if (!decision.Accepted)
         {
@@ -398,6 +409,26 @@ public sealed class ArmyService(
             .Where(a => a.IsSupporting && a.TargetSettlementId == hostSettlementId)
             .OrderBy(a => a.Id)
             .ToListAsync(cancellationToken);
+
+    /// <summary>
+    /// The host's way to send a guest home: recalls the guest army
+    /// <paramref name="armyId"/> from <paramref name="hostSettlementId"/>
+    /// through exactly the path <see cref="RecallAsync"/> takes. Refused as
+    /// <see cref="RecallOutcome.ArmyNotFound"/> unless the army exists and is
+    /// currently a guest at that host — the host has no say over any other
+    /// army.
+    /// </summary>
+    public async Task<RecallResult> SendGuestHomeAsync(Guid hostSettlementId, Guid armyId, CancellationToken cancellationToken = default)
+    {
+        var isGuestHere = await _dbContext.Armies
+            .AsNoTracking()
+            .AnyAsync(a => a.Id == armyId && a.IsSupporting && a.TargetSettlementId == hostSettlementId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return isGuestHere
+            ? await RecallAsync(armyId, cancellationToken).ConfigureAwait(false)
+            : new RecallResult(RecallOutcome.ArmyNotFound);
+    }
 
     /// <summary>
     /// Turns an army around mid-journey — or, for a <see cref="ArmyLocation.Supporting"/>
@@ -798,6 +829,27 @@ public sealed class ArmyService(
     private async Task<ArmySettleOutcome> SettleAndFoldAsync(
         ArmyEntity army, DateTimeOffset now, CancellationToken cancellationToken)
     {
+        var outcome = await SettleAndFoldCoreAsync(army, now, cancellationToken).ConfigureAwait(false);
+
+        // A siege that cut down a tower moved the defender's realm: save what the settle did, then bring the realm state of every
+        // settlement of that player up to date, so buildings the tower chained in stop working at once.
+        if (_realmDirty.Count > 0)
+        {
+            var dirty = _realmDirty.ToList();
+            _realmDirty.Clear();
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var settlementId in dirty)
+            {
+                await _settlementService.ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return outcome;
+    }
+
+    private async Task<ArmySettleOutcome> SettleAndFoldCoreAsync(
+        ArmyEntity army, DateTimeOffset now, CancellationToken cancellationToken)
+    {
         var domain = army.ToDomain();
 
         // In-flight interception (issue #206) is checked before any
@@ -977,6 +1029,11 @@ public sealed class ArmyService(
 
         defenderEntity.ApplyDomain(arrival.DefenderSettlement);
 
+        if (arrival.Siege is { Applied: true })
+        {
+            _realmDirty.Add(targetId);
+        }
+
         // Attribute the guest side's pooled share of the battle back onto
         // the actual guest Army records — the second half of the same
         // cross-aggregate split Settlement's starvation pass uses (see
@@ -1053,11 +1110,12 @@ public sealed class ArmyService(
         var effectiveLevel = state.EffectiveLevel(camp);
 
         var attackerEntity = await LoadSettlementAsync(armyEntity.SettlementId, cancellationToken).ConfigureAwait(false);
-        var landAttackBonusPercent = attackerEntity?.ToDomain().AttackBonusPercent(UnitClass.Infantry) ?? 0;
+        // Fleets hunting a water camp fight with the ship attack bonus, land armies with the land one.
+        var attackBonusPercent = attackerEntity?.ToDomain().AttackBonusPercent(domain.IsFleet ? UnitClass.Ship : UnitClass.Infantry) ?? 0;
 
         var seed = Random.Shared.Next();
         var plan = CampBattleResolver.Hunt(
-            domain.Stacks, garrison, camp, effectiveLevel, seed, landAttackBonusPercent, state.Leftover);
+            domain.Stacks, garrison, camp, effectiveLevel, seed, attackBonusPercent, state.Leftover);
 
         // An already empty camp is a pickup, not a clear: clears, calm and snapshot stay as they were.
         var nextState = garrison.IsEmpty
@@ -1266,7 +1324,7 @@ public sealed class ArmyService(
             return null;
         }
 
-        return candidate.Buildings.Any(b => b.Type == BuildingType.Dockyard) ? candidate : null;
+        return candidate.Buildings.Any(b => b.Type == BuildingType.Dockyard && b.OutsideRealmSince == null) ? candidate : null;
     }
 
     /// <summary>

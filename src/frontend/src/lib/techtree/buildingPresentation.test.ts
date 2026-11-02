@@ -18,6 +18,9 @@ const NEW_TYPES = [
   { type: 'druidhut', label: "Druid's hut", graphCategory: 'logistics' },
   { type: 'cartworkshop', label: 'Cart workshop', graphCategory: 'logistics' },
   { type: 'claybrickworks', label: 'Clay brickworks', graphCategory: 'production' },
+  { type: 'tower', label: 'Tower', graphCategory: 'defense' },
+  { type: 'palisade', label: 'Palisade', graphCategory: 'defense' },
+  { type: 'palisadegate', label: 'Palisade gate', graphCategory: 'defense' },
 ] as const;
 
 describe('buildingPresentation', () => {

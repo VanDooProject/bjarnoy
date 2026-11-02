@@ -170,28 +170,33 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
     [Fact]
     public async Task Camps_survive_the_round_trip_through_the_text_encoded_column()
     {
-        using var client = _fixture.CreateClient();
         var world = await CreateWorldAsync(seed: 9, radius: 300);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        // Read back from the database, not through the API: GET /islands only ships the camps of islands the caller
+        // has seen (WorldCampVisibilityEndpointsTests), and an anonymous caller has seen none.
+        List<IslandEntity> stored;
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            stored = await db.Islands.AsNoTracking().Where(i => i.WorldId == world.Id).ToListAsync(Ct);
+        }
 
-        Assert.NotNull(islands);
-        var camps = islands.SelectMany(i => i.Camps).ToList();
+        var camps = stored.SelectMany(i => i.Camps.Select(CampResponse.From)).ToList();
         Assert.NotEmpty(camps);
         Assert.All(camps, c => Assert.Contains(c.Orientation, new[] { "E", "NE", "NW", "W", "SW", "SE" }));
         Assert.All(camps, c => Assert.InRange(c.Level, 1, 5));
 
-        // What the API serves is exactly what the generator placed: family, hex, level, rotation,
+        // What the column returns is exactly what the generator placed: family, hex, level, rotation,
         // and the strength / guard range derived from the shared family table.
-        var expected = world.Islands.Where(i => !i.IsWasted)
+        var expected = world.Islands
             .SelectMany(i => i.Camps.Select(c => (i.Index, Response: CampResponse.From(c))))
             .ToList();
-        var actual = islands.SelectMany(i => i.Camps.Select(c => (i.Index, Response: c))).ToList();
-        Assert.Equal(expected, actual);
+        var actual = stored.SelectMany(i => i.Camps.Select(c => (i.Index, Response: CampResponse.From(c)))).ToList();
+        Assert.Equal(expected.OrderBy(e => e.Index).ThenBy(e => e.Response.Q).ThenBy(e => e.Response.R),
+            actual.OrderBy(e => e.Index).ThenBy(e => e.Response.Q).ThenBy(e => e.Response.R));
         Assert.All(camps, c => Assert.Equal(
             c.Strong,
-            c.Family is "wolfden" or "boarwallow" or "bearrapids" or "fenrirbrood" or "walrushaulout" or "eagleeyrie" or "moosemire"));
+            c.Family is "wolfden" or "boarwallow" or "bearrapids" or "fenrirbrood" or "walrushaulout" or "eagleeyrie" or "moosemire" or "whaleroad"));
     }
 
     [Fact]

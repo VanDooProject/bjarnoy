@@ -1,4 +1,4 @@
-// The river flow layer at runtime — docs/design/water-shader.md §4.4d.
+// The river flow layer at runtime — docs/design/water-shader.md §4.4e.
 //
 // `build/waterDryMasks.ts` bakes a river water mask per river frame
 // (`virtual:river-water-masks`). This file decodes that atlas once, turns a

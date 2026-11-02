@@ -8,8 +8,17 @@ using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Buildings;
 
-/// <summary>A building standing on a hex.</summary>
-public readonly record struct PlacedBuilding(HexCoord Coord, BuildingType Type, int Level);
+/// <summary>
+/// A building standing on a hex. <paramref name="OutsideRealmSince"/> is the game instant the hex stopped being inside the
+/// player's realm (<c>docs/design/economy.md</c> section 5, "Buildings outside the realm decay"), or <see langword="null"/>
+/// while it is inside: a building with a value there has no function (<see cref="IsFunctioning"/>) and loses a level every
+/// <see cref="BuildingCatalogue.DecayInterval(BuildingType, double)"/>. Only <see cref="Settlement.ApplyRealmState"/> sets or clears it.
+/// </summary>
+public readonly record struct PlacedBuilding(HexCoord Coord, BuildingType Type, int Level, DateTimeOffset? OutsideRealmSince = null)
+{
+    /// <summary>Whether the hex is inside the realm, so the building produces, boosts and trains.</summary>
+    public bool IsFunctioning => OutsideRealmSince is null;
+}
 
 /// <summary>
 /// A settlement's rules: what it holds, what stands in it, and what it may
@@ -160,7 +169,7 @@ public sealed record Settlement
 
     /// <summary>The level of the standing Town Square (0 when there is none).</summary>
     public int TownSquareLevel =>
-        Buildings.Where(b => b.Type == BuildingType.TownSquare).Select(b => b.Level).DefaultIfEmpty(0).Max();
+        Buildings.Where(b => b.Type == BuildingType.TownSquare && b.IsFunctioning).Select(b => b.Level).DefaultIfEmpty(0).Max();
 
     public int LonghouseLevel =>
         Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
@@ -170,10 +179,11 @@ public sealed record Settlement
     /// or 0 when it has none. A settlement may hold several buildings of one
     /// type (two storage houses, a second tower), so a prerequisite asking for
     /// "a storage house at level 10" is answered by the highest one rather
-    /// than by whichever happens to come first in coordinate order.
+    /// than by whichever happens to come first in coordinate order. A building outside the realm has no function and
+    /// does not count.
     /// </summary>
     private int HighestLevelOf(BuildingType type) =>
-        Buildings.Where(b => b.Type == type).Select(b => b.Level).DefaultIfEmpty(0).Max();
+        Buildings.Where(b => b.Type == type && b.IsFunctioning).Select(b => b.Level).DefaultIfEmpty(0).Max();
 
     /// <summary>Food consumed per hour by everything currently in <see cref="Garrison"/>.</summary>
     public double UpkeepPerHour => TotalUpkeepPerHour(Garrison);
@@ -189,27 +199,32 @@ public sealed record Settlement
     /// the union of this and every placed Tower's own satellite disc; see
     /// <see cref="Claims"/> and <see cref="ClaimDiscs"/>. Backed by
     /// <see cref="BuildingDefinition.ClaimRadius"/> so the number lives in
-    /// one place, alongside every other Longhouse stat.
+    /// one place, alongside every other Longhouse stat. 0 when the Longhouse is destroyed (see <see cref="LonghouseDisc"/>).
     /// </summary>
     public int ClaimRadius => ClaimRadiusForLonghouseLevel(LonghouseLevel);
 
     /// <summary>
-    /// <see cref="ClaimRadius"/> for an arbitrary longhouse level, clamped to
-    /// <c>[1, MaxLevelFor(Longhouse)]</c> — a settlement with no standing
-    /// Longhouse (level 0, e.g. mid-founding) still gets the level-1 radius
-    /// (2, not this property's old level-0 floor of 1: the floor itself grew
-    /// by the same one hex as every other level when the formula changed)
-    /// rather than a lookup failure, and a corrupted/out-of-range level above
-    /// <see cref="BuildingCatalogue.MaxLevelFor"/> is clamped down to it instead
-    /// of throwing — the same defensive clamp <c>SettlementEntity.ToDomain</c>
-    /// already applies for exactly this "a raw DB row could carry a bad
-    /// level" reason. Public so callers with only a raw longhouse level on
-    /// hand (a lightweight DB projection, e.g. <c>SettlementService.GetClaimedSettlementsAsync</c>
-    /// or <c>ArmyService</c>'s siege-arrival check) can compute the same
-    /// number without a full <see cref="Settlement"/> instance.
+    /// <see cref="ClaimRadius"/> for an arbitrary longhouse level, capped at
+    /// <see cref="BuildingCatalogue.MaxLevelFor"/> (a corrupted/out-of-range level is clamped down instead of throwing — the
+    /// same defensive clamp <c>SettlementEntity.ToDomain</c> applies). Level 0 is a settlement whose Longhouse was destroyed
+    /// (every settlement is founded with a level-1 Longhouse, so there is no other level-0 state): it has no claim, so this
+    /// reads 0. A radius of 0 is <em>not</em> a disc — <see cref="LonghouseDisc"/> is the one place that decides whether
+    /// there is a centre disc at all; this number is for callers that only measure distance from the centre (founding's
+    /// spacing, <c>SettlementService.GetClaimedSettlementsAsync</c>). Public so callers with only a raw longhouse level on
+    /// hand (a lightweight DB projection) can compute the same number without a full <see cref="Settlement"/>.
     /// </summary>
     public static int ClaimRadiusForLonghouseLevel(int longhouseLevel) =>
-        BuildingCatalogue.Get(BuildingType.Longhouse, Math.Clamp(longhouseLevel, 1, BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse))).ClaimRadius;
+        longhouseLevel <= 0
+            ? 0
+            : BuildingCatalogue.Get(BuildingType.Longhouse, Math.Min(longhouseLevel, BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse))).ClaimRadius;
+
+    /// <summary>
+    /// The settlement's Longhouse (centre) claim disc, or <see langword="null"/> when it has none: a settlement whose
+    /// Longhouse is destroyed (level 0) has no claim at all, not even its centre hex. The one place that decides this —
+    /// <see cref="ConnectedRealm"/> and <see cref="Combat.FieldBattleResolver.ClaimAt"/> both read it.
+    /// </summary>
+    public static (HexCoord Centre, int Radius)? LonghouseDisc(HexCoord centre, int longhouseLevel) =>
+        longhouseLevel <= 0 ? null : (centre, ClaimRadiusForLonghouseLevel(longhouseLevel));
 
     /// <summary>
     /// How many orders may build in parallel right now (issue #158):
@@ -1900,6 +1915,143 @@ public sealed record Settlement
         return burned.PromoteWaitingOrders(now, speedFactor).Settlement;
     }
 
+    /// <summary>
+    /// Brings every building's realm state up to <paramref name="now"/> (<c>docs/design/economy.md</c> section 5, "Buildings
+    /// outside the realm decay"): the one function the realm-change hooks, the lazy read and the periodic sweep all call.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A building is inside the realm when its hex is claimed by <paramref name="realm"/> (<see cref="Territory.Claims"/>, the test
+    /// <see cref="PlanBuild"/> uses); the Longhouse is always inside and never decays. A building that just left the realm gets
+    /// <see cref="PlacedBuilding.OutsideRealmSince"/> = <paramref name="now"/> and stops functioning at once. One that is back
+    /// inside has it cleared: levels already lost stay lost, the partial progress towards the next loss is dropped. One that is
+    /// still outside loses <c>floor(elapsed / <see cref="BuildingCatalogue.DecayInterval(BuildingType, double)"/>)</c> levels, and
+    /// <see cref="PlacedBuilding.OutsideRealmSince"/> advances by the intervals consumed so a later call never counts them again;
+    /// a building that reaches level 0 is removed together with every order queued on its hex. A level-0 foundation has no level
+    /// to lose and is left as it is.
+    /// </para>
+    /// <para>
+    /// Call on an already-settled settlement and persist the result when <c>Changed</c>. <paramref name="realm"/> must contain this
+    /// settlement in its current state.
+    /// </para>
+    /// </remarks>
+    public (Settlement Settlement, bool Changed) ApplyRealmState(
+        ConnectedRealm realm,
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null,
+        World.IGiantIndex? giants = null)
+    {
+        ArgumentNullException.ThrowIfNull(realm);
+
+        var giantIndex = giants ?? World.GiantIndex.Empty;
+        var buildings = Buildings.ToList();
+        var removed = new HashSet<HexCoord>();
+        var leaving = new List<PlacedBuilding>();
+        var foundations = new HashSet<HexCoord>();
+        var changed = false;
+        var functionChanged = false;
+
+        for (var i = 0; i < buildings.Count; i++)
+        {
+            var building = buildings[i];
+            var step = RealmDecay.StepFor(building, realm, giantIndex, now, speedFactor);
+            switch (step.Kind)
+            {
+                case RealmStepKind.LeaveRealm:
+                    buildings[i] = building with { OutsideRealmSince = now };
+                    functionChanged = true;
+                    leaving.Add(building);
+                    break;
+                case RealmStepKind.CancelFoundation:
+                    foundations.Add(building.Coord);
+                    break;
+                case RealmStepKind.ReturnToRealm:
+                    buildings[i] = building with { OutsideRealmSince = null };
+                    functionChanged = true;
+                    break;
+                case RealmStepKind.Decay when step.LevelsLost >= building.Level:
+                    removed.Add(building.Coord);
+                    break;
+                case RealmStepKind.Decay:
+                    buildings[i] = building with
+                    {
+                        Level = building.Level - step.LevelsLost,
+                        OutsideRealmSince = building.OutsideRealmSince + BuildingCatalogue.DecayInterval(building.Type, speedFactor) * step.LevelsLost,
+                    };
+                    break;
+                default:
+                    continue;
+            }
+
+            changed = true;
+        }
+
+        if (!changed)
+        {
+            return (this, false);
+        }
+
+        buildings.RemoveAll(b => removed.Contains(b.Coord));
+        var queue = removed.Count == 0 ? Queue : [.. Queue.Where(o => !removed.Contains(o.Coord))];
+        var resources = Resources;
+        if (functionChanged)
+        {
+            var (production, capacity) = BoostedTotals(buildings, Runes, terrainAt);
+            resources = resources.WithRate(ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity, now);
+        }
+
+        var updated = this with { Buildings = buildings, Queue = queue, Resources = resources };
+
+        // What leaving the realm cancels (docs/design/economy.md section 5): queued upgrades and foundations on the hex, refunded by
+        // the ordinary cancel; queued training of a unit whose training building no longer functions anywhere, refunded in full.
+        foreach (var coord in leaving.Select(b => b.Coord).Concat(foundations))
+        {
+            foreach (var order in updated.Queue.Where(o => o.Coord == coord).ToList())
+            {
+                updated = updated.CancelBuild(order.Id, now, speedFactor).Settlement ?? updated;
+            }
+        }
+
+        if (foundations.Count > 0)
+        {
+            updated = updated with { Buildings = [.. updated.Buildings.Where(b => !(foundations.Contains(b.Coord) && b.Level < 1))] };
+        }
+
+        if (leaving.Count > 0)
+        {
+            updated = updated.CancelUnservedTraining(leaving.Select(b => b.Type).ToHashSet(), now);
+        }
+
+        // Dropped orders may have held construction slots: let the head of the waiting queue take them now.
+        return (updated.PromoteWaitingOrders(now, speedFactor).Settlement, true);
+    }
+
+    /// <summary>
+    /// Cancels and refunds in full (cost x count x cost multiplier) the queued training of every unit whose training building is one of
+    /// <paramref name="buildingTypes"/> and has no functioning building left (<see cref="PlacedBuilding.IsFunctioning"/>).
+    /// </summary>
+    private Settlement CancelUnservedTraining(IReadOnlySet<BuildingType> buildingTypes, DateTimeOffset now)
+    {
+        var resources = Resources;
+        var kept = new List<TrainingOrder>();
+        foreach (var order in TrainingQueue)
+        {
+            var definition = UnitCatalogue.Get(order.UnitType);
+            if (buildingTypes.Contains(definition.RequiredBuildingType) && HighestLevelOf(definition.RequiredBuildingType) < 1)
+            {
+                resources = resources.Deposit(definition.TrainingCost * order.Count * order.CostMultiplier, now);
+            }
+            else
+            {
+                kept.Add(order);
+            }
+        }
+
+        return kept.Count == TrainingQueue.Count ? this : this with { TrainingQueue = kept, Resources = resources };
+    }
+
     private Settlement WithBuildings(
         List<PlacedBuilding> buildings,
         HexCoord editedCoord,
@@ -1974,7 +2126,7 @@ public sealed record Settlement
 
         var shrine = Buildings.FirstOrDefault(b => b.Coord == shrineCoord);
         var occupied = Buildings.Any(b => b.Coord == shrineCoord);
-        if (!occupied || BuildingCatalogue.GodOf(shrine.Type) is null || shrine.Level < 1)
+        if (!occupied || BuildingCatalogue.GodOf(shrine.Type) is null || shrine.Level < 1 || !shrine.IsFunctioning)
         {
             // Level 0 is the foundation stub Enqueue places while the shrine
             // is still under construction (see BuildingCatalogue.Totals's own
@@ -2060,7 +2212,7 @@ public sealed record Settlement
             // ShrineCatalogue.Favour/Slots clamp their level argument to
             // [1,5], so without this check a stub would grant full level-1
             // favour and a rune slot before the shrine is actually built.
-            if (building.Level < 1)
+            if (building.Level < 1 || !building.IsFunctioning)
             {
                 continue;
             }
@@ -2189,9 +2341,14 @@ public sealed record Settlement
             return TrainDecision.Rejected(TrainRejection.InvalidCount);
         }
 
-        if (!UnitCatalogue.IsAvailable(type, LonghouseLevel, t => Buildings.FirstOrDefault(b => b.Type == t).Level))
+        if (!UnitCatalogue.IsAvailable(type, LonghouseLevel, t => HighestLevelOf(t)))
         {
-            return TrainDecision.Rejected(TrainRejection.UnitNotAvailable);
+            // The same check counting every building: the unit is only missing because its training building stands
+            // outside the realm.
+            return TrainDecision.Rejected(
+                UnitCatalogue.IsAvailable(type, LonghouseLevel, t => Buildings.Where(b => b.Type == t).Select(b => b.Level).DefaultIfEmpty(0).Max())
+                    ? TrainRejection.BuildingOutsideRealm
+                    : TrainRejection.UnitNotAvailable);
         }
 
         if (UnitCatalogue.Get(type).Class == UnitClass.Ship && !hasShoreline)

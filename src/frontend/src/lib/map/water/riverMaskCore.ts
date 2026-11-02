@@ -1,4 +1,4 @@
-// The pure half of the river water mask (docs/design/water-shader.md §4.4d).
+// The pure half of the river water mask (docs/design/water-shader.md §4.4e).
 //
 // The river flow shader animates the painted river, stream and bog-creek water.
 // To know which pixels of a river tile frame are that water, this file picks

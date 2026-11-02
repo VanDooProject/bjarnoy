@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import TrainingQueuePanel from './TrainingQueuePanel.vue';
 import { useWorldStore } from '../../stores/world';
+import { api, ApiError } from '../../api/client';
 import type { TrainingOrderResponse } from '../../api/types';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
@@ -81,5 +82,76 @@ describe('TrainingQueuePanel', () => {
 
     expect(fillWidth(wrapper)).toBeGreaterThanOrEqual(beforePoll);
     wrapper.unmount();
+  });
+
+  describe('guests', () => {
+    function guest(armyId: string) {
+      return { armyId, ownerSettlementId: 'unknown', totalUpkeepPerHour: 1, stacks: [{ unit: 'spearman', count: 5 }] };
+    }
+
+    function seedGuests(world: ReturnType<typeof useWorldStore>, ...ids: string[]) {
+      world.selectedSettlementId = 'host-1';
+      world.ownerId = 'owner-1';
+      world.guestArmies = ids.map(guest) as typeof world.guestArmies;
+    }
+
+    it('shows one Send home button per guest and none without guests', async () => {
+      const world = useWorldStore();
+      const wrapper = mountPanel();
+      expect(wrapper.findAll('.guest-send-home')).toHaveLength(0);
+
+      seedGuests(world, 'a1', 'a2');
+      await wrapper.vm.$nextTick();
+
+      const buttons = wrapper.findAll('.guest-send-home');
+      expect(buttons).toHaveLength(2);
+      expect(buttons[0].text()).toBe('Send home');
+      wrapper.unmount();
+    });
+
+    it('sends the clicked guest home for the selected settlement and refreshes', async () => {
+      const world = useWorldStore();
+      seedGuests(world, 'a1', 'a2');
+      const send = vi.spyOn(api, 'sendGuestHome').mockResolvedValue(undefined);
+      const refresh = vi.spyOn(world, 'refreshArmies').mockResolvedValue(undefined);
+
+      const wrapper = mountPanel();
+      await wrapper.findAll('.guest-send-home')[1].trigger('click');
+      await vi.waitFor(() => expect(refresh).toHaveBeenCalled());
+
+      expect(send).toHaveBeenCalledWith('host-1', 'a2', 'owner-1');
+      wrapper.unmount();
+    });
+
+    it('disables the button while the request runs', async () => {
+      const world = useWorldStore();
+      seedGuests(world, 'a1');
+      let finish!: () => void;
+      vi.spyOn(api, 'sendGuestHome').mockReturnValue(new Promise<void>((resolve) => { finish = resolve; }));
+      vi.spyOn(world, 'refreshArmies').mockResolvedValue(undefined);
+
+      const wrapper = mountPanel();
+      await wrapper.get('.guest-send-home').trigger('click');
+      expect(wrapper.get('.guest-send-home').attributes('disabled')).toBeDefined();
+
+      finish();
+      await vi.waitFor(() => expect(wrapper.get('.guest-send-home').attributes('disabled')).toBeUndefined());
+      wrapper.unmount();
+    });
+
+    it('shows the rejection message when the server refuses', async () => {
+      const world = useWorldStore();
+      seedGuests(world, 'a1');
+      vi.spyOn(api, 'sendGuestHome').mockRejectedValue(
+        new ApiError(409, { title: 'No route home.', detail: 'No route home exists.', status: 409 }),
+      );
+
+      const wrapper = mountPanel();
+      await wrapper.get('.guest-send-home').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('.error-note').exists()).toBe(true));
+
+      expect(wrapper.get('.error-note').text()).toBe('No route home exists.');
+      wrapper.unmount();
+    });
   });
 });

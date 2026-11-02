@@ -19,7 +19,7 @@ const stub = { template: '<div />' };
 async function mountBoth(path: string) {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: ['landing:/', 'settlement:/settlement', 'world:/world', 'leaderboards:/leaderboards', 'messages:/messages', 'reports:/reports', 'guild:/guild', 'docs:/docs'].map((r) => {
+    routes: ['landing:/', 'settlement:/settlement', 'leaderboards:/leaderboards', 'messages:/messages', 'reports:/reports', 'guild:/guild', 'docs:/docs'].map((r) => {
       const [name, p] = r.split(':') as [string, string];
       return { path: p, name, component: stub };
     }),
@@ -47,7 +47,7 @@ describe('MobileHudDrawer entries', () => {
       ...nav.findAll('.menu-entries .row-entry').map((b) => b.text().replace(/\s*\d+$/, '')),
     ];
     expect(drawerEntryTexts(drawer)).toEqual(navTexts);
-    expect(navTexts).toEqual(['Settlement', 'World map', 'Leaderboards', 'Messages', 'Reports', 'Alliance', 'Docs']);
+    expect(navTexts).toEqual(['Settlement', 'Leaderboards', 'Messages', 'Reports', 'Alliance', 'Docs']);
   });
 
   it('anonymous before founding: offers Landing on both surfaces', async () => {

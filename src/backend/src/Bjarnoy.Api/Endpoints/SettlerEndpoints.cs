@@ -32,7 +32,8 @@ public static class SettlerEndpoints
         worlds.MapGet("/{worldId:guid}/renown", GetOwnRenown)
             .WithName("GetOwnRenown")
             .WithSummary("The caller's own renown in this world, accrued as of now (issue #55).")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .WithConcurrencyRetry();
 
         worlds.MapGet("/{worldId:guid}/settlements/mine", ListOwnSettlements)
             .WithName("ListOwnSettlementsInWorld")
@@ -74,9 +75,7 @@ public static class SettlerEndpoints
         [
             .. entities
                 .Where(s => s.UserId == userId)
-                .Select(s => new SettlementSummary(
-                    s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
-                    s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0, s.IslandId)),
+                .Select(s => SettlementSummary.From(s, mine: true)),
         ];
 
         return TypedResults.Ok(response);

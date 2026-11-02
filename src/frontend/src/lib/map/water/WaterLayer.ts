@@ -265,7 +265,7 @@ const CAUSTIC_BLOB_ALPHA = 0.42;
 const CAUSTIC_BLOB_COLOR = 0x0d1728;
 
 /**
- * River ripples (docs/design/water-shader.md §4.4d). The crests slide `RIVER_SPEED_TURNS_PER_SECOND` whole ripple periods per
+ * River ripples (docs/design/water-shader.md §4.4e). The crests slide `RIVER_SPEED_TURNS_PER_SECOND` whole ripple periods per
  * second towards the out edge (a period is about `RIPPLE_WAVELENGTH_TEXELS` texels, an eighth of a tile). The noise that breaks
  * the crests into pieces has `RIVER_NOISE_PER_TILE` cells per tile.
  */
@@ -310,8 +310,11 @@ function placeholderTaintTexture(): Texture {
 }
 
 let sharedPlaceholderDryTexture: Texture | null = null;
-/** A 1x1 "nothing is dry" texture (alpha 0, which is what the shader reads), bound in world mode and before the art masks are ready. */
-function placeholderDryTexture(): Texture {
+/**
+ * A 1x1 fully clear texture (alpha 0): "nothing is dry" for the water shader, "no lake water" for the bog lake shader. Bound in world mode
+ * and before the art masks are ready.
+ */
+export function placeholderDryTexture(): Texture {
   sharedPlaceholderDryTexture ??= new Texture({
     source: new BufferImageSource({ resource: new Uint8Array([0, 0, 0, 0]), width: 1, height: 1 }),
   });

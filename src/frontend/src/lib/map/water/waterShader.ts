@@ -486,15 +486,13 @@ vec4 sampleMask() {
 
 // The art dry mask (docs/design/water-shader.md §4.4b): 1 where the painted
 // tile art under the water is not plain water (rock, boat, dock, hut, their
-// reflections), 0 elsewhere, in the alpha channel; the red channel is the shade
-// the art paints on the water (a soft shadow, darker than plain water but not
-// dry), 1 at full shade. A render texture over the same world rect as the
-// mask, so it takes the same UVs.
-vec4 sampleDryMask() {
-  return texture(uWaterDry, vUV);
+// reflections), 0 elsewhere, in the alpha channel. A render texture over the
+// same world rect as the mask, so it takes the same UVs.
+float sampleDry() {
+  return texture(uWaterDry, vUV).a;
 }
 
-// The river ripple field (docs/design/water-shader.md §4.4d), premultiplied RGBA: rg = (cos, sin) of the ripple phase
+// The river ripple field (docs/design/water-shader.md §4.4e), premultiplied RGBA: rg = (cos, sin) of the ripple phase
 // * 0.5 + 0.5, b = intensity (0 at the bank), a = 1 where the river hex has flow. Its own UVs (riverUV). Returns the
 // un-premultiplied value, zero where no river hex is drawn.
 vec4 sampleRiverFlowAt(vec2 uv) {
@@ -771,7 +769,7 @@ vec4 riverStreaks(vec2 cs, float centre, vec2 ground) {
   return col * (uRiverAlpha / 0.5);
 }
 
-// The river overlay of the chosen look (uRiverStyle, §4.4d "Styles"): 0 ripple arcs, 1 toon strands, 2 cartoon bands, 3 flow streaks, 4 bands with the streaks over them.
+// The river overlay of the chosen look (uRiverStyle, §4.4e "Styles"): 0 ripple arcs, 1 toon strands, 2 cartoon bands, 3 flow streaks, 4 bands with the streaks over them.
 vec4 riverOverlay(vec2 cs, float centre, vec2 ground) {
   if (uRiverStyle > 3.5) return riverOver(riverBands(cs, centre, ground), riverStreaks(cs, centre, ground) * uRiverStreakMix);
   if (uRiverStyle > 2.5) return riverStreaks(cs, centre, ground);
@@ -808,15 +806,11 @@ float sampleNoFoam() {
 // on R, so the coastline the mask believes in reads as a crisp line you can
 // lay over the painted art and see any disagreement immediately. This is what
 // the throwaway spike existed for, kept as a permanent option.
-vec4 maskDebugColor(vec4 m, vec4 dryS) {
+vec4 maskDebugColor(vec4 m, float dry) {
   float contour = step(0.5, fract(m.r * 8.0));
-  // Dry in blue, shade in red (added to the contour bands).
-  vec3 col = vec3(max(m.r * contour, dryS.r), m.g, dryS.a);
+  vec3 col = vec3(m.r * contour, m.g, dry);
   return vec4(col, 0.85);
 }
-
-// How much of its colour the foam loses in full shade (§4.4b shadow channel): darker, but still clearly foam.
-const float SHADOW_FOAM = 0.45;
 
 void main() {
   vec4 m = sampleMask();
@@ -832,7 +826,7 @@ void main() {
   vec2 vGround = vec2(vWorld.x, vWorld.y / uGroundSquash);
 
   if (uShowMask > 0.5) {
-    vec4 dbg = maskDebugColor(m, sampleDryMask());
+    vec4 dbg = maskDebugColor(m, sampleDry());
     finalColor = vec4(dbg.rgb * dbg.a, dbg.a);
     return;
   }
@@ -843,7 +837,7 @@ void main() {
   float dist = (m.r - 0.5) * uNearSpan * 2.0;
   bool water = dist > 0.0;
 
-  // --- §4.4d river flow ----------------------------------------------------
+  // --- §4.4e river flow ----------------------------------------------------
   // Painted river water is land as far as the mask knows, so it is drawn here, before the land discard. The flow texture is
   // clipped to the river hex's own top face, which tessellates exactly with its neighbours', so nothing else needs masking.
   vec4 flow = (uRiverFlowOn > 0.5 || uShowRiverFlow > 0.5) ? sampleRiverFlow() : vec4(0.0);
@@ -869,11 +863,7 @@ void main() {
   // Pixels of the painted tile art that are not plain water (a rock, a boat, a
   // dock, a hut, their reflections). Caustics and foam are drawn only on water,
   // so both are multiplied by what is left of this.
-  vec4 dryS = sampleDryMask();
-  float dry = dryS.a;
-  // The soft shadows the art paints on the water: light through clear water does not appear in shade, so caustics are dimmed
-  // by it, and foam is darkened by it (SHADOW_FOAM).
-  float shade = dryS.r;
+  float dry = sampleDry();
 
   vec3 col = vec3(0.0);
   float alpha = 0.0;
@@ -945,15 +935,15 @@ void main() {
       // art dry mask rather than picking one.
       // Kept faintly rather than switched off: with the taint wash under them
       // a few dim ribbons stop tainted water reading as a flat fill.
-      float quiet = (1.0 - dry) * (1.0 - shade) * (1.0 - 0.75 * taint);
+      float quiet = (1.0 - dry) * (1.0 - 0.75 * taint);
 
       // Three layers, dark to light, in that order: the shadows are depth *in*
       // the water, so both light nets draw over them, and the fine net is the
       // highlight on top of the coarse one.
       if (uCausticBlobs > 0.5) {
-        float blob = blobField(vGround, uWaveTime, offshore) * uCausticBlobAlpha * quiet;
-        if (blob > 0.004) {
-          acc = vec4(uCausticBlobColor * blob, blob) + acc * (1.0 - blob);
+        float shade = blobField(vGround, uWaveTime, offshore) * uCausticBlobAlpha * quiet;
+        if (shade > 0.004) {
+          acc = vec4(uCausticBlobColor * shade, shade) + acc * (1.0 - shade);
         }
       }
 
@@ -1089,8 +1079,7 @@ void main() {
     // dims a little further than they do — foam is brighter than open water
     // to begin with, so it needs more of a pull to stop reading as clean surf
     // against a dead coast.
-    // Foam in the art's shadow darkens (colour only, alpha stays) by up to SHADOW_FOAM, so it reads as lying in the shade.
-    vec3 foamColor = mix(uFoamColor, uTaintFoamColor, taint) * (1.0 - SHADOW_FOAM * shade);
+    vec3 foamColor = mix(uFoamColor, uTaintFoamColor, taint);
     float foam = max(inner * uFoamAlpha.x, outer * uFoamAlpha.y) * mix(1.0, 0.55, taint) * (1.0 - noFoam) * (1.0 - dry);
     acc = vec4(foamColor * foam, foam) + acc * (1.0 - foam);
   }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Hosting;
 using Bjarnoy.Domain.World;
@@ -6,6 +7,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -37,6 +39,9 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
 
     /// <summary>Set by <see cref="WithBuild"/>; null means an unstamped build.</summary>
     private BuildInfoOptions? _build;
+
+    /// <summary>Set by <see cref="WithBuildId"/>; a web root of its own holding <c>build-id.txt</c>.</summary>
+    private string? _buildIdWebRoot;
 
     /// <summary>Set by <see cref="WithDiagnostics"/>; null leaves it to the build.</summary>
     private DiagnosticsOptions? _diagnostics;
@@ -118,6 +123,20 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
     }
 
     /// <summary>
+    /// Serves a web root that holds a <c>build-id.txt</c> with this content,
+    /// as the Docker image does after the frontend build.
+    /// </summary>
+    public BjarnoyApiFactory WithBuildId(string content)
+    {
+        _buildIdWebRoot = Path.Combine(Path.GetTempPath(), $"bjarnoy-webroot-{Guid.CreateVersion7():N}");
+        Directory.CreateDirectory(_buildIdWebRoot);
+        File.Copy(Path.Combine(TestWebRootPath, "index.html"), Path.Combine(_buildIdWebRoot, "index.html"));
+        File.WriteAllText(Path.Combine(_buildIdWebRoot, "build-id.txt"), content);
+
+        return this;
+    }
+
+    /// <summary>
     /// Overrides what the build's branch would otherwise decide about the
     /// diagnostic surfaces — the per-deployment escape hatch, as an env var
     /// would supply it.
@@ -179,6 +198,12 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
             .GetStatusAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Dormant unless a test arms it: provokes a lost write race on one settlement (see
+    /// <see cref="SettlementRaceInterceptor"/>), for the background jobs that run outside any request.
+    /// </summary>
+    public SettlementRaceInterceptor Race { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -192,11 +217,17 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         // Camp aggression is driven by hand in the tests that cover it (CampAggressionService.ProcessWorldAsync);
         // the hosted scan would only race them on the test clock.
         builder.UseSetting("CampAggression:Enabled", "false");
+        builder.UseSetting("RealmSweep:Enabled", "false");
 
         // Same for the leaderboard poll: its real 60 s wall-clock timer can fire mid-test on a loaded machine,
         // refresh a half-seeded world and stamp the watermark, so the test's explicit RefreshCurrentBoardsAsync
         // is then skipped as "still fresh" (the fake clock has not moved) and the board misses entries.
         builder.UseSetting("LeaderboardAggregation:Enabled", "false");
+
+        // The default world (MigrationCommand's --ensure-world, Program.cs's startup seeding) is otherwise
+        // generated at the production radius of 4000: minutes of every core, during which every other
+        // test's requests starve into HttpClient's 100 s timeout. The tests only need *a* world there.
+        builder.UseSetting(MigrationCommand.DefaultWorldRadiusKey, TestWorlds.MinimumRadius.ToString(CultureInfo.InvariantCulture));
 
         // A fixed key so tokens minted by one test are still valid tokens (not
         // that any test relies on that) and so the app has something to sign
@@ -235,7 +266,7 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         // Stand in for the built frontend the Docker image bakes into wwwroot,
         // so the SPA-fallback tests do not depend on whether anyone has run a
         // frontend build.
-        builder.UseWebRoot(TestWebRootPath);
+        builder.UseWebRoot(_buildIdWebRoot ?? TestWebRootPath);
 
         // SetMinimumLevel only sets a fallback used when no rule matches, and
         // appsettings.json's "Logging:LogLevel:Default": "Information" is
@@ -251,12 +282,25 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Time);
+            services.ConfigureDbContext<GameDbContext>(options => options.AddInterceptors(Race));
         });
     }
 
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
+
+        if (disposing && _buildIdWebRoot is not null)
+        {
+            try
+            {
+                Directory.Delete(_buildIdWebRoot, recursive: true);
+            }
+            catch (IOException)
+            {
+                // A leftover temp directory is not worth failing a test run over.
+            }
+        }
 
         if (!disposing || _databaseFile is null)
         {

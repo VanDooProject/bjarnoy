@@ -54,7 +54,8 @@ public sealed class FieldBattleServiceTests : IDisposable
         // guards this with the same numbers; re-search a seed if the island shape changes):
         // one 100-hex-wide disc per 100-hex cell (a single-vertex spine, no islets
         // possible to matter, no warp, no coast noise, every cell an island), so the
-        // ground around the origin is plain grass — no sea, sand, forest or mountain.
+        // ground around the origin is land — no sea or sand (grass, forest and the odd grove; a single-vertex
+        // spine has no mountain chain).
         Seed = 14,
         Radius = 500,
         IslandCellSize = 100,

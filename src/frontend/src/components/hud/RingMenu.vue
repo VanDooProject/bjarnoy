@@ -88,6 +88,8 @@ export interface RingCard {
   time?: string;
   /** One-line summary of what it produces. */
   gives?: string;
+  /** For an upgrade, the building's new total next to the gain in `gives` ("90 total"); shown on wide screens only. */
+  givesTotal?: string;
   /** Progression blockers (longhouse level, prerequisites, limits), each as a sentence. */
   locks?: string[];
   /** A non-blocking caution (the building can still be placed), e.g. wild beasts burning an unguarded tower. */
@@ -366,7 +368,8 @@ const lane1 = computed(() =>
       y: spot.y,
       active,
       dim: !!activeCategory.value && !active,
-      state: item.state,
+      category: !atRoot.value,
+      state: item.state ?? (atRoot.value ? undefined : categoryState(item.id)),
       // A disabled bubble with no availability state is the plain "can't do
       // that here" look; one with a state explains itself with a badge instead.
       ban: !!item.disabled && !item.state,
@@ -439,11 +442,18 @@ function cardOf(b: RingBuilding): RingCard {
     cost: b.cost,
     time: b.time,
     gives: b.gives,
+    givesTotal: b.givesTotal,
     locks: b.locks?.length ? b.locks : b.lock ? [b.lock] : [],
     warning: b.warning,
     art: b.art,
     availability: b.availability,
   };
+}
+
+/** A category whose every building is locked carries the lock itself; it still opens, to show what is locked. */
+function categoryState(id: string): RingAvailabilityState | undefined {
+  const list = props.categories.find((c) => c.id === id)?.buildings ?? [];
+  return list.length && list.every((b) => stateOf(b) === 'locked') ? 'locked' : undefined;
 }
 
 /** What state a building bubble is in: a lock wins, otherwise whatever the availability says. */
@@ -471,7 +481,7 @@ interface CardView {
   chips: { key: string; color: string; amount: number; short: boolean }[];
   time?: string;
   gives?: string;
-  slots?: { text: string; short: boolean };
+  givesTotal?: string;
   rows: { label: string; value: string }[];
   warning?: string;
   statuses: { text: string; tone: Tone }[];
@@ -534,14 +544,6 @@ const cardView = computed<CardView | null>(() => {
   else if (a?.state === 'waiting') badge = { text: t('hud.ringMenu.card.badgeNoSlot').toUpperCase(), tone: 'wait' };
   else badge = { text: t('hud.ringMenu.buildableHere'), tone: 'ok' };
 
-  let slots: CardView['slots'];
-  if (a) {
-    const params = { needed: a.slots.needed, free: a.slots.free, total: a.slots.total };
-    // "All (3)" when the order takes every slot the settlement has.
-    const all = a.slots.needed >= a.slots.total && a.slots.total > 1;
-    slots = { text: all ? t('hud.ringMenu.card.slotsAll', params) : t('hud.ringMenu.card.slotsValue', params), short: a.slots.short };
-  }
-
   return {
     title: card.title,
     sub: card.sub,
@@ -550,7 +552,7 @@ const cardView = computed<CardView | null>(() => {
     chips,
     time: card.time,
     gives: card.gives,
-    slots,
+    givesTotal: card.givesTotal,
     rows: [],
     warning: card.warning,
     statuses,
@@ -953,7 +955,9 @@ function onBackdropPointerDown(e: PointerEvent) {
         disabled: entry.ban,
         'is-locked': entry.state === 'locked',
         'is-waiting': entry.state === 'waiting',
+        category: entry.category,
         armed: armed === entry.item.id,
+        'no-commit': entry.item.disabled,
       }"
       :style="{
         left: `${entry.x}px`,
@@ -1002,6 +1006,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         waiting: stateOf(b.building) === 'waiting',
         disabled: b.building.disabled,
         armed: armed === b.building.id,
+        'no-commit': b.building.disabled || !isActionable(stateOf(b.building)),
       }"
       :style="{
         left: `${b.x}px`,
@@ -1058,11 +1063,9 @@ function onBackdropPointerDown(e: PointerEvent) {
         </template>
         <template v-if="cardView.gives">
           <dt>{{ t('hud.ringMenu.gives') }}</dt>
-          <dd class="nowrap">{{ cardView.gives }}</dd>
-        </template>
-        <template v-if="cardView.slots">
-          <dt>{{ t('hud.ringMenu.card.slots') }}</dt>
-          <dd class="nowrap" :class="{ 'slots-short': cardView.slots.short }" data-testid="ring-card-slots">{{ cardView.slots.text }}</dd>
+          <dd class="nowrap">
+            {{ cardView.gives }}<span v-if="cardView.givesTotal" class="gives-total" data-testid="ring-card-total"> · {{ cardView.givesTotal }}</span>
+          </dd>
         </template>
         <template v-for="row in cardView.rows" :key="row.label">
           <dt>{{ row.label }}</dt>
@@ -1246,6 +1249,10 @@ function onBackdropPointerDown(e: PointerEvent) {
   cursor: not-allowed;
   border: 1.5px dashed rgba(226, 112, 95, 0.55);
   color: rgba(240, 163, 150, 0.9);
+}
+.ring-bubble.is-locked.category {
+  /* All its buildings are locked, but it still opens to show them. */
+  cursor: pointer;
 }
 .ring-bubble.is-waiting {
   cursor: not-allowed;
@@ -1500,6 +1507,14 @@ html[data-hud-motion='reduced'] .ring-bubble.armed {
   animation: none;
   box-shadow: 0 0 0 4px var(--gold);
 }
+/* A blocked bubble is still armed (its card says why), but without the gold ring: a second tap would do nothing. */
+.ring-bubble.armed.no-commit {
+  animation: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+html[data-hud-motion='reduced'] .ring-bubble.armed.no-commit {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
 /* The glow becomes a static gold ring. */
 html[data-hud-motion='reduced'] .ring-bubble.glow {
   animation: none;
@@ -1573,8 +1588,14 @@ html[data-hud-motion='reduced'] .ring-bubble.glow {
 .card-status .queue {
   color: var(--gold);
 }
-.card-rows dd.slots-short {
-  color: #ffb347;
+.gives-total {
+  color: var(--muted);
+  font-weight: 400;
+}
+@media (max-width: 768px), (max-height: 500px) {
+  .gives-total {
+    display: none;
+  }
 }
 .ring-hint {
   position: absolute;

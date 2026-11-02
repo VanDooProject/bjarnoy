@@ -14,7 +14,6 @@ import { useLoadFlow } from '../composables/useLoadFlow';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
-import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 import ReturningPlayerMenu from '../components/hud/ReturningPlayerMenu.vue';
 import MotionPrompt from '../components/onboarding/MotionPrompt.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
@@ -574,6 +573,9 @@ function ringStepTarget(): { id: string; spot: { x: number; y: number }; label: 
   return { id: step.id!, spot: step.spot, label: t('landing.pointer.openCategory', { category: category?.label ?? '' }) };
 }
 
+// Bumped by the checklist's current step: GuidancePointer plays one poke per change.
+const pointerNudge = ref(0);
+
 const pointerTarget = computed(() => {
   if (joinBlocked.value) return null;
   // Player logout/login gate: ReturningLoginPanel replaces the founding
@@ -968,13 +970,12 @@ watch(
          being provided, not on `docked`/route context, so simply not
          passing one here is enough.
          Mobile tutorial focus: `v-else` alone would render THIS bar (the
-         pre-founding one, "Bjarnoy" + locale switcher) whenever the founded
+         pre-founding one, "Bjarnoy" + the returning-player menu) whenever the founded
          branch's `v-if` above is false for ANY reason — including
          `hideBarForTutorial`, which is exactly the state that must render no
          bar at all. `v-else-if="!player.hasFoundedSettlement"` keeps this
          branch scoped to its own original condition. -->
     <TopBar v-else-if="!player.hasFoundedSettlement" title="Bjarnoy">
-      <LocaleSwitcher />
       <ReturningPlayerMenu>
         <!-- One-time offer to turn animations on when the device asks for reduced motion. -->
         <template #nudge><MotionPrompt /></template>
@@ -1039,6 +1040,7 @@ watch(
       :scale="pointerTarget.scale"
       :avoid="pointerTarget.mode === 'screen' ? ringBubbles : undefined"
       clear-below-selector=".hero--founding, [data-testid='onboarding-banner'].landfall"
+      :nudge="pointerNudge"
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
 
@@ -1057,6 +1059,8 @@ watch(
       v-if="!joinBlocked && !guidance.complete && !showReturningLoginGate && !(isCompactHudLanding && ringScreen)"
       :guidance="guidance"
       :has-founded="player.hasFoundedSettlement"
+      :can-focus="!!pointerTarget && mapDrawn"
+      @focus="pointerNudge++"
     />
 
     <template v-if="player.hasFoundedSettlement">

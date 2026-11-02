@@ -36,7 +36,7 @@ Decisions taken up front (asked and answered before writing this):
 
 Explicitly **out of scope**: any backend work (the mask is baked client-side,
 see §2.3), the river art itself (rivers are land hexes with their own painted
-art — see §6; only the ripples that make that water flow are drawn here, §4.4d),
+art — see §6; only the ripples that make that water flow are drawn here, §4.4e),
 lava streams, frozen rivers and bog lakes (they stay still), and a
 player-facing graphics-settings UI.
 
@@ -554,9 +554,9 @@ stops looking like the boundary of the water and starts looking like the
 brightest part of a texture. A band of plain water against the coast reads as
 the surface only catching the light once there is some depth under it.
 
-The keep-off is short on purpose: `causticCullHexes` is 0.1 and
-`CAUSTIC_CULL_SPREAD_TILES` 0.1, so every ribbon ends 0.1 to 0.2 tiles out, inside the foam band
-(`foamWidthHexes` 0.3, breathing with the surge), never short of it. At 0.25 the ends showed as a strip of plain water before the foam. What keeps ribbons
+The keep-off is short on purpose: `causticCullHexes` is 0.25 and
+`CAUSTIC_CULL_SPREAD_TILES` 0.1, so a ribbon ends just under the foam band
+(`foamWidthHexes` 0.3) instead of a visible gap before it. What keeps ribbons
 off rocks, boats and buildings is not this distance but the art dry mask (§4.4b).
 
 **Cut, not faded.** The first version ramped them in over half a hex, and the
@@ -892,24 +892,16 @@ the pure per-frame maths is `dryMaskCore.ts`):
    only the object and its contact shadow are dry.
 5. The 0/1 map is closed (grown by 2 source pixels, shrunk by 1) — which fills
    the pinholes the dithering leaves inside an object and leaves the mask one
-   pixel outside its outline, so the shader stops just outside it — and box-downsampled 2x2 to **half resolution**, which
-   makes the edge soft. All cells are shelf-packed into one RGBA PNG (A is the dry
-   mask, R the shadow channel below, G and B 0) that the module exports as a data URL, with each frame's cell
+   pixel outside its outline, so the shader stops just outside it — then
+   cleared below the top face's front edges with a 2 px inset
+   (`aboveFrontEdges`; the face is the manifests' `topFaceY` 140 / `topFaceH`
+   92, which the build checks). The skirt and the face's rim are painted over
+   on screen by the hexes in front, so a dry pixel there would cut *their*
+   water. Then box-downsampled 2x2 to **half resolution**, which
+   makes the edge soft. All cells are shelf-packed into one grey+alpha PNG (alpha
+   is the mask) that the module exports as a data URL, with each frame's cell
    rect and the source rect it covers. Computed once per build or dev-server
    start.
-
-6. **Shadow channel.** The soft shadows the art paints on the water are darker
-   than the plain water but within the 20 of step 4, so they are not dry. Light
-   through clear water does not appear in shade, so they must dim the caustics
-   and darken the foam. Per source pixel where art and reference are both opaque
-   and the pixel is not dry: `d = max(0, lumRef - lumArt) / max(lumRef, 1)` with
-   Rec.709 luma, `shadow = clamp(d / 0.25, 0, 1)` (`SHADOW_FULL_DARKENING`: 25%
-   darker is full shade; softer shadows scale linearly). Dry and brighter pixels
-   are 0 (dry already gates the former). The map is box-blurred by 2 source
-   pixels (`SHADOW_BLUR_RADIUS`; the render is dithered, raw per-pixel darkening
-   is speckled), cleared below the top face's front edges like dry, and
-   box-downsampled 2x2 like dry. It is stored in the red channel
-   (`artMasksHalf` returns `{ dry, shadow }`).
 
 *Runtime* (`waterDryMask.ts`, `WaterDryLayer`): the module is imported lazily.
 For every sea hex's base art in settlement mode the renderer draws, into one
@@ -919,29 +911,25 @@ art sprite's position plus the cell's source rect scaled by `tileWidth / 200`.
 Frame names come from `Texture.label`, which Pixi's `Spritesheet` sets to the
 frame key. The texture is redrawn when the water mask is applied or the terrain
 base entries change, not every frame, and bound as `uWaterDry`, sampled with the
-same `vUV` as the water mask. Overlapping sprites must union both channels
-independently, so the sprites use blend mode `'max'` (blend equation MAX with
-ONE/ONE factors: WebGL2, `EXT_blend_minmax` on WebGL1, WebGPU `max`). The mask
-atlas texture is created with `alphaMode: 'no-premultiply-alpha'` (on top of
-`createImageBitmap(..., { premultiplyAlpha: 'none' })`): Pixi's default would
-premultiply on upload, scaling R by A and erasing the shadow wherever nothing
-is dry. With tint `0xffffff` and alpha 1 the batcher outputs the sampled RGBA
-unchanged. World mode, and the time before the masks have
+same `vUV` as the water mask. World mode, and the time before the masks have
 loaded, bind a 1x1 texture of zeros: nothing is dry.
 
 *Fallback for unknown art*: art on a sea hex that is neither a reference nor has
 a mask cell (anything not water-based) is drawn into the render texture with its
-own alpha, tinted black, so all of its opaque pixels count as fully dry (A =
-art alpha, R = 0: no shadow). Reference
+own alpha, tinted black, so all of its opaque pixels count as fully dry. Reference
 frames draw nothing.
 
-The shader reads `vec4 dryS = texture(uWaterDry, vUV);` with `dry = dryS.a` and
-`shade = dryS.r`, and multiplies the caustics (all three layers: blobs, coarse
-net, fine net) by `(1.0 - dry) * (1.0 - shade)` and the foam by `(1.0 - dry)`;
-the foam keeps its full width and edge noise. In shade the foam's colour (not
-its alpha) is also darkened by `(1.0 - SHADOW_FOAM * shade)`, `SHADOW_FOAM =
-0.45`: at full shade it keeps 55% of its brightness, still clearly foam. The
-debug view (`showWaterMask`) shows dry in blue and shade in red. The sea body (§4.1)
+*Why only `_base` frames, and where shadows come from*: each piece of water art
+is split into a base layer (water, and what of the object lies in it) drawn
+*under* the water mesh and a top layer (the object and the shadow it casts on
+the water, a semi-transparent dark layer) drawn *over* it. The top layer
+already covers the caustics and foam under its opaque pixels and darkens them
+under its shadow by exactly the shadow's own opacity, so it needs no mask and
+there is no separate shadow input to the shader.
+
+The shader reads `float dry = texture(uWaterDry, vUV).a;` and multiplies the
+caustics (all three layers: blobs, coarse net, fine net) and the foam by
+`(1.0 - dry)`; the foam keeps its full width and edge noise. The sea body (§4.1)
 is not masked (it is a flat colour with nothing at odds with the art), and the
 world-mode wave arcs are not either, since world mode has no painted sea tiles.
 
@@ -1000,7 +988,78 @@ distance also reads this:
   taint)`) — sunlight-through-clear-water ribbons don't belong on water that
   isn't clear.
 
-### 4.4d River flow — `uRiverFlow`
+### 4.4d Bog lakes — gusts in step with the forest
+
+Settlement view only. The lake water of the bog (terrain `lake` and the `boglake`, `boglake_inlet`, `boglake_shore`, `boglake_half`,
+`boglake_mouth` families) gets a second shader, `bogLakeShader.ts`, drawn by `BogLakeLayer.ts`: a wind gust that travels over the lake in
+exactly the phase of the forest sway clips next to it. Three looks, each behind its own flag, all on by default (the lake's base colour is
+dark navy, about rgb(16-24, 32-40, 56-72)). Between gusts the water is left calm. From bottom to top:
+
+- **Cat's paws**: darker matte patches where the gust roughens the surface, with a fine grain inside, drifting downwind.
+- **Sheen**: a broad, almost featureless lightening of the water that sweeps across with the gust.
+- **Foam**: ships as **micro curls**, small white crescent ripples opening downwind, scattered in the band, each fading in and out on
+  its own beat. Five other styles stay selectable in the debug panel's foam style dropdown (`BOG_LAKE_FOAM_STYLES`: strands, tapered
+  strands, crest + shadow, ring arcs, glint squiggles). Line half-width (share of the spacing, 0.04) and spacing (15 world units) are
+  tunable and apply to every style.
+
+**The gust phase.** The forest art is rendered so a tree's phase is `frame / 16 - s / 6` (`s` = position along screen-right in render units,
+`sway.wavelength` 6, `sway.frames_per_column` 4, 16 frames per period at 6 fps). `HexMapRenderer.syncTopAnim` plays the tile in map column
+`col` at frame `(g - 4 * col) mod 16`, `g = floor(animClockMs * 6 / 1000)`. A tile's art canvas starts at `isoGridPosition(coord).x =
+col * 0.75 * TILE_W`, and one render unit is `TILE_W / 2` world units, so the same wave is continuous in world space:
+
+```
+phase(x, t) = t * 6 / 16 - (x / (TILE_W / 2)) / 6        t = animClockMs / 1000, x = world x; the wave travels toward +x
+```
+
+It is the one function `gustPhase` in `bogLakeGust.ts`, mirrored in GLSL; `bogLakeGust.test.ts` checks it equals the sway formula for every
+column and global frame (it also places the frame through the real `sharedClockPlayback`), and that the constants match
+`swayPeriodFrames`/`swayFramesPerColumn` of the clips' `sway` metadata. Unlike the forest it is continuous in time (no 6 fps stepping). The
+shader gets only the time term wrapped to one period (`uGustTime`, from `gustTime`), so float32 keeps its precision however long the clock
+has run. The gust moves 6 * TILE_W / 2 * 6 / 16 = 189 world units per second, one wavelength (504 units, three hexes) per 2.7 s.
+
+**The peak.** The trees lean furthest at phase 0.34 (`GUST_PEAK_PHASE`), measured from the forest_mixed / forest_taiga SE sway frames' lean
+(the fundamental of the centroid shift). A second check on 16 settlement-view frames (each tree's sideways displacement, about 7 000
+samples) found the same: the lean is a wave of 504 world units toward +x, coherence 0.998, peaking 0.13 frames before 0.34. The lake gust
+ships shifted against it by `GUST_LAKE_PHASE_OFFSET` = -0.14 periods (about -2.2 frames, chosen by eye; the debug panel's phase offset
+starts there). The envelope is a smooth bump on `fract(phase - (0.34 + offset))` around 0, half-width 0.16 periods (the band
+is about one hex wide; `uBandHalf`, tunable), its centre line wandering a little with world y (low-frequency noise) so the band is not a
+ruler-straight vertical. Every look is multiplied by it and by the lake mask.
+
+**The lake mask** reuses §4.4b's machinery instead of a second one. `dryMaskCore.ts` compares each `boglake*_base` frame, per pixel, with
+`boglake_<O>_base` (the plain lake of the same orientation) and keeps the pixels where the **reference** is lake water (opaque, blue
+dominant: `b > r + 15 && b > g + 5`, which leaves out the tile prism's side faces: they repeat the reference but are earth) and the art
+repeats it within `DRY_PIXEL_EPS` (`lakeWetMaskHalf`). Measured over the vendored art that is exactly the lake water: shore 4235 of 4238
+pixels, half 8334 of 8354, inlet all, and 2196 of 4707 on the mouth, whose brighter creek water is excluded on purpose (the effect is for
+lakes, not creeks). The 0/1 map is eroded by one source pixel (the bank outline stays clear; `dryMaskHalf` grows instead) and box-downsampled
+to half resolution. The `virtual:water-dry-masks` module bakes it for every `boglake*` frame, always (the family name decides, not a match
+ratio), into a second atlas, `lake`; both atlases go through one packing and PNG encoding function.
+
+At runtime `WaterDryLayer('lake')` (the same class as the sea's dry layer, only its atlas differs) draws those masks, placed like the tile
+art, into a render texture over the bounding rect of the lake hexes' base art. It redraws when the terrain is rebuilt, never per frame. The
+lake entries are collected next to the sea's `waterDryEntries`, by frame name (the shore, half, inlet and mouth hexes are `bog` terrain, only
+the open water is `lake`).
+
+**Layering.** `BogLakeLayer.mesh` is a world-space quad over that rect (UVs matching the render texture), its own `WorldLayerName`
+`bogLake`, directly above `terrainBase` and under `bogEdges` in settlement mode (the bog edge fringe paints moss over a lake tile's rim, which the lake mask can't know, so the fringe has to cover the gust; everything in `terrainTop` does too): the lily pads, boats and the fish
+weir, which sit in the top layer, draw over it. World mode never shows it. Output is a premultiplied overlay, same blending as `WaterLayer`.
+
+**Switches.** Hidden with `waterDebugFlags.water` (this is what the e2e `mapLayers: { water: false }` opt-out flips), follows
+`setSuppressed` (landing preview, `deepFogOnly`) and is **hidden** while the player's own "Wind on lakes" motion setting is off (`motionPreferences.lakes`, `setLakeMotion`; under 'auto' it follows the device's reduced-motion setting). Water motion does not affect it. Unlike the sea it is not frozen: a still gust band reads as a fault, not as calm water. The
+clock is `animClockMs`, passed in from the renderer's tick (not `performance.now()`), so the gust shares the forest's clock. No environment
+checks.
+
+| Uniform | Meaning |
+| --- | --- |
+| `sampler2D uLakeMask` | lake wet mask, render texture over the lakes' rect; alpha is the mask |
+| `float uTime` | `animClockMs / 1000`: the drift inside the band |
+| `float uGustTime` | the gust phase's time term in periods, wrapped to [0, 1) |
+| `float uTileW` | `TILE_W`; world x to render units |
+| `float uGustPeak` | `GUST_PEAK_PHASE` |
+| `float uBandHalf` | half-width of the gust band, in periods (0.16) |
+| `float uFoam`, `uSheen`, `uCatsPaws` | 0 turns the look off, else its strength |
+| `float uFoamWidth`, `uFoamSpacing` | foam line half-width as a share of the spacing (0.04), spacing in world units (15) |
+
+### 4.4e River flow — `uRiverFlow`
 
 The painted river, stream and bog-creek water is still. In the settlement view the shader draws thin light ripple bands on it
 that cross the channel and slide downstream. Not covered: lava streams (`wasted` rivers), frozen rivers, bog lakes (all stay still) and the world map.
@@ -1098,13 +1157,15 @@ ould.
 
 ### 4.4 Uniforms
 
+(The bog lake shader's own uniforms are in §4.4d.)
+
 ```
 sampler2D uWaterMask
 sampler2D uWaterTaint              taint field (§4.4c), single channel
 sampler2D uWaterNoFoam             river-mouth no-foam field, single channel; foam *= 1 - it
-sampler2D uWaterDry                art dry mask (§4.4b), render texture over the mask's rect; A = dry mask, R = shadow; caustics *= (1 - A)(1 - R), foam *= 1 - A, foam colour *= 1 - 0.45 R
-sampler2D uRiverFlow               river flow field (§4.4d), render texture over the river cells' own rect; rg cos/sin of the ripple phase, b distance to the bank, a where the hex has flow
-sampler2D uRiverPsi                stream function psi (§4.4d), same rect and UVs as uRiverFlow
+sampler2D uWaterDry                art dry mask (§4.4b), render texture over the mask's rect; alpha is the mask; caustics and foam *= 1 - it
+sampler2D uRiverFlow               river flow field (§4.4e), render texture over the river cells' own rect; rg cos/sin of the ripple phase, b distance to the bank, a where the hex has flow
+sampler2D uRiverPsi                stream function psi (§4.4e), same rect and UVs as uRiverFlow
 vec4  uRiverRect                   the river textures' world rect: (minX, minY, 1 / width, 1 / height)
 float uRiverStyle                  0 ripple arcs, 1 toon strands, 2 cartoon bands, 3 flow streaks, 4 bands + streaks (the default)
 float uRiverStreakMix              style 4: the streaks' alpha over the bands (0.25)
@@ -1176,12 +1237,16 @@ export interface WaterDebugFlags {
   legacyWaveSquiggles: boolean; // default true
   /** Debug: render the water mask's channels instead of water. */
   showWaterMask: boolean;       // default false
-  /** The moving ripples on river, stream and bog-creek water (§4.4d). */
+  /** The moving ripples on river, stream and bog-creek water (§4.4e). */
   riverFlow: boolean;           // default true
   /** Debug: colour river pixels by flow direction (hue) and intensity (brightness). */
   showRiverFlow: boolean;       // default false
   /** §3.3's code-side split of the unsplit tall art. Off reproduces the artifact it fixes. */
   legacyTileSplit: boolean;     // default true
+  /** Bog lakes, inside the forest wind gust (§4.4d): white foam lines, a soft sheen, cat's paws. */
+  bogLakeFoam: boolean;         // default true
+  bogLakeSheen: boolean;        // default true
+  bogLakeCatsPaws: boolean;     // default true
 }
 export interface WaterDebugTuning {
   foamWidthHexes: number;  // 0.3 — the band is in world units, so this is sized
@@ -1191,7 +1256,16 @@ export interface WaterDebugTuning {
   foamSurge: number;       // 0.18 — well under half; the surge is meant to be
                            //        felt rather than seen.
   waveSpeed: number;       // 1
-  causticCullHexes: number; // 0.1 — the *closest* a ribbon may come to shore;
+  bogLakeFoamStrength: number;     // 1 — multipliers on the lake gust's looks (§4.4d)
+  bogLakeSheenStrength: number;    // 1
+  bogLakeCatsPawsStrength: number; // 1
+  bogLakeFoamWidth: number;        // 0.04 — foam line half-width, share of the spacing
+  bogLakeFoamSpacing: number;      // 15 — world units between foam lines
+  bogLakeBandHalf: number;         // 0.16 — gust band half-width, in periods
+  mapAnimationSpeed: number;       // 1 — debug playback speed of every map animation: tile clips, lake gust, sea water, squiggles, fog drift
+  bogLakeGustPhaseOffset: number;  // -0.14 (about -2.2 sway frames, GUST_LAKE_PHASE_OFFSET) — shifts the lake gust against the sway, in periods (added to GUST_PEAK_PHASE)
+  bogLakeFoamStyle: number;        // 3 micro curls — foam line style, BOG_LAKE_FOAM_STYLES (0 strands, 1 tapered, 2 crest + shadow, 3 micro curls, 4 ring arcs, 5 glint squiggles); a dropdown in the debug panel
+  causticCullHexes: number; // 0.25 — the *closest* a ribbon may come to shore;
                             //        each one takes its own distance from here
                             //        up to + CAUSTIC_CULL_SPREAD_TILES
                             //        (§4.2b); clamped to FOAM_REACH_TILES, past
@@ -1215,7 +1289,7 @@ export interface WaterDebugTuning {
   causticFineBrightness: number; // 1
   causticFineDensity: number;    // 1
   causticFinePhase: number;      // 17s — see §4.2e.
-  riverBrightness: number;       // 1 — multiplier on the river ripples' opacity (§4.4d)
+  riverBrightness: number;       // 1 — multiplier on the river ripples' opacity (§4.4e)
   riverSpeed: number;            // 1 — multiplier on the river ripples' speed (rotation of the ripple phase)
   riverArc: number;              // 1 — multiplier on how far the crests lag at the banks (0 = straight crests)
   // None of the seven touches the shadow pools. Brightness would darken the
@@ -1247,7 +1321,7 @@ navigation, which is the whole reason it exists — see its header).
   are `isLand` true, so no foam appears along a riverbank and no waves appear
   on a river. Correct by construction, and deliberately so — the river water
   itself is painted. The only thing the shader adds to it is the moving ripples
-  of §4.4d, drawn in the land branch of the fragment shader.
+  of §4.4e, drawn in the land branch of the fragment shader.
 - **Coastal water tiles** keep their painted shoreline in the settlement view;
   the shader's foam animates *over* it, anchored to the same coastline,
   because both derive from the same `isCoastalWater`/`isLand` terrain.

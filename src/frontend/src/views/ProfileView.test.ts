@@ -297,6 +297,7 @@ describe('ProfileView', () => {
         'Bar position',
         'Building animations',
         'Water motion',
+        'Wind on lakes',
         'Fog drift',
         'Menu animations',
         'Smooth edges',
@@ -421,6 +422,7 @@ describe('ProfileView', () => {
 
     it.each([
       ['water', 'Water motion', 'bjarnoy.motion.water'],
+      ['lakes', 'Wind on lakes', 'bjarnoy.motion.lakes'],
       ['fog', 'Fog drift', 'bjarnoy.motion.fog'],
       ['menus', 'Menu animations', 'bjarnoy.motion.hud'],
     ] as const)('the %s row persists its own setting and leaves the others alone', async (row, _label, key) => {
@@ -428,6 +430,7 @@ describe('ProfileView', () => {
       ownProfileAuth();
       localStorage.clear();
       motionPreferences.water = 'auto';
+      motionPreferences.lakes = 'auto';
       motionPreferences.fog = 'auto';
       motionPreferences.hud = 'auto';
 
@@ -441,8 +444,8 @@ describe('ProfileView', () => {
       expect(localStorage.getItem(key)).toBe('off');
       expect(offButton.attributes('aria-pressed')).toBe('true');
       expect(animationPreference.setting).toBe('auto');
-      const others = ['bjarnoy.motion.water', 'bjarnoy.motion.fog', 'bjarnoy.motion.hud'].filter((k) => k !== key);
-      expect(others.map((k) => localStorage.getItem(k))).toEqual(['auto', 'auto']);
+      const others = ['bjarnoy.motion.water', 'bjarnoy.motion.lakes', 'bjarnoy.motion.fog', 'bjarnoy.motion.hud'].filter((k) => k !== key);
+      expect(others.map((k) => localStorage.getItem(k))).toEqual(['auto', 'auto', 'auto']);
       motionPreferences.water = 'auto';
       motionPreferences.fog = 'auto';
       motionPreferences.hud = 'auto';

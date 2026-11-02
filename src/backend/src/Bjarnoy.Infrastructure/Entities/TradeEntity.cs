@@ -41,6 +41,18 @@ public class TradeOfferEntity
 
     public TradeOfferState State { get; set; } = TradeOfferState.Open;
 
+    /// <summary>
+    /// Optimistic-concurrency token, replaced by <c>GameDbContext.SaveChanges</c>
+    /// whenever this row is modified. Delivering a shipment touches its offer
+    /// so that the two deliveries of one trade (one per settlement, possibly in
+    /// concurrent requests) both write this row: under READ COMMITTED the two
+    /// requests would otherwise write disjoint rows, each see the other
+    /// shipment still undelivered, and neither would complete the offer. With
+    /// the shared row, the second writer fails its version check, is retried,
+    /// and sees both deliveries.
+    /// </summary>
+    public Guid Version { get; set; }
+
     public TradeOffer ToDomain() => new()
     {
         Id = Id,

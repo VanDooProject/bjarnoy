@@ -24,7 +24,7 @@ import { RingMenuComponent } from './pages/RingMenuComponent';
  * same ring menu the settlement view uses instead, so a fleet's target
  * (open water the settlement view never shows) can be picked by tapping it.
  * The second test below used to assert the old click-to-enter behaviour;
- * it now asserts the ring opens and the URL stays on `/world`.
+ * it now asserts the ring opens and the URL stays in world mode (`/settlement#world`).
  */
 
 type FleetOrdersWindow = Window & {
@@ -53,7 +53,7 @@ test.describe('fleet orders on the world map', { tag: '@g3' }, () => {
 
     // Stayed on the world map — a plain click-to-enter would have navigated
     // to /settlement instead.
-    await expect(page).toHaveURL(/\/world$/);
+    await expect(page).toHaveURL(/\/settlement#world$/);
 
     const route = await page.evaluate(
       () => (window as unknown as FleetOrdersWindow).__demoWorld().dispatchDraft?.route,
@@ -70,7 +70,7 @@ test.describe('fleet orders on the world map', { tag: '@g3' }, () => {
     await page.mouse.click(centre.x, centre.y);
 
     // Stayed on the world map — zoom is the only way into /settlement now.
-    await expect(page).toHaveURL(/\/world$/);
+    await expect(page).toHaveURL(/\/settlement#world$/);
     await expect(ring.bubbles.first()).toBeVisible();
     await expect(ring.action('Send army here')).toBeVisible();
     await expect(ring.bubbles).toHaveCount(1);

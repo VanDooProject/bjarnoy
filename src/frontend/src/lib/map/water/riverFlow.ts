@@ -1,4 +1,4 @@
-// The river flow field (docs/design/water-shader.md §4.4d).
+// The river flow field (docs/design/water-shader.md §4.4e).
 //
 // Given a river frame's half-resolution water mask (riverMaskCore.ts) and the
 // tile's upstream and downstream edges, this computes, per mask texel, which way
@@ -78,7 +78,7 @@ export interface RiverFlowInput {
    * Where this cell's stream function sits in its downstream cell's: its own psi (0 right bank, 1 left bank) is mapped to
    * `lo + (hi - lo) * psi`. A cell feeding one arm of a confluence takes that arm's share of the confluence's range
    * (`confluenceArmRanges`), so psi is continuous across that seam. Default [0, 1]. `RiverFlowLayer` does not use it (see
-   * docs/design/water-shader.md §4.4d): composed up a chain of confluences the shares shrink to 1/8 and less, the 8-bit psi then has
+   * docs/design/water-shader.md §4.4e): composed up a chain of confluences the shares shrink to 1/8 and less, the 8-bit psi then has
    * 32 levels for its 36 lanes and the lanes get wide and sparse.
    */
   psiRange?: readonly [number, number];

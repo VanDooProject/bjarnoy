@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useUnsavedInput } from '../composables/useUnsavedInput';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../api/client';
@@ -57,6 +58,7 @@ watch(otherUserId, load, { immediate: true });
 const draft = ref('');
 const sending = ref(false);
 const sendError = ref<string | null>(null);
+useUnsavedInput(() => draft.value.trim() !== '' || reportReason.value.trim() !== '');
 const BODY_MAX = 2000;
 
 async function send() {

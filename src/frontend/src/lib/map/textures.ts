@@ -144,6 +144,10 @@ export type TextureKey =
   // like the Sawmill's river keys these are texture-lookup keys, not wire building types.
   | 'fisherhutlake'
   | 'hammerschmiedebend'
+  // The stave tower on sand, on a forest hex and on plain bog moss: texture-lookup keys, the wire type is `tower`.
+  | 'towersand'
+  | 'towerforest'
+  | 'towerbog'
   // The palisade's six pieces (`palisadeArtFor`): which one a wall hex draws is decided by its wall neighbours, so these are
   // texture-lookup keys, not wire building types (the wire types are `palisade` and `palisadegate`).
   | 'palisadestraight'
@@ -206,16 +210,20 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   lumberjack: 'lumberjack',
   storagehouse: 'storagebuilding',
   archeryrange: 'archeryrange',
-  // TODO(art): the Siege Workshop has no atlas family yet, so it is deliberately absent here and draws as bare terrain (the same
-  // fallback the Quarry takes). Expected family `siegeworkshop` (frames `siegeworkshop_<DIR>_level000..004`, DIR in E NE NW W SW SE):
-  // add `siegeworkshop: 'siegeworkshop'` here, and the same entry to buildingArt.ts, when the owner's render lands in the atlas.
+  // The Siege Workshop (3D_assets hextile147): hall, mangonel and ram on the grass base.
+  siegeworkshop: 'siegeworkshop',
   greatstorehouse: 'bigstoragehouse',
   barracks: 'barracks',
   // Uses the leveled `fisherhut` art family now — the legacy 'fishinghutbuilding'
   // composite (still in the pack, no longer referenced) had no per-level
   // art at all. See buildingArt.ts's matching docs-page choice.
   fishinghut: 'fisherhut',
-  tower: 'towerbuilding',
+  // The stave tower replaces the tile it stands on, so each ground has its own art, picked by `textureKeyFor`: grass (3D_assets
+  // hextile148), sand (hextile151), forest (hextile150) and plain bog moss (hextile149).
+  tower: 'stavetower',
+  towersand: 'stavetower_sand',
+  towerforest: 'stavetower_forest',
+  towerbog: 'stavetower_bog',
   dockyard: 'dockyard',
   // A Sawmill is never actually on grass (the backend requires a river
   // shape to place one — BuildingCatalogue.SawmillRiverShapes) — there is
@@ -257,6 +265,8 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   harewarren: 'harewarren',
   deerglade: 'deerglade',
   otterslide: 'otterslide',
+  // The first water camp (3D_assets hextile134): drawn on its open-sea hex, so its base is the plain sea base; level000 gulls (all six rotations), level001 whales (kept SE and NE).
+  whaleroad: 'whaleroad',
   // Open (non-coastal) water on a wasted island — see `WASTED_TEXTURE_KEY`'s
   // own doc comment for why this key exists at all despite `WorldModel`
   // itself never producing a wasted open-sea tile today.
@@ -1745,6 +1755,10 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
   if (tile.buildingType === 'hammerschmiede' && tile.bog?.kind === 'creek') {
     return bogTextureKey(tile.bog) === 'bogcreek' ? 'hammerschmiede' : 'hammerschmiedebend';
   }
+  // A tower replaces the tile it stands on, so its art depends on the ground: sand, forest and plain bog moss have their own, grass is `tower`.
+  if (tile.buildingType === 'tower' && tile.bog?.kind === 'bog') return 'towerbog';
+  if (tile.buildingType === 'tower' && tile.terrain === 'forest') return 'towerforest';
+  if (tile.buildingType === 'tower' && tile.terrain === 'sand') return 'towersand';
   if (tile.buildingType) return tile.buildingType;
   if (tile.wasted) return WASTED_TEXTURE_KEY[tile.terrain] ?? tile.terrain;
   if (tile.bog) return bogTextureKey(tile.bog);
@@ -1855,12 +1869,20 @@ function tileOrientationFor(tile: Tile, riverArt?: RiverArt): TileOrientation {
 /**
  * Bog looks the game no longer shows, per family: a hex never draws one, its variant is spread over the family's other
  * looks instead. The art pack still has them, so every look keeps its slot index.
- * `bog` 0 is the plain moss: bare green with nothing on it, so bog ground always draws one of its decorated looks
- * (a building on the moss keeps the plain base, it never reads these tops). `bog` 6 is the peat cuttings: its stepped
- * peat bank stands on the moss as a hard-edged slab.
+ * Look 0 of every bog ground and water-edge family (moss, creeks, springs, inlets, shores, halves, mouths) is the plain
+ * hex: bare green with nothing on it, so those hexes always draw one of their decorated looks (a building on the moss
+ * keeps the plain base, it never reads these tops). The open lake keeps its plain look: plain water is just water.
+ * `bog` 6 is the peat cuttings: its stepped peat bank stands on the moss as a hard-edged slab.
  */
 export const RETIRED_BOG_VARIANTS: Readonly<Partial<Record<TextureKey, ReadonlySet<number>>>> = {
   bog: new Set([0, 6]),
+  bogcreek: new Set([0]),
+  bogcreekbend: new Set([0]),
+  bogcreekspring: new Set([0]),
+  lakeinlet: new Set([0]),
+  lakeshore: new Set([0]),
+  lakehalf: new Set([0]),
+  lakemouth: new Set([0]),
 };
 
 /** A bog family's variant slot for a tile: its hashed variant, wrapped onto the looks the family shows (creeks have 2, shores 1-2, ...), skipping retired ones. Exported for the tests. */

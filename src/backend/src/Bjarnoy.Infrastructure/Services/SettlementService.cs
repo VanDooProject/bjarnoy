@@ -185,6 +185,7 @@ public sealed class SettlementService(
     TimeProvider timeProvider,
     IPlotReservationStore reservations,
     CampService campService,
+    ConcurrentWriteExecutor concurrentWriteExecutor,
     ILogger<SettlementService> logger)
 {
     /// <summary>
@@ -233,6 +234,7 @@ public sealed class SettlementService(
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly IPlotReservationStore _reservations = reservations;
     private readonly CampService _campService = campService;
+    private readonly ConcurrentWriteExecutor _concurrentWriteExecutor = concurrentWriteExecutor;
     private readonly ILogger<SettlementService> _logger = logger;
 
     /// <summary>
@@ -425,7 +427,7 @@ public sealed class SettlementService(
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (!ConcurrentWriteExecutor.IsRetryable(ex))
         {
             // Two requests raced (same plot, or the same player founding
             // twice). The unique indexes are what actually decided it, so
@@ -520,6 +522,9 @@ public sealed class SettlementService(
 
         _dbContext.Settlements.Add(settlement);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // The new longhouse may reach buildings of the player's other settlements on the island that stood outside the realm.
+        await ReconcileRealmAsync(settlement.Id, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Settlement {Name} ({Id}) founded at {Coord} by settler convoy for user {UserId}.",
@@ -714,6 +719,8 @@ public sealed class SettlementService(
         ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
+
         _logger.LogInformation(
             "Admin set building at {Coord} in settlement {Id} to level {Level}.", coord, settlementId, level);
 
@@ -875,6 +882,11 @@ public sealed class SettlementService(
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        if (result.Completed.Any(o => o.Type is BuildingType.Tower or BuildingType.Longhouse))
+        {
+            await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        }
+
         _logger.LogInformation(
             "Admin insta-completed {Builds} build(s) and {Training} training batch(es) in settlement {Id}.",
             result.Completed.Count, result.TrainingCompleted.Count, settlementId);
@@ -920,6 +932,8 @@ public sealed class SettlementService(
         ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
+
         _logger.LogInformation(
             "Admin placed {Type} level {Level} at {Coord} in settlement {Id}.", type, level, coord, settlementId);
 
@@ -953,6 +967,8 @@ public sealed class SettlementService(
         settlement.ApplyDomain(result.Settlement!);
         ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Admin razed the building at {Coord} in settlement {Id}.", coord, settlementId);
 
@@ -1696,8 +1712,14 @@ public sealed class SettlementService(
     /// <paramref name="entity"/>.World to already be loaded (every caller
     /// checks this before calling in).
     /// </summary>
+    /// <remarks>
+    /// The settled state also gets its realm state brought up to <paramref name="now"/> (<see cref="Settlement.ApplyRealmState"/>) when
+    /// that can have something to do: <paramref name="forceRealm"/>, a building still marked as outside the realm (levels to lose, or
+    /// the realm may have reached it again), or a tower or longhouse that just completed (the realm moved).
+    /// </remarks>
     private async Task<(Settlement Settled, SettleResult Result, List<ArmyEntity> GuestArmies)> SettleWithGuestsAsync(
-        SettlementEntity entity, DateTimeOffset now, double speedFactor, CancellationToken cancellationToken)
+        SettlementEntity entity, DateTimeOffset now, double speedFactor, CancellationToken cancellationToken,
+        bool forceRealm = false)
     {
         var guestArmies = await _dbContext.Armies
             .Include(a => a.Stacks)
@@ -1707,8 +1729,135 @@ public sealed class SettlementService(
         var guestStacks = AggregateStacks(
             guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
 
-        var result = entity.ToDomain().SettleTo(now, speedFactor, guestStacks, await TerrainAtAsync(entity.World!, cancellationToken).ConfigureAwait(false));
+        var terrainAt = await TerrainAtAsync(entity.World!, cancellationToken).ConfigureAwait(false);
+        var result = entity.ToDomain().SettleTo(now, speedFactor, guestStacks, terrainAt);
+
+        if (forceRealm
+            || result.Settlement.Buildings.Any(b => b.OutsideRealmSince is not null)
+            || result.Completed.Any(o => o.Type is BuildingType.Tower or BuildingType.Longhouse))
+        {
+            var realm = await PlayerRealms.ForSettlementAsync(_dbContext, entity, result.Settlement, cancellationToken).ConfigureAwait(false);
+            var giants = await LoadGiantIndexAsync(entity.WorldId, cancellationToken).ConfigureAwait(false);
+            var (applied, realmChanged) = result.Settlement.ApplyRealmState(realm, now, speedFactor, guestStacks, terrainAt, giants);
+            if (realmChanged)
+            {
+                result = result with { Settlement = applied, Changed = true };
+            }
+        }
+
         return (result.Settlement, result, guestArmies);
+    }
+
+    /// <summary>
+    /// Brings the realm state (<see cref="Settlement.ApplyRealmState"/>) of every settlement of the player that owns
+    /// <paramref name="settlementId"/> on its island up to the game clock now, and saves: the hook for a change that moved the
+    /// realm (a tower burnt or sieged, a building placed or razed, a level set, a founding), so buildings that just fell outside
+    /// stop working at once in every settlement of the player, not only the one that changed. Call it after the change is saved.
+    /// </summary>
+    /// <returns>How many settlements changed.</returns>
+    public async Task<int> ReconcileRealmAsync(Guid settlementId, CancellationToken cancellationToken = default)
+    {
+        var anchor = await _dbContext.Settlements.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == settlementId, cancellationToken).ConfigureAwait(false);
+        if (anchor is null)
+        {
+            return 0;
+        }
+
+        var ids = await PlayerRealms.GroupOf(_dbContext, anchor).Select(x => x.Id).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var changed = 0;
+        foreach (var id in ids)
+        {
+            if (await ApplyRealmStateAsync(id, cancellationToken).ConfigureAwait(false))
+            {
+                changed++;
+            }
+        }
+
+        return changed;
+    }
+
+    /// <summary>
+    /// The periodic sweep: for every world that accepts commands, applies the realm state to the settlements that have a step due
+    /// (<see cref="PlayerRealms.DueForRealmStepAsync"/>), so decay happens (and a reconnected building starts working) even when
+    /// nobody looks at the settlement. One world failing never stops the others, and one settlement losing a write race never stops
+    /// the rest of its world: each settlement is its own unit of work through <see cref="ConcurrentWriteExecutor"/> (retried against
+    /// fresh state), and one that still conflicts is skipped until the next sweep.
+    /// </summary>
+    /// <remarks>
+    /// Only the hosted service and tests call this, never a request already running inside the executor, so the executor (which is
+    /// not re-entrant) is safe to use here. <see cref="ReconcileRealmAsync"/> shares <see cref="ApplyRealmStateAsync"/> but is
+    /// called from inside such requests, so the executor wraps the call here, not <see cref="ApplyRealmStateAsync"/> itself.
+    /// </remarks>
+    /// <returns>How many settlements changed.</returns>
+    public async Task<int> SweepRealmStateAsync(CancellationToken cancellationToken = default)
+    {
+        var worlds = await _dbContext.Worlds.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var wall = _timeProvider.GetUtcNow();
+        var changed = 0;
+
+        foreach (var world in worlds)
+        {
+            var clock = world.ToClock();
+            if (!clock.AllowsCommands)
+            {
+                continue;
+            }
+
+            try
+            {
+                var giants = await LoadGiantIndexAsync(world.Id, cancellationToken).ConfigureAwait(false);
+                var due = await PlayerRealms.DueForRealmStepAsync(
+                    _dbContext, world.Id, giants, clock.ToGameTime(wall), world.SpeedFactor, cancellationToken).ConfigureAwait(false);
+                foreach (var id in due)
+                {
+                    try
+                    {
+                        if (await _concurrentWriteExecutor.ExecuteAsync(
+                            ct => ApplyRealmStateAsync(id, ct), cancellationToken).ConfigureAwait(false))
+                        {
+                            changed++;
+                        }
+                    }
+                    catch (ConcurrentUpdateException ex)
+                    {
+                        _logger.LogInformation(ex, "Realm sweep of settlement {SettlementId} lost a write race; will retry next sweep.", id);
+                    }
+                    finally
+                    {
+                        _dbContext.ChangeTracker.Clear();
+                    }
+                }
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                _dbContext.ChangeTracker.Clear();
+                _logger.LogInformation(ex, "Realm sweep in world {WorldId} lost a write race; will retry next sweep.", world.Id);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _dbContext.ChangeTracker.Clear();
+                _logger.LogError(ex, "Realm sweep in world {WorldId} failed; will retry next sweep.", world.Id);
+            }
+        }
+
+        return changed;
+    }
+
+    /// <summary>Settles one settlement to the game clock now with its realm state applied, and saves when that changed anything.</summary>
+    private async Task<bool> ApplyRealmStateAsync(Guid settlementId, CancellationToken cancellationToken)
+    {
+        var entity = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (entity?.World is null)
+        {
+            return false;
+        }
+
+        var now = entity.World.ToClock().ToGameTime(_timeProvider.GetUtcNow());
+        var (_, result, guestArmies) = await SettleWithGuestsAsync(
+            entity, now, entity.World.SpeedFactor, cancellationToken, forceRealm: true).ConfigureAwait(false);
+        await PersistIfSettledAsync(entity, result, guestArmies, cancellationToken).ConfigureAwait(false);
+        return result.Changed;
     }
 
     private static List<UnitStack> AggregateStacks(IEnumerable<UnitStack> stacks) =>

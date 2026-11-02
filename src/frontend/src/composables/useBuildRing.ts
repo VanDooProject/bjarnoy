@@ -14,6 +14,7 @@ import { formatBuildingModifier, formatBuildingOutput } from '../lib/map/buildin
 import {
   buildingStatsAt,
   buildingUpgradeCost,
+  scaleOutput,
   type BuildingModifier,
   type BuildingOutput,
   SHRINE_BUILDING_TYPES,
@@ -81,7 +82,7 @@ export interface BuildCategory {
 }
 // Mirrors BuildingCatalogue.cs's per-type AllowedTerrain: Farm/PumpkinFarm/
 // Shrine is Grass-only, Lumberjack is Forest-only, Quarry is
-// Mountain-only, and Tower/ArcheryRange are SandOrGrass. Offering a building
+// Mountain-only, and ArcheryRange is SandOrGrass. The Tower stands on grass, sand, forest and plain bog moss. Offering a building
 // the backend's own AllowedTerrain would reject is what "messed up
 // categories" on a shore (sand) tile meant — sand used to fall into the same
 // flat bucket as forest/mountain and offer Farm/Lumberjack/Quarry, none of
@@ -117,13 +118,22 @@ const DEFENSE_CATEGORY: BuildCategory = {
   id: 'defense',
   buildings: [{ type: 'palisade' }, { type: 'palisadegate' }, { type: 'bridge' }],
 };
+// The Tower is a defence building too, and stands on grass, sand and forest; the bog ring keeps the wall-only category.
+const DEFENSE_TOWER_CATEGORY: BuildCategory = {
+  id: 'defense',
+  buildings: [{ type: 'tower' }, ...DEFENSE_CATEGORY.buildings],
+};
 const DEFENSE_SEA_CATEGORY: BuildCategory = { id: 'defense', buildings: [{ type: 'palisade' }] };
 // Bog ground offers what stands on its own bog kind (BuildingDefinition.RequiresBogKind / LakeShoreKinds, mirrored by
-// ringCatalogue.ts's buildingAllowedOnHex): plain moss takes the Clay Brickworks and the bog-ore works, a creek the
+// ringCatalogue.ts's buildingAllowedOnHex): plain moss takes the Clay Brickworks, the bog-ore works and the Tower, a creek the
 // Hammer Forge (with the river hammer-mill art for now: TODO(art) bog-creek Hammer Forge) and a lake's half shore the
 // Fishing Hut with its lake art. Shores, mouths and springs take nothing.
 const BOG_CATEGORIES: Record<string, BuildCategory[]> = {
-  bog: [{ id: 'resource', buildings: [{ type: 'claybrickworks' }, { type: 'bogoreworks' }] }, DEFENSE_CATEGORY],
+  bog: [
+    { id: 'resource', buildings: [{ type: 'claybrickworks' }, { type: 'bogoreworks' }] },
+    { id: 'military', buildings: [{ type: 'tower' }] },
+    DEFENSE_CATEGORY,
+  ],
   creek: [{ id: 'resource', buildings: [{ type: 'hammerschmiede' }] }],
   half: [{ id: 'water', buildings: [{ type: 'fishinghut' }] }],
 };
@@ -149,7 +159,6 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
     {
       id: 'military',
       buildings: [
-        { type: 'tower' },
         { type: 'archeryrange' },
         { type: 'siegeworkshop' },
         { type: 'barracks' },
@@ -166,11 +175,11 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
         { type: 'druidhut' },
       ],
     },
-    DEFENSE_CATEGORY,
+    DEFENSE_TOWER_CATEGORY,
     SHRINE_CATEGORY,
   ],
-  sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }, DEFENSE_CATEGORY],
-  forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }, DEFENSE_CATEGORY],
+  sand: [{ id: 'military', buildings: [{ type: 'smithy' }] }, DEFENSE_TOWER_CATEGORY],
+  forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }, DEFENSE_TOWER_CATEGORY],
   // No new quarries can be built for now (BuildingCatalogue.NewPlacementDisabled); mountains offer nothing to build.
   mountain: [],
 };
@@ -364,7 +373,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
       cost,
       // Odin's Wisdom shortens every build in the settlement (`wisdomFactor`).
       time: definition ? formatBuildTime(definition.buildSeconds * wisdomFactor()) : undefined,
-      gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
+      gives: stats.output ? formatOutput(scaleOutput(stats.output, world.worldSpeedFactor)) : stats.modifier ? formatModifier(stats.modifier) : undefined,
       locks,
       warning: type === 'tower' ? towerCampWarning(coord) : undefined,
       art: buildingArt(type, 1),

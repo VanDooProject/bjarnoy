@@ -73,15 +73,17 @@ import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './marker
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
-import { WaterDryLayer, type DryEntry } from './water/waterDryMask';
+import { WaterDryLayer, entriesWorldBounds, maskEntries, type DryEntry } from './water/waterDryMask';
+import { BogLakeLayer } from './water/BogLakeLayer';
+import { LAKE_FRAME_RE } from './water/dryMaskCore';
 import { RiverFlowLayer, riverFlowOf, type RiverFlowEntry } from './water/riverFlowLayer';
-import { waterDebugFlags, waterPerfStats } from './water/waterDebug';
+import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './water/waterDebug';
 import type { TerrainLookup, WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement, type MaskBounds } from './fog/fogMaskLayout';
 import { chunkRangeOfTexels, rangesEqual, type ChunkRange } from './fog/fogChunks';
-import { riverPathFor } from './riverPath';
+import { bogCreekPathFor, riverPathFor, type RiverDrawing } from './riverPath';
 import {
   TILE_ART_NATIVE_H,
   TILE_ART_NATIVE_W,
@@ -114,6 +116,7 @@ import {
   type TileTextures,
 } from './textures';
 import { giantCrop, giantFootprintOutline } from './giantTiles';
+import type { GiantFamily } from './giantPlacement';
 import { bogEdgeShapes, bogEdgesOf, isBogGround, type BogEdgeShape } from './bogEdge';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
@@ -164,6 +167,24 @@ const WORLD_TERRAIN_FILL: Record<Terrain, number> = {
   bog: 0x5b6234, // the moss: duller and yellower than the grass, like the art
   lake: 0x27445e, // dark slate blue, the bog water's own colour
 };
+
+/**
+ * A revealed wasted island's flat world-map colours, picked from its tile art's top faces
+ * (`wasteland`, `deadforest`, `blacksand`, `mountaintile_jagged`): ash-brown ground, darker under the
+ * dead trees, grey black sand, lighter jagged rock. Keyed by the hex's wire terrain, which stays
+ * grass/forest/sand/mountain on a wasted island (see `Tile.wasted`).
+ */
+const WORLD_WASTED_FILL: Partial<Record<Terrain, number>> = {
+  grass: 0x47403c,
+  forest: 0x302c29,
+  sand: 0x646772,
+  mountain: 0x6b625a,
+};
+
+/** A world-map hex's flat fill: the wasted palette on a revealed wasted island, else the terrain's own. */
+export function worldHexFill(terrain: Terrain, wasted: boolean): number {
+  return (wasted ? WORLD_WASTED_FILL[terrain] : undefined) ?? WORLD_TERRAIN_FILL[terrain];
+}
 
 // zip 7's own prototype (prototypes/worldmap/Viking Realm.dc.html, sea()
 // method, "playful" style — the one shown in docs/design/img/worldmap.png)
@@ -452,6 +473,12 @@ export interface HexMapRendererOptions {
    */
   hideSettlementBadge?: boolean;
   /**
+   * World mode only: draw a paw symbol on every standing wildlife camp the model knows (`worldCampMarkers`). The host
+   * sets it for premium players; absent means no camp symbols at all. Changeable after mount with
+   * `setShowCampMarkers`.
+   */
+  showCampMarkers?: boolean;
+  /**
    * Landing-page static preview: fixes the camera to fit the whole preview
    * island on screen and disables drag/wheel/pinch zoom, while clicks/taps
    * still pass through (founding a settlement must keep working) — unlike
@@ -459,6 +486,8 @@ export interface HexMapRendererOptions {
    * branch of `onPointerMove`, and `previewFitZoom`.
    */
   lockCamera?: boolean;
+  /** Called whenever the camera transform is applied (pan, zoom, resize, re-framing). The host debounces. */
+  onCameraChange?: () => void;
   /**
    * Lets the page itself scroll under a wheel/touch gesture over the canvas
    * instead of the renderer eating it for camera zoom/pan. With `lockCamera`
@@ -619,6 +648,11 @@ export interface ArmyOverlayData {
 /**
  * What `drawArmyOverlay` actually placed on screen on its most recent frame
  * — read back via `lastArmyOverlayFrame()`.
+ *
+ * Recorded when the overlay is rebuilt, which is not always inside a rendered
+ * tick (`rebuildAll` also runs from atlas-load callbacks), so it can run ahead
+ * of the canvas by one frame: anything that judges the pixels waits for
+ * `whenFrameRendered()` first.
  *
  * Not a test-only hook (nothing in the draw path branches on whether anyone
  * reads it): it is the same "ask the renderer where it really put things"
@@ -1382,6 +1416,61 @@ const WHEEL_IDLE_MS = 180;
 const ROUTE_COLOR = 0x5ab0e6;
 /** World-map river stroke colour — a sibling tone to ROUTE_COLOR, tuned to read against WORLD_TERRAIN_FILL's grass/forest. */
 const RIVER_COLOR = 0x4fa8d8;
+/** World-map lava stream colour (a wasted island's rivers): the glow of the lavastream art. */
+const LAVA_COLOR = 0xe8702a;
+
+/**
+ * How a giant's 7-hex footprint reads on the flat world map: its ground stays as it is, and the giants that do
+ * something get a light outline around the footprint, coloured after their art: lava orange for the volcano, the
+ * runes' cyan for the shrine and the Utgard tower. The giant mountain has no function of its own, so it gets none
+ * (hovering it still highlights the footprint).
+ */
+const WORLD_GIANT_OUTLINE: Partial<Record<GiantFamily, number>> = {
+  giantvolcano: 0xe8702a,
+  giantshrine: 0x6fe3e0,
+  giantutgard: 0x6fe3e0,
+};
+
+/** The world-map outline colour around a giant's footprint, or `undefined` for a giant drawn without one. */
+export function worldGiantOutline(family: GiantFamily): number | undefined {
+  return WORLD_GIANT_OUTLINE[family];
+}
+
+/** The world-map stroke colour of a river tile: lava on a wasted island, water everywhere else. */
+export function worldRiverColor(river: Pick<RiverTile, 'wasted'>): number {
+  return river.wasted ? LAVA_COLOR : RIVER_COLOR;
+}
+/** World-map paw colour of a strong wildlife camp: the overlay's one red. */
+const CAMP_STRONG_COLOR = 0xe2705f;
+/** World-map paw colour of a weak wildlife camp: a light neutral. */
+const CAMP_WEAK_COLOR = 0xe8e2d0;
+
+/** One paw symbol on the world map. */
+export interface WorldCampMarker {
+  q: number;
+  r: number;
+  color: number;
+}
+
+/**
+ * Which camps get a paw symbol on the world map, and in which colour: none unless `show` (premium players), never a
+ * removed camp (a building stands on its hex), strong camps red and weak ones neutral.
+ */
+export function worldCampMarkers(
+  camps: readonly { q: number; r: number; strong: boolean; removed?: boolean }[],
+  show: boolean,
+): WorldCampMarker[] {
+  if (!show) return [];
+  return camps
+    .filter((camp) => !camp.removed)
+    .map((camp) => ({ q: camp.q, r: camp.r, color: camp.strong ? CAMP_STRONG_COLOR : CAMP_WEAK_COLOR }));
+}
+
+/** Half-size in screen pixels of a world-map paw at `zoom`: grows a little with the map but stays readable zoomed out. */
+export function worldPawHalfSize(zoom: number): number {
+  return Math.min(14, Math.max(8, 6 * zoom + 7));
+}
+
 /** An army already turned around and heading home. */
 const RETURNING_COLOR = 0x8fa3af;
 /** Attack target indicator (crossed sword + axe) — the one red in the overlay, matching RIVAL's "someone else's" reading. */
@@ -1478,6 +1567,7 @@ export function clampAnimationDeltaMs(deltaMs: number, maxMs = 100): number {
 /** One child of the camera-transformed `world` container — see `worldLayerOrder`. */
 export type WorldLayerName =
   | 'water'
+  | 'bogLake'
   | 'terrainBase'
   | 'bogEdges'
   | 'waves'
@@ -1528,9 +1618,11 @@ export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] 
   // terrainTop (see riverTexturesFor), so riverLayer is simply never added
   // to the scene graph there (rebuildRivers is never called for that mode
   // either, so it always stays empty).
+  // The bog lake gust sits right on the ground art it shades, under `bogEdges`: the bog edge fringe paints moss over the rim of a lake
+  // tile, and the lake mask (baked from the tile art alone) can't know that, so anything drawn later has to cover the gust, not take it.
   return mode === 'world'
-    ? ['water', 'terrainBase', 'bogEdges', 'waves', 'terrainFlat', 'rivers', ...rest]
-    : ['terrainBase', 'bogEdges', 'waves', 'terrainFlat', 'water', ...rest];
+    ? ['water', 'terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'rivers', ...rest]
+    : ['terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'water', ...rest];
 }
 
 /**
@@ -1724,6 +1816,9 @@ export class HexMapRenderer {
   private topAnimState = new Map<string, TopAnimState>();
   /** The global animation clock in ms (advanced by `advanceTopAnimations`): where a `sharedClock` clip joins its cycle. */
   private animClockMs = 0;
+  // Map animation time (ms) for the water shader and the world map's wave squiggles: real time scaled by the debug
+  // `waterDebugTuning.mapAnimationSpeed`, so a slowed-down map slows everything on it together.
+  private mapAnimMs = 0;
   // Pooled overlay sprites for an overlay clip's parts-only frames (see
   // `TopAnimState.overlay`) — a sibling pool to `terrainTop.pool`, kept
   // separate because these sprites aren't `terrainTop.active`'s own entries
@@ -1787,9 +1882,14 @@ export class HexMapRenderer {
   private waterDry = new WaterDryLayer();
   private waterDryEntries: DryEntry[] = [];
   private waterDryLoadStarted = false;
-  // The river flow field (§4.4d), drawn into its own render texture next to the dry mask: where the river and bog-creek art flows.
+  // The river flow field (§4.4e), drawn into its own render texture next to the dry mask: where the river and bog-creek art flows.
   private riverFlow = new RiverFlowLayer();
   private riverFlowEntries: RiverFlowEntry[] = [];
+  // Bog lakes' gust (settlement mode only): the lake wet masks drawn over the lakes' bounding rect, and the mesh that shades them.
+  private bogLakeLayer: BogLakeLayer;
+  private bogLakeMask = new WaterDryLayer('lake');
+  private bogLakeEntries: DryEntry[] = [];
+  private bogLakeLoadStarted = false;
   // The world rect the current water mask was baked over — `null` until the
   // first bake. Re-baked only when the viewport leaves it (§2.2), not per
   // rebuild: a rebuild happens on every 0.4-tile camera move, the mask's own
@@ -1928,6 +2028,9 @@ export class HexMapRenderer {
   // so the view doesn't jump.
   private cameraAnim: { from: Camera; to: Camera; startedAt: number; durationMs: number } | null = null;
   private markerLayer = new Graphics();
+  // World mode's camp paws (drawCampPaws): under both fog layers, like the terrain they mark, so the fog covers them
+  // the way it covers the ground (markerLayer sits above the out-of-sight fog).
+  private campPawLayer = new Graphics();
   private labelPool: Text[] = [];
   private labelsUsed = 0;
   /**
@@ -2125,6 +2228,7 @@ export class HexMapRenderer {
     this.options = options;
     this.bogEdgeLayer.addChild(this.bogEdgeUnder, this.bogEdgeOver);
     this.waterLayer = new WaterLayer(options.mode, TILE_W, TILE_H);
+    this.bogLakeLayer = new BogLakeLayer(TILE_W);
     this.idleDrift = options.mode === 'world' && !options.confineCamera;
     this.lockCamera = !!options.lockCamera;
     this.camera =
@@ -2302,6 +2406,7 @@ export class HexMapRenderer {
   private layersByName(): Record<WorldLayerName, Container> {
     return {
       water: this.waterLayer.mesh,
+      bogLake: this.bogLakeLayer.mesh,
       terrainBase: this.terrainBase.container,
       bogEdges: this.bogEdgeLayer,
       waves: this.waveLayer,
@@ -2459,7 +2564,7 @@ export class HexMapRenderer {
     // troop/settlement labels read as veiled by it rather than floating in
     // front; whiteMistLayer (never-scouted) sits over everything, since
     // nothing should show through ground that's never been seen at all.
-    app.stage.addChild(this.world, this.blackFogLayer.mesh, this.markerLayer, this.whiteMistLayer.mesh);
+    app.stage.addChild(this.world, this.campPawLayer, this.blackFogLayer.mesh, this.markerLayer, this.whiteMistLayer.mesh);
 
     app.ticker.add(this.onTick);
     // See framePacing.ts: a loop whose frames outlast the vsync interval otherwise starves input and timers.
@@ -2509,12 +2614,15 @@ export class HexMapRenderer {
     this.blackFogLayer.setCamera(this.camera, this.viewport);
     this.whiteMistLayer.setCamera(this.camera, this.viewport);
     this.notifyFogViewport();
+    this.options.onCameraChange?.();
   }
 
   private onTick = () => {
     this.frames++;
     this.options.worldModel.tick();
-    this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
+    // waterDebugTuning.mapAnimationSpeed: debug playback speed of every map animation (1 ships), so they all slow down together.
+    this.mapAnimMs += this.app!.ticker.deltaMS * waterDebugTuning.mapAnimationSpeed;
+    this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS) * waterDebugTuning.mapAnimationSpeed);
     this.advanceTransitionFades(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
     // Feeds the 'auto' animation governor (animationPreference.ts) — in both
     // modes, not just settlement: the governor is measuring this device's
@@ -2551,7 +2659,8 @@ export class HexMapRenderer {
     // check per frame, and it can only ever do work on the first frame after
     // the gesture that owes it ends.
     if (this.waterMaskDirty && !this.dragging && !this.wheeling) this.maybeBakeWaterMask();
-    this.waterLayer.tick(performance.now());
+    this.waterLayer.tick(this.mapAnimMs);
+    this.bogLakeLayer.tick(this.animClockMs);
     if (this.idleDrift) {
       this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
       this.applyCameraTransform();
@@ -2575,8 +2684,8 @@ export class HexMapRenderer {
     };
     this.blackFogLayer.setDebug(debug);
     this.whiteMistLayer.setDebug(debug);
-    this.blackFogLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed);
-    this.whiteMistLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed);
+    this.blackFogLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed * waterDebugTuning.mapAnimationSpeed);
+    this.whiteMistLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed * waterDebugTuning.mapAnimationSpeed);
     this.drawRangeOverlay();
     this.drawHighlight();
   };
@@ -3614,6 +3723,11 @@ export class HexMapRenderer {
     this.waterLayer.setFrozen(!enabled);
   }
 
+  /** Shows (true) or hides (false) the wind gust on the bog lakes: the player's "Wind on lakes" motion setting. */
+  setLakeMotion(enabled: boolean) {
+    this.bogLakeLayer.setMotion(enabled);
+  }
+
   /** Freezes (false) or resumes (true) the drift of the fog and mist layers. */
   setFogMotion(enabled: boolean) {
     this.fogMotion = enabled;
@@ -3826,6 +3940,7 @@ export class HexMapRenderer {
     // the most expensive thing on screen.
     const waterSuppressed = deepFogOnly || !this.isFogActive();
     this.waterLayer.setSuppressed(waterSuppressed);
+    this.bogLakeLayer.setSuppressed(waterSuppressed);
     // A suppressed mesh has nothing to read the mask, so a bake owed from
     // before it was suppressed is owed no longer — the next rebuild that
     // un-suppresses it re-asks the coverage question from scratch.
@@ -3965,6 +4080,31 @@ export class HexMapRenderer {
     }
     this.waterLayer.setDryTexture(this.waterDry.draw(renderer, region.rect, this.waterDryEntries, TILE_W));
     this.waterLayer.setRiverFlowTexture(this.riverFlow.draw(renderer, this.riverFlowEntries, TILE_W), this.riverFlow.rect, this.riverFlow.psiTexture);
+  }
+
+  /**
+   * Redraws the bog lakes' wet mask over the lakes' bounding rect and hands it to the gust mesh. Runs when the terrain is rebuilt, not per
+   * frame. Waits for the (lazily decoded) lake mask atlas on first use.
+   */
+  private refreshBogLake() {
+    const renderer = this.app?.renderer;
+    if (this.options.mode !== 'settlement' || !renderer) return;
+    const bounds = entriesWorldBounds(this.bogLakeEntries, TILE_W);
+    if (!bounds) {
+      this.bogLakeLayer.setLake(null, null);
+      return;
+    }
+    if (!this.bogLakeMask.ready) {
+      if (!this.bogLakeLoadStarted) {
+        this.bogLakeLoadStarted = true;
+        this.bogLakeMask.load().then(
+          () => this.refreshBogLake(),
+          (err) => console.warn('HexMapRenderer: bog lake masks failed to load', err),
+        );
+      }
+      return;
+    }
+    this.bogLakeLayer.setLake(this.bogLakeMask.draw(renderer, bounds, this.bogLakeEntries, TILE_W), bounds);
   }
 
   /**
@@ -4232,17 +4372,19 @@ export class HexMapRenderer {
 
     // The base art of every sea hex, for the water shader's dry mask. Placed
     // exactly as syncSpriteLayer places the sprite.
-    this.waterDryEntries = [];
-    for (const { texture, coord, crop } of baseEntries.values()) {
-      if (crop || worldModel.getTile(coord.q, coord.r).terrain !== 'sea') continue;
-      const grid = isoGridPosition(coord, TILE_W, TILE_H);
-      this.waterDryEntries.push({ texture, x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET });
-    }
+    // The same goes for the bog lakes' wet mask, from the base art of every hex that carries lake water: the lake itself and the bog
+    // tiles around it (inlet, shore, half, mouth), which is why the frame name decides and not the hex's terrain.
+    const artOrigin = (c: AxialCoord) => {
+      const grid = isoGridPosition(c, TILE_W, TILE_H);
+      return { x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET };
+    };
+    this.waterDryEntries = maskEntries(baseEntries.values(), (c) => worldModel.getTile(c.q, c.r).terrain === 'sea', artOrigin);
+    this.bogLakeEntries = maskEntries(baseEntries.values(), (_c, texture) => LAKE_FRAME_RE.test(texture.label ?? ''), artOrigin);
     this.riverFlowEntries = [];
     const flowCoords = new Map<string, RiverFlowEntry>();
     const entryCoords: { entry: RiverFlowEntry; coord: AxialCoord }[] = [];
     for (const { texture, coord, crop } of baseEntries.values()) {
-      if (crop) continue;
+      if (!texture || crop) continue;
       const river = worldModel.getRiverTile(coord.q, coord.r);
       const seaDirection = river?.shape === 'mouth' ? worldModel.seaFacingDirectionOf(coord, river.inDirections[0]) : null;
       const flow = riverFlowOf(river, worldModel.getTile(coord.q, coord.r).bog, seaDirection);
@@ -4265,6 +4407,7 @@ export class HexMapRenderer {
       entry.neighbours = neighbours;
     }
     this.refreshWaterDry();
+    this.refreshBogLake();
   }
 
   // zip 7: world-map islands are flat coloured hexes, not tile art — see
@@ -4290,6 +4433,8 @@ export class HexMapRenderer {
     });
     const fogSources =
       fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];
+    // Giants whose footprint got drawn this pass, by anchor key: outlined once all fills are down.
+    const giants = new Map<string, { anchor: AxialCoord; family: GiantFamily }>();
 
     for (const c of coords) {
       // Flat world-map hexes are coloured from terrain alone (WORLD_TERRAIN_FILL),
@@ -4317,8 +4462,19 @@ export class HexMapRenderer {
 
       const grid = isoGridPosition(c, TILE_W, TILE_H);
       const flat = inflated.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
-      this.terrainFlat.poly(flat).fill({ color: WORLD_TERRAIN_FILL[terrain] });
+      this.terrainFlat.poly(flat).fill({ color: worldHexFill(terrain, worldModel.isWastedLandAt(c.q, c.r)) });
+      // A giant's footprint gets outlined once all fills are down (few hexes, so the Tile lookup for its family is cheap).
+      const anchor = worldModel.giantAnchorAt(c);
+      const family = anchor ? (worldModel.getTile(c.q, c.r).giant?.family as GiantFamily | undefined) : undefined;
+      if (anchor && family) giants.set(coordKey(anchor), { anchor, family });
       fogPerfStats.terrainDrawnCount++;
+    }
+
+    for (const { anchor, family } of giants.values()) {
+      const color = worldGiantOutline(family);
+      if (color === undefined) continue;
+      const outline = giantFootprintOutline(anchor, TILE_W, TILE_H).flatMap((p) => [p.x, p.y]);
+      this.terrainFlat.poly(outline).stroke({ width: 2.5, color, alpha: 0.8, join: 'round' });
     }
   }
 
@@ -4336,7 +4492,9 @@ export class HexMapRenderer {
 
     for (const c of coords) {
       const river = worldModel.getRiverTile(c.q, c.r);
-      if (!river) continue;
+      // A bog carries its river on as creek, lake-mouth and creek-spring bog tiles (no river tile there).
+      const bog = river ? undefined : worldModel.getBogTile(c.q, c.r);
+      if (!river && !bog) continue;
 
       if (
         fogActive &&
@@ -4347,10 +4505,18 @@ export class HexMapRenderer {
         continue;
       }
 
-      const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
-      const { segments, springDot } = riverPathFor(c, river, seaDirection, TILE_W, TILE_H);
+      let drawing: RiverDrawing | null;
+      if (river) {
+        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
+        drawing = riverPathFor(c, river, seaDirection, TILE_W, TILE_H);
+      } else {
+        drawing = bogCreekPathFor(c, bog!, TILE_W, TILE_H);
+      }
+      if (!drawing) continue;
+      const { segments, springDot } = drawing;
       // A stream is half a river's width: draw its line thinner.
-      const streamScale = river.width === 'stream' ? 0.55 : 1;
+      const streamScale = river?.width === 'stream' ? 0.55 : 1;
+      const color = river ? worldRiverColor(river) : RIVER_COLOR;
 
       for (const { from, control, to } of segments) {
         // Double stroke, same "wide soft casing under a crisp line" trick
@@ -4360,14 +4526,14 @@ export class HexMapRenderer {
         this.riverLayer
           .moveTo(from.x, from.y)
           .quadraticCurveTo(control.x, control.y, to.x, to.y)
-          .stroke({ width: 5 * streamScale, color: RIVER_COLOR, alpha: 0.35, cap: 'round', join: 'round' });
+          .stroke({ width: 5 * streamScale, color, alpha: 0.35, cap: 'round', join: 'round' });
         this.riverLayer
           .moveTo(from.x, from.y)
           .quadraticCurveTo(control.x, control.y, to.x, to.y)
-          .stroke({ width: 2.2 * streamScale, color: RIVER_COLOR, alpha: 0.95, cap: 'round', join: 'round' });
+          .stroke({ width: 2.2 * streamScale, color, alpha: 0.95, cap: 'round', join: 'round' });
       }
       if (springDot) {
-        this.riverLayer.circle(springDot.x, springDot.y, 3).fill({ color: RIVER_COLOR, alpha: 0.95 });
+        this.riverLayer.circle(springDot.x, springDot.y, 3).fill({ color, alpha: 0.95 });
       }
     }
   }
@@ -4469,8 +4635,8 @@ export class HexMapRenderer {
       return;
     }
     const alpha = WAVE_ALPHA * fade;
-    // Frozen water holds the squiggles at a fixed phase instead of Date.now().
-    const now = this.waterMotion ? Date.now() : 0;
+    // Frozen water holds the squiggles at a fixed phase instead of the map animation clock (mapAnimMs).
+    const now = this.waterMotion ? this.mapAnimMs : 0;
     this.waveLayer.clear();
     for (const p of this.wavePoints) {
       const s = (Math.sin((now / p.periodMs) * Math.PI * 2 + p.phase) + 1) / 2;
@@ -4975,6 +5141,7 @@ export class HexMapRenderer {
 
   private rebuildMarkers() {
     this.markerLayer.clear();
+    this.campPawLayer.clear();
     // markerLayer.clear() only wipes the Graphics geometry, not the pooled
     // Sprite/Text children parented to it — each pass counts what it used and
     // hides the rest, same bookkeeping labels already do (labelsUsed).
@@ -5082,6 +5249,8 @@ export class HexMapRenderer {
       label.visible = true;
     }
 
+    this.drawCampPaws();
+
     const now = Date.now();
 
     // Issue #46 phase 3: trade carts in transit, interpolated between their
@@ -5126,6 +5295,43 @@ export class HexMapRenderer {
     this.drawArmyOverlay();
     this.hideUnusedIcons();
     for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
+  }
+
+  /**
+   * World mode: a paw symbol for every standing camp (`worldCampMarkers`) inside the viewport. The model only holds the
+   * camps of islands the player has seen part of (the server's cutoff); the paws sit under the fog (campPawLayer), so
+   * the fog covers them like the ground. Drawn in screen pixels (campPawLayer, like markerLayer, does not scale with the
+   * camera), so it stays readable zoomed out; a dark rim keeps it legible over any terrain.
+   */
+  private drawCampPaws() {
+    if (!this.options.showCampMarkers) return;
+    const { worldModel } = this.options;
+    const half = worldPawHalfSize(this.camera.zoom);
+    const markers = worldCampMarkers(worldModel.camps(), true);
+    for (const marker of markers) {
+      const grid = isoGridPosition({ q: marker.q, r: marker.r }, TILE_W, TILE_H);
+      const centre = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
+      if (!isIslandNearViewport(centre, this.viewport, half * 2)) continue;
+      this.drawPaw(centre.x, centre.y, half, marker.color);
+    }
+  }
+
+  /** One paw: a pad ellipse and four toe circles, on a slightly larger dark copy that reads as the rim. */
+  private drawPaw(x: number, y: number, half: number, color: number) {
+    const rim = 1.5;
+    const pad = { x, y: y + half * 0.35, rx: half * 0.58, ry: half * 0.46 };
+    const toeR = half * 0.24;
+    const toes = [
+      { x: x - half * 0.7, y: y - half * 0.12 },
+      { x: x - half * 0.26, y: y - half * 0.62 },
+      { x: x + half * 0.26, y: y - half * 0.62 },
+      { x: x + half * 0.7, y: y - half * 0.12 },
+    ];
+    const g = this.campPawLayer;
+    g.ellipse(pad.x, pad.y, pad.rx + rim, pad.ry + rim).fill({ color: 0x0b1116, alpha: 0.85 });
+    for (const toe of toes) g.circle(toe.x, toe.y, toeR + rim).fill({ color: 0x0b1116, alpha: 0.85 });
+    g.ellipse(pad.x, pad.y, pad.rx, pad.ry).fill({ color });
+    for (const toe of toes) g.circle(toe.x, toe.y, toeR).fill({ color });
   }
 
   // zip 9's settlement view floats a name badge over the longhouse hex
@@ -5467,6 +5673,23 @@ export class HexMapRenderer {
   /** Current camera zoom — for the zoom-transition debug panel's live readout and e2e assertions on camera continuity. `camera` itself stays private. */
   get cameraZoom(): number {
     return this.camera.zoom;
+  }
+
+  /** The hex under the camera centre and the zoom — what the URL hash keeps (lib/mapCameraHash.ts). `camera` itself stays private. */
+  get cameraView(): { coord: AxialCoord; zoom: number } {
+    return { coord: isoPixelToAxial({ x: this.camera.x, y: this.camera.y }, TILE_W, TILE_H), zoom: this.camera.zoom };
+  }
+
+  /** Puts the camera centre on `coord` at `zoom`, as if the player had panned there. No-op on a locked camera. */
+  restoreCameraView(coord: AxialCoord, zoom: number) {
+    if (!this.app || this.lockCamera) return;
+    const grid = isoGridPosition(coord, TILE_W, TILE_H);
+    this.camera = this.clampCamera({ ...this.camera, x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2, zoom });
+    this.cameraTouched = true;
+    this.idleDrift = false;
+    this.cameraAnim = null;
+    this.applyCameraTransform();
+    this.rebuildAll();
   }
 
   /**
@@ -6101,6 +6324,14 @@ export class HexMapRenderer {
   }
 
   /**
+   * Switches the world map's camp paw symbols on or off (`showCampMarkers`). Unlike `updateOptions` it does not
+   * re-aim the camera or rebuild the terrain: world mode redraws its markers every tick.
+   */
+  setShowCampMarkers(show: boolean) {
+    this.options = { ...this.options, showCampMarkers: show };
+  }
+
+  /**
    * The zoom-driven world<->settlement transition (docs/design/
    * zoom-transition.md §4/§8) — a level-of-detail switch only: `mode`
    * changes, nothing about `settlementId`/the camera does, which is what
@@ -6153,9 +6384,11 @@ export class HexMapRenderer {
     this.waterLayer.setMode(mode);
     // World mode draws no sea tiles, so nothing is dry there.
     this.waterDryEntries = [];
+    this.bogLakeEntries = [];
     this.riverFlowEntries = [];
     if (mode === 'world') {
       this.waterLayer.setDryTexture(null);
+      this.bogLakeLayer.setLake(null, null);
       this.waterLayer.setRiverFlowTexture(null);
     }
     // Reinsert every layer in the new mode's order — addChild only moves a
@@ -6206,6 +6439,8 @@ export class HexMapRenderer {
     this.waterLayer.destroy();
     this.waterDry.destroy();
     this.riverFlow.destroy();
+    this.bogLakeMask.destroy();
+    this.bogLakeLayer.destroy();
     // The cached bog edge contexts are only borrowed by the pooled Graphics, so the stage teardown below won't free them.
     this.clearBogEdgeCache();
     this.app?.destroy(false, { children: true });

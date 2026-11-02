@@ -4,10 +4,10 @@
   "seed": 11,
   "radius": 1000,
   "generation": { "islandCellSize": 260, "islandMaxReach": 0, "islandMinGap": 0, "islandLargeShare": 0.12 },
-  "window": { "q": -161, "r": 9, "size": 44 },
+  "window": { "q": -164, "r": 9, "size": 44 },
   "px": 22,
   "routes": [
-    { "from": [-160, 1], "to": [-163, 3], "army": "enemy" },
-    { "from": [-153, 19], "to": [-159, 19], "army": "enemy" }
+    { "from": [-172, 6], "to": [-172, 4], "army": "enemy" },
+    { "from": [-157, 13], "to": [-155, 11], "army": "enemy" }
   ]
 }

@@ -33,6 +33,7 @@ import { profileLocation } from '../../lib/profileRoute';
 import type { MessageSchema } from '../../i18n/schema';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
+import HudNavLink from './HudNavLink.vue';
 
 const props = withDefaults(defineProps<{ hasResourceBar?: boolean }>(), { hasResourceBar: false });
 const emit = defineEmits<{ close: [] }>();
@@ -49,6 +50,7 @@ function onEntryClick(entry: HudNavEntry) {
   emit('close');
 }
 
+const profileHref = computed(() => router.resolve('/profile').href);
 function goToProfile() {
   router.push(profileLocation(router));
   emit('close');
@@ -80,16 +82,17 @@ onBeforeUnmount(() => { isHudDrawerPending.value = false; });
 
 <template>
   <nav class="drawer-links">
-    <button
+    <HudNavLink
       v-for="entry in entries"
       :key="entry.id"
+      :href="entry.href"
       class="link"
       :class="{ active: entry.active }"
-      @click="onEntryClick(entry)"
+      @navigate="onEntryClick(entry)"
     >
       {{ t(entry.labelKey) }}
       <span v-if="entry.badge > 0" class="badge">{{ entry.badge }}</span>
-    </button>
+    </HudNavLink>
     <!-- The language switcher's only home at phone width — see
          LocaleSwitcher.vue's own comment on why no bar carries it there. -->
     <div class="drawer-locale">
@@ -102,9 +105,9 @@ onBeforeUnmount(() => { isHudDrawerPending.value = false; });
          this file's own top-of-file comment). -->
     <div class="drawer-account">
       <template v-if="auth.isAuthenticated">
-        <button type="button" class="link" data-testid="drawer-account-profile" @click="goToProfile">
+        <HudNavLink :href="profileHref" class="link" data-testid="drawer-account-profile" @navigate="goToProfile">
           {{ t('hud.accountMenu.profile') }}
-        </button>
+        </HudNavLink>
         <button type="button" class="link" data-testid="drawer-account-logout" @click="onLogoutClick">
           {{ t('hud.accountMenu.logout') }}
         </button>
@@ -126,6 +129,7 @@ onBeforeUnmount(() => { isHudDrawerPending.value = false; });
   gap: 8px;
   background: transparent;
   border: none;
+  text-decoration: none;
   color: var(--muted);
   padding: 10px 4px;
   cursor: pointer;

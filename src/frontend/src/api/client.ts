@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '../config';
 import { clientFingerprint } from '../lib/clientFingerprint';
+import { checkBuildHeader } from '../lib/appUpdate';
 import type {
   AcceptTradeOfferRequest,
   ActivitySummaryResponse,
@@ -129,7 +130,9 @@ export class ApiError extends Error {
  */
 async function fetchOrThrow(method: string, path: string, init: RequestInit): Promise<Response> {
   try {
-    return await fetch(`${API_BASE_URL}${path}`, init);
+    const response = await fetch(`${API_BASE_URL}${path}`, init);
+    checkBuildHeader(response.headers.get('X-App-Build'));
+    return response;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const wrapped = new ApiError(0, undefined, method, path);
@@ -630,6 +633,15 @@ export const api = {
     request<ArmyResponse>(`/armies/${armyId}`, { headers: ownerHeader(ownerId) }),
   recallArmy: (armyId: string, ownerId?: string) =>
     request<ArmyResponse>(`/armies/${armyId}/recall`, { method: 'POST', headers: ownerHeader(ownerId) }),
+  // The host's recall of a guest army stationed at its settlement. Mirrors
+  // ArmyEndpoints.cs's `/settlements/{id}/guests/{armyId}/send-home`: 204, no
+  // body — the guest's full ArmyResponse is owner-only. `ownerId` proves the
+  // *host* settlement's ownership.
+  sendGuestHome: (settlementId: string, armyId: string, ownerId?: string) =>
+    request<void>(`/settlements/${settlementId}/guests/${armyId}/send-home`, {
+      method: 'POST',
+      headers: ownerHeader(ownerId),
+    }),
   // Issue #156 phase 1: sends an army already out in the field onward to a
   // new hex — 'move on' if it's standing, 'append goal' if it's still
   // travelling. Mirrors ArmyEndpoints.cs's `/armies/{id}/orders`.

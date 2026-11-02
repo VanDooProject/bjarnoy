@@ -1,4 +1,4 @@
-// The river flow shader trusts `outDirection` as "downstream" (docs/design/water-shader.md §4.4d). This pins the data: on the
+// The river flow shader trusts `outDirection` as "downstream" (docs/design/water-shader.md §4.4e). This pins the data: on the
 // generated islands of the shared golden fixture every tile's out direction leads into a tile that takes the water in.
 import { describe, expect, it } from 'vitest';
 import goldenFixtureJson from '../../../../shared/bog-generation-golden.json';

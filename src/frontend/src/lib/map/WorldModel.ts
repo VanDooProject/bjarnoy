@@ -18,14 +18,14 @@ import type { PalisadeWalls } from './palisadeMovement';
 import type { StandingBridges } from './bridgeMovement';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
-import { guardRange, isStrongCampFamily, placeCamps, StartPositionMargin, type CampStrength } from './campPlacement';
+import { campGuardRange, isStrongCampFamily, placeCamps, placeWhaleRoads, StartPositionMargin } from './campPlacement';
 import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
 import type { PalisadePiece } from './palisadeTiles';
 import { campHexBuildable } from './campRules';
 import type { CampStateResponse } from '../../api/types';
 import { claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { claimsWithGiants } from './territory';
-import { resolveRealm, type ConnectedRealm } from './realmChain';
+import { realmFromDiscs, resolveRealm, type ConnectedRealm } from './realmChain';
 import { validateTradeRatio } from '../trade/tradeRatio';
 import {
   DEFAULT_GENERATION,
@@ -48,6 +48,7 @@ import {
 import { generateRiversWithBogs, isWideRiverTile } from './riverGenerator';
 import { BOG_REACH } from './bogGenerator';
 import { placeLakeProps, type LakeProp, type LakePropBuilding } from './lakeProps';
+import { isOutsideRealm } from './realmDecay';
 import {
   emptyResources,
   mouthSeaDirection,
@@ -299,6 +300,8 @@ export class WorldModel {
    * a stale sea answer for a now-revealed hex.
    */
   private wastedRevealed = false;
+  /** `isWastedLandAt`'s answers while revealed, by `terrainKey` (each one costs two terrain samples); cleared on every reveal flip. */
+  private wastedLand = new Map<number, boolean>();
   /**
    * Whether this world has the frozen isles admin flag on (see the
    * backend's `WorldEntity.FrozenIslesEnabled`). A simple field with no
@@ -358,10 +361,17 @@ export class WorldModel {
    */
   private settlementTowers = new Map<string, { q: number; r: number; level: number }[]>();
   /**
-   * The settlements the chain rule resolves together (`realmChain.ts`): one player's settlements on one island, keyed by
-   * `realmGroupKey`. Kept up to date by `registerSettlement`, the only place a settlement enters the model.
+   * The settlements the chain rule resolves together locally (`realmChain.ts`): one player's settlements on one island, keyed
+   * by `realmGroupKey`. Kept up to date by `registerSettlement`, the only place a settlement enters the model. Demo mode (and
+   * live settlements without a server realm) read the realm from here.
    */
   private realmGroups = new Map<string, Map<string, Settlement>>();
+  /**
+   * Live mode: the realm the server resolved (`applyServerSnapshot`'s `realm`), per member settlement id; every member id maps
+   * to the same entry object. `signature` detects a changed realm. Takes precedence over `realmGroups` in `realmOf` and
+   * `realmMembers`.
+   */
+  private serverRealms = new Map<string, { ids: string[]; realm: ConnectedRealm; signature: string }>();
   /**
    * The hexes `syncClaim` last gave each settlement (its claim, plus any
    * hex it only kept because a building of its own stands there) — what the
@@ -611,7 +621,7 @@ export class WorldModel {
    */
   private isNearAnyStrongCamp(coord: AxialCoord): boolean {
     for (const camp of this.campByHex.values()) {
-      if (camp.strong && hexDistance(coord, camp) <= camp.guardRange + StartPositionMargin) return true;
+      if (camp.strong && camp.guardRange > 0 && hexDistance(coord, camp) <= camp.guardRange + StartPositionMargin) return true;
     }
     return false;
   }
@@ -760,9 +770,14 @@ export class WorldModel {
    */
   isWastedLandAt(q: number, r: number): boolean {
     if (!this.wastedRevealed) return false;
-    const world = { seed: this.seed, generation: this.generation };
-    if (terrainAt(q, r, world) !== 'sea') return false;
-    return wastedTerrainAt(q, r, world) !== 'sea';
+    const k = terrainKey(q, r);
+    let wasted = this.wastedLand.get(k);
+    if (wasted === undefined) {
+      const world = { seed: this.seed, generation: this.generation };
+      wasted = terrainAt(q, r, world) === 'sea' && wastedTerrainAt(q, r, world) !== 'sea';
+      this.wastedLand.set(k, wasted);
+    }
+    return wasted;
   }
 
   /**
@@ -791,6 +806,7 @@ export class WorldModel {
   setWastedRevealed(revealed: boolean) {
     if (this.wastedRevealed === revealed) return;
     this.wastedRevealed = revealed;
+    this.wastedLand.clear();
     const world = { seed: this.seed, generation: this.generation };
     const isGreenSea = (q: number, r: number) => terrainAt(q, r, world) === 'sea';
     for (const key of this.terrain.keys()) {
@@ -1304,8 +1320,20 @@ export class WorldModel {
     return claimRadiusForLevel(settlement.level);
   }
 
-  /** The settlements `settlement`'s chain rule is resolved with: the same player's settlements on the same island (itself included). */
+  /**
+   * The settlements `settlement`'s chain rule is resolved with (itself included): the members of the server's realm when it
+   * sent one (live), else the same player's settlements on the same island.
+   */
   private realmMembers(settlement: Settlement): Settlement[] {
+    const server = this.serverRealms.get(settlement.id);
+    if (server) {
+      const members = server.ids.flatMap((id) => {
+        const m = this.settlements.get(id);
+        return m ? [m] : [];
+      });
+      if (!members.some((m) => m.id === settlement.id)) members.push(settlement);
+      return members;
+    }
     const group = this.realmGroups.get(realmGroupKey(settlement));
     const members = group ? [...group.values()] : [];
     if (!members.some((m) => m.id === settlement.id)) members.push(settlement);
@@ -1314,10 +1342,12 @@ export class WorldModel {
 
   /**
    * The chain rule (`realmChain.ts`, mirrors the backend's `ConnectedRealm`) for `settlement` and the same player's other
-   * settlements on its island: which towers are connected to a longhouse and so claim and see. Every claim and every tower's
-   * vision reads its answer from here.
+   * settlements on its island: which towers are connected to a longhouse and so claim and see. Live: the realm the server
+   * resolved; otherwise resolved locally. Every claim and every tower's vision reads its answer from here.
    */
   private realmOf(settlement: Settlement): ConnectedRealm {
+    const server = this.serverRealms.get(settlement.id);
+    if (server) return server.realm;
     return resolveRealm(
       this.realmMembers(settlement).map((m) => ({
         id: m.id,
@@ -1578,7 +1608,10 @@ export class WorldModel {
    * is silently skipped rather than stored as an unrecognized string. A type
    * with no distinct sprite in the art pack (Lumberjack, Quarry) is still
    * safe to place — `textures.ts`'s `baseTextureFor` falls back to the
-   * tile's bare terrain rather than throwing.
+   * tile's bare terrain rather than throwing. `realm` (live) is the realm the
+   * server resolved for this settlement: when it changes, it replaces the
+   * local chain resolution for every member and the claim is re-derived,
+   * including for settlements that left the realm.
    */
   applyServerSnapshot(
     settlementId: string,
@@ -1587,11 +1620,28 @@ export class WorldModel {
       resources: Resources;
       rates: Resources;
       capacity: Resources;
-      buildings: { q: number; r: number; type: string; level: number; orientation?: string | null }[];
+      buildings: { q: number; r: number; type: string; level: number; orientation?: string | null; outsideRealmSince?: string | null }[];
+      realm?: ReadonlyArray<{ settlementId: string; discs: readonly ClaimDisc[] }>;
     },
   ) {
     const settlement = this.settlements.get(settlementId);
     if (!settlement) return;
+
+    let realmChanged = false;
+    let leftRealm: string[] = [];
+    if (snapshot.realm) {
+      const signature = JSON.stringify(snapshot.realm);
+      const old = this.serverRealms.get(settlementId);
+      if (old?.signature !== signature) {
+        realmChanged = true;
+        const oldIds = old?.ids ?? [];
+        for (const id of oldIds) this.serverRealms.delete(id);
+        const ids = snapshot.realm.map((m) => m.settlementId);
+        const entry = { ids, realm: realmFromDiscs(snapshot.realm), signature };
+        for (const id of ids) this.serverRealms.set(id, entry);
+        leftRealm = oldIds.filter((id) => !ids.includes(id));
+      }
+    }
 
     const previousTowers = this.settlementTowers.get(settlementId) ?? [];
     const towers = snapshot.buildings
@@ -1614,7 +1664,7 @@ export class WorldModel {
     // centre disc grew (a longhouse level-up) or the set of Tower satellite
     // discs changed (a new, levelled-up, downgraded or burnt tower) — not
     // every poll, since claiming is otherwise pure repeated work.
-    const claimChanged = levelIncreased || towersChanged || ravensChanged;
+    const claimChanged = levelIncreased || towersChanged || ravensChanged || realmChanged;
     if (claimChanged) this.exploreRealm(settlement);
     settlement.resources = snapshot.resources;
     settlement.rates = snapshot.rates;
@@ -1669,6 +1719,7 @@ export class WorldModel {
       if ((type === 'bogoreworks' || type === 'fishinghut') && tile.buildingType !== type) this.lakePropsDirty = true;
       tile.buildingType = type as Tile['buildingType'];
       tile.buildingLevel = building.level;
+      tile.buildingOutsideRealm = isOutsideRealm(building) || undefined;
       // The fishing hut is the only building with its own orientation (a
       // dock that has to face this settlement's shore, not whatever a bare
       // coastal-water tile would default to) — see PlacedBuildingResponse.
@@ -1690,11 +1741,19 @@ export class WorldModel {
         if (tile.buildingType === 'bogoreworks' || tile.buildingType === 'fishinghut') this.lakePropsDirty = true;
         tile.buildingType = undefined;
         tile.buildingLevel = undefined;
+        tile.buildingOutsideRealm = undefined;
       }
     }
     // After the building pass: a fallen tower's own hex has to be empty before
     // the release step may take it back.
-    if (claimChanged) this.syncClaim(settlement);
+    if (claimChanged) {
+      this.syncClaim(settlement);
+      // Settlements that left the realm are no longer covered by `syncClaim`'s members: re-derive (release) their ground too.
+      for (const id of leftRealm) {
+        const gone = this.settlements.get(id);
+        if (gone) this.syncOwnClaim(gone);
+      }
+    }
     this.renderedBuildingCoords.set(settlementId, nowRendered);
     this.wallRevision++;
   }
@@ -1756,7 +1815,7 @@ export class WorldModel {
    * one of the player's own settlements renders is never touched.
    */
   applyRivalWalls(
-    walls: { q: number; r: number; type: string; level: number; settlementId: string; ownerUserId: string | null }[],
+    walls: { q: number; r: number; type: string; level: number; settlementId: string; ownerUserId: string | null; outsideRealm?: boolean }[],
   ) {
     const ownRendered = new Set<string>();
     for (const keys of this.renderedBuildingCoords.values()) for (const key of keys) ownRendered.add(key);
@@ -1770,6 +1829,7 @@ export class WorldModel {
       tile.ownerId = wall.settlementId;
       tile.buildingType = wall.type;
       tile.buildingLevel = wall.level;
+      tile.buildingOutsideRealm = wall.outsideRealm === true || undefined;
       next.set(key, { settlementId: wall.settlementId, ownerUserId: wall.ownerUserId });
     }
 
@@ -1781,6 +1841,7 @@ export class WorldModel {
       if (tile.buildingType === 'palisade' || tile.buildingType === 'palisadegate') {
         tile.buildingType = undefined;
         tile.buildingLevel = undefined;
+        tile.buildingOutsideRealm = undefined;
       }
     }
 
@@ -1817,15 +1878,20 @@ export class WorldModel {
   protected storedTiles(): Iterable<Tile> {
     return this.tiles.values();
   }
-  private wallCache: { revision: number; walls: Map<string, { gate: boolean; level: number; tileOwner?: string }> } | null = null;
+  private wallCache: { revision: number; walls: Map<string, { gate: boolean; level: number; tileOwner?: string; outsideRealm?: boolean }> } | null = null;
 
   /** Every palisade and gate hex known (a level-0 foundation included), keyed by hex, rebuilt lazily after a building changes. */
-  private palisadeIndex(): Map<string, { gate: boolean; level: number; tileOwner?: string }> {
+  private palisadeIndex(): Map<string, { gate: boolean; level: number; tileOwner?: string; outsideRealm?: boolean }> {
     if (this.wallCache?.revision === this.wallRevision) return this.wallCache.walls;
-    const walls = new Map<string, { gate: boolean; level: number; tileOwner?: string }>();
+    const walls = new Map<string, { gate: boolean; level: number; tileOwner?: string; outsideRealm?: boolean }>();
     for (const tile of this.storedTiles()) {
       if (tile.buildingType !== 'palisade' && tile.buildingType !== 'palisadegate') continue;
-      walls.set(coordKey(tile), { gate: tile.buildingType === 'palisadegate', level: tile.buildingLevel ?? 1, tileOwner: tile.ownerId });
+      walls.set(coordKey(tile), {
+        gate: tile.buildingType === 'palisadegate',
+        level: tile.buildingLevel ?? 1,
+        tileOwner: tile.ownerId,
+        outsideRealm: tile.buildingOutsideRealm,
+      });
     }
     this.wallCache = { revision: this.wallRevision, walls };
     return walls;
@@ -1843,7 +1909,7 @@ export class WorldModel {
    * is unknown. Same shape as the backend's `PalisadeIndex`.
    */
   standingPalisadeWalls(): PalisadeWalls {
-    const standing = new Map<string, { gate: boolean; owner: string }>();
+    const standing = new Map<string, { gate: boolean; owner: string; outsideRealm?: boolean }>();
     for (const [key, wall] of this.palisadeIndex()) {
       if (wall.level < 1) continue;
       // A rival wall's owner key is the one the server's PalisadeIndex uses: the account, or the settlement for an anonymous one.
@@ -1853,7 +1919,7 @@ export class WorldModel {
         : wall.tileOwner
           ? (this.settlements.get(wall.tileOwner)?.ownerId ?? wall.tileOwner)
           : '';
-      standing.set(key, { gate: wall.gate, owner });
+      standing.set(key, { gate: wall.gate, owner, outsideRealm: wall.outsideRealm });
     }
     // The jötnar's Utgard walls block under a fixed owner key that is nobody's friend (a breached level-0 hex is passable).
     for (const [key, wall] of this.utgardWallByHex) {
@@ -1871,11 +1937,11 @@ export class WorldModel {
    */
   standingBridges(): StandingBridges {
     if (this.bridgeCache?.revision === this.wallRevision) return this.bridgeCache.bridges;
-    const bridges = new Map<string, { level: number; owner: string }>();
+    const bridges = new Map<string, { level: number; owner: string; outsideRealm?: boolean }>();
     for (const tile of this.storedTiles()) {
       if (tile.buildingType !== 'bridge' || (tile.buildingLevel ?? 1) < 1) continue;
       const owner = tile.ownerId ? (this.settlements.get(tile.ownerId)?.ownerId ?? tile.ownerId) : '';
-      bridges.set(coordKey(tile), { level: tile.buildingLevel ?? 1, owner });
+      bridges.set(coordKey(tile), { level: tile.buildingLevel ?? 1, owner, outsideRealm: tile.buildingOutsideRealm });
     }
     this.bridgeCache = { revision: this.wallRevision, bridges };
     return bridges;
@@ -2197,6 +2263,24 @@ export class WorldModel {
       })),
     );
 
+    // The water camps (whale roads) come after the land ones, from their own sea pass over the whole world's
+    // land (wasted islands included): green islands only, like the backend's `CampGenerator.GenerateWhaleRoads`.
+    if (!wasted) {
+      const whales = placeWhaleRoads(
+        islandTiles,
+        (c) => terrainAt(c.q, c.r, world) !== 'sea' || wastedTerrainAt(c.q, c.r, world) !== 'sea',
+        worldSeed,
+        islandIndex,
+      );
+      this.setCamps(
+        whales.map((p) => ({
+          family: p.family,
+          coord: p.coord,
+          level: p.level,
+          orientation: p.orientation ?? this.getTile(p.coord.q, p.coord.r).orientation ?? 'SE',
+        })),
+      );
+    }
     // Utgard's wall rings and the Jötun watchtowers (a wasted island with Utgard only), after giants and camps — the backend's
     // own order (`WorldGenerator.Generate`).
     if (wasted) {
@@ -2256,23 +2340,25 @@ export class WorldModel {
    * authoritative camps (`IslandResponse.camps`); demo mode feeds it
    * `placeCamps` output. Idempotent and additive, like `setGiants`: a hex that
    * already has a camp is left untouched. Strength and guard range are derived
-   * from the shared family table, so they cannot disagree with the server.
+   * from the shared family table, so they cannot disagree with the server. Returns whether any camp was added.
    */
-  setCamps(camps: { family: string; coord: AxialCoord; level: number; orientation: TileOrientation }[]) {
+  setCamps(camps: { family: string; coord: AxialCoord; level: number; orientation: TileOrientation }[]): boolean {
+    let added = false;
     for (const camp of camps) {
       const tile = this.getTile(camp.coord.q, camp.coord.r);
       if (tile.camp) continue;
+      added = true;
       const strong = isStrongCampFamily(camp.family);
-      const strength: CampStrength = strong ? 'strong' : 'weak';
       tile.camp = {
         family: camp.family,
         level: camp.level,
         orientation: camp.orientation,
         strong,
-        guardRange: guardRange(camp.level, strength),
+        guardRange: campGuardRange(camp.family, camp.level),
       };
       this.campByHex.set(coordKey(camp.coord), { ...tile.camp, q: camp.coord.q, r: camp.coord.r });
     }
+    return added;
   }
 
   /**
