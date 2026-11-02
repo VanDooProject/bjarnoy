@@ -328,9 +328,10 @@ describe('HudNav account menu', () => {
     expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
   });
 
-  it('Log out calls auth.logout, forgets the local identity, and ends with a full page load to /', async () => {
+  it('Log out revokes the session, forgets the local identity, and ends with a full page load to /', async () => {
     const auth = useAuthStore();
     authenticate(auth);
+    localStorage.setItem('bjarnoy.refreshToken', 'refresh-1');
     localStorage.setItem('bjarnoy.playerId', 'player-1');
     localStorage.setItem('bjarnoy.settlementId', 'settlement-1');
     localStorage.setItem('bjarnoy.settlementsByWorld', '{"world-1":"settlement-1"}');
@@ -356,7 +357,10 @@ describe('HudNav account menu', () => {
     await wrapper.find('[data-testid="account-menu-logout"]').trigger('click');
     await flushPromises();
 
-    expect(auth.isAuthenticated).toBe(false);
+    // The stored session is gone; the in-memory one stays with the page
+    // until the full load replaces it (see useLogout.ts).
+    expect(localStorage.getItem('bjarnoy.refreshToken')).toBeNull();
+    expect(auth.isAuthenticated).toBe(true);
     for (const key of [
       'bjarnoy.playerId',
       'bjarnoy.settlementId',
