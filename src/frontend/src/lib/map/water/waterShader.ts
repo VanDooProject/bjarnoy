@@ -27,6 +27,8 @@
 // needed at all; and Pixi camera-transforms it like everything else, so it
 // pans and zooms in lockstep with the coastline it is drawing foam on.
 
+import { NOISE_LATTICE_GLSL } from "../shaderNoise";
+
 /**
  * Vertex shader for a world-space quad inside the camera-transformed `world`
  * container.
@@ -123,28 +125,10 @@ uniform vec3 uTaintShallowColor;
 uniform vec3 uTaintDeepColor;
 uniform vec3 uTaintFoamColor;
 
-// Same cheap 2D value noise fogShader.ts uses — hash plus smooth
-// interpolation, no dependency, and deliberately the same function so the two
-// shaders' fields have the same character rather than two different kinds of
-// procedural grain on screen at once.
-float hash(vec2 p) {
-  p = fract(p * vec2(123.34, 456.21));
-  p += dot(p, p + 45.32);
-  return fract(p.x * p.y);
-}
-
-float noise(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  float a = hash(i);
-  float b = hash(i + vec2(1.0, 0.0));
-  float c = hash(i + vec2(0.0, 1.0));
-  float d = hash(i + vec2(1.0, 1.0));
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
-}
-
-
+// The same value noise fogShader.ts uses (shaderNoise.ts), so the two shaders'
+// fields have the same character. Its lattice is a texture lookup, so \`hash\`
+// only takes whole numbers.
+${NOISE_LATTICE_GLSL}
 // Two octaves, normalised back to roughly 0..1. Two and not fog's three: this
 // is evaluated per-pixel along every coastline, and the third octave would
 // carry an eighth of the amplitude at a scale finer than the foam band is
@@ -231,8 +215,10 @@ const float WAVE_DENSITY = 0.62;
 // but individual crests land in different places. That is the intended
 // relationship: \`legacyWaveSquiggles\` exists to A/B the look against the
 // reference screenshot, not to overlay two copies of the same wave.
+// \`cell\` is a whole number (floor()'d), the salt offsets it by whole numbers
+// too, so the lattice lookup in \`hash\` stays exact.
 float cellHash(vec2 cell, float salt) {
-  return hash(cell * 1.13 + salt * 17.31 + 3.7);
+  return hash(cell + vec2(salt * 17.0, salt * 31.0));
 }
 
 /**
