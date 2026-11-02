@@ -138,6 +138,17 @@ which precompresses static assets with gzip and brotli at publish time
 (`deploy/Dockerfile` copies `dist/` into `wwwroot` before `dotnet publish`
 for exactly this reason).
 
+## World generation
+
+In a live world the client computes only the per-hex terrain itself (`terrainAt`/`generateTile`: sea, sand, grass,
+forest, mountain, plus each hex's look) from the world seed and its generation constants. Everything built per island
+(rivers, bogs, giants, camps, endgame sites) is generated once by the server when the world is created, stored, and
+sent with `GET /worlds/{id}/islands`. The cost of those passes lands on world creation, not on the player's device.
+Per-hex terrain costs about 1 µs per hex on a desktop CPU (spine chains and groves, measured 2026-11-01; 0.6 µs before).
+
+Demo mode is a dev tool, not a target for performance work. It has no server, so it runs the per-island passes on the
+client when you land; a large island can take seconds there, and that is accepted.
+
 ## Possible next steps
 
 - A small showcase thumbnail atlas (one camera, 200 × 300) for in-game UI,

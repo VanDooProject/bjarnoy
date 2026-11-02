@@ -58,6 +58,11 @@ internal static partial class RiverGenerator
 
         public int BogGuaranteeSpawns;
 
+        /// <summary>Bogs the gap fill placed after the guarantee: through river, and spawn bogs.</summary>
+        public int BogGapThrough;
+
+        public int BogGapSpawns;
+
         /// <summary>Islands the guarantee could not help (no room inland, or no valid site).</summary>
         public int BogGuaranteeMissed;
 
@@ -81,6 +86,8 @@ internal static partial class RiverGenerator
             BogGuaranteeWithoutBog += other.BogGuaranteeWithoutBog;
             BogGuaranteeThrough += other.BogGuaranteeThrough;
             BogGuaranteeSpawns += other.BogGuaranteeSpawns;
+            BogGapThrough += other.BogGapThrough;
+            BogGapSpawns += other.BogGapSpawns;
             BogGuaranteeMissed += other.BogGuaranteeMissed;
             BogPaddingRejected += other.BogPaddingRejected;
             BogGuaranteePaddingRejected += other.BogGuaranteePaddingRejected;

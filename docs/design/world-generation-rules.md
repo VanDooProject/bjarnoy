@@ -15,7 +15,7 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
 | Bog and lakes, bog buildings, landing spots with bog in reach | Implemented (bog PR, bog buildings PR); see [`bog.md`](./bog.md) |
 | Wildlife camps: placement, levels, guard ranges, rendering (no gameplay) | Implemented (camps PR; bog camps in the bog PR) |
 | Island density: about twice the islands, same island sizes, no fused islands | Implemented (island-density PR) |
-| Mountain chains with passes, grove forests | Planned |
+| Mountain chains with passes, grove forests | Implemented (terrain chains PR) |
 
 ## World and islands
 
@@ -138,7 +138,7 @@ Every one of them keeps the 24-hex gap from green land and from each other.
 
 ## Mountains and forests
 
-*Planned.*
+*Implemented (terrain chains PR): see [`river-generation.md`](./river-generation.md#mountain-ranges-and-forest-patches-terrain).*
 
 - Mountains form chains along the island with passes between the massifs, so land armies can always path through;
   short ridges branch off the massifs.
@@ -207,8 +207,8 @@ into a tile whose Y the art can draw, so every path ends at a sea mouth or a con
   `bog.md`, "On the denser terrain").
 - More bog, spread over the whole island (owner decision): after the normal bogs, while some land of an island is still more than 18
   hexes from a bog, another bog is placed aimed at that land — on a river passing there if there is one, otherwise as the source of a
-  new river. *Planned.*
-- The 20% rule is lifted for these gap-fill bogs: about a third of all bogs may start a river. *Planned.*
+  new river. *Implemented (terrain chains PR): see [`bog.md`](./bog.md), "Implemented generation".*
+- The 20% rule is lifted for these gap-fill bogs: about a third of all bogs may start a river. *Implemented: 39.5% of bogs start or end a river (seeds 1-8, radius 1000); accepted by the owner.*
 
 ## Wildlife camps
 

@@ -57,7 +57,8 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         // guards this with the same numbers; re-search a seed if the island shape changes):
         // one 100-hex-wide disc per 100-hex cell (a single-vertex spine, no islets
         // possible to matter, no warp, no coast noise, every cell an island), so the
-        // ground around the origin is plain grass — no sea, sand, forest or mountain.
+        // ground around the origin is land — no sea or sand (grass, forest and the odd grove; a single-vertex
+        // spine has no mountain chain).
         Seed = 14,
         Radius = 500,
         IslandCellSize = 100,
@@ -80,7 +81,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
 
     /// <summary>
     /// <see cref="LandOptions"/> with 14-hex-wide islands, so the sea starts a few hexes from an island's middle. With seed 14,
-    /// (-60,-38) is grass with only grass within two hexes of it (no shoreline), and (-59,-41) -> (-58,-42) -> (-58,-43) is sea.
+    /// (-60,-38) is land with only land within two hexes of it (no shoreline), and (-59,-41) -> (-58,-42) -> (-58,-43) is sea.
     /// </summary>
     private static WorldGenerationOptions SmallIslandOptions => LandOptions with { IslandMinWidth = 14.0, IslandMaxWidth = 14.0 };
 
