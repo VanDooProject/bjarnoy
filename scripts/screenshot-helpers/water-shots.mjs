@@ -108,7 +108,7 @@ await page.evaluate(() => {
 });
 await shoot(page, 'settlement_close_no_caustic_cull');
 await page.evaluate(() => {
-  window.__waterTuning.causticCullHexes = 0.25;
+  window.__waterTuning.causticCullHexes = 0.1;
 });
 
 await page.getByRole('button', { name: /world map/i }).first().click();

@@ -13,6 +13,35 @@ export const SOURCE_W = 200;
 export const SOURCE_H = 300;
 
 /** A frame placed on the full source canvas: RGBA8, `SOURCE_W * SOURCE_H * 4` bytes. */
+/**
+ * The tile's flat top face inside the source canvas: the `isoTopPoints` hexagon, `SOURCE_W` wide, starting `TOP_FACE_Y` px
+ * down and `TOP_FACE_H` px tall — the atlas manifests' `meta.bjarnoy.tile.topFaceY`/`topFaceH` (the build checks they agree).
+ */
+export const TOP_FACE_Y = 140;
+export const TOP_FACE_H = 92;
+
+/**
+ * How far inside the top face's front edges the dry mask stops, in source px. Everything below those edges (the skirt, and
+ * the face's own antialiased rim) is painted over on screen by the hexes in front, so a dry pixel there would cut the
+ * caustics and foam of *their* water; the inset keeps the closed, grown mask off the rim too.
+ */
+export const FRONT_EDGE_INSET = 2;
+
+/** Whether source pixel (x, y) is above the top face's lower outline (left vertex → bottom edge → right vertex), less `inset`. */
+export function aboveFrontEdges(x: number, y: number, inset = FRONT_EDGE_INSET): boolean {
+  const cy = TOP_FACE_Y + TOP_FACE_H / 2;
+  const bottom = TOP_FACE_Y + TOP_FACE_H;
+  const px = x + 0.5;
+  const py = y + 0.5;
+  // Lower outline as a function of x: rises from the side vertices (cy) to the bottom edge (bottom) over a quarter width.
+  const q = SOURCE_W / 4;
+  const t = Math.min(1, Math.min(px, SOURCE_W - px) / q);
+  const edgeY = cy + (bottom - cy) * t;
+  // Distance to a sloped edge is shorter than the vertical gap; scale the inset by the slope so it is a true perpendicular inset.
+  const slope = t < 1 ? (bottom - cy) / q : 0;
+  return py <= edgeY - inset * Math.sqrt(1 + slope * slope);
+}
+
 export type Canvas = Uint8Array | Uint8ClampedArray;
 
 /**
@@ -108,36 +137,114 @@ export function bestReference(art: Canvas, references: readonly Canvas[]): { ind
 }
 
 /**
- * The dry mask of `art` against `reference`, at half resolution.
- *
- * Dry = art opaque AND (reference transparent OR RGB differs by more than
- * `DRY_PIXEL_EPS`). The 0/1 map is closed and grown by one source pixel (so the
- * shader stops just outside the object's outline, not on it) and box-downsampled 2x2,
- * which makes the edge soft. Output is `(SOURCE_W / 2) * (SOURCE_H / 2)` bytes,
- * 255 = dry.
+ * Luminance darkening at which art-painted water shadow counts as full shade. A soft shadow in the art is a few percent darker
+ * than the plain water (it stays below `DRY_PIXEL_EPS`, so it is not dry). Light through clear water does not appear in shade,
+ * so the darkening becomes a shade factor; a quarter darker reads as deep shade, so it maps to the full 1 and anything softer
+ * scales linearly: a faint shadow dims caustics and foam a little, a deep one removes the caustics.
  */
-export function dryMaskHalf(art: Canvas, reference: Canvas, width = SOURCE_W, height = SOURCE_H): Uint8Array {
-  const dry = new Uint8Array(width * height);
-  for (let p = 0; p < dry.length; p++) {
-    const i = p * 4;
-    if (art[i + 3] < OPAQUE_ALPHA) continue;
-    dry[p] = reference[i + 3] < OPAQUE_ALPHA || !isSame(art, reference, i, DRY_PIXEL_EPS) ? 1 : 0;
+export const SHADOW_FULL_DARKENING = 0.25;
+
+/** Radius (source px) of the box blur smoothing the shadow channel; the render is dithered, so raw per-pixel darkening is speckled. */
+export const SHADOW_BLUR_RADIUS = 2;
+
+/** Rec.709 luma of the pixel at byte offset `i`. */
+function luma(c: Canvas, i: number): number {
+  return 0.2126 * c[i] + 0.7152 * c[i + 1] + 0.0722 * c[i + 2];
+}
+
+/** Box blur of radius `radius` (square window, outside the canvas counts as 0), separable. */
+function boxBlur(src: Float32Array, width: number, height: number, radius: number): Float32Array {
+  const n = 2 * radius + 1;
+  const tmp = new Float32Array(src.length);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let sum = 0;
+      for (let d = -radius; d <= radius; d++) {
+        const xx = x + d;
+        if (xx >= 0 && xx < width) sum += src[y * width + xx];
+      }
+      tmp[y * width + x] = sum / n;
+    }
   }
+  const out = new Float32Array(src.length);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let sum = 0;
+      for (let d = -radius; d <= radius; d++) {
+        const yy = y + d;
+        if (yy >= 0 && yy < height) sum += tmp[yy * width + x];
+      }
+      out[y * width + x] = sum / n;
+    }
+  }
+  return out;
+}
 
-  // Close (grow 2, shrink 1): fills the pinholes the dithered render leaves inside an object and leaves the mask 1 px wider
-  // than the object, so neither foam nor caustics show a seam along its edge.
-  const dilated = morph(morph(dry, width, height, 2, true), width, height, 1, false);
+/** The two half-resolution mask channels of one frame; both are `(SOURCE_W / 2) * (SOURCE_H / 2)` bytes. */
+export interface ArtMasksHalf {
+  /** 255 = dry (not plain water). */
+  dry: Uint8Array;
+  /** 255 = full shade painted on the water by the art (`SHADOW_FULL_DARKENING` or more darker than the plain water). */
+  shadow: Uint8Array;
+}
 
+/** Box-downsamples a full-canvas 0..1 map 2x2 to bytes. */
+function downsampleHalf(map: ArrayLike<number>, width: number, height: number): Uint8Array {
   const halfW = width >> 1;
   const halfH = height >> 1;
   const out = new Uint8Array(halfW * halfH);
   for (let y = 0; y < halfH; y++) {
     for (let x = 0; x < halfW; x++) {
       const i = 2 * y * width + 2 * x;
-      out[y * halfW + x] = Math.round((255 * (dilated[i] + dilated[i + 1] + dilated[i + width] + dilated[i + width + 1])) / 4);
+      out[y * halfW + x] = Math.round((255 * (map[i] + map[i + 1] + map[i + width] + map[i + width + 1])) / 4);
     }
   }
   return out;
+}
+
+/**
+ * The dry and shadow masks of `art` against `reference`, at half resolution.
+ *
+ * Dry = art opaque AND (reference transparent OR RGB differs by more than
+ * `DRY_PIXEL_EPS`). The 0/1 map is closed and grown by one source pixel (so the
+ * shader stops just outside the object's outline, not on it), cleared below the
+ * top face's front edges (`aboveFrontEdges`) and box-downsampled 2x2,
+ * which makes the edge soft.
+ *
+ * Shadow = where art and reference are both opaque and the pixel is not dry, the
+ * Rec.709 luma darkening `max(0, lumRef - lumArt) / max(lumRef, 1)` divided by
+ * `SHADOW_FULL_DARKENING` and clamped to 0..1; dry pixels and brighter pixels
+ * are 0. Blurred by `SHADOW_BLUR_RADIUS`, then cleared below the front edges and
+ * downsampled like dry. The shader dims caustics and darkens foam by it.
+ *
+ * 255 = fully dry / fully shaded.
+ */
+export function artMasksHalf(art: Canvas, reference: Canvas, width = SOURCE_W, height = SOURCE_H): ArtMasksHalf {
+  const dry = new Uint8Array(width * height);
+  const shade = new Float32Array(width * height);
+  for (let p = 0; p < dry.length; p++) {
+    const i = p * 4;
+    if (art[i + 3] < OPAQUE_ALPHA) continue;
+    const isDry = reference[i + 3] < OPAQUE_ALPHA || !isSame(art, reference, i, DRY_PIXEL_EPS);
+    dry[p] = isDry ? 1 : 0;
+    if (isDry) continue;
+    const lumRef = luma(reference, i);
+    const darkening = Math.max(0, lumRef - luma(art, i)) / Math.max(lumRef, 1);
+    shade[p] = Math.min(1, darkening / SHADOW_FULL_DARKENING);
+  }
+
+  // Close (grow 2, shrink 1): fills the pinholes the dithered render leaves inside an object and leaves the mask 1 px wider
+  // than the object, so neither foam nor caustics show a seam along its edge.
+  const dilated = morph(morph(dry, width, height, 2, true), width, height, 1, false);
+  const shadow = boxBlur(shade, width, height, SHADOW_BLUR_RADIUS);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (aboveFrontEdges(x, y)) continue;
+      dilated[y * width + x] = 0;
+      shadow[y * width + x] = 0;
+    }
+  }
+  return { dry: downsampleHalf(dilated, width, height), shadow: downsampleHalf(shadow, width, height) };
 }
 
 /** Where a frame's mask cell sits in the packed atlas, and which part of the source canvas it covers. */
@@ -154,7 +261,7 @@ export interface DryMaskFrame {
 
 /** What the `virtual:water-dry-masks` module exports. */
 export interface WaterDryMasksData {
-  /** `data:image/png;base64,...` — a grey+alpha PNG whose alpha is the dry mask. */
+  /** `data:image/png;base64,...` — an RGBA PNG: R is the shadow channel, G and B are 0, A is the dry mask. */
   url: string;
   /** Atlas size in texels. */
   width: number;

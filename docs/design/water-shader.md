@@ -554,9 +554,9 @@ stops looking like the boundary of the water and starts looking like the
 brightest part of a texture. A band of plain water against the coast reads as
 the surface only catching the light once there is some depth under it.
 
-The keep-off is short on purpose: `causticCullHexes` is 0.25 and
-`CAUSTIC_CULL_SPREAD_TILES` 0.1, so a ribbon ends just under the foam band
-(`foamWidthHexes` 0.3) instead of a visible gap before it. What keeps ribbons
+The keep-off is short on purpose: `causticCullHexes` is 0.1 and
+`CAUSTIC_CULL_SPREAD_TILES` 0.1, so every ribbon ends 0.1 to 0.2 tiles out, inside the foam band
+(`foamWidthHexes` 0.3, breathing with the surge), never short of it. At 0.25 the ends showed as a strip of plain water before the foam. What keeps ribbons
 off rocks, boats and buildings is not this distance but the art dry mask (§4.4b).
 
 **Cut, not faded.** The first version ramped them in over half a hex, and the
@@ -893,10 +893,23 @@ the pure per-frame maths is `dryMaskCore.ts`):
 5. The 0/1 map is closed (grown by 2 source pixels, shrunk by 1) — which fills
    the pinholes the dithering leaves inside an object and leaves the mask one
    pixel outside its outline, so the shader stops just outside it — and box-downsampled 2x2 to **half resolution**, which
-   makes the edge soft. All cells are shelf-packed into one grey+alpha PNG (alpha
-   is the mask) that the module exports as a data URL, with each frame's cell
+   makes the edge soft. All cells are shelf-packed into one RGBA PNG (A is the dry
+   mask, R the shadow channel below, G and B 0) that the module exports as a data URL, with each frame's cell
    rect and the source rect it covers. Computed once per build or dev-server
    start.
+
+6. **Shadow channel.** The soft shadows the art paints on the water are darker
+   than the plain water but within the 20 of step 4, so they are not dry. Light
+   through clear water does not appear in shade, so they must dim the caustics
+   and darken the foam. Per source pixel where art and reference are both opaque
+   and the pixel is not dry: `d = max(0, lumRef - lumArt) / max(lumRef, 1)` with
+   Rec.709 luma, `shadow = clamp(d / 0.25, 0, 1)` (`SHADOW_FULL_DARKENING`: 25%
+   darker is full shade; softer shadows scale linearly). Dry and brighter pixels
+   are 0 (dry already gates the former). The map is box-blurred by 2 source
+   pixels (`SHADOW_BLUR_RADIUS`; the render is dithered, raw per-pixel darkening
+   is speckled), cleared below the top face's front edges like dry, and
+   box-downsampled 2x2 like dry. It is stored in the red channel
+   (`artMasksHalf` returns `{ dry, shadow }`).
 
 *Runtime* (`waterDryMask.ts`, `WaterDryLayer`): the module is imported lazily.
 For every sea hex's base art in settlement mode the renderer draws, into one
@@ -906,17 +919,29 @@ art sprite's position plus the cell's source rect scaled by `tileWidth / 200`.
 Frame names come from `Texture.label`, which Pixi's `Spritesheet` sets to the
 frame key. The texture is redrawn when the water mask is applied or the terrain
 base entries change, not every frame, and bound as `uWaterDry`, sampled with the
-same `vUV` as the water mask. World mode, and the time before the masks have
+same `vUV` as the water mask. Overlapping sprites must union both channels
+independently, so the sprites use blend mode `'max'` (blend equation MAX with
+ONE/ONE factors: WebGL2, `EXT_blend_minmax` on WebGL1, WebGPU `max`). The mask
+atlas texture is created with `alphaMode: 'no-premultiply-alpha'` (on top of
+`createImageBitmap(..., { premultiplyAlpha: 'none' })`): Pixi's default would
+premultiply on upload, scaling R by A and erasing the shadow wherever nothing
+is dry. With tint `0xffffff` and alpha 1 the batcher outputs the sampled RGBA
+unchanged. World mode, and the time before the masks have
 loaded, bind a 1x1 texture of zeros: nothing is dry.
 
 *Fallback for unknown art*: art on a sea hex that is neither a reference nor has
 a mask cell (anything not water-based) is drawn into the render texture with its
-own alpha, tinted black, so all of its opaque pixels count as fully dry. Reference
+own alpha, tinted black, so all of its opaque pixels count as fully dry (A =
+art alpha, R = 0: no shadow). Reference
 frames draw nothing.
 
-The shader reads `float dry = texture(uWaterDry, vUV).a;` and multiplies the
-caustics (all three layers: blobs, coarse net, fine net) and the foam by
-`(1.0 - dry)`; the foam keeps its full width and edge noise. The sea body (§4.1)
+The shader reads `vec4 dryS = texture(uWaterDry, vUV);` with `dry = dryS.a` and
+`shade = dryS.r`, and multiplies the caustics (all three layers: blobs, coarse
+net, fine net) by `(1.0 - dry) * (1.0 - shade)` and the foam by `(1.0 - dry)`;
+the foam keeps its full width and edge noise. In shade the foam's colour (not
+its alpha) is also darkened by `(1.0 - SHADOW_FOAM * shade)`, `SHADOW_FOAM =
+0.45`: at full shade it keeps 55% of its brightness, still clearly foam. The
+debug view (`showWaterMask`) shows dry in blue and shade in red. The sea body (§4.1)
 is not masked (it is a flat colour with nothing at odds with the art), and the
 world-mode wave arcs are not either, since world mode has no painted sea tiles.
 
@@ -1077,13 +1102,15 @@ ould.
 sampler2D uWaterMask
 sampler2D uWaterTaint              taint field (§4.4c), single channel
 sampler2D uWaterNoFoam             river-mouth no-foam field, single channel; foam *= 1 - it
-sampler2D uWaterDry                art dry mask (§4.4b), render texture over the mask's rect; alpha is the mask; caustics and foam *= 1 - it
-sampler2D uRiverFlow               river flow field (§4.4d), render texture over the mask's rect; rg cos/sin of the ripple phase, b intensity, a where the hex has flow (its top face plus a 2-texel rim past the in and out edges)
-sampler2D uRiverSlow               slow phase, same layout and UVs as uRiverFlow (style 3)
-float uRiverStyle                 0 ripple arcs, 1 toon strands, 2 cartoon bands, 3 flow streaks (debug panel); vec2 uRiverUVPerWorld flow texture UV per world unit
-float uRiverFlowOn, uShowRiverFlow 0/1: the ripples; debug: colour the river by ripple phase
+sampler2D uWaterDry                art dry mask (§4.4b), render texture over the mask's rect; A = dry mask, R = shadow; caustics *= (1 - A)(1 - R), foam *= 1 - A, foam colour *= 1 - 0.45 R
+sampler2D uRiverFlow               river flow field (§4.4d), render texture over the river cells' own rect; rg cos/sin of the ripple phase, b distance to the bank, a where the hex has flow
+sampler2D uRiverPsi                stream function psi (§4.4d), same rect and UVs as uRiverFlow
+vec4  uRiverRect                   the river textures' world rect: (minX, minY, 1 / width, 1 / height)
+float uRiverStyle                  0 ripple arcs, 1 toon strands, 2 cartoon bands, 3 flow streaks, 4 bands + streaks (the default)
+float uRiverStreakMix              style 4: the streaks' alpha over the bands (0.25)
+float uRiverFlowOn, uShowRiverFlow 0/1: the river overlay; debug: colour the river by ripple phase
 float uRiverSpeed, uRiverArc       ripple phase rotation, radians per second; periods the crests lag at the banks
-float uRiverAlpha, uRiverScale;  vec3 uRiverColor   crest opacity; crest-break noise cells per world unit; crest colour
+float uRiverAlpha, uRiverScale;  vec3 uRiverColor   overlay opacity; noise cells per world unit; crest colour
 vec3  uTaintShallowColor, uTaintDeepColor, uTaintFoamColor
 float uTime, uWaveTime            base clock; wave clock, scaled by waveSpeed
 float uSeaBody, uMidWaterWaves, uShorelineFoam, uCaustics   0/1
@@ -1164,7 +1191,7 @@ export interface WaterDebugTuning {
   foamSurge: number;       // 0.18 — well under half; the surge is meant to be
                            //        felt rather than seen.
   waveSpeed: number;       // 1
-  causticCullHexes: number; // 0.25 — the *closest* a ribbon may come to shore;
+  causticCullHexes: number; // 0.1 — the *closest* a ribbon may come to shore;
                             //        each one takes its own distance from here
                             //        up to + CAUSTIC_CULL_SPREAD_TILES
                             //        (§4.2b); clamped to FOAM_REACH_TILES, past

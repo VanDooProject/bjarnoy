@@ -5,7 +5,8 @@
 // packs them into one atlas (`virtual:water-dry-masks`). This file draws those
 // masks, placed where the tile art is drawn, into one render texture covering
 // the water mask's world rect. The water shader samples it with the same UVs as
-// the water mask and keeps caustics and foam off whatever is dry.
+// the water mask: A keeps caustics and foam off whatever is dry, R dims them in
+// the soft shadows the art paints on the water.
 import { Container, ImageSource, Matrix, Rectangle, RenderTexture, Sprite, Texture, type Renderer } from 'pixi.js';
 import { REFERENCE_FRAME_RE, SOURCE_H, SOURCE_W, type DryMaskFrame, type WaterDryMasksData } from './dryMaskCore';
 
@@ -64,9 +65,13 @@ function loadMasks(): Promise<LoadedMasks> {
   masksPromise ??= (async () => {
     const { default: data } = await import('virtual:water-dry-masks');
     const blob = await (await fetch(data.url)).blob();
-    // 'none': keep the PNG's values as they are; Pixi premultiplies on upload, so the mask lands in the alpha channel (and rgb).
+    // The PNG is RGBA with R = shadow, A = dry. Both the bitmap decode ('none') and the GPU upload ('no-premultiply-alpha',
+    // Pixi's default would set UNPACK_PREMULTIPLY_ALPHA) keep the values raw: premultiplying would scale R by A and erase the
+    // shadow wherever nothing is dry.
     const bitmap = await createImageBitmap(blob, { premultiplyAlpha: 'none' });
-    const atlas = new Texture({ source: new ImageSource({ resource: bitmap, scaleMode: 'linear', addressMode: 'clamp-to-edge' }) });
+    const atlas = new Texture({
+      source: new ImageSource({ resource: bitmap, scaleMode: 'linear', addressMode: 'clamp-to-edge', alphaMode: 'no-premultiply-alpha' }),
+    });
     return { data, atlas, cells: new Map() };
   })();
   masksPromise.catch(() => {
@@ -97,10 +102,17 @@ export interface MaskPlacement {
  */
 export class MaskRenderTarget {
   private readonly maxSide: number;
+  private readonly blendMode: 'normal' | 'max';
 
-  /** `maxSide`: the longest side of the render texture, in pixels. */
-  constructor(maxSide: number = DRY_RT_MAX_SIDE) {
+  /**
+   * `maxSide`: the longest side of the render texture, in pixels. `blendMode`: how overlapping sprites combine. The dry mask
+   * uses 'max' (blend equation MAX, WebGL2 / EXT_blend_minmax / WebGPU), so overlapping sprites union dry and shadow
+   * independently. The river flow needs 'normal': its faces are drawn over its rims to replace them, and its channels
+   * (cos and sin of a phase) must not be combined channel by channel.
+   */
+  constructor(maxSide: number = DRY_RT_MAX_SIDE, blendMode: 'normal' | 'max' = 'normal') {
     this.maxSide = maxSide;
+    this.blendMode = blendMode;
   }
 
   private readonly container = new Container();
@@ -125,6 +137,7 @@ export class MaskRenderTarget {
     let used = 0;
     for (const { texture, rect: worldRect, tint } of placements) {
       const sprite = (this.pool[used] ??= new Sprite());
+      sprite.blendMode = this.blendMode;
       sprite.texture = texture;
       sprite.tint = tint;
       sprite.position.set(worldRect.x, worldRect.y);
@@ -158,7 +171,7 @@ export class MaskRenderTarget {
  * change, never per frame.
  */
 export class WaterDryLayer {
-  private readonly target = new MaskRenderTarget();
+  private readonly target = new MaskRenderTarget(DRY_RT_MAX_SIDE, 'max');
   private masks: LoadedMasks | null = null;
 
   /** The masks are lazily decoded; resolves when `draw` can use them. */
@@ -189,7 +202,7 @@ export class WaterDryLayer {
       if (REFERENCE_FRAME_RE.test(name)) continue;
       const frame = masks.data.frames[name];
       if (frame) placements.push({ texture: cellTexture(masks, name, frame), rect: dryCellWorldRect(entry, frame, tileWidth), tint: 0xffffff });
-      // Sea-hex art that is not plain water and has no mask: all of it is dry. Black tint keeps rgb 0 and the art's own alpha, which is what the shader reads.
+      // Sea-hex art that is not plain water and has no mask: all of it is dry. Black tint keeps R (shadow) 0 and the art's own alpha as A (dry).
       else placements.push({ texture: entry.texture, rect: artCanvasWorldRect(entry, tileWidth), tint: 0x000000 });
     }
     return this.target.render(renderer, rect, placements);

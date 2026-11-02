@@ -5,7 +5,7 @@
 //
 // For every `_base` frame of the non-showcase atlas pages that repeats a plain
 // water tile (see dryMaskCore.ts) it computes a half-resolution mask of the
-// pixels that are not plain water, and packs all masks into one grey+alpha PNG.
+// pixels that are not plain water, and packs all masks into one RGBA PNG (R = shadow, A = dry).
 // The result is computed once per build / dev-server start and cached.
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -17,11 +17,13 @@ import {
   REFERENCE_FRAME_RE,
   SOURCE_H,
   SOURCE_W,
+  TOP_FACE_H,
+  TOP_FACE_Y,
   WATER_MATCH_MIN_RATIO,
   bestReference,
   cellSourceRect,
   cropHalf,
-  dryMaskHalf,
+  artMasksHalf,
   orientationOf,
   type DryMaskFrame,
   type SourceRect,
@@ -45,6 +47,7 @@ interface ManifestFrame {
 }
 interface Manifest {
   frames: Record<string, ManifestFrame>;
+  meta?: { bjarnoy?: { tile?: { w: number; h: number; topFaceY: number; topFaceH: number } } };
 }
 
 /** Every non-showcase page's `_base` frames (the ones drawn under the water mesh), as full 200x300 RGBA canvases. */
@@ -63,6 +66,10 @@ async function readBaseCanvases(): Promise<Map<string, BaseCanvas>> {
   const pages = readdirSync(ATLAS_DIR).filter((f) => f.endsWith('.json') && !f.includes('showcase'));
   for (const jsonName of pages) {
     const manifest = JSON.parse(readFileSync(join(ATLAS_DIR, jsonName), 'utf8')) as Manifest;
+    const tile = manifest.meta?.bjarnoy?.tile;
+    if (tile && (tile.w !== SOURCE_W || tile.h !== SOURCE_H || tile.topFaceY !== TOP_FACE_Y || tile.topFaceH !== TOP_FACE_H)) {
+      throw new Error(`waterDryMasks: ${jsonName} has tile geometry ${JSON.stringify(tile)}, dryMaskCore assumes ${SOURCE_W}x${SOURCE_H} with the top face at ${TOP_FACE_Y}+${TOP_FACE_H}`);
+    }
     const names = Object.entries(manifest.frames).filter(
       ([name, f]) => name.endsWith('_base') && f.bjarnoy?.layer === 'base' && !f.rotated && f.sourceSize.w === SOURCE_W && f.sourceSize.h === SOURCE_H,
     );
@@ -103,7 +110,8 @@ export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
     const best = bestReference(canvas, references);
     if (!best || best.ratio < WATER_MATCH_MIN_RATIO) continue;
     const rect = cellSourceRect(trim);
-    cells.push({ name, rect, mask: cropHalf(dryMaskHalf(canvas, references[best.index]), rect) });
+    const masks = artMasksHalf(canvas, references[best.index]);
+    cells.push({ name, rect, a: cropHalf(masks.dry, rect), r: cropHalf(masks.shadow, rect) });
   }
 
   return packMasks(cells);
@@ -116,18 +124,20 @@ export async function buildRiverWaterMasks(): Promise<WaterDryMasksData> {
   for (const [name, { canvas, trim }] of bases) {
     if (!hasRiverWater(name) || riverTexelCount(canvas) < RIVER_MASK_MIN_TEXELS) continue;
     const rect = cellSourceRect(trim);
-    cells.push({ name, rect, mask: cropHalf(riverMaskHalf(canvas), rect) });
+    cells.push({ name, rect, a: cropHalf(riverMaskHalf(canvas), rect) });
   }
   return packMasks(cells);
 }
 
+/** One frame's half-resolution planes: `a` goes to the alpha channel (the dry mask, or the river water mask), `r` to red (the dry masks' shadow). */
 interface MaskCell {
   name: string;
   rect: ReturnType<typeof cellSourceRect>;
-  mask: Uint8Array;
+  a: Uint8Array;
+  r?: Uint8Array;
 }
 
-/** Shelf-packs the cells into one grey+alpha PNG whose alpha is the mask. */
+/** Shelf-packs the cells into one RGBA PNG: R = the cell's `r` plane (0 without one), G = B = 0, A = its `a` plane. */
 async function packMasks(cells: MaskCell[]): Promise<WaterDryMasksData> {
   // Shelf packing, tallest first.
   cells.sort((a, b) => b.rect.sh - a.rect.sh);
@@ -149,22 +159,22 @@ async function packMasks(cells: MaskCell[]): Promise<WaterDryMasksData> {
   }
   const height = Math.max(1, y + shelfH);
 
-  // Grey + alpha, both the mask: the browser decodes it to (v, v, v, v) once premultiplied.
-  const raw = new Uint8Array(ATLAS_WIDTH * height * 2);
+  // RGBA: R = shadow (dry masks only), G = B = 0, A = dry or river water. Decoded without premultiplying (waterDryMask.ts,
+  // riverFlowLayer.ts), so R survives where A is 0.
+  const raw = new Uint8Array(ATLAS_WIDTH * height * 4);
   for (const cell of cells) {
     const { x: cx, y: cy } = frames[cell.name];
     const w = cell.rect.sw >> 1;
     const h = cell.rect.sh >> 1;
     for (let row = 0; row < h; row++) {
       for (let col = 0; col < w; col++) {
-        const v = cell.mask[row * w + col];
-        const o = ((cy + row) * ATLAS_WIDTH + cx + col) * 2;
-        raw[o] = 255;
-        raw[o + 1] = v;
+        const o = ((cy + row) * ATLAS_WIDTH + cx + col) * 4;
+        raw[o] = cell.r?.[row * w + col] ?? 0;
+        raw[o + 3] = cell.a[row * w + col];
       }
     }
   }
-  const png = await sharp(raw, { raw: { width: ATLAS_WIDTH, height, channels: 2 } })
+  const png = await sharp(raw, { raw: { width: ATLAS_WIDTH, height, channels: 4 } })
     .png({ compressionLevel: 9 })
     .toBuffer();
   return { url: `data:image/png;base64,${png.toString('base64')}`, width: ATLAS_WIDTH, height, frames };

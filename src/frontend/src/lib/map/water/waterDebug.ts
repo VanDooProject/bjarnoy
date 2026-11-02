@@ -138,7 +138,7 @@ export interface WaterDebugTuning {
    * How close to the shore the caustic ribbons are allowed to come, in hexes.
    * Inside it they are simply absent — cut, not faded, since a half-strength
    * ribbon reads as a smudge and a belt of them reads as a second coastline.
-   * The default (0.25) lets them end just under the foam band, whose default
+   * The default (0.1) lets them end inside the foam band, whose default
    * width is `foamWidthHexes` 0.3. The
    * cut line wanders by CAUSTIC_CULL_JITTER_TILES either side of this so it
    * isn't a clean offset curve of the coast.
@@ -202,7 +202,7 @@ export const waterDebugTuning: WaterDebugTuning = {
   foamWidthHexes: 0.3,
   foamSurge: 0.18,
   waveSpeed: 1,
-  causticCullHexes: 0.25,
+  causticCullHexes: 0.1,
   causticThickness: 1,
   causticBrightness: 1,
   causticDensity: 1,
