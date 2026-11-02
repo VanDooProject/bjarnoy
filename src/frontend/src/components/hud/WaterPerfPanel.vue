@@ -25,7 +25,7 @@
 // without pulling Vue reactivity into HexMapRenderer.
 import { computed, onMounted, onUnmounted, reactive, ref, shallowRef } from 'vue';
 import DebugPanel from './DebugPanel.vue';
-import { waterDebugFlags, waterPerfStats, type WaterDebugFlags, type WaterPerfStats } from '../../lib/map/water/waterDebug';
+import { waterDebugFlags, waterPerfStats, type WaterDebugToggle, type WaterPerfStats } from '../../lib/map/water/waterDebug';
 import { runPerfSweep, sampleFrames, type SweepResult, type SweepSubject } from '../../lib/map/water/perfSweep';
 import { fogDebugFlags } from '../../lib/map/HexMapRenderer';
 
@@ -73,7 +73,7 @@ const count = (v: number) => v.toLocaleString();
 
 // --- the breakdown ---------------------------------------------------------
 
-const waterSubject = (key: keyof WaterDebugFlags, label: string, nested = false): SweepSubject => ({
+const waterSubject = (key: WaterDebugToggle, label: string, nested = false): SweepSubject => ({
   key,
   label,
   nested,

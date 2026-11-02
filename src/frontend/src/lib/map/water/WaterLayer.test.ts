@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BufferImageSource, Texture } from 'pixi.js';
-import { WaterLayer } from './WaterLayer';
-import { WATER_FRAGMENT } from './waterShader';
+import { RIVER_NOISE_PER_TILE, RIVER_SPEED_TURNS_PER_SECOND, WaterLayer } from './WaterLayer';
+import { RIPPLE_WAVELENGTH_TEXELS } from './riverFlow';
+import { RIVER_DRIFT, WATER_FRAGMENT } from './waterShader';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
 import { FOAM_REACH_TILES, type WaterMask } from './waterMask';
 import { waterMaskRegion } from './waterMaskLayout';
@@ -294,6 +295,86 @@ describe('WaterLayer', () => {
 
     layer.setDryTexture(null);
     expect(resources.uWaterDry).toBe(placeholder);
+  });
+
+  it('binds the "no river" placeholder until a river flow texture is set, and the given texture after', () => {
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+    const resources = layer.mesh.shader!.resources as Record<string, unknown>;
+    const placeholder = resources.uRiverFlow;
+    expect(placeholder).toBeDefined();
+    expect(WATER_FRAGMENT).toContain('uniform sampler2D uRiverFlow;');
+
+    const texture = new Texture({ source: new BufferImageSource({ resource: new Uint8Array([128, 128, 255, 255]), width: 1, height: 1 }) });
+    layer.setRiverFlowTexture(texture);
+    expect(resources.uRiverFlow).toBe(texture.source);
+
+    layer.setRiverFlowTexture(null);
+    expect(resources.uRiverFlow).toBe(placeholder);
+
+    // (f) The shader reads the texture with its own UVs: the river cells' box, as an origin and 1 / size.
+    layer.setRiverFlowTexture(texture, { minX: 100, minY: 20, maxX: 160, maxY: 80 });
+    const rect = Array.from(uniformsOf(layer).uRiverRect as Float32Array);
+    expect(rect.slice(0, 2)).toEqual([100, 20]);
+    expect(rect[2]).toBeCloseTo(1 / 60, 6);
+    expect(rect[3]).toBeCloseTo(1 / 60, 6);
+    layer.setRiverFlowTexture(null);
+    expect(Array.from(uniformsOf(layer).uRiverRect as Float32Array)).toEqual([0, 0, 1, 1]);
+
+    // The stream function texture is bound with the texture, and falls back to the placeholder without it.
+    const psiTexture = new Texture({ source: new BufferImageSource({ resource: new Uint8Array([128, 128, 255, 255]), width: 1, height: 1 }) });
+    layer.setRiverFlowTexture(texture, { minX: 0, minY: 0, maxX: 2, maxY: 2 }, psiTexture);
+    expect(resources.uRiverPsi).toBe(psiTexture.source);
+    layer.setRiverFlowTexture(texture, { minX: 0, minY: 0, maxX: 2, maxY: 2 });
+    expect(resources.uRiverPsi).toBe(placeholder);
+  });
+
+  it('carries the specks and patches at the ripples\' speed times the gain measured on the clips (within 10 %)', () => {
+    const k = RIVER_NOISE_PER_TILE / TILE_W; // the river noise scale, per world unit (uRiverScale)
+    const texelWorld = (2 * TILE_W) / 200; // a flow cell texel: 2 source px of the 200 px art
+    // Ripples: periods per second times the wavelength in world units. Drifts: shift * rate / (grid * k) world units per second.
+    // `gain` is what scripts/motion measurements on recorded clips needed on top of that so the visible marks match the crests
+    // (cross-fading features shows less motion than the nominal speed).
+    const ripples = RIVER_SPEED_TURNS_PER_SECOND * RIPPLE_WAVELENGTH_TEXELS * texelWorld;
+    for (const [name, d] of Object.entries(RIVER_DRIFT)) {
+      const speed = (d.shift * d.rate) / (d.grid * k);
+      expect(Math.abs(speed / d.gain / ripples - 1), `${name}: ${speed.toFixed(1)} against ${ripples.toFixed(1)} world units per second`).toBeLessThan(0.1);
+    }
+  });
+
+  it('maps the river flow flags and knobs onto their uniforms', () => {
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+    const u = uniformsOf(layer);
+    layer.tick(0);
+    expect(u.uRiverFlowOn).toBe(1);
+    expect(u.uShowRiverFlow).toBe(0);
+    const alpha = u.uRiverAlpha as number;
+    const speed = u.uRiverSpeed as number;
+    const arc = u.uRiverArc as number;
+
+    waterDebugFlags.riverFlow = false;
+    waterDebugFlags.showRiverFlow = true;
+    waterDebugTuning.riverBrightness = 2;
+    waterDebugTuning.riverSpeed = 0.5;
+    waterDebugTuning.riverArc = 2;
+    layer.tick(16);
+    expect(u.uRiverFlowOn).toBe(0);
+    expect(u.uShowRiverFlow).toBe(1);
+    // The default look is the cartoon bands with the flow streaks over them at a quarter of their alpha.
+    expect(u.uRiverStyle).toBe(4);
+    expect(u.uRiverStreakMix).toBeCloseTo(0.25, 9);
+    waterDebugFlags.riverStyle = 2;
+    waterDebugTuning.riverStreakMix = 0.4;
+    layer.tick(32);
+    expect(u.uRiverStyle).toBe(2);
+    expect(u.uRiverStreakMix).toBeCloseTo(0.4, 9);
+    waterDebugFlags.riverStyle = 3;
+    layer.tick(48);
+    expect(u.uRiverStyle).toBe(3);
+    waterDebugFlags.riverStyle = 4;
+    waterDebugTuning.riverStreakMix = 0.25;
+    expect(u.uRiverAlpha).toBeCloseTo(alpha * 2, 9);
+    expect(u.uRiverSpeed).toBeCloseTo(speed * 0.5, 9);
+    expect(u.uRiverArc).toBeCloseTo(arc * 2, 9);
   });
 
   it('never draws a sea body in settlement mode — the painted water tiles are it', () => {

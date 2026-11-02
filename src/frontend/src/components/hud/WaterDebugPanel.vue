@@ -11,7 +11,7 @@ import {
   BOG_LAKE_FOAM_STYLES,
   waterDebugFlags,
   waterDebugTuning,
-  type WaterDebugFlags,
+  type WaterDebugToggle,
   type WaterDebugTuning,
 } from '../../lib/map/water/waterDebug';
 
@@ -28,7 +28,10 @@ const emit = defineEmits<{ change: [] }>();
 const flags = reactive(waterDebugFlags);
 const tuning = reactive(waterDebugTuning);
 
-const LABELS: Record<keyof WaterDebugFlags, string> = {
+/** The looks of the river overlay, by `riverStyle`. */
+const RIVER_STYLES = ['Ripple arcs', 'Toon strands', 'Cartoon bands', 'Flow streaks', 'Bands + streaks'];
+
+const LABELS: Record<WaterDebugToggle, string> = {
   water: 'Water layer enabled',
   midWaterWaves: 'Surface pattern (caustics close / waves far)',
   causticsEverywhere: 'Debug: caustics on the world map too',
@@ -39,6 +42,8 @@ const LABELS: Record<keyof WaterDebugFlags, string> = {
   seaBody: 'Sea body (world map; off = CSS gradient)',
   legacyWaveSquiggles: 'World map: Graphics wave squiggles',
   showWaterMask: 'Debug: show the raw water mask',
+  riverFlow: 'River ripples (settlement)',
+  showRiverFlow: 'Debug: show river ripple phase',
   legacyTileSplit: 'Split unsplit tall art in code',
   bogLakeFoam: 'Bog lakes: gust foam lines',
   bogLakeSheen: 'Bog lakes: gust sheen',
@@ -83,7 +88,7 @@ const CAUSTIC_DENSITY = { min: 0.3, max: 2.5, step: 0.05 };
 const SLIDERS: {
   key: keyof WaterDebugTuning;
   label: string;
-  needs: keyof WaterDebugFlags;
+  needs: WaterDebugToggle;
   range: { min: number; max: number; step: number };
   format: (v: number) => string;
 }[] = [
@@ -108,11 +113,16 @@ const SLIDERS: {
   { key: 'mapAnimationSpeed', label: 'All map animations: playback speed', needs: 'water', range: { min: 0, max: 1.5, step: 0.05 }, format: times },
   { key: 'bogLakeGustPhaseOffset', label: 'Bog lake gust: phase offset', needs: 'water', range: { min: -0.5, max: 0.5, step: 0.01 }, format: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(2)} period (${(v * 16).toFixed(1)} frames)` },
   { key: 'bogLakeBandHalf', label: 'Bog lake gust: band half-width', needs: 'water', range: { min: 0.05, max: 0.5, step: 0.01 }, format: (v) => `${v.toFixed(2)} period` },
+  { key: 'riverBrightness', label: 'River flow: brightness', needs: 'riverFlow', range: CAUSTIC_BRIGHTNESS, format: times },
+  { key: 'riverStreakMix', label: 'River flow: streaks over bands', needs: 'riverFlow', range: CAUSTIC_BRIGHTNESS, format: times },
+  { key: 'riverArc', label: 'River flow: arc', needs: 'riverFlow', range: CAUSTIC_BRIGHTNESS, format: times },
+  { key: 'riverSpeed', label: 'River flow: speed', needs: 'riverFlow', range: WAVE_SPEED, format: times },
   { key: 'waveSpeed', label: 'Wave speed', needs: 'midWaterWaves', range: WAVE_SPEED, format: (v) => `${v.toFixed(1)}\u00d7` },
 ];
 
 // Debug-only panel text, like LABELS and SLIDERS above.
 const FOAM_STYLE_LABEL = 'Bog lake foam: style';
+const RIVER_STYLE_LABEL = 'River style';
 
 watch([flags, tuning], () => emit('change'), { flush: 'post' });
 </script>
@@ -122,6 +132,13 @@ watch([flags, tuning], () => emit('change'), { flush: 'post' });
     <label v-for="(label, key) in LABELS" :key="key" class="row">
       <input type="checkbox" v-model="flags[key]" />
       <span>{{ label }}</span>
+    </label>
+
+    <label class="row">
+      <span>{{ RIVER_STYLE_LABEL }}</span>
+      <select v-model.number="flags.riverStyle" :disabled="!flags.riverFlow">
+        <option v-for="(name, i) in RIVER_STYLES" :key="name" :value="i">{{ name }}</option>
+      </select>
     </label>
 
     <label class="row slider-row" :class="{ disabled: !flags.bogLakeFoam }">

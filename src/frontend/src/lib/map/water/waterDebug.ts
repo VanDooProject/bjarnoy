@@ -72,6 +72,21 @@ export interface WaterDebugFlags {
    */
   showWaterMask: boolean;
   /**
+   * The moving ripples on the painted river, stream and bog-creek water of a settlement view (§4.4e). The flow comes
+   * from the tile data and the art, see riverFlow.ts. Off leaves the painted water still.
+   */
+  riverFlow: boolean;
+  /**
+   * Debug: colour the river pixels by ripple phase (hue = phase, static) with the bank distance as brightness, instead of
+   * the ripples. The tool to check that the bands cross the channel and match across hex seams.
+   */
+  showRiverFlow: boolean;
+  /**
+   * The look of the river overlay (§4.4e "Looks"): 0 ripple arcs, 1 toon strands, 2 cartoon bands, 3 flow streaks, 4 bands with the
+   * streaks over them (what ships). The others are alternatives to compare in the debug panel.
+   */
+  riverStyle: number;
+  /**
    * Cut the unsplit tall art families into base/top halves in code
    * (legacyTileSplit.ts) so their overhang sits above the water mesh. Off
    * reproduces the artifact that exists to fix, which is the only way to see
@@ -91,6 +106,9 @@ export interface WaterDebugFlags {
   bogLakeBlops: boolean;
 }
 
+/** The on/off switches among the flags (the panel draws a checkbox for each). */
+export type WaterDebugToggle = { [K in keyof WaterDebugFlags]: WaterDebugFlags[K] extends boolean ? K : never }[keyof WaterDebugFlags];
+
 export const waterDebugFlags: WaterDebugFlags = {
   water: true,
   midWaterWaves: true,
@@ -102,6 +120,9 @@ export const waterDebugFlags: WaterDebugFlags = {
   seaBody: true,
   legacyWaveSquiggles: true,
   showWaterMask: false,
+  riverFlow: true,
+  showRiverFlow: false,
+  riverStyle: 4,
   legacyTileSplit: true,
   bogLakeFoam: false,
   bogLakeSheen: false,
@@ -189,6 +210,13 @@ export interface WaterDebugTuning {
    * offsetting one in time does.
    */
   causticFinePhase: number;
+  /** Multipliers on the river ripples' brightness and speed (§4.4e); 1.00x is what ships. */
+  riverBrightness: number;
+  riverSpeed: number;
+  /** Multiplier on how far the crests lag at the banks (§4.4e); 1.00x is what ships, 0 draws straight crests. */
+  riverArc: number;
+  /** The flow streaks' share of their own opacity where they are drawn over the cartoon bands (style 4, §4.4e). */
+  riverStreakMix: number;
   /** Multipliers on the bog lake gust's looks (1 is what ships). Only used while the matching flag is on. */
   bogLakeFoamStrength: number;
   bogLakeSheenStrength: number;
@@ -231,6 +259,10 @@ export const waterDebugTuning: WaterDebugTuning = {
   // A little over half the coarse net's ~30s breathing period, so the two are
   // close to opposed rather than merely unequal.
   causticFinePhase: 17,
+  riverBrightness: 1,
+  riverSpeed: 1,
+  riverArc: 1,
+  riverStreakMix: 0.25,
   bogLakeFoamStrength: 1,
   bogLakeSheenStrength: 1,
   bogLakeCatsPawsStrength: 1,
