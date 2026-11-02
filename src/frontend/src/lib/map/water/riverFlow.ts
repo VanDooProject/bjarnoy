@@ -40,6 +40,9 @@ export const SEED_REACH = 2;
  * face edge, and that dry rim must not fade the flow to nothing at every seam.
  */
 export const EDGE_RIM_TEXELS = 3;
+/** The strip along a seam, in texels from the edge line, where this cell's water may show over a neighbour whose own water stops short of the seam. */
+export const SEAM_STRIP_TEXELS = 1.5;
+
 /** Red-black SOR over-relaxation factor, convergence tolerance (largest update of a sweep) and sweep cap. */
 export const SOR_OMEGA = 1.9;
 export const SOR_TOLERANCE = 1e-5;
@@ -75,6 +78,8 @@ export interface RiverFlowInput {
 
 export interface BankContext {
   mask: Uint8Array;
+  /** The neighbours' water alone, on the same grid: what the neighbour's art shows past a seam. */
+  neighbour: Uint8Array;
   w: number;
   h: number;
   margin: number;
@@ -451,11 +456,8 @@ function distanceToBank(input: RiverFlowInput, passable: Uint8Array): Float32Arr
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const p = y * w + x;
-      if (water(x, y) || !dom[p]) {
-        d[p] = far;
-      } else {
-        d[p] = pastFlowEdge(x + 0.5, y + 0.5) || shortOfEdge(x, y) ? far : 0;
-      }
+      if (water(x, y) || !dom[p]) d[p] = far;
+      else d[p] = shortOfEdge(x, y) || pastFlowEdge(x + 0.5, y + 0.5) ? far : 0;
     }
   }
   // Steps in ground texels: a vertical texel is 1 / squash long.
@@ -526,7 +528,31 @@ function solveRiver(input: RiverFlowInput) {
     if (fade) intensity *= 1 - smoothstep(0, fadeLength, fade[p]!);
     return intensity;
   };
-  return { inside, passable, cover, isWater, phi, seedEdge, intensityAt };
+  /**
+   * Whether the art shows water at a texel of the rim past an in or out edge that has a neighbour: the neighbour's own water,
+   * or the strip where its water stops short of the seam. Anything else is the neighbour's land (or this hex's skirt under
+   * it), and a ripple there would sit on grass at the corner of a bank.
+   */
+  const rimShowsWater = (x: number, y: number): boolean => {
+    const c = input.context;
+    if (!c) return true;
+    const e = nearestFlowEdge(input, x + 0.5, y + 0.5);
+    if (!c.edges.includes(e)) return true;
+    const nbr = (xx: number, yy: number) => {
+      const i = xx + c.margin;
+      const j = yy + c.margin;
+      return i >= 0 && j >= 0 && i < c.w && j < c.h && c.neighbour[j * c.w + i]! >= WATER_THRESHOLD;
+    };
+    if (nbr(x, y)) return true;
+    // The strip where the neighbour's water stops short of the seam: close to the edge, with its water just further on.
+    const a = input.polygon[e]!;
+    const b = input.polygon[(e + 1) % input.polygon.length]!;
+    if (distToSegment(x + 0.5, y + 0.5, a, b) > SEAM_STRIP_TEXELS) return false;
+    const n = crossingDirection(input.polygon, e);
+    for (let step = 1; step <= EDGE_RIM_TEXELS + 1; step++) if (nbr(Math.round(x + n.x * step), Math.round(y + n.y * step))) return true;
+    return false;
+  };
+  return { inside, passable, cover, isWater, phi, seedEdge, intensityAt, rimShowsWater };
 }
 
 /**
@@ -669,7 +695,7 @@ function minDistance(fields: Float64Array[]): Float64Array {
 
 export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; periods: number; inside: Uint8Array } {
   const { mask, cw, ch, outEdge } = input;
-  const { inside, passable, cover, isWater, phi, seedEdge, intensityAt } = solveRiver(input);
+  const { inside, passable, cover, isWater, phi, seedEdge, intensityAt, rimShowsWater } = solveRiver(input);
   const hasIn = input.inEdges.some((e) => e !== outEdge);
 
   const dist = geodesic(input, passable, outEdge);
@@ -733,6 +759,7 @@ export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; p
     for (let x = 0; x < cw; x++) {
       const p = y * cw + x;
       if (!cover[p] || !isWater(x, y)) continue;
+      if (!inside[p] && !rimShowsWater(x, y)) continue;
       // The seed bands and the rim past an edge have a constant potential, which would draw a crest as a wide flat strip along
       // every seam. There the phase runs on past the edge line at the cell's mean rate instead (`2 pi n / L` per texel), so it
       // is still 0 mod 2 pi on the edge line itself and the two hexes of a seam continue each other's phase through it. The
@@ -783,6 +810,7 @@ export function buildBankContext(
   const w = own.cw + 2 * margin;
   const h = own.ch + 2 * margin;
   const mask = new Uint8Array(w * h);
+  const neighbour = new Uint8Array(w * h);
   for (let y = 0; y < own.ch; y++) mask.set(own.mask.subarray(y * own.cw, (y + 1) * own.cw), (y + margin) * w + margin);
   for (const { edge, cell } of neighbours) {
     const a = polygon[edge]!;
@@ -795,9 +823,12 @@ export function buildBankContext(
         const nx = Math.floor((own.x + (cx + 0.5) * texelWorld - cell.x) / texelWorld);
         const ny = Math.floor((own.y + (cy + 0.5) * texelWorld - cell.y) / texelWorld);
         if (nx < 0 || ny < 0 || nx >= cell.cw || ny >= cell.ch) continue;
-        if (cell.mask[ny * cell.cw + nx]! >= WATER_THRESHOLD) mask[j * w + i] = 255;
+        if (cell.mask[ny * cell.cw + nx]! >= WATER_THRESHOLD) {
+          mask[j * w + i] = 255;
+          neighbour[j * w + i] = 255;
+        }
       }
     }
   }
-  return { mask, w, h, margin, edges: neighbours.map((n) => n.edge) };
+  return { mask, neighbour, w, h, margin, edges: neighbours.map((n) => n.edge) };
 }

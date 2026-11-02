@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { vendoredArt } from './riverArtFixture';
 import { composePair, directionOfOffset, sampleComposite, SEAM_PAIRS, TEXEL_WORLD, type ComposedCell } from './riverSeamFixture';
 import { topFaceEdgeIndex } from '../riverPath';
+import { FACE_PAD_TEXELS } from './riverFlow';
 
 /** The texels where one cell's rim lies over the other cell's face: [rim texel data offset, face texel data offset, rim cell, face cell]. */
 function overlaps(cells: ComposedCell[]): { rim: Uint8Array; ro: number; face: Uint8Array; fo: number }[] {
@@ -90,6 +91,46 @@ describe.skipIf(!vendoredArt)('river flow across the seams of real neighbouring 
     for (const o of overlaps(cells)) max = Math.max(max, Math.abs(o.rim[o.ro + 2]! - o.face[o.fo + 2]!) / 255);
     expect(max).toBeGreaterThan(0.3);
   }, 120_000);
+
+  it('(g) draws no rim ripples over the neighbour\'s land, only in the 1-texel strip along the seam line', async () => {
+    // A confluence has edges whose neighbours the pair does not include, so its rims there are not filtered in this fixture.
+    const totals = { before: 0, after: 0 };
+    for (const pair of SEAM_PAIRS.filter((p) => p.every((c) => c.ins.length === 1))) {
+      const overDry = async (withContext: boolean) => {
+        const cells = await composePair(pair, withContext);
+        const found: { dseam: number }[] = [];
+        for (const [i, j] of [[0, 1], [1, 0]] as const) {
+          const r = cells[i]!;
+          const f = cells[j]!;
+          const a = r.frame.polygon[r.seamEdge]!;
+          const b = r.frame.polygon[(r.seamEdge + 1) % 6]!;
+          for (let ty = 0; ty < r.frame.ch; ty++) {
+            for (let tx = 0; tx < r.frame.cw; tx++) {
+              if (r.rim[(ty * r.frame.cw + tx) * 4 + 3] === 0) continue;
+              const fx = Math.floor((r.x + (tx + 0.5) * TEXEL_WORLD - f.x) / TEXEL_WORLD);
+              const fy = Math.floor((r.y + (ty + 0.5) * TEXEL_WORLD - f.y) / TEXEL_WORLD);
+              if (fx < 0 || fy < 0 || fx >= f.frame.cw || fy >= f.frame.ch) continue;
+              if (f.frame.mask[fy * f.frame.cw + fx]! >= 128) continue;
+              const dx = b.x - a.x;
+              const dy = b.y - a.y;
+              const t = Math.max(0, Math.min(1, ((tx + 0.5 - a.x) * dx + (ty + 0.5 - a.y) * dy) / (dx * dx + dy * dy)));
+              const dseam = Math.hypot(tx + 0.5 - a.x - t * dx, ty + 0.5 - a.y - t * dy);
+              // Farther than the rim is wide: that is the rim of another edge, whose neighbour this pair does not have.
+              if (dseam <= FACE_PAD_TEXELS) found.push({ dseam });
+            }
+          }
+        }
+        return found;
+      };
+      const before = await overDry(false);
+      const after = await overDry(true);
+      expect(after.length, `${pair[0].name}: ${before.length} before, ${after.length} after`).toBeLessThanOrEqual(before.length);
+      totals.before += before.length;
+      totals.after += after.length;
+      for (const t of after) expect(t.dseam, pair[0].name).toBeLessThanOrEqual(1);
+    }
+    expect(totals.after, JSON.stringify(totals)).toBeLessThan(totals.before);
+  }, 300_000);
 
   it('(c) turns the ripple phase at about the same rate on both sides of a seam (25 % on average over the pairs, 40 % at worst)', async () => {
     const worst: string[] = [];
