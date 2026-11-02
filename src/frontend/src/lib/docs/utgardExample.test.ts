@@ -4,12 +4,13 @@
 // per ring on straights, and clamp(floor(land / 120 + 0.5), 3, 6) watchtowers outside the outer ring, at least 5 hexes from each other
 // and from Utgard. The rules themselves are not re-tested here.
 import { describe, expect, it } from 'vitest';
-import { coordKey, hexDistance, type AxialCoord } from '../hex/coords';
+import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
 import { MinTowerSpacing, towerCountFor } from '../map/endgamePlacement';
 import { giantCoverage } from '../map/giantTiles';
 import { findPath, type PathContext } from '../map/hexPath';
 import { palisadeRestrictions } from '../map/palisadeMovement';
-import { UTGARD_CENTRE, UTGARD_RINGS, buildUtgardExampleTiles, utgardExampleKindOf, utgardLandHexes } from './utgardExample';
+import { wastedVariantAt } from '../map/worldGenerator';
+import { UTGARD_CENTRE, UTGARD_EXAMPLE_WORLD, UTGARD_RINGS, buildUtgardExampleStreams, buildUtgardExampleTiles, utgardExampleKindOf, utgardLandHexes } from './utgardExample';
 
 const tiles = buildUtgardExampleTiles();
 const byKey = new Map(tiles.map((t) => [coordKey(t), t]));
@@ -92,5 +93,48 @@ describe('the Utgard example island', () => {
     for (let i = 0; i < towers.length; i++) {
       for (let j = i + 1; j < towers.length; j++) expect(hexDistance(towers[i]!, towers[j]!)).toBeGreaterThanOrEqual(MinTowerSpacing);
     }
+  });
+});
+
+describe('the Utgard example island looks', () => {
+  it('draw what the game would roll for the same wasted hex (wastedVariantAt)', () => {
+    const land = tiles.filter((t) => t.terrain !== 'sea' && !t.giant);
+    expect(land.length).toBeGreaterThan(100);
+    for (const t of land) expect(t.variant, `(${t.q},${t.r})`).toBe(wastedVariantAt(t.q, t.r, UTGARD_EXAMPLE_WORLD, t.terrain));
+  });
+});
+
+describe('the Utgard example lava streams', () => {
+  const streams = buildUtgardExampleStreams();
+  const streamKeys = new Set(streams.map(coordKey));
+  const giantKeys = new Set(giantCoverage(UTGARD_CENTRE).map((g) => coordKey(g.coord)));
+
+  it('come from the game generator: wasted, and at least one runs from a mountain to the sea', () => {
+    expect(streams.length).toBeGreaterThan(0);
+    expect(streams.every((s) => s.wasted)).toBe(true);
+    const springs = streams.filter((s) => s.shape === 'spring');
+    expect(springs.length).toBeGreaterThanOrEqual(1);
+    for (const s of springs) expect(byKey.get(coordKey(s))!.terrain).toBe('mountain');
+    const mouths = streams.filter((s) => s.shape === 'mouth');
+    expect(mouths.length).toBeGreaterThanOrEqual(1);
+    for (const m of mouths) expect(neighbors(m).some((n) => byKey.get(coordKey(n))?.terrain === 'sea')).toBe(true);
+  });
+
+  it('never run through Utgard, and no mountain stands on it', () => {
+    for (const k of giantKeys) {
+      expect(streamKeys.has(k)).toBe(false);
+      expect(byKey.get(k)!.terrain).not.toBe('mountain');
+    }
+  });
+
+  it('leave no wall or tower on a stream hex', () => {
+    for (const t of [...walls, ...towers]) expect(streamKeys.has(coordKey(t)), `(${t.q},${t.r})`).toBe(false);
+  });
+
+  it('name a hovered stream hex and mountain hex', () => {
+    const stream = streams[0]!;
+    expect(utgardExampleKindOf(byKey.get(coordKey(stream))!, stream)).toBe('lava');
+    const mountain = tiles.find((t) => t.terrain === 'mountain')!;
+    expect(utgardExampleKindOf(mountain)).toBe('mountain');
   });
 });

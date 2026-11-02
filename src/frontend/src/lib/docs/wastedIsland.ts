@@ -25,11 +25,13 @@
 //     per-hex top parts from `buildings-static`/`terrain` (draw layer "top",
 //     see `giantTiles.ts`) — see its own doc comment for why a giant is
 //     drawn per-hex rather than as one pre-composited frame.
-import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
+import { coordKey, hexDistance, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import { isoGridPosition } from '../hex/geometry';
+import { DEFAULT_GENERATION, wastedVariantAt, type WorldSeed } from '../map/worldGenerator';
 import { findAtlasClip, findAtlasFrame, type AtlasClip, type AtlasFrameRect } from '../map/atlas';
 import { giantCoverage, giantCrop, GIANT_PARTS } from '../map/giantTiles';
-import { TILE_ORIENTATIONS, type Tile, type TileOrientation } from '../map/types';
+import { generateRivers } from '../map/riverGenerator';
+import { TILE_ORIENTATIONS, type RiverTile, type Terrain, type Tile, type TileOrientation } from '../map/types';
 
 /** One island hex's terrain family, or one of the two giants. */
 export type IslandKind = 'grass' | 'forest' | 'mountain' | 'sand' | 'coast' | 'sea' | 'utgard' | 'volcano';
@@ -68,6 +70,9 @@ export interface IslandPlacement {
 // rendered at 2x into this same 400-wide, 600-tall space, anchored to the
 // bottom of that canvas rather than its top-left — see `TILE_SOURCE_H` and
 // `WastedIsland.vue`'s `spriteBox`.
+/** The seed the docs island's wasted looks are rolled with (`wastedVariantAt`). */
+export const WASTED_ISLAND_WORLD: WorldSeed = { seed: 1, generation: DEFAULT_GENERATION };
+
 const TILE_W = 400;
 const TOP_FACE_H = 184;
 /** A tile's top face's own bounding-box y-offset within its 400x600 source canvas — also usable by a standalone giant layout (e.g. `AnimatedGiant.vue`) that needs the same `g.y - TOP_FACE_Y` placement math `buildIsland` uses. */
@@ -78,6 +83,8 @@ export const TILE_SOURCE_H = 600;
 export const GIANT_PART_NATIVE_CANVAS_H = 300;
 
 const ISLAND_RADIUS = 5;
+/** The blight stage at which the island's land turns wasted. */
+const LAND_TURNS_AT = 2;
 const ORIGIN: AxialCoord = { q: 0, r: 0 };
 const VOLCANO_CENTER: AxialCoord = { q: -3, r: 1 };
 
@@ -186,6 +193,13 @@ function isGiantHex(c: AxialCoord): boolean {
   return GIANT_KEYS.has(coordKey(c));
 }
 
+/**
+ * Mountain hexes the layout fixes by hand (on top of the hash rolls): two small ranges, each two connected hexes (what a lava
+ * stream's spring needs) whose spring has only land round it, so each sends a stream down to the coast. The hash rolls alone leave
+ * the island's mountains as single, unconnected hexes.
+ */
+const FORCED_MOUNTAINS: ReadonlySet<string> = new Set(['1,-3', '1,-4', '-2,3', '-3,3']);
+
 let cachedHexes: IslandHexRecord[] | null = null;
 
 function classifyIsland(): IslandHexRecord[] {
@@ -217,7 +231,7 @@ function classifyIsland(): IslandHexRecord[] {
 
     let kind: IslandHexRecord['kind'];
     if (isLand) {
-      if (isEdge) {
+      if (isEdge && !FORCED_MOUNTAINS.has(coordKey(c))) {
         kind = 'sand';
       } else {
         // Never forest/mountain at d===2 (the ring immediately around the
@@ -227,7 +241,9 @@ function classifyIsland(): IslandHexRecord[] {
         const northOfUtgard = isoGridPosition(c, TILE_W, TOP_FACE_H).y < utgardCentreY;
         const nearVolcano = hexDistance(c, VOLCANO_CENTER) <= 3;
         const roll = hashFloat(c.q, c.r, SALT.kind);
-        if (d <= 2) {
+        if (FORCED_MOUNTAINS.has(coordKey(c))) {
+          kind = 'mountain';
+        } else if (d <= 2) {
           kind = 'grass';
         } else if (northOfUtgard && nearVolcano) {
           kind = roll < 0.15 ? 'grass' : roll < 0.6 ? 'forest' : 'mountain';
@@ -240,7 +256,7 @@ function classifyIsland(): IslandHexRecord[] {
       kind = coastal ? 'coast' : 'sea';
     }
 
-    const turnsAt = isLand ? 2 : kind === 'coast' ? 3 : 4;
+    const turnsAt = isLand ? LAND_TURNS_AT : kind === 'coast' ? 3 : 4;
 
     const living = livingArt(kind, c);
     const wasted = wastedArt(kind, c);
@@ -310,19 +326,22 @@ function livingArt(kind: IslandHexRecord['kind'], c: AxialCoord): { prefix: stri
   }
 }
 
-/** Same shape as `livingArt`, for the wasted counterpart. */
+/**
+ * Same shape as `livingArt`, for the wasted counterpart. The land looks (wasteland, dead forest, black sand) are rolled with the
+ * game's own `wastedVariantAt` weights, so the docs island shows the rune crack as rarely as a real wasted island does.
+ */
 function wastedArt(kind: IslandHexRecord['kind'], c: AxialCoord): { prefix: string; suffix: string; index: number } {
   switch (kind) {
     case 'grass': {
-      const n = hashInt(c.q, c.r, SALT.wastedVariant, 6); // '', variant001..005
+      const n = wastedVariantAt(c.q, c.r, WASTED_ISLAND_WORLD, 'grass'); // '', variant001..005 — the game's own weights
       return { prefix: 'wasteland', suffix: n === 0 ? '' : `_variant${String(n).padStart(3, '0')}`, index: n };
     }
     case 'forest': {
-      const n = hashInt(c.q, c.r, SALT.wastedVariant, 2); // '', variant001
+      const n = wastedVariantAt(c.q, c.r, WASTED_ISLAND_WORLD, 'forest'); // '', variant001
       return { prefix: 'deadforest', suffix: n === 0 ? '' : '_variant001', index: n };
     }
     case 'sand': {
-      const n = hashInt(c.q, c.r, SALT.wastedVariant, 2); // '', variant001
+      const n = wastedVariantAt(c.q, c.r, WASTED_ISLAND_WORLD, 'sand'); // '', variant001
       return { prefix: 'blacksand', suffix: n === 0 ? '' : '_variant001', index: n };
     }
     case 'mountain':
@@ -339,6 +358,58 @@ function wastedArt(kind: IslandHexRecord['kind'], c: AxialCoord): { prefix: stri
       // index is always 0, same as its living `watertile` counterpart.
       return { prefix: 'taintedwater', suffix: '', index: 0 };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Lava streams — traced once, by the game's own generator, over the un-rotated island
+// ---------------------------------------------------------------------------
+
+let cachedStreams: RiverTile[] | null = null;
+
+/**
+ * The island's lava streams, traced by the game's own `generateRivers` (wasted mode, no confluences) over the un-rotated island:
+ * its mountains are the springs, the giants' hexes count as land (they are placed after the rivers in a world, and here they are
+ * fixed, so the mountains are laid out such that no stream crosses one). Not rotated, not stage-dependent: `buildIslandStreams`
+ * does both.
+ */
+function islandStreams(): RiverTile[] {
+  if (cachedStreams) return cachedStreams;
+  const records = classifyIsland();
+  const terrain = new Map<string, Terrain>();
+  for (const k of GIANT_KEYS) terrain.set(k, 'grass');
+  for (const r of records) {
+    if (r.kind !== 'coast' && r.kind !== 'sea') terrain.set(coordKey(r), r.kind === 'mountain' ? 'mountain' : 'grass');
+  }
+  const land = [...terrain.keys()].map(parseKey);
+  // Depth grows toward the coast (the tracer prefers the higher value, like `wastedDepthAt`): the island's deepest inland distance
+  // minus a hex's own distance to the nearest sea hex.
+  const inland = new Map<string, number>();
+  let frontier = land.filter((c) => neighbors(c).some((n) => !terrain.has(coordKey(n))));
+  for (const c of frontier) inland.set(coordKey(c), 1);
+  for (let d = 2; frontier.length > 0; d++) {
+    const next: AxialCoord[] = [];
+    for (const c of frontier) {
+      for (const n of neighbors(c)) {
+        if (terrain.has(coordKey(n)) && !inland.has(coordKey(n))) {
+          inland.set(coordKey(n), d);
+          next.push(n);
+        }
+      }
+    }
+    frontier = next;
+  }
+  const deepest = Math.max(...inland.values());
+  cachedStreams = generateRivers(
+    land,
+    (c) => terrain.get(coordKey(c)) ?? 'sea',
+    (c) => (inland.has(coordKey(c)) ? deepest + 1 - inland.get(coordKey(c))! : null),
+    (c) => terrain.has(coordKey(c)),
+    WASTED_ISLAND_WORLD.seed,
+    0,
+    true,
+    false,
+  );
+  return cachedStreams;
 }
 
 function orientationAt(baseIndex: number, rotation: number): TileOrientation {
@@ -759,4 +830,42 @@ export function giantClipBoxes(
     frames: clip.frameRects.map((rect) => giantTopPartBox(origin, rect)),
     rest: clip.restRect ? giantTopPartBox(origin, clip.restRect) : undefined,
   };
+}
+
+/** The island's lava streams before any rotation (what the generator traced). */
+export function islandStreamsForTests(): readonly RiverTile[] {
+  return islandStreams();
+}
+
+/**
+ * `orientation` seen after the island turns `steps` x 60 degrees (`rotateAxial`'s direction): the compass name of the neighbour
+ * that `orientation`'s neighbour rotates into, so a flow direction keeps pointing at the same neighbour hex after a rotation.
+ */
+export function rotateOrientation(orientation: TileOrientation, steps: number): TileOrientation {
+  const origin: AxialCoord = { q: 0, r: 0 };
+  const towards = neighbors(origin)[TILE_ORIENTATIONS.indexOf(orientation)]!;
+  const turned = rotateAxial(towards, steps);
+  return TILE_ORIENTATIONS[neighbors(origin).findIndex((n) => n.q === turned.q && n.r === turned.r)]!;
+}
+
+/**
+ * The lava streams as they show at `rotation` and blight `stage`: the generator's tiles turned with the island (coordinates and
+ * every flow direction), and only those on a hex that is already wasted at `stage` (the land turns at stage 2, so earlier stages
+ * show none).
+ */
+export function buildIslandStreams(rotation: number, stage: number): RiverTile[] {
+  const turnsAt = new Map<string, number>(classifyIsland().map((r) => [coordKey(r), r.turnsAt]));
+  const out: RiverTile[] = [];
+  for (const tile of islandStreams()) {
+    if (stage < (turnsAt.get(coordKey(tile)) ?? LAND_TURNS_AT)) continue;
+    const rotated = rotateAxial(tile, rotation);
+    out.push({
+      ...tile,
+      q: rotated.q,
+      r: rotated.r,
+      inDirections: tile.inDirections.map((d) => rotateOrientation(d, rotation)),
+      outDirection: tile.outDirection ? rotateOrientation(tile.outDirection, rotation) : null,
+    });
+  }
+  return out;
 }

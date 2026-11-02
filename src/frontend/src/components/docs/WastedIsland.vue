@@ -14,11 +14,11 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
-import { useHexMapRenderer } from '../../composables/useHexMapRenderer';
+import { useDocsMapRenderer } from '../../composables/useDocsMapRenderer';
 import { StaticWorldModel } from '../../lib/map/StaticWorldModel';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import type { AxialCoord } from '../../lib/hex/coords';
-import { buildIslandTiles, delayFraction, islandHexInfo, type IslandKind } from '../../lib/docs/wastedIsland';
+import { buildIslandStreams, buildIslandTiles, delayFraction, islandHexInfo, type IslandKind } from '../../lib/docs/wastedIsland';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -38,6 +38,7 @@ const reducedMotion =
 // `setTiles` plus the exposed renderer's `forceRebuild`, the way the real
 // game mutates its WorldModel and re-renders rather than re-mounting.
 const world = new StaticWorldModel(buildIslandTiles(rotation.value, stage.value));
+world.setRivers(buildIslandStreams(rotation.value, stage.value));
 
 // The hovered hex, plus which rotation it was hovered *at* — a hex's
 // identity (kind/turnsAt) is looked up per-rotation (islandHexInfo), and the
@@ -49,20 +50,9 @@ const hovered = ref<{ coord: AxialCoord; rotation: number } | null>(null);
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-const { renderer } = useHexMapRenderer(canvas, container, {
-  mode: 'settlement',
+const { renderer } = useDocsMapRenderer(canvas, container, {
   worldModel: world,
-  playerId: 'docs',
   previewCenter: { q: 0, r: 0 },
-  lockCamera: true,
-  // The locked preview sits inline in this scrolling docs article, not
-  // beside static hero copy the way the landing page's own locked preview
-  // does — a wheel/touch gesture over it should scroll the page, not be
-  // eaten for a zoom/pan the locked camera already ignores anyway. The
-  // canvas's own `touch-action: pan-y` (below) is this same intent from the
-  // CSS side.
-  allowPageScroll: true,
-  hideSettlementBadge: true,
   onHoverChange: (info: HoverInfo | null) => {
     hovered.value = info ? { coord: info.coord, rotation: rotation.value } : null;
   },
@@ -86,6 +76,7 @@ const captionText = computed(() => {
   const h = hovered.value;
   const info = h ? islandHexInfo(h.rotation, h.coord) : undefined;
   if (!info) return t('docs.wastedLands.island.hoverHint');
+  if (h && world.getRiverTile(h.coord.q, h.coord.r)) return t('docs.wastedLands.tiles.river.wasted');
   return t(tileNameKey(info.kind, stage.value >= info.turnsAt));
 });
 
@@ -95,6 +86,7 @@ const captionText = computed(() => {
 // ring by ring from the centre out).
 watch(stage, (newStage) => {
   world.setTiles(buildIslandTiles(rotation.value, newStage));
+  world.setRivers(buildIslandStreams(rotation.value, newStage));
   renderer.value?.forceRebuild({
     transition: {
       durationMs: reducedMotion ? 0 : 700,
@@ -106,6 +98,7 @@ watch(stage, (newStage) => {
 function rotate(delta: number): void {
   rotation.value = (((rotation.value + delta) % 6) + 6) % 6;
   world.setTiles(buildIslandTiles(rotation.value, stage.value));
+  world.setRivers(buildIslandStreams(rotation.value, stage.value));
   // No transition here: a rotation swaps every hex's screen position, not
   // just its texture — a cross-fade would read as every tile's art
   // dissolving in place while the whole island silently jumps underneath it,
@@ -178,7 +171,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div ref="container" class="map-host">
-      <canvas ref="canvas" />
+      <canvas ref="canvas" class="docs-map-canvas" />
     </div>
 
     <p class="caption" data-testid="island-caption">{{ captionText }}</p>
@@ -258,19 +251,6 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   background: radial-gradient(ellipse at 50% 40%, #1a2a33 0%, #0b1116 75%);
   border: 1px solid var(--panel-border);
-}
-.map-host canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  /* This preview's camera is locked (no pan/pinch-zoom) and `allowPageScroll`
-     tells the renderer not to eat a wheel/touch gesture for zoom either — this
-     is that same intent for the browser's own default touch handling, so a
-     one-finger drag here scrolls the article instead of doing nothing.
-     (SettlementCanvas.vue's real, pannable map uses `touch-action: none`
-     instead — the opposite tradeoff, for the opposite reason.) */
-  touch-action: pan-y;
-  cursor: default;
 }
 .caption {
   margin: 0;
