@@ -9,7 +9,8 @@ import { MinTowerSpacing, towerCountFor } from '../map/endgamePlacement';
 import { giantCoverage } from '../map/giantTiles';
 import { findPath, type PathContext } from '../map/hexPath';
 import { palisadeRestrictions } from '../map/palisadeMovement';
-import { UTGARD_CENTRE, UTGARD_RINGS, buildUtgardExampleTiles, utgardExampleKindOf, utgardLandHexes } from './utgardExample';
+import { wastedVariantAt } from '../map/worldGenerator';
+import { UTGARD_CENTRE, UTGARD_EXAMPLE_WORLD, UTGARD_RINGS, buildUtgardExampleTiles, utgardExampleKindOf, utgardLandHexes } from './utgardExample';
 
 const tiles = buildUtgardExampleTiles();
 const byKey = new Map(tiles.map((t) => [coordKey(t), t]));
@@ -92,5 +93,13 @@ describe('the Utgard example island', () => {
     for (let i = 0; i < towers.length; i++) {
       for (let j = i + 1; j < towers.length; j++) expect(hexDistance(towers[i]!, towers[j]!)).toBeGreaterThanOrEqual(MinTowerSpacing);
     }
+  });
+});
+
+describe('the Utgard example island looks', () => {
+  it('draw what the game would roll for the same wasted hex (wastedVariantAt)', () => {
+    const land = tiles.filter((t) => t.terrain !== 'sea' && !t.giant);
+    expect(land.length).toBeGreaterThan(100);
+    for (const t of land) expect(t.variant, `(${t.q},${t.r})`).toBe(wastedVariantAt(t.q, t.r, UTGARD_EXAMPLE_WORLD, t.terrain));
   });
 });

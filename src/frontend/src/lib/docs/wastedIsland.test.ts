@@ -22,7 +22,9 @@ import {
   giantClipBoxes,
   giantTopPartBox,
   GIANT_PART_NATIVE_CANVAS_H,
+  WASTED_ISLAND_WORLD,
 } from './wastedIsland';
+import { wastedVariantAt } from '../map/worldGenerator';
 import { coordKey, hexDistance } from '../hex/coords';
 import { GIANT_NEIGHBOR_PARTS, type GiantPart } from '../map/giantTiles';
 
@@ -419,3 +421,24 @@ function domGiantKindOf(
   );
   return anchorPlacement?.kind as 'utgard' | 'volcano' | undefined;
 }
+
+describe('the wasted looks', () => {
+  it('draw what the game would roll for the same hex (wastedVariantAt)', () => {
+    const land = islandHexRecordsForTests().filter((r) => r.kind === 'grass' || r.kind === 'forest' || r.kind === 'sand');
+    expect(land.length).toBeGreaterThan(10);
+    for (const r of land) {
+      expect(r.wastedVariantIndex, `${r.kind} (${r.q},${r.r})`).toBe(wastedVariantAt(r.q, r.r, WASTED_ISLAND_WORLD, r.kind));
+    }
+  });
+
+  it('reach the renderer tiles unchanged at every rotation', () => {
+    for (const rotation of ROTATIONS) {
+      const byKey = new Map(buildIslandTiles(rotation, 4).map((t) => [coordKey(t), t]));
+      for (const r of islandHexRecordsForTests()) {
+        if (r.kind !== 'grass') continue;
+        const tile = byKey.get(coordKey(rotateAxial(r, rotation)))!;
+        expect(tile.variant).toBe(wastedVariantAt(r.q, r.r, WASTED_ISLAND_WORLD, 'grass'));
+      }
+    }
+  });
+});

@@ -27,6 +27,7 @@
 //     drawn per-hex rather than as one pre-composited frame.
 import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
 import { isoGridPosition } from '../hex/geometry';
+import { DEFAULT_GENERATION, wastedVariantAt, type WorldSeed } from '../map/worldGenerator';
 import { findAtlasClip, findAtlasFrame, type AtlasClip, type AtlasFrameRect } from '../map/atlas';
 import { giantCoverage, giantCrop, GIANT_PARTS } from '../map/giantTiles';
 import { TILE_ORIENTATIONS, type Tile, type TileOrientation } from '../map/types';
@@ -68,6 +69,9 @@ export interface IslandPlacement {
 // rendered at 2x into this same 400-wide, 600-tall space, anchored to the
 // bottom of that canvas rather than its top-left — see `TILE_SOURCE_H` and
 // `WastedIsland.vue`'s `spriteBox`.
+/** The seed the docs island's wasted looks are rolled with (`wastedVariantAt`). */
+export const WASTED_ISLAND_WORLD: WorldSeed = { seed: 1, generation: DEFAULT_GENERATION };
+
 const TILE_W = 400;
 const TOP_FACE_H = 184;
 /** A tile's top face's own bounding-box y-offset within its 400x600 source canvas — also usable by a standalone giant layout (e.g. `AnimatedGiant.vue`) that needs the same `g.y - TOP_FACE_Y` placement math `buildIsland` uses. */
@@ -310,19 +314,22 @@ function livingArt(kind: IslandHexRecord['kind'], c: AxialCoord): { prefix: stri
   }
 }
 
-/** Same shape as `livingArt`, for the wasted counterpart. */
+/**
+ * Same shape as `livingArt`, for the wasted counterpart. The land looks (wasteland, dead forest, black sand) are rolled with the
+ * game's own `wastedVariantAt` weights, so the docs island shows the rune crack as rarely as a real wasted island does.
+ */
 function wastedArt(kind: IslandHexRecord['kind'], c: AxialCoord): { prefix: string; suffix: string; index: number } {
   switch (kind) {
     case 'grass': {
-      const n = hashInt(c.q, c.r, SALT.wastedVariant, 6); // '', variant001..005
+      const n = wastedVariantAt(c.q, c.r, WASTED_ISLAND_WORLD, 'grass'); // '', variant001..005 — the game's own weights
       return { prefix: 'wasteland', suffix: n === 0 ? '' : `_variant${String(n).padStart(3, '0')}`, index: n };
     }
     case 'forest': {
-      const n = hashInt(c.q, c.r, SALT.wastedVariant, 2); // '', variant001
+      const n = wastedVariantAt(c.q, c.r, WASTED_ISLAND_WORLD, 'forest'); // '', variant001
       return { prefix: 'deadforest', suffix: n === 0 ? '' : '_variant001', index: n };
     }
     case 'sand': {
-      const n = hashInt(c.q, c.r, SALT.wastedVariant, 2); // '', variant001
+      const n = wastedVariantAt(c.q, c.r, WASTED_ISLAND_WORLD, 'sand'); // '', variant001
       return { prefix: 'blacksand', suffix: n === 0 ? '' : '_variant001', index: n };
     }
     case 'mountain':

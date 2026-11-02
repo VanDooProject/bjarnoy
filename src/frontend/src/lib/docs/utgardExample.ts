@@ -9,9 +9,9 @@ import { InnerRingLevel, InnerRingRadius, OuterRingLevel, OuterRingRadius, place
 import { giantCoverage } from '../map/giantTiles';
 import { UtgardFamily } from '../map/giantPlacement';
 import type { Terrain, Tile } from '../map/types';
-import { DEFAULT_GENERATION, defaultOrientation, variantForTerrain, type WorldSeed } from '../map/worldGenerator';
+import { DEFAULT_GENERATION, defaultOrientation, variantForTerrain, wastedVariantAt, type WorldSeed } from '../map/worldGenerator';
 
-const EXAMPLE_WORLD: WorldSeed = { seed: 5, generation: DEFAULT_GENERATION };
+export const UTGARD_EXAMPLE_WORLD: WorldSeed = { seed: 5, generation: DEFAULT_GENERATION };
 
 /** Utgard's anchor: the centre hex of its seven. */
 export const UTGARD_CENTRE: AxialCoord = { q: 0, r: 0 };
@@ -58,8 +58,12 @@ export function buildUtgardExampleTiles(): Tile[] {
       r: c.r,
       terrain,
       wasted: true,
-      orientation: defaultOrientation(c.q, c.r, EXAMPLE_WORLD),
-      variant: variantForTerrain(c.q, c.r, EXAMPLE_WORLD, terrain),
+      orientation: defaultOrientation(c.q, c.r, UTGARD_EXAMPLE_WORLD),
+      // A wasted land hex rolls its look with the game's own weights (`WorldModel.getTile`), not the living grass roll.
+      variant:
+        terrain === 'sea'
+          ? variantForTerrain(c.q, c.r, UTGARD_EXAMPLE_WORLD, terrain)
+          : wastedVariantAt(c.q, c.r, UTGARD_EXAMPLE_WORLD, terrain),
       ...(terrain === 'sea' ? { isCoastalWater: true } : {}),
       ...extra,
     });
@@ -76,7 +80,7 @@ export function buildUtgardExampleTiles(): Tile[] {
   for (const { coord, part } of giantCoverage(UTGARD_CENTRE)) {
     place(coord, 'grass', { orientation: 'SE', giant: { family: 'giantutgard', anchor: UTGARD_CENTRE, part, orientation: 'SE' } });
   }
-  const sites = placeEndgame(land, terrainOf, () => false, [{ anchor: UTGARD_CENTRE, family: UtgardFamily }], new Set(), EXAMPLE_WORLD.seed, 0);
+  const sites = placeEndgame(land, terrainOf, () => false, [{ anchor: UTGARD_CENTRE, family: UtgardFamily }], new Set(), UTGARD_EXAMPLE_WORLD.seed, 0);
   for (const w of sites.walls) {
     const tile = tiles.get(coordKey(w.coord))!;
     tile.utgardWall = { ring: w.ring, piece: w.piece, dir: w.dir, isGate: w.isGate, level: w.level };
