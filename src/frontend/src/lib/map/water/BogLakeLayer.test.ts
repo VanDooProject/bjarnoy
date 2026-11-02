@@ -104,18 +104,23 @@ describe('BogLakeLayer', () => {
     expect(uniformsOf(layer).uBandHalf).toBe(0.3);
   });
 
-  it('runs the gust on the forests\' clock, and holds it while frozen', () => {
+  it('runs the gust on the forests\' clock', () => {
     const layer = new BogLakeLayer(TILE_W);
     layer.tick(2500);
     expect(uniformsOf(layer).uTime).toBeCloseTo(2.5, 9);
     expect(uniformsOf(layer).uGustTime).toBeCloseTo(gustTime(2500), 9);
     expect(uniformsOf(layer).uGustPeak).toBe(GUST_PEAK_PHASE);
+  });
 
+  it('is hidden, not frozen, while water motion is off', () => {
+    const layer = new BogLakeLayer(TILE_W);
+    layer.setLake(lakeTexture(), { minX: 0, minY: 0, maxX: 10, maxY: 10 });
     layer.setFrozen(true);
     layer.tick(9000);
-    expect(uniformsOf(layer).uTime).toBeCloseTo(2.5, 9);
+    expect(layer.mesh.visible).toBe(false);
     layer.setFrozen(false);
     layer.tick(9500);
+    expect(layer.mesh.visible).toBe(true);
     expect(uniformsOf(layer).uTime).toBeCloseTo(9.5, 9);
   });
 });

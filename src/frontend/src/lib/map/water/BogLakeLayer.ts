@@ -18,9 +18,9 @@ export class BogLakeLayer {
   private readonly geometry: MeshGeometry;
   private hasLake = false;
   private suppressed = false;
-  private frozen = false;
-  // The clock the shader last got; while frozen it stays put, so the gust holds its pose.
-  private clockMs = 0;
+  // Water motion off (the player's setting, or the device's reduced-motion setting under 'auto'): the gust is hidden, not frozen. A
+  // frozen gust is a band of foam and dark patches standing still on the lake, which reads as a rendering fault rather than calm water.
+  private motionOff = false;
 
   constructor(tileWidth: number) {
     this.uniforms = new UniformGroup({
@@ -73,24 +73,23 @@ export class BogLakeLayer {
     this.suppressed = suppressed;
   }
 
-  /** Freezes (or resumes) the gust: the layer keeps drawing, its clock just stops (see WaterLayer.setFrozen). */
+  /** Water motion off (`HexMapRenderer.setWaterMotion(false)`): hides the gust until motion is back on. */
   setFrozen(frozen: boolean): void {
-    this.frozen = frozen;
+    this.motionOff = frozen;
   }
 
   /** Syncs the debug flags onto uniforms and takes the forests' animation clock (`animClockMs`, so the gust shares their phase). Once a frame. */
   tick(animClockMs: number): void {
-    if (!this.frozen) this.clockMs = animClockMs;
     const u = this.uniforms.uniforms;
-    u.uTime = this.clockMs / 1000;
-    u.uGustTime = gustTime(this.clockMs);
+    u.uTime = animClockMs / 1000;
+    u.uGustTime = gustTime(animClockMs);
     u.uFoam = waterDebugFlags.bogLakeFoam ? waterDebugTuning.bogLakeFoamStrength : 0;
     u.uSheen = waterDebugFlags.bogLakeSheen ? waterDebugTuning.bogLakeSheenStrength : 0;
     u.uCatsPaws = waterDebugFlags.bogLakeCatsPaws ? waterDebugTuning.bogLakeCatsPawsStrength : 0;
     u.uFoamWidth = waterDebugTuning.bogLakeFoamWidth;
     u.uFoamSpacing = waterDebugTuning.bogLakeFoamSpacing;
     u.uBandHalf = waterDebugTuning.bogLakeBandHalf;
-    this.mesh.visible = waterDebugFlags.water && this.hasLake && !this.suppressed;
+    this.mesh.visible = waterDebugFlags.water && this.hasLake && !this.suppressed && !this.motionOff;
   }
 
   destroy(): void {

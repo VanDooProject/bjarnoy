@@ -1024,7 +1024,7 @@ the open water is `lake`).
 weir, which sit in the top layer, draw over it. World mode never shows it. Output is a premultiplied overlay, same blending as `WaterLayer`.
 
 **Switches.** Hidden with `waterDebugFlags.water` (this is what the e2e `mapLayers: { water: false }` opt-out flips), follows
-`setSuppressed` (landing preview, `deepFogOnly`) and `setFrozen` (the water-motion setting: the clock stops, the gust holds its pose). The
+`setSuppressed` (landing preview, `deepFogOnly`) and is **hidden** while water motion is off (`setFrozen`: the player's water-motion setting, which under 'auto' follows the device's reduced-motion setting). Unlike the sea it is not frozen: a still gust band reads as a fault, not as calm water. The
 clock is `animClockMs`, passed in from the renderer's tick (not `performance.now()`), so the gust shares the forest's clock. No environment
 checks.
 
