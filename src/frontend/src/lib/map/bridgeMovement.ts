@@ -20,6 +20,8 @@ export const GUARDED_BRIDGE_LEVEL = 4;
 export interface StandingBridge {
   level: number;
   owner: string;
+  /** The hex lies outside its owner's realm: the bridge has no function and is open to every army, a guarded one included. */
+  outsideRealm?: boolean;
 }
 
 export type StandingBridges = ReadonlyMap<string, StandingBridge>;
@@ -44,7 +46,9 @@ export function bridgeCrossingCost(
     case 3:
       return rules.land[terrain] ?? null;
     default:
-      return bridge.owner === ownerKey || friendOwners.has(bridge.owner) ? (rules.land[terrain] ?? null) : null;
+      return bridge.outsideRealm === true || bridge.owner === ownerKey || friendOwners.has(bridge.owner)
+        ? (rules.land[terrain] ?? null)
+        : null;
   }
 }
 

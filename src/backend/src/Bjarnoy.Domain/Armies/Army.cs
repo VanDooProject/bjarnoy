@@ -800,7 +800,7 @@ public sealed record Army
         }
 
         return buildings
-            .Where(b => b.Type == BuildingType.Dockyard)
+            .Where(b => b.Type == BuildingType.Dockyard && b.IsFunctioning)
             .Select(b => b.Coord)
             .OrderBy(c => c.DistanceTo(centre)).ThenBy(c => c.Q).ThenBy(c => c.R)
             .Cast<HexCoord?>()

@@ -2311,6 +2311,28 @@ describe('WorldModel palisade and gate', () => {
     expect(model.getTile(coastal.q, coastal.r).terrain).toBe('sea');
   });
 
+  it('marks a gate the server reports outside the realm, and clears it when the realm reaches it again', () => {
+    const { model, settlement, line } = walledSetting(3);
+    const snapshot = (outsideRealmSince: string | null) => ({
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.resources,
+      buildings: [
+        { q: line[0]!.q, r: line[0]!.r, type: 'palisade', level: 1 },
+        { q: line[1]!.q, r: line[1]!.r, type: 'palisadegate', level: 2, outsideRealmSince },
+      ],
+    });
+    const key = `${line[1]!.q},${line[1]!.r}`;
+
+    model.applyServerSnapshot(settlement.id, snapshot('2026-11-01T10:00:00Z'));
+    expect(model.standingPalisadeWalls().get(key)?.outsideRealm).toBe(true);
+    expect(model.standingPalisadeWalls().get(`${line[0]!.q},${line[0]!.r}`)?.outsideRealm).toBeUndefined();
+
+    model.applyServerSnapshot(settlement.id, snapshot(null));
+    expect(model.standingPalisadeWalls().get(key)?.outsideRealm).toBeUndefined();
+  });
+
   it('hands the pathfinder only standing walls (a level-0 foundation does not block), each with its owner', () => {
     const { model, settlement, line } = walledSetting(3);
     model.applyServerSnapshot(settlement.id, {

@@ -219,6 +219,20 @@ play.
   level 1 finishes.
 - **Giants are claimed whole:** a giant's seven hexes join the realm only when
   the claim covers all seven; a claim that reaches some of them takes none.
+- **Buildings outside the realm decay.** A building whose hex is no longer
+  inside the realm has no function: it stops producing and gives no bonus; a
+  palisade still blocks, but a gate or bridge outside the realm is open to
+  everyone. It loses a level at a steady pace until the realm reaches it
+  again; at level 0 it is gone and the hex is free. Each building type takes
+  max level × 24 hours to go from its top level to gone, but never less than 7
+  days or more than 30. Longhouses never decay: they make the realm.
+  When a building leaves the realm, its queued upgrade, its queued training
+  and a foundation still under construction there are cancelled and
+  refunded; a rune slotted in it stays on the hex; a dockyard outside the
+  realm is no fleet home or dock. In faster worlds decay runs on world speed:
+  the time to gone is max level × 24 h ÷ world speed, clamped between a
+  minimum and a maximum that shrink with world speed on a log scale, from
+  7 days–30 days at 1× to 1 hour–1 day at 100× (3.8 hours–2.4 days at 30×).
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't

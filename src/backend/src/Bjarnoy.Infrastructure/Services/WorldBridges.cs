@@ -21,7 +21,7 @@ public static class WorldBridges
         var rows = await db.PlacedBuildings
             .AsNoTracking()
             .Where(b => b.Settlement!.WorldId == worldId && b.Type == BuildingType.Bridge && b.Level >= 1)
-            .Select(b => new { b.Q, b.R, b.Level, b.SettlementId, b.Settlement!.UserId })
+            .Select(b => new { b.Q, b.R, b.Level, b.SettlementId, b.Settlement!.UserId, OutsideRealm = b.OutsideRealmSince != null })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         // Only a guarded bridge cares who the friends are, so a world without one skips the guild queries.
@@ -30,7 +30,7 @@ public static class WorldBridges
             : null;
 
         return new BridgeIndex(
-            rows.Select(r => new StandingBridge(new HexCoord(r.Q, r.R), r.Level, WorldPalisades.OwnerKeyOf(r.UserId, r.SettlementId))),
+            rows.Select(r => new StandingBridge(new HexCoord(r.Q, r.R), r.Level, WorldPalisades.OwnerKeyOf(r.UserId, r.SettlementId), r.OutsideRealm)),
             terrainAt,
             areFriends);
     }

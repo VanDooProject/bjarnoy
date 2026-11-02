@@ -58,6 +58,53 @@ public static class BuildingCatalogue
         _ => 0,
     };
 
+    /// <summary>The shortest time a building outside the realm takes from its top level to gone in a 1x world.</summary>
+    public static readonly TimeSpan MinDecayTime = TimeSpan.FromDays(7);
+
+    /// <summary>The longest time a building outside the realm takes from its top level to gone in a 1x world.</summary>
+    public static readonly TimeSpan MaxDecayTime = TimeSpan.FromDays(30);
+
+    /// <summary>The world speed at and above which the decay bounds stop shrinking (the 100x bounds hold).</summary>
+    public const double DecayBoundsMaxSpeed = 100;
+
+    /// <summary>
+    /// The shortest and longest time to gone in a world running at <paramref name="speedFactor"/>: on a log scale of speed
+    /// (<c>t = clamp(ln s / ln 100, 0, 1)</c>) the minimum falls from 7 days at 1x to 1 hour at 100x
+    /// (<c>168^(1-t)</c> hours) and the maximum from 30 days to 24 hours (<c>720^(1-t) * 24^t</c> hours).
+    /// </summary>
+    public static (TimeSpan Min, TimeSpan Max) DecayBounds(double speedFactor)
+    {
+        var t = speedFactor <= 1 ? 0.0 : Math.Min(1.0, Math.Log(speedFactor) / Math.Log(DecayBoundsMaxSpeed));
+        return (
+            TimeSpan.FromHours(Math.Pow(168, 1 - t)),
+            TimeSpan.FromHours(Math.Pow(720, 1 - t) * Math.Pow(24, t)));
+    }
+
+    /// <summary>
+    /// How long a building with <paramref name="maxLevel"/> levels takes from its top level to gone once the realm no longer
+    /// reaches it (<c>docs/design/economy.md</c> section 5): <paramref name="maxLevel"/> x 24 hours divided by the world's
+    /// <paramref name="speedFactor"/>, clamped to <see cref="DecayBounds"/> of that speed (7 to 30 days at 1x).
+    /// </summary>
+    public static TimeSpan DecayTimeToGone(int maxLevel, double speedFactor = 1.0)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxLevel, 1);
+        var (min, max) = DecayBounds(speedFactor);
+        var time = TimeSpan.FromHours(24.0 * maxLevel / Math.Max(speedFactor, 1e-9));
+        return time < min ? min : time > max ? max : time;
+    }
+
+    /// <summary>The time a <paramref name="type"/> outside the realm takes from its top level to gone (<see cref="DecayTimeToGone(int)"/> of its max level).</summary>
+    public static TimeSpan DecayTimeToGone(BuildingType type, double speedFactor = 1.0) => DecayTimeToGone(MaxLevelFor(type), speedFactor);
+
+    /// <summary>One level of a building with <paramref name="maxLevel"/> levels is lost every this long outside the realm: its <see cref="DecayTimeToGone(int)"/> divided by <paramref name="maxLevel"/>.</summary>
+    public static TimeSpan DecayInterval(int maxLevel, double speedFactor = 1.0) => DecayTimeToGone(maxLevel, speedFactor) / maxLevel;
+
+    /// <summary>One level of a <paramref name="type"/> outside the realm is lost every this long (<see cref="DecayInterval(int)"/> of its max level).</summary>
+    public static TimeSpan DecayInterval(BuildingType type, double speedFactor = 1.0) => DecayInterval(MaxLevelFor(type), speedFactor);
+
+    /// <summary>Whether a <paramref name="type"/> outside the realm decays: every building does except the Longhouse, which makes the realm.</summary>
+    public static bool Decays(BuildingType type) => type != BuildingType.Longhouse;
+
     /// <summary>What a settlement can store before it builds a storage house.</summary>
     public static ResourceAmounts BaseStorageCapacity { get; } = ResourceAmounts.Uniform(500);
 
@@ -446,7 +493,8 @@ public static class BuildingCatalogue
     {
         ArgumentNullException.ThrowIfNull(buildings);
 
-        var placed = buildings.Where(b => b.Level >= 1).ToList();
+        // A building outside the realm has no function: it neither produces nor boosts nor stores (PlacedBuilding.IsFunctioning).
+        var placed = buildings.Where(b => b.Level >= 1 && b.IsFunctioning).ToList();
 
         // Radius-boost sources standing among these buildings, with their
         // level's percent/range already resolved once rather than per

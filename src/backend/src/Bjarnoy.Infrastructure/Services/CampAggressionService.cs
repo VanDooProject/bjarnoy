@@ -195,6 +195,13 @@ public sealed class CampAggressionService(
 
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        // The burnt tower no longer claims its ground: buildings it chained into the realm stop working at once, in every
+        // settlement of the player.
+        if (burned)
+        {
+            await _settlementService.ReconcileRealmAsync(tower.SettlementId, cancellationToken).ConfigureAwait(false);
+        }
+
         _logger.LogInformation(
             "{Family} camp at {Camp} attacked the {Kind} tower at {Tower} of settlement {SettlementId}: {Winner} won "
                 + "({DefensePower} vs {CampPower}), {Defenders} defending army(ies), tower burned: {Burned}.",

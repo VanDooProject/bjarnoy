@@ -35,7 +35,7 @@ public static class WorldPalisades
             .Where(b => b.Settlement!.WorldId == worldId
                 && (b.Type == BuildingType.Palisade || b.Type == BuildingType.PalisadeGate)
                 && b.Level >= 1)
-            .Select(b => new { b.Q, b.R, b.Type, b.SettlementId, b.Settlement!.UserId })
+            .Select(b => new { b.Q, b.R, b.Type, b.SettlementId, b.Settlement!.UserId, OutsideRealm = b.OutsideRealmSince != null })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         // Only a gate cares who the friends are, so a world without one skips the guild queries.
@@ -53,7 +53,7 @@ public static class WorldPalisades
 
         return new PalisadeIndex(
             rows.Select(r => new StandingWall(
-                new HexCoord(r.Q, r.R), r.Type == BuildingType.PalisadeGate, OwnerKeyOf(r.UserId, r.SettlementId)))
+                new HexCoord(r.Q, r.R), r.Type == BuildingType.PalisadeGate, OwnerKeyOf(r.UserId, r.SettlementId), r.OutsideRealm))
             .Concat(utgardWalls.SelectMany(walls => walls)
                 .Where(w => w.Level >= 1)
                 .Select(w => new StandingWall(new HexCoord(w.Q, w.R), w.IsGate, EndgameRules.JotnarOwnerKey))),
@@ -64,7 +64,8 @@ public static class WorldPalisades
 
     /// <summary>One standing wall hex with its settlement's identity and centre, for <see cref="ListStandingAsync"/>.</summary>
     public sealed record StandingWallRow(
-        int Q, int R, BuildingType Type, int Level, Guid SettlementId, Guid UserId, string OwnerId, int CentreQ, int CentreR);
+        int Q, int R, BuildingType Type, int Level, Guid SettlementId, Guid UserId, string OwnerId, int CentreQ, int CentreR,
+        bool OutsideRealm = false);
 
     /// <summary>Every standing wall hex (level 1 or more) of <paramref name="worldId"/> with who owns it, for the world-wide walls read.</summary>
     public static async Task<IReadOnlyList<StandingWallRow>> ListStandingAsync(
@@ -79,7 +80,7 @@ public static class WorldPalisades
             .OrderBy(b => b.SettlementId).ThenBy(b => b.Q).ThenBy(b => b.R)
             .Select(b => new StandingWallRow(
                 b.Q, b.R, b.Type, b.Level, b.SettlementId, b.Settlement!.UserId, b.Settlement.OwnerId,
-                b.Settlement.CentreQ, b.Settlement.CentreR))
+                b.Settlement.CentreQ, b.Settlement.CentreR, b.OutsideRealmSince != null))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
