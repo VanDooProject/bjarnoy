@@ -80,9 +80,14 @@ public sealed record ClaimQuestResult(
     public bool Accepted => Rejection == QuestRejection.None && !SettlementNotFound && !WorldPaused && Settlement is not null;
 }
 
-public sealed record TrainResult(TrainRejection Rejection, TrainingOrder? Order = null, bool WorldPaused = false)
+public sealed record TrainResult(
+    TrainRejection Rejection,
+    IReadOnlyList<TrainingOrder>? Orders = null,
+    bool WorldPaused = false,
+    GameClock? Clock = null,
+    DateTimeOffset Now = default)
 {
-    public bool Accepted => Rejection == TrainRejection.None && Order is not null;
+    public bool Accepted => Rejection == TrainRejection.None && Orders is { Count: > 0 };
 }
 
 /// <summary>A page of settlements matching an admin search.</summary>
@@ -1265,11 +1270,16 @@ public sealed class SettlementService(
         return true;
     }
 
-    /// <summary>Queues training a batch of units, charging for it up front.</summary>
+    /// <summary>
+    /// Queues training a batch of units in the building on <paramref name="buildingCoord"/> (and, by <paramref name="split"/>, in
+    /// its siblings), charging for it up front.
+    /// </summary>
     public async Task<TrainResult> TrainUnitsAsync(
         Guid settlementId,
         UnitType unitType,
         int count,
+        HexCoord buildingCoord,
+        TrainingSplit split = TrainingSplit.Here,
         CancellationToken cancellationToken = default)
     {
         var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
@@ -1322,7 +1332,8 @@ public sealed class SettlementService(
         }
 
         var decision = settled.PlanTrain(
-            unitType, count, now, Guid.CreateVersion7(), hasShoreline, costMultiplier, settlement.World.SpeedFactor);
+            unitType, count, now, Guid.CreateVersion7, buildingCoord, split, settlement.Owner?.IsPremium ?? false,
+            hasShoreline, costMultiplier, settlement.World.SpeedFactor);
 
         if (!decision.Accepted)
         {
@@ -1334,15 +1345,15 @@ public sealed class SettlementService(
             return new TrainResult(decision.Rejection);
         }
 
-        settlement.ApplyDomain(settled.EnqueueTraining(decision.Order!, now));
+        settlement.ApplyDomain(settled.EnqueueTraining(decision.Orders, now));
         ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
-            "Settlement {Id} queued training {Count}x {Type}, completing {CompletesAt}.",
-            settlementId, count, unitType, decision.Order!.CompletesAt);
+            "Settlement {Id} queued training {Count}x {Type} in {Parts} part(s), completing {CompletesAt}.",
+            settlementId, count, unitType, decision.Orders.Count, decision.Orders.Max(o => o.CompletesAt));
 
-        return new TrainResult(TrainRejection.None, decision.Order);
+        return new TrainResult(TrainRejection.None, decision.Orders, Clock: clock, Now: now);
     }
 
     /// <summary>Starts a Town Square feast, charging its cost up front (economy.md section 6).</summary>

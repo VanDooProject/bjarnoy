@@ -110,7 +110,7 @@ public sealed class AdminGodModeTests
         var decision = settlement.PlanTrain(UnitType.Thrall, 5, Start, Guid.CreateVersion7(), hasShoreline: false);
         Assert.True(decision.Accepted);
 
-        var queued = settlement.EnqueueTraining(decision.Order!, Start);
+        var queued = settlement.EnqueueTraining(decision.Orders, Start);
         var oneMinuteIn = Start + TimeSpan.FromMinutes(1);
 
         var settled = queued.WithQueuesDueAt(oneMinuteIn).SettleTo(oneMinuteIn);
@@ -129,7 +129,7 @@ public sealed class AdminGodModeTests
         var withBuild = settlement.Enqueue(build.Order!, Start);
 
         var train = withBuild.PlanTrain(UnitType.Thrall, 5, Start, Guid.CreateVersion7(), hasShoreline: false);
-        var queued = withBuild.EnqueueTraining(train.Order!, Start);
+        var queued = withBuild.EnqueueTraining(train.Orders, Start);
 
         var oneMinuteIn = Start + TimeSpan.FromMinutes(1);
         var settled = queued.WithQueuesDueAt(oneMinuteIn, builds: true, training: false).SettleTo(oneMinuteIn);

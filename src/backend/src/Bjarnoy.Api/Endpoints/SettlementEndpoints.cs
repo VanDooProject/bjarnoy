@@ -430,7 +430,7 @@ public static class SettlementEndpoints
         return result.Accepted ? TypedResults.NoContent() : TypedResults.NotFound();
     }
 
-    private static async Task<Results<Accepted<TrainingOrderResponse>, NotFound,
+    private static async Task<Results<Accepted<TrainUnitsResponse>, NotFound,
         Conflict<ProblemDetails>, BadRequest<ProblemDetails>>> TrainUnits(
         Guid settlementId,
         TrainUnitsRequest request,
@@ -450,7 +450,18 @@ public static class SettlementEndpoints
             });
         }
 
-        var result = await settlements.TrainUnitsAsync(settlementId, type, request.Count, cancellationToken);
+        if (!TryParseSplit(request.Split, out var split))
+        {
+            return TypedResults.BadRequest(new ProblemDetails
+            {
+                Title = "Unknown split.",
+                Detail = $"'{request.Split}' is not a split. Valid: here, evenly, fastest.",
+                Status = StatusCodes.Status400BadRequest,
+            });
+        }
+
+        var result = await settlements.TrainUnitsAsync(
+            settlementId, type, request.Count, new HexCoord(request.Q, request.R), split, cancellationToken);
 
         if (result.WorldPaused)
         {
@@ -459,13 +470,9 @@ public static class SettlementEndpoints
 
         if (result.Accepted)
         {
-            var order = result.Order!;
             return TypedResults.Accepted(
                 $"/api/v1/settlements/{settlementId}",
-                new TrainingOrderResponse(
-                    order.Id, order.UnitType.ToWireName(), order.Count, 0,
-                    order.CompletesAt, (order.CompletesAt - order.StartedAt).TotalSeconds,
-                    (order.CompletesAt - order.StartedAt).TotalSeconds));
+                new TrainUnitsResponse([.. result.Orders!.Select(o => TrainingOrderResponse.From(o, result.Clock!.Value, result.Now))]));
         }
 
         var problem = new ProblemDetails
@@ -833,13 +840,27 @@ public static class SettlementEndpoints
         TrainRejection.UnitNotAvailable =>
             "That unit isn't available yet — check its required longhouse level and training building.",
         TrainRejection.TrainingQueueFull =>
-            $"The training queue is full (max {Settlement.MaxTrainingQueueLength}).",
+            $"The training queue is full (max {Settlement.MaxTrainingPartsPerBuilding} orders per building).",
         TrainRejection.NotEnoughResources =>
             "Not enough resources (some may be reserved for queued construction).",
         TrainRejection.InvalidCount => "Count must be at least 1.",
         TrainRejection.SettlementNotCoastal => "Ships can only be trained at a settlement that claims a shoreline hex.",
         TrainRejection.BuildingOutsideRealm =>
             "The building that trains this unit stands outside your realm and has no function until your realm reaches it again.",
+        TrainRejection.WrongBuilding => "There is no building that trains this unit on that hex.",
+        TrainRejection.PremiumRequired => "Splitting an order for the fastest finish needs premium.",
         _ => "Refused.",
     };
+
+    private static bool TryParseSplit(string? value, out TrainingSplit split)
+    {
+        (var valid, split) = value switch
+        {
+            null or "" or "here" => (true, TrainingSplit.Here),
+            "evenly" => (true, TrainingSplit.Evenly),
+            "fastest" => (true, TrainingSplit.Fastest),
+            _ => (false, TrainingSplit.Here),
+        };
+        return valid;
+    }
 }

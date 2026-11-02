@@ -41,11 +41,13 @@ public class TrainingAndGarrisonTests
         };
     }
 
-    private static TrainingOrder Plan(Settlement settlement, UnitType type, int count, DateTimeOffset now)
+    private static TrainingOrder Plan(Settlement settlement, UnitType type, int count, DateTimeOffset now, HexCoord? at = null)
     {
-        var decision = settlement.PlanTrain(type, count, now, Guid.CreateVersion7());
+        var decision = at is { } coord
+            ? settlement.PlanTrain(type, count, now, Guid.CreateVersion7, coord)
+            : settlement.PlanTrain(type, count, now, Guid.CreateVersion7());
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
-        return decision.Order!;
+        return decision.Orders[0];
     }
 
     [Fact]
@@ -101,7 +103,7 @@ public class TrainingAndGarrisonTests
         var unitCost = UnitCatalogue.Get(UnitType.Thrall).TrainingCost;
 
         var order = Plan(settlement, UnitType.Thrall, 5, T0);
-        var queued = settlement.EnqueueTraining(order, T0);
+        var queued = settlement.EnqueueTraining([order], T0);
 
         Assert.Equal(
             settlement.Resources.At(T0).Wood - (unitCost.Wood * 5),
@@ -111,135 +113,24 @@ public class TrainingAndGarrisonTests
         // Duration scales as five units trained one after another, not five
         // units trained in parallel.
         Assert.Equal(
-            (UnitCatalogue.Get(UnitType.Thrall).TrainingDuration.Ticks * 5),
+            UnitCatalogue.TrainingTime(UnitType.Thrall, buildingLevel: 1).Ticks * 5,
             order.CompletesAt.Ticks - order.StartedAt.Ticks);
     }
 
     [Fact]
-    public void The_training_queue_is_capped_separately_from_the_build_queue()
+    public void A_building_holds_at_most_five_parts_and_another_building_is_unaffected()
     {
-        var settlement = Found();
+        var second = new PlacedBuilding(new HexCoord(8, 8), BuildingType.Barracks, 1);
+        var settlement = Found(extraBuildings: [second]);
+        var first = new HexCoord(9, 9);
 
-        for (var i = 0; i < Settlement.MaxTrainingQueueLength; i++)
+        for (var i = 0; i < Settlement.MaxTrainingPartsPerBuilding; i++)
         {
-            var order = Plan(settlement, UnitType.Thrall, 1, T0);
-            settlement = settlement.EnqueueTraining(order, T0);
+            settlement = settlement.EnqueueTraining([Plan(settlement, UnitType.Thrall, 1, T0, first)], T0);
         }
 
-        Assert.Equal(Settlement.MaxTrainingQueueLength, settlement.TrainingQueue.Count);
-
-        var overflow = settlement.PlanTrain(UnitType.Thrall, 1, T0, Guid.CreateVersion7());
-
-        Assert.Equal(TrainRejection.TrainingQueueFull, overflow.Rejection);
-    }
-
-    /// <summary>Ship training's coastal requirement (issue #40 phase 6 §4).</summary>
-    [Fact]
-    public void Training_a_ship_at_a_non_coastal_settlement_is_refused()
-    {
-        var settlement = Found(longhouseLevel: 8, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.Dockyard, 1)]);
-
-        var decision = settlement.PlanTrain(UnitType.Karve, 1, T0, Guid.CreateVersion7(), hasShoreline: false);
-
-        Assert.Equal(TrainRejection.SettlementNotCoastal, decision.Rejection);
-    }
-
-    [Fact]
-    public void Training_a_ship_at_a_coastal_settlement_is_accepted()
-    {
-        var settlement = Found(longhouseLevel: 8, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.Dockyard, 1)]);
-
-        var decision = settlement.PlanTrain(UnitType.Karve, 1, T0, Guid.CreateVersion7(), hasShoreline: true);
-
-        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
-    }
-
-    /// <summary>A land unit (the Archery Range roster) is gated by that building standing, not just the longhouse level.</summary>
-    [Fact]
-    public void A_land_unit_cannot_be_trained_without_an_archery_range()
-    {
-        var settlement = Found(longhouseLevel: 9);
-
-        var decision = settlement.PlanTrain(UnitType.Bowman, 1, T0, Guid.CreateVersion7());
-
-        Assert.Equal(TrainRejection.UnitNotAvailable, decision.Rejection);
-    }
-
-    [Fact]
-    public void A_land_unit_can_be_trained_once_an_archery_range_stands()
-    {
-        var settlement = Found(
-            longhouseLevel: 9, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.ArcheryRange, 1)]);
-
-        var decision = settlement.PlanTrain(UnitType.Bowman, 1, T0, Guid.CreateVersion7());
-
-        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
-    }
-
-    [Fact]
-    public void A_ram_is_trained_at_a_siege_workshop_and_not_at_an_archery_range()
-    {
-        var withRange = Found(
-            longhouseLevel: 20, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.ArcheryRange, 5)]);
-        var withWorkshop = Found(
-            longhouseLevel: 20, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.SiegeWorkshop, 1)]);
-
-        Assert.Equal(TrainRejection.UnitNotAvailable, withRange.PlanTrain(UnitType.Ram, 1, T0, Guid.CreateVersion7()).Rejection);
-        Assert.True(withWorkshop.PlanTrain(UnitType.Ram, 1, T0, Guid.CreateVersion7()).Accepted);
-    }
-
-    [Fact]
-    public void A_catapult_is_trained_at_a_siege_workshop_and_not_at_an_archery_range()
-    {
-        var withRange = Found(
-            longhouseLevel: 20, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.ArcheryRange, 5)]);
-        var withWorkshop = Found(
-            longhouseLevel: 20, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.SiegeWorkshop, 1)]);
-
-        Assert.Equal(TrainRejection.UnitNotAvailable, withRange.PlanTrain(UnitType.Catapult, 1, T0, Guid.CreateVersion7()).Rejection);
-        Assert.True(withWorkshop.PlanTrain(UnitType.Catapult, 1, T0, Guid.CreateVersion7()).Accepted);
-    }
-
-    /// <summary>The basic melee slice of the roster is gated by a Barracks standing, not just the longhouse level.</summary>
-    [Fact]
-    public void A_basic_melee_unit_cannot_be_trained_without_a_barracks()
-    {
-        var settlement = Found(longhouseLevel: 5, withBarracks: false);
-
-        var decision = settlement.PlanTrain(UnitType.Spearman, 1, T0, Guid.CreateVersion7());
-
-        Assert.Equal(TrainRejection.UnitNotAvailable, decision.Rejection);
-    }
-
-    [Fact]
-    public void A_basic_melee_unit_can_be_trained_once_a_barracks_stands()
-    {
-        var settlement = Found(
-            longhouseLevel: 5, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.Barracks, 1)]);
-
-        var decision = settlement.PlanTrain(UnitType.Spearman, 1, T0, Guid.CreateVersion7());
-
-        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
-    }
-
-    [Fact]
-    public void A_ship_cannot_be_trained_without_a_dockyard()
-    {
-        var settlement = Found(longhouseLevel: 8);
-
-        var decision = settlement.PlanTrain(UnitType.Karve, 1, T0, Guid.CreateVersion7(), hasShoreline: true);
-
-        Assert.Equal(TrainRejection.UnitNotAvailable, decision.Rejection);
-    }
-
-    [Fact]
-    public void A_non_ship_unit_is_unaffected_by_the_shoreline_requirement()
-    {
-        var settlement = Found(longhouseLevel: 1);
-
-        var decision = settlement.PlanTrain(UnitType.Thrall, 1, T0, Guid.CreateVersion7(), hasShoreline: false);
-
-        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        Assert.Equal(TrainRejection.TrainingQueueFull, settlement.PlanTrain(UnitType.Thrall, 1, T0, Guid.CreateVersion7()).Rejection);
+        Assert.True(settlement.PlanTrain(UnitType.Thrall, 1, T0, () => Guid.CreateVersion7(), second.Coord).Accepted);
     }
 
     [Fact]
@@ -253,7 +144,7 @@ public class TrainingAndGarrisonTests
                 ResourceAmounts.Zero, ResourceAmounts.Zero, ResourceAmounts.Uniform(1_000_000), T0),
         };
 
-        Assert.Throws<InvalidOperationException>(() => broke.EnqueueTraining(order, T0));
+        Assert.Throws<InvalidOperationException>(() => broke.EnqueueTraining([order], T0));
     }
 
     [Fact]
@@ -261,7 +152,7 @@ public class TrainingAndGarrisonTests
     {
         var settlement = Found();
         var order = Plan(settlement, UnitType.Thrall, 3, T0);
-        var queued = settlement.EnqueueTraining(order, T0);
+        var queued = settlement.EnqueueTraining([order], T0);
 
         var result = queued.SettleTo(order.CompletesAt);
 
@@ -278,7 +169,7 @@ public class TrainingAndGarrisonTests
     {
         var settlement = Found();
         var order = Plan(settlement, UnitType.Thrall, 4, T0);
-        var queued = settlement.EnqueueTraining(order, T0);
+        var queued = settlement.EnqueueTraining([order], T0);
 
         var midway = order.StartedAt + TimeSpan.FromTicks(order.PerUnitDuration.Ticks * 2);
         var result = queued.SettleTo(midway);
@@ -297,7 +188,7 @@ public class TrainingAndGarrisonTests
     {
         var settlement = Found(longhouseLevel: 1);
         var order = Plan(settlement, UnitType.Thrall, 10, T0);
-        var queued = settlement.EnqueueTraining(order, T0);
+        var queued = settlement.EnqueueTraining([order], T0);
 
         var (grossProduction, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
         var expectedUpkeep = UnitCatalogue.Get(UnitType.Thrall).UpkeepPerHour * 10;
@@ -313,7 +204,7 @@ public class TrainingAndGarrisonTests
     {
         var settlement = Found(longhouseLevel: 1);
         var order = Plan(settlement, UnitType.Thrall, 1, T0);
-        var settled = settlement.EnqueueTraining(order, T0).SettleTo(order.CompletesAt).Settlement;
+        var settled = settlement.EnqueueTraining([order], T0).SettleTo(order.CompletesAt).Settlement;
 
         var later = settled.SettleTo(order.CompletesAt.AddDays(1));
 

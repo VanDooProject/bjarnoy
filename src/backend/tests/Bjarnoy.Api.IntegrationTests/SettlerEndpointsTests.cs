@@ -234,8 +234,11 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
     /// </summary>
     private async Task<AuthResponse> TrainFiveSettlersAsync(HttpClient client, Guid settlementId, string refreshToken)
     {
+        var current = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlementId}", SqliteApiFixture.StrictJson, Ct);
+        var workshop = current!.Buildings.First(b => b.Type == "cartworkshop");
         var response = await client.PostJsonAsync(
-            $"/api/v1/settlements/{settlementId}/units", new TrainUnitsRequest("settler", 5), Ct);
+            $"/api/v1/settlements/{settlementId}/units", new TrainUnitsRequest("settler", 5, workshop.Q, workshop.R), Ct);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
 
         // 5 settlers x 24 minutes each, per UnitCatalogue — well past the

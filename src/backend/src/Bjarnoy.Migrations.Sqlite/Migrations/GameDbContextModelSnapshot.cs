@@ -1393,6 +1393,12 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("BuildingQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BuildingR")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Count")
                         .HasColumnType("INTEGER");
 

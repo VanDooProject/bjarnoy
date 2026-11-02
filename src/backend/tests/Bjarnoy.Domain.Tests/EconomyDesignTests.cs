@@ -175,7 +175,7 @@ public class EconomyDesignTests
     [InlineData(BuildingType.StorageHouse, 25)]
     [InlineData(BuildingType.Barracks, 20)]
     [InlineData(BuildingType.ArcheryRange, 20)]
-    [InlineData(BuildingType.SiegeWorkshop, 5)]
+    [InlineData(BuildingType.SiegeWorkshop, 20)]
     [InlineData(BuildingType.Dockyard, 20)]
     [InlineData(BuildingType.TownSquare, 20)]
     [InlineData(BuildingType.CartWorkshop, 20)]
