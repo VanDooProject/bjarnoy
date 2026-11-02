@@ -286,7 +286,7 @@ async function applyRunState(world: AdminWorldResponse) {
         <tr v-for="world in worlds" :key="world.id">
           <td>{{ world.name }}</td>
           <td>{{ world.status }}</td>
-          <td>{{ world.runState }}</td>
+          <td>{{ runStateName(world.runState) }}</td>
           <td>{{ world.playerCount }} / {{ world.maxPlayers }}</td>
           <td>{{ world.freeSpawnCount }} / {{ world.spawnCount }}</td>
           <td>{{ world.joinsClosed ? $t('adminWorlds.joins.closed') : $t('adminWorlds.joins.open') }}</td>
