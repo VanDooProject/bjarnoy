@@ -18,8 +18,8 @@ export class BogLakeLayer {
   private readonly geometry: MeshGeometry;
   private hasLake = false;
   private suppressed = false;
-  // "Wind on lakes" off (the player's setting, or the device's reduced-motion setting under 'auto'): the gust is hidden, not frozen. A
-  // frozen gust is a band of foam and dark patches standing still on the lake, which reads as a rendering fault rather than calm water.
+  // "Lake motion" off (the player's setting, or the device's reduced-motion setting under 'auto'): the whole layer (gusts, blops) is hidden, not frozen. A frozen gust is a band of foam and dark patches standing still on the lake, which reads as a rendering
+  // fault rather than calm water.
   private motionOff = false;
 
   constructor(tileWidth: number) {
@@ -35,6 +35,10 @@ export class BogLakeLayer {
       uFoamWidth: { value: 0, type: 'f32' },
       uFoamSpacing: { value: 0, type: 'f32' },
       uFoamStyle: { value: 0, type: 'f32' },
+      uLakeOrigin: { value: new Float32Array(2), type: 'vec2<f32>' },
+      uLakeSize: { value: new Float32Array([1, 1]), type: 'vec2<f32>' },
+      uBlops: { value: 0, type: 'f32' },
+      uBlopDensity: { value: 1, type: 'f32' },
     });
     this.geometry = new MeshGeometry({
       positions: new Float32Array(8),
@@ -64,6 +68,10 @@ export class BogLakeLayer {
     this.mesh.shader!.resources.uLakeMask = (texture ?? placeholderDryTexture()).source;
     if (!rect) return;
     const { minX, minY, maxX, maxY } = rect;
+    // The shader maps world positions onto the mask itself (shore bank distance, blop spots): its rect, not just vUV.
+    const u = this.uniforms.uniforms;
+    u.uLakeOrigin = new Float32Array([minX, minY]);
+    u.uLakeSize = new Float32Array([Math.max(maxX - minX, 1), Math.max(maxY - minY, 1)]);
     const positions = this.geometry.getBuffer('aPosition');
     positions.data.set([minX, minY, maxX, minY, maxX, maxY, minX, maxY]);
     positions.update();
@@ -74,7 +82,7 @@ export class BogLakeLayer {
     this.suppressed = suppressed;
   }
 
-  /** The "Wind on lakes" motion setting (`HexMapRenderer.setLakeMotion`): off hides the gust until it is back on. */
+  /** The "Lake motion" setting (`HexMapRenderer.setLakeMotion`): off hides all lake motion (gusts, blops) until it is back on. */
   setMotion(enabled: boolean): void {
     this.motionOff = !enabled;
   }
@@ -87,6 +95,8 @@ export class BogLakeLayer {
     u.uFoam = waterDebugFlags.bogLakeFoam ? waterDebugTuning.bogLakeFoamStrength : 0;
     u.uSheen = waterDebugFlags.bogLakeSheen ? waterDebugTuning.bogLakeSheenStrength : 0;
     u.uCatsPaws = waterDebugFlags.bogLakeCatsPaws ? waterDebugTuning.bogLakeCatsPawsStrength : 0;
+    u.uBlops = waterDebugFlags.bogLakeBlops ? waterDebugTuning.bogLakeBlopsStrength : 0;
+    u.uBlopDensity = waterDebugTuning.bogLakeBlopDensity;
     u.uFoamWidth = waterDebugTuning.bogLakeFoamWidth;
     u.uFoamSpacing = waterDebugTuning.bogLakeFoamSpacing;
     u.uFoamStyle = waterDebugTuning.bogLakeFoamStyle;

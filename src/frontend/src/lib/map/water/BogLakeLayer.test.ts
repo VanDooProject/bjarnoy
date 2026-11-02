@@ -93,6 +93,28 @@ describe('BogLakeLayer', () => {
     expect(uniformsOf(layer).uCatsPaws).toBe(0);
   });
 
+  it('turns blops off with their flag and scales them, density included', () => {
+    const layer = new BogLakeLayer(TILE_W);
+    layer.tick(0);
+    expect(uniformsOf(layer).uBlops).toBe(1);
+    expect(uniformsOf(layer).uBlopDensity).toBe(1);
+    waterDebugTuning.bogLakeBlopsStrength = 1.5;
+    waterDebugTuning.bogLakeBlopDensity = 2;
+    layer.tick(0);
+    expect(uniformsOf(layer).uBlops).toBe(1.5);
+    expect(uniformsOf(layer).uBlopDensity).toBe(2);
+    waterDebugFlags.bogLakeBlops = false;
+    layer.tick(0);
+    expect(uniformsOf(layer).uBlops).toBe(0);
+  });
+
+  it('gives the shader the lake mask\'s world rect', () => {
+    const layer = new BogLakeLayer(TILE_W);
+    layer.setLake(lakeTexture(), { minX: 10, minY: 20, maxX: 110, maxY: 220 });
+    expect(Array.from(uniformsOf(layer).uLakeOrigin as Float32Array)).toEqual([10, 20]);
+    expect(Array.from(uniformsOf(layer).uLakeSize as Float32Array)).toEqual([100, 200]);
+  });
+
   it('passes the foam line width and spacing and the band width through', () => {
     const layer = new BogLakeLayer(TILE_W);
     waterDebugTuning.bogLakeFoamWidth = 0.07;

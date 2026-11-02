@@ -1042,7 +1042,7 @@ the open water is `lake`).
 weir, which sit in the top layer, draw over it. World mode never shows it. Output is a premultiplied overlay, same blending as `WaterLayer`.
 
 **Switches.** Hidden with `waterDebugFlags.water` (this is what the e2e `mapLayers: { water: false }` opt-out flips), follows
-`setSuppressed` (landing preview, `deepFogOnly`) and is **hidden** while the player's own "Wind on lakes" motion setting is off (`motionPreferences.lakes`, `setLakeMotion`; under 'auto' it follows the device's reduced-motion setting). Water motion does not affect it. Unlike the sea it is not frozen: a still gust band reads as a fault, not as calm water. The
+`setSuppressed` (landing preview, `deepFogOnly`) and is **hidden** while the player's own "Lake motion" setting is off (`motionPreferences.lakes`, `setLakeMotion`; storage key `bjarnoy.motion.lakes`; under 'auto' it follows the device's reduced-motion setting). The setting covers all lake motion: the gusts and the blops. Water motion does not affect it. Unlike the sea it is not frozen: a still gust band reads as a fault, not as calm water. The
 clock is `animClockMs`, passed in from the renderer's tick (not `performance.now()`), so the gust shares the forest's clock. No environment
 checks.
 
@@ -1056,6 +1056,17 @@ checks.
 | `float uBandHalf` | half-width of the gust band, in periods (0.16) |
 | `float uFoam`, `uSheen`, `uCatsPaws` | 0 turns the look off, else its strength |
 | `float uFoamWidth`, `uFoamSpacing` | foam line half-width as a share of the spacing (0.04), spacing in world units (15) |
+| `vec2 uLakeOrigin`, `uLakeSize` | the world rect the lake mask covers (min corner, size): maps a world point onto the mask for point samples |
+| `float uBlops`, `uBlopDensity` | blops strength (0 = off) and density multiplier (1) |
+
+**Blops.** Independent of the wind (not gated by the gust band): small crescent ripples, like micro curls, that pop up at random spots on the
+lake and fade again, like a drip or a fish rising. Each is one or two concentric ring arcs, opening at a random angle, that appear, grow from
+about 3 to 9 world units radius and fade out over 1.2-1.8 s; lines about 1-1.5 units thin, near-white, alpha up to 0.8. The shader runs a
+jittered grid of cells (`1.75 * TILE_W`); each cell has its own cycle (random period 3-6 s, random phase) and, per cycle, a fresh random
+spot (hashed from the cycle index), shown for the first part of the cycle only. The density is therefore constant per water area: bigger
+lakes show more blops, and `bogLakeBlopDensity` scales the share of cycles that show one. A blop's spot is checked against `uLakeMask` (the
+centre must read above 0.9, and so must four points 11 units around it) and skipped otherwise, so rings never cut at the bank. The demo lake
+(6-9 water hexes) shows about 2-3 at a time. Flag `bogLakeBlops`, tuning `bogLakeBlopsStrength`, `bogLakeBlopDensity` (both 1).
 
 ### 4.4 Uniforms
 
@@ -1137,6 +1148,7 @@ export interface WaterDebugFlags {
   bogLakeFoam: boolean;         // default true
   bogLakeSheen: boolean;        // default true
   bogLakeCatsPaws: boolean;     // default true
+  bogLakeBlops: boolean;        // default true — small crescent ripples popping up on the lake, independent of the wind
 }
 export interface WaterDebugTuning {
   foamWidthHexes: number;  // 0.3 — the band is in world units, so this is sized
@@ -1149,6 +1161,8 @@ export interface WaterDebugTuning {
   bogLakeFoamStrength: number;     // 1 — multipliers on the lake gust's looks (§4.4d)
   bogLakeSheenStrength: number;    // 1
   bogLakeCatsPawsStrength: number; // 1
+  bogLakeBlopsStrength: number;    // 1
+  bogLakeBlopDensity: number;      // 1 — scales the share of cell cycles that show a blop
   bogLakeFoamWidth: number;        // 0.04 — foam line half-width, share of the spacing
   bogLakeFoamSpacing: number;      // 15 — world units between foam lines
   bogLakeBandHalf: number;         // 0.16 — gust band half-width, in periods

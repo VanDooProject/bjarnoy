@@ -41,6 +41,12 @@ uniform float uFoamWidth;
 uniform float uFoamSpacing;
 // Foam line style (design round 4): 0 strands, 1 tapered strands, 2 crest + shadow, 3 micro curls, 4 ring arcs, 5 glint squiggles.
 uniform float uFoamStyle;
+// The world rect the lake mask covers: its top-left corner and its size (vUV 0..1 maps linearly onto it).
+uniform vec2 uLakeOrigin;
+uniform vec2 uLakeSize;
+// Blops (not gust-gated, ignore the wind): strength, 0 = off; density multiplier.
+uniform float uBlops;
+uniform float uBlopDensity;
 
 // bogLakeGust.ts gustPhase, with the time term already in uGustTime: the same wave the forest sway frames are drawn in.
 const float GUST_WAVELENGTH = ${glFloat(GUST_WAVELENGTH)};
@@ -159,6 +165,54 @@ vec2 foamLook(vec2 w, float t) {
   return vec2(thread * seg * 0.9, 0.0);
 }
 
+
+// Lake mask at a world-unit offset from the pixel (the mask is 1 render-texture px per world unit, so this is a point sample).
+float maskAt(vec2 w, vec2 off) {
+  return texture(uLakeMask, (w + off - uLakeOrigin) / uLakeSize).a;
+}
+
+// One blop's alpha: 1-2 concentric crescents opening at a random angle, growing and fading over the life 0..1.
+float blopRipple(vec2 p, float rot, float age) {
+  float fadeIn = smoothstep(0.0, 0.12, age);
+  float fadeOut = 1.0 - smoothstep(0.35, 1.0, age);
+  float life = fadeIn * fadeOut;
+  vec2 q = vec2(cos(rot) * p.x + sin(rot) * p.y, -sin(rot) * p.x + cos(rot) * p.y);
+  q.y *= 1.5;
+  float len = length(q);
+  float ang = atan(q.y, q.x);
+  float arc = 1.0 - smoothstep(0.9, 1.9, abs(ang));
+  float r1 = mix(3.0, 9.0, age);
+  float r2 = r1 * 0.58;
+  float l1 = 1.0 - smoothstep(0.3, 1.5, abs(len - r1));
+  float l2 = (1.0 - smoothstep(0.3, 1.4, abs(len - r2))) * 0.8 * smoothstep(0.1, 0.35, age);
+  return max(l1, l2) * arc * life;
+}
+
+// Blops: a jittered grid, each cell with its own cycle (period, phase) and a fresh random spot per cycle. The spot must sit well inside the
+// water, else that cycle shows nothing. Cells are big enough (and the spot inset) that a blop never reaches the next cell.
+float blops(vec2 w, float t) {
+  float cell = uTileW * 1.75;
+  vec2 id = floor(w / cell);
+  float h = hash21(id + 3.3);
+  float period = 3.0 + 3.0 * h;
+  float tt = t + hash21(id + 8.8) * period;
+  float cycle = floor(tt / period);
+  float local = fract(tt / period) * period;
+  float lifeSec = 1.2 + 0.6 * hash21(id + cycle * 1.7);
+  if (local > lifeSec) return 0.0;
+  if (hash21(id * 1.3 + cycle * 7.1 + 0.4) > uBlopDensity * 0.55) return 0.0;
+  vec2 centre = (id + 0.06 + 0.88 * vec2(hash21(id + cycle * 2.3 + 1.1), hash21(id + cycle * 3.9 + 5.7))) * cell;
+  vec2 p = w - centre;
+  if (dot(p, p) > 14.0 * 14.0) return 0.0;
+  if (maskAt(centre, vec2(0.0)) < 0.9) return 0.0;
+  for (int i = 0; i < 4; i++) {
+    float a = float(i) * 1.570796 + 0.5;
+    if (maskAt(centre, vec2(cos(a), sin(a)) * 11.0) < 0.9) return 0.0;
+  }
+  float rot = 6.2832 * hash21(id + cycle * 4.1 + 2.2);
+  return blopRipple(p, rot, local / lifeSec) * 0.8;
+}
+
 // Premultiplied colour c at alpha a.
 vec4 over(vec3 c, float a) { return vec4(c * a, a); }
 
@@ -167,39 +221,45 @@ vec4 stack(vec4 a, vec4 b) { return a + b * (1.0 - a.a); }
 
 void main() {
   float lake = texture(uLakeMask, vUV).a;
-  if (lake < 0.01 || (uFoam <= 0.0 && uSheen <= 0.0 && uCatsPaws <= 0.0)) {
+  bool gustLooks = uFoam > 0.0 || uSheen > 0.0 || uCatsPaws > 0.0;
+  if (lake < 0.01 || (!gustLooks && uBlops <= 0.0)) {
     finalColor = vec4(0.0);
     return;
   }
   vec2 w = vWorld;
-  float env = gustEnvelope(w);
-  if (env <= 0.0) {
-    finalColor = vec4(0.0);
-    return;
-  }
   float t = uTime;
-  vec2 drift = vec2(-t * 40.0, 0.0);
   vec4 acc = vec4(0.0);
 
-  // Cat's paws: matte darker patches where the wind roughens the surface, with a fine grain inside. Bottom of the stack.
-  if (uCatsPaws > 0.0) {
-    float n = fbm((w + drift * 1.5) * vec2(0.02, 0.03));
-    float paws = smoothstep(0.42, 0.55, n) * env;
-    float grain = vnoise(w * vec2(0.6, 0.25) + vec2(-t * 9.0, 0.0));
-    acc = vec4(vec3(0.0), clamp(uCatsPaws * paws * (0.26 + 0.1 * grain), 0.0, 1.0));
+  // The wind gust looks, only inside the gust band.
+  float env = gustLooks ? gustEnvelope(w) : 0.0;
+  if (env > 0.0) {
+    vec2 drift = vec2(-t * 40.0, 0.0);
+
+    // Cat's paws: matte darker patches where the wind roughens the surface, with a fine grain inside. Bottom of the stack.
+    if (uCatsPaws > 0.0) {
+      float n = fbm((w + drift * 1.5) * vec2(0.02, 0.03));
+      float paws = smoothstep(0.42, 0.55, n) * env;
+      float grain = vnoise(w * vec2(0.6, 0.25) + vec2(-t * 9.0, 0.0));
+      acc = vec4(vec3(0.0), clamp(uCatsPaws * paws * (0.26 + 0.1 * grain), 0.0, 1.0));
+    }
+
+    // Soft sheen: a broad, almost featureless lightening that sweeps across with the gust.
+    if (uSheen > 0.0) {
+      float n = 0.65 + 0.35 * vnoise(w * 0.008 + vec2(t * 0.05, 0.0));
+      acc = stack(over(vec3(0.42, 0.60, 0.78), clamp(uSheen * env * n * 0.3, 0.0, 1.0)), acc);
+    }
+
+    // Foam lines (foamLook, uFoamStyle): light crests across the wind, sliding downwind; style 2 adds a dark trough line.
+    if (uFoam > 0.0) {
+      vec2 f = foamLook(w, t);
+      acc = stack(vec4(vec3(0.0), clamp(uFoam * f.y * env, 0.0, 1.0)), acc);
+      acc = stack(over(vec3(0.92, 0.95, 0.97), clamp(uFoam * f.x * env, 0.0, 1.0)), acc);
+    }
   }
 
-  // Soft sheen: a broad, almost featureless lightening that sweeps across with the gust.
-  if (uSheen > 0.0) {
-    float n = 0.65 + 0.35 * vnoise(w * 0.008 + vec2(t * 0.05, 0.0));
-    acc = stack(over(vec3(0.42, 0.60, 0.78), clamp(uSheen * env * n * 0.3, 0.0, 1.0)), acc);
-  }
-
-  // Foam lines (foamLook, uFoamStyle): light crests across the wind, sliding downwind; style 2 adds a dark trough line. Top of the stack.
-  if (uFoam > 0.0) {
-    vec2 f = foamLook(w, t);
-    acc = stack(vec4(vec3(0.0), clamp(uFoam * f.y * env, 0.0, 1.0)), acc);
-    acc = stack(over(vec3(0.92, 0.95, 0.97), clamp(uFoam * f.x * env, 0.0, 1.0)), acc);
+  // Blops: independent of the wind, top of the stack.
+  if (uBlops > 0.0) {
+    acc = stack(over(vec3(0.94, 0.97, 0.98), clamp(uBlops * blops(w, t), 0.0, 1.0)), acc);
   }
 
   finalColor = acc * lake;

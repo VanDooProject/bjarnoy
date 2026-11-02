@@ -87,6 +87,8 @@ export interface WaterDebugFlags {
   bogLakeSheen: boolean;
   /** Bog lakes: cat's paws, darker matte patches where the gust roughens the water. */
   bogLakeCatsPaws: boolean;
+  /** Bog lakes: small crescent ripples that pop up at random spots on the lake and fade again. Independent of the wind. */
+  bogLakeBlops: boolean;
 }
 
 export const waterDebugFlags: WaterDebugFlags = {
@@ -104,6 +106,7 @@ export const waterDebugFlags: WaterDebugFlags = {
   bogLakeFoam: true,
   bogLakeSheen: true,
   bogLakeCatsPaws: true,
+  bogLakeBlops: true,
 };
 
 /**
@@ -190,6 +193,10 @@ export interface WaterDebugTuning {
   bogLakeFoamStrength: number;
   bogLakeSheenStrength: number;
   bogLakeCatsPawsStrength: number;
+  /** Multiplier on the blops (1 is what ships). Only used while the flag is on. */
+  bogLakeBlopsStrength: number;
+  /** Blops per lake area: scales the share of cell cycles that show one (1 is what ships). */
+  bogLakeBlopDensity: number;
   /** Half-width of a foam line, as a share of the line spacing. */
   bogLakeFoamWidth: number;
   /** Distance between foam lines, in world units. */
@@ -225,6 +232,8 @@ export const waterDebugTuning: WaterDebugTuning = {
   bogLakeFoamStrength: 1,
   bogLakeSheenStrength: 1,
   bogLakeCatsPawsStrength: 1,
+  bogLakeBlopsStrength: 1,
+  bogLakeBlopDensity: 1,
   bogLakeFoamWidth: 0.04,
   bogLakeFoamSpacing: 15,
   bogLakeBandHalf: GUST_BAND_HALF_WIDTH,
