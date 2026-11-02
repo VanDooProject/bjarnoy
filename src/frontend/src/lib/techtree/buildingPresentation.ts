@@ -47,6 +47,7 @@ const TYPE_LABELS: Record<string, string> = {
   odinstatue: 'Odin Statue',
   reindeerherder: 'Reindeer herder',
   archeryrange: 'Archery range',
+  siegeworkshop: 'Siege workshop',
   dockyard: 'Dockyard',
   greatstorehouse: 'Great storehouse',
   townsquare: 'Town square',
@@ -55,10 +56,11 @@ const TYPE_LABELS: Record<string, string> = {
   cartworkshop: 'Cart workshop',
   claybrickworks: 'Clay brickworks',
   bogoreworks: 'Bog-ore works',
-  hammerschmiede: 'Hammerschmiede',
+  hammerschmiede: 'Hammer Forge',
   // Display name only; the internal type stays `smithy`.
   smithy: 'Weaponsmith',
   palisadegate: 'Palisade gate',
+  bridge: 'Bridge',
 };
 
 export function typeLabel(type: string): string {
@@ -84,6 +86,7 @@ const SHORT_LABELS: Record<string, string> = {
   shrineofullr: 'Ullr',
   shrineofnjord: 'Njörd',
   archeryrange: 'Archery',
+  siegeworkshop: 'Siege',
 };
 
 export function shortLabel(type: string): string {
@@ -128,6 +131,7 @@ const GRAPH_CATEGORY_OF: Record<string, GraphCategory> = {
   hammerschmiede: 'production',
   tower: 'military',
   archeryrange: 'military',
+  siegeworkshop: 'military',
   barracks: 'military',
   smithy: 'military',
   palisade: 'military',
@@ -136,6 +140,7 @@ const GRAPH_CATEGORY_OF: Record<string, GraphCategory> = {
   greatstorehouse: 'logistics',
   cartworkshop: 'logistics',
   townsquare: 'logistics',
+  bridge: 'logistics',
   druidhut: 'logistics',
   shrineofthor: 'religion',
   shrineoffreyja: 'religion',

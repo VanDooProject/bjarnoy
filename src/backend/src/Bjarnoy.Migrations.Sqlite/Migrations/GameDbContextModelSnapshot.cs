@@ -15,7 +15,7 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyEntity", b =>
                 {
@@ -754,6 +754,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("CentreR")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("FogChunks")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Giants")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -763,6 +767,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<bool>("IsWasted")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("JotunTowers")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -779,6 +787,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<int>("TileCount")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("UtgardWalls")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("WorldId")
                         .HasColumnType("TEXT");
@@ -943,6 +955,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<int>("Level")
                         .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset?>("OutsideRealmSince")
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Q")
                         .HasColumnType("INTEGER");
@@ -1150,6 +1165,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset>("FoundedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("HuntStarted")
+                        .HasColumnType("INTEGER");
+
                     b.Property<Guid>("IslandId")
                         .HasColumnType("TEXT");
 
@@ -1197,6 +1215,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<double>("StockWood")
                         .HasColumnType("REAL");
+
+                    b.Property<bool>("TroopsTrained")
+                        .HasColumnType("INTEGER");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("TEXT");

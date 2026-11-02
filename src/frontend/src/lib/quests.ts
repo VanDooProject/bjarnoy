@@ -3,7 +3,7 @@
 // In live mode the backend is the source of truth: `SettlementResponse.quests`
 // says what is completed/claimed and `POST /settlements/{id}/quests/{id}/claim`
 // pays. Demo mode has no backend but does keep a local stock on `WorldModel`,
-// so it evaluates the same six quests here and pays them locally. Keep this
+// so it evaluates the same eight quests here and pays them locally. Keep this
 // list in step with `Bjarnoy.Domain.Settlers.Quests`.
 import type { QuestResponse, ResourceLine } from '../api/types';
 import type { Resources } from './map/types';
@@ -20,6 +20,12 @@ export interface DemoQuestState {
   level: number;
   /** Standing buildings by wire name (`farm`, `storagehouse`, ...). */
   counts: Readonly<Record<string, number>>;
+  /** Whether a hunt was ever sent. Demo mode has no armies, so this stays false there. */
+  huntStarted?: boolean;
+  /** Whether the garrison ever held 5 fighting land units (latched server-side). Demo mode has no garrison, so this stays false there. */
+  troopsTrained?: boolean;
+  /** Fighting land units at home. Demo mode has no garrison, so this stays 0 there. */
+  fightingLandUnits?: number;
 }
 
 /** Resource producers for the "n producers built" quests (wire names). */
@@ -50,6 +56,9 @@ export const QUESTS: readonly QuestDef[] = [
   { id: 'producers6', reward: { wood: 200, stone: 150, food: 100, iron: 0 }, done: (s) => producers(s) >= 6 },
   { id: 'longhouse3', reward: { wood: 400, stone: 300, food: 200, iron: 0 }, done: (s) => s.level >= 3 },
   { id: 'longhouse5', reward: { wood: 800, stone: 600, food: 400, iron: 0 }, done: (s) => s.level >= 5 },
+  { id: 'spearmen5', reward: { wood: 500, stone: 400, food: 300, iron: 0 }, done: (s) => s.troopsTrained === true || (s.fightingLandUnits ?? 0) >= 5 },
+  // Needs the trained-troops latch and a started hunt; no claim involved. Demo mode never sets either.
+  { id: 'hunt1', reward: { wood: 400, stone: 300, food: 300, iron: 0 }, done: (s) => s.troopsTrained === true && s.huntStarted === true },
 ];
 
 /** Demo mode: the quest list as the server would report it. */

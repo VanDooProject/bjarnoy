@@ -50,6 +50,13 @@ export const MASK_MAX_TEXELS = 1024;
  */
 export const MASK_MARGIN_TILES = 3;
 
+/** WebGL's default UNPACK_ALIGNMENT, in bytes — see `waterMaskRegion`'s width. */
+export const MASK_ROW_ALIGN = 4;
+
+function alignUp(value: number, align: number): number {
+  return Math.ceil(value / align) * align;
+}
+
 export interface WaterMaskRegion {
   /** The world rect this mask covers — exactly `width x height` square texels. */
   rect: WorldRect;
@@ -85,7 +92,15 @@ export function waterMaskRegion(viewport: WorldRect, tileWidth: number): WaterMa
 
   const minX = Math.floor(wantMinX / texelWorldSize) * texelWorldSize;
   const minY = Math.floor(wantMinY / texelWorldSize) * texelWorldSize;
-  const width = Math.max(2, Math.ceil((wantMinX + wantW - minX) / texelWorldSize));
+  // Rounded up to a multiple of MASK_ROW_ALIGN: the single-byte fields
+  // (`WaterMask.taint`, `WaterMask.noFoam`) upload as r8 textures, one byte per
+  // texel, and WebGL reads their rows at its default 4-byte UNPACK_ALIGNMENT,
+  // which Pixi's buffer uploader never changes. A row of, say, 110 bytes then
+  // makes texImage2D expect more data than the array holds, the upload is
+  // rejected, and the field silently samples as zero everywhere. The RGBA mask
+  // itself is always aligned; widening the region by up to three texels costs
+  // nothing but a sliver of extra reach on the east side.
+  const width = alignUp(Math.max(2, Math.ceil((wantMinX + wantW - minX) / texelWorldSize)), MASK_ROW_ALIGN);
   const height = Math.max(2, Math.ceil((wantMinY + wantH - minY) / texelWorldSize));
 
   return {

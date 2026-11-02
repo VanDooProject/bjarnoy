@@ -26,10 +26,12 @@
     "cartworkshop": "Cart Workshop",
     "claybrickworks": "Clay Brickworks",
     "bogoreworks": "Bog-Ore Works",
-    "hammerschmiede": "Hammerschmiede",
+    "hammerschmiede": "Hammer Forge",
     "odinstatue": "Odin Statue",
     "palisade": "Palisade",
     "palisadegate": "Palisade Gate",
+    "bridge": "Bridge",
+    "siegeworkshop": "Siege workshop",
     "reindeerherder": "Reindeer Herder"
   },
   "units": {
@@ -40,9 +42,10 @@
     "berserker": "Berserker",
     "provisioner": "Provisioner",
     "catapult": "Catapult",
+    "ram": "Battering ram",
     "karve": "Karve",
     "longship": "Longship",
-    "settlercrew": "Settler Crew"
+    "settler": "Settler"
   },
   "giants": {
     "giantmountain": "Giant mountain",
@@ -63,7 +66,8 @@
     "cranedance": "Crane dance",
     "harewarren": "Hare warren",
     "deerglade": "Deer glade",
-    "otterslide": "Otter slide"
+    "otterslide": "Otter slide",
+    "whaleroad": "Whale road"
   },
   "terrain": {
     "sea": "Open water",
@@ -204,6 +208,16 @@
       "young": "Pup",
       "adult": "Otter",
       "alpha": "Old otter"
+    },
+    "whaleroad": {
+      "young": "Whale calf",
+      "adult": "Humpback",
+      "alpha": "Old bull"
     }
+  },
+  "endgame": {
+    "utgardwall": "Utgard wall",
+    "utgardgate": "Utgard gate",
+    "jotunwatchtower": "Jötun watchtower"
   }
 }

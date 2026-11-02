@@ -12,6 +12,11 @@ export interface ConstructionDial {
   startMs: number | null;
   /** `Date.now()`-epoch ms the build completes; null while waiting / unknown. */
   endMs: number | null;
+  /**
+   * `Date.now()`-epoch ms the server refused the build this (still "…") dial
+   * stood for: the dial plays `dialRejectFrame` from then and is pruned.
+   */
+  rejectedAtMs?: number;
 }
 
 /**
@@ -128,6 +133,90 @@ export function polylinePartial(points: { x: number; y: number }[], fraction: nu
   return out;
 }
 
+/** The dial label's font size in px at map scale 1 (`LABEL_STYLES.dialTime` is 12 px, drawn at 1.2x). */
+export const DIAL_LABEL_BASE_PX = 12 * 1.2;
+/** A dial's time label is hidden while it would be smaller than this many on-screen px. */
+export const DIAL_MIN_LABEL_PX = 10;
+/** How long a dial takes to grow to / shrink back from its hovered size. */
+export const DIAL_HOVER_MS = 150;
+
+export interface DialScale {
+  /** Multiplier for the dial's radius, strokes and label (1 = the size at the settlement's default zoom). */
+  zs: number;
+  /** Whether the time label is drawn. */
+  showLabel: boolean;
+}
+
+/**
+ * Dial sizing. `mapScale` is `camera.zoom / SETTLEMENT_DEFAULT_ZOOM`: the dial
+ * scales exactly with the map (no floor, so it stays the same fraction of a
+ * tile at every zoom). The time label is dropped once it would be below
+ * `DIAL_MIN_LABEL_PX` on screen. `hoverT` (0..1, the linear tween progress)
+ * lifts the dial to at least its default-zoom size (`max(mapScale, 1)`, so a
+ * dial already bigger than that never shrinks) and, from halfway, forces the
+ * label. `rejectScale` is the rejection animation's shrink.
+ */
+export function dialScale(mapScale: number, hoverT: number, rejectScale = 1): DialScale {
+  const t = clamp01(hoverT);
+  const eased = easeInOut(t);
+  const zs = mapScale + (Math.max(mapScale, 1) - mapScale) * eased;
+  return { zs, showLabel: t >= 0.5 || DIAL_LABEL_BASE_PX * zs * rejectScale >= DIAL_MIN_LABEL_PX };
+}
+
+/**
+ * One tween step of a dial's hover progress: toward 1 while `hovered`, toward
+ * 0 otherwise, taking `DIAL_HOVER_MS` for the full range. With reduced motion
+ * it jumps straight to the target.
+ */
+export function dialHoverStep(t: number, hovered: boolean, dtMs: number, reducedMotion: boolean): number {
+  const target = hovered ? 1 : 0;
+  if (reducedMotion) return target;
+  const step = Math.max(0, dtMs) / DIAL_HOVER_MS;
+  return target > t ? Math.min(target, t + step) : Math.max(target, t - step);
+}
+
+/** Dial hex radius in px at zoom factor `zs` (and reject shrink `rejectScale`). */
+export function dialRadiusPx(zs: number, rejectScale = 1): number {
+  return 22 * zs * 1.25 * rejectScale;
+}
+
+/** How long a tap-revealed dial stays revealed without another tap. */
+export const DIAL_TAP_REVEAL_MS = 4000;
+
+export interface DialHitTarget {
+  key: string;
+  cx: number;
+  cy: number;
+  /** Currently drawn radius in px. */
+  r: number;
+}
+
+/**
+ * The dial a touch at `point` lands on: within its drawn radius `r` (only the
+ * dial itself is tappable, so the tiles around and under it stay reachable);
+ * the nearest centre wins when several qualify. Null for none.
+ */
+export function pickTappedDial(point: { x: number; y: number }, dials: DialHitTarget[]): string | null {
+  let best: string | null = null;
+  let bestDist = Infinity;
+  for (const d of dials) {
+    const dist = Math.hypot(point.x - d.cx, point.y - d.cy);
+    if (dist <= d.r && dist < bestDist) {
+      best = d.key;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
+/**
+ * Next tap-revealed dial after a tap: tapping a dial reveals it, tapping the
+ * revealed one again closes it, a tap elsewhere (`tapped` null) closes it too.
+ */
+export function nextTapReveal(current: string | null, tapped: string | null): string | null {
+  return tapped !== null && tapped !== current ? tapped : null;
+}
+
 /** How long the completion animation plays after a build ends. */
 export const DIAL_FINISH_MS = 2600;
 
@@ -168,14 +257,53 @@ export function dialFinishFrame(msSinceEnd: number): DialFinishFrame | null {
   };
 }
 
+/** How long the rejection animation (shake, then fade out) plays. */
+export const DIAL_REJECT_MS = 480;
+const REJECT_SHAKE_MS = 280;
+
+export interface DialRejectFrame {
+  /** Horizontal shake offset in px. */
+  offsetX: number;
+  /** Dial size multiplier (shrinks to .6 while fading). */
+  scale: number;
+  /** Whole-dial opacity 0..1. */
+  alpha: number;
+}
+
+const REJECT_SHAKE_OFFSETS = [0, -4, 4, -2, 0];
+
+/**
+ * Rejection animation state `msSinceReject` after the server refused the
+ * build: a +-4 px shake over 280 ms, then fade and shrink to .6 over 200 ms;
+ * null outside it.
+ */
+export function dialRejectFrame(msSinceReject: number): DialRejectFrame | null {
+  if (msSinceReject < 0 || msSinceReject >= DIAL_REJECT_MS) return null;
+  if (msSinceReject < REJECT_SHAKE_MS) {
+    // Five evenly spaced keyframes (0, -4, 4, -2, 0), linearly interpolated.
+    const pos = (msSinceReject / REJECT_SHAKE_MS) * (REJECT_SHAKE_OFFSETS.length - 1);
+    const i = Math.min(REJECT_SHAKE_OFFSETS.length - 2, Math.floor(pos));
+    const offsetX = REJECT_SHAKE_OFFSETS[i] + (REJECT_SHAKE_OFFSETS[i + 1] - REJECT_SHAKE_OFFSETS[i]) * (pos - i);
+    return { offsetX, scale: 1, alpha: 1 };
+  }
+  const p = clamp01((msSinceReject - REJECT_SHAKE_MS) / (DIAL_REJECT_MS - REJECT_SHAKE_MS));
+  return { offsetX: 0, scale: 1 - 0.4 * p, alpha: 1 - p };
+}
+
 /**
  * Carry dials that just completed server-side (and so vanished from `next`)
  * over so their finish animation can play. Cancelled orders (end far in the
- * future / unknown) and expired animations are dropped.
+ * future / unknown) and expired animations are dropped. A dial that is playing
+ * its rejection (`rejectedAtMs`) is carried over until that has played.
  */
 export function retainFinishingDials(prev: ConstructionDial[], next: ConstructionDial[], nowMs: number): ConstructionDial[] {
   const out = [...next];
   for (const d of prev) {
+    // A refused build's dial outlives its (removed) pending order while it plays its rejection.
+    if (d.rejectedAtMs !== undefined) {
+      if (nowMs - d.rejectedAtMs < DIAL_REJECT_MS && !next.some((n) => n.coord.q === d.coord.q && n.coord.r === d.coord.r)) out.push(d);
+      continue;
+    }
     if (d.endMs === null || d.endMs > nowMs + 5000) continue;
     if (next.some((n) => n.coord.q === d.coord.q && n.coord.r === d.coord.r)) continue;
     const endMs = Math.min(d.endMs, nowMs);

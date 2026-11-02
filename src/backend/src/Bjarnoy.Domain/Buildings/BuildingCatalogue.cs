@@ -36,7 +36,7 @@ public static class BuildingCatalogue
     /// The highest level <paramref name="type"/> can be built to
     /// (<c>docs/design/economy.md</c> §4): Longhouse 30; resource producers and
     /// Storage House 25 (the bog-ore works too); military/civic buildings and the mills (the Hammerschmiede too) 20; Tower and
-    /// Great Storehouse 10; shrines 5; Palisade and Palisade Gate 3. Unknown/removed types return 0.
+    /// Great Storehouse 10; shrines 5; Palisade and Palisade Gate 3; Bridge 4; Siege Workshop 5. Unknown/removed types return 0.
     /// </summary>
     public static int MaxLevelFor(BuildingType type) => type switch
     {
@@ -53,8 +53,57 @@ public static class BuildingCatalogue
             or BuildingType.ShrineOfUllr or BuildingType.ShrineOfNjord
             or BuildingType.OdinStatue => 5,
         BuildingType.Palisade or BuildingType.PalisadeGate => 3,
+        BuildingType.Bridge => 4,
+        BuildingType.SiegeWorkshop => 5,
         _ => 0,
     };
+
+    /// <summary>The shortest time a building outside the realm takes from its top level to gone in a 1x world.</summary>
+    public static readonly TimeSpan MinDecayTime = TimeSpan.FromDays(7);
+
+    /// <summary>The longest time a building outside the realm takes from its top level to gone in a 1x world.</summary>
+    public static readonly TimeSpan MaxDecayTime = TimeSpan.FromDays(30);
+
+    /// <summary>The world speed at and above which the decay bounds stop shrinking (the 100x bounds hold).</summary>
+    public const double DecayBoundsMaxSpeed = 100;
+
+    /// <summary>
+    /// The shortest and longest time to gone in a world running at <paramref name="speedFactor"/>: on a log scale of speed
+    /// (<c>t = clamp(ln s / ln 100, 0, 1)</c>) the minimum falls from 7 days at 1x to 1 hour at 100x
+    /// (<c>168^(1-t)</c> hours) and the maximum from 30 days to 24 hours (<c>720^(1-t) * 24^t</c> hours).
+    /// </summary>
+    public static (TimeSpan Min, TimeSpan Max) DecayBounds(double speedFactor)
+    {
+        var t = speedFactor <= 1 ? 0.0 : Math.Min(1.0, Math.Log(speedFactor) / Math.Log(DecayBoundsMaxSpeed));
+        return (
+            TimeSpan.FromHours(Math.Pow(168, 1 - t)),
+            TimeSpan.FromHours(Math.Pow(720, 1 - t) * Math.Pow(24, t)));
+    }
+
+    /// <summary>
+    /// How long a building with <paramref name="maxLevel"/> levels takes from its top level to gone once the realm no longer
+    /// reaches it (<c>docs/design/economy.md</c> section 5): <paramref name="maxLevel"/> x 24 hours divided by the world's
+    /// <paramref name="speedFactor"/>, clamped to <see cref="DecayBounds"/> of that speed (7 to 30 days at 1x).
+    /// </summary>
+    public static TimeSpan DecayTimeToGone(int maxLevel, double speedFactor = 1.0)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxLevel, 1);
+        var (min, max) = DecayBounds(speedFactor);
+        var time = TimeSpan.FromHours(24.0 * maxLevel / Math.Max(speedFactor, 1e-9));
+        return time < min ? min : time > max ? max : time;
+    }
+
+    /// <summary>The time a <paramref name="type"/> outside the realm takes from its top level to gone (<see cref="DecayTimeToGone(int)"/> of its max level).</summary>
+    public static TimeSpan DecayTimeToGone(BuildingType type, double speedFactor = 1.0) => DecayTimeToGone(MaxLevelFor(type), speedFactor);
+
+    /// <summary>One level of a building with <paramref name="maxLevel"/> levels is lost every this long outside the realm: its <see cref="DecayTimeToGone(int)"/> divided by <paramref name="maxLevel"/>.</summary>
+    public static TimeSpan DecayInterval(int maxLevel, double speedFactor = 1.0) => DecayTimeToGone(maxLevel, speedFactor) / maxLevel;
+
+    /// <summary>One level of a <paramref name="type"/> outside the realm is lost every this long (<see cref="DecayInterval(int)"/> of its max level).</summary>
+    public static TimeSpan DecayInterval(BuildingType type, double speedFactor = 1.0) => DecayInterval(MaxLevelFor(type), speedFactor);
+
+    /// <summary>Whether a <paramref name="type"/> outside the realm decays: every building does except the Longhouse, which makes the realm.</summary>
+    public static bool Decays(BuildingType type) => type != BuildingType.Longhouse;
 
     /// <summary>What a settlement can store before it builds a storage house.</summary>
     public static ResourceAmounts BaseStorageCapacity { get; } = ResourceAmounts.Uniform(500);
@@ -113,10 +162,11 @@ public static class BuildingCatalogue
             [BuildingType.Farm] = 4,
             [BuildingType.PumpkinFarm] = 4,
             [BuildingType.Barracks] = 5,
-            [BuildingType.BogOreWorks] = 6,
+            [BuildingType.BogOreWorks] = 3,
             [BuildingType.TownSquare] = 6,
             [BuildingType.Palisade] = 7,
             [BuildingType.PalisadeGate] = 7,
+            [BuildingType.Bridge] = 7,
             [BuildingType.Dockyard] = 8,
             [BuildingType.ArcheryRange] = 9,
             [BuildingType.CartWorkshop] = 10,
@@ -124,6 +174,7 @@ public static class BuildingCatalogue
             [BuildingType.DruidHut] = 12,
             [BuildingType.Smithy] = 15,
             [BuildingType.GreatStorehouse] = 15,
+            [BuildingType.SiegeWorkshop] = 18,
             [BuildingType.Sawmill] = 20,
             [BuildingType.CropMill] = 20,
             [BuildingType.Hammerschmiede] = 20,
@@ -133,6 +184,16 @@ public static class BuildingCatalogue
             [BuildingType.ShrineOfThor] = 25,
             [BuildingType.OdinStatue] = 25,
         };
+
+    /// <summary>
+    /// Buildings that can no longer be placed anew while their type, art and numbers stay: the Quarry is switched off for now.
+    /// Quarries already standing (or queued) in a saved world keep producing and upgrading —
+    /// <see cref="Settlement.PlanBuild"/> only refuses a level-1 order (<see cref="BuildRejection.NewPlacementDisabled"/>).
+    /// </summary>
+    public static IReadOnlySet<BuildingType> NewPlacementDisabled { get; } = new HashSet<BuildingType>
+    {
+        BuildingType.Quarry,
+    };
 
     /// <summary>
     /// The Longhouse level <paramref name="type"/> unlocks at (1 for the
@@ -203,7 +264,7 @@ public static class BuildingCatalogue
     /// </para>
     /// <para>
     /// Storage House, Quarry, Clay Brickworks, Lumberjack, Reindeer Herder,
-    /// Tower and Town Square gate nothing on their own way in: Quarry needs a Mountain hex, and
+    /// Tower and Town Square need nothing standing before them: Quarry needs a Mountain hex, and
     /// <see cref="World.WorldGenerator"/> does not guarantee one within reach
     /// of a starting position — anything behind a Quarry would be unreachable
     /// for an unlucky map roll rather than merely expensive.
@@ -217,9 +278,12 @@ public static class BuildingCatalogue
             [BuildingType.Barracks] = [new(BuildingType.Tower, 3)],
             [BuildingType.Palisade] = [new(BuildingType.Tower, 5)],
             [BuildingType.PalisadeGate] = [new(BuildingType.Tower, 5)],
+            [BuildingType.Bridge] = [new(BuildingType.TownSquare, 1)],
             [BuildingType.Dockyard] = [new(BuildingType.FishingHut, 5)],
             [BuildingType.ArcheryRange] = [new(BuildingType.Barracks, 5)],
+            [BuildingType.SiegeWorkshop] = [new(BuildingType.ArcheryRange, 3)],
             [BuildingType.CartWorkshop] = [new(BuildingType.TownSquare, 3)],
+            [BuildingType.BogOreWorks] = [new(BuildingType.ClayBrickworks, 3)],
             [BuildingType.Meadery] = [new(BuildingType.Farm, 5)],
             [BuildingType.DruidHut] = [new(BuildingType.TownSquare, 5)],
             [BuildingType.Smithy] = [new(BuildingType.Barracks, 10)],
@@ -290,7 +354,9 @@ public static class BuildingCatalogue
             BuildingType.OdinStatue => Shrine(type, level),
             BuildingType.GreatStorehouse => GreatStorehouse(level),
             BuildingType.Palisade or BuildingType.PalisadeGate => PalisadeHex(type, level),
+            BuildingType.Bridge => BridgeHex(level),
             BuildingType.ArcheryRange => ArcheryRange(level),
+            BuildingType.SiegeWorkshop => SiegeWorkshop(level),
             BuildingType.Dockyard => Dockyard(level),
             BuildingType.Barracks => Barracks(level),
             // Grass qualifies terrain-wise, but only a hex that is itself a
@@ -427,7 +493,8 @@ public static class BuildingCatalogue
     {
         ArgumentNullException.ThrowIfNull(buildings);
 
-        var placed = buildings.Where(b => b.Level >= 1).ToList();
+        // A building outside the realm has no function: it neither produces nor boosts nor stores (PlacedBuilding.IsFunctioning).
+        var placed = buildings.Where(b => b.Level >= 1 && b.IsFunctioning).ToList();
 
         // Radius-boost sources standing among these buildings, with their
         // level's percent/range already resolved once rather than per
@@ -693,7 +760,9 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 120, Stone: 200, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(8, level),
-        AllowedTerrain = SandOrGrass,
+        // Stands on grass, sand, forest or plain bog moss (the palisade's rule); the tower replaces the tile under it.
+        AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Sand, Terrain.Forest },
+        AlsoOnBogKinds = PlainBogOnly,
         // Unlocks at LH 3, later than the first producers on purpose: a tower
         // extends the realm, so opening it at the very first longhouse level
         // made expansion the obvious first move rather than a decision. It is
@@ -790,7 +859,7 @@ public static class BuildingCatalogue
     /// the gate is refused there by <see cref="Palisades.PalisadeRules"/>). Unlocks at LH 7 behind a level-5 Tower; no production,
     /// storage or claim of its own.
     /// </summary>
-    // TODO(docs/design/economy.md section 5): siege and fire take a level off a wall hex at a time until it is gone; nothing does yet.
+    // TODO(docs/design/economy.md section 5): fire takes a level off a wall hex at a time until it is gone; nothing burns walls yet.
     private static BuildingDefinition PalisadeHex(BuildingType type, int level) => new()
     {
         Type = type,
@@ -800,6 +869,34 @@ public static class BuildingCatalogue
         AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Forest, Terrain.Sand },
         AlsoOnCoastalWater = true,
         AlsoOnBogKinds = PlainBogOnly,
+    };
+
+    /// <summary>
+    /// Wood, stone, food, iron and build minutes of each bridge level, spelled out per level (no cost growth): wood-heavy, stone from
+    /// level 3, no iron (<c>docs/design/economy.md</c> section 5).
+    /// </summary>
+    private static readonly (ResourceAmounts Cost, TimeSpan Duration)[] BridgeLevels =
+    [
+        (new ResourceAmounts(Wood: 120, Stone: 0, Food: 20, Iron: 0), TimeSpan.FromMinutes(10)),
+        (new ResourceAmounts(Wood: 220, Stone: 0, Food: 30, Iron: 0), TimeSpan.FromMinutes(20)),
+        (new ResourceAmounts(Wood: 380, Stone: 160, Food: 40, Iron: 0), TimeSpan.FromMinutes(45)),
+        (new ResourceAmounts(Wood: 660, Stone: 340, Food: 60, Iron: 0), TimeSpan.FromMinutes(90)),
+    ];
+
+    /// <summary>
+    /// The bridge over a wide river hex (<c>docs/design/economy.md</c> section 5): it stands on the river tile itself (grass, forest or
+    /// sand under it), on a Straight, Bend or Bend60 tile only (<see cref="BuildingDefinition.RequiresRiverShape"/>; any river art
+    /// variant, the bridge swaps it for the plain channel). <see cref="Settlement.PlanBuild"/> additionally requires the tile to be a wide
+    /// river and the island not wasted. Unlocks at LH 7 behind a level-1 Town Square; no production, storage or claim of its own.
+    /// </summary>
+    private static BuildingDefinition BridgeHex(int level) => new()
+    {
+        Type = BuildingType.Bridge,
+        Level = level,
+        Cost = BridgeLevels[level - 1].Cost,
+        BuildDuration = BridgeLevels[level - 1].Duration,
+        AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Forest, Terrain.Sand },
+        RequiresRiverShape = SawmillRiverShapes,
     };
 
     /// <summary>
@@ -839,15 +936,27 @@ public static class BuildingCatalogue
         // Archery Range), behind a level-5 Barracks.
     };
 
+    /// <summary>
+    /// Trains the siege engines, catapult and battering ram (<see cref="Units.UnitDefinition.RequiredBuildingType"/>); the ram is the only engine that
+    /// breaches walls (<c>docs/design/economy.md</c> section 5). Five levels, no production, storage or combat bonus of its own. The tunable defaults
+    /// mirror <see cref="ArcheryRange"/> one tier up: wood and stone costs about 1.6 times higher (buildings cost no iron), a slightly longer build.
+    /// </summary>
+    private static BuildingDefinition SiegeWorkshop(int level) => new()
+    {
+        Type = BuildingType.SiegeWorkshop,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 220, Stone: 160, Food: 0, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(10, level),
+        AllowedTerrain = Grass,
+    };
+
     // Same shape as FishingHut: RequiresCoastalWater rather than
     // AllowedTerrain, the hex under it stays Terrain.Sea. No production or
     // storage of its own — it trains the ship roster in place of the
     // Longhouse (see Units.UnitDefinition.RequiredBuildingType).
     //
-    // Deferred follow-up, not implemented here: ships departing a fleet
-    // should render from the Dockyard's own hex rather than the settlement
-    // centre — that needs an Army/pathing rendering change out of scope for
-    // this pass.
+    // When the settlement centre is inland, fleets depart from and return to
+    // the Dockyard's hex (see Army.FleetAnchor).
     private static BuildingDefinition Dockyard(int level) => new()
     {
         Type = BuildingType.Dockyard,
@@ -910,7 +1019,7 @@ public static class BuildingCatalogue
     };
 
     /// <summary>
-    /// Trains the civilian Provisioner/SettlerCrew half of the roster in
+    /// Trains the civilian Provisioner/Settler half of the roster in
     /// place of the Longhouse (see
     /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>) — the basic
     /// melee/archer/ship split's shape, applied to the civilian line.

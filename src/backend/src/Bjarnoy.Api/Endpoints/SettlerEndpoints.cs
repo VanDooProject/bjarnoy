@@ -74,9 +74,7 @@ public static class SettlerEndpoints
         [
             .. entities
                 .Where(s => s.UserId == userId)
-                .Select(s => new SettlementSummary(
-                    s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
-                    s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0, s.IslandId)),
+                .Select(s => SettlementSummary.From(s, mine: true)),
         ];
 
         return TypedResults.Ok(response);

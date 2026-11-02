@@ -11,7 +11,10 @@ import {
   enumerateIslandShapes,
   generateTile,
   islandsTooClose,
+  MOUNTAIN_SHAPE_WEIGHTS,
   soilAt,
+  terrainAt,
+  variantAt,
   wastedVariantAt,
   type WorldSeed,
 } from './worldGenerator';
@@ -84,6 +87,23 @@ describe('enumerateIslands', () => {
     for (const island of islands) {
       expect(model.isLand(island.q, island.r)).toBe(true);
     }
+  });
+});
+
+describe('mountain shape ratios', () => {
+  it('rolls the table shape rarely and splits the rest between cone, saddleback and corrie', () => {
+    expect(MOUNTAIN_SHAPE_WEIGHTS.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 10);
+    expect(MOUNTAIN_SHAPE_WEIGHTS[1]).toBeLessThan(0.05);
+
+    const counts = [0, 0, 0, 0];
+    for (let q = 0; q < 400; q++) {
+      for (let r = 0; r < 400; r++) {
+        if (terrainAt(q, r, SEED) === 'mountain') counts[variantAt(q, r, SEED)]!++;
+      }
+    }
+    const total = counts.reduce((a, b) => a + b, 0);
+    expect(total).toBeGreaterThan(1500);
+    counts.forEach((n, shape) => expect(Math.abs(n / total - MOUNTAIN_SHAPE_WEIGHTS[shape]!)).toBeLessThan(0.03));
   });
 });
 

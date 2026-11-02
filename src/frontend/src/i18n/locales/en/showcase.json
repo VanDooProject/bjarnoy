@@ -8,9 +8,7 @@
     "playCta": "Play now",
     "docsCta": "Read the docs",
     "seed": "World seed {seed}",
-    "reroll": "New world",
-    "explore": "Explore the map",
-    "exploreDone": "Done exploring"
+    "reroll": "New world"
   },
   "oneView": {
     "title": "One view — map and village",
@@ -38,7 +36,7 @@
       },
       "expansion": {
         "title": "Expansion by sea",
-        "body": "Load a settler crew onto a longship, sail it to an unclaimed coastal hex on any island, and found a second settlement."
+        "body": "Load settlers onto a ship, sail it to an unclaimed coastal hex on any island, and found a second settlement."
       },
       "trade": {
         "title": "Trade between players",

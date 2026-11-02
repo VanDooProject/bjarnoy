@@ -2,9 +2,10 @@
 // (ArmyPanel.vue, stores/world.ts) — kept separate and dependency-free so
 // they're unit-testable without mounting a component or a Pinia store, same
 // reasoning as lib/units/trainingEconomy.ts.
-import type { AxialCoord } from '../hex/coords';
+import { hexDistance, type AxialCoord } from '../hex/coords';
 import type { DispatchArmyRequest, FieldOrderRequest, HexPoint, UnitDefinitionResponse } from '../../api/types';
 import { i18n } from '../../i18n';
+import { isShoreBuildingHex, type TerrainLookup } from '../map/shoreline';
 
 /**
  * Converts an ordered list of clicked hexes into the shape `DispatchArmyRequest`
@@ -58,7 +59,8 @@ export function buildMoveDispatchRequest(
  * catapults hit on arrival — see `DispatchArmyRequest.targetBuildingCoord`'s
  * own comment. Omit (or pass `null`/`undefined`) for "no preference", the
  * same as never having picked one; `SiegeResolver` then falls back to a
- * seeded random pick server-side. Not validated here against the target's
+ * seeded random pick server-side. A fleet must always name one (a building on
+ * the target's shore; the server rejects the dispatch without it). Not validated here against the target's
  * actual layout — that can change before the army arrives — only forwarded
  * as-is.
  */
@@ -89,7 +91,8 @@ export function buildAttackDispatchRequest(
  * Builds a `hunt`-mission `DispatchArmyRequest` against a wildlife camp: the camp's own hex is the
  * `destination` (the server walks to the nearest reachable neighbour when the hex itself is not
  * walkable) and `route` holds only intermediate waypoints. `null` without units or a camp target.
- * Land units only is enforced by the UI (`isHuntUnit`) and by the server (`HuntRequiresLandUnits`).
+ * Land units only against land camps and ships only against a water camp (the whale road) is enforced by the UI
+ * (`isHuntUnit`) and by the server (`HuntRequiresLandUnits` / `HuntRequiresFleet`).
  */
 export function buildHuntDispatchRequest(
   unitCounts: Record<string, number>,
@@ -112,10 +115,23 @@ export function buildHuntDispatchRequest(
   };
 }
 
-/** Whether a unit type may join a hunt — land units only, ships cannot hunt. */
-export function isHuntUnit(type: string, byType: Record<string, UnitDefinitionResponse>): boolean {
+/**
+ * Whether a unit type may join a hunt: land units against a land camp, ships only against a water camp (`atSea`,
+ * the whale road).
+ */
+export function isHuntUnit(type: string, byType: Record<string, UnitDefinitionResponse>, atSea = false): boolean {
   const definition = byType[type];
-  return !!definition && definition.class !== 'ship';
+  if (!definition) return false;
+  return atSea ? definition.class === 'ship' : definition.class !== 'ship';
+}
+
+/** Whether a garrison holds any unit that may hunt the camp (`atSea`: ships for a water camp, land units otherwise). */
+export function garrisonCanHunt(
+  garrison: ReadonlyArray<{ unit: string; count: number }>,
+  byType: Record<string, UnitDefinitionResponse>,
+  atSea: boolean,
+): boolean {
+  return garrison.some((g) => g.count > 0 && isHuntUnit(g.unit, byType, atSea));
 }
 
 /**
@@ -225,14 +241,80 @@ export function isUnitSelectableFor(
   return selection === 'fleet' ? isShip : !isShip;
 }
 
+/** The kinds of building a siege engine can damage — mirrors `SiegeTargets` (`UnitDefinition.SiegeTargets`) in the backend. */
+export type SiegeTargetKind = 'walls' | 'towers' | 'buildings';
+
 /**
- * True when `unitCounts` sends at least one Catapult — the gate `ArmyPanel.vue`
- * uses to decide whether the "preferred target building" picker is even worth
- * showing (issue #40 phase 5): a catapult-free attack does no siege damage
+ * Which kind of siege target a building type is — mirrors `SiegeResolver.KindOf`: wall hexes (palisade, gate), the tower, and
+ * every other building (the Longhouse and bridges included).
+ */
+export function siegeTargetKindOf(buildingType: string): SiegeTargetKind {
+  if (buildingType === 'palisade' || buildingType === 'palisadegate') return 'walls';
+  if (buildingType === 'tower') return 'towers';
+  return 'buildings';
+}
+
+/** The kinds of building the selected siege engines (units with siege targets, count above zero) can damage together. */
+export function selectedSiegeTargets(
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+): Set<SiegeTargetKind> {
+  const kinds = new Set<SiegeTargetKind>();
+  for (const [type, count] of Object.entries(unitCounts)) {
+    if (count <= 0) continue;
+    for (const kind of byType[type]?.siegeTargets ?? []) kinds.add(kind as SiegeTargetKind);
+  }
+  return kinds;
+}
+
+/**
+ * True when `unitCounts` sends at least one siege engine (a catapult or a ram) — the gate `ArmyPanel.vue` uses to decide whether
+ * the "preferred target building" picker is even worth showing (issue #40 phase 5): an attack without one does no siege damage
  * regardless of what's requested, per `SiegeResolver.Resolve`.
  */
-export function hasCatapultSelected(unitCounts: Record<string, number>): boolean {
-  return (unitCounts.catapult ?? 0) > 0;
+export function hasSiegeEngineSelected(
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+): boolean {
+  return selectedSiegeTargets(unitCounts, byType).size > 0;
+}
+
+/** Whether the selected siege engines can damage a `buildingType` building: rams breach walls and towers, catapults the rest. */
+export function canSiegeDamage(
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+  buildingType: string,
+): boolean {
+  return selectedSiegeTargets(unitCounts, byType).has(siegeTargetKindOf(buildingType));
+}
+
+/** Whether a unit type is a ram-like engine: one that can breach walls. */
+export function breachesWalls(type: string, byType: Record<string, UnitDefinitionResponse>): boolean {
+  return byType[type]?.siegeTargets?.includes('walls') ?? false;
+}
+
+/**
+ * Whether the dispatch needs the player to name a building of the target settlement. A fleet attack is always sent at
+ * one building on the target's shore (`'required'`); a land attack may name a building for its siege engines to hit
+ * (`'optional'`, only worth offering when siege engines are along); everything else names none.
+ */
+export type TargetBuildingPickerMode = 'none' | 'optional' | 'required';
+
+export function targetBuildingPickerMode(
+  mission: string | undefined,
+  hasTargetSettlement: boolean,
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+  selection: FleetSelectionKind,
+): TargetBuildingPickerMode {
+  if (mission !== 'attack' || !hasTargetSettlement) return 'none';
+  if (selection === 'fleet') return 'required';
+  return hasSiegeEngineSelected(unitCounts, byType) ? 'optional' : 'none';
+}
+
+/** The buildings a fleet can be sent at: only those on the target's shore (see `isShoreBuildingHex`). */
+export function shoreBuildings<T extends { q: number; r: number }>(buildings: T[], terrain: TerrainLookup): T[] {
+  return buildings.filter((b) => isShoreBuildingHex({ q: b.q, r: b.r }, terrain));
 }
 
 /**
@@ -368,4 +450,39 @@ export function armyStatusLabel(
   if (army.movement?.isReturning) return i18n.global.t('hud.armyStatus.returning');
   if (army.mission === 'hunt') return i18n.global.t('hud.armyStatus.hunting');
   return i18n.global.t('hud.armyStatus.inTransit');
+}
+
+/**
+ * The hex a land army leaves from and returns to: the building that trained its slowest unit type
+ * (ties: the unit type listed first in the catalogue, which `/api/v1/units` serves in backend
+ * `UnitType` enum order), the one nearest `centre` when there are several (ties by Q, then R), and
+ * the centre when that building is gone or nothing is selected. Mirrors `Army.TrainingSite`.
+ */
+export function trainingSite(
+  centre: AxialCoord,
+  buildings: ReadonlyArray<{ q: number; r: number; type: string }>,
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+): AxialCoord {
+  const order = Object.keys(byType);
+  let slowest: UnitDefinitionResponse | null = null;
+  for (const [type, count] of Object.entries(unitCounts)) {
+    if (count <= 0) continue;
+    const definition = byType[type];
+    if (!definition) continue;
+    if (
+      slowest === null ||
+      definition.speed < slowest.speed ||
+      (definition.speed === slowest.speed && order.indexOf(type) < order.indexOf(slowest.type))
+    ) {
+      slowest = definition;
+    }
+  }
+  if (!slowest) return centre;
+
+  const required = slowest.requiredBuildingType;
+  const candidates = buildings
+    .filter((b) => b.type === required)
+    .sort((a, b) => hexDistance(a, centre) - hexDistance(b, centre) || a.q - b.q || a.r - b.r);
+  return candidates.length > 0 ? { q: candidates[0].q, r: candidates[0].r } : centre;
 }

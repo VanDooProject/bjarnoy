@@ -114,21 +114,31 @@ public static class FieldBattleResolver
     /// every hex of that footprint is covered by its discs — a claim that
     /// merely reaches this one hex of it does not grant the bonus.
     /// </param>
+    /// <param name="realm">
+    /// The chain-rule realm (<see cref="ConnectedRealm"/>) <paramref name="settlementId"/> belongs to, or
+    /// <see langword="null"/> to resolve the settlement alone. Only a connected tower claims ground, so only a connected
+    /// tower's disc grants its own bonus.
+    /// </param>
+    /// <param name="settlementId">This settlement's id inside <paramref name="realm"/>; ignored when the realm is null.</param>
     public static FieldBattleClaim ClaimAt(
-        HexCoord hex, HexCoord settlementCentre, IReadOnlyList<PlacedBuilding> buildings, IGiantIndex? giants = null)
+        HexCoord hex, HexCoord settlementCentre, IReadOnlyList<PlacedBuilding> buildings, IGiantIndex? giants = null,
+        ConnectedRealm? realm = null, Guid settlementId = default)
     {
         ArgumentNullException.ThrowIfNull(buildings);
 
+        var connected = realm ?? ConnectedRealm.Resolve([new RealmSettlement(Guid.Empty, settlementCentre, buildings)]);
+        var id = realm is null ? Guid.Empty : settlementId;
+
         var giantIndex = giants ?? GiantIndex.Empty;
         if (giantIndex.TryGetGiant(hex, out var giant)
-            && !Territory.IsFullyCovered([.. Settlement.ClaimDiscsFor(settlementCentre, buildings)], giant))
+            && !Territory.IsFullyCovered([.. connected.DiscsOf(id)], giant))
         {
             return FieldBattleClaim.None;
         }
 
         foreach (var building in buildings)
         {
-            if (building.Type != BuildingType.Tower)
+            if (building.Type != BuildingType.Tower || !connected.IsTowerConnected(id, building.Coord))
             {
                 continue;
             }
@@ -147,11 +157,7 @@ public static class FieldBattleResolver
             return FieldBattleClaim.None;
         }
 
-        var highestTowerLevel = buildings
-            .Where(b => b.Type == BuildingType.Tower)
-            .Select(b => b.Level)
-            .DefaultIfEmpty(0)
-            .Max();
+        var highestTowerLevel = connected.HighestConnectedTowerLevel(id, buildings);
         return new FieldBattleClaim(true, BuildingCatalogue.TowerDefenseBonusPercent(highestTowerLevel) * 0.5);
     }
 

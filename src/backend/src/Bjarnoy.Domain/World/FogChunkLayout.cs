@@ -39,6 +39,28 @@ public static class FogChunkLayout
 
     public static FogChunkCoord ChunkOf(HexCoord hex) => ChunkOf(FogMaskLayout.ToTexel(hex));
 
+    /// <summary>
+    /// The distinct chunks <paramref name="hexes"/> fall in, in first-seen order — a land mass's chunk footprint
+    /// (<c>IslandEntity.FogChunks</c>).
+    /// </summary>
+    public static List<FogChunkCoord> ChunksOf(IEnumerable<HexCoord> hexes)
+    {
+        ArgumentNullException.ThrowIfNull(hexes);
+
+        var seen = new HashSet<FogChunkCoord>();
+        var chunks = new List<FogChunkCoord>();
+        foreach (var hex in hexes)
+        {
+            var chunk = ChunkOf(hex);
+            if (seen.Add(chunk))
+            {
+                chunks.Add(chunk);
+            }
+        }
+
+        return chunks;
+    }
+
     /// <summary>The texels a chunk covers, half-open.</summary>
     public static MaskBounds Bounds(FogChunkCoord chunk) => new(
         chunk.U * ChunkSize,

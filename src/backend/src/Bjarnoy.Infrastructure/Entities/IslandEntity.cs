@@ -1,3 +1,5 @@
+using Bjarnoy.Domain.World;
+
 namespace Bjarnoy.Infrastructure.Entities;
 
 /// <summary>
@@ -34,6 +36,34 @@ public class IslandEntity
     /// <see cref="Persistence.HexListConverter"/> for the encoding.
     /// </remarks>
     public List<HexPoint> StartPositions { get; set; } = [];
+
+    /// <summary>
+    /// The distinct 64 x 64 fog chunks (<see cref="FogChunkLayout"/>) this island's land hexes fall in, computed at world
+    /// generation. An island counts as "seen" by a player when they have explored anything in one of these chunks — the
+    /// cutoff the camp endpoints use (<c>docs/design/wildlife-camps.md</c>). Empty for islands generated before the
+    /// column existed: their camps are simply not sent until the world is reseeded.
+    /// </summary>
+    public List<FogChunkCoord> FogChunks { get; set; } = [];
+
+    /// <summary>
+    /// <see cref="StartPositions"/> minus any that stands on a river hex. Worlds generated before start positions
+    /// avoided rivers still store such plots (a Longhouse on a wide river leaves a land army with no way home, so
+    /// every land dispatch fails); a filter here, rather than a migration, keeps them from ever being handed out or
+    /// founded on. Order is preserved.
+    /// </summary>
+    public List<HexPoint> FoundableStartPositions() => WithoutRiverHexes(StartPositions, RiverTiles);
+
+    /// <summary>The <paramref name="startPositions"/> not standing on any of <paramref name="riverTiles"/>, in order.</summary>
+    public static List<HexPoint> WithoutRiverHexes(List<HexPoint> startPositions, IReadOnlyCollection<RiverTileRecord> riverTiles)
+    {
+        if (riverTiles.Count == 0)
+        {
+            return startPositions;
+        }
+
+        var rivers = riverTiles.Select(t => (t.Q, t.R)).ToHashSet();
+        return [.. startPositions.Where(p => !rivers.Contains((p.Q, p.R)))];
+    }
 
     /// <summary>
     /// This island's rivers, one entry per river tile — see
@@ -91,6 +121,17 @@ public class IslandEntity
     public List<CampRecord> Camps { get; set; } = [];
 
     /// <summary>
+    /// This wasted island's Utgard wall rings — see <c>Bjarnoy.Domain.World.EndgameGenerator</c>. A wall hex's level changes
+    /// as siege engines breach it, so the column is the live state, not just the generated one. Empty for every green island, for a
+    /// wasted island without Utgard and for an island stored before the endgame existed (a reseed adds them). See
+    /// <see cref="Persistence.UtgardWallListConverter"/> for the encoding.
+    /// </summary>
+    public List<UtgardWallRecord> UtgardWalls { get; set; } = [];
+
+    /// <summary>This wasted island's Jötun watchtowers — empty like <see cref="UtgardWalls"/>. See <see cref="Persistence.JotunTowerListConverter"/>.</summary>
+    public List<JotunTowerRecord> JotunTowers { get; set; } = [];
+
+    /// <summary>
     /// True for an island generated from the wasted-island terrain layer —
     /// see <c>Bjarnoy.Domain.World.GeneratedIsland.IsWasted</c>. Hidden from
     /// the islands list until the world's endboss triggers; defaults to
@@ -115,6 +156,15 @@ public readonly record struct GiantRecord(int Q, int R, string Family, int Orien
 /// family (<c>CampFamilies</c>).
 /// </summary>
 public readonly record struct CampRecord(int Q, int R, string Family, int Level, int Orientation);
+
+/// <summary>
+/// A stored Utgard wall hex. <c>Ring</c>, <c>Piece</c> and <c>Dir</c> are the domain's <c>UtgardRing</c>, <c>PalisadePiece</c> and
+/// <c>TileOrientation</c> values by their plain numeric index, like <see cref="GiantRecord"/>.
+/// </summary>
+public readonly record struct UtgardWallRecord(int Q, int R, int Ring, int Piece, int Dir, bool IsGate, int Level);
+
+/// <summary>A stored Jötun watchtower. <c>Orientation</c> is the domain's <c>TileOrientation</c> by its plain numeric index.</summary>
+public readonly record struct JotunTowerRecord(int Q, int R, int Orientation);
 
 /// <summary>
 /// A stored bog hex. <c>Kind</c>, <c>InDirections</c>, <c>OutDirection</c> and <c>WaterEdges</c> are the domain's

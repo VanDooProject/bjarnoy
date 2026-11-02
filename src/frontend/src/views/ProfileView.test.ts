@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProfileView from './ProfileView.vue';
 import type { ProfileResponse } from '../api/types';
 import { animationPreference } from '../lib/perf/animationPreference';
+import { motionPreferences } from '../lib/perf/motionPreferences';
+import { antialiasPreference } from '../lib/perf/antialiasPreference';
 import { useAuthStore } from '../stores/auth';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { createTestI18n } from '../test/i18n';
@@ -270,13 +272,13 @@ describe('ProfileView', () => {
       await flushPromises();
 
       expect(wrapper.find('[role="tablist"]').exists()).toBe(true);
-      expect(wrapper.text()).not.toContain('Map animations');
+      expect(wrapper.text()).not.toContain('Building animations');
 
       await openSettings(wrapper);
 
       const panel = wrapper.find('[role="tabpanel"]');
       expect(panel.exists()).toBe(true);
-      expect(panel.text()).toContain('Map animations');
+      expect(panel.text()).toContain('Building animations');
       expect(panel.text()).toContain('Bar position');
     });
 
@@ -291,7 +293,14 @@ describe('ProfileView', () => {
       const names = wrapper
         .findAll('[role="group"]')
         .map((group) => document.getElementById(group.attributes('aria-labelledby')!)?.textContent);
-      expect(names).toEqual(['Bar position', 'Map animations']);
+      expect(names).toEqual([
+        'Bar position',
+        'Building animations',
+        'Water motion',
+        'Fog drift',
+        'Menu animations',
+        'Smooth edges',
+      ]);
       wrapper.unmount();
     });
 
@@ -303,10 +312,10 @@ describe('ProfileView', () => {
       await flushPromises();
 
       await openSettings(wrapper);
-      expect(wrapper.text()).toContain('Map animations');
+      expect(wrapper.text()).toContain('Building animations');
 
       await wrapper.findAll('[role="tab"]').find((b) => b.text() === 'Profile')!.trigger('click');
-      expect(wrapper.text()).not.toContain('Map animations');
+      expect(wrapper.text()).not.toContain('Building animations');
       expect(wrapper.find('pre.bio').exists()).toBe(true);
     });
 
@@ -389,6 +398,73 @@ describe('ProfileView', () => {
       expect(animationPreference.setting).toBe('on');
       expect(localStorage.getItem('bjarnoy.animations')).toBe('on');
       expect(wrapper.text()).toContain('On (this device)');
+    });
+
+    it('the smooth-edges toggle persists the antialias setting to localStorage', async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+      await openSettings(wrapper);
+
+      const offButton = wrapper
+        .findAll('.antialias-toggle button')
+        .find((button) => button.text() === 'Off')!;
+      await offButton.trigger('click');
+
+      expect(antialiasPreference.enabled).toBe(false);
+      expect(localStorage.getItem('bjarnoy.antialias')).toBe('off');
+      expect(offButton.attributes('aria-pressed')).toBe('true');
+      antialiasPreference.setting = 'on';
+    });
+
+    it.each([
+      ['water', 'Water motion', 'bjarnoy.motion.water'],
+      ['fog', 'Fog drift', 'bjarnoy.motion.fog'],
+      ['menus', 'Menu animations', 'bjarnoy.motion.hud'],
+    ] as const)('the %s row persists its own setting and leaves the others alone', async (row, _label, key) => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+      localStorage.clear();
+      motionPreferences.water = 'auto';
+      motionPreferences.fog = 'auto';
+      motionPreferences.hud = 'auto';
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+      await openSettings(wrapper);
+
+      const offButton = wrapper.findAll(`[data-testid="motion-${row}"] button`).find((b) => b.text() === 'Off')!;
+      await offButton.trigger('click');
+
+      expect(localStorage.getItem(key)).toBe('off');
+      expect(offButton.attributes('aria-pressed')).toBe('true');
+      expect(animationPreference.setting).toBe('auto');
+      const others = ['bjarnoy.motion.water', 'bjarnoy.motion.fog', 'bjarnoy.motion.hud'].filter((k) => k !== key);
+      expect(others.map((k) => localStorage.getItem(k))).toEqual(['auto', 'auto']);
+      motionPreferences.water = 'auto';
+      motionPreferences.fog = 'auto';
+      motionPreferences.hud = 'auto';
+    });
+
+    it("shows the device's reduce-motion state and an OS hint", async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+      await openSettings(wrapper);
+
+      expect(wrapper.get('[data-testid="device-motion-state"]').text()).toBe('OFF');
+      expect(wrapper.get('[data-testid="device-motion"]').text()).toContain('“Auto” below follows this.');
+
+      Object.defineProperty(animationPreference, 'reducedMotion', { get: () => true, configurable: true });
+      await flushPromises();
+      const again = mountProfileView();
+      await flushPromises();
+      await openSettings(again);
+      expect(again.get('[data-testid="device-motion-state"]').text()).toBe('ON');
     });
 
     it("shows the 'measuring' status for auto before the fps governor has decided", async () => {

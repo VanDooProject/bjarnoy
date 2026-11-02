@@ -1,0 +1,194 @@
+# Endgame: the Jötnar, their watchtowers and Utgard
+
+Status: **spec, not built yet**. Owner decisions from the camp-fights follow-up; numbers are tuning
+defaults (`EndgameRules` in C#, mirrored in `endgameRules.ts` where the client shows them). Lore and art:
+the Wasted Lands docs page (`WastedLandsView.vue`, `docs.wastedLands`). Builds on wildlife camps
+(`wildlife-camps.md`), palisades (`economy.md` §5) and the endboss trigger (`WorldService.TriggerDueEndbossesAsync`).
+
+## The shape of it
+
+When a world's endboss fires (`EndbossTriggeredAt`), the wasted islands appear. Each wasted island that has
+Utgard (one per wasted island of 150+ tiles, `GiantGenerator`) is defended by:
+
+- **Jötun watchtowers** spread over the island, each with a jötunn garrison.
+- **One or two rings of Utgard walls** around the fortress, which block land armies until siege breaks them.
+- **Utgard** itself, with a big garrison.
+
+Guilds wear the garrisons down together (losses stay), hold them down with armies standing on them (siege),
+breach the walls with rams, take every watchtower, and then storm Utgard. The army that clears
+Utgard wins the age for its player and guild.
+
+**Every endgame fight is a full battle**: the loser loses everything, the winner `(loser/winner)^1.5` of its
+units (`BattleResolver` maths, no raid cap). That holds for attacks on towers and Utgard, for siege ticks and
+for the jötnar's own attacks. (Wildlife camps keep their raid-capped attacks.)
+
+## Map: watchtowers and wall rings (world generation)
+
+Generated with the world, per wasted island with Utgard, after giants and camps, deterministic and bit-identical
+in C# (`EndgameGenerator`) and TS (`endgamePlacement.ts`), pinned by `src/shared/endgame-placement-golden.json`.
+Stored per island (`islands.JotunTowers`, `islands.UtgardWalls`, token converters like `CampListConverter`).
+Existing worlds get them on their next reseed.
+
+### Wall rings
+
+- Two candidate rings around Utgard's anchor: **inner** at hex distance `InnerRingRadius` = 3 (two hexes clear of
+  the 7-hex fortress), **outer** at `OuterRingRadius` = 6.
+- A ring hex takes a wall when its terrain could take a palisade (wasteland, dead forest, black sand; not a
+  river, lava, mountain or a giant footprint). Where a ring reaches the sea, the last land wall ends as an
+  `end_coast` piece on the shore, like a palisade's sea end; mountains and wide rivers close a ring by
+  themselves (they already stop land armies).
+- **One or two rings, depending on space**: the inner ring is always built if at least `MinRingLandShare` = 60%
+  of its hexes can take a wall; the outer ring only if that is also true for it. A small island gets one ring
+  (or none, in which case Utgard stands open).
+- **Levels**: inner ring walls stand at **level 2**, outer ring walls at **level 1** (`utgardwall_*_level002` /
+  `_level001` art; `level000` is the breached rubble).
+- **Gates**: `GatesPerRing` = 2 per ring, on straight pieces as far apart as the ring allows. Jötnar gates
+  are never friendly to players; for players a gate is a wall like any other (it can be breached).
+- Pieces and rotations come from the palisade rules (`PalisadeRules.TileFor`, same six pieces as `utgardwall_*`),
+  so one code path picks pieces for both.
+
+### Watchtowers
+
+- Count per island: `clamp(round(land / TilesPerTower), MinTowers, MaxTowers)` with `TilesPerTower` = 120,
+  3 to 6.
+- **Spread over the island, not a ring**: farthest-point sampling (like camp placement) over land hexes that
+  could take a building, outside the outer ring's interior, at least `MinTowerSpacing` = 5 from each other and
+  from Utgard's footprint, not on a camp or giant hex.
+- Art: `jotunwatchtower_*` (three stages: `level002` garrisoned, `level001` damaged, `level000` taken/empty).
+
+### Movement
+
+Utgard walls feed the same `PalisadeIndex` the pathfinder already uses, under a fixed jötnar owner key: a
+standing wall hex (level ≥ 1) blocks land armies, gates are never friendly to players, half-open land ends cost
+the ground + 3 like palisade ends. A breached wall hex (level 0) is passable.
+
+## Siege engines
+
+- **Catapult**: siege power 40, trained at the Siege Workshop. It burns towers and every ordinary building
+  (bridges included) but **cannot damage a wall**.
+- **Ram** (new `UnitType.Ram`, class Siege): the same siege power (40, the same `SiegeResolver.LevelsDestroyed`),
+  more staying power, slower. Attack 10, **defense 30** (catapult 10), **speed 1.0** (catapult 1.5), carry 0,
+  upkeep 3, cost wood 400 / stone 100 / food 40 / iron 150, 1 h, Longhouse 20, after the Berserker. Trained at
+  the new **Siege Workshop** (`BuildingType.SiegeWorkshop` 33, five levels, Longhouse 18, behind a level-3
+  Archery Range). The ram is the **wall breaker**: it damages walls and towers, nothing else.
+- Which engine hits which building is data: `UnitDefinition.SiegeTargets` (walls / towers / buildings), asked
+  through `SiegeResolver.CanDamage`; `economy.md` section 5 has the table. Only the surviving engines that can
+  damage the target count towards the levels destroyed.
+
+### Breaching walls
+
+There is **no separate siege mission**. A wall is breached by an ordinary **Attack** (or Raid) with rams that
+**names the wall hex** as its preferred target building (`TargetBuildingCoord`):
+
+- A **player's palisade** belongs to a settlement, so the Attack targets that settlement. The ring menu's
+  "Siege" action on a rival's wall hex (needs a ram at home) opens exactly that dispatch: an Attack on the
+  wall's owner with the wall hex pre-selected in the target-building picker, which marks what the selected
+  engines can damage (rams: walls and towers; catapults: towers and everything else).
+- Only the surviving **rams** count against a wall, and a won siege takes **one level** off the hex whatever
+  the ram count (`SiegeResolver.LevelsTakenFrom`, like a bridge). A named wall the surviving engines cannot
+  damage (a catapult-only army) takes no damage. A wall hex at level 0 is **breached** (a palisade hex is
+  removed; an Utgard wall becomes rubble).
+- **Utgard walls** have no settlement to attack, so they get their own wall-assault path in step 3 (an
+  assault on the wall hex with rams, with the 24 h rules below); the wall-state rules below describe it.
+- **Utgard walls lose at most 1 level per `WallBreachInterval` = 24 h** per wall hex, matching the repair pace:
+  a strike takes 1 level whatever the ram count, and a strike on a hex that already lost a level in
+  the last 24 h fights its battle but takes no level (the report says when the next strike can land). So the
+  inner ring (level 2) needs two strikes a day apart, with an army kept next to it in between so it does not
+  repair.
+- The Attack's battle comes first (the defenders of a player's settlement); an Utgard wall has no defenders: walls and gates hold **no garrison**, they are
+  pure siege targets (but towers and Utgard ambush armies that come into their range, see below).
+- **Utgard walls repair**: a breached or damaged Utgard wall regains 1 level every `WallRepairInterval` = 24 h,
+  up to its ring level, while no player army stands on or next to it. Player palisades are rebuilt by their
+  owner as usual.
+- Report: the ordinary battle report with its siege line (target, level before/after).
+
+## Jötunn garrisons
+
+Garrisons sit at every watchtower and at Utgard. Jötnar are a second garrison family, built on the camp system
+(`CampGarrison`, `CampState`, `CampBattleResolver`), generalised from beast tiers to garrison tiers:
+
+| Tier | Name (en / de) | Attack / Defense |
+|---|---|---|
+| Thrall | Rime thrall / Reifknecht | 20 / 40 |
+| Warrior | Jötunn / Jötunn | 120 / 150 |
+| Chieftain | Jötunn chieftain / Jötunnfürst | 300 / 400 |
+
+| Site | Thralls | Warriors | Chieftains | Defense power | Guard range | Full regrowth |
+|---|---|---|---|---|---|---|
+| Watchtower | 40 | 15 | 2 | 4 650 | 5 | 24 h |
+| Utgard | 300 | 120 | 20 | 38 000 | 8 | 48 h |
+
+- **Attack**: new mission **`assault`** against a watchtower or Utgard (land units; Utgard's hex is reached
+  through a breach or an open ring). A full battle: army attack vs garrison defense. Losses stay with the
+  garrison; it regrows linearly per tier over the full-regrowth time (`CampState.GarrisonAt` pattern).
+  A watchtower with no jötnar left is **taken** (empty art, no longer attacks). A taken site stays empty for a
+  **grace period** of `TakenGrace` = 1 h, then starts to regrow (unless an army holds it, see siege).
+- **Siege (holding a site)**: an army **standing on a site's hex** (arrived, not turned around) besieges it.
+  Every `SiegeTick` = 1 h the jötnar that regrew during that hour come out and fight it in a **full battle**.
+  If the army wins they are dead and the garrison does not recover; if it loses, the army is gone and regrowth
+  goes on. An army standing on a taken tower keeps it taken.
+- **Siege loot**: each siege tick the army takes `SiegeLootPerHour` (watchtower 300, Utgard 1 000; split
+  iron 40% / food 30% / stone 30%) into its carried loot until its carry capacity is full; the rest is lost.
+- **Aggression** (like strong camps, but full battles): a site with jötnar ambushes armies that enter its guard
+  range (`CampAmbush`), and burns player towers inside it unless defended (`CampTowerThreat`). After a fight
+  it is calm for `EndgameCalm` = 1 h.
+- Garrisons and sites only exist once the endboss has triggered; before that the wasted islands are hidden.
+
+## Utgard and the end of the age
+
+- **Gate rule**: Utgard can be assaulted only while **every watchtower on its island is taken** (no jötnar) at
+  the moment the assault arrives. The dispatch is refused otherwise (`TowersStillStand`), and an army arriving
+  while a tower has regrown turns home without a fight. Holding the towers means keeping armies besieging them.
+- **Winning**: the army whose assault leaves Utgard with no jötnar **wins the age**: its player and the player's
+  guild (if any) are recorded on the world (`AgeEndedAt`, `WinnerUserId`, `WinnerGuildId`,
+  `WinnerSettlementId`).
+- **Hall of fame**: both are credited. The winning player gets the age win as the one whose army threw down
+  Utgard; every member of the winning guild at the moment of the win gets a guild age win (stored per user,
+  `AgeWins` with a `Kind` of `Conqueror` or `Guild`, so the leaderboard can show both).
+- **Age-end mode** (new world setting, admin world settings next to "endboss at"):
+  - **`ReadOnly`** (default): the world goes to `WorldRunState.Locked` (time runs, no new commands), every
+    page shows a banner "The age has ended. <guild/player> threw down Utgard's gate.", leaderboards are
+    finalised.
+  - **`KeepRunning`**: the winner is recorded and announced in the same banner, and play goes on; Utgard stays
+    empty and cannot be won again.
+
+## Reports and UI
+
+- New report kinds on the camp report (`CampReportKind`): `Assault`, `SiegeTick`, `EndgameAmbush`,
+  `EndgameTower`; sieges of player walls use the battle report with its siege line.
+- **Bundled siege reports**: siege ticks are folded into one report per (army, site), updated in place each
+  tick (ticks fought, jötnar killed, units lost, loot taken, last tick). The inbox groups reports by target
+  and collapses a group to one row with a count; expanding shows every report.
+- Map: watchtower and wall art per state, Utgard and tower tooltips with the garrison like camps, `Assault`
+  and `Siege` actions in the ring menu (siege only with rams at home), the guard ranges on hover.
+- Docs: the Wasted Lands page gains a "How the endgame plays" section with these rules.
+
+## Delivery (PRs)
+
+1. **This spec.**
+2. In parallel (separate worktrees, no shared files):
+   - **2a Map**: wall rings and watchtowers in world generation (C#, TS, golden), storage, rendering with the
+     existing art, walls blocking land armies.
+   - **2b Siege engines**: the Ram unit, the Siege Workshop and the engine-by-target damage split, breaching
+     **player palisades** through the ordinary Attack that names the wall (Utgard walls get their wall-assault
+     path in step 3).
+3. **Jötunn garrisons**: garrisons, `assault`, siege ticks with loot, aggression, the wall-assault path against Utgard walls (rams), Utgard wall state and repair,
+   sieging Utgard walls, bundled reports and the inbox grouping.
+4. **Utgard**: gate rule, winning, the age-end world setting and banner.
+
+## Open questions
+
+None open. (A won siege takes one level off a player wall hex; Utgard walls are additionally capped at 1 level per 24 h.)
+
+## Screenshots
+
+The in-game docs page (`/docs/wasted-lands`, section "How the endgame plays"):
+
+![Endgame rules on the Wasted Lands docs page](img/endgame/docs_rules_en.png)
+![Jötnar and garrison tables, German](img/endgame/docs_tables_de.png)
+![Garrison tables on a phone, scrolling sideways](img/endgame/docs_tables_mobile.png)
+
+The map (step 2a), demo mode on a wasted island:
+
+![Utgard with its inner and outer wall rings](img/endgame/map_utgard_walls.png)
+![A garrisoned jötun watchtower](img/endgame/map_jotun_tower.png)

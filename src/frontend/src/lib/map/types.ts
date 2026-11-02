@@ -304,6 +304,9 @@ export type ResourceKind = 'wood' | 'stone' | 'food' | 'iron';
 
 export type Resources = Record<ResourceKind, number>;
 
+/** A forest hex's biome - see `Tile.forestKind`. */
+export type ForestKind = 'taiga' | 'birch' | 'mixed';
+
 export interface Tile {
   q: number;
   r: number;
@@ -318,6 +321,11 @@ export interface Tile {
    * see `textures.ts`'s wasted family mapping.
    */
   wasted?: boolean;
+  /**
+   * Which forest biome a (non-wasted) forest hex belongs to: `taiga` and `birch` cover large regions of an island,
+   * `mixed` is sprinkled into both. Picks the forest art family in `textures.ts`; undefined on every other terrain.
+   */
+  forestKind?: ForestKind;
   /** Which art-pack rotation to render this hex with. */
   orientation?: TileOrientation;
   /** Which numbered variant of this terrain's tile art to use. */
@@ -361,8 +369,15 @@ export interface Tile {
     | 'bogoreworks'
     | 'hammerschmiede'
     | 'palisade'
-    | 'palisadegate';
+    | 'palisadegate'
+    | 'bridge'
+    | 'siegeworkshop';
   buildingLevel?: number;
+  /**
+   * The building on this hex stands outside its owner's realm (`PlacedBuildingResponse.outsideRealmSince` is set): it has no
+   * function, a gate or bridge there is open to every army. Set and cleared with `buildingType` by `WorldModel`.
+   */
+  buildingOutsideRealm?: boolean;
   /**
    * A decoration on this open-lake hex, drawn because of a building nearby (`lakeProps.ts`): a fish weir or fishing boat
    * next to a lake Fishing Hut, an ore boat next to a bog-ore works. Render-only and derived, like `bog`; set and cleared by
@@ -387,6 +402,25 @@ export interface Tile {
     anchor: { q: number; r: number };
     part: import('./giantTiles').GiantPart;
     orientation: TileOrientation;
+  };
+  /**
+   * An Utgard wall piece on this hex (a wasted island's wall ring, see `endgamePlacement.ts` and `docs/design/endgame.md`); a sea
+   * hex carries the `end_coast` piece. A standing wall (level 1+) blocks land armies; not buildable.
+   */
+  utgardWall?: {
+    ring: 'inner' | 'outer';
+    piece: import('./palisadeTiles').PalisadePiece;
+    /** The art file's camera, as the server resolved it through the palisade rules. */
+    dir: TileOrientation;
+    isGate: boolean;
+    /** 2 full, 1 damaged, 0 breached rubble (passable). */
+    level: number;
+  };
+  /** A Jötun watchtower on this hex (see `endgamePlacement.ts`); not buildable. `orientation` is the tile's own rotation. */
+  jotunTower?: {
+    orientation: TileOrientation;
+    /** 2 garrisoned, 1 damaged, 0 taken; later endgame steps switch it. */
+    level: number;
   };
   /**
    * A wildlife camp on this hex (see `campPlacement.ts` and

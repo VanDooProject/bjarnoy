@@ -38,6 +38,19 @@ export interface HexQuery {
    * there first, the same way WorldModel.test.ts does.
    */
   withRiver?: boolean;
+  /**
+   * Hexes from the longhouse to scan, when the realm reaches past its centre
+   * disc (a Tower's satellite disc, see `standTowerTowardCoast`). Defaults to
+   * the centre disc's own radius, so the scan order — and the hex every other
+   * spec gets back — is unchanged.
+   */
+  reach?: number;
+  /**
+   * Of the matching hexes, the one drawn closest to this canvas point rather
+   * than the first in scan order — for a spec that needs the ring opened at a
+   * particular part of the screen (e.g. low on a phone, above the docked card).
+   */
+  nearest?: ScreenPoint;
 }
 
 /**
@@ -74,8 +87,6 @@ export class SettlementPage {
   readonly banner: Locator;
   /** The completion banner's explicit hand-off to /settlement. */
   readonly continueButton: Locator;
-  /** The ring's persistent "why it's dim" note (RingMenu.vue's `note` prop). */
-  readonly ringNote: Locator;
   /** The profile-mark tooltip that replaces the old nickname modal (ProfileNudge.vue). */
   readonly profileNudge: Locator;
   /** Player logout/login gate: HudNav's authenticated avatar dropdown trigger (only mounted once founded). */
@@ -110,7 +121,6 @@ export class SettlementPage {
     this.checklist = page.getByTestId('onboarding-checklist');
     this.banner = page.getByTestId('onboarding-banner');
     this.continueButton = page.getByTestId('onboarding-continue');
-    this.ringNote = page.getByTestId('ring-note');
     this.profileNudge = page.getByTestId('profile-nudge');
     this.accountMenuTrigger = page.getByTestId('account-menu-trigger');
     this.accountMenu = page.getByTestId('account-menu');
@@ -181,7 +191,9 @@ export class SettlementPage {
       };
       const world = win.__demoWorld();
       const settlement = world.model.getSettlement(world.selectedSettlementId);
-      const radius = world.model.borderRadius(settlement);
+      const radius = q.reach ?? world.model.borderRadius(settlement);
+      const renderer = win.__settlementRenderer();
+      let best: { hex: { q: number; r: number }; screen: { x: number; y: number }; d: number } | null = null;
       for (let dq = -radius; dq <= radius; dq++) {
         for (let dr = -radius; dr <= radius; dr++) {
           if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
@@ -192,18 +204,80 @@ export class SettlementPage {
           if (q.terrain !== undefined && tile.terrain !== q.terrain) continue;
           if (q.notTerrain !== undefined && tile.terrain === q.notTerrain) continue;
           if (q.coastalWater && !tile.isCoastalWater) continue;
+          if (q.nearest) {
+            const screen = renderer.hexCenterScreen(at);
+            const d = Math.hypot(screen.x - q.nearest.x, screen.y - q.nearest.y);
+            if (!best || d < best.d) best = { hex: at, screen, d };
+            continue;
+          }
           if (q.withRiver) {
             world.model.setRiverTiles([
               { q: at.q, r: at.r, shape: 'straight', inDirections: [], outDirection: null },
             ]);
           }
-          return { hex: at, screen: win.__settlementRenderer().hexCenterScreen(at) };
+          return { hex: at, screen: renderer.hexCenterScreen(at) };
         }
+      }
+      if (best) {
+        if (q.withRiver) {
+          world.model.setRiverTiles([{ q: best.hex.q, r: best.hex.r, shape: 'straight', inDirections: [], outDirection: null }]);
+        }
+        return { hex: best.hex, screen: best.screen };
       }
       throw new Error(
         `no empty, owned hex matching ${JSON.stringify(q)} found inside the realm — pick a different demo seed`,
       );
     }, query);
+  }
+
+  /**
+   * Stands a Tower on the realm's own hex nearest the closest coastal water,
+   * levelled until its satellite disc (one hex per level, BuildingCatalogue's
+   * Tower ClaimRadius, at most level 10) reaches that water — the way a player
+   * would push the border to the shore. A good start position never has sea
+   * within two hexes, so the centre disc only reaches coastal water when the
+   * coast happens to lie exactly at its edge. Goes through
+   * `placeBuilding`/`upgradeBuilding`, which re-claim the Tower's disc.
+   * Returns how far from the longhouse the realm can now reach, for
+   * `findHex`'s `reach`.
+   */
+  async standTowerTowardCoast(): Promise<number> {
+    return this.page.evaluate(() => {
+      const world = (window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
+      }).__demoWorld();
+      const id = world.selectedSettlementId;
+      const settlement = world.model.getSettlement(id);
+      const distance = (a: { q: number; r: number }, b: { q: number; r: number }) =>
+        (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(a.q + a.r - b.q - b.r)) / 2;
+      const disc = (radius: number) => {
+        const out: { q: number; r: number }[] = [];
+        for (let dq = -radius; dq <= radius; dq++) {
+          for (let dr = -radius; dr <= radius; dr++) {
+            if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 <= radius) out.push({ q: settlement.q + dq, r: settlement.r + dr });
+          }
+        }
+        return out;
+      };
+      const coast = disc(12)
+        .filter((c) => world.model.getTile(c.q, c.r).isCoastalWater)
+        .sort((a, b) => distance(a, settlement) - distance(b, settlement))[0];
+      if (!coast) throw new Error('no coastal water within 12 hexes of the settlement — pick a different demo seed');
+      const site = disc(world.model.borderRadius(settlement))
+        .filter((c) => {
+          const tile = world.model.getTile(c.q, c.r);
+          return tile.ownerId === id && !tile.buildingType && !tile.camp && !tile.giant && !world.model.getRiverTile(c.q, c.r) &&
+            ['grass', 'forest', 'sand'].includes(tile.terrain);
+        })
+        .sort((a, b) => distance(a, coast) - distance(b, coast))[0];
+      if (!site) throw new Error('no free owned land hex to stand a tower on');
+      const towerLevel = distance(site, coast);
+      if (towerLevel > 10) throw new Error(`coastal water is ${towerLevel} hexes past the realm, beyond a level-10 tower — pick a different demo seed`);
+      if (!world.model.placeBuilding(id, site, 'tower')) throw new Error('could not stand a tower toward the coast');
+      for (let l = 1; l < towerLevel; l++) world.model.upgradeBuilding(id, site);
+      world.syncHud();
+      return distance(site, settlement) + towerLevel;
+    });
   }
 
   /** The longhouse's own hex, and where it is on screen. */
@@ -280,6 +354,43 @@ export class SettlementPage {
     }, level);
   }
 
+  /**
+   * Stands buildings of these types and levels on free owned land hexes —
+   * for a building whose `prerequisites` (BuildingCatalogue.cs, mirrored by
+   * the ring's lock) need another building first, the way a player would have
+   * to build it, rather than weakening the gate for the test. Picks hexes from
+   * the far end of the realm's scan, so `findHex` (which scans from the near
+   * end) still hands back the same target it would have otherwise.
+   */
+  async standBuildings(buildings: { type: string; level: number }[]): Promise<void> {
+    await this.page.evaluate((wanted) => {
+      const world = (window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
+      }).__demoWorld();
+      const settlement = world.model.getSettlement(world.selectedSettlementId);
+      const radius = world.model.borderRadius(settlement);
+      const free: { q: number; r: number }[] = [];
+      for (let dq = -radius; dq <= radius; dq++) {
+        for (let dr = -radius; dr <= radius; dr++) {
+          if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
+          const at = { q: settlement.q + dq, r: settlement.r + dr };
+          const tile = world.model.getTile(at.q, at.r);
+          if (tile.ownerId !== world.selectedSettlementId || tile.buildingType || tile.camp || tile.giant) continue;
+          if (!['grass', 'forest', 'sand', 'mountain'].includes(tile.terrain) || world.model.getRiverTile(at.q, at.r)) continue;
+          free.push(at);
+        }
+      }
+      for (const building of wanted) {
+        const at = free.pop();
+        if (!at) throw new Error(`no free owned hex left to stand a ${building.type} on`);
+        const tile = world.model.getTile(at.q, at.r);
+        tile.buildingType = building.type;
+        tile.buildingLevel = building.level;
+      }
+      world.syncHud();
+    }, buildings);
+  }
+
   /** Sets the settlement's stock outright — for the affordability gates. */
   async setResources(resources: { wood: number; stone: number; food: number; iron: number }): Promise<void> {
     await this.page.evaluate((r) => {
@@ -314,14 +425,6 @@ export class SettlementPage {
       () =>
         (window as unknown as { __demoWorld: () => { hud: { resources: { wood: number; iron: number } } } })
           .__demoWorld().hud.resources,
-    );
-  }
-
-  /** The cosmetic cart shipments a trade acceptance drops onto the world map (issue #46). */
-  listCartShipments(): Promise<unknown[]> {
-    return this.page.evaluate(() =>
-      (window as unknown as { __demoWorld: () => { model: { listCartShipments: () => unknown[] } } })
-        .__demoWorld().model.listCartShipments(),
     );
   }
 

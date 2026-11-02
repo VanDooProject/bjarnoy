@@ -146,6 +146,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .HasConversion(new HexListConverter())
                 .Metadata.SetValueComparer(HexListConverter.Comparer);
 
+            island.Property(i => i.FogChunks)
+                .HasConversion(new FogChunkListConverter())
+                .Metadata.SetValueComparer(FogChunkListConverter.Comparer);
+
             island.Property(i => i.RiverTiles)
                 .HasConversion(new RiverTileListConverter())
                 .Metadata.SetValueComparer(RiverTileListConverter.Comparer);
@@ -161,6 +165,12 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             island.Property(i => i.Camps)
                 .HasConversion(new CampListConverter())
                 .Metadata.SetValueComparer(CampListConverter.Comparer);
+            island.Property(i => i.UtgardWalls)
+                .HasConversion(new UtgardWallListConverter())
+                .Metadata.SetValueComparer(UtgardWallListConverter.Comparer);
+            island.Property(i => i.JotunTowers)
+                .HasConversion(new JotunTowerListConverter())
+                .Metadata.SetValueComparer(JotunTowerListConverter.Comparer);
         });
 
         modelBuilder.Entity<SettlementEntity>(settlement =>

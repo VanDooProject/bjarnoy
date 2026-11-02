@@ -193,4 +193,32 @@ describe('useGuildStore', () => {
     expect(store.actionError).toBe('Could not found the guild.');
     expect(store.actionPending).toBe(false);
   });
+
+  it('counts guildmates and members of guilds at peace as friends, not the player, proposed treaties or strangers', async () => {
+    currentUserId = 'user-1';
+    const store = await freshStore();
+    const member = (userId: string) => ({ userId, role: 'member' as const, joinedAt: '2026-01-01T00:00:00Z', feeOverdue: false });
+    store.guilds = [
+      guildFixture(),
+      guildFixture({ id: 'guild-2', members: [member('user-3')] }),
+      guildFixture({ id: 'guild-3', members: [member('user-4')] }),
+      guildFixture({ id: 'guild-4', members: [member('user-5')] }),
+    ];
+    const treaty = (id: string, proposer: string, target: string, status: GuildTreatyResponse['status']) =>
+      ({ id, proposerGuildId: proposer, targetGuildId: target, status, proposedAt: '', respondedAt: null }) as GuildTreatyResponse;
+    store.treaties = [
+      treaty('t1', 'guild-1', 'guild-2', 'active'),
+      treaty('t2', 'guild-3', 'guild-1', 'active'),
+      treaty('t3', 'guild-1', 'guild-4', 'proposed'),
+    ];
+
+    expect([...store.friendlyUserIds].sort()).toEqual(['user-2', 'user-3', 'user-4']);
+  });
+
+  it('has no friends while the player is in no guild', async () => {
+    currentUserId = 'user-1';
+    const store = await freshStore();
+    store.guilds = [guildFixture({ members: [] })];
+    expect(store.friendlyUserIds.size).toBe(0);
+  });
 });

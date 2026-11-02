@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { Texture } from 'pixi.js';
 import {
   baseTextureFor,
+  buildTileTextures,
+  clipVariantSlot,
   BOG_TEXTURE_KEYS,
   bogOrientationFor,
+  bogVariantIn,
   bogTextureKey,
   campArtFor,
   drawnCampOf,
@@ -24,7 +27,10 @@ import {
   RIVER_FAMILY,
   KEY_FAMILY,
   LAKE_PROP_VARIANT,
+  MOUNTAIN_SHAPE_KEY,
   PALISADE_TEXTURE_KEY,
+  UTGARD_WALL_TEXTURE_KEY,
+  endgameDrawTile,
   palisadeArtFor,
   selectVariantFrames,
   type FamilyFrame,
@@ -33,7 +39,8 @@ import {
 import { PALISADE_FAMILY } from './palisadeTiles';
 import { bend60OrientationOf, bendOrientationOf, TILE_ORIENTATIONS } from './types';
 import type { BogTile, RiverTile, Tile } from './types';
-import { findAtlasClip, findAtlasFrame, type AtlasClip } from './atlas';
+import { findAtlasClip, findAtlasFrame, swayFramesPerColumn, swayPeriodFrames, type AtlasClip, type LoadedAtlas } from './atlas';
+import { clipFrameIndex, clipTimingOf, sharedClockPlayback } from './clipPlayback';
 
 /** A plain-string-keyed stand-in for `OrientationMap<T[]>` (`wastedCoastalBase`'s shape), for tests that don't otherwise need real Textures. */
 function emptyOrientationArrayMap(): Record<string, unknown[]> {
@@ -216,6 +223,10 @@ describe('KEY_FAMILY new building families (map fix #1)', () => {
     expect(KEY_FAMILY.druidhut).toBe('druidhut');
     expect(KEY_FAMILY.cartworkshop).toBe('cartworkshop');
     expect(KEY_FAMILY.claybrickworks).toBe('claybrickworks');
+  });
+
+  it('maps the Siege Workshop to its own art family (3D_assets hextile147)', () => {
+    expect(KEY_FAMILY.siegeworkshop).toBe('siegeworkshop');
   });
 
   it('quarry is deliberately left unmapped — its art depends on the mountain shape it is carved into', () => {
@@ -721,6 +732,47 @@ describe('textureKeyFor wasted-island mapping', () => {
   });
 });
 
+describe('living mountain shapes', () => {
+  const FAMILIES = ['mountaintile', 'mountaintile_table', 'mountaintile_saddleback', 'mountaintile_corrie'];
+  const mountain = (variant: number, extra: Partial<Tile> = {}): Tile => ({ q: 0, r: 0, terrain: 'mountain', orientation: 'E', variant, ...extra });
+
+  // A one-frame-per-rotation family, as the atlas ships each shape: tagged with its key so a test sees which family drew.
+  function fixture(): TileTextures {
+    const perRotation = (tag: string) => Object.fromEntries(TILE_ORIENTATIONS.map((o) => [o, [`${tag}-top`]]));
+    const baseOf = (tag: string) => Object.fromEntries(TILE_ORIENTATIONS.map((o) => [o, `${tag}-base`]));
+    const keys = MOUNTAIN_SHAPE_KEY;
+    return {
+      base: Object.fromEntries(keys.map((k) => [k, baseOf(k)])),
+      baseIndexed: {},
+      top: Object.fromEntries(keys.map((k) => [k, perRotation(k)])),
+      animTop: {},
+    } as unknown as TileTextures;
+  }
+
+  it('maps the four shapes to the four atlas families, in the backend MountainShape order', () => {
+    expect(MOUNTAIN_SHAPE_KEY.map((k) => KEY_FAMILY[k])).toEqual(FAMILIES);
+  });
+
+  it('picks the shape key by the tile variant', () => {
+    expect([0, 1, 2, 3].map((v) => textureKeyFor(mountain(v)))).toEqual([...MOUNTAIN_SHAPE_KEY]);
+  });
+
+  it('draws the shape family on both layers, not the cone, for variants 1-3', () => {
+    const textures = fixture();
+    for (const key of MOUNTAIN_SHAPE_KEY) {
+      const tile = mountain(MOUNTAIN_SHAPE_KEY.indexOf(key));
+      expect(baseTextureFor(textures, tile)).toBe(`${key}-base`);
+      expect(topTextureFor(textures, tile)).toBe(`${key}-top`);
+    }
+  });
+
+  it('keeps a wasted mountain, a building on a mountain and a river art override on their own art', () => {
+    expect(textureKeyFor(mountain(2, { wasted: true }))).toBe('wastedmountain');
+    expect(textureKeyFor(mountain(2, { buildingType: 'quarry' }))).toBe('quarry');
+    expect(textureKeyFor(mountain(2), { key: 'sawmillbend60', orientation: 'E' })).toBe('sawmillbend60');
+  });
+});
+
 // baseTextureFor's wasted-mountain/giant base swap — a minimal, hand-rolled
 // TileTextures fixture (plain strings standing in for real Pixi Textures,
 // same reasoning riverTexturesFor's own fixture above uses).
@@ -742,6 +794,8 @@ describe('baseTextureFor wasted mountain/giant base', () => {
       },
       coastalBase: orientationMap([]),
       wastedCoastalBase: orientationMap([]),
+      coastalTop: orientationMap([]),
+      wastedCoastalTop: orientationMap([]),
       baseIndexed: {},
       top: {},
       animTop: {},
@@ -893,6 +947,8 @@ describe('riverTexturesFor lava-island shapes', () => {
       base: {},
       coastalBase: orientationMap([]),
       wastedCoastalBase: orientationMap([]),
+      coastalTop: orientationMap([]),
+      wastedCoastalTop: orientationMap([]),
       baseIndexed: {},
       top: {},
       animTop: {},
@@ -1033,6 +1089,8 @@ describe('riverTexturesFor river-art variants', () => {
       base: {},
       coastalBase: orientationMap([]),
       wastedCoastalBase: orientationMap([]),
+      coastalTop: orientationMap([]),
+      wastedCoastalTop: orientationMap([]),
       baseIndexed: {},
       top: {},
       animTop: {},
@@ -1161,6 +1219,7 @@ describe('mergeTileTextures terrain ownership', () => {
       top: { wasteland: full },
       animTop: {},
       wastedCoastalBase: emptyWastedCoastalBase,
+      wastedCoastalTop: emptyWastedCoastalBase,
       lavaRiverBase: {},
       lavaRiverTop: {},
       giants: {},
@@ -1172,6 +1231,7 @@ describe('mergeTileTextures terrain ownership', () => {
       top: { wasteland: stale, hut: stale },
       animTop: {},
       wastedCoastalBase: emptyWastedCoastalBase,
+      wastedCoastalTop: emptyWastedCoastalBase,
       lavaRiverBase: {},
       lavaRiverTop: {},
       giants: {},
@@ -1196,15 +1256,18 @@ describe('mergeTileTextures terrain ownership', () => {
       ({ base: {}, baseIndexed: {}, top: {}, animTop: {}, giants: {}, giantAnims: {} }) as unknown as TileTextures;
 
     const populatedWastedCoastal = { ...emptyOrientationArrayMap(), E: ['blacksandcoast_E'] };
+    const populatedWastedCoastalTop = { ...emptyOrientationArrayMap(), E: ['blacksandcoast_E_boat'] };
     const a = {
       ...baseFixture(),
       wastedCoastalBase: emptyOrientationArrayMap(),
+      wastedCoastalTop: emptyOrientationArrayMap(),
       lavaRiverBase: {},
       lavaRiverTop: {},
     } as unknown as TileTextures;
     const b = {
       ...baseFixture(),
       wastedCoastalBase: populatedWastedCoastal,
+      wastedCoastalTop: populatedWastedCoastalTop,
       lavaRiverBase: { straight: 'lava-base' },
       lavaRiverTop: { straight: 'lava-top' },
     } as unknown as TileTextures;
@@ -1213,6 +1276,7 @@ describe('mergeTileTextures terrain ownership', () => {
 
     // a had nothing yet -> falls back to b's.
     expect(merged.wastedCoastalBase.E).toEqual(['blacksandcoast_E']);
+    expect(merged.wastedCoastalTop.E).toEqual(['blacksandcoast_E_boat']);
     expect(merged.lavaRiverBase.straight).toBe('lava-base');
     expect(merged.lavaRiverTop.straight).toBe('lava-top');
 
@@ -1221,11 +1285,13 @@ describe('mergeTileTextures terrain ownership', () => {
     const aWithWasted = {
       ...baseFixture(),
       wastedCoastalBase: { ...emptyOrientationArrayMap(), E: ['from-a'] },
+      wastedCoastalTop: { ...emptyOrientationArrayMap(), E: ['top-from-a'] },
       lavaRiverBase: { straight: 'a-lava-base' },
       lavaRiverTop: { straight: 'a-lava-top' },
     } as unknown as TileTextures;
     const merged2 = mergeTileTextures(aWithWasted, b);
     expect(merged2.wastedCoastalBase.E).toEqual(['from-a']);
+    expect(merged2.wastedCoastalTop.E).toEqual(['top-from-a']);
     expect(merged2.lavaRiverBase.straight).toBe('a-lava-base');
     expect(merged2.lavaRiverTop.straight).toBe('a-lava-top');
   });
@@ -1254,6 +1320,8 @@ describe('level-1-first loading: sparse top/baseIndexed arrays', () => {
       animTop: {},
       coastalBase: orientationMap([]),
       wastedCoastalBase: orientationMap([]),
+      coastalTop: orientationMap([]),
+      wastedCoastalTop: orientationMap([]),
       riverBase: {} as TileTextures['riverBase'],
       riverTop: {} as TileTextures['riverTop'],
       lavaRiverBase: {},
@@ -1362,6 +1430,8 @@ describe('wildlife camps', () => {
       animTop: {},
       coastalBase: orientationMap([]),
       wastedCoastalBase: orientationMap([]),
+      coastalTop: orientationMap([]),
+      wastedCoastalTop: orientationMap([]),
       riverBase: {},
       riverTop: {},
       lavaRiverBase: {},
@@ -1429,6 +1499,34 @@ describe('wildlife camps', () => {
     expect(drawnCampOf({ ...tile, camp: { ...tile.camp!, removed: true } })).toBeUndefined();
     expect(campArtFor(textures, { ...tile, camp: { ...tile.camp!, removed: true } }, undefined)).toBeUndefined();
     expect(drawnCampOf({ ...tile, buildingType: 'farm', buildingLevel: 1 })).toBeUndefined();
+  });
+
+  // The whale road (first water camp) stands on an open-sea hex: gulls (level000, all six rotations) or whales
+  // (level001, kept SE and NE), drawn like any camp over the sea tile's own base.
+  it('the whale road is a camp family with art on an open-sea tile: whales when guarded, gulls once cleared', () => {
+    expect(KEY_FAMILY.whaleroad).toBe('whaleroad');
+    const textures = emptyTileTextures();
+    withCamp(textures, 'whaleroad', ['SE', 'NE']);
+    const tile = campTile('whaleroad', 'SE', 'sea');
+    tile.camp = { ...tile.camp!, guardRange: 0 };
+    expect(topTextureFor(textures, tile)).toBe('whaleroad-SE-guarded');
+    expect(topAnimFor(textures, tile)).toEqual({ textures: ['whaleroad-SE-f0'], fps: 6, playback: 'loop' });
+    const cleared = { ...tile, camp: { ...tile.camp!, empty: true } };
+    expect(topTextureFor(textures, cleared)).toBe('whaleroad-SE-cleared');
+    expect(topAnimFor(textures, cleared)).toBeUndefined();
+  });
+
+  it('the whale road maps every tile orientation onto its kept rotations NE and SE (guarded), any rotation when cleared', () => {
+    const textures = emptyTileTextures();
+    withCamp(textures, 'whaleroad', ['SE', 'NE']);
+    // kept in TILE_ORIENTATIONS order: [NE, SE]; index % 2 picks NE for E/NW/SW, SE for NE/W/SE.
+    const mapped = ORIENTATIONS.map((o) => campArtFor(textures, campTile('whaleroad', o, 'sea'), undefined)?.orientation);
+    expect(mapped).toEqual(['NE', 'SE', 'NE', 'SE', 'NE', 'SE']);
+    for (const o of ORIENTATIONS) {
+      const tile = campTile('whaleroad', o, 'sea');
+      tile.camp = { ...tile.camp!, empty: true };
+      expect(campArtFor(textures, tile, undefined)?.orientation).toBe(o);
+    }
   });
 
   it('a tile without a camp is untouched by the camp lookup', () => {
@@ -1554,6 +1652,34 @@ describe('bog art', () => {
     expect(classified.top!.W[8]).toBe('bog_W_variant008');
   });
 
+  it('never draws a retired moss look (plain moss, variant006 the peat cuttings): every variant lands on a decorated one', () => {
+    const tops = Array.from({ length: 9 }, (_, i) => `bog_W_${i}`);
+    const slot = (variant: number) => bogVariantIn('bog', { variant } as Tile, tops);
+    const decorated = [1, 2, 3, 4, 5, 7, 8];
+    expect(Array.from({ length: 7 }, (_, v) => slot(v))).toEqual(decorated);
+    for (let v = 0; v < 100; v++) expect(decorated, `variant ${v}`).toContain(slot(v));
+    // While only the plain frame has loaded there is nothing else to draw.
+    expect(bogVariantIn('bog', { variant: 3 } as Tile, ['bog_W'])).toBe(0);
+    // Only the moss retires looks: a lake shows its own variant in every slot.
+    expect(bogVariantIn('lake', { variant: 6 } as Tile, tops)).toBe(6);
+    expect(bogVariantIn('lake', { variant: 0 } as Tile, tops)).toBe(0);
+  });
+
+  it('never draws the bare plain look of a bog water-edge family (creek, spring, inlet, shore, half, mouth)', () => {
+    const keys = ['bogcreek', 'bogcreekbend', 'bogcreekspring', 'lakeinlet', 'lakeshore', 'lakehalf', 'lakemouth'] as const;
+    for (const key of keys) {
+      // Plain look plus the family's decorated ones (1-2, as shipped).
+      for (const looks of [2, 3]) {
+        const tops = Array.from({ length: looks }, (_, i) => `${key}_W_${i}`);
+        for (let v = 0; v < 100; v++) {
+          expect(bogVariantIn(key, { variant: v } as Tile, tops), `${key} ${looks} looks, variant ${v}`).not.toBe(0);
+        }
+      }
+      // Only the plain frame loaded: nothing else to draw.
+      expect(bogVariantIn(key, { variant: 4 } as Tile, [`${key}_W`])).toBe(0);
+    }
+  });
+
   it('gives every bog family its own key and family, all of them terrain keys', () => {
     for (const key of BOG_TEXTURE_KEYS) expect(KEY_FAMILY[key], key).toBeDefined();
     expect(KEY_FAMILY.bog).toBe('bog');
@@ -1626,6 +1752,8 @@ describe('bog buildings and lake decorations', () => {
       base: {},
       coastalBase: map(() => []),
       wastedCoastalBase: map(() => []),
+      coastalTop: map(() => []),
+      wastedCoastalTop: map(() => []),
       baseIndexed: {},
       top: {},
       animTop: {},
@@ -1684,6 +1812,20 @@ describe('bog buildings and lake decorations', () => {
     expect(KEY_FAMILY.claybrickworks).toBe('claybrickworks');
   });
 
+  it('draws a tower with the art of the ground it replaces', () => {
+    expect(KEY_FAMILY.tower).toBe('stavetower');
+    expect(KEY_FAMILY.towersand).toBe('stavetower_sand');
+    expect(KEY_FAMILY.towerforest).toBe('stavetower_forest');
+    expect(KEY_FAMILY.towerbog).toBe('stavetower_bog');
+    const tower = (tile: Partial<Tile>): Tile => ({ q: 0, r: 0, terrain: 'grass', buildingType: 'tower', buildingLevel: 1, ...tile });
+
+    expect(textureKeyFor(tower({}))).toBe('tower');
+    expect(textureKeyFor(tower({ terrain: 'sand' }))).toBe('towersand');
+    expect(textureKeyFor(tower({ terrain: 'forest' }))).toBe('towerforest');
+    expect(textureKeyFor(tower({ terrain: 'forest', forestKind: 'taiga' }))).toBe('towerforest');
+    expect(textureKeyFor(tower({ terrain: 'bog', bog: bog('bog', [], null) }))).toBe('towerbog');
+  });
+
   it('draws a Fishing Hut on a half shore with the lake art, and one on the coast with the coastal art', () => {
     const half: Tile = { q: 0, r: 0, terrain: 'bog', orientation: 'NW', buildingType: 'fishinghut', buildingLevel: 2, bog: bog('half', [], null, ['SE', 'E', 'NE']) };
     expect(textureKeyFor(half)).toBe('fisherhutlake');
@@ -1697,7 +1839,7 @@ describe('bog buildings and lake decorations', () => {
     expect(topTextureFor(textures, half)).toBe(`fisherhutlake-top-${shoreOrientation}`);
   });
 
-  it('draws a Hammerschmiede on a creek as the straight or bend river mill, turned like the creek', () => {
+  it('draws a Hammer Forge on a creek as the straight or bend river mill, turned like the creek', () => {
     const straight: Tile = { q: 0, r: 0, terrain: 'bog', orientation: 'SW', buildingType: 'hammerschmiede', buildingLevel: 1, bog: bog('creek', ['W'], 'E') };
     const bend: Tile = { ...straight, bog: bog('creek', ['E'], 'SW') };
     expect(textureKeyFor(straight)).toBe('hammerschmiede');
@@ -1798,6 +1940,8 @@ describe('palisade art', () => {
       animTop: {},
       coastalBase: orientationMap([]),
       wastedCoastalBase: orientationMap([]),
+      coastalTop: orientationMap([]),
+      wastedCoastalTop: orientationMap([]),
       riverBase: {} as TileTextures['riverBase'],
       riverTop: {} as TileTextures['riverTop'],
       lavaRiverBase: {},
@@ -1952,5 +2096,488 @@ describe('palisade art', () => {
     }
 
     expect(missing).toEqual([]);
+  });
+});
+
+// The Utgard wall set and the Jötun watchtower (wasted pack): the server resolves piece and camera, the renderer draws them at the
+// site's level (level000 breached/taken, level001 damaged, level002 full/garrisoned) and the vendored atlas carries every frame.
+describe('endgame site art', () => {
+  const ORIENTATIONS = ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const;
+  function orientationMap<T>(value: T) {
+    return Object.fromEntries(ORIENTATIONS.map((o) => [o, value])) as Record<(typeof ORIENTATIONS)[number], T>;
+  }
+  function emptyTextures(): TileTextures {
+    return {
+      base: {},
+      baseIndexed: {},
+      top: {},
+      animTop: {},
+      coastalBase: orientationMap([]),
+      wastedCoastalBase: orientationMap([]),
+      coastalTop: orientationMap([]),
+      wastedCoastalTop: orientationMap([]),
+      riverBase: {} as TileTextures['riverBase'],
+      riverTop: {} as TileTextures['riverTop'],
+      lavaRiverBase: {},
+      lavaRiverTop: {},
+      giants: {},
+      giantAnims: {},
+    } as unknown as TileTextures;
+  }
+  const wall = (piece: NonNullable<Tile['utgardWall']>['piece'], level: number, dir: NonNullable<Tile['utgardWall']>['dir'] = 'NW'): Tile => ({
+    q: 0, r: 0, terrain: 'grass', wasted: true, orientation: 'SE', utgardWall: { ring: 'inner', piece, dir, isGate: piece === 'gate180', level },
+  });
+
+  it('maps every piece and the tower to the atlas family the art ships under', () => {
+    expect(
+      (['straight180', 'bend60', 'bend120', 'gate180', 'end', 'end_coast'] as const).map((piece) => KEY_FAMILY[UTGARD_WALL_TEXTURE_KEY[piece]]),
+    ).toEqual([
+      'utgardwall_straight180',
+      'utgardwall_bend60',
+      'utgardwall_bend120',
+      'utgardwall_gate180',
+      'utgardwall_end',
+      'utgardwall_end_coast',
+    ]);
+    expect(KEY_FAMILY.jotunwatchtower).toBe('jotunwatchtower');
+  });
+
+  it('draws the server-resolved piece in the server-resolved camera, not the tile\'s own rotation', () => {
+    const drawn = endgameDrawTile(wall('bend120', 2, 'SW'))!;
+    expect(drawn.art).toEqual({ key: 'utgardwallbend120', orientation: 'SW' });
+    expect(endgameDrawTile(wall('gate180', 2, 'E'))!.art.key).toBe('utgardwallgate');
+    expect(endgameDrawTile({ q: 0, r: 0, terrain: 'grass', jotunTower: { orientation: 'NE', level: 2 } })!.art).toEqual({
+      key: 'jotunwatchtower',
+      orientation: 'NE',
+    });
+    expect(endgameDrawTile({ q: 0, r: 0, terrain: 'grass' })).toBeUndefined();
+  });
+
+  it('draws a wall at its current level: rubble, damaged, full', () => {
+    const textures = emptyTextures();
+    textures.top.utgardwallstraight = orientationMap(['rubble', 'damaged', 'full'] as unknown as never);
+
+    for (const [level, texture] of [[0, 'rubble'], [1, 'damaged'], [2, 'full']] as const) {
+      const drawn = endgameDrawTile(wall('straight180', level))!;
+      expect(topTextureFor(textures, drawn.tile, drawn.art)).toBe(texture);
+    }
+  });
+
+  it('draws the tower at its level too, on the hex\'s own wasted ground', () => {
+    const textures = emptyTextures();
+    textures.top.jotunwatchtower = orientationMap(['taken', 'damaged', 'garrisoned'] as unknown as never);
+    textures.base.wasteland = orientationMap('wasteland-base' as unknown as never);
+    const tile: Tile = { q: 0, r: 0, terrain: 'grass', wasted: true, orientation: 'SE', jotunTower: { orientation: 'SE', level: 2 } };
+    const drawn = endgameDrawTile(tile)!;
+
+    expect(topTextureFor(textures, drawn.tile, drawn.art)).toBe('garrisoned');
+    expect(baseTextureFor(textures, drawn.tile, drawn.art)).toBe('wasteland-base');
+    expect(topTextureFor(textures, endgameDrawTile({ ...tile, jotunTower: { orientation: 'SE', level: 0 } })!.tile, drawn.art)).toBe('taken');
+  });
+
+  it('keeps a land wall on the wasted ground and the shore end on its own coastal base per level', () => {
+    const textures = emptyTextures();
+    textures.base.wasteland = orientationMap('wasteland-base' as unknown as never);
+    textures.baseIndexed.utgardwallendcoast = orientationMap(['coast-0', 'coast-1', 'coast-2'] as unknown as never);
+    const land = endgameDrawTile(wall('straight180', 2))!;
+    expect(baseTextureFor(textures, land.tile, land.art)).toBe('wasteland-base');
+
+    const shore: Tile = {
+      q: 0, r: 0, terrain: 'sea', isCoastalWater: true, orientation: 'SE',
+      utgardWall: { ring: 'outer', piece: 'end_coast', dir: 'W', isGate: false, level: 1 },
+    };
+    const drawn = endgameDrawTile(shore)!;
+    expect(baseTextureFor(textures, drawn.tile, drawn.art)).toBe('coast-1');
+  });
+
+  const manifests = import.meta.glob('../../../vendor/bg_assets_hextile/atlas/wasted-buildings-{static,level1}-*.json', {
+    eager: true,
+    import: 'default',
+  }) as Record<string, { frames: Record<string, unknown> }>;
+  const vendored = Object.keys(manifests).length > 0;
+
+  it.skipIf(!vendored)('the vendored wasted atlas carries every frame the walls and towers can ask for', () => {
+    const frames = new Set<string>();
+    for (const manifest of Object.values(manifests)) {
+      for (const name of Object.keys(manifest.frames)) if (name.startsWith('utgardwall_') || name.startsWith('jotunwatchtower_')) frames.add(name);
+    }
+    const missing: string[] = [];
+    for (const family of [...Object.values(UTGARD_WALL_TEXTURE_KEY).map((k) => KEY_FAMILY[k]!), 'jotunwatchtower']) {
+      for (const dir of ORIENTATIONS) {
+        for (const level of [0, 1, 2]) {
+          const top = `${family}_${dir}_level00${level}`;
+          if (!frames.has(top)) missing.push(top);
+          if (family === 'utgardwall_end_coast' && !frames.has(`${top}_base`)) missing.push(`${top}_base`);
+        }
+      }
+    }
+
+    expect(missing).toEqual([]);
+  });
+});
+
+// The biome forests (3D_assets hextile143-145): forest_taiga / forest_birch / forest_mixed replace foresttile on living islands,
+// fall back to it while the atlas has no frames for them, and play a wind-sway clip per top variant on one shared clock.
+describe('biome forest art', () => {
+  const fakeTexture = (name: string) => ({ label: name }) as unknown as Texture;
+
+  /** A `terrain`-atlas stand-in holding `family`'s plain + `variantCount` variant tops and a base, camera E only. */
+  function terrainAtlas(family: string, variantCount: number): LoadedAtlas {
+    const atlas: LoadedAtlas = { textures: {}, frameMeta: {}, clips: {} };
+    const add = (name: string, layer: 'base' | 'top') => {
+      atlas.textures[name] = fakeTexture(name);
+      atlas.frameMeta[name] = { family, layer };
+    };
+    add(`${family}_E`, 'top');
+    for (let v = 0; v < variantCount; v++) add(`${family}_E_variant${String(v).padStart(3, '0')}`, 'top');
+    add(`${family}_E_base`, 'base');
+    return atlas;
+  }
+
+  /** A `buildings-anim` stand-in: one 4-frame overlay clip per variant (null = the plain pass), frames + rest image on `family`. */
+  function animAtlas(family: string, variants: (string | null)[]): LoadedAtlas {
+    const atlas: LoadedAtlas = { textures: {}, frameMeta: {}, clips: {} };
+    for (const variant of variants) {
+      const name = variant === null ? `${family}_E` : `${family}_E_${variant}`;
+      const frames = [0, 1, 2, 3].map((i) => `${name}_f0${i}`);
+      for (const f of [...frames, `${name}_rest`]) {
+        atlas.textures[f] = fakeTexture(f);
+        atlas.frameMeta[f] = { family, layer: 'top' };
+      }
+      atlas.clips[name] = {
+        name, family, orientation: 'E', camera: 'E', layer: 'top', source_level: null, variant, pass_suffix: '',
+        anim_type: 'loop', playback: 'loop', fps: 4, pause: 0, frame_count: 4, frame_padding: 2, frames, parts: [],
+        overlay: true, rest: `${name}_rest`,
+      } as unknown as AtlasClip;
+    }
+    return atlas;
+  }
+
+  const forestTile = (extra: Partial<Tile> = {}): Tile => ({ q: 0, r: 0, terrain: 'forest', orientation: 'E', ...extra });
+
+  describe('textureKeyFor', () => {
+    it('maps each forestKind to its biome key and an undefined kind to mixed', () => {
+      expect(textureKeyFor(forestTile({ forestKind: 'taiga' }))).toBe('forest_taiga');
+      expect(textureKeyFor(forestTile({ forestKind: 'birch' }))).toBe('forest_birch');
+      expect(textureKeyFor(forestTile({ forestKind: 'mixed' }))).toBe('forest_mixed');
+      expect(textureKeyFor(forestTile())).toBe('forest_mixed');
+    });
+
+    it('keeps a wasted forest on deadforest whatever its forestKind', () => {
+      expect(textureKeyFor(forestTile({ wasted: true, forestKind: 'taiga' }))).toBe('deadforest');
+      expect(textureKeyFor(forestTile({ wasted: true }))).toBe('deadforest');
+    });
+
+    it('ships a family per biome key, in the atlas under the same name', () => {
+      expect(KEY_FAMILY.forest_taiga).toBe('forest_taiga');
+      expect(KEY_FAMILY.forest_birch).toBe('forest_birch');
+      expect(KEY_FAMILY.forest_mixed).toBe('forest_mixed');
+    });
+  });
+
+  describe('fallback to foresttile while the atlas has no biome art', () => {
+    it('draws plain foresttile when the biome family is absent, whatever the biome variant', () => {
+      const textures = buildTileTextures([terrainAtlas('foresttile', 2)]);
+      // The variant indexes the biome looks; on foresttile index 1 would be the bear variant on ~84% of forests.
+      expect(topTextureFor(textures, forestTile({ forestKind: 'taiga', variant: 1 }))).toBe(textures.top.forest!.E[0]);
+      expect(topTextureFor(textures, forestTile({ forestKind: 'taiga', variant: 2 }))).toBe(textures.top.forest!.E[0]);
+      expect(topTextureFor(textures, forestTile({ forestKind: 'taiga', variant: 3 }))).toBe(textures.top.forest!.E[0]);
+      expect(baseTextureFor(textures, forestTile({ forestKind: 'birch' }))).toBe(textures.base.forest!.E);
+      expect(topAnimFor(textures, forestTile({ forestKind: 'taiga', variant: 1 }))).toBeUndefined();
+    });
+
+    it('switches to the biome art as soon as its frames are loaded, and only for the kinds that have them', () => {
+      const textures = buildTileTextures([terrainAtlas('foresttile', 2), terrainAtlas('forest_taiga', 3)]);
+      expect(topTextureFor(textures, forestTile({ forestKind: 'taiga', variant: 3 }))).toBe(textures.top.forest_taiga!.E[3]);
+      expect(baseTextureFor(textures, forestTile({ forestKind: 'taiga' }))).toBe(textures.base.forest_taiga!.E);
+      // birch has no frames: still foresttile.
+      expect(topTextureFor(textures, forestTile({ forestKind: 'birch', variant: 1 }))).toBe(textures.top.forest!.E[0]);
+    });
+
+    it('leaves a wasted forest on deadforest art', () => {
+      const textures = buildTileTextures([terrainAtlas('foresttile', 2), terrainAtlas('deadforest', 1), terrainAtlas('forest_taiga', 3)]);
+      expect(topTextureFor(textures, forestTile({ wasted: true, forestKind: 'taiga' }))).toBe(textures.top.deadforest!.E[0]);
+    });
+  });
+
+  describe('clips', () => {
+    it('slots a clip by its variant: null = index 0, variantNNN = NNN + 1', () => {
+      expect(clipVariantSlot({ variant: null })).toBe(0);
+      expect(clipVariantSlot({ variant: 'variant000' })).toBe(1);
+      expect(clipVariantSlot({ variant: 'variant002' })).toBe(3);
+      expect(clipVariantSlot({ variant: 'weird' })).toBeUndefined();
+    });
+
+    it('classifies a terrain family manifest by variant, with rest images, and marks them shared-clock', () => {
+      const anim = animAtlas('forest_taiga', [null, 'variant000', 'variant002']);
+      const textures = buildTileTextures([terrainAtlas('forest_taiga', 3)], anim);
+      const slots = textures.animTop.forest_taiga!.E;
+      expect(slots).toHaveLength(4);
+      expect(slots[0]!.textures).toHaveLength(4);
+      expect(slots[0]!.rest).toBe(anim.textures['forest_taiga_E_rest']);
+      expect(slots[1]!.textures[2]).toBe(anim.textures['forest_taiga_E_variant000_f02']);
+      expect(slots[2]).toBeUndefined(); // glade has no clip in this manifest
+      expect(slots[3]!.rest).toBe(anim.textures['forest_taiga_E_variant002_rest']);
+      expect(slots.filter(Boolean).every((c) => c!.sharedClock === true && c!.fps === 4)).toBe(true);
+      // topAnimFor reads the slot of the tile's variant (index + 1 for variants, no building level involved).
+      expect(topAnimFor(textures, forestTile({ forestKind: 'taiga', variant: 3 }))).toBe(slots[3]);
+      expect(topAnimFor(textures, forestTile({ forestKind: 'taiga', variant: 2 }))).toBeUndefined();
+    });
+
+    it('drops a clip whose rest image does not resolve', () => {
+      const anim = animAtlas('forest_taiga', [null]);
+      delete anim.textures['forest_taiga_E_rest'];
+      const textures = buildTileTextures([terrainAtlas('forest_taiga', 3)], anim);
+      expect(textures.animTop.forest_taiga).toBeUndefined();
+    });
+
+    it('does not slot other terrain clips as shared-clock (a building clip keeps its own start)', () => {
+      const anim = animAtlas('foresttile', [null]);
+      const textures = buildTileTextures([terrainAtlas('foresttile', 2)], anim);
+      expect(textures.animTop.forest).toBeUndefined();
+    });
+
+    it('shares the clock for any family whose clip says shared_clock, carrying sway.frames_per_column (a building clip would do the same)', () => {
+      const anim = animAtlas('foresttile', []);
+      const frames = [0, 1, 2, 3].map((i) => `foresttile_E_level001_f0${i}`);
+      for (const f of frames) anim.textures[f] = fakeTexture(f);
+      anim.clips['foresttile_E_level001'] = {
+        name: 'foresttile_E_level001', family: 'foresttile', orientation: 'E', camera: 'E', layer: 'top', source_level: null, variant: null,
+        pass_suffix: '', anim_type: 'loop', playback: 'loop', fps: 4, pause: 0, frame_count: 4, frame_padding: 2, frames, parts: [],
+        shared_clock: true, sway: { wavelength: 6, frames_per_column: 2 },
+      } as unknown as AtlasClip;
+      const textures = buildTileTextures([terrainAtlas('foresttile', 2)], anim);
+      const clip = textures.animTop.forest!.E[1]!;
+      expect(clip.sharedClock).toBe(true);
+      expect(clip.framesPerColumn).toBe(2);
+      expect(clip.swayPeriod).toBe(8);
+    });
+
+    it('classifyFamilyClips ignores a malformed sway but keeps shared_clock; no new fields means no shared clock', () => {
+      const base = {
+        name: 'x_E_level001', family: 'x', orientation: 'E', camera: 'E', layer: 'top', variant: null, playback: 'loop', fps: 4, pause: 0, frames: ['a'],
+      } as unknown as AtlasClip;
+      const run = (extra: Partial<AtlasClip>) => classifyFamilyClips([{ ...base, ...extra }], (n) => n).E.get(1)!;
+      expect(run({ shared_clock: true, sway: { wavelength: 6, frames_per_column: 2 } })).toMatchObject({ sharedClock: true, framesPerColumn: 2 });
+      expect(run({ shared_clock: true, sway: { wavelength: 6, frames_per_column: 1.5 } })).toMatchObject({ sharedClock: true, framesPerColumn: 0 });
+      expect(run({ shared_clock: true, sway: { wavelength: 6, frames_per_column: -1 } })).toMatchObject({ framesPerColumn: 0 });
+      expect(run({}).sharedClock).toBeUndefined();
+      expect(swayFramesPerColumn({ sway: { wavelength: 6, frames_per_column: 0 } })).toBe(0);
+      expect(swayFramesPerColumn({})).toBe(0);
+      expect(swayPeriodFrames({ sway: { wavelength: 6, frames_per_column: 4 } })).toBe(16);
+      expect(swayPeriodFrames({ sway: { wavelength: 6, frames_per_column: 0 } })).toBe(0);
+      expect(swayPeriodFrames({})).toBe(0);
+      expect(run({ shared_clock: true, sway: { wavelength: 6, frames_per_column: 4 } })).toMatchObject({ swayPeriod: 16 });
+      expect(run({ shared_clock: true }).swayPeriod).toBeUndefined();
+    });
+
+    it('the forest fallback (no new fields) is shared-clock with a column offset of 0', () => {
+      const textures = buildTileTextures([terrainAtlas('forest_taiga', 3)], animAtlas('forest_taiga', [null]));
+      const clip = textures.animTop.forest_taiga!.E[0]!;
+      expect(clip.sharedClock).toBe(true);
+      expect(clip.framesPerColumn ?? 0).toBe(0);
+    });
+
+    it('keeps a later, fuller terrain clip batch over an earlier partial one when merging', () => {
+      const terrain = terrainAtlas('forest_taiga', 3);
+      const partial = buildTileTextures([terrain], animAtlas('forest_taiga', [null]));
+      const full = buildTileTextures([terrain], animAtlas('forest_taiga', [null, 'variant000']));
+      const merged = mergeTileTextures(mergeTileTextures(buildTileTextures([terrain]), partial), full);
+      expect(merged.animTop.forest_taiga!.E[1]).toBeDefined();
+    });
+  });
+
+  describe('global clock', () => {
+    const sway = clipTimingOf({ frameRects: new Array(8).fill(0), fps: 4, playback: 'loop', pause: 0 });
+
+    it('offsets the gust per map column: adjacent columns (2 frames per column, 8 frames) are exactly 2 frames apart at every clock time', () => {
+      for (let clockMs = 0; clockMs < 6000; clockMs += 37) {
+        const g = Math.floor((clockMs / 1000) * 4);
+        for (const col of [-9, -3, -1, 0, 1, 2, 7, 8, 25]) {
+          const here = sharedClockPlayback(sway, clockMs, 2 * col).frame;
+          const right = sharedClockPlayback(sway, clockMs, 2 * (col + 1)).frame;
+          expect(here).toBe((((g - 2 * col) % 8) + 8) % 8);
+          expect((here - right + 8) % 8).toBe(2); // the column to the right is 2 frames behind
+        }
+      }
+    });
+
+    it('stays in lockstep after advancing by the same deltas, and a zero offset is the plain shared clock', () => {
+      const a = sharedClockPlayback(sway, 777, 0);
+      const b = sharedClockPlayback(sway, 777, 2);
+      for (const delta of [16, 250, 90, 400, 1000, 33]) {
+        a.playedMs += delta;
+        b.playedMs += delta;
+        expect((clipFrameIndex(sway, a.playedMs) - clipFrameIndex(sway, b.playedMs) + 8) % 8).toBe(2);
+      }
+      expect(sharedClockPlayback(sway, 777, 0)).toEqual({ playedMs: 777, frame: clipFrameIndex(sway, 777) });
+    });
+
+    const timing = clipTimingOf({ frameRects: [0, 0, 0, 0], fps: 4, playback: 'loop', pause: 0 });
+
+    it('starts a clip at the shared clock time: every tile shows frame floor(t * fps) mod 4 whenever it spawned', () => {
+      for (const clockMs of [0, 260, 1010, 9999]) {
+        const start = sharedClockPlayback(timing, clockMs);
+        expect(start.frame).toBe(Math.floor((clockMs / 1000) * 4) % 4);
+        expect(start.frame).toBe(clipFrameIndex(timing, clockMs));
+        expect(start.playedMs).toBe(clockMs);
+      }
+    });
+
+    it('two tiles spawned at different times stay on the same frame once advanced by the same deltas', () => {
+      const a = sharedClockPlayback(timing, 400);
+      const b = sharedClockPlayback(timing, 400);
+      for (const delta of [16, 250, 90, 400]) {
+        a.playedMs += delta;
+        b.playedMs += delta;
+        expect(clipFrameIndex(timing, a.playedMs)).toBe(clipFrameIndex(timing, b.playedMs));
+      }
+    });
+  });
+});
+
+// The river bridge (3D_assets hextile135-137): three crossing families picked by the river tile's shape, oriented by the river like the
+// Sawmill's, and drawn as the hex's plain river (never a bare terrain texture) while the atlas has no frames for them yet.
+describe('river bridge art', () => {
+  const fakeTexture = (name: string) => ({ label: name }) as unknown as Texture;
+  const bridgeTile = (overrides: Partial<Tile> = {}): Tile =>
+    ({ q: 0, r: 0, terrain: 'grass', buildingType: 'bridge', buildingLevel: 2, orientation: 'SE', ownerId: 's1', ...overrides }) as Tile;
+
+  /** A `buildings-static` stand-in with `levels` art levels of one bridge family: a top and a base frame per level and camera. */
+  function bridgeAtlas(family: string, levels: number): LoadedAtlas {
+    const atlas: LoadedAtlas = { textures: {}, frameMeta: {}, clips: {} };
+    for (const camera of TILE_ORIENTATIONS) {
+      for (let l = 0; l < levels; l++) {
+        const name = `${family}_${camera}_level${String(l).padStart(3, '0')}`;
+        atlas.textures[name] = fakeTexture(name);
+        atlas.frameMeta[name] = { family, layer: 'top' };
+        atlas.textures[`${name}_base`] = fakeTexture(`${name}_base`);
+        atlas.frameMeta[`${name}_base`] = { family, layer: 'base' };
+      }
+    }
+    return atlas;
+  }
+
+  it('ships the three crossings under the atlas family names the art is rendered as', () => {
+    expect(KEY_FAMILY.riverbridge).toBe('riverbridge');
+    expect(KEY_FAMILY.riverbridgebend).toBe('riverbridge_bend');
+    expect(KEY_FAMILY.riverbridgebend60).toBe('riverbridge_bend60');
+  });
+
+  it('picks the family by the river tile shape and the camera by the river, like the Sawmill', () => {
+    const cases = [
+      [riverTile('straight', 'W', null), 'riverbridge'],
+      [riverTile('bend', 'NW', 'SW'), 'riverbridgebend'],
+      [riverTile('bend60', 'NE', 'NW'), 'riverbridgebend60'],
+    ] as const;
+    for (const [river, key] of cases) {
+      expect(riverBuildingArtFor('bridge', river)).toEqual({ key, orientation: riverArtFor(river, null).orientation });
+      // The Sawmill stands on the same three shapes, on the same camera.
+      expect(riverBuildingArtFor('bridge', river)!.orientation).toBe(riverBuildingArtFor('sawmill', river)!.orientation);
+    }
+  });
+
+  it('draws no bridge art on a spring, a fork, a mouth or a stream', () => {
+    for (const shape of ['spring', 'confluence', 'mouth'] as const) {
+      expect(riverBuildingArtFor('bridge', riverTile(shape, 'W', 'E'))).toBeUndefined();
+    }
+    expect(riverBuildingArtFor('bridge', { ...riverTile('straight', 'W', null), width: 'stream' })).toBeUndefined();
+  });
+
+  it('keys a bridge tile to the straight family when no river tile is at hand', () => {
+    expect(textureKeyFor(bridgeTile())).toBe('riverbridge');
+  });
+
+  describe('the art by level', () => {
+    const river = riverTile('straight', 'W', null);
+    const textures = buildTileTextures([bridgeAtlas('riverbridge', 5)]);
+    const art = riverBuildingArtFor('bridge', river)!;
+
+    it('resolves the bridge art for the river tile', () => {
+      expect(art.key).toBe('riverbridge');
+    });
+
+    it('shows level000 (the building site) while level 1 is under construction, then each level in turn', () => {
+      for (let level = 0; level <= 4; level++) {
+        const tile = bridgeTile({ buildingLevel: level });
+        expect(topTextureFor(textures, tile, art)).toBe(textures.top.riverbridge![art.orientation][level]);
+        expect(baseTextureFor(textures, tile, art)).toBe(textures.baseIndexed.riverbridge![art.orientation][level]);
+      }
+    });
+  });
+});
+
+// Coastal water's variants are split like any other tile: the water with the submerged part of a prop in `_base`, the prop
+// above the water (the boat, the rock) as the top frame. Both layers have to draw, or the props vanish and only their
+// underwater shadow is left.
+describe('coastal water props', () => {
+  const ORIENTATIONS = ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const;
+  const fakeTexture = (name: string) => ({ label: name }) as unknown as Texture;
+
+  /** A `terrain`-atlas stand-in for a coastal family: the plain look and `variantCount` prop looks, each a top + base, every camera. */
+  function coastalAtlas(family: string, variantCount: number, split = true): LoadedAtlas {
+    const atlas: LoadedAtlas = { textures: {}, frameMeta: {}, clips: {} };
+    const add = (name: string, layer: 'base' | 'top') => {
+      atlas.textures[name] = fakeTexture(name);
+      atlas.frameMeta[name] = { family, layer };
+    };
+    for (const o of ORIENTATIONS) {
+      const looks = [`${family}_${o}`, ...Array.from({ length: variantCount }, (_, v) => `${family}_${o}_variant${String(v).padStart(3, '0')}`)];
+      for (const look of looks) {
+        add(look, 'top');
+        if (split) add(`${look}_base`, 'base');
+      }
+    }
+    return atlas;
+  }
+  const label = (texture: Texture | undefined) => (texture as unknown as { label: string } | undefined)?.label;
+  const coastal = (extra: Partial<Tile> = {}): Tile => ({ q: 0, r: 0, terrain: 'sea', isCoastalWater: true, orientation: 'SE', ...extra });
+
+  it('draws a coastal variant as its base under its prop', () => {
+    const textures = buildTileTextures([coastalAtlas('coastalwatertile', 2)]);
+
+    expect(label(baseTextureFor(textures, coastal({ variant: 1 })))).toBe('coastalwatertile_SE_variant000_base');
+    expect(label(topTextureFor(textures, coastal({ variant: 1 })))).toBe('coastalwatertile_SE_variant000');
+    expect(label(baseTextureFor(textures, coastal({ variant: 2 })))).toBe('coastalwatertile_SE_variant001_base');
+    expect(label(topTextureFor(textures, coastal({ variant: 2 })))).toBe('coastalwatertile_SE_variant001');
+  });
+
+  it('draws the wasted coast (blacksandcoast) the same way', () => {
+    const textures = buildTileTextures([coastalAtlas('blacksandcoast', 3)]);
+    const tile = coastal({ wasted: true, variant: 3 });
+
+    expect(label(baseTextureFor(textures, tile))).toBe('blacksandcoast_SE_variant002_base');
+    expect(label(topTextureFor(textures, tile))).toBe('blacksandcoast_SE_variant002');
+  });
+
+  it('draws an unsplit pack (one picture per variant) as the base, with no prop on top', () => {
+    const textures = buildTileTextures([coastalAtlas('coastalwatertile', 2, false)]);
+
+    expect(label(baseTextureFor(textures, coastal({ variant: 1 })))).toBe('coastalwatertile_SE_variant000');
+    expect(topTextureFor(textures, coastal({ variant: 1 }))).toBeUndefined();
+  });
+
+  it('puts no coastal prop on open sea or under a building on the coast', () => {
+    const textures = buildTileTextures([coastalAtlas('coastalwatertile', 2)]);
+
+    expect(topTextureFor(textures, { q: 0, r: 0, terrain: 'sea', orientation: 'SE', variant: 1 })).toBeUndefined();
+    expect(topTextureFor(textures, coastal({ variant: 1, buildingType: 'fishinghut', buildingLevel: 1 }))).toBeUndefined();
+  });
+
+  // The vendored atlas (a gitignored submodule: absent where it was not checked out, then the check is skipped).
+  const manifests = import.meta.glob('../../../vendor/bg_assets_hextile/atlas/terrain-*.json', {
+    eager: true,
+    import: 'default',
+  }) as Record<string, { frames: Record<string, unknown> }>;
+  const vendored = Object.keys(manifests).length > 0;
+
+  it.skipIf(!vendored)('the vendored coastal water ships its props as top frames over per-variant bases', () => {
+    const frames = new Set(Object.values(manifests).flatMap((m) => Object.keys(m.frames)));
+    for (const o of ORIENTATIONS) {
+      for (const look of [`coastalwatertile_${o}_variant000`, `coastalwatertile_${o}_variant001`]) {
+        expect(frames).toContain(look);
+        expect(frames).toContain(`${look}_base`);
+      }
+    }
   });
 });

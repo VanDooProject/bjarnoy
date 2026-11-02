@@ -291,14 +291,26 @@ describe('PathRestrictions.halfOpen (a palisade land end)', () => {
   const make = (restrictions: PathContext['restrictions']): PathContext => ({ ...contextFor(corridor), restrictions });
   const wall = (c: AxialCoord) => c.q === 2;
 
-  it('crosses a half-open end at the penalty instead of the terrain cost, for any army', () => {
+  it('crosses a half-open end at the ground cost plus the penalty, for any army', () => {
     const ctx = make({ blocked: wall, halfOpen: wall });
     const path = findPath(from, to, ctx)!;
     expect(path.map(coordKey)).toContain('2,0');
-    expect(pathCost(path, ctx)).toBe(1 + HALF_OPEN_END_COST + 1 + 1);
-    expect(pathCost(path, make({ blocked: wall, halfOpen: wall, halfOpenCost: 5 }))).toBe(1 + 5 + 1 + 1);
+    expect(pathCost(path, ctx)).toBe(1 + (1 + HALF_OPEN_END_COST) + 1 + 1);
+    expect(pathCost(path, ctx)).toBe(7);
+    expect(pathCost(path, make({ blocked: wall, halfOpen: wall, halfOpenCost: 5 }))).toBe(1 + (1 + 5) + 1 + 1);
     // A friendly gate on the same hex changes nothing: it is already passable.
     expect(findPath(from, to, make({ blocked: wall, halfOpen: wall, friendlyGate: wall }))).not.toBeNull();
+  });
+
+  it('adds the penalty to a forest and to a bog under the end, not to a flat grass price', () => {
+    for (const [terrain, ground] of [['forest', 1.3], ['bog', 2]] as const) {
+      const land = new Map(corridor);
+      land.set(coordKey({ q: 2, r: 0 }), terrain);
+      const ctx = make({ blocked: wall, halfOpen: wall });
+      const withTerrain = { ...ctx, terrainAt: (c: AxialCoord) => land.get(coordKey(c)) ?? 'sea' } as PathContext;
+      const path = findPath(from, to, withTerrain)!;
+      expect(pathCost(path, withTerrain)).toBeCloseTo(1 + (ground + HALF_OPEN_END_COST) + 1 + 1, 9);
+    }
   });
 
   it('a sealed end (blocked, not half open) blocks; default off blocks too', () => {

@@ -3,8 +3,8 @@
 // (river-pathing-golden.json) holds the two to the same routes.
 //
 // Every wall hex blocks every army, the owner's included, with two exceptions (docs/design/economy.md section 5): a gate is passable
-// for its owner's armies only, and a land end (a plain palisade hex with exactly one wall neighbour) is half open, passable for every
-// army at HALF_OPEN_END_COST, unless it touches a mountain or a wide river (a sealed end, which blocks like any wall hex). The sea end
+// for its owner's armies only (open to everyone while it lies outside its owner's realm), and a land end (a plain palisade hex with exactly one wall neighbour) is half open, passable for every
+// army at the ground cost plus HALF_OPEN_END_COST, unless it touches a mountain or a wide river (a sealed end, which blocks like any wall hex). The sea end
 // stands on a sea hex a land army never enters anyway. Fleets are unaffected.
 import { coordKey, neighbors, type AxialCoord } from '../hex/coords';
 import { classifyEnd } from './palisadeTiles';
@@ -16,6 +16,8 @@ export interface PalisadeWall {
   gate: boolean;
   /** An opaque owner key; two armies of one owner share it (the settlement owner's id). */
   owner: string;
+  /** The hex lies outside its owner's realm: a gate there has no function and is open to every army; a plain wall still blocks. */
+  outsideRealm?: boolean;
 }
 
 export type PalisadeWalls = ReadonlyMap<string, PalisadeWall>;
@@ -29,6 +31,8 @@ export function palisadeRestrictions(
   terrainAt: (c: AxialCoord) => Terrain,
   isWideRiver: (c: AxialCoord) => boolean,
   ownerKey: string,
+  /** The other owners whose gates also open for this army (same guild, or a guild at peace); an owner is always its own friend. */
+  friendOwners: ReadonlySet<string> = new Set(),
 ): Pick<PathRestrictions, 'blocked' | 'friendlyGate' | 'halfOpen'> | undefined {
   if (walls.size === 0) return undefined;
   const halfOpenMemo = new Map<string, boolean>();
@@ -36,7 +40,7 @@ export function palisadeRestrictions(
     blocked: (c) => walls.has(coordKey(c)),
     friendlyGate: (c) => {
       const wall = walls.get(coordKey(c));
-      return wall !== undefined && wall.gate && wall.owner === ownerKey;
+      return wall !== undefined && wall.gate && (wall.outsideRealm === true || wall.owner === ownerKey || friendOwners.has(wall.owner));
     },
     halfOpen: (c) => {
       const key = coordKey(c);

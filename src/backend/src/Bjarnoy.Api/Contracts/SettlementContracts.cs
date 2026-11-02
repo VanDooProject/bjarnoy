@@ -6,6 +6,8 @@ using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
 
 namespace Bjarnoy.Api.Contracts;
 
@@ -82,7 +84,29 @@ public sealed record ResourceLine(double Wood, double Stone, double Food, double
 /// for anything else; the tile's own <c>orientation</c> from
 /// <c>GET /worlds/{id}/tiles</c> covers it.
 /// </param>
-public sealed record PlacedBuildingResponse(int Q, int R, string Type, int Level, string? Orientation = null);
+/// <param name="OutsideRealmSince">
+/// Game instant the building's hex stopped being inside the player's realm (<c>docs/design/economy.md</c> section 5,
+/// "Buildings outside the realm decay"): from then on it has no function and loses levels. Null while it is inside.
+/// </param>
+/// <param name="NextLevelLossInSeconds">
+/// Seconds until the building loses its next level while it stays outside the realm
+/// (<see cref="OutsideRealmSince"/> plus <see cref="BuildingCatalogue.DecayInterval(BuildingType, double)"/> at the world speed, which the server advances by
+/// every level lost). Null while the building is inside, while the world's clock is frozen, and in a rival's fog-gated view.
+/// </param>
+public sealed record PlacedBuildingResponse(
+    int Q, int R, string Type, int Level, string? Orientation = null,
+    DateTimeOffset? OutsideRealmSince = null, double? NextLevelLossInSeconds = null)
+{
+    /// <summary>The response for a stored building, with the realm decay fields filled from it.</summary>
+    /// <param name="gameNow">The settlement's game time now, for <see cref="NextLevelLossInSeconds"/>; null leaves that out.</param>
+    public static PlacedBuildingResponse From(
+        PlacedBuilding b, string? orientation = null, DateTimeOffset? gameNow = null, bool freezesTime = false,
+        double speedFactor = 1.0) => new(
+        b.Coord.Q, b.Coord.R, b.Type.ToWireName(), b.Level, orientation, b.OutsideRealmSince,
+        b.OutsideRealmSince is { } since && gameNow is { } now && !freezesTime
+            ? Math.Max(0, (since + BuildingCatalogue.DecayInterval(b.Type, speedFactor) - now).TotalSeconds)
+            : null);
+}
 
 /// <param name="State">
 /// <c>"building"</c> while under construction, <c>"waiting"</c> while queued
@@ -202,6 +226,10 @@ public sealed record FeastOfferResponse(
 /// <param name="Reward">Wood, stone and food paid on claim (clamped to storage).</param>
 public sealed record QuestResponse(string Id, bool Completed, bool Claimed, ResourceLine Reward);
 
+/// <param name="Realm">
+/// The owner's read only: every settlement of the realm this settlement belongs to (itself first), each with its
+/// connected claim discs. Lists only the caller's own settlements, never another player's.
+/// </param>
 public sealed record SettlementResponse(
     Guid Id,
     Guid WorldId,
@@ -222,12 +250,28 @@ public sealed record SettlementResponse(
     FeastResponse? Feast,
     FeastOfferResponse? NextFeast,
     IReadOnlyList<QuestResponse> Quests,
-    WorldClockResponse World)
+    WorldClockResponse World,
+    IReadOnlyList<RealmMemberResponse> Realm)
 {
+    /// <summary>
+    /// The owner's read: resolves <paramref name="entity"/>'s realm (all of the same player's settlements on the
+    /// island, <see cref="PlayerRealms"/>) and builds the response. Every owner-facing settlement response goes through here.
+    /// </summary>
+    public static async Task<SettlementResponse> ForOwnerAsync(
+        GameDbContext db, SettlementEntity entity, GameClock clock, DateTimeOffset gameNow, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(entity);
+
+        var realm = await PlayerRealms.ForSettlementAsync(db, entity, entity.ToDomain(), ct).ConfigureAwait(false);
+        return From(entity, clock, gameNow, realm);
+    }
+
     public static SettlementResponse From(
-        SettlementEntity entity, GameClock clock, DateTimeOffset gameNow)
+        SettlementEntity entity, GameClock clock, DateTimeOffset gameNow, ConnectedRealm realm)
     {
         ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(realm);
 
         var domain = entity.ToDomain();
         var centre = new HexCoord(entity.CentreQ, entity.CentreR);
@@ -274,8 +318,7 @@ public sealed record SettlementResponse(
                 domain.WaitingOrders.Count(),
                 Settlement.DefaultMaxOrdersPerHex),
             [.. domain.Buildings.Select(b =>
-                new PlacedBuildingResponse(
-                    b.Coord.Q, b.Coord.R, b.Type.ToWireName(), b.Level, OrientationFor(b.Type, b.Coord)))],
+                PlacedBuildingResponse.From(b, OrientationFor(b.Type, b.Coord), gameNow, clock.FreezesTime, speedFactor))],
             [.. domain.Queue.Select(o => new BuildOrderResponse(
                 o.Id,
                 o.Coord.Q,
@@ -312,9 +355,19 @@ public sealed record SettlementResponse(
                 : null,
             [.. Bjarnoy.Domain.Settlers.Quests.All.Select(q => new QuestResponse(
                 q.Id, q.IsCompleted(domain), domain.HasClaimed(q), ResourceLine.From(q.Reward)))],
-            WorldClockResponse.From(clock, gameNow));
+            WorldClockResponse.From(clock, gameNow),
+            [.. realm.SettlementIds
+                .OrderBy(id => id == entity.Id ? 0 : 1)
+                .Select(id => new RealmMemberResponse(
+                    id, [.. realm.DiscsOf(id).Select(d => new ClaimDiscResponse(d.Centre.Q, d.Centre.R, d.Radius))]))]);
     }
 }
+
+/// <summary>One connected claim disc: a longhouse's or a connected tower's centre and claim radius.</summary>
+public sealed record ClaimDiscResponse(int Q, int R, int Radius);
+
+/// <summary>One settlement of the owner's realm and the connected claim discs it contributes (longhouse disc first).</summary>
+public sealed record RealmMemberResponse(Guid SettlementId, IReadOnlyList<ClaimDiscResponse> Discs);
 
 /// <param name="Running">Whether game time is advancing.</param>
 /// <param name="AcceptsCommands">Whether new actions are being taken.</param>
@@ -392,8 +445,20 @@ public sealed record BuildingDefinitionResponse(
 }
 
 /// <summary>A settlement as it appears on the world map: enough to draw a marker.</summary>
+/// <param name="Mine">Whether the settlement belongs to the caller (never the owner or user id itself).</param>
 public sealed record SettlementSummary(
-    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId);
+    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine)
+{
+    public static SettlementSummary From(SettlementEntity s, bool mine)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+
+        return new SettlementSummary(
+            s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
+            s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
+            s.IslandId, mine);
+    }
+}
 
 /// <summary>
 /// <c>GET /settlements/{id}/view</c>'s fog-gated read: what a rival's
@@ -452,7 +517,8 @@ public sealed record UnitDefinitionResponse(
     double TrainingSeconds,
     int RequiredLonghouseLevel,
     string? RequiredUnitType,
-    string RequiredBuildingType)
+    string RequiredBuildingType,
+    IReadOnlyList<string> SiegeTargets)
 {
     public static UnitDefinitionResponse From(UnitDefinition definition)
     {
@@ -471,6 +537,14 @@ public sealed record UnitDefinitionResponse(
             definition.TrainingDuration.TotalSeconds,
             definition.RequiredLonghouseLevel,
             definition.RequiredUnitType?.ToWireName(),
-            definition.RequiredBuildingType.ToWireName());
+            definition.RequiredBuildingType.ToWireName(),
+            SiegeTargetNames(definition.SiegeTargets));
     }
+
+    /// <summary>The lowercase wire names of the kinds of building a siege engine can damage: <c>walls</c>, <c>towers</c>, <c>buildings</c>.</summary>
+    private static string[] SiegeTargetNames(Domain.Units.SiegeTargets targets) =>
+        Enum.GetValues<Domain.Units.SiegeTargets>()
+            .Where(t => t != Domain.Units.SiegeTargets.None && targets.HasFlag(t))
+            .Select(t => t.ToString().ToLowerInvariant())
+            .ToArray();
 }

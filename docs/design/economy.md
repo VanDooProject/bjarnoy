@@ -1,7 +1,7 @@
 # Economy & tech tree
 
 Status: **agreed design.** The catalogue runs these numbers; the bog-ore works,
-the Hammerschmiede and the unit iron rework (§8) are in the game. Numbers are
+the Hammer Forge and the unit iron rework (§8) are in the game. Numbers are
 tuned against the pacing simulator (the admin *Economy lab* page,
 `/admin/economy`); change them together with it. Buildings marked * don't exist
 in the game yet and come in their own PRs.
@@ -33,14 +33,15 @@ Wood, Stone, Food, Iron.
 - **Food** — Reindeer Herder (the default, any grass), later Farm / Pumpkin
   Farm by island soil (one tech-tree card), Fishing Hut on coastal water.
 - **Iron** — comes from **bog ore**: the bog-ore works stand on bog ground
-  (§8, `bog.md`), and a **Hammerschmiede** (water-powered hammer mill) on a
+  (§8, `bog.md`), and a **Hammer Forge** (water-powered hammer mill) on a
   bog creek boosts them later, the way the Sawmill boosts Lumberjacks. Before
   the bog-ore works, the Longhouse is the only iron source, so buildings
-  cost no iron; iron is a military resource (units, Tower).
+  cost no iron;
+  iron is a military resource (units, Tower).
 
 The **Magic Tower is removed**. The **Smithy** is renamed **Weaponsmith**
 (Waffenschmiede; its art has an anvil) so it doesn't clash with the
-Hammerschmiede. It produces nothing and is a troop-upgrade building only.
+Hammer Forge. It produces nothing and is a troop-upgrade building only.
 Only its display name changes; the internal type stays `smithy`.
 
 ## 3. Level formulas
@@ -91,11 +92,13 @@ has 3–8 stages per building, and each level maps onto a stage
 | Longhouse | 30 (also drives build slots and claim radius) |
 | Resource producers (incl. the bog-ore works), Storage House | 25 |
 | Military and civic buildings (Barracks, Archery Range, Dockyard, Town Square, Cart Workshop, Druid Hut, Weaponsmith, Meadery) | 20 |
-| Mills (Sawmill, Crop Mill, Hammerschmiede) | 20 |
+| Mills (Sawmill, Crop Mill, Hammer Forge) | 20 |
 | Tower | 10 |
 | Great Storehouse | 10 |
 | Shrines | 5 (one per settlement) |
 | Palisade | 3 |
+| Bridge | 4 |
+| Siege Workshop | 5 |
 
 Construction slots: `2 + ⌊(LH − 5) / 5⌋` → 2 at LH 1–9, 7 at LH 30.
 
@@ -122,20 +125,22 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 
 | LH | Unlocks | Also needs |
 |---|---|---|
-| 1 | Lumberjack, Quarry, Clay Brickworks, Reindeer Herder, Storage House | — |
+| 1 | Lumberjack, Clay Brickworks, Reindeer Herder, Storage House (the Quarry is switched off: no new one can be built, standing ones keep working) | — |
 | 2 | Fishing Hut | — |
-| 3 | Tower | — |
+| 3 | Tower, Bog-ore works (iron, §8) | — |
 | 4 | Farm / Pumpkin Farm (one card, by island soil) | Reindeer Herder 3 |
 | 5 | Barracks | Tower 3 |
-| 6 | Town Square (feasts, §6), Bog-ore works (iron, §8) | — |
+| 6 | Town Square (feasts, §6) | — |
 | 7 | Palisade / Palisade Gate (one card, the wall) | Tower 5 |
+| 7 | Bridge (over a wide river) | Town Square 1 |
 | 8 | Dockyard | Fishing Hut 5 |
 | 9 | Archery Range | Barracks 5 |
 | 10 | Cart Workshop (settlers) | Town Square 3 |
 | 11 | Meadery | Farm 5 |
 | 12 | Druid Hut | Town Square 5 |
 | 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 15 |
-| 20 | Sawmill, Crop Mill, Hammerschmiede | Lumberjack 10 / Farm 10 / Bog-ore works 10 |
+| 18 | Siege Workshop (trains the catapult and the battering ram) | Archery Range 3 |
+| 20 | Sawmill, Crop Mill, Hammer Forge | Lumberjack 10 / Farm 10 / Bog-ore works 10 |
 | 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue | Sawmill 5 / Crop Mill 5 / Dockyard 10 / Weaponsmith 5 / **Druid Hut 10** (Odin) |
 
 The shrines all open at LH 25, but each also needs its own feeder, so in
@@ -192,12 +197,48 @@ play.
   So LH 3–6 allow 1, LH 7 allows 2, LH 9 allows 3, …, and LH 29–30 allow 13.
   The tech tree shows only the first unlock (LH 3); the rule is shown where
   a tower is placed, not as extra tech-tree cards.
+- **Where a tower stands:** on grass, sand, forest or plain bog moss (not a
+  bog shore, creek, spring or lake). It replaces the tile it stands on; its
+  art keeps that ground round it, so each ground has its own version of the
+  tower.
+- **Towers have to be chained to a longhouse.** A tower claims its ground only
+  while it is connected: it stands on ground claimed by one of your
+  longhouses, or by a tower that is itself connected. All of your longhouses
+  on an island count, so a chain that a longhouse reaches from either end stays
+  connected when a tower in the middle falls. A cut-off tower claims nothing and
+  sees nothing until the link is rebuilt; it still counts for prerequisites. It
+  does not count against the tower limit while cut off; once it is connected
+  again it counts, even if that puts you over the limit (you then can't build
+  more towers).
+- **How a tower claims:** a tower claims every hex within its level of
+  itself (level 1 its neighbours, level 2 two rings, …), centred on the
+  tower. It has to be built inside the realm, which includes ground another
+  tower claimed, so towers can chain out across an island. A tower claims
+  nothing while it is under construction (a level-0 stub claims only its own
+  hex, which is already inside the realm); its ground joins the realm when
+  level 1 finishes.
+- **Giants are claimed whole:** a giant's seven hexes join the realm only when
+  the claim covers all seven; a claim that reaches some of them takes none.
+- **Buildings outside the realm decay.** A building whose hex is no longer
+  inside the realm has no function: it stops producing and gives no bonus; a
+  palisade still blocks, but a gate or bridge outside the realm is open to
+  everyone. It loses a level at a steady pace until the realm reaches it
+  again; at level 0 it is gone and the hex is free. Each building type takes
+  max level × 24 hours to go from its top level to gone, but never less than 7
+  days or more than 30. Longhouses never decay: they make the realm.
+  When a building leaves the realm, its queued upgrade, its queued training
+  and a foundation still under construction there are cancelled and
+  refunded; a rune slotted in it stays on the hex; a dockyard outside the
+  realm is no fleet home or dock. In faster worlds decay runs on world speed:
+  the time to gone is max level × 24 h ÷ world speed, clamped between a
+  minimum and a maximum that shrink with world speed on a log scale, from
+  7 days–30 days at 1× to 1 hour–1 day at 100× (3.8 hours–2.4 days at 30×).
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't
   take an ordinary building, but it is the only place for the mills, and a
   mill boosts every Lumberjack / Farm within its range (up to +100% at max
-  level); a bog creek hex is the only place for the Hammerschmiede, which does
+  level); a bog creek hex is the only place for the Hammer Forge, which does
   the same for bog-ore works. A river or creek running through a claim is a
   trade: fewer producer hexes, and a much stronger boost on the ones that are
   left.
@@ -258,15 +299,19 @@ and a level the atlas does not have yet shows the richest rung it has (level 3 s
 
 **Movement** (land armies; fleets are unaffected). The rules apply in this order in
 `HexPathfinder` and in the frontend's `hexPath.ts`: wide river and mountain
-impassable, then stream flat 9, then half-open end 3, then blocked (unless a friendly
-gate), then the terrain cost.
+impassable, then stream flat 9, then half-open end (ground + 3), then blocked (unless a
+friendly gate), then the terrain cost.
 
 - Every wall hex **blocks every army, the owner's included**. Only standing hexes
   count (level 1 or more): a foundation does not block.
-- A **gate** passes only its **owner's** armies (the same settlement owner), at the
-  normal terrain cost. Anyone else is stopped like at any wall hex.
+- A **gate** passes its **owner's** armies and their **friends'** at the normal terrain
+  cost: friends are the owner's guildmates and the members of guilds with an active peace
+  treaty with that guild (`WorldPalisades.IndexAsync` reads both). Anyone else is stopped
+  like at any wall hex. A friend's plain wall hex still blocks, and an anonymous
+  settlement has no friends.
 - A **land end** (a plain palisade hex with exactly one wall neighbour) is **half open**:
-  every army crosses it at a flat cost of 3 in place of the terrain cost (bog's 2 included). If it touches
+  every army crosses it at the ground's own cost **plus 3** (grass 1 -> 4, forest 1.3 -> 4.3, bog 2 -> 5; a stream
+  under it, which no wall can be built on, would be 9 -> 12). If it touches
   a mountain or a wide river it is a **sealed end** and blocks like any wall hex, so a
   wall run up to a river or a mountain still seals.
 - The **sea end** stays sea, impassable to land armies, so a wall that ends in one
@@ -278,18 +323,95 @@ gate), then the terrain cost.
 Routes are priced the same on both sides (`river-pathing-golden.json`: walls, a gate
 for friend and foe, a half-open end and a sealed end), the dispatch is refused when no
 land route is left, and the range tint applies the same rules for the selected
-settlement's owner.
+settlement's owner (friends come from the guild store: `friendlyUserIds`).
 
-**Not built yet.** Siege and fire take a level off a wall hex at a time until it is
-gone; nothing does yet (`TODO(economy.md section 5)` in `BuildingCatalogue.PalisadeHex`).
+**Siege.** On land a wall hex falls to **battering rams only** (a fleet can hit a wall's sea end, see below): a won Attack or Raid that names the wall hex
+as `TargetBuildingCoord` takes **one level** off it, however many rams survive
+(`SiegeResolver.LevelsTakenFrom`, the same rule as a bridge): a level-3 palisade needs three won
+sieges to be breached, and the hex is gone at level 0. Catapults do nothing to a wall. There is no
+separate siege mission: the in-game "Siege" action on a rival wall opens an Attack on the wall's
+settlement with the wall hex as the preferred target building. Which engine damages which
+building is one table (`UnitDefinition.SiegeTargets`, asked through `SiegeResolver.CanDamage`):
+
+| Target | Rams | Catapults | Ships (shore only) | Levels per won siege |
+|---|---|---|---|---|
+| Wall hex (Palisade, Palisade Gate) | yes | no | yes | 1 |
+| Tower | yes | yes | yes | `LevelsDestroyed` of the surviving power that can damage it |
+| Bridge | no | yes | yes | 1 |
+| Every other building (Longhouse included) | no | yes | yes | `LevelsDestroyed` |
+
+Only the surviving engines that can damage the target count towards its levels. A named target
+the surviving engines cannot damage takes no damage (the report has no siege line). Without a
+named target, or when it is gone, the pick is random (seeded) among the buildings the surviving
+engines can damage; if there are none, no siege happens. Rams and catapults are trained at the Siege Workshop
+(section 8, the iron ladder).
+
+**Fleets.** A fleet Attack or Raid is always sent at one building on the target's shore: a building inside the target's
+claim on a shoreline land hex or on a sea hex (Dockyard, Fishing Hut, Shrine of Njörd, a wall's sea end). Without one the
+dispatch is refused (`FleetTargetBuildingRequired`, `FleetTargetBuildingNotOnShore`). The fleet's route ends at that
+building's hex, the battle against the settlement's garrison is fought there, and the target's Longhouse may be inland.
+A won fight damages only that building, by `LevelsDestroyed` of the surviving ships' siege power (Karve 10, Longship 20,
+starting values to be tuned; catapult 40), walls and bridges one level as above. A fleet has no random fallback: if the
+building is gone when it arrives, the battle still happens and nothing is damaged.
+
+**Not built yet.** Fire takes a level off a wall hex at a time until it is gone; nothing
+burns walls yet (`TODO(economy.md section 5)` in `BuildingCatalogue.PalisadeHex`).
 The admin building editor places a wall hex without the placement rules.
+
+### Bridge
+
+A bridge over a **wide river** (`BuildingType.Bridge` 32, wire id `bridge`). A wide river
+is impassable to every land army (`troop-movement-range.md` section 5); a bridge is the
+only way to open one. It unlocks at Longhouse 7 behind a level-1 Town Square, has **4
+levels** (a causeway, a footbridge, a king's bridge and a guarded bridge), and no
+production, storage or claim. Costs and times are set per level (no cost growth), wood-heavy,
+with stone from level 3 and no iron:
+
+| Level | Name | Wood | Stone | Food | Iron | Time |
+|---|---|---|---|---|---|---|
+| 1 | Causeway | 120 | 0 | 20 | 0 | 10 min |
+| 2 | Footbridge | 220 | 0 | 30 | 0 | 20 min |
+| 3 | King's bridge | 380 | 160 | 40 | 0 | 45 min |
+| 4 | Guarded bridge | 660 | 340 | 60 | 0 | 90 min |
+
+**Placement** (`Settlement.PlanBuild`, `BuildingCatalogue.BridgeHex`): on the river hex
+itself, inside the claim, when the river tile is of shape Straight, Bend or Bend60 and
+**wide** (`RiverIndex.IsWide`, the same test the pathfinder uses). Refused on a spring,
+a confluence or a mouth (`TerrainNotAllowed`), on a stream or a widening tile that is
+not wide (`BuildRejection.BridgeNeedsWideRiver`: a stream can be waded, so it needs no
+bridge), on a wasted (lava) island, outside the claim, and on an occupied hex. Any river
+art variant is allowed (the bridge swaps it for the plain channel), and so is any ground
+under the river (grass, forest or sand).
+
+**Movement** (land armies; fleets are unaffected). Only standing bridges count (level 1
+or more): a foundation leaves the river shut. The bridge's price replaces the
+impassable wide river in `HexPathfinder.LandStepCost`; streams keep their own price.
+
+| Level | Land army |
+|---|---|
+| 1 | every army, the owner's included: slower than any ground (`1.0 + CausewayCrossingCost` = 6) |
+| 2 | every army: still slower than the ground, but quicker than the causeway (`1.0 + FootbridgeCrossingCost` = 4) |
+| 3 | every army: as quickly as the ground under it (its terrain cost) |
+| 4 | the owner's armies and their friends: as quickly as the ground; everyone else is stopped as if there were no bridge |
+
+Friends of a guarded bridge are the same as for a palisade gate: the owner's guildmates
+and the members of guilds with an active peace treaty with that guild
+(`WorldBridges.IndexAsync` reads both via `WorldPalisades.FriendsAsync`). An anonymous
+settlement has no friends.
+
+**Burning.** An Attack mission with catapults (rams cannot burn a bridge) that names the bridge's hex as
+`TargetBuildingCoord` burns it, but a bridge burns **one level per won siege**, however
+many catapults survive (`SiegeResolver.LevelsTakenFrom`), like a wall hex, where any other building loses several. A
+guarded bridge therefore falls to the king's bridge first and opens to everyone, attackers
+included; each further siege takes another level, and a causeway burnt once is gone and
+shuts the river again.
 
 ## 6. Settling and renown
 
 A new settlement needs:
 
 1. a Cart Workshop (LH 10, Town Square 3), so troops come first (T6);
-2. 3 Settler Crews (the crew cost doubles per settlement already held);
+2. 5 Settlers (the settler cost doubles per settlement already held);
 3. **renown**: +1 per building level per hour, across all settlements
    (`Renown.cs`), never spent. Thresholds: **55 000** for the 2nd, then
    ×2 per settlement.
@@ -399,13 +521,17 @@ their renown.
   | 4 | 6 producers built | 6 standing resource producers | 200 / 150 / 100 |
   | 5 | Longhouse 3 | Longhouse level 3 or more | 400 / 300 / 200 |
   | 6 | Longhouse 5 | Longhouse level 5 or more | 800 / 600 / 400 |
+  | 7 | Train 5 spearmen | 5 fighting land units at home (any type), stored once reached: it stays completed after the troops leave or die | 500 / 400 / 300 |
+  | 8 | Hunt a camp | an army sent to hunt a wildlife camp; unlocks once troops were trained (5 fighting land units were ever at home when it was sent), no claim needed | 400 / 300 / 300 |
 
   Rules:
 
   - **Manual claim.** A completed quest pays nothing until the player presses
     Claim in the quest tray (`POST /settlements/{id}/quests/{questId}/claim`).
     The tray shows the first unclaimed quest, plus any other completed one so
-    it can be claimed; quests can be claimed in any order.
+    it can be claimed; quests can be claimed in any order. Claims are optional
+    and never gate anything (not even "Hunt a camp"), so a player may hold
+    rewards back: unclaimed quest loot works as a hidden storage buffer.
   - **Exactly once per settlement.** Each quest has a bit in the settlement's
     claimed-quests mask, set in the same save that pays the reward, so a
     double click or a retry gets a 409 (`AlreadyClaimed`), never a second
@@ -448,7 +574,7 @@ The art for this is the **bog set** in `VanDooProject/3D_assets`
 - **Clay Brickworks** moves from grass onto plain bog moss.
 - A **lake Fishing Hut** on stilts on a lake's half shore, the same building
   as the coastal one.
-- A **Hammerschmiede** on a bog creek (straight or bend): boosts bog-ore works
+- A **Hammer Forge** on a bog creek (straight or bend): boosts bog-ore works
   within range, with the mills' percent and range curve. It is drawn with the
   river hammer-mill art until its own bog-creek art exists.
 
@@ -462,32 +588,33 @@ sources have to line up with the unit unlocks:
 
 | When | Iron source | Units it has to carry |
 |---|---|---|
-| LH 1–5 | Longhouse trickle only (2–10 iron/h) | Thrall (no iron), then the first Spearmen when the Barracks opens at LH 5 |
-| from ~LH 6 | bog-ore works: bog ground has to be in reach of every start (`bog.md`) | the main army: Spearman, Axeman, Bowman, Karve, Settler Crew, Provisioner |
-| LH 20 | Hammerschmiede (bog creek) boosts bog ore | elite units: Berserker, Catapult, Longship |
+| LH 1–2 | Longhouse trickle only (2–4 iron/h) | Thrall (no iron) |
+| from LH 3 | bog-ore works: bog ground has to be in reach of every start (`bog.md`) | the Barracks' first Spearmen (LH 5), then the main army: Axeman, Bowman, Karve, Settler, Provisioner |
+| LH 20 | Hammer Forge (bog creek) boosts bog ore | elite units: Berserker, Catapult, Longship |
 
-So bog ground and the bog-ore works are needed by about LH 6, not as a
+So bog ground and the bog-ore works are needed by about LH 3, not as a
 late add-on. The unit costs and unlock levels are reworked together with
 them so the levels match. *Implemented:*
 
 - the Thrall costs no iron (it was 15); every other unit still does (Spearman
   40, Axeman 60, Bowman 50, Berserker 120, Provisioner 20, Karve 100,
-  Longship 220, Settler Crew 100, Catapult 250);
+  Longship 220, Settler 60, Catapult 250);
 - each unit's Longhouse gate follows the building that trains it:
 
   | Unit | Trained at | Longhouse gate (was) |
   |---|---|---|
   | Thrall | Barracks | the Barracks' own gate (LH 5); no gate of its own (1) |
   | Spearman | Barracks | 5 (1) |
-  | Axeman | Barracks | 6 (3): opens with the first bog-ore works |
+  | Axeman | Barracks | 6 (3): three levels after the bog-ore works open (LH 3) |
   | Karve | Dockyard | 8 (5) |
   | Bowman | Archery Range | 9 (4) |
-  | Provisioner, Settler Crew | Cart Workshop | 10 (4, 5) |
-  | Berserker, Catapult, Longship | Barracks, Archery Range, Dockyard | 20 (6, 10, 8): with the Hammerschmiede |
+  | Provisioner, Settler | Cart Workshop | 10 (4, 5) |
+  | Berserker, Catapult, Longship | Barracks, Siege Workshop, Dockyard | 20 (6, 10, 8): with the Hammer Forge |
+  | Ram | Siege Workshop | 20: after the Berserker, like the Catapult |
 
   (Berserker still needs the Axeman, Catapult the Berserker, Longship the
   Karve.) The elite units are gated by the Longhouse level only, not by a
-  standing Hammerschmiede: not every settlement has a creek.
+  standing Hammer Forge: not every settlement has a creek.
 
 ### Bog-ore works numbers (Economy lab)
 
@@ -512,21 +639,23 @@ included). The profile only shifts *when* a level is reached:
 
 | LH | iron/h | reached: active | 4 check-ins | 2 check-ins |
 |---|---|---|---|---|
-| 5 (Barracks) | 10 | day 1.3 | day 5.4 | day 11.0 |
-| 6 (works open) | 98 (32 for the check-in profiles, whose works are still level 1) | day 2.0 | day 6.5 | day 13.5 |
-| 8 | 326 | day 3.0 | day 12.2 | day 24.5 |
-| 10 | 466 | day 4.2 | day 16.2 | day 32.5 |
-| 15 | 1 139 | day 9.2 | day 25.4 | day 48.5 |
-| 20 | 2 800 | day 21.2 | day 40.6 | — (past day 60) |
+| 3 (works open) | 66 | day 0.9 | day 3.0 | day 6.0 |
+| 5 (Barracks) | 189 | day 1.6 | day 7.1 | day 14.5 |
+| 6 | 227 | day 2.0 | day 9.0 | day 18.0 |
+| 8 | 326 | day 3.1 | day 12.3 | day 25.0 |
+| 10 | 466 | day 4.2 | day 16.3 | day 33.0 |
+| 15 | 1 139 | day 9.0 | day 25.4 | day 49.0 |
+| 20 | 2 800 | day 20.2 | day 40.6 | — (past day 60) |
 
-Iron before the works is the Longhouse trickle alone (2/h per level: 10/h at
-LH 5), which has banked 139 iron at LH 5 for the active profile (622 and 1 256
-for the slower ones): the first three Spearmen (40 each) are affordable the
-moment the Barracks open, ten of them about 17 h later. Every other unit is
-affordable the moment its gate opens, because its gate opens with or after the
-works: Axeman at LH 6 (361 iron banked), Karve at LH 8, Settler Crew and
-Provisioner at LH 10, the elite units at LH 20 (income 2 800/h against a
-Catapult's 250).
+Iron before the works (Longhouse 1 and 2) is the Longhouse trickle alone
+(2/h per level). From Longhouse 3 the works carry it, so the Barracks' first
+Spearmen (LH 5) are paid from works income, and every other unit is
+affordable the moment its gate opens, because its gate opens with or after
+the works: Axeman at LH 6, Karve at LH 8, Settler and Provisioner at
+LH 10, the elite units at LH 20 (income 2 800/h against a Catapult's 250).
+The table is the Economy lab's own default setup re-run for the LH 3 unlock
+(three Lumberjacks, Quarries and Reindeer Herders, three bog-ore works, two
+storage houses, producers up to three levels ahead, joining at 09:00, 60 days).
 
 Second-settlement timing (§6) is unchanged as long as the lab's default
 producers are used (no bog-ore works: 6.4 / 12.3 / 25.0 days for active / 4
@@ -666,7 +795,7 @@ Open work, in rough order. Each is its own PR.
    Wisdom, §5) and the Palisade (§5).
 6. ~~**Bogs and iron** (§8, `bog.md`): bog ground, creeks and lakes in world
    generation, the bog-ore works, Clay Brickworks on bog ground, the lake
-   Fishing Hut, and the Hammerschmiede.~~ Done (the Hammerschmiede with the
+   Fishing Hut, and the Hammer Forge.~~ Done (the Hammer Forge with the
    river mill's art until the bog-creek art exists).
 7. ~~**Units and iron:** every unit except the Thrall costs iron, and the unit
    unlock levels follow the building ladder, matched to the iron sources.~~

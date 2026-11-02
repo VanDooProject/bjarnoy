@@ -25,13 +25,16 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { loginTestUser } from './helpers';
+import { loginTestUser, openHudDrawer } from './helpers';
 import { SettlementPage } from './pages';
 
+// DOM and game state only: water pixels cannot change these results (see `mapLayers` in fixtures.ts).
+test.use({ mapLayers: { water: false } });
+
 /**
- * ResourceBar.vue mounts a second, hidden `.resource-bar` alongside the real
- * one purely to measure whether full notation would fit (`data-measure` on
- * its root) — off-screen (`position: fixed`, far outside the viewport) and
+ * ResourceBar.vue mounts hidden `.resource-bar` clones alongside the real
+ * one purely to measure whether a row would fit (`data-measure` on their
+ * roots: the collapsed phone row, and on desktop the full desktop row) — off-screen (`position: fixed`, far outside the viewport) and
  * `aria-hidden`/`inert`, but still real DOM sharing the same classes, so
  * every locator below that means "the pills the player actually sees" has
  * to exclude it explicitly or it silently doubles counts and pulls
@@ -60,6 +63,35 @@ async function expectPillsNotClipped(page: Page): Promise<void> {
     expect(pillBox!.x).toBeGreaterThanOrEqual(bar!.x - 1);
     expect(pillBox!.x + pillBox!.width).toBeLessThanOrEqual(bar!.x + bar!.width + 1);
   }
+}
+
+/**
+ * A mouse drag from (x, fromY) to (x, toY) in `steps` moves `msPerStep`
+ * apart, then released where it ended, with explicit event timestamps
+ * (CDP `Input.dispatchMouseEvent`). useHudDrawer reads release speed from
+ * the events' own `timeStamp`s, so a `page.mouse` drag's speed is whatever
+ * pace the runner happens to deliver its moves at: anything from ~7ms to
+ * hundreds of ms apart. A short drag then counts as a flick on a fast run
+ * and not on a slow one. Fixed timestamps make the speed part of the test.
+ */
+async function timedMouseDrag(page: Page, x: number, fromY: number, toY: number, steps: number, msPerStep: number): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  const t0 = Date.now() / 1000;
+  const at = (ms: number) => t0 + ms / 1000;
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y: fromY, timestamp: at(0) });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y: fromY, button: 'left', buttons: 1, clickCount: 1, timestamp: at(0) });
+  for (let i = 1; i <= steps; i++) {
+    await cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x,
+      y: fromY + ((toY - fromY) * i) / steps,
+      button: 'left',
+      buttons: 1,
+      timestamp: at(i * msPerStep),
+    });
+  }
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y: toY, button: 'left', buttons: 0, clickCount: 1, timestamp: at(steps * msPerStep) });
+  await cdp.detach();
 }
 
 /** Each pill's `.fill-track` must never be wider than its own `.numbers`/`.numbers-compact` text above it. */
@@ -237,6 +269,20 @@ test.describe('mobile HUD bar', () => {
       const openBox = (await page.locator('.hud-drawer').boundingBox())!;
       expect(openBox.height).toBeGreaterThan(100);
     }).toPass();
+    // The close drag below is laid out from the open drawer's own box, so
+    // that box has to be the drawer's resting open height, not a frame of
+    // its open animation (TopBar.vue's `height 180ms ease`, which
+    // `reducedMotion` doesn't touch: it's an inline transition). The check
+    // above can't tell the two apart — the drawer is already ~220px tall
+    // the instant the drag releases, before it animates the rest of the
+    // way. Measured mid-animation (say 220 of 472px), the close drag only
+    // covers that much, releases with the drawer still past the 30% open
+    // threshold, and whether it closes then rests on the last of its 10
+    // steps alone happening to arrive fast enough to count as a flick —
+    // which a busy renderer's frame-delayed pointermove doesn't. That's
+    // the CI flake (drawer stuck at 472px). Wait for the transition itself
+    // to finish instead.
+    await expect.poll(() => page.locator('.hud-drawer').evaluate((el) => el.getAnimations().length)).toBe(0);
     await expect(page.locator('.hud-drawer .drawer-links')).toBeVisible();
     // ResourceBar's pills switch to their expanded (desktop-style stacked)
     // rendering while the drawer is open, instead of the collapsed
@@ -287,19 +333,37 @@ test.describe('mobile HUD bar', () => {
     await loginTestUser(page);
     await SettlementPage.found(page);
 
-    const bar = page.locator('.hud-bar');
-    const box = (await bar.boundingBox())!;
+    const box = (await page.locator('.hud-bar').boundingBox())!;
     const x = box.x + box.width / 2;
     const y = box.y + box.height / 2;
-
-    await page.mouse.move(x, y);
-    await page.mouse.down();
-    await page.mouse.move(x, y + 20, { steps: 5 }); // well short of the ~30% threshold
-    await page.mouse.up();
+    // 20px, well short of the ~30% threshold, at 0.1px/ms: far below the
+    // 0.5px/ms flick speed (useHudDrawer's FLICK_VELOCITY_PX_MS), so only
+    // the distance decides.
+    await timedMouseDrag(page, x, y, y + 20, 5, 40);
 
     await expect(async () => {
       const closedBox = (await page.locator('.hud-drawer').boundingBox())!;
       expect(closedBox.height).toBeLessThanOrEqual(2);
+    }).toPass();
+  });
+
+  test('a fast flick of the same short distance opens the drawer', async ({ page }) => {
+    // The counterpart of the test above: the same 20px, but at 1px/ms, past
+    // the flick speed. Speed, not distance, is what differs, so the test
+    // above passing means a slow short drag snaps back, not that flicks
+    // never register.
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await loginTestUser(page);
+    await SettlementPage.found(page);
+
+    const box = (await page.locator('.hud-bar').boundingBox())!;
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await timedMouseDrag(page, x, y, y + 20, 5, 4);
+
+    await expect(async () => {
+      const openBox = (await page.locator('.hud-drawer').boundingBox())!;
+      expect(openBox.height).toBeGreaterThan(100);
     }).toPass();
   });
 
@@ -430,14 +494,52 @@ test.describe('mobile HUD bar', () => {
     await expect(page).toHaveURL('/profile');
   });
 
-  test('drawer account section: anonymous shows the log-in entry (the trigger itself stays out of this bar)', async ({ page }) => {
+  // Regression: the drawer's resting height used to come from the content
+  // element's `contentRect` (padding excluded), so it opened ~24px + the
+  // bottom inset short and its last row ("Log out") was cut off until scrolled.
+  test('opened drawer shows its last row fully, without scrolling', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await loginTestUser(page);
+    await SettlementPage.found(page);
+
+    await page.locator('.hud-grip').click();
+    const drawer = page.locator('.hud-drawer');
+    const logout = page.locator('[data-testid="drawer-account-logout"]');
+    await expect(logout).toBeVisible();
+    await expect.poll(() => drawer.evaluate((el) => el.getAnimations().length)).toBe(0);
+
+    const drawerBox = (await drawer.boundingBox())!;
+    const logoutBox = (await logout.boundingBox())!;
+    expect(logoutBox.y + logoutBox.height).toBeLessThanOrEqual(drawerBox.y + drawerBox.height);
+
+    const { scrollHeight, clientHeight, scrollTop } = await page
+      .locator('.hud-drawer-scroll')
+      .evaluate((el) => ({ scrollHeight: el.scrollHeight, clientHeight: el.clientHeight, scrollTop: el.scrollTop }));
+    expect(scrollTop).toBe(0);
+    expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 1);
+  });
+
+  // The anonymous trigger has no room in the bar itself: it floats as a chip
+  // below it, and steps aside while the drawer is
+  // open. Its entries (log in, world list) live only on that chip, not in
+  // the drawer too.
+  test('anonymous: the trigger floats below the bar, and the drawer does not repeat its entries', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.found(page); // anonymous — no loginTestUser
 
-    await expect(page.locator('.hud-bar .returning-player-menu')).toBeHidden();
+    const trigger = page.getByTestId('returning-player-trigger');
+    await expect(trigger).toBeVisible();
+    const [triggerBox, barBox] = [await trigger.boundingBox(), await page.locator('header.hud-bar').boundingBox()];
+    expect(triggerBox!.y, 'the trigger sits in the bar').toBeGreaterThanOrEqual(barBox!.y + barBox!.height);
     await page.locator('.hud-grip').click();
-    await expect(page.locator('[data-testid="drawer-account-login"]')).toBeVisible();
-    await expect(page.locator('[data-testid="drawer-account-worlds"]')).toBeVisible();
+    await expect(trigger).toBeHidden();
+    await expect(page.locator('.hud-drawer .drawer-links .link').first()).toBeVisible();
+    await expect(page.locator('.hud-drawer [data-testid^="drawer-account-"]')).toHaveCount(0);
+
+    await page.locator('.hud-grip').click();
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+    await expect(page.getByTestId('returning-player-login')).toBeVisible();
   });
 });
 
@@ -645,7 +747,7 @@ test.describe('mobile HUD drawer on non-map pages', () => {
   // mount outside the HUD drawer hides itself at phone width.
   test('no page shows the language switcher outside the drawer', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    for (const path of ['/', '/login', '/register', '/worlds', '/reports', '/impressum', '/docs', '/tech-tree']) {
+    for (const path of ['/', '/login', '/register', '/worlds', '/reports', '/impressum', '/docs', '/docs/tech-tree']) {
       await page.goto(path);
       // Mounted (so this can't pass just because the page hadn't rendered
       // yet), but not shown.
@@ -726,7 +828,10 @@ test('demo badge never overlaps the settlement bubble on a phone settlement view
 // A bottom-docked bar used to sit on top of the landing page's onboarding
 // completion banner on a real phone-height screen (390x664, iPhone 13), so
 // "Enter your settlement" couldn't be tapped and onboarding couldn't finish
-// — the landing overlays only ever cleared a *top* bar.
+// — the landing overlays only ever cleared a *top* bar. The founded landing's
+// phone bar now floats as top chips regardless of that preference (TopBar's
+// `floating`), so the bar can't sit at the bottom there at all any more; this
+// keeps guarding that the CTA stays uncovered and tappable with it set.
 test('bottom docking never covers the onboarding completion banner', async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await page.setViewportSize({ width: 390, height: 664 });
@@ -739,7 +844,9 @@ test('bottom docking never covers the onboarding completion banner', async ({ pa
   const cta = page.getByTestId('onboarding-continue');
   await expect(cta).toBeVisible();
   const [ctaBox, barBox] = [await cta.boundingBox(), await page.locator('header.hud-bar').boundingBox()];
-  expect(ctaBox!.y + ctaBox!.height, 'completion CTA overlaps the bottom-docked bar').toBeLessThanOrEqual(barBox!.y);
+  const overlaps =
+    ctaBox!.y < barBox!.y + barBox!.height && barBox!.y < ctaBox!.y + ctaBox!.height;
+  expect(overlaps, 'completion CTA overlaps the HUD bar').toBe(false);
   await cta.click();
   await expect(page).toHaveURL(/\/settlement$/);
 });
@@ -823,7 +930,7 @@ test('a short phone can scroll the open drawer down to reach the profile nudge',
   // profile nudge (showProfileNudge in MobileHudDrawer.vue) needs nothing
   // further set up here; the anonymous, no-nickname founding above already
   // satisfies its other conditions too.
-  await page.locator('.hud-grip').click();
+  await openHudDrawer(page);
   const nudge = page.locator('.hud-drawer [data-testid="profile-nudge"]');
   await expect(nudge).toBeVisible();
 

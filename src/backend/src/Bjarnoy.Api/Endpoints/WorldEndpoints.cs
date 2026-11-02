@@ -1,9 +1,12 @@
+using System.Security.Claims;
 using Asp.Versioning;
 using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Bjarnoy.Infrastructure.Services.PlotReservations;
 using Bjarnoy.Infrastructure.World;
@@ -47,11 +50,18 @@ public static class WorldEndpoints
 
         worlds.MapGet("/{worldId:guid}/islands", GetIslands)
             .WithName("GetWorldIslands")
-            .WithSummary("Lists the islands of a world, with their start positions.");
+            .WithSummary("Lists the islands of a world, with their start positions; camps only for the islands the caller has seen part of.")
+            .RequireCallerRealm();
 
         worlds.MapGet("/{worldId:guid}/camps", GetCamps)
             .WithName("GetWorldCamps")
-            .WithSummary("Every wildlife camp's live state (garrison, calm, clears, loot left) at the world's game time, optionally for one island.");
+            .WithSummary("The live state (garrison, calm, clears, loot left) at the world's game time of every wildlife camp on an island the caller has seen part of, optionally for one island.")
+            .RequireCallerRealm();
+
+        worlds.MapGet("/{worldId:guid}/walls", GetWalls)
+            .WithName("GetWorldWalls")
+            .WithSummary("Every standing palisade/gate hex of the rival settlements the caller has explored (their own walls excluded).")
+            .RequireCallerRealm();
 
         worlds.MapGet("/{worldId:guid}/tiles", GetTiles)
             .WithName("GetWorldTiles")
@@ -196,9 +206,18 @@ public static class WorldEndpoints
             worldId, settlement?.Id.ToString(), settlement?.Name));
     }
 
+    /// <summary>
+    /// The islands of a world — labels, start positions and the rest are the same for everyone, but
+    /// <see cref="IslandResponse.Camps"/> ships only for islands the caller has seen part of (<see cref="SeenIslandIdsAsync"/>);
+    /// every other island answers an empty camp list.
+    /// </summary>
     private static async Task<Results<Ok<IReadOnlyList<IslandResponse>>, NotFound<ProblemDetails>>> GetIslands(
         Guid worldId,
+        HttpContext httpContext,
         WorldService worlds,
+        ExploredAreaService exploredArea,
+        RealmDirectory realms,
+        PlotReservationService reservations,
         CancellationToken cancellationToken)
     {
         var world = await worlds.GetWorldAsync(worldId, cancellationToken);
@@ -219,22 +238,56 @@ public static class WorldEndpoints
             islands = [.. islands.Where(i => !i.IsWasted)];
         }
 
-        IReadOnlyList<IslandResponse> response = [.. islands.Select(IslandResponse.From)];
+        var seen = await SeenIslandIdsAsync(worldId, httpContext, exploredArea, realms, reservations, cancellationToken);
+        IReadOnlyList<IslandResponse> response = [.. islands.Select(i => IslandResponse.From(i, seen.Contains(i.Id)))];
 
         return TypedResults.Ok(response);
     }
 
     /// <summary>
-    /// The live state of every wildlife camp at the world's game clock, optionally narrowed to one island. Public like
-    /// <see cref="GetIslands"/>: the camps themselves already ship in <see cref="IslandResponse.Camps"/>, and this is
-    /// world state, not per-player data. Read-only — a camp's garrison is settled in memory from its stored snapshot,
+    /// The islands the caller has seen part of (<see cref="ExploredAreaService.SeenIslandIdsAsync"/>), plus the island of
+    /// their pinned pre-founding plot suggestion. A caller that does not resolve to a realm, or has no explored area,
+    /// has seen none. The one cutoff for the camp data of <see cref="GetIslands"/> and <see cref="GetCamps"/>.
+    /// </summary>
+    private static async Task<HashSet<Guid>> SeenIslandIdsAsync(
+        Guid worldId,
+        HttpContext httpContext,
+        ExploredAreaService exploredArea,
+        RealmDirectory realms,
+        PlotReservationService reservations,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return [];
+        }
+
+        var area = await exploredArea.GetAsync(worldId, realm.OwnerId!, persist: false, cancellationToken);
+        if (area is null)
+        {
+            return [];
+        }
+
+        return await exploredArea.SeenIslandIdsAsync(
+            area, reservations.PinnedIslandId(worldId, realm.OwnerId!), cancellationToken);
+    }
+
+    /// <summary>
+    /// The live state of every wildlife camp at the world's game clock, optionally narrowed to one island, limited to the
+    /// islands the caller has seen part of like <see cref="IslandResponse.Camps"/> (<see cref="SeenIslandIdsAsync"/>).
+    /// Read-only — a camp's garrison is settled in memory from its stored snapshot,
     /// never written on this path. Wasted islands' camps stay hidden until the endboss has triggered, like the islands.
     /// </summary>
     private static async Task<Results<Ok<IReadOnlyList<CampStateResponse>>, NotFound<ProblemDetails>>> GetCamps(
         Guid worldId,
         Guid? islandId,
+        HttpContext httpContext,
         WorldService worlds,
         CampService campService,
+        ExploredAreaService exploredArea,
+        RealmDirectory realms,
+        PlotReservationService reservations,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -247,9 +300,61 @@ public static class WorldEndpoints
         var now = world.ToClock().ToGameTime(timeProvider.GetUtcNow());
         var camps = await campService.LoadCampsAsync(
             worldId, now, islandId, includeWasted: world.EndbossTriggeredAt is not null, cancellationToken);
+        var seen = await SeenIslandIdsAsync(worldId, httpContext, exploredArea, realms, reservations, cancellationToken);
+        camps = [.. camps.Where(c => seen.Contains(c.IslandId))];
         var realm = await campService.LoadRealmAsync(worldId, cancellationToken);
 
         IReadOnlyList<CampStateResponse> response = [.. camps.Select(c => CampStateResponse.From(c, now, realm))];
+        return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// The standing wall hexes (level 1 or more) of the world's rival settlements, so a live client can draw, hit-test and plan routes
+    /// around walls it never fetched a settlement for. Gated exactly like <c>GET /worlds/{id}/settlements</c> (<c>SettlementEndpoints.ListForWorld</c>):
+    /// a settlement's walls are listed only when its centre hex is in the caller's explored area, and the caller's own settlements are
+    /// left out (their walls already ship in their own settlement read). No resolvable realm or world answers an empty list.
+    /// </summary>
+    private static async Task<Ok<IReadOnlyList<WallResponse>>> GetWalls(
+        Guid worldId,
+        HttpContext httpContext,
+        GameDbContext db,
+        ExploredAreaService exploredArea,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<WallResponse>>([]);
+        }
+
+        var area = await exploredArea.GetAsync(worldId, realm.OwnerId!, persist: false, cancellationToken);
+        if (area is null)
+        {
+            return TypedResults.Ok<IReadOnlyList<WallResponse>>([]);
+        }
+
+        var idClaim = httpContext.User.Identity?.IsAuthenticated == true
+            ? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            : null;
+        var callerUserId = Guid.TryParse(idClaim, out var parsedUserId) ? parsedUserId : (Guid?)null;
+
+        var rows = (await WorldPalisades.ListStandingAsync(db, worldId, cancellationToken))
+            .Where(w => w.OwnerId != realm.OwnerId && !(callerUserId is not null && w.UserId == callerUserId))
+            .ToList();
+
+        var explored = await exploredArea.ExploredAmongAsync(
+            area, rows.Select(w => new HexCoord(w.CentreQ, w.CentreR)).Distinct(), cancellationToken);
+
+        IReadOnlyList<WallResponse> response =
+        [
+            .. rows
+                .Where(w => explored.Contains(new HexCoord(w.CentreQ, w.CentreR)))
+                .Select(w => new WallResponse(
+                    w.Q, w.R, w.Type.ToWireName(), w.Level, w.SettlementId,
+                    w.UserId == SystemUserIds.Abandoned ? null : w.UserId, w.OutsideRealm)),
+        ];
+
         return TypedResults.Ok(response);
     }
 
@@ -455,13 +560,17 @@ public static class WorldEndpoints
 
         var suggestion = result.Suggestion!;
 
+        var callerIdClaim = httpContext.User.Identity?.IsAuthenticated == true
+            ? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            : null;
+        var callerUserId = Guid.TryParse(callerIdClaim, out var parsedCallerId) ? parsedCallerId : (Guid?)null;
+
         var islandSettlementEntities = await settlements.GetForIslandAsync(suggestion.IslandId, cancellationToken);
         IReadOnlyList<SettlementSummary> islandSettlements =
         [
-            .. islandSettlementEntities.Select(s => new SettlementSummary(
-                s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
-                s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
-                s.IslandId)),
+            .. islandSettlementEntities.Select(s => SettlementSummary.From(
+                s,
+                s.OwnerId == realm.OwnerId || (callerUserId is not null && s.UserId == callerUserId))),
         ];
 
         return TypedResults.Ok(new PlotSuggestionResponse(

@@ -24,10 +24,34 @@
   "graphics": {
     "title": "Graphics",
     "hint": "Applies on this device only.",
-    "animations": "Map animations",
     "auto": "Auto",
     "on": "On",
     "off": "Off",
+    "device": {
+      "label": "Your device: “Reduce motion”",
+      "on": "ON",
+      "off": "OFF",
+      "autoNote": "“Auto” below follows this.",
+      "hint": {
+        "windows": "Change it in Settings → Accessibility → Visual effects → Animation effects.",
+        "macos": "Change it in System Settings → Accessibility → Display → Reduce motion.",
+        "ios": "Change it in Settings → Accessibility → Motion → Reduce Motion.",
+        "android": "Change it in Settings → Accessibility → Remove animations.",
+        "other": "Change it in your device’s accessibility settings."
+      }
+    },
+    "groupMap": "Map",
+    "groupHud": "HUD",
+    "buildings": "Building animations",
+    "buildingsSub": "Camps, workshops, giants",
+    "water": "Water motion",
+    "waterSub": "Waves, shore surge, caustics",
+    "fog": "Fog drift",
+    "fogSub": "Moving fog and mist edges",
+    "menus": "Menu animations",
+    "menusSub": "Radial menu, resource ticks, hints, drawers",
+    "antialias": "Smooth edges",
+    "antialiasHint": "Smoother borders and outlines on the map. Off is faster on slow devices; applies the next time the map opens.",
     "status": {
       "forcedOn": "On (this device)",
       "forcedOff": "Off (this device)",

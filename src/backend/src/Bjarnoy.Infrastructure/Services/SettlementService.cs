@@ -290,7 +290,7 @@ public sealed class SettlementService(
         // Founding is restricted to the plots the generator already vetted, so
         // the terrain rules are enforced once at world creation rather than
         // re-derived per request.
-        if (!island.StartPositions.Any(p => p.Q == coord.Q && p.R == coord.R))
+        if (!island.FoundableStartPositions().Any(p => p.Q == coord.Q && p.R == coord.R))
         {
             return new FoundingResult(FoundingRejection.NotAStartPosition);
         }
@@ -350,15 +350,26 @@ public sealed class SettlementService(
             .Where(s => s.WorldId == worldId && s.IslandId == islandId)
             .Select(s => new
             {
+                s.Id,
+                s.UserId,
+                s.OwnerId,
+                s.IslandId,
                 s.CentreQ,
                 s.CentreR,
                 Buildings = s.Buildings.Select(b => new { b.Q, b.R, b.Type, b.Level }).ToList(),
             })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-        var snapshots = neighbours.Select(n => new Founding.NeighbourSnapshot(
-            new HexCoord(n.CentreQ, n.CentreR),
-            n.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level)).ToList()));
+        // A neighbour's towers can be connected through another settlement of the same player (the chain rule), so its
+        // claim discs come from the whole realm, not from the one settlement alone.
+        var neighbourRows = neighbours
+            .Select(n => new PlayerRealms.Row(
+                n.Id, n.UserId, n.OwnerId, n.IslandId, new HexCoord(n.CentreQ, n.CentreR),
+                [.. n.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level))]))
+            .ToList();
+        var neighbourRealms = PlayerRealms.Resolve(neighbourRows);
+        var snapshots = neighbourRows.Select(n => new Founding.NeighbourSnapshot(
+            n.Centre, n.Buildings, neighbourRealms[n.Id].DiscsOf(n.Id)));
 
         switch (Founding.CheckSpacing(coord, snapshots, MinimumSpacing, FoundingSafetyMargin))
         {
@@ -444,7 +455,7 @@ public sealed class SettlementService(
     }
 
     /// <summary>
-    /// Founds a new settlement from a settler-crew convoy's arrival (issue
+    /// Founds a new settlement from a settler convoy's arrival (issue
     /// #55 §5) — the second-and-onward-settlement counterpart to
     /// <see cref="FoundAsync"/>'s first-settlement flow, reusing the same
     /// starting shape (a Lv 1 Longhouse, <see cref="BuildingCatalogue.FoundingStock"/>)
@@ -509,6 +520,9 @@ public sealed class SettlementService(
 
         _dbContext.Settlements.Add(settlement);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // The new longhouse may reach buildings of the player's other settlements on the island that stood outside the realm.
+        await ReconcileRealmAsync(settlement.Id, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Settlement {Name} ({Id}) founded at {Coord} by settler convoy for user {UserId}.",
@@ -703,6 +717,8 @@ public sealed class SettlementService(
         ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
+
         _logger.LogInformation(
             "Admin set building at {Coord} in settlement {Id} to level {Level}.", coord, settlementId, level);
 
@@ -864,6 +880,11 @@ public sealed class SettlementService(
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        if (result.Completed.Any(o => o.Type is BuildingType.Tower or BuildingType.Longhouse))
+        {
+            await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        }
+
         _logger.LogInformation(
             "Admin insta-completed {Builds} build(s) and {Training} training batch(es) in settlement {Id}.",
             result.Completed.Count, result.TrainingCompleted.Count, settlementId);
@@ -896,7 +917,8 @@ public sealed class SettlementService(
         var bogKind = await WorldTerrain.BogKindAtAsync(_dbContext, settlement.WorldId, coord, cancellationToken).ConfigureAwait(false);
         var result = settled.PlaceBuilding(
             coord, type, level, sampler.TerrainAt(coord), sampler.IsCoastalWater(coord),
-            now, settlement.World!.SpeedFactor, guestStacks, sampler.TerrainAt, placeGiants, bogKind);
+            now, settlement.World!.SpeedFactor, guestStacks, sampler.TerrainAt, placeGiants, bogKind,
+            realm: await PlayerRealms.ForSettlementAsync(_dbContext, settlement, settled, cancellationToken).ConfigureAwait(false));
 
         if (!result.Accepted)
         {
@@ -907,6 +929,8 @@ public sealed class SettlementService(
         settlement.ApplyDomain(result.Settlement!);
         ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Admin placed {Type} level {Level} at {Coord} in settlement {Id}.", type, level, coord, settlementId);
@@ -941,6 +965,8 @@ public sealed class SettlementService(
         settlement.ApplyDomain(result.Settlement!);
         ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Admin razed the building at {Coord} in settlement {Id}.", coord, settlementId);
 
@@ -1046,6 +1072,14 @@ public sealed class SettlementService(
             .OrderBy(s => s.Id)
             .ToListAsync(cancellationToken);
 
+    /// <summary>
+    /// The chain-rule realm (<see cref="ConnectedRealm"/>) of <paramref name="settled"/> and the same player's other
+    /// settlements on its island: which towers are connected and which ground the player's realm covers.
+    /// </summary>
+    public Task<ConnectedRealm> LoadRealmAsync(
+        SettlementEntity entity, Settlement settled, CancellationToken cancellationToken = default) =>
+        PlayerRealms.ForSettlementAsync(_dbContext, entity, settled, cancellationToken);
+
     /// <summary>Queues a build, charging for it up front.</summary>
     public async Task<BuildResult> QueueBuildAsync(
         Guid settlementId,
@@ -1084,6 +1118,12 @@ public sealed class SettlementService(
         var terrain = sampler.TerrainAt(coord);
         var riverShapeAt = await RiverShapeAtAsync(settlement.WorldId, coord, cancellationToken)
             .ConfigureAwait(false);
+        // A bridge is the one building that stands on a wide river: it needs the raw tile (a stream's shape too, so PlanBuild can name
+        // the stream), whether the tile is wide, and whether its island is a wasted one.
+        var bridgeSite = type == BuildingType.Bridge
+            ? await BridgeSiteAsync(settlement.WorldId, coord, cancellationToken).ConfigureAwait(false)
+            : default;
+        riverShapeAt = bridgeSite.Shape ?? riverShapeAt;
         // Only meaningful when there's a river shape to begin with — see
         // Settlement.PlanBuild's riverVariantAt doc comment.
         var riverVariantAt = riverShapeAt is { } shapeAt ? sampler.RiverVariantAt(coord, shapeAt) : RiverVariant.Plain;
@@ -1113,10 +1153,14 @@ public sealed class SettlementService(
             islandSoil: islandSoil,
             giants: buildGiants,
             camps: await LoadCampIndexAsync(settlement.WorldId, now, cancellationToken).ConfigureAwait(false),
+            endgameSites: await LoadEndgameSiteIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false),
             bogKindAt: await WorldTerrain.BogKindAtAsync(_dbContext, settlement.WorldId, coord, cancellationToken).ConfigureAwait(false),
             palisades: type is BuildingType.Palisade or BuildingType.PalisadeGate
                 ? await WorldPalisades.NearAsync(_dbContext, settlement.WorldId, coord, sampler.TerrainAt, cancellationToken).ConfigureAwait(false)
-                : null);
+                : null,
+            isWideRiverAt: bridgeSite.IsWide,
+            onWastedIsland: bridgeSite.OnWastedIsland,
+            realm: await PlayerRealms.ForSettlementAsync(_dbContext, settlement, settled, cancellationToken).ConfigureAwait(false));
 
         if (!decision.Accepted)
         {
@@ -1258,18 +1302,19 @@ public sealed class SettlementService(
         // isn't actually claimed (its footprint isn't fully covered) must
         // not count as this settlement's shoreline either.
         var trainGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var discs = settled.ClaimDiscs.ToList();
+        var discs = (await PlayerRealms.ForSettlementAsync(_dbContext, settlement, settled, cancellationToken).ConfigureAwait(false))
+            .DiscsOf(settled.Id).ToList();
         var hasShoreline = discs
             .SelectMany(disc => disc.Centre.WithinRadius(disc.Radius))
             .Distinct()
             .Where(coord => Territory.Claims(discs, coord, trainGiants))
             .Any(sampler.IsShoreline);
 
-        // Settler-crew training escalates per settlement the owning player
+        // Settler training escalates per settlement the owning player
         // already holds (issue #55 §4) — every other unit type trains at the
         // catalogue's flat cost (multiplier 1.0).
         var costMultiplier = 1.0;
-        if (unitType == UnitType.SettlerCrew)
+        if (unitType == UnitType.Settler)
         {
             var existingSettlementCount = await GetSettlementCountAsync(settlement.UserId, settlement.WorldId, cancellationToken)
                 .ConfigureAwait(false);
@@ -1529,6 +1574,29 @@ public sealed class SettlementService(
     }
 
     /// <summary>
+    /// What a bridge's placement rule needs to know about <paramref name="coord"/>: the shape of the river tile standing there whatever its
+    /// width (<see langword="null"/> when there is none), whether that tile is a wide river (<see cref="RiverIndex.IsWide"/>), and whether
+    /// the island it lies on is a wasted one.
+    /// </summary>
+    private async Task<(RiverTileShape? Shape, bool IsWide, bool OnWastedIsland)> BridgeSiteAsync(
+        Guid worldId, HexCoord coord, CancellationToken cancellationToken)
+    {
+        var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
+        if (rivers.TileAt(coord) is not { } tile)
+        {
+            return (null, false, false);
+        }
+
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId)
+            .Select(i => new { i.IsWasted, i.RiverTiles })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var wasted = islands.Any(i => i.IsWasted && i.RiverTiles.Any(t => t.Q == coord.Q && t.R == coord.R));
+        return (tile.Shape, rivers.IsWide(coord), wasted);
+    }
+
+    /// <summary>
     /// Which gods already have a standing shrine somewhere on
     /// <paramref name="islandId"/>, at a hex other than
     /// (<paramref name="settlementId"/>, <paramref name="coord"/>) — spanning
@@ -1602,6 +1670,19 @@ public sealed class SettlementService(
     public Task<ICampIndex> LoadCampIndexAsync(Guid worldId, DateTimeOffset now, CancellationToken cancellationToken = default) =>
         _campService.LoadBlockingIndexAsync(worldId, now, cancellationToken);
 
+    /// <summary>The world's Utgard wall hexes (rubble included) and Jötun watchtowers as one lookup for the build rule.</summary>
+    public async Task<IEndgameSiteIndex> LoadEndgameSiteIndexAsync(Guid worldId, CancellationToken cancellationToken = default)
+    {
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId && i.IsWasted)
+            .Select(i => new { i.UtgardWalls, i.JotunTowers })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return new EndgameSiteIndex(islands.SelectMany(i =>
+            i.UtgardWalls.Select(w => new HexCoord(w.Q, w.R)).Concat(i.JotunTowers.Select(t => new HexCoord(t.Q, t.R)))));
+    }
+
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>
         _dbContext.Settlements
             .Include(s => s.World)
@@ -1629,8 +1710,14 @@ public sealed class SettlementService(
     /// <paramref name="entity"/>.World to already be loaded (every caller
     /// checks this before calling in).
     /// </summary>
+    /// <remarks>
+    /// The settled state also gets its realm state brought up to <paramref name="now"/> (<see cref="Settlement.ApplyRealmState"/>) when
+    /// that can have something to do: <paramref name="forceRealm"/>, a building still marked as outside the realm (levels to lose, or
+    /// the realm may have reached it again), or a tower or longhouse that just completed (the realm moved).
+    /// </remarks>
     private async Task<(Settlement Settled, SettleResult Result, List<ArmyEntity> GuestArmies)> SettleWithGuestsAsync(
-        SettlementEntity entity, DateTimeOffset now, double speedFactor, CancellationToken cancellationToken)
+        SettlementEntity entity, DateTimeOffset now, double speedFactor, CancellationToken cancellationToken,
+        bool forceRealm = false)
     {
         var guestArmies = await _dbContext.Armies
             .Include(a => a.Stacks)
@@ -1640,8 +1727,116 @@ public sealed class SettlementService(
         var guestStacks = AggregateStacks(
             guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
 
-        var result = entity.ToDomain().SettleTo(now, speedFactor, guestStacks, await TerrainAtAsync(entity.World!, cancellationToken).ConfigureAwait(false));
+        var terrainAt = await TerrainAtAsync(entity.World!, cancellationToken).ConfigureAwait(false);
+        var result = entity.ToDomain().SettleTo(now, speedFactor, guestStacks, terrainAt);
+
+        if (forceRealm
+            || result.Settlement.Buildings.Any(b => b.OutsideRealmSince is not null)
+            || result.Completed.Any(o => o.Type is BuildingType.Tower or BuildingType.Longhouse))
+        {
+            var realm = await PlayerRealms.ForSettlementAsync(_dbContext, entity, result.Settlement, cancellationToken).ConfigureAwait(false);
+            var giants = await LoadGiantIndexAsync(entity.WorldId, cancellationToken).ConfigureAwait(false);
+            var (applied, realmChanged) = result.Settlement.ApplyRealmState(realm, now, speedFactor, guestStacks, terrainAt, giants);
+            if (realmChanged)
+            {
+                result = result with { Settlement = applied, Changed = true };
+            }
+        }
+
         return (result.Settlement, result, guestArmies);
+    }
+
+    /// <summary>
+    /// Brings the realm state (<see cref="Settlement.ApplyRealmState"/>) of every settlement of the player that owns
+    /// <paramref name="settlementId"/> on its island up to the game clock now, and saves: the hook for a change that moved the
+    /// realm (a tower burnt or sieged, a building placed or razed, a level set, a founding), so buildings that just fell outside
+    /// stop working at once in every settlement of the player, not only the one that changed. Call it after the change is saved.
+    /// </summary>
+    /// <returns>How many settlements changed.</returns>
+    public async Task<int> ReconcileRealmAsync(Guid settlementId, CancellationToken cancellationToken = default)
+    {
+        var anchor = await _dbContext.Settlements.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == settlementId, cancellationToken).ConfigureAwait(false);
+        if (anchor is null)
+        {
+            return 0;
+        }
+
+        var ids = await PlayerRealms.GroupOf(_dbContext, anchor).Select(x => x.Id).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var changed = 0;
+        foreach (var id in ids)
+        {
+            if (await ApplyRealmStateAsync(id, cancellationToken).ConfigureAwait(false))
+            {
+                changed++;
+            }
+        }
+
+        return changed;
+    }
+
+    /// <summary>
+    /// The periodic sweep: for every world that accepts commands, applies the realm state to the settlements that have a step due
+    /// (<see cref="PlayerRealms.DueForRealmStepAsync"/>), so decay happens (and a reconnected building starts working) even when
+    /// nobody looks at the settlement. One world failing never stops the others.
+    /// </summary>
+    /// <returns>How many settlements changed.</returns>
+    public async Task<int> SweepRealmStateAsync(CancellationToken cancellationToken = default)
+    {
+        var worlds = await _dbContext.Worlds.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var wall = _timeProvider.GetUtcNow();
+        var changed = 0;
+
+        foreach (var world in worlds)
+        {
+            var clock = world.ToClock();
+            if (!clock.AllowsCommands)
+            {
+                continue;
+            }
+
+            try
+            {
+                var giants = await LoadGiantIndexAsync(world.Id, cancellationToken).ConfigureAwait(false);
+                var due = await PlayerRealms.DueForRealmStepAsync(
+                    _dbContext, world.Id, giants, clock.ToGameTime(wall), world.SpeedFactor, cancellationToken).ConfigureAwait(false);
+                foreach (var id in due)
+                {
+                    if (await ApplyRealmStateAsync(id, cancellationToken).ConfigureAwait(false))
+                    {
+                        changed++;
+                    }
+                }
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                _dbContext.ChangeTracker.Clear();
+                _logger.LogInformation(ex, "Realm sweep in world {WorldId} lost a write race; will retry next sweep.", world.Id);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _dbContext.ChangeTracker.Clear();
+                _logger.LogError(ex, "Realm sweep in world {WorldId} failed; will retry next sweep.", world.Id);
+            }
+        }
+
+        return changed;
+    }
+
+    /// <summary>Settles one settlement to the game clock now with its realm state applied, and saves when that changed anything.</summary>
+    private async Task<bool> ApplyRealmStateAsync(Guid settlementId, CancellationToken cancellationToken)
+    {
+        var entity = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (entity?.World is null)
+        {
+            return false;
+        }
+
+        var now = entity.World.ToClock().ToGameTime(_timeProvider.GetUtcNow());
+        var (_, result, guestArmies) = await SettleWithGuestsAsync(
+            entity, now, entity.World.SpeedFactor, cancellationToken, forceRealm: true).ConfigureAwait(false);
+        await PersistIfSettledAsync(entity, result, guestArmies, cancellationToken).ConfigureAwait(false);
+        return result.Changed;
     }
 
     private static List<UnitStack> AggregateStacks(IEnumerable<UnitStack> stacks) =>

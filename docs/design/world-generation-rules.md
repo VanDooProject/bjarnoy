@@ -15,6 +15,7 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
 | Bog and lakes, bog buildings, landing spots with bog in reach | Implemented (bog PR, bog buildings PR); see [`bog.md`](./bog.md) |
 | Wildlife camps: placement, levels, guard ranges, rendering (no gameplay) | Implemented (camps PR; bog camps in the bog PR) |
 | Island density: about twice the islands, same island sizes, no fused islands | Implemented (island-density PR) |
+| Mountain chains with passes, grove forests | Implemented (terrain chains PR) |
 
 ## World and islands
 
@@ -135,6 +136,15 @@ radius 4000):
 
 Every one of them keeps the 24-hex gap from green land and from each other.
 
+## Mountains and forests
+
+*Implemented (terrain chains PR): see [`river-generation.md`](./river-generation.md#mountain-ranges-and-forest-patches-terrain).*
+
+- Mountains form chains along the island with passes between the massifs, so land armies can always path through;
+  short ridges branch off the massifs.
+- Forest grows as round groves; mixed with a broader forest pattern so groves gather into larger woods in some areas
+  and leave open meadow in others.
+
 ## Rivers and streams
 
 *Implemented (streams PR) except the bog entry, which arrives with the bog. Mechanics:
@@ -150,8 +160,15 @@ Every one of them keeps the 24-hex gap from green land and from each other.
   streams join, or on a straight tile chosen at random within the second half of the stream's run before it
   must be river-width (sea mouth, bog, meeting a river). Never in the first half, and not always at the very
   last tile of a long run (that reads as artificial); the second half, rather than the last quarter, leaves
-  enough river-width tiles for the river buildings (Sawmill, Crop Mill, Hammerschmiede).
+  enough river-width tiles for the river buildings (Sawmill, Crop Mill, Hammer Forge). The one exception is a
+  run into a sea mouth with no Straight tile in its second half: it widens on the Straight tile nearest the mouth.
+- On green islands every river reaches the sea head-on: the sea mouth is river width with the sea straight ahead
+  of its single inflow, so it always draws as a delta.
 - Springs are chosen as far apart from each other as possible so there are few parallel river runs.
+- Rivers on green islands arc instead of running straight (stretches of 8-16 steps bending to alternating sides), and a
+  river that has left a mountain range rarely climbs into a second one (entering a mountain costs extra). Seeds 1-8:
+  median spring-to-mouth sinuosity 1.07 to 1.32, spring walks re-entering mountains 29% to 11%. See
+  [`river-generation.md`](./river-generation.md#meanders-and-mountain-entry-green-islands).
 
 The old collision rule's limitation (about 2% of river mouths inland, a third river dropped at a full
 confluence: "merge two, drop the third") is gone for green islands: merging is decided while tracing and only
@@ -176,7 +193,7 @@ into a tile whose Y the art can draw, so every path ends at a sea mouth or a con
   spring or a lake mouth; a creek meets a lake only at a mouth (inlet shore with the creek opposite its water
   edge; inflow = outflow tile); a fish weir only near a lake fisher hut; no walkways.
 - Buildings in scope: bog-ore works (iron), Clay Brickworks on bog (the grass version is dropped), Fishing Hut
-  on a bog-lake half shore, Hammerschmiede on a bog creek; landing spots need bog in reach. *Implemented (bog buildings PR)*:
+  on a bog-lake half shore, Hammer Forge on a bog creek; landing spots need bog in reach. *Implemented (bog buildings PR)*:
   see [`bog.md`](./bog.md), "Buildings" and "Decisions".
 - More bogs (owner decision): every island of 150 or more land tiles that has a landing-spot candidate gets at least one bog, so the
   landing-spot rule keeps spots on 140 of the 273 islands of seeds 1-8 at radius 1000 (94 without the guarantee; 177 have a candidate; the
@@ -188,11 +205,15 @@ into a tile whose Y the art can draw, so every path ends at a sea mouth or a con
   density PR: 273 of the 482 green islands of seeds 1-8 at radius 1000 have landing spots (338 have a candidate), after giving the
   spawned river an outlet in every drainage basin and growing the guarantee's lakes only onto shore-fit tiles (258 before; see
   `bog.md`, "On the denser terrain").
+- More bog, spread over the whole island (owner decision): after the normal bogs, while some land of an island is still more than 18
+  hexes from a bog, another bog is placed aimed at that land — on a river passing there if there is one, otherwise as the source of a
+  new river. *Implemented (terrain chains PR): see [`bog.md`](./bog.md), "Implemented generation".*
+- The 20% rule is lifted for these gap-fill bogs: about a third of all bogs may start a river. *Implemented: 39.5% of bogs start or end a river (seeds 1-8, radius 1000); accepted by the owner.*
 
 ## Wildlife camps
 
 *Implemented (bog camps too, on plain bog tiles): see [`wildlife-camps.md`](./wildlife-camps.md).* Spawn and render only for now (no gameplay yet). Every island of 60 or more land tiles gets camps (islets below that get none); a small island whose
-only start positions sit inside a strong camp's guard range is simply not a start island. Camps are placed before start positions; start positions keep away from strong camps,
+only start positions sit inside a strong camp's guard range is simply not a start island. Green islands of 60 or more tiles also get one to three whale roads on open sea (water camps with no guard range, see `wildlife-camps.md`, "Water camps"). Camps are placed before start positions; start positions keep away from strong camps,
 weak camps are fine nearby.
 
 - Strong (will block towers later): wolves, bears, boars, Fenrir.

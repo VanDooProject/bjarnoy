@@ -82,6 +82,7 @@ import type {
   SettlementViewResponse,
   SlotRuneRequest,
   SettlementSummary,
+  WorldWall,
   ShipmentResponse,
   SimulatorRequest,
   SimulatorResponse,
@@ -285,6 +286,10 @@ export const api = {
   // anonymous caller with no realm at all) just gets an empty list back.
   listSettlements: (worldId: string, ownerId?: string) =>
     request<SettlementSummary[]>(`/worlds/${worldId}/settlements`, { headers: ownerHeader(ownerId) }),
+  // Every standing palisade/gate hex of the rival settlements the caller has explored (their own walls excluded) — same fog rule
+  // and X-Owner-Id handling as `listSettlements`, so the live client can draw, hit-test and route around other players' walls.
+  listWalls: (worldId: string, ownerId?: string) =>
+    request<WorldWall[]>(`/worlds/${worldId}/walls`, { headers: ownerHeader(ownerId) }),
   // `ownerId` becomes the `X-Owner-Id` header the backend's ownership
   // filter reads for an anonymous (unclaimed) settlement — see
   // SettlementOwnershipEndpointFilter. Harmless to omit or send stale for a
@@ -411,7 +416,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  // Settlement expansion (issue #55): settler-crew founding convoys ride the
+  // Settlement expansion (issue #55): settler founding convoys ride the
   // same generic army-dispatch endpoints the troop system's backend exposes
   // (dispatchArmy/getSettlementArmies/getArmy/recallArmy below); only the
   // founding-specific retarget and renown reads are new here.
@@ -625,6 +630,15 @@ export const api = {
     request<ArmyResponse>(`/armies/${armyId}`, { headers: ownerHeader(ownerId) }),
   recallArmy: (armyId: string, ownerId?: string) =>
     request<ArmyResponse>(`/armies/${armyId}/recall`, { method: 'POST', headers: ownerHeader(ownerId) }),
+  // The host's recall of a guest army stationed at its settlement. Mirrors
+  // ArmyEndpoints.cs's `/settlements/{id}/guests/{armyId}/send-home`: 204, no
+  // body — the guest's full ArmyResponse is owner-only. `ownerId` proves the
+  // *host* settlement's ownership.
+  sendGuestHome: (settlementId: string, armyId: string, ownerId?: string) =>
+    request<void>(`/settlements/${settlementId}/guests/${armyId}/send-home`, {
+      method: 'POST',
+      headers: ownerHeader(ownerId),
+    }),
   // Issue #156 phase 1: sends an army already out in the field onward to a
   // new hex — 'move on' if it's standing, 'append goal' if it's still
   // travelling. Mirrors ArmyEndpoints.cs's `/armies/{id}/orders`.

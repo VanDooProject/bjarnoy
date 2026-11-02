@@ -5,6 +5,9 @@ import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 
+// DOM and game state only: water pixels cannot change these results (see `mapLayers` in fixtures.ts).
+test.use({ mapLayers: { water: false } });
+
 // Issue: mobile queue sidebar (slide-out drawer for build/training
 // progress). Runs at a phone-width viewport so useIsMobile's matchMedia
 // breakpoint actually swaps BuildQueuePanel/TrainingQueuePanel for

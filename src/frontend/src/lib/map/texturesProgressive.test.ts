@@ -15,7 +15,7 @@ vi.mock('pixi.js', () => {
   return { Assets: { load: vi.fn(async (url: string) => ({ url })), unload: vi.fn(async () => {}) }, Spritesheet, Texture: { EMPTY: {} } };
 });
 
-import { loadAnimAtlases, loadBuildingAtlases, mergeTileTextures, type TileTextures } from './textures';
+import { loadAnimAtlases, loadBuildingAtlases, mergeTileTextures, unloadAnimAtlases, type TileTextures } from './textures';
 
 function count(t: TileTextures): { top: number; anim: number } {
   let top = 0;
@@ -47,27 +47,22 @@ describe('progressive building art', () => {
     expect(counts.every((c, i) => i === 0 || c >= counts[i - 1])).toBe(true);
     expect(count(final).anim).toBeGreaterThanOrEqual(counts.at(-1)!);
     expect(count(final).anim).toBeGreaterThan(0);
+    // Only the clips change page by page: the static art they resolve against is classified once
+    // per load and shared by every partial and the full result, not rebuilt for each page.
+    const finalBase = Object.entries(final.base) as [keyof TileTextures['base'], unknown][];
+    expect(finalBase.length).toBeGreaterThan(0);
+    expect(partials.every((p) => finalBase.every(([key, value]) => p.base[key] === value))).toBe(true);
   });
 
   it('hands out every anim partial before the full result', async () => {
-    // Fresh module state, so this load really runs page by page (the tests
-    // above already cached buildings-anim). Each partial waits on the static
-    // atlases asynchronously; a partial landing after the full result would
-    // overwrite it with fewer clips, so loadAnimAtlases chains them - this
-    // guards that order.
-    vi.resetModules();
-    const { registerAtlasManifestsForTests } = await import('./atlasManifests');
-    const { readdirSync, readFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const dir = join(process.cwd(), 'vendor/bg_assets_hextile/atlas/');
-    const manifests: Parameters<typeof registerAtlasManifestsForTests>[0] = {};
-    for (const file of readdirSync(dir)) if (file.endsWith('.json')) manifests[file] = JSON.parse(readFileSync(join(dir, file), 'utf8'));
-    registerAtlasManifestsForTests(manifests);
-    const fresh = await import('./textures');
-    await fresh.loadBuildingAtlases();
-
+    // Each partial waits on the static atlases asynchronously; a partial
+    // landing after the full result would overwrite it with fewer clips, so
+    // loadAnimAtlases chains them - this guards that order. Unloading first
+    // (what turning animations off does) drops the cached buildings-anim load,
+    // so this one really runs page by page again.
+    unloadAnimAtlases();
     const events: string[] = [];
-    await fresh.loadAnimAtlases(() => events.push('partial')).then(() => events.push('final'));
+    await loadAnimAtlases(() => events.push('partial')).then(() => events.push('final'));
     await new Promise((r) => setTimeout(r, 50));
     expect(events.filter((e) => e === 'partial').length).toBeGreaterThan(0);
     expect(events.at(-1)).toBe('final');

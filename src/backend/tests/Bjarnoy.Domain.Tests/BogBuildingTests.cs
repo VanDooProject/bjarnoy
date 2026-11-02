@@ -103,6 +103,39 @@ public class BogBuildingTests
         Assert.Equal(allowed, definition.AllowsHex(Terrain.Bog, isCoastalWater: false, kind));
     }
 
+    [Theory]
+    [InlineData(BogTileKind.Bog, true)]
+    [InlineData(BogTileKind.Shore, false)]
+    [InlineData(BogTileKind.Mouth, false)]
+    [InlineData(BogTileKind.Creek, false)]
+    [InlineData(BogTileKind.CreekSpring, false)]
+    [InlineData(BogTileKind.Inlet, false)]
+    [InlineData(BogTileKind.Half, false)]
+    public void The_tower_stands_on_plain_bog_moss_and_on_no_other_bog_hex(BogTileKind kind, bool allowed)
+    {
+        for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(BuildingType.Tower); level++)
+        {
+            Assert.Equal(allowed, BuildingCatalogue.Get(BuildingType.Tower, level).AllowsHex(Terrain.Bog, false, kind));
+        }
+
+        var settlement = Rich(3);
+        Assert.Equal(allowed ? null : BuildRejection.TerrainNotAllowed, Try(settlement, BuildingType.Tower, Terrain.Bog, kind));
+    }
+
+    [Fact]
+    public void The_tower_stands_on_forest_but_not_on_a_lake_mountain_or_unknown_bog()
+    {
+        var definition = BuildingCatalogue.Get(BuildingType.Tower, 1);
+
+        Assert.True(definition.AllowsHex(Terrain.Forest, false, null));
+        Assert.True(definition.AllowsHex(Terrain.Grass, false, null));
+        Assert.True(definition.AllowsHex(Terrain.Sand, false, null));
+        Assert.False(definition.AllowsHex(Terrain.Mountain, false, null));
+        Assert.False(definition.AllowsHex(Terrain.Lake, false, BogTileKind.Lake));
+        Assert.False(definition.AllowsHex(Terrain.Bog, false, null), "an unknown bog kind is refused");
+        Assert.Null(Try(Rich(3), BuildingType.Tower, Terrain.Forest, null));
+    }
+
     [Fact]
     public void The_fishing_hut_keeps_its_coastal_behaviour_and_never_stands_on_a_lake_or_on_grass()
     {
@@ -161,8 +194,8 @@ public class BogBuildingTests
         var bogTypes = new HashSet<BuildingType>
         {
             BuildingType.ClayBrickworks, BuildingType.BogOreWorks, BuildingType.Hammerschmiede, BuildingType.FishingHut,
-            // The wall stands on plain moss too (and nowhere else on bog).
-            BuildingType.Palisade, BuildingType.PalisadeGate,
+            // The wall and the tower stand on plain moss too (and nowhere else on bog).
+            BuildingType.Palisade, BuildingType.PalisadeGate, BuildingType.Tower,
         };
 
         foreach (var type in BuildingCatalogue.AllTypes)
@@ -182,7 +215,7 @@ public class BogBuildingTests
     }
 
     [Fact]
-    public void The_bog_ore_works_is_the_iron_producer_unlocking_at_longhouse_6_with_no_feeder()
+    public void The_bog_ore_works_is_the_iron_producer_unlocking_at_longhouse_3_behind_a_level_3_clay_brickworks()
     {
         for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(BuildingType.BogOreWorks); level++)
         {
@@ -194,8 +227,8 @@ public class BogBuildingTests
             Assert.Equal(0, production.Food);
             Assert.Equal(BuildingCatalogue.BogOreWorksIronAtLevelOne * Math.Pow(1.20, level - 1), production.Iron, 6);
             Assert.Equal(0, definition.Cost.Iron);
-            Assert.Equal(6, definition.RequiredLonghouseLevel);
-            Assert.Empty(definition.Prerequisites);
+            Assert.Equal(3, definition.RequiredLonghouseLevel);
+            Assert.Equal(level == 1 ? [new BuildingPrerequisite(BuildingType.ClayBrickworks, 3)] : [], definition.Prerequisites);
         }
 
         Assert.Contains(BuildingType.BogOreWorks, BuildingCatalogue.StorageCappedProducers);
@@ -212,13 +245,21 @@ public class BogBuildingTests
     }
 
     [Fact]
-    public void The_bog_ore_works_is_refused_below_longhouse_6_and_placed_on_plain_bog_from_6()
+    public void The_bog_ore_works_is_refused_below_longhouse_3_and_placed_on_plain_bog_from_3()
     {
-        Assert.Equal(BuildRejection.LonghouseTooLow, Try(Rich(5), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Bog));
-        Assert.Null(Try(Rich(6), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Bog));
-        Assert.Equal(BuildRejection.TerrainNotAllowed, Try(Rich(6), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Creek));
-        Assert.Equal(BuildRejection.TerrainNotAllowed, Try(Rich(6), BuildingType.BogOreWorks, Terrain.Grass, null));
-        Assert.Equal(BuildRejection.TerrainNotAllowed, Try(Rich(6), BuildingType.BogOreWorks, Terrain.Lake, BogTileKind.Lake));
+        Assert.Equal(BuildRejection.LonghouseTooLow, Try(Rich(2, (BuildingType.ClayBrickworks, 3)), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Bog));
+        Assert.Null(Try(Rich(3, (BuildingType.ClayBrickworks, 3)), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Bog));
+        Assert.Equal(BuildRejection.TerrainNotAllowed, Try(Rich(3, (BuildingType.ClayBrickworks, 3)), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Creek));
+        Assert.Equal(BuildRejection.TerrainNotAllowed, Try(Rich(3, (BuildingType.ClayBrickworks, 3)), BuildingType.BogOreWorks, Terrain.Grass, null));
+        Assert.Equal(BuildRejection.TerrainNotAllowed, Try(Rich(3, (BuildingType.ClayBrickworks, 3)), BuildingType.BogOreWorks, Terrain.Lake, BogTileKind.Lake));
+    }
+
+    [Fact]
+    public void The_bog_ore_works_is_refused_until_a_clay_brickworks_of_level_3_stands()
+    {
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, Try(Rich(3), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Bog));
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, Try(Rich(3, (BuildingType.ClayBrickworks, 2)), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Bog));
+        Assert.Null(Try(Rich(3, (BuildingType.ClayBrickworks, 3)), BuildingType.BogOreWorks, Terrain.Bog, BogTileKind.Bog));
     }
 
     [Fact]

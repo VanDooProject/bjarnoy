@@ -57,7 +57,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
 
     await expect(settlement.questTray).toBeVisible();
     await expect(settlement.questTray).toContainText('Build 3 resource producers');
-    await expect(settlement.questTray.getByTestId('quest-progress')).toHaveText('0 of 6');
+    await expect(settlement.questTray.getByTestId('quest-progress')).toHaveText('0 of 8');
   });
 
   test('clicking an empty hex inside the realm places a building', async ({ page }) => {
@@ -77,12 +77,12 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // set up by SettlementView for exactly this) for that hex's exact
     // screen position — which is what SettlementPage.findHex does.
     //
-    // Grass specifically: it's the one terrain where every category's first
-    // building (Hut) has no longhouse-level gate at all, so a fresh level-1
-    // realm can always actually place it — sand/forest/mountain's own
-    // categories (Tower, Lumberjack, Quarry) are gated and would make this
-    // generic "does the click-to-build flow work" smoke test flaky on
-    // whichever terrain the scan happened to hit first.
+    // Grass specifically: it takes the Reindeer Herder, which has no
+    // longhouse-level gate at all, so a fresh level-1 realm can always
+    // actually place it — sand/forest/mountain's own options (Tower,
+    // Lumberjack, nothing at all on a mountain) are gated or empty and would
+    // make this generic "does the click-to-build flow work" smoke test flaky
+    // on whichever terrain the scan happened to hit first.
     const target = await settlement.findHex({ terrain: 'grass' });
 
     // The model, via the __demoWorld debug hook, is the deterministic
@@ -92,25 +92,15 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     const before = await settlement.countBuildings();
 
     // Issue #16: a hex click no longer opens BuildingModal directly — it
-    // opens a RingMenu of contextual actions; hovering its "Build" bubble
-    // drills into a category ring, and hovering a category bubble drills
-    // into that category's building-type ring (see SettlementView's
-    // onRingHover — only the root "build" action and a category's own
-    // bubbles advance the ring on hover; everything else, including the
-    // final building choice, needs a real click). Drilling via hover here
-    // (not the click-based path onRingSelect also supports) matches
-    // ring-menu.spec.ts's own drill-down coverage — the interaction path
-    // that suite already exercises and keeps green, rather than a second,
-    // untried one: a click-based version of this same test was flaky here,
-    // repeatedly racing the ring bubble getting detached and re-mounted
-    // mid-click on a loaded run, something hover-then-click rides out fine.
+    // opens a RingMenu of contextual actions. Navigation is click-only
+    // (clicking "Build" opens the categories, clicking a category opens its
+    // buildings; hover only previews a building's card), and the final
+    // building choice is a click on the bubble itself.
     await settlement.clickHex(target);
 
     await settlement.ring.openBuildCategories();
 
-    // Grass's first category (Housing) has exactly one building — Hut — so
-    // hovering the first category bubble and clicking the first building
-    // bubble always reaches it, without needing to name it explicitly.
+    // Grass's first category is Resource, which opens with the Reindeer Herder.
     //
     // The 2a ring caps itself at two lanes, so drilling *replaces* the root
     // actions with the categories rather than orbiting outside them —
@@ -120,7 +110,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
     await settlement.ring.openFirstCategory();
 
-    const buildingBubble = settlement.ring.childBubbles.first();
+    const buildingBubble = settlement.ring.child('Reindeer Herder').first();
     await expect(buildingBubble).toBeVisible();
     await buildingBubble.click();
 
@@ -166,13 +156,18 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // Regression guard: sand used to fall into the same flat "other" bucket
     // as forest/mountain and offer Farm/Lumberjack/Quarry — none of which
     // the backend's AllowedTerrain would ever accept on sand (Farm is
-    // Grass-only, Lumberjack Forest-only, Quarry Mountain-only). Sand only
+    // Grass-only, Lumberjack Forest-only, Quarry Mountain-only and now
+    // closed to new placement altogether). Sand only
     // carries Tower (SandOrGrass) — shrines are Grass-only now, so they no
     // longer appear here.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
 
-    const target = await settlement.findHex({ terrain: 'sand' });
+    // Sand only lies on the shore, and a start position keeps two hexes from the sea: a tower (unlocked at longhouse 3,
+    // BuildingCatalogue.cs UnlockLevels) pushes the realm onto the beach.
+    await settlement.setSettlementLevel(3);
+    const reach = await settlement.standTowerTowardCoast();
+    const target = await settlement.findHex({ terrain: 'sand', reach });
 
     await settlement.clickHex(target);
 

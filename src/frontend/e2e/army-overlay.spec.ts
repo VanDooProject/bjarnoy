@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
@@ -13,7 +14,11 @@ import { SettlementPage } from './pages';
  * SettlementView already exposes for exactly this kind of coordinate maths),
  * backed up by screenshot diffs proving pixels really changed. That accessor
  * reports what the real draw path produced — nothing in the renderer branches
- * on whether a test is reading it.
+ * on whether a test is reading it. It is updated when the overlay is rebuilt,
+ * which can happen outside a rendered tick (an atlas load's `rebuildAll`), so
+ * every screenshot goes through `shotAfterRender`: under a paced, software-
+ * rendered loop the next render can be a second away, and a shot taken before
+ * it still shows the previous frame's pixels.
  *
  * Army/dispatch state is seeded through the store (`__demoWorld`), the same
  * way settlement-interactions.spec.ts drives WorldModel directly: demo mode
@@ -37,8 +42,15 @@ type OverlayWindow = Window & {
   __settlementRenderer: () => {
     hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number };
     lastArmyOverlayFrame: () => OverlayFrame;
+    whenFrameRendered: () => Promise<void>;
   };
 };
+
+/** A screenshot of `clip` taken after the renderer has drawn a frame since this call — see the header comment. */
+async function shotAfterRender(page: Page, clip: { x: number; y: number; width: number; height: number }) {
+  await page.evaluate(() => (window as unknown as OverlayWindow).__settlementRenderer().whenFrameRendered());
+  return page.screenshot({ clip });
+}
 
 test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
   test('a plotted waypoint can be dragged onto another hex', async ({ page }) => {
@@ -87,7 +99,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
       width: 220,
       height: 220,
     };
-    const before = await page.screenshot({ clip });
+    const before = await shotAfterRender(page, clip);
 
     await page.mouse.move(box.x + geometry.firstScreen.x, box.y + geometry.firstScreen.y);
     await page.mouse.down();
@@ -118,7 +130,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
         return Math.hypot(f.waypoints[0].x - geometry.dropScreen.x, f.waypoints[0].y - geometry.dropScreen.y);
       }, { timeout: 5_000 })
       .toBeLessThan(1);
-    const after = await page.screenshot({ clip });
+    const after = await shotAfterRender(page, clip);
     expect(Buffer.compare(before, after)).not.toBe(0);
   });
 
@@ -175,7 +187,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
     const clip = { x: box.x + target.screen.x - 70, y: box.y + target.screen.y - 70, width: 140, height: 140 };
     // Nothing is marked while the draft is a plain Move with no target.
     expect((await frame()).targets).toEqual([]);
-    const unmarked = await page.screenshot({ clip });
+    const unmarked = await shotAfterRender(page, clip);
 
     await page.getByRole('button', { name: 'Attack', exact: true }).click();
     await page.evaluate(() => (window as unknown as OverlayWindow).__demoWorld().setDispatchTarget('rival-1'));
@@ -184,7 +196,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
     const marked = (await frame()).targets[0];
     expect(marked.kind).toBe('attack');
     expect(Math.hypot(marked.x - target.screen.x, marked.y - target.screen.y)).toBeLessThan(1);
-    const attackShot = await page.screenshot({ clip });
+    const attackShot = await shotAfterRender(page, clip);
     expect(Buffer.compare(unmarked, attackShot)).not.toBe(0);
 
     // Support gets its own, visibly different marker rather than reusing the
@@ -192,7 +204,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
     await page.getByRole('button', { name: 'Support', exact: true }).click();
     await page.evaluate(() => (window as unknown as OverlayWindow).__demoWorld().setDispatchTarget('rival-1'));
     await expect.poll(async () => (await frame()).targets[0]?.kind, { timeout: 5_000 }).toBe('support');
-    const supportShot = await page.screenshot({ clip });
+    const supportShot = await shotAfterRender(page, clip);
     expect(Buffer.compare(attackShot, supportShot)).not.toBe(0);
   });
 

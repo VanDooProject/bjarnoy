@@ -33,7 +33,7 @@ Territory follows Settlers II logic, on hexes.
 ## 3. Settlements
 
 - A player starts with one settlement, founded by choosing a plot on a starter island.
-- New settlements are founded by loading a **settler crew** on a longship, sailing it to an unclaimed coastal hex on any island, and landing. This is the Travian/Die Stämme pattern: expansion by colonisation, not by conquest alone.
+- New settlements are founded by loading **settlers** on a longship, sailing it to an unclaimed coastal hex on any island, and landing. This is the Travian/Die Stämme pattern: expansion by colonisation, not by conquest alone.
 - Each settlement has its own resource stores, build queue and garrison. Nothing is pooled; caravans move goods between settlements.
 - Settlements can be captured. Razing a settlement releases its hexes back to unclaimed.
 
@@ -72,7 +72,7 @@ Grain also feeds population; a settlement that runs its grain to zero stops grow
 
 - **Longhouse** — the anchor. Its level sets claim radius, build slots and settlement cap.
 - **Production** — lumber camp, quarry, farm, fishing dock, fisher hut (a third food producer on grass, alongside farm/pumpkin farm), sawmill (wood, on grass, boosted by a neighbouring forest same as the lumber camp — it refines what that building cuts). Placed on the matching terrain hex.
-- **Military** — the archery range trains the land army (spearmen through catapults) instead of the longhouse; the dockyard trains ships instead of the longhouse and, like the fishing hut, must stand on shallow (coastal) water. Neither carries a combat bonus of its own yet — that's a later pass. The barracks is buildable/leveling on grass or sand alongside them, but has no unit-training hook of its own yet (the archery range already owns the land roster's gate) — deferred until a garrison-capacity or second training-track mechanic exists to hang one off. Wall is placed on a border hex and only defends that approach, which is what makes the choice of *which* border hex interesting.
+- **Military** — the archery range trains the land army (spearmen through bowmen; catapults moved to the siege workshop) instead of the longhouse; the dockyard trains ships instead of the longhouse and, like the fishing hut, must stand on shallow (coastal) water. Neither carries a combat bonus of its own yet — that's a later pass. The barracks is buildable/leveling on grass or sand alongside them, but has no unit-training hook of its own yet (the archery range already owns the land roster's gate) — deferred until a garrison-capacity or second training-track mechanic exists to hang one off. Wall is placed on a border hex and only defends that approach, which is what makes the choice of *which* border hex interesting.
 - **Logistics** — warehouse, harbour, market. The great storehouse is a late-game storage tier gated behind both a level-10 longhouse *and* a level-10 storage house of the settlement's own — the first cross-building prerequisite in the tech tree, not just a longhouse-level gate.
 
 Buildings occupy a hex. There are more useful hexes than build slots, so expansion and demolition are both real decisions.
@@ -81,7 +81,7 @@ Buildings occupy a hex. There are more useful hexes than build slots, so expansi
 
 - Raids are sent hex-to-hex against a specific settlement; travel time is a function of distance across the sea.
 - Defenders see an inbound raid and its landing time, and can recall fleets, reinforce, or build a wall on the threatened approach.
-- Successful raids take resources; sieges take territory; only a settler crew can found on empty ground.
+- Successful raids take resources; sieges take territory; only settlers can found on empty ground.
 - Clans (alliances) share vision, coordinate landings and hold islands jointly.
 
 ## 9. Onboarding
@@ -100,7 +100,7 @@ The landing page is the game, one step earlier.
 - **Bjornstad** — the player's realm. Jarl: you. Lv 4. One of three settlements.
 - **Grimhold** — rival realm. Jarl: Ulf. Lv 6.
 - **Havnsted** — the abandoned village in 6b, jarl gone three days.
-- **Sea-Wolf** — longship carrying a settler crew, landfall 00:38:20.
+- **Sea-Wolf** — longship carrying settlers, landfall 00:38:20.
 - **Kettil Sea** — the world/sea the mockups are set in.
 - **Nordvik** — neighbouring holding referenced in 7c.
 - **fjordhold.game** — the product domain used in the browser chrome.

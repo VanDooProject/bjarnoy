@@ -122,7 +122,7 @@ public sealed class PlotReservationService(
             && !_store.IsBlockedByOtherOwner(worldId, candidate, ownerId, ReservationSpacing);
 
         bool IsStartPosition(Guid islandId, HexCoord candidate) =>
-            islands.Any(i => i.Id == islandId && i.StartPositions.Any(p => p.Q == candidate.Q && p.R == candidate.R));
+            islands.Any(i => i.Id == islandId && i.FoundableStartPositions().Any(p => p.Q == candidate.Q && p.R == candidate.R));
 
         (Guid IslandId, HexCoord Plot)? pin = null;
 
@@ -178,7 +178,7 @@ public sealed class PlotReservationService(
         // across the whole island — highlighted hexes the locked preview
         // never draws. Order by hex distance from `plot` instead, so the
         // `.Take` below keeps the ones actually inside that crop.
-        var alternatives = island.StartPositions
+        var alternatives = island.FoundableStartPositions()
             .Select(p => new HexCoord(p.Q, p.R))
             .Where(c => c != plot && IsValid(islandId, c))
             .OrderBy(c => c.DistanceTo(plot))
@@ -208,6 +208,13 @@ public sealed class PlotReservationService(
             PlotSuggestionRejection.None,
             new PlotSuggestion(islandId, plot, alternatives, reserved, reservedUntil));
     }
+
+    /// <summary>
+    /// The island of the plot currently pinned to <paramref name="ownerId"/> — their live reservation, else the last
+    /// plot offered — or null when there is none. Purely a read: it takes no reservation and refreshes nothing.
+    /// </summary>
+    public Guid? PinnedIslandId(Guid worldId, string ownerId) =>
+        _store.GetReservation(worldId, ownerId)?.IslandId ?? _store.GetLastSuggestion(worldId, ownerId)?.IslandId;
 
     public void Release(Guid worldId, string ownerId) => _store.Release(worldId, ownerId);
 
@@ -240,7 +247,7 @@ public sealed class PlotReservationService(
 
         foreach (var entry in ordered)
         {
-            foreach (var position in entry.Island.StartPositions)
+            foreach (var position in entry.Island.FoundableStartPositions())
             {
                 var candidate = new HexCoord(position.Q, position.R);
                 if (isValid(entry.Island.Id, candidate))
@@ -260,6 +267,9 @@ public sealed class PlotReservationService(
             .Where(s => s.WorldId == worldId)
             .Select(s => new
             {
+                s.Id,
+                s.UserId,
+                s.OwnerId,
                 s.IslandId,
                 s.CentreQ,
                 s.CentreR,
@@ -268,13 +278,17 @@ public sealed class PlotReservationService(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return rows
+        var settlementRows = rows
+            .Select(r => new PlayerRealms.Row(
+                r.Id, r.UserId, r.OwnerId, r.IslandId, new HexCoord(r.CentreQ, r.CentreR),
+                [.. r.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level))]))
+            .ToList();
+        var realms = PlayerRealms.Resolve(settlementRows);
+
+        return settlementRows
             .GroupBy(r => r.IslandId)
             .ToDictionary(
                 g => g.Key,
-                g => g.Select(r => new Founding.NeighbourSnapshot(
-                    new HexCoord(r.CentreQ, r.CentreR),
-                    r.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level)).ToList()))
-                    .ToList());
+                g => g.Select(r => new Founding.NeighbourSnapshot(r.Centre, r.Buildings, realms[r.Id].DiscsOf(r.Id))).ToList());
     }
 }

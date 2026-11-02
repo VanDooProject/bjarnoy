@@ -30,6 +30,8 @@
     "odinstatue": "Odin-Statue",
     "palisade": "Palisade",
     "palisadegate": "Palisaden-Tor",
+    "bridge": "Brücke",
+    "siegeworkshop": "Belagerungswerkstatt",
     "reindeerherder": "Rentierhirte"
   },
   "units": {
@@ -40,9 +42,10 @@
     "berserker": "Berserker",
     "provisioner": "Versorger",
     "catapult": "Katapult",
+    "ram": "Rammbock",
     "karve": "Karve",
     "longship": "Langschiff",
-    "settlercrew": "Siedlertrupp"
+    "settler": "Siedler"
   },
   "giants": {
     "giantmountain": "Riesenberg",
@@ -63,7 +66,8 @@
     "cranedance": "Kranichtanz",
     "harewarren": "Hasenbau",
     "deerglade": "Hirschlichtung",
-    "otterslide": "Otterrutsche"
+    "otterslide": "Otterrutsche",
+    "whaleroad": "Walweg"
   },
   "terrain": {
     "sea": "Offenes Wasser",
@@ -203,7 +207,17 @@
     "otterslide": {
       "young": "Otterjunges",
       "adult": "Otter",
-      "alpha": "Alter Otter"
+      "alpha": "Alter Bulle"
+    },
+    "whaleroad": {
+      "young": "Walkalb",
+      "adult": "Buckelwal",
+      "alpha": "Alter Bulle"
     }
+  },
+  "endgame": {
+    "utgardwall": "Utgardmauer",
+    "utgardgate": "Utgardtor",
+    "jotunwatchtower": "Jötunn-Wachturm"
   }
 }
