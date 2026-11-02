@@ -140,6 +140,7 @@
       "campOccupied": "Occupied by wild beasts",
       "maxLevel": "Max level",
       "noLandUnitsAtHome": "No land units at home",
+      "noShipsAtHome": "No ships at home",
       "siege": "Siege",
       "noRamAtHome": "Needs a battering ram at home"
     },

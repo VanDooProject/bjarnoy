@@ -18,7 +18,7 @@ import type { PalisadeWalls } from './palisadeMovement';
 import type { StandingBridges } from './bridgeMovement';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
-import { guardRange, isStrongCampFamily, placeCamps, StartPositionMargin, type CampStrength } from './campPlacement';
+import { campGuardRange, isStrongCampFamily, placeCamps, placeWhaleRoads, StartPositionMargin } from './campPlacement';
 import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
 import type { PalisadePiece } from './palisadeTiles';
 import { campHexBuildable } from './campRules';
@@ -621,7 +621,7 @@ export class WorldModel {
    */
   private isNearAnyStrongCamp(coord: AxialCoord): boolean {
     for (const camp of this.campByHex.values()) {
-      if (camp.strong && hexDistance(coord, camp) <= camp.guardRange + StartPositionMargin) return true;
+      if (camp.strong && camp.guardRange > 0 && hexDistance(coord, camp) <= camp.guardRange + StartPositionMargin) return true;
     }
     return false;
   }
@@ -2263,6 +2263,24 @@ export class WorldModel {
       })),
     );
 
+    // The water camps (whale roads) come after the land ones, from their own sea pass over the whole world's
+    // land (wasted islands included): green islands only, like the backend's `CampGenerator.GenerateWhaleRoads`.
+    if (!wasted) {
+      const whales = placeWhaleRoads(
+        islandTiles,
+        (c) => terrainAt(c.q, c.r, world) !== 'sea' || wastedTerrainAt(c.q, c.r, world) !== 'sea',
+        worldSeed,
+        islandIndex,
+      );
+      this.setCamps(
+        whales.map((p) => ({
+          family: p.family,
+          coord: p.coord,
+          level: p.level,
+          orientation: p.orientation ?? this.getTile(p.coord.q, p.coord.r).orientation ?? 'SE',
+        })),
+      );
+    }
     // Utgard's wall rings and the Jötun watchtowers (a wasted island with Utgard only), after giants and camps — the backend's
     // own order (`WorldGenerator.Generate`).
     if (wasted) {
@@ -2331,13 +2349,12 @@ export class WorldModel {
       if (tile.camp) continue;
       added = true;
       const strong = isStrongCampFamily(camp.family);
-      const strength: CampStrength = strong ? 'strong' : 'weak';
       tile.camp = {
         family: camp.family,
         level: camp.level,
         orientation: camp.orientation,
         strong,
-        guardRange: guardRange(camp.level, strength),
+        guardRange: campGuardRange(camp.family, camp.level),
       };
       this.campByHex.set(coordKey(camp.coord), { ...tile.camp, q: camp.coord.q, r: camp.coord.r });
     }

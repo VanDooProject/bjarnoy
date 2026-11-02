@@ -234,6 +234,7 @@ public sealed class ArmyService(
         // Army.PlanDispatch (targetCampCoord stays null); otherwise the route may end beside a camp whose own
         // hex is not walkable.
         HexCoord? targetCampCoord = null;
+        var targetCampIsWater = false;
         if (mission == ArmyMission.Hunt)
         {
             var camp = await _campService.FindCampAsync(settlement.WorldId, effectiveDestination, now, cancellationToken)
@@ -241,10 +242,13 @@ public sealed class ArmyService(
             if (camp is { } found)
             {
                 targetCampCoord = found.Camp.Coord;
+                targetCampIsWater = found.Camp.IsWater;
+                // A water camp (the whale road) is hunted by a fleet, whose route ends on the camp's own sea hex.
                 effectiveDestination = Army.HuntRouteDestination(
                     found.Camp.Coord,
                     Army.TrainingSite(settled.Centre, settled.Buildings, unitCounts),
-                    sampler.TerrainAt);
+                    sampler.TerrainAt,
+                    isFleet: found.Camp.IsWater);
             }
         }
 
@@ -294,7 +298,7 @@ public sealed class ArmyService(
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimDiscs,
             isHexFoundable, renownAndSlotAllowed, settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide,
-            dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord);
+            dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater);
 
         if (!decision.Accepted)
         {
@@ -1102,11 +1106,12 @@ public sealed class ArmyService(
         var effectiveLevel = state.EffectiveLevel(camp);
 
         var attackerEntity = await LoadSettlementAsync(armyEntity.SettlementId, cancellationToken).ConfigureAwait(false);
-        var landAttackBonusPercent = attackerEntity?.ToDomain().AttackBonusPercent(UnitClass.Infantry) ?? 0;
+        // Fleets hunting a water camp fight with the ship attack bonus, land armies with the land one.
+        var attackBonusPercent = attackerEntity?.ToDomain().AttackBonusPercent(domain.IsFleet ? UnitClass.Ship : UnitClass.Infantry) ?? 0;
 
         var seed = Random.Shared.Next();
         var plan = CampBattleResolver.Hunt(
-            domain.Stacks, garrison, camp, effectiveLevel, seed, landAttackBonusPercent, state.Leftover);
+            domain.Stacks, garrison, camp, effectiveLevel, seed, attackBonusPercent, state.Leftover);
 
         // An already empty camp is a pickup, not a clear: clears, calm and snapshot stay as they were.
         var nextState = garrison.IsEmpty

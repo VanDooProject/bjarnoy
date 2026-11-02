@@ -140,6 +140,7 @@
       "campOccupied": "Von wilden Tieren belegt",
       "maxLevel": "Höchste Stufe",
       "noLandUnitsAtHome": "Keine Landeinheiten zu Hause",
+      "noShipsAtHome": "Keine Schiffe zu Hause",
       "siege": "Belagern",
       "noRamAtHome": "Braucht einen Rammbock zu Hause"
     },
