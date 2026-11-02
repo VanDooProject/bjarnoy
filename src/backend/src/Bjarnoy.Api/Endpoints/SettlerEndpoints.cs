@@ -3,6 +3,7 @@ using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -64,18 +65,21 @@ public static class SettlerEndpoints
     private static async Task<Ok<IReadOnlyList<SettlementSummary>>> ListOwnSettlements(
         Guid worldId,
         SettlementService settlements,
+        GameDbContext db,
         ClaimsPrincipal principal,
         CancellationToken cancellationToken)
     {
         var userId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
         var entities = await settlements.GetForWorldAsync(worldId, cancellationToken);
+        var labels = await LinkedRealmNames.ForAsync(db, worldId, entities, cancellationToken);
 
         IReadOnlyList<SettlementSummary> response =
         [
             .. entities
-                .Where(s => s.UserId == userId)
-                .Select(s => SettlementSummary.From(s, mine: true)),
+                // One entry per linked realm: the switcher lists the oldest member only.
+                .Where(s => s.UserId == userId && labels[s.Id].RealmId == s.Id)
+                .Select(s => SettlementSummary.From(s, mine: true, labels[s.Id])),
         ];
 
         return TypedResults.Ok(response);

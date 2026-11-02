@@ -589,6 +589,18 @@ public sealed class SettlementService(
         Guid settlementId,
         CancellationToken cancellationToken = default)
     {
+        var session = await GetGroupAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        return session is null ? null : (session.Anchor, session.Clock);
+    }
+
+    /// <summary>
+    /// <see cref="GetAsync"/> for a caller that builds the linked realm's owner view: the settled group session itself
+    /// (written back when something was due), so the response needs no second load.
+    /// </summary>
+    public async Task<LinkedGroupSession?> GetGroupAsync(
+        Guid settlementId,
+        CancellationToken cancellationToken = default)
+    {
         var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
         if (session is null)
         {
@@ -604,7 +616,7 @@ public sealed class SettlementService(
                 settlementId, session.ChangedMembers.Count);
         }
 
-        return (session.Anchor, session.Clock);
+        return session;
     }
 
     /// <summary>Admin search: settlements by world and/or owner name, paged.</summary>
