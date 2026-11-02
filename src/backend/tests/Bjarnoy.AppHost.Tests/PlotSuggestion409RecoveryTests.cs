@@ -107,7 +107,7 @@ public class PlotSuggestion409RecoveryTests(AppHostFixture fixture)
         // the real settlement/tile data `restoreLiveSettlement` fetched.
         var canvas = page.Locator("canvas");
         await canvas.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 60_000 });
-        var trainUnitsBubble = page.GetByRole(AriaRole.Button, new() { Name = "Train units" });
+        var detailsBubble = page.GetByRole(AriaRole.Button, new() { Name = "Details" });
         var ringOpened = false;
         for (var attempt = 0; attempt < 10 && !ringOpened; attempt++)
         {
@@ -116,7 +116,7 @@ public class PlotSuggestion409RecoveryTests(AppHostFixture fixture)
             await page.Mouse.ClickAsync(box.X + box.Width / 2, box.Y + box.Height / 2);
             try
             {
-                await Assertions.Expect(trainUnitsBubble).ToBeVisibleAsync(new() { Timeout = 2_000 });
+                await Assertions.Expect(detailsBubble).ToBeVisibleAsync(new() { Timeout = 2_000 });
                 ringOpened = true;
             }
             catch (PlaywrightException)
