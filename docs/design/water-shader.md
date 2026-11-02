@@ -1029,7 +1029,8 @@ dominant: `b > r + 15 && b > g + 5`, which leaves out the tile prism's side face
 repeats it within `DRY_PIXEL_EPS` (`lakeWetMaskHalf`). Measured over the vendored art that is exactly the lake water: shore 4235 of 4238
 pixels, half 8334 of 8354, inlet all, and 2196 of 4707 on the mouth, whose brighter creek water is excluded on purpose (the effect is for
 lakes, not creeks). The 0/1 map is eroded by one source pixel (the bank outline stays clear; `dryMaskHalf` grows instead) and box-downsampled
-to half resolution. The `virtual:water-dry-masks` module bakes it for every `boglake*` frame, always (the family name decides, not a match
+to half resolution. The frame's own top layer (`boglake*` without `_base`: lily pads, reed islands, reeds, which the game draws over the
+water) is cut out too, grown by one source pixel, so nothing on the lake is placed under them. The `virtual:water-dry-masks` module bakes it for every `boglake*` frame, always (the family name decides, not a match
 ratio), into a second atlas, `lake`; both atlases go through one packing and PNG encoding function.
 
 At runtime `WaterDryLayer('lake')` (the same class as the sea's dry layer, only its atlas differs) draws those masks, placed like the tile
@@ -1062,11 +1063,12 @@ checks.
 **Blops.** Independent of the wind (not gated by the gust band): micro curls that appear at random spots on the lake and fade again.
 Each blop is one thin crescent ")" drawn by `curlShape`, the same mark as the micro curls foam style, and every blop faces the same way.
 Ring radius 9 world units (squashed in y like the ground, about 30 units tall), line about 1 unit, near-white, alpha up to 0.85; it fades
-in over the first 15 % of its life and out over the last 45 %, life 2.0-2.6 s. The shader runs a jittered grid of cells `0.46 * TILE_W`
-(about 77 world units) square; each cell has its own cycle (period 2.8-3.6 s, random phase) and, per cycle, a fresh random spot (hashed
-from the cycle index). A spot is checked against `uLakeMask` (the centre and four points just past the curl's reach must read above 0.9)
-and skipped otherwise, so a curl never touches the bank; the cells are smaller than a hex to make up for those near the bank, and the demo
-lake (about 10 hexes) shows 7-10 curls at a time, about one per hex. Bigger lakes show more. `bogLakeBlopDensity` is the chance (0..1) a
+in over the first 15 % of its life and out over the last 45 %, life 2.0-2.6 s. The shader runs a jittered grid of cells `0.4 * TILE_W`
+(about 67 world units) square; each cell has its own cycle (period 2.8-3.6 s, random phase) and, per cycle, a fresh random spot (hashed
+from the cycle index). A spot is checked against `uLakeMask` (the centre and four points at 75 % of the curl's reach must read above 0.9) and
+skipped otherwise, so a curl neither touches the bank nor sits half under a reed island or lily pad (the lake mask has those cut out, see
+below); the cells are smaller than a hex to make up for the rejected spots, and the demo lake (about 10 hexes) shows 7-9 curls at a time,
+about one per hex. Bigger lakes show more. `bogLakeBlopDensity` is the chance (0..1) a
 cycle shows its curl. Flag `bogLakeBlops`, tuning `bogLakeBlopsStrength`, `bogLakeBlopDensity`, `bogLakeBlopSize` (all 1).
 
 ### 4.4 Uniforms

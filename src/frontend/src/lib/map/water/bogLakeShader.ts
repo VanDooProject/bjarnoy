@@ -186,7 +186,7 @@ float maskAt(vec2 w, vec2 off) {
 float blops(vec2 w, float t) {
   // Cells smaller than a hex (TILE_W 168 -> ~77 world units square): spots near the bank fail the water check, so this lands at about one
   // curl per hex of lake on average.
-  float cell = uTileW * 0.46;
+  float cell = uTileW * 0.4;
   vec2 id = floor(w / cell);
   float h = hash21(id + 3.3);
   float period = 2.8 + 0.8 * h;
@@ -205,8 +205,11 @@ float blops(vec2 w, float t) {
   vec2 p = w - centre;
   if (dot(p, p) > reach * reach) return 0.0;
   if (maskAt(centre, vec2(0.0)) < 0.9) return 0.0;
-  if (maskAt(centre, vec2(reach2.x, 0.0)) < 0.9 || maskAt(centre, vec2(-reach2.x, 0.0)) < 0.9) return 0.0;
-  if (maskAt(centre, vec2(0.0, reach2.y)) < 0.9 || maskAt(centre, vec2(0.0, -reach2.y)) < 0.9) return 0.0;
+  // The water around it, a little inside the curl's reach: the lake mask has the banks and the art on the water (lily pads, reed
+  // islands) cut out, so a curl neither touches a bank nor sits half under an island.
+  vec2 probe = reach2 * 0.75;
+  if (maskAt(centre, vec2(probe.x, 0.0)) < 0.9 || maskAt(centre, vec2(-probe.x, 0.0)) < 0.9) return 0.0;
+  if (maskAt(centre, vec2(0.0, probe.y)) < 0.9 || maskAt(centre, vec2(0.0, -probe.y)) < 0.9) return 0.0;
   float age = local / lifeSec;
   float life = smoothstep(0.0, 0.15, age) * (1.0 - smoothstep(0.55, 1.0, age));
   return curlShape(p, rad, 0.6, 1.5) * life * 0.85;
