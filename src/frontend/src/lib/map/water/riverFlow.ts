@@ -83,6 +83,21 @@ function distToSegment(px: number, py: number, a: Point, b: Point): number {
   return Math.hypot(px - (a.x + t * dx), py - (a.y + t * dy));
 }
 
+/** Unit normal of polygon edge `edge`, pointing out of the face. */
+function outwardNormal(polygon: readonly Point[], edge: number): Point {
+  const a = polygon[edge]!;
+  const b = polygon[(edge + 1) % polygon.length]!;
+  const c = polygon.reduce((s, p) => ({ x: s.x + p.x / polygon.length, y: s.y + p.y / polygon.length }), { x: 0, y: 0 });
+  let nx = b.y - a.y;
+  let ny = a.x - b.x;
+  if (nx * ((a.x + b.x) / 2 - c.x) + ny * ((a.y + b.y) / 2 - c.y) < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  const len = Math.hypot(nx, ny);
+  return { x: nx / len, y: ny / len };
+}
+
 /** Min-heap of (cost, index) pairs, for Dijkstra. */
 class Heap {
   private costs: number[] = [];
@@ -277,24 +292,28 @@ export function riverGeodesicDistance(input: RiverFlowInput, edge: number): Floa
  * any link that touches a dry texel `1 / NON_WATER_COST`, so the banks are (nearly) no-flux walls and a bridge deck still
  * conducts. Texels outside the padded face are not part of the domain. Solved by red-black SOR.
  */
-export function riverPotential(input: RiverFlowInput): { phi: Float64Array; sweeps: number } {
+export function riverPotential(input: RiverFlowInput): { phi: Float64Array; sweeps: number; seedEdge: Int8Array } {
   const { mask, cw, ch, inEdges, outEdge } = input;
   const { padded, passable } = faceMasks(input);
   const n = cw * ch;
   const isWater = (p: number) => passable[p] === 1 && mask[p]! >= WATER_THRESHOLD;
   const fixed = new Uint8Array(n);
   const phi = new Float64Array(n);
+  // Which edge's seed band a texel is in (-1: none).
+  const seedEdge = new Int8Array(n).fill(-1);
   const hasIn = inEdges.some((e) => e !== outEdge);
   for (const e of inEdges) {
     if (e === outEdge) continue;
     for (const p of edgeSeeds(input, padded, e)) {
       fixed[p] = 1;
       phi[p] = 1;
+      seedEdge[p] = e;
     }
   }
   for (const p of edgeSeeds(input, padded, outEdge)) {
     fixed[p] = 1;
     phi[p] = 0;
+    seedEdge[p] = outEdge;
   }
   if (hasIn) for (let p = 0; p < n; p++) if (!fixed[p]) phi[p] = 0.5;
 
@@ -339,7 +358,7 @@ export function riverPotential(input: RiverFlowInput): { phi: Float64Array; swee
     sweeps++;
     if (maxUpdate < SOR_TOLERANCE) break;
   }
-  return { phi, sweeps };
+  return { phi, sweeps, seedEdge };
 }
 
 /**
@@ -401,16 +420,30 @@ function smoothstep(e0: number, e1: number, x: number): number {
  * (`FACE_PAD_TEXELS`), all four 0 elsewhere.
  */
 export function computeRiverFlow(input: RiverFlowInput): Uint8Array {
-  const { mask, cw, ch, fadeEdge } = input;
+  const { mask, cw, ch, outEdge, fadeEdge } = input;
   const { inside, passable, cover } = faceMasks(input);
   const isWater = (x: number, y: number) => x >= 0 && x < cw && y >= 0 && y < ch && mask[y * cw + x]! >= WATER_THRESHOLD && passable[y * cw + x] === 1;
   const bank = distanceToBank(input, passable);
-  const { phi } = riverPotential(input);
+  const { phi, seedEdge } = riverPotential(input);
 
   // Negative gradient of the potential over water neighbours: central differences, one-sided where only one side is water.
   const vx = new Float32Array(cw * ch);
   const vy = new Float32Array(cw * ch);
   const has = new Uint8Array(cw * ch);
+  const flowEdges = [...input.inEdges.filter((e) => e !== outEdge), outEdge];
+  const normals = input.polygon.map((_, e) => outwardNormal(input.polygon, e));
+  const nearestEdge = (px: number, py: number) => {
+    let best = -1;
+    let bestD = Infinity;
+    for (const e of flowEdges) {
+      const d = distToSegment(px, py, input.polygon[e]!, input.polygon[(e + 1) % input.polygon.length]!);
+      if (d < bestD) {
+        bestD = d;
+        best = e;
+      }
+    }
+    return best;
+  };
   const axis = (lo: boolean, hi: boolean, here: number, pLo: number, pHi: number) => (lo && hi ? (pHi - pLo) / 2 : hi ? pHi - here : lo ? here - pLo : 0);
   for (let y = 0; y < ch; y++) {
     for (let x = 0; x < cw; x++) {
@@ -423,14 +456,26 @@ export function computeRiverFlow(input: RiverFlowInput): Uint8Array {
       const d = isWater(x, y + 1);
       const gx = axis(l, r, here, l ? phi[p - 1]! : 0, r ? phi[p + 1]! : 0);
       const gy = axis(u, d, here, u ? phi[p - cw]! : 0, d ? phi[p + cw]! : 0);
+      // Inside a seed band the potential is constant, and the rim past the face is a dead end beyond it, flat up to solver
+      // noise: neither has a gradient of its own. Both take the edge's crossing direction, which is what the potential
+      // tends to there anyway, and the neighbouring hex sets the same direction on the same edge, so the seam matches
+      // exactly. (Filled from their neighbours instead, the band's ends against a bank took the bank's direction and left
+      // off-colour spots along every seam.)
+      const edge = seedEdge[p]! >= 0 ? seedEdge[p]! : inside[p] ? -1 : nearestEdge(x + 0.5, y + 0.5);
+      if (edge >= 0) {
+        const n = normals[edge]!;
+        const sign = edge === outEdge ? 1 : -1;
+        vx[p] = n.x * sign;
+        vy[p] = n.y * sign;
+        has[p] = 1;
+        continue;
+      }
       vx[p] = -gx;
       vy[p] = -gy;
-      // Inside a seed band the potential is constant: no direction yet, filled from the band's inner side below. So is the
-      // rim past the face: beyond the seed band it is a dead end whose potential is flat up to solver noise.
-      has[p] = inside[p] && Math.hypot(gx, gy) > 1e-9 ? 1 : 0;
+      has[p] = Math.hypot(gx, gy) > 1e-9 ? 1 : 0;
     }
   }
-  // Fill the texels without a direction (the seed bands, the rim past the face, exact stagnation points) from their nearest water neighbours that
+  // Fill the texels without a direction (exact stagnation points) from their nearest water neighbours that
   // have one, ring by ring, so the flow keeps crossing the edge perpendicular to it.
   for (let pass = 0; pass < 8; pass++) {
     const filled: number[] = [];

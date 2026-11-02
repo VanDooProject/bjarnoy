@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeRiverFlow, riverGeodesicDistance, riverPotential, SEED_REACH, topFacePolygonTexels, WATER_THRESHOLD, type RiverFlowInput } from './riverFlow';
+import { topFaceEdgeIndex } from '../riverPath';
 import { riverFrameInput, vendoredArt, type RiverFrame } from './riverArtFixture';
 
 const CW = 100;
@@ -223,6 +224,35 @@ describe.skipIf(!vendoredArt)('computeRiverFlow on the vendored art', () => {
     }
     return found;
   };
+
+  it('crosses each in and out edge along its normal over the whole crossing, bank ends included', async () => {
+    // These two frames meet at a seam where the band along the edge used to copy the bank's direction at its ends:
+    // off-colour spots along the seam. Both sides of a seam use the edge normal, so they match exactly.
+    for (const [name, outDir, inDirs] of [
+      ['rivertile_bend120_meander_SE_base', 'W', ['SE']],
+      ['rivertile_y_narrow_SE_base', 'W', ['E', 'SE']],
+    ] as const) {
+      const f = await riverFrameInput(name);
+      const outEdge = topFaceEdgeIndex(outDir);
+      const inEdges = inDirs.map(topFaceEdgeIndex);
+      const flow = computeRiverFlow({ ...f, inEdges, outEdge });
+      for (const e of [outEdge, ...inEdges]) {
+        const n = outward(f, e);
+        const want = e === outEdge ? n : { x: -n.x, y: -n.y };
+        let checked = 0;
+        for (let y = 0; y < f.ch; y++) {
+          for (let x = 0; x < f.cw; x++) {
+            if (distToEdge(f, e, x + 0.5, y + 0.5) > 1.5) continue;
+            const d = dirAt(flow, x, y, f.cw);
+            if (d.a === 0) continue;
+            checked++;
+            expect(degrees(d, want), `${name} edge ${e} at ${x},${y}`).toBeLessThan(5);
+          }
+        }
+        expect(checked, `${name} edge ${e}`).toBeGreaterThan(5);
+      }
+    }
+  }, 120_000);
 
   it('runs a straight river along its axis and crosses the in and out edge perpendicular to them, both ways round', async () => {
     const f = await riverFrameInput('rivertile_E_base');

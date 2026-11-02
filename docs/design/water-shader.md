@@ -1008,7 +1008,10 @@ the frame's painted water (`riverFlow.ts`), so meanders, the 60-degree loop, isl
    source on its water instead (`laplacian = -1`) and 0 at the out edge. Solved by red-black SOR (omega 1.9, stop when no texel
    moves by more than 1e-5), a few ms per frame; cells are cached.
 4. The direction is `-grad` of the potential over water neighbours (central differences, one-sided at the bank), normalised. Inside
-   a seed band the potential is constant, so those texels take the direction of their nearest texels that have one.
+   a seed band the potential is constant, and the rim past the face is a dead end beyond it; both take the edge's crossing
+   direction (its normal: out of the face at the out edge, into it at an in edge). The neighbouring hex sets the same normal on
+   the same edge, so the two match exactly at the seam. Filling them from their neighbours instead (an earlier version) let the
+   ends of the band against a bank take the bank's direction, which showed as off-colour spots along the seams.
 
 Why a potential and not a geodesic distance (the first version): a distance field points sideways into the channel at the banks
 and along the in edge, so the direction jumped at every hex seam, and it has a cut locus: upstream of an island the two
