@@ -6,6 +6,8 @@ using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
 
 namespace Bjarnoy.Api.Contracts;
 
@@ -202,6 +204,10 @@ public sealed record FeastOfferResponse(
 /// <param name="Reward">Wood, stone and food paid on claim (clamped to storage).</param>
 public sealed record QuestResponse(string Id, bool Completed, bool Claimed, ResourceLine Reward);
 
+/// <param name="Realm">
+/// The owner's read only: every settlement of the realm this settlement belongs to (itself first), each with its
+/// connected claim discs. Lists only the caller's own settlements, never another player's.
+/// </param>
 public sealed record SettlementResponse(
     Guid Id,
     Guid WorldId,
@@ -222,12 +228,28 @@ public sealed record SettlementResponse(
     FeastResponse? Feast,
     FeastOfferResponse? NextFeast,
     IReadOnlyList<QuestResponse> Quests,
-    WorldClockResponse World)
+    WorldClockResponse World,
+    IReadOnlyList<RealmMemberResponse> Realm)
 {
+    /// <summary>
+    /// The owner's read: resolves <paramref name="entity"/>'s realm (all of the same player's settlements on the
+    /// island, <see cref="PlayerRealms"/>) and builds the response. Every owner-facing settlement response goes through here.
+    /// </summary>
+    public static async Task<SettlementResponse> ForOwnerAsync(
+        GameDbContext db, SettlementEntity entity, GameClock clock, DateTimeOffset gameNow, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(entity);
+
+        var realm = await PlayerRealms.ForSettlementAsync(db, entity, entity.ToDomain(), ct).ConfigureAwait(false);
+        return From(entity, clock, gameNow, realm);
+    }
+
     public static SettlementResponse From(
-        SettlementEntity entity, GameClock clock, DateTimeOffset gameNow)
+        SettlementEntity entity, GameClock clock, DateTimeOffset gameNow, ConnectedRealm realm)
     {
         ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(realm);
 
         var domain = entity.ToDomain();
         var centre = new HexCoord(entity.CentreQ, entity.CentreR);
@@ -312,9 +334,19 @@ public sealed record SettlementResponse(
                 : null,
             [.. Bjarnoy.Domain.Settlers.Quests.All.Select(q => new QuestResponse(
                 q.Id, q.IsCompleted(domain), domain.HasClaimed(q), ResourceLine.From(q.Reward)))],
-            WorldClockResponse.From(clock, gameNow));
+            WorldClockResponse.From(clock, gameNow),
+            [.. realm.SettlementIds
+                .OrderBy(id => id == entity.Id ? 0 : 1)
+                .Select(id => new RealmMemberResponse(
+                    id, [.. realm.DiscsOf(id).Select(d => new ClaimDiscResponse(d.Centre.Q, d.Centre.R, d.Radius))]))]);
     }
 }
+
+/// <summary>One connected claim disc: a longhouse's or a connected tower's centre and claim radius.</summary>
+public sealed record ClaimDiscResponse(int Q, int R, int Radius);
+
+/// <summary>One settlement of the owner's realm and the connected claim discs it contributes (longhouse disc first).</summary>
+public sealed record RealmMemberResponse(Guid SettlementId, IReadOnlyList<ClaimDiscResponse> Discs);
 
 /// <param name="Running">Whether game time is advancing.</param>
 /// <param name="AcceptsCommands">Whether new actions are being taken.</param>
@@ -392,8 +424,20 @@ public sealed record BuildingDefinitionResponse(
 }
 
 /// <summary>A settlement as it appears on the world map: enough to draw a marker.</summary>
+/// <param name="Mine">Whether the settlement belongs to the caller (never the owner or user id itself).</param>
 public sealed record SettlementSummary(
-    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId);
+    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine)
+{
+    public static SettlementSummary From(SettlementEntity s, bool mine)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+
+        return new SettlementSummary(
+            s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
+            s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
+            s.IslandId, mine);
+    }
+}
 
 /// <summary>
 /// <c>GET /settlements/{id}/view</c>'s fog-gated read: what a rival's

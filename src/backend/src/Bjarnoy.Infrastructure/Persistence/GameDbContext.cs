@@ -146,6 +146,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .HasConversion(new HexListConverter())
                 .Metadata.SetValueComparer(HexListConverter.Comparer);
 
+            island.Property(i => i.FogChunks)
+                .HasConversion(new FogChunkListConverter())
+                .Metadata.SetValueComparer(FogChunkListConverter.Comparer);
+
             island.Property(i => i.RiverTiles)
                 .HasConversion(new RiverTileListConverter())
                 .Metadata.SetValueComparer(RiverTileListConverter.Comparer);

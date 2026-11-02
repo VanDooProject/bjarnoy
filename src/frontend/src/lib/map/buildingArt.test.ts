@@ -92,6 +92,10 @@ describe('buildingLayersForType', () => {
     expect(buildingLayersForType('magictower', 1)).toBeUndefined();
   });
 
+  it('resolves the Siege Workshop at every level, on the grass base', () => {
+    for (const level of [1, 2, 3, 4, 5]) expect(buildingLayersForType('siegeworkshop', level)?.top).toBeDefined();
+  });
+
   it('resolves FishingHut through the shared fisherhut family, not the old single-level art', () => {
     expect(buildingLayersForType('fishinghut', 1)?.top).toBeDefined();
   });

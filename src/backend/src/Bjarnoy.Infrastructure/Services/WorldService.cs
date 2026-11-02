@@ -427,6 +427,7 @@ public sealed class WorldService(
         CentreR = island.Centre.R,
         TileCount = island.TileCount,
         StartPositions = [.. island.StartPositions.Select(p => new HexPoint(p.Q, p.R))],
+        FogChunks = FogChunkLayout.ChunksOf(island.Tiles),
         RiverTiles = [.. island.RiverTiles.Select(ToRiverTileRecord)],
         BogTiles = [.. island.BogTiles.Select(ToBogTileRecord)],
         Giants = [.. island.Giants.Select(ToGiantRecord)],
@@ -563,6 +564,10 @@ public sealed class WorldService(
             .Where(s => worldId == null || s.WorldId == worldId)
             .Select(s => new
             {
+                s.Id,
+                s.UserId,
+                s.OwnerId,
+                s.WorldId,
                 s.IslandId,
                 s.CentreQ,
                 s.CentreR,
@@ -571,14 +576,18 @@ public sealed class WorldService(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var neighboursByIsland = settlements
+        var settlementRows = settlements
+            .Select(s => new PlayerRealms.Row(
+                s.Id, s.UserId, s.OwnerId, s.IslandId, new HexCoord(s.CentreQ, s.CentreR),
+                [.. s.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level))]))
+            .ToList();
+        var realms = PlayerRealms.Resolve(settlementRows);
+
+        var neighboursByIsland = settlementRows
             .GroupBy(s => s.IslandId)
             .ToDictionary(
                 g => g.Key,
-                g => g.Select(s => new Founding.NeighbourSnapshot(
-                    new HexCoord(s.CentreQ, s.CentreR),
-                    s.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level)).ToList()))
-                    .ToList());
+                g => g.Select(s => new Founding.NeighbourSnapshot(s.Centre, s.Buildings, realms[s.Id].DiscsOf(s.Id))).ToList());
 
         return islands
             .GroupBy(i => i.WorldId)
@@ -689,7 +698,7 @@ public sealed class WorldService(
     private static int SpacingReach(Founding.NeighbourSnapshot snapshot)
     {
         var reach = SettlementService.MinimumSpacing - 1;
-        foreach (var (centre, radius) in Settlement.ClaimDiscsFor(snapshot.Centre, snapshot.Buildings))
+        foreach (var (centre, radius) in snapshot.ClaimDiscs)
         {
             reach = Math.Max(reach, snapshot.Centre.DistanceTo(centre) + radius + SettlementService.FoundingSafetyMargin);
         }

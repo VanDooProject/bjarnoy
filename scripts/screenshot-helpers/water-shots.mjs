@@ -100,20 +100,15 @@ await setFlags(page, { fineCaustics: true, causticShadows: true });
 
 await setFlags(page, { water: false });
 await shoot(page, 'settlement_close_off');
-// The prop-tile mute (§4.4b) is only judgeable as an A/B at one camera: with it
-// off, foam and ribbons run straight across whatever boat or rock the coastal
-// art has drawn on that tile.
-await setFlags(page, { water: true, propTileMute: false });
-await shoot(page, 'settlement_close_no_mute');
-await setFlags(page, { propTileMute: true });
-// And the same for the caustics' keep-off distance — at 0 they run to the
-// coastline and sit on top of the foam.
+// The art dry mask (§4.4b) and the caustics' keep-off are only judgeable as an A/B at one camera: with the keep-off at 0
+// the ribbons run to the coastline under the foam.
+await setFlags(page, { water: true });
 await page.evaluate(() => {
   window.__waterTuning.causticCullHexes = 0;
 });
 await shoot(page, 'settlement_close_no_caustic_cull');
 await page.evaluate(() => {
-  window.__waterTuning.causticCullHexes = 0.35;
+  window.__waterTuning.causticCullHexes = 0.1;
 });
 
 await page.getByRole('button', { name: /world map/i }).first().click();

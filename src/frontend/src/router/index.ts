@@ -153,7 +153,7 @@ export const router = createRouter({
       beforeEnter: () => startAtlasManifestLoad(),
     },
     {
-      path: '/tech-tree',
+      path: '/docs/tech-tree',
       name: 'tech-tree',
       component: () => import('../views/TechTreeView.vue'),
       // Computes its art synchronously at setup — see atlasGuard.ts.

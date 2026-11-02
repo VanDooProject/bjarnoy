@@ -23,8 +23,9 @@ import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
 import type { PalisadePiece } from './palisadeTiles';
 import { campHexBuildable } from './campRules';
 import type { CampStateResponse } from '../../api/types';
-import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
+import { claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { claimsWithGiants } from './territory';
+import { realmFromDiscs, resolveRealm, type ConnectedRealm } from './realmChain';
 import { validateTradeRatio } from '../trade/tradeRatio';
 import {
   DEFAULT_GENERATION,
@@ -254,7 +255,10 @@ function decodeTerrainKey(key: number): { q: number; r: number } {
   return { q: ((u >>> 16) & 0xffff) - 0x8000, r: (u & 0xffff) - 0x8000 };
 }
 
-
+/** Which settlements share one realm for the chain rule: the same player's settlements on the same island. */
+function realmGroupKey(settlement: Settlement): string {
+  return `${settlement.ownerId}|${settlement.islandId ?? ''}`;
+}
 
 export class WorldModel {
   readonly seed: number;
@@ -295,6 +299,8 @@ export class WorldModel {
    * a stale sea answer for a now-revealed hex.
    */
   private wastedRevealed = false;
+  /** `isWastedLandAt`'s answers while revealed, by `terrainKey` (each one costs two terrain samples); cleared on every reveal flip. */
+  private wastedLand = new Map<number, boolean>();
   /**
    * Whether this world has the frozen isles admin flag on (see the
    * backend's `WorldEntity.FrozenIslesEnabled`). A simple field with no
@@ -353,6 +359,25 @@ export class WorldModel {
    * `applyServerSnapshot` (live mode) and `placeBuilding` (demo mode).
    */
   private settlementTowers = new Map<string, { q: number; r: number; level: number }[]>();
+  /**
+   * The settlements the chain rule resolves together locally (`realmChain.ts`): one player's settlements on one island, keyed
+   * by `realmGroupKey`. Kept up to date by `registerSettlement`, the only place a settlement enters the model. Demo mode (and
+   * live settlements without a server realm) read the realm from here.
+   */
+  private realmGroups = new Map<string, Map<string, Settlement>>();
+  /**
+   * Live mode: the realm the server resolved (`applyServerSnapshot`'s `realm`), per member settlement id; every member id maps
+   * to the same entry object. `signature` detects a changed realm. Takes precedence over `realmGroups` in `realmOf` and
+   * `realmMembers`.
+   */
+  private serverRealms = new Map<string, { ids: string[]; realm: ConnectedRealm; signature: string }>();
+  /**
+   * The hexes `syncClaim` last gave each settlement (its claim, plus any
+   * hex it only kept because a building of its own stands there) — what the
+   * release step walks, so a shrinking realm only visits ground it owned
+   * before, never the whole (procedural, unbounded) world.
+   */
+  private claimedKeys = new Map<string, Set<string>>();
   /**
    * The level of each settlement's standing Odin Statue (absent: none) — what
    * Ravens (`ravensRingsFor`, extra fog-vision rings) and Wisdom
@@ -744,9 +769,14 @@ export class WorldModel {
    */
   isWastedLandAt(q: number, r: number): boolean {
     if (!this.wastedRevealed) return false;
-    const world = { seed: this.seed, generation: this.generation };
-    if (terrainAt(q, r, world) !== 'sea') return false;
-    return wastedTerrainAt(q, r, world) !== 'sea';
+    const k = terrainKey(q, r);
+    let wasted = this.wastedLand.get(k);
+    if (wasted === undefined) {
+      const world = { seed: this.seed, generation: this.generation };
+      wasted = terrainAt(q, r, world) === 'sea' && wastedTerrainAt(q, r, world) !== 'sea';
+      this.wastedLand.set(k, wasted);
+    }
+    return wasted;
   }
 
   /**
@@ -775,6 +805,7 @@ export class WorldModel {
   setWastedRevealed(revealed: boolean) {
     if (this.wastedRevealed === revealed) return;
     this.wastedRevealed = revealed;
+    this.wastedLand.clear();
     const world = { seed: this.seed, generation: this.generation };
     const isGreenSea = (q: number, r: number) => terrainAt(q, r, world) === 'sea';
     for (const key of this.terrain.keys()) {
@@ -976,32 +1007,8 @@ export class WorldModel {
   }
 
   /**
-   * Every hex known to carry a building, packed with the terrain cache's own
-   * key — for the water mask's prop channel (`hasWaterProp`).
-   *
-   * A list rather than a lookup, because the consumer is the bake worker,
-   * which has the world seed but none of this model's live state. Whether a
-   * coastal-water hex shows a prop is otherwise pure (sea, coastal, variant),
-   * so the buildings are the only thing that has to cross, and there are a few
-   * dozen of them against the several hundred thousand texels that would
-   * otherwise each have to ask this thread.
-   *
-   * Walks `tiles`, which holds every hex materialised so far. That is a
-   * superset of the placed buildings and bounded by where the player has
-   * looked, and it is walked once per bake rather than once per texel.
-   */
-  buildingHexKeys(): number[] {
-    const keys: number[] = [];
-    for (const tile of this.tiles.values()) {
-      if (tile.buildingType) keys.push(terrainKey(tile.q, tile.r));
-    }
-    return keys;
-  }
-
-  /**
    * Packed keys (`terrainKey`) of every river-mouth hex, for the water-mask
-   * bake: the worker cannot derive rivers from the seed, so — like
-   * `buildingHexKeys` — the few of them cross as a list, and the sea's
+   * bake: the worker cannot derive rivers from the seed, so the few of them cross as a list, and the sea's
    * shoreline foam is suppressed around each.
    */
   riverMouthHexKeys(): number[] {
@@ -1127,7 +1134,13 @@ export class WorldModel {
    * island(s) the caller actually wants rendered.
    */
   registerSettlement(settlement: Settlement): Settlement {
+    const previous = this.settlements.get(settlement.id);
+    if (previous) this.realmGroups.get(realmGroupKey(previous))?.delete(previous.id);
     this.settlements.set(settlement.id, settlement);
+    const key = realmGroupKey(settlement);
+    const group = this.realmGroups.get(key) ?? new Map<string, Settlement>();
+    group.set(settlement.id, settlement);
+    this.realmGroups.set(key, group);
     return settlement;
   }
 
@@ -1142,11 +1155,10 @@ export class WorldModel {
     const home = this.getTile(settlement.q, settlement.r);
     home.ownerId = settlement.id;
     home.buildingType = 'longhouse';
-    home.buildingLevel = 1;
-    for (const c of this.claimedHexes(settlement)) {
-      const tile = this.getTile(c.q, c.r);
-      if (!tile.ownerId) tile.ownerId = settlement.id;
-    }
+    // The settlement's own level (live polls raise it, a rival's comes from its summary), never a fixed 1:
+    // the world-settlements poll re-claims every settlement on the island next to the settlement poll.
+    home.buildingLevel = settlement.level;
+    this.syncClaim(settlement);
     for (const c of this.exploredHexesFor(settlement)) {
       this.explored.add(coordKey(c));
     }
@@ -1307,13 +1319,57 @@ export class WorldModel {
     return claimRadiusForLevel(settlement.level);
   }
 
-  /** Every claim disc — the centre disc plus one per standing Tower — making up this settlement's full claimed territory. */
-  private claimDiscsFor(settlement: Settlement) {
-    return claimDiscs(
-      { q: settlement.q, r: settlement.r },
-      settlement.level,
-      this.settlementTowers.get(settlement.id) ?? [],
+  /**
+   * The settlements `settlement`'s chain rule is resolved with (itself included): the members of the server's realm when it
+   * sent one (live), else the same player's settlements on the same island.
+   */
+  private realmMembers(settlement: Settlement): Settlement[] {
+    const server = this.serverRealms.get(settlement.id);
+    if (server) {
+      const members = server.ids.flatMap((id) => {
+        const m = this.settlements.get(id);
+        return m ? [m] : [];
+      });
+      if (!members.some((m) => m.id === settlement.id)) members.push(settlement);
+      return members;
+    }
+    const group = this.realmGroups.get(realmGroupKey(settlement));
+    const members = group ? [...group.values()] : [];
+    if (!members.some((m) => m.id === settlement.id)) members.push(settlement);
+    return members;
+  }
+
+  /**
+   * The chain rule (`realmChain.ts`, mirrors the backend's `ConnectedRealm`) for `settlement` and the same player's other
+   * settlements on its island: which towers are connected to a longhouse and so claim and see. Live: the realm the server
+   * resolved; otherwise resolved locally. Every claim and every tower's vision reads its answer from here.
+   */
+  private realmOf(settlement: Settlement): ConnectedRealm {
+    const server = this.serverRealms.get(settlement.id);
+    if (server) return server.realm;
+    return resolveRealm(
+      this.realmMembers(settlement).map((m) => ({
+        id: m.id,
+        q: m.q,
+        r: m.r,
+        level: m.level,
+        towers: this.settlementTowers.get(m.id) ?? [],
+      })),
     );
+  }
+
+  /**
+   * Every claim disc — the centre disc plus one per standing Tower that is connected to a longhouse (`realmOf`) — making up
+   * this settlement's full claimed territory. A cut-off tower claims nothing.
+   */
+  private claimDiscsFor(settlement: Settlement) {
+    return this.realmOf(settlement).discsOf(settlement.id);
+  }
+
+  /** `claimDiscsFor` by id — the discs of this settlement's claim that count (connected towers only); empty for an unknown id. */
+  claimDiscsOf(settlementId: string): ClaimDisc[] {
+    const settlement = this.settlements.get(settlementId);
+    return settlement ? this.claimDiscsFor(settlement) : [];
   }
 
   /**
@@ -1330,9 +1386,11 @@ export class WorldModel {
     // Odin's Ravens widen the claim's own disc and every tower's alike
     // (`FogVisionRadii.ToVisionSource`/`ToTowerVisionSource`'s `bonusRings`).
     const ravens = this.ravensRingsFor(settlement.id);
+    // A tower cut off from every longhouse of the player's realm sees nothing (and gets no Ravens rings either).
+    const realm = this.realmOf(settlement);
     return [
       { q: settlement.q, r: settlement.r, radius: this.borderRadius(settlement) + ravens },
-      ...(this.settlementTowers.get(settlement.id) ?? []).map((t) => ({
+      ...(this.settlementTowers.get(settlement.id) ?? []).filter((t) => realm.isTowerConnected(settlement.id, t)).map((t) => ({
         q: t.q,
         r: t.r,
         radius: Math.max(0, t.level) + ravens,
@@ -1388,10 +1446,11 @@ export class WorldModel {
    * (rather than cached), which is what makes a giant that only becomes
    * fully enclosed later (a Tower completing the enclosure) start being
    * included the next time this runs, with no separate "did a giant just
-   * get enclosed" tracking needed — every caller here only ever *adds*
-   * ownership (`if (!tile.ownerId) tile.ownerId = ...`), never removes it,
-   * so a hex excluded on an earlier call and included on a later one is
-   * exactly the one-way claiming this model already promises elsewhere.
+   * get enclosed" tracking needed. It only answers "what is claimed now";
+   * `syncClaim` is the one place that turns the answer into tile ownership,
+   * both ways: ground a burnt or razed Tower (or a Tower that lost levels)
+   * no longer claims is released again, like `Settlement.ClaimDiscsFor` on
+   * the server.
    */
   private claimedHexes(settlement: Settlement): AxialCoord[] {
     const discs = this.claimDiscsFor(settlement);
@@ -1408,9 +1467,55 @@ export class WorldModel {
     return hexes;
   }
 
+  /**
+   * Brings tile ownership in line with `claimedHexes(settlement)` — the one
+   * claim rule every caller shares. Claims every unowned hex of the current
+   * claim; releases every hex the settlement owned from an earlier sync that
+   * the claim no longer covers, unless a building stands on it (the server
+   * keeps buildings standing outside the claim, and `applyServerSnapshot`
+   * owns the hex of every building it renders, walls included). Never
+   * touches another settlement's hexes and never the explored set.
+   */
+  private syncClaim(settlement: Settlement): void {
+    // A broken or restored link can change another settlement of the same player's towers too, so the whole realm re-syncs.
+    for (const member of this.realmMembers(settlement)) this.syncOwnClaim(member);
+  }
+
+  /** `syncClaim` for one settlement. */
+  private syncOwnClaim(settlement: Settlement): void {
+    const id = settlement.id;
+    const claimed = new Set<string>();
+    for (const c of this.claimedHexes(settlement)) {
+      const key = coordKey(c);
+      claimed.add(key);
+      const tile = this.getTile(c.q, c.r);
+      if (!tile.ownerId) tile.ownerId = id;
+    }
+    const owned = new Set(claimed);
+    for (const key of this.claimedKeys.get(id) ?? []) {
+      if (claimed.has(key)) continue;
+      const { q, r } = parseKey(key);
+      const tile = this.getTile(q, r);
+      if (tile.ownerId !== id) continue;
+      if (tile.buildingType) owned.add(key);
+      else tile.ownerId = undefined;
+    }
+    this.claimedKeys.set(id, owned);
+  }
+
+  /** Marks everything the realm's vision reaches as explored (nothing ever leaves `explored`), for every settlement of the realm. */
+  private exploreRealm(settlement: Settlement): void {
+    for (const member of this.realmMembers(settlement)) {
+      for (const c of this.exploredHexesFor(member)) {
+        this.explored.add(coordKey(c));
+      }
+    }
+  }
+
   /** Whether `at` is inside this settlement's claimed territory — see `claimedHexes`. */
   private claims(settlement: Settlement, at: AxialCoord): boolean {
-    const discs = this.claimDiscsFor(settlement);
+    // The realm is shared: ground claimed by another connected disc of the same player's settlements on the island counts too.
+    const discs = this.realmOf(settlement).allDiscs;
     return claimsWithGiants(discs, at, (coord) => this.giantAnchorAt(coord));
   }
 
@@ -1502,7 +1607,10 @@ export class WorldModel {
    * is silently skipped rather than stored as an unrecognized string. A type
    * with no distinct sprite in the art pack (Lumberjack, Quarry) is still
    * safe to place — `textures.ts`'s `baseTextureFor` falls back to the
-   * tile's bare terrain rather than throwing.
+   * tile's bare terrain rather than throwing. `realm` (live) is the realm the
+   * server resolved for this settlement: when it changes, it replaces the
+   * local chain resolution for every member and the claim is re-derived,
+   * including for settlements that left the realm.
    */
   applyServerSnapshot(
     settlementId: string,
@@ -1512,10 +1620,27 @@ export class WorldModel {
       rates: Resources;
       capacity: Resources;
       buildings: { q: number; r: number; type: string; level: number; orientation?: string | null }[];
+      realm?: ReadonlyArray<{ settlementId: string; discs: readonly ClaimDisc[] }>;
     },
   ) {
     const settlement = this.settlements.get(settlementId);
     if (!settlement) return;
+
+    let realmChanged = false;
+    let leftRealm: string[] = [];
+    if (snapshot.realm) {
+      const signature = JSON.stringify(snapshot.realm);
+      const old = this.serverRealms.get(settlementId);
+      if (old?.signature !== signature) {
+        realmChanged = true;
+        const oldIds = old?.ids ?? [];
+        for (const id of oldIds) this.serverRealms.delete(id);
+        const ids = snapshot.realm.map((m) => m.settlementId);
+        const entry = { ids, realm: realmFromDiscs(snapshot.realm), signature };
+        for (const id of ids) this.serverRealms.set(id, entry);
+        leftRealm = oldIds.filter((id) => !ids.includes(id));
+      }
+    }
 
     const previousTowers = this.settlementTowers.get(settlementId) ?? [];
     const towers = snapshot.buildings
@@ -1534,18 +1659,12 @@ export class WorldModel {
     const levelIncreased = snapshot.level > settlement.level;
     if (levelIncreased) settlement.level = snapshot.level;
 
-    // Re-claim whenever the centre disc grew (a longhouse level-up) or the
-    // set of Tower satellite discs changed (a new/levelled-up tower) — not
+    // Re-sync the claim (below, once the buildings are rendered) whenever the
+    // centre disc grew (a longhouse level-up) or the set of Tower satellite
+    // discs changed (a new, levelled-up, downgraded or burnt tower) — not
     // every poll, since claiming is otherwise pure repeated work.
-    if (levelIncreased || towersChanged || ravensChanged) {
-      for (const c of this.claimedHexes(settlement)) {
-        const tile = this.getTile(c.q, c.r);
-        if (!tile.ownerId) tile.ownerId = settlementId;
-      }
-      for (const c of this.exploredHexesFor(settlement)) {
-        this.explored.add(coordKey(c));
-      }
-    }
+    const claimChanged = levelIncreased || towersChanged || ravensChanged || realmChanged;
+    if (claimChanged) this.exploreRealm(settlement);
     settlement.resources = snapshot.resources;
     settlement.rates = snapshot.rates;
     settlement.capacity = snapshot.capacity;
@@ -1622,6 +1741,16 @@ export class WorldModel {
         tile.buildingLevel = undefined;
       }
     }
+    // After the building pass: a fallen tower's own hex has to be empty before
+    // the release step may take it back.
+    if (claimChanged) {
+      this.syncClaim(settlement);
+      // Settlements that left the realm are no longer covered by `syncClaim`'s members: re-derive (release) their ground too.
+      for (const id of leftRealm) {
+        const gone = this.settlements.get(id);
+        if (gone) this.syncOwnClaim(gone);
+      }
+    }
     this.renderedBuildingCoords.set(settlementId, nowRendered);
     this.wallRevision++;
   }
@@ -1634,6 +1763,17 @@ export class WorldModel {
    */
   towerCoords(settlementId: string): AxialCoord[] {
     return (this.settlementTowers.get(settlementId) ?? []).map((t) => ({ q: t.q, r: t.r }));
+  }
+
+  /**
+   * How many towers count against this settlement's tower limit: the distinct hexes among its standing towers and
+   * `queuedHexes` (still-queued new-tower orders) that are connected to a longhouse (`realmOf`). A cut-off tower claims
+   * nothing and does not count; once reconnected it counts again, even if that puts the settlement over the limit.
+   */
+  connectedTowerCount(settlementId: string, queuedHexes: Iterable<AxialCoord> = []): number {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return 0;
+    return this.realmOf(settlement).countConnected([...this.towerCoords(settlementId), ...queuedHexes]);
   }
 
   /** Where this settlement's shrines (of any god) stand — at most one is allowed. */
@@ -1891,7 +2031,7 @@ export class WorldModel {
     // longhouse level allows (matches BuildRejection.TowerLimitReached and
     // BuildingCatalogue.MaxTowers). Upgrading a tower never goes through
     // here, so it is never refused for this reason.
-    if (type === 'tower' && this.towerCoords(settlementId).length >= maxTowers(settlement.level)) {
+    if (type === 'tower' && this.connectedTowerCount(settlementId) >= maxTowers(settlement.level)) {
       return false;
     }
     // A settlement raises one shrine in total, of any god (matches
@@ -1925,10 +2065,7 @@ export class WorldModel {
       const towers = this.settlementTowers.get(settlementId) ?? [];
       towers.push({ q: at.q, r: at.r, level: 1 });
       this.settlementTowers.set(settlementId, towers);
-      for (const c of this.claimedHexes(settlement)) {
-        const claimed = this.getTile(c.q, c.r);
-        if (!claimed.ownerId) claimed.ownerId = settlementId;
-      }
+      this.syncClaim(settlement);
     }
     return true;
   }
@@ -1937,15 +2074,16 @@ export class WorldModel {
    * Issue #16 ring menu "tear down": demo-mode only — the backend
    * (`Bjarnoy.Domain.Buildings`) has no raze endpoint yet, so live mode
    * disables this action rather than pretending to support it (see
-   * SettlementView.vue's ring-menu wiring). Clears the building but leaves
-   * the hex claimed by the settlement — claiming stays one-way here, the
-   * same as `applyServerSnapshot`'s live-mode reads, so razing a Tower never
-   * shrinks the border its satellite disc already opened up.
+   * SettlementView.vue's ring-menu wiring). Clears the building. The hex
+   * stays with the settlement while it is inside its claim; razing a Tower
+   * drops its satellite disc and the border shrinks (`syncClaim`), the same
+   * as a burnt tower on the server.
    */
   razeBuilding(settlementId: string, at: AxialCoord): boolean {
     const tile = this.getTile(at.q, at.r);
     if (tile.ownerId !== settlementId || !tile.buildingType || tile.buildingType === 'longhouse') return false;
-    if (tile.buildingType === 'tower') {
+    const wasTower = tile.buildingType === 'tower';
+    if (wasTower) {
       const towers = this.settlementTowers.get(settlementId);
       if (towers) {
         const index = towers.findIndex((t) => t.q === at.q && t.r === at.r);
@@ -1956,6 +2094,8 @@ export class WorldModel {
     if (tile.buildingType === 'bogoreworks' || tile.buildingType === 'fishinghut') this.lakePropsDirty = true;
     tile.buildingType = undefined;
     tile.buildingLevel = undefined;
+    const settlement = this.settlements.get(settlementId);
+    if (settlement && wasTower) this.syncClaim(settlement);
     this.wallRevision++;
     return true;
   }
@@ -2172,12 +2312,14 @@ export class WorldModel {
    * authoritative camps (`IslandResponse.camps`); demo mode feeds it
    * `placeCamps` output. Idempotent and additive, like `setGiants`: a hex that
    * already has a camp is left untouched. Strength and guard range are derived
-   * from the shared family table, so they cannot disagree with the server.
+   * from the shared family table, so they cannot disagree with the server. Returns whether any camp was added.
    */
-  setCamps(camps: { family: string; coord: AxialCoord; level: number; orientation: TileOrientation }[]) {
+  setCamps(camps: { family: string; coord: AxialCoord; level: number; orientation: TileOrientation }[]): boolean {
+    let added = false;
     for (const camp of camps) {
       const tile = this.getTile(camp.coord.q, camp.coord.r);
       if (tile.camp) continue;
+      added = true;
       const strong = isStrongCampFamily(camp.family);
       const strength: CampStrength = strong ? 'strong' : 'weak';
       tile.camp = {
@@ -2189,6 +2331,7 @@ export class WorldModel {
       };
       this.campByHex.set(coordKey(camp.coord), { ...tile.camp, q: camp.coord.q, r: camp.coord.r });
     }
+    return added;
   }
 
   /**
@@ -2328,13 +2471,8 @@ export class WorldModel {
       return true;
     }
 
-    for (const c of this.claimedHexes(settlement)) {
-      const claimed = this.getTile(c.q, c.r);
-      if (!claimed.ownerId) claimed.ownerId = settlementId;
-    }
-    for (const c of this.exploredHexesFor(settlement)) {
-      this.explored.add(coordKey(c));
-    }
+    this.syncClaim(settlement);
+    this.exploreRealm(settlement);
     return true;
   }
 

@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import { ScrollableView } from "./pages";
 
@@ -13,6 +13,24 @@ import { ScrollableView } from "./pages";
  * back to the bundled `data/building-catalogue.json` snapshot with no
  * backend, which is exactly what `npm run test:e2e` runs against.
  */
+
+/**
+ * Art drawn with a CSS `aspect-ratio` (`.atlas-sprite`, `.animated-building`) whose rendered box drifts more than 2% from
+ * that ratio, i.e. a box that a max-height or a fixed size squashed or stretched. Empty when every picture keeps its shape.
+ */
+async function aspectMismatches(art: Locator) {
+  return art.evaluateAll((els) =>
+    els.flatMap((el) => {
+      const [w, h] = getComputedStyle(el).aspectRatio.split("/").map(Number);
+      const box = el.getBoundingClientRect();
+      if (!w || !h || box.height === 0) return [];
+      const drift = Math.abs(box.width / box.height - w / h) / (w / h);
+      return drift > 0.02
+        ? [`${box.width.toFixed(0)}x${box.height.toFixed(0)} vs ${w}/${h}`]
+        : [];
+    }),
+  );
+}
 
 /**
  * The wasted-lands island toy is an admin note: hidden from players, shown to
@@ -32,7 +50,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   test("tech tree page scrolls to reveal content below the fold", async ({
     page,
   }) => {
-    await page.goto("/tech-tree");
+    await page.goto("/docs/tech-tree");
     // Catalogue load is async even against the bundled fallback — wait for
     // a real building section before measuring the page.
     const lastSection = page.locator("section.building").last();
@@ -64,7 +82,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   test("tech tree thumbnail keeps the tile floor still across a building's levels", async ({
     page,
   }) => {
-    await page.goto("/tech-tree");
+    await page.goto("/docs/tech-tree");
     const sawmill = page.locator("section.building", {
       has: page.locator("h3", { hasText: /^Sawmill/ }),
     });
@@ -228,18 +246,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
 
     const sprites = page.locator(".wasted-lands .atlas-sprite");
     expect(await sprites.count()).toBeGreaterThan(0);
-    const mismatches = await sprites.evaluateAll((els) =>
-      els.flatMap((el) => {
-        const [w, h] = getComputedStyle(el).aspectRatio.split("/").map(Number);
-        const box = el.getBoundingClientRect();
-        if (!w || !h || box.height === 0) return [];
-        const drift = Math.abs(box.width / box.height - w / h) / (w / h);
-        return drift > 0.02
-          ? [`${box.width.toFixed(0)}x${box.height.toFixed(0)} vs ${w}/${h}`]
-          : [];
-      }),
-    );
-    expect(mismatches).toEqual([]);
+    expect(await aspectMismatches(sprites)).toEqual([]);
   });
   test("wildlife camps page scrolls and shows guarded art only for kept rotations", async ({
     page,
@@ -462,7 +469,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   // Every docs page sits on the shared DocsPageLayout: the same top bar, a breadcrumb (the hub itself has none),
   // a title, the lede, header art and the related/previous/next footer.
   const DOCS_PATHS = [
-    "/tech-tree",
+    "/docs/tech-tree",
     "/docs/tiles",
     "/docs/wasted-lands",
     "/docs/wildlife-camps",
@@ -693,6 +700,10 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         .locator('a.card[data-page="walls"] .atlas-sprite')
         .boundingBox();
       expect(herder!.width).toBeGreaterThanOrEqual(tile!.width - 2);
+      // Regression: the 84px box used to clamp the 2:3 canvas's height, squashing the herder flat.
+      expect(
+        await aspectMismatches(page.locator(".groups .animated-building")),
+      ).toEqual([]);
 
       await page.getByRole("link", { name: /^Bog lands/ }).click();
       await expect(page).toHaveURL(/\/docs\/bog-lands$/);
@@ -746,7 +757,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(tip).toHaveCount(0);
 
     await link.click();
-    await expect(page).toHaveURL(/\/tech-tree#shrineofthor$/);
+    await expect(page).toHaveURL(/\/docs\/tech-tree#shrineofthor$/);
     await expect(page.locator("#shrineofthor")).toBeInViewport();
   });
 
@@ -797,7 +808,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       page
         .locator('[data-producer="longhouse"] th')
         .first()
-        .locator('a[href="/tech-tree#longhouse"]'),
+        .locator('a[href="/docs/tech-tree#longhouse"]'),
     ).toHaveCount(1);
     // The header shows the herder's still frame (the hub card plays the clip).
     await expect(
@@ -875,6 +886,10 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(
       page.locator(".walls .tile .thumb .animated-building"),
     ).toHaveCount(6);
+    // Regression: the thumb box used to clamp the pieces' height, squashing them flat.
+    expect(
+      await aspectMismatches(page.locator(".walls .animated-building")),
+    ).toEqual([]);
     for (const id of [
       "straight180",
       "bend60",
@@ -922,10 +937,12 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       page.getByTestId("wall-movement-legend").locator("li"),
     ).toHaveCount(11);
 
-    // Sieges are player content now: rams take one level per won siege, three levels per wall hex.
+    // Sieges are player content now: rams take one level per won siege, three levels per wall hex, and a fleet sent at
+    // the sea end of a wall takes a level too.
     const sieges = page.locator("#sieges");
     await expect(sieges.getByRole("heading", { name: "Sieges" })).toBeVisible();
-    await expect(sieges.locator("li")).toHaveCount(5);
+    await expect(sieges.locator("li")).toHaveCount(6);
+    await expect(sieges).toContainText("the sea end of a wall included");
     await expect(sieges).toContainText("exactly one level");
     await expect(sieges).toContainText("3 levels");
     // The note on what is still not built (fire) stays admin-only.

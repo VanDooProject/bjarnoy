@@ -44,6 +44,9 @@ jobs:
       - name: Domain tests
         run: dotnet test --project tests/Bjarnoy.Domain.Tests --configuration Release --no-build --report-xunit-trx --report-xunit-trx-filename domain.trx --results-directory ${{ runner.temp }}/test-results
 
+      - name: Infrastructure tests
+        run: dotnet test --project tests/Bjarnoy.Infrastructure.Tests --configuration Release --no-build --report-xunit-trx --report-xunit-trx-filename infrastructure.trx --results-directory ${{ runner.temp }}/test-results
+
       # Runs the SQLite suite and, because GitHub runners have Docker, the
       # Testcontainers PostgreSQL suite as well.
       #

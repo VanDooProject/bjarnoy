@@ -23,7 +23,7 @@ function mountPage(links: { type: string; label?: string }[], withRegister = tru
     history: createMemoryHistory(),
     routes: [
       { path: '/', component: { template: '<div />' } },
-      { path: '/tech-tree', component: { template: '<div />' } },
+      { path: '/docs/tech-tree', component: { template: '<div />' } },
     ],
   });
   const Page = defineComponent({
@@ -55,7 +55,7 @@ describe('BuildingLink', () => {
 
     const link = wrapper.get('a.link');
     expect(link.text()).toBe('Reindeer Herder');
-    expect(link.attributes('href')).toBe('/tech-tree#reindeerherder');
+    expect(link.attributes('href')).toBe('/docs/tech-tree#reindeerherder');
   });
 
   it('shows a later mention of the same building as plain text, and a different building as a link', () => {
@@ -69,7 +69,7 @@ describe('BuildingLink', () => {
   });
 
   it('always links a table-subject mention (`always`), even after an earlier mention', () => {
-    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }, { path: '/tech-tree', component: { template: '<div />' } }] });
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }, { path: '/docs/tech-tree', component: { template: '<div />' } }] });
     const Page = defineComponent({
       setup() {
         provideFirstMentions();
@@ -84,7 +84,7 @@ describe('BuildingLink', () => {
   });
 
   it('an `always` link does not consume the first mention: a later plain mention still becomes the link', () => {
-    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }, { path: '/tech-tree', component: { template: '<div />' } }] });
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }, { path: '/docs/tech-tree', component: { template: '<div />' } }] });
     const Page = defineComponent({
       setup() {
         provideFirstMentions();
@@ -123,7 +123,7 @@ describe('BuildingLink', () => {
     expect(tip.text()).toContain('levels 1–25');
     expect(tip.text()).toContain('Grassland');
     expect(tip.get('a.cta').text()).toBe('Costs and levels in the tech tree →');
-    expect(tip.get('a.cta').attributes('href')).toBe('/tech-tree#reindeerherder');
+    expect(tip.get('a.cta').attributes('href')).toBe('/docs/tech-tree#reindeerherder');
 
     await link.trigger('keydown', { key: 'Escape' });
     expect(wrapper.find('[role=tooltip]').exists()).toBe(false);
@@ -157,7 +157,7 @@ describe('BuildingLink', () => {
 
     await link.trigger('pointerdown', { pointerType: 'touch' });
     await tap();
-    expect(router.currentRoute.value.fullPath).toBe('/tech-tree#tower');
+    expect(router.currentRoute.value.fullPath).toBe('/docs/tech-tree#tower');
   });
 
   it('follows the link on the first click of a mouse', async () => {
@@ -167,7 +167,7 @@ describe('BuildingLink', () => {
     await wrapper.get('a.link').trigger('click');
     await flushPromises();
 
-    expect(router.currentRoute.value.fullPath).toBe('/tech-tree#tower');
+    expect(router.currentRoute.value.fullPath).toBe('/docs/tech-tree#tower');
   });
 
   it('keeps the card inside the viewport by shifting it left when the name is at the right edge', async () => {

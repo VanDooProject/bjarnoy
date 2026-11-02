@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  previewGroundCoords,
   attentionPulseFrame,
   clampAnimationDeltaMs,
   fadeAlphaAt,
@@ -24,6 +25,11 @@ import {
   type TextureLoadDeps,
   clientToCanvasPoint,
   waterMaskTerrainFor,
+  worldGiantOutline,
+  worldHexFill,
+  worldCampMarkers,
+  worldPawHalfSize,
+  worldRiverColor,
 } from './HexMapRenderer';
 import { StaticWorldModel } from './StaticWorldModel';
 import { PREVIEW_ISLAND_RADIUS } from './WorldModel';
@@ -284,6 +290,28 @@ describe('previewDrawRadius', () => {
   it('draws a wider radius than the camera fits, but never a narrower one', () => {
     expect(previewDrawRadius({ previewRadius: 13, previewRenderRadius: 34 })).toBe(34);
     expect(previewDrawRadius({ previewRadius: 13, previewRenderRadius: 5 })).toBe(13);
+  });
+});
+
+// The landing/onboarding preview drew the bog edge border for every bog hex in view, including ones past the island
+// crop whose ground art is never drawn, so their outlines floated over the empty backdrop. Terrain and bog edges now
+// both take this one crop.
+describe('previewGroundCoords', () => {
+  const center = { q: 0, r: 0 };
+  const crop = hexesInRadius(center, 2);
+  const world = { previewCropTiles: vi.fn(() => crop) };
+
+  it('keeps only the hexes of the island crop, so nothing past it is drawn or outlined', () => {
+    const kept = previewGroundCoords(hexesInRadius(center, 6), world, { previewCenter: center, previewRadius: 2 });
+    expect(kept).toHaveLength(crop.length);
+    expect(kept).not.toContainEqual({ q: 5, r: 0 });
+    expect(world.previewCropTiles).toHaveBeenCalledWith(center, 2);
+  });
+
+  it('keeps the whole drawn disc, sea included, with previewSea', () => {
+    const options = { previewCenter: center, previewRadius: 2, previewRenderRadius: 4, previewSea: true };
+    const kept = previewGroundCoords(hexesInRadius(center, 6), world, options);
+    expect(kept).toHaveLength(hexesInRadius(center, 4).length);
   });
 });
 
@@ -930,18 +958,18 @@ describe('waterMaskTerrainFor', () => {
     { q: 1, r: 0, terrain: 'bog' },
   ]);
 
-  it.each(['settlement', 'world'] as const)('counts a bog lake as land in %s mode', (mode) => {
-    const terrain = waterMaskTerrainFor(world, mode);
+  it('counts a bog lake as land', () => {
+    const terrain = waterMaskTerrainFor(world);
     expect(world.isLand(0, 0)).toBe(false);
     expect(terrain.isLand(0, 0)).toBe(true);
     expect(terrain.isLand(1, 0)).toBe(true);
   });
 
-  it.each(['settlement', 'world'] as const)('still counts the sea as water in %s mode', (mode) => {
-    expect(waterMaskTerrainFor(world, mode).isLand(5, 5)).toBe(false);
+  it('still counts the sea as water', () => {
+    expect(waterMaskTerrainFor(world).isLand(5, 5)).toBe(false);
   });
 
-  it.each(['settlement', 'world'] as const)('answers noFoam for a river mouth only, in %s mode', (mode) => {
+  it('answers noFoam for a river mouth only', () => {
     const rivers = new StaticWorldModel([
       { q: 0, r: 0, terrain: 'grass' },
       { q: 1, r: 0, terrain: 'grass' },
@@ -950,7 +978,7 @@ describe('waterMaskTerrainFor', () => {
       { q: 0, r: 0, shape: 'mouth', inDirections: ['NE'], outDirection: null },
       { q: 1, r: 0, shape: 'straight', inDirections: ['NE'], outDirection: 'SW' },
     ]);
-    const terrain = waterMaskTerrainFor(rivers, mode);
+    const terrain = waterMaskTerrainFor(rivers);
     expect(terrain.noFoam!(0, 0)).toBe(true);
     expect(terrain.noFoam!(1, 0)).toBe(false);
     expect(terrain.noFoam!(5, 5)).toBe(false);
@@ -1056,5 +1084,60 @@ describe('wheelPassesToPage', () => {
   it('never passes on a host that did not opt into page scroll', () => {
     expect(wheelPassesToPage({ ...base, allowPageScroll: false })).toBe(false);
     expect(wheelPassesToPage({ ...base, allowPageScroll: false, lockCamera: true })).toBe(false);
+  });
+});
+
+describe('world-map wasted lands', () => {
+  it('fills a revealed wasted hex from the wasted palette, not the green island colours', () => {
+    for (const terrain of ['grass', 'forest', 'sand', 'mountain'] as const) {
+      expect(worldHexFill(terrain, true)).not.toBe(worldHexFill(terrain, false));
+    }
+  });
+
+  it('keeps the four wasted terrains apart from each other', () => {
+    const fills = (['grass', 'forest', 'sand', 'mountain'] as const).map((t) => worldHexFill(t, true));
+    expect(new Set(fills).size).toBe(4);
+  });
+
+  it('draws a lava stream in another colour than a river', () => {
+    expect(worldRiverColor({ wasted: true })).not.toBe(worldRiverColor({ wasted: false }));
+    expect(worldRiverColor({})).toBe(worldRiverColor({ wasted: false }));
+  });
+});
+
+describe('world-map giants', () => {
+  it('outlines the volcano and the runestone giants in their own colours', () => {
+    expect(worldGiantOutline('giantvolcano')).toBeDefined();
+    expect(worldGiantOutline('giantshrine')).toBeDefined();
+    expect(worldGiantOutline('giantutgard')).toBeDefined();
+    expect(worldGiantOutline('giantvolcano')).not.toBe(worldGiantOutline('giantshrine'));
+  });
+
+  it('draws no outline around the giant mountain, which has no function of its own', () => {
+    expect(worldGiantOutline('giantmountain')).toBeUndefined();
+  });
+});
+
+describe('worldCampMarkers', () => {
+  const strong = { q: 1, r: 2, strong: true, removed: false };
+  const weak = { q: 3, r: 4, strong: false, removed: false };
+
+  it('draws nothing for a player who is not premium', () => {
+    expect(worldCampMarkers([strong, weak], false)).toEqual([]);
+  });
+
+  it('skips a removed camp', () => {
+    expect(worldCampMarkers([{ ...strong, removed: true }, weak], true).map((m) => [m.q, m.r])).toEqual([[3, 4]]);
+  });
+
+  it('colours a strong camp red and a weak one neutral', () => {
+    const [strongMarker, weakMarker] = worldCampMarkers([strong, weak], true);
+    expect(strongMarker).toEqual({ q: 1, r: 2, color: 0xe2705f });
+    expect(weakMarker).toEqual({ q: 3, r: 4, color: 0xe8e2d0 });
+  });
+
+  it('keeps the paw readable when zoomed far out and bounded when zoomed in', () => {
+    expect(worldPawHalfSize(0.01)).toBeGreaterThanOrEqual(8);
+    expect(worldPawHalfSize(100)).toBeLessThanOrEqual(14);
   });
 });

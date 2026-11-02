@@ -193,19 +193,7 @@ public sealed class ArmyService(
             var target = await _dbContext.Settlements
                 .AsNoTracking()
                 .Where(s => s.Id == targetId && s.WorldId == settlement.WorldId)
-                .Select(s => new
-                {
-                    s.CentreQ,
-                    s.CentreR,
-                    LonghouseLevel = s.Buildings
-                        .Where(b => b.Type == BuildingType.Longhouse)
-                        .Select(b => (int?)b.Level)
-                        .Max() ?? 0,
-                    Towers = s.Buildings
-                        .Where(b => b.Type == BuildingType.Tower)
-                        .Select(b => new { b.Q, b.R, b.Level })
-                        .ToList(),
-                })
+                .Select(s => new { s.CentreQ, s.CentreR })
                 .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
 
             if (target is null)
@@ -216,16 +204,10 @@ public sealed class ArmyService(
 
             effectiveDestination = new HexCoord(target.CentreQ, target.CentreR);
 
-            // Mirrors Settlement.ClaimDiscs: the centre disc (Settlement.ClaimRadius)
-            // plus one satellite disc per Tower, centred on that tower's own
-            // hex, not the settlement's centre.
-            var centreClaimRadius = Settlement.ClaimRadiusForLonghouseLevel(target.LonghouseLevel);
-            targetClaimDiscs =
-            [
-                (effectiveDestination, centreClaimRadius),
-                .. target.Towers.Select(t =>
-                    (new HexCoord(t.Q, t.R), Settlement.TowerClaimRadius(t.Level))),
-            ];
+            // The target's connected claim discs (ConnectedRealm): its centre disc plus the discs of the towers that
+            // are chained to a longhouse of the target's player on that island.
+            var targetRealm = await PlayerRealms.ForStoredSettlementAsync(_dbContext, targetId, cancellationToken).ConfigureAwait(false);
+            targetClaimDiscs = targetRealm?.DiscsOf(targetId) ?? [];
         }
         else
         {
@@ -416,6 +398,26 @@ public sealed class ArmyService(
             .Where(a => a.IsSupporting && a.TargetSettlementId == hostSettlementId)
             .OrderBy(a => a.Id)
             .ToListAsync(cancellationToken);
+
+    /// <summary>
+    /// The host's way to send a guest home: recalls the guest army
+    /// <paramref name="armyId"/> from <paramref name="hostSettlementId"/>
+    /// through exactly the path <see cref="RecallAsync"/> takes. Refused as
+    /// <see cref="RecallOutcome.ArmyNotFound"/> unless the army exists and is
+    /// currently a guest at that host — the host has no say over any other
+    /// army.
+    /// </summary>
+    public async Task<RecallResult> SendGuestHomeAsync(Guid hostSettlementId, Guid armyId, CancellationToken cancellationToken = default)
+    {
+        var isGuestHere = await _dbContext.Armies
+            .AsNoTracking()
+            .AnyAsync(a => a.Id == armyId && a.IsSupporting && a.TargetSettlementId == hostSettlementId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return isGuestHere
+            ? await RecallAsync(armyId, cancellationToken).ConfigureAwait(false)
+            : new RecallResult(RecallOutcome.ArmyNotFound);
+    }
 
     /// <summary>
     /// Turns an army around mid-journey — or, for a <see cref="ArmyLocation.Supporting"/>
@@ -985,7 +987,8 @@ public sealed class ArmyService(
         var seed = Random.Shared.Next();
         var arrival = Army.SettleArrival(
             domain, defenderEntity.ToDomain(), defenderEntity.World.SpeedFactor, now, seed, guestDefenderStacks,
-            landAttackBonusPercent, shipAttackBonusPercent);
+            landAttackBonusPercent, shipAttackBonusPercent,
+            await PlayerRealms.ForStoredSettlementAsync(_dbContext, defenderEntity.Id, cancellationToken).ConfigureAwait(false));
 
         // Guaranteed true: the caller only reaches this method when the
         // outbound leg's ArrivesAt has already passed for a not-yet-returning

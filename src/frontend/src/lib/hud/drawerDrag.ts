@@ -28,6 +28,34 @@ export function shouldOpenOnRelease(
   return offset / height >= openThresholdRatio;
 }
 
+/** The drawer's drag offset at one moment of a gesture (`t` in event-timeStamp ms). */
+export interface DragSample {
+  t: number;
+  offset: number;
+}
+
+/**
+ * Release speed in px/ms (positive = towards open): how far the drawer moved
+ * over the last `windowMs` before the release at `releaseT`. Measured up to
+ * the release itself, not between the last two moves, so a drag that stopped
+ * before the finger lifted releases at (near) zero speed, however fast its
+ * last move was. `samples` is in time order; between samples the offset
+ * holds its last value. A gesture shorter than the window is measured from
+ * its first sample.
+ */
+export function releaseVelocity(samples: readonly DragSample[], releaseT: number, windowMs: number): number {
+  if (samples.length < 2) return 0;
+  const from = releaseT - windowMs;
+  let base = samples[0];
+  for (const s of samples) {
+    if (s.t > from) break;
+    base = s;
+  }
+  const dt = releaseT - Math.max(base.t, from);
+  if (dt <= 0) return 0;
+  return (samples[samples.length - 1].offset - base.offset) / dt;
+}
+
 /** One gesture-frame's delta, split between the drawer's scroll container and its drag offset. */
 export interface DrawerDragSplit {
   /** Amount to add to the scroll container's current `scrollTop`. */

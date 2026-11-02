@@ -155,7 +155,7 @@ public class FoundingTests
     [Fact]
     public void CheckSpacing_reports_TooClose_when_a_tower_chain_reaches_past_the_centre_distance_phase()
     {
-        // A max-level longhouse (claim radius 7) plus a max-level tower
+        // A max-level longhouse (claim radius 3) plus a connected max-level tower
         // (TowerClaimRadius(10)) placed right at that border, chaining real
         // territory out past minimumSpacing's own centre-only radius — the
         // same scenario SettlementEndpointsTests already covers for
@@ -165,10 +165,10 @@ public class FoundingTests
             new HexCoord(0, 0),
             [
                 new PlacedBuilding(new HexCoord(0, 0), BuildingType.Longhouse, 10),
-                new PlacedBuilding(new HexCoord(7, 0), BuildingType.Tower, 10),
+                new PlacedBuilding(new HexCoord(3, 0), BuildingType.Tower, 10),
             ]);
 
-        var candidate = new HexCoord(7 + towerClaimRadius + 2, 0);
+        var candidate = new HexCoord(3 + towerClaimRadius + 2, 0);
 
         var verdict = Founding.CheckSpacing(candidate, [neighbour], minimumSpacing: 15, safetyMargin: 2);
 
@@ -183,10 +183,10 @@ public class FoundingTests
             new HexCoord(0, 0),
             [
                 new PlacedBuilding(new HexCoord(0, 0), BuildingType.Longhouse, 10),
-                new PlacedBuilding(new HexCoord(7, 0), BuildingType.Tower, 10),
+                new PlacedBuilding(new HexCoord(3, 0), BuildingType.Tower, 10),
             ]);
 
-        var candidate = new HexCoord(7 + towerClaimRadius + 3, 0);
+        var candidate = new HexCoord(3 + towerClaimRadius + 3, 0);
 
         var verdict = Founding.CheckSpacing(candidate, [neighbour], minimumSpacing: 15, safetyMargin: 2);
 
