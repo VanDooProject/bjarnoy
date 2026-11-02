@@ -4,6 +4,7 @@
 // custom-shader code in this codebase; see HexMapRenderer.ts's own comment
 // on how this replaces v1's per-hex blob/pattern-sprite fog entirely.
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, UniformGroup } from 'pixi.js';
+import { noiseLatticeTexture } from '../shaderNoise';
 import { EDGE_NOISE_FADE_RAMP, FOG_FRAGMENT, FOG_VERTEX, MAX_ARMY_VISION_SOURCES } from './fogShader';
 
 export type FogTier = 'outOfSight' | 'unknown';
@@ -236,6 +237,7 @@ export class FogMaskLayer {
         fogUniforms: this.uniforms,
         uMask: placeholderTexture().source,
         uMaskPrev: placeholderTexture().source,
+        uNoiseLattice: noiseLatticeTexture().source,
       },
     });
 

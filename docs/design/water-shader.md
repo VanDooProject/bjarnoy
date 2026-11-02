@@ -477,6 +477,8 @@ One `GlProgram`, one fragment shader, both effects inside it, each behind a
 uniform. Following `fogShader.ts`'s conventions exactly (no `#version`,
 `in`/`out`, `finalColor`).
 
+Noise: map shaders take `hash`/`noise` from `shaderNoise.ts` (`NOISE_LATTICE_GLSL`, lattice values from a texture), never a float ALU hash such as `fract(p * vec2(123.34, 456.21))` - those are not bit-stable on Mali GPUs and seam along the lattice lines. `hash` takes whole-number input only; `shaderNoise.test.ts` enforces it.
+
 ### 4.1 Sea body — `uSeaBody`
 
 World mode only. Base colour ramped by the mask's R channel: shallow teal at
