@@ -412,38 +412,56 @@ function smoothstep(e0: number, e1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-/**
- * The flow texture of one river frame cell: RGBA8, `cw * ch * 4` bytes, premultiplied.
- *
- * R, G = unit flow direction * 0.5 + 0.5 (art space, +y down). B = intensity: the distance to the bank
- * over `BANK_FADE_TEXELS`. A = 255 on the water texels with a direction inside the top face and its rim along the in and out edges
- * (`FACE_PAD_TEXELS`), all four 0 elsewhere.
- */
-export function computeRiverFlow(input: RiverFlowInput): Uint8Array {
-  const { mask, cw, ch, outEdge, fadeEdge } = input;
+/** Edge `e` is nearest to the point, among the in and out edges the water crosses (-1 if there are none). */
+function nearestFlowEdge(input: RiverFlowInput, px: number, py: number): number {
+  const { polygon, outEdge } = input;
+  let best = -1;
+  let bestD = Infinity;
+  for (const e of [...input.inEdges.filter((i) => i !== outEdge), outEdge]) {
+    const d = distToSegment(px, py, polygon[e]!, polygon[(e + 1) % polygon.length]!);
+    if (d < bestD) {
+      bestD = d;
+      best = e;
+    }
+  }
+  return best;
+}
+
+/** Everything both flow textures read from one solve of a river frame: the face masks, the potential, the bank distance, the lake fade. */
+function solveRiver(input: RiverFlowInput) {
+  const { mask, cw, ch, fadeEdge } = input;
   const { inside, passable, cover } = faceMasks(input);
   const isWater = (x: number, y: number) => x >= 0 && x < cw && y >= 0 && y < ch && mask[y * cw + x]! >= WATER_THRESHOLD && passable[y * cw + x] === 1;
   const bank = distanceToBank(input, passable);
   const { phi, seedEdge } = riverPotential(input);
 
+  const fade = fadeEdge === undefined ? null : geodesic(input, passable, fadeEdge);
+  const fadeLength = (Math.max(...input.polygon.map((p) => p.x)) - Math.min(...input.polygon.map((p) => p.x))) / 2;
+  /** Intensity of the water at texel `p`: the bank fade, and the lake fade where there is one. */
+  const intensityAt = (p: number): number => {
+    let intensity = Math.min(1, Math.max(0, bank[p]! / BANK_FADE_TEXELS));
+    if (fade) intensity *= 1 - smoothstep(0, fadeLength, fade[p]!);
+    return intensity;
+  };
+  return { inside, passable, cover, isWater, phi, seedEdge, intensityAt };
+}
+
+/**
+ * The flow direction texture of one river frame cell: RGBA8, `cw * ch * 4` bytes, premultiplied.
+ *
+ * R, G = unit flow direction * 0.5 + 0.5 (art space, +y down). B = intensity: the distance to the bank
+ * over `BANK_FADE_TEXELS`. A = 255 on the water texels with a direction inside the top face and its rim along the in and out edges
+ * (`FACE_PAD_TEXELS`), all four 0 elsewhere. Not drawn any more (the ripple texture is); kept as the direction reference.
+ */
+export function computeRiverFlow(input: RiverFlowInput): Uint8Array {
+  const { cw, ch, outEdge } = input;
+  const { inside, cover, isWater, phi, seedEdge, intensityAt } = solveRiver(input);
+
   // Negative gradient of the potential over water neighbours: central differences, one-sided where only one side is water.
   const vx = new Float32Array(cw * ch);
   const vy = new Float32Array(cw * ch);
   const has = new Uint8Array(cw * ch);
-  const flowEdges = [...input.inEdges.filter((e) => e !== outEdge), outEdge];
   const normals = input.polygon.map((_, e) => outwardNormal(input.polygon, e));
-  const nearestEdge = (px: number, py: number) => {
-    let best = -1;
-    let bestD = Infinity;
-    for (const e of flowEdges) {
-      const d = distToSegment(px, py, input.polygon[e]!, input.polygon[(e + 1) % input.polygon.length]!);
-      if (d < bestD) {
-        bestD = d;
-        best = e;
-      }
-    }
-    return best;
-  };
   const axis = (lo: boolean, hi: boolean, here: number, pLo: number, pHi: number) => (lo && hi ? (pHi - pLo) / 2 : hi ? pHi - here : lo ? here - pLo : 0);
   for (let y = 0; y < ch; y++) {
     for (let x = 0; x < cw; x++) {
@@ -461,7 +479,7 @@ export function computeRiverFlow(input: RiverFlowInput): Uint8Array {
       // tends to there anyway, and the neighbouring hex sets the same direction on the same edge, so the seam matches
       // exactly. (Filled from their neighbours instead, the band's ends against a bank took the bank's direction and left
       // off-colour spots along every seam.)
-      const edge = seedEdge[p]! >= 0 ? seedEdge[p]! : inside[p] ? -1 : nearestEdge(x + 0.5, y + 0.5);
+      const edge = seedEdge[p]! >= 0 ? seedEdge[p]! : inside[p] ? -1 : nearestFlowEdge(input, x + 0.5, y + 0.5);
       if (edge >= 0) {
         const n = normals[edge]!;
         const sign = edge === outEdge ? 1 : -1;
@@ -508,9 +526,6 @@ export function computeRiverFlow(input: RiverFlowInput): Uint8Array {
     for (const p of filled) has[p] = 1;
   }
 
-  const fade = fadeEdge === undefined ? null : geodesic(input, passable, fadeEdge);
-  const fadeLength = (Math.max(...input.polygon.map((p) => p.x)) - Math.min(...input.polygon.map((p) => p.x))) / 2;
-
   const out = new Uint8Array(cw * ch * 4);
   for (let y = 0; y < ch; y++) {
     for (let x = 0; x < cw; x++) {
@@ -525,12 +540,98 @@ export function computeRiverFlow(input: RiverFlowInput): Uint8Array {
       // short) must not cover the neighbouring river cell's rim, which is the water actually seen there.
       const o = p * 4;
       out[o + 3] = 255;
-      let intensity = Math.min(1, Math.max(0, bank[p]! / BANK_FADE_TEXELS));
-      if (fade) intensity *= 1 - smoothstep(0, fadeLength, fade[p]!);
+      const intensity = intensityAt(p);
       out[o] = Math.round(((dx / len) * 0.5 + 0.5) * 255);
       out[o + 1] = Math.round(((dy / len) * 0.5 + 0.5) * 255);
       out[o + 2] = Math.round(intensity * 255);
     }
   }
   return out;
+}
+
+/**
+ * Target ripple wavelength in texels of the half-resolution cell (one tile width is about 100 texels): a cell gets
+ * `round(channel length / this)` whole ripple periods between its in and out edges.
+ */
+export const RIPPLE_WAVELENGTH_TEXELS = 12;
+
+/**
+ * The ripple texture of one river frame cell: RGBA8, `cw * ch * 4` bytes, premultiplied, and the number of periods `n` it holds.
+ *
+ * The phase is `theta = 2 pi n phi` with the flow potential `phi` (1 at the in edges, 0 at the out edge; a cell without an in
+ * edge has `phi` normalised by its maximum over the water first), so its contour lines cross the channel and `theta` is
+ * a multiple of 2 pi on every in and out edge: neighbouring hexes and the arms of a confluence agree there. `n` is
+ * `max(1, round(L / RIPPLE_WAVELENGTH_TEXELS))`, `L` the mean geodesic distance (no bank penalty) from the out edge to the in edge
+ * seeds (the maximum over the water for a cell without an in edge). In the seed bands and the rim, where the potential is flat, the
+ * phase continues linearly at the cell's mean rate `2 pi n / L` per texel from the edge line (0 mod 2 pi on it), so a crest is not a flat strip.
+ *
+ * R, G = cos, sin of `theta` * 0.5 + 0.5 (filtering-safe, unlike a wrapped phase). B = intensity (as `computeRiverFlow`).
+ * A = 255 on the water of the face and its rim along the in and out edges, all four 0 elsewhere.
+ */
+export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; periods: number } {
+  const { mask, cw, ch, outEdge } = input;
+  const { inside, passable, cover, isWater, phi, seedEdge, intensityAt } = solveRiver(input);
+  const hasIn = input.inEdges.some((e) => e !== outEdge);
+
+  const dist = geodesic(input, passable, outEdge);
+  let length = 0;
+  let count = 0;
+  let maxDist = 0;
+  let maxPhi = 0;
+  for (let p = 0; p < cw * ch; p++) {
+    if (!passable[p] || mask[p]! < WATER_THRESHOLD) continue;
+    if (Number.isFinite(dist[p]!)) maxDist = Math.max(maxDist, dist[p]!);
+    maxPhi = Math.max(maxPhi, phi[p]!);
+    if (hasIn && seedEdge[p]! >= 0 && seedEdge[p] !== outEdge && Number.isFinite(dist[p]!)) {
+      length += dist[p]!;
+      count++;
+    }
+  }
+  const channelLength = hasIn && count > 0 ? length / count : maxDist;
+  const periods = Math.max(1, Math.round(channelLength / RIPPLE_WAVELENGTH_TEXELS));
+  const scale = hasIn || maxPhi <= 0 ? 1 : 1 / maxPhi;
+  const rate = channelLength > 0 ? (2 * Math.PI * periods) / channelLength : 0;
+  const normals = input.polygon.map((_, e) => outwardNormal(input.polygon, e));
+
+  // How far past its edge line (into the face) each edge's seed band reaches: the potential starts there, not on the line.
+  const depthOf = (edge: number, x: number, y: number) => {
+    const a = input.polygon[edge]!;
+    const n = normals[edge]!;
+    return -((x + 0.5 - a.x) * n.x + (y + 0.5 - a.y) * n.y);
+  };
+  const bandDepth = new Float64Array(input.polygon.length);
+  for (let p = 0; p < cw * ch; p++) {
+    const e = seedEdge[p]!;
+    if (e >= 0) bandDepth[e] = Math.max(bandDepth[e]!, depthOf(e, p % cw, Math.floor(p / cw)));
+  }
+  const inEdges = input.inEdges.filter((e) => e !== outEdge);
+  const outDepth = bandDepth[outEdge]!;
+  const inDepth = inEdges.length > 0 ? inEdges.reduce((s, e) => s + bandDepth[e]!, 0) / inEdges.length : 0;
+
+  const out = new Uint8Array(cw * ch * 4);
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      const p = y * cw + x;
+      if (!cover[p] || !isWater(x, y)) continue;
+      // The seed bands and the rim past an edge have a constant potential, which would draw a crest as a wide flat strip along
+      // every seam. There the phase runs on past the edge line at the cell's mean rate instead (`2 pi n / L` per texel), so it
+      // is still 0 mod 2 pi on the edge line itself and the two hexes of a seam continue each other's phase through it. The
+      // potential proper starts at the inner side of the bands, so its phase is shifted there by what the bands have used up
+      // (linearly in the potential), which keeps the phase continuous where band and interior meet.
+      const edge = seedEdge[p]! >= 0 ? seedEdge[p]! : inside[p] ? -1 : nearestFlowEdge(input, x + 0.5, y + 0.5);
+      let theta: number;
+      if (edge >= 0) {
+        theta = (edge === outEdge ? 1 : -1) * rate * depthOf(edge, x, y);
+      } else {
+        const phase = Math.min(1, phi[p]! * scale);
+        theta = 2 * Math.PI * periods * phase + (1 - phase) * rate * outDepth - phase * rate * inDepth;
+      }
+      const o = p * 4;
+      out[o] = Math.round((Math.cos(theta) * 0.5 + 0.5) * 255);
+      out[o + 1] = Math.round((Math.sin(theta) * 0.5 + 0.5) * 255);
+      out[o + 2] = Math.round(intensityAt(p) * 255);
+      out[o + 3] = 255;
+    }
+  }
+  return { data: out, periods };
 }

@@ -2,17 +2,17 @@
 //
 // `build/waterDryMasks.ts` bakes a river water mask per river frame
 // (`virtual:river-water-masks`). This file decodes that atlas once, turns a
-// frame's mask into a flow cell (riverFlow.ts) for the tile's downstream edge,
+// frame's mask into a ripple cell (riverFlow.ts) for the tile's downstream edge,
 // and draws the cells, placed where the tile art is drawn, into one render
 // texture covering the water mask's world rect. The water shader samples it
-// with the same UVs as the water mask and draws the moving streaks on the
+// with the same UVs as the water mask and draws the moving ripple crests on the
 // river pixels.
 import { BufferImageSource, Texture, type Renderer } from 'pixi.js';
 import type { RiverTile, BogTile, TileOrientation } from '../types';
 import { topFaceEdgeIndex } from '../riverPath';
 import type { DryMaskFrame, WaterDryMasksData } from './dryMaskCore';
 import { dryCellWorldRect, MaskRenderTarget, type MaskPlacement } from './waterDryMask';
-import { computeRiverFlow, topFacePolygonTexels } from './riverFlow';
+import { computeRiverRipple, topFacePolygonTexels } from './riverFlow';
 
 /** One river or bog-creek hex's base art, as drawn, and where its water goes. */
 export interface RiverFlowEntry {
@@ -125,8 +125,8 @@ export class RiverFlowLayer {
     let texture = this.cells.get(key);
     if (!texture) {
       const { mask, cw, ch } = cropAtlasCell(masks.alpha, masks.data.width, frame);
-      const flow = computeRiverFlow({ mask, cw, ch, polygon: topFacePolygonTexels(frame.sx, frame.sy), inEdges, outEdge, fadeEdge });
-      texture = new Texture({ source: new BufferImageSource({ resource: flow, width: cw, height: ch, scaleMode: 'linear', addressMode: 'clamp-to-edge' }) });
+      const flow = computeRiverRipple({ mask, cw, ch, polygon: topFacePolygonTexels(frame.sx, frame.sy), inEdges, outEdge, fadeEdge });
+      texture = new Texture({ source: new BufferImageSource({ resource: flow.data, width: cw, height: ch, scaleMode: 'linear', addressMode: 'clamp-to-edge' }) });
       this.cells.set(key, texture);
     }
     return texture;

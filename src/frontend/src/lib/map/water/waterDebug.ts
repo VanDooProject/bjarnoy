@@ -66,13 +66,13 @@ export interface WaterDebugFlags {
    */
   showWaterMask: boolean;
   /**
-   * The moving streaks on the painted river, stream and bog-creek water of a settlement view (§4.4d). The flow comes
+   * The moving ripples on the painted river, stream and bog-creek water of a settlement view (§4.4d). The flow comes
    * from the tile data and the art, see riverFlow.ts. Off leaves the painted water still.
    */
   riverFlow: boolean;
   /**
-   * Debug: colour the river pixels by flow direction (hue = angle) with the bank distance as brightness, instead of
-   * the streaks. The tool to check that the water runs downstream.
+   * Debug: colour the river pixels by ripple phase (hue = phase, static) with the bank distance as brightness, instead of
+   * the ripples. The tool to check that the bands cross the channel and match across hex seams.
    */
   showRiverFlow: boolean;
   /**
@@ -180,7 +180,7 @@ export interface WaterDebugTuning {
    * offsetting one in time does.
    */
   causticFinePhase: number;
-  /** Multipliers on the river streaks' brightness and speed (§4.4d); 1.00x is what ships. */
+  /** Multipliers on the river ripples' brightness and speed (§4.4d); 1.00x is what ships. */
   riverBrightness: number;
   riverSpeed: number;
 }

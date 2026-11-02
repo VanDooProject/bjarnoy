@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeRiverFlow, riverGeodesicDistance, riverPotential, SEED_REACH, topFacePolygonTexels, WATER_THRESHOLD, type RiverFlowInput } from './riverFlow';
+import { computeRiverFlow, computeRiverRipple, RIPPLE_WAVELENGTH_TEXELS, riverGeodesicDistance, riverPotential, SEED_REACH, topFacePolygonTexels, WATER_THRESHOLD, type RiverFlowInput } from './riverFlow';
 import { topFaceEdgeIndex } from '../riverPath';
 import { riverFrameInput, vendoredArt, type RiverFrame } from './riverArtFixture';
 
@@ -430,5 +430,134 @@ describe.skipIf(!vendoredArt)('computeRiverFlow on the river delta', () => {
       }
     }
     expect(sum / n).toBeLessThan(-0.5);
+  }, 120_000);
+});
+
+/** The ripple phase (radians, wrapped to -pi..pi) at a texel of a ripple cell; null where the cell has no flow. */
+function phaseAt(cell: Uint8Array, x: number, y: number, cw: number): { theta: number; cos: number; b: number } | null {
+  const o = (y * cw + x) * 4;
+  if (cell[o + 3] === 0) return null;
+  const cos = (cell[o]! / 255) * 2 - 1;
+  const sin = (cell[o + 1]! / 255) * 2 - 1;
+  return { theta: Math.atan2(sin, cos), cos, b: cell[o + 2]! / 255 };
+}
+
+describe('computeRiverRipple on a synthetic straight channel', () => {
+  it('is a whole number of periods, 0 mod 2 pi on the in and out seed bands, rising from the out edge to the in edge', () => {
+    const { data, periods } = computeRiverRipple(input(channel(), BOTTOM));
+    // The channel runs from the bottom seed band (y ~ 45) to the top one (y ~ 1): about 44 texels.
+    expect(periods).toBe(Math.max(1, Math.round(44 / RIPPLE_WAVELENGTH_TEXELS)));
+    // On the edge line itself (the face's top and bottom sides, y 0 and 46) the phase is a whole turn; past it, in the seed band
+    // and the rim, it runs on at the cell's mean rate instead of standing still. The texel centres at y 0.5 and 45.5 are half
+    // a texel from the lines, the out edge's rim at 46.5 and 47.5 up to 1.5.
+    for (const y of [0, CH - 3]) expect(phaseAt(data, 50, y, CW)!.cos, `y=${y}`).toBeGreaterThan(0.95);
+    for (const y of [1, CH - 2, CH - 1]) expect(phaseAt(data, 50, y, CW)!.cos, `y=${y}`).toBeGreaterThan(0.5);
+    // Unwrapped along the axis from the out edge to the in edge: never decreases, ends at 2 pi * periods.
+    let prev = 0;
+    let unwrapped = 0;
+    let started = false;
+    for (let y = CH - 1; y >= 0; y--) {
+      const p = phaseAt(data, 50, y, CW);
+      if (!p) continue;
+      if (started) {
+        let step = p.theta - prev;
+        while (step < -Math.PI) step += 2 * Math.PI;
+        while (step > Math.PI) step -= 2 * Math.PI;
+        expect(step, `y=${y}`).toBeGreaterThan(-0.05);
+        unwrapped += step;
+      }
+      started = true;
+      prev = p.theta;
+    }
+    // The sampled rows run from 1.5 texels past the out edge line to half a texel inside the in edge line, so the span is a
+    // whole number of periods plus the phase of those 2 texels at the cell's rate (2 pi periods / 44 per texel, about 0.6).
+    expect(Math.abs(unwrapped - 2 * Math.PI * periods)).toBeLessThan(1);
+  });
+
+  it('continues its phase across a seam: the out edge rim of one hex equals the in edge side of the hex below it', () => {
+    const above = computeRiverRipple(input(channel(), BOTTOM));
+    const below = computeRiverRipple(input(channel(), BOTTOM));
+    expect(above.periods).toBe(below.periods);
+    // The face's bottom side is at y = 46, the next hex's top side is the same line: texel y of the hex above is y - 46 of the
+    // hex below. Both are on the water, one in the out edge's rim, the other in the in edge's seed band.
+    for (const [yAbove, yBelow] of [[46, 0], [47, 1]] as const) {
+      const a = phaseAt(above.data, 50, yAbove, CW)!;
+      const b = phaseAt(below.data, 50, yBelow, CW)!;
+      expect(Math.abs(a.theta - b.theta), `rows ${yAbove}/${yBelow}`).toBeLessThan(0.05);
+    }
+  });
+
+  it('runs the other way round when the edges swap, and keeps the intensity and coverage of the direction cell', () => {
+    const flow = computeRiverFlow(input(channel(), TOP));
+    const { data } = computeRiverRipple(input(channel(), TOP));
+    for (let p = 0; p < CW * CH; p++) {
+      expect(data[p * 4 + 3], `alpha ${p}`).toBe(flow[p * 4 + 3]);
+      expect(data[p * 4 + 2], `intensity ${p}`).toBe(flow[p * 4 + 2]);
+    }
+    expect(phaseAt(data, 50, 0, CW)!.cos).toBeGreaterThan(0.95);
+    expect(phaseAt(data, 50, CH - 3, CW)!.cos).toBeGreaterThan(0.95);
+  });
+});
+
+describe.skipIf(!vendoredArt)('computeRiverRipple on the vendored art', () => {
+  it('is a whole turn on every in and out edge line: cos theta > 0.95 within half a texel of it, and near 0 within 1.5', async () => {
+    for (const [name, outDir, inDirs] of [
+      ['rivertile_bend120_meander_SE_base', 'W', ['SE']],
+      ['rivertile_y_narrow_SE_base', 'W', ['E', 'SE']],
+    ] as const) {
+      const f = await riverFrameInput(name);
+      const outEdge = topFaceEdgeIndex(outDir);
+      const inEdges = inDirs.map(topFaceEdgeIndex);
+      const { data, periods } = computeRiverRipple({ ...f, inEdges, outEdge });
+      expect(periods, name).toBeGreaterThanOrEqual(1);
+      for (const e of [outEdge, ...inEdges]) {
+        const a = f.polygon[e]!;
+        const b = f.polygon[(e + 1) % 6]!;
+        let checked = 0;
+        for (let y = 0; y < f.ch; y++) {
+          for (let x = 0; x < f.cw; x++) {
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const t = Math.max(0, Math.min(1, ((x + 0.5 - a.x) * dx + (y + 0.5 - a.y) * dy) / (dx * dx + dy * dy)));
+            const d = Math.hypot(x + 0.5 - (a.x + t * dx), y + 0.5 - (a.y + t * dy));
+            if (d > 1.5) continue;
+            const p = phaseAt(data, x, y, f.cw);
+            if (!p) continue;
+            checked++;
+            expect(p.cos, `${name} edge ${e} at ${x},${y}`).toBeGreaterThan(d <= 0.5 ? 0.95 : 0.5);
+          }
+        }
+        expect(checked, `${name} edge ${e}`).toBeGreaterThan(5);
+      }
+    }
+  }, 120_000);
+
+  it('gives a spring frame (no in edge) a valid cell with phase 0 at the out edge', async () => {
+    const f = await riverFrameInput('bogcreek_spring_E_base');
+    const edges = touchedEdges(f);
+    expect(edges.length).toBe(1);
+    const out = edges[0]!;
+    const { data, periods } = computeRiverRipple({ ...f, inEdges: [], outEdge: out });
+    expect(periods).toBeGreaterThanOrEqual(1);
+    const a = f.polygon[out]!;
+    const b = f.polygon[(out + 1) % 6]!;
+    let covered = 0;
+    let checked = 0;
+    for (let y = 0; y < f.ch; y++) {
+      for (let x = 0; x < f.cw; x++) {
+        const p = phaseAt(data, x, y, f.cw);
+        if (!p) continue;
+        covered++;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const t = Math.max(0, Math.min(1, ((x + 0.5 - a.x) * dx + (y + 0.5 - a.y) * dy) / (dx * dx + dy * dy)));
+        if (Math.hypot(x + 0.5 - (a.x + t * dx), y + 0.5 - (a.y + t * dy)) <= 1.5) {
+          checked++;
+          expect(p.cos, `at ${x},${y}`).toBeGreaterThan(0.5);
+        }
+      }
+    }
+    expect(covered).toBeGreaterThan(50);
+    expect(checked).toBeGreaterThan(3);
   }, 120_000);
 });

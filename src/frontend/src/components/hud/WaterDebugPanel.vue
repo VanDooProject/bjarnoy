@@ -38,8 +38,8 @@ const LABELS: Record<keyof WaterDebugFlags, string> = {
   seaBody: 'Sea body (world map; off = CSS gradient)',
   legacyWaveSquiggles: 'World map: Graphics wave squiggles',
   showWaterMask: 'Debug: show the raw water mask',
-  riverFlow: 'River flow streaks (settlement)',
-  showRiverFlow: 'Debug: show river flow direction',
+  riverFlow: 'River ripples (settlement)',
+  showRiverFlow: 'Debug: show river ripple phase',
   legacyTileSplit: 'Split unsplit tall art in code',
 };
 

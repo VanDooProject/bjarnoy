@@ -265,16 +265,14 @@ const CAUSTIC_BLOB_ALPHA = 0.42;
 const CAUSTIC_BLOB_COLOR = 0x0d1728;
 
 /**
- * River flow streaks (docs/design/water-shader.md §4.4d). Pattern units are `RIVER_SCALE` per world unit: one noise cell along
- * the flow is a sixth of a tile, so a streak is about that long. The streaks advance a third of a tile (`RIVER_SPEED` pattern
- * units) per `RIVER_CYCLE_SECONDS`, i.e. half a tile per second. The advance per cycle is short on purpose: the flow direction
- * turns along a bend, and sliding the pattern further per cycle shears it into swirls.
+ * River ripples (docs/design/water-shader.md §4.4d). The crests slide `RIVER_SPEED_TURNS_PER_SECOND` whole ripple periods per
+ * second towards the out edge (a period is about `RIPPLE_WAVELENGTH_TEXELS` texels, an eighth of a tile). The noise that breaks
+ * the crests into pieces has `RIVER_NOISE_PER_TILE` cells per tile.
  */
 export const RIVER_COLOR = 0xcce9ff;
-export const RIVER_ALPHA = 0.35;
-export const RIVER_CYCLE_SECONDS = 2 / 3;
-const RIVER_SCALE_PER_TILE = 6;
-const RIVER_SPEED_TILES_PER_CYCLE = 1 / 3;
+export const RIVER_ALPHA = 0.5;
+const RIVER_NOISE_PER_TILE = 6;
+const RIVER_SPEED_TURNS_PER_SECOND = 0.8;
 
 function hexToRgb01(hex: number): [number, number, number] {
   return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
@@ -436,11 +434,10 @@ export class WaterLayer {
       uCausticBlobColor: { value: new Float32Array([blobR, blobG, blobB]), type: 'vec3<f32>' },
       uRiverFlowOn: { value: 0, type: 'f32' },
       uShowRiverFlow: { value: 0, type: 'f32' },
-      uRiverCycle: { value: 1 / RIVER_CYCLE_SECONDS, type: 'f32' },
-      uRiverSpeed: { value: RIVER_SPEED_TILES_PER_CYCLE * RIVER_SCALE_PER_TILE, type: 'f32' },
+      uRiverSpeed: { value: RIVER_SPEED_TURNS_PER_SECOND * 2 * Math.PI, type: 'f32' },
       uRiverAlpha: { value: RIVER_ALPHA, type: 'f32' },
       uRiverColor: { value: new Float32Array([riverR, riverG, riverB]), type: 'vec3<f32>' },
-      uRiverScale: { value: RIVER_SCALE_PER_TILE / tileWidth, type: 'f32' },
+      uRiverScale: { value: RIVER_NOISE_PER_TILE / tileWidth, type: 'f32' },
       // What the mask's far channel is normalised over, so the shader can decode
       // G back into tile widths the same way uNearSpan decodes R.
       uFarReach: { value: FOAM_REACH_TILES, type: 'f32' },
@@ -677,7 +674,7 @@ export class WaterLayer {
     u.uRiverFlowOn = waterDebugFlags.riverFlow ? 1 : 0;
     u.uShowRiverFlow = waterDebugFlags.showRiverFlow ? 1 : 0;
     u.uRiverAlpha = RIVER_ALPHA * waterDebugTuning.riverBrightness;
-    u.uRiverSpeed = RIVER_SPEED_TILES_PER_CYCLE * RIVER_SCALE_PER_TILE * waterDebugTuning.riverSpeed;
+    u.uRiverSpeed = RIVER_SPEED_TURNS_PER_SECOND * 2 * Math.PI * waterDebugTuning.riverSpeed;
 
     this.mesh.visible = waterDebugFlags.water && this.hasMask && !this.suppressed;
   }

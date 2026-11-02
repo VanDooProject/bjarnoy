@@ -121,7 +121,6 @@ uniform float uCausticBlobAlpha;
 uniform vec3 uCausticBlobColor;
 uniform float uRiverFlowOn;
 uniform float uShowRiverFlow;
-uniform float uRiverCycle;
 uniform float uRiverSpeed;
 uniform float uRiverAlpha;
 uniform vec3 uRiverColor;
@@ -476,58 +475,37 @@ float sampleDry() {
   return texture(uWaterDry, vUV).a;
 }
 
-// The river flow field (docs/design/water-shader.md §4.4d), premultiplied RGBA: rg = flow direction * 0.5 + 0.5 in art
-// space (+y down), b = intensity (0 at the bank), a = 1 inside the river hex's top face. Same UVs as the mask. Returns the
+// The river ripple field (docs/design/water-shader.md §4.4d), premultiplied RGBA: rg = (cos, sin) of the ripple phase
+// * 0.5 + 0.5, b = intensity (0 at the bank), a = 1 where the river hex has flow. Same UVs as the mask. Returns the
 // un-premultiplied value, zero where no river hex is drawn.
 vec4 sampleRiverFlow() {
   vec4 f = texture(uRiverFlow, vUV);
   return f.a > 0.01 ? vec4(f.rgb / f.a, f.a) : vec4(0.0);
 }
 
-// Streaky value noise in a frame whose first axis runs at angle: stretched along it, ~4x finer across. Thin bright streaks
-// plus sparse glints, 0..1. The frame is one of a fixed set (see riverPattern), never one built from the local flow
-// direction: a frame rotated about the world origin by a direction that changes from pixel to pixel throws the lookup
-// far across the noise lattice, and the streaks turn to static.
-float riverPatternAt(float angle, vec2 p) {
-  vec2 along = vec2(cos(angle), sin(angle));
-  vec2 q = vec2(dot(p, along), dot(p, vec2(-along.y, along.x)) * 4.0);
-  float streak = smoothstep(0.60, 0.74, noise(q) * 0.7 + noise(q * vec2(2.1, 1.7) + 13.0) * 0.3);
-  float glint = smoothstep(0.86, 0.94, noise(q * vec2(1.3, 2.3) + 37.0));
-  return max(streak * 0.8, glint);
+// The stored phase as a unit (cos, sin) pair: filtering the encoded pair shortens it, so it is renormalised.
+vec2 riverPhase(vec4 flow) {
+  vec2 cs = flow.rg * 2.0 - 1.0;
+  return cs / max(length(cs), 1e-3);
 }
 
-// The pattern for a flow direction: the two nearest of RIVER_FRAMES fixed frames, cross-faded by angle, so the streaks follow
-// a bending river smoothly.
-const float RIVER_FRAMES = 24.0;
-float riverPattern(vec2 dir, vec2 p) {
-  float k = mod(atan(dir.y, dir.x) / 6.2831853, 1.0) * RIVER_FRAMES;
-  float k0 = floor(k);
-  float step = 6.2831853 / RIVER_FRAMES;
-  return mix(riverPatternAt(k0 * step, p), riverPatternAt((k0 + 1.0) * step, p), smoothstep(0.0, 1.0, k - k0));
-}
+const float RIVER_CREST_EDGE = 0.85;
 
-// The river overlay: two-phase flow-map advection in ground space. Each layer slides along the local flow direction by
-// phase * uRiverSpeed pattern units and is faded in and out by a triangle weight, so the two layers swap at their resets and
-// the pattern never visibly jumps. A very low-frequency noise offsets the phase, so the whole river does not pulse in step
-// (a faster one would shear the pattern into swirls). Returns premultiplied colour.
-vec4 riverOverlay(vec2 flowDir, float intensity, vec2 ground) {
-  vec2 dirG = vec2(flowDir.x, flowDir.y / uGroundSquash);
-  dirG /= max(length(dirG), 1e-4);
-  float t = uTime * uRiverCycle + noise(ground * uRiverScale * 0.06) * 0.6;
-  float phase0 = fract(t);
-  float phase1 = fract(t + 0.5);
-  vec2 p = ground * uRiverScale;
-  float a = riverPattern(dirG, p - dirG * phase0 * uRiverSpeed);
-  float b = riverPattern(dirG, p - dirG * phase1 * uRiverSpeed);
-  // Layer 1 is at its fullest when layer 0 resets (phase0 = 0 or 1), and the other way round.
-  float w = abs(1.0 - 2.0 * phase0);
-  float alpha = mix(a, b, w) * intensity * uRiverAlpha;
+// The river overlay: thin light crests where the stored phase, rotated by uTime * uRiverSpeed, is near a whole turn. The phase
+// is a multiple of the potential, so the crests cross the channel and slide towards the out edge (potential 0). Low-frequency
+// noise in ground space breaks each crest into ripple pieces. Returns premultiplied colour.
+vec4 riverOverlay(vec2 cs, float intensity, vec2 ground) {
+  float turn = uRiverSpeed * uTime;
+  float c = cs.x * cos(turn) - cs.y * sin(turn);
+  float crest = smoothstep(RIVER_CREST_EDGE, 0.985, c);
+  float broken = smoothstep(0.25, 0.5, noise(ground * uRiverScale) * 0.7 + noise(ground * uRiverScale * 2.3 + 11.0) * 0.3);
+  float alpha = crest * broken * intensity * uRiverAlpha;
   return vec4(uRiverColor * alpha, alpha);
 }
 
-// Debug: hue = flow angle, brightness = intensity (with a floor so the bank stays visible).
-vec3 riverFlowDebugColor(vec2 flowDir, float intensity) {
-  float angle = atan(flowDir.y, flowDir.x);
+// Debug: hue = the static ripple phase (a whole turn per ripple), brightness = intensity (with a floor so the bank stays visible).
+vec3 riverFlowDebugColor(vec2 cs, float intensity) {
+  float angle = atan(cs.y, cs.x);
   vec3 hue = clamp(abs(mod(angle / 6.2831853 * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
   return hue * (0.2 + 0.8 * intensity);
 }
@@ -588,14 +566,14 @@ void main() {
   // Painted river water is land as far as the mask knows, so it is drawn here, before the land discard. The flow texture is
   // clipped to the river hex's own top face, which tessellates exactly with its neighbours', so nothing else needs masking.
   vec4 flow = (uRiverFlowOn > 0.5 || uShowRiverFlow > 0.5) ? sampleRiverFlow() : vec4(0.0);
-  vec2 flowDir = flow.rg * 2.0 - 1.0;
-  if (!water && flow.a > 0.5 && length(flowDir) > 0.5) {
+  vec2 ripple = riverPhase(flow);
+  if (!water && flow.a > 0.5) {
     if (uShowRiverFlow > 0.5) {
-      finalColor = vec4(riverFlowDebugColor(flowDir, flow.b), 1.0);
+      finalColor = vec4(riverFlowDebugColor(ripple, flow.b), 1.0);
       return;
     }
     if (flow.b > 0.01) {
-      vec4 river = riverOverlay(flowDir, flow.b, vGround);
+      vec4 river = riverOverlay(ripple, flow.b, vGround);
       if (river.a >= 0.004) {
         finalColor = river;
         return;
