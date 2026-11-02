@@ -9,49 +9,49 @@
       "seed": 1,
       "terrain": "64e1c85bf6c7d96c948d8c673bc77acbb96849251a1c0e7903a1b2910d01f180",
       "orientation": "f8e09e70b0c96283fb5f16b82f6c904a82f1bf0d16646291b298219daeb9e581",
-      "variant": "0e79a095160f3e16e04aa73efc9511675b86c90e9a58437db39a6b4281d70eed",
+      "variant": "ae16f91eb490ae07bec8ed4c890a8a0074d3a95532cf236b5674486c25861bbb",
       "forestKind": "5b2c7145e152c5fbce457070b99f35c0963a964531968abd170b0503d9614c40"
     },
     {
       "seed": 7,
       "terrain": "45b92f3fc1f85aa37932c995c9a873edaffa5836ecffe9821791e24004ac5752",
       "orientation": "e72db036c26e75dc82ab4bb61b1a3c76a706d19ddf9de32d7b7cea1dd1e319cd",
-      "variant": "5fd61c8352abf786d899cf89d69ef2d1dac89dded66809bfaf0ef6aa748b382d",
+      "variant": "e0b64ecd73a9c5abd7a3d12adb44307c2651b3360f78ea9059f5d77695c78826",
       "forestKind": "a2e462b6f8e20953e975dfb2aa20373fefa59c85b610c487268d9665d2c5a2dd"
     },
     {
       "seed": 42,
       "terrain": "988fba13983123690bef8ae41830caddcb1d256cae4eb29ce778b406a838596a",
       "orientation": "e18a9c791afa996d6d64d7acceb007be630bd5bcdec331c1390cd38a12ea7fa9",
-      "variant": "dd945733561917f979c4655b0d03c84a3a1f02dd1964f6960846e95d74cf793e",
+      "variant": "4434e4443e41734b004c79e8d03c93d4e3c45677e187605c402ce8fa31821548",
       "forestKind": "c712300e47aaf437aaf62f6bc73c2646da581863711e1f54caa36a51ebc0b9e7"
     },
     {
       "seed": 1337,
       "terrain": "caf583dd45057223b6e6132507ee7098dea61371d51dbe385017a484579ea399",
       "orientation": "e202ca8c417d15a696e18345fc4c60d101a86fe396aab78ea3e09de9c79bad51",
-      "variant": "110b7ed416e3ac768356ee41ba8d15589428f802230cb1d7ee21d33ff62e05ca",
+      "variant": "2c8e0090e96e4ced4e3028db2ca8e8edc428dbd690d10585d01c36bac6d75423",
       "forestKind": "537808c7eb670d2817122524827791ffae476e82cec16bec114494314a87301e"
     },
     {
       "seed": -5,
       "terrain": "cfc6dd1faf99819de88336d1c68b1b687c55e1c15ad1d1d1b97ca0de1cce0e8c",
       "orientation": "6e9b2dfa2894a2b68875a7b2f19eb7d0c57142eeaa57867c1b67cef2da98cd1b",
-      "variant": "2ac462cb91e7e7d165ca99642118d7eb1553fb0042594712e182e369ede42ff2",
+      "variant": "c14c2f01eb62888f0c019821623b5ceb5325bbc7dbc393f437cce13d63663598",
       "forestKind": "d79684453450d13c55d7fa47e5906959c21837e428b04b4465d4b7af0fa0f770"
     },
     {
       "seed": 2147483,
       "terrain": "816634136fdec9a065cb999122aad978136b7c012a85d7e6b5c28ebd8b9ed7c3",
       "orientation": "4176bee385b7b861ecc719b1c784c8e6d585ee0740e624396f6b64e07bd17273",
-      "variant": "56fffc8c43d20d20e33b272ab0b4b037cb3d1e47975a382f17e248898f51dbaa",
+      "variant": "e3f05d46ea122a27cb7c9565e649f61d594c7457f27be25ac78dd09df295e49d",
       "forestKind": "e9699faf8b80f6745fdc2fd88391ebcce059e927f2f6df8c689f1156b8893411"
     },
     {
       "seed": 0,
       "terrain": "24aba455d714e579884dabe962417bab8d8ba5f4449e785b84af9d1361650e06",
       "orientation": "d356b39870c7480a1f01c1a3bcb3b3d0679e3e35dd068f6ed67bbb16c80c73fd",
-      "variant": "2a971a867cbf80f51c147fedf80972a22c252a0a08707efb3b8dbe1b4a0501a4",
+      "variant": "0643cc7826e7454ea0411e33c357065fd9ac11dc3f30a7cb28c49192b83c15c7",
       "forestKind": "4b3a11abc7cf6b1a9aa22ac7faaec47f60f9f9fbe0614acda8efe6976191cf2a"
     }
   ]
