@@ -53,9 +53,9 @@ describe('RealmView', () => {
       const from = Number(row.attributes('data-from'));
       expect(Number(row.get('td').text())).toBe(maxTowers(from));
     }
-    expect(rows[0]!.text()).toContain('3–6');
-    expect(rows.at(-1)!.text()).toContain('29–30');
-    expect(rows.at(-1)!.text()).toContain('13');
+    expect(rows.map((r) => r.get('th').text()).slice(0, 5)).toEqual(['3', '7', '9', '11', '13']);
+    expect(rows.at(-1)!.get('th').text()).toBe('29');
+    expect(rows.at(-1)!.get('td').text()).toBe('13');
   });
 
   it('has the five sections, the example, and the four tower grounds', () => {

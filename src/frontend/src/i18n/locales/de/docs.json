@@ -1076,8 +1076,7 @@
       "heading": "Wie viele Wachtürme",
       "body": "Die Stufe deines Langhauses bestimmt, wie viele Wachtürme du haben darfst: einen ab Stufe {level}, danach einen weiteren für jede zweite Stufe nach Stufe 5.",
       "levels": "Langhaus-Stufe",
-      "towers": "Wachtürme",
-      "range": "{from}–{to}"
+      "towers": "Wachtürme"
     },
     "where": {
       "heading": "Wo ein Wachturm steht",

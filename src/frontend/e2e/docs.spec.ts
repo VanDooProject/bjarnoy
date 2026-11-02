@@ -849,9 +849,10 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(page.locator(".realm-example canvas")).toBeVisible();
     const caption = page.getByTestId("realm-example-caption");
     await expect(caption).toContainText("Step 1");
-    await page.locator(".realm-example").getByRole("button", { name: "2", exact: true }).click();
+    const slider = page.getByTestId("realm-example-slider");
+    await slider.fill("1");
     await expect(caption).toContainText("forest hex");
-    await page.locator(".realm-example").getByRole("button", { name: "3", exact: true }).click();
+    await slider.fill("2");
     await expect(caption).toContainText("plain bog moss");
   });
 

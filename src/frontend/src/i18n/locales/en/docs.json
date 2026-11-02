@@ -1076,8 +1076,7 @@
       "heading": "How many towers",
       "body": "Your longhouse level sets how many towers you may have: one from level {level}, then one more for every second level after level 5.",
       "levels": "Longhouse level",
-      "towers": "Towers",
-      "range": "{from}–{to}"
+      "towers": "Towers"
     },
     "where": {
       "heading": "Where a tower stands",
