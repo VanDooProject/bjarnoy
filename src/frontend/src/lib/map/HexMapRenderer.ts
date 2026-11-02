@@ -485,6 +485,8 @@ export interface HexMapRendererOptions {
    * branch of `onPointerMove`, and `previewFitZoom`.
    */
   lockCamera?: boolean;
+  /** Called whenever the camera transform is applied (pan, zoom, resize, re-framing). The host debounces. */
+  onCameraChange?: () => void;
   /**
    * Lets the page itself scroll under a wheel/touch gesture over the canvas
    * instead of the renderer eating it for camera zoom/pan. With `lockCamera`
@@ -2608,6 +2610,7 @@ export class HexMapRenderer {
     this.blackFogLayer.setCamera(this.camera, this.viewport);
     this.whiteMistLayer.setCamera(this.camera, this.viewport);
     this.notifyFogViewport();
+    this.options.onCameraChange?.();
   }
 
   private onTick = () => {
@@ -5639,6 +5642,23 @@ export class HexMapRenderer {
   /** Current camera zoom — for the zoom-transition debug panel's live readout and e2e assertions on camera continuity. `camera` itself stays private. */
   get cameraZoom(): number {
     return this.camera.zoom;
+  }
+
+  /** The hex under the camera centre and the zoom — what the URL hash keeps (lib/mapCameraHash.ts). `camera` itself stays private. */
+  get cameraView(): { coord: AxialCoord; zoom: number } {
+    return { coord: isoPixelToAxial({ x: this.camera.x, y: this.camera.y }, TILE_W, TILE_H), zoom: this.camera.zoom };
+  }
+
+  /** Puts the camera centre on `coord` at `zoom`, as if the player had panned there. No-op on a locked camera. */
+  restoreCameraView(coord: AxialCoord, zoom: number) {
+    if (!this.app || this.lockCamera) return;
+    const grid = isoGridPosition(coord, TILE_W, TILE_H);
+    this.camera = this.clampCamera({ ...this.camera, x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2, zoom });
+    this.cameraTouched = true;
+    this.idleDrift = false;
+    this.cameraAnim = null;
+    this.applyCameraTransform();
+    this.rebuildAll();
   }
 
   /**

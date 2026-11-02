@@ -19,7 +19,7 @@ test('landing page is the village view, not a marketing page in front of it', { 
   // banner's explicit hand-off, then the full game — all without ever
   // visiting a world map.
   await SettlementPage.found(page);
-  await expect(page).toHaveURL(/\/settlement$/);
+  await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
 });
 
 // While the terrain art is still loading there is no plot on screen yet, so

@@ -11,7 +11,7 @@ test('clicking an island founds a settlement and opens the village view', async 
   // comments for the other tests that share this same root cause.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await SettlementPage.found(page);
-  await expect(page).toHaveURL(/\/settlement$/);
+  await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
 
   // resource bar: the settlement is real state, not a placeholder screen —
   // four resources plus the population pill, each a positive, growing
