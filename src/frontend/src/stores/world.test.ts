@@ -1823,6 +1823,8 @@ describe('construction slots/reservations degrade gracefully in demo mode', () =
       maxWaitingOrders: 0,
       waitingOrders: 0,
       maxOrdersPerHex: 1,
+      towerLimit: 0,
+      towersHeld: 0,
     });
 
     store.selectedSettlementId = 'settlement-1';
@@ -2097,7 +2099,7 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
         capacity: { wood: 750, stone: 750, food: 900, iron: 375 },
         reserved: { wood: 0, stone: 0, food: 0, iron: 0 },
       },
-      construction: { slots: 2, slotsUsed: 1, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1 },
+      construction: { slots: 2, slotsUsed: 1, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 },
       buildings: [],
       queue: overrides.queue ?? [],
       garrison: [],
@@ -2286,7 +2288,7 @@ describe('useWorldStore linked realms', () => {
     return {
       id, realmId, linkedMemberIds, name: 'Realm', ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-1',
       resources: { stock: { ...emptyRes }, ratePerHour: { ...emptyRes }, capacity: { ...emptyRes }, reserved: { ...emptyRes } },
-      construction: { slots: 2, slotsUsed: 0, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1 },
+      construction: { slots: 2, slotsUsed: 0, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 },
       buildings: [], queue: [], garrison: [], trainingQueue: [], runes: [], feast: null, nextFeast: null, quests: [],
     };
   }

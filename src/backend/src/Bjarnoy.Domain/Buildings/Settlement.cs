@@ -222,6 +222,27 @@ public sealed record Settlement
         BuildingCatalogue.Get(BuildingType.Longhouse, Math.Clamp(longhouseLevel, 1, BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse))).ClaimRadius;
 
     /// <summary>
+    /// How many towers the whole (linked) realm may hold: this settlement's limit (<see cref="BuildingCatalogue.MaxTowers"/>) plus
+    /// the other members' limits.
+    /// </summary>
+    public int TowerLimit => BuildingCatalogue.MaxTowers(LonghouseLevel) + (Linked?.OtherTowerLimit ?? 0);
+
+    /// <summary>
+    /// The towers counting against <see cref="TowerLimit"/>: the realm's connected standing and queued towers, this settlement's
+    /// and the other members'. Only connected towers count (<see cref="ConnectedRealm"/>): a cut-off tower claims nothing and
+    /// does not use up the limit.
+    /// </summary>
+    public int TowersHeld(ConnectedRealm connected)
+    {
+        ArgumentNullException.ThrowIfNull(connected);
+
+        return connected.CountConnected(
+            Buildings.Where(b => b.Type == BuildingType.Tower).Select(b => b.Coord)
+                .Concat(Queue.Where(o => o.Type == BuildingType.Tower).Select(o => o.Coord)))
+            + (Linked?.OtherTowerCount ?? 0);
+    }
+
+    /// <summary>
     /// How many orders may build in parallel right now (issue #158):
     /// <c>2 + max(0, (longhouseLevel − 5) / 5)</c> — 2 slots at level 1–9, 3 at
     /// 10, 4 at 15, 5 at 20, 7 at 30. A razed settlement
@@ -1362,10 +1383,13 @@ public sealed record Settlement
         // A settlement holds at most one shrine in total, of any god. A
         // queued new shrine already stakes a level-0 stub in Buildings, but the
         // queue is counted too so the answer doesn't hang on that. Levelling
-        // the shrine standing on this same coord is not "another" one.
+        // the shrine standing on this same coord is not "another" one. A linked
+        // realm holds one shrine in total, so the other members' count too.
         if (BuildingCatalogue.GodOf(type) is not null
             && (Buildings.Any(b => BuildingCatalogue.GodOf(b.Type) is not null && b.Coord != coord)
-                || Queue.Any(o => BuildingCatalogue.GodOf(o.Type) is not null && o.Coord != coord)))
+                || Queue.Any(o => BuildingCatalogue.GodOf(o.Type) is not null && o.Coord != coord)
+                || (Linked?.OtherBuildings.Any(b => BuildingCatalogue.GodOf(b.Type) is not null) ?? false)
+                || (Linked?.OtherQueue.Any(o => BuildingCatalogue.GodOf(o.Type) is not null) ?? false)))
         {
             return BuildDecision.Rejected(BuildRejection.SettlementAlreadyHasShrine);
         }
@@ -1418,11 +1442,7 @@ public sealed record Settlement
         // counted by distinct hex across standing buildings and queued orders.
         if (type == BuildingType.Tower && baseLevel == 0)
         {
-            // Only connected towers count (ConnectedRealm): a cut-off tower claims nothing and does not use up the limit.
-            var towerHexes = connected.CountConnected(
-                Buildings.Where(b => b.Type == BuildingType.Tower).Select(b => b.Coord)
-                    .Concat(Queue.Where(o => o.Type == BuildingType.Tower).Select(o => o.Coord)));
-            if (towerHexes + (Linked?.OtherTowerCount ?? 0) >= BuildingCatalogue.MaxTowers(LonghouseLevel) + (Linked?.OtherTowerLimit ?? 0))
+            if (TowersHeld(connected) >= TowerLimit)
             {
                 return BuildDecision.Rejected(BuildRejection.TowerLimitReached);
             }
@@ -1434,13 +1454,17 @@ public sealed record Settlement
         // storage house counts (baseLevel 0) — upgrading one is never refused.
         if (type == BuildingType.StorageHouse && baseLevel == 0)
         {
+            // A linked realm counts all of its storage houses, in every member.
             var storageHexes = Buildings.Where(b => b.Type == BuildingType.StorageHouse).Select(b => b.Coord)
                 .Concat(Queue.Where(o => o.Type == BuildingType.StorageHouse).Select(o => o.Coord))
+                .Concat(Linked?.OtherBuildings.Where(b => b.Type == BuildingType.StorageHouse).Select(b => b.Coord) ?? [])
+                .Concat(Linked?.OtherQueue.Where(o => o.Type == BuildingType.StorageHouse).Select(o => o.Coord) ?? [])
                 .Distinct()
                 .Count();
             var (needCount, needLevel) = BuildingCatalogue.AdditionalStorageHouseRequirement(storageHexes);
             if (storageHexes >= 1
-                && Buildings.Count(b => b.Type == BuildingType.StorageHouse && b.Level >= needLevel) < needCount)
+                && Buildings.Count(b => b.Type == BuildingType.StorageHouse && b.Level >= needLevel)
+                    + (Linked?.OtherBuildings.Count(b => b.Type == BuildingType.StorageHouse && b.Level >= needLevel) ?? 0) < needCount)
             {
                 return BuildDecision.Rejected(BuildRejection.StorageHouseTooLow);
             }

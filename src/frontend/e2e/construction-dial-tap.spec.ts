@@ -43,7 +43,7 @@ test.describe('construction dial tap on a phone', { tag: '@g2' }, () => {
           totalSeconds: 500,
         },
       ];
-      world.hud.construction = { slots: 3, slotsUsed: 1, maxWaitingOrders: 3, waitingOrders: 0, maxOrdersPerHex: 1 };
+      world.hud.construction = { slots: 3, slotsUsed: 1, maxWaitingOrders: 3, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 };
       world.hud.tick += 1;
       world.syncHud();
     }, target.hex);

@@ -9,6 +9,7 @@ using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
+using Bjarnoy.Infrastructure.Services.PlotReservations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -20,6 +21,9 @@ namespace Bjarnoy.Api.IntegrationTests;
 /// </summary>
 public sealed class LinkedRealmApiTests : IAsyncLifetime
 {
+    // Minimum spacing a visitor's plot needs from a longhouse (SettlementService.MinimumSpacing plus its safety margin).
+    private const int PlotSpacingForTests = SettlementService.MinimumSpacing + SettlementService.FoundingSafetyMargin;
+
     private const string OwnerId = "linked-api-player";
     private const string RivalOwnerId = "linked-api-rival";
 
@@ -54,7 +58,7 @@ public sealed class LinkedRealmApiTests : IAsyncLifetime
     /// "Bjornstad" (the oldest), "Lillestad" (a second settlement of the same player whose disc touches it), "Farholm" (the same
     /// player on another island, not linked) and a rival standing between the first two. The player is a registered account.
     /// </summary>
-    private async Task<Scene> SetUpAsync()
+    private async Task<Scene> SetUpAsync(bool leaveRoomForAnotherPlot = false)
     {
         using var anonymous = _factory.CreateClient();
         var world = await _factory.CreateWorldAsync($"w-{Guid.CreateVersion7():N}"[..20], 21, 60, cancellationToken: Ct);
@@ -64,6 +68,13 @@ public sealed class LinkedRealmApiTests : IAsyncLifetime
         Assert.True(islands.Count >= 2, "the world needs two islands with a start position");
 
         var plot = islands[0].StartPositions[0];
+        if (leaveRoomForAnotherPlot)
+        {
+            // The realm's three longhouses (x, x + 2, x + 5) sit where a second founding plot of the island is still allowed
+            // (Founding spacing is 15 hexes), so a visitor can be offered this island.
+            plot = islands[0].StartPositions.First(p => islands[0].StartPositions.Any(c => new[] { 0, 2, 5 }
+                .All(dx => new HexCoord(p.Q + dx, p.R).DistanceTo(new HexCoord(c.Q, c.R)) >= PlotSpacingForTests)));
+        }
         var founded = await anonymous.PostJsonAsync(
             $"/api/v1/worlds/{world.Id}/settlements",
             new FoundSettlementRequest(islands[0].Id, plot.Q, plot.R, "Bjornstad", "Ulf", OwnerId),
@@ -241,6 +252,46 @@ public sealed class LinkedRealmApiTests : IAsyncLifetime
         Assert.Equal([scene.Unlinked], lone.LinkedMemberIds);
         Assert.Equal(2, lone.Construction.Slots);
         Assert.Single(lone.Buildings);
+        Assert.Equal(BuildingCatalogue.MaxTowers(1), lone.Construction.TowerLimit);
+        Assert.Equal(0, lone.Construction.TowersHeld);
+    }
+
+    [Fact]
+    public async Task The_tower_hint_is_the_realms_limit_and_towers_held_for_every_member()
+    {
+        var scene = await SetUpAsync();
+
+        // Both longhouses at level 3 (a limit of one tower each), and one connected tower standing in the newer member.
+        var towerHex = scene.NewestOnlyHexes[0];
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            foreach (var id in new[] { scene.Oldest, scene.Newest })
+            {
+                var entity = await db.Settlements.Include(s => s.Buildings).Include(s => s.Queue).Include(s => s.Garrison)
+                    .Include(s => s.TrainingQueue).Include(s => s.Runes).FirstAsync(s => s.Id == id, Ct);
+                var domain = entity.ToDomain();
+                var buildings = domain.Buildings.Select(b => b.Type == BuildingType.Longhouse ? b with { Level = 3 } : b).ToList();
+                if (id == scene.Newest)
+                {
+                    buildings.Add(new PlacedBuilding(towerHex, BuildingType.Tower, 1));
+                }
+
+                entity.ApplyDomain(domain with { Buildings = buildings });
+            }
+
+            await db.SaveChangesAsync(Ct);
+        }
+
+        using var client = Player(scene);
+        var oldest = await GetAsync<SettlementResponse>(client, $"/api/v1/settlements/{scene.Oldest}");
+        var newest = await GetAsync<SettlementResponse>(client, $"/api/v1/settlements/{scene.Newest}");
+
+        Assert.Equal(2 * BuildingCatalogue.MaxTowers(3), oldest.Construction.TowerLimit);
+        Assert.Equal(2, oldest.Construction.TowerLimit);
+        Assert.Equal(1, oldest.Construction.TowersHeld);
+        Assert.Equal(oldest.Construction.TowerLimit, newest.Construction.TowerLimit);
+        Assert.Equal(oldest.Construction.TowersHeld, newest.Construction.TowersHeld);
     }
 
     [Fact]
@@ -305,19 +356,34 @@ public sealed class LinkedRealmApiTests : IAsyncLifetime
     [Fact]
     public async Task The_plot_suggestion_island_list_names_each_longhouse_after_its_realm()
     {
-        var scene = await SetUpAsync();
+        var scene = await SetUpAsync(leaveRoomForAnotherPlot: true);
         using var visitor = _factory.CreateClient();
         visitor.DefaultRequestHeaders.Add("X-Owner-Id", "linked-api-visitor");
 
-        var suggestion = await GetAsync<PlotSuggestionResponse>(visitor, $"/api/v1/worlds/{scene.WorldId}/plot-suggestion");
-
-        var sameIsland = suggestion.IslandSettlements.Where(s => s.Id == scene.Oldest || s.Id == scene.Newest).ToList();
-        if (sameIsland.Count == 0)
+        // Left alone the service offers the emptier island, which is not the realm's. Pin the visitor's last suggestion to a
+        // plot still free on the realm's island, so the island list always holds the realm.
+        Guid realmIsland;
+        await using (var scope = _factory.Services.CreateAsyncScope())
         {
-            // The suggested island is another one: nothing of the realm to check on it.
-            return;
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            realmIsland = (await db.Settlements.AsNoTracking().FirstAsync(s => s.Id == scene.Oldest, Ct)).IslandId;
+            var island = await db.Islands.AsNoTracking().FirstAsync(i => i.Id == realmIsland, Ct);
+            var centres = await db.Settlements.AsNoTracking()
+                .Where(s => s.IslandId == realmIsland).Select(s => new HexCoord(s.CentreQ, s.CentreR)).ToListAsync(Ct);
+            var free = island.FoundableStartPositions()
+                .Select(p => (HexCoord?)new HexCoord(p.Q, p.R))
+                .FirstOrDefault(c => centres.All(x => x.DistanceTo(c!.Value) >= PlotSpacingForTests));
+            Assert.True(free is not null, "the realm's island needs a free founding plot");
+
+            scope.ServiceProvider.GetRequiredService<IPlotReservationStore>().RememberSuggestion(
+                new LastSuggestion(scene.WorldId, "linked-api-visitor", realmIsland, free!.Value, _factory.Time.GetUtcNow().AddHours(1)));
         }
 
+        var suggestion = await GetAsync<PlotSuggestionResponse>(visitor, $"/api/v1/worlds/{scene.WorldId}/plot-suggestion");
+
+        Assert.Equal(realmIsland, suggestion.IslandId);
+        var sameIsland = suggestion.IslandSettlements.Where(s => s.Id == scene.Oldest || s.Id == scene.Newest).ToList();
+        Assert.Equal(2, sameIsland.Count);
         Assert.All(sameIsland, s => Assert.Equal("Bjornstad", s.Name));
         Assert.All(sameIsland, s => Assert.Equal(scene.Oldest, s.RealmId));
     }

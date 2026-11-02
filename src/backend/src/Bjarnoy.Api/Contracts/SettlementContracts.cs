@@ -193,7 +193,16 @@ public sealed record TrainingOrderResponse(
 /// "read the cap off the response" trick as <see cref="MaxWaitingOrders"/>,
 /// this time for the stage 1d per-hex stacking tier once it exists.
 /// </param>
-public sealed record ConstructionResponse(int Slots, int SlotsUsed, int MaxWaitingOrders, int WaitingOrders, int MaxOrdersPerHex);
+/// <param name="TowerLimit">
+/// How many towers the realm may hold: the settlement's own limit, or for a linked realm the members' limits added up. The same for
+/// every member.
+/// </param>
+/// <param name="TowersHeld">
+/// The towers counting against <paramref name="TowerLimit"/> (connected standing plus queued, the whole linked realm's): the number a
+/// new tower is checked against.
+/// </param>
+public sealed record ConstructionResponse(
+    int Slots, int SlotsUsed, int MaxWaitingOrders, int WaitingOrders, int MaxOrdersPerHex, int TowerLimit, int TowersHeld);
 
 /// <summary>A Town Square feast in progress (economy.md section 6).</summary>
 /// <param name="EndsAtGameTime">When the feast ends and grants its renown.</param>
@@ -333,7 +342,9 @@ public sealed record SettlementResponse(
                 domain.UsedSlots,
                 maxWaitingOrders,
                 domain.GroupWaitingOrders.Count(),
-                Settlement.DefaultMaxOrdersPerHex),
+                Settlement.DefaultMaxOrdersPerHex,
+                domain.TowerLimit,
+                domain.TowersHeld(store.Realm)),
             [.. members.SelectMany(m => m.Domain.Buildings.Select(b =>
                 PlacedBuildingResponse.From(b, OrientationFor(m.Entity, b.Type, b.Coord), gameNow, clock.FreezesTime, speedFactor)))],
             [.. queue.Select(o => new BuildOrderResponse(

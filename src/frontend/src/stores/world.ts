@@ -194,9 +194,11 @@ export const useWorldStore = defineStore('world', {
       // and BuildingModal's affordability/queue-state copy.
       // `maxWaitingOrders === 0` doubles as "not premium" — no separate
       // premium flag needed. Demo mode reports a fixed 2-slot, no-waiting
+      // `towerLimit`/`towersHeld` are the server's realm numbers for the tower
+      // lock; demo mode reads its local model instead.
       // settlement (longhouse level 1, non-premium) since the local
       // WorldModel places buildings instantly and has no queue at all.
-      construction: { slots: 2, slotsUsed: 0, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1 },
+      construction: { slots: 2, slotsUsed: 0, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 },
       settlementName: '',
       level: 1,
       // Issue #16: population, wired the same way as the other resources —

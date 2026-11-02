@@ -300,6 +300,10 @@ export interface ConstructionResponse {
   maxWaitingOrders: number;
   waitingOrders: number;
   maxOrdersPerHex: number;
+  /** How many towers the realm may hold: the settlement's limit, or a linked realm's members' limits added up. */
+  towerLimit: number;
+  /** The towers counting against `towerLimit` (connected standing plus queued, the whole linked realm's) — what a new tower is checked against. */
+  towersHeld: number;
 }
 
 export interface PlacedBuildingResponse {

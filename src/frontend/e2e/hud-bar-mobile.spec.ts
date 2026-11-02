@@ -869,7 +869,7 @@ test('bottom docking clears the QueueDrawer handle', async ({ page }) => {
     const world = (
       window as unknown as {
         __demoWorld: () => {
-          hud: { queueFetchedAt: number; queue: unknown[]; construction: { slots: number; slotsUsed: number; maxWaitingOrders: number; waitingOrders: number; maxOrdersPerHex: number }; tick: number };
+          hud: { queueFetchedAt: number; queue: unknown[]; construction: { slots: number; slotsUsed: number; maxWaitingOrders: number; waitingOrders: number; maxOrdersPerHex: number; towerLimit: number; towersHeld: number }; tick: number };
           selectedSettlementId: string;
           model: { getSettlement: (id: string) => { q: number; r: number } };
           syncHud: () => void;
@@ -892,7 +892,7 @@ test('bottom docking clears the QueueDrawer handle', async ({ page }) => {
         totalSeconds: 500,
       },
     ];
-    world.hud.construction = { slots: 3, slotsUsed: 1, maxWaitingOrders: 3, waitingOrders: 0, maxOrdersPerHex: 1 };
+    world.hud.construction = { slots: 3, slotsUsed: 1, maxWaitingOrders: 3, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 };
     world.hud.tick += 1;
     world.syncHud();
   });

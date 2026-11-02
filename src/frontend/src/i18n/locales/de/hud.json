@@ -90,7 +90,7 @@
     "towerLevel0": "Eingenommen"
   },
   "ringMenu": {
-    "shrineLimitLock": "Diese Siedlung hat bereits einen Schrein",
+    "shrineLimitLock": "Dein Gebiet hat bereits einen Schrein",
     "storageHouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
     "palisadeLock": {
       "branch": "Eine Mauer verzweigt sich nie: Dieses Feld hätte drei Nachbarn der Mauer",

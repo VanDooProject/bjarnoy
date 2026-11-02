@@ -201,6 +201,20 @@ public sealed class LinkedStore
     public Guid? MemberOwningOrder(Guid orderId) =>
         _slots.FirstOrDefault(s => s.Settlement.Queue.Any(o => o.Id == orderId))?.Id;
 
+    /// <summary>
+    /// Replaces the guest stacks <paramref name="id"/> hosts (after a battle took some of them) and re-splits the pool, so the
+    /// following settle eats with the guests that are left.
+    /// </summary>
+    public void SetGuests(Guid id, IReadOnlyList<UnitStack> guests)
+    {
+        ArgumentNullException.ThrowIfNull(guests);
+
+        var slot = SlotOf(id);
+        slot.Guests.Clear();
+        slot.Guests.AddRange(guests);
+        Normalize(Cursor);
+    }
+
     /// <summary>Changes the world speed: what was settled stays as it is, and the pool is re-split with the new rates.</summary>
     public void Rerate(double newSpeedFactor)
     {

@@ -152,6 +152,65 @@ public sealed class LinkedSettlementContextTests
     }
 
     [Fact]
+    public void PlanBuild_refuses_a_shrine_when_another_member_stands_or_queues_one()
+    {
+        var own = Found(10);
+        var coord = new HexCoord(1, 0);
+        var standing = new PlacedBuilding(new HexCoord(4, 0), BuildingType.ShrineOfThor, 1);
+        var queued = Order(BuildingType.OdinStatue, new HexCoord(4, 1));
+
+        var alone = own.PlanBuild(BuildingType.ShrineOfFreyja, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+        var otherStands = (own with { Linked = Context(lh: 10, buildings: [standing]) })
+            .PlanBuild(BuildingType.ShrineOfFreyja, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+        var otherQueues = (own with { Linked = Context(lh: 10, queue: [queued]) })
+            .PlanBuild(BuildingType.ShrineOfFreyja, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+        var noShrineElsewhere = (own with { Linked = Context(lh: 10, buildings: [new PlacedBuilding(new HexCoord(4, 0), BuildingType.Farm, 1)]) })
+            .PlanBuild(BuildingType.ShrineOfFreyja, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.NotEqual(BuildRejection.SettlementAlreadyHasShrine, alone.Rejection);
+        Assert.Equal(BuildRejection.SettlementAlreadyHasShrine, otherStands.Rejection);
+        Assert.Equal(BuildRejection.SettlementAlreadyHasShrine, otherQueues.Rejection);
+        Assert.NotEqual(BuildRejection.SettlementAlreadyHasShrine, noShrineElsewhere.Rejection);
+    }
+
+    [Fact]
+    public void Shrines_raised_before_linking_all_stay_and_keep_their_favour()
+    {
+        var thor = new PlacedBuilding(new HexCoord(1, 0), BuildingType.ShrineOfThor, 3);
+        var freyja = new PlacedBuilding(new HexCoord(4, 0), BuildingType.ShrineOfFreyja, 3);
+        var s = Found(10) with { Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, 10), thor] };
+        var linked = s with { Linked = Context(lh: 10, buildings: [freyja]) };
+
+        Assert.Contains(thor, linked.Buildings);
+        Assert.Equal(s.AttackBonusPercent(UnitClass.Infantry), linked.AttackBonusPercent(UnitClass.Infantry));
+        Assert.True(linked.AttackBonusPercent(UnitClass.Infantry) > 0);
+    }
+
+    [Fact]
+    public void PlanBuild_counts_the_storage_houses_of_the_whole_group_for_an_extra_one()
+    {
+        var coord = new HexCoord(1, 0);
+        var ownHouse = new PlacedBuilding(new HexCoord(3, 0), BuildingType.StorageHouse, 25);
+        var own = Found(25) with { Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, 25), ownHouse] };
+        var lowOther = new PlacedBuilding(new HexCoord(4, 0), BuildingType.StorageHouse, 1);
+        var highOther = new PlacedBuilding(new HexCoord(4, 0), BuildingType.StorageHouse, 25);
+
+        // Alone, one maxed house is enough for a second. With a second one standing in the group a third needs two high ones.
+        var alone = own.PlanBuild(BuildingType.StorageHouse, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+        var withLow = (own with { Linked = Context(lh: 25, buildings: [lowOther]) })
+            .PlanBuild(BuildingType.StorageHouse, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+        var withHigh = (own with { Linked = Context(lh: 25, buildings: [highOther]) })
+            .PlanBuild(BuildingType.StorageHouse, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+        var withQueued = (own with { Linked = Context(lh: 25, queue: [Order(BuildingType.StorageHouse, new HexCoord(4, 1))]) })
+            .PlanBuild(BuildingType.StorageHouse, coord, Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.NotEqual(BuildRejection.StorageHouseTooLow, alone.Rejection);
+        Assert.Equal(BuildRejection.StorageHouseTooLow, withLow.Rejection);
+        Assert.NotEqual(BuildRejection.StorageHouseTooLow, withHigh.Rejection);
+        Assert.Equal(BuildRejection.StorageHouseTooLow, withQueued.Rejection);
+    }
+
+    [Fact]
     public void Promote_and_drop_are_no_ops_when_linked()
     {
         var waiting = Order(BuildingType.Farm, new HexCoord(1, 0), waiting: true);

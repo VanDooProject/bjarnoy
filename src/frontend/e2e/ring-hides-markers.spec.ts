@@ -65,7 +65,7 @@ test.describe('markers beneath the ring menu', { tag: '@g2' }, () => {
       });
       world.hud.queueFetchedAt = Date.now();
       world.hud.queue = [entry('near', nearHex), entry('far', farHex)];
-      world.hud.construction = { slots: 3, slotsUsed: 2, maxWaitingOrders: 3, waitingOrders: 0, maxOrdersPerHex: 1 };
+      world.hud.construction = { slots: 3, slotsUsed: 2, maxWaitingOrders: 3, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 };
       world.hud.tick += 1;
       world.syncHud();
       return { near: nearHex, far: farHex, settlementId: world.selectedSettlementId };

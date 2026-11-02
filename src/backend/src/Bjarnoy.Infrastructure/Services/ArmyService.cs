@@ -1048,6 +1048,9 @@ public sealed class ArmyService(
             _dbContext.Armies.Remove(guest);
         }
 
+        // The settle that follows eats with the guests the battle left, not the ones it started with.
+        session.Store.SetGuests(targetId, session.GuestStacksOf(targetId));
+
         // The loot left the pool at the battle instant; settle the group on from there to now and write every member back.
         session.Apply(targetId, arrival.DefenderSettlement);
         if (now > battleInstant)

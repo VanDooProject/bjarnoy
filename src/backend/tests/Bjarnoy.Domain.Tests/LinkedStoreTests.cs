@@ -348,6 +348,33 @@ public sealed class LinkedStoreTests
         Assert.True(outcomeB.Changed);
     }
 
+    [Fact]
+    public void Replacing_the_guests_after_a_battle_changes_the_pooled_food_rate()
+    {
+        IReadOnlyList<UnitStack> before = [new UnitStack(UnitType.Catapult, 10)];
+        IReadOnlyList<UnitStack> after = [new UnitStack(UnitType.Catapult, 2)];
+        var a = Member(CentreA, new ResourceAmounts(0, 0, 1_000_000, 0), guests: before);
+        var b = Member(CentreB, new ResourceAmounts(0, 0, 1_000_000, 0));
+        var store = Store([before, []], a, b);
+
+        double PooledFoodRate() => store.Outcome(a.Id).Settlement.Resources.RatePerHour.Food
+            + store.Outcome(b.Id).Settlement.Resources.RatePerHour.Food;
+
+        var expectedBefore = Rate(a, before).Food + Rate(b).Food;
+        Assert.Equal(expectedBefore, PooledFoodRate(), 6);
+
+        store.SetGuests(a.Id, after);
+
+        var expectedAfter = Rate(a, after).Food + Rate(b).Food;
+        Assert.True(expectedAfter > expectedBefore);
+        Assert.Equal(expectedAfter, PooledFoodRate(), 6);
+
+        // The settle that follows goes on with the guests that are left.
+        store.SettleTo(T0.AddHours(1));
+        Assert.Empty(store.Outcome(a.Id).GuestDeaths);
+        Assert.Equal(expectedAfter, PooledFoodRate(), 6);
+    }
+
     // ------------------------------------------------------------------ joining
 
     [Fact]
