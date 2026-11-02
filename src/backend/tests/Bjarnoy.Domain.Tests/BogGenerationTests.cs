@@ -85,6 +85,8 @@ public class BogGenerationTests
         {
             var bog = island.BogTiles.Select(t => t.Coord).ToHashSet();
             var land = island.Tiles.ToDictionary(t => t, sampler.TerrainAt);
+            // FillHoles leaves river tiles as they are (bog.md, "Holes"), like mountains: only grass and forest off a river count.
+            var river = island.RiverTiles.Select(t => t.Coord).ToHashSet();
             var seen = new HashSet<HexCoord>();
             foreach (var start in island.Tiles.Where(t => !bog.Contains(t)))
             {
@@ -114,7 +116,7 @@ public class BogGenerationTests
                     }
                 }
 
-                var plain = group.Where(c => land[c] is Terrain.Grass or Terrain.Forest).ToList();
+                var plain = group.Where(c => land[c] is Terrain.Grass or Terrain.Forest && !river.Contains(c)).ToList();
                 Assert.True(open || plain.Count == 0, $"seed {seed} island {island.Index}: {plain.Count} grass/forest tiles enclosed by bog around {(plain.Count > 0 ? plain[0] : default)}");
             }
         }
