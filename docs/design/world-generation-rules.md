@@ -15,6 +15,7 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
 | Bog and lakes, bog buildings, landing spots with bog in reach | Implemented (bog PR, bog buildings PR); see [`bog.md`](./bog.md) |
 | Wildlife camps: placement, levels, guard ranges, rendering (no gameplay) | Implemented (camps PR; bog camps in the bog PR) |
 | Island density: about twice the islands, same island sizes, no fused islands | Implemented (island-density PR) |
+| Mountain chains with passes, grove forests | Implemented (terrain chains PR) |
 
 ## World and islands
 
@@ -135,6 +136,15 @@ radius 4000):
 
 Every one of them keeps the 24-hex gap from green land and from each other.
 
+## Mountains and forests
+
+*Implemented (terrain chains PR): see [`river-generation.md`](./river-generation.md#mountain-ranges-and-forest-patches-terrain).*
+
+- Mountains form chains along the island with passes between the massifs, so land armies can always path through;
+  short ridges branch off the massifs.
+- Forest grows as round groves; mixed with a broader forest pattern so groves gather into larger woods in some areas
+  and leave open meadow in others.
+
 ## Rivers and streams
 
 *Implemented (streams PR) except the bog entry, which arrives with the bog. Mechanics:
@@ -195,11 +205,15 @@ into a tile whose Y the art can draw, so every path ends at a sea mouth or a con
   density PR: 273 of the 482 green islands of seeds 1-8 at radius 1000 have landing spots (338 have a candidate), after giving the
   spawned river an outlet in every drainage basin and growing the guarantee's lakes only onto shore-fit tiles (258 before; see
   `bog.md`, "On the denser terrain").
+- More bog, spread over the whole island (owner decision): after the normal bogs, while some land of an island is still more than 18
+  hexes from a bog, another bog is placed aimed at that land — on a river passing there if there is one, otherwise as the source of a
+  new river. *Implemented (terrain chains PR): see [`bog.md`](./bog.md), "Implemented generation".*
+- The 20% rule is lifted for these gap-fill bogs: about a third of all bogs may start a river. *Implemented: 39.5% of bogs start or end a river (seeds 1-8, radius 1000); accepted by the owner.*
 
 ## Wildlife camps
 
 *Implemented (bog camps too, on plain bog tiles): see [`wildlife-camps.md`](./wildlife-camps.md).* Spawn and render only for now (no gameplay yet). Every island of 60 or more land tiles gets camps (islets below that get none); a small island whose
-only start positions sit inside a strong camp's guard range is simply not a start island. Camps are placed before start positions; start positions keep away from strong camps,
+only start positions sit inside a strong camp's guard range is simply not a start island. Green islands of 60 or more tiles also get one to three whale roads on open sea (water camps with no guard range, see `wildlife-camps.md`, "Water camps"). Camps are placed before start positions; start positions keep away from strong camps,
 weak camps are fine nearby.
 
 - Strong (will block towers later): wolves, bears, boars, Fenrir.

@@ -3,7 +3,8 @@ using Bjarnoy.Domain.World;
 namespace Bjarnoy.Domain.Movement;
 
 /// <summary>One standing bridge of the world: where, how far built (1 to 4) and whose (the opaque owner key two armies of one owner share, as in <see cref="StandingWall"/>).</summary>
-public readonly record struct StandingBridge(HexCoord Coord, int Level, Guid OwnerKey);
+/// <remarks>A bridge whose hex lies outside its owner's realm (<paramref name="OutsideRealm"/>) has no function and is open to every army, a guarded one included.</remarks>
+public readonly record struct StandingBridge(HexCoord Coord, int Level, Guid OwnerKey, bool OutsideRealm = false);
 
 /// <summary>
 /// A world's standing bridges as the movement rules need them: built once per request from the persisted buildings, only bridges of level 1
@@ -58,7 +59,7 @@ public sealed class BridgeIndex
             1 => 1.0 + HexPathfinder.CausewayCrossingCost,
             2 => 1.0 + HexPathfinder.FootbridgeCrossingCost,
             3 => HexPathfinder.LandTerrainCostOf(_terrainAt(hex)),
-            _ => bridge.OwnerKey == ownerKey || _areFriends(bridge.OwnerKey, ownerKey)
+            _ => bridge.OutsideRealm || bridge.OwnerKey == ownerKey || _areFriends(bridge.OwnerKey, ownerKey)
                 ? HexPathfinder.LandTerrainCostOf(_terrainAt(hex))
                 : null,
         };

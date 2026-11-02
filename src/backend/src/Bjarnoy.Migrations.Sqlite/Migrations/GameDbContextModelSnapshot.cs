@@ -956,6 +956,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("Level")
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTimeOffset?>("OutsideRealmSince")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Q")
                         .HasColumnType("INTEGER");
 

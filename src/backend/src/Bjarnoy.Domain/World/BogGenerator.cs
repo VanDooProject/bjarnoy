@@ -775,7 +775,7 @@ internal sealed class BogGenerator
                 var tile = path[i];
 
                 // A site's disc has no tile within 2 of the coast, so its centre is at least radius + 3 in.
-                if (!_coastDist.TryGetValue(tile, out var cd) || cd < radius + 1)
+                if (!_coastDist.TryGetValue(tile, out var cd) || cd < radius + 1 - _options.BogCoastSlack)
                 {
                     continue;
                 }
@@ -798,12 +798,49 @@ internal sealed class BogGenerator
 
         var attempts = 0;
         var siteAnchors = new List<HexCoord>();
-        foreach (var anchor in anchors)
+        var sortedAt = 0;
+        for (var ai = 0; ai < anchors.Count; ai++)
         {
-            if (placed >= wanted || attempts >= MaxSiteAttempts)
+            if (placed >= wanted || attempts >= _options.BogSiteAttempts)
             {
                 break;
             }
+
+            // Spread: once a site has been placed, the anchors not yet visited are ordered by distance from the placed sites (plus half their score).
+            if (siteAnchors.Count > sortedAt)
+            {
+                sortedAt = siteAnchors.Count;
+                var rest = anchors.GetRange(ai, anchors.Count - ai);
+                var value = new Dictionary<(HexCoord Tile, int Path, int Index, double Score), double>();
+                foreach (var a in rest)
+                {
+                    var nearest = double.PositiveInfinity;
+                    foreach (var s in siteAnchors)
+                    {
+                        nearest = Math.Min(nearest, HexCoord.Distance(s, a.Tile));
+                    }
+
+                    value[a] = nearest + (0.5 * a.Score);
+                }
+
+                rest.Sort((a, b) =>
+                {
+                    var byValue = value[b] - value[a];
+                    if (byValue != 0)
+                    {
+                        return byValue < 0 ? -1 : 1;
+                    }
+
+                    var byTile = Cmp(a.Tile, b.Tile);
+                    return byTile != 0 ? byTile : a.Path != b.Path ? a.Path.CompareTo(b.Path) : a.Index.CompareTo(b.Index);
+                });
+                for (var k = 0; k < rest.Count; k++)
+                {
+                    anchors[ai + k] = rest[k];
+                }
+            }
+
+            var anchor = anchors[ai];
 
             if (siteAnchors.Any(s => HexCoord.Distance(s, anchor.Tile) < (2 * radius) + 4))
             {
@@ -911,6 +948,7 @@ internal sealed class BogGenerator
         }
 
         PlaceGuarantee(bp, widthTrial, traceRiver);
+        FillGaps(bp, widthTrial, traceRiver);
         FillHoles(bp);
     }
 
@@ -2094,7 +2132,94 @@ internal sealed class BogGenerator
         Func<HexCoord, int, BogPaths, HashSet<HexCoord>, List<HexCoord>?> traceRiver)
     {
         PlaceGuarantee(bp, widthTrial, traceRiver);
+        FillGaps(bp, widthTrial, traceRiver);
         FillHoles(bp);
+    }
+
+    /// <summary>
+    /// The gap fill, after the guarantee: while at least <see cref="WorldGenerationOptions.BogGapMinCandidates"/> landing candidates lie further
+    /// than <see cref="WorldGenerationOptions.BogGapReach"/> from every plain bog tile, one more bog is placed for them: through-river first,
+    /// else a spawn bog. At most <c>land / BogGapTilesPerRound</c> rounds.
+    /// </summary>
+    private void FillGaps(
+        BogPaths bp,
+        Func<BogPaths, List<RiverTile>> widthTrial,
+        Func<HexCoord, int, BogPaths, HashSet<HexCoord>, List<HexCoord>?> traceRiver)
+    {
+        if (!GuaranteeApplies)
+        {
+            return;
+        }
+
+        var rounds = _islandTiles.Count / _options.BogGapTilesPerRound;
+        for (var round = 0; round < rounds; round++)
+        {
+            var covered = PlainBogReach(_options.BogGapReach);
+            var uncovered = GuaranteeCandidates().Where(c => !covered.Contains(c)).ToList();
+            if (uncovered.Count < _options.BogGapMinCandidates)
+            {
+                return;
+            }
+
+            var coverage = CoverageMap(uncovered, _options.BogReach);
+            if (GuaranteeThrough(bp, uncovered, coverage, widthTrial))
+            {
+                if (_stats is not null)
+                {
+                    _stats.BogGapThrough++;
+                }
+            }
+            else if (GuaranteeSpawn(bp, uncovered, coverage, widthTrial, traceRiver))
+            {
+                if (_stats is not null)
+                {
+                    _stats.BogGapSpawns++;
+                }
+            }
+            else
+            {
+                return;
+            }
+        }
+    }
+
+    /// <summary>Every hex (land or sea) within <paramref name="reach"/> of a plain bog tile, by a multi-source breadth-first search.</summary>
+    private HashSet<HexCoord> PlainBogReach(int reach)
+    {
+        var seen = new HashSet<HexCoord>();
+        var frontier = new List<HexCoord>();
+        foreach (var t in _bog)
+        {
+            if (_lake.Contains(t) || _creek.ContainsKey(t) || _mouth.ContainsKey(t) || _spring.ContainsKey(t) || LakeMask(t, _lake) != 0)
+            {
+                continue;
+            }
+
+            if (seen.Add(t))
+            {
+                frontier.Add(t);
+            }
+        }
+
+        for (var depth = 0; depth < reach && frontier.Count > 0; depth++)
+        {
+            var next = new List<HexCoord>();
+            foreach (var c in frontier)
+            {
+                for (var d = 0; d < 6; d++)
+                {
+                    var n = Nb(c, d);
+                    if (seen.Add(n))
+                    {
+                        next.Add(n);
+                    }
+                }
+            }
+
+            frontier = next;
+        }
+
+        return seen;
     }
 
     private void PlaceGuarantee(
@@ -2503,7 +2628,7 @@ internal sealed class BogGenerator
     private HashSet<HexCoord> ComputeRegion(BogPaths bp, Site site)
     {
         var count = PathCount(bp);
-        var reach = site.Radius - 2;
+        var reach = site.Radius + _options.BogRegionReachExtra;
         var dist = new Dictionary<HexCoord, int>();
         var queue = new Queue<HexCoord>();
         foreach (var t in Sorted(site.Core.Concat(site.Lake)))

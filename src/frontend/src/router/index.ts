@@ -200,6 +200,13 @@ export const router = createRouter({
       beforeEnter: () => awaitShowcaseManifests(),
     },
     {
+      path: '/docs/realm',
+      name: 'realm-docs',
+      component: () => import('../views/RealmView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
       path: '/docs/land-movement',
       name: 'land-movement-docs',
       component: () => import('../views/LandMovementView.vue'),

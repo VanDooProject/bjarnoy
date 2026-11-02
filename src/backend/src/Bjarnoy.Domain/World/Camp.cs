@@ -26,6 +26,12 @@ public enum CampGround
 
     /// <summary>Plain bog moss (not a lake, shore, mouth or creek); the family is picked by hash among moosemire, beaverlodge and cranedance.</summary>
     Bog,
+
+    /// <summary>
+    /// Open sea, far from any shore: a water camp (<see cref="CampGenerator.PlaceWhaleRoads"/>). It holds no land,
+    /// has no guard range and is met by fleets only. Appended last so every earlier value keeps its number.
+    /// </summary>
+    Sea,
 }
 
 /// <summary>How a family's level roll is skewed inside <c>1..MaxCampLevel</c>; both skews favour low levels.</summary>
@@ -62,6 +68,9 @@ public static class CampFamilies
     public const string Harewarren = "harewarren";
     public const string Otterslide = "otterslide";
 
+    /// <summary>The whale road (3D_assets hextile134): the first water camp, a humpback cow and calf on open sea.</summary>
+    public const string Whaleroad = "whaleroad";
+
     public static IReadOnlyList<CampFamilyInfo> All { get; } =
     [
         new(Wolfden, CampGround.Grass, CampStrength.Strong, CampLevelSkew.Cubic),
@@ -79,12 +88,18 @@ public static class CampFamilies
         new(Harewarren, CampGround.Grass, CampStrength.Weak, CampLevelSkew.Quadratic),
         new(Deerglade, CampGround.Forest, CampStrength.Weak, CampLevelSkew.Quadratic),
         new(Otterslide, CampGround.RiverStraight, CampStrength.Weak, CampLevelSkew.Quadratic),
+        // The first water camp, last so no land family's candidate hash moves (it is placed by its own
+        // sea pass, CampGenerator.PlaceWhaleRoads, never by PlaceCore).
+        new(Whaleroad, CampGround.Sea, CampStrength.Strong, CampLevelSkew.Cubic),
     ];
 
     public static CampFamilyInfo? Find(string family) => All.FirstOrDefault(f => f.Family == family);
 
     /// <summary>True for a strong family. An unknown family is not strong.</summary>
     public static bool IsStrong(string family) => Find(family)?.Strength == CampStrength.Strong;
+
+    /// <summary>True for a water camp (a family on <see cref="CampGround.Sea"/>). An unknown family is not.</summary>
+    public static bool IsWater(string family) => Find(family)?.Ground == CampGround.Sea;
 }
 
 /// <summary>
@@ -102,6 +117,12 @@ public readonly record struct Camp(HexCoord Coord, string Family, int Level, Til
 {
     public bool Strong => CampFamilies.IsStrong(Family);
 
-    /// <summary>How many hexes around the camp it guards — see <see cref="CampGenerator.GuardRange(int, CampStrength)"/>.</summary>
-    public int GuardRange => CampGenerator.GuardRange(Level, Strong ? CampStrength.Strong : CampStrength.Weak);
+    /// <summary>True for a water camp (it stands on open sea and is met by fleets).</summary>
+    public bool IsWater => CampFamilies.IsWater(Family);
+
+    /// <summary>
+    /// How many hexes around the camp it guards — see <see cref="CampGenerator.GuardRange(int, CampStrength)"/>.
+    /// A water camp holds no land and locks no towers: its range is 0, which for a fleet's route means "the camp's own hex".
+    /// </summary>
+    public int GuardRange => IsWater ? 0 : CampGenerator.GuardRange(Level, Strong ? CampStrength.Strong : CampStrength.Weak);
 }

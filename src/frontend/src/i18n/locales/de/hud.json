@@ -139,6 +139,7 @@
       "campOccupied": "Von wilden Tieren belegt",
       "maxLevel": "Höchste Stufe",
       "noLandUnitsAtHome": "Keine Landeinheiten zu Hause",
+      "noShipsAtHome": "Keine Schiffe zu Hause",
       "siege": "Belagern",
       "noRamAtHome": "Braucht einen Rammbock zu Hause"
     },
@@ -219,6 +220,8 @@
     "descOutsideBorder": "Außerhalb der Reichsgrenze — beanspruche mehr Land, um hier zu bauen.",
     "descOpenWater": "Offenes Wasser. Hier kann kein Gebäude stehen.",
     "descUpgrade": "Baue dieses Gebäude weiter aus, um seinen Ertrag für deine Siedlung zu steigern.",
+    "outsideRealm": "Dieses Gebäude liegt außerhalb deines Reichs und arbeitet nicht mehr. Es verliert Stufen, bis dein Reich es wieder erreicht.",
+    "outsideRealmLosesIn": "Dieses Gebäude liegt außerhalb deines Reichs und arbeitet nicht mehr. In {time} verliert es eine Stufe.",
     "descBuildEmpty": "Leerer Boden innerhalb deiner Grenze. Tippe auf das Feld, um ein Gebäude zu platzieren.",
     "runesSlotted": "Runen: {slotted} / {total} eingesetzt",
     "inStorage": "Im Lager",

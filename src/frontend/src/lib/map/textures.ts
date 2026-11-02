@@ -144,6 +144,10 @@ export type TextureKey =
   // like the Sawmill's river keys these are texture-lookup keys, not wire building types.
   | 'fisherhutlake'
   | 'hammerschmiedebend'
+  // The stave tower on sand, on a forest hex and on plain bog moss: texture-lookup keys, the wire type is `tower`.
+  | 'towersand'
+  | 'towerforest'
+  | 'towerbog'
   // The palisade's six pieces (`palisadeArtFor`): which one a wall hex draws is decided by its wall neighbours, so these are
   // texture-lookup keys, not wire building types (the wire types are `palisade` and `palisadegate`).
   | 'palisadestraight'
@@ -214,7 +218,12 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   // composite (still in the pack, no longer referenced) had no per-level
   // art at all. See buildingArt.ts's matching docs-page choice.
   fishinghut: 'fisherhut',
-  tower: 'towerbuilding',
+  // The stave tower replaces the tile it stands on, so each ground has its own art, picked by `textureKeyFor`: grass (3D_assets
+  // hextile148), sand (hextile151), forest (hextile150) and plain bog moss (hextile149).
+  tower: 'stavetower',
+  towersand: 'stavetower_sand',
+  towerforest: 'stavetower_forest',
+  towerbog: 'stavetower_bog',
   dockyard: 'dockyard',
   // A Sawmill is never actually on grass (the backend requires a river
   // shape to place one — BuildingCatalogue.SawmillRiverShapes) — there is
@@ -256,6 +265,8 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   harewarren: 'harewarren',
   deerglade: 'deerglade',
   otterslide: 'otterslide',
+  // The first water camp (3D_assets hextile134): drawn on its open-sea hex, so its base is the plain sea base; level000 gulls (all six rotations), level001 whales (kept SE and NE).
+  whaleroad: 'whaleroad',
   // Open (non-coastal) water on a wasted island — see `WASTED_TEXTURE_KEY`'s
   // own doc comment for why this key exists at all despite `WorldModel`
   // itself never producing a wasted open-sea tile today.
@@ -1744,6 +1755,10 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
   if (tile.buildingType === 'hammerschmiede' && tile.bog?.kind === 'creek') {
     return bogTextureKey(tile.bog) === 'bogcreek' ? 'hammerschmiede' : 'hammerschmiedebend';
   }
+  // A tower replaces the tile it stands on, so its art depends on the ground: sand, forest and plain bog moss have their own, grass is `tower`.
+  if (tile.buildingType === 'tower' && tile.bog?.kind === 'bog') return 'towerbog';
+  if (tile.buildingType === 'tower' && tile.terrain === 'forest') return 'towerforest';
+  if (tile.buildingType === 'tower' && tile.terrain === 'sand') return 'towersand';
   if (tile.buildingType) return tile.buildingType;
   if (tile.wasted) return WASTED_TEXTURE_KEY[tile.terrain] ?? tile.terrain;
   if (tile.bog) return bogTextureKey(tile.bog);
