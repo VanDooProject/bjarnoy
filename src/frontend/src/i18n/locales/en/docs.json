@@ -1093,6 +1093,10 @@
     "giants": {
       "heading": "Giants",
       "body": "A giant fills seven hexes. You only take it into your realm when your claim covers all seven. A claim that reaches just some of them takes none."
+    },
+    "linked": {
+      "heading": "Linked realms",
+      "body": "When the realms of two of your settlements on an island touch, they link into one realm. A linked realm has one name, that of your oldest settlement in it, and one stock: everything you produce goes into it, and everything you build, train or trade there is paid from it. Its storage is that of all its settlements added up, and so are its construction slots, which all its builds share. You run it from your oldest settlement and can build on any of its hexes from there. Your other settlements in it no longer show up in lists, and rivals see the oldest one's name on every longhouse. A raid on any of its longhouses can loot the whole stock. If the link breaks, each settlement keeps its share of the stock, in proportion to its storage."
     }
   },
   "landMovement": {
