@@ -476,6 +476,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     "/docs/bog-lands",
     "/docs/shrines",
     "/docs/production",
+    "/docs/training",
     "/docs/founding",
     "/docs/realm",
     "/docs/land-movement",
@@ -619,7 +620,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   });
 
   test.describe("docs hub", () => {
-    test("shows the four groups and twelve art cards, and the cards and footer link through", async ({
+    test("shows the four groups and thirteen art cards, and the cards and footer link through", async ({
       page,
     }) => {
       await page.goto("/docs");
@@ -641,11 +642,11 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         ).toBeVisible();
       }
       await expect(page.locator(".groups .group")).toHaveCount(4);
-      await expect(page.locator(".groups .group a.card")).toHaveCount(12);
+      await expect(page.locator(".groups .group a.card")).toHaveCount(13);
       for (const [group, count] of [
         ["island", 2],
         ["building", 4],
-        ["move", 4],
+        ["move", 5],
         ["beyond", 2],
       ] as const) {
         await expect(
@@ -654,7 +655,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       }
 
       const cards = page.locator(".groups a.card");
-      await expect(cards).toHaveCount(12);
+      await expect(cards).toHaveCount(13);
       for (const title of [
         "Tiles",
         "Bog lands",
@@ -662,6 +663,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         "Resource production",
         "Shrines",
         "Walls",
+        "Training troops",
         "Founding settlements",
         "Extending the realm",
         "Land movement",
@@ -678,8 +680,8 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       // Every card's art is drawn from the atlas: a sprite with a background
       // image, or the animated camp's layers.
       const arts = page.getByTestId("docs-card-art");
-      await expect(arts).toHaveCount(12);
-      for (let i = 0; i < 12; i++) {
+      await expect(arts).toHaveCount(13);
+      for (let i = 0; i < 13; i++) {
         const layer = arts
           .nth(i)
           .locator(
@@ -720,7 +722,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     test("does not overflow horizontally on a phone", async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/docs");
-      await expect(page.locator(".groups a.card")).toHaveCount(12);
+      await expect(page.locator(".groups a.card")).toHaveCount(13);
       const overflow = await page
         .locator(".docs-page")
         .evaluate((el) => el.scrollWidth - el.clientWidth);
@@ -883,6 +885,26 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         .getByRole("heading", { name: "Bridges over wide rivers" }),
     ).toBeVisible();
     await expect(page.getByText("planned but not in the game")).toHaveCount(0);
+  });
+
+  test("training page lists which building trains which units and hides the admin note", async ({
+    page,
+  }) => {
+    await page.goto("/docs/training");
+    await expectPlayerPage(page, "Training troops", "training-table");
+    await expect(page.locator('[data-building="barracks"]')).toContainText(
+      "Spearman",
+    );
+    await expect(page.locator('[data-building="dockyard"]')).toContainText(
+      "Longship",
+    );
+    // The Longhouse trains nothing, so it is not a row.
+    await expect(page.locator('[data-building="longhouse"]')).toHaveCount(0);
+    await expect(
+      page.locator(
+        '[data-building="barracks"] th [data-building-link="link"]',
+      ),
+    ).toHaveCount(1);
   });
 
   test("ships page compares the Karve and the Longship and hides the admin note", async ({

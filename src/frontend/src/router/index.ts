@@ -202,6 +202,13 @@ export const router = createRouter({
       beforeEnter: () => awaitShowcaseManifests(),
     },
     {
+      path: '/docs/training',
+      name: 'training-docs',
+      component: () => import('../views/TrainingView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
       path: '/docs/founding',
       name: 'founding-docs',
       component: () => import('../views/FoundingView.vue'),

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // A building's training window, opened from the building's ring ('train'
 // action) the same way BuildingModal is: training belongs to a building (it
-// trains one part at a time, the rest wait behind it), so this lists only the
+// trains one order at a time, the rest wait behind it), so this lists only the
 // units that building type trains, with a quantity picker per unit, rather
 // than BuildingModal's single-target cost/duration/action layout. With several
 // buildings of the type the order can also be distributed over all of them.
@@ -15,7 +15,7 @@ import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { useAuthStore } from '../../stores/auth';
 import { DEMO_MODE } from '../../config';
 import {
-  MAX_TRAINING_PARTS_PER_BUILDING,
+  MAX_TRAINING_ORDERS_PER_BUILDING,
   canAfford,
   distributedTrainingSeconds,
   formatCostLine,
@@ -65,11 +65,11 @@ const split = computed<TrainingSplit>(() => (canDistribute.value && mode.value =
 // Fastest splits by time — premium only; shown locked for everyone else (docs/design/premium-gating-ux.md).
 const fastestLocked = computed(() => !auth.isPremium);
 
-// How many parts this building already holds (the running one plus those waiting), against its cap.
-const partsHere = computed(
+// How many orders this building already holds (the running one plus those waiting), against its cap.
+const ordersHere = computed(
   () => world.hud.trainingQueue.filter((o) => o.q === props.building.q && o.r === props.building.r).length,
 );
-const fullHere = computed(() => split.value === 'here' && partsHere.value >= MAX_TRAINING_PARTS_PER_BUILDING);
+const fullHere = computed(() => split.value === 'here' && ordersHere.value >= MAX_TRAINING_ORDERS_PER_BUILDING);
 
 // Issue #40 phase 6 §4: whether this settlement's own claimed territory
 // touches the sea — Ship-class units (Karve, Longship) need it, mirroring
@@ -251,7 +251,7 @@ async function train(type: string, count: number) {
         </i18n-t>
       </div>
       <p v-if="fullHere" class="desc error-note">
-        {{ t('hud.trainingModal.full', { used: partsHere, max: MAX_TRAINING_PARTS_PER_BUILDING }) }}
+        {{ t('hud.trainingModal.full', { used: ordersHere, max: MAX_TRAINING_ORDERS_PER_BUILDING }) }}
       </p>
 
       <div class="roster">

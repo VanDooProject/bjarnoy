@@ -35,7 +35,7 @@ function placed(type: string, q: number, r: number, level: number, extra: Partia
   return { type, q, r, level, ...extra };
 }
 
-function part(q: number, r: number, id: string): TrainingOrderResponse {
+function order(q: number, r: number, id: string): TrainingOrderResponse {
   return {
     id,
     unit: 'thrall',
@@ -169,9 +169,9 @@ describe('TrainingModal', () => {
 
   it('says when this building is full and disables Train, but only for "This building"', async () => {
     const world = setup(twoBarracks);
-    world.hud.trainingQueue = [1, 2, 3, 4, 5].map((i) => part(3, -2, `p${i}`));
+    world.hud.trainingQueue = [1, 2, 3, 4, 5].map((i) => order(3, -2, `p${i}`));
     const wrapper = mountModal();
-    expect(wrapper.get('.error-note').text()).toContain('5 of 5');
+    expect(wrapper.get('.error-note').text()).toContain('5 of 5 orders');
     expect(wrapper.get('.unit-row .primary').attributes('disabled')).toBeDefined();
 
     await wrapper.findAll('.seg')[1].trigger('click');
@@ -179,9 +179,9 @@ describe('TrainingModal', () => {
     expect(wrapper.get('.unit-row .primary').attributes('disabled')).toBeUndefined();
   });
 
-  it('does not count another building\'s parts toward this one', () => {
+  it('does not count another building\'s orders toward this one', () => {
     const world = setup(twoBarracks);
-    world.hud.trainingQueue = [1, 2, 3, 4, 5].map((i) => part(5, 0, `p${i}`));
+    world.hud.trainingQueue = [1, 2, 3, 4, 5].map((i) => order(5, 0, `p${i}`));
     const wrapper = mountModal();
     expect(wrapper.find('.error-note').exists()).toBe(false);
     expect(wrapper.get('.unit-row .primary').attributes('disabled')).toBeUndefined();

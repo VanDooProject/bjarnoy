@@ -48,7 +48,7 @@ const guestCount = computed(() => world.guestArmies.length);
     <template v-if="orders.length">
       <div class="status-card-header">
         <span class="status-card-title">{{ t('hud.trainingQueue.title') }}</span>
-        <span class="status-card-count">{{ t('hud.trainingQueue.parts', { count: orders.length }) }}</span>
+        <span class="status-card-count">{{ t('hud.trainingQueue.orders', { count: orders.length }) }}</span>
       </div>
       <div v-for="o in orders" :key="o.key" class="status-row" :class="{ 'is-waiting': o.waiting }">
         <div class="status-row-top">
@@ -91,7 +91,7 @@ const guestCount = computed(() => world.guestArmies.length);
 </template>
 
 <style scoped>
-/* A part queued behind another one in its building reads dim: no progress bar, "Starts in …" in place of a countdown. */
+/* An order queued behind another one in its building reads dim: no progress bar, "Starts in …" in place of a countdown. */
 .status-row.is-waiting {
   opacity: 0.55;
 }

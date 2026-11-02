@@ -162,7 +162,7 @@ describe('distributedTrainingSeconds', () => {
     expect(distributedTrainingSeconds(thrall, 5, [0, 20], 'evenly')).toBeCloseTo(300);
   });
 
-  it('fastest: parts finish together, faster buildings take more', () => {
+  it('fastest: orders finish together, faster buildings take more', () => {
     // rates 1/100 + 1/80 per second -> 10 units take 10 / 0.0225
     expect(distributedTrainingSeconds(thrall, 10, [0, 20], 'fastest')).toBeCloseTo(10 / (1 / 100 + 1 / 80));
   });

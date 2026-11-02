@@ -431,7 +431,7 @@ function onDrawerLeave(el: Element, done: () => void) {
           <template v-if="trainingOrders.length">
             <div class="status-card-header" :class="{ 'has-section-above': buildOrders.length }">
               <span class="status-card-title">{{ t('hud.trainingQueue.title') }}</span>
-              <span class="status-card-count">{{ t('hud.trainingQueue.parts', { count: trainingOrders.length }) }}</span>
+              <span class="status-card-count">{{ t('hud.trainingQueue.orders', { count: trainingOrders.length }) }}</span>
             </div>
             <div v-for="o in trainingOrders" :key="o.key" class="status-row" :class="{ 'is-waiting': o.waiting }">
               <div class="status-row-top">

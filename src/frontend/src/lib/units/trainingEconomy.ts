@@ -54,8 +54,8 @@ export function isUnitAvailable(
 /** Share of the per-unit training time a building takes off per level (docs/design: -1% per level, -20% at level 20). */
 export const TRAINING_TIME_REDUCTION_PER_LEVEL = 0.01;
 
-/** Mirrors the backend's cap on the parts one building trains at a time (the running one plus those waiting). */
-export const MAX_TRAINING_PARTS_PER_BUILDING = 5;
+/** Mirrors the backend's cap on the orders one building trains at a time (the running one plus those waiting). */
+export const MAX_TRAINING_ORDERS_PER_BUILDING = 5;
 
 /** Where a training order goes: one building, or spread over all of the type — evenly by count or by time. */
 export type TrainingSplit = TrainUnitsRequest['split'];
@@ -78,7 +78,7 @@ export function unitTrainingSeconds(definition: Pick<UnitDefinitionResponse, 'tr
 /**
  * How long `count` units take when spread over buildings of the given `levels`, as an estimate that ignores what each building
  * already has queued: `evenly` hands each building the same share (the first ones get the remainder), `fastest` splits by speed so
- * all parts finish together. Used for the duration the training window shows in "Distribute" mode.
+ * all orders finish together. Used for the duration the training window shows in "Distribute" mode.
  */
 export function distributedTrainingSeconds(
   definition: Pick<UnitDefinitionResponse, 'trainingSeconds'>,
