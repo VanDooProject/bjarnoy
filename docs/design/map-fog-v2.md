@@ -33,6 +33,10 @@ always the outer of the two (`WorldModel.exploredRadius` is
 `borderRadius + FOG_SCOUT_RING`, `visibleHexes` only `borderRadius + 1`) —
 so any texel with R > 0 has G already saturated.
 
+A settlement whose Longhouse is destroyed contributes no centre vision source at all (`FogVisionRadii.ToVisionSource` is
+null, the same `Settlement.LonghouseDisc` decision as its claim): no explored and no visible ring around its centre.
+Chained towers and armies still add their own sources; ground explored before stays in the persisted explored area.
+
 That invariant is what makes the layer stack in §4 correct as a plain stack:
 
 - **The dark tier is a full underlay.** Everything outside current line of
