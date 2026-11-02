@@ -101,7 +101,8 @@ public static class SettlementEndpoints
             .WithSummary("Claims a completed onboarding quest's resource reward, once per settlement.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/runes/{runeId:guid}/slot", SlotRune)
             .WithName("SlotRune")

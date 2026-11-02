@@ -61,7 +61,8 @@ public static class ArmyEndpoints
             // ArmyResponse (route, provisions) is owner-only.
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         var armies = app.MapGroup("/api/v1/armies")
             .WithApiVersionSet(versionSet)

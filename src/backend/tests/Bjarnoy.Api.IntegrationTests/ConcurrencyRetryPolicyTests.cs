@@ -52,6 +52,7 @@ public sealed class ConcurrencyRetryPolicyTests
         "GET /api/v1/settlements/{settlementId:guid}/trade-offers/mine",
         "GET /api/v1/settlements/{settlementId:guid}/shipments",
         "GET /api/v1/admin/settlements/{settlementId:guid}",
+        "GET /api/v1/admin/settlements/{settlementId:guid}/layout",
     ];
 
     private static async Task<Dictionary<string, RouteEndpoint>> MapEndpointsAsync()
