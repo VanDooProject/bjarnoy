@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeRiverFlow, computeRiverRipple, GROUND_SQUASH, SLOW_PHASE_FACTOR, RIPPLE_WAVELENGTH_TEXELS, RIVER_CENTRE_TEXELS, riverGeodesicDistance, riverPotential, SEED_REACH, topFacePolygonTexels, WATER_THRESHOLD, type RiverFlowInput } from './riverFlow';
+import { computeRiverFlow, computeRiverRipple, GROUND_SQUASH, riverStreamFunction, SLOW_PHASE_FACTOR, RIPPLE_WAVELENGTH_TEXELS, RIVER_CENTRE_TEXELS, riverGeodesicDistance, riverPotential, SEED_REACH, topFacePolygonTexels, WATER_THRESHOLD, type RiverFlowInput } from './riverFlow';
 import { topFaceEdgeIndex } from '../riverPath';
 import { riverFrameInput, vendoredArt, type RiverFrame } from './riverArtFixture';
 
@@ -522,7 +522,6 @@ describe('computeRiverRipple slow phase', () => {
     expect(Math.abs(slowPeriods - periods / SLOW_PHASE_FACTOR)).toBeLessThanOrEqual(1);
     for (let p = 0; p < CW * CH; p++) {
       expect(slow[p * 4 + 3]).toBe(data[p * 4 + 3]);
-      expect(slow[p * 4 + 2]).toBe(data[p * 4 + 2]);
     }
     // 0 mod 2 pi on the out edge's line, like the fast phase.
     const o = ((CH - 3) * CW + 50) * 4;
@@ -793,4 +792,41 @@ describe('computeRiverRipple draws only water it has a phase for', () => {
       }
     }
   }, 120_000);
+});
+
+describe('riverStreamFunction', () => {
+  const psiAt = (psi: Float64Array, x: number, y: number) => psi[y * CW + x]!;
+
+  it('is 0 on the bank to the right looking downstream and 1 on the left, and flips with the flow', () => {
+    // Flowing towards the bottom (south), the right-hand bank is the west one (small x).
+    const down = riverStreamFunction(input(channel(), BOTTOM));
+    expect(psiAt(down, 41, 22)).toBeLessThan(0.15);
+    expect(psiAt(down, 58, 22)).toBeGreaterThan(0.85);
+    // Monotone across the channel, and about the same along it (a straight channel: the streamlines are straight).
+    for (let x = 41; x < 58; x++) expect(psiAt(down, x + 1, 22)).toBeGreaterThanOrEqual(psiAt(down, x, 22) - 1e-3);
+    expect(Math.abs(psiAt(down, 50, 12) - psiAt(down, 50, 34))).toBeLessThan(0.05);
+    const up = riverStreamFunction(input(channel(), TOP));
+    expect(psiAt(up, 41, 22)).toBeGreaterThan(0.85);
+    expect(psiAt(up, 58, 22)).toBeLessThan(0.15);
+  });
+
+  it('gives an island no fixed value: the streamlines part round it', () => {
+    const mask = channel();
+    for (let y = 18; y < 28; y++) for (let x = 48; x < 53; x++) mask[y * CW + x] = 0;
+    const psi = riverStreamFunction(input(mask, BOTTOM));
+    // Inside the island ψ is neither bank value, and the water on either side of it keeps its side.
+    expect(psiAt(psi, 50, 22)).toBeGreaterThan(0.25);
+    expect(psiAt(psi, 50, 22)).toBeLessThan(0.75);
+    expect(psiAt(psi, 45, 22)).toBeLessThan(0.5);
+    expect(psiAt(psi, 55, 22)).toBeGreaterThan(0.5);
+    // Above and below the island the streamline at its middle is the same one (ψ about 0.5 on the axis).
+    expect(Math.abs(psiAt(psi, 50, 12) - 0.5)).toBeLessThan(0.15);
+    expect(Math.abs(psiAt(psi, 50, 36) - 0.5)).toBeLessThan(0.15);
+  });
+
+  it('puts the two banks of a spring on either side of its out crossing', () => {
+    const psi = riverStreamFunction({ mask: channel(), cw: CW, ch: CH, polygon: POLYGON, inEdges: [], outEdge: BOTTOM });
+    expect(psiAt(psi, 41, 40)).toBeLessThan(0.3);
+    expect(psiAt(psi, 58, 40)).toBeGreaterThan(0.7);
+  });
 });

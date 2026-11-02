@@ -545,6 +545,36 @@ vec4 riverOver(vec4 a, vec4 b) {
   return b + a * (1.0 - b.a);
 }
 
+// The stream function psi (0 on the right bank looking downstream, 1 on the left), the slow texture's blue channel: its contour
+// lines are the streamlines. A lane coordinate is psi times a lane count the same for every cell, so lanes continue across seams.
+float riverPsi() {
+  vec4 f = texture(uRiverSlow, riverUV());
+  return f.a > 0.5 ? f.b / f.a : 0.5;
+}
+
+// The direction of the flow from the slow phase: its gradient over a wide stretch (central differences over 32 world units), which is smooth where the fast
+// phase's, taken over 3, quantises into patches of equal direction. Used to carry the cartoon patches and the specks downstream.
+vec2 riverSlowGradient() {
+  const float H = 16.0;
+  vec2 uv = riverUV();
+  vec4 f0 = texture(uRiverSlow, uv);
+  vec2 c0 = f0.a > 0.5 ? (f0.rg / f0.a) * 2.0 - 1.0 : vec2(1.0, 0.0);
+  c0 /= max(length(c0), 1e-3);
+  vec4 xm = texture(uRiverSlow, uv - vec2(H * uRiverRect.z, 0.0));
+  vec4 xp = texture(uRiverSlow, uv + vec2(H * uRiverRect.z, 0.0));
+  vec4 ym = texture(uRiverSlow, uv - vec2(0.0, H * uRiverRect.w));
+  vec4 yp = texture(uRiverSlow, uv + vec2(0.0, H * uRiverRect.w));
+  vec2 cxm = xm.a > 0.5 ? (xm.rg / xm.a) * 2.0 - 1.0 : c0;
+  vec2 cxp = xp.a > 0.5 ? (xp.rg / xp.a) * 2.0 - 1.0 : c0;
+  vec2 cym = ym.a > 0.5 ? (ym.rg / ym.a) * 2.0 - 1.0 : c0;
+  vec2 cyp = yp.a > 0.5 ? (yp.rg / yp.a) * 2.0 - 1.0 : c0;
+  cxm /= max(length(cxm), 1e-3);
+  cxp /= max(length(cxp), 1e-3);
+  cym /= max(length(cym), 1e-3);
+  cyp /= max(length(cyp), 1e-3);
+  return vec2(cxm.x * cxp.y - cxm.y * cxp.x, (cym.x * cyp.y - cym.y * cyp.x) * uGroundSquash) / (2.0 * H);
+}
+
 // Style 1, toon strands: long thin light and dark strands along the flow (noise across the stream from centre, which is
 // constant along it, times noise along the stream on the phase circle), curly white foam where centre is small (banks, islands,
 // where channels meet) and a few sparkles.
@@ -554,12 +584,12 @@ vec4 riverStrands(vec2 cs, float centre, vec2 ground) {
   float turn = atan(p.y, p.x);
   // Lanes: B cut into thin strips (about 3 texels), nudged by noise so they are not exact contours. Most lanes are empty; a
   // present lane has its own width, tone and dash pattern.
-  float laneCoord = centre * 5.5 + (noise(ground * k * 2.5) - 0.5) * 0.8;
+  float laneCoord = riverPsi() * 10.0 + (noise(ground * k * 2.5) - 0.5) * 0.8;
   float lane = floor(laneCoord);
-  float h1 = hash(vec2(lane, 3.7));
+  float h1 = hash(vec2(mod(lane, 289.0), 3.7));
   float h2 = hash(vec2(lane, 11.3));
   float h3 = hash(vec2(lane, 29.1));
-  float present = step(0.5, h1);
+  float present = step(0.4, h1);
   float halfWidth = 0.15 + 0.35 * h2;
   float across = abs(fract(laneCoord) - 0.5) * 2.0;
   float body = 1.0 - smoothstep(halfWidth, halfWidth + 0.18, across);
@@ -625,17 +655,18 @@ vec4 riverBands(vec2 cs, float centre, vec2 ground) {
   // Patches: big lobes of low-frequency noise drifting downstream. Moved along the flow (minus the phase gradient: the phase
   // grows upstream), two layers half a cycle apart and cross-faded, so the drift never jumps back. Shifting the noise by the
   // phase instead lined the patch edges up with the phase contours: straight bars across the channel.
-  vec2 down = -riverPhaseGradient(cs);
-  down /= max(length(down), 1e-6);
+  // Soft normalisation: where the gradient is tiny (a flat stretch of the phase) its direction is noise, so it shifts nothing.
+  vec2 down = -riverSlowGradient();
+  down /= length(down) + 0.03;
   float cycle = uTime * 0.06;
   float c0 = fract(cycle);
   float c1 = fract(cycle + 0.5);
   vec2 warp = vec2(noiseQuintic(ground * k * 0.8), noiseQuintic(ground * k * 0.8 + 9.0)) - 0.5;
   vec2 base = ground * k * 0.3 + warp * 1.4;
-  float f0 = fbmRotated(base - down * c0 * 0.9 + 5.0);
-  float f1 = fbmRotated(base - down * c1 * 0.9 + 23.0);
+  float f0 = fbmRotated(base - down * c0 * 0.6 + 5.0);
+  float f1 = fbmRotated(base - down * c1 * 0.6 + 23.0);
   float f = mix(f0, f1, abs(1.0 - 2.0 * c0));
-  float patch = smoothstep(0.46, 0.62, f) * smoothstep(0.1, 0.3, centre);
+  float patch = smoothstep(0.46, 0.62, f) * smoothstep(0.0, 0.08, centre);
   col = riverOver(col, vec4(vec3(0.75, 0.94, 1.0) * 0.22, 0.22) * patch);
   // Glints: ellipses along the flow (the phase gradient points across it), shown while the wave passes their cell.
   vec2 g = ground * k * 14.0;
@@ -667,24 +698,22 @@ vec4 riverStreaks(vec2 cs, float centre, vec2 ground) {
   float turn = atan(ps.y, ps.x) - uRiverSpeed * uTime * 0.25;
   float k = uRiverScale;
   float nearBank = 1.0 - smoothstep(0.0, 0.35, centre);
-  // Lanes of B mirror across the channel's middle; the region number breaks that (and the lanes' rows) up.
-  float region = floor(noise(ground * k * 0.7) * 4.0);
-  float laneCoord = centre * 16.0 + (noise(ground * k * 2.5) - 0.5) * 1.2;
+  float laneCoord = riverPsi() * 24.0 + (noise(ground * k * 2.5) - 0.5) * 0.8;
   float lane = floor(laneCoord);
-  float h1 = hash(vec2(lane, 3.7 + region * 13.1));
-  float h2 = hash(vec2(lane, 11.3 + region * 7.9));
-  float h3 = hash(vec2(lane, 29.1 + region * 3.3));
-  float present = step(mix(0.58, 0.28, nearBank), h1);
-  float halfWidth = 0.45 + 0.45 * h2;
+  float h1 = hash(vec2(mod(lane, 289.0), 3.7));
+  float h2 = hash(vec2(mod(lane, 289.0), 11.3));
+  float h3 = hash(vec2(mod(lane, 289.0), 29.1));
+  float present = step(mix(0.42, 0.18, nearBank), h1);
+  float halfWidth = 0.3 + 0.35 * h2;
   float across = abs(fract(laneCoord) - 0.5) * 2.0;
   float body = 1.0 - smoothstep(halfWidth, halfWidth + 0.15, across);
-  float dash = smoothstep(mix(-0.3, 0.7, h3), mix(-0.3, 0.7, h3) + 0.12, cos(turn + h1 * 40.0));
-  float broken = smoothstep(0.2, 0.4, noise(ground * k * 1.1 + lane * 5.3 + ps * 0.8));
-  float alpha = mix(0.75, 0.35, smoothstep(0.55, 0.9, halfWidth));
+  float dash = smoothstep(mix(-0.6, 0.5, h3), mix(-0.6, 0.5, h3) + 0.12, cos(turn + h1 * 40.0));
+  float broken = smoothstep(0.1, 0.3, noise(ground * k * 1.1 + lane * 5.3 + ps * 0.8));
+  float alpha = mix(0.85, 0.6, smoothstep(0.35, 0.65, halfWidth));
   float streak = body * dash * broken * present * smoothstep(0.02, 0.1, centre);
   vec4 col = vec4(vec3(1.0), 1.0) * alpha * streak;
   // Specks: small ovals along the flow, two cell grids carried downstream and cross-faded, a few more near the banks.
-  vec2 down = -riverPhaseGradient(cs);
+  vec2 down = -riverSlowGradient();
   down /= max(length(down), 1e-6);
   vec2 side = vec2(-down.y, down.x);
   float cyc = uTime * 0.5;

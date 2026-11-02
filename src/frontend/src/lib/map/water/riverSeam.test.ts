@@ -168,6 +168,27 @@ describe.skipIf(!vendoredArt)('river flow across the seams of real neighbouring 
     expect(ratiosAll.reduce((a, b) => a + b, 0) / ratiosAll.length, ratiosAll.map((r) => r.toFixed(2)).join(' ')).toBeLessThan(1.7);
   }, 300_000);
 
+  it('(i) keeps the stream function continuous across a single-channel seam (the jump beyond the local slope is within 0.08)', async () => {
+    for (const pair of SEAM_PAIRS.filter((p) => p.every((c) => c.ins.length === 1))) {
+      const cells = await composePair(pair, true);
+      let n = 0;
+      let max = 0;
+      for (let t = 0.3; t <= 0.71; t += 0.05) {
+        const line = seamLine(cells, t);
+        const psi = (k: number) => sampleComposite(cells, line.x + line.step.x * k, line.y + line.step.y * k, true)?.b;
+        // The jump from one texel before the seam to one after, beyond what psi changes on either side over two texels (the
+        // streamlines cross the crossing direction at an angle on a bend, so psi has a slope along it).
+        const [m3, m1, p1, p3] = [psi(-3), psi(-1), psi(1), psi(3)];
+        if (m3 === undefined || m1 === undefined || p1 === undefined || p3 === undefined) continue;
+        n++;
+        max = Math.max(max, Math.max(0, Math.abs(p1 - m1) - Math.max(Math.abs(m1 - m3), Math.abs(p3 - p1))));
+      }
+      expect(n, pair[0].name).toBeGreaterThan(6);
+      // (Across a confluence the arms' psi would have to be mapped into the confluence's sub-ranges: not done, those seams jump.)
+      expect(max, pair[0].name).toBeLessThanOrEqual(0.08);
+    }
+  }, 300_000);
+
   it('(c) turns the ripple phase at about the same rate on both sides of a seam (25 % on average over the pairs, 40 % at worst)', async () => {
     const worst: string[] = [];
     const medians: number[] = [];
