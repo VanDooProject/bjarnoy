@@ -68,10 +68,14 @@ public static class PageConsoleErrors
                 return;
             }
 
-            var text = msg.Text.StartsWith("Failed to load resource", StringComparison.Ordinal)
-                && recentFailedResponses.Count > 0
-                ? $"{msg.Text} — most recently observed failed request(s): {string.Join(", ", recentFailedResponses)}"
-                : msg.Text;
+            // For "Failed to load resource" Chromium reports the failed
+            // resource's own URL as the message location.
+            var text = string.IsNullOrEmpty(msg.Location) ? msg.Text : $"{msg.Text} [at {msg.Location}]";
+            if (msg.Text.StartsWith("Failed to load resource", StringComparison.Ordinal)
+                && recentFailedResponses.Count > 0)
+            {
+                text += $" — most recently observed failed request(s): {string.Join(", ", recentFailedResponses)}";
+            }
             errors.Add(text);
         };
         page.PageError += (_, err) => errors.Add(err);
