@@ -25,7 +25,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { loginTestUser } from './helpers';
+import { loginTestUser, openHudDrawer } from './helpers';
 import { SettlementPage } from './pages';
 
 // DOM and game state only: water pixels cannot change these results (see `mapLayers` in fixtures.ts).
@@ -63,6 +63,35 @@ async function expectPillsNotClipped(page: Page): Promise<void> {
     expect(pillBox!.x).toBeGreaterThanOrEqual(bar!.x - 1);
     expect(pillBox!.x + pillBox!.width).toBeLessThanOrEqual(bar!.x + bar!.width + 1);
   }
+}
+
+/**
+ * A mouse drag from (x, fromY) to (x, toY) in `steps` moves `msPerStep`
+ * apart, then released where it ended, with explicit event timestamps
+ * (CDP `Input.dispatchMouseEvent`). useHudDrawer reads release speed from
+ * the events' own `timeStamp`s, so a `page.mouse` drag's speed is whatever
+ * pace the runner happens to deliver its moves at: anything from ~7ms to
+ * hundreds of ms apart. A short drag then counts as a flick on a fast run
+ * and not on a slow one. Fixed timestamps make the speed part of the test.
+ */
+async function timedMouseDrag(page: Page, x: number, fromY: number, toY: number, steps: number, msPerStep: number): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  const t0 = Date.now() / 1000;
+  const at = (ms: number) => t0 + ms / 1000;
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y: fromY, timestamp: at(0) });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y: fromY, button: 'left', buttons: 1, clickCount: 1, timestamp: at(0) });
+  for (let i = 1; i <= steps; i++) {
+    await cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x,
+      y: fromY + ((toY - fromY) * i) / steps,
+      button: 'left',
+      buttons: 1,
+      timestamp: at(i * msPerStep),
+    });
+  }
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y: toY, button: 'left', buttons: 0, clickCount: 1, timestamp: at(steps * msPerStep) });
+  await cdp.detach();
 }
 
 /** Each pill's `.fill-track` must never be wider than its own `.numbers`/`.numbers-compact` text above it. */
@@ -304,19 +333,37 @@ test.describe('mobile HUD bar', () => {
     await loginTestUser(page);
     await SettlementPage.found(page);
 
-    const bar = page.locator('.hud-bar');
-    const box = (await bar.boundingBox())!;
+    const box = (await page.locator('.hud-bar').boundingBox())!;
     const x = box.x + box.width / 2;
     const y = box.y + box.height / 2;
-
-    await page.mouse.move(x, y);
-    await page.mouse.down();
-    await page.mouse.move(x, y + 20, { steps: 5 }); // well short of the ~30% threshold
-    await page.mouse.up();
+    // 20px, well short of the ~30% threshold, at 0.1px/ms: far below the
+    // 0.5px/ms flick speed (useHudDrawer's FLICK_VELOCITY_PX_MS), so only
+    // the distance decides.
+    await timedMouseDrag(page, x, y, y + 20, 5, 40);
 
     await expect(async () => {
       const closedBox = (await page.locator('.hud-drawer').boundingBox())!;
       expect(closedBox.height).toBeLessThanOrEqual(2);
+    }).toPass();
+  });
+
+  test('a fast flick of the same short distance opens the drawer', async ({ page }) => {
+    // The counterpart of the test above: the same 20px, but at 1px/ms, past
+    // the flick speed. Speed, not distance, is what differs, so the test
+    // above passing means a slow short drag snaps back, not that flicks
+    // never register.
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await loginTestUser(page);
+    await SettlementPage.found(page);
+
+    const box = (await page.locator('.hud-bar').boundingBox())!;
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await timedMouseDrag(page, x, y, y + 20, 5, 4);
+
+    await expect(async () => {
+      const openBox = (await page.locator('.hud-drawer').boundingBox())!;
+      expect(openBox.height).toBeGreaterThan(100);
     }).toPass();
   });
 
@@ -655,7 +702,7 @@ test.describe('mobile HUD drawer on non-map pages', () => {
 
     // Finding #8: MobileHudDrawer gained the Home/Landing link that was
     // previously missing entirely — tapping it must actually navigate.
-    await page.getByRole('button', { name: 'Landing' }).tap();
+    await page.getByRole('link', { name: 'Landing' }).tap();
     await expect(page).toHaveURL('/');
   });
 
@@ -700,11 +747,12 @@ test.describe('mobile HUD drawer on non-map pages', () => {
   // mount outside the HUD drawer hides itself at phone width.
   test('no page shows the language switcher outside the drawer', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    for (const path of ['/', '/login', '/register', '/worlds', '/reports', '/impressum', '/docs', '/tech-tree']) {
+    for (const path of ['/', '/login', '/register', '/worlds', '/reports', '/impressum', '/docs', '/docs/tech-tree']) {
       await page.goto(path);
-      // Mounted (so this can't pass just because the page hadn't rendered
-      // yet), but not shown.
-      await expect(page.locator('.locale-switcher:not(.in-drawer)').first(), path).toBeAttached();
+      // The page has rendered (its HUD bar, or a standalone page's own
+      // switcher), so this can't pass just because nothing is there yet. HUD
+      // pages keep the switcher in their dropdown menu, which is closed here.
+      await expect(page.locator('.hud-bar, .locale-switcher:not(.in-drawer)').first(), path).toBeAttached();
       await expect(page.locator('.locale-switcher:not(.in-drawer):visible'), path).toHaveCount(0);
     }
   });
@@ -748,7 +796,7 @@ test.describe('mobile HUD drawer on non-map pages', () => {
       expect(openBox.height).toBeGreaterThan(100);
     }).toPass();
 
-    await page.getByRole('button', { name: /Reports/ }).first().click();
+    await page.getByRole('link', { name: /Reports/ }).first().click();
     await expect(page).toHaveURL(/\/reports/);
   });
 });
@@ -883,7 +931,7 @@ test('a short phone can scroll the open drawer down to reach the profile nudge',
   // profile nudge (showProfileNudge in MobileHudDrawer.vue) needs nothing
   // further set up here; the anonymous, no-nickname founding above already
   // satisfies its other conditions too.
-  await page.locator('.hud-grip').click();
+  await openHudDrawer(page);
   const nudge = page.locator('.hud-drawer [data-testid="profile-nudge"]');
   await expect(nudge).toBeVisible();
 

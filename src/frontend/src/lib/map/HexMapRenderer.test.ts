@@ -25,6 +25,11 @@ import {
   type TextureLoadDeps,
   clientToCanvasPoint,
   waterMaskTerrainFor,
+  worldGiantOutline,
+  worldHexFill,
+  worldCampMarkers,
+  worldPawHalfSize,
+  worldRiverColor,
 } from './HexMapRenderer';
 import { StaticWorldModel } from './StaticWorldModel';
 import { PREVIEW_ISLAND_RADIUS } from './WorldModel';
@@ -181,6 +186,11 @@ describe('hoverSubjectFor', () => {
   it('names the giant even over a building type, since a giant tile fully covers whatever is under it', () => {
     const tile = { ...tileOf('grass'), giant, buildingType: 'hut' as const, buildingLevel: 3 };
     expect(hoverSubjectFor(tile, undefined)).toEqual({ kind: 'giant', family: 'giantmountain' });
+  });
+
+  it('names the whale road on its open-sea hex, as a camp rather than as water', () => {
+    const camp = { family: 'whaleroad', level: 2, orientation: 'NE' as const, strong: true, guardRange: 0 };
+    expect(hoverSubjectFor({ ...tileOf('sea'), camp }, undefined)).toEqual({ kind: 'camp', family: 'whaleroad', level: 2, strong: true });
   });
 
   it('names a wildlife camp with its level and strength, ahead of a building type and the terrain', () => {
@@ -1089,5 +1099,60 @@ describe('wheelPassesToPage', () => {
   it('never passes on a host that did not opt into page scroll', () => {
     expect(wheelPassesToPage({ ...base, allowPageScroll: false })).toBe(false);
     expect(wheelPassesToPage({ ...base, allowPageScroll: false, lockCamera: true })).toBe(false);
+  });
+});
+
+describe('world-map wasted lands', () => {
+  it('fills a revealed wasted hex from the wasted palette, not the green island colours', () => {
+    for (const terrain of ['grass', 'forest', 'sand', 'mountain'] as const) {
+      expect(worldHexFill(terrain, true)).not.toBe(worldHexFill(terrain, false));
+    }
+  });
+
+  it('keeps the four wasted terrains apart from each other', () => {
+    const fills = (['grass', 'forest', 'sand', 'mountain'] as const).map((t) => worldHexFill(t, true));
+    expect(new Set(fills).size).toBe(4);
+  });
+
+  it('draws a lava stream in another colour than a river', () => {
+    expect(worldRiverColor({ wasted: true })).not.toBe(worldRiverColor({ wasted: false }));
+    expect(worldRiverColor({})).toBe(worldRiverColor({ wasted: false }));
+  });
+});
+
+describe('world-map giants', () => {
+  it('outlines the volcano and the runestone giants in their own colours', () => {
+    expect(worldGiantOutline('giantvolcano')).toBeDefined();
+    expect(worldGiantOutline('giantshrine')).toBeDefined();
+    expect(worldGiantOutline('giantutgard')).toBeDefined();
+    expect(worldGiantOutline('giantvolcano')).not.toBe(worldGiantOutline('giantshrine'));
+  });
+
+  it('draws no outline around the giant mountain, which has no function of its own', () => {
+    expect(worldGiantOutline('giantmountain')).toBeUndefined();
+  });
+});
+
+describe('worldCampMarkers', () => {
+  const strong = { q: 1, r: 2, strong: true, removed: false };
+  const weak = { q: 3, r: 4, strong: false, removed: false };
+
+  it('draws nothing for a player who is not premium', () => {
+    expect(worldCampMarkers([strong, weak], false)).toEqual([]);
+  });
+
+  it('skips a removed camp', () => {
+    expect(worldCampMarkers([{ ...strong, removed: true }, weak], true).map((m) => [m.q, m.r])).toEqual([[3, 4]]);
+  });
+
+  it('colours a strong camp red and a weak one neutral', () => {
+    const [strongMarker, weakMarker] = worldCampMarkers([strong, weak], true);
+    expect(strongMarker).toEqual({ q: 1, r: 2, color: 0xe2705f });
+    expect(weakMarker).toEqual({ q: 3, r: 4, color: 0xe8e2d0 });
+  });
+
+  it('keeps the paw readable when zoomed far out and bounded when zoomed in', () => {
+    expect(worldPawHalfSize(0.01)).toBeGreaterThanOrEqual(8);
+    expect(worldPawHalfSize(100)).toBeLessThanOrEqual(14);
   });
 });

@@ -192,6 +192,7 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         // Camp aggression is driven by hand in the tests that cover it (CampAggressionService.ProcessWorldAsync);
         // the hosted scan would only race them on the test clock.
         builder.UseSetting("CampAggression:Enabled", "false");
+        builder.UseSetting("RealmSweep:Enabled", "false");
 
         // Same for the leaderboard poll: its real 60 s wall-clock timer can fire mid-test on a loaded machine,
         // refresh a half-seeded world and stamp the watermark, so the test's explicit RefreshCurrentBoardsAsync

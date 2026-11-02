@@ -16,6 +16,7 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { unitName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
+import GuestList from './GuestList.vue';
 import { hudRailHeightPx } from '../../composables/hudBarHeight';
 import {
   MAX_TRAINING_QUEUE_LENGTH,
@@ -133,19 +134,10 @@ const garrison = computed(() =>
     .map((g) => ({ key: g.unit, label: unitName(g.unit), count: g.count })),
 );
 
-// Issue #40 phase 4 — mirrors TrainingQueuePanel.vue's own guests computed;
-// see its comment for why guests are folded in here rather than getting a
-// separate HUD element.
-const guests = computed(() =>
-  world.guestArmies.map((g) => ({
-    key: g.armyId,
-    ownerName: world.model.getSettlement(g.ownerSettlementId)?.name ?? t('hud.trainingQueue.unknownSettlement'),
-    composition: g.stacks
-      .filter((s) => s.count > 0)
-      .map((s) => t('hud.trainingQueue.orderName', { count: s.count, unit: unitName(s.unit) }))
-      .join(', ') || '—',
-  })),
-);
+// Issue #40 phase 4 — the guest rows themselves (and their "Send home") are
+// GuestList.vue, shared with TrainingQueuePanel.vue; see its comment for why
+// guests are folded in here rather than getting a separate HUD element.
+const guestCount = computed(() => world.guestArmies.length);
 
 const reservedTotal = computed(() => {
   const r = world.hud.reserved;
@@ -185,7 +177,7 @@ const hasAnything = computed(
     buildOrders.value.length > 0
     || trainingOrders.value.length > 0
     || garrison.value.length > 0
-    || guests.value.length > 0
+    || guestCount.value > 0
     || armyRows.value.length > 0,
 );
 
@@ -506,17 +498,12 @@ function onDrawerLeave(el: Element, done: () => void) {
           </div>
           <div v-else class="status-subtext">{{ t('hud.trainingQueue.garrisonEmpty') }}</div>
 
-          <template v-if="guests.length">
+          <template v-if="guestCount">
             <div class="status-card-header has-section-above">
               <span class="status-card-title">{{ t('hud.trainingQueue.guests') }}</span>
-              <span class="status-card-count">{{ guests.length }}</span>
+              <span class="status-card-count">{{ guestCount }}</span>
             </div>
-            <div class="guests-grid">
-              <div v-for="g in guests" :key="g.key" class="guest-row">
-                <span class="guest-owner">{{ g.ownerName }}</span>
-                <span class="guest-composition">{{ g.composition }}</span>
-              </div>
-            </div>
+            <GuestList />
           </template>
         </div>
       </div>
@@ -697,8 +684,7 @@ function onDrawerLeave(el: Element, done: () => void) {
 .recall {
   color: #e08a8a;
 }
-.garrison-grid,
-.guests-grid {
+.garrison-grid {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -714,20 +700,6 @@ function onDrawerLeave(el: Element, done: () => void) {
 .garrison-count {
   color: var(--gold);
   font-weight: 600;
-}
-.guest-row {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  font-size: 12px;
-}
-.guest-owner {
-  color: var(--text);
-  font-weight: 600;
-}
-.guest-composition {
-  color: var(--muted);
-  font-size: 11px;
 }
 
 /* Drawer chrome

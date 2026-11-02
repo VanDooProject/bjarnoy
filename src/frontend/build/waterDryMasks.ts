@@ -3,8 +3,9 @@
 //
 // For every `_base` frame of the non-showcase atlas pages that repeats a plain
 // water tile (see dryMaskCore.ts) it computes a half-resolution mask of the
-// pixels that are not plain water, and packs all masks into one grey+alpha PNG.
-// Bog lake frames (`boglake*`) get a *wet* mask instead (the lake water, for the bog lake gust shader), packed into a second atlas.
+// pixels that are not plain water, and packs all masks into one grey+alpha PNG (alpha = dry).
+// Every bog lake `_base` frame gets a wet mask (the lake water in it, `lakeWetMaskHalf`) packed into a second PNG,
+// served as the module's `lake` atlas (docs/design/water-shader.md, "Bog lakes").
 // The result is computed once per build / dev-server start and cached.
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -17,6 +18,8 @@ import {
   REFERENCE_FRAME_RE,
   SOURCE_H,
   SOURCE_W,
+  TOP_FACE_H,
+  TOP_FACE_Y,
   WATER_MATCH_MIN_RATIO,
   bestReference,
   cellSourceRect,
@@ -25,8 +28,8 @@ import {
   lakeWetMaskHalf,
   orientationOf,
   type DryMaskFrame,
-  type MaskAtlasData,
   type SourceRect,
+  type MaskAtlasData,
   type WaterDryMasksData,
 } from '../src/lib/map/water/dryMaskCore.ts';
 
@@ -47,6 +50,7 @@ interface ManifestFrame {
 }
 interface Manifest {
   frames: Record<string, ManifestFrame>;
+  meta?: { bjarnoy?: { tile?: { w: number; h: number; topFaceY: number; topFaceH: number } } };
 }
 
 /** Every non-showcase page's `_base` frames (the ones drawn under the water mesh), as full 200x300 RGBA canvases. */
@@ -55,6 +59,10 @@ async function loadBaseCanvases(): Promise<Map<string, { canvas: Uint8Array; tri
   const pages = readdirSync(ATLAS_DIR).filter((f) => f.endsWith('.json') && !f.includes('showcase'));
   for (const jsonName of pages) {
     const manifest = JSON.parse(readFileSync(join(ATLAS_DIR, jsonName), 'utf8')) as Manifest;
+    const tile = manifest.meta?.bjarnoy?.tile;
+    if (tile && (tile.w !== SOURCE_W || tile.h !== SOURCE_H || tile.topFaceY !== TOP_FACE_Y || tile.topFaceH !== TOP_FACE_H)) {
+      throw new Error(`waterDryMasks: ${jsonName} has tile geometry ${JSON.stringify(tile)}, dryMaskCore assumes ${SOURCE_W}x${SOURCE_H} with the top face at ${TOP_FACE_Y}+${TOP_FACE_H}`);
+    }
     const names = Object.entries(manifest.frames).filter(
       ([name, f]) => name.endsWith('_base') && f.bjarnoy?.layer === 'base' && !f.rotated && f.sourceSize.w === SOURCE_W && f.sourceSize.h === SOURCE_H,
     );
@@ -76,13 +84,14 @@ async function loadBaseCanvases(): Promise<Map<string, { canvas: Uint8Array; tri
   return result;
 }
 
+/** One frame's half-resolution mask, cropped to its cell. */
 interface MaskCell {
   name: string;
   rect: ReturnType<typeof cellSourceRect>;
   mask: Uint8Array;
 }
 
-/** Shelf-packs `cells` (tallest first) into one grey+alpha PNG whose alpha is the mask. */
+/** Shelf-packs `cells` (tallest first) into one grey+alpha PNG: grey 0, alpha = the mask. The sea and lake atlases both use it. */
 async function packMaskAtlas(cells: MaskCell[]): Promise<MaskAtlasData> {
   cells.sort((a, b) => b.rect.sh - a.rect.sh);
   const frames: Record<string, DryMaskFrame> = {};
@@ -103,7 +112,6 @@ async function packMaskAtlas(cells: MaskCell[]): Promise<MaskAtlasData> {
   }
   const height = Math.max(1, y + shelfH);
 
-  // Grey + alpha, both the mask: the browser decodes it to (v, v, v, v) once premultiplied.
   const raw = new Uint8Array(ATLAS_WIDTH * height * 2);
   for (const cell of cells) {
     const { x: cx, y: cy } = frames[cell.name];
@@ -111,10 +119,7 @@ async function packMaskAtlas(cells: MaskCell[]): Promise<MaskAtlasData> {
     const h = cell.rect.sh >> 1;
     for (let row = 0; row < h; row++) {
       for (let col = 0; col < w; col++) {
-        const v = cell.mask[row * w + col];
-        const o = ((cy + row) * ATLAS_WIDTH + cx + col) * 2;
-        raw[o] = 255;
-        raw[o + 1] = v;
+        raw[((cy + row) * ATLAS_WIDTH + cx + col) * 2 + 1] = cell.mask[row * w + col];
       }
     }
   }
@@ -124,25 +129,28 @@ async function packMaskAtlas(cells: MaskCell[]): Promise<MaskAtlasData> {
   return { url: `data:image/png;base64,${png.toString('base64')}`, width: ATLAS_WIDTH, height, frames };
 }
 
-/** Computes every dry mask and every bog lake wet mask and packs them into two PNGs. Exported for the build log and tooling. */
+/**
+ * Computes every dry mask (sea) and every lake wet mask (bog lakes) and packs each set into its own PNG. Exported for the build
+ * log and tooling.
+ */
 export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
   const bases = await loadBaseCanvases();
   const referencesByOrientation = new Map<string, Uint8Array[]>();
-  const lakeReferences = new Map<string, Uint8Array>();
+  const lakeReferenceByOrientation = new Map<string, Uint8Array>();
   for (const [name, { canvas }] of bases) {
-    if (LAKE_REFERENCE_FRAME_RE.test(name)) lakeReferences.set(orientationOf(name)!, canvas);
+    if (LAKE_REFERENCE_FRAME_RE.test(name)) lakeReferenceByOrientation.set(orientationOf(name)!, canvas);
     if (!REFERENCE_FRAME_RE.test(name)) continue;
     const orientation = orientationOf(name)!;
     referencesByOrientation.set(orientation, [...(referencesByOrientation.get(orientation) ?? []), canvas]);
   }
 
-  const dryCells: MaskCell[] = [];
+  const seaCells: MaskCell[] = [];
   const lakeCells: MaskCell[] = [];
   for (const [name, { canvas, trim }] of bases) {
     const orientation = orientationOf(name);
-    // Bog lakes: the family name decides, not a match ratio (a mouth tile is half creek and still has lake water).
+    // Every bog lake frame gets a wet mask, the plain lake included: the family name decides, not a match ratio.
     if (LAKE_FRAME_RE.test(name)) {
-      const reference = orientation ? lakeReferences.get(orientation) : undefined;
+      const reference = orientation ? lakeReferenceByOrientation.get(orientation) : undefined;
       if (!reference) continue;
       const rect = cellSourceRect(trim);
       lakeCells.push({ name, rect, mask: cropHalf(lakeWetMaskHalf(canvas, reference), rect) });
@@ -154,9 +162,11 @@ export async function buildWaterDryMasks(): Promise<WaterDryMasksData> {
     const best = bestReference(canvas, references);
     if (!best || best.ratio < WATER_MATCH_MIN_RATIO) continue;
     const rect = cellSourceRect(trim);
-    dryCells.push({ name, rect, mask: cropHalf(dryMaskHalf(canvas, references[best.index]), rect) });
+    seaCells.push({ name, rect, mask: cropHalf(dryMaskHalf(canvas, references[best.index]), rect) });
   }
-  return { ...(await packMaskAtlas(dryCells)), lake: await packMaskAtlas(lakeCells) };
+
+  const [sea, lake] = await Promise.all([packMaskAtlas(seaCells), packMaskAtlas(lakeCells)]);
+  return { ...sea, lake };
 }
 
 export function waterDryMasksPlugin(): Plugin {

@@ -54,6 +54,42 @@ public static class PlayerRealms
     }
 
     /// <summary>
+    /// The settlements of <paramref name="worldId"/> that have a realm step due at <paramref name="now"/> (<see cref="RealmDecay.StepFor"/>:
+    /// a building that left the realm, one the realm reaches again, one with a level to lose): one pass over the world's buildings,
+    /// so the periodic sweep only loads the settlements it has to change.
+    /// </summary>
+    public static async Task<IReadOnlyList<Guid>> DueForRealmStepAsync(
+        GameDbContext dbContext, Guid worldId, IGiantIndex giants, DateTimeOffset now, double speedFactor, CancellationToken cancellationToken)
+    {
+        var rows = await dbContext.Settlements
+            .AsNoTracking()
+            .Where(s => s.WorldId == worldId)
+            .Select(s => new
+            {
+                s.Id,
+                s.UserId,
+                s.OwnerId,
+                s.IslandId,
+                s.CentreQ,
+                s.CentreR,
+                Buildings = s.Buildings.Select(b => new { b.Q, b.R, b.Type, b.Level, b.OutsideRealmSince }).ToList(),
+            })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var settlements = rows.Select(r => new Row(
+            r.Id, r.UserId, r.OwnerId, r.IslandId, new HexCoord(r.CentreQ, r.CentreR),
+            [.. r.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level, b.OutsideRealmSince))])).ToList();
+        var realms = Resolve(settlements);
+
+        return
+        [
+            .. settlements
+                .Where(s => s.Buildings.Any(b => RealmDecay.StepFor(b, realms[s.Id], giants, now, speedFactor).IsDue))
+                .Select(s => s.Id),
+        ];
+    }
+
+    /// <summary>
     /// The realm <paramref name="settled"/> belongs to: its own current state (<paramref name="settled"/>, which may be newer
     /// than the stored row) together with the same player's other settlements on the island.
     /// </summary>
@@ -87,17 +123,27 @@ public static class PlayerRealms
         return ConnectedRealm.Resolve([self, .. siblings]);
     }
 
-    /// <summary>The same player's other settlements on <paramref name="entity"/>'s island, as stored.</summary>
-    public static async Task<IReadOnlyList<RealmSettlement>> SiblingsAsync(
-        GameDbContext dbContext, SettlementEntity entity, CancellationToken cancellationToken)
+    /// <summary>
+    /// Every settlement of the player <paramref name="entity"/> belongs to on its island (itself included): the group the chain
+    /// rule resolves together.
+    /// </summary>
+    public static IQueryable<SettlementEntity> GroupOf(GameDbContext dbContext, SettlementEntity entity)
     {
         var userId = entity.UserId;
         var ownerId = entity.OwnerId;
         var anonymous = userId == SystemUserIds.Abandoned;
-        var rows = await dbContext.Settlements
+        return dbContext.Settlements
             .AsNoTracking()
-            .Where(s => s.WorldId == entity.WorldId && s.IslandId == entity.IslandId && s.Id != entity.Id
-                && (anonymous ? s.UserId == userId && s.OwnerId == ownerId : s.UserId == userId))
+            .Where(s => s.WorldId == entity.WorldId && s.IslandId == entity.IslandId
+                && (anonymous ? s.UserId == userId && s.OwnerId == ownerId : s.UserId == userId));
+    }
+
+    /// <summary>The same player's other settlements on <paramref name="entity"/>'s island, as stored.</summary>
+    public static async Task<IReadOnlyList<RealmSettlement>> SiblingsAsync(
+        GameDbContext dbContext, SettlementEntity entity, CancellationToken cancellationToken)
+    {
+        var rows = await GroupOf(dbContext, entity)
+            .Where(s => s.Id != entity.Id)
             .Select(s => new
             {
                 s.Id,

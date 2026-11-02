@@ -54,6 +54,25 @@ export interface DryEntry {
   y: number;
 }
 
+/**
+ * A mask layer's entries from the terrain rebuild's base entries: the base art of every hex `include` picks (the sea hexes for the
+ * dry layer, the lake-water frames for the bog lake layer), at the sprite's top-left (`origin`). Skips a hex without art — the sprite
+ * layer draws nothing there either, e.g. a revealed wasted coast while its atlas pack is still loading (or failed to) — and
+ * legacy-split crops, which are land.
+ */
+export function maskEntries<C>(
+  entries: Iterable<{ texture: Texture | undefined; coord: C; crop?: unknown }>,
+  include: (coord: C, texture: Texture) => boolean,
+  origin: (coord: C) => { x: number; y: number },
+): DryEntry[] {
+  const out: DryEntry[] = [];
+  for (const { texture, coord, crop } of entries) {
+    if (!texture || crop || !include(coord, texture)) continue;
+    out.push({ texture, ...origin(coord) });
+  }
+  return out;
+}
+
 /** Which mask atlas a layer draws: the sea hexes' dry masks or the bog lakes' wet masks. */
 export type MaskKind = 'dry' | 'lake';
 

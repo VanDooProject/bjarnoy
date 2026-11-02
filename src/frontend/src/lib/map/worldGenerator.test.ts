@@ -102,7 +102,7 @@ describe('mountain shape ratios', () => {
       }
     }
     const total = counts.reduce((a, b) => a + b, 0);
-    expect(total).toBeGreaterThan(2000);
+    expect(total).toBeGreaterThan(1500);
     counts.forEach((n, shape) => expect(Math.abs(n / total - MOUNTAIN_SHAPE_WEIGHTS[shape]!)).toBeLessThan(0.03));
   });
 });

@@ -59,7 +59,7 @@ function levelsOf(family: string): number[] {
 // pick a look, buildings a stage, and each has its own camera.
 
 // Look names follow the variant order in 3D_assets' docs/bog-tiles.md, minus the looks the game no longer shows
-// (the plain moss and variant006, the peat cuttings: `RETIRED_BOG_VARIANTS`).
+// (the plain look of every ground and water-edge family, and the moss's variant006, the peat cuttings: `RETIRED_BOG_VARIANTS`).
 const GROUND_LOOKS = [
   "mire1",
   "mire2",
@@ -71,14 +71,14 @@ const GROUND_LOOKS = [
 ] as const;
 
 const WATER_SHAPES = [
-  { id: "creek", family: "bogcreek" },
-  { id: "creekBend", family: "bogcreek_bend" },
-  { id: "spring", family: "bogcreek_spring" },
-  { id: "lake", family: "boglake" },
-  { id: "inlet", family: "boglake_inlet" },
-  { id: "shore", family: "boglake_shore" },
-  { id: "half", family: "boglake_half" },
-  { id: "mouth", family: "boglake_mouth" },
+  { id: "creek", family: "bogcreek", key: "bogcreek" },
+  { id: "creekBend", family: "bogcreek_bend", key: "bogcreekbend" },
+  { id: "spring", family: "bogcreek_spring", key: "bogcreekspring" },
+  { id: "lake", family: "boglake", key: "lake" },
+  { id: "inlet", family: "boglake_inlet", key: "lakeinlet" },
+  { id: "shore", family: "boglake_shore", key: "lakeshore" },
+  { id: "half", family: "boglake_half", key: "lakehalf" },
+  { id: "mouth", family: "boglake_mouth", key: "lakemouth" },
 ] as const;
 
 const BUILDINGS = [
@@ -115,7 +115,7 @@ const ENTRIES: Entry[] = [
     id: s.id,
     group: "water" as const,
     family: s.family,
-    looks: looksOf(s.family),
+    looks: looksOf(s.family, RETIRED_BOG_VARIANTS[s.key]),
     levels: [],
   })),
   ...BUILDINGS.map((b) => ({

@@ -7,6 +7,7 @@ using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Bjarnoy.Infrastructure.World;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -130,6 +131,7 @@ public static class SettlementEndpoints
         FoundSettlementRequest request,
         HttpContext httpContext,
         SettlementService settlements,
+        GameDbContext db,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -162,7 +164,7 @@ public static class SettlementEndpoints
 
             return TypedResults.Created(
                 $"/api/v1/settlements/{entity.Id}",
-                SettlementResponse.From(entity, clock, clock.ToGameTime(time.GetUtcNow())));
+                await SettlementResponse.ForOwnerAsync(db, entity, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken));
         }
 
         var problem = Problem(result.Rejection);
@@ -183,6 +185,7 @@ public static class SettlementEndpoints
     private static async Task<Results<Ok<SettlementResponse>, NotFound<ProblemDetails>>> Get(
         Guid settlementId,
         SettlementService settlements,
+        GameDbContext db,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -194,7 +197,7 @@ public static class SettlementEndpoints
 
         var (entity, clock) = found.Value;
         return TypedResults.Ok(
-            SettlementResponse.From(entity, clock, clock.ToGameTime(time.GetUtcNow())));
+            await SettlementResponse.ForOwnerAsync(db, entity, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken));
     }
 
     /// <summary>
@@ -260,7 +263,7 @@ public static class SettlementEndpoints
         [
             .. entity.Buildings
                 .Where(b => isOwnSettlement || explored.Contains(new HexCoord(b.Q, b.R)))
-                .Select(b => new PlacedBuildingResponse(b.Q, b.R, b.Type.ToWireName(), b.Level)),
+                .Select(b => PlacedBuildingResponse.From(b.ToPlacedBuilding())),
         ];
 
         return TypedResults.Ok(new SettlementViewResponse(
@@ -315,25 +318,23 @@ public static class SettlementEndpoints
 
         var entities = await settlements.GetForWorldAsync(worldId, cancellationToken);
 
+        bool IsMine(Bjarnoy.Infrastructure.Entities.SettlementEntity s) =>
+            s.OwnerId == realm.OwnerId || (callerUserId is not null && s.UserId == callerUserId);
+
         // Only rivals' centres need the fog check; the explored lookup reads
         // just the stored chunks those centres fall in.
         var explored = await exploredArea.ExploredAmongAsync(
             area,
             entities
-                .Where(s => s.OwnerId != realm.OwnerId && !(callerUserId is not null && s.UserId == callerUserId))
+                .Where(s => !IsMine(s))
                 .Select(s => new HexCoord(s.CentreQ, s.CentreR)),
             cancellationToken);
 
         IReadOnlyList<SettlementSummary> response =
         [
             .. entities
-                .Where(s => s.OwnerId == realm.OwnerId
-                    || (callerUserId is not null && s.UserId == callerUserId)
-                    || explored.Contains(new HexCoord(s.CentreQ, s.CentreR)))
-                .Select(s => new SettlementSummary(
-                    s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
-                    s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
-                    s.IslandId)),
+                .Where(s => IsMine(s) || explored.Contains(new HexCoord(s.CentreQ, s.CentreR)))
+                .Select(s => SettlementSummary.From(s, IsMine(s))),
         ];
 
         return TypedResults.Ok(response);
@@ -513,6 +514,7 @@ public static class SettlementEndpoints
         Guid settlementId,
         string questId,
         SettlementService settlements,
+        GameDbContext db,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -543,7 +545,7 @@ public static class SettlementEndpoints
 
         var clock = result.Clock!.Value;
         return TypedResults.Ok(
-            SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+            await SettlementResponse.ForOwnerAsync(db, result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken));
     }
 
     private static async Task<Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>>> SlotRune(
@@ -551,6 +553,7 @@ public static class SettlementEndpoints
         Guid runeId,
         SlotRuneRequest request,
         SettlementService settlements,
+        GameDbContext db,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -559,23 +562,24 @@ public static class SettlementEndpoints
         var result = await settlements.SlotRuneAsync(
             settlementId, runeId, new HexCoord(request.Q, request.R), cancellationToken);
 
-        return RuneResultToResponse(result, time);
+        return await RuneResultToResponse(result, db, time, cancellationToken);
     }
 
     private static async Task<Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>>> UnslotRune(
         Guid settlementId,
         Guid runeId,
         SettlementService settlements,
+        GameDbContext db,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
         var result = await settlements.UnslotRuneAsync(settlementId, runeId, cancellationToken);
 
-        return RuneResultToResponse(result, time);
+        return await RuneResultToResponse(result, db, time, cancellationToken);
     }
 
-    private static Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>> RuneResultToResponse(
-        RuneResult result, TimeProvider time)
+    private static async Task<Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>>> RuneResultToResponse(
+        RuneResult result, GameDbContext db, TimeProvider time, CancellationToken cancellationToken)
     {
         if (result.Outcome == RuneOutcome.SettlementNotFound)
         {
@@ -594,7 +598,7 @@ public static class SettlementEndpoints
 
         var clock = result.Clock!.Value;
         return TypedResults.Ok(
-            SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+            await SettlementResponse.ForOwnerAsync(db, result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken));
     }
 
     private static string DescribeRune(RuneOutcome outcome) => outcome switch
@@ -834,6 +838,8 @@ public static class SettlementEndpoints
             "Not enough resources (some may be reserved for queued construction).",
         TrainRejection.InvalidCount => "Count must be at least 1.",
         TrainRejection.SettlementNotCoastal => "Ships can only be trained at a settlement that claims a shoreline hex.",
+        TrainRejection.BuildingOutsideRealm =>
+            "The building that trains this unit stands outside your realm and has no function until your realm reaches it again.",
         _ => "Refused.",
     };
 }

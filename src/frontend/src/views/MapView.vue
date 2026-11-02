@@ -31,6 +31,8 @@ import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
+import { WORLD_HASH } from '../lib/mapModeRoute';
+import { useAuthStore } from '../stores/auth';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
 import { useGuildStore } from '../stores/guild';
@@ -57,8 +59,16 @@ import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { campHexBuildable } from '../lib/map/campRules';
+import { isWaterCampFamily } from '../lib/map/campPlacement';
 import { isHostileWallTile, siegeAttackOptions } from '../lib/map/siegeRules';
-import { breachesWalls, classifyUnitSelection, totalSpeed, totalUpkeepPerHour, trainingSite } from '../lib/units/armyDispatch';
+import {
+  breachesWalls,
+  classifyUnitSelection,
+  garrisonCanHunt,
+  totalSpeed,
+  totalUpkeepPerHour,
+  trainingSite,
+} from '../lib/units/armyDispatch';
 import { reachableRange } from '../lib/map/hexPath';
 import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
@@ -68,6 +78,7 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const world = useWorldStore();
 const player = usePlayerStore();
+const auth = useAuthStore();
 const hudPrefs = useHudPrefsStore();
 
 // Mobile-only HUD bar: whether the collapsed bar (and its pull-down drawer)
@@ -91,15 +102,16 @@ const buildingCatalogue = useBuildingCatalogueStore();
 const route = useRoute();
 const router = useRouter();
 
-// One view/one persistent renderer serves both /world and /settlement now
-// (docs/design/zoom-transition.md §5, option (a)) — the zoom-driven
+// One view/one persistent renderer serves both the settlement and the world
+// map on one route (`/settlement`, world mode marked by `#world` — see
+// lib/mapModeRoute.ts; docs/design/zoom-transition.md §5, option (a)) — the zoom-driven
 // transition needs the same HexMapRenderer instance to survive the switch
 // (no teardown/flash, fog persists uninterrupted), which two independently-
 // mounted views/renderers per route could never give it. `mode` is derived
-// from the route rather than tracked as separate local state, so a nav-button
-// click, browser back/forward, or a direct URL load all agree with the
+// from the route rather than tracked as separate local state, so a zoom
+// crossing, a nav click, browser back/forward, or a direct URL load all agree with the
 // renderer on what to show.
-const mode = computed<RenderMode>(() => (route.name === 'world' ? 'world' : 'settlement'));
+const mode = computed<RenderMode>(() => (route.hash === WORLD_HASH ? 'world' : 'settlement'));
 // World map's own sea backdrop (must match WorldMapCanvas.vue's — that
 // component is still used standalone by AdminWorldReseedView's world
 // preview, which has no settlement/ring-menu UI to merge and so keeps its
@@ -114,7 +126,7 @@ const WORLD_SEA_BACKGROUND = 'radial-gradient(115% 100% at 45% 40%, #2a92ae 0%, 
 let zoomDrivenTransition = false;
 function onZoomModeChange(next: RenderMode) {
   zoomDrivenTransition = true;
-  router.push(next === 'settlement' ? '/settlement' : '/world');
+  router.push({ path: '/settlement', hash: next === 'world' ? WORLD_HASH : '' });
 }
 
 // ?debug=1 surfaces FogDebugPanel — same idea as window.__fogDebug (main.ts)
@@ -282,6 +294,14 @@ watch(
   ([renderer, bitmap, bounds]) => {
     if (renderer && bitmap && bounds) renderer.setFogMask(bounds, bitmap);
   },
+);
+
+// Premium players see every standing camp as a paw symbol on the world map; the renderer never reads the auth store
+// itself, so the host hands it the flag (and updates it when the player's premium status changes).
+watch(
+  [() => canvasRef.value?.renderer, () => auth.isPremium],
+  ([renderer, premium]) => renderer?.setShowCampMarkers(premium),
+  { immediate: true },
 );
 
 // Fog chunks are fetched for the ground the camera actually sees (§3): the
@@ -710,19 +730,19 @@ function sendArmyAction(tile: Tile): RingAction {
 }
 
 // Hunt a wildlife camp: offered on a camp tile that is still on the map, live mode only
-// (the demo has no army simulation, so no camp fights). Needs land units at home — ships cannot hunt.
+// (the demo has no army simulation, so no camp fights). A land camp needs land units at home, a camp at sea (the
+// whale road) ships — the other class cannot hunt it.
 function huntActions(tile: Tile): RingAction[] {
   if (DEMO_MODE || !tile.camp || tile.camp.removed || tile.buildingType) return [];
-  const hasLandUnits = world.hud.garrison.some(
-    (g) => g.count > 0 && classifyUnitSelection({ [g.unit]: g.count }, unitCatalogue.byType) === 'land',
-  );
+  const atSea = isWaterCampFamily(tile.camp.family);
+  const hasLandUnits = garrisonCanHunt(world.hud.garrison, unitCatalogue.byType, atSea);
   return [
     {
       id: 'hunt',
       label: t('hud.ringMenu.actions.hunt'),
       color: 'var(--rival)',
       disabled: !hasLandUnits,
-      hint: hasLandUnits ? undefined : t('hud.ringMenu.actions.noLandUnitsAtHome'),
+      hint: hasLandUnits ? undefined : t(atSea ? 'hud.ringMenu.actions.noShipsAtHome' : 'hud.ringMenu.actions.noLandUnitsAtHome'),
     },
   ];
 }

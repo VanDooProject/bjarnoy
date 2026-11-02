@@ -260,7 +260,9 @@ public sealed record IslandResponse(
     IReadOnlyList<UtgardWallResponse> UtgardWalls,
     IReadOnlyList<JotunTowerResponse> JotunTowers)
 {
-    public static IslandResponse From(IslandEntity island)
+    /// <param name="island">The stored island.</param>
+    /// <param name="includeCamps">Whether the island's camps ship; false answers an empty list (the island is not one the caller has seen).</param>
+    public static IslandResponse From(IslandEntity island, bool includeCamps = true)
     {
         ArgumentNullException.ThrowIfNull(island);
 
@@ -275,7 +277,7 @@ public sealed record IslandResponse(
             [.. island.RiverTiles.Select(RiverTileResponse.From)],
             [.. island.Giants.Select(GiantResponse.From)],
             island.IsWasted,
-            [.. island.Camps.Select(CampResponse.From)],
+            [.. (includeCamps ? island.Camps : []).Select(CampResponse.From)],
             [.. island.BogTiles.Select(BogTileResponse.From)],
             [.. island.UtgardWalls.Select(UtgardWallResponse.From)],
             [.. island.JotunTowers.Select(JotunTowerResponse.From)]);
@@ -570,6 +572,7 @@ public sealed record CampGarrisonResponse(int Young, int Adult, int Alpha)
 /// A wildlife camp's live state at the world's game time (<c>GET /worlds/{id}/camps</c>) — see
 /// <c>docs/design/wildlife-camps.md</c>, "State and API". Settled lazily from the stored snapshot; reading never writes.
 /// </summary>
+/// <param name="Orientation">The tile's own orientation wire name, so a client can add a camp it first learns about here.</param>
 /// <param name="Level">The rolled level (sets <paramref name="GuardRange"/>).</param>
 /// <param name="EffectiveLevel">Rolled level plus one per 10 clears, at most 100; what the garrison and loot scale with.</param>
 /// <param name="Garrison">Beasts alive now (regrown from the snapshot).</param>
@@ -584,6 +587,7 @@ public sealed record CampStateResponse(
     int Q,
     int R,
     string Family,
+    string Orientation,
     int Level,
     int EffectiveLevel,
     bool Strong,
@@ -612,6 +616,7 @@ public sealed record CampStateResponse(
             camp.Coord.Q,
             camp.Coord.R,
             camp.Family,
+            camp.Orientation.ToWireName(),
             camp.Level,
             effectiveLevel,
             camp.Strong,
@@ -634,4 +639,5 @@ public sealed record CampStateResponse(
 /// <param name="Type">"palisade" or "palisadegate".</param>
 /// <param name="SettlementId">The settlement the wall belongs to.</param>
 /// <param name="OwnerUserId">The owning account; null for an anonymous settlement (owned by the shared abandoned user).</param>
-public sealed record WallResponse(int Q, int R, string Type, int Level, Guid SettlementId, Guid? OwnerUserId);
+public sealed record WallResponse(
+    int Q, int R, string Type, int Level, Guid SettlementId, Guid? OwnerUserId, bool OutsideRealm = false);

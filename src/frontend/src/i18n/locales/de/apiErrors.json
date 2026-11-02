@@ -60,7 +60,8 @@
     "MixedFleetAndLandUnits": "Schiffe und Landeinheiten können nicht gemeinsam entsandt werden.",
     "DestinationNotSea": "Das Ziel muss auf dem Wasser liegen.",
     "WaypointNotSea": "Ein Wegpunkt muss auf dem Wasser liegen.",
-    "DefenderHasNoShoreline": "Die Siedlung des Verteidigers hat keine Küste.",
+    "FleetTargetBuildingRequired": "Schick deine Flotte zu einem Gebäude am Ufer des Gegners.",
+    "FleetTargetBuildingNotOnShore": "Dieses Gebäude liegt nicht am Ufer des Gegners, deine Flotte kommt also nicht heran.",
     "WrongSettlerCount": "Für eine Gründung brauchst du genau fünf Siedler.",
     "InsufficientShipCapacityForSettlers": "Nicht genug Schiffskapazität für die Siedler.",
     "RenownOrSettlementSlotRequirementNotMet": "Du erfüllst die Ansehens- oder Siedlungsplatz-Voraussetzung für eine weitere Siedlung nicht.",
@@ -86,7 +87,8 @@
     "NotCompleted": "Diese Aufgabe ist noch nicht erledigt.",
     "UnknownQuest": "Diese Aufgabe gibt es nicht.",
     "NoCampAtDestination": "Auf diesem Feld steht kein Wildtierlager.",
-    "HuntRequiresLandUnits": "Nur Landeinheiten können ein Wildtierlager jagen.",
+    "HuntRequiresLandUnits": "Schiffe können kein Lager an Land jagen. Schick Landeinheiten.",
+    "HuntRequiresFleet": "Ein Lager auf See kannst du nur mit Schiffen jagen. Landeinheiten erreichen es nicht.",
     "HexOccupiedByCamp": "Wilde Tiere halten dieses Feld noch.",
     "HexOccupiedByEndgameSite": "Auf diesem Feld steht eine Utgardmauer oder ein Jötunn-Wachturm."
   }

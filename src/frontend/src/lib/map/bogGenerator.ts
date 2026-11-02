@@ -13,9 +13,9 @@ import { TILE_ORIENTATIONS } from './types';
 import type { BogTile, BogTileKind, RiverTile, Terrain } from './types';
 
 /** Land tiles an island needs per bog site — mirrors `WorldGenerationOptions.BogTilesPerSite`. */
-export const BOG_TILES_PER_SITE = 6000;
+export const BOG_TILES_PER_SITE = 1500;
 /** Most through-river bog sites one island gets — mirrors `BogMaxSites`. */
-export const BOG_MAX_SITES = 3;
+export const BOG_MAX_SITES = 16;
 /** Radius of a site's disc (+2 on a large island) — mirrors `BogSiteRadius`. */
 export const BOG_SITE_RADIUS = 7;
 /** Land tiles from which an island counts as large — mirrors `BogLargeIslandTiles`. */
@@ -45,6 +45,19 @@ export const BOG_REACH = 12;
  */
 export const BOG_GUARANTEE_MIN_TILES = 150;
 export const BOG_GUARANTEE_RADIUS = 5;
+/** Attempt cap of the normal site pass (the guarantee keeps `MAX_SITE_ATTEMPTS`) — mirrors `BogSiteAttempts`. */
+export const BOG_SITE_ATTEMPTS = 200;
+/** Anchors may lie this many hexes closer to the coast than the disc needs — mirrors `BogCoastSlack`. */
+export const BOG_COAST_SLACK = 3;
+/** A bog's moss reaches this many hexes beyond the site's disc radius — mirrors `BogRegionReachExtra`. */
+export const BOG_REGION_REACH_EXTRA = 2;
+/**
+ * The gap fill after the guarantee — mirrors `BogGapReach`, `BogGapTilesPerRound`, `BogGapMinCandidates`: up to `land / tilesPerRound` rounds
+ * that each give one more bog to the landing candidates further than `reach` from every plain bog tile (stopping below `minCandidates`).
+ */
+export const BOG_GAP_REACH = 18;
+export const BOG_GAP_TILES_PER_ROUND = 1000;
+export const BOG_GAP_MIN_CANDIDATES = 40;
 
 const SINK_EXTRA_REACH = 6;
 const MAX_CREEK_LENGTH = 40;
@@ -69,6 +82,9 @@ export interface BogStats {
   guaranteeWithoutBog: number;
   guaranteeThrough: number;
   guaranteeSpawns: number;
+  /** Bogs the gap fill placed: through-river, and spawn bogs. */
+  gapThrough: number;
+  gapSpawns: number;
   guaranteeMissed: number;
   /** Sites dropped because their water features could not get a full ring of bog (rule R12): the normal pass, and the guarantee's attempts. */
   paddingRejected: number;
@@ -89,6 +105,8 @@ export function emptyBogStats(): BogStats {
     guaranteeWithoutBog: 0,
     guaranteeThrough: 0,
     guaranteeSpawns: 0,
+    gapThrough: 0,
+    gapSpawns: 0,
     guaranteeMissed: 0,
     paddingRejected: 0,
     guaranteePaddingRejected: 0,
@@ -642,7 +660,7 @@ export class BogGenerator {
       for (let i = BOG_MIN_FROM_SPRING; i <= path.length - 1 - BOG_MIN_FROM_MOUTH; i++) {
         const tile = path[i]!;
         const cd = this.coastDist.get(coordKey(tile));
-        if (cd === undefined || cd < radius + 1) continue;
+        if (cd === undefined || cd < radius + 1 - BOG_COAST_SLACK) continue;
         anchors.push({ tile, path: p, index: i, score: cd + trunkBonus + hash2(tile.q, tile.r, this.seed + 73) });
       }
     }
@@ -656,8 +674,30 @@ export class BogGenerator {
 
     let attempts = 0;
     const siteAnchors: AxialCoord[] = [];
-    for (const anchor of anchors) {
-      if (placed >= wanted || attempts >= MAX_SITE_ATTEMPTS) break;
+    let sortedAt = 0;
+    for (let ai = 0; ai < anchors.length; ai++) {
+      if (placed >= wanted || attempts >= BOG_SITE_ATTEMPTS) break;
+      // Spread: once a site has been placed, the anchors not yet visited are ordered by distance from the placed sites (plus half their score).
+      if (siteAnchors.length > sortedAt) {
+        sortedAt = siteAnchors.length;
+        const rest = anchors.slice(ai);
+        const value = new Map<(typeof rest)[number], number>();
+        for (const a of rest) {
+          let nearest = Infinity;
+          for (const s of siteAnchors) nearest = Math.min(nearest, hexDistance(s, a.tile));
+          value.set(a, nearest + 0.5 * a.score);
+        }
+
+        rest.sort((a, b) => {
+          const byValue = value.get(b)! - value.get(a)!;
+          if (byValue !== 0) return byValue;
+          const byTile = cmp(a.tile, b.tile);
+          return byTile !== 0 ? byTile : a.path !== b.path ? a.path - b.path : a.index - b.index;
+        });
+        for (let k = 0; k < rest.length; k++) anchors[ai + k] = rest[k]!;
+      }
+
+      const anchor = anchors[ai]!;
       if (siteAnchors.some((s) => hexDistance(s, anchor.tile) < 2 * radius + 4)) continue;
 
       // The path may have been cut by an earlier site: find the anchor tile again.
@@ -729,6 +769,7 @@ export class BogGenerator {
     }
 
     this.placeGuarantee(bp, widthTrial, traceRiver);
+    this.fillGaps(bp, widthTrial, traceRiver);
     this.fillHoles(bp);
   }
 
@@ -1391,6 +1432,7 @@ export class BogGenerator {
   /** The guarantee alone, for an island with no river candidates at all: only a spawn bog — mirrors `PlaceGuaranteeOnly`. */
   placeGuaranteeOnly(bp: BogPaths, widthTrial: WidthTrial, traceRiver: TraceRiver): void {
     this.placeGuarantee(bp, widthTrial, traceRiver);
+    this.fillGaps(bp, widthTrial, traceRiver);
     this.fillHoles(bp);
   }
 
@@ -1540,6 +1582,61 @@ export class BogGenerator {
     }
 
     if (this.stats) this.stats.guaranteeMissed++;
+  }
+
+  /**
+   * The gap fill, after the guarantee: while landing candidates lie further than `BOG_GAP_REACH` from every plain bog tile (at least
+   * `BOG_GAP_MIN_CANDIDATES` of them), one more bog is placed for them, through-river first, else a spawn bog — mirrors `FillGaps`.
+   */
+  private fillGaps(bp: BogPaths, widthTrial: WidthTrial, traceRiver: TraceRiver): void {
+    if (!this.guaranteeApplies) return;
+
+    const rounds = Math.floor(this.islandTiles.length / BOG_GAP_TILES_PER_ROUND);
+    for (let round = 0; round < rounds; round++) {
+      const covered = this.plainBogReach(BOG_GAP_REACH);
+      const uncovered = this.guaranteeCandidates().filter((c) => !covered.has(coordKey(c)));
+      if (uncovered.length < BOG_GAP_MIN_CANDIDATES) return;
+
+      const coverage = BogGenerator.coverageMap(uncovered, BOG_REACH);
+      if (this.guaranteeThrough(bp, uncovered, coverage, widthTrial)) {
+        if (this.stats) this.stats.gapThrough++;
+      } else if (this.guaranteeSpawn(bp, uncovered, coverage, widthTrial, traceRiver)) {
+        if (this.stats) this.stats.gapSpawns++;
+      } else {
+        return;
+      }
+    }
+  }
+
+  /** Every hex (land or sea) within `reach` of a plain bog tile, by a multi-source BFS — mirrors `PlainBogReach`. */
+  private plainBogReach(reach: number): Set<string> {
+    const seen = new Set<string>();
+    let frontier: AxialCoord[] = [];
+    for (const t of this.bog) {
+      const tk = coordKey(t);
+      if (this.lake.has(t) || this.creek.has(tk) || this.mouth.has(tk) || this.spring.has(tk) || this.lakeMask(t, this.lake) !== 0) continue;
+      if (!seen.has(tk)) {
+        seen.add(tk);
+        frontier.push(t);
+      }
+    }
+
+    for (let depth = 0; depth < reach && frontier.length > 0; depth++) {
+      const next: AxialCoord[] = [];
+      for (const c of frontier) {
+        for (let d = 0; d < 6; d++) {
+          const n = nb(c, d);
+          const nk = coordKey(n);
+          if (seen.has(nk)) continue;
+          seen.add(nk);
+          next.push(n);
+        }
+      }
+
+      frontier = next;
+    }
+
+    return seen;
   }
 
   private guaranteeThrough(bp: BogPaths, candidates: AxialCoord[], coverage: Map<string, number>, widthTrial: WidthTrial): boolean {
@@ -1799,7 +1896,7 @@ export class BogGenerator {
   /** The bog moss of a site: a noisy reach around the lake and the creeks, on fit tiles, never on or beside another river; always the core. */
   private computeRegion(bp: BogPaths, site: Site): HexSet {
     const count = pathCount(bp);
-    const reach = site.radius - 2;
+    const reach = site.radius + BOG_REGION_REACH_EXTRA;
     const dist = new Map<string, number>();
     const coords = new Map<string, AxialCoord>();
     const queue: AxialCoord[] = [];

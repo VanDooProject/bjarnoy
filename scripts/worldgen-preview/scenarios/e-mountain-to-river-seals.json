@@ -3,44 +3,49 @@
  "title": "a five-hex wall from a mountain to a wide river seals the land behind it: no route in",
  "seed": 11,
  "radius": 1000,
- "generation": { "islandCellSize": 260, "islandMaxReach": 0, "islandMinGap": 0, "islandLargeShare": 0.12 },
+ "generation": {
+  "islandCellSize": 260,
+  "islandMaxReach": 0,
+  "islandMinGap": 0,
+  "islandLargeShare": 0.12
+ },
  "window": {
-  "q": -73,
-  "r": -375,
+  "q": -50,
+  "r": -332,
   "size": 24
  },
  "px": 36,
  "walls": [
   [
-   -74,
-   -373
+   -52,
+   -330
   ],
   [
-   -73,
-   -374
+   -51,
+   -331
   ],
   [
-   -73,
-   -375
+   -50,
+   -332
   ],
   [
-   -73,
-   -376
+   -49,
+   -333
   ],
   [
-   -72,
-   -377
+   -48,
+   -334
   ]
  ],
  "routes": [
   {
    "from": [
-    -72,
-    -376
+    -49,
+    -332
    ],
    "to": [
-    -74,
-    -375
+    -50,
+    -333
    ],
    "army": "enemy"
   }

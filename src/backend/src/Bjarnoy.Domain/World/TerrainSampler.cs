@@ -616,7 +616,13 @@ public sealed class TerrainSampler
         return result;
     }
 
-    private double? DepthAt(HexCoord coord, bool wasted)
+    private double? DepthAt(HexCoord coord, bool wasted) => ClosestIsland(coord, wasted)?.Depth;
+
+    // The winning island of a hex with its depth and the hex's coast-warped position relative to the
+    // island's centre, or null at sea.
+    private readonly record struct Closest(IslandShape Island, double Depth, double Qx, double Qy);
+
+    private Closest? ClosestIsland(HexCoord coord, bool wasted)
     {
         var (col, row) = coord.ToOddQ();
         var o = _options;
@@ -630,7 +636,7 @@ public sealed class TerrainSampler
         }
 
         var (px, py) = Warp(col, row, seed);
-        double? best = null;
+        Closest? best = null;
         foreach (var island in near)
         {
             var qx = px - island.CentreX;
@@ -641,9 +647,9 @@ public sealed class TerrainSampler
             }
 
             var d = NoisyDistance(island, qx, qy, col, row, seed);
-            if (d <= 1 && (best is null || d < best))
+            if (d <= 1 && (best is null || d < best.Value.Depth))
             {
-                best = d;
+                best = new Closest(island, d, qx, qy);
             }
         }
 
@@ -737,25 +743,25 @@ public sealed class TerrainSampler
     /// <summary>The terrain the seed alone gives a hex (never a bog or a lake).</summary>
     public Terrain SeedTerrainAt(HexCoord coord)
     {
-        var depth = IslandDepthAt(coord);
-        if (depth is null)
+        var closest = ClosestIsland(coord, wasted: false);
+        if (closest is null)
         {
             return Terrain.Sea;
         }
 
+        var (island, depth, qx, qy) = closest.Value;
         if (depth > _options.BeachThreshold && SeesSea(coord, wasted: false))
         {
             return Terrain.Sand;
         }
 
-        if (depth < _options.MountainThreshold && MountainField(coord.Q, coord.R) > _options.MountainRockiness)
+        var spine = depth > MountainMaxDepth ? null : SpineAt(island, qx, qy);
+        if (ChainMountainAt(coord.Q, coord.R, depth, spine))
         {
             return Terrain.Mountain;
         }
 
-        return ValueNoise.Sample(coord.Q, coord.R, _options.Seed + 2, ForestPatchScale) > _options.ForestRockiness
-            ? Terrain.Forest
-            : Terrain.Grass;
+        return GroveForestAt(coord.Q, coord.R) ? Terrain.Forest : Terrain.Grass;
     }
 
     /// <summary>
@@ -788,30 +794,321 @@ public sealed class TerrainSampler
         return false;
     }
 
-    /// <summary>Wavelength (hexes) of the forest/grass patch noise — mirrors the frontend's <c>FOREST_PATCH_SCALE</c>.</summary>
-    public const double ForestPatchScale = 6;
+    // ---- Green-island mountains and forests ---------------------------------------------------
+    // Mountains are chains along an island's spine and forests are round groves; wasted islands keep
+    // the plain noise rule (WastedTerrainAt). Mirrors worldGenerator.ts bit for bit: no trigonometry
+    // anywhere (JS and .NET trig are not guaranteed identical), only + - * / and Sqrt.
+    //
+    // Seed salts of this block: the odd numbers 601, 603, ... (a range no other noise field uses).
+    // A consumer that needs several salts of its own reserves the numbers above its own: the groves'
+    // jittered grid uses GroveSalt, +1 and +2; the forest noise uses ForestNoiseSalt and +1..+4.
 
-    /// <summary>Wavelength of the coarse ridge field that shapes mountain ranges.</summary>
-    public const double RangeScale = 10;
+    /// <summary>Roll of an island's spine id: <c>Hash2(cellCol, cellRow, seed + SpineIdSalt)</c>.</summary>
+    public const int SpineIdSalt = 601;
 
-    /// <summary>Wavelength of the fine term that roughens a range's edge.</summary>
-    public const double RangeDetailScale = 2.5;
+    /// <summary>Sideways drift of a crest along the spine.</summary>
+    public const int CrestOffsetSalt = 603;
 
-    /// <summary>Weight of the fine term in <see cref="MountainField"/>.</summary>
-    public const double RangeDetailWeight = 0.12;
+    /// <summary>Coarse width profile of a crest (passes and massifs).</summary>
+    public const int CrestProfileSalt = 605;
+
+    /// <summary>Fine width profile of a crest.</summary>
+    public const int CrestProfileFineSalt = 607;
+
+    /// <summary>Coarse rim roughness of the mountains.</summary>
+    public const int RimNoiseSalt = 609;
+
+    /// <summary>Fine rim roughness of the mountains.</summary>
+    public const int RimNoiseFineSalt = 611;
+
+    /// <summary>Whether a spur arm is rooted in a slot (also mixed with the island id).</summary>
+    public const int ArmRootSalt = 613;
+
+    /// <summary>Where along the crest an arm is rooted.</summary>
+    public const int ArmPositionSalt = 615;
+
+    /// <summary>Which side of the crest an arm leaves on.</summary>
+    public const int ArmSideSalt = 617;
+
+    /// <summary>The angle of an arm against the crest normal.</summary>
+    public const int ArmTiltSalt = 619;
+
+    /// <summary>The length of an arm.</summary>
+    public const int ArmLengthSalt = 621;
+
+    /// <summary>Rim roughness of the groves.</summary>
+    public const int GroveRimSalt = 623;
+
+    /// <summary>Jittered grid of the groves (uses this salt, +1 and +2).</summary>
+    public const int GroveSalt = 625;
+
+    /// <summary>Value noise that clusters the groves (uses this salt and +1..+4 inside <c>WarpedNoise</c>).</summary>
+    public const int ForestNoiseSalt = 629;
+
+    /// <summary>Mountains exist only up to this depth into the island (1 is the shoreline).</summary>
+    public const double MountainMaxDepth = 0.8;
+
+    /// <summary>An island whose half-width is above this gets a second, parallel crest.</summary>
+    public const double SecondCrestMinWidth = 26;
+
+    /// <summary>Crest width stops growing with the island's half-width at this value.</summary>
+    public const double CrestFullWidth = 22;
+
+    /// <summary>Spacing (hexes) of the slots where a spur arm can be rooted along a crest.</summary>
+    public const double ArmSpacing = 9;
+
+    /// <summary>Share of arm slots that stay empty.</summary>
+    public const double ArmSlotEmptyBelow = 0.25;
+
+    /// <summary>Cell size (hexes) of the jittered grid the groves sit on.</summary>
+    public const double GroveCell = 9.5;
+
+    /// <summary>Groves exist only for grid cells whose roll is at least this.</summary>
+    public const double GroveMinRoll = 0.32;
+
+    /// <summary>Forest where the weighted grove, noise and rim terms beat this.</summary>
+    public const double ForestThreshold = 0.43;
+
+    /// <summary>Weight of the grove field in the forest blend.</summary>
+    public const double GroveWeight = 0.65;
+
+    /// <summary>Weight of the clustering noise in the forest blend.</summary>
+    public const double ForestNoiseWeight = 0.35;
+
+    /// <summary>Weight of the rim roughness in the forest blend.</summary>
+    public const double GroveRimWeight = 0.12;
+
+    /// <summary>Wavelength (hexes) of the noise that clusters the groves.</summary>
+    public const double ForestNoiseCell = 9;
+
+    /// <summary>Domain warp (hexes) of the noise that clusters the groves.</summary>
+    public const double ForestNoiseWarp = 2.5;
+
+    // cos(0.6) and sin(0.6), written out so no platform has to compute them.
+    private const double Cos06 = 0.8253356149096783;
+    private const double Sin06 = 0.5646424733950354;
+
+    private static readonly double Sqrt3 = Math.Sqrt(3);
+
+    /// <summary>Where a hex sits relative to its island's spine (the coast-warped offset space).</summary>
+    /// <param name="S">Arc length along the spine (hexes).</param>
+    /// <param name="D">Signed distance from the spine (hexes).</param>
+    /// <param name="W">Half-width of the island there.</param>
+    /// <param name="Len">Total spine length.</param>
+    /// <param name="Id">A per-island roll in [0, 1).</param>
+    public readonly record struct Spine(double S, double D, double W, double Len, double Id);
 
     /// <summary>
-    /// The field a hex inside an island's core must beat <c>MountainRockiness</c> in to be a
-    /// mountain: ridged (1 - |2n - 1|) coarse value noise puts high values along long winding
-    /// lines - the range crests - and a small fine term keeps a range's edge from being a
-    /// smooth blob. Mirrors the frontend's <c>mountainField</c>.
+    /// The spine coordinates of the point (<paramref name="qx"/>, <paramref name="qy"/>) (relative to the
+    /// island's centre, coast-warped) on <paramref name="island"/>: the nearest spine segment by distance /
+    /// half-width. <see langword="null"/> for an island with fewer than two spine points. Islets are not
+    /// part of the spine. Mirrors <c>spineAt</c> in <c>worldGenerator.ts</c>.
     /// </summary>
-    public double MountainField(int q, int r)
+    public Spine? SpineAt(IslandShape island, double qx, double qy)
     {
-        var n = ValueNoise.Sample(q, r, _options.Seed + 5, RangeScale);
-        var ridge = 1 - Math.Abs((2 * n) - 1);
-        var fine = ValueNoise.Sample(q, r, _options.Seed + 7, RangeDetailScale);
-        return ((1 - RangeDetailWeight) * ridge) + (RangeDetailWeight * fine);
+        var sx = island.SpineXArray;
+        var sy = island.SpineYArray;
+        var w = island.WidthArray;
+        var n = sx.Length;
+        if (n < 2)
+        {
+            return null;
+        }
+
+        double len = 0;
+        for (var k = 0; k < n - 1; k++)
+        {
+            var ex = sx[k + 1] - sx[k];
+            var ey = sy[k + 1] - sy[k];
+            len += Math.Sqrt((ex * ex) + (ey * ey));
+        }
+
+        double acc = 0;
+        var bestV = double.PositiveInfinity;
+        double bs = 0;
+        double bd = 0;
+        double bw = 0;
+        for (var k = 0; k < n - 1; k++)
+        {
+            var x0 = sx[k];
+            var y0 = sy[k];
+            var dx = sx[k + 1] - x0;
+            var dy = sy[k + 1] - y0;
+            var l2 = (dx * dx) + (dy * dy);
+            var l = Math.Sqrt(l2);
+            var t = l2 > 0 ? (((qx - x0) * dx) + ((qy - y0) * dy)) / l2 : 0.0;
+            t = t < 0 ? 0 : t > 1 ? 1 : t;
+            var ex = qx - (x0 + (t * dx));
+            var ey = qy - (y0 + (t * dy));
+            var wk = w[k] + ((w[k + 1] - w[k]) * t);
+            var dist = Math.Sqrt((ex * ex) + (ey * ey));
+            var v = dist / wk;
+            if (v < bestV)
+            {
+                bestV = v;
+                bs = acc + (t * l);
+                bd = ((((dx * ey) - (dy * ex)) >= 0) ? 1 : -1) * dist;
+                bw = wk;
+            }
+
+            acc += l;
+        }
+
+        return new Spine(bs, bd, bw, len, ValueNoise.Hash2(island.CellCol, island.CellRow, _options.Seed + SpineIdSalt));
+    }
+
+    private static double Smoothstep(double a, double b, double x)
+    {
+        var t = Math.Min(1, Math.Max(0, (x - a) / (b - a)));
+        return t * t * (3 - (2 * t));
+    }
+
+    // Value noise sampled in cartesian space (hex centres, no axial shear) with a two-axis domain warp
+    // and two lattices rotated against each other, so the blobs are round and the square lattice hides.
+    // Uses seed + 1 .. seed + 4.
+    private static double WarpedNoise(int q, int r, int seed, double cell, double warp)
+    {
+        var x = 1.5 * q;
+        var y = Sqrt3 * (r + (q / 2.0));
+        var wx = x + ((ValueNoise.Sample(x, y, seed + 1, cell * 1.7) - 0.5) * 2 * warp);
+        var wy = y + ((ValueNoise.Sample(x, y, seed + 2, cell * 1.7) - 0.5) * 2 * warp);
+        var a = ValueNoise.Sample(wx, wy, seed + 3, cell);
+        var b = ValueNoise.Sample((wx * Cos06) - (wy * Sin06), (wx * Sin06) + (wy * Cos06), seed + 4, cell);
+        return (a + b) / 2;
+    }
+
+    // One crest of a chain at arc length sAt: sideways offset from the spine and half-width (0 at a pass).
+    private (double Off, double Half) CrestAt(Spine sp, int crest, double offFrac, double passBelow, double maxHalf, double sAt)
+    {
+        var seed = _options.Seed;
+        var y = (sp.Id * 1000) + crest;
+        var off = (offFrac + ((ValueNoise.Sample(sAt, y, seed + CrestOffsetSalt, 45) - 0.5) * 0.7)) * sp.W;
+        var prof = (0.7 * ValueNoise.Sample(sAt, y, seed + CrestProfileSalt, 13))
+            + (0.3 * ValueNoise.Sample(sAt, y, seed + CrestProfileFineSalt, 5));
+        var k = (prof - passBelow) / (1 - passBelow);
+        var half = k <= 0 ? 0 : 1.3 + (maxHalf * Math.Sqrt(k));
+        var endFade = Smoothstep(0, 0.1, Math.Min(sAt, sp.Len - sAt) / Math.Max(1, sp.Len));
+        var scale = Math.Min(1, sp.W / CrestFullWidth);
+        return (off, half * endFade * scale);
+    }
+
+    /// <summary>
+    /// Whether green-island hex (<paramref name="q"/>, <paramref name="r"/>) at depth <paramref name="t"/> is
+    /// mountain: chains along the island's spine (a second parallel chain on wide islands) with passes, a rough
+    /// rim, and tapered spur arms off the massifs. Mirrors <c>chainMountainAt</c> in <c>worldGenerator.ts</c>.
+    /// </summary>
+    public bool ChainMountainAt(int q, int r, double t, Spine? spine)
+    {
+        if (spine is not { } sp || t > MountainMaxDepth)
+        {
+            return false;
+        }
+
+        var seed = _options.Seed;
+        var x = 1.5 * q;
+        var y = Sqrt3 * (r + (q / 2.0));
+        var fine = (0.8 * (ValueNoise.Sample(x, y, seed + RimNoiseSalt, 3.5) - 0.5))
+            + (0.2 * (ValueNoise.Sample(x, y, seed + RimNoiseFineSalt, 2.2) - 0.5));
+        var crests = new List<(int Crest, double OffFrac, double Pass, double MaxHalf)> { (0, 0, 0.36, 6.5) };
+        if (sp.W > SecondCrestMinWidth)
+        {
+            crests.Add((1, sp.Id < 0.5 ? 0.55 : -0.55, 0.5, 4.5));
+        }
+
+        var idRoll = (int)Math.Floor(sp.Id * 1e5);
+        foreach (var (crest, offFrac, pass, maxHalf) in crests)
+        {
+            var c = CrestAt(sp, crest, offFrac, pass, maxHalf, sp.S);
+            if (Math.Abs(sp.D - c.Off) < c.Half * (1 + (0.8 * fine)))
+            {
+                return true;
+            }
+
+            // spur arms: rooted every ~ArmSpacing hexes along the crest at a massif, tapering away from it at an angle;
+            // every arm roll is keyed on the island too, so islands don't share their arm layout
+            var armRow = crest + (2 * idRoll);
+            var k0 = (int)Math.Floor(sp.S / ArmSpacing);
+            for (var kk = k0 - 2; kk <= k0 + 2; kk++)
+            {
+                if (ValueNoise.Hash2(kk, armRow, seed + ArmRootSalt) < ArmSlotEmptyBelow)
+                {
+                    continue;
+                }
+
+                var s0 = (kk + 0.2 + (0.6 * ValueNoise.Hash2(kk, armRow, seed + ArmPositionSalt))) * ArmSpacing;
+                var root = CrestAt(sp, crest, offFrac, pass, maxHalf, s0);
+                if (root.Half < 2.5)
+                {
+                    continue; // arms only off a massif, never off a pass
+                }
+
+                var side = ValueNoise.Hash2(kk, armRow, seed + ArmSideSalt) < 0.5 ? -1 : 1;
+
+                // angle from the crest normal (up to about 0.8 rad) as a rational rotation: sin/cos of 2*atan(u)
+                var u = (ValueNoise.Hash2(kk, armRow, seed + ArmTiltSalt) - 0.5) * 0.85;
+                var sinT = (2 * u) / (1 + (u * u));
+                var cosT = (1 - (u * u)) / (1 + (u * u));
+                var armLen = 4 + (8 * ValueNoise.Hash2(kk, armRow, seed + ArmLengthSalt));
+                var ax = s0;
+                var ay = root.Off + (side * root.Half * 0.6);
+                var bx = ax + (sinT * (armLen + (root.Half * 0.4)));
+                var by = ay + (side * cosT * (armLen + (root.Half * 0.4)));
+                var dx = bx - ax;
+                var dy = by - ay;
+                var l2 = (dx * dx) + (dy * dy);
+                var v = (((sp.S - ax) * dx) + ((sp.D - ay) * dy)) / l2;
+                v = v < 0 ? 0 : v > 1 ? 1 : v;
+                var ex = sp.S - (ax + (v * dx));
+                var ey = sp.D - (ay + (v * dy));
+                var dist = Math.Sqrt((ex * ex) + (ey * ey));
+                var w = (0.55 * root.Half * (1 - v)) + (0.7 * v);
+                if (dist < w * (1 + (0.8 * fine)))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether a green-island hex that is not mountain is forest: round groves on a jittered grid, blended
+    /// with a warped noise so woods cluster, with a rough rim. Mirrors <c>groveForestAt</c> in
+    /// <c>worldGenerator.ts</c>.
+    /// </summary>
+    public bool GroveForestAt(int q, int r)
+    {
+        var seed = _options.Seed;
+        var x = 1.5 * q;
+        var y = Sqrt3 * (r + (q / 2.0));
+        var fine = ValueNoise.Sample(x, y, seed + GroveRimSalt, 3) - 0.5;
+        var cx = (int)Math.Floor(x / GroveCell);
+        var cy = (int)Math.Floor(y / GroveCell);
+        double g = 0;
+        for (var i = -2; i <= 2; i++)
+        {
+            for (var j = -2; j <= 2; j++)
+            {
+                var gx = cx + i;
+                var gy = cy + j;
+                var h = ValueNoise.Hash2(gx, gy, seed + GroveSalt + 2);
+                if (h < GroveMinRoll)
+                {
+                    continue;
+                }
+
+                var fx = (gx + 0.1 + (0.8 * ValueNoise.Hash2(gx, gy, seed + GroveSalt))) * GroveCell;
+                var fy = (gy + 0.1 + (0.8 * ValueNoise.Hash2(gx, gy, seed + GroveSalt + 1))) * GroveCell;
+                var ex = x - fx;
+                var ey = y - fy;
+                var rad = 1.8 + (5.2 * h * h);
+                g = Math.Max(g, 1 - (Math.Sqrt((ex * ex) + (ey * ey)) / (rad * 1.6)));
+            }
+        }
+
+        var n = WarpedNoise(q, r, seed + ForestNoiseSalt, ForestNoiseCell, ForestNoiseWarp);
+        return (GroveWeight * g) + (ForestNoiseWeight * n) + (GroveRimWeight * fine) > ForestThreshold;
     }
 
     /// <summary>

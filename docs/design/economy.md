@@ -197,6 +197,10 @@ play.
   So LH 3–6 allow 1, LH 7 allows 2, LH 9 allows 3, …, and LH 29–30 allow 13.
   The tech tree shows only the first unlock (LH 3); the rule is shown where
   a tower is placed, not as extra tech-tree cards.
+- **Where a tower stands:** on grass, sand, forest or plain bog moss (not a
+  bog shore, creek, spring or lake). It replaces the tile it stands on; its
+  art keeps that ground round it, so each ground has its own version of the
+  tower.
 - **Towers have to be chained to a longhouse.** A tower claims its ground only
   while it is connected: it stands on ground claimed by one of your
   longhouses, or by a tower that is itself connected. All of your longhouses
@@ -206,6 +210,29 @@ play.
   does not count against the tower limit while cut off; once it is connected
   again it counts, even if that puts you over the limit (you then can't build
   more towers).
+- **How a tower claims:** a tower claims every hex within its level of
+  itself (level 1 its neighbours, level 2 two rings, …), centred on the
+  tower. It has to be built inside the realm, which includes ground another
+  tower claimed, so towers can chain out across an island. A tower claims
+  nothing while it is under construction (a level-0 stub claims only its own
+  hex, which is already inside the realm); its ground joins the realm when
+  level 1 finishes.
+- **Giants are claimed whole:** a giant's seven hexes join the realm only when
+  the claim covers all seven; a claim that reaches some of them takes none.
+- **Buildings outside the realm decay.** A building whose hex is no longer
+  inside the realm has no function: it stops producing and gives no bonus; a
+  palisade still blocks, but a gate or bridge outside the realm is open to
+  everyone. It loses a level at a steady pace until the realm reaches it
+  again; at level 0 it is gone and the hex is free. Each building type takes
+  max level × 24 hours to go from its top level to gone, but never less than 7
+  days or more than 30. Longhouses never decay: they make the realm.
+  When a building leaves the realm, its queued upgrade, its queued training
+  and a foundation still under construction there are cancelled and
+  refunded; a rune slotted in it stays on the hex; a dockyard outside the
+  realm is no fleet home or dock. In faster worlds decay runs on world speed:
+  the time to gone is max level × 24 h ÷ world speed, clamped between a
+  minimum and a maximum that shrink with world speed on a log scale, from
+  7 days–30 days at 1× to 1 hour–1 day at 100× (3.8 hours–2.4 days at 30×).
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't
@@ -298,7 +325,7 @@ for friend and foe, a half-open end and a sealed end), the dispatch is refused w
 land route is left, and the range tint applies the same rules for the selected
 settlement's owner (friends come from the guild store: `friendlyUserIds`).
 
-**Siege.** A wall hex falls to **battering rams only**: a won Attack or Raid that names the wall hex
+**Siege.** On land a wall hex falls to **battering rams only** (a fleet can hit a wall's sea end, see below): a won Attack or Raid that names the wall hex
 as `TargetBuildingCoord` takes **one level** off it, however many rams survive
 (`SiegeResolver.LevelsTakenFrom`, the same rule as a bridge): a level-3 palisade needs three won
 sieges to be breached, and the hex is gone at level 0. Catapults do nothing to a wall. There is no
@@ -306,18 +333,26 @@ separate siege mission: the in-game "Siege" action on a rival wall opens an Atta
 settlement with the wall hex as the preferred target building. Which engine damages which
 building is one table (`UnitDefinition.SiegeTargets`, asked through `SiegeResolver.CanDamage`):
 
-| Target | Rams | Catapults | Levels per won siege |
-|---|---|---|---|
-| Wall hex (Palisade, Palisade Gate) | yes | no | 1 |
-| Tower | yes | yes | `LevelsDestroyed` of the surviving power that can damage it |
-| Bridge | no | yes | 1 |
-| Every other building (Longhouse included) | no | yes | `LevelsDestroyed` |
+| Target | Rams | Catapults | Ships (shore only) | Levels per won siege |
+|---|---|---|---|---|
+| Wall hex (Palisade, Palisade Gate) | yes | no | yes | 1 |
+| Tower | yes | yes | yes | `LevelsDestroyed` of the surviving power that can damage it |
+| Bridge | no | yes | yes | 1 |
+| Every other building (Longhouse included) | no | yes | yes | `LevelsDestroyed` |
 
 Only the surviving engines that can damage the target count towards its levels. A named target
 the surviving engines cannot damage takes no damage (the report has no siege line). Without a
 named target, or when it is gone, the pick is random (seeded) among the buildings the surviving
 engines can damage; if there are none, no siege happens. Rams and catapults are trained at the Siege Workshop
 (section 8, the iron ladder).
+
+**Fleets.** A fleet Attack or Raid is always sent at one building on the target's shore: a building inside the target's
+claim on a shoreline land hex or on a sea hex (Dockyard, Fishing Hut, Shrine of Njörd, a wall's sea end). Without one the
+dispatch is refused (`FleetTargetBuildingRequired`, `FleetTargetBuildingNotOnShore`). The fleet's route ends at that
+building's hex, the battle against the settlement's garrison is fought there, and the target's Longhouse may be inland.
+A won fight damages only that building, by `LevelsDestroyed` of the surviving ships' siege power (Karve 10, Longship 20,
+starting values to be tuned; catapult 40), walls and bridges one level as above. A fleet has no random fallback: if the
+building is gone when it arrives, the battle still happens and nothing is damaged.
 
 **Not built yet.** Fire takes a level off a wall hex at a time until it is gone; nothing
 burns walls yet (`TODO(economy.md section 5)` in `BuildingCatalogue.PalisadeHex`).

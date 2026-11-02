@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SOURCE_H, SOURCE_W } from './dryMaskCore';
-import { DRY_RT_MAX_SIDE, DRY_RT_PIXELS_PER_UNIT, artCanvasWorldRect, dryCellWorldRect, dryRenderTargetSize } from './waterDryMask';
+import { Texture } from 'pixi.js';
+import { DRY_RT_MAX_SIDE, DRY_RT_PIXELS_PER_UNIT, artCanvasWorldRect, dryCellWorldRect, dryRenderTargetSize, maskEntries } from './waterDryMask';
 
 describe('dryCellWorldRect', () => {
   it('puts the cell at the art sprite origin plus its source rect scaled to the tile width', () => {
@@ -33,5 +34,33 @@ describe('dryRenderTargetSize', () => {
     expect(size.width).toBe(DRY_RT_MAX_SIDE);
     expect(size.scale).toBeCloseTo(DRY_RT_MAX_SIDE / 8000, 9);
     expect(size.height).toBeLessThanOrEqual(DRY_RT_MAX_SIDE);
+  });
+});
+
+describe('maskEntries', () => {
+  const origin = (c: { q: number }) => ({ x: c.q * 10, y: 5 });
+
+  it('takes every sea hex with art, at its sprite origin', () => {
+    const art = Texture.WHITE;
+    const entries = maskEntries([{ texture: art, coord: { q: 2, sea: true } }], (c) => c.sea, origin);
+    expect(entries).toEqual([{ texture: art, x: 20, y: 5 }]);
+  });
+
+  it('skips a sea hex with no art yet instead of crashing the rebuild', () => {
+    // A revealed wasted coast while its atlas pack is still loading: baseTextureFor has no texture for it.
+    const entries = maskEntries([{ texture: undefined, coord: { q: 1, sea: true } }], (c) => c.sea, origin);
+    expect(entries).toEqual([]);
+  });
+
+  it('skips land hexes and legacy-split crops', () => {
+    const entries = maskEntries(
+      [
+        { texture: Texture.WHITE, coord: { q: 1, sea: false } },
+        { texture: Texture.WHITE, coord: { q: 2, sea: true }, crop: { nativeY: 0, nativeH: 150 } },
+      ],
+      (c) => c.sea,
+      origin,
+    );
+    expect(entries).toEqual([]);
   });
 });

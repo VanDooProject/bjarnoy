@@ -2,7 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
-import { claimLandfall, layoutOverflow, loginTestUser, openRingOnGuidedHex, waitForMapReady } from './helpers';
+import { claimLandfall, layoutOverflow, loginTestUser, openHudDrawer, openRingOnGuidedHex, waitForMapReady } from './helpers';
 
 // Mobile-readiness audit: every one of these was a real defect at phone width
 // — the onboarding checklist's third card and the guidance chip clipped past
@@ -405,8 +405,8 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
     await loginTestUser(page);
     await SettlementPage.found(page);
 
-    await page.locator('.hud-grip').click();
-    await page.getByRole('button', { name: 'Leaderboards' }).click();
+    await openHudDrawer(page);
+    await page.getByRole('link', { name: 'Leaderboards' }).click();
     await expect(page).toHaveURL(/\/leaderboards$/);
 
     const dialog = page.getByRole('dialog');
@@ -424,8 +424,8 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.found(page);
 
-    await page.locator('.hud-grip').click();
-    await page.getByRole('button', { name: 'Alliance' }).click();
+    await openHudDrawer(page);
+    await page.getByRole('link', { name: 'Alliance' }).click();
     await expect(page).toHaveURL(/\/guild$/);
 
     const dialog = page.getByRole('dialog');

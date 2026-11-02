@@ -13,6 +13,35 @@ export const SOURCE_W = 200;
 export const SOURCE_H = 300;
 
 /** A frame placed on the full source canvas: RGBA8, `SOURCE_W * SOURCE_H * 4` bytes. */
+/**
+ * The tile's flat top face inside the source canvas: the `isoTopPoints` hexagon, `SOURCE_W` wide, starting `TOP_FACE_Y` px
+ * down and `TOP_FACE_H` px tall — the atlas manifests' `meta.bjarnoy.tile.topFaceY`/`topFaceH` (the build checks they agree).
+ */
+export const TOP_FACE_Y = 140;
+export const TOP_FACE_H = 92;
+
+/**
+ * How far inside the top face's front edges the dry mask stops, in source px. Everything below those edges (the skirt, and
+ * the face's own antialiased rim) is painted over on screen by the hexes in front, so a dry pixel there would cut the
+ * caustics and foam of *their* water; the inset keeps the closed, grown mask off the rim too.
+ */
+export const FRONT_EDGE_INSET = 2;
+
+/** Whether source pixel (x, y) is above the top face's lower outline (left vertex → bottom edge → right vertex), less `inset`. */
+export function aboveFrontEdges(x: number, y: number, inset = FRONT_EDGE_INSET): boolean {
+  const cy = TOP_FACE_Y + TOP_FACE_H / 2;
+  const bottom = TOP_FACE_Y + TOP_FACE_H;
+  const px = x + 0.5;
+  const py = y + 0.5;
+  // Lower outline as a function of x: rises from the side vertices (cy) to the bottom edge (bottom) over a quarter width.
+  const q = SOURCE_W / 4;
+  const t = Math.min(1, Math.min(px, SOURCE_W - px) / q);
+  const edgeY = cy + (bottom - cy) * t;
+  // Distance to a sloped edge is shorter than the vertical gap; scale the inset by the slope so it is a true perpendicular inset.
+  const slope = t < 1 ? (bottom - cy) / q : 0;
+  return py <= edgeY - inset * Math.sqrt(1 + slope * slope);
+}
+
 export type Canvas = Uint8Array | Uint8ClampedArray;
 
 /**
@@ -117,12 +146,27 @@ export function bestReference(art: Canvas, references: readonly Canvas[]): { ind
   return best;
 }
 
+/** Box-downsamples a full-canvas 0/1 map 2x2 to bytes. */
+function downsampleHalf(map: ArrayLike<number>, width: number, height: number): Uint8Array {
+  const halfW = width >> 1;
+  const halfH = height >> 1;
+  const out = new Uint8Array(halfW * halfH);
+  for (let y = 0; y < halfH; y++) {
+    for (let x = 0; x < halfW; x++) {
+      const i = 2 * y * width + 2 * x;
+      out[y * halfW + x] = Math.round((255 * (map[i] + map[i + 1] + map[i + width] + map[i + width + 1])) / 4);
+    }
+  }
+  return out;
+}
+
 /**
  * The dry mask of `art` against `reference`, at half resolution.
  *
  * Dry = art opaque AND (reference transparent OR RGB differs by more than
  * `DRY_PIXEL_EPS`). The 0/1 map is closed and grown by one source pixel (so the
- * shader stops just outside the object's outline, not on it) and box-downsampled 2x2,
+ * shader stops just outside the object's outline, not on it), cleared below the
+ * top face's front edges (`aboveFrontEdges`) and box-downsampled 2x2,
  * which makes the edge soft. Output is `(SOURCE_W / 2) * (SOURCE_H / 2)` bytes,
  * 255 = dry.
  */
@@ -137,7 +181,9 @@ export function dryMaskHalf(art: Canvas, reference: Canvas, width = SOURCE_W, he
   // Close (grow 2, shrink 1): fills the pinholes the dithered render leaves inside an object and leaves the mask 1 px wider
   // than the object, so neither foam nor caustics show a seam along its edge.
   const dilated = morph(morph(dry, width, height, 2, true), width, height, 1, false);
-
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) if (!aboveFrontEdges(x, y)) dilated[y * width + x] = 0;
+  }
   return downsampleHalf(dilated, width, height);
 }
 
@@ -166,20 +212,6 @@ export function lakeWetMaskHalf(art: Canvas, reference: Canvas, width = SOURCE_W
   return downsampleHalf(morph(wet, width, height, 1, false), width, height);
 }
 
-/** Box-downsamples a 0/1 map 2x2 to 0..255. */
-function downsampleHalf(bits: Uint8Array, width: number, height: number): Uint8Array {
-  const halfW = width >> 1;
-  const halfH = height >> 1;
-  const out = new Uint8Array(halfW * halfH);
-  for (let y = 0; y < halfH; y++) {
-    for (let x = 0; x < halfW; x++) {
-      const i = 2 * y * width + 2 * x;
-      out[y * halfW + x] = Math.round((255 * (bits[i] + bits[i + 1] + bits[i + width] + bits[i + width + 1])) / 4);
-    }
-  }
-  return out;
-}
-
 /** Where a frame's mask cell sits in the packed atlas, and which part of the source canvas it covers. */
 export interface DryMaskFrame {
   /** Cell origin in the mask atlas (texels). */
@@ -192,9 +224,9 @@ export interface DryMaskFrame {
   sh: number;
 }
 
-/** One packed mask atlas: a grey+alpha PNG whose alpha is the mask, and where each frame's cell sits in it. */
+/** One packed mask atlas and where each frame's cell sits in it. */
 export interface MaskAtlasData {
-  /** `data:image/png;base64,...` — a grey+alpha PNG whose alpha is the dry mask. */
+  /** `data:image/png;base64,...` — a grey+alpha PNG; alpha is the mask (dry for the sea, wet for the lakes). */
   url: string;
   /** Atlas size in texels. */
   width: number;
@@ -204,7 +236,7 @@ export interface MaskAtlasData {
 
 /**
  * What the `virtual:water-dry-masks` module exports: the sea hexes' dry masks, plus under `lake` the bog lakes' wet masks
- * (`lakeWetMaskHalf`) in an atlas of their own.
+ * (`lakeWetMaskHalf`, a grey+alpha PNG whose alpha is the mask) in an atlas of their own.
  */
 export interface WaterDryMasksData extends MaskAtlasData {
   lake: MaskAtlasData;

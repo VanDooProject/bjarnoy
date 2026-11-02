@@ -890,7 +890,12 @@ the pure per-frame maths is `dryMaskCore.ts`):
    only the object and its contact shadow are dry.
 5. The 0/1 map is closed (grown by 2 source pixels, shrunk by 1) — which fills
    the pinholes the dithering leaves inside an object and leaves the mask one
-   pixel outside its outline, so the shader stops just outside it — and box-downsampled 2x2 to **half resolution**, which
+   pixel outside its outline, so the shader stops just outside it — then
+   cleared below the top face's front edges with a 2 px inset
+   (`aboveFrontEdges`; the face is the manifests' `topFaceY` 140 / `topFaceH`
+   92, which the build checks). The skirt and the face's rim are painted over
+   on screen by the hexes in front, so a dry pixel there would cut *their*
+   water. Then box-downsampled 2x2 to **half resolution**, which
    makes the edge soft. All cells are shelf-packed into one grey+alpha PNG (alpha
    is the mask) that the module exports as a data URL, with each frame's cell
    rect and the source rect it covers. Computed once per build or dev-server
@@ -911,6 +916,14 @@ loaded, bind a 1x1 texture of zeros: nothing is dry.
 a mask cell (anything not water-based) is drawn into the render texture with its
 own alpha, tinted black, so all of its opaque pixels count as fully dry. Reference
 frames draw nothing.
+
+*Why only `_base` frames, and where shadows come from*: each piece of water art
+is split into a base layer (water, and what of the object lies in it) drawn
+*under* the water mesh and a top layer (the object and the shadow it casts on
+the water, a semi-transparent dark layer) drawn *over* it. The top layer
+already covers the caustics and foam under its opaque pixels and darkens them
+under its shadow by exactly the shadow's own opacity, so it needs no mask and
+there is no separate shadow input to the shader.
 
 The shader reads `float dry = texture(uWaterDry, vUV).a;` and multiplies the
 caustics (all three layers: blobs, coarse net, fine net) and the foam by

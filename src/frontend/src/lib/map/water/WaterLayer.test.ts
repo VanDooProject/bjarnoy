@@ -49,10 +49,10 @@ describe('WaterLayer', () => {
     Object.assign(waterDebugTuning, DEFAULT_TUNING);
   });
 
-  it('ships a coast gap that ends the caustics under the foam band', () => {
-    // The caustics stop at the foam's edge, not a visible gap before it: the
-    // keep-off (plus the per-ribbon spread) sits inside the foam width.
-    expect(waterDebugTuning.causticCullHexes).toBe(0.25);
+  it('ends the caustics inside the foam band', () => {
+    // The ribbons end inside the foam band, never short of it: the keep-off
+    // plus the per-ribbon spread (0.1) stays inside the foam width (0.3).
+    expect(waterDebugTuning.causticCullHexes + 0.1).toBeLessThanOrEqual(waterDebugTuning.foamWidthHexes * 0.7);
     expect(waterDebugTuning.causticCullHexes).toBeLessThan(waterDebugTuning.foamWidthHexes);
   });
 

@@ -121,6 +121,19 @@ describe('dryMaskHalf', () => {
   });
 });
 
+describe('front-edge clip', () => {
+  const tall = { x: 0, y: 100, w: SOURCE_W, h: 200 };
+
+  it('clears a dry patch in the skirt below the top face and keeps one above the face', () => {
+    const art = canvas(WATER, tall);
+    paint(art, { x: 80, y: 256, w: 20, h: 8 }, [120, 120, 120]);
+    paint(art, { x: 80, y: 116, w: 20, h: 8 }, [120, 120, 120]);
+    const dry = dryMaskHalf(art, canvas(WATER, tall));
+    expect(maskAt(dry, 90, 260)).toBe(0);
+    expect(maskAt(dry, 90, 120)).toBe(255);
+  });
+});
+
 describe('matchRatio / bestReference', () => {
   it('is 1 for identical art and 0 for art with no matching pixel', () => {
     expect(matchRatio(canvas(WATER), canvas(WATER))).toBe(1);

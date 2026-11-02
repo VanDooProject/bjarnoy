@@ -50,7 +50,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   test("tech tree page scrolls to reveal content below the fold", async ({
     page,
   }) => {
-    await page.goto("/tech-tree");
+    await page.goto("/docs/tech-tree");
     // Catalogue load is async even against the bundled fallback — wait for
     // a real building section before measuring the page.
     const lastSection = page.locator("section.building").last();
@@ -82,7 +82,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   test("tech tree thumbnail keeps the tile floor still across a building's levels", async ({
     page,
   }) => {
-    await page.goto("/tech-tree");
+    await page.goto("/docs/tech-tree");
     const sawmill = page.locator("section.building", {
       has: page.locator("h3", { hasText: /^Sawmill/ }),
     });
@@ -324,17 +324,25 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       '.wildlife-camps .card .animated-camp[data-animated="true"]',
     );
     await expect.poll(() => animated.count()).toBeGreaterThan(0);
+    // Every land camp states its guard range; the whale road (open sea) has none.
     await expect(
       page.locator('.wildlife-camps .card [data-testid="guard-range"]'),
-    ).toHaveCount(total);
+    ).toHaveCount(total - 1);
+    await expect(
+      page.locator('#camp-whaleroad [data-testid="guard-range"]'),
+    ).toHaveCount(0);
     // Every camp gives food and every strong camp iron; the camps' own extras and larger shares come on top.
     await expect(
       page.locator('.wildlife-camps .card [data-loot="food"]'),
     ).toHaveCount(total);
     const strongCards = page.locator('.card:has([data-strength="strong"])');
+    // (the whale road is strong but pays food only)
     await expect(strongCards.locator('[data-loot="iron"]')).toHaveCount(
-      await strongCards.count(),
+      (await strongCards.count()) - 1,
     );
+    await expect(
+      page.locator('#camp-whaleroad [data-loot="iron"]'),
+    ).toHaveCount(0);
     await expect(
       page.locator('#camp-beaverlodge [data-loot="wood"]'),
     ).toHaveCount(1);
@@ -443,7 +451,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
 
     // The example island is drawn, and the page links back to the docs hub.
     await expect(page.locator("#example-map canvas")).toBeVisible();
-    await page.getByRole("link", { name: "Docs", exact: true }).click();
+    await page.getByTestId("docs-breadcrumb").getByRole("link", { name: "Docs", exact: true }).click();
     await expect(page).toHaveURL(/\/docs$/);
   });
 
@@ -469,7 +477,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   // Every docs page sits on the shared DocsPageLayout: the same top bar, a breadcrumb (the hub itself has none),
   // a title, the lede, header art and the related/previous/next footer.
   const DOCS_PATHS = [
-    "/tech-tree",
+    "/docs/tech-tree",
     "/docs/tiles",
     "/docs/wasted-lands",
     "/docs/wildlife-camps",
@@ -477,6 +485,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     "/docs/shrines",
     "/docs/production",
     "/docs/founding",
+    "/docs/realm",
     "/docs/land-movement",
     "/docs/ships",
     "/docs/walls",
@@ -618,7 +627,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   });
 
   test.describe("docs hub", () => {
-    test("shows the four groups and eleven art cards, and the cards and footer link through", async ({
+    test("shows the four groups and twelve art cards, and the cards and footer link through", async ({
       page,
     }) => {
       await page.goto("/docs");
@@ -640,11 +649,11 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         ).toBeVisible();
       }
       await expect(page.locator(".groups .group")).toHaveCount(4);
-      await expect(page.locator(".groups .group a.card")).toHaveCount(11);
+      await expect(page.locator(".groups .group a.card")).toHaveCount(12);
       for (const [group, count] of [
         ["island", 2],
         ["building", 4],
-        ["move", 3],
+        ["move", 4],
         ["beyond", 2],
       ] as const) {
         await expect(
@@ -653,7 +662,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       }
 
       const cards = page.locator(".groups a.card");
-      await expect(cards).toHaveCount(11);
+      await expect(cards).toHaveCount(12);
       for (const title of [
         "Tiles",
         "Bog lands",
@@ -662,6 +671,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
         "Shrines",
         "Walls",
         "Founding settlements",
+        "Extending the realm",
         "Land movement",
         "Ships and water",
         "Wildlife camps",
@@ -676,8 +686,8 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       // Every card's art is drawn from the atlas: a sprite with a background
       // image, or the animated camp's layers.
       const arts = page.getByTestId("docs-card-art");
-      await expect(arts).toHaveCount(11);
-      for (let i = 0; i < 11; i++) {
+      await expect(arts).toHaveCount(12);
+      for (let i = 0; i < 12; i++) {
         const layer = arts
           .nth(i)
           .locator(
@@ -718,7 +728,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     test("does not overflow horizontally on a phone", async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/docs");
-      await expect(page.locator(".groups a.card")).toHaveCount(11);
+      await expect(page.locator(".groups a.card")).toHaveCount(12);
       const overflow = await page
         .locator(".docs-page")
         .evaluate((el) => el.scrollWidth - el.clientWidth);
@@ -757,7 +767,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(tip).toHaveCount(0);
 
     await link.click();
-    await expect(page).toHaveURL(/\/tech-tree#shrineofthor$/);
+    await expect(page).toHaveURL(/\/docs\/tech-tree#shrineofthor$/);
     await expect(page.locator("#shrineofthor")).toBeInViewport();
   });
 
@@ -808,7 +818,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       page
         .locator('[data-producer="longhouse"] th')
         .first()
-        .locator('a[href="/tech-tree#longhouse"]'),
+        .locator('a[href="/docs/tech-tree#longhouse"]'),
     ).toHaveCount(1);
     // The header shows the herder's still frame (the hub card plays the clip).
     await expect(
@@ -824,6 +834,25 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     await expect(page.locator('[data-settlement="2"]')).toContainText("55,000");
     await expect(page.locator('[data-settlement="3"]')).toContainText("240 / 180 / 120 / 120");
     await expect(page.getByText("issue #447")).toHaveCount(0);
+  });
+
+  test("realm page shows the tower limit table, the four tower grounds and an example map whose steps grow the realm", async ({
+    page,
+  }) => {
+    await page.goto("/docs/realm");
+    await expectPlayerPage(page, "Extending the realm", "tower-limit-table");
+    await expect(page.locator('[data-testid="tower-limit-table"] [data-from="3"]')).toContainText("1");
+    await expect(page.locator('[data-testid="tower-limit-table"] [data-from="29"]')).toContainText("13");
+    await expect(page.locator(".realm figure.ground")).toHaveCount(4);
+
+    // The example map is the game's own renderer; the step picker swaps the caption.
+    await expect(page.locator(".realm-example canvas")).toBeVisible();
+    const caption = page.getByTestId("realm-example-caption");
+    await expect(caption).toContainText("Step 1");
+    await page.locator(".realm-example").getByRole("button", { name: "2", exact: true }).click();
+    await expect(caption).toContainText("forest hex");
+    await page.locator(".realm-example").getByRole("button", { name: "3", exact: true }).click();
+    await expect(caption).toContainText("plain bog moss");
   });
 
   test("land movement page shows the example route and the unit speeds, keeps the ground costs for admins and hides the admin note", async ({
@@ -937,10 +966,12 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
       page.getByTestId("wall-movement-legend").locator("li"),
     ).toHaveCount(11);
 
-    // Sieges are player content now: rams take one level per won siege, three levels per wall hex.
+    // Sieges are player content now: rams take one level per won siege, three levels per wall hex, and a fleet sent at
+    // the sea end of a wall takes a level too.
     const sieges = page.locator("#sieges");
     await expect(sieges.getByRole("heading", { name: "Sieges" })).toBeVisible();
-    await expect(sieges.locator("li")).toHaveCount(5);
+    await expect(sieges.locator("li")).toHaveCount(6);
+    await expect(sieges).toContainText("the sea end of a wall included");
     await expect(sieges).toContainText("exactly one level");
     await expect(sieges).toContainText("3 levels");
     // The note on what is still not built (fire) stays admin-only.
@@ -984,8 +1015,8 @@ test.describe(
         island: ".bog-island",
         caption: "bog-island-caption",
         probes: [
-          { fx: 0.2, fy: 0.4, name: "River" },
-          { fx: 0.75, fy: 0.5, name: "Grass" },
+          { fx: 0.44, fy: 0.41, name: "River" },
+          { fx: 0.65, fy: 0.6, name: "Grass" },
         ],
       },
     ];

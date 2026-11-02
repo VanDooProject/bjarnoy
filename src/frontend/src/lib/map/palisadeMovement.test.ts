@@ -152,3 +152,25 @@ describe('palisadeRestrictions with a rival wall from the walls read', () => {
     expect(friend.blocked!(wall)).toBe(true);
   });
 });
+
+describe('palisadeRestrictions outside the realm', () => {
+  it('opens a gate outside its owner realm to every army but still blocks a plain wall', () => {
+    const rival = new WorldModel(20260825);
+    rival.applyRivalWalls([
+      { q: 3, r: 0, type: 'palisadegate', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival', outsideRealm: true },
+      { q: 3, r: -1, type: 'palisade', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival', outsideRealm: true },
+      { q: 3, r: 1, type: 'palisade', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival' },
+    ]);
+    const stranger = palisadeRestrictions(rival.standingPalisadeWalls(), () => 'grass', () => false, 'someone-else')!;
+
+    expect(stranger.friendlyGate!({ q: 3, r: 0 })).toBe(true);
+    expect(stranger.blocked!({ q: 3, r: -1 })).toBe(true);
+    expect(stranger.friendlyGate!({ q: 3, r: -1 })).toBe(false);
+  });
+
+  it('keeps a gate inside its realm closed to a stranger', () => {
+    const stranger = palisadeRestrictions(new Map([['3,0', { gate: true, owner: OWNER, outsideRealm: false }]]), () => 'grass', () => false, 'x')!;
+
+    expect(stranger.friendlyGate!({ q: 3, r: 0 })).toBe(false);
+  });
+});

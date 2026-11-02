@@ -2003,6 +2003,7 @@ describe('useWorldStore refreshCampStates', () => {
     q: 2,
     r: 1,
     family: 'wolfden',
+    orientation: 'SE',
     level: 2,
     effectiveLevel: 2,
     strong: true,
@@ -2027,6 +2028,27 @@ describe('useWorldStore refreshCampStates', () => {
 
     expect(getWorldCamps).toHaveBeenCalledWith('world-1');
     expect(store.model.campAt({ q: 2, r: 1 })?.empty).toBe(true);
+    expect(store.campStatesVersion).toBe(1);
+
+    await store.refreshCampStates();
+    expect(store.campStatesVersion).toBe(1);
+  });
+
+  it('adds a camp it first learns about from the poll (a newly seen island) with its state', async () => {
+    getWorldCamps.mockReset().mockResolvedValue([{ ...campState, family: 'bearrapids', orientation: 'NE', strong: true }]);
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    expect(store.model.campAt({ q: 2, r: 1 })).toBeUndefined();
+
+    await store.refreshCampStates();
+
+    expect(store.model.campAt({ q: 2, r: 1 })).toMatchObject({
+      family: 'bearrapids',
+      orientation: 'NE',
+      level: 2,
+      empty: true,
+      clears: 1,
+    });
     expect(store.campStatesVersion).toBe(1);
 
     await store.refreshCampStates();
@@ -2192,5 +2214,50 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
     expect(store.hud.lastSpend).toBeNull();
     store.recordSpend({ wood: 30 });
     expect(store.hud.lastSpend?.cost).toEqual({ wood: 30 });
+  });
+});
+
+describe('useWorldStore live realm membership', () => {
+  const summary = (id: string, mine: boolean) => ({
+    id, name: id, ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-1', mine,
+  });
+
+  it("registers the player's own settlements under the player id and everyone else as rivals", async () => {
+    const store = await loadStoreModule(false);
+    store.ownerId = 'player-1';
+
+    store.registerSettlementSummaries([summary('own-other', true), summary('rival', false)]);
+
+    expect(store.model.getSettlement('own-other')?.ownerId).toBe('player-1');
+    expect(store.model.getSettlement('rival')?.ownerId).toBe('rival');
+  });
+
+  it("forwards the response's realm to the model", async () => {
+    const realm = [{ settlementId: 'settlement-1', discs: [{ q: 0, r: 0, radius: 1 }] }];
+    getSettlement.mockReset().mockResolvedValue({
+      id: 'settlement-1',
+      longhouseLevel: 1,
+      resources: {
+        stock: { wood: 0, stone: 0, food: 0, iron: 0 },
+        ratePerHour: { wood: 0, stone: 0, food: 0, iron: 0 },
+        capacity: { wood: 750, stone: 750, food: 900, iron: 375 },
+      },
+      buildings: [],
+      queue: [],
+      garrison: [],
+      trainingQueue: [],
+      realm,
+    });
+    const store = await loadStoreModule(false);
+    store.model.registerSettlement({
+      id: 'settlement-1', ownerId: 'player-1', ownerName: 'Astrid', name: 'Astrid', q: 0, r: 0, level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 }, rates: { wood: 0, stone: 0, food: 0, iron: 0 }, foundedAt: Date.now(),
+    });
+    store.selectedSettlementId = 'settlement-1';
+    const spy = vi.spyOn(store.model, 'applyServerSnapshot');
+
+    await store.refreshLiveSettlement();
+
+    expect(spy).toHaveBeenCalledWith('settlement-1', expect.objectContaining({ realm }));
   });
 });

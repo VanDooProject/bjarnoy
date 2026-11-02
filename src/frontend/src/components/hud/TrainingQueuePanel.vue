@@ -17,6 +17,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { unitName } from '../../i18n/catalogueNames';
+import GuestList from './GuestList.vue';
 import { useWorldStore } from '../../stores/world';
 import { MAX_TRAINING_QUEUE_LENGTH, useTrainingOrders } from '../../composables/useQueueOrders';
 
@@ -31,30 +32,19 @@ const garrison = computed(() =>
     .map((g) => ({ key: g.unit, label: unitName(g.unit), count: g.count })),
 );
 
-// Issue #40 phase 4: guest (Support) armies currently stationed at this
-// settlement — the host's read-only view (`GET /settlements/{id}/guests`,
-// fetched alongside `world.armies` — see world.ts's `refreshArmies`). Shown
-// as a small section under Garrison rather than a separate HUD panel: most
-// screen corners are already taken (BuildQueuePanel top-left, this panel
-// top-right, ArmyPanel bottom-right — see each panel's own `position:
-// absolute`), and a guest garrison is conceptually close kin to "who's
-// standing at home" already shown just above it. No
-// recall/action buttons here — the host cannot command a guest army, only
-// its owner can (via their own settlement's ArmyPanel).
-const guests = computed(() =>
-  world.guestArmies.map((g) => ({
-    key: g.armyId,
-    ownerName: world.model.getSettlement(g.ownerSettlementId)?.name ?? t('hud.trainingQueue.unknownSettlement'),
-    composition: g.stacks
-      .filter((s) => s.count > 0)
-      .map((s) => t('hud.trainingQueue.orderName', { count: s.count, unit: unitName(s.unit) }))
-      .join(', ') || '—',
-  })),
-);
+// Issue #40 phase 4: guest (Support) armies stationed at this settlement —
+// the host's view (`GET /settlements/{id}/guests`, fetched alongside
+// `world.armies` — see world.ts's `refreshArmies`), with a "Send home" per
+// row (GuestList.vue, shared with QueueDrawer). Shown as a small section
+// under Garrison rather than a separate HUD panel: most screen corners are
+// already taken (BuildQueuePanel top-left, this panel top-right, ArmyPanel
+// bottom-right), and a guest garrison is close kin to "who's standing at
+// home" shown just above it.
+const guestCount = computed(() => world.guestArmies.length);
 </script>
 
 <template>
-  <div v-if="orders.length || garrison.length || guests.length" class="status-card training-queue-panel">
+  <div v-if="orders.length || garrison.length || guestCount" class="status-card training-queue-panel">
     <template v-if="orders.length">
       <div class="status-card-header">
         <span class="status-card-title">{{ t('hud.trainingQueue.title') }}</span>
@@ -89,17 +79,12 @@ const guests = computed(() =>
       <div v-else class="status-subtext garrison-empty">{{ t('hud.trainingQueue.garrisonEmpty') }}</div>
     </div>
 
-    <div v-if="guests.length" class="guests has-orders-above">
+    <div v-if="guestCount" class="guests has-orders-above">
       <div class="status-card-header">
         <span class="status-card-title">{{ t('hud.trainingQueue.guests') }}</span>
-        <span class="status-card-count">{{ guests.length }}</span>
+        <span class="status-card-count">{{ guestCount }}</span>
       </div>
-      <div class="guests-grid">
-        <div v-for="g in guests" :key="g.key" class="guest-row">
-          <span class="guest-owner">{{ g.ownerName }}</span>
-          <span class="guest-composition">{{ g.composition }}</span>
-        </div>
-      </div>
+      <GuestList />
     </div>
   </div>
 </template>
@@ -210,24 +195,5 @@ const guests = computed(() =>
 
 .guests.has-orders-above {
   margin-top: 12px;
-}
-.guests-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.guest-row {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  font-size: 12px;
-}
-.guest-owner {
-  color: var(--text);
-  font-weight: 600;
-}
-.guest-composition {
-  color: var(--muted);
-  font-size: 11px;
 }
 </style>

@@ -3,7 +3,7 @@ import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 import { RingMenuComponent } from './pages/RingMenuComponent';
-import { layoutOverflow, loginTestUser, waitForMapReady } from './helpers';
+import { gotoWorldMap, layoutOverflow, loginTestUser } from './helpers';
 
 /**
  * Issue: mobile army dispatch. Phones (<=768px) get no ArmyPanel — a 260px
@@ -46,18 +46,6 @@ async function seedGarrison(page: Page) {
   });
 }
 
-/**
- * Reaches `/world` the way a phone player does without a pinch: the pull-down
- * drawer's "World map" link (HudNav itself isn't in the compact bar, so
- * `gotoWorldMap`'s `.hud-nav` click doesn't apply here). The link only shows
- * for a logged-in player, so callers log in before founding.
- */
-async function gotoWorldViaDrawer(page: Page) {
-  await page.locator('.hud-grip').click();
-  await page.locator('.hud-drawer .drawer-links button', { hasText: 'World map' }).click();
-  await page.waitForURL('**/world');
-  await waitForMapReady(page);
-}
 
 test.describe('mobile army dispatch', { tag: '@g3' }, () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
@@ -68,7 +56,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await SettlementPage.found(page);
     await expect(page.locator('.army-panel')).toHaveCount(0);
 
-    await gotoWorldViaDrawer(page);
+    await gotoWorldMap(page);
     await expect(page.locator('.army-panel')).toHaveCount(0);
   });
 
@@ -166,17 +154,17 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     expect(draft.targetSettlementId).toBe('rival-1');
   });
 
-  test('world mode: a tap opens the ring and stays on /world', async ({ page }) => {
+  test('world mode: a tap opens the ring and stays in world mode', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await loginTestUser(page);
     const settlement = await SettlementPage.found(page);
     const ring = new RingMenuComponent(page);
     const centre = await settlement.canvasCentre();
 
-    await gotoWorldViaDrawer(page);
+    await gotoWorldMap(page);
     await page.mouse.click(centre.x, centre.y);
 
-    await expect(page).toHaveURL(/\/world$/);
+    await expect(page).toHaveURL(/\/settlement#world$/);
     // Only the army action: Build/Upgrade/Info open settlement-only modals.
     await expect(ring.action('Send army here')).toBeVisible();
     await expect(ring.bubbles).toHaveCount(1);

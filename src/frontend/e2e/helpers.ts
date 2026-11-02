@@ -13,10 +13,9 @@ import { AdminAuthFixture } from './pages/AdminAuthFixture';
  * is also the *fastest* path to `auth.isAuthenticated === true` this suite
  * has, not just the most convenient.
  *
- * Added for the returning-player nav work: HudNav's "World map" and
- * "Leaderboards" links now require `auth.isAuthenticated` (previously just a
- * founded settlement, or nothing at all — see HudNav.vue), so any spec that
- * clicks either now needs a real authenticated session first. Must be
+ * Added for the returning-player nav work: HudNav's "Leaderboards" link
+ * requires `auth.isAuthenticated` (see useHudNavEntries.ts), so any spec that
+ * clicks it needs a real authenticated session first. Must be
  * called before the page's first navigation — an `addInitScript` only takes
  * effect on a *subsequent* one — so call it before
  * `foundSettlement`/`SettlementPage.found`/`WorldMapPage.open`, not after.
@@ -65,10 +64,13 @@ export async function waitForRenderedFrames(page: Page, frames = 2): Promise<voi
 }
 
 /**
- * Navigates to the world map and waits for its renderer to be ready.
+ * Switches the map to world mode and waits for its renderer to be ready.
  *
- * Real client-side navigation (the HudNav "World map" button), not
- * `page.goto('/world')` — a hard navigation reloads the whole app, and in
+ * Players switch by zooming out; world mode is marked by the `#world` hash on
+ * `/settlement` (lib/mapModeRoute.ts), so this sets that hash — a fragment
+ * navigation the router picks up without reloading — rather than replaying a
+ * whole zoom gesture (zoom-transition.spec.ts covers the gesture itself).
+ * Not `page.goto('/settlement#world')` — a hard navigation reloads the whole app, and in
  * demo mode `hasFoundedSettlement` is intentionally never persisted to
  * localStorage (player.ts's own remarks: demo mode's WorldModel is pure
  * in-memory, so every reload starts a fresh session). A reload here silently
@@ -77,15 +79,17 @@ export async function waitForRenderedFrames(page: Page, frames = 2): Promise<voi
  * of this function was actually driving the *landing page's* canvas, not
  * the world map, without a single assertion failing to say so.
  *
- * docs/design/zoom-transition.md: `/world` and `/settlement` now share one
+ * docs/design/zoom-transition.md: world and settlement mode share one
  * persistent renderer (MapView.vue), so `data-map-ready` alone no longer
  * distinguishes "the world map is up" from "the settlement view never went
  * away" — waiting for the URL first is what actually confirms the mode
  * switch happened.
  */
 export async function gotoWorldMap(page: Page): Promise<void> {
-  await page.locator('.hud-nav button', { hasText: 'World map' }).click();
-  await page.waitForURL('**/world');
+  await page.evaluate(() => {
+    window.location.hash = 'world';
+  });
+  await page.waitForURL('**/settlement#world');
   await waitForMapReady(page);
 }
 
@@ -93,15 +97,44 @@ export async function gotoWorldMap(page: Page): Promise<void> {
  * Clicks a secondary HUD destination (Leaderboards, Messages, Reports,
  * Alliance, Docs, Landing) on a desktop-width bar: those entries live in the
  * avatar's dropdown — the account menu when logged in, the returning-player
- * menu otherwise — not inline in `.hud-nav`. `label` is the visible row text
+ * menu otherwise — except Docs, which sits inline in `.hud-nav` on a wide bar. `label` is the visible row text
  * (a Reports row may carry an unread count after it). One helper so no spec
  * has to know where the entries live; phone specs use the drawer instead.
  */
 export async function clickHudMenuEntry(page: Page, label: string): Promise<void> {
+  // Docs sits inline on a wide enough bar (lib/breakpoints.ts's HUD_NAV_ROOMY_QUERY).
+  const inline = page.locator('.hud-nav > a.link', { hasText: label });
+  if (await inline.isVisible()) {
+    await inline.click();
+    return;
+  }
   const account = page.getByTestId('account-menu-trigger');
   const trigger = (await account.isVisible()) ? account : page.getByTestId('returning-player-trigger');
   await trigger.click();
   await page.locator('.hud-nav [role="menuitem"]', { hasText: label }).click();
+}
+
+/**
+ * Opens the phone HUD drawer (TopBar.vue's `.hud-grip`) and waits until it
+ * has finished opening. Tap anything inside the drawer only after this.
+ *
+ * While the drawer grows open (a 180ms height transition), the rows inside
+ * don't move, they are only uncovered. Playwright's stability check passes on
+ * a row that is still clipped, and its scroll-into-view then scrolls
+ * `.hud-drawer-scroll` to bring it out. The still-growing drawer clamps that
+ * scroll back on every frame, so the row slides while the click is under way.
+ * Playwright hit-checks only the press: when the release lands on another
+ * element, the browser sends the click to their common ancestor and the
+ * row's handler never runs (seen as "Later" on the profile nudge doing
+ * nothing on a 320x568 phone).
+ */
+export async function openHudDrawer(page: Page): Promise<void> {
+  const grip = page.locator('.hud-grip');
+  if ((await grip.getAttribute('aria-expanded')) !== 'true') await grip.click();
+  await expect(grip).toHaveAttribute('aria-expanded', 'true');
+  await expect
+    .poll(() => page.locator('.hud-drawer').evaluate((el) => el.getAnimations().length))
+    .toBe(0);
 }
 
 /**
@@ -187,13 +220,13 @@ export async function enterSettlementAfterOnboarding(page: Page): Promise<void> 
     return;
   }
   // A wide bar carries the nav inline; a phone bar keeps it in the drawer.
-  const inlineNav = page.locator('.hud-nav button', { hasText: 'Settlement' });
+  const inlineNav = page.locator('.hud-nav a.link', { hasText: 'Settlement' });
   if (await inlineNav.isVisible()) {
     await inlineNav.click();
     return;
   }
-  await page.locator('.hud-grip').click();
-  await page.locator('.hud-drawer button', { hasText: 'Settlement' }).click();
+  await openHudDrawer(page);
+  await page.locator('.hud-drawer .drawer-links a', { hasText: 'Settlement' }).click();
 }
 
 /**

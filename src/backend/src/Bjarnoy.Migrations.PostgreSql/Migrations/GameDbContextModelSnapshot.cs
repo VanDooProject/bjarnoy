@@ -17,7 +17,7 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -759,6 +759,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("CentreR")
                         .HasColumnType("integer");
 
+                    b.Property<string>("FogChunks")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("Giants")
                         .IsRequired()
                         .HasColumnType("text");
@@ -956,6 +960,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<int>("Level")
                         .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("OutsideRealmSince")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Q")
                         .HasColumnType("integer");

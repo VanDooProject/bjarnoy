@@ -144,7 +144,7 @@ describe('scenario files', () => {
   it('d: a land end at the coast is half open, the sea end still seals', { timeout: 60_000 }, () => {
     const touching = runScenario(load('d-land-end-at-coast'));
     // The end by the sea is half open; the end at the river is sealed.
-    expect([...touching.halfOpen]).toEqual([coordKey({ q: 209, r: -651 })]);
+    expect([...touching.halfOpen]).toEqual([coordKey({ q: 372, r: -832 })]);
     const path = touching.routes[0]!.path!;
     expect(path).not.toBeNull();
     expect(path.some((c) => touching.halfOpen.has(coordKey(c)))).toBe(true);

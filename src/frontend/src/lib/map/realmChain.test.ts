@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveRealm, type RealmSettlementInput } from './realmChain';
+import { realmFromDiscs, resolveRealm, type RealmSettlementInput } from './realmChain';
 
 // Longhouse level 2 claims radius 3; a level-2 tower claims radius 2 (mirrors ConnectedRealmTests.cs).
 const settlement = (id: string, q: number, towerQs: number[] = [], towerLevel = 2): RealmSettlementInput => ({
@@ -66,5 +66,33 @@ describe('resolveRealm (the chain rule)', () => {
   it('counts only connected tower hexes against the limit', () => {
     const realm = resolveRealm([settlement('a', 0, [3, 7])]);
     expect(realm.countConnected([at(3), at(7), at(3)])).toBe(1);
+  });
+});
+
+describe('realmFromDiscs (the realm the server resolved)', () => {
+  const realm = realmFromDiscs([
+    { settlementId: 'a', discs: [{ q: 0, r: 0, radius: 3 }, { q: 5, r: 0, radius: 2 }] },
+    { settlementId: 'b', discs: [{ q: 20, r: 0, radius: 3 }] },
+  ]);
+
+  it('hands each member its own discs, longhouse disc first', () => {
+    expect(realm.discsOf('a')).toEqual([{ q: 0, r: 0, radius: 3 }, { q: 5, r: 0, radius: 2 }]);
+    expect(realm.discsOf('b')).toEqual([{ q: 20, r: 0, radius: 3 }]);
+    expect(realm.discsOf('unknown')).toEqual([]);
+    expect(realm.allDiscs).toHaveLength(3);
+  });
+
+  it('connects a tower only for a non-first disc of that member centred on it', () => {
+    expect(realm.isTowerConnected('a', at(5))).toBe(true);
+    expect(realm.isTowerConnected('a', at(0))).toBe(false); // the longhouse disc is not a tower
+    expect(realm.isTowerConnected('b', at(5))).toBe(false); // another member's tower disc
+    expect(realm.isTowerConnected('a', at(6))).toBe(false);
+  });
+
+  it('covers and counts hexes inside any disc of any member', () => {
+    expect(realm.covers(at(7))).toBe(true);
+    expect(realm.covers(at(8))).toBe(false);
+    expect(realm.covers(at(22))).toBe(true);
+    expect(realm.countConnected([at(5), at(5), at(7), at(12)])).toBe(2);
   });
 });
