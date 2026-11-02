@@ -236,6 +236,9 @@ play.
 - **Linked realms share their stores.** Two of your settlements are linked when their realms touch (share a hex edge). Linked settlements share one stock: it is kept split between them in proportion to each one's storage capacity, per resource; production goes into it and a build in any of them draws from all of them in that ratio. When the link breaks, each keeps its share. The oldest settlement of a linked group is the one the game shows; the stock of the others is shown with it.
 - **A linked group is one realm.** It has one name (the oldest settlement's) and one stock. The newer settlements are left out of every list, yours and your rivals', and rivals see the oldest settlement's name on every longhouse of the group. Only their longhouses and the border stay on the map. You run the whole linked realm from the oldest settlement and can build on any of its hexes from there. A raid on any longhouse of the group can loot the whole stock.
 - A linked realm has one build queue: its construction slots are the members' slots added up, and a build on any of its hexes joins that queue.
+- In a linked realm, build requirements count for the whole realm: its highest longhouse level unlocks buildings on all of its ground, its tower limit is the members' limits added up, and storage requirements read the shared capacity.
+- A linked realm's units eat from the shared food. When it runs out, the units with the highest upkeep across the whole realm starve first, until the shared food stops falling.
+- Leaderboards show a linked realm once, under the oldest settlement's name, with the members' scores added up; battle and trade reports use the realm's name.
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't
