@@ -63,7 +63,7 @@ public sealed record UnitDefinition
     /// <summary>
     /// Siege power this unit contributes toward building destruction (issue
     /// #40 phase 5) — zero for every unit except <see cref="UnitClass.Siege"/>
-    /// (the Catapult). Kept separate from <see cref="Attack"/>/<see cref="Defense"/>
+    /// (the Catapult) and the <see cref="UnitClass.Ship"/>s (starting values). Kept separate from <see cref="Attack"/>/<see cref="Defense"/>
     /// since it only matters for <see cref="SiegeResolver"/>'s
     /// levels-destroyed formula, never for ordinary battle power. A
     /// placeholder balance figure, not a tuned number — see

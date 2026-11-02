@@ -34,6 +34,15 @@ export function hasShoreline(center: AxialCoord, claimRadius: number, terrain: T
 }
 
 /**
+ * Mirrors the backend's rule for where a fleet may be sent (`Army.PlanDispatch`'s fleet Attack/Raid gate): a building
+ * hex is on the shore when it is a sea hex (the coastal-water buildings: Dockyard, Fishing Hut, Shrine of Njörd) or a
+ * shoreline land hex. The claim check is not mirrored: the buildings a caller offers already belong to the target.
+ */
+export function isShoreBuildingHex(coord: AxialCoord, terrain: TerrainLookup): boolean {
+  return !terrain.isLand(coord.q, coord.r) || hasShoreline(coord, 0, terrain);
+}
+
+/**
  * Mirrors `Settlement.cs`'s `ClaimRadius` (backed by
  * `BuildingCatalogue`'s Longhouse `ClaimRadius = level == 1 ? 2 : 3`, the same
  * number `building-catalogue.json`'s `longhouse` entries carry in their own

@@ -324,7 +324,8 @@ export const useWorldStore = defineStore('world', {
       // Issue #40 phase 5: the coordinate of a building within the target
       // settlement a Catapult-carrying Attack would prefer to hit — a
       // *preference*, not a guarantee (see `buildAttackDispatchRequest`'s own
-      // comment). `null` means "no preference", the same as never having
+      // comment). A fleet Attack must always name one (a building on the
+      // target's shore): the fleet sails to it and only it can be damaged. `null` means "no preference", the same as never having
       // picked one. Always `null` outside `mission: 'attack'` — a Move/Support
       // dispatch has no battle to apply it in (see `setDispatchMission`).
       targetBuildingCoord: { q: number; r: number } | null;

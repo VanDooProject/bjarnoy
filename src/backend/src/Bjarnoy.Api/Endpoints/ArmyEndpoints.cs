@@ -592,8 +592,10 @@ public static class ArmyEndpoints
                     "An army must be either all ships or all non-ships, not a mix.",
                 DispatchRejection.DestinationNotSea => "The destination is not sea; fleets can only path over water.",
                 DispatchRejection.WaypointNotSea => "A waypoint is not sea; fleets can only path over water.",
-                DispatchRejection.DefenderHasNoShoreline =>
-                    "The target settlement is fully inland and cannot be reached by ship.",
+                DispatchRejection.FleetTargetBuildingRequired =>
+                    "A fleet must be sent at one building on the target settlement's shore.",
+                DispatchRejection.FleetTargetBuildingNotOnShore =>
+                    "That building is not on the target settlement's shore, so a fleet cannot reach it.",
                 DispatchRejection.WrongSettlerCount =>
                     $"A founding mission requires exactly {Founding.RequiredSettlers} settlers, no more, no fewer.",
                 DispatchRejection.InsufficientShipCapacityForSettlers =>
