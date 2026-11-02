@@ -246,7 +246,8 @@ public class EndgameGenerationTests
                 Assert.DoesNotContain(tower.Coord, camps);
                 Assert.DoesNotContain(tower.Coord, rivers);
                 Assert.DoesNotContain(tower.Coord, walls);
-                Assert.True(tower.Coord.DistanceTo(anchor) > EndgameRules.RingBand(UtgardRing.Outer).Max + 1);
+                Assert.True(tower.Coord.DistanceTo(anchor) > EndgameRules.RingBand(UtgardRing.Inner).Max + 1);
+                Assert.DoesNotContain(tower.Coord.Neighbours(), walls.Contains);
                 Assert.Equal(sampler.OrientationAt(tower.Coord), tower.Orientation);
             }
 
@@ -309,12 +310,12 @@ public class EndgameGenerationTests
     private static Dictionary<HexCoord, Terrain> Disc(int radius, Terrain terrain = Terrain.Grass) =>
         Origin.WithinRadius(radius).ToDictionary(h => h, _ => terrain);
 
-    private static EndgameGenerator.Sites Place(IReadOnlyDictionary<HexCoord, Terrain> land, int seed = 11, IReadOnlySet<HexCoord>? rivers = null)
+    private static EndgameGenerator.Sites Place(IReadOnlyDictionary<HexCoord, Terrain> land, int seed = 11, IReadOnlySet<HexCoord>? rivers = null, int islandIndex = 0)
     {
         var tiles = land.Where(kv => kv.Value != Terrain.Sea).Select(kv => kv.Key).ToList();
         return EndgameGenerator.PlaceCore(
             tiles, land, rivers ?? new HashSet<HexCoord>(), [new GiantGenerator.Placement(Origin, GiantGenerator.UtgardFamily)],
-            new HashSet<HexCoord>(), seed, 0);
+            new HashSet<HexCoord>(), seed, islandIndex);
     }
 
     /// <summary>True when the hexes form one simple cycle: each adjacent to the next (cyclically), no two others adjacent or equal.</summary>
@@ -399,11 +400,26 @@ public class EndgameGenerationTests
     }
 
     [Fact]
-    public void Towers_keep_beyond_the_outer_band_from_utgard()
+    public void Towers_keep_outside_the_inner_band_and_off_the_walls()
     {
         var sites = Place(Disc(24));
+        var walls = sites.Walls.Select(w => w.Coord).ToHashSet();
         Assert.NotEmpty(sites.Towers);
-        Assert.All(sites.Towers, t => Assert.True(t.DistanceTo(Origin) > EndgameRules.RingBand(UtgardRing.Outer).Max + 1));
+        Assert.All(sites.Towers, t =>
+        {
+            Assert.True(t.DistanceTo(Origin) > EndgameRules.RingBand(UtgardRing.Inner).Max + 1);
+            Assert.DoesNotContain(t, walls);
+            Assert.DoesNotContain(t.Neighbours(), walls.Contains);
+        });
+    }
+
+    [Fact]
+    public void A_tower_may_stand_between_the_two_wall_lines_on_a_small_island()
+    {
+        // A disc and seeds where the sampling happens to pick one tower inside the outer line (found by scanning; nothing forces it).
+        var sites = Place(Disc(12), seed: 32, islandIndex: 4);
+        var nearestOuterWall = sites.Walls.Where(w => w.Ring == UtgardRing.Outer).Min(w => w.Coord.DistanceTo(Origin));
+        Assert.Contains(sites.Towers, t => t.DistanceTo(Origin) < nearestOuterWall);
     }
 
     private static HexCoord H(int q, int r) => new(q, r);

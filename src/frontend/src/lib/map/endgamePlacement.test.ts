@@ -44,6 +44,8 @@ describe('towerCountFor', () => {
 });
 
 const ORIGIN = { q: 0, r: 0 };
+// A disc and seeds where the sampling happens to pick one tower inside the outer line (found by scanning; nothing forces it).
+const BETWEEN = { radius: 12, seed: 32, islandIndex: 4 };
 const footprintKeys: ReadonlySet<string> = new Set([ORIGIN, ...neighbors(ORIGIN)].map(coordKey));
 
 /** True when the hexes form one simple cycle: each adjacent to the next (cyclically), no two others adjacent or equal. */
@@ -260,25 +262,37 @@ describe('placeEndgame', () => {
     expect(placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 5, 8)).toEqual(a);
   });
 
-  it('spreads the towers over land past the outer band, MinTowerSpacing apart, off camps, and deterministically', () => {
+  it('spreads the towers over land outside the inner band, off walls and their neighbours, MinTowerSpacing apart, off camps, and deterministically', () => {
     const { tiles, terrainOf } = disc(24);
     const camp = coordKey({ q: 16, r: -4 });
     const a = placeEndgame(tiles, terrainOf, none, UTGARD, new Set([camp]), 5, 8);
     const b = placeEndgame(tiles, terrainOf, none, UTGARD, new Set([camp]), 5, 8);
 
+    const wallKeys = new Set(a.walls.map((w) => coordKey(w.coord)));
     expect(a).toEqual(b);
     expect(a.towers).toHaveLength(towerCountFor(tiles.length));
     for (const t of a.towers) {
-      expect(hexDistance(t, ORIGIN)).toBeGreaterThan(RingBands.outer[1] + 1);
+      expect(hexDistance(t, ORIGIN)).toBeGreaterThan(RingBands.inner[1] + 1);
       expect(coordKey(t)).not.toBe(camp);
+      expect(wallKeys.has(coordKey(t))).toBe(false);
+      for (const n of neighbors(t)) expect(wallKeys.has(coordKey(n))).toBe(false);
     }
     for (let i = 0; i < a.towers.length; i++) {
       for (let j = i + 1; j < a.towers.length; j++) expect(hexDistance(a.towers[i]!, a.towers[j]!)).toBeGreaterThanOrEqual(MinTowerSpacing);
     }
   });
 
+  it('may put a tower between the two wall lines when a small island leaves room there', () => {
+    const { tiles, terrainOf } = disc(BETWEEN.radius);
+    const { walls, towers } = placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), BETWEEN.seed, BETWEEN.islandIndex);
+    const nearestOuterWall = Math.min(...walls.filter((w) => w.ring === 'outer').map((w) => hexDistance(w.coord, ORIGIN)));
+
+    expect(walls.some((w) => w.ring === 'outer')).toBe(true);
+    expect(towers.some((t) => hexDistance(t, ORIGIN) < nearestOuterWall)).toBe(true);
+  });
+
   it('places no tower when the island ends inside the tower distance', () => {
-    const { tiles, terrainOf } = disc(RingBands.outer[1] + 1);
+    const { tiles, terrainOf } = disc(RingBands.inner[1] + 1);
     expect(placeEndgame(tiles, terrainOf, none, UTGARD, new Set(), 5, 8).towers).toEqual([]);
   });
 });

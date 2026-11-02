@@ -64,8 +64,10 @@ Existing worlds get them on their next reseed.
 - Count per island: `clamp(round(land / TilesPerTower), MinTowers, MaxTowers)` with `TilesPerTower` = 120,
   3 to 6.
 - **Spread over the island, not a ring**: farthest-point sampling (like camp placement) over land hexes that
-  could take a building, more than `RingBands.outer` max + 1 = 12 hexes from Utgard's anchor, at least `MinTowerSpacing` = 5 from each other and
-  from Utgard's footprint, not on a camp or giant hex.
+  could take a building, more than `RingBands.inner` max + 1 = 7 hexes from Utgard's anchor (outside the inner wall line), not on or next to a wall hex,
+  at least `MinTowerSpacing` = 5 from each other and from Utgard's footprint, not on a camp, river or giant hex. Nothing forces a
+  tower between the two lines: the sampling picks them there only when that spot is the farthest one, so small islands may get one
+  between the lines and large ones keep all outside.
 - Art: `jotunwatchtower_*` (three stages: `level002` garrisoned, `level001` damaged, `level000` taken/empty).
 
 ### Movement

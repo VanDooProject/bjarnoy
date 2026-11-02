@@ -598,7 +598,8 @@ internal static class EndgameGenerator
         int seed)
     {
         var count = EndgameRules.TowerCountFor(islandTiles.Count);
-        var minDistanceFromAnchor = EndgameRules.RingBand(UtgardRing.Outer).Max + 1;
+        // Towers stand outside the inner wall line - between the two lines when there is room, or beyond the outer one.
+        var minDistanceFromAnchor = EndgameRules.RingBand(UtgardRing.Inner).Max + 1;
 
         var candidates = new List<(HexCoord Coord, double Hash)>();
         foreach (var hex in islandTiles.OrderBy(c => c.Q).ThenBy(c => c.R))
@@ -614,6 +615,11 @@ internal static class EndgameGenerator
             }
 
             if (hex.DistanceTo(anchor) <= minDistanceFromAnchor)
+            {
+                continue;
+            }
+
+            if (hex.Neighbours().Any(wallHexes.Contains))
             {
                 continue;
             }

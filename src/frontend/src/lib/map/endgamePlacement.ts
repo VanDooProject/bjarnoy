@@ -445,7 +445,8 @@ function placeTowers(
   seed: number,
 ): AxialCoord[] {
   const count = towerCountFor(islandTiles.length);
-  const minDistanceFromAnchor = RingBands.outer[1] + 1;
+  // Towers stand outside the inner wall line - between the two lines when there is room, or beyond the outer one.
+  const minDistanceFromAnchor = RingBands.inner[1] + 1;
   const fp = footprint(anchor);
 
   const candidates: { coord: AxialCoord; hash: number }[] = [];
@@ -455,6 +456,7 @@ function placeTowers(
     const key = coordKey(hex);
     if (isRiver(hex) || giantHexes.has(key) || campHexes.has(key) || wallHexes.has(key)) continue;
     if (hexDistance(hex, anchor) <= minDistanceFromAnchor) continue;
+    if (neighbors(hex).some((n) => wallHexes.has(coordKey(n)))) continue;
     // Utgard's footprint is the anchor and its neighbours; a tower keeps MinTowerSpacing from every one of them.
     if (fp.some((f) => hexDistance(f, hex) < MinTowerSpacing)) continue;
     candidates.push({ coord: hex, hash: hash2(hex.q, hex.r, seed + 401) });
