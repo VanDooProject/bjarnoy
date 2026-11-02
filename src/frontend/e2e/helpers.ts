@@ -13,10 +13,9 @@ import { AdminAuthFixture } from './pages/AdminAuthFixture';
  * is also the *fastest* path to `auth.isAuthenticated === true` this suite
  * has, not just the most convenient.
  *
- * Added for the returning-player nav work: HudNav's "World map" and
- * "Leaderboards" links now require `auth.isAuthenticated` (previously just a
- * founded settlement, or nothing at all — see HudNav.vue), so any spec that
- * clicks either now needs a real authenticated session first. Must be
+ * Added for the returning-player nav work: HudNav's "Leaderboards" link
+ * requires `auth.isAuthenticated` (see useHudNavEntries.ts), so any spec that
+ * clicks it needs a real authenticated session first. Must be
  * called before the page's first navigation — an `addInitScript` only takes
  * effect on a *subsequent* one — so call it before
  * `foundSettlement`/`SettlementPage.found`/`WorldMapPage.open`, not after.
@@ -65,10 +64,13 @@ export async function waitForRenderedFrames(page: Page, frames = 2): Promise<voi
 }
 
 /**
- * Navigates to the world map and waits for its renderer to be ready.
+ * Switches the map to world mode and waits for its renderer to be ready.
  *
- * Real client-side navigation (the HudNav "World map" button), not
- * `page.goto('/world')` — a hard navigation reloads the whole app, and in
+ * Players switch by zooming out; world mode is marked by the `#world` hash on
+ * `/settlement` (lib/mapModeRoute.ts), so this sets that hash — a fragment
+ * navigation the router picks up without reloading — rather than replaying a
+ * whole zoom gesture (zoom-transition.spec.ts covers the gesture itself).
+ * Not `page.goto('/settlement#world')` — a hard navigation reloads the whole app, and in
  * demo mode `hasFoundedSettlement` is intentionally never persisted to
  * localStorage (player.ts's own remarks: demo mode's WorldModel is pure
  * in-memory, so every reload starts a fresh session). A reload here silently
@@ -77,15 +79,17 @@ export async function waitForRenderedFrames(page: Page, frames = 2): Promise<voi
  * of this function was actually driving the *landing page's* canvas, not
  * the world map, without a single assertion failing to say so.
  *
- * docs/design/zoom-transition.md: `/world` and `/settlement` now share one
+ * docs/design/zoom-transition.md: world and settlement mode share one
  * persistent renderer (MapView.vue), so `data-map-ready` alone no longer
  * distinguishes "the world map is up" from "the settlement view never went
  * away" — waiting for the URL first is what actually confirms the mode
  * switch happened.
  */
 export async function gotoWorldMap(page: Page): Promise<void> {
-  await page.locator('.hud-nav button', { hasText: 'World map' }).click();
-  await page.waitForURL('**/world');
+  await page.evaluate(() => {
+    window.location.hash = 'world';
+  });
+  await page.waitForURL('**/settlement#world');
   await waitForMapReady(page);
 }
 
@@ -210,13 +214,13 @@ export async function enterSettlementAfterOnboarding(page: Page): Promise<void> 
     return;
   }
   // A wide bar carries the nav inline; a phone bar keeps it in the drawer.
-  const inlineNav = page.locator('.hud-nav button', { hasText: 'Settlement' });
+  const inlineNav = page.locator('.hud-nav a.link', { hasText: 'Settlement' });
   if (await inlineNav.isVisible()) {
     await inlineNav.click();
     return;
   }
   await openHudDrawer(page);
-  await page.locator('.hud-drawer button', { hasText: 'Settlement' }).click();
+  await page.locator('.hud-drawer .drawer-links a', { hasText: 'Settlement' }).click();
 }
 
 /**
