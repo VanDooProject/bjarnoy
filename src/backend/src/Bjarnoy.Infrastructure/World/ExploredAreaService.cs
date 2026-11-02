@@ -386,7 +386,7 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException) when (inserting)
+        catch (DbUpdateException ex) when (inserting && !ConcurrentWriteExecutor.IsRetryable(ex))
         {
             // Two concurrent fog requests for a new player both saw no row
             // for a chunk and both inserted; the primary key let one win.

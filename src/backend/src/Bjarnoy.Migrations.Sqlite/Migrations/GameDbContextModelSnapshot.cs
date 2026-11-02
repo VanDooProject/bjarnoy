@@ -1222,6 +1222,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("WorldId")
                         .HasColumnType("TEXT");
 
@@ -1328,6 +1332,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<int>("State")
                         .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("WorldId")
                         .HasColumnType("TEXT");

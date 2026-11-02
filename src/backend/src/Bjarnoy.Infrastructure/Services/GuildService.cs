@@ -129,7 +129,7 @@ public sealed class GuildService(
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (!ConcurrentWriteExecutor.IsRetryable(ex))
         {
             // Two founders raced on the same name/tag, or the same player
             // founded twice from two requests. The unique indexes are what
@@ -243,7 +243,7 @@ public sealed class GuildService(
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (!ConcurrentWriteExecutor.IsRetryable(ex))
         {
             _dbContext.Entry(membership).State = EntityState.Detached;
             return new GuildMembershipResult(GuildRejection.AlreadyInAGuild);

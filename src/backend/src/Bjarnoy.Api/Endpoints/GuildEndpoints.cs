@@ -31,7 +31,8 @@ public static class GuildEndpoints
         worlds.MapPost("/{worldId:guid}/guilds", Create)
             .WithName("CreateGuild")
             .WithSummary("Founds a guild in a world. The founder becomes its Leader.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         worlds.MapGet("/{worldId:guid}/guilds", ListForWorld)
             .WithName("ListWorldGuilds")
@@ -56,32 +57,38 @@ public static class GuildEndpoints
         guilds.MapPost("/{guildId:guid}/join", Join)
             .WithName("JoinGuild")
             .WithSummary("Joins a guild, refused once its member cap is reached.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         guilds.MapPost("/{guildId:guid}/leave", Leave)
             .WithName("LeaveGuild")
             .WithSummary("Leaves a guild. The Leader may only leave alone, which disbands the guild.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         guilds.MapPost("/{guildId:guid}/members/{userId:guid}/kick", Kick)
             .WithName("KickGuildMember")
             .WithSummary("Removes another member. Leader kicks anyone; Officer kicks Members only.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         guilds.MapPut("/{guildId:guid}/members/{userId:guid}/role", SetRole)
             .WithName("SetGuildMemberRole")
             .WithSummary("Sets a member's role. Leader-only; promoting to Leader transfers leadership.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         guilds.MapPut("/{guildId:guid}/fee-tier", SetFeeTier)
             .WithName("SetGuildFeeTier")
             .WithSummary("Changes the guild's fee tier. Leader-only.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         guilds.MapPost("/{guildId:guid}/fee-payment", PayFee)
             .WithName("PayGuildFee")
             .WithSummary("Pays the guild's current fee from the caller's settlement in that world.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         guilds.MapGet("/{guildId:guid}/board/topics", ListTopics)
             .WithName("ListGuildTopics")
@@ -92,7 +99,8 @@ public static class GuildEndpoints
             .WithName("CreateGuildTopic")
             .WithSummary(
                 "Starts a board topic with its opening post. Kind 'report' flags it for a future game-event-report feature.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         guilds.MapGet("/{guildId:guid}/board/topics/{topicId:guid}", GetTopic)
             .WithName("GetGuildTopic")
@@ -102,7 +110,8 @@ public static class GuildEndpoints
         guilds.MapPost("/{guildId:guid}/board/topics/{topicId:guid}/posts", Reply)
             .WithName("ReplyToGuildTopic")
             .WithSummary("Replies to a board topic.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         guilds.MapGet("/{guildId:guid}/treaties", ListTreaties)
             .WithName("ListGuildTreaties")
@@ -112,7 +121,8 @@ public static class GuildEndpoints
         guilds.MapPost("/{guildId:guid}/treaties", ProposeTreaty)
             .WithName("ProposeGuildTreaty")
             .WithSummary("Proposes a peace treaty to another guild. Leader/Officer only.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         var treaties = app.MapGroup("/api/v1/treaties")
             .WithApiVersionSet(versionSet)
@@ -122,17 +132,20 @@ public static class GuildEndpoints
         treaties.MapPost("/{treatyId:guid}/accept", AcceptTreaty)
             .WithName("AcceptGuildTreaty")
             .WithSummary("Accepts a pending peace treaty proposal. Leader/Officer of the target guild only.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         treaties.MapPost("/{treatyId:guid}/reject", RejectTreaty)
             .WithName("RejectGuildTreaty")
             .WithSummary("Rejects a pending peace treaty proposal. Leader/Officer of the target guild only.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         treaties.MapPost("/{treatyId:guid}/break", BreakTreaty)
             .WithName("BreakGuildTreaty")
             .WithSummary("Breaks an active peace treaty. Leader of either guild only.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         return app;
     }

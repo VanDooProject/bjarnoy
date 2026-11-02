@@ -36,27 +36,41 @@ public sealed class RealmDecayEndpointsTests : IAsyncLifetime
 
     private static string Unique(string prefix) => $"{prefix}-{Guid.CreateVersion7():N}"[..20];
 
-    private sealed record Scene(HttpClient Client, SettlementResponse Settlement, HexCoord Tower, HexCoord Lumberjack);
+    private sealed record Scene(HttpClient Client, SettlementResponse Settlement, HexCoord Tower, HexCoord Lumberjack, Guid WorldId);
 
-    /// <summary>A settlement whose longhouse has a tower in its disc and a lumberjack out on the tower's ground only.</summary>
-    private async Task<Scene> FoundWithChainedLumberjackAsync()
+    /// <summary>
+    /// A settlement whose longhouse has a tower in its disc and a lumberjack out on the tower's ground only. Pass
+    /// <paramref name="worldId"/> and another <paramref name="ownerId"/> to put a second player's settlement into the same
+    /// world, on the first start position the founding spacing accepts.
+    /// </summary>
+    private async Task<Scene> FoundWithChainedLumberjackAsync(Guid? worldId = null, string ownerId = OwnerId)
     {
         var client = _factory.CreateClient();
-        var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
+        worldId ??= (await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct)).Id;
+        var world = new { Id = worldId.Value };
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
-        var island = islands!.First(i => i.StartPositions.Count > 0);
-        var plot = island.StartPositions[0];
+        HttpResponseMessage? founded = null;
+        TileCoordinate? plot = null;
+        foreach (var (island, candidate) in islands!.SelectMany(i => i.StartPositions.Select(p => (Island: i, Plot: p))))
+        {
+            founded = await client.PostJsonAsync(
+                $"/api/v1/worlds/{world.Id}/settlements",
+                new FoundSettlementRequest(island.Id, candidate.Q, candidate.R, "Bjornstad", "Ulf", ownerId),
+                Ct);
+            if (founded.StatusCode == HttpStatusCode.Created)
+            {
+                plot = candidate;
+                break;
+            }
+        }
 
-        var founded = await client.PostJsonAsync(
-            $"/api/v1/worlds/{world.Id}/settlements",
-            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Bjornstad", "Ulf", OwnerId),
-            Ct);
-        Assert.Equal(HttpStatusCode.Created, founded.StatusCode);
+        Assert.NotNull(plot);
+        Assert.Equal(HttpStatusCode.Created, founded!.StatusCode);
         var settlement = await founded.ReadStrictAsync<SettlementResponse>(Ct);
-        client.DefaultRequestHeaders.Add("X-Owner-Id", OwnerId);
+        client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
 
-        var centre = new HexCoord(plot.Q, plot.R);
+        var centre = new HexCoord(plot!.Q, plot.R);
         var longhouseReach = Settlement.ClaimRadiusForLonghouseLevel(settlement.LonghouseLevel);
         var tower = new HexCoord(centre.Q + longhouseReach, centre.R);
         var lumberjack = new HexCoord(centre.Q + longhouseReach + 1, centre.R);
@@ -73,7 +87,7 @@ public sealed class RealmDecayEndpointsTests : IAsyncLifetime
             await db.SaveChangesAsync(Ct);
         }
 
-        return new Scene(client, settlement, tower, lumberjack);
+        return new Scene(client, settlement, tower, lumberjack, world.Id);
     }
 
     private static Task<SettlementResponse> ReadAsync(Scene scene) =>
@@ -145,6 +159,57 @@ public sealed class RealmDecayEndpointsTests : IAsyncLifetime
             Assert.Equal(LumberjackLevel - 1, stored.Level);
             Assert.NotNull(stored.OutsideRealmSince);
         }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task A_settlement_that_keeps_losing_a_write_race_does_not_stop_the_sweep_for_the_rest_of_its_world(int conflictingIndex)
+    {
+        var first = await FoundWithChainedLumberjackAsync();
+        var second = await FoundWithChainedLumberjackAsync(first.WorldId, "bjorn-player");
+        var interval = BuildingCatalogue.DecayInterval(BuildingType.Lumberjack);
+        await RazeTowerAsync(first);
+        await RazeTowerAsync(second);
+        _factory.Time.Advance(interval * 1.5);
+
+        // Whichever of the two the sweep reaches first, the one under attack loses every attempt (3 of them), and the
+        // other one must still be swept.
+        Scene[] scenes = [first, second];
+        var conflicting = scenes[conflictingIndex];
+        var other = scenes[1 - conflictingIndex];
+        _factory.Race.Arm(
+            conflicting.Settlement.Id,
+            () => SettlementRaceInterceptor.BumpAsync(_factory.Services, conflicting.Settlement.Id, Ct),
+            repeat: true);
+
+        int changed;
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            changed = await scope.ServiceProvider.GetRequiredService<SettlementService>().SweepRealmStateAsync(Ct);
+        }
+
+        _factory.Race.Disarm();
+        Assert.Equal(ConcurrentWriteExecutor.MaxAttempts, _factory.Race.Fired);
+        Assert.Equal(1, changed);
+        Assert.Equal(LumberjackLevel - 1, await StoredLumberjackLevelAsync(other));
+        Assert.Equal(LumberjackLevel, await StoredLumberjackLevelAsync(conflicting));
+
+        // The next sweep, with no race, catches the one that was skipped.
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            Assert.Equal(1, await scope.ServiceProvider.GetRequiredService<SettlementService>().SweepRealmStateAsync(Ct));
+        }
+
+        Assert.Equal(LumberjackLevel - 1, await StoredLumberjackLevelAsync(conflicting));
+    }
+
+    private async Task<int> StoredLumberjackLevelAsync(Scene scene)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        return (await db.PlacedBuildings.AsNoTracking()
+            .SingleAsync(b => b.SettlementId == scene.Settlement.Id && b.Type == BuildingType.Lumberjack, Ct)).Level;
     }
 
     [Fact]

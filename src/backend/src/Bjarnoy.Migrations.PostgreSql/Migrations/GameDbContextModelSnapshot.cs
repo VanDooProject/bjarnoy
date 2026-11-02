@@ -1227,6 +1227,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("WorldId")
                         .HasColumnType("uuid");
 
@@ -1333,6 +1337,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<int>("State")
                         .HasColumnType("integer");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("WorldId")
                         .HasColumnType("uuid");
