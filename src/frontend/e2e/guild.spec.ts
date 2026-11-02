@@ -24,7 +24,7 @@ test('the Alliance nav link opens the guild view as a modal over the map', { tag
 
   // Closing returns to a bare /settlement with no modal left behind.
   await dialog.locator('.close-button').click();
-  await expect(page).toHaveURL(/\/settlement$/);
+  await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 

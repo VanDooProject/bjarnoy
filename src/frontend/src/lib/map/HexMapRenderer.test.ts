@@ -109,6 +109,14 @@ describe('worldLayerOrder', () => {
     expect(indexIn('settlement', 'water')).toBeLessThan(indexIn('settlement', 'terrainTop'));
   });
 
+  it('puts the bog lake gust above the ground art and below the tall art in settlement mode', () => {
+    // So lily pads, boats and the fish weir (terrainTop) draw over the gust.
+    expect(indexIn('settlement', 'terrainBase')).toBeLessThan(indexIn('settlement', 'bogLake'));
+    // Regression: drawn after the bog edge fringe, the gust shaded the moss the fringe paints over the lake tile's rim.
+    expect(indexIn('settlement', 'bogLake')).toBeLessThan(indexIn('settlement', 'bogEdges'));
+    expect(indexIn('settlement', 'bogLake')).toBeLessThan(indexIn('settlement', 'terrainTop'));
+  });
+
   it('keeps the foam’s inward bleed clipped by real land geometry', () => {
     // §3.5: the foam band is allowed to run slightly onto land (the mask's G
     // channel), and in *both* views the land art draws above the mesh, so that
@@ -137,7 +145,7 @@ describe('worldLayerOrder', () => {
     // strokes) — settlement mode draws rivers as sprite tile art baked into
     // terrainBase/terrainTop instead (riverTexturesFor), so it never adds
     // 'rivers' to its own order.
-    const expectedLength = { world: 11, settlement: 10 } as const;
+    const expectedLength = { world: 12, settlement: 11 } as const;
     for (const mode of ['world', 'settlement'] as const) {
       const order = worldLayerOrder(mode);
       expect(new Set(order).size).toBe(order.length);
@@ -148,7 +156,9 @@ describe('worldLayerOrder', () => {
   it('draws the bog/grass edge right over the ground art, under everything else in settlement mode', () => {
     // bogEdge.ts: the border only touches the ground, so the water mesh, realm
     // borders, hover outline and every topping (reeds, trees, buildings) draw over it.
-    expect(indexIn('settlement', 'bogEdges')).toBe(indexIn('settlement', 'terrainBase') + 1);
+    // Only the bog lake gust sits between: it shades the ground art itself, and the fringe must cover it.
+    expect(indexIn('settlement', 'bogEdges')).toBe(indexIn('settlement', 'bogLake') + 1);
+    expect(indexIn('settlement', 'bogLake')).toBe(indexIn('settlement', 'terrainBase') + 1);
     for (const above of ['water', 'borders', 'hover', 'terrainTop']) {
       expect(indexIn('settlement', 'bogEdges')).toBeLessThan(indexIn('settlement', above));
     }

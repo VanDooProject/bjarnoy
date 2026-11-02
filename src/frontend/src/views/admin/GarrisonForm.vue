@@ -5,6 +5,7 @@ import { api, ApiError } from '../../api/client';
 import type { SettlementResponse, UnitStackResponse } from '../../api/types';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import type { MessageSchema } from '../../i18n/schema';
+import { useUnsavedInput } from '../../composables/useUnsavedInput';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -19,6 +20,7 @@ void catalogue.load();
 
 const unit = ref('');
 const count = ref(10);
+useUnsavedInput(() => count.value !== 10);
 const saving = ref(false);
 const error = ref<string | null>(null);
 

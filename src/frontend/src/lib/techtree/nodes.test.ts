@@ -71,7 +71,7 @@ describe('buildTechTreeNodes', () => {
       { text: 'Tower 5', kind: 'building' },
     ]);
     expect(wall.gives).toBe('Blocks every land army (a lone end is half open)');
-    expect(wall.category).toBe('military');
+    expect(wall.category).toBe('defense');
     // The Gate is a separate type with the same gate and prerequisite, merged into the card.
     expect(byType.palisadegate).toBeTruthy();
     expect(unlockLevel(byType.palisadegate!)).toBe(7);

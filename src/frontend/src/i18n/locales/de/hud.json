@@ -1,7 +1,6 @@
 {
   "nav": {
     "settlement": "Siedlung",
-    "worldMap": "Weltkarte",
     "leaderboards": "Ranglisten",
     "messages": "Nachrichten",
     "reports": "Meldungen",
@@ -154,9 +153,7 @@
       "level": "Stufe {level}",
       "upgradeTitle": "Ausbau auf Stufe {level}",
       "upgradeSub": "{building} · Stufe {from} → {to}",
-      "slots": "Bauplätze",
-      "slotsValue": "{needed} · {free} von {total} frei",
-      "slotsAll": "Alle ({total}) · {free} von {total} frei",
+      "givesTotal": "gesamt {amount}",
       "needResources": "Es fehlen {resources}",
       "needSlots": "Braucht {needed} Bauplatz · {free} von {total} frei | Braucht {needed} Bauplätze · {free} von {total} frei",
       "needSlotsNext": "Braucht {needed} Bauplatz · {free} von {total} frei · nächster frei in {time} | Braucht {needed} Bauplätze · {free} von {total} frei · nächster frei in {time}",

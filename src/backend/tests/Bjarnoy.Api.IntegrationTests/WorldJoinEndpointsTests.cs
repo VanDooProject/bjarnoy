@@ -103,7 +103,7 @@ public sealed class WorldJoinEndpointsTests(SqliteApiFixture fixture) : IClassFi
     }
 
     [Fact]
-    public async Task A_world_with_joins_closed_is_reported_unjoinable_with_reason()
+    public async Task A_world_with_joins_closed_is_listed_unjoinable_with_reason_for_admins()
     {
         using var client = _fixture.CreateClient();
         var world = await CreateWorldAsync();
@@ -115,7 +115,8 @@ public sealed class WorldJoinEndpointsTests(SqliteApiFixture fixture) : IClassFi
             Ct);
         Assert.Equal(HttpStatusCode.OK, patched.StatusCode);
 
-        client.DefaultRequestHeaders.Authorization = null;
+        // Players no longer see it at all (AdminWorldEndpointsTests covers
+        // that); an admin still gets it, marked unjoinable with its reason.
         var response = await client.GetAsync("/api/v1/worlds/joinable", Ct);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 

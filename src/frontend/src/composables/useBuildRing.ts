@@ -14,6 +14,7 @@ import { formatBuildingModifier, formatBuildingOutput } from '../lib/map/buildin
 import {
   buildingStatsAt,
   buildingUpgradeCost,
+  scaleOutput,
   type BuildingModifier,
   type BuildingOutput,
   SHRINE_BUILDING_TYPES,
@@ -117,6 +118,11 @@ const DEFENSE_CATEGORY: BuildCategory = {
   id: 'defense',
   buildings: [{ type: 'palisade' }, { type: 'palisadegate' }, { type: 'bridge' }],
 };
+// The Tower is a defence building too, and stands on grass, sand and forest; the bog ring keeps the wall-only category.
+const DEFENSE_TOWER_CATEGORY: BuildCategory = {
+  id: 'defense',
+  buildings: [{ type: 'tower' }, ...DEFENSE_CATEGORY.buildings],
+};
 const DEFENSE_SEA_CATEGORY: BuildCategory = { id: 'defense', buildings: [{ type: 'palisade' }] };
 // Bog ground offers what stands on its own bog kind (BuildingDefinition.RequiresBogKind / LakeShoreKinds, mirrored by
 // ringCatalogue.ts's buildingAllowedOnHex): plain moss takes the Clay Brickworks, the bog-ore works and the Tower, a creek the
@@ -153,7 +159,6 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
     {
       id: 'military',
       buildings: [
-        { type: 'tower' },
         { type: 'archeryrange' },
         { type: 'siegeworkshop' },
         { type: 'barracks' },
@@ -170,15 +175,11 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
         { type: 'druidhut' },
       ],
     },
-    DEFENSE_CATEGORY,
+    DEFENSE_TOWER_CATEGORY,
     SHRINE_CATEGORY,
   ],
-  sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }, DEFENSE_CATEGORY],
-  forest: [
-    { id: 'resource', buildings: [{ type: 'lumberjack' }] },
-    { id: 'military', buildings: [{ type: 'tower' }] },
-    DEFENSE_CATEGORY,
-  ],
+  sand: [{ id: 'military', buildings: [{ type: 'smithy' }] }, DEFENSE_TOWER_CATEGORY],
+  forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }, DEFENSE_TOWER_CATEGORY],
   // No new quarries can be built for now (BuildingCatalogue.NewPlacementDisabled); mountains offer nothing to build.
   mountain: [],
 };
@@ -372,7 +373,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
       cost,
       // Odin's Wisdom shortens every build in the settlement (`wisdomFactor`).
       time: definition ? formatBuildTime(definition.buildSeconds * wisdomFactor()) : undefined,
-      gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
+      gives: stats.output ? formatOutput(scaleOutput(stats.output, world.worldSpeedFactor)) : stats.modifier ? formatModifier(stats.modifier) : undefined,
       locks,
       warning: type === 'tower' ? towerCampWarning(coord) : undefined,
       art: buildingArt(type, 1),

@@ -105,7 +105,7 @@ test.describe('mobile HUD drawer, touch', () => {
     await touchDrag(page, start.x, start.y, openBar.y + openBar.height + 4);
     await expectDrawerClosed(page);
     // The drag must not have turned into a tap on the button it started on.
-    await expect(page).toHaveURL(/\/settlement$/);
+    await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
   });
 
   test('a touch tap on the grip still toggles, and the first tap inside after a touch drag navigates', async ({ page }) => {
@@ -122,7 +122,7 @@ test.describe('mobile HUD drawer, touch', () => {
     await touchDrag(page, bar.x + bar.width / 2, bar.y + bar.height / 2, bar.y + bar.height + 260);
     await expectDrawerOpen(page);
     await page
-      .getByRole('button', { name: /Reports/ })
+      .getByRole('link', { name: /Reports/ })
       .first()
       .tap();
     await expect(page).toHaveURL(/\/reports/);
@@ -142,7 +142,7 @@ test.describe('mobile HUD drawer, touch', () => {
     // has to round-trip to the page between the flick and the tap.
     await page.locator('.hud-grip').tap();
     await expectDrawerOpen(page);
-    const link = (await page.getByRole('button', { name: /Reports/ }).first().boundingBox())!;
+    const link = (await page.getByRole('link', { name: /Reports/ }).first().boundingBox())!;
     await page.locator('.hud-grip').tap();
     await expectDrawerClosed(page);
 

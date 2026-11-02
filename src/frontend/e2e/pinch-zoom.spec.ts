@@ -41,7 +41,7 @@ test.describe('pinch-to-zoom on touch', { tag: '@g3' }, () => {
     const world = await WorldMapPage.open(page);
     const centre = await world.centre();
 
-    await expect(page).toHaveURL(/\/world/);
+    await expect(page).toHaveURL(/\/settlement#world$/);
     // Bounded loop rather than a fixed gap: this only needs to prove the
     // transition fires on a sustained pinch gesture, not pin the exact gap
     // it takes to cross DEFAULT_ENTER_SETTLEMENT_ZOOM.
@@ -50,9 +50,9 @@ test.describe('pinch-to-zoom on touch', { tag: '@g3' }, () => {
       const nextGap = gap * 1.8;
       await pinch(page, centre, gap, nextGap, 4);
       gap = nextGap;
-      if (page.url().includes('/settlement')) break;
+      if (!page.url().includes('#world')) break;
     }
-    await expect(page).toHaveURL(/\/settlement/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/, { timeout: 10_000 });
   });
 
   test('a pinch never opens the ring menu, even one that ends within click-slop distance', async ({ page }) => {

@@ -49,6 +49,7 @@ export function useHexMapRenderer(
   let resizeObserver: ResizeObserver | null = null;
   let stopAnimationWatch: (() => void) | null = null;
   let stopWaterMotionWatch: (() => void) | null = null;
+  let stopLakeMotionWatch: (() => void) | null = null;
   let stopFogMotionWatch: (() => void) | null = null;
   // Bumped on every (re)mount attempt and on unmount, so a mount that
   // resolves after being superseded (retry, or the component going away)
@@ -62,6 +63,8 @@ export function useHexMapRenderer(
     stopAnimationWatch = null;
     stopWaterMotionWatch?.();
     stopWaterMotionWatch = null;
+    stopLakeMotionWatch?.();
+    stopLakeMotionWatch = null;
     stopFogMotionWatch?.();
     stopFogMotionWatch = null;
     r?.destroy();
@@ -108,6 +111,9 @@ export function useHexMapRenderer(
     // the device's reduced-motion preference). Applied immediately for the
     // same reason as the animation watch above.
     stopWaterMotionWatch = watch(() => motionPreferences.waterEnabled, (enabled) => r.setWaterMotion(enabled), {
+      immediate: true,
+    });
+    stopLakeMotionWatch = watch(() => motionPreferences.lakesEnabled, (enabled) => r.setLakeMotion(enabled), {
       immediate: true,
     });
     stopFogMotionWatch = watch(() => motionPreferences.fogEnabled, (enabled) => r.setFogMotion(enabled), {

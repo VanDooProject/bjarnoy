@@ -8,7 +8,7 @@ import { WorldMapPage } from './pages';
 // "same hex lattice as the settlement view, flattened"), so both views need
 // the same regression coverage.
 //
-// zip 6a: founding now only ever happens on the landing page — /world
+// zip 6a: founding now only ever happens on the landing page — world mode
 // requires an already-founded settlement (see router/index.ts's guard), so
 // every test here founds one first via `WorldMapPage.open()`, then still has
 // to pan/zoom/hover through a second real render. 120s (not the 90s these
@@ -44,7 +44,7 @@ test.describe('world map interactions', () => {
     // WorldMapPage.open() founds a settlement, so the world map is fogged
     // (HexMapRenderer.isFogActive(): world mode fogs once the local player
     // owns any settlement) — before gotoWorldMap navigated via a real
-    // client-side click (see helpers.ts), this test had actually been
+    // client-side navigation (see helpers.ts), this test had actually been
     // exercising the landing page's own never-fogged preview the whole
     // time, since its `.map-container[data-map-ready]` satisfied the same
     // wait and a hard `page.goto('/world')` silently lost demo mode's

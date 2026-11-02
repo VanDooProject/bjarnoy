@@ -65,6 +65,7 @@ const CATEGORY_LABELS: Record<(typeof GRAPH_CATEGORY_ORDER)[number], string> = {
   anchor: t('docs.techTree.categories.anchor'),
   production: t('docs.techTree.categories.production'),
   military: t('docs.techTree.categories.military'),
+  defense: t('docs.techTree.categories.defense'),
   logistics: t('docs.techTree.categories.logistics'),
   religion: t('docs.techTree.categories.religion'),
   water: t('docs.techTree.categories.water'),

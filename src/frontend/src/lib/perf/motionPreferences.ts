@@ -1,5 +1,5 @@
 // Per-device motion settings beyond the map's building clip art
-// (animationPreference.ts): water, fog and HUD motion. Each is
+// (animationPreference.ts): water, lake wind, fog and HUD motion. Each is
 // 'auto' | 'on' | 'off'; 'auto' follows the device's own "reduce motion"
 // setting (animationPreference.reducedMotion, a live OS media query), an
 // explicit 'on'/'off' wins over it. Reactive singleton in the same style
@@ -11,11 +11,12 @@ import { reactive } from 'vue';
 import { animationPreference, type AnimationSetting } from './animationPreference';
 
 export type MotionSetting = AnimationSetting;
-export type MotionKey = 'water' | 'fog' | 'hud';
+export type MotionKey = 'water' | 'lakes' | 'fog' | 'hud';
 export type MotionPromptAnswer = 'on' | 'dismissed';
 
 const KEYS: Record<MotionKey, string> = {
   water: 'bjarnoy.motion.water',
+  lakes: 'bjarnoy.motion.lakes',
   fog: 'bjarnoy.motion.fog',
   hud: 'bjarnoy.motion.hud',
 };
@@ -57,6 +58,7 @@ export function resolveMotion(setting: MotionSetting, reducedMotion: boolean): b
 
 const state = reactive({
   water: readSetting('water'),
+  lakes: readSetting('lakes'),
   fog: readSetting('fog'),
   hud: readSetting('hud'),
   prompt: readPrompt() as MotionPromptAnswer | null,
@@ -74,6 +76,12 @@ export const motionPreferences = {
   set water(value: MotionSetting) {
     setMotion('water', value);
   },
+  get lakes(): MotionSetting {
+    return state.lakes;
+  },
+  set lakes(value: MotionSetting) {
+    setMotion('lakes', value);
+  },
   get fog(): MotionSetting {
     return state.fog;
   },
@@ -88,6 +96,10 @@ export const motionPreferences = {
   },
   get waterEnabled(): boolean {
     return resolveMotion(state.water, animationPreference.reducedMotion);
+  },
+  /** The wind gust crossing the bog lakes; hidden (not frozen) when off. */
+  get lakesEnabled(): boolean {
+    return resolveMotion(state.lakes, animationPreference.reducedMotion);
   },
   get fogEnabled(): boolean {
     return resolveMotion(state.fog, animationPreference.reducedMotion);
@@ -105,14 +117,16 @@ export const motionPreferences = {
       state.prompt === null &&
       animationPreference.setting === 'auto' &&
       state.water === 'auto' &&
+      state.lakes === 'auto' &&
       state.fog === 'auto' &&
       state.hud === 'auto'
     );
   },
-  /** "Turn on": every animation setting to 'on' (buildings, water, fog, HUD) and the prompt answered. */
+  /** "Turn on": every animation setting to 'on' (buildings, water, lake wind, fog, HUD) and the prompt answered. */
   turnAllOn(): void {
     animationPreference.setting = 'on';
     setMotion('water', 'on');
+    setMotion('lakes', 'on');
     setMotion('fog', 'on');
     setMotion('hud', 'on');
     state.prompt = 'on';

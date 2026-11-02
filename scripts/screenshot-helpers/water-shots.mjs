@@ -41,7 +41,7 @@ const setFlags = (page, water = {}, fog = {}) =>
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-// The world map stops click HudNav's "World map" button, which needs a player session.
+// Logged in, like the e2e suite's world-map specs.
 await loginDemoPlayer(page);
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e.message)));
@@ -111,7 +111,10 @@ await page.evaluate(() => {
   window.__waterTuning.causticCullHexes = 0.1;
 });
 
-await page.getByRole('button', { name: /world map/i }).first().click();
+// World mode is /settlement#world (players reach it by zooming out).
+await page.evaluate(() => {
+  window.location.hash = 'world';
+});
 await page.waitForTimeout(2500);
 // The world map keeps the camera where the close-up shots left it, out on open
 // water; bring it back to the home settlement so the shots have a coastline.

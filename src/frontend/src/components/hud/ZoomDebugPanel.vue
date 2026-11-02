@@ -1,10 +1,11 @@
 <script setup lang="ts">
 // Tuning panel for the zoom-driven world<->settlement transition — see
 // docs/design/zoom-transition.md §2. Mounted by MapView.vue (the shared
-// /world and /settlement host) under ?debug=1, same as the fog/water panels.
+// settlement/world map host) under ?debug=1, same as the fog/water panels.
 import { onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import DebugPanel from './DebugPanel.vue';
+import { WORLD_HASH } from '../../lib/mapModeRoute';
 import { clampTuning, zoomTransitionTuning, type ZoomTransitionTuning } from '../../lib/map/zoomTransition';
 import type { HexMapRenderer } from '../../lib/map/HexMapRenderer';
 
@@ -161,7 +162,7 @@ const FORCE_WORLD_LABEL = 'World';
       <span>{{ FORCE_VIEW_LABEL }}</span>
       <div class="force-buttons">
         <button type="button" @click="router.push('/settlement')">{{ FORCE_SETTLEMENT_LABEL }}</button>
-        <button type="button" @click="router.push('/world')">{{ FORCE_WORLD_LABEL }}</button>
+        <button type="button" @click="router.push({ path: '/settlement', hash: WORLD_HASH })">{{ FORCE_WORLD_LABEL }}</button>
       </div>
     </div>
   </DebugPanel>

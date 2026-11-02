@@ -24,6 +24,7 @@ import { api } from '../../api/client';
 import { apiErrorMessage } from '../../i18n/apiErrors';
 import { DEMO_MODE } from '../../config';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
+import { useUnsavedInput } from '../../composables/useUnsavedInput';
 import { SETTLERS_PER_FOUNDING } from '../../lib/founding';
 import type { ArmySummary, RenownResponse, SettlementResponse } from '../../api/types';
 
@@ -48,6 +49,7 @@ const foundingConvoys = computed(() => convoys.value.filter((a) => a.mission ===
 // Founding-dispatch form.
 const destQ = ref(0);
 const destR = ref(0);
+useUnsavedInput(() => destQ.value !== 0 || destR.value !== 0);
 // The founding convoy is always 5 settlers (`SETTLERS_PER_FOUNDING`);
 // the backend rejects provisions above their combined `foodCarryCapacity`
 // (`ProvisionsExceedCarryCapacity`), so the form defaults to and is capped at

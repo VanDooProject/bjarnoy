@@ -46,4 +46,21 @@ describe('GuidancePointer', () => {
     expect(style).toContain('--anchor-y: 456px');
     wrapper.unmount();
   });
+
+  it('plays one poke each time nudge changes', async () => {
+    vi.useFakeTimers();
+    const wrapper = mount(GuidancePointer, {
+      props: { coord: { q: 0, r: 0 }, renderer: null, label: 'x', nudge: 0 },
+    });
+    const poke = () => wrapper.get('[data-testid="guidance-poke"]');
+    expect(poke().classes()).not.toContain('poking');
+    await wrapper.setProps({ nudge: 1 });
+    vi.advanceTimersToNextFrame();
+    await wrapper.vm.$nextTick();
+    expect(poke().classes()).toContain('poking');
+    await poke().trigger('animationend');
+    expect(poke().classes()).not.toContain('poking');
+    wrapper.unmount();
+    vi.useRealTimers();
+  });
 });

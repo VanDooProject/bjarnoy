@@ -3,11 +3,10 @@
 // HexMapRenderer through a StaticWorldModel (like WallExample.vue and LandMovementExample.vue). A step picker adds the towers one by
 // one; every step re-claims the ground through the model itself (lib/docs/realmExample.ts), so the gold border is the real
 // realm border the map draws round your own territory.
-import { computed, ref, watch } from 'vue';
+import { ref, watch } from 'vue';
 import { useHexMapRenderer } from '../../composables/useHexMapRenderer';
 import { StaticWorldModel } from '../../lib/map/StaticWorldModel';
 import { REALM_EXAMPLE_PLAYER, REALM_EXAMPLE_STEPS, applyRealmExampleStep } from '../../lib/docs/realmExample';
-import DocsPicker from './DocsPicker.vue';
 
 const step = ref(0);
 const world = new StaticWorldModel();
@@ -34,9 +33,7 @@ watch(step, (next) => {
   renderer.value?.forceRebuild();
 });
 
-const options = computed(() =>
-  REALM_EXAMPLE_STEPS.map((_, i) => ({ value: i, label: String(i + 1) })),
-);
+const lastStep = REALM_EXAMPLE_STEPS.length - 1;
 </script>
 
 <template>
@@ -45,7 +42,10 @@ const options = computed(() =>
       <canvas ref="canvas" />
     </div>
     <p class="caption" data-testid="realm-example-caption">{{ $t(`docs.realm.example.steps.${step + 1}`) }}</p>
-    <DocsPicker v-model="step" :label="$t('docs.realm.example.step')" :options="options" />
+    <label class="step-slider">
+      <span class="step-label">{{ $t('docs.realm.example.step') }} {{ step + 1 }} / {{ lastStep + 1 }}</span>
+      <input v-model.number="step" type="range" min="0" :max="lastStep" step="1" data-testid="realm-example-slider" />
+    </label>
   </div>
 </template>
 
@@ -77,5 +77,25 @@ const options = computed(() =>
   line-height: 1.5;
   color: var(--muted);
   min-height: 3em;
+}
+.step-slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+.step-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.step-slider input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--gold);
 }
 </style>

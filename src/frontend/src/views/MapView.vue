@@ -31,6 +31,8 @@ import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
+import { WORLD_HASH } from '../lib/mapModeRoute';
+import { parseCameraHash, serializeCameraHash } from '../lib/mapCameraHash';
 import { useAuthStore } from '../stores/auth';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
@@ -50,7 +52,7 @@ import { useIsMobile } from '../composables/useIsMobile';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { buildingArt } from '../lib/map/buildingArt';
-import { buildingStatsAt, buildingUpgradeCost } from '../lib/map/buildingEconomy';
+import { buildingStatsAt, buildingUpgradeCost, scaleOutput, upgradeRateGain } from '../lib/map/buildingEconomy';
 import { formatBuildTime, formatMissingResources, longhouseLock } from '../lib/map/ringCatalogue';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
@@ -101,15 +103,16 @@ const buildingCatalogue = useBuildingCatalogueStore();
 const route = useRoute();
 const router = useRouter();
 
-// One view/one persistent renderer serves both /world and /settlement now
-// (docs/design/zoom-transition.md §5, option (a)) — the zoom-driven
+// One view/one persistent renderer serves both the settlement and the world
+// map on one route (`/settlement`, world mode marked by `#world` — see
+// lib/mapModeRoute.ts; docs/design/zoom-transition.md §5, option (a)) — the zoom-driven
 // transition needs the same HexMapRenderer instance to survive the switch
 // (no teardown/flash, fog persists uninterrupted), which two independently-
 // mounted views/renderers per route could never give it. `mode` is derived
-// from the route rather than tracked as separate local state, so a nav-button
-// click, browser back/forward, or a direct URL load all agree with the
+// from the route rather than tracked as separate local state, so a zoom
+// crossing, a nav click, browser back/forward, or a direct URL load all agree with the
 // renderer on what to show.
-const mode = computed<RenderMode>(() => (route.name === 'world' ? 'world' : 'settlement'));
+const mode = computed<RenderMode>(() => (route.hash === WORLD_HASH ? 'world' : 'settlement'));
 // World map's own sea backdrop (must match WorldMapCanvas.vue's — that
 // component is still used standalone by AdminWorldReseedView's world
 // preview, which has no settlement/ring-menu UI to merge and so keeps its
@@ -124,7 +127,7 @@ const WORLD_SEA_BACKGROUND = 'radial-gradient(115% 100% at 45% 40%, #2a92ae 0%, 
 let zoomDrivenTransition = false;
 function onZoomModeChange(next: RenderMode) {
   zoomDrivenTransition = true;
-  router.push(next === 'settlement' ? '/settlement' : '/world');
+  router.push({ path: '/settlement', hash: next === 'world' ? WORLD_HASH : '' });
 }
 
 // ?debug=1 surfaces FogDebugPanel — same idea as window.__fogDebug (main.ts)
@@ -135,6 +138,36 @@ const showFogDebug = useFogDebug();
 const isMobile = useIsMobile();
 const queueDrawerOpen = ref(false);
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
+
+// Settlement mode keeps its camera in the URL hash (lib/mapCameraHash.ts), so a reload or a shared link
+// lands on the same spot. Read once, before the first camera change rewrites the hash; a missing or
+// invalid hash leaves the default framing.
+const initialCameraView = mode.value === 'settlement' ? parseCameraHash(route.hash) : null;
+const CAMERA_HASH_DEBOUNCE_MS = 300;
+let cameraHashTimer: ReturnType<typeof setTimeout> | undefined;
+function onCameraChange() {
+  clearTimeout(cameraHashTimer);
+  cameraHashTimer = setTimeout(writeCameraHash, CAMERA_HASH_DEBOUNCE_MS);
+}
+function writeCameraHash() {
+  const renderer = canvasRef.value?.renderer;
+  if (!renderer || mode.value !== 'settlement' || route.path !== '/settlement') return;
+  // Not router.replace: that would run the route watchers; vue-router keeps its own state in history.state.
+  const hash = serializeCameraHash(renderer.cameraView);
+  history.replaceState(history.state, '', `${location.pathname}${location.search}${hash}`);
+}
+onUnmounted(() => clearTimeout(cameraHashTimer));
+// Once the renderer has mounted and framed the settlement itself, the hash's view wins over that default.
+if (initialCameraView) {
+  const stopRestore = watch(
+    () => canvasRef.value?.renderer,
+    (renderer) => {
+      if (!renderer) return;
+      renderer.restoreCameraView(initialCameraView.coord, initialCameraView.zoom);
+      stopRestore();
+    },
+  );
+}
 function onFogDebugChange() {
   canvasRef.value?.renderer?.forceRebuild();
 }
@@ -791,6 +824,8 @@ function upgradeActionFor(tile: Tile): RingAction {
   const hexBusy = world.hud.queue.some((o) => o.q === tile.q && o.r === tile.r);
   const availability = availabilityFor(cost, upgradeDefinition, locks.length > 0, hexBusy);
   const stats = buildingStatsAt(type, nextLevel, tile, tileAt);
+  // Production is per hour at the world's speed: the card shows the gain, and the new total next to it.
+  const rate = upgradeRateGain(buildingStatsAt(type, level, tile, tileAt).output, stats.output, world.worldSpeedFactor);
   const missing = formatMissingResources(cost, world.hud.available);
   const blocked = availability.state === 'locked' || availability.state === 'waiting';
   return {
@@ -812,7 +847,14 @@ function upgradeActionFor(tile: Tile): RingAction {
       sub: t('hud.ringMenu.card.upgradeSub', { building: buildingName(type), from: level, to: nextLevel }),
       cost,
       time: upgradeDefinition ? formatBuildTime(upgradeDefinition.buildSeconds * wisdomFactor()) : undefined,
-      gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
+      gives: rate
+        ? formatOutput(rate.gain)
+        : stats.output
+          ? formatOutput(scaleOutput(stats.output, world.worldSpeedFactor))
+          : stats.modifier
+            ? formatModifier(stats.modifier)
+            : undefined,
+      givesTotal: rate ? t('hud.ringMenu.card.givesTotal', { amount: rate.total }) : undefined,
       locks,
       art: buildingArt(type, nextLevel),
       availability,
@@ -850,7 +892,7 @@ function tileInfo(tile: Tile): RingInfo {
     // Like the hover tooltip, stats are for the player's own buildings only.
     if (mine) {
       const stats = buildingStatsAt(tile.buildingType, level, tile, tileAt);
-      if (stats.output) rows.push({ label: t('hud.hoverTooltip.output'), value: formatOutput(stats.output) });
+      if (stats.output) rows.push({ label: t('hud.hoverTooltip.output'), value: formatOutput(scaleOutput(stats.output, world.worldSpeedFactor)) });
       if (stats.modifier) rows.push({ label: t('hud.hoverTooltip.modifier'), value: formatModifier(stats.modifier) });
     }
     return {
@@ -1265,6 +1307,7 @@ async function upgrade() {
       @waypoint-move="onWaypointMove"
       @waypoint-tap="onWaypointTap"
       @zoom-mode-change="onZoomModeChange"
+      @camera-change="onCameraChange"
     />
     <div v-if="showFogDebug" class="fog-debug-stack">
       <!-- First in the stack on purpose: it is the one panel that answers

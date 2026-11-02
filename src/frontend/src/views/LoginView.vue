@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../stores/world';
 import { useLoginForm } from '../composables/useLoginForm';
+import { useUnsavedInput } from '../composables/useUnsavedInput';
 import type { MessageSchema } from '../i18n/schema';
 import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
@@ -13,6 +14,7 @@ const route = useRoute();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const { userName, password, submitting, error, login, restoreRealmIfAny } = useLoginForm();
+useUnsavedInput(() => userName.value !== '' || password.value !== '');
 
 // Login↔world linkage (docs/plans/returning-player-world-switching.md):
 // arriving here from ReturningPlayerMenu.vue's "Log in" link, in the

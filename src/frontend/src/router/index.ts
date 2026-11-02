@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { updateNavigationGuard } from '../lib/appUpdate';
 import { resolveAuthGuard } from './authGuard';
 import { awaitShowcaseManifests, startAtlasManifestLoad } from './atlasGuard';
 import { useAuthStore } from '../stores/auth';
@@ -49,19 +50,10 @@ export const router = createRouter({
       component: () => import('../views/RegisterView.vue'),
     },
     {
-      // /world and /settlement share one component (docs/design/
-      // zoom-transition.md §5) so the zoom-driven transition's persistent
-      // HexMapRenderer survives navigating between them — Vue Router only
-      // reuses a route's component instance (no remount) when both routes
-      // resolve to the exact same component, which a shared dynamic import
-      // guarantees (the module is cached, so both resolve to the same
-      // object). See MapView.vue's own `mode` computed for how it tells the
-      // two apart.
-      path: '/world',
-      name: 'world',
-      component: () => import('../views/MapView.vue'),
-    },
-    {
+      // Settlement and world map are one view (MapView.vue) on one route:
+      // the player switches between them by zooming (docs/design/
+      // zoom-transition.md), and world mode is marked by a `#world` hash so
+      // the URL (and the e2e suite) can still tell the two apart.
       path: '/settlement',
       name: 'settlement',
       component: () => import('../views/MapView.vue'),
@@ -296,6 +288,9 @@ export const router = createRouter({
   ],
 });
 
+// First guard: with a newer build deployed, navigating loads it instead of running old code.
+router.beforeEach(updateNavigationGuard);
+
 router.beforeEach(async (to) => {
   // Awaited once (see `ensureInitialized`) so a page reload restores a
   // logged-in user from the stored refresh token before this guard has to
@@ -310,13 +305,13 @@ router.beforeEach(async (to) => {
   const player = usePlayerStore();
   // zip 6a: founding (and the guided build-2-more-buildings onboarding that
   // follows it) only ever happens on the landing page now — the world map
-  // never founds a settlement. So `/world` and `/settlement` both require an
+  // never founds a settlement. So `/settlement` (world mode included) requires an
   // already-founded settlement, and `/` itself is done being the founding
   // surface once onboarding is complete.
   if (to.name === 'landing' && player.hasFoundedSettlement && player.onboardingComplete) {
     return { name: 'settlement' };
   }
-  if ((to.name === 'settlement' || to.name === 'world') && !player.hasFoundedSettlement) {
+  if (to.name === 'settlement' && !player.hasFoundedSettlement) {
     return { name: 'landing' };
   }
   return true;

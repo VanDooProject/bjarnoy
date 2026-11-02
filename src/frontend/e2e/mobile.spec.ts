@@ -358,7 +358,7 @@ test.describe('phone overlay layering', { tag: '@g1' }, () => {
     await expect(trigger).toContainText('Name your jarl');
 
     await page.getByTestId('onboarding-continue').click();
-    await expect(page).toHaveURL(/\/settlement$/);
+    await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
     await waitForMapReady(page);
     await expect(trigger).toBeVisible();
     await expect(trigger).toContainText('Name your jarl');
@@ -406,7 +406,7 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
     await SettlementPage.found(page);
 
     await openHudDrawer(page);
-    await page.getByRole('button', { name: 'Leaderboards' }).click();
+    await page.getByRole('link', { name: 'Leaderboards' }).click();
     await expect(page).toHaveURL(/\/leaderboards$/);
 
     const dialog = page.getByRole('dialog');
@@ -416,7 +416,7 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
     await expect(page.locator('canvas')).toBeVisible();
 
     await page.locator('.back-button').click();
-    await expect(page).toHaveURL(/\/settlement$/);
+    await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
@@ -425,7 +425,7 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
     await SettlementPage.found(page);
 
     await openHudDrawer(page);
-    await page.getByRole('button', { name: 'Alliance' }).click();
+    await page.getByRole('link', { name: 'Alliance' }).click();
     await expect(page).toHaveURL(/\/guild$/);
 
     const dialog = page.getByRole('dialog');
@@ -434,7 +434,7 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
     await expect(page.locator('canvas')).toBeVisible();
 
     await page.locator('.back-button').click();
-    await expect(page).toHaveURL(/\/settlement$/);
+    await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
