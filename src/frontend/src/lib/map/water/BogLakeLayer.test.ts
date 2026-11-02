@@ -115,6 +115,8 @@ describe('BogLakeLayer', () => {
 
   it('passes the foam style through', () => {
     const layer = new BogLakeLayer(TILE_W);
+    layer.tick(0);
+    expect(uniformsOf(layer).uFoamStyle).toBe(3); // micro curls ship
     waterDebugTuning.bogLakeFoamStyle = 3;
     layer.tick(0);
     expect(uniformsOf(layer).uFoamStyle).toBe(3);

@@ -12,6 +12,9 @@
 import { GUST_LAKE_PHASE_OFFSET } from './bogLakeGust';
 import { GUST_BAND_HALF_WIDTH } from './bogLakeShader';
 
+/** The bog lake foam line styles, by `uFoamStyle` index (bogLakeShader.ts foamLook). */
+export const BOG_LAKE_FOAM_STYLES = ['strands', 'tapered strands', 'crest + shadow', 'micro curls', 'ring arcs', 'glint squiggles'] as const;
+
 export interface WaterDebugFlags {
   /** The whole water layer. Off hides the mesh entirely — the pre-shader look. */
   water: boolean;
@@ -201,7 +204,7 @@ export interface WaterDebugTuning {
   mapAnimationSpeed: number;
   /** Shifts the bog lake gust against the forest sway, in gust periods (0 = on the trees' furthest lean, the measured `GUST_PEAK_PHASE`; ships at `GUST_LAKE_PHASE_OFFSET`, -2 frames). */
   bogLakeGustPhaseOffset: number;
-  /** Foam line style (design round 4): 0 strands, 1 tapered strands, 2 crest + shadow, 3 micro curls, 4 ring arcs, 5 glint squiggles. */
+  /** Foam line style, an index into `BOG_LAKE_FOAM_STYLES`; micro curls ship, the others stay selectable for showing them. */
   bogLakeFoamStyle: number;
 }
 
@@ -226,7 +229,7 @@ export const waterDebugTuning: WaterDebugTuning = {
   bogLakeFoamSpacing: 15,
   bogLakeBandHalf: GUST_BAND_HALF_WIDTH,
   mapAnimationSpeed: 1,
-  bogLakeFoamStyle: 0,
+  bogLakeFoamStyle: BOG_LAKE_FOAM_STYLES.indexOf('micro curls'),
   bogLakeGustPhaseOffset: GUST_LAKE_PHASE_OFFSET,
 };
 

@@ -982,8 +982,10 @@ dark navy, about rgb(16-24, 32-40, 56-72)). Between gusts the water is left calm
 
 - **Cat's paws**: darker matte patches where the gust roughens the surface, with a fine grain inside, drifting downwind.
 - **Sheen**: a broad, almost featureless lightening of the water that sweeps across with the gust.
-- **Foam lines**: thin wiggly white crest strands across the wind (roughly vertical on screen), broken into pieces, sliding downwind. Line
-  half-width (share of the spacing, 0.04) and spacing (15 world units) are tunable.
+- **Foam**: ships as **micro curls**, small white crescent ripples opening downwind, scattered in the band, each fading in and out on
+  its own beat. Five other styles stay selectable in the debug panel's foam style dropdown (`BOG_LAKE_FOAM_STYLES`: strands, tapered
+  strands, crest + shadow, ring arcs, glint squiggles). Line half-width (share of the spacing, 0.04) and spacing (15 world units) are
+  tunable and apply to every style.
 
 **The gust phase.** The forest art is rendered so a tree's phase is `frame / 16 - s / 6` (`s` = position along screen-right in render units,
 `sway.wavelength` 6, `sway.frames_per_column` 4, 16 frames per period at 6 fps). `HexMapRenderer.syncTopAnim` plays the tile in map column
@@ -1001,7 +1003,10 @@ shader gets only the time term wrapped to one period (`uGustTime`, from `gustTim
 has run. The gust moves 6 * TILE_W / 2 * 6 / 16 = 189 world units per second, one wavelength (504 units, three hexes) per 2.7 s.
 
 **The peak.** The trees lean furthest at phase 0.34 (`GUST_PEAK_PHASE`), measured from the forest_mixed / forest_taiga SE sway frames' lean
-(the fundamental of the centroid shift). The envelope is a smooth bump on `fract(phase - 0.34)` around 0, half-width 0.16 periods (the band
+(the fundamental of the centroid shift). A second check on 16 settlement-view frames (each tree's sideways displacement, about 7 000
+samples) found the same: the lean is a wave of 504 world units toward +x, coherence 0.998, peaking 0.13 frames before 0.34. The lake gust
+ships shifted against it by `GUST_LAKE_PHASE_OFFSET` = -0.14 periods (about -2.2 frames, chosen by eye; the debug panel's phase offset
+starts there). The envelope is a smooth bump on `fract(phase - (0.34 + offset))` around 0, half-width 0.16 periods (the band
 is about one hex wide; `uBandHalf`, tunable), its centre line wandering a little with world y (low-frequency noise) so the band is not a
 ruler-straight vertical. Every look is multiplied by it and by the lake mask.
 
@@ -1135,8 +1140,8 @@ export interface WaterDebugTuning {
   bogLakeFoamSpacing: number;      // 15 — world units between foam lines
   bogLakeBandHalf: number;         // 0.16 — gust band half-width, in periods
   mapAnimationSpeed: number;       // 1 — debug playback speed of every map animation: tile clips, lake gust, sea water, squiggles, fog drift
-  bogLakeGustPhaseOffset: number;  // -0.125 (-2 sway frames, GUST_LAKE_PHASE_OFFSET) — shifts the lake gust against the sway, in periods (added to GUST_PEAK_PHASE)
-  bogLakeFoamStyle: number;        // 0 — foam line style under evaluation (0 strands, 1 tapered, 2 crest + shadow, 3 micro curls, 4 ring arcs, 5 glint squiggles)
+  bogLakeGustPhaseOffset: number;  // -0.14 (about -2.2 sway frames, GUST_LAKE_PHASE_OFFSET) — shifts the lake gust against the sway, in periods (added to GUST_PEAK_PHASE)
+  bogLakeFoamStyle: number;        // 3 micro curls — foam line style, BOG_LAKE_FOAM_STYLES (0 strands, 1 tapered, 2 crest + shadow, 3 micro curls, 4 ring arcs, 5 glint squiggles); a dropdown in the debug panel
   causticCullHexes: number; // 0.25 — the *closest* a ribbon may come to shore;
                             //        each one takes its own distance from here
                             //        up to + CAUSTIC_CULL_SPREAD_TILES
