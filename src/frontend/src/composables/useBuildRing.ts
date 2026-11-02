@@ -14,6 +14,7 @@ import { formatBuildingModifier, formatBuildingOutput } from '../lib/map/buildin
 import {
   buildingStatsAt,
   buildingUpgradeCost,
+  scaleOutput,
   type BuildingModifier,
   type BuildingOutput,
   SHRINE_BUILDING_TYPES,
@@ -372,7 +373,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
       cost,
       // Odin's Wisdom shortens every build in the settlement (`wisdomFactor`).
       time: definition ? formatBuildTime(definition.buildSeconds * wisdomFactor()) : undefined,
-      gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
+      gives: stats.output ? formatOutput(scaleOutput(stats.output, world.worldSpeedFactor)) : stats.modifier ? formatModifier(stats.modifier) : undefined,
       locks,
       warning: type === 'tower' ? towerCampWarning(coord) : undefined,
       art: buildingArt(type, 1),

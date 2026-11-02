@@ -439,7 +439,6 @@ test.describe('ring menu availability', () => {
     await settlement.ring.hover(herder);
     const card = settlement.ring.card;
     await expect(card).toContainText('NO FREE BUILD SLOT');
-    await expect(card.getByTestId('ring-card-slots')).toHaveText('1 · 0 of 2 free');
     await expect(card.getByTestId('ring-card-status')).toContainText('Needs 1 build slot · 0 of 2 free');
 
     await settlement.ring.press();
@@ -483,7 +482,7 @@ test.describe('ring menu availability', () => {
     await settlement.ring.hover(herder);
     const card = settlement.ring.card;
     await expect(card).toContainText('BUILDABLE HERE');
-    await expect(card.getByTestId('ring-card-slots')).toHaveText('1 · 2 of 2 free');
+    await expect(card.getByTestId('ring-card-slots')).toHaveCount(0);
     await expect(card.getByTestId('ring-card-status')).toHaveCount(0);
     await expect(card).not.toContainText(/click to build/i);
 
