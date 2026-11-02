@@ -16,7 +16,11 @@ import { TOUCH_QUERY } from '../../lib/breakpoints';
 const props = defineProps<{
   guidance: OnboardingGuidance;
   hasFounded: boolean;
+  /** The guidance arrow is on screen: tapping the current row then makes it poke its target. */
+  canFocus?: boolean;
 }>();
+
+const emit = defineEmits<{ focus: [] }>();
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const isTouch = useMediaQuery(TOUCH_QUERY);
@@ -43,13 +47,22 @@ function subtextFor(row: ChecklistRow): string {
       <div class="tray-progress-fill" :style="{ width: `${Math.round(guidance.progress * 100)}%` }" />
     </div>
     <div class="tray-rows">
-      <div v-for="row in guidance.rows" :key="row.key" class="tray-item" :class="row.state">
+      <component
+        :is="row.state === 'current' && canFocus ? 'button' : 'div'"
+        v-for="row in guidance.rows"
+        :key="row.key"
+        class="tray-item"
+        :class="row.state"
+        :type="row.state === 'current' && canFocus ? 'button' : undefined"
+        :data-testid="row.state === 'current' && canFocus ? 'onboarding-focus' : undefined"
+        @click="row.state === 'current' && canFocus && emit('focus')"
+      >
         <div class="dot" />
         <div>
           <div class="name">{{ nameFor(row.key) }}</div>
           <div class="sub">{{ subtextFor(row) }}</div>
         </div>
-      </div>
+      </component>
     </div>
   </div>
 </template>
@@ -122,6 +135,12 @@ function subtextFor(row: ChecklistRow): string {
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.12);
+  font: inherit;
+  text-align: left;
+  color: inherit;
+}
+button.tray-item {
+  cursor: pointer;
 }
 .tray-item.current {
   background: var(--gold);
