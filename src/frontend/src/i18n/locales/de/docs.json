@@ -988,7 +988,7 @@
     "intro": "Welches Gebäude welche Einheiten ausbildet, wie die Warteschlangen funktionieren und wie du einen Auftrag auf mehrere Gebäude verteilst.",
     "buildings": {
       "heading": "Wer bildet was aus",
-      "body": "Jede Einheit bildet eine bestimmte Art von Gebäude aus. Das Langhaus bildet nichts aus.",
+      "body": "Jede Einheit bildest du in einer bestimmten Art von Gebäude aus. Das Langhaus bildet keine Einheiten aus.",
       "building": "Gebäude",
       "units": "Bildet aus"
     },
@@ -1003,8 +1003,8 @@
     },
     "distribute": {
       "heading": "Ausbilden in mehreren Gebäuden",
-      "body": "Im Fenster eines Gebäudes wählst du, wohin der Auftrag geht. „Dieses Gebäude“ bildet alles hier aus. „Verteilen“ legt ihn auf alle deine arbeitenden Gebäude dieser Art, deren Warteschlange noch Platz hat. Jedes Gebäude, das Einheiten bekommt, erhält einen eigenen Auftrag.",
-      "evenly": "Gleichmäßig: Die Einheiten werden durch die Zahl der Gebäude geteilt. Übrige Einheiten gehen einzeln an die Gebäude mit den höchsten Stufen. Gibt es weniger Einheiten als Gebäude, bekommen nur die höchsten Gebäude eine Einheit.",
+      "body": "Im Fenster eines Gebäudes wählst du, wohin der Auftrag geht. „Dieses Gebäude“ bildet alles hier aus. „Verteilen“ teilt ihn auf alle deine arbeitenden Gebäude dieser Art, deren Warteschlange noch Platz hat. Jedes Gebäude, das Einheiten bekommt, erhält einen eigenen Auftrag.",
+      "evenly": "Gleichmäßig: Die Einheiten werden durch die Zahl der Gebäude geteilt. Übrige Einheiten gehen einzeln an die Gebäude mit den höchsten Stufen. Gibt es weniger Einheiten als Gebäude, bekommen nur die Gebäude mit den höchsten Stufen eine.",
       "fastest": "Am schnellsten (Premium-Funktion): Die Einheiten werden so aufgeteilt, dass die Aufträge möglichst früh und gemeinsam fertig werden. Dabei zählen die Stufe jedes Gebäudes und die Aufträge, die dort schon warten."
     },
     "adminNote": {
