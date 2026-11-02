@@ -91,14 +91,13 @@ has 3–8 stages per building, and each level maps onto a stage
 |---|---|
 | Longhouse | 30 (also drives build slots and claim radius) |
 | Resource producers (incl. the bog-ore works), Storage House | 25 |
-| Military and civic buildings (Barracks, Archery Range, Dockyard, Town Square, Cart Workshop, Druid Hut, Weaponsmith, Meadery) | 20 |
+| Military and civic buildings (Barracks, Archery Range, Siege Workshop, Dockyard, Town Square, Cart Workshop, Druid Hut, Weaponsmith, Meadery) | 20 |
 | Mills (Sawmill, Crop Mill, Hammer Forge) | 20 |
 | Tower | 10 |
 | Great Storehouse | 10 |
 | Shrines | 5 (one per settlement) |
 | Palisade | 3 |
 | Bridge | 4 |
-| Siege Workshop | 5 |
 
 Construction slots: `2 + ⌊(LH − 5) / 5⌋` → 2 at LH 1–9, 7 at LH 30.
 
@@ -226,7 +225,7 @@ play.
   again; at level 0 it is gone and the hex is free. Each building type takes
   max level × 24 hours to go from its top level to gone, but never less than 7
   days or more than 30. Longhouses never decay: they make the realm.
-  When a building leaves the realm, its queued upgrade, its queued training
+  When a building leaves the realm, its queued upgrade, the training orders in its queue
   and a foundation still under construction there are cancelled and
   refunded; a rune slotted in it stays on the hex; a dockyard outside the
   realm is no fleet home or dock. In faster worlds decay runs on world speed:
@@ -405,6 +404,27 @@ many catapults survive (`SiegeResolver.LevelsTakenFrom`), like a wall hex, where
 guarded bridge therefore falls to the king's bridge first and opens to everyone, attackers
 included; each further siege takes another level, and a causeway burnt once is gone and
 shuts the river again.
+
+### Training troops
+
+- Units are trained in a building: the Barracks, Archery Range, Siege Workshop, Dockyard or
+  Cart Workshop that trains them (table in section 8). The Longhouse trains nothing.
+- Every training building has its own queue of at most 5 orders. It trains them one after
+  another: a new order waits behind the orders already in its queue. Different buildings train
+  at the same time.
+- Training time falls with the building's level: −1% per level, −20% at level 20
+  (per-unit time = catalogue time × (1 − 0.01 × level) ÷ world speed). The time is fixed when the
+  order is placed; a later upgrade does not change it.
+- In a building's window the player trains either in this building only or distributes the order
+  over all of the settlement's working buildings of that type (inside the realm, queue not full);
+  a distributed order becomes one order in the queue of each building that gets units:
+  - evenly: the unit count is divided; units left over go one each to the highest-level
+    buildings; with fewer units than buildings only the highest-level ones get a unit;
+  - fastest (premium): the units are split so the orders finish as early and as close together
+    as possible, counting each building's speed and the orders already waiting in it.
+- The whole order is paid when it is placed.
+- When a building leaves the realm or is gone (destroyed, decayed to level 0), the orders in its
+  queue are cancelled and refunded in full. Orders in other buildings keep training.
 
 ## 6. Settling and renown
 
