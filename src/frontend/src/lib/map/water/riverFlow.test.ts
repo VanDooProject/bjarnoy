@@ -830,3 +830,75 @@ describe('riverStreamFunction', () => {
     expect(psiAt(psi, 58, 40)).toBeGreaterThan(0.7);
   });
 });
+
+describe.skipIf(!vendoredArt)('riverStreamFunction round a real island', () => {
+  it('runs the streamlines parallel to an island shore: psi is constant on it, so its gradient 2 to 3 texels off the shore points along the shore normal', async () => {
+    for (const [name, inDir, outDir] of [
+      ['rivertile_bend180_island_W_base', 'SE', 'NW'],
+      ['rivertile_bend120_island_NW_base', 'E', 'NW'],
+    ] as const) {
+      const f = await riverFrameInput(name);
+      const psi = riverStreamFunction({ ...f, inEdges: [topFaceEdgeIndex(inDir)], outEdge: topFaceEdgeIndex(outDir) });
+      const { cw, ch } = f;
+      const dry = (x: number, y: number) => f.mask[y * cw + x]! < WATER_THRESHOLD;
+      // Land connected to the outside of the cell is bank; the dry components left over are islands.
+      const outside = new Uint8Array(cw * ch);
+      const queue: number[] = [];
+      for (let y = 0; y < ch; y++) {
+        for (let x = 0; x < cw; x++) {
+          if ((x === 0 || y === 0 || x === cw - 1 || y === ch - 1) && dry(x, y)) {
+            outside[y * cw + x] = 1;
+            queue.push(y * cw + x);
+          }
+        }
+      }
+      for (let head = 0; head < queue.length; head++) {
+        const p = queue[head]!;
+        const x = p % cw;
+        const y = (p - x) / cw;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const xx = x + dx;
+          const yy = y + dy;
+          if (xx < 0 || yy < 0 || xx >= cw || yy >= ch || outside[yy * cw + xx] || !dry(xx, yy)) continue;
+          outside[yy * cw + xx] = 1;
+          queue.push(yy * cw + xx);
+        }
+      }
+      const island: [number, number][] = [];
+      for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) if (dry(x, y) && !outside[y * cw + x]) island.push([x, y]);
+      expect(island.length, `${name} island`).toBeGreaterThan(30);
+      let checked = 0;
+      let parallel = 0;
+      for (let y = 2; y < ch - 2; y++) {
+        for (let x = 2; x < cw - 2; x++) {
+          if (dry(x, y)) continue;
+          // Nearest island texel, in ground texels.
+          let best = Infinity;
+          let nx = 0;
+          let ny = 0;
+          for (const [ix, iy] of island) {
+            const d = Math.hypot(x - ix, (y - iy) / GROUND_SQUASH);
+            if (d < best) {
+              best = d;
+              nx = x - ix;
+              ny = (y - iy) / GROUND_SQUASH;
+            }
+          }
+          if (best < 2 || best > 3) continue;
+          const gx = (psi[y * cw + x + 1]! - psi[y * cw + x - 1]!) / 2;
+          const gy = ((psi[(y + 1) * cw + x]! - psi[(y - 1) * cw + x]!) / 2) * GROUND_SQUASH;
+          const m = Math.hypot(gx, gy);
+          if (m < 1e-4) continue;
+          checked++;
+          const cos = (gx * nx + gy * ny) / (m * Math.hypot(nx, ny));
+          if (Math.abs(cos) >= 0.9) parallel++;
+        }
+      }
+      expect(checked, name).toBeGreaterThan(30);
+      // The gradient is within 25 degrees of the normal (so the streamline, perpendicular to the gradient, runs along the shore) for
+      // the bulk of the texels; the stagnation points at the tips differ. With the island left unfixed (zero flux through it) the
+      // contours met the shore at a right angle, radiating out of it like spokes.
+      expect(parallel / checked, `${name}: ${parallel} of ${checked}`).toBeGreaterThan(0.75);
+    }
+  }, 120_000);
+});

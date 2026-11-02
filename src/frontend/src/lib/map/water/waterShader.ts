@@ -552,6 +552,20 @@ float riverPsi() {
   return f.a > 0.5 ? f.b / f.a : 0.5;
 }
 
+// How many world units one lane of psi is wide here (1 / (|grad psi| * lanes)), from two more taps: psi is only 8 bits, so this is
+// good for a line's width (a few percent off is invisible) but not for the lane coordinate itself.
+float riverLaneWidth(float lanes) {
+  const float H = 8.0;
+  vec2 uv = riverUV();
+  float p0 = riverPsi();
+  vec4 fx = texture(uRiverSlow, uv + vec2(H * uRiverRect.z, 0.0));
+  vec4 fy = texture(uRiverSlow, uv + vec2(0.0, H * uRiverRect.w));
+  float px = fx.a > 0.5 ? fx.b / fx.a : p0;
+  float py = fy.a > 0.5 ? fy.b / fy.a : p0;
+  float g = length(vec2(px - p0, (py - p0) * uGroundSquash)) / H;
+  return 1.0 / max(g * lanes, 1e-3);
+}
+
 // The direction of the flow from the slow phase: its gradient over a wide stretch (central differences over 32 world units), which is smooth where the fast
 // phase's, taken over 3, quantises into patches of equal direction. Used to carry the cartoon patches and the specks downstream.
 vec2 riverSlowGradient() {
@@ -590,7 +604,7 @@ vec4 riverStrands(vec2 cs, float centre, vec2 ground) {
   float h2 = hash(vec2(lane, 11.3));
   float h3 = hash(vec2(lane, 29.1));
   float present = step(0.4, h1);
-  float halfWidth = 0.15 + 0.35 * h2;
+  float halfWidth = min(0.8, (1.2 + 2.0 * h2) / riverLaneWidth(10.0));
   float across = abs(fract(laneCoord) - 0.5) * 2.0;
   float body = 1.0 - smoothstep(halfWidth, halfWidth + 0.18, across);
   // Dashes along the stream: the phase on its circle, offset per lane, so every lane has its own run of dashes (about a third of a
@@ -698,18 +712,19 @@ vec4 riverStreaks(vec2 cs, float centre, vec2 ground) {
   float turn = atan(ps.y, ps.x) - uRiverSpeed * uTime * 0.25;
   float k = uRiverScale;
   float nearBank = 1.0 - smoothstep(0.0, 0.35, centre);
-  float laneCoord = riverPsi() * 24.0 + (noise(ground * k * 2.5) - 0.5) * 0.8;
+  float laneCoord = riverPsi() * 36.0 + (noise(ground * k * 2.5) - 0.5) * 0.8;
   float lane = floor(laneCoord);
   float h1 = hash(vec2(mod(lane, 289.0), 3.7));
   float h2 = hash(vec2(mod(lane, 289.0), 11.3));
   float h3 = hash(vec2(mod(lane, 289.0), 29.1));
-  float present = step(mix(0.42, 0.18, nearBank), h1);
-  float halfWidth = 0.3 + 0.35 * h2;
+  float present = step(mix(0.52, 0.25, nearBank), h1);
+  // A line is about 1 to 2 world px wide whatever the lane: a cell with a small share of psi (an upstream arm) has wide lanes.
+  float halfWidth = min(0.85, (0.9 + 0.8 * h2) / riverLaneWidth(36.0));
   float across = abs(fract(laneCoord) - 0.5) * 2.0;
   float body = 1.0 - smoothstep(halfWidth, halfWidth + 0.15, across);
   float dash = smoothstep(mix(-0.6, 0.5, h3), mix(-0.6, 0.5, h3) + 0.12, cos(turn + h1 * 40.0));
   float broken = smoothstep(0.1, 0.3, noise(ground * k * 1.1 + lane * 5.3 + ps * 0.8));
-  float alpha = mix(0.85, 0.6, smoothstep(0.35, 0.65, halfWidth));
+  float alpha = mix(0.85, 0.6, smoothstep(0.0, 1.0, h2));
   float streak = body * dash * broken * present * smoothstep(0.02, 0.1, centre);
   vec4 col = vec4(vec3(1.0), 1.0) * alpha * streak;
   // Specks: small ovals along the flow, two cell grids carried downstream and cross-faded, a few more near the banks.

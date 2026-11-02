@@ -4,7 +4,7 @@
 import { topFaceEdgeIndex } from '../riverPath';
 import type { TileOrientation } from '../types';
 import { riverFrameInput, type RiverFrame } from './riverArtFixture';
-import { buildBankContext, computeRiverRipple, type PlacedMask } from './riverFlow';
+import { buildBankContext, computeRiverRipple, confluenceArmRanges, type PlacedMask } from './riverFlow';
 import { splitFaceAndRim } from './riverFlowLayer';
 
 /** Tile art drawn 168 wide for 200 source px. */
@@ -80,12 +80,20 @@ export async function composePair(pair: readonly [SeamCell, SeamCell], withConte
   }));
   const toB = directionOfOffset(pair[1].dx - pair[0].dx, pair[1].dy - pair[0].dy);
   const edges = [topFaceEdgeIndex(toB), topFaceEdgeIndex(OPPOSITE[toB])];
+  const toPartner = (i: number): TileOrientation => (i === 0 ? toB : OPPOSITE[toB]);
   return pair.map((cell, i) => {
     const frame = frames[i]!;
     const context = withContext
       ? buildBankContext(placed[i]!, frame.polygon, [{ edge: edges[i]!, cell: placed[1 - i]! }], TEXEL_WORLD)
       : undefined;
-    const flow = computeRiverRipple({ ...frame, inEdges: cell.ins.map(topFaceEdgeIndex), outEdge: topFaceEdgeIndex(cell.out), context });
+    // A cell that feeds an arm of its partner takes that arm's share of the partner's stream function (as RiverFlowLayer does).
+    const partner = pair[1 - i]!;
+    let psiRange: [number, number] | undefined;
+    if (toPartner(i) === cell.out) {
+      const arm = confluenceArmRanges(frame.polygon, topFaceEdgeIndex(partner.out), partner.ins.map(topFaceEdgeIndex)).get((edges[i]! + 3) % 6);
+      if (arm) psiRange = arm;
+    }
+    const flow = computeRiverRipple({ ...frame, inEdges: cell.ins.map(topFaceEdgeIndex), outEdge: topFaceEdgeIndex(cell.out), context, psiRange });
     const { face, rim } = splitFaceAndRim(flow.data, flow.inside);
     const slow = splitFaceAndRim(flow.slow, flow.inside);
     return { cell, frame, x: placed[i]!.x, y: placed[i]!.y, seamEdge: edges[i]!, face, rim, slowFace: slow.face, slowRim: slow.rim };

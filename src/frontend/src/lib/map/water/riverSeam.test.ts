@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { vendoredArt } from './riverArtFixture';
 import { composePair, directionOfOffset, sampleComposite, SEAM_PAIRS, TEXEL_WORLD, type ComposedCell } from './riverSeamFixture';
 import { topFaceEdgeIndex } from '../riverPath';
-import { FACE_PAD_TEXELS } from './riverFlow';
+import { FACE_PAD_TEXELS, GROUND_SQUASH } from './riverFlow';
 
 /** The texels where one cell's rim lies over the other cell's face: [rim texel data offset, face texel data offset, rim cell, face cell]. */
 function overlaps(cells: ComposedCell[]): { rim: Uint8Array; ro: number; face: Uint8Array; fo: number }[] {
@@ -168,8 +168,8 @@ describe.skipIf(!vendoredArt)('river flow across the seams of real neighbouring 
     expect(ratiosAll.reduce((a, b) => a + b, 0) / ratiosAll.length, ratiosAll.map((r) => r.toFixed(2)).join(' ')).toBeLessThan(1.7);
   }, 300_000);
 
-  it('(i) keeps the stream function continuous across a single-channel seam (the jump beyond the local slope is within 0.08)', async () => {
-    for (const pair of SEAM_PAIRS.filter((p) => p.every((c) => c.ins.length === 1))) {
+  it('(i) keeps the stream function continuous across every seam, confluences included (the jump beyond the local slope is within 0.1)', async () => {
+    for (const pair of SEAM_PAIRS) {
       const cells = await composePair(pair, true);
       let n = 0;
       let max = 0;
@@ -183,9 +183,39 @@ describe.skipIf(!vendoredArt)('river flow across the seams of real neighbouring 
         n++;
         max = Math.max(max, Math.max(0, Math.abs(p1 - m1) - Math.max(Math.abs(m1 - m3), Math.abs(p3 - p1))));
       }
-      expect(n, pair[0].name).toBeGreaterThan(6);
-      // (Across a confluence the arms' psi would have to be mapped into the confluence's sub-ranges: not done, those seams jump.)
-      expect(max, pair[0].name).toBeLessThanOrEqual(0.08);
+      expect(n, pair[0].name).toBeGreaterThan(3);
+      expect(max, pair[0].name).toBeLessThanOrEqual(0.1);
+    }
+  }, 300_000);
+
+  it('(j) crosses a seam without a kink: the psi gradient 3 texels before and after points the same way (within 20 degrees; 45 into a confluence arm)', async () => {
+    const sq = GROUND_SQUASH;
+    const h = 2 * TEXEL_WORLD;
+    for (const pair of SEAM_PAIRS) {
+      const cells = await composePair(pair, true);
+      const grad = (x: number, y: number) => {
+        const l = sampleComposite(cells, x - h, y, true);
+        const r = sampleComposite(cells, x + h, y, true);
+        const u = sampleComposite(cells, x, y - h, true);
+        const d = sampleComposite(cells, x, y + h, true);
+        if (!l || !r || !u || !d) return null;
+        return { x: (r.b - l.b) / (2 * h), y: (d.b - u.b) / (2 * h) / sq };
+      };
+      const confluence = pair.some((c) => c.ins.length > 1);
+      let n = 0;
+      for (let t = 0.3; t <= 0.71; t += 0.05) {
+        const line = seamLine(cells, t);
+        const g0 = grad(line.x - line.step.x * 3, line.y - line.step.y * 3);
+        const g1 = grad(line.x + line.step.x * 3, line.y + line.step.y * 3);
+        if (!g0 || !g1) continue;
+        const m0 = Math.hypot(g0.x, g0.y);
+        const m1 = Math.hypot(g1.x, g1.y);
+        if (m0 < 0.002 || m1 < 0.002) continue;
+        n++;
+        const angle = (Math.acos(Math.max(-1, Math.min(1, (g0.x * g1.x + g0.y * g1.y) / (m0 * m1)))) * 180) / Math.PI;
+        expect(angle, `${pair[0].name} t=${t}`).toBeLessThan(confluence ? 45 : 20);
+      }
+      expect(n, pair[0].name).toBeGreaterThan(1);
     }
   }, 300_000);
 

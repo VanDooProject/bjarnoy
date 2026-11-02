@@ -74,6 +74,14 @@ export interface RiverFlowInput {
    * seam read the same value there. Without it the cell sees only its own banks.
    */
   context?: BankContext;
+  /**
+   * Where this cell's stream function sits in its downstream cell's: its own psi (0 right bank, 1 left bank) is mapped to
+   * `lo + (hi - lo) * psi`. A cell feeding one arm of a confluence takes that arm's share of the confluence's range
+   * (`confluenceArmRanges`), so psi is continuous across that seam. Default [0, 1]. `RiverFlowLayer` does not use it (see
+   * docs/design/water-shader.md §4.4d): composed up a chain of confluences the shares shrink to 1/8 and less, the 8-bit psi then has
+   * 32 levels for its 36 lanes and the lanes get wide and sparse.
+   */
+  psiRange?: readonly [number, number];
 }
 
 export interface BankContext {
@@ -724,7 +732,7 @@ export const SLOW_PHASE_FACTOR = 4;
  * Which side is right is decided from the out edge's flow direction on the ground, so both hexes of a seam agree.
  * Returns psi per texel, 0 where it is not defined.
  */
-function streamFunction(input: RiverFlowInput, passable: Uint8Array, isWaterP: (p: number) => boolean, seedEdge: Int8Array, bank: Float32Array): Float64Array {
+function streamFunction(input: RiverFlowInput, passable: Uint8Array, isWaterP: (p: number) => boolean, seedEdge: Int8Array, bank: Float32Array, phi: Float64Array): Float64Array {
   const { cw, ch, polygon, outEdge } = input;
   const n = cw * ch;
   const psi = new Float64Array(n).fill(0.5);
@@ -842,8 +850,9 @@ function streamFunction(input: RiverFlowInput, passable: Uint8Array, isWaterP: (
   const fixed = new Uint8Array(n);
   const conducting = new Uint8Array(n);
   // Along a crossing psi runs from the value of the bank before it to the value of the bank after it, linearly with the position
-  // on the edge: both hexes of a seam see the same stretch of the same edge, so they agree there (left natural, each cell's own
-  // flow decided how psi spreads over the crossing, and the two did not match).
+  // on the edge, and is fixed ON the edge line only (the row of texels along it, water or not): both hexes of a seam see the same
+  // stretch of the same edge, so they agree there, and past and before the line psi comes from the solve, in ground space, so
+  // the streamlines cross the edge along the ground normal and not along whatever the band's texel columns happen to be.
   const arcValueBefore = (j: number) => arcs[(j - 1 + arcs.length) % arcs.length]!.value;
   const arcValueAfter = (j: number) => arcs[j % arcs.length]!.value;
   ordered.forEach((c, j) => {
@@ -854,13 +863,20 @@ function streamFunction(input: RiverFlowInput, passable: Uint8Array, isWaterP: (
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     for (let p = 0; p < n; p++) {
-      if (seedEdge[p] !== c.e) continue;
-      const t = ((((p % cw) + 0.5) - a.x) * dx + ((Math.floor(p / cw) + 0.5) - a.y) * dy) / (dx * dx + dy * dy);
-      const f = Math.max(0, Math.min(1, (t - c.t0) / Math.max(1e-6, c.t1 - c.t0)));
+      if (!passable[p]) continue;
+      const px = (p % cw) + 0.5;
+      const py = Math.floor(p / cw) + 0.5;
+      const t = ((px - a.x) * dx + (py - a.y) * dy) / (dx * dx + dy * dy);
+      if (t < c.t0 || t > c.t1) continue;
+      // Within one texel of the edge line (the segment's own line, not past its ends).
+      const dist = Math.abs((px - a.x) * dy - (py - a.y) * dx) / Math.hypot(dx, dy);
+      if (dist > 0.75 || bank[p] === 0) continue;
+      const f = (t - c.t0) / Math.max(1e-6, c.t1 - c.t0);
       fixed[p] = 1;
       psi[p] = vb + (va - vb) * f;
     }
   });
+  void seedEdge;
   for (let p = 0; p < n; p++) {
     if (fixed[p]) {
       conducting[p] = 1;
@@ -868,18 +884,99 @@ function streamFunction(input: RiverFlowInput, passable: Uint8Array, isWaterP: (
       fixed[p] = 1;
       psi[p] = label[p]!;
       conducting[p] = 1;
-    } else if (isWaterP(p)) {
+    } else if (isWaterP(p) || (passable[p] && bank[p]! > 0)) {
+      // Water, and the dry strip where the art's water stops short of an edge (it is no bank).
       conducting[p] = 1;
     }
   }
   solveLaplace(input, passable, conducting, fixed, psi, false);
+  // An island's shore is a streamline: psi is constant on it, at a value the flow chooses. Solved once with the island left free
+  // (zero flux through it), its value is taken where the stream meets it, at its upstream tip (the island texel with the highest
+  // potential), then the island is fixed there and the whole field solved again.
+  const unlabelled = (p: number) => isBank(p) && Number.isNaN(label[p]!);
+  const seen = new Uint8Array(n);
+  let islands = 0;
+  for (let start = 0; start < n; start++) {
+    if (seen[start] || !unlabelled(start)) continue;
+    const comp: number[] = [start];
+    seen[start] = 1;
+    for (let head = 0; head < comp.length; head++) {
+      const p = comp[head]!;
+      const x = p % cw;
+      const y = (p - x) / cw;
+      for (const [dx, dy] of NEIGHBOURS) {
+        const xx = x + dx;
+        const yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= cw || yy >= ch) continue;
+        const q = yy * cw + xx;
+        if (!seen[q] && unlabelled(q)) {
+          seen[q] = 1;
+          comp.push(q);
+        }
+      }
+    }
+    let tip = comp[0]!;
+    for (const p of comp) if (phi[p]! > phi[tip]!) tip = p;
+    const tx = tip % cw;
+    const ty = (tip - tx) / cw;
+    let sum = 0;
+    let count = 0;
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const xx = tx + dx;
+        const yy = ty + dy;
+        if (xx < 0 || yy < 0 || xx >= cw || yy >= ch) continue;
+        const q = yy * cw + xx;
+        if (isWaterP(q)) {
+          sum += psi[q]!;
+          count++;
+        }
+      }
+    }
+    if (count === 0) continue;
+    const value = sum / count;
+    for (const p of comp) {
+      fixed[p] = 1;
+      conducting[p] = 1;
+      psi[p] = value;
+    }
+    islands++;
+  }
+  if (islands > 0) solveLaplace(input, passable, conducting, fixed, psi, false);
   return psi;
+}
+
+/**
+ * The stretch of a cell's stream function each of its in edges takes, for the cells feeding it: (right bank value, left bank
+ * value) at the in crossing, in the cell's own psi. A single in edge takes [0, 1]; the arms of a confluence share it, in the order
+ * they come walking the face boundary from the out edge (`j / k` .. `(j + 1) / k`, flipped as `streamFunction` flips them).
+ */
+export function confluenceArmRanges(polygon: readonly Point[], outEdge: number, inEdges: readonly number[]): Map<number, [number, number]> {
+  const out = new Map<number, [number, number]>();
+  const arms = inEdges.filter((e) => e !== outEdge).sort((a, b) => (((a - outEdge) % 6) + 6) % 6 - (((b - outEdge) % 6) + 6) % 6);
+  const k = arms.length;
+  if (k === 0) return out;
+  const g = GROUND_SQUASH;
+  const flow = crossingDirection(polygon, outEdge);
+  const tangent = { x: polygon[(outEdge + 1) % 6]!.x - polygon[outEdge]!.x, y: (polygon[(outEdge + 1) % 6]!.y - polygon[outEdge]!.y) / g };
+  const firstIsRight = tangent.x * (-flow.y / g) + tangent.y * flow.x > 0;
+  const value = (j: number) => (firstIsRight ? j / k : 1 - j / k);
+  arms.forEach((e, i) => {
+    const before = value(i);
+    const after = value(i + 1);
+    // Looking downstream at an in crossing is looking inward: which end of the edge, walking up the perimeter, is the right one?
+    const inFlow = crossingDirection(polygon, e);
+    const t = { x: polygon[(e + 1) % 6]!.x - polygon[e]!.x, y: (polygon[(e + 1) % 6]!.y - polygon[e]!.y) / g };
+    const upIsRight = t.x * (inFlow.y / g) + t.y * -inFlow.x > 0;
+    out.set(e, upIsRight ? [after, before] : [before, after]);
+  });
+  return out;
 }
 
 /** The stream function of a cell (`streamFunction`), for tests and tooling: psi per texel, in 0..1. */
 export function riverStreamFunction(input: RiverFlowInput): Float64Array {
-  const { passable, isWater, seedEdge, bank } = solveRiver(input);
-  return streamFunction(input, passable, (q) => isWater(q % input.cw, Math.floor(q / input.cw)), seedEdge, bank);
+  const { passable, isWater, seedEdge, bank, phi } = solveRiver(input);
+  return streamFunction(input, passable, (q) => isWater(q % input.cw, Math.floor(q / input.cw)), seedEdge, bank, phi);
 }
 
 export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; slow: Uint8Array; periods: number; slowPeriods: number; inside: Uint8Array } {
@@ -949,7 +1046,8 @@ export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; s
 
   const out = new Uint8Array(cw * ch * 4);
   const slowOut = new Uint8Array(cw * ch * 4);
-  const psi = streamFunction(input, passable, (q) => isWater(q % cw, Math.floor(q / cw)), seedEdge, bank);
+  const [psiLo, psiHi] = input.psiRange ?? [0, 1];
+  const psi = streamFunction(input, passable, (q) => isWater(q % cw, Math.floor(q / cw)), seedEdge, bank, phi);
   for (let y = 0; y < ch; y++) {
     for (let x = 0; x < cw; x++) {
       const p = y * cw + x;
@@ -981,7 +1079,7 @@ export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; s
       out[o + 3] = 255;
       slowOut[o] = Math.round((Math.cos(slowTheta) * 0.5 + 0.5) * 255);
       slowOut[o + 1] = Math.round((Math.sin(slowTheta) * 0.5 + 0.5) * 255);
-      slowOut[o + 2] = Math.round(Math.min(1, Math.max(0, psi[p]!)) * 255);
+      slowOut[o + 2] = Math.round(Math.min(1, Math.max(0, psiLo + (psiHi - psiLo) * psi[p]!)) * 255);
       slowOut[o + 3] = 255;
     }
   }
