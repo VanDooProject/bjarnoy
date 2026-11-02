@@ -95,7 +95,27 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
         var layout = await admin.GetFromJsonAsync<AdminSettlementLayoutResponse>(
             $"/api/v1/admin/settlements/{founded.Id}/layout", SqliteApiFixture.StrictJson, Ct);
         var freeGrass = layout!.Hexes.Where(h => !h.IsCentre && h.Building is null && h.Terrain == "grass").ToList();
-        Assert.True(freeGrass.Count >= 3, "the fixture needs a few free grass hexes");
+        Assert.True(freeGrass.Count >= 4, "the fixture needs a few free grass hexes");
+
+        // A farm needs a level-3 Reindeer Herder standing first (the catalogue's prerequisite table), so grant one
+        // through god mode and keep its hex out of the free list the tests build on.
+        var herderHex = freeGrass[0];
+        freeGrass.RemoveAt(0);
+        var herder = await admin.PutJsonAsync(
+            $"/api/v1/admin/settlements/{founded.Id}/buildings/{herderHex.Q}/{herderHex.R}",
+            new PlaceBuildingRequest("reindeerherder", 3), Ct);
+        Assert.True(herder.IsSuccessStatusCode, await herder.Content.ReadAsStringAsync(Ct));
+
+        // A farm also needs a raised Longhouse (its unlock level), which lifts the storage capacity as well, so top the
+        // stock up again afterwards.
+        var level = await admin.PutJsonAsync(
+            $"/api/v1/admin/settlements/{founded.Id}/buildings/{founded.Q}/{founded.R}/level",
+            new SetBuildingLevelRequest(5), Ct);
+        Assert.Equal(HttpStatusCode.OK, level.StatusCode);
+        var topUp = await admin.PostJsonAsync(
+            $"/api/v1/admin/settlements/{founded.Id}/resources",
+            new GrantResourcesRequest(Wood: 1_000_000, Stone: 1_000_000, Food: 1_000_000, Iron: 1_000_000), Ct);
+        Assert.Equal(HttpStatusCode.OK, topUp.StatusCode);
 
         return new Player(client, admin, auth, world.Id, founded, freeGrass);
     }
@@ -145,8 +165,10 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
         _injector.ArmOnce(async () => competing = await QueueFarm(p.Client, p.Settlement.Id, p.FreeGrass[1]));
         var first = await QueueFarm(p.Client, p.Settlement.Id, p.FreeGrass[0]);
 
-        Assert.True(_injector.Fired > 0, "the race was never injected");
-        var accepted = new[] { first, competing! }.Count(r => r.StatusCode == HttpStatusCode.Accepted);
+        Assert.Equal(1, _injector.Fired);
+        Assert.True(first.StatusCode == HttpStatusCode.Accepted, await first.Content.ReadAsStringAsync(Ct));
+        Assert.True(competing!.StatusCode == HttpStatusCode.Accepted, await competing.Content.ReadAsStringAsync(Ct));
+        var accepted = new[] { first, competing }.Count(r => r.StatusCode == HttpStatusCode.Accepted);
         Assert.Equal(2, accepted);
 
         var after = (await GetSettlement(p.Client, p.Settlement.Id))!;
@@ -171,8 +193,8 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
             Ct));
         var build = await QueueFarm(p.Client, p.Settlement.Id, p.FreeGrass[0]);
 
-        Assert.True(_injector.Fired > 0, "the race was never injected");
-        Assert.Equal(HttpStatusCode.Accepted, build.StatusCode);
+        Assert.Equal(1, _injector.Fired);
+        Assert.True(build.StatusCode == HttpStatusCode.Accepted, await build.Content.ReadAsStringAsync(Ct));
         Assert.True(competing!.IsSuccessStatusCode, await competing.Content.ReadAsStringAsync(Ct));
 
         var after = (await GetSettlement(p.Client, p.Settlement.Id))!;
@@ -196,16 +218,6 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
             new PlaceBuildingRequest("townsquare", 3), Ct);
         Assert.True(square.IsSuccessStatusCode, await square.Content.ReadAsStringAsync(Ct));
 
-        // The starting storage cannot hold a feast's price: raise the longhouse
-        // (which lifts the capacity) and top the stock up again.
-        var level = await p.Admin.PutJsonAsync(
-            $"/api/v1/admin/settlements/{p.Settlement.Id}/buildings/{p.Settlement.Q}/{p.Settlement.R}/level",
-            new SetBuildingLevelRequest(5), Ct);
-        Assert.Equal(HttpStatusCode.OK, level.StatusCode);
-        await p.Admin.PostJsonAsync(
-            $"/api/v1/admin/settlements/{p.Settlement.Id}/resources",
-            new GrantResourcesRequest(Wood: 1_000_000, Stone: 1_000_000, Food: 1_000_000, Iron: 1_000_000), Ct);
-
         var gain = Feasts.RenownFor(3);
         var started = await p.Client.PostAsync($"/api/v1/settlements/{p.Settlement.Id}/feast", null, Ct);
         Assert.True(started.StatusCode == HttpStatusCode.Accepted, await started.Content.ReadAsStringAsync(Ct));
@@ -224,7 +236,7 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
         // renown and zeroes it. The stale build must not put it back.
         _injector.ArmOnce(async () => await p.Client.GetAsync($"/api/v1/worlds/{p.WorldId}/renown", Ct));
         var build = await QueueFarm(p.Client, p.Settlement.Id, p.FreeGrass[0]);
-        Assert.True(_injector.Fired > 0, "the race was never injected");
+        Assert.Equal(1, _injector.Fired);
         Assert.True(build.StatusCode == HttpStatusCode.Accepted, await build.Content.ReadAsStringAsync(Ct));
 
         var first = await p.Client.GetFromJsonAsync<RenownResponse>(
@@ -252,8 +264,8 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
         var patch = await p.Admin.PatchJsonAsync(
             $"/api/v1/admin/worlds/{p.WorldId}/settings", new UpdateWorldSettingsRequest { SpeedFactor = 7 }, Ct);
 
-        Assert.True(_injector.Fired > 0, "the race was never injected");
-        Assert.Equal(HttpStatusCode.Accepted, competing!.StatusCode);
+        Assert.Equal(1, _injector.Fired);
+        Assert.True(competing!.StatusCode == HttpStatusCode.Accepted, await competing.Content.ReadAsStringAsync(Ct));
         Assert.True(patch.IsSuccessStatusCode, await patch.Content.ReadAsStringAsync(Ct));
 
         var world = await patch.Content.ReadFromJsonAsync<AdminWorldResponse>(SqliteApiFixture.StrictJson, Ct);
@@ -277,7 +289,8 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
         var response = await QueueFarm(p.Client, p.Settlement.Id, p.FreeGrass[0]);
         _injector.Disarm();
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync(Ct);
+        Assert.True(response.StatusCode == HttpStatusCode.Conflict, body);
         Assert.Contains("try again", await response.Content.ReadAsStringAsync(Ct), StringComparison.OrdinalIgnoreCase);
         Assert.Equal(ConcurrentWriteExecutor.MaxAttempts, _injector.Fired);
 
@@ -304,6 +317,7 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
         private Func<Task>? _competing;
         private bool _repeat;
         private bool _busy;
+        private bool _firedSinceLastWrite;
 
         public int Fired { get; private set; }
 
@@ -311,6 +325,7 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
         {
             _competing = competing;
             _repeat = false;
+            _firedSinceLastWrite = false;
             Fired = 0;
         }
 
@@ -318,6 +333,7 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
         {
             _competing = competing;
             _repeat = true;
+            _firedSinceLastWrite = false;
             Fired = 0;
         }
 
@@ -329,8 +345,18 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
             DbDataReader result,
             CancellationToken cancellationToken = default)
         {
-            if (_competing is { } competing && !_busy && IsFullSettlementRead(command))
+            // The request's own save (even a refused one) ends the attempt: the next matching read starts a new attempt
+            // and gets its own competing write. Writes by the competing request itself do not count.
+            if (!_busy && IsWrite(command))
             {
+                _firedSinceLastWrite = false;
+            }
+
+            // Once per attempt: the handler reads the settlement with its buildings more than once before it saves, and
+            // one competing write per attempt is all it takes to make that attempt's save stale.
+            if (_competing is { } competing && !_busy && !_firedSinceLastWrite && IsFullSettlementRead(command))
+            {
+                _firedSinceLastWrite = true;
                 // Disarm first: the competing request reads settlements too.
                 if (!_repeat)
                 {
@@ -351,6 +377,11 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
 
             return result;
         }
+
+        private static bool IsWrite(DbCommand command) =>
+            command.CommandText.AsSpan().TrimStart().StartsWith("UPDATE", StringComparison.Ordinal)
+            || command.CommandText.AsSpan().TrimStart().StartsWith("INSERT", StringComparison.Ordinal)
+            || command.CommandText.AsSpan().TrimStart().StartsWith("DELETE", StringComparison.Ordinal);
 
         private static bool IsFullSettlementRead(DbCommand command) =>
             command.CommandText.Contains("FROM \"settlements\"", StringComparison.Ordinal)
