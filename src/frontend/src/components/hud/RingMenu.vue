@@ -88,6 +88,8 @@ export interface RingCard {
   time?: string;
   /** One-line summary of what it produces. */
   gives?: string;
+  /** For an upgrade, the building's new total next to the gain in `gives` ("90 total"); shown on wide screens only. */
+  givesTotal?: string;
   /** Progression blockers (longhouse level, prerequisites, limits), each as a sentence. */
   locks?: string[];
   /** A non-blocking caution (the building can still be placed), e.g. wild beasts burning an unguarded tower. */
@@ -439,6 +441,7 @@ function cardOf(b: RingBuilding): RingCard {
     cost: b.cost,
     time: b.time,
     gives: b.gives,
+    givesTotal: b.givesTotal,
     locks: b.locks?.length ? b.locks : b.lock ? [b.lock] : [],
     warning: b.warning,
     art: b.art,
@@ -471,7 +474,7 @@ interface CardView {
   chips: { key: string; color: string; amount: number; short: boolean }[];
   time?: string;
   gives?: string;
-  slots?: { text: string; short: boolean };
+  givesTotal?: string;
   rows: { label: string; value: string }[];
   warning?: string;
   statuses: { text: string; tone: Tone }[];
@@ -534,14 +537,6 @@ const cardView = computed<CardView | null>(() => {
   else if (a?.state === 'waiting') badge = { text: t('hud.ringMenu.card.badgeNoSlot').toUpperCase(), tone: 'wait' };
   else badge = { text: t('hud.ringMenu.buildableHere'), tone: 'ok' };
 
-  let slots: CardView['slots'];
-  if (a) {
-    const params = { needed: a.slots.needed, free: a.slots.free, total: a.slots.total };
-    // "All (3)" when the order takes every slot the settlement has.
-    const all = a.slots.needed >= a.slots.total && a.slots.total > 1;
-    slots = { text: all ? t('hud.ringMenu.card.slotsAll', params) : t('hud.ringMenu.card.slotsValue', params), short: a.slots.short };
-  }
-
   return {
     title: card.title,
     sub: card.sub,
@@ -550,7 +545,7 @@ const cardView = computed<CardView | null>(() => {
     chips,
     time: card.time,
     gives: card.gives,
-    slots,
+    givesTotal: card.givesTotal,
     rows: [],
     warning: card.warning,
     statuses,
@@ -1058,11 +1053,9 @@ function onBackdropPointerDown(e: PointerEvent) {
         </template>
         <template v-if="cardView.gives">
           <dt>{{ t('hud.ringMenu.gives') }}</dt>
-          <dd class="nowrap">{{ cardView.gives }}</dd>
-        </template>
-        <template v-if="cardView.slots">
-          <dt>{{ t('hud.ringMenu.card.slots') }}</dt>
-          <dd class="nowrap" :class="{ 'slots-short': cardView.slots.short }" data-testid="ring-card-slots">{{ cardView.slots.text }}</dd>
+          <dd class="nowrap">
+            {{ cardView.gives }}<span v-if="cardView.givesTotal" class="gives-total" data-testid="ring-card-total"> · {{ cardView.givesTotal }}</span>
+          </dd>
         </template>
         <template v-for="row in cardView.rows" :key="row.label">
           <dt>{{ row.label }}</dt>
@@ -1573,8 +1566,14 @@ html[data-hud-motion='reduced'] .ring-bubble.glow {
 .card-status .queue {
   color: var(--gold);
 }
-.card-rows dd.slots-short {
-  color: #ffb347;
+.gives-total {
+  color: var(--muted);
+  font-weight: 400;
+}
+@media (max-width: 768px), (max-height: 500px) {
+  .gives-total {
+    display: none;
+  }
 }
 .ring-hint {
   position: absolute;
