@@ -704,6 +704,29 @@ describe.skipIf(!vendoredArt)('computeRiverRipple coverage on the real art', () 
       expect(missed.slice(0, 5), `${name}: ${missed.length} water texels uncovered`).toEqual([]);
     }
   }, 120_000);
+
+  it('covers the painted water of the bog creek frames, up to the few texels where the art spills over the cliff past a non-flow edge', async () => {
+    for (const [name, inDirs, outDir] of [
+      ['bogcreek_NW_variant002_base', ['E'], 'W'],
+      ['bogcreek_bend_SE_variant002_base', ['SE'], 'W'],
+      ['bogcreek_W_base', ['SE'], 'NW'],
+      ['bogcreek_bend_NW_base', ['E'], 'NW'],
+    ] as const) {
+      const f = await riverFrameInput(name);
+      const { data } = computeRiverRipple({ ...f, inEdges: inDirs.map(topFaceEdgeIndex), outEdge: topFaceEdgeIndex(outDir) });
+      let water = 0;
+      let missed = 0;
+      for (let y = 0; y < f.ch; y++) {
+        for (let x = 0; x < f.cw; x++) {
+          if (f.mask[y * f.cw + x]! < WATER_THRESHOLD) continue;
+          water++;
+          if (data[(y * f.cw + x) * 4 + 3] === 0) missed++;
+        }
+      }
+      expect(water, name).toBeGreaterThan(900);
+      expect(missed, `${name}: ${missed} of ${water} water texels uncovered`).toBeLessThanOrEqual(5);
+    }
+  }, 120_000);
 });
 
 describe('computeRiverRipple distance to the bank near an edge', () => {

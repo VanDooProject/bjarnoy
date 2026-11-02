@@ -48,6 +48,9 @@ export const SEAM_PAIRS: readonly [SeamCell, SeamCell][] = [
   [{ name: 'rivertile_y_narrow_SE_base', dx: 0, dy: 0, out: 'W', ins: ['E', 'SE'] }, { name: 'rivertile_bend120_meander_SE_base', dx: 126, dy: 38.64, out: 'W', ins: ['SE'] }],
   [{ name: 'rivertile_bend120_meander_SE_base', dx: 0, dy: 0, out: 'W', ins: ['SE'] }, { name: 'rivertile_bend180_island_W_base', dx: 0, dy: 77.28, out: 'NW', ins: ['SE'] }],
   [{ name: 'rivertile_bend180_island_W_base', dx: 0, dy: 0, out: 'NW', ins: ['SE'] }, { name: 'rivertile_bend_NW_base', dx: 0, dy: 77.28, out: 'NW', ins: ['E'] }],
+  // Bog creeks (the bogcreek frames of the demo world): a river into a creek, and two creek hexes.
+  [{ name: 'rivertile_bend180_island_NW_base', dx: 0, dy: 0, out: 'W', ins: ['E'] }, { name: 'bogcreek_NW_variant002_base', dx: 126, dy: 38.64, out: 'W', ins: ['E'] }],
+  [{ name: 'bogcreek_NW_variant002_base', dx: 0, dy: 0, out: 'W', ins: ['E'] }, { name: 'bogcreek_bend_SE_variant002_base', dx: 126, dy: 38.64, out: 'W', ins: ['SE'] }],
 ];
 
 export interface ComposedCell {

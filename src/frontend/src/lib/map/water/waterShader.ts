@@ -588,6 +588,29 @@ vec4 riverStrands(vec2 cs, float centre, vec2 ground) {
   return col * (uRiverAlpha / 0.5);
 }
 
+// Value noise with the quintic fade (the cubic one of noise() leaves visible creases along the lattice lines), and an fbm of it that
+// rotates the domain between octaves so no octave's lattice lines up with another's. Low frequencies thresholded sharply make
+// the contours of the cartoon patches; with the plain noise they ran straight along the lattice axes.
+float noiseQuintic(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  float a = hash(mod(i, 289.0));
+  float b = hash(mod(i + vec2(1.0, 0.0), 289.0));
+  float c = hash(mod(i + vec2(0.0, 1.0), 289.0));
+  float d = hash(mod(i + vec2(1.0, 1.0), 289.0));
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+}
+float fbmRotated(vec2 p) {
+  const mat2 R = mat2(0.8, 0.6, -0.6, 0.8);
+  float sum = noiseQuintic(p) * 0.55;
+  p = R * p * 2.03 + 17.0;
+  sum += noiseQuintic(p) * 0.3;
+  p = R * p * 2.01 + 31.0;
+  sum += noiseQuintic(p) * 0.15;
+  return sum;
+}
+
 // Style 2, cartoon bands: a lighter shallow band along each bank with a wobbly inner edge, large see-through lobed patches
 // drifting downstream, and small white glints stretched along the flow.
 vec4 riverBands(vec2 cs, float centre, vec2 ground) {
@@ -606,12 +629,12 @@ vec4 riverBands(vec2 cs, float centre, vec2 ground) {
   float cycle = uTime * 0.06;
   float c0 = fract(cycle);
   float c1 = fract(cycle + 0.5);
-  vec2 warp = vec2(noise(ground * k * 0.8), noise(ground * k * 0.8 + 9.0)) - 0.5;
-  vec2 base = ground * k * 0.3 + warp * 0.7;
-  float f0 = fbm(base - down * c0 * 0.9 + 5.0);
-  float f1 = fbm(base - down * c1 * 0.9 + 23.0);
+  vec2 warp = vec2(noiseQuintic(ground * k * 0.8), noiseQuintic(ground * k * 0.8 + 9.0)) - 0.5;
+  vec2 base = ground * k * 0.3 + warp * 1.4;
+  float f0 = fbmRotated(base - down * c0 * 0.9 + 5.0);
+  float f1 = fbmRotated(base - down * c1 * 0.9 + 23.0);
   float f = mix(f0, f1, abs(1.0 - 2.0 * c0));
-  float patch = smoothstep(0.48, 0.6, f) * smoothstep(0.1, 0.3, centre);
+  float patch = smoothstep(0.46, 0.62, f) * smoothstep(0.1, 0.3, centre);
   col = riverOver(col, vec4(vec3(0.75, 0.94, 1.0) * 0.22, 0.22) * patch);
   // Glints: ellipses along the flow (the phase gradient points across it), shown while the wave passes their cell.
   vec2 g = ground * k * 14.0;
