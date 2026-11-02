@@ -165,18 +165,21 @@ function placeWalls(
 }
 
 /** Hex-distance band each ring's line may wander in: [min, max] from Utgard's anchor. One clear hex always separates the two bands. */
-export const RingBands: Record<UtgardRing, readonly [number, number]> = { inner: [3, 5], outer: [6, 9] };
+export const RingBands: Record<UtgardRing, readonly [number, number]> = { inner: [3, 6], outer: [7, 11] };
 /** Control points of the ring's wobble round the full circle (more on the longer outer ring). */
-const RingNoisePoints: Record<UtgardRing, number> = { inner: 5, outer: 7 };
+const RingNoisePoints: Record<UtgardRing, number> = { inner: 5, outer: 8 };
+/** The finer second octave: its own control points (more than twice the first's) and how far it pushes the target in or out. */
+const RingDetailPoints: Record<UtgardRing, number> = { inner: 11, outer: 17 };
+const RingDetailAmplitude = 0.9;
 /** Range the wobble's target distance is drawn from, per ring. */
-const RingTargetRange: Record<UtgardRing, readonly [number, number]> = { inner: [2.8, 5.2], outer: [6, 9.2] };
+const RingTargetRange: Record<UtgardRing, readonly [number, number]> = { inner: [2.6, 6.4], outer: [6.6, 11.4] };
 /** Cost of a hex the line can follow without a wall (mountain, lava, sea, a giant) against a hex that needs one. */
 const BarrierStepCost = 0.35;
 const WallStepCost = 1;
 /** Cost of a sea hex: the line keeps to land where the band allows, so a small island's ring hugs its coast instead of running out to sea. */
-const SeaStepCost = 4;
+const SeaStepCost = 15;
 /** Cost per hex of distance between a hex and the wobble's target distance at its angle. */
-const TargetPull = 2;
+const TargetPull = 3;
 
 /**
  * Where `c` sits round Utgard, as a fraction of the circle in [0, 1): its index in `ring(anchor, d)` over the ring's 6d hexes.
@@ -210,6 +213,14 @@ export function naturalLoop(
   const [lo, hi] = RingTargetRange[kind];
   const salt = kind === 'inner' ? 601 : 607;
   const control = Array.from({ length: points }, (_, k) => lo + (hi - lo) * hash2(k, points, seed + salt));
+  const detailPoints = RingDetailPoints[kind];
+  const detail = Array.from({ length: detailPoints }, (_, k) => RingDetailAmplitude * (2 * hash2(k, detailPoints, seed + salt + 2) - 1));
+  const periodic = (values: number[], u: number) => {
+    const x = u * values.length;
+    const k = Math.floor(x);
+    const f = x - k;
+    return values[k % values.length]! * (1 - f) + values[(k + 1) % values.length]! * f;
+  };
 
   // The band's hexes in a fixed order (distance, then ring order), with their angle and step cost.
   const nodes: { hex: AxialCoord; u: number; cost: number }[] = [];
@@ -219,14 +230,15 @@ export function naturalLoop(
     hexes.forEach((hex, i) => {
       if (blocked.has(coordKey(hex))) return;
       const u = i / (6 * d);
-      const x = u * points;
-      const k = Math.floor(x);
-      const f = x - k;
-      const target = control[k % points]! * (1 - f) + control[(k + 1) % points]! * f;
+      const target = periodic(control, u) + periodic(detail, u);
       const terrain = terrainOf(hex);
       const barrier = terrain === 'mountain' || isRiver(hex) || giantHexes.has(coordKey(hex));
       index.set(coordKey(hex), nodes.length);
-      nodes.push({ hex, u, cost: (terrain === 'sea' ? SeaStepCost : barrier ? BarrierStepCost : WallStepCost) + TargetPull * Math.abs(d - target) });
+      // True (Euclidean) distance in hex widths: a constant hex distance is a hexagon, so the wobble is measured round a circle.
+      const dq = hex.q - anchor.q;
+      const dr = hex.r - anchor.r;
+      const radius = Math.sqrt(dq * dq + dq * dr + dr * dr);
+      nodes.push({ hex, u, cost: (terrain === 'sea' ? SeaStepCost : barrier ? BarrierStepCost : WallStepCost) + TargetPull * Math.abs(radius - target) });
     });
   }
   const n = nodes.length;
