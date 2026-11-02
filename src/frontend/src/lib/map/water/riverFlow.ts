@@ -10,6 +10,14 @@
 // field, it has no cut locus. Pure: no Pixi, no DOM.
 import { isoTopPoints, type Point } from '../../hex/geometry';
 import { TILE_ART_NATIVE_W, TILE_ART_TOPFACE_H_FRAC, TILE_ART_TOPFACE_Y_FRAC } from '../textures';
+import { groundSquash } from './waterMask';
+
+/**
+ * The art is isometric: the top face is drawn `GROUND_SQUASH` (about 0.53) as tall as the ground it lies on. Everything that
+ * measures or solves on the ground (the potential's Laplacian, the flow direction, distances, the crossing direction of an edge)
+ * does so in ground space, (x, y / GROUND_SQUASH). Lengths named "texels" below are ground texels: one texel along x.
+ */
+export const GROUND_SQUASH = groundSquash(TILE_ART_NATIVE_W, TILE_ART_NATIVE_W * TILE_ART_TOPFACE_H_FRAC);
 
 /** A texel counts as water at this mask value. */
 export const WATER_THRESHOLD = 128;
@@ -19,7 +27,7 @@ export const WATER_THRESHOLD = 128;
  * off, without leaking across the grass neck of the 60-degree loop.
  */
 export const NON_WATER_COST = 40;
-/** Texels from the bank over which the flow intensity ramps from 0 to 1. */
+/** Ground texels from the bank over which the flow intensity ramps from 0 to 1. */
 export const BANK_FADE_TEXELS = 4;
 /**
  * Texels from an edge segment within which water texels seed the potential (and the fade distance), counted from the water
@@ -36,6 +44,9 @@ export const EDGE_RIM_TEXELS = 3;
 export const SOR_OMEGA = 1.9;
 export const SOR_TOLERANCE = 1e-5;
 export const SOR_MAX_SWEEPS = 6000;
+
+/** A vertical link in screen texels conducts this much (ground space: `phi_xx + s^2 phi_yy = 0`). */
+const VERTICAL_CONDUCTANCE = GROUND_SQUASH * GROUND_SQUASH;
 
 export interface RiverFlowInput {
   /** The half-resolution mask cell, `cw * ch` bytes (255 = water). */
@@ -83,19 +94,19 @@ function distToSegment(px: number, py: number, a: Point, b: Point): number {
   return Math.hypot(px - (a.x + t * dx), py - (a.y + t * dy));
 }
 
-/** Unit normal of polygon edge `edge`, pointing out of the face. */
-function outwardNormal(polygon: readonly Point[], edge: number): Point {
+/**
+ * The direction (screen space, unit) in which water crosses polygon edge `edge`, out of the face: from the hex centre to the
+ * edge's midpoint. On the ground that is the edge's normal; the isometric squash keeps "centre to midpoint" a straight line, so
+ * its screen projection is just the screen vector. (The screen perpendicular of a slanted edge is about 30 degrees off.)
+ */
+function crossingDirection(polygon: readonly Point[], edge: number): Point {
   const a = polygon[edge]!;
   const b = polygon[(edge + 1) % polygon.length]!;
-  const c = polygon.reduce((s, p) => ({ x: s.x + p.x / polygon.length, y: s.y + p.y / polygon.length }), { x: 0, y: 0 });
-  let nx = b.y - a.y;
-  let ny = a.x - b.x;
-  if (nx * ((a.x + b.x) / 2 - c.x) + ny * ((a.y + b.y) / 2 - c.y) < 0) {
-    nx = -nx;
-    ny = -ny;
-  }
-  const len = Math.hypot(nx, ny);
-  return { x: nx / len, y: ny / len };
+  const c = polygon.reduce((acc, p) => ({ x: acc.x + p.x / polygon.length, y: acc.y + p.y / polygon.length }), { x: 0, y: 0 });
+  const dx = (a.x + b.x) / 2 - c.x;
+  const dy = (a.y + b.y) / 2 - c.y;
+  const len = Math.hypot(dx, dy);
+  return { x: dx / len, y: dy / len };
 }
 
 /** Min-heap of (cost, index) pairs, for Dijkstra. */
@@ -244,6 +255,7 @@ function geodesic(input: RiverFlowInput, passable: Uint8Array, edge: number): Fl
   // Fast marching (the heap-driven upwind eikonal solver): like Dijkstra, but the distance of a texel comes from both axis
   // neighbours, so it is a Euclidean-accurate front instead of the 8-way staircase of a plain grid walk.
   const done = new Uint8Array(cw * ch);
+  const hy = 1 / GROUND_SQUASH; // one texel down is 1 / squash ground texels
   const solve = (x: number, y: number): number => {
     const cost = mask[y * cw + x]! >= WATER_THRESHOLD ? 1 : NON_WATER_COST;
     const axis = (x0: number, y0: number, x1: number, y1: number) => {
@@ -253,10 +265,15 @@ function geodesic(input: RiverFlowInput, passable: Uint8Array, edge: number): Fl
     };
     const tx = axis(x - 1, y, x + 1, y);
     const ty = axis(x, y - 1, x, y + 1);
-    const lo = Math.min(tx, ty);
-    const hi = Math.max(tx, ty);
-    if (hi - lo >= cost) return lo + cost;
-    return (lo + hi + Math.sqrt(2 * cost * cost - (hi - lo) * (hi - lo))) / 2;
+    // Upwind eikonal on a grid whose spacing is 1 along x and hy along y: ((u - tx) / 1)^2 + ((u - ty) / hy)^2 = cost^2.
+    const one = Math.min(tx + cost, ty + cost * hy);
+    if (!Number.isFinite(tx) || !Number.isFinite(ty) || one <= Math.max(tx, ty)) return one;
+    const a = 1;
+    const b = 1 / (hy * hy);
+    const qa = a + b;
+    const qb = -2 * (a * tx + b * ty);
+    const qc = a * tx * tx + b * ty * ty - cost * cost;
+    return (-qb + Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc))) / (2 * qa);
   };
   while (heap.size > 0) {
     const { cost, item } = heap.pop();
@@ -327,8 +344,9 @@ export function riverPotential(input: RiverFlowInput): { phi: Float64Array; swee
       if (!passable[p]) continue;
       if (x + 1 < cw && passable[p + 1]) cond[p * 4] = link(p, p + 1);
       if (x > 0 && passable[p - 1]) cond[p * 4 + 1] = link(p, p - 1);
-      if (y + 1 < ch && passable[p + cw]) cond[p * 4 + 2] = link(p, p + cw);
-      if (y > 0 && passable[p - cw]) cond[p * 4 + 3] = link(p, p - cw);
+      // Ground-space Laplacian phi_xx + s^2 phi_yy in screen texels: vertical links conduct s^2 as much.
+      if (y + 1 < ch && passable[p + cw]) cond[p * 4 + 2] = link(p, p + cw) * VERTICAL_CONDUCTANCE;
+      if (y > 0 && passable[p - cw]) cond[p * 4 + 3] = link(p, p - cw) * VERTICAL_CONDUCTANCE;
       sum[p] = cond[p * 4]! + cond[p * 4 + 1]! + cond[p * 4 + 2]! + cond[p * 4 + 3]!;
     }
   }
@@ -381,6 +399,9 @@ function distanceToBank(input: RiverFlowInput, passable: Uint8Array): Float32Arr
       }
     }
   }
+  // Steps in ground texels: a vertical texel is 1 / squash long.
+  const DOWN = 1 / GROUND_SQUASH;
+  const DIAG = Math.hypot(1, DOWN);
   const relax = (x: number, y: number, dx: number, dy: number, step: number) => {
     const xx = x + dx;
     const yy = y + dy;
@@ -391,17 +412,17 @@ function distanceToBank(input: RiverFlowInput, passable: Uint8Array): Float32Arr
   for (let y = 0; y < ch; y++) {
     for (let x = 0; x < cw; x++) {
       relax(x, y, -1, 0, 1);
-      relax(x, y, 0, -1, 1);
-      relax(x, y, -1, -1, Math.SQRT2);
-      relax(x, y, 1, -1, Math.SQRT2);
+      relax(x, y, 0, -1, DOWN);
+      relax(x, y, -1, -1, DIAG);
+      relax(x, y, 1, -1, DIAG);
     }
   }
   for (let y = ch - 1; y >= 0; y--) {
     for (let x = cw - 1; x >= 0; x--) {
       relax(x, y, 1, 0, 1);
-      relax(x, y, 0, 1, 1);
-      relax(x, y, 1, 1, Math.SQRT2);
-      relax(x, y, -1, 1, Math.SQRT2);
+      relax(x, y, 0, 1, DOWN);
+      relax(x, y, 1, 1, DIAG);
+      relax(x, y, -1, 1, DIAG);
     }
   }
   return d;
@@ -461,7 +482,7 @@ export function computeRiverFlow(input: RiverFlowInput): Uint8Array {
   const vx = new Float32Array(cw * ch);
   const vy = new Float32Array(cw * ch);
   const has = new Uint8Array(cw * ch);
-  const normals = input.polygon.map((_, e) => outwardNormal(input.polygon, e));
+  const normals = input.polygon.map((_, e) => crossingDirection(input.polygon, e));
   const axis = (lo: boolean, hi: boolean, here: number, pLo: number, pHi: number) => (lo && hi ? (pHi - pLo) / 2 : hi ? pHi - here : lo ? here - pLo : 0);
   for (let y = 0; y < ch; y++) {
     for (let x = 0; x < cw; x++) {
@@ -488,8 +509,9 @@ export function computeRiverFlow(input: RiverFlowInput): Uint8Array {
         has[p] = 1;
         continue;
       }
+      // Ground velocity (-phi_X, -phi_Y) = (-phi_x, -phi_y * s) mapped to the screen (x, y * s): (-phi_x, -s^2 phi_y).
       vx[p] = -gx;
-      vy[p] = -gy;
+      vy[p] = -VERTICAL_CONDUCTANCE * gy;
       has[p] = Math.hypot(gx, gy) > 1e-9 ? 1 : 0;
     }
   }
@@ -550,7 +572,7 @@ export function computeRiverFlow(input: RiverFlowInput): Uint8Array {
 }
 
 /**
- * Texels from the bank at which the ripple texture's B reaches 1 (the middle of the channel). B is the distance to the bank over
+ * Ground texels from the bank at which the ripple texture's B reaches 1 (the middle of the channel). B is the distance to the bank over
  * this, not over `BANK_FADE_TEXELS`: the shader both fades the ripples out at the bank (over the first `BANK_FADE_TEXELS` of it)
  * and lags the crests there, so they bow into arcs and none runs straight along a hex seam.
  */
@@ -599,13 +621,16 @@ export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; p
   const periods = Math.max(1, Math.round(channelLength / RIPPLE_WAVELENGTH_TEXELS));
   const scale = hasIn || maxPhi <= 0 ? 1 : 1 / maxPhi;
   const rate = channelLength > 0 ? (2 * Math.PI * periods) / channelLength : 0;
-  const normals = input.polygon.map((_, e) => outwardNormal(input.polygon, e));
+  const normals = input.polygon.map((_, e) => crossingDirection(input.polygon, e));
 
   // How far past its edge line (into the face) each edge's seed band reaches: the potential starts there, not on the line.
+  // (measured on the ground: the crossing direction and the offsets are unsquashed first.)
   const depthOf = (edge: number, x: number, y: number) => {
     const a = input.polygon[edge]!;
     const n = normals[edge]!;
-    return -((x + 0.5 - a.x) * n.x + (y + 0.5 - a.y) * n.y);
+    const gy = 1 / GROUND_SQUASH;
+    const len = Math.hypot(n.x, n.y * gy);
+    return -((x + 0.5 - a.x) * n.x + ((y + 0.5 - a.y) * gy) * (n.y * gy)) / len;
   };
   const bandDepth = new Float64Array(input.polygon.length);
   for (let p = 0; p < cw * ch; p++) {

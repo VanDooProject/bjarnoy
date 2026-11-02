@@ -995,6 +995,8 @@ dithered render, then box-downsampled 2x2. Only the `_base` frames of these fami
 without an out direction does not flow. Inside the hex the flow is a **potential flow** solved over
 the frame's painted water (`riverFlow.ts`), so meanders, the 60-degree loop, islands and Y confluences are followed as painted:
 
+0. **Everything is solved on the ground.** The art is isometric: the top face is drawn `s = groundSquash` (about 0.531, 92 over 173.2) as tall as the ground it lies on. The potential, the direction, the distances and the crossing direction of an edge are therefore computed in ground space `(x, y / s)`. In screen texels the Laplacian is `phi_xx + s^2 phi_yy = 0` (vertical links conduct `s^2` as much); the flow direction is the ground velocity mapped back to the screen, `(-phi_x, -s^2 phi_y)`; fast marching and the bank-distance chamfer count a vertical step as `1/s`. "Texels" in the constants below are ground texels. The water crosses an edge along the line from the hex centre to the edge midpoint (the ground normal, projected), not along the screen perpendicular of the edge: on the four slanted edges the two are about 30 degrees apart, which showed as a diagonal band of the wrong direction on the seam.
+
 1. Passable texels are those inside the hex top face, padded by one texel. Edges are polygon edge
    `(3 - index of the direction in TILE_ORIENTATIONS + 6) % 6` of the top face (`topFaceEdgeIndex`, shared with `riverPath.ts`);
    the in edges come from `inDirections` of the river or bog tile, the out edge as above.

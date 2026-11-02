@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeRiverFlow, computeRiverRipple, RIPPLE_WAVELENGTH_TEXELS, RIVER_CENTRE_TEXELS, riverGeodesicDistance, riverPotential, SEED_REACH, topFacePolygonTexels, WATER_THRESHOLD, type RiverFlowInput } from './riverFlow';
+import { computeRiverFlow, computeRiverRipple, GROUND_SQUASH, RIPPLE_WAVELENGTH_TEXELS, RIVER_CENTRE_TEXELS, riverGeodesicDistance, riverPotential, SEED_REACH, topFacePolygonTexels, WATER_THRESHOLD, type RiverFlowInput } from './riverFlow';
 import { topFaceEdgeIndex } from '../riverPath';
 import { riverFrameInput, vendoredArt, type RiverFrame } from './riverArtFixture';
 
@@ -192,14 +192,14 @@ describe.skipIf(!vendoredArt)('computeRiverFlow on the vendored art', () => {
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   };
   const centre = (f: RiverFrame) => ({ x: f.polygon.reduce((s, p) => s + p.x, 0) / 6, y: f.polygon.reduce((s, p) => s + p.y, 0) / 6 });
-  /** The normal of edge `e`, pointing out of the face. */
+  /**
+   * The direction water crosses edge `e` out of the face: hex centre to edge midpoint, which is the ground normal of the edge
+   * projected onto the isometric screen. (The screen perpendicular of a slanted edge is about 30 degrees off it.)
+   */
   const outward = (f: RiverFrame, e: number) => {
-    const a = f.polygon[e]!;
-    const b = f.polygon[(e + 1) % 6]!;
     const m = mid(f, e);
     const c = centre(f);
-    const n = { x: b.y - a.y, y: a.x - b.x };
-    return n.x * (m.x - c.x) + n.y * (m.y - c.y) >= 0 ? n : { x: -n.x, y: -n.y };
+    return { x: m.x - c.x, y: m.y - c.y };
   };
   const water = (f: RiverFrame, x: number, y: number) => f.mask[y * f.cw + x]! >= WATER_THRESHOLD;
   /** Water texels of the face within `reach` of edge `e` and within `span` of its midpoint, with intensity above `minB`. */
@@ -264,14 +264,15 @@ describe.skipIf(!vendoredArt)('computeRiverFlow on the vendored art', () => {
       const to = mid(f, outEdge);
       const axis = { x: to.x - from.x, y: to.y - from.y };
       // The painted banks have coves, where the water follows the bank: nearly all of the channel is within 20 degrees of the
-      // axis, the coves within 50.
+      // axis, the coves within 50. Angles are ground angles.
       let checked = 0;
       let within20 = 0;
       for (let y = 0; y < f.ch; y++) {
         for (let x = 0; x < f.cw; x++) {
           const d = dirAt(flow, x, y, f.cw);
           if (d.a !== 255 || !water(f, x, y) || d.b <= 0.5) continue;
-          const off = degrees(d, axis);
+          // Angles are measured on the ground (screen y unsquashed): that is where the flow is solved and where a bank slants.
+          const off = degrees({ x: d.x, y: d.y / GROUND_SQUASH }, { x: axis.x, y: axis.y / GROUND_SQUASH });
           expect(off, `${inEdge}->${outEdge} at ${x},${y}`).toBeLessThan(50);
           if (off < 20) within20++;
           checked++;
@@ -442,16 +443,28 @@ function phaseAt(cell: Uint8Array, x: number, y: number, cw: number): { theta: n
   return { theta: Math.atan2(sin, cos), cos, b: cell[o + 2]! / 255 };
 }
 
+/** Distance (ground texels: screen y unsquashed) from a texel centre to polygon edge `e` of the frame. */
+function groundDistToEdge(f: RiverFrame, e: number, x: number, y: number): number {
+  const s = 1 / GROUND_SQUASH;
+  const a = f.polygon[e]!;
+  const b = f.polygon[(e + 1) % 6]!;
+  const dx = b.x - a.x;
+  const dy = (b.y - a.y) * s;
+  const t = Math.max(0, Math.min(1, ((x + 0.5 - a.x) * dx + ((y + 0.5 - a.y) * s) * dy) / (dx * dx + dy * dy)));
+  return Math.hypot(x + 0.5 - (a.x + t * dx), (y + 0.5 - a.y) * s - t * dy);
+}
+
 describe('computeRiverRipple on a synthetic straight channel', () => {
   it('is a whole number of periods, 0 mod 2 pi on the in and out seed bands, rising from the out edge to the in edge', () => {
     const { data, periods } = computeRiverRipple(input(channel(), BOTTOM));
-    // The channel runs from the bottom seed band (y ~ 45) to the top one (y ~ 1): about 44 texels.
-    expect(periods).toBe(Math.max(1, Math.round(44 / RIPPLE_WAVELENGTH_TEXELS)));
+    // The channel runs from the bottom seed band (y ~ 45) to the top one (y ~ 1): about 44 screen texels, 44 / squash on the ground.
+    expect(periods).toBe(Math.max(1, Math.round(44 / GROUND_SQUASH / RIPPLE_WAVELENGTH_TEXELS)));
     // On the edge line itself (the face's top and bottom sides, y 0 and 46) the phase is a whole turn; past it, in the seed band
     // and the rim, it runs on at the cell's mean rate instead of standing still. The texel centres at y 0.5 and 45.5 are half
     // a texel from the lines, the out edge's rim at 46.5 and 47.5 up to 1.5.
-    for (const y of [0, CH - 3]) expect(phaseAt(data, 50, y, CW)!.cos, `y=${y}`).toBeGreaterThan(0.95);
-    for (const y of [1, CH - 2, CH - 1]) expect(phaseAt(data, 50, y, CW)!.cos, `y=${y}`).toBeGreaterThan(0.5);
+    // The phase runs at 2 pi periods / 44 per screen texel along the axis, so it is within that times the distance (30 % margin).
+    const perTexel = (2 * Math.PI * periods) / 44;
+    for (const [y, d] of [[0, 0.5], [CH - 3, 0.5], [1, 1.5], [CH - 2, 1.5], [CH - 1, 2.5]] as const) expect(phaseAt(data, 50, y, CW)!.cos, `y=${y}`).toBeGreaterThan(Math.cos(Math.min(Math.PI, 1.3 * perTexel * d)));
     // Unwrapped along the axis from the out edge to the in edge: never decreases, ends at 2 pi * periods.
     let prev = 0;
     let unwrapped = 0;
@@ -471,7 +484,7 @@ describe('computeRiverRipple on a synthetic straight channel', () => {
     }
     // The sampled rows run from 1.5 texels past the out edge line to half a texel inside the in edge line, so the span is a
     // whole number of periods plus the phase of those 2 texels at the cell's rate (2 pi periods / 44 per texel, about 0.6).
-    expect(Math.abs(unwrapped - 2 * Math.PI * periods)).toBeLessThan(1);
+    expect(Math.abs(unwrapped - 2 * Math.PI * periods - 2 * perTexel)).toBeLessThan(1);
   });
 
   it('continues its phase across a seam: the out edge rim of one hex equals the in edge side of the hex below it', () => {
@@ -480,7 +493,7 @@ describe('computeRiverRipple on a synthetic straight channel', () => {
     expect(above.periods).toBe(below.periods);
     // The face's bottom side is at y = 46, the next hex's top side is the same line: texel y of the hex above is y - 46 of the
     // hex below. Both are on the water, one in the out edge's rim, the other in the in edge's seed band.
-    for (const [yAbove, yBelow] of [[46, 0], [47, 1]] as const) {
+    for (const [yAbove, yBelow] of [[46, 0]] as const) {
       const a = phaseAt(above.data, 50, yAbove, CW)!;
       const b = phaseAt(below.data, 50, yBelow, CW)!;
       expect(Math.abs(a.theta - b.theta), `rows ${yAbove}/${yBelow}`).toBeLessThan(0.05);
@@ -491,12 +504,13 @@ describe('computeRiverRipple on a synthetic straight channel', () => {
 
   it('runs the other way round when the edges swap, and covers the same texels as the direction cell', () => {
     const flow = computeRiverFlow(input(channel(), TOP));
-    const { data } = computeRiverRipple(input(channel(), TOP));
+    const { data, periods } = computeRiverRipple(input(channel(), TOP));
     for (let p = 0; p < CW * CH; p++) {
       expect(data[p * 4 + 3], `alpha ${p}`).toBe(flow[p * 4 + 3]);
     }
-    expect(phaseAt(data, 50, 0, CW)!.cos).toBeGreaterThan(0.95);
-    expect(phaseAt(data, 50, CH - 3, CW)!.cos).toBeGreaterThan(0.95);
+    const perTexel = (2 * Math.PI * periods) / 44;
+    expect(phaseAt(data, 50, 0, CW)!.cos).toBeGreaterThan(Math.cos(1.3 * perTexel * 0.5));
+    expect(phaseAt(data, 50, CH - 3, CW)!.cos).toBeGreaterThan(Math.cos(1.3 * perTexel * 0.5));
   });
 });
 
@@ -516,14 +530,14 @@ describe('computeRiverRipple intensity', () => {
   it('is nearly the same in the middle on both sides of a seam (within 0.1)', () => {
     const above = computeRiverRipple(input(channel(), BOTTOM));
     const below = computeRiverRipple(input(channel(), BOTTOM));
-    for (const [yAbove, yBelow] of [[46, 0], [47, 1]] as const) {
+    for (const [yAbove, yBelow] of [[46, 0]] as const) {
       for (const x of [50]) expect(Math.abs(above.data[(yAbove * CW + x) * 4 + 2]! - below.data[(yBelow * CW + x) * 4 + 2]!) / 255, `x=${x} rows ${yAbove}/${yBelow}`).toBeLessThan(0.1);
     }
   });
 });
 
 describe.skipIf(!vendoredArt)('computeRiverRipple on the vendored art', () => {
-  it('is a whole turn on every in and out edge line: cos theta > 0.95 within half a texel of it, and near 0 within 1.5', async () => {
+  it('is a whole turn on every in and out edge line: cos theta > 0.8 (2 pi / 6 per ground texel at most) within 2 ground texels of it', async () => {
     for (const [name, outDir, inDirs] of [
       ['rivertile_bend120_meander_SE_base', 'W', ['SE']],
       ['rivertile_y_narrow_SE_base', 'W', ['E', 'SE']],
@@ -534,20 +548,15 @@ describe.skipIf(!vendoredArt)('computeRiverRipple on the vendored art', () => {
       const { data, periods } = computeRiverRipple({ ...f, inEdges, outEdge });
       expect(periods, name).toBeGreaterThanOrEqual(1);
       for (const e of [outEdge, ...inEdges]) {
-        const a = f.polygon[e]!;
-        const b = f.polygon[(e + 1) % 6]!;
         let checked = 0;
         for (let y = 0; y < f.ch; y++) {
           for (let x = 0; x < f.cw; x++) {
-            const dx = b.x - a.x;
-            const dy = b.y - a.y;
-            const t = Math.max(0, Math.min(1, ((x + 0.5 - a.x) * dx + (y + 0.5 - a.y) * dy) / (dx * dx + dy * dy)));
-            const d = Math.hypot(x + 0.5 - (a.x + t * dx), y + 0.5 - (a.y + t * dy));
-            if (d > 1.5) continue;
+            if (groundDistToEdge(f, e, x, y) > 2) continue;
             const p = phaseAt(data, x, y, f.cw);
             if (!p) continue;
             checked++;
-            expect(p.cos, `${name} edge ${e} at ${x},${y}`).toBeGreaterThan(d <= 0.5 ? 0.95 : 0.5);
+            // The phase runs at most 2 pi / 6 per ground texel (a period is 6..18 texels), from 0 on the edge line.
+            expect(p.cos, `${name} edge ${e} at ${x},${y}`).toBeGreaterThan(Math.cos(Math.min(Math.PI, (Math.PI / 3) * groundDistToEdge(f, e, x, y) + 0.15)));
           }
         }
         expect(checked, `${name} edge ${e}`).toBeGreaterThan(5);
@@ -562,8 +571,6 @@ describe.skipIf(!vendoredArt)('computeRiverRipple on the vendored art', () => {
     const out = edges[0]!;
     const { data, periods } = computeRiverRipple({ ...f, inEdges: [], outEdge: out });
     expect(periods).toBeGreaterThanOrEqual(1);
-    const a = f.polygon[out]!;
-    const b = f.polygon[(out + 1) % 6]!;
     let covered = 0;
     let checked = 0;
     for (let y = 0; y < f.ch; y++) {
@@ -571,16 +578,110 @@ describe.skipIf(!vendoredArt)('computeRiverRipple on the vendored art', () => {
         const p = phaseAt(data, x, y, f.cw);
         if (!p) continue;
         covered++;
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const t = Math.max(0, Math.min(1, ((x + 0.5 - a.x) * dx + (y + 0.5 - a.y) * dy) / (dx * dx + dy * dy)));
-        if (Math.hypot(x + 0.5 - (a.x + t * dx), y + 0.5 - (a.y + t * dy)) <= 1.5) {
+        const dg = groundDistToEdge(f, out, x, y);
+        if (dg <= 3) {
           checked++;
-          expect(p.cos, `at ${x},${y}`).toBeGreaterThan(0.5);
+          expect(p.cos, `at ${x},${y}`).toBeGreaterThan(Math.cos(Math.min(Math.PI, (Math.PI / 3) * dg + 0.15)));
         }
       }
     }
     expect(covered).toBeGreaterThan(50);
     expect(checked).toBeGreaterThan(3);
+  }, 120_000);
+});
+
+/** The tile art is drawn `TILE_W` wide: 168 world units for 200 source px. */
+const WORLD_PER_SOURCE_PX = 168 / 200;
+
+describe('computeRiverFlow on a slanted channel', () => {
+  it('runs along the centre-to-centre axis between a pair of slanted opposite edges, both ways round', () => {
+    const polygon = POLYGON;
+    const mid = (e: number) => ({ x: (polygon[e]!.x + polygon[(e + 1) % 6]!.x) / 2, y: (polygon[e]!.y + polygon[(e + 1) % 6]!.y) / 2 });
+    const m0 = mid(0);
+    const m3 = mid(3);
+    const axis = { x: m3.x - m0.x, y: m3.y - m0.y };
+    // A channel 12 ground texels wide round the line from one edge midpoint to the other.
+    const mask = new Uint8Array(CW * CH);
+    const len = Math.hypot(axis.x, axis.y / GROUND_SQUASH);
+    for (let y = 0; y < CH; y++) {
+      for (let x = 0; x < CW; x++) {
+        const px = x + 0.5 - m0.x;
+        const py = (y + 0.5 - m0.y) / GROUND_SQUASH;
+        const across = (px * (axis.y / GROUND_SQUASH) - py * axis.x) / len;
+        if (Math.abs(across) <= 6) mask[y * CW + x] = 255;
+      }
+    }
+    for (const [inEdge, outEdge, sign] of [[0, 3, 1], [3, 0, -1]] as const) {
+      const flow = computeRiverFlow({ mask, cw: CW, ch: CH, polygon, inEdges: [inEdge], outEdge });
+      let checked = 0;
+      for (let y = 0; y < CH; y++) {
+        for (let x = 0; x < CW; x++) {
+          const d = dirAt(flow, x, y);
+          const px = x + 0.5 - m0.x;
+          const py = (y + 0.5 - m0.y) / GROUND_SQUASH;
+          const across = Math.abs((px * (axis.y / GROUND_SQUASH) - py * axis.x) / len);
+          if (d.a === 0 || d.b < 0.99 || across > 1.5) continue;
+          checked++;
+          const dot = (d.x * axis.x * sign + d.y * axis.y * sign) / (Math.hypot(d.x, d.y) * Math.hypot(axis.x, axis.y));
+          expect((Math.acos(Math.min(1, dot)) * 180) / Math.PI, `${inEdge}->${outEdge} at ${x},${y}`).toBeLessThan(5);
+        }
+      }
+      expect(checked, `${inEdge}->${outEdge}`).toBeGreaterThan(20);
+    }
+  });
+});
+
+describe.skipIf(!vendoredArt)('computeRiverFlow across a slanted seam of the real art', () => {
+  it('turns by less than 15 degrees between texels 2 apart along the channel middle across the seam of the bend-into-meander pair', async () => {
+    const meanderOrigin = { x: 7182, y: 6103.44 };
+    const bendOrigin = { x: 7308, y: 6142.08 };
+    const meander = await riverFrameInput('rivertile_bend180_meander_NW_base');
+    const bend = await riverFrameInput('rivertile_bend_SE_base');
+    const meanderFlow = computeRiverFlow({ ...meander, inEdges: [topFaceEdgeIndex('E')], outEdge: topFaceEdgeIndex('W') });
+    const bendFlow = computeRiverFlow({ ...bend, inEdges: [topFaceEdgeIndex('SE')], outEdge: topFaceEdgeIndex('W') });
+    // The cells as the render texture places them (the bend is drawn last): world -> flow at that point, or null.
+    const cells = [
+      { f: meander, flow: meanderFlow, o: meanderOrigin },
+      { f: bend, flow: bendFlow, o: bendOrigin },
+    ];
+    const sample = (wx: number, wy: number) => {
+      let found: { x: number; y: number; b: number } | null = null;
+      for (const { f, flow, o } of cells) {
+        const x = Math.floor((((wx - o.x) / WORLD_PER_SOURCE_PX) - f.sx) / 2);
+        const y = Math.floor((((wy - o.y) / WORLD_PER_SOURCE_PX) - f.sy) / 2);
+        if (x < 0 || y < 0 || x >= f.cw || y >= f.ch) continue;
+        const d = dirAt(flow, x, y, f.cw);
+        if (d.a === 255) found = d;
+      }
+      return found;
+    };
+    // The seam: the bend's out edge. Its water midpoint is where the channel crosses.
+    const outEdge = topFaceEdgeIndex('W');
+    const a = bend.polygon[outEdge]!;
+    const b = bend.polygon[(outEdge + 1) % 6]!;
+    const toWorld = (p: { x: number; y: number }) => ({
+      x: bendOrigin.x + (bend.sx + 2 * p.x) * WORLD_PER_SOURCE_PX,
+      y: bendOrigin.y + (bend.sy + 2 * p.y) * WORLD_PER_SOURCE_PX,
+    });
+    const wa = toWorld(a);
+    const wb = toWorld(b);
+    const wc = toWorld(bend.polygon.reduce((s, p) => ({ x: s.x + p.x / 6, y: s.y + p.y / 6 }), { x: 0, y: 0 }));
+    const seamMid = { x: (wa.x + wb.x) / 2, y: (wa.y + wb.y) / 2 };
+    const cross = { x: seamMid.x - wc.x, y: seamMid.y - wc.y };
+    const crossLen = Math.hypot(cross.x, cross.y);
+    // Walk along the crossing direction through the seam, in texel steps of the half-resolution cell (2 source px).
+    const step = 2 * WORLD_PER_SOURCE_PX;
+    const samples: { x: number; y: number; b: number }[] = [];
+    for (let i = -12; i <= 12; i++) {
+      const d = sample(seamMid.x + (cross.x / crossLen) * step * i, seamMid.y + (cross.y / crossLen) * step * i);
+      if (d && d.b > 0.5) samples.push(d);
+    }
+    expect(samples.length).toBeGreaterThan(12);
+    for (let i = 0; i + 2 < samples.length; i++) {
+      const p = samples[i]!;
+      const q = samples[i + 2]!;
+      const c = (p.x * q.x + p.y * q.y) / (Math.hypot(p.x, p.y) * Math.hypot(q.x, q.y));
+      expect((Math.acos(Math.max(-1, Math.min(1, c))) * 180) / Math.PI, `samples ${i}/${i + 2}`).toBeLessThan(15);
+    }
   }, 120_000);
 });

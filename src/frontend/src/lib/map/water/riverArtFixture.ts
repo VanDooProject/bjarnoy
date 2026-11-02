@@ -10,7 +10,11 @@ import { topFacePolygonTexels, type RiverFlowInput } from './riverFlow';
 export const vendoredArt = existsSync(resolve(__dirname, '../../../../vendor/bg_assets_hextile/atlas/terrain-4.json'));
 
 /** The flow input of the frame called `name`, without the edges. */
-export type RiverFrame = Omit<RiverFlowInput, 'inEdges' | 'outEdge' | 'fadeEdge'>;
+export type RiverFrame = Omit<RiverFlowInput, 'inEdges' | 'outEdge' | 'fadeEdge'> & {
+  /** The cell's source rect origin (source px), to place it like the render texture does. */
+  sx: number;
+  sy: number;
+};
 
 export async function riverFrameInput(name: string): Promise<RiverFrame> {
   const bases = await loadBaseCanvases();
@@ -22,5 +26,7 @@ export async function riverFrameInput(name: string): Promise<RiverFrame> {
     cw: rect.sw >> 1,
     ch: rect.sh >> 1,
     polygon: topFacePolygonTexels(rect.sx, rect.sy),
+    sx: rect.sx,
+    sy: rect.sy,
   };
 }
