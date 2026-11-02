@@ -117,6 +117,11 @@ const DEFENSE_CATEGORY: BuildCategory = {
   id: 'defense',
   buildings: [{ type: 'palisade' }, { type: 'palisadegate' }, { type: 'bridge' }],
 };
+// The Tower is a defence building too, but stands only on grass and sand (SandOrGrass), so the forest and bog rings keep the wall-only category.
+const DEFENSE_TOWER_CATEGORY: BuildCategory = {
+  id: 'defense',
+  buildings: [{ type: 'tower' }, ...DEFENSE_CATEGORY.buildings],
+};
 const DEFENSE_SEA_CATEGORY: BuildCategory = { id: 'defense', buildings: [{ type: 'palisade' }] };
 // Bog ground offers what stands on its own bog kind (BuildingDefinition.RequiresBogKind / LakeShoreKinds, mirrored by
 // ringCatalogue.ts's buildingAllowedOnHex): plain moss takes the Clay Brickworks and the bog-ore works, a creek the
@@ -149,7 +154,6 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
     {
       id: 'military',
       buildings: [
-        { type: 'tower' },
         { type: 'archeryrange' },
         { type: 'siegeworkshop' },
         { type: 'barracks' },
@@ -166,10 +170,10 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
         { type: 'druidhut' },
       ],
     },
-    DEFENSE_CATEGORY,
+    DEFENSE_TOWER_CATEGORY,
     SHRINE_CATEGORY,
   ],
-  sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }, DEFENSE_CATEGORY],
+  sand: [{ id: 'military', buildings: [{ type: 'smithy' }] }, DEFENSE_TOWER_CATEGORY],
   forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }, DEFENSE_CATEGORY],
   // No new quarries can be built for now (BuildingCatalogue.NewPlacementDisabled); mountains offer nothing to build.
   mountain: [],
