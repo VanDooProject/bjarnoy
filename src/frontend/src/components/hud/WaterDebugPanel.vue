@@ -10,7 +10,7 @@ import DebugPanel from './DebugPanel.vue';
 import {
   waterDebugFlags,
   waterDebugTuning,
-  type WaterDebugFlags,
+  type WaterDebugToggle,
   type WaterDebugTuning,
 } from '../../lib/map/water/waterDebug';
 
@@ -27,7 +27,10 @@ const emit = defineEmits<{ change: [] }>();
 const flags = reactive(waterDebugFlags);
 const tuning = reactive(waterDebugTuning);
 
-const LABELS: Record<keyof WaterDebugFlags, string> = {
+/** The looks of the river overlay, by `riverStyle`. */
+const RIVER_STYLES = ['Ripple arcs', 'Toon strands', 'Cartoon bands'];
+
+const LABELS: Record<WaterDebugToggle, string> = {
   water: 'Water layer enabled',
   midWaterWaves: 'Surface pattern (caustics close / waves far)',
   causticsEverywhere: 'Debug: caustics on the world map too',
@@ -78,7 +81,7 @@ const CAUSTIC_DENSITY = { min: 0.3, max: 2.5, step: 0.05 };
 const SLIDERS: {
   key: keyof WaterDebugTuning;
   label: string;
-  needs: keyof WaterDebugFlags;
+  needs: WaterDebugToggle;
   range: { min: number; max: number; step: number };
   format: (v: number) => string;
 }[] = [
@@ -106,6 +109,13 @@ watch([flags, tuning], () => emit('change'), { flush: 'post' });
     <label v-for="(label, key) in LABELS" :key="key" class="row">
       <input type="checkbox" v-model="flags[key]" />
       <span>{{ label }}</span>
+    </label>
+
+    <label class="row">
+      <span>River style</span>
+      <select v-model.number="flags.riverStyle" :disabled="!flags.riverFlow">
+        <option v-for="(name, i) in RIVER_STYLES" :key="name" :value="i">{{ name }}</option>
+      </select>
     </label>
 
     <div

@@ -76,6 +76,11 @@ export interface WaterDebugFlags {
    */
   showRiverFlow: boolean;
   /**
+   * The look of the river overlay (§4.4d "Styles"): 0 ripple arcs (what ships), 1 toon strands, 2 cartoon bands. The last two
+   * are alternatives to compare in the debug panel.
+   */
+  riverStyle: number;
+  /**
    * Cut the unsplit tall art families into base/top halves in code
    * (legacyTileSplit.ts) so their overhang sits above the water mesh. Off
    * reproduces the artifact that exists to fix, which is the only way to see
@@ -83,6 +88,9 @@ export interface WaterDebugFlags {
    */
   legacyTileSplit: boolean;
 }
+
+/** The on/off switches among the flags (the panel draws a checkbox for each). */
+export type WaterDebugToggle = { [K in keyof WaterDebugFlags]: WaterDebugFlags[K] extends boolean ? K : never }[keyof WaterDebugFlags];
 
 export const waterDebugFlags: WaterDebugFlags = {
   water: true,
@@ -97,6 +105,7 @@ export const waterDebugFlags: WaterDebugFlags = {
   showWaterMask: false,
   riverFlow: true,
   showRiverFlow: false,
+  riverStyle: 0,
   legacyTileSplit: true,
 };
 

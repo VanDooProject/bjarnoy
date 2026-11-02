@@ -329,6 +329,11 @@ describe('WaterLayer', () => {
     layer.tick(16);
     expect(u.uRiverFlowOn).toBe(0);
     expect(u.uShowRiverFlow).toBe(1);
+    expect(u.uRiverStyle).toBe(0);
+    waterDebugFlags.riverStyle = 2;
+    layer.tick(32);
+    expect(u.uRiverStyle).toBe(2);
+    waterDebugFlags.riverStyle = 0;
     expect(u.uRiverAlpha).toBeCloseTo(alpha * 2, 9);
     expect(u.uRiverSpeed).toBeCloseTo(speed * 0.5, 9);
     expect(u.uRiverArc).toBeCloseTo(arc * 2, 9);

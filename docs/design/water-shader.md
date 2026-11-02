@@ -1062,6 +1062,8 @@ along the band by low-frequency world-space noise (`uRiverScale`, 6 cells per ti
 `crest * broken * B * uRiverAlpha`, colour `uRiverColor` (light cyan-white). The speed is 0.8 periods per second; a period is about
 an eighth of a tile (12 texels), the real length differs a little per cell because `N` is rounded.
 
+**Styles.** The ripple arcs above are the default (`waterDebugFlags.riverStyle = 0`, uniform `uRiverStyle`). Two alternatives for comparison are in the debug panel's "River style" select, drawn by the same `riverOverlay` from the same texture (the phase on its circle for moving along the stream, B as the cross-stream coordinate, ground noise to hide the per-wavelength repeat): 1 *toon strands* (long light and dark strands along the flow, curly white foam where B is small, sparkles) and 2 *cartoon bands* (a lighter shallow band along each bank with a wobbly inner edge, large see-through lobed patches, short glints stretched along the flow, whose direction comes from two extra taps of the flow texture, `uRiverUVPerWorld`). They are not shipped looks.
+
 `showRiverFlow` (debug) replaces the ripples with the static phase: hue is `theta`, brightness the intensity. It is how to check
 that the bands cross the channel and are continuous across hex seams.
 
@@ -1075,6 +1077,7 @@ sampler2D uWaterTaint              taint field (§4.4c), single channel
 sampler2D uWaterNoFoam             river-mouth no-foam field, single channel; foam *= 1 - it
 sampler2D uWaterDry                art dry mask (§4.4b), render texture over the mask's rect; alpha is the mask; caustics and foam *= 1 - it
 sampler2D uRiverFlow               river flow field (§4.4d), render texture over the mask's rect; rg cos/sin of the ripple phase, b intensity, a where the hex has flow (its top face plus a 2-texel rim past the in and out edges)
+float uRiverStyle                 0 ripple arcs, 1 toon strands, 2 cartoon bands (debug panel); vec2 uRiverUVPerWorld flow texture UV per world unit
 float uRiverFlowOn, uShowRiverFlow 0/1: the ripples; debug: colour the river by ripple phase
 float uRiverSpeed, uRiverArc       ripple phase rotation, radians per second; periods the crests lag at the banks
 float uRiverAlpha, uRiverScale;  vec3 uRiverColor   crest opacity; crest-break noise cells per world unit; crest colour

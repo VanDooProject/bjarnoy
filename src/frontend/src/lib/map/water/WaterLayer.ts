@@ -436,6 +436,8 @@ export class WaterLayer {
       uCausticBlobColor: { value: new Float32Array([blobR, blobG, blobB]), type: 'vec3<f32>' },
       uRiverFlowOn: { value: 0, type: 'f32' },
       uShowRiverFlow: { value: 0, type: 'f32' },
+      uRiverStyle: { value: 0, type: 'f32' },
+      uRiverUVPerWorld: { value: new Float32Array([1, 1]), type: 'vec2<f32>' },
       uRiverSpeed: { value: RIVER_SPEED_TURNS_PER_SECOND * 2 * Math.PI, type: 'f32' },
       uRiverArc: { value: RIVER_ARC_PERIODS, type: 'f32' },
       uRiverAlpha: { value: RIVER_ALPHA, type: 'f32' },
@@ -580,6 +582,7 @@ export class WaterLayer {
     const { minX, minY, maxX, maxY } = mask.region.rect;
     const positions = this.geometry.getBuffer('aPosition');
     positions.data.set([minX, minY, maxX, minY, maxX, maxY, minX, maxY]);
+    this.uniforms.uniforms.uRiverUVPerWorld = new Float32Array([1 / (maxX - minX), 1 / (maxY - minY)]);
     positions.update();
     this.hasMask = true;
   }
@@ -676,6 +679,7 @@ export class WaterLayer {
     // River flow is a settlement-view effect: the world map draws no tile art, so there is no flow texture to read there.
     u.uRiverFlowOn = waterDebugFlags.riverFlow ? 1 : 0;
     u.uShowRiverFlow = waterDebugFlags.showRiverFlow ? 1 : 0;
+    u.uRiverStyle = waterDebugFlags.riverStyle;
     u.uRiverAlpha = RIVER_ALPHA * waterDebugTuning.riverBrightness;
     u.uRiverSpeed = RIVER_SPEED_TURNS_PER_SECOND * 2 * Math.PI * waterDebugTuning.riverSpeed;
     u.uRiverArc = RIVER_ARC_PERIODS * waterDebugTuning.riverArc;

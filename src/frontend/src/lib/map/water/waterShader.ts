@@ -121,6 +121,8 @@ uniform float uCausticBlobAlpha;
 uniform vec3 uCausticBlobColor;
 uniform float uRiverFlowOn;
 uniform float uShowRiverFlow;
+uniform float uRiverStyle;
+uniform vec2 uRiverUVPerWorld;
 uniform float uRiverSpeed;
 uniform float uRiverArc;
 uniform float uRiverAlpha;
@@ -479,9 +481,12 @@ float sampleDry() {
 // The river ripple field (docs/design/water-shader.md §4.4d), premultiplied RGBA: rg = (cos, sin) of the ripple phase
 // * 0.5 + 0.5, b = intensity (0 at the bank), a = 1 where the river hex has flow. Same UVs as the mask. Returns the
 // un-premultiplied value, zero where no river hex is drawn.
-vec4 sampleRiverFlow() {
-  vec4 f = texture(uRiverFlow, vUV);
+vec4 sampleRiverFlowAt(vec2 uv) {
+  vec4 f = texture(uRiverFlow, uv);
   return f.a > 0.01 ? vec4(f.rgb / f.a, f.a) : vec4(0.0);
+}
+vec4 sampleRiverFlow() {
+  return sampleRiverFlowAt(vUV);
 }
 
 // The stored phase as a unit (cos, sin) pair: filtering the encoded pair shortens it, so it is renormalised.
@@ -492,12 +497,13 @@ vec2 riverPhase(vec4 flow) {
 
 const float RIVER_CREST_EDGE = 0.85;
 
-// The river overlay: thin light crests where the stored phase, rotated by uTime * uRiverSpeed, is near a whole turn, less a lag towards the banks (the crests bow downstream in the middle). The phase
-// is a multiple of the potential, so the crests cross the channel and slide towards the out edge (potential 0). Low-frequency
-// noise in ground space breaks each crest into ripple pieces. Returns premultiplied colour.
-vec4 riverOverlay(vec2 cs, float centre, vec2 ground) {
-  // centre: 0 at the bank, 1 from the channel's middle. The ripples fade out over its first quarter (4 of 16 texels); the
-  // crests lag at the banks by uRiverArc periods (1 - centre)^2, so the middle leads downstream and a crest is an arc.
+// Style 0, ripple arcs: thin light crests where the stored phase, rotated by uTime * uRiverSpeed, is near a whole turn, less a lag
+// towards the banks (the crests bow downstream in the middle). The phase is a multiple of the potential, so the crests cross the
+// channel and slide towards the out edge (potential 0). Low-frequency noise in ground space breaks each crest into ripple
+// pieces. centre: 0 at the bank, 1 from the channel's middle. Returns premultiplied colour.
+vec4 riverRipples(vec2 cs, float centre, vec2 ground) {
+  // The ripples fade out over the first quarter of centre (4 of 16 texels); the crests lag at the banks by uRiverArc periods
+  // (1 - centre)^2, so the middle leads downstream and a crest is an arc.
   float intensity = smoothstep(0.0, 0.25, centre);
   float lag = uRiverArc * (1.0 - centre) * (1.0 - centre) * 6.2831853;
   float turn = uRiverSpeed * uTime - lag;
@@ -506,6 +512,98 @@ vec4 riverOverlay(vec2 cs, float centre, vec2 ground) {
   float broken = smoothstep(0.25, 0.5, noise(ground * uRiverScale) * 0.7 + noise(ground * uRiverScale * 2.3 + 11.0) * 0.3);
   float alpha = crest * broken * intensity * uRiverAlpha;
   return vec4(uRiverColor * alpha, alpha);
+}
+
+// The stored phase rotated by time: (cos, sin) of theta + uRiverSpeed * uTime. Moving along the stream means moving round this
+// circle, so anything looked up with it repeats every wavelength; it is always mixed with ground noise to hide that.
+vec2 riverPhaseNow(vec2 cs) {
+  float t = uRiverSpeed * uTime;
+  return vec2(cs.x * cos(t) - cs.y * sin(t), cs.x * sin(t) + cs.y * cos(t));
+}
+
+// The ground gradient of the stored phase at this pixel (its direction is across the ripples, up the potential), from two more
+// taps of the flow texture 3 world units away. No dFdx: this shader has to compile as WebGL1 (see the header).
+vec2 riverPhaseGradient(vec2 cs) {
+  const float H = 3.0;
+  vec4 tx = sampleRiverFlowAt(vUV + vec2(H * uRiverUVPerWorld.x, 0.0));
+  vec4 ty = sampleRiverFlowAt(vUV + vec2(0.0, H * uRiverUVPerWorld.y));
+  vec2 px = tx.a > 0.5 ? riverPhase(tx) : cs;
+  vec2 py = ty.a > 0.5 ? riverPhase(ty) : cs;
+  // sin of the angle from cs to the tap: its cross product.
+  return vec2(cs.x * px.y - cs.y * px.x, (cs.x * py.y - cs.y * py.x) * uGroundSquash) / H;
+}
+
+// Premultiplied "over": b drawn over a.
+vec4 riverOver(vec4 a, vec4 b) {
+  return b + a * (1.0 - b.a);
+}
+
+// Style 1, toon strands: long thin light and dark strands along the flow (noise across the stream from centre, which is
+// constant along it, times noise along the stream on the phase circle), curly white foam where centre is small (banks, islands,
+// where channels meet) and a few sparkles.
+vec4 riverStrands(vec2 cs, float centre, vec2 ground) {
+  vec2 p = riverPhaseNow(cs);
+  float k = uRiverScale;
+  // Strands: one noise cell is about 3 texels across the stream. The phase circle carries them downstream; ground noise breaks the repeat.
+  float across = centre * 11.0;
+  vec2 q = vec2(across, 0.0) + p * vec2(0.12, 0.45) + vec2(0.0, noise(ground * k * 0.6) * 3.0);
+  float v = noise(q) * 0.65 + noise(q * vec2(2.3, 0.8) + 7.0) * 0.35;
+  float light = smoothstep(0.62, 0.7, v);
+  float dark = smoothstep(0.38, 0.3, v);
+  vec4 lightC = vec4(vec3(0.62, 0.86, 1.0) * 0.6, 0.6);
+  vec4 darkC = vec4(vec3(0.02, 0.07, 0.3) * 0.7, 0.7);
+  vec4 col = riverOver(darkC * dark, lightC * light);
+  col *= smoothstep(0.0, 0.1, centre);
+  // Curly white foam: a thin ridge of a slowly moving noise field, only near the banks and islands.
+  float nearBank = 1.0 - smoothstep(0.04, 0.16, centre);
+  float f = fbm(ground * k * 7.0 + p * 0.4);
+  float squiggle = 1.0 - smoothstep(0.0, 0.05, abs(f - 0.55));
+  float curl = squiggle * nearBank;
+  col = riverOver(col, vec4(vec3(1.0) * 0.9, 0.9) * curl);
+  // Sparkles: sparse small dots that twinkle.
+  vec2 sp = ground * k * 34.0;
+  vec2 cell = floor(sp);
+  float h = hash(cell);
+  vec2 jitter = vec2(hash(cell + 3.1), hash(cell + 7.7)) * 0.5 + 0.25;
+  float dotMask = (1.0 - smoothstep(0.08, 0.2, length(fract(sp) - jitter))) * step(0.95, h) * (0.5 + 0.5 * sin(uTime * 3.0 + h * 60.0));
+  col = riverOver(col, vec4(vec3(1.0), 1.0) * dotMask * 0.9);
+  return col * smoothstep(0.0, 0.05, centre + 0.05) * (uRiverAlpha / 0.5);
+}
+
+// Style 2, cartoon bands: a lighter shallow band along each bank with a wobbly inner edge, large see-through lobed patches
+// drifting downstream, and small white glints stretched along the flow.
+vec4 riverBands(vec2 cs, float centre, vec2 ground) {
+  vec2 p = riverPhaseNow(cs);
+  float k = uRiverScale;
+  // Bank band: its edge wobbles with noise and slowly with the phase.
+  float wobble = noise(ground * k * 5.0 + p * 0.8) - 0.5;
+  float edge = 0.3 + wobble * 0.14;
+  float band = 1.0 - smoothstep(edge - 0.03, edge + 0.03, centre);
+  vec4 col = vec4(vec3(0.42, 0.72, 0.9) * 0.6, 0.6) * band;
+  // Patches: big lobes of low-frequency noise, slid by the phase circle.
+  vec2 warp = vec2(noise(ground * k * 2.4), noise(ground * k * 2.4 + 9.0)) - 0.5;
+  float f = fbm(ground * k * 1.2 + warp * 1.4 + p * 0.25 + 5.0);
+  float patch = smoothstep(0.5, 0.64, f) * smoothstep(0.1, 0.3, centre);
+  col = riverOver(col, vec4(vec3(0.72, 0.93, 1.0) * 0.28, 0.28) * patch);
+  // Glints: ellipses along the flow (the phase gradient points across it), shown while the wave passes their cell.
+  vec2 g = ground * k * 22.0;
+  vec2 cell = floor(g);
+  float h = hash(cell);
+  vec2 o = fract(g) - (vec2(hash(cell + 1.7), hash(cell + 9.3)) * 0.4 + 0.3);
+  vec2 phaseGrad = riverPhaseGradient(cs);
+  vec2 across = phaseGrad / max(length(phaseGrad), 1e-6);
+  vec2 along = vec2(-across.y, across.x);
+  float e = pow(dot(o, along) / 0.34, 2.0) + pow(dot(o, across) / 0.07, 2.0);
+  float shown = smoothstep(0.55, 0.9, cos(atan(p.y, p.x) + h * 6.2831853)) * step(0.7, h);
+  col = riverOver(col, vec4(vec3(1.0), 1.0) * (1.0 - smoothstep(0.7, 1.0, e)) * shown * 0.85);
+  return col * smoothstep(0.0, 0.04, centre) * (uRiverAlpha / 0.5);
+}
+
+// The river overlay of the chosen look (uRiverStyle, §4.4d "Styles"): 0 ripple arcs, 1 toon strands, 2 cartoon bands.
+vec4 riverOverlay(vec2 cs, float centre, vec2 ground) {
+  if (uRiverStyle > 1.5) return riverBands(cs, centre, ground);
+  if (uRiverStyle > 0.5) return riverStrands(cs, centre, ground);
+  return riverRipples(cs, centre, ground);
 }
 
 // Debug: hue = the static ripple phase (a whole turn per ripple), brightness = intensity (with a floor so the bank stays visible).
