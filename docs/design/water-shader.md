@@ -994,7 +994,7 @@ distance also reads this:
 
 Settlement view only. The lake water of the bog (terrain `lake` and the `boglake`, `boglake_inlet`, `boglake_shore`, `boglake_half`,
 `boglake_mouth` families) gets a second shader, `bogLakeShader.ts`, drawn by `BogLakeLayer.ts`: a wind gust that travels over the lake in
-exactly the phase of the forest sway clips next to it. Three looks, each behind its own flag, all **off** by default (the lakes ship with the blops only) (the lake's base colour is
+exactly the phase of the forest sway clips next to it. Three looks, each behind its own flag, all **off** by default (the lakes ship with the shore band and the blops only) (the lake's base colour is
 dark navy, about rgb(16-24, 32-40, 56-72)). Between gusts the water is left calm. From bottom to top:
 
 - **Cat's paws**: darker matte patches where the gust roughens the surface, with a fine grain inside, drifting downwind.
@@ -1063,6 +1063,8 @@ checks.
 | `float uFoamWidth`, `uFoamSpacing` | foam line half-width as a share of the spacing (0.04), spacing in world units (15) |
 | `vec2 uLakeOrigin`, `uLakeSize` | the world rect the lake mask covers (min corner, size): maps a world point onto the mask for point samples |
 | `float uBlops`, `uBlopDensity`, `uBlopSize` | blops strength (0 = off), chance a cell's cycle shows its curl (1), curl size multiplier (1) |
+| `sampler2D uShoreMask` | the lake mask blurred once (`SHORE_BLUR_STRENGTH`), same rect and UVs as `uLakeMask`: alpha falls towards the shore |
+| `float uShore`, `uShoreEdge`, `uShoreWobble` | shore band strength (0 = off), blurred-mask level of its inner edge (0.85), wobble multiplier (1) |
 
 **Blops.** Independent of the wind (not gated by the gust band): micro curls that appear at random spots on the lake, grow and drift,
 then fade. Each blop is one thin crescent ")" drawn by `curlShape`, the same mark as the micro curls foam style, and every blop faces the
@@ -1075,6 +1077,17 @@ middle, at 75 % of the curl's reach, must read above 0.9) and the blop skipped o
 under a reed island or lily pad (the lake mask has those cut out, see below). `bogLakeBlopDensity` is the chance (0..1) a cycle shows its
 curl: 1 is about one curl per hex of lake, the shipped 0.5 about one per two hexes (about 4 on the 10-hex demo lake). Flag `bogLakeBlops`,
 tuning `bogLakeBlopsStrength` (1), `bogLakeBlopDensity` (0.5), `bogLakeBlopSize` (1).
+
+**Shore band.** Like the river's cartoon bank band (§4.4e, style 2), without its patches and glints: a near-white band (alpha up to 0.6)
+along the lake's shore, bottom of the stack (gust looks and blops draw over it). The lake shader has no distance-to-bank field like the
+river's `B`, so `BogLakeLayer.setLake` blurs the lake mask once with a `BlurFilter` (`SHORE_BLUR_STRENGTH` 8, quality 4) into a second render
+texture of the same size, `uShoreMask`; it is redrawn with the lake mask (terrain rebuild), never per frame, so the band costs one texture
+read per pixel. The blurred alpha rises from about 0.5 at the shore to 1 a few world units in; the band is where it is below
+`uShoreEdge` (0.85, `bogLakeShoreEdge`), with a soft edge of ±0.04. The edge moves a little: value noise drifting with time
+(`± 0.06 * uShoreWobble`) plus a slow breathing (`0.02 * uShoreWobble * sin(0.7 t + noise)`). The lake mask has lily pads and reed islands
+cut out, so they get a thin rim of the band too (as the river band thickens around reeds). Flag `bogLakeShore` (**on**), tuning
+`bogLakeShoreStrength` (1), `bogLakeShoreEdge` (0.85), `bogLakeShoreWobble` (1). Hidden with the rest of the layer (water off, suppression,
+"Lake motion" off).
 
 ### 4.4e River flow — `uRiverFlow`, `uRiverPsi`
 
@@ -1308,6 +1321,7 @@ export interface WaterDebugFlags {
   bogLakeSheen: boolean;        // default false
   bogLakeCatsPaws: boolean;     // default false
   bogLakeBlops: boolean;        // default true — micro curls appearing at random on the lake, independent of the wind
+  bogLakeShore: boolean;        // default true — a near-white, slowly wobbling band along the lake shore (§4.4d)
 }
 export interface WaterDebugTuning {
   foamWidthHexes: number;  // 0.3 — the band is in world units, so this is sized
@@ -1323,6 +1337,9 @@ export interface WaterDebugTuning {
   bogLakeBlopsStrength: number;    // 1
   bogLakeBlopDensity: number;      // 0.5 — chance a cell's cycle shows its curl (1 = about one per hex)
   bogLakeBlopSize: number;         // 1 — curl size multiplier (ring radius 9 world units)
+  bogLakeShoreStrength: number;    // 1 — shore band strength
+  bogLakeShoreEdge: number;        // 0.85 — blurred-mask level of the band's inner edge (higher = wider)
+  bogLakeShoreWobble: number;      // 1 — how much the band's edge moves
   bogLakeFoamWidth: number;        // 0.04 — foam line half-width, share of the spacing
   bogLakeFoamSpacing: number;      // 15 — world units between foam lines
   bogLakeBandHalf: number;         // 0.16 — gust band half-width, in periods

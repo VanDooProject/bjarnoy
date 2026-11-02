@@ -4093,7 +4093,7 @@ export class HexMapRenderer {
     if (this.options.mode !== 'settlement' || !renderer) return;
     const bounds = entriesWorldBounds(this.bogLakeEntries, TILE_W);
     if (!bounds) {
-      this.bogLakeLayer.setLake(null, null);
+      this.bogLakeLayer.setLake(null, null, null);
       return;
     }
     if (!this.bogLakeMask.ready) {
@@ -4106,7 +4106,7 @@ export class HexMapRenderer {
       }
       return;
     }
-    this.bogLakeLayer.setLake(this.bogLakeMask.draw(renderer, bounds, this.bogLakeEntries, TILE_W), bounds);
+    this.bogLakeLayer.setLake(renderer, this.bogLakeMask.draw(renderer, bounds, this.bogLakeEntries, TILE_W), bounds);
   }
 
   /**
@@ -6390,7 +6390,7 @@ export class HexMapRenderer {
     this.riverFlowEntries = [];
     if (mode === 'world') {
       this.waterLayer.setDryTexture(null);
-      this.bogLakeLayer.setLake(null, null);
+      this.bogLakeLayer.setLake(null, null, null);
       this.waterLayer.setRiverFlowTexture(null);
     }
     // Reinsert every layer in the new mode's order — addChild only moves a
