@@ -310,11 +310,33 @@ unchanged (their river tiles for seeds 1-20 are byte-identical before and after)
 
 Measured over seeds 1-8 (`RiverStreamTests`, spring walks down the finished tiles):
 
-| | before | after | bound |
-|---|---|---|---|
-| median sinuosity | 1.07 | 1.32 | >= 1.2 |
-| spring walks re-entering mountains after leaving them | 29% | 11.3% | < 15% |
-| truncated + dropped rivers | 2.4% | 2.4% | < 5% |
+| | before | after | on chain mountains, groves and the denser bogs | bound |
+|---|---|---|---|---|
+| median sinuosity | 1.07 | 1.32 | 1.28 | >= 1.2 |
+| spring walks re-entering mountains after leaving them | 29% | 11.3% | 9.5% (241 of 2 550) | < 15% |
+| truncated + dropped rivers | 2.4% | 2.4% | 4.4% | < 5% |
+
+The last column is the green-island terrain PR (chain mountains and grove forests, 1 500 land tiles per bog site, the bog gap fill), measured on
+2026-11-02 with `river-stats.ts --seeds 1-8 --radius 1000` against `origin/main` before it (482 islands in both):
+
+| | main | head |
+|---|---|---|
+| islands with rivers | 320 | 300 |
+| springs / river paths | 2 801 / 2 765 | 2 681 / 2 650 |
+| rivers per island with rivers | 8.6 | 8.8 |
+| outlets per island | 2.6 | 2.5 |
+| merges per island / islands with 4+ rivers | 4.9 / 188 | 5.4 / 186 |
+| truncated / dropped (% of rivers) | 27 / 38 (2.4%) | 101 / 15 (4.4%) |
+| median spring-to-end length (steps) | 35 | 24 |
+| river-tile shares: river / widened / stream | 30.0% / 2.0% / 68.1% | 58.8% / 2.2% / 39.0% |
+| parallel adjacent pairs per 1 000 river tiles | 15.0 | 16.7 |
+| inland mouths as `river-stats.ts` counts them | 271 | 1 079 |
+
+The terrain change alone already gives 300 islands with rivers and 2 650 paths (the bog changes leave them as they are). The "inland mouths"
+that `river-stats.ts` counts (a river end that is not beside the sea) follow the number of bogs: 271 with 302 bogs on main, 1 079 with 1 635
+on head. They are paths that end at a bog creek, not broken mouths: `bog-stats.ts`, which leaves out the ends that run into a bog, counts 0
+on both. Spring-to-end lengths shrink and the river share of the tiles grows in step. The share of truncated and dropped rivers is close
+to its 5% bound.
 
 ### Width assignment
 
