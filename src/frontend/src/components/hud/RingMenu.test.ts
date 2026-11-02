@@ -484,7 +484,7 @@ describe('RingMenu', () => {
       expect(hut.find('.ring-badge.waiting').exists()).toBe(true);
       const card = wrapper.get('.ring-card');
       expect(card.text()).toContain('NO FREE BUILD SLOT');
-      expect(card.get('[data-testid="ring-card-slots"]').text()).toBe('1 · 0 of 3 free');
+      expect(card.find('[data-testid="ring-card-slots"]').exists()).toBe(false);
       expect(card.get('[data-testid="ring-card-status"]').text()).toBe('Needs 1 build slot · 0 of 3 free · next free in 3:12');
       await hut.trigger('click');
       expect(wrapper.emitted('select')).toBeUndefined();
@@ -499,18 +499,24 @@ describe('RingMenu', () => {
       });
       await hoverHut(wrapper);
       expect(wrapper.get('[data-testid="ring-card-status"]').text()).toBe('Needs 2 build slots · 1 of 3 free');
-      expect(wrapper.get('[data-testid="ring-card-slots"]').text()).toBe('2 · 1 of 3 free');
     });
 
-    it('says “All (n)” for a building that takes every slot', async () => {
+    it('shows no build-slots row while a slot is free: slots only appear as a status when they block', async () => {
       const wrapper = ringWith({
         availability: availability({
-          slotsNeeded: 3,
-          construction: { slots: 3, slotsUsed: 2, maxWaitingOrders: 0, waitingOrders: 0 },
+          construction: { slots: 3, slotsUsed: 1, maxWaitingOrders: 0, waitingOrders: 0 },
         }),
       });
       await hoverHut(wrapper);
-      expect(wrapper.get('[data-testid="ring-card-slots"]').text()).toBe('All (3) · 1 of 3 free');
+      expect(wrapper.find('[data-testid="ring-card-slots"]').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain('Build slots');
+    });
+
+    it('shows the new total next to an upgrade’s gain', async () => {
+      const wrapper = ringWith({ gives: '+15 Stone/h', givesTotal: '90 total' });
+      await hoverHut(wrapper);
+      expect(wrapper.get('.ring-card').text()).toContain('+15 Stone/h');
+      expect(wrapper.get('[data-testid="ring-card-total"]').text()).toBe('· 90 total');
     });
 
     it('lets a premium player queue when slots are full, with a gold footer, and no clock badge', async () => {

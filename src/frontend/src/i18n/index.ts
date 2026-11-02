@@ -40,6 +40,7 @@ import deDocs from './locales/de/docs.json';
 import enShowcase from './locales/en/showcase.json';
 import deShowcase from './locales/de/showcase.json';
 import deAdminWorldReview from './locales/de/adminWorldReview.json';
+import deAdminWorlds from './locales/de/adminWorlds.json';
 import enAdminActivityChart from './locales/en/adminActivityChart.json';
 import enAdminActivity from './locales/en/adminActivity.json';
 import enAdminEconomy from './locales/en/adminEconomy.json';
@@ -155,6 +156,7 @@ export const i18n = createI18n({
       simulator: deSimulator,
       docs: deDocs,
       showcase: deShowcase,
+      adminWorlds: deAdminWorlds,
       adminWorldReview: deAdminWorldReview,
     },
   },

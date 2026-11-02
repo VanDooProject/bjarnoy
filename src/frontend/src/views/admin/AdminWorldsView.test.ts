@@ -38,6 +38,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     startsAt: null,
     joinsClosed: false,
     frozenIslesEnabled: false,
+    hidden: false,
     endbossAt: null,
     endbossTriggeredAt: null,
     runState: 'running',
@@ -76,29 +77,104 @@ describe('AdminWorldsView', () => {
     expect(wrapper.text()).toContain('2 / 500');
     // Free spawn spots, separate from player slots: expansions take them too.
     expect(wrapper.text()).toContain('7 / 40');
-    expect(wrapper.text()).toContain('paused');
+    expect(wrapper.text()).toContain('Paused');
     // The world's active generation seed, surfaced so an admin can tell what
     // seed produced the current map without having to regenerate it first.
     expect(wrapper.text()).toContain('1234');
     expect(wrapper.text()).toContain('5678');
   });
 
-  it('confirms before changing a world run state', async () => {
+  async function pickRunState(wrapper: Awaited<ReturnType<typeof mountView>>, value: string) {
+    await wrapper.find('.run-state select').setValue(value);
+  }
+
+  const applyButton = (wrapper: Awaited<ReturnType<typeof mountView>>) => wrapper.find('button.apply-run-state');
+
+  it('preselects the current run state and keeps Apply disabled until the selection differs', async () => {
+    const wrapper = await mountView([world({ runState: 'maintenance' })]);
+
+    expect((wrapper.find('.run-state select').element as HTMLSelectElement).value).toBe('maintenance');
+    expect(wrapper.findAll('.run-state option').map((o) => o.text())).toEqual([
+      'Running',
+      'Paused',
+      'Maintenance',
+      'Locked',
+    ]);
+    expect(applyButton(wrapper).attributes('disabled')).toBeDefined();
+
+    await pickRunState(wrapper, 'locked');
+    expect(applyButton(wrapper).attributes('disabled')).toBeUndefined();
+
+    await pickRunState(wrapper, 'maintenance');
+    expect(applyButton(wrapper).attributes('disabled')).toBeDefined();
+  });
+
+  it('says since when the world is in its run state', async () => {
+    const wrapper = await mountView([
+      world({ runState: 'locked', runStateSince: new Date(Date.now() - 3 * 3_600_000).toISOString() }),
+    ]);
+
+    const text = wrapper.find('.run-state-since').text();
+    expect(text).toMatch(/^Locked since \d{4}-\d{2}-\d{2} \d{2}:\d{2} \(3 h.*ago\)$/);
+  });
+
+  it('confirms, then applies the picked run state through the matching action', async () => {
     const wrapper = await mountView();
     adminSetWorldRunState.mockResolvedValue(world({ runState: 'paused' }));
 
-    await wrapper.findAll('button').find((b) => b.text() === 'Pause')!.trigger('click');
+    await pickRunState(wrapper, 'paused');
+    await applyButton(wrapper).trigger('click');
     await flushPromises();
 
     expect(window.confirm).toHaveBeenCalledOnce();
     expect(adminSetWorldRunState).toHaveBeenCalledWith('world-1', { action: 'pause', graceMinutes: undefined });
+    // The dropdown follows the world's new state and Apply goes back to disabled.
+    expect((wrapper.find('.run-state select').element as HTMLSelectElement).value).toBe('paused');
+    expect(applyButton(wrapper).attributes('disabled')).toBeDefined();
+  });
+
+  it.each([
+    ['maintenance', 'maintenance'],
+    ['locked', 'lock'],
+  ])('maps %s to the %s action', async (state, action) => {
+    const wrapper = await mountView();
+    adminSetWorldRunState.mockResolvedValue(world({ runState: state }));
+
+    await pickRunState(wrapper, state);
+    await applyButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(adminSetWorldRunState).toHaveBeenCalledWith('world-1', { action, graceMinutes: undefined });
+  });
+
+  it('shows the grace minutes only when resuming a world that is not running, and sends them', async () => {
+    const wrapper = await mountView([world({ runState: 'paused' })]);
+    adminSetWorldRunState.mockResolvedValue(world({ runState: 'running' }));
+
+    expect(wrapper.find('.grace').exists()).toBe(false);
+    await pickRunState(wrapper, 'locked');
+    expect(wrapper.find('.grace').exists()).toBe(false);
+
+    await pickRunState(wrapper, 'running');
+    await wrapper.find('.grace input').setValue('15');
+    await applyButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(adminSetWorldRunState).toHaveBeenCalledWith('world-1', { action: 'resume', graceMinutes: 15 });
+  });
+
+  it('hides the grace minutes for a running world', async () => {
+    const wrapper = await mountView();
+    await pickRunState(wrapper, 'running');
+    expect(wrapper.find('.grace').exists()).toBe(false);
   });
 
   it('leaves the run state alone when the confirmation is dismissed', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     const wrapper = await mountView();
 
-    await wrapper.findAll('button').find((b) => b.text() === 'Lock')!.trigger('click');
+    await pickRunState(wrapper, 'locked');
+    await applyButton(wrapper).trigger('click');
     await flushPromises();
 
     expect(adminSetWorldRunState).not.toHaveBeenCalled();
@@ -166,6 +242,115 @@ describe('AdminWorldsView', () => {
       'world-1',
       expect.objectContaining({ frozenIslesEnabled: true }),
     );
+  });
+
+  it('shows dates as text in the UI language layout and sends them back as ISO', async () => {
+    const startsAt = new Date(2026, 2, 5, 19, 30);
+    const wrapper = await mountView([world({ startsAt: startsAt.toISOString() })]);
+    adminUpdateWorldSettings.mockResolvedValue(world());
+
+    const field = wrapper.find('input#starts-world-1');
+    expect((field.element as HTMLInputElement).value).toBe('2026-03-05 19:30');
+    expect((field.element as HTMLInputElement).placeholder).toBe('YYYY-MM-DD HH:mm');
+
+    await wrapper.find('input#endboss-world-1').setValue('2026-04-01 08:15');
+    await wrapper.find('.actions button').trigger('click');
+    await flushPromises();
+
+    expect(adminUpdateWorldSettings).toHaveBeenCalledWith(
+      'world-1',
+      expect.objectContaining({
+        startsAt: startsAt.toISOString(),
+        endbossAt: new Date(2026, 3, 1, 8, 15).toISOString(),
+      }),
+    );
+  });
+
+  it('rewrites typed dates into the new layout when the UI language changes', async () => {
+    adminListWorlds.mockResolvedValue([world({ startsAt: new Date(2026, 2, 5, 19, 30).toISOString() })]);
+    const i18n = createTestI18n({ adminWorlds });
+    i18n.global.setLocaleMessage('de', i18n.global.getLocaleMessage('en'));
+    const wrapper = mount(AdminWorldsView, {
+      global: { stubs: { RouterLink: RouterLinkStub }, plugins: [i18n] },
+    });
+    await flushPromises();
+    await wrapper.find('input#endboss-world-1').setValue('2026-04-01 08:15');
+
+    i18n.global.locale.value = 'de';
+    await flushPromises();
+
+    expect((wrapper.find('input#starts-world-1').element as HTMLInputElement).value).toBe('05.03.2026 19:30');
+    expect((wrapper.find('input#endboss-world-1').element as HTMLInputElement).value).toBe('01.04.2026 08:15');
+  });
+
+  it('clears a date when its field is emptied', async () => {
+    const wrapper = await mountView([world({ startsAt: new Date(2026, 2, 5, 19, 30).toISOString() })]);
+    adminUpdateWorldSettings.mockResolvedValue(world());
+
+    await wrapper.find('input#starts-world-1').setValue('');
+    await wrapper.find('.actions button').trigger('click');
+    await flushPromises();
+
+    expect(adminUpdateWorldSettings).toHaveBeenCalledWith('world-1', expect.objectContaining({ startsAt: null }));
+  });
+
+  it('shows an inline error for an unreadable date and does not save', async () => {
+    const wrapper = await mountView();
+
+    await wrapper.find('input#starts-world-1').setValue('05.03.2026 19:30');
+    expect(wrapper.find('.datetime-error').text()).toContain('YYYY-MM-DD HH:mm');
+
+    await wrapper.find('.actions button').trigger('click');
+    await flushPromises();
+
+    expect(adminUpdateWorldSettings).not.toHaveBeenCalled();
+    expect(wrapper.find('.panel .error').exists()).toBe(true);
+  });
+
+  it('edits the world name and the hidden flag alongside the other settings', async () => {
+    const wrapper = await mountView();
+    adminUpdateWorldSettings.mockResolvedValue(world({ name: 'Asgard', hidden: true }));
+
+    // The name is the first field of the panel.
+    expect(wrapper.find('.panel .fields input').attributes('id')).toBe('name-world-1');
+    const name = wrapper.find('input#name-world-1');
+    expect((name.element as HTMLInputElement).value).toBe('Midgard');
+    await name.setValue('  Asgard  ');
+    await wrapper.find('input#hidden-world-1').setValue(true);
+
+    await wrapper.find('.actions button').trigger('click');
+    await flushPromises();
+
+    expect(adminUpdateWorldSettings).toHaveBeenCalledWith(
+      'world-1',
+      expect.objectContaining({ name: 'Asgard', hidden: true }),
+    );
+  });
+
+  it('refuses a panel name shorter than three characters without calling the API', async () => {
+    const wrapper = await mountView();
+
+    await wrapper.find('input#name-world-1').setValue(' ab ');
+    await wrapper.find('.actions button').trigger('click');
+    await flushPromises();
+
+    expect(adminUpdateWorldSettings).not.toHaveBeenCalled();
+    expect(wrapper.find('.panel .error').text()).toContain('at least three characters');
+  });
+
+  it('shows the hidden flag as a column of the overview table', async () => {
+    const wrapper = await mountView([
+      world(),
+      world({ id: 'world-2', name: 'Utgard', hidden: true }),
+    ]);
+
+    const headers = wrapper.findAll('thead th').map((th) => th.text());
+    const hiddenCol = headers.indexOf('Hidden');
+    expect(hiddenCol).toBeGreaterThan(-1);
+
+    const [visible, hidden] = wrapper.findAll('tbody tr').map((tr) => tr.findAll('td').map((td) => td.text()));
+    expect(visible[hiddenCol]).toBe('No');
+    expect(hidden[hiddenCol]).toBe('Yes');
   });
 
   it('refuses a name too short to be a world name without calling the API', async () => {

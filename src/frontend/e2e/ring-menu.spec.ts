@@ -158,7 +158,7 @@ test.describe('ring menu drill-down', () => {
     await settlement.setSettlementLevel(3);
 
     // Ask the model for a real empty, owned, grass hex (grass is what carries
-    // the Military category — see BUILD_CATEGORIES) rather than guessing a
+    // the Military and Defence categories — see BUILD_CATEGORIES) rather than guessing a
     // pixel offset that only lands on one at a particular camera framing.
     const target = await settlement.findHex({ terrain: 'grass' });
 
@@ -224,6 +224,8 @@ test.describe('ring menu drill-down', () => {
     });
     expect(underCard).not.toContain('ring-card');
 
+    // The Watchtower is a defence building: switch from Military to Defence.
+    await settlement.ring.openCategory('Defence');
     const watchtower = settlement.ring.child('Watchtower').first();
     await settlement.ring.hover(watchtower);
     await settlement.ring.press();
@@ -439,7 +441,6 @@ test.describe('ring menu availability', () => {
     await settlement.ring.hover(herder);
     const card = settlement.ring.card;
     await expect(card).toContainText('NO FREE BUILD SLOT');
-    await expect(card.getByTestId('ring-card-slots')).toHaveText('1 · 0 of 2 free');
     await expect(card.getByTestId('ring-card-status')).toContainText('Needs 1 build slot · 0 of 2 free');
 
     await settlement.ring.press();
@@ -483,7 +484,7 @@ test.describe('ring menu availability', () => {
     await settlement.ring.hover(herder);
     const card = settlement.ring.card;
     await expect(card).toContainText('BUILDABLE HERE');
-    await expect(card.getByTestId('ring-card-slots')).toHaveText('1 · 2 of 2 free');
+    await expect(card.getByTestId('ring-card-slots')).toHaveCount(0);
     await expect(card.getByTestId('ring-card-status')).toHaveCount(0);
     await expect(card).not.toContainText(/click to build/i);
 

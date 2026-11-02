@@ -1651,6 +1651,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<bool>("FrozenIslesEnabled")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("Hidden")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("IslandCellSize")
                         .HasColumnType("INTEGER");
 

@@ -25,6 +25,7 @@
     "joinable": "Joinable",
     "endboss": "Endboss",
     "frozenIsles": "Frozen isles",
+    "hidden": "Hidden",
     "seed": "Seed"
   },
   "joins": {
@@ -40,11 +41,15 @@
     "enabled": "Enabled",
     "disabled": "Disabled"
   },
+  "yes": "Yes",
+  "no": "No",
   "fields": {
+    "name": "Name",
     "speedFactor": "Speed factor",
     "startsAt": "Starts at",
     "closedToNewPlayers": "Closed to new players",
     "frozenIslesEnabled": "Frozen isles enabled",
+    "hidden": "Hidden from players",
     "endbossAt": "Endboss at"
   },
   "speedFactorTooLow": "Speed factor must be greater than 0.",
@@ -58,13 +63,16 @@
     "lock": "Lock",
     "resume": "Resume"
   },
-  "runStateActions": {
-    "pause": "Pause",
-    "maintenance": "Maintenance",
-    "lock": "Lock",
-    "resume": "Resume"
-  },
   "graceMinutes": "Grace (min)",
   "reseedLink": "Reseed map…",
-  "confirmRunState": "{label} world \"{name}\"?"
+  "confirmRunState": "{label} world \"{name}\"?",
+  "dateInvalid": "Use the format {pattern}.",
+  "runStates": {
+    "running": "Running",
+    "paused": "Paused",
+    "maintenance": "Maintenance",
+    "locked": "Locked"
+  },
+  "runStateSince": "{state} since {date} ({relative})",
+  "applyRunState": "Apply"
 }

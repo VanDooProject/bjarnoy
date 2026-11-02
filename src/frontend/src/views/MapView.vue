@@ -52,7 +52,7 @@ import { useIsMobile } from '../composables/useIsMobile';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { buildingArt } from '../lib/map/buildingArt';
-import { buildingStatsAt, buildingUpgradeCost } from '../lib/map/buildingEconomy';
+import { buildingStatsAt, buildingUpgradeCost, scaleOutput, upgradeRateGain } from '../lib/map/buildingEconomy';
 import { formatBuildTime, formatMissingResources, longhouseLock } from '../lib/map/ringCatalogue';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
@@ -824,6 +824,8 @@ function upgradeActionFor(tile: Tile): RingAction {
   const hexBusy = world.hud.queue.some((o) => o.q === tile.q && o.r === tile.r);
   const availability = availabilityFor(cost, upgradeDefinition, locks.length > 0, hexBusy);
   const stats = buildingStatsAt(type, nextLevel, tile, tileAt);
+  // Production is per hour at the world's speed: the card shows the gain, and the new total next to it.
+  const rate = upgradeRateGain(buildingStatsAt(type, level, tile, tileAt).output, stats.output, world.worldSpeedFactor);
   const missing = formatMissingResources(cost, world.hud.available);
   const blocked = availability.state === 'locked' || availability.state === 'waiting';
   return {
@@ -845,7 +847,14 @@ function upgradeActionFor(tile: Tile): RingAction {
       sub: t('hud.ringMenu.card.upgradeSub', { building: buildingName(type), from: level, to: nextLevel }),
       cost,
       time: upgradeDefinition ? formatBuildTime(upgradeDefinition.buildSeconds * wisdomFactor()) : undefined,
-      gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
+      gives: rate
+        ? formatOutput(rate.gain)
+        : stats.output
+          ? formatOutput(scaleOutput(stats.output, world.worldSpeedFactor))
+          : stats.modifier
+            ? formatModifier(stats.modifier)
+            : undefined,
+      givesTotal: rate ? t('hud.ringMenu.card.givesTotal', { amount: rate.total }) : undefined,
       locks,
       art: buildingArt(type, nextLevel),
       availability,
@@ -883,7 +892,7 @@ function tileInfo(tile: Tile): RingInfo {
     // Like the hover tooltip, stats are for the player's own buildings only.
     if (mine) {
       const stats = buildingStatsAt(tile.buildingType, level, tile, tileAt);
-      if (stats.output) rows.push({ label: t('hud.hoverTooltip.output'), value: formatOutput(stats.output) });
+      if (stats.output) rows.push({ label: t('hud.hoverTooltip.output'), value: formatOutput(scaleOutput(stats.output, world.worldSpeedFactor)) });
       if (stats.modifier) rows.push({ label: t('hud.hoverTooltip.modifier'), value: formatModifier(stats.modifier) });
     }
     return {
