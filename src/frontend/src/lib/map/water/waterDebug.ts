@@ -193,10 +193,11 @@ export interface WaterDebugTuning {
   /** Half-width of the gust band, in gust periods (0.16 is about 0.9 hex). */
   bogLakeBandHalf: number;
   /**
-   * Debug playback speed of the shared tile animation clock (`animClockMs`): the forest sway, every other tile clip and the bog lake gust
-   * slow down together, so they stay in step. 1 is what ships; 0 pauses them.
+   * Debug playback speed of every map animation: the tile clips (forest sway, buildings, camps) and the bog lake gust on the shared
+   * `animClockMs`, the sea water shader, the world map's wave squiggles and the fog drift. They slow down together, so the lake gust stays
+   * in step with the trees. 1 is what ships; 0 pauses them.
    */
-  tileAnimationSpeed: number;
+  mapAnimationSpeed: number;
   /** Shifts the bog lake gust against the forest sway, in gust periods (0 = on the trees' furthest lean, the measured `GUST_PEAK_PHASE`). */
   bogLakeGustPhaseOffset: number;
 }
@@ -221,7 +222,7 @@ export const waterDebugTuning: WaterDebugTuning = {
   bogLakeFoamWidth: 0.04,
   bogLakeFoamSpacing: 15,
   bogLakeBandHalf: GUST_BAND_HALF_WIDTH,
-  tileAnimationSpeed: 1,
+  mapAnimationSpeed: 1,
   bogLakeGustPhaseOffset: 0,
 };
 

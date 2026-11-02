@@ -1728,6 +1728,9 @@ export class HexMapRenderer {
   private topAnimState = new Map<string, TopAnimState>();
   /** The global animation clock in ms (advanced by `advanceTopAnimations`): where a `sharedClock` clip joins its cycle. */
   private animClockMs = 0;
+  // Map animation time (ms) for the water shader and the world map's wave squiggles: real time scaled by the debug
+  // `waterDebugTuning.mapAnimationSpeed`, so a slowed-down map slows everything on it together.
+  private mapAnimMs = 0;
   // Pooled overlay sprites for an overlay clip's parts-only frames (see
   // `TopAnimState.overlay`) — a sibling pool to `terrainTop.pool`, kept
   // separate because these sprites aren't `terrainTop.active`'s own entries
@@ -2522,8 +2525,9 @@ export class HexMapRenderer {
   private onTick = () => {
     this.frames++;
     this.options.worldModel.tick();
-    // waterDebugTuning.tileAnimationSpeed: debug playback speed of the shared clock (1 ships), so sway and lake gust slow down together.
-    this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS) * waterDebugTuning.tileAnimationSpeed);
+    // waterDebugTuning.mapAnimationSpeed: debug playback speed of every map animation (1 ships), so they all slow down together.
+    this.mapAnimMs += this.app!.ticker.deltaMS * waterDebugTuning.mapAnimationSpeed;
+    this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS) * waterDebugTuning.mapAnimationSpeed);
     this.advanceTransitionFades(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
     // Feeds the 'auto' animation governor (animationPreference.ts) — in both
     // modes, not just settlement: the governor is measuring this device's
@@ -2560,7 +2564,7 @@ export class HexMapRenderer {
     // check per frame, and it can only ever do work on the first frame after
     // the gesture that owes it ends.
     if (this.waterMaskDirty && !this.dragging && !this.wheeling) this.maybeBakeWaterMask();
-    this.waterLayer.tick(performance.now());
+    this.waterLayer.tick(this.mapAnimMs);
     this.bogLakeLayer.tick(this.animClockMs);
     if (this.idleDrift) {
       this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
@@ -2585,8 +2589,8 @@ export class HexMapRenderer {
     };
     this.blackFogLayer.setDebug(debug);
     this.whiteMistLayer.setDebug(debug);
-    this.blackFogLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed);
-    this.whiteMistLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed);
+    this.blackFogLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed * waterDebugTuning.mapAnimationSpeed);
+    this.whiteMistLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed * waterDebugTuning.mapAnimationSpeed);
     this.drawRangeOverlay();
     this.drawHighlight();
   };
@@ -4489,8 +4493,8 @@ export class HexMapRenderer {
       return;
     }
     const alpha = WAVE_ALPHA * fade;
-    // Frozen water holds the squiggles at a fixed phase instead of Date.now().
-    const now = this.waterMotion ? Date.now() : 0;
+    // Frozen water holds the squiggles at a fixed phase instead of the map animation clock (mapAnimMs).
+    const now = this.waterMotion ? this.mapAnimMs : 0;
     this.waveLayer.clear();
     for (const p of this.wavePoints) {
       const s = (Math.sin((now / p.periodMs) * Math.PI * 2 + p.phase) + 1) / 2;
