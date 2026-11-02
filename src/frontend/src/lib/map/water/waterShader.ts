@@ -122,7 +122,7 @@ uniform vec3 uCausticBlobColor;
 uniform float uRiverFlowOn;
 uniform float uShowRiverFlow;
 uniform float uRiverStyle;
-uniform vec2 uRiverUVPerWorld;
+uniform vec4 uRiverRect;
 uniform float uRiverSpeed;
 uniform float uRiverArc;
 uniform float uRiverAlpha;
@@ -479,14 +479,18 @@ float sampleDry() {
 }
 
 // The river ripple field (docs/design/water-shader.md §4.4d), premultiplied RGBA: rg = (cos, sin) of the ripple phase
-// * 0.5 + 0.5, b = intensity (0 at the bank), a = 1 where the river hex has flow. Same UVs as the mask. Returns the
+// * 0.5 + 0.5, b = intensity (0 at the bank), a = 1 where the river hex has flow. Its own UVs (riverUV). Returns the
 // un-premultiplied value, zero where no river hex is drawn.
 vec4 sampleRiverFlowAt(vec2 uv) {
   vec4 f = texture(uRiverFlow, uv);
   return f.a > 0.01 ? vec4(f.rgb / f.a, f.a) : vec4(0.0);
 }
+// The river texture covers its own world rect (the river cells), not the water mask's: its UVs come from vWorld.
+vec2 riverUV() {
+  return (vWorld - uRiverRect.xy) * uRiverRect.zw;
+}
 vec4 sampleRiverFlow() {
-  return sampleRiverFlowAt(vUV);
+  return sampleRiverFlowAt(riverUV());
 }
 
 // The stored phase as a unit (cos, sin) pair: filtering the encoded pair shortens it, so it is renormalised.
@@ -527,8 +531,8 @@ vec4 riverRipples(vec2 cs, float centre, vec2 ground) {
 // taps of the flow texture 3 world units away. No dFdx: this shader has to compile as WebGL1 (see the header).
 vec2 riverPhaseGradient(vec2 cs) {
   const float H = 3.0;
-  vec4 tx = sampleRiverFlowAt(vUV + vec2(H * uRiverUVPerWorld.x, 0.0));
-  vec4 ty = sampleRiverFlowAt(vUV + vec2(0.0, H * uRiverUVPerWorld.y));
+  vec4 tx = sampleRiverFlowAt(riverUV() + vec2(H * uRiverRect.z, 0.0));
+  vec4 ty = sampleRiverFlowAt(riverUV() + vec2(0.0, H * uRiverRect.w));
   vec2 px = tx.a > 0.5 ? riverPhase(tx) : cs;
   vec2 py = ty.a > 0.5 ? riverPhase(ty) : cs;
   // sin of the angle from cs to the tap: its cross product.
@@ -575,7 +579,8 @@ vec4 riverStrands(vec2 cs, float centre, vec2 ground) {
   col = riverOver(col, vec4(vec3(0.9), 0.9) * curl);
   // Sparkles: a few small dots that twinkle.
   vec2 sp = ground * k * 30.0;
-  vec2 cell = floor(sp);
+  // Wrapped before hashing: hash() of cell indices in the thousands loses its precision and the dots line up on a grid.
+  vec2 cell = mod(floor(sp), 289.0);
   float h = hash(cell);
   vec2 jitter = vec2(hash(cell + 3.1), hash(cell + 7.7)) * 0.5 + 0.25;
   float dotMask = (1.0 - smoothstep(0.08, 0.2, length(fract(sp) - jitter))) * step(0.975, h) * (0.5 + 0.5 * sin(uTime * 3.0 + h * 60.0));
@@ -593,14 +598,25 @@ vec4 riverBands(vec2 cs, float centre, vec2 ground) {
   float edge = 0.3 + wobble * 0.08;
   float band = 1.0 - smoothstep(edge - 0.05, edge + 0.05, centre);
   vec4 col = vec4(vec3(0.42, 0.72, 0.9) * 0.6, 0.6) * band;
-  // Patches: big lobes of low-frequency noise, slid by the phase circle.
+  // Patches: big lobes of low-frequency noise drifting downstream. Moved along the flow (minus the phase gradient: the phase
+  // grows upstream), two layers half a cycle apart and cross-faded, so the drift never jumps back. Shifting the noise by the
+  // phase instead lined the patch edges up with the phase contours: straight bars across the channel.
+  vec2 down = -riverPhaseGradient(cs);
+  down /= max(length(down), 1e-6);
+  float cycle = uTime * 0.06;
+  float c0 = fract(cycle);
+  float c1 = fract(cycle + 0.5);
   vec2 warp = vec2(noise(ground * k * 0.8), noise(ground * k * 0.8 + 9.0)) - 0.5;
-  float f = fbm(ground * k * 0.3 + warp * 0.7 + p * 0.12 + 5.0);
+  vec2 base = ground * k * 0.3 + warp * 0.7;
+  float f0 = fbm(base - down * c0 * 0.9 + 5.0);
+  float f1 = fbm(base - down * c1 * 0.9 + 23.0);
+  float f = mix(f0, f1, abs(1.0 - 2.0 * c0));
   float patch = smoothstep(0.48, 0.6, f) * smoothstep(0.1, 0.3, centre);
   col = riverOver(col, vec4(vec3(0.75, 0.94, 1.0) * 0.22, 0.22) * patch);
   // Glints: ellipses along the flow (the phase gradient points across it), shown while the wave passes their cell.
   vec2 g = ground * k * 14.0;
-  vec2 cell = floor(g);
+  // Wrapped before hashing, as for the sparkles: large cell indices put the glints on a regular grid.
+  vec2 cell = mod(floor(g), 289.0);
   float h = hash(cell);
   vec2 o = fract(g) - (vec2(hash(cell + 1.7), hash(cell + 9.3)) * 0.4 + 0.3);
   vec2 phaseGrad = riverPhaseGradient(cs);

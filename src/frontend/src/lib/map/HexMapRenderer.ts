@@ -3964,7 +3964,7 @@ export class HexMapRenderer {
       return;
     }
     this.waterLayer.setDryTexture(this.waterDry.draw(renderer, region.rect, this.waterDryEntries, TILE_W));
-    this.waterLayer.setRiverFlowTexture(this.riverFlow.draw(renderer, region.rect, this.riverFlowEntries, TILE_W));
+    this.waterLayer.setRiverFlowTexture(this.riverFlow.draw(renderer, this.riverFlowEntries, TILE_W), this.riverFlow.rect);
   }
 
   /**

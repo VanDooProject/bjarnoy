@@ -386,7 +386,33 @@ export function riverPotential(input: RiverFlowInput): { phi: Float64Array; swee
  */
 function distanceToBank(input: RiverFlowInput, passable: Uint8Array): Float32Array {
   const { mask, cw, ch, polygon, inEdges, outEdge } = input;
-  const segments = [...new Set([...inEdges, outEdge])].map((e) => [polygon[e]!, polygon[(e + 1) % polygon.length]!] as const);
+  const flowEdges = [...new Set([...inEdges, outEdge])];
+  const segments = flowEdges.map((e) => [polygon[e]!, polygon[(e + 1) % polygon.length]!] as const);
+  // Past an in or out edge lies the neighbouring river hex, whose banks this cell does not see; what the art has there is
+  // its own skirt or nothing. A dry texel past such an edge line is therefore never a bank, however far past it is, or
+  // every seam would read as a bank and B would dip along it.
+  const centroid = polygon.reduce((s, q) => ({ x: s.x + q.x / polygon.length, y: s.y + q.y / polygon.length }), { x: 0, y: 0 });
+  const side = ([a, b]: readonly [Point, Point], x: number, y: number) => (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
+  const pastFlowEdge = (x: number, y: number) => segments.some((seg) => side(seg, x, y) * side(seg, centroid.x, centroid.y) < 0);
+  // The art's water often stops a texel or two short of an in or out edge. That dry strip is not a bank: a dry texel within
+  // EDGE_RIM_TEXELS of such an edge with water just inward of it (along the crossing direction) counts as water. A real
+  // bank reaching the edge has no water inward of it and stays a bank, so B does not swell at every seam (it did when every
+  // dry texel near the edge was let off).
+  const inward = flowEdges.map((e) => {
+    const n = crossingDirection(polygon, e);
+    return { x: -n.x, y: -n.y };
+  });
+  const shortOfEdge = (x: number, y: number) =>
+    segments.some(([a, b], i) => {
+      if (distToSegment(x + 0.5, y + 0.5, a, b) > EDGE_RIM_TEXELS) return false;
+      for (let step = 1; step <= EDGE_RIM_TEXELS + 1; step++) {
+        const xx = Math.round(x + inward[i]!.x * step);
+        const yy = Math.round(y + inward[i]!.y * step);
+        if (xx < 0 || yy < 0 || xx >= cw || yy >= ch) break;
+        if (mask[yy * cw + xx]! >= WATER_THRESHOLD) return true;
+      }
+      return false;
+    });
   const far = 1e6;
   const d = new Float32Array(cw * ch);
   for (let y = 0; y < ch; y++) {
@@ -395,8 +421,7 @@ function distanceToBank(input: RiverFlowInput, passable: Uint8Array): Float32Arr
       if (mask[p]! >= WATER_THRESHOLD || !passable[p]) {
         d[p] = far;
       } else {
-        const nearEdge = segments.some(([a, b]) => distToSegment(x + 0.5, y + 0.5, a, b) <= EDGE_RIM_TEXELS);
-        d[p] = nearEdge ? far : 0;
+        d[p] = pastFlowEdge(x + 0.5, y + 0.5) || shortOfEdge(x, y) ? far : 0;
       }
     }
   }
@@ -599,7 +624,14 @@ export const RIPPLE_WAVELENGTH_TEXELS = 12;
  * `RIVER_CENTRE_TEXELS` (0 at the bank, 1 in the middle; the dry rim along an in or out edge is no bank; a lake mouth's fade multiplies it).
  * A = 255 on the water of the face and its rim along the in and out edges, all four 0 elsewhere.
  */
-export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; periods: number } {
+/** The texel-wise minimum of distance fields. */
+function minDistance(fields: Float64Array[]): Float64Array {
+  const out = new Float64Array(fields[0]!.length).fill(Infinity);
+  for (const f of fields) for (let p = 0; p < out.length; p++) out[p] = Math.min(out[p]!, f[p]!);
+  return out;
+}
+
+export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; periods: number; inside: Uint8Array } {
   const { mask, cw, ch, outEdge } = input;
   const { inside, passable, cover, isWater, phi, seedEdge, intensityAt } = solveRiver(input);
   const hasIn = input.inEdges.some((e) => e !== outEdge);
@@ -620,7 +652,6 @@ export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; p
   }
   const channelLength = hasIn && count > 0 ? length / count : maxDist;
   const periods = Math.max(1, Math.round(channelLength / RIPPLE_WAVELENGTH_TEXELS));
-  const scale = hasIn || maxPhi <= 0 ? 1 : 1 / maxPhi;
   const rate = channelLength > 0 ? (2 * Math.PI * periods) / channelLength : 0;
   const normals = input.polygon.map((_, e) => crossingDirection(input.polygon, e));
 
@@ -638,9 +669,28 @@ export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; p
     const e = seedEdge[p]!;
     if (e >= 0) bandDepth[e] = Math.max(bandDepth[e]!, depthOf(e, p % cw, Math.floor(p / cw)));
   }
+  // Where along the stream a texel is: s = dOut / (dIn + dOut), from the geodesic distances to the out edge and to the
+  // nearest in edge. It is 0 on the out edge's band and 1 on every in edge's band (so both hexes of a seam agree), and it
+  // advances evenly with distance along the stream, so ripples keep about the same spacing on both sides of a seam. (The
+  // potential, 2 pi n phi, ran faster where the channel narrowed and its spacing jumped at seams; a remap of it by mean
+  // distance broke on a confluence, whose two arms reach the same potential at different distances.) Round an island the
+  // fronts fold into a V behind it, a wake. A spring has no in edge: s = dOut over its longest distance.
+  const inFields = hasIn ? input.inEdges.filter((e) => e !== outEdge).map((e) => ({ e, d: geodesic(input, passable, e) })) : [];
+  const inDist = hasIn ? minDistance(inFields.map((f) => f.d)) : null;
+  // The in edge a texel is nearest to (along the water): its band depth is what the phase is shifted by near that edge.
+  const nearestIn = (p: number) => inFields.reduce((best, f) => (f.d[p]! < best.d[p]! ? f : best), inFields[0]!).e;
+  // NaN for water the distance fields do not reach (a pocket cut off from the channel, e.g. in a notch of the bank at a
+  // seam): it gets no flow rather than one made-up phase, which showed as an off-colour blob.
+  const along = (p: number) => {
+    const dOut = dist[p]!;
+    if (!Number.isFinite(dOut)) return NaN;
+    if (!inDist) return maxDist > 0 ? Math.min(1, dOut / maxDist) : 0;
+    const dIn = inDist[p]!;
+    if (!Number.isFinite(dIn)) return NaN;
+    return dOut + dIn > 0 ? dOut / (dOut + dIn) : 0;
+  };
   const inEdges = input.inEdges.filter((e) => e !== outEdge);
   const outDepth = bandDepth[outEdge]!;
-  const inDepth = inEdges.length > 0 ? inEdges.reduce((s, e) => s + bandDepth[e]!, 0) / inEdges.length : 0;
 
   const out = new Uint8Array(cw * ch * 4);
   for (let y = 0; y < ch; y++) {
@@ -657,7 +707,9 @@ export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; p
       if (edge >= 0) {
         theta = (edge === outEdge ? 1 : -1) * rate * depthOf(edge, x, y);
       } else {
-        const phase = Math.min(1, phi[p]! * scale);
+        const phase = along(p);
+        if (Number.isNaN(phase)) continue;
+        const inDepth = inEdges.length > 0 ? bandDepth[nearestIn(p)]! : 0;
         theta = 2 * Math.PI * periods * phase + (1 - phase) * rate * outDepth - phase * rate * inDepth;
       }
       const o = p * 4;
@@ -667,5 +719,5 @@ export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; p
       out[o + 3] = 255;
     }
   }
-  return { data: out, periods };
+  return { data: out, periods, inside };
 }

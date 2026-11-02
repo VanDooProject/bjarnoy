@@ -93,6 +93,28 @@ export function cropAtlasCell(alpha: Uint8Array, atlasWidth: number, frame: DryM
   return { mask, cw, ch };
 }
 
+/** Splits a cell's RGBA data into its top face and its rim past the face (`inside` = 1 on the face): each keeps only its own texels. */
+export function splitFaceAndRim(data: Uint8Array, inside: Uint8Array): { face: Uint8Array; rim: Uint8Array } {
+  const face = new Uint8Array(data.length);
+  const rim = new Uint8Array(data.length);
+  for (let p = 0; p < inside.length; p++) {
+    const target = inside[p] ? face : rim;
+    target.set(data.subarray(p * 4, p * 4 + 4), p * 4);
+  }
+  return { face, rim };
+}
+
+/** The bounding box of world rects; a unit box at the origin for none. */
+export function boundsOf(rects: readonly { x: number; y: number; w: number; h: number }[]): { minX: number; minY: number; maxX: number; maxY: number } {
+  if (rects.length === 0) return { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+  return {
+    minX: Math.min(...rects.map((r) => r.x)),
+    minY: Math.min(...rects.map((r) => r.y)),
+    maxX: Math.max(...rects.map((r) => r.x + r.w)),
+    maxY: Math.max(...rects.map((r) => r.y + r.h)),
+  };
+}
+
 /**
  * Owns the river flow render texture, the flow cells computed for it and the sprites drawn into it.
  *
@@ -101,7 +123,8 @@ export function cropAtlasCell(alpha: Uint8Array, atlasWidth: number, frame: DryM
 export class RiverFlowLayer {
   private readonly target = new MaskRenderTarget();
   private masks: LoadedRiverMasks | null = null;
-  private readonly cells = new Map<string, Texture>();
+  private readonly cells = new Map<string, { face: Texture; rim: Texture }>();
+  private drawnRect: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
 
   /** The masks are lazily decoded; resolves when `draw` can use them. */
   async load(): Promise<void> {
@@ -117,40 +140,66 @@ export class RiverFlowLayer {
     return this.target.texture;
   }
 
-  private cellTexture(masks: LoadedRiverMasks, name: string, frame: DryMaskFrame, entry: RiverFlowEntry): Texture {
+  /**
+   * The cell of one frame / edge combination as two textures: its own top face, and the rim past its in and out edges. The
+   * layer draws every rim first and every face over them, so a rim only fills the strip where the neighbouring hex's own
+   * art has no water (its water stops short of the edge) and never overwrites the neighbour's face with this cell's
+   * version of it. Drawn in one pass, whichever hex came later overwrote up to `FACE_PAD_TEXELS` of the other's face: a
+   * second, shifted seam inside the neighbour.
+   */
+  private cellTextures(masks: LoadedRiverMasks, name: string, frame: DryMaskFrame, entry: RiverFlowEntry): { face: Texture; rim: Texture } {
     const outEdge = topFaceEdgeIndex(entry.outDirection);
     const inEdges = entry.inDirections.map(topFaceEdgeIndex).sort((a, b) => a - b);
     const fadeEdge = entry.fadeDirection ? topFaceEdgeIndex(entry.fadeDirection) : undefined;
     const key = `${name}|${outEdge}|${inEdges.join(',')}|${fadeEdge ?? ''}`;
-    let texture = this.cells.get(key);
-    if (!texture) {
+    let pair = this.cells.get(key);
+    if (!pair) {
       const { mask, cw, ch } = cropAtlasCell(masks.alpha, masks.data.width, frame);
       const flow = computeRiverRipple({ mask, cw, ch, polygon: topFacePolygonTexels(frame.sx, frame.sy), inEdges, outEdge, fadeEdge });
-      texture = new Texture({ source: new BufferImageSource({ resource: flow.data, width: cw, height: ch, scaleMode: 'linear', addressMode: 'clamp-to-edge' }) });
-      this.cells.set(key, texture);
+      const { face, rim } = splitFaceAndRim(flow.data, flow.inside);
+      const texture = (data: Uint8Array) =>
+        new Texture({ source: new BufferImageSource({ resource: data, width: cw, height: ch, scaleMode: 'linear', addressMode: 'clamp-to-edge' }) });
+      pair = { face: texture(face), rim: texture(rim) };
+      this.cells.set(key, pair);
     }
-    return texture;
+    return pair;
+  }
+
+  /** The world rect the texture covers (the river hexes' cells), for the shader's own UVs; null before the first `draw`. */
+  get rect(): { minX: number; minY: number; maxX: number; maxY: number } | null {
+    return this.drawnRect;
   }
 
   /**
-   * Rebuilds the render texture over `rect` (the water mask's world rect) from `entries`, the base art of every river and
-   * bog-creek hex. Entries whose frame has no river mask are skipped. Returns the (possibly new) texture to bind.
+   * Rebuilds the render texture from `entries`, the base art of every river and bog-creek hex. Entries whose frame has no
+   * river mask are skipped. The texture covers only the river cells' own bounding box, not the water mask's whole region:
+   * at the region's size it ran at a third of a texel per world unit, so the flow field went blocky and the seams ragged.
+   * Returns the (possibly new) texture to bind.
    */
-  draw(renderer: Renderer, rect: { minX: number; minY: number; maxX: number; maxY: number }, entries: readonly RiverFlowEntry[], tileWidth: number): Texture | null {
+  draw(renderer: Renderer, entries: readonly RiverFlowEntry[], tileWidth: number): Texture | null {
     const masks = this.masks;
     if (!masks) return this.target.texture;
-    const placements: MaskPlacement[] = [];
+    const rims: MaskPlacement[] = [];
+    const faces: MaskPlacement[] = [];
     for (const entry of entries) {
       const name = entry.texture.label ?? '';
       const frame = masks.data.frames[name];
-      if (frame) placements.push({ texture: this.cellTexture(masks, name, frame, entry), rect: dryCellWorldRect(entry, frame, tileWidth), tint: 0xffffff });
+      if (!frame) continue;
+      const { face, rim } = this.cellTextures(masks, name, frame, entry);
+      const rect = dryCellWorldRect(entry, frame, tileWidth);
+      rims.push({ texture: rim, rect, tint: 0xffffff });
+      faces.push({ texture: face, rect, tint: 0xffffff });
     }
-    return this.target.render(renderer, rect, placements);
+    this.drawnRect = boundsOf(faces.map((p) => p.rect));
+    return this.target.render(renderer, this.drawnRect, [...rims, ...faces]);
   }
 
   destroy(): void {
     this.target.destroy();
-    for (const texture of this.cells.values()) texture.destroy(true);
+    for (const { face, rim } of this.cells.values()) {
+      face.destroy(true);
+      rim.destroy(true);
+    }
     this.cells.clear();
   }
 }

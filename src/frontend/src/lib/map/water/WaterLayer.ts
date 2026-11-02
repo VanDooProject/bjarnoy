@@ -437,7 +437,8 @@ export class WaterLayer {
       uRiverFlowOn: { value: 0, type: 'f32' },
       uShowRiverFlow: { value: 0, type: 'f32' },
       uRiverStyle: { value: 0, type: 'f32' },
-      uRiverUVPerWorld: { value: new Float32Array([1, 1]), type: 'vec2<f32>' },
+      // The river flow texture's own world rect: (minX, minY, 1 / width, 1 / height).
+      uRiverRect: { value: new Float32Array([0, 0, 1, 1]), type: 'vec4<f32>' },
       uRiverSpeed: { value: RIVER_SPEED_TURNS_PER_SECOND * 2 * Math.PI, type: 'f32' },
       uRiverArc: { value: RIVER_ARC_PERIODS, type: 'f32' },
       uRiverAlpha: { value: RIVER_ALPHA, type: 'f32' },
@@ -582,7 +583,6 @@ export class WaterLayer {
     const { minX, minY, maxX, maxY } = mask.region.rect;
     const positions = this.geometry.getBuffer('aPosition');
     positions.data.set([minX, minY, maxX, minY, maxX, maxY, minX, maxY]);
-    this.uniforms.uniforms.uRiverUVPerWorld = new Float32Array([1 / (maxX - minX), 1 / (maxY - minY)]);
     positions.update();
     this.hasMask = true;
   }
@@ -597,11 +597,14 @@ export class WaterLayer {
   }
 
   /**
-   * Binds the river flow texture (`RiverFlowLayer.texture`), over the same world rect as the water mask. `null` goes back to
-   * the 1x1 "no river" texture. The texture is owned by the caller, not destroyed here.
+   * Binds the river flow texture (`RiverFlowLayer.texture`) and the world rect it covers (`RiverFlowLayer.rect`, its own,
+   * not the water mask's). `null` goes back to the 1x1 "no river" texture. The texture is owned by the caller, not
+   * destroyed here.
    */
-  setRiverFlowTexture(texture: Texture | null): void {
+  setRiverFlowTexture(texture: Texture | null, rect: { minX: number; minY: number; maxX: number; maxY: number } | null = null): void {
     this.mesh.shader!.resources.uRiverFlow = (texture ?? placeholderRiverFlowTexture()).source;
+    const r = texture && rect ? rect : { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+    this.uniforms.uniforms.uRiverRect = new Float32Array([r.minX, r.minY, 1 / (r.maxX - r.minX), 1 / (r.maxY - r.minY)]);
   }
 
   /**

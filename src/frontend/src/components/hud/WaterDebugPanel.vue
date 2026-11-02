@@ -101,6 +101,8 @@ const SLIDERS: {
   { key: 'waveSpeed', label: 'Wave speed', needs: 'midWaterWaves', range: WAVE_SPEED, format: (v) => `${v.toFixed(1)}\u00d7` },
 ];
 
+const RIVER_STYLE_LABEL = 'River style';
+
 watch([flags, tuning], () => emit('change'), { flush: 'post' });
 </script>
 
@@ -112,7 +114,7 @@ watch([flags, tuning], () => emit('change'), { flush: 'post' });
     </label>
 
     <label class="row">
-      <span>River style</span>
+      <span>{{ RIVER_STYLE_LABEL }}</span>
       <select v-model.number="flags.riverStyle" :disabled="!flags.riverFlow">
         <option v-for="(name, i) in RIVER_STYLES" :key="name" :value="i">{{ name }}</option>
       </select>
