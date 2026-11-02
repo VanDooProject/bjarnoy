@@ -78,7 +78,7 @@ describe('AdminWorldsView', () => {
     expect(wrapper.text()).toContain('2 / 500');
     // Free spawn spots, separate from player slots: expansions take them too.
     expect(wrapper.text()).toContain('7 / 40');
-    expect(wrapper.text()).toContain('paused');
+    expect(wrapper.text()).toContain('Paused');
     // The world's active generation seed, surfaced so an admin can tell what
     // seed produced the current map without having to regenerate it first.
     expect(wrapper.text()).toContain('1234');
