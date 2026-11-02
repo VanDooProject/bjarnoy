@@ -992,32 +992,41 @@ dithered render, then box-downsampled 2x2. Only the `_base` frames of these fami
 
 **Which way is downstream: from the data.** A river tile flows towards its `outDirection`; a `mouth` without one towards
 `WorldModel.seaFacingDirectionOf`; a bog tile of kind `creek`, `creekspring` or `mouth` towards its `outDirection`. A hex
-without an out direction does not flow. Inside the hex the direction is the negative gradient of the geodesic distance to the out
-edge through the frame's painted water (`riverFlow.ts`), so meanders, the 60-degree loop, islands and Y confluences are followed
-as painted:
+without an out direction does not flow. Inside the hex the direction is the negative gradient of a **potential flow** solved over
+the frame's painted water (`riverFlow.ts`), so meanders, the 60-degree loop, islands and Y confluences are followed as painted:
 
-1. Passable texels are those inside the hex top face, padded by one texel. The out edge is polygon edge
-   `(3 - index of the direction in TILE_ORIENTATIONS + 6) % 6` of the top face (`topFaceEdgeIndex`, shared with `riverPath.ts`).
-2. Seeds (distance 0) are the water texels within 2 texels of the water closest to the out edge. Normally that water touches
-   the edge; the river delta's canvas is trimmed a few texels short of it.
-3. The front is marched with a fast-marching solver (upwind eikonal, driven by a heap), not a plain 8-way walk: a grid walk
-   leans the gradient towards the diagonals. A texel costs 1 on water and `NON_WATER_COST = 40` off it, so the field crosses a
-   bridge deck or a mill wheel that spans the whole channel (`riverbridge*`, `sawmill*`) without leaving the upstream half
-   disconnected, while a channel never shortcuts across the grass neck of the bend60 loop. Water within 8 texels of a bank costs
-   up to 4 more, so the field runs along the middle of a bend and not along its inside bank.
-4. The gradient is taken over water neighbours (central differences, one-sided at the bank), blurred over water texels in two
-   3x3 passes and normalised.
+1. Passable texels are those inside the hex top face, padded by one texel. Edges are polygon edge
+   `(3 - index of the direction in TILE_ORIENTATIONS + 6) % 6` of the top face (`topFaceEdgeIndex`, shared with `riverPath.ts`);
+   the in edges come from `inDirections` of the river or bog tile, the out edge as above.
+2. Dirichlet seeds: the water texels within 2 texels of the water closest to an edge segment. The potential is 1 at the seeds of
+   every in edge and 0 at the seeds of the out edge. Normally that water touches the edge; the river delta's canvas is trimmed a
+   few texels short of it.
+3. The potential is harmonic in between and has no flux through the banks: a link between two water texels conducts 1, a link that
+   touches a dry texel `1 / NON_WATER_COST = 1/40`. That keeps the banks nearly closed walls, yet a bridge deck or a mill wheel
+   that spans the whole channel (`riverbridge*`, `sawmill*`) still conducts, so the upstream half is not cut off, and the field
+   does not leak across the grass neck of the bend60 loop. A hex without an in edge (a spring, a bog creek spring) has a uniform
+   source on its water instead (`laplacian = -1`) and 0 at the out edge. Solved by red-black SOR (omega 1.9, stop when no texel
+   moves by more than 1e-5), a few ms per frame; cells are cached.
+4. The direction is `-grad` of the potential over water neighbours (central differences, one-sided at the bank), normalised. Inside
+   a seed band the potential is constant, so those texels take the direction of their nearest texels that have one.
+
+Why a potential and not a geodesic distance (the first version): a distance field points sideways into the channel at the banks
+and along the in edge, so the direction jumped at every hex seam, and it has a cut locus: upstream of an island the two
+shortest-path families meet on a ridge whose end is a singularity (the full hue wheel in the debug view, streaks radiating from a
+point). The potential has no cut locus, stagnation points sit on an island's shore, and because the boundary value is constant
+along each edge crossing, the flow crosses every in and out edge perpendicular to it: the two hexes that share an edge agree
+there, with no seam-specific code.
 
 The flow texture (`RiverFlowLayer`) is RGBA8 per frame cell: R,G the unit direction `* 0.5 + 0.5` in art space (+y down),
-B the intensity (distance to the bank over 4 texels, so the streaks fade out at the shore), A 255 inside the hex top face and 0
+B the intensity (distance to the bank over 4 texels, so the streaks fade out at the shore; a dry texel within 3 texels of an in or out edge segment is not a bank, because the art's water stops a texel or two short of the top face edge and that rim would otherwise fade every seam to nothing), A 255 inside the hex top face and 0
 outside. Top faces tessellate exactly (§3.4), so this clipping alone resolves the cells of neighbouring hexes that overlap. Cells
-are cached per `frame|out edge|fade edge` and drawn into one render texture over the water mask's rect, placed and sized
+are cached per `frame|out edge|in edges|fade edge` and drawn into one render texture over the water mask's rect, placed and sized
 exactly like the dry mask cells (`MaskRenderTarget` is the shared drawing half), and bound as `uRiverFlow` with the same `vUV`.
 World mode, and the time before the masks have loaded, bind a 1x1 texture of zeros.
 
 **Lakes stay still.** A bog `boglake_mouth` hex joins a creek to a lake. Its flow fades away from the creek edge (the one of
 in/out that is not a lake edge): the intensity is multiplied by `1 - smoothstep(0, half a hex width, geodesic distance from the
-creek edge)`.
+creek edge)` (the one place a geodesic distance remains: it is an intensity fade, not a direction).
 
 **In the shader.** Painted river water is land as far as the water mask knows, so the river branch sits before the land
 `discard`: where `!water`, the flow texture's alpha is set and its intensity B is above 0.01, the pixel is the river overlay.

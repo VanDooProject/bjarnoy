@@ -9,11 +9,11 @@ const bog = (over: Partial<BogTile>): BogTile => ({ q: 0, r: 0, kind: 'creek', i
 
 describe('riverFlowOf', () => {
   it('flows a river towards its out direction', () => {
-    expect(riverFlowOf(river({}), undefined, null)).toEqual({ outDirection: 'E' });
+    expect(riverFlowOf(river({}), undefined, null)).toEqual({ outDirection: 'E', inDirections: ['W'] });
   });
 
   it('flows a mouth without an out direction towards the sea', () => {
-    expect(riverFlowOf(river({ shape: 'mouth', outDirection: null }), undefined, 'NE')).toEqual({ outDirection: 'NE' });
+    expect(riverFlowOf(river({ shape: 'mouth', outDirection: null }), undefined, 'NE')).toEqual({ outDirection: 'NE', inDirections: ['W'] });
     expect(riverFlowOf(river({ shape: 'mouth', outDirection: null }), undefined, null)).toBeNull();
   });
 
@@ -23,16 +23,16 @@ describe('riverFlowOf', () => {
   });
 
   it('flows bog creeks and creek springs, but not moss or lakes', () => {
-    expect(riverFlowOf(undefined, bog({}), null)).toEqual({ outDirection: 'E' });
-    expect(riverFlowOf(undefined, bog({ kind: 'creekspring', inDirections: [] }), null)).toEqual({ outDirection: 'E' });
+    expect(riverFlowOf(undefined, bog({}), null)).toEqual({ outDirection: 'E', inDirections: ['W'] });
+    expect(riverFlowOf(undefined, bog({ kind: 'creekspring', inDirections: [] }), null)).toEqual({ outDirection: 'E', inDirections: [] });
     for (const kind of ['bog', 'lake', 'inlet', 'shore', 'half'] as const) expect(riverFlowOf(undefined, bog({ kind }), null), kind).toBeNull();
   });
 
   it('fades a lake mouth away from its creek edge, whichever way the water runs', () => {
     // Water runs out of the lake: the out edge is the creek edge.
-    expect(riverFlowOf(undefined, bog({ kind: 'mouth', inDirections: ['W'], outDirection: 'E', waterEdges: ['W'] }), null)).toEqual({ outDirection: 'E', fadeDirection: 'E' });
+    expect(riverFlowOf(undefined, bog({ kind: 'mouth', inDirections: ['W'], outDirection: 'E', waterEdges: ['W'] }), null)).toEqual({ outDirection: 'E', inDirections: ['W'], fadeDirection: 'E' });
     // Water runs into the lake: the in edge is the creek edge.
-    expect(riverFlowOf(undefined, bog({ kind: 'mouth', inDirections: ['W'], outDirection: 'E', waterEdges: ['E'] }), null)).toEqual({ outDirection: 'E', fadeDirection: 'W' });
+    expect(riverFlowOf(undefined, bog({ kind: 'mouth', inDirections: ['W'], outDirection: 'E', waterEdges: ['E'] }), null)).toEqual({ outDirection: 'E', inDirections: ['W'], fadeDirection: 'W' });
     expect(riverFlowOf(undefined, bog({ kind: 'mouth', outDirection: null }), null)).toBeNull();
   });
 });

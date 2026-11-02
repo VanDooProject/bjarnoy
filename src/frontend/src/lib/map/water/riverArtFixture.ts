@@ -9,8 +9,10 @@ import { topFacePolygonTexels, type RiverFlowInput } from './riverFlow';
 /** Whether the vendored atlas is checked out (then the art-backed tests run, otherwise they are skipped). */
 export const vendoredArt = existsSync(resolve(__dirname, '../../../../vendor/bg_assets_hextile/atlas/terrain-4.json'));
 
-/** The flow input (without out edge) of the frame called `name`. */
-export async function riverFrameInput(name: string): Promise<Omit<RiverFlowInput, 'outEdge'>> {
+/** The flow input of the frame called `name`, without the edges. */
+export type RiverFrame = Omit<RiverFlowInput, 'inEdges' | 'outEdge' | 'fadeEdge'>;
+
+export async function riverFrameInput(name: string): Promise<RiverFrame> {
   const bases = await loadBaseCanvases();
   const frame = bases.get(name);
   if (!frame) throw new Error(`no vendored frame ${name}`);

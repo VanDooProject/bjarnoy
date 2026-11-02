@@ -23,6 +23,8 @@ export interface RiverFlowEntry {
   y: number;
   /** The downstream side. */
   outDirection: TileOrientation;
+  /** The upstream sides (none for a spring). */
+  inDirections: readonly TileOrientation[];
   /** The side the flow fades away from, so the lake of a bog lake mouth stays still. */
   fadeDirection?: TileOrientation;
 }
@@ -36,16 +38,16 @@ export function riverFlowOf(
   river: RiverTile | undefined,
   bog: BogTile | undefined,
   seaDirection: TileOrientation | null,
-): { outDirection: TileOrientation; fadeDirection?: TileOrientation } | null {
+): { outDirection: TileOrientation; inDirections: readonly TileOrientation[]; fadeDirection?: TileOrientation } | null {
   if (river) {
     if (river.wasted) return null;
     const outDirection = river.outDirection ?? (river.shape === 'mouth' ? seaDirection : null);
-    return outDirection ? { outDirection } : null;
+    return outDirection ? { outDirection, inDirections: river.inDirections } : null;
   }
   if (bog && (bog.kind === 'creek' || bog.kind === 'creekspring' || bog.kind === 'mouth') && bog.outDirection) {
-    if (bog.kind !== 'mouth') return { outDirection: bog.outDirection };
+    if (bog.kind !== 'mouth') return { outDirection: bog.outDirection, inDirections: bog.inDirections };
     const creekEdge = [bog.inDirections[0], bog.outDirection].find((d) => d !== undefined && !bog.waterEdges.includes(d));
-    return { outDirection: bog.outDirection, fadeDirection: creekEdge };
+    return { outDirection: bog.outDirection, inDirections: bog.inDirections, fadeDirection: creekEdge };
   }
   return null;
 }
@@ -117,12 +119,13 @@ export class RiverFlowLayer {
 
   private cellTexture(masks: LoadedRiverMasks, name: string, frame: DryMaskFrame, entry: RiverFlowEntry): Texture {
     const outEdge = topFaceEdgeIndex(entry.outDirection);
+    const inEdges = entry.inDirections.map(topFaceEdgeIndex).sort((a, b) => a - b);
     const fadeEdge = entry.fadeDirection ? topFaceEdgeIndex(entry.fadeDirection) : undefined;
-    const key = `${name}|${outEdge}|${fadeEdge ?? ''}`;
+    const key = `${name}|${outEdge}|${inEdges.join(',')}|${fadeEdge ?? ''}`;
     let texture = this.cells.get(key);
     if (!texture) {
       const { mask, cw, ch } = cropAtlasCell(masks.alpha, masks.data.width, frame);
-      const flow = computeRiverFlow({ mask, cw, ch, polygon: topFacePolygonTexels(frame.sx, frame.sy), outEdge, fadeEdge });
+      const flow = computeRiverFlow({ mask, cw, ch, polygon: topFacePolygonTexels(frame.sx, frame.sy), inEdges, outEdge, fadeEdge });
       texture = new Texture({ source: new BufferImageSource({ resource: flow, width: cw, height: ch, scaleMode: 'linear', addressMode: 'clamp-to-edge' }) });
       this.cells.set(key, texture);
     }
