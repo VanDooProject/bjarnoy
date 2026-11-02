@@ -438,8 +438,8 @@ function solveRiver(input: RiverFlowInput) {
   const fade = fadeEdge === undefined ? null : geodesic(input, passable, fadeEdge);
   const fadeLength = (Math.max(...input.polygon.map((p) => p.x)) - Math.min(...input.polygon.map((p) => p.x))) / 2;
   /** Intensity of the water at texel `p`: the bank fade, and the lake fade where there is one. */
-  const intensityAt = (p: number): number => {
-    let intensity = Math.min(1, Math.max(0, bank[p]! / BANK_FADE_TEXELS));
+  const intensityAt = (p: number, fadeTexels = BANK_FADE_TEXELS): number => {
+    let intensity = Math.min(1, Math.max(0, bank[p]! / fadeTexels));
     if (fade) intensity *= 1 - smoothstep(0, fadeLength, fade[p]!);
     return intensity;
   };
@@ -550,6 +550,13 @@ export function computeRiverFlow(input: RiverFlowInput): Uint8Array {
 }
 
 /**
+ * Texels from the bank at which the ripple texture's B reaches 1 (the middle of the channel). B is the distance to the bank over
+ * this, not over `BANK_FADE_TEXELS`: the shader both fades the ripples out at the bank (over the first `BANK_FADE_TEXELS` of it)
+ * and lags the crests there, so they bow into arcs and none runs straight along a hex seam.
+ */
+export const RIVER_CENTRE_TEXELS = 16;
+
+/**
  * Target ripple wavelength in texels of the half-resolution cell (one tile width is about 100 texels): a cell gets
  * `round(channel length / this)` whole ripple periods between its in and out edges.
  */
@@ -565,7 +572,8 @@ export const RIPPLE_WAVELENGTH_TEXELS = 12;
  * seeds (the maximum over the water for a cell without an in edge). In the seed bands and the rim, where the potential is flat, the
  * phase continues linearly at the cell's mean rate `2 pi n / L` per texel from the edge line (0 mod 2 pi on it), so a crest is not a flat strip.
  *
- * R, G = cos, sin of `theta` * 0.5 + 0.5 (filtering-safe, unlike a wrapped phase). B = intensity (as `computeRiverFlow`).
+ * R, G = cos, sin of `theta` * 0.5 + 0.5 (filtering-safe, unlike a wrapped phase). B = distance to the bank over
+ * `RIVER_CENTRE_TEXELS` (0 at the bank, 1 in the middle; the dry rim along an in or out edge is no bank; a lake mouth's fade multiplies it).
  * A = 255 on the water of the face and its rim along the in and out edges, all four 0 elsewhere.
  */
 export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; periods: number } {
@@ -629,7 +637,7 @@ export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; p
       const o = p * 4;
       out[o] = Math.round((Math.cos(theta) * 0.5 + 0.5) * 255);
       out[o + 1] = Math.round((Math.sin(theta) * 0.5 + 0.5) * 255);
-      out[o + 2] = Math.round(intensityAt(p) * 255);
+      out[o + 2] = Math.round(intensityAt(p, RIVER_CENTRE_TEXELS) * 255);
       out[o + 3] = 255;
     }
   }

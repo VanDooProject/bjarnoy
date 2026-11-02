@@ -122,6 +122,7 @@ uniform vec3 uCausticBlobColor;
 uniform float uRiverFlowOn;
 uniform float uShowRiverFlow;
 uniform float uRiverSpeed;
+uniform float uRiverArc;
 uniform float uRiverAlpha;
 uniform vec3 uRiverColor;
 uniform float uRiverScale;
@@ -491,11 +492,15 @@ vec2 riverPhase(vec4 flow) {
 
 const float RIVER_CREST_EDGE = 0.85;
 
-// The river overlay: thin light crests where the stored phase, rotated by uTime * uRiverSpeed, is near a whole turn. The phase
+// The river overlay: thin light crests where the stored phase, rotated by uTime * uRiverSpeed, is near a whole turn, less a lag towards the banks (the crests bow downstream in the middle). The phase
 // is a multiple of the potential, so the crests cross the channel and slide towards the out edge (potential 0). Low-frequency
 // noise in ground space breaks each crest into ripple pieces. Returns premultiplied colour.
-vec4 riverOverlay(vec2 cs, float intensity, vec2 ground) {
-  float turn = uRiverSpeed * uTime;
+vec4 riverOverlay(vec2 cs, float centre, vec2 ground) {
+  // centre: 0 at the bank, 1 from the channel's middle. The ripples fade out over its first quarter (4 of 16 texels); the
+  // crests lag at the banks by uRiverArc periods (1 - centre)^2, so the middle leads downstream and a crest is an arc.
+  float intensity = smoothstep(0.0, 0.25, centre);
+  float lag = uRiverArc * (1.0 - centre) * (1.0 - centre) * 6.2831853;
+  float turn = uRiverSpeed * uTime - lag;
   float c = cs.x * cos(turn) - cs.y * sin(turn);
   float crest = smoothstep(RIVER_CREST_EDGE, 0.985, c);
   float broken = smoothstep(0.25, 0.5, noise(ground * uRiverScale) * 0.7 + noise(ground * uRiverScale * 2.3 + 11.0) * 0.3);

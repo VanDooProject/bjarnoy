@@ -183,6 +183,8 @@ export interface WaterDebugTuning {
   /** Multipliers on the river ripples' brightness and speed (§4.4d); 1.00x is what ships. */
   riverBrightness: number;
   riverSpeed: number;
+  /** Multiplier on how far the crests lag at the banks (§4.4d); 1.00x is what ships, 0 draws straight crests. */
+  riverArc: number;
 }
 
 export const waterDebugTuning: WaterDebugTuning = {
@@ -201,6 +203,7 @@ export const waterDebugTuning: WaterDebugTuning = {
   causticFinePhase: 17,
   riverBrightness: 1,
   riverSpeed: 1,
+  riverArc: 1,
 };
 
 /**

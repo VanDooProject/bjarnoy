@@ -319,16 +319,19 @@ describe('WaterLayer', () => {
     expect(u.uShowRiverFlow).toBe(0);
     const alpha = u.uRiverAlpha as number;
     const speed = u.uRiverSpeed as number;
+    const arc = u.uRiverArc as number;
 
     waterDebugFlags.riverFlow = false;
     waterDebugFlags.showRiverFlow = true;
     waterDebugTuning.riverBrightness = 2;
     waterDebugTuning.riverSpeed = 0.5;
+    waterDebugTuning.riverArc = 2;
     layer.tick(16);
     expect(u.uRiverFlowOn).toBe(0);
     expect(u.uShowRiverFlow).toBe(1);
     expect(u.uRiverAlpha).toBeCloseTo(alpha * 2, 9);
     expect(u.uRiverSpeed).toBeCloseTo(speed * 0.5, 9);
+    expect(u.uRiverArc).toBeCloseTo(arc * 2, 9);
   });
 
   it('never draws a sea body in settlement mode — the painted water tiles are it', () => {

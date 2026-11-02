@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeRiverFlow, computeRiverRipple, RIPPLE_WAVELENGTH_TEXELS, riverGeodesicDistance, riverPotential, SEED_REACH, topFacePolygonTexels, WATER_THRESHOLD, type RiverFlowInput } from './riverFlow';
+import { computeRiverFlow, computeRiverRipple, RIPPLE_WAVELENGTH_TEXELS, RIVER_CENTRE_TEXELS, riverGeodesicDistance, riverPotential, SEED_REACH, topFacePolygonTexels, WATER_THRESHOLD, type RiverFlowInput } from './riverFlow';
 import { topFaceEdgeIndex } from '../riverPath';
 import { riverFrameInput, vendoredArt, type RiverFrame } from './riverArtFixture';
 
@@ -484,18 +484,41 @@ describe('computeRiverRipple on a synthetic straight channel', () => {
       const a = phaseAt(above.data, 50, yAbove, CW)!;
       const b = phaseAt(below.data, 50, yBelow, CW)!;
       expect(Math.abs(a.theta - b.theta), `rows ${yAbove}/${yBelow}`).toBeLessThan(0.05);
+      // The shader's lag is a function of B alone, so equal phase and nearly equal B (the domains end at different rows) make the same crest on both sides.
+      expect(Math.abs(above.data[(yAbove * CW + 50) * 4 + 2]! - below.data[(yBelow * CW + 50) * 4 + 2]!) / 255).toBeLessThan(0.1);
     }
   });
 
-  it('runs the other way round when the edges swap, and keeps the intensity and coverage of the direction cell', () => {
+  it('runs the other way round when the edges swap, and covers the same texels as the direction cell', () => {
     const flow = computeRiverFlow(input(channel(), TOP));
     const { data } = computeRiverRipple(input(channel(), TOP));
     for (let p = 0; p < CW * CH; p++) {
       expect(data[p * 4 + 3], `alpha ${p}`).toBe(flow[p * 4 + 3]);
-      expect(data[p * 4 + 2], `intensity ${p}`).toBe(flow[p * 4 + 2]);
     }
     expect(phaseAt(data, 50, 0, CW)!.cos).toBeGreaterThan(0.95);
     expect(phaseAt(data, 50, CH - 3, CW)!.cos).toBeGreaterThan(0.95);
+  });
+});
+
+describe('computeRiverRipple intensity', () => {
+  it('is 0 at the bank and 1 from RIVER_CENTRE_TEXELS of it, across the whole width of a wide channel', () => {
+    const mask = new Uint8Array(CW * CH);
+    for (let y = 0; y < CH; y++) for (let x = 20; x < 80; x++) mask[y * CW + x] = 255;
+    const { data } = computeRiverRipple(input(mask, BOTTOM));
+    const b = (x: number) => data[(20 * CW + x) * 4 + 2]! / 255;
+    expect(b(20)).toBeLessThan(0.1);
+    expect(b(20 + RIVER_CENTRE_TEXELS / 2)).toBeGreaterThan(0.4);
+    expect(b(20 + RIVER_CENTRE_TEXELS / 2)).toBeLessThan(0.6);
+    expect(b(20 + RIVER_CENTRE_TEXELS + 1)).toBe(1);
+    expect(b(50)).toBe(1);
+  });
+
+  it('is nearly the same in the middle on both sides of a seam (within 0.1)', () => {
+    const above = computeRiverRipple(input(channel(), BOTTOM));
+    const below = computeRiverRipple(input(channel(), BOTTOM));
+    for (const [yAbove, yBelow] of [[46, 0], [47, 1]] as const) {
+      for (const x of [50]) expect(Math.abs(above.data[(yAbove * CW + x) * 4 + 2]! - below.data[(yBelow * CW + x) * 4 + 2]!) / 255, `x=${x} rows ${yAbove}/${yBelow}`).toBeLessThan(0.1);
+    }
   });
 });
 

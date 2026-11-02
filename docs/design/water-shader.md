@@ -1033,8 +1033,7 @@ The flow direction (`computeRiverFlow`, the negative gradient of `phi`) is no lo
 reference the tests check the potential against.
 
 The ripple texture (`RiverFlowLayer`, `computeRiverRipple`) is RGBA8 per frame cell: R,G = `cos theta`, `sin theta` `* 0.5 + 0.5`
-(a filtering-safe encoding, unlike a wrapped phase, which would smear across the 2 pi jump), B the intensity (distance to the bank
-over 4 texels, so the ripples fade out at the shore; a dry texel within 3 texels of an in or out edge segment is not a bank, because
+(a filtering-safe encoding, unlike a wrapped phase, which would smear across the 2 pi jump), B the distance to the bank over `RIVER_CENTRE_TEXELS = 16` (0 at the bank, 1 in the middle; the shader fades the ripples out at the shore over the first quarter of it, the same 4 texels as before, and bows the crests with the rest, see below; a dry texel within 3 texels of an in or out edge segment is not a bank, because
 the art's water stops a texel or two short of the top face edge and that rim would otherwise fade every seam to nothing), A 255 on the
 water texels of the hex top face and of a 2-texel rim past its in and out edges (`FACE_PAD_TEXELS`), and all four 0 everywhere else,
 dry texels inside the face included. Clipped exactly to the face, a cell left a strip along every seam without flow: the art's water
@@ -1050,11 +1049,13 @@ time before the masks have loaded, bind a 1x1 texture of zeros.
 in/out that is not a lake edge): the intensity is multiplied by `1 - smoothstep(0, half a hex width, geodesic distance from the
 creek edge)` (the one place a geodesic distance remains: it is an intensity fade, not a direction).
 
+**Arcs, not straight lines.** `theta` is 0 along the whole edge line, so with one phase for the whole width a crest would cross every seam as a straight line along the hex edge (and the contours meet an island's shore at a right angle, spokes). The shader lags the crests towards the banks: `theta' = theta + uRiverSpeed * uTime - uRiverArc * (1 - B)^2 * 2 pi`, `uRiverArc = 0.35` of a period. The middle of the channel (B = 1) is ahead, the banks lag, so a crest bows downstream in the middle. Both hexes of a seam have nearly the same B there, so the lag is near-continuous and the crest stays one arc across the seam. The direction cell (`computeRiverFlow`) keeps its 4-texel B.
+
 **In the shader.** Painted river water is land as far as the water mask knows, so the river branch sits before the land
 `discard`: where `!water` and the flow texture's alpha is set, the pixel is the river overlay (where its intensity B is above
 0.01). The shader renormalises the filtered `(cos, sin)` pair and rotates it by time, `theta' = theta + uRiverSpeed * uTime`
 (`cos theta' = cos theta cos d - sin theta sin d`). Because `phi` falls downstream, the crests (`theta' = 0`, i.e. `phi` decreasing
-over time) move towards the out edge. A crest is `smoothstep(0.85, 0.985, cos theta')`, about a fifth of a wavelength wide, broken up
+over time) move towards the out edge. The ripples fade in with `smoothstep(0, 4/16, B)`. A crest is `smoothstep(0.85, 0.985, cos theta')`, about a fifth of a wavelength wide, broken up
 along the band by low-frequency world-space noise (`uRiverScale`, 6 cells per tile) so it reads as ripples and not stripes. Alpha is
 `crest * broken * B * uRiverAlpha`, colour `uRiverColor` (light cyan-white). The speed is 0.8 periods per second; a period is about
 an eighth of a tile (12 texels), the real length differs a little per cell because `N` is rounded.
@@ -1073,7 +1074,7 @@ sampler2D uWaterNoFoam             river-mouth no-foam field, single channel; fo
 sampler2D uWaterDry                art dry mask (§4.4b), render texture over the mask's rect; alpha is the mask; caustics and foam *= 1 - it
 sampler2D uRiverFlow               river flow field (§4.4d), render texture over the mask's rect; rg cos/sin of the ripple phase, b intensity, a where the hex has flow (its top face plus a 2-texel rim past the in and out edges)
 float uRiverFlowOn, uShowRiverFlow 0/1: the ripples; debug: colour the river by ripple phase
-float uRiverSpeed                  ripple phase rotation, radians per second
+float uRiverSpeed, uRiverArc       ripple phase rotation, radians per second; periods the crests lag at the banks
 float uRiverAlpha, uRiverScale;  vec3 uRiverColor   crest opacity; crest-break noise cells per world unit; crest colour
 vec3  uTaintShallowColor, uTaintDeepColor, uTaintFoamColor
 float uTime, uWaveTime            base clock; wave clock, scaled by waveSpeed
@@ -1181,6 +1182,7 @@ export interface WaterDebugTuning {
   causticFinePhase: number;      // 17s — see §4.2e.
   riverBrightness: number;       // 1 — multiplier on the river ripples' opacity (§4.4d)
   riverSpeed: number;            // 1 — multiplier on the river ripples' speed (rotation of the ripple phase)
+  riverArc: number;              // 1 — multiplier on how far the crests lag at the banks (0 = straight crests)
   // None of the seven touches the shadow pools. Brightness would darken the
   // water if it did, and the pools' density is a level in a field, not a count.
 }
