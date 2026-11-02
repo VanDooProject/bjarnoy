@@ -2,8 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
+using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -211,4 +213,294 @@ public sealed class LinkedRealmEndpointsTests : IAsyncLifetime
         Assert.Equal(before.StockWood, after.StockWood);
         Assert.Equal(before.Version, after.Version);
     }
+
+    #region Army, trade and guild paths use the shared stock (step D)
+
+    private async Task<T> WithDbAsync<T>(Func<GameDbContext, Task<T>> body)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        return await body(scope.ServiceProvider.GetRequiredService<GameDbContext>());
+    }
+
+    /// <summary>Sets the stored stock of settlements directly (the pool is the sum; the next group load re-splits it by capacity).</summary>
+    private Task SetStockAsync(params (Guid Id, ResourceAmounts Stock)[] stocks) => WithDbAsync(async db =>
+    {
+        foreach (var (id, stock) in stocks)
+        {
+            var entity = await db.Settlements.FirstAsync(s => s.Id == id, Ct);
+            entity.StockWood = stock.Wood;
+            entity.StockStone = stock.Stone;
+            entity.StockFood = stock.Food;
+            entity.StockIron = stock.Iron;
+        }
+
+        await db.SaveChangesAsync(Ct);
+        return true;
+    });
+
+    private Task SetLonghouseLevelAsync(int level, params Guid[] ids) => WithDbAsync(async db =>
+    {
+        foreach (var id in ids)
+        {
+            var longhouse = await db.PlacedBuildings.FirstAsync(b => b.SettlementId == id && b.Type == BuildingType.Longhouse, Ct);
+            longhouse.Level = level;
+        }
+
+        await db.SaveChangesAsync(Ct);
+        return true;
+    });
+
+    private Task SetGarrisonAsync(Guid id, params UnitStack[] stacks) => WithDbAsync(async db =>
+    {
+        var entity = await db.Settlements
+            .Include(s => s.Buildings).Include(s => s.Queue).Include(s => s.Garrison).Include(s => s.TrainingQueue).Include(s => s.Runes)
+            .FirstAsync(s => s.Id == id, Ct);
+        entity.ApplyDomain(entity.ToDomain() with { Garrison = stacks });
+        await db.SaveChangesAsync(Ct);
+        return true;
+    });
+
+    private async Task<DateTimeOffset> GameNowAsync(Guid worldId) => await WithDbAsync(async db =>
+        (await db.Worlds.AsNoTracking().FirstAsync(w => w.Id == worldId, Ct)).ToClock().ToGameTime(_factory.Time.GetUtcNow()));
+
+    private Task<ArmyEntity> ReadArmyAsync(Guid armyId) => WithDbAsync(db =>
+        db.Armies.AsNoTracking().Include(a => a.Stacks).FirstAsync(a => a.Id == armyId, Ct));
+
+    private async Task<Guid> PlantArmyAsync(
+        Guid homeId, ArmyMission mission, Guid? targetId, DateTimeOffset departedAt, bool returning,
+        HexCoord from, HexCoord to, double legHours, double returnLegHours, ResourceAmounts loot, params UnitStack[] stacks)
+    {
+        var army = new ArmyEntity
+        {
+            SettlementId = homeId,
+            Mission = (int)mission,
+            TargetSettlementId = targetId,
+            AtHome = false,
+            Provisions = 1000,
+            DepartedAt = departedAt,
+            Path = returning ? [new HexPoint(to.Q, to.R), new HexPoint(from.Q, from.R)] : [new HexPoint(from.Q, from.R), new HexPoint(to.Q, to.R)],
+            CumulativeHours = returning ? [0, returnLegHours] : [0, legHours],
+            ReturnPath = [new HexPoint(to.Q, to.R), new HexPoint(from.Q, from.R)],
+            ReturnCumulativeHours = [0, returnLegHours],
+            TurnAroundAt = returning ? departedAt : departedAt + TimeSpan.FromHours(legHours),
+            IsReturning = returning,
+            LootWood = loot.Wood,
+            LootStone = loot.Stone,
+            LootFood = loot.Food,
+            LootIron = loot.Iron,
+            Stacks = [.. stacks.Select(s => new ArmyUnitStackEntity { UnitType = s.Type, Count = s.Count })],
+        };
+        return await WithDbAsync(async db =>
+        {
+            db.Armies.Add(army);
+            await db.SaveChangesAsync(Ct);
+            return army.Id;
+        });
+    }
+
+    private void AssertSharesEven(SettlementEntity a, SettlementEntity b)
+    {
+        Assert.Equal(a.SettledAt, b.SettledAt);
+        Assert.Equal(a.StockWood / a.CapacityWood, b.StockWood / b.CapacityWood, 6);
+        Assert.Equal(a.StockFood / a.CapacityFood, b.StockFood / b.CapacityFood, 6);
+    }
+
+    [Fact]
+    public async Task A_raid_on_the_newer_member_loots_the_whole_pooled_stock_and_both_shares_are_re_split()
+    {
+        var scene = await SetUpAsync();
+        var stock = new ResourceAmounts(400, 400, 400, 0);
+        await SetStockAsync((scene.Oldest, stock), (scene.Newest, ResourceAmounts.Zero));
+        _factory.Time.Advance(TimeSpan.FromHours(3));
+        var gameNow = await GameNowAsync(scene.WorldId);
+
+        // Lands two hours in (an hour after leaving), on a defender with no garrison; the way home takes two more hours.
+        var armyId = await PlantArmyAsync(
+            scene.Unlinked, ArmyMission.Raid, scene.Newest, gameNow - TimeSpan.FromHours(2), returning: false,
+            scene.OldestCentre, scene.NewestCentre, legHours: 1, returnLegHours: 2, ResourceAmounts.Zero, new UnitStack(UnitType.Axeman, 500));
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var armies = scope.ServiceProvider.GetRequiredService<ArmyService>();
+            var result = await armies.GetAsync(armyId, Ct);
+            Assert.NotNull(result?.Army);
+        }
+
+        var army = await ReadArmyAsync(armyId);
+        var oldest = await ReadAsync(scene.Oldest);
+        var newest = await ReadAsync(scene.Newest);
+
+        // The newer member held none of its own and a half share of the pool at most, yet the raid took the whole pooled stock.
+        Assert.InRange(army.LootWood, 399, double.MaxValue);
+        Assert.InRange(army.LootStone, 399, double.MaxValue);
+        Assert.InRange(army.LootFood, 399, double.MaxValue);
+        Assert.True(Total(oldest, newest, s => s.StockWood) < 100, "the raid left the pool nearly empty");
+        AssertSharesEven(oldest, newest);
+    }
+
+    [Fact]
+    public async Task Loot_brought_home_lands_in_the_pool_and_is_shared_between_the_members()
+    {
+        var scene = await SetUpAsync();
+        await SetStockAsync((scene.Oldest, ResourceAmounts.Zero), (scene.Newest, ResourceAmounts.Zero));
+        var gameNow = await GameNowAsync(scene.WorldId);
+
+        // Back from a raid an hour ago; the carried loot goes into the realm of the settlement it left from.
+        var armyId = await PlantArmyAsync(
+            scene.Oldest, ArmyMission.Raid, scene.Unlinked, gameNow - TimeSpan.FromHours(2), returning: true,
+            scene.OldestCentre, scene.NewestCentre, legHours: 1, returnLegHours: 1, new ResourceAmounts(100, 80, 60, 0), new UnitStack(UnitType.Axeman, 5));
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var armies = scope.ServiceProvider.GetRequiredService<ArmyService>();
+            Assert.Null((await armies.GetAsync(armyId, Ct))?.Army);
+        }
+
+        var oldest = await ReadAsync(scene.Oldest);
+        var newest = await ReadAsync(scene.Newest);
+        Assert.Equal(100, Total(oldest, newest, s => s.StockWood), 3);
+        Assert.Equal(80, Total(oldest, newest, s => s.StockStone), 3);
+        Assert.True(newest.StockWood > 0 && oldest.StockWood > 0, "both members hold a share of the loot");
+        Assert.True(oldest.StockWood < 100, "the oldest does not keep it all");
+        AssertSharesEven(oldest, newest);
+    }
+
+    [Fact]
+    public async Task Dispatch_provisions_are_paid_from_the_pool_when_they_exceed_the_departing_members_share()
+    {
+        var scene = await SetUpAsync();
+        await SetStockAsync((scene.Oldest, new ResourceAmounts(0, 0, 300, 0)), (scene.Newest, ResourceAmounts.Zero));
+        await SetGarrisonAsync(scene.Newest, new UnitStack(UnitType.Spearman, 40));
+
+        const double provisions = 250;
+        ArmyDispatchResult? dispatched = null;
+        var refusals = new List<DispatchRejection>();
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var armies = scope.ServiceProvider.GetRequiredService<ArmyService>();
+            foreach (var hex in scene.NewestOnlyHexes)
+            {
+                var result = await armies.DispatchAsync(
+                    scene.Newest, [new UnitStack(UnitType.Spearman, 30)], [], hex, provisions, cancellationToken: Ct);
+                if (result.Accepted)
+                {
+                    dispatched = result;
+                    break;
+                }
+
+                refusals.Add(result.Rejection);
+            }
+        }
+
+        Assert.True(dispatched is not null, $"no hex accepted the dispatch: {string.Join(", ", refusals.Distinct())}");
+        var oldest = await ReadAsync(scene.Oldest);
+        var newest = await ReadAsync(scene.Newest);
+
+        // 300 food shared 150/150: only the pool covers 250.
+        Assert.Equal(50, Total(oldest, newest, s => s.StockFood), 3);
+        AssertSharesEven(oldest, newest);
+    }
+
+    [Fact]
+    public async Task A_trade_offer_larger_than_one_members_share_is_escrowed_from_the_pool_and_refunded_into_it()
+    {
+        var scene = await SetUpAsync();
+        await SetLonghouseLevelAsync(5, scene.Oldest, scene.Newest);
+        await SetStockAsync((scene.Oldest, new ResourceAmounts(300, 0, 0, 0)), (scene.Newest, new ResourceAmounts(300, 0, 0, 0)));
+
+        Guid offerId;
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var trade = scope.ServiceProvider.GetRequiredService<TradeService>();
+            var posted = await trade.PostOfferAsync(
+                scene.Newest, Bjarnoy.Domain.Trade.TradeResource.Wood, 500, Bjarnoy.Domain.Trade.TradeResource.Iron, 500, guildOnly: false, Ct);
+            Assert.True(posted.Accepted, $"{posted.Outcome} {posted.Rejection}");
+            offerId = posted.Offer!.Id;
+        }
+
+        var oldest = await ReadAsync(scene.Oldest);
+        var newest = await ReadAsync(scene.Newest);
+        Assert.Equal(100, Total(oldest, newest, s => s.StockWood), 3);
+        AssertSharesEven(oldest, newest);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var trade = scope.ServiceProvider.GetRequiredService<TradeService>();
+            var cancelled = await trade.CancelOfferAsync(offerId, scene.Newest, Ct);
+            Assert.Equal(TradeCancelOutcome.Applied, cancelled.Outcome);
+        }
+
+        oldest = await ReadAsync(scene.Oldest);
+        newest = await ReadAsync(scene.Newest);
+        Assert.Equal(600, Total(oldest, newest, s => s.StockWood), 3);
+        AssertSharesEven(oldest, newest);
+    }
+
+    [Fact]
+    public async Task A_guild_fee_larger_than_one_members_share_is_paid_from_the_pool()
+    {
+        var scene = await SetUpAsync();
+
+        // One settlement of the player on another island would be as eligible as the pair; keep only the pair.
+        await WithDbAsync(async db =>
+        {
+            db.Settlements.Remove(await db.Settlements.FirstAsync(s => s.Id == scene.Unlinked, Ct));
+            await db.SaveChangesAsync(Ct);
+            return true;
+        });
+
+        // The Copper fee is 50 of everything: each member holds 30 iron, the pool 60.
+        await SetStockAsync((scene.Oldest, new ResourceAmounts(300, 300, 300, 30)), (scene.Newest, new ResourceAmounts(300, 300, 300, 30)));
+        var userId = (await ReadAsync(scene.Oldest)).UserId;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var guilds = scope.ServiceProvider.GetRequiredService<GuildService>();
+            var created = await guilds.CreateAsync(scene.WorldId, userId, "Linked Guild", "LNK", null, Ct);
+            Assert.True(created.Accepted, created.Rejection.ToString());
+            var paid = await guilds.PayFeeAsync(created.Guild!.Id, userId, Ct);
+            Assert.True(paid.Accepted, paid.Rejection.ToString());
+        }
+
+        var oldest = await ReadAsync(scene.Oldest);
+        var newest = await ReadAsync(scene.Newest);
+        Assert.Equal(10, Total(oldest, newest, s => s.StockIron), 3);
+        Assert.Equal(550, Total(oldest, newest, s => s.StockWood), 3);
+        AssertSharesEven(oldest, newest);
+    }
+
+    [Fact]
+    public async Task Posting_a_trade_offer_keeps_the_guest_upkeep_in_the_stored_food_rate()
+    {
+        // Regression: the trade paths settled with a plain SettleTo that knew nothing of hosted guests (or terrain boosts), so the
+        // rate they stored dropped the guests' upkeep (and a mill's boost). Every resource path now settles through the group.
+        var scene = await SetUpAsync();
+        await SetLonghouseLevelAsync(3, scene.Unlinked);
+        await PlantArmyAsync(
+            scene.Oldest, ArmyMission.Support, scene.Unlinked, await GameNowAsync(scene.WorldId), returning: false,
+            scene.OldestCentre, scene.OldestCentre, legHours: 0, returnLegHours: 0, ResourceAmounts.Zero, new UnitStack(UnitType.Spearman, 10));
+        await WithDbAsync(async db =>
+        {
+            var guest = await db.Armies.FirstAsync(a => a.TargetSettlementId == scene.Unlinked, Ct);
+            guest.AtHome = false;
+            guest.IsSupporting = true;
+            await db.SaveChangesAsync(Ct);
+            return true;
+        });
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var trade = scope.ServiceProvider.GetRequiredService<TradeService>();
+            var posted = await trade.PostOfferAsync(
+                scene.Unlinked, Bjarnoy.Domain.Trade.TradeResource.Wood, 50, Bjarnoy.Domain.Trade.TradeResource.Iron, 50, guildOnly: false, Ct);
+            Assert.True(posted.Accepted, $"{posted.Outcome} {posted.Rejection}");
+        }
+
+        var after = await ReadAsync(scene.Unlinked);
+        var speed = await WithDbAsync(async db => (await db.Worlds.AsNoTracking().FirstAsync(w => w.Id == scene.WorldId, Ct)).SpeedFactor);
+        var withoutGuests = BuildingCatalogue.Totals([(BuildingType.Longhouse, 3)]).ProductionPerHour.Food * speed;
+        Assert.True(after.RateFood < withoutGuests, $"guest upkeep missing from the stored food rate ({after.RateFood} vs {withoutGuests} without guests)");
+    }
+
+    #endregion
 }

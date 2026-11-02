@@ -75,10 +75,12 @@ public sealed record GuildPerksSummary(GuildPerks Perks, int MemberCap, int MaxA
 public sealed class GuildService(
     GameDbContext dbContext,
     TimeProvider timeProvider,
+    LinkedGroupLoader groups,
     ILogger<GuildService> logger)
 {
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
+    private readonly LinkedGroupLoader _groups = groups;
     private readonly ILogger<GuildService> _logger = logger;
 
     /// <summary>Founds a guild. The founder becomes its Leader.</summary>
@@ -418,36 +420,39 @@ public sealed class GuildService(
             return new GuildMembershipResult(GuildRejection.NotAMember);
         }
 
-        var settlement = await _dbContext.Settlements
-            .Include(s => s.World)
-            .Include(s => s.Buildings)
-            .Include(s => s.Queue)
-            .Include(s => s.Runes)
-            .FirstOrDefaultAsync(
-                s => s.UserId == userId && s.WorldId == membership.Guild.WorldId, cancellationToken)
+        var settlementId = await _dbContext.Settlements
+            .Where(s => s.UserId == userId && s.WorldId == membership.Guild.WorldId)
+            .Select(s => (Guid?)s.Id)
+            .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        if (settlement?.World is null)
+        // The fee is drawn from the linked realm's shared stock (docs/design/economy.md section 5).
+        var session = settlementId is { } id
+            ? await _groups.LoadAsync(id, ct: cancellationToken).ConfigureAwait(false)
+            : null;
+        if (session is null)
         {
             return new GuildMembershipResult(GuildRejection.NoSettlement);
         }
 
-        var clock = settlement.World.ToClock();
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
-
-        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
+        var now = session.Now;
+        var settled = session.View(session.Anchor.Id);
         var cost = GuildRules.FeeCost(membership.Guild.FeeTier);
 
         // Issue #158 stage 1c: a reservation earmarked for the waiting build
         // queue must be unspendable on a guild fee too.
         if (!settled.TrySpendAvailable(cost, now, out var paid))
         {
-            settlement.ApplyDomain(settled);
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            if (session.WriteBack())
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             return new GuildMembershipResult(GuildRejection.NotEnoughResources);
         }
 
-        settlement.ApplyDomain(settled with { Resources = paid });
+        session.Apply(session.Anchor.Id, settled with { Resources = paid });
+        session.WriteBack();
 
         // A fee paid early stacks onto whatever time is left rather than being
         // wasted, but a very overdue member does not need to pay for the
