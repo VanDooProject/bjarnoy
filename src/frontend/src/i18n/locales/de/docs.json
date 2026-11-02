@@ -1114,6 +1114,11 @@
       "alt": "Eine Beispielinsel mit dem Weg einer Armee von ihrer Siedlung auf die andere Seite einer Mauer.",
       "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
       "total": "Eine {unit}-Armee braucht für die ganze Route {time}.",
+      "columns": {
+        "step": "#",
+        "hex": "Feld",
+        "time": "Zeit"
+      },
       "names": {
         "settlement": "Siedlung",
         "bridge": "Brücke",
