@@ -977,12 +977,13 @@ distance also reads this:
 
 Settlement view only. The lake water of the bog (terrain `lake` and the `boglake`, `boglake_inlet`, `boglake_shore`, `boglake_half`,
 `boglake_mouth` families) gets a second shader, `bogLakeShader.ts`, drawn by `BogLakeLayer.ts`: a wind gust that travels over the lake in
-exactly the phase of the forest sway clips next to it. Two looks, each behind its own flag, both on by default and both meant to be subtle
-(the lake's base colour is dark navy, about rgb(16-24, 32-40, 56-72)):
+exactly the phase of the forest sway clips next to it. Three looks, each behind its own flag, all on by default (the lake's base colour is
+dark navy, about rgb(16-24, 32-40, 56-72)). Between gusts the water is left calm. From bottom to top:
 
-- **Ruffle band**: inside the gust the water gets a darker band of fine ripples, streaks running across the wind (roughly vertical stripes on
-  screen), noisy and broken, drifting and flickering. Between gusts the water is left calm.
-- **Glints**: sparse small bright sparkles inside the band, each flickering on its own beat.
+- **Cat's paws**: darker matte patches where the gust roughens the surface, with a fine grain inside, drifting downwind.
+- **Sheen**: a broad, almost featureless lightening of the water that sweeps across with the gust.
+- **Foam lines**: thin wiggly white crest strands across the wind (roughly vertical on screen), broken into pieces, sliding downwind. Line
+  half-width (share of the spacing, 0.04) and spacing (15 world units) are tunable.
 
 **The gust phase.** The forest art is rendered so a tree's phase is `frame / 16 - s / 6` (`s` = position along screen-right in render units,
 `sway.wavelength` 6, `sway.frames_per_column` 4, 16 frames per period at 6 fps). `HexMapRenderer.syncTopAnim` plays the tile in map column
@@ -1001,8 +1002,8 @@ has run. The gust moves 6 * TILE_W / 2 * 6 / 16 = 189 world units per second, on
 
 **The peak.** The trees lean furthest at phase 0.34 (`GUST_PEAK_PHASE`), measured from the forest_mixed / forest_taiga SE sway frames' lean
 (the fundamental of the centroid shift). The envelope is a smooth bump on `fract(phase - 0.34)` around 0, half-width 0.16 periods (the band
-is about one hex wide), its centre line wandering a little with world y (low-frequency noise) so the band is not a ruler-straight vertical.
-The ripples and glints are multiplied by it and by the lake mask.
+is about one hex wide; `uBandHalf`, tunable), its centre line wandering a little with world y (low-frequency noise) so the band is not a
+ruler-straight vertical. Every look is multiplied by it and by the lake mask.
 
 **The lake mask** reuses §4.4b's machinery instead of a second one. `dryMaskCore.ts` compares each `boglake*_base` frame, per pixel, with
 `boglake_<O>_base` (the plain lake of the same orientation) and keeps the pixels where the **reference** is lake water (opaque, blue
@@ -1030,11 +1031,13 @@ checks.
 | Uniform | Meaning |
 | --- | --- |
 | `sampler2D uLakeMask` | lake wet mask, render texture over the lakes' rect; alpha is the mask |
-| `float uTime` | `animClockMs / 1000`: ripple and glint motion |
+| `float uTime` | `animClockMs / 1000`: the drift inside the band |
 | `float uGustTime` | the gust phase's time term in periods, wrapped to [0, 1) |
 | `float uTileW` | `TILE_W`; world x to render units |
 | `float uGustPeak` | `GUST_PEAK_PHASE` |
-| `float uRuffle`, `uGlints` | 0 turns the look off, else its strength |
+| `float uBandHalf` | half-width of the gust band, in periods (0.16) |
+| `float uFoam`, `uSheen`, `uCatsPaws` | 0 turns the look off, else its strength |
+| `float uFoamWidth`, `uFoamSpacing` | foam line half-width as a share of the spacing (0.04), spacing in world units (15) |
 
 ### 4.4 Uniforms
 
@@ -1112,10 +1115,10 @@ export interface WaterDebugFlags {
   showWaterMask: boolean;       // default false
   /** §3.3's code-side split of the unsplit tall art. Off reproduces the artifact it fixes. */
   legacyTileSplit: boolean;     // default true
-  /** Bog lakes: the darker ripple band that travels with the forest wind gust (§4.4d). */
-  bogLakeRuffle: boolean;       // default true
-  /** Bog lakes: sparse flickering sparkles inside the gust band (§4.4d). */
-  bogLakeGlints: boolean;       // default true
+  /** Bog lakes, inside the forest wind gust (§4.4d): white foam lines, a soft sheen, cat's paws. */
+  bogLakeFoam: boolean;         // default true
+  bogLakeSheen: boolean;        // default true
+  bogLakeCatsPaws: boolean;     // default true
 }
 export interface WaterDebugTuning {
   foamWidthHexes: number;  // 0.3 — the band is in world units, so this is sized
@@ -1125,8 +1128,12 @@ export interface WaterDebugTuning {
   foamSurge: number;       // 0.18 — well under half; the surge is meant to be
                            //        felt rather than seen.
   waveSpeed: number;       // 1
-  bogLakeRuffleStrength: number; // 1 — multiplier on the lake gust's ruffle (§4.4d)
-  bogLakeGlintStrength: number;  // 1 — multiplier on its glints
+  bogLakeFoamStrength: number;     // 1 — multipliers on the lake gust's looks (§4.4d)
+  bogLakeSheenStrength: number;    // 1
+  bogLakeCatsPawsStrength: number; // 1
+  bogLakeFoamWidth: number;        // 0.04 — foam line half-width, share of the spacing
+  bogLakeFoamSpacing: number;      // 15 — world units between foam lines
+  bogLakeBandHalf: number;         // 0.16 — gust band half-width, in periods
   causticCullHexes: number; // 0.25 — the *closest* a ribbon may come to shore;
                             //        each one takes its own distance from here
                             //        up to + CAUSTIC_CULL_SPREAD_TILES

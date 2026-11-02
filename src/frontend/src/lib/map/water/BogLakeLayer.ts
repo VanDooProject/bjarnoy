@@ -28,8 +28,12 @@ export class BogLakeLayer {
       uGustTime: { value: 0, type: 'f32' },
       uTileW: { value: tileWidth, type: 'f32' },
       uGustPeak: { value: GUST_PEAK_PHASE, type: 'f32' },
-      uRuffle: { value: 0, type: 'f32' },
-      uGlints: { value: 0, type: 'f32' },
+      uBandHalf: { value: 0, type: 'f32' },
+      uFoam: { value: 0, type: 'f32' },
+      uSheen: { value: 0, type: 'f32' },
+      uCatsPaws: { value: 0, type: 'f32' },
+      uFoamWidth: { value: 0, type: 'f32' },
+      uFoamSpacing: { value: 0, type: 'f32' },
     });
     this.geometry = new MeshGeometry({
       positions: new Float32Array(8),
@@ -80,8 +84,12 @@ export class BogLakeLayer {
     const u = this.uniforms.uniforms;
     u.uTime = this.clockMs / 1000;
     u.uGustTime = gustTime(this.clockMs);
-    u.uRuffle = waterDebugFlags.bogLakeRuffle ? waterDebugTuning.bogLakeRuffleStrength : 0;
-    u.uGlints = waterDebugFlags.bogLakeGlints ? waterDebugTuning.bogLakeGlintStrength : 0;
+    u.uFoam = waterDebugFlags.bogLakeFoam ? waterDebugTuning.bogLakeFoamStrength : 0;
+    u.uSheen = waterDebugFlags.bogLakeSheen ? waterDebugTuning.bogLakeSheenStrength : 0;
+    u.uCatsPaws = waterDebugFlags.bogLakeCatsPaws ? waterDebugTuning.bogLakeCatsPawsStrength : 0;
+    u.uFoamWidth = waterDebugTuning.bogLakeFoamWidth;
+    u.uFoamSpacing = waterDebugTuning.bogLakeFoamSpacing;
+    u.uBandHalf = waterDebugTuning.bogLakeBandHalf;
     this.mesh.visible = waterDebugFlags.water && this.hasLake && !this.suppressed;
   }
 

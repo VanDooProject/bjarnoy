@@ -74,18 +74,34 @@ describe('BogLakeLayer', () => {
   it('turns each look off with its own flag and scales it with its strength', () => {
     const layer = new BogLakeLayer(TILE_W);
     layer.tick(0);
-    expect(uniformsOf(layer).uRuffle).toBe(1);
-    expect(uniformsOf(layer).uGlints).toBe(1);
+    expect(uniformsOf(layer).uFoam).toBe(1);
+    expect(uniformsOf(layer).uSheen).toBe(1);
+    expect(uniformsOf(layer).uCatsPaws).toBe(1);
 
-    waterDebugFlags.bogLakeRuffle = false;
-    waterDebugTuning.bogLakeGlintStrength = 2;
+    waterDebugFlags.bogLakeFoam = false;
+    waterDebugTuning.bogLakeSheenStrength = 2;
+    waterDebugTuning.bogLakeCatsPawsStrength = 0.5;
     layer.tick(0);
-    expect(uniformsOf(layer).uRuffle).toBe(0);
-    expect(uniformsOf(layer).uGlints).toBe(2);
+    expect(uniformsOf(layer).uFoam).toBe(0);
+    expect(uniformsOf(layer).uSheen).toBe(2);
+    expect(uniformsOf(layer).uCatsPaws).toBe(0.5);
 
-    waterDebugFlags.bogLakeGlints = false;
+    waterDebugFlags.bogLakeSheen = false;
+    waterDebugFlags.bogLakeCatsPaws = false;
     layer.tick(0);
-    expect(uniformsOf(layer).uGlints).toBe(0);
+    expect(uniformsOf(layer).uSheen).toBe(0);
+    expect(uniformsOf(layer).uCatsPaws).toBe(0);
+  });
+
+  it('passes the foam line width and spacing and the band width through', () => {
+    const layer = new BogLakeLayer(TILE_W);
+    waterDebugTuning.bogLakeFoamWidth = 0.07;
+    waterDebugTuning.bogLakeFoamSpacing = 22;
+    waterDebugTuning.bogLakeBandHalf = 0.3;
+    layer.tick(0);
+    expect(uniformsOf(layer).uFoamWidth).toBe(0.07);
+    expect(uniformsOf(layer).uFoamSpacing).toBe(22);
+    expect(uniformsOf(layer).uBandHalf).toBe(0.3);
   });
 
   it('runs the gust on the forests\' clock, and holds it while frozen', () => {

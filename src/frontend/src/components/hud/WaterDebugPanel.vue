@@ -39,8 +39,9 @@ const LABELS: Record<keyof WaterDebugFlags, string> = {
   legacyWaveSquiggles: 'World map: Graphics wave squiggles',
   showWaterMask: 'Debug: show the raw water mask',
   legacyTileSplit: 'Split unsplit tall art in code',
-  bogLakeRuffle: 'Bog lakes: gust ruffle band',
-  bogLakeGlints: 'Bog lakes: gust glints',
+  bogLakeFoam: 'Bog lakes: gust foam lines',
+  bogLakeSheen: 'Bog lakes: gust sheen',
+  bogLakeCatsPaws: "Bog lakes: gust cat's paws",
 };
 
 // Brackets the shipped values on both sides, so "is this too wide / too still"
@@ -94,8 +95,12 @@ const SLIDERS: {
   { key: 'causticFineBrightness', label: 'Fine net: brightness', needs: 'fineCaustics', range: CAUSTIC_BRIGHTNESS, format: times },
   { key: 'causticFineDensity', label: 'Fine net: density', needs: 'fineCaustics', range: CAUSTIC_DENSITY, format: times },
   { key: 'causticFinePhase', label: 'Fine net: phase shift', needs: 'fineCaustics', range: CAUSTIC_PHASE, format: (v) => `${v.toFixed(1)} s` },
-  { key: 'bogLakeRuffleStrength', label: 'Bog lake ruffle: strength', needs: 'bogLakeRuffle', range: BOG_LAKE_STRENGTH, format: times },
-  { key: 'bogLakeGlintStrength', label: 'Bog lake glints: strength', needs: 'bogLakeGlints', range: BOG_LAKE_STRENGTH, format: times },
+  { key: 'bogLakeFoamStrength', label: 'Bog lake foam: strength', needs: 'bogLakeFoam', range: BOG_LAKE_STRENGTH, format: times },
+  { key: 'bogLakeFoamWidth', label: 'Bog lake foam: line width', needs: 'bogLakeFoam', range: { min: 0.01, max: 0.15, step: 0.005 }, format: (v) => v.toFixed(3) },
+  { key: 'bogLakeFoamSpacing', label: 'Bog lake foam: spacing', needs: 'bogLakeFoam', range: { min: 6, max: 40, step: 1 }, format: (v) => `${v.toFixed(0)} u` },
+  { key: 'bogLakeSheenStrength', label: 'Bog lake sheen: strength', needs: 'bogLakeSheen', range: BOG_LAKE_STRENGTH, format: times },
+  { key: 'bogLakeCatsPawsStrength', label: "Bog lake cat's paws: strength", needs: 'bogLakeCatsPaws', range: BOG_LAKE_STRENGTH, format: times },
+  { key: 'bogLakeBandHalf', label: 'Bog lake gust: band half-width', needs: 'water', range: { min: 0.05, max: 0.5, step: 0.01 }, format: (v) => `${v.toFixed(2)} period` },
   { key: 'waveSpeed', label: 'Wave speed', needs: 'midWaterWaves', range: WAVE_SPEED, format: (v) => `${v.toFixed(1)}\u00d7` },
 ];
 
