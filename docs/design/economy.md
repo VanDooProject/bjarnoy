@@ -210,6 +210,12 @@ play.
   does not count against the tower limit while cut off; once it is connected
   again it counts, even if that puts you over the limit (you then can't build
   more towers).
+- **A destroyed longhouse ends the settlement's claim.** A settlement whose
+  Longhouse is destroyed claims nothing at all, not even its centre hex (it
+  contributes no disc to the chain). Its towers stay connected only if they
+  stand within the claim of another Longhouse of yours, directly or through
+  a chain of connected towers; otherwise they are cut off like any other
+  cut-off tower.
 - **How a tower claims:** a tower claims every hex within its level of
   itself (level 1 its neighbours, level 2 two rings, …), centred on the
   tower. It has to be built inside the realm, which includes ground another

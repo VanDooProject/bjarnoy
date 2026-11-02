@@ -131,6 +131,18 @@ public class SiegeResolverTests
     }
 
     [Fact]
+    public void A_settlement_whose_longhouse_was_sieged_to_zero_claims_nothing()
+    {
+        var buildings = new List<PlacedBuilding> { new(Longhouse, BuildingType.Longhouse, 3), new(TowerHex, BuildingType.Tower, 1) };
+        var survivors = new[] { new UnitStack(UnitType.Catapult, 20) };
+
+        var outcome = SiegeResolver.Resolve(survivors, buildings, requestedTargetCoord: Longhouse, seed: 1);
+
+        Assert.True(outcome.SettlementRazed);
+        Assert.Empty(Settlement.ClaimDiscsFor(Longhouse, outcome.UpdatedBuildings!));
+    }
+
+    [Fact]
     public void A_non_longhouse_building_reduced_to_zero_is_removed_and_its_hex_freed()
     {
         var survivors = new[] { new UnitStack(UnitType.Catapult, 20) }; // 800 siege power -> way past the Farm's level

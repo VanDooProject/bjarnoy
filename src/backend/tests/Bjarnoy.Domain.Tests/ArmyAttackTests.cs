@@ -565,7 +565,9 @@ public class ArmyAttackTests
 
         Assert.True(arrival.Siege!.SettlementRazed);
         Assert.Equal(0, arrival.DefenderSettlement.LonghouseLevel);
-        Assert.Equal(2, arrival.DefenderSettlement.ClaimRadius); // 2 + (0 / 2) — the level-0 floor, not a crash
+        Assert.Equal(0, arrival.DefenderSettlement.ClaimRadius);
+        Assert.Empty(arrival.DefenderSettlement.ClaimDiscs); // a razed settlement claims nothing
+        Assert.False(arrival.DefenderSettlement.Claims(TargetHex));
         Assert.Empty(arrival.DefenderSettlement.Buildings);
 
         // Reading the razed settlement further does not throw anywhere
