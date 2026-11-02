@@ -58,14 +58,16 @@
     "lock": "Lock",
     "resume": "Resume"
   },
-  "runStateActions": {
-    "pause": "Pause",
-    "maintenance": "Maintenance",
-    "lock": "Lock",
-    "resume": "Resume"
-  },
   "graceMinutes": "Grace (min)",
   "reseedLink": "Reseed map…",
   "confirmRunState": "{label} world \"{name}\"?",
-  "dateInvalid": "Use the format {pattern}."
+  "dateInvalid": "Use the format {pattern}.",
+  "runStates": {
+    "running": "Running",
+    "paused": "Paused",
+    "maintenance": "Maintenance",
+    "locked": "Locked"
+  },
+  "runStateSince": "{state} since {date} ({relative})",
+  "applyRunState": "Apply"
 }

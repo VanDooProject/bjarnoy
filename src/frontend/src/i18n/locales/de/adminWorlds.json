@@ -54,18 +54,20 @@
   "saving": "Speichert …",
   "saveSettings": "Einstellungen speichern",
   "runStateLabels": {
-    "pause": "Pausieren",
-    "maintenance": "In Wartung setzen",
-    "lock": "Sperren",
-    "resume": "Fortsetzen"
-  },
-  "runStateActions": {
-    "pause": "Pausieren",
-    "maintenance": "Wartung",
-    "lock": "Sperren",
-    "resume": "Fortsetzen"
+    "pause": "pausieren",
+    "maintenance": "in Wartung setzen",
+    "lock": "sperren",
+    "resume": "fortsetzen"
   },
   "graceMinutes": "Kulanz (Min.)",
   "reseedLink": "Karte neu erzeugen …",
-  "confirmRunState": "Welt „{name}“: {label}?"
+  "confirmRunState": "Welt „{name}“ {label}?",
+  "runStates": {
+    "running": "Läuft",
+    "paused": "Pausiert",
+    "maintenance": "In Wartung",
+    "locked": "Gesperrt"
+  },
+  "runStateSince": "{state} seit {date} ({relative})",
+  "applyRunState": "Übernehmen"
 }

@@ -83,22 +83,97 @@ describe('AdminWorldsView', () => {
     expect(wrapper.text()).toContain('5678');
   });
 
-  it('confirms before changing a world run state', async () => {
+  async function pickRunState(wrapper: Awaited<ReturnType<typeof mountView>>, value: string) {
+    await wrapper.find('.run-state select').setValue(value);
+  }
+
+  const applyButton = (wrapper: Awaited<ReturnType<typeof mountView>>) => wrapper.find('button.apply-run-state');
+
+  it('preselects the current run state and keeps Apply disabled until the selection differs', async () => {
+    const wrapper = await mountView([world({ runState: 'maintenance' })]);
+
+    expect((wrapper.find('.run-state select').element as HTMLSelectElement).value).toBe('maintenance');
+    expect(wrapper.findAll('.run-state option').map((o) => o.text())).toEqual([
+      'Running',
+      'Paused',
+      'Maintenance',
+      'Locked',
+    ]);
+    expect(applyButton(wrapper).attributes('disabled')).toBeDefined();
+
+    await pickRunState(wrapper, 'locked');
+    expect(applyButton(wrapper).attributes('disabled')).toBeUndefined();
+
+    await pickRunState(wrapper, 'maintenance');
+    expect(applyButton(wrapper).attributes('disabled')).toBeDefined();
+  });
+
+  it('says since when the world is in its run state', async () => {
+    const wrapper = await mountView([
+      world({ runState: 'locked', runStateSince: new Date(Date.now() - 3 * 3_600_000).toISOString() }),
+    ]);
+
+    const text = wrapper.find('.run-state-since').text();
+    expect(text).toMatch(/^Locked since \d{4}-\d{2}-\d{2} \d{2}:\d{2} \(3 h.*ago\)$/);
+  });
+
+  it('confirms, then applies the picked run state through the matching action', async () => {
     const wrapper = await mountView();
     adminSetWorldRunState.mockResolvedValue(world({ runState: 'paused' }));
 
-    await wrapper.findAll('button').find((b) => b.text() === 'Pause')!.trigger('click');
+    await pickRunState(wrapper, 'paused');
+    await applyButton(wrapper).trigger('click');
     await flushPromises();
 
     expect(window.confirm).toHaveBeenCalledOnce();
     expect(adminSetWorldRunState).toHaveBeenCalledWith('world-1', { action: 'pause', graceMinutes: undefined });
+    // The dropdown follows the world's new state and Apply goes back to disabled.
+    expect((wrapper.find('.run-state select').element as HTMLSelectElement).value).toBe('paused');
+    expect(applyButton(wrapper).attributes('disabled')).toBeDefined();
+  });
+
+  it.each([
+    ['maintenance', 'maintenance'],
+    ['locked', 'lock'],
+  ])('maps %s to the %s action', async (state, action) => {
+    const wrapper = await mountView();
+    adminSetWorldRunState.mockResolvedValue(world({ runState: state }));
+
+    await pickRunState(wrapper, state);
+    await applyButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(adminSetWorldRunState).toHaveBeenCalledWith('world-1', { action, graceMinutes: undefined });
+  });
+
+  it('shows the grace minutes only when resuming a world that is not running, and sends them', async () => {
+    const wrapper = await mountView([world({ runState: 'paused' })]);
+    adminSetWorldRunState.mockResolvedValue(world({ runState: 'running' }));
+
+    expect(wrapper.find('.grace').exists()).toBe(false);
+    await pickRunState(wrapper, 'locked');
+    expect(wrapper.find('.grace').exists()).toBe(false);
+
+    await pickRunState(wrapper, 'running');
+    await wrapper.find('.grace input').setValue('15');
+    await applyButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(adminSetWorldRunState).toHaveBeenCalledWith('world-1', { action: 'resume', graceMinutes: 15 });
+  });
+
+  it('hides the grace minutes for a running world', async () => {
+    const wrapper = await mountView();
+    await pickRunState(wrapper, 'running');
+    expect(wrapper.find('.grace').exists()).toBe(false);
   });
 
   it('leaves the run state alone when the confirmation is dismissed', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     const wrapper = await mountView();
 
-    await wrapper.findAll('button').find((b) => b.text() === 'Lock')!.trigger('click');
+    await pickRunState(wrapper, 'locked');
+    await applyButton(wrapper).trigger('click');
     await flushPromises();
 
     expect(adminSetWorldRunState).not.toHaveBeenCalled();
