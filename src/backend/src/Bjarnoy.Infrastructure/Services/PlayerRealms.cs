@@ -124,19 +124,26 @@ public static class PlayerRealms
     }
 
     /// <summary>
-    /// Every settlement of the player <paramref name="entity"/> belongs to on its island (itself included): the group the chain
-    /// rule resolves together.
+    /// Every settlement of the player <paramref name="entity"/> belongs to on its island (itself included): the set the chain
+    /// rule resolves together and the linked realms (<see cref="LinkedGroups"/>) are formed from. <paramref name="tracked"/>
+    /// loads the rows into the change tracker (a write path) instead of read-only.
     /// </summary>
-    public static IQueryable<SettlementEntity> GroupOf(GameDbContext dbContext, SettlementEntity entity)
+    public static IQueryable<SettlementEntity> PlayerIslandSet(GameDbContext dbContext, SettlementEntity entity, bool tracked)
     {
+        var worldId = entity.WorldId;
+        var islandId = entity.IslandId;
         var userId = entity.UserId;
         var ownerId = entity.OwnerId;
         var anonymous = userId == SystemUserIds.Abandoned;
-        return dbContext.Settlements
-            .AsNoTracking()
-            .Where(s => s.WorldId == entity.WorldId && s.IslandId == entity.IslandId
+        var query = dbContext.Settlements
+            .Where(s => s.WorldId == worldId && s.IslandId == islandId
                 && (anonymous ? s.UserId == userId && s.OwnerId == ownerId : s.UserId == userId));
+        return tracked ? query : query.AsNoTracking();
     }
+
+    /// <summary>Read-only <see cref="PlayerIslandSet"/>.</summary>
+    public static IQueryable<SettlementEntity> GroupOf(GameDbContext dbContext, SettlementEntity entity) =>
+        PlayerIslandSet(dbContext, entity, tracked: false);
 
     /// <summary>The same player's other settlements on <paramref name="entity"/>'s island, as stored.</summary>
     public static async Task<IReadOnlyList<RealmSettlement>> SiblingsAsync(
