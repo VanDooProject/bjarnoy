@@ -1656,6 +1656,12 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<bool>("FrozenIslesEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("Hidden")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("HiddenFromJoin")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("IslandCellSize")
                         .HasColumnType("integer");
 

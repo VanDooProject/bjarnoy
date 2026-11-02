@@ -18,6 +18,8 @@ public sealed record AdminWorldResponse(
     DateTimeOffset? StartsAt,
     bool JoinsClosed,
     bool FrozenIslesEnabled,
+    bool Hidden,
+    bool HiddenFromJoin,
     DateTimeOffset? EndbossAt,
     DateTimeOffset? EndbossTriggeredAt,
     string RunState,
@@ -42,6 +44,8 @@ public sealed record AdminWorldResponse(
             world.StartsAt,
             world.JoinsClosed,
             world.FrozenIslesEnabled,
+            world.Hidden,
+            world.HiddenFromJoin,
             world.EndbossAt,
             world.EndbossTriggeredAt,
             world.RunState.ToString().ToLowerInvariant(),
@@ -161,6 +165,12 @@ public sealed record WorldGenerationSettingsOverrides(
 /// </remarks>
 public sealed record UpdateWorldSettingsRequest
 {
+    /// <summary>
+    /// Omit to leave unchanged. Trimmed; must be at least 3 characters and
+    /// unique among worlds when sent.
+    /// </summary>
+    public string? Name { get; init; }
+
     /// <summary>Omit to leave unchanged. Must be greater than 0 when sent.</summary>
     public double? SpeedFactor { get; init; }
 
@@ -175,6 +185,12 @@ public sealed record UpdateWorldSettingsRequest
 
     /// <summary>Omit to leave unchanged.</summary>
     public bool? FrozenIslesEnabled { get; init; }
+
+    /// <summary>Omit to leave unchanged. See <see cref="WorldEntity.Hidden"/>.</summary>
+    public bool? Hidden { get; init; }
+
+    /// <summary>Omit to leave unchanged. See <see cref="WorldEntity.HiddenFromJoin"/>.</summary>
+    public bool? HiddenFromJoin { get; init; }
 
     /// <summary>
     /// Omit to leave unchanged; send explicit <c>null</c> to cancel a scheduled

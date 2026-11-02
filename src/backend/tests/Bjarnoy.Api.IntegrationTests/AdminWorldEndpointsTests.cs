@@ -83,6 +83,14 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         return ((await loggedIn.ReadStrictAsync<AuthResponse>(Ct)).AccessToken, auth.User.Id);
     }
 
+    private async Task<string> RegisterPlayerAsync(HttpClient client)
+    {
+        var registered = await client.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(UniqueName("player"), "correct-horse-battery"), Ct);
+        Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
+        return (await registered.ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
+    }
+
     private static void Authorize(HttpClient client, string accessToken) =>
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
@@ -235,6 +243,131 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         Assert.Null(afterCleared.EndbossAt);
         Assert.Equal(startsAt, afterCleared.StartsAt);
     }
+
+    [Fact]
+    public async Task Admin_can_rename_a_world_and_the_name_is_trimmed()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var newName = UniqueName("renamed");
+        var response = await client.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/settings",
+            new UpdateWorldSettingsRequest { Name = $"  {newName}  " },
+            Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(newName, (await response.ReadStrictAsync<AdminWorldResponse>(Ct)).Name);
+
+        // Omitting the name on the next PATCH leaves it alone.
+        var second = await client.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/settings", new UpdateWorldSettingsRequest { SpeedFactor = 2.0 }, Ct);
+        Assert.Equal(newName, (await second.ReadStrictAsync<AdminWorldResponse>(Ct)).Name);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("ab")]
+    [InlineData("  ab  ")]
+    public async Task A_name_shorter_than_three_characters_is_rejected(string name)
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var response = await client.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/settings", new UpdateWorldSettingsRequest { Name = name }, Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Renaming_a_world_to_another_worlds_name_is_a_conflict()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var other = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var response = await client.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/settings", new UpdateWorldSettingsRequest { Name = other.Name }, Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+
+        // Sending the world's own current name is not a clash.
+        var same = await client.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/settings", new UpdateWorldSettingsRequest { Name = world.Name }, Ct);
+        Assert.Equal(HttpStatusCode.OK, same.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_hidden_world_is_missing_from_both_public_lists_for_players_but_not_for_admins()
+    {
+        using var client = _fixture.CreateClient();
+        var visible = await CreateWorldAsync(client);
+        var hidden = await CreateWorldAsync(client);
+        var adminToken = await CreateAdminTokenAsync(client);
+        Authorize(client, adminToken);
+
+        var patch = await client.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{hidden.Id}/settings", new UpdateWorldSettingsRequest { Hidden = true }, Ct);
+        Assert.Equal(HttpStatusCode.OK, patch.StatusCode);
+        Assert.True((await patch.ReadStrictAsync<AdminWorldResponse>(Ct)).Hidden);
+
+        // Admin sees everything.
+        Assert.Contains(await ListWorldsAsync(client), w => w.Id == hidden.Id);
+        Assert.Contains(await ListJoinableAsync(client), w => w.Id == hidden.Id);
+
+        // Anonymous and a signed-in non-admin do not.
+        client.DefaultRequestHeaders.Authorization = null;
+        await AssertHiddenFromPlayersAsync(client, hidden.Id, visible.Id, hiddenFromWorlds: true);
+
+        using var player = _fixture.CreateClient();
+        var auth = await RegisterPlayerAsync(player);
+        Authorize(player, auth);
+        await AssertHiddenFromPlayersAsync(player, hidden.Id, visible.Id, hiddenFromWorlds: true);
+    }
+
+    [Fact]
+    public async Task A_world_hidden_from_join_is_missing_only_from_the_joinable_list_for_players()
+    {
+        using var client = _fixture.CreateClient();
+        var visible = await CreateWorldAsync(client);
+        var noJoin = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var patch = await client.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{noJoin.Id}/settings", new UpdateWorldSettingsRequest { HiddenFromJoin = true }, Ct);
+        Assert.Equal(HttpStatusCode.OK, patch.StatusCode);
+        var updated = await patch.ReadStrictAsync<AdminWorldResponse>(Ct);
+        Assert.True(updated.HiddenFromJoin);
+        Assert.False(updated.Hidden);
+
+        Assert.Contains(await ListJoinableAsync(client), w => w.Id == noJoin.Id);
+
+        client.DefaultRequestHeaders.Authorization = null;
+        await AssertHiddenFromPlayersAsync(client, noJoin.Id, visible.Id, hiddenFromWorlds: false);
+    }
+
+    private async Task AssertHiddenFromPlayersAsync(HttpClient client, Guid hiddenId, Guid visibleId, bool hiddenFromWorlds)
+    {
+        var joinable = await ListJoinableAsync(client);
+        Assert.DoesNotContain(joinable, w => w.Id == hiddenId);
+        Assert.Contains(joinable, w => w.Id == visibleId);
+
+        var worlds = await ListWorldsAsync(client);
+        Assert.Equal(!hiddenFromWorlds, worlds.Any(w => w.Id == hiddenId));
+        Assert.Contains(worlds, w => w.Id == visibleId);
+    }
+
+    private async Task<List<WorldSummaryResponse>> ListWorldsAsync(HttpClient client) =>
+        (await client.GetFromJsonAsync<List<WorldSummaryResponse>>("/api/v1/worlds", SqliteApiFixture.StrictJson, Ct))!;
+
+    private async Task<List<JoinableWorldResponse>> ListJoinableAsync(HttpClient client) =>
+        (await client.GetFromJsonAsync<List<JoinableWorldResponse>>(
+            "/api/v1/worlds/joinable", SqliteApiFixture.StrictJson, Ct))!;
 
     [Fact]
     public async Task A_non_positive_speed_factor_is_rejected()

@@ -146,6 +146,19 @@ public class WorldEntity
     /// </summary>
     public bool FrozenIslesEnabled { get; set; }
 
+    /// <summary>
+    /// The world is left out of every public world listing for non-admins
+    /// (<c>GET /worlds</c> and <c>GET /worlds/joinable</c>). Admins always see
+    /// every world.
+    /// </summary>
+    public bool Hidden { get; set; }
+
+    /// <summary>
+    /// The world is left out of <c>GET /worlds/joinable</c> for non-admins only;
+    /// <c>GET /worlds</c> still lists it. Admins always see every world.
+    /// </summary>
+    public bool HiddenFromJoin { get; set; }
+
     /// <summary>Joins remain allowed; the endboss fires at this instant. Null means none scheduled.</summary>
     public DateTimeOffset? EndbossAt { get; set; }
 

@@ -96,11 +96,15 @@ public static class WorldEndpoints
     /// the full config for a world it has actually picked.
     /// </summary>
     private static async Task<Ok<IReadOnlyList<WorldSummaryResponse>>> ListWorlds(
+        ClaimsPrincipal user,
         WorldService worlds,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
-        var entities = await worlds.GetWorldsAsync(cancellationToken);
+        var isAdmin = user.IsInRole(nameof(UserRole.Admin));
+        var entities = (await worlds.GetWorldsAsync(cancellationToken))
+            .Where(w => isAdmin || !w.Hidden)
+            .ToList();
         var playerCounts = await worlds.GetPlayerCountsAsync(cancellationToken);
         var now = timeProvider.GetUtcNow();
 
@@ -119,11 +123,15 @@ public static class WorldEndpoints
     /// see <see cref="JoinableWorldResponse"/>.
     /// </summary>
     private static async Task<Ok<IReadOnlyList<JoinableWorldResponse>>> ListJoinableWorlds(
+        ClaimsPrincipal user,
         WorldService worlds,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
-        var entities = await worlds.GetWorldsAsync(cancellationToken);
+        var isAdmin = user.IsInRole(nameof(UserRole.Admin));
+        var entities = (await worlds.GetWorldsAsync(cancellationToken))
+            .Where(w => isAdmin || (!w.Hidden && !w.HiddenFromJoin))
+            .ToList();
         var playerCounts = await worlds.GetPlayerCountsAsync(cancellationToken);
         var now = timeProvider.GetUtcNow();
 
