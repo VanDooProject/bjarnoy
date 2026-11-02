@@ -188,6 +188,7 @@ rivers) and seed 3 island 61 (1 095 tiles, 365 mountain, two rivers). The throug
 non-allowed hex (mountain, sand, or within two of the coast) inside its radius-2 disc; the spawn pass tries 8 and 34 anchors (the rest lie
 within three hexes of a river) and every one fails in `GrowLake` (no tile whose six neighbours are all shore-fit) or, on island 44, finds no
 creek route from a spring. So no anchor has the clear ground a lake and its shore ring need.
+Owner decision: very small islands may stay without a bog; the guarantee test now requires a bog only on islands of 1 500 tiles or more.
 
 Creeks are routed by a BFS over (tile, heading) with turns {0, +60, -60}: only straight tiles and 60-degree bends
 (see the tile kinds in `BogTileKind`). Giants, camps and start positions see bog through `BogTerrain.Overlay`; bog
