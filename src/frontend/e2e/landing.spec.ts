@@ -314,9 +314,8 @@ test('the pre-founding header has no dead in-game nav, only the returning-player
 
   await SettlementPage.openLanding(page);
 
-  await expect(page.getByRole('button', { name: 'World map', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Reports', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Alliance', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Reports', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Alliance', exact: true })).toHaveCount(0);
 
   const trigger = page.getByTestId('returning-player-trigger');
   await expect(trigger).toBeVisible();
@@ -337,21 +336,18 @@ test('the pre-founding header has no dead in-game nav, only the returning-player
   await expect(page).toHaveURL(/\/login$/);
 });
 
-// Returning-player nav work: World map and Leaderboards now additionally
-// require `auth.isAuthenticated` (previously World map only needed a founded
-// settlement, and Leaderboards had no condition at all — see HudNav.vue), so
-// an anonymous founder still doesn't get them; Reports/Alliance stay
+// Returning-player nav work: Leaderboards requires `auth.isAuthenticated`
+// (useHudNavEntries.ts), so an anonymous founder still doesn't get it; Reports/Alliance stay
 // unconditioned, and the returning-player menu doesn't disappear once
 // founded — it just moves from being the pre-founding header's only content
 // into HudNav's own anonymous-state slot (HudNav.vue's `v-else`).
-test('founding a settlement swaps the pre-founding header for the real in-game nav, but world map and leaderboards stay hidden until login', { tag: '@g3' }, async ({ page }) => {
+test('founding a settlement swaps the pre-founding header for the real in-game nav, but leaderboards stay hidden until login', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.openLanding(page);
   await settlement.claimLandfall();
 
   // Reports/Alliance live in the returning-player menu, not inline.
-  await expect(page.getByRole('button', { name: 'Reports', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'World map', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Reports', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('returning-player-trigger')).toBeVisible();
   await page.getByTestId('returning-player-trigger').click();
   const menu = page.getByTestId('returning-player-menu');

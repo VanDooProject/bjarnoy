@@ -36,10 +36,8 @@ export async function gotoMapReady(page, url, { timeout = 120_000 } = {}) {
   await page.locator('[data-testid="map-status-overlay"]').waitFor({ state: 'detached', timeout });
 }
 
-// HudNav's "World map" button only renders for an authenticated player
-// (HudNav.vue: `auth.isAuthenticated && player.hasFoundedSettlement`), and
-// demo mode is anonymous, so a script that clicks it without this times out
-// waiting for a button that never appears. Same session the e2e suite fakes
+// A logged-in player session for scripts that need one (demo mode is
+// anonymous otherwise, and some HUD entries only show when logged in). Same session the e2e suite fakes
 // (e2e/pages/AdminAuthFixture.ts, `loginAsPlayer`): a seeded refresh token
 // plus `/auth/refresh` and `/auth/me` answered with a player. Call it before
 // the page's first navigation - the init script only applies to later ones.

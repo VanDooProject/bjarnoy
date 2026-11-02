@@ -652,7 +652,8 @@ const backdropStyle = computed(() => {
 /* Still needed although the bar itself takes clicks now: ProfileNudge sets
    `pointer-events: none` on its floating panel, and its buttons inherit
    that unless something opts them back in. */
-.hud-bar-right :deep(button) {
+.hud-bar-right :deep(button),
+.hud-bar-right :deep(a) {
   pointer-events: auto;
 }
 /* A page header rather than a map overlay: in the document flow, stuck to
