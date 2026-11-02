@@ -76,8 +76,8 @@ export interface WaterDebugFlags {
    */
   showRiverFlow: boolean;
   /**
-   * The look of the river overlay (§4.4d "Styles"): 0 ripple arcs (what ships), 1 toon strands, 2 cartoon bands, 3 flow streaks. The last three
-   * are alternatives to compare in the debug panel.
+   * The look of the river overlay (§4.4d "Styles"): 0 ripple arcs, 1 toon strands, 2 cartoon bands (what ships), 3 flow streaks, 4 bands with the
+   * streaks over them. The others are alternatives to compare in the debug panel.
    */
   riverStyle: number;
   /**
@@ -105,7 +105,7 @@ export const waterDebugFlags: WaterDebugFlags = {
   showWaterMask: false,
   riverFlow: true,
   showRiverFlow: false,
-  riverStyle: 0,
+  riverStyle: 2,
   legacyTileSplit: true,
 };
 
@@ -194,6 +194,8 @@ export interface WaterDebugTuning {
   riverSpeed: number;
   /** Multiplier on how far the crests lag at the banks (§4.4d); 1.00x is what ships, 0 draws straight crests. */
   riverArc: number;
+  /** The flow streaks' share of their own opacity where they are drawn over the cartoon bands (style 4, §4.4d). */
+  riverStreakMix: number;
 }
 
 export const waterDebugTuning: WaterDebugTuning = {
@@ -213,6 +215,7 @@ export const waterDebugTuning: WaterDebugTuning = {
   riverBrightness: 1,
   riverSpeed: 1,
   riverArc: 1,
+  riverStreakMix: 0.4,
 };
 
 /**

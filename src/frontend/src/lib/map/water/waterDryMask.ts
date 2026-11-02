@@ -39,8 +39,8 @@ export function artCanvasWorldRect(origin: { x: number; y: number }, tileWidth: 
 }
 
 /** Render-texture size and scale (pixels per world unit) for a world rect: `DRY_RT_PIXELS_PER_UNIT`, capped so the long side fits `DRY_RT_MAX_SIDE`. */
-export function dryRenderTargetSize(worldW: number, worldH: number): { width: number; height: number; scale: number } {
-  const scale = Math.min(DRY_RT_PIXELS_PER_UNIT, DRY_RT_MAX_SIDE / Math.max(worldW, worldH));
+export function dryRenderTargetSize(worldW: number, worldH: number, maxSide: number = DRY_RT_MAX_SIDE): { width: number; height: number; scale: number } {
+  const scale = Math.min(DRY_RT_PIXELS_PER_UNIT, maxSide / Math.max(worldW, worldH));
   return { width: Math.max(1, Math.ceil(worldW * scale)), height: Math.max(1, Math.ceil(worldH * scale)), scale };
 }
 
@@ -96,6 +96,13 @@ export interface MaskPlacement {
  * and the river flow layer (`riverFlowLayer.ts`). The water shader samples it with the water mask's UVs.
  */
 export class MaskRenderTarget {
+  private readonly maxSide: number;
+
+  /** `maxSide`: the longest side of the render texture, in pixels. */
+  constructor(maxSide: number = DRY_RT_MAX_SIDE) {
+    this.maxSide = maxSide;
+  }
+
   private readonly container = new Container();
   private pool: Sprite[] = [];
   private target: RenderTexture | null = null;
@@ -107,7 +114,7 @@ export class MaskRenderTarget {
 
   /** Clears the target and draws `placements` into it over `rect`. Returns the (possibly new) texture to bind. */
   render(renderer: Renderer, rect: { minX: number; minY: number; maxX: number; maxY: number }, placements: readonly MaskPlacement[]): Texture {
-    const { width, height, scale } = dryRenderTargetSize(rect.maxX - rect.minX, rect.maxY - rect.minY);
+    const { width, height, scale } = dryRenderTargetSize(rect.maxX - rect.minX, rect.maxY - rect.minY, this.maxSide);
     if (!this.target) {
       this.target = RenderTexture.create({ width, height, resolution: 1, scaleMode: 'linear' });
     } else if (this.target.width !== width || this.target.height !== height) {

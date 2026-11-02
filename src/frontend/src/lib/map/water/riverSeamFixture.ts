@@ -111,8 +111,12 @@ export function sampleComposite(cells: readonly ComposedCell[], wx: number, wy: 
       const d = slow ? (pass === 'face' ? c.slowFace : c.slowRim) : c[pass];
       const o = (ty * c.frame.cw + tx) * 4;
       if (d[o + 3] === 0) return;
-      const cos = d[o]! / 127.5 - 1;
-      const sin = d[o + 1]! / 127.5 - 1;
+      // (The slow phase's vector is not a unit one: its length carries the speed share.)
+      const rawCos = d[o]! / 127.5 - 1;
+      const rawSin = d[o + 1]! / 127.5 - 1;
+      const norm = Math.hypot(rawCos, rawSin) || 1;
+      const cos = rawCos / norm;
+      const sin = rawSin / norm;
       res = { b: d[o + 2]! / 255, theta: Math.atan2(sin, cos), who, pass, cos, sin };
     });
   }

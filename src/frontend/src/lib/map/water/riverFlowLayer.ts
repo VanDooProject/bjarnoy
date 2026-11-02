@@ -106,6 +106,9 @@ export function splitFaceAndRim(data: Uint8Array, inside: Uint8Array): { face: U
   return { face, rim };
 }
 
+/** The longest side, in pixels, of the flow render textures. */
+export const RIVER_RT_MAX_SIDE = 4096;
+
 /** The bounding box of world rects; a unit box at the origin for none. */
 export function boundsOf(rects: readonly { x: number; y: number; w: number; h: number }[]): { minX: number; minY: number; maxX: number; maxY: number } {
   if (rects.length === 0) return { minX: 0, minY: 0, maxX: 1, maxY: 1 };
@@ -123,9 +126,11 @@ export function boundsOf(rects: readonly { x: number; y: number; w: number; h: n
  * `draw` runs when the water mask is applied or the terrain base entries change, never per frame.
  */
 export class RiverFlowLayer {
-  private readonly target = new MaskRenderTarget();
+  // Larger than the dry mask's 2048 px: the river cells' box spans a whole region of the map, and a flow texel is 1.7 world units, so at
+  // 2048 px over several thousand units the fine marks (streak lines, stream function lanes) were sampled coarser than the data.
+  private readonly target = new MaskRenderTarget(RIVER_RT_MAX_SIDE);
   /** The same cells' slow phase (`computeRiverRipple`'s `slow`), over the same rect, so it is read with the same UVs. */
-  private readonly slowTarget = new MaskRenderTarget();
+  private readonly slowTarget = new MaskRenderTarget(RIVER_RT_MAX_SIDE);
   private masks: LoadedRiverMasks | null = null;
   private readonly cells = new Map<string, { face: Texture; rim: Texture; slowFace: Texture; slowRim: Texture }>();
   private drawnRect: { minX: number; minY: number; maxX: number; maxY: number } | null = null;

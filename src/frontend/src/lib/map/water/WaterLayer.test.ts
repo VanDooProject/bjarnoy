@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BufferImageSource, Texture } from 'pixi.js';
-import { WaterLayer } from './WaterLayer';
-import { WATER_FRAGMENT } from './waterShader';
+import { RIVER_NOISE_PER_TILE, RIVER_SPEED_TURNS_PER_SECOND, WaterLayer } from './WaterLayer';
+import { RIPPLE_WAVELENGTH_TEXELS } from './riverFlow';
+import { RIVER_DRIFT, WATER_FRAGMENT } from './waterShader';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
 import { FOAM_REACH_TILES, type WaterMask } from './waterMask';
 import { waterMaskRegion } from './waterMaskLayout';
@@ -327,6 +328,17 @@ describe('WaterLayer', () => {
     expect(resources.uRiverSlow).toBe(placeholder);
   });
 
+  it('carries everything that drifts on the river downstream at about the speed of the ripples (within 10 %)', () => {
+    const k = RIVER_NOISE_PER_TILE / TILE_W; // the river noise scale, per world unit (uRiverScale)
+    const texelWorld = (2 * TILE_W) / 200; // a flow cell texel: 2 source px of the 200 px art
+    // Ripples: periods per second times the wavelength in world units. Drifts: shift * rate / (grid * k) world units per second.
+    const ripples = RIVER_SPEED_TURNS_PER_SECOND * RIPPLE_WAVELENGTH_TEXELS * texelWorld;
+    for (const [name, d] of Object.entries(RIVER_DRIFT)) {
+      const speed = (d.shift * d.rate) / (d.grid * k);
+      expect(Math.abs(speed / ripples - 1), `${name}: ${speed.toFixed(1)} against ${ripples.toFixed(1)} world units per second`).toBeLessThan(0.1);
+    }
+  });
+
   it('maps the river flow flags and knobs onto their uniforms', () => {
     const layer = new WaterLayer('settlement', TILE_W, TILE_H);
     const u = uniformsOf(layer);
@@ -345,14 +357,19 @@ describe('WaterLayer', () => {
     layer.tick(16);
     expect(u.uRiverFlowOn).toBe(0);
     expect(u.uShowRiverFlow).toBe(1);
-    expect(u.uRiverStyle).toBe(0);
-    waterDebugFlags.riverStyle = 2;
-    layer.tick(32);
+    // The cartoon bands are the default look, and the streaks' share over them is 0.4.
     expect(u.uRiverStyle).toBe(2);
+    expect(u.uRiverStreakMix).toBeCloseTo(0.4, 9);
+    waterDebugFlags.riverStyle = 4;
+    waterDebugTuning.riverStreakMix = 0.25;
+    layer.tick(32);
+    expect(u.uRiverStyle).toBe(4);
+    expect(u.uRiverStreakMix).toBeCloseTo(0.25, 9);
     waterDebugFlags.riverStyle = 3;
     layer.tick(48);
     expect(u.uRiverStyle).toBe(3);
-    waterDebugFlags.riverStyle = 0;
+    waterDebugFlags.riverStyle = 2;
+    waterDebugTuning.riverStreakMix = 0.4;
     expect(u.uRiverAlpha).toBeCloseTo(alpha * 2, 9);
     expect(u.uRiverSpeed).toBeCloseTo(speed * 0.5, 9);
     expect(u.uRiverArc).toBeCloseTo(arc * 2, 9);

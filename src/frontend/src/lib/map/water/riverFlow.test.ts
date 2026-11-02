@@ -525,7 +525,9 @@ describe('computeRiverRipple slow phase', () => {
     }
     // 0 mod 2 pi on the out edge's line, like the fast phase.
     const o = ((CH - 3) * CW + 50) * 4;
-    expect(slow[o]! / 127.5 - 1).toBeGreaterThan(0.8);
+    const cosv = slow[o]! / 127.5 - 1;
+    const sinv = slow[o + 1]! / 127.5 - 1;
+    expect(cosv / Math.hypot(cosv, sinv)).toBeGreaterThan(0.8);
   });
 });
 

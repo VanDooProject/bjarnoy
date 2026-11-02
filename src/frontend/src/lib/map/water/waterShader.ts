@@ -38,6 +38,19 @@
  * lib/rendering/high-shader/shader-bits/localUniformBit.mjs. Declaring them is
  * all it takes to inherit the camera.
  */
+/**
+ * How the river looks that drift downstream (cartoon patches, flow streaks' dashes, specks) are carried: each is a noise grid of
+ * `grid` cells per noise cell scale (the river noise scale, `uRiverScale`), shifted along the flow by `shift` cells per cycle, at
+ * `rate` cycles per second. Along-stream speed in world units per second = shift * rate / (grid * uRiverScale). They are chosen to
+ * match the ripples' (`RIVER_SPEED_TURNS_PER_SECOND` periods per second of `RIPPLE_WAVELENGTH_TEXELS` texels).
+ */
+export const RIVER_DRIFT = {
+  dash: { grid: 1.5, shift: 1.6, rate: 0.55 },
+  speck: { grid: 5, shift: 4, rate: 0.7 },
+  patch: { grid: 0.3, shift: 0.6, rate: 0.28 },
+} as const;
+const glsl = (v: number): string => v.toFixed(3);
+
 export const WATER_VERTEX = `
 in vec2 aPosition;
 in vec2 aUV;
@@ -126,6 +139,7 @@ uniform float uRiverStyle;
 uniform vec4 uRiverRect;
 uniform float uRiverSpeed;
 uniform float uRiverArc;
+uniform float uRiverStreakMix;
 uniform float uRiverAlpha;
 uniform vec3 uRiverColor;
 uniform float uRiverScale;
@@ -672,13 +686,14 @@ vec4 riverBands(vec2 cs, float centre, vec2 ground) {
   // Soft normalisation: where the gradient is tiny (a flat stretch of the phase) its direction is noise, so it shifts nothing.
   vec2 down = -riverSlowGradient();
   down /= length(down) + 0.03;
-  float cycle = uTime * 0.06;
+  // One cycle carries a patch along by RIVER_DRIFT.patch.shift cells, at about the ripples' speed.
+  float cycle = uTime * ${glsl(RIVER_DRIFT.patch.rate)};
   float c0 = fract(cycle);
   float c1 = fract(cycle + 0.5);
   vec2 warp = vec2(noiseQuintic(ground * k * 0.8), noiseQuintic(ground * k * 0.8 + 9.0)) - 0.5;
-  vec2 base = ground * k * 0.3 + warp * 1.4;
-  float f0 = fbmRotated(base - down * c0 * 0.6 + 5.0);
-  float f1 = fbmRotated(base - down * c1 * 0.6 + 23.0);
+  vec2 base = ground * k * ${glsl(RIVER_DRIFT.patch.grid)} + warp * 1.4;
+  float f0 = fbmRotated(base - down * c0 * ${glsl(RIVER_DRIFT.patch.shift)} + 5.0);
+  float f1 = fbmRotated(base - down * c1 * ${glsl(RIVER_DRIFT.patch.shift)} + 23.0);
   float f = mix(f0, f1, abs(1.0 - 2.0 * c0));
   float patch = smoothstep(0.46, 0.62, f) * smoothstep(0.0, 0.08, centre);
   col = riverOver(col, vec4(vec3(0.75, 0.94, 1.0) * 0.22, 0.22) * patch);
@@ -697,61 +712,60 @@ vec4 riverBands(vec2 cs, float centre, vec2 ground) {
   return col * smoothstep(0.0, 0.04, centre) * (uRiverAlpha / 0.5);
 }
 
-// The slow phase (RiverFlowLayer's second texture, same UVs): (cos, sin) of a phase about four ripples long per period.
-vec2 riverSlowPhase() {
-  vec4 f = texture(uRiverSlow, riverUV());
-  vec2 cs = f.a > 0.01 ? (f.rg / f.a) * 2.0 - 1.0 : vec2(1.0, 0.0);
-  return cs / max(length(cs), 1e-3);
+// Ovals of a hashed cell grid carried downstream: two grids half a cycle apart, each shifted along down by shift cells per cycle
+// and faded in and out by a triangle that is zero when it jumps back, so nothing pops. along and across are the oval's half axes
+// in cells, threshold the hash a cell must reach to hold one, cycles is time in cycles.
+float riverDrift(vec2 grid, vec2 down, float cycles, float shift, float along, float across, float threshold) {
+  vec2 side = vec2(-down.y, down.x);
+  float total = 0.0;
+  for (int i = 0; i < 2; i++) {
+    float c = fract(cycles + (i == 0 ? 0.0 : 0.5));
+    float w = 1.0 - abs(1.0 - 2.0 * c);
+    vec2 g = grid - down * c * shift + (i == 0 ? 0.0 : 31.0);
+    vec2 cell = mod(floor(g), 289.0);
+    float h = hash(cell);
+    vec2 o = fract(g) - (vec2(hash(cell + 1.7), hash(cell + 9.3)) * 0.4 + 0.3);
+    float e = pow(dot(o, down) / along, 2.0) + pow(dot(o, side) / across, 2.0);
+    total += (1.0 - smoothstep(0.6, 1.0, e)) * step(threshold, h) * w;
+  }
+  return min(total, 1.0);
 }
 
 // Style 3, flow streaks: many long thin white streaks along the flow on the bare painted water, and a few small white ovals drifting
 // downstream; denser near the banks and round islands. A streak is a lane of B (about a texel wide, so 1 to 2 px at zoom 1) with
-// its own width and a run of dashes along the slow phase, several ripples long.
+// its own width, shown where drifting ovals cover it, a few ripples long.
 vec4 riverStreaks(vec2 cs, float centre, vec2 ground) {
-  vec2 ps = riverSlowPhase();
-  float turn = atan(ps.y, ps.x) - uRiverSpeed * uTime * 0.25;
   float k = uRiverScale;
   float nearBank = 1.0 - smoothstep(0.0, 0.35, centre);
   float laneCoord = riverPsi() * 36.0 + (noise(ground * k * 2.5) - 0.5) * 0.8;
   float lane = floor(laneCoord);
   float h1 = hash(vec2(mod(lane, 289.0), 3.7));
   float h2 = hash(vec2(mod(lane, 289.0), 11.3));
-  float h3 = hash(vec2(mod(lane, 289.0), 29.1));
   float present = step(mix(0.52, 0.25, nearBank), h1);
   // A line is about 1 to 2 world px wide whatever the lane: a cell with a small share of psi (an upstream arm) has wide lanes.
   float halfWidth = min(0.85, (0.9 + 0.8 * h2) / riverLaneWidth(36.0));
   float across = abs(fract(laneCoord) - 0.5) * 2.0;
   float body = 1.0 - smoothstep(halfWidth, halfWidth + 0.15, across);
-  float dash = smoothstep(mix(-0.6, 0.5, h3), mix(-0.6, 0.5, h3) + 0.12, cos(turn + h1 * 40.0));
-  float broken = smoothstep(0.1, 0.3, noise(ground * k * 1.1 + lane * 5.3 + ps * 0.8));
-  float alpha = mix(0.85, 0.6, smoothstep(0.0, 1.0, h2));
-  float streak = body * dash * broken * present * smoothstep(0.02, 0.1, centre);
-  vec4 col = vec4(vec3(1.0), 1.0) * alpha * streak;
-  // Specks: small ovals along the flow, two cell grids carried downstream and cross-faded, a few more near the banks.
+  // The flow direction (smooth, from the slow phase over a wide stretch) carries both the dashes and the specks downstream.
   vec2 down = -riverSlowGradient();
   down /= max(length(down), 1e-6);
-  vec2 side = vec2(-down.y, down.x);
-  float cyc = uTime * 0.5;
-  float c0 = fract(cyc);
-  float c1 = fract(cyc + 0.5);
-  float speckThreshold = 0.93 - 0.04 * nearBank;
-  float specks = 0.0;
-  for (int i = 0; i < 2; i++) {
-    float c = i == 0 ? c0 : c1;
-    float w = i == 0 ? abs(1.0 - 2.0 * c0) : abs(1.0 - 2.0 * c1);
-    vec2 g = ground * k * 5.0 - down * c * 4.0 + (i == 0 ? 0.0 : 31.0);
-    vec2 cell = mod(floor(g), 289.0);
-    float h = hash(cell);
-    vec2 o = fract(g) - (vec2(hash(cell + 1.7), hash(cell + 9.3)) * 0.4 + 0.3);
-    float e = pow(dot(o, down) / 0.34, 2.0) + pow(dot(o, side) / 0.13, 2.0);
-    specks += (1.0 - smoothstep(0.6, 1.0, e)) * step(speckThreshold, h) * w;
-  }
-  col = riverOver(col, vec4(vec3(1.0), 1.0) * min(specks, 1.0) * 0.85 * smoothstep(0.02, 0.1, centre));
+  // Dashes: where an elongated oval of a grid carried downstream lies. The lines of psi stay put; a dash is the part of a line an oval
+  // covers, so it travels along the line, and an oval spans a few neighbouring lines, so they dash together, like bundles of streaks.
+  // (A pattern sliding along a continuous line shows no motion, and one keyed to the phase of the flow was grainy: its speed share
+  // is only known to a percent, times a clock of tens of seconds.)
+  float dash = riverDrift(ground * k * ${glsl(RIVER_DRIFT.dash.grid)}, down, uTime * ${glsl(RIVER_DRIFT.dash.rate)}, ${glsl(RIVER_DRIFT.dash.shift)}, 0.9, 0.38, 0.62 - 0.2 * nearBank);
+  float alpha = mix(0.85, 0.6, smoothstep(0.0, 1.0, h2));
+  float streak = body * dash * present * smoothstep(0.02, 0.1, centre);
+  vec4 col = vec4(vec3(1.0), 1.0) * alpha * streak;
+  // Specks: small ovals along the flow, a few more near the banks.
+  float specks = riverDrift(ground * k * ${glsl(RIVER_DRIFT.speck.grid)}, down, uTime * ${glsl(RIVER_DRIFT.speck.rate)}, ${glsl(RIVER_DRIFT.speck.shift)}, 0.34, 0.13, 0.93 - 0.04 * nearBank);
+  col = riverOver(col, vec4(vec3(1.0), 1.0) * specks * 0.85 * smoothstep(0.02, 0.1, centre));
   return col * (uRiverAlpha / 0.5);
 }
 
-// The river overlay of the chosen look (uRiverStyle, §4.4d "Styles"): 0 ripple arcs, 1 toon strands, 2 cartoon bands.
+// The river overlay of the chosen look (uRiverStyle, §4.4d "Styles"): 0 ripple arcs, 1 toon strands, 2 cartoon bands, 3 flow streaks, 4 bands with the streaks over them.
 vec4 riverOverlay(vec2 cs, float centre, vec2 ground) {
+  if (uRiverStyle > 3.5) return riverOver(riverBands(cs, centre, ground), riverStreaks(cs, centre, ground) * uRiverStreakMix);
   if (uRiverStyle > 2.5) return riverStreaks(cs, centre, ground);
   if (uRiverStyle > 1.5) return riverBands(cs, centre, ground);
   if (uRiverStyle > 0.5) return riverStrands(cs, centre, ground);

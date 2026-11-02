@@ -271,8 +271,8 @@ const CAUSTIC_BLOB_COLOR = 0x0d1728;
  */
 export const RIVER_COLOR = 0xcce9ff;
 export const RIVER_ALPHA = 0.5;
-const RIVER_NOISE_PER_TILE = 6;
-const RIVER_SPEED_TURNS_PER_SECOND = 0.8;
+export const RIVER_NOISE_PER_TILE = 6;
+export const RIVER_SPEED_TURNS_PER_SECOND = 0.8;
 /** How many periods the crests lag at the banks (at 1x of the debug knob), so a crest bows downstream in the middle. */
 const RIVER_ARC_PERIODS = 0.35;
 
@@ -441,6 +441,7 @@ export class WaterLayer {
       uRiverRect: { value: new Float32Array([0, 0, 1, 1]), type: 'vec4<f32>' },
       uRiverSpeed: { value: RIVER_SPEED_TURNS_PER_SECOND * 2 * Math.PI, type: 'f32' },
       uRiverArc: { value: RIVER_ARC_PERIODS, type: 'f32' },
+      uRiverStreakMix: { value: 0.4, type: 'f32' },
       uRiverAlpha: { value: RIVER_ALPHA, type: 'f32' },
       uRiverColor: { value: new Float32Array([riverR, riverG, riverB]), type: 'vec3<f32>' },
       uRiverScale: { value: RIVER_NOISE_PER_TILE / tileWidth, type: 'f32' },
@@ -688,6 +689,7 @@ export class WaterLayer {
     u.uRiverAlpha = RIVER_ALPHA * waterDebugTuning.riverBrightness;
     u.uRiverSpeed = RIVER_SPEED_TURNS_PER_SECOND * 2 * Math.PI * waterDebugTuning.riverSpeed;
     u.uRiverArc = RIVER_ARC_PERIODS * waterDebugTuning.riverArc;
+    u.uRiverStreakMix = waterDebugTuning.riverStreakMix;
 
     this.mesh.visible = waterDebugFlags.water && this.hasMask && !this.suppressed;
   }

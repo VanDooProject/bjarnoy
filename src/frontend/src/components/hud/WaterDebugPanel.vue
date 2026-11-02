@@ -28,7 +28,7 @@ const flags = reactive(waterDebugFlags);
 const tuning = reactive(waterDebugTuning);
 
 /** The looks of the river overlay, by `riverStyle`. */
-const RIVER_STYLES = ['Ripple arcs', 'Toon strands', 'Cartoon bands', 'Flow streaks'];
+const RIVER_STYLES = ['Ripple arcs', 'Toon strands', 'Cartoon bands', 'Flow streaks', 'Bands + streaks'];
 
 const LABELS: Record<WaterDebugToggle, string> = {
   water: 'Water layer enabled',
@@ -96,6 +96,7 @@ const SLIDERS: {
   { key: 'causticFineDensity', label: 'Fine net: density', needs: 'fineCaustics', range: CAUSTIC_DENSITY, format: times },
   { key: 'causticFinePhase', label: 'Fine net: phase shift', needs: 'fineCaustics', range: CAUSTIC_PHASE, format: (v) => `${v.toFixed(1)} s` },
   { key: 'riverBrightness', label: 'River flow: brightness', needs: 'riverFlow', range: CAUSTIC_BRIGHTNESS, format: times },
+  { key: 'riverStreakMix', label: 'River flow: streaks over bands', needs: 'riverFlow', range: CAUSTIC_BRIGHTNESS, format: times },
   { key: 'riverArc', label: 'River flow: arc', needs: 'riverFlow', range: CAUSTIC_BRIGHTNESS, format: times },
   { key: 'riverSpeed', label: 'River flow: speed', needs: 'riverFlow', range: WAVE_SPEED, format: times },
   { key: 'waveSpeed', label: 'Wave speed', needs: 'midWaterWaves', range: WAVE_SPEED, format: (v) => `${v.toFixed(1)}\u00d7` },
