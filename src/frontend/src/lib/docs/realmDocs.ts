@@ -13,10 +13,10 @@ export interface TowerLimitRow {
   towers: number;
 }
 
-/** One row per run of Longhouse levels that allow the same number of towers, from the first level with a tower up to the last. */
+/** One row per run of Longhouse levels that allow the same number of towers, from level 1 (no towers) up to the last level. */
 export function towerLimitRows(): TowerLimitRow[] {
   const rows: TowerLimitRow[] = [];
-  for (let level = FIRST_TOWER_LONGHOUSE_LEVEL; level <= maxLevelFor('longhouse'); level++) {
+  for (let level = 1; level <= maxLevelFor('longhouse'); level++) {
     const towers = maxTowers(level);
     const last = rows.at(-1);
     if (last && last.towers === towers) last.to = level;
