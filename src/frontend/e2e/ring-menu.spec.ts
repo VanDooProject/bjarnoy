@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { distanceFrom, loginTestUser, rectsOf } from './helpers';
+import { clickHudMenuEntry, distanceFrom, loginTestUser, rectsOf } from './helpers';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage, type ScreenPoint } from './pages';
 
@@ -13,9 +13,9 @@ test.use({ mapLayers: { water: false } });
  * show the newly opened bubbles, (2) the map underneath kept reacting to
  * hover/wheel/click while a ring was open, since the renderer's own
  * pointer tracking is window-level and doesn't know a ring's DOM overlay
- * is on top (see HexMapRenderer's `interactionLocked`), (3) the header's
- * "World map" button used to be swallowed by the ring's full-screen
- * backdrop instead of navigating, and (4) clicking elsewhere on the map
+ * is on top (see HexMapRenderer's `interactionLocked`), (3) header clicks
+ * (then the "World map" button) used to be swallowed by the ring's
+ * full-screen backdrop instead of navigating, and (4) clicking elsewhere on the map
  * with a ring open used to close that ring and immediately open a new one
  * at the click point, instead of just closing it.
  *
@@ -323,12 +323,9 @@ test.describe('ring menu drill-down', () => {
     await expect(settlement.tooltip).toBeHidden();
   });
 
-  test('clicking "World map" in the header while a ring is open navigates instead of the ring intercepting it', { tag: '@g1' }, async ({ page }) => {
+  test('clicking a header link while a ring is open navigates instead of the ring intercepting it', { tag: '@g1' }, async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    // Returning-player nav work: "World map" now requires
-    // `auth.isAuthenticated` (see loginTestUser's own comment), so this
-    // regression guard needs a real session before it can even reach the
-    // button it's testing.
+    // Logged in so the header carries the avatar's account menu.
     await loginTestUser(page);
     const settlement = await SettlementPage.found(page);
     const { x: cx, y: cy } = await settlement.canvasCentre();
@@ -337,12 +334,11 @@ test.describe('ring menu drill-down', () => {
     await settlement.ring.waitForOpen();
 
     // The header sits at the very top of the screen — the ring's own
-    // full-screen backdrop used to render above it and swallow this click,
-    // so pressing "World map" reopened a ring under the header instead of
-    // navigating.
-    await page.getByRole('button', { name: 'World map', exact: true }).click();
+    // full-screen backdrop used to render above it and swallow header clicks,
+    // reopening a ring under the header instead of navigating.
+    await clickHudMenuEntry(page, 'Docs');
 
-    await page.waitForURL('**/world');
+    await page.waitForURL('**/docs');
     await expect(settlement.ring.bubbles).toHaveCount(0);
   });
 

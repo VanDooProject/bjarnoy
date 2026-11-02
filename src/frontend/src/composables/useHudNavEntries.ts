@@ -1,5 +1,4 @@
-// The one list of HUD navigation destinations (Settlement, World map,
-// Leaderboards, Messages, Reports, Alliance, Docs, Landing) with their
+// The one list of HUD navigation destinations (Settlement, Leaderboards, Messages, Reports, Alliance, Docs, Landing) with their
 // visibility rules, active-route checks, navigation targets and the Reports
 // unread badge. HudNav.vue (desktop top bar) and MobileHudDrawer.vue (phone
 // drawer) both render from it, so an entry or a rule added here shows up on
@@ -11,10 +10,11 @@ import { usePlayerStore } from '../stores/player';
 import { useReportsStore } from '../stores/reports';
 import { modalLocation } from '../lib/modalRoute';
 import { showsLandingLink } from './useLandingLink';
+import { useMediaQuery } from './useMediaQuery';
+import { HUD_NAV_ROOMY_QUERY } from '../lib/breakpoints';
 
 export type HudNavEntryId =
   | 'settlement'
-  | 'world'
   | 'leaderboards'
   | 'messages'
   | 'reports'
@@ -30,12 +30,16 @@ export interface HudNavEntry {
   active: boolean;
   /** Unread count shown as a badge (Reports only); 0 or absent shows none. */
   badge: number;
-  /** Navigates to the entry's destination. */
+  /** The destination's URL, for the link's `href` (Ctrl/Cmd click opens it in a new tab). */
+  href: string;
+  /** Navigates to the entry's destination in-app. */
   go: () => void;
 }
 
 /** Entries that stay inline in the desktop bar; every other visible entry lives in the avatar menu. */
-export const HUD_NAV_PRIMARY_IDS: readonly HudNavEntryId[] = ['settlement', 'world'];
+export const HUD_NAV_PRIMARY_IDS: readonly HudNavEntryId[] = ['settlement'];
+/** Entries that also stay inline once the bar is wide enough (`HUD_NAV_ROOMY_QUERY`). */
+export const HUD_NAV_ROOMY_PRIMARY_IDS: readonly HudNavEntryId[] = [...HUD_NAV_PRIMARY_IDS, 'docs'];
 
 export function useHudNavEntries(): {
   /** Every entry the player may see right now, in display order. */
@@ -52,6 +56,7 @@ export function useHudNavEntries(): {
   const reports = useReportsStore();
 
   const routeName = () => String(route.name);
+  const href = (path: string) => router.resolve(path).href;
 
   const entries = computed<HudNavEntry[]>(() => {
     const all: Array<HudNavEntry & { visible: boolean }> = [
@@ -59,20 +64,12 @@ export function useHudNavEntries(): {
         id: 'settlement',
         labelKey: 'hud.nav.settlement',
         visible: player.hasFoundedSettlement,
+        // World mode is the same route with a `#world` hash (MapView.vue), so
+        // this stays active there too; the link zooms back to the settlement.
         active: route.name === 'settlement',
         badge: 0,
+        href: href('/settlement'),
         go: () => void router.push('/settlement'),
-      },
-      // landing-page-defects.md L1: the router guard bounces `/world` back to
-      // `/` while `player.hasFoundedSettlement` is false, so the link would be
-      // a dead click; an anonymous visitor has no settlement to view either.
-      {
-        id: 'world',
-        labelKey: 'hud.nav.worldMap',
-        visible: auth.isAuthenticated && player.hasFoundedSettlement,
-        active: route.name === 'world',
-        badge: 0,
-        go: () => void router.push('/world'),
       },
       {
         id: 'leaderboards',
@@ -80,6 +77,7 @@ export function useHudNavEntries(): {
         visible: auth.isAuthenticated,
         active: route.name === 'leaderboards',
         badge: 0,
+        href: href('/leaderboards'),
         go: () => void router.push(modalLocation(router, '/leaderboards')),
       },
       {
@@ -88,6 +86,7 @@ export function useHudNavEntries(): {
         visible: auth.isAuthenticated,
         active: ['messages', 'conversation'].includes(routeName()),
         badge: 0,
+        href: href('/messages'),
         go: () => void router.push('/messages'),
       },
       {
@@ -96,6 +95,7 @@ export function useHudNavEntries(): {
         visible: true,
         active: routeName().startsWith('report'),
         badge: reports.unreadCount,
+        href: href('/reports'),
         go: () => void router.push(modalLocation(router, '/reports')),
       },
       {
@@ -104,6 +104,7 @@ export function useHudNavEntries(): {
         visible: true,
         active: route.name === 'guild',
         badge: 0,
+        href: href('/guild'),
         go: () => void router.push(modalLocation(router, '/guild')),
       },
       {
@@ -112,6 +113,7 @@ export function useHudNavEntries(): {
         visible: true,
         active: ['docs', 'tech-tree', 'tile-docs'].includes(routeName()),
         badge: 0,
+        href: href('/docs'),
         go: () => void router.push('/docs'),
       },
       // Only a way back to the pre-founding landing flow: the one rule lives
@@ -123,14 +125,17 @@ export function useHudNavEntries(): {
         visible: showsLandingLink(route.name, player.hasFoundedSettlement),
         active: false,
         badge: 0,
+        href: href('/'),
         go: () => void router.push('/'),
       },
     ];
     return all.filter((e) => e.visible).map(({ visible: _visible, ...entry }) => entry);
   });
 
-  const primary = computed(() => entries.value.filter((e) => HUD_NAV_PRIMARY_IDS.includes(e.id)));
-  const secondary = computed(() => entries.value.filter((e) => !HUD_NAV_PRIMARY_IDS.includes(e.id)));
+  const roomy = useMediaQuery(HUD_NAV_ROOMY_QUERY);
+  const primaryIds = computed(() => (roomy.value ? HUD_NAV_ROOMY_PRIMARY_IDS : HUD_NAV_PRIMARY_IDS));
+  const primary = computed(() => entries.value.filter((e) => primaryIds.value.includes(e.id)));
+  const secondary = computed(() => entries.value.filter((e) => !primaryIds.value.includes(e.id)));
 
   return { entries, primary, secondary };
 }

@@ -84,8 +84,11 @@ export interface WorldGenerationConstants {
   islandSmallShare: number;
   islandLargeShare: number;
   beachThreshold: number;
+  /** Wasted islands only: the depth below which a hex can be mountain (green islands use the chain rule). */
   mountainThreshold: number;
+  /** Wasted islands only: the noise a hex must beat to be mountain. */
   mountainRockiness: number;
+  /** Wasted islands only: the noise a hex must beat to be forest (green islands use the grove rule). */
   forestRockiness: number;
 }
 
@@ -737,7 +740,17 @@ function islandsNear(baseCol: number, baseRow: number, world: WorldSeed, wasted:
   return near;
 }
 
-function closestIsland(col: number, row: number, world: WorldSeed, wasted: boolean): { t: number } | null {
+interface ClosestIsland {
+  /** depth into the island (land when <= 1) */
+  t: number;
+  /** the island that won */
+  is: IslandShape;
+  /** the hex's coast-warped position relative to the island's centre */
+  qx: number;
+  qy: number;
+}
+
+function closestIsland(col: number, row: number, world: WorldSeed, wasted: boolean): ClosestIsland | null {
   const gen = world.generation;
   const seed = wasted ? world.seed + WASTED_SEED_OFFSET : world.seed;
   const cs = gen.islandCellSize;
@@ -755,7 +768,7 @@ function closestIsland(col: number, row: number, world: WorldSeed, wasted: boole
     (valueNoise(col, row, seed + 71, gen.islandCoastWarpScale) - 0.5) * 2 * gen.islandCoastWarp +
     (valueNoise(col, row, seed + 89, ISLAND_SHAPE.warpScale2) - 0.5) * 2 * ISLAND_SHAPE.warp2;
 
-  let best: { t: number } | null = null;
+  let best: ClosestIsland | null = null;
   for (const is of near) {
     const qx = px - is.cx;
     const qy = py - is.cy;
@@ -765,7 +778,7 @@ function closestIsland(col: number, row: number, world: WorldSeed, wasted: boole
     const n2 = valueNoise(col, row, seed + 101, gen.islandCoastNoiseScale / 2.5) - 0.5;
     const n3 = valueNoise(col, row, seed + 103, gen.islandCoastNoiseScale / 6.25) - 0.5;
     d += gen.islandCoastNoise * (n1 + ISLAND_SHAPE.octave2 * n2 + ISLAND_SHAPE.octave3 * n3);
-    if (d <= 1 && (!best || d < best.t)) best = { t: d };
+    if (d <= 1 && (!best || d < best.t)) best = { t: d, is, qx, qy };
   }
   return best;
 }
@@ -944,32 +957,244 @@ export function terrainAt(q: number, r: number, world: WorldSeed): Terrain {
   const island = closestIsland(col, row, world, false);
   if (!island) return 'sea';
   if (island.t > world.generation.beachThreshold && seesSea(q, r, world, false)) return 'sand';
-  if (island.t < world.generation.mountainThreshold && mountainField(q, r, world.seed) > world.generation.mountainRockiness) {
-    return 'mountain';
-  }
-  return valueNoise(q, r, world.seed + 2, FOREST_PATCH_SCALE) > world.generation.forestRockiness ? 'forest' : 'grass';
+  const sp = island.t > MOUNTAIN_MAX_DEPTH ? null : spineAt(island.is, island.qx, island.qy, world.seed);
+  if (chainMountainAt(q, r, island.t, world.seed, sp)) return 'mountain';
+  return groveForestAt(q, r, world.seed) ? 'forest' : 'grass';
 }
 
-/** Wavelength (hexes) of the forest/grass patch noise — mirrors `TerrainSampler.ForestPatchScale`. */
-export const FOREST_PATCH_SCALE = 6;
-/** Wavelength of the coarse ridge field that shapes mountain ranges — mirrors `TerrainSampler.RangeScale`. */
-export const RANGE_SCALE = 10;
-/** Wavelength of the fine term that roughens a range's edge — mirrors `TerrainSampler.RangeDetailScale`. */
-export const RANGE_DETAIL_SCALE = 2.5;
-/** Weight of the fine term in the mountain field — mirrors `TerrainSampler.RangeDetailWeight`. */
-export const RANGE_DETAIL_WEIGHT = 0.12;
+// ---- Green-island mountains and forests -------------------------------------------------
+// Mountains are chains along an island's spine and forests are round groves; wasted islands keep
+// the plain noise rule (`wastedTerrainAt`). Mirrors `TerrainSampler` (C#) bit for bit: no
+// trigonometry anywhere (JS and .NET trig are not guaranteed identical), only + - * / sqrt.
+//
+// Seed salts of this block: the odd numbers 601, 603, ... (a range no other noise field uses).
+// A consumer that needs several salts of its own reserves the numbers above its own: the groves'
+// jittered grid uses GROVE_SALT, +1 and +2; the forest noise uses FOREST_NOISE_SALT and +1..+4.
+
+/** Roll of an island's spine id: `hash2(cellCol, cellRow, seed + SPINE_ID_SALT)`. */
+export const SPINE_ID_SALT = 601;
+/** Sideways drift of a crest along the spine. */
+export const CREST_OFFSET_SALT = 603;
+/** Coarse width profile of a crest (passes and massifs). */
+export const CREST_PROFILE_SALT = 605;
+/** Fine width profile of a crest. */
+export const CREST_PROFILE_FINE_SALT = 607;
+/** Coarse rim roughness of the mountains. */
+export const RIM_NOISE_SALT = 609;
+/** Fine rim roughness of the mountains. */
+export const RIM_NOISE_FINE_SALT = 611;
+/** Whether a spur arm is rooted in a slot (also mixed with the island id). */
+export const ARM_ROOT_SALT = 613;
+/** Where along the crest an arm is rooted. */
+export const ARM_POSITION_SALT = 615;
+/** Which side of the crest an arm leaves on. */
+export const ARM_SIDE_SALT = 617;
+/** The angle of an arm against the crest normal. */
+export const ARM_TILT_SALT = 619;
+/** The length of an arm. */
+export const ARM_LENGTH_SALT = 621;
+/** Rim roughness of the groves. */
+export const GROVE_RIM_SALT = 623;
+/** Jittered grid of the groves (uses this salt, +1 and +2). */
+export const GROVE_SALT = 625;
+/** Value noise that clusters the groves (uses this salt and +1..+4 inside `warpedNoise`). */
+export const FOREST_NOISE_SALT = 629;
+
+/** Mountains exist only up to this depth into the island (1 is the shoreline). */
+export const MOUNTAIN_MAX_DEPTH = 0.8;
+/** An island whose half-width is above this gets a second, parallel crest. */
+export const SECOND_CREST_MIN_WIDTH = 26;
+/** Crest width stops growing with the island's half-width at this value. */
+export const CREST_FULL_WIDTH = 22;
+/** Spacing (hexes) of the slots where a spur arm can be rooted along a crest. */
+export const ARM_SPACING = 9;
+/** Share of arm slots that stay empty. */
+export const ARM_SLOT_EMPTY_BELOW = 0.25;
+/** Cell size (hexes) of the jittered grid the groves sit on. */
+export const GROVE_CELL = 9.5;
+/** Groves exist only for grid cells whose roll is at least this. */
+export const GROVE_MIN_ROLL = 0.32;
+/** Forest where `GROVE_WEIGHT * grove + FOREST_NOISE_WEIGHT * noise + GROVE_RIM_WEIGHT * rim` beats this. */
+export const FOREST_THRESHOLD = 0.43;
+export const GROVE_WEIGHT = 0.65;
+export const FOREST_NOISE_WEIGHT = 0.35;
+export const GROVE_RIM_WEIGHT = 0.12;
+/** Wavelength (hexes) and domain warp of the noise that clusters the groves. */
+export const FOREST_NOISE_CELL = 9;
+export const FOREST_NOISE_WARP = 2.5;
+// cos(0.6) and sin(0.6), written out so no platform has to compute them.
+const COS_06 = 0.8253356149096783;
+const SIN_06 = 0.5646424733950354;
+const SQRT3 = Math.sqrt(3);
+
+/** Where a hex sits relative to its island's spine (the coast-warped offset space). */
+export interface Spine {
+  /** arc length along the spine (hexes) */
+  s: number;
+  /** signed distance from the spine (hexes) */
+  d: number;
+  /** half-width of the island there */
+  w: number;
+  /** total spine length */
+  len: number;
+  /** a per-island roll in [0, 1) */
+  id: number;
+}
 
 /**
- * The field a hex inside an island's core must beat `mountainRockiness` in to be mountain. A
- * ridged (1 - |2n - 1|) coarse value noise puts high values along long winding lines - the
- * range crests - and a small fine term keeps a range's edge from being a smooth blob. Mirrors
- * `TerrainSampler.MountainField`.
+ * The spine coordinates of the point `(qx, qy)` (relative to the island's centre, coast-warped) on
+ * `is`: the nearest spine segment by distance / half-width. `null` for an island with fewer than
+ * two spine points. Islets are not part of the spine. Mirrors `TerrainSampler.SpineAt`.
  */
-export function mountainField(q: number, r: number, seed: number): number {
-  const n = valueNoise(q, r, seed + 5, RANGE_SCALE);
-  const ridge = 1 - Math.abs(2 * n - 1);
-  const fine = valueNoise(q, r, seed + 7, RANGE_DETAIL_SCALE);
-  return (1 - RANGE_DETAIL_WEIGHT) * ridge + RANGE_DETAIL_WEIGHT * fine;
+export function spineAt(is: IslandShape, qx: number, qy: number, seed: number): Spine | null {
+  const n = is.sx.length;
+  if (n < 2) return null;
+  let len = 0;
+  for (let k = 0; k < n - 1; k++) {
+    const ex = is.sx[k + 1] - is.sx[k];
+    const ey = is.sy[k + 1] - is.sy[k];
+    len += Math.sqrt(ex * ex + ey * ey);
+  }
+  let acc = 0;
+  let bestV = Infinity;
+  let bs = 0;
+  let bd = 0;
+  let bw = 0;
+  for (let k = 0; k < n - 1; k++) {
+    const x0 = is.sx[k];
+    const y0 = is.sy[k];
+    const dx = is.sx[k + 1] - x0;
+    const dy = is.sy[k + 1] - y0;
+    const l2 = dx * dx + dy * dy;
+    const l = Math.sqrt(l2);
+    let t = l2 > 0 ? ((qx - x0) * dx + (qy - y0) * dy) / l2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const ex = qx - (x0 + t * dx);
+    const ey = qy - (y0 + t * dy);
+    const w = is.w[k] + (is.w[k + 1] - is.w[k]) * t;
+    const dist = Math.sqrt(ex * ex + ey * ey);
+    const v = dist / w;
+    if (v < bestV) {
+      bestV = v;
+      bs = acc + t * l;
+      bd = (dx * ey - dy * ex >= 0 ? 1 : -1) * dist;
+      bw = w;
+    }
+    acc += l;
+  }
+  return { s: bs, d: bd, w: bw, len, id: hash2(is.cellCol, is.cellRow, seed + SPINE_ID_SALT) };
+}
+
+function smoothstep(a: number, b: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Value noise sampled in cartesian space (hex centres, no axial shear) with a two-axis domain warp
+ * and two lattices rotated against each other, so the blobs are round and the square lattice hides.
+ * Uses `seed + 1 .. seed + 4`.
+ */
+function warpedNoise(q: number, r: number, seed: number, cell: number, warp: number): number {
+  const x = 1.5 * q;
+  const y = SQRT3 * (r + q / 2);
+  const wx = x + (valueNoise(x, y, seed + 1, cell * 1.7) - 0.5) * 2 * warp;
+  const wy = y + (valueNoise(x, y, seed + 2, cell * 1.7) - 0.5) * 2 * warp;
+  const a = valueNoise(wx, wy, seed + 3, cell);
+  const b = valueNoise(wx * COS_06 - wy * SIN_06, wx * SIN_06 + wy * COS_06, seed + 4, cell);
+  return (a + b) / 2;
+}
+
+/** One crest of a chain at arc length `sAt`: sideways offset from the spine and half-width (0 at a pass). */
+function crestAt(sp: Spine, seed: number, crest: number, offFrac: number, passBelow: number, maxHalf: number, sAt: number) {
+  const y = sp.id * 1000 + crest;
+  const off = (offFrac + (valueNoise(sAt, y, seed + CREST_OFFSET_SALT, 45) - 0.5) * 0.7) * sp.w;
+  const prof =
+    0.7 * valueNoise(sAt, y, seed + CREST_PROFILE_SALT, 13) + 0.3 * valueNoise(sAt, y, seed + CREST_PROFILE_FINE_SALT, 5);
+  const k = (prof - passBelow) / (1 - passBelow);
+  const half = k <= 0 ? 0 : 1.3 + maxHalf * Math.sqrt(k);
+  const endFade = smoothstep(0, 0.1, Math.min(sAt, sp.len - sAt) / Math.max(1, sp.len));
+  const scale = Math.min(1, sp.w / CREST_FULL_WIDTH);
+  return { off, half: half * endFade * scale };
+}
+
+/**
+ * Whether green-island hex `(q, r)` at depth `t` is mountain: chains along the island's spine
+ * (a second parallel chain on wide islands) with passes, a rough rim, and tapered spur arms off the
+ * massifs. Mirrors `TerrainSampler.ChainMountainAt`.
+ */
+export function chainMountainAt(q: number, r: number, t: number, seed: number, sp: Spine | null): boolean {
+  if (!sp || t > MOUNTAIN_MAX_DEPTH) return false;
+  const x = 1.5 * q;
+  const y = SQRT3 * (r + q / 2);
+  const fine =
+    0.8 * (valueNoise(x, y, seed + RIM_NOISE_SALT, 3.5) - 0.5) + 0.2 * (valueNoise(x, y, seed + RIM_NOISE_FINE_SALT, 2.2) - 0.5);
+  const crests: [number, number, number, number][] = [[0, 0, 0.36, 6.5]];
+  if (sp.w > SECOND_CREST_MIN_WIDTH) crests.push([1, sp.id < 0.5 ? 0.55 : -0.55, 0.5, 4.5]);
+  // every arm roll is keyed on the island too, so islands don't share their arm layout
+  const idRoll = Math.floor(sp.id * 1e5);
+  for (const [crest, offFrac, pass, maxHalf] of crests) {
+    const c = crestAt(sp, seed, crest, offFrac, pass, maxHalf, sp.s);
+    if (Math.abs(sp.d - c.off) < c.half * (1 + 0.8 * fine)) return true;
+    // spur arms: rooted every ~ARM_SPACING hexes along the crest at a massif, tapering away from it at an angle
+    const armRow = crest + 2 * idRoll;
+    const k0 = Math.floor(sp.s / ARM_SPACING);
+    for (let kk = k0 - 2; kk <= k0 + 2; kk++) {
+      if (hash2(kk, armRow, seed + ARM_ROOT_SALT) < ARM_SLOT_EMPTY_BELOW) continue;
+      const s0 = (kk + 0.2 + 0.6 * hash2(kk, armRow, seed + ARM_POSITION_SALT)) * ARM_SPACING;
+      const root = crestAt(sp, seed, crest, offFrac, pass, maxHalf, s0);
+      if (root.half < 2.5) continue; // arms only off a massif, never off a pass
+      const side = hash2(kk, armRow, seed + ARM_SIDE_SALT) < 0.5 ? -1 : 1;
+      // angle from the crest normal (up to about 0.8 rad) as a rational rotation: sin/cos of 2*atan(u)
+      const u = (hash2(kk, armRow, seed + ARM_TILT_SALT) - 0.5) * 0.85;
+      const sinT = (2 * u) / (1 + u * u);
+      const cosT = (1 - u * u) / (1 + u * u);
+      const armLen = 4 + 8 * hash2(kk, armRow, seed + ARM_LENGTH_SALT);
+      const ax = s0;
+      const ay = root.off + side * root.half * 0.6;
+      const bx = ax + sinT * (armLen + root.half * 0.4);
+      const by = ay + side * cosT * (armLen + root.half * 0.4);
+      const dx = bx - ax;
+      const dy = by - ay;
+      const l2 = dx * dx + dy * dy;
+      let v = ((sp.s - ax) * dx + (sp.d - ay) * dy) / l2;
+      v = v < 0 ? 0 : v > 1 ? 1 : v;
+      const ex = sp.s - (ax + v * dx);
+      const ey = sp.d - (ay + v * dy);
+      const dist = Math.sqrt(ex * ex + ey * ey);
+      const w = 0.55 * root.half * (1 - v) + 0.7 * v;
+      if (dist < w * (1 + 0.8 * fine)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a green-island hex that is not mountain is forest: round groves on a jittered grid,
+ * blended with a warped noise so woods cluster, with a rough rim. Mirrors `TerrainSampler.GroveForestAt`.
+ */
+export function groveForestAt(q: number, r: number, seed: number): boolean {
+  const x = 1.5 * q;
+  const y = SQRT3 * (r + q / 2);
+  const fine = valueNoise(x, y, seed + GROVE_RIM_SALT, 3) - 0.5;
+  const cx = Math.floor(x / GROVE_CELL);
+  const cy = Math.floor(y / GROVE_CELL);
+  let g = 0;
+  for (let i = -2; i <= 2; i++)
+    for (let j = -2; j <= 2; j++) {
+      const gx = cx + i;
+      const gy = cy + j;
+      const h = hash2(gx, gy, seed + GROVE_SALT + 2);
+      if (h < GROVE_MIN_ROLL) continue;
+      const fx = (gx + 0.1 + 0.8 * hash2(gx, gy, seed + GROVE_SALT)) * GROVE_CELL;
+      const fy = (gy + 0.1 + 0.8 * hash2(gx, gy, seed + GROVE_SALT + 1)) * GROVE_CELL;
+      const ex = x - fx;
+      const ey = y - fy;
+      const rad = 1.8 + 5.2 * h * h;
+      g = Math.max(g, 1 - Math.sqrt(ex * ex + ey * ey) / (rad * 1.6));
+    }
+  const n = warpedNoise(q, r, seed + FOREST_NOISE_SALT, FOREST_NOISE_CELL, FOREST_NOISE_WARP);
+  return GROVE_WEIGHT * g + FOREST_NOISE_WEIGHT * n + GROVE_RIM_WEIGHT * fine > FOREST_THRESHOLD;
 }
 
 function isLand(q: number, r: number, world: WorldSeed): boolean {
@@ -1247,7 +1472,9 @@ export type RiverVariant = 'plain' | 'meander' | 'island' | 'loop';
  * property sequence this module already uses (`defaultOrientation` +29,
  * `variantAt` +31, `springMountainShapeAt` +37, `soilAt` +41): far enough
  * past that cluster, and past every noise-field salt this file also uses
- * (11, 13, 17, 19, 23, 47, 53, 59, 61, 71, 101, 103, 200+lobe), that hash2's
+ * (11, 13, 17, 19, 23, 47, 53, 59, 61, 71, 101, 103, 200+lobe, and the odd
+ * 601..633 of the green-island mountain/forest block — `SPINE_ID_SALT` up to
+ * `FOREST_NOISE_SALT`+4), that hash2's
  * weak seed-mixing (see `WASTED_VARIANT_SALT`'s own doc comment) can't
  * correlate this pick with a neighbouring one.
  */

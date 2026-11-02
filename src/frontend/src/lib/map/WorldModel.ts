@@ -18,7 +18,7 @@ import type { PalisadeWalls } from './palisadeMovement';
 import type { StandingBridges } from './bridgeMovement';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
-import { guardRange, isStrongCampFamily, placeCamps, StartPositionMargin, type CampStrength } from './campPlacement';
+import { campGuardRange, isStrongCampFamily, placeCamps, placeWhaleRoads, StartPositionMargin } from './campPlacement';
 import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
 import type { PalisadePiece } from './palisadeTiles';
 import { campHexBuildable } from './campRules';
@@ -48,6 +48,7 @@ import {
 import { generateRiversWithBogs, isWideRiverTile } from './riverGenerator';
 import { BOG_REACH } from './bogGenerator';
 import { placeLakeProps, type LakeProp, type LakePropBuilding } from './lakeProps';
+import { isOutsideRealm } from './realmDecay';
 import {
   emptyResources,
   mouthSeaDirection,
@@ -620,7 +621,7 @@ export class WorldModel {
    */
   private isNearAnyStrongCamp(coord: AxialCoord): boolean {
     for (const camp of this.campByHex.values()) {
-      if (camp.strong && hexDistance(coord, camp) <= camp.guardRange + StartPositionMargin) return true;
+      if (camp.strong && camp.guardRange > 0 && hexDistance(coord, camp) <= camp.guardRange + StartPositionMargin) return true;
     }
     return false;
   }
@@ -1619,7 +1620,7 @@ export class WorldModel {
       resources: Resources;
       rates: Resources;
       capacity: Resources;
-      buildings: { q: number; r: number; type: string; level: number; orientation?: string | null }[];
+      buildings: { q: number; r: number; type: string; level: number; orientation?: string | null; outsideRealmSince?: string | null }[];
       realm?: ReadonlyArray<{ settlementId: string; discs: readonly ClaimDisc[] }>;
     },
   ) {
@@ -1718,6 +1719,7 @@ export class WorldModel {
       if ((type === 'bogoreworks' || type === 'fishinghut') && tile.buildingType !== type) this.lakePropsDirty = true;
       tile.buildingType = type as Tile['buildingType'];
       tile.buildingLevel = building.level;
+      tile.buildingOutsideRealm = isOutsideRealm(building) || undefined;
       // The fishing hut is the only building with its own orientation (a
       // dock that has to face this settlement's shore, not whatever a bare
       // coastal-water tile would default to) — see PlacedBuildingResponse.
@@ -1739,6 +1741,7 @@ export class WorldModel {
         if (tile.buildingType === 'bogoreworks' || tile.buildingType === 'fishinghut') this.lakePropsDirty = true;
         tile.buildingType = undefined;
         tile.buildingLevel = undefined;
+        tile.buildingOutsideRealm = undefined;
       }
     }
     // After the building pass: a fallen tower's own hex has to be empty before
@@ -1812,7 +1815,7 @@ export class WorldModel {
    * one of the player's own settlements renders is never touched.
    */
   applyRivalWalls(
-    walls: { q: number; r: number; type: string; level: number; settlementId: string; ownerUserId: string | null }[],
+    walls: { q: number; r: number; type: string; level: number; settlementId: string; ownerUserId: string | null; outsideRealm?: boolean }[],
   ) {
     const ownRendered = new Set<string>();
     for (const keys of this.renderedBuildingCoords.values()) for (const key of keys) ownRendered.add(key);
@@ -1826,6 +1829,7 @@ export class WorldModel {
       tile.ownerId = wall.settlementId;
       tile.buildingType = wall.type;
       tile.buildingLevel = wall.level;
+      tile.buildingOutsideRealm = wall.outsideRealm === true || undefined;
       next.set(key, { settlementId: wall.settlementId, ownerUserId: wall.ownerUserId });
     }
 
@@ -1837,6 +1841,7 @@ export class WorldModel {
       if (tile.buildingType === 'palisade' || tile.buildingType === 'palisadegate') {
         tile.buildingType = undefined;
         tile.buildingLevel = undefined;
+        tile.buildingOutsideRealm = undefined;
       }
     }
 
@@ -1873,15 +1878,20 @@ export class WorldModel {
   protected storedTiles(): Iterable<Tile> {
     return this.tiles.values();
   }
-  private wallCache: { revision: number; walls: Map<string, { gate: boolean; level: number; tileOwner?: string }> } | null = null;
+  private wallCache: { revision: number; walls: Map<string, { gate: boolean; level: number; tileOwner?: string; outsideRealm?: boolean }> } | null = null;
 
   /** Every palisade and gate hex known (a level-0 foundation included), keyed by hex, rebuilt lazily after a building changes. */
-  private palisadeIndex(): Map<string, { gate: boolean; level: number; tileOwner?: string }> {
+  private palisadeIndex(): Map<string, { gate: boolean; level: number; tileOwner?: string; outsideRealm?: boolean }> {
     if (this.wallCache?.revision === this.wallRevision) return this.wallCache.walls;
-    const walls = new Map<string, { gate: boolean; level: number; tileOwner?: string }>();
+    const walls = new Map<string, { gate: boolean; level: number; tileOwner?: string; outsideRealm?: boolean }>();
     for (const tile of this.storedTiles()) {
       if (tile.buildingType !== 'palisade' && tile.buildingType !== 'palisadegate') continue;
-      walls.set(coordKey(tile), { gate: tile.buildingType === 'palisadegate', level: tile.buildingLevel ?? 1, tileOwner: tile.ownerId });
+      walls.set(coordKey(tile), {
+        gate: tile.buildingType === 'palisadegate',
+        level: tile.buildingLevel ?? 1,
+        tileOwner: tile.ownerId,
+        outsideRealm: tile.buildingOutsideRealm,
+      });
     }
     this.wallCache = { revision: this.wallRevision, walls };
     return walls;
@@ -1899,7 +1909,7 @@ export class WorldModel {
    * is unknown. Same shape as the backend's `PalisadeIndex`.
    */
   standingPalisadeWalls(): PalisadeWalls {
-    const standing = new Map<string, { gate: boolean; owner: string }>();
+    const standing = new Map<string, { gate: boolean; owner: string; outsideRealm?: boolean }>();
     for (const [key, wall] of this.palisadeIndex()) {
       if (wall.level < 1) continue;
       // A rival wall's owner key is the one the server's PalisadeIndex uses: the account, or the settlement for an anonymous one.
@@ -1909,7 +1919,7 @@ export class WorldModel {
         : wall.tileOwner
           ? (this.settlements.get(wall.tileOwner)?.ownerId ?? wall.tileOwner)
           : '';
-      standing.set(key, { gate: wall.gate, owner });
+      standing.set(key, { gate: wall.gate, owner, outsideRealm: wall.outsideRealm });
     }
     // The jötnar's Utgard walls block under a fixed owner key that is nobody's friend (a breached level-0 hex is passable).
     for (const [key, wall] of this.utgardWallByHex) {
@@ -1927,11 +1937,11 @@ export class WorldModel {
    */
   standingBridges(): StandingBridges {
     if (this.bridgeCache?.revision === this.wallRevision) return this.bridgeCache.bridges;
-    const bridges = new Map<string, { level: number; owner: string }>();
+    const bridges = new Map<string, { level: number; owner: string; outsideRealm?: boolean }>();
     for (const tile of this.storedTiles()) {
       if (tile.buildingType !== 'bridge' || (tile.buildingLevel ?? 1) < 1) continue;
       const owner = tile.ownerId ? (this.settlements.get(tile.ownerId)?.ownerId ?? tile.ownerId) : '';
-      bridges.set(coordKey(tile), { level: tile.buildingLevel ?? 1, owner });
+      bridges.set(coordKey(tile), { level: tile.buildingLevel ?? 1, owner, outsideRealm: tile.buildingOutsideRealm });
     }
     this.bridgeCache = { revision: this.wallRevision, bridges };
     return bridges;
@@ -2253,6 +2263,24 @@ export class WorldModel {
       })),
     );
 
+    // The water camps (whale roads) come after the land ones, from their own sea pass over the whole world's
+    // land (wasted islands included): green islands only, like the backend's `CampGenerator.GenerateWhaleRoads`.
+    if (!wasted) {
+      const whales = placeWhaleRoads(
+        islandTiles,
+        (c) => terrainAt(c.q, c.r, world) !== 'sea' || wastedTerrainAt(c.q, c.r, world) !== 'sea',
+        worldSeed,
+        islandIndex,
+      );
+      this.setCamps(
+        whales.map((p) => ({
+          family: p.family,
+          coord: p.coord,
+          level: p.level,
+          orientation: p.orientation ?? this.getTile(p.coord.q, p.coord.r).orientation ?? 'SE',
+        })),
+      );
+    }
     // Utgard's wall rings and the Jötun watchtowers (a wasted island with Utgard only), after giants and camps — the backend's
     // own order (`WorldGenerator.Generate`).
     if (wasted) {
@@ -2321,13 +2349,12 @@ export class WorldModel {
       if (tile.camp) continue;
       added = true;
       const strong = isStrongCampFamily(camp.family);
-      const strength: CampStrength = strong ? 'strong' : 'weak';
       tile.camp = {
         family: camp.family,
         level: camp.level,
         orientation: camp.orientation,
         strong,
-        guardRange: guardRange(camp.level, strength),
+        guardRange: campGuardRange(camp.family, camp.level),
       };
       this.campByHex.set(coordKey(camp.coord), { ...tile.camp, q: camp.coord.q, r: camp.coord.r });
     }

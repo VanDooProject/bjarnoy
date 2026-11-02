@@ -702,7 +702,7 @@ test.describe('mobile HUD drawer on non-map pages', () => {
 
     // Finding #8: MobileHudDrawer gained the Home/Landing link that was
     // previously missing entirely — tapping it must actually navigate.
-    await page.getByRole('button', { name: 'Landing' }).tap();
+    await page.getByRole('link', { name: 'Landing' }).tap();
     await expect(page).toHaveURL('/');
   });
 
@@ -749,9 +749,10 @@ test.describe('mobile HUD drawer on non-map pages', () => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     for (const path of ['/', '/login', '/register', '/worlds', '/reports', '/impressum', '/docs', '/docs/tech-tree']) {
       await page.goto(path);
-      // Mounted (so this can't pass just because the page hadn't rendered
-      // yet), but not shown.
-      await expect(page.locator('.locale-switcher:not(.in-drawer)').first(), path).toBeAttached();
+      // The page has rendered (its HUD bar, or a standalone page's own
+      // switcher), so this can't pass just because nothing is there yet. HUD
+      // pages keep the switcher in their dropdown menu, which is closed here.
+      await expect(page.locator('.hud-bar, .locale-switcher:not(.in-drawer)').first(), path).toBeAttached();
       await expect(page.locator('.locale-switcher:not(.in-drawer):visible'), path).toHaveCount(0);
     }
   });
@@ -795,7 +796,7 @@ test.describe('mobile HUD drawer on non-map pages', () => {
       expect(openBox.height).toBeGreaterThan(100);
     }).toPass();
 
-    await page.getByRole('button', { name: /Reports/ }).first().click();
+    await page.getByRole('link', { name: /Reports/ }).first().click();
     await expect(page).toHaveURL(/\/reports/);
   });
 });

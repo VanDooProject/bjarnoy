@@ -103,6 +103,39 @@ public class BogBuildingTests
         Assert.Equal(allowed, definition.AllowsHex(Terrain.Bog, isCoastalWater: false, kind));
     }
 
+    [Theory]
+    [InlineData(BogTileKind.Bog, true)]
+    [InlineData(BogTileKind.Shore, false)]
+    [InlineData(BogTileKind.Mouth, false)]
+    [InlineData(BogTileKind.Creek, false)]
+    [InlineData(BogTileKind.CreekSpring, false)]
+    [InlineData(BogTileKind.Inlet, false)]
+    [InlineData(BogTileKind.Half, false)]
+    public void The_tower_stands_on_plain_bog_moss_and_on_no_other_bog_hex(BogTileKind kind, bool allowed)
+    {
+        for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(BuildingType.Tower); level++)
+        {
+            Assert.Equal(allowed, BuildingCatalogue.Get(BuildingType.Tower, level).AllowsHex(Terrain.Bog, false, kind));
+        }
+
+        var settlement = Rich(3);
+        Assert.Equal(allowed ? null : BuildRejection.TerrainNotAllowed, Try(settlement, BuildingType.Tower, Terrain.Bog, kind));
+    }
+
+    [Fact]
+    public void The_tower_stands_on_forest_but_not_on_a_lake_mountain_or_unknown_bog()
+    {
+        var definition = BuildingCatalogue.Get(BuildingType.Tower, 1);
+
+        Assert.True(definition.AllowsHex(Terrain.Forest, false, null));
+        Assert.True(definition.AllowsHex(Terrain.Grass, false, null));
+        Assert.True(definition.AllowsHex(Terrain.Sand, false, null));
+        Assert.False(definition.AllowsHex(Terrain.Mountain, false, null));
+        Assert.False(definition.AllowsHex(Terrain.Lake, false, BogTileKind.Lake));
+        Assert.False(definition.AllowsHex(Terrain.Bog, false, null), "an unknown bog kind is refused");
+        Assert.Null(Try(Rich(3), BuildingType.Tower, Terrain.Forest, null));
+    }
+
     [Fact]
     public void The_fishing_hut_keeps_its_coastal_behaviour_and_never_stands_on_a_lake_or_on_grass()
     {
@@ -161,8 +194,8 @@ public class BogBuildingTests
         var bogTypes = new HashSet<BuildingType>
         {
             BuildingType.ClayBrickworks, BuildingType.BogOreWorks, BuildingType.Hammerschmiede, BuildingType.FishingHut,
-            // The wall stands on plain moss too (and nowhere else on bog).
-            BuildingType.Palisade, BuildingType.PalisadeGate,
+            // The wall and the tower stand on plain moss too (and nowhere else on bog).
+            BuildingType.Palisade, BuildingType.PalisadeGate, BuildingType.Tower,
         };
 
         foreach (var type in BuildingCatalogue.AllTypes)

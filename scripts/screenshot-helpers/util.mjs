@@ -23,10 +23,21 @@ export async function forceRebuild(page, { x = 720, y = 450 } = {}) {
   await page.waitForTimeout(400);
 }
 
-// HudNav's "World map" button only renders for an authenticated player
-// (HudNav.vue: `auth.isAuthenticated && player.hasFoundedSettlement`), and
-// demo mode is anonymous, so a script that clicks it without this times out
-// waiting for a button that never appears. Same session the e2e suite fakes
+// Loads `url` and waits for the map to be ready to screenshot — the same
+// signal e2e/helpers.ts's waitForMapReady uses (`data-map-ready`, then the
+// loading overlay gone). Not `waitUntil: 'networkidle'`: once the map's own
+// art is in, the app keeps warming the rest of the atlas in the background
+// (atlas.ts's startBackgroundAtlasLoad), so the network can stay busy for a
+// long while after the page is ready. Dev-server first loads are slow, hence
+// the generous timeout.
+export async function gotoMapReady(page, url, { timeout = 120_000 } = {}) {
+  await page.goto(url);
+  await page.locator('.map-container[data-map-ready]').first().waitFor({ timeout });
+  await page.locator('[data-testid="map-status-overlay"]').waitFor({ state: 'detached', timeout });
+}
+
+// A logged-in player session for scripts that need one (demo mode is
+// anonymous otherwise, and some HUD entries only show when logged in). Same session the e2e suite fakes
 // (e2e/pages/AdminAuthFixture.ts, `loginAsPlayer`): a seeded refresh token
 // plus `/auth/refresh` and `/auth/me` answered with a player. Call it before
 // the page's first navigation - the init script only applies to later ones.

@@ -752,6 +752,8 @@ public sealed class WorldService(
         bool? frozenIslesEnabled,
         bool hasEndbossAt,
         DateTimeOffset? endbossAt,
+        string? name = null,
+        bool? hidden = null,
         CancellationToken cancellationToken = default)
     {
         var world = await _dbContext.Worlds
@@ -760,6 +762,22 @@ public sealed class WorldService(
         if (world is null)
         {
             return null;
+        }
+
+        if (name is not null && name != world.Name)
+        {
+            if (await _dbContext.Worlds.AnyAsync(w => w.Name == name && w.Id != worldId, cancellationToken)
+                .ConfigureAwait(false))
+            {
+                throw new WorldCreationException($"A world named '{name}' already exists.");
+            }
+
+            world.Name = name;
+        }
+
+        if (hidden is { } isHidden)
+        {
+            world.Hidden = isHidden;
         }
 
         if (speedFactor is { } factor)
@@ -787,7 +805,15 @@ public sealed class WorldService(
             world.EndbossAt = endbossAt;
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException) when (name is not null)
+        {
+            // The AnyAsync check above is a courtesy; the unique index on Name decides a race.
+            throw new WorldCreationException($"A world named '{name}' already exists.");
+        }
 
         _logger.LogInformation("World {WorldId} admin settings updated.", worldId);
 

@@ -49,6 +49,29 @@ internal static class CampGenerator
     public static int MaxEyrieCampsFor(int landTileCount) =>
         Math.Max(1, ((2 * landTileCount) + MountainTilesPerEyrieCamp) / (2 * MountainTilesPerEyrieCamp));
 
+    /// <summary>One whale road per this many land tiles (rounded, at least 1, see <see cref="WhaleCountFor"/>), tuning default.</summary>
+    public const int WhaleTilesPer = 3000;
+
+    /// <summary>No island gets more whale roads than this, tuning default.</summary>
+    public const int MaxWhaleCampsPerIsland = 3;
+
+    /// <summary>A whale road lies at least this many hexes from its island's nearest land tile, tuning default.</summary>
+    public const int WhaleMinShoreDistance = 6;
+
+    /// <summary>A whale road lies at most this many hexes from its island's nearest land tile, tuning default.</summary>
+    public const int WhaleMaxShoreDistance = 10;
+
+    /// <summary>No land of any island lies within this many hexes of a whale road (so the nearest land overall is further than this).</summary>
+    public const int WhaleClearRadius = 5;
+
+    /// <summary>Two whale roads of one island are never closer than this many hex steps, tuning default.</summary>
+    public const int MinWhaleSpacing = 12;
+
+    /// <summary>Hash salts of the sea pass: independent of the land camps' (<c>seed + 131</c> candidates, <c>seed + 313</c> levels).</summary>
+    private const int WhaleHashSalt = 4_093;
+
+    private const int WhaleLevelSalt = 5_419;
+
     /// <summary>Camp levels are rolled in <c>1..MaxCampLevel</c>, tuning default.</summary>
     public const int MaxCampLevel = 5;
 
@@ -95,6 +118,172 @@ internal static class CampGenerator
 
         return camps;
     }
+
+    /// <summary>
+    /// The whale roads of a green island: <see cref="PlaceWhaleRoads"/> over the world's whole terrain (green or wasted
+    /// land of any island blocks), with the sampler's orientation attached. Run after the island's land camps.
+    /// </summary>
+    public static IReadOnlyList<Camp> GenerateWhaleRoads(
+        IReadOnlyList<HexCoord> islandTiles, TerrainSampler sampler, WorldGenerationOptions options, int islandIndex)
+    {
+        var placements = PlaceWhaleRoads(
+            islandTiles,
+            c => sampler.TerrainAt(c).IsLand() || sampler.WastedTerrainAt(c).IsLand(),
+            options.Seed,
+            islandIndex);
+        return [.. placements.Select(p => new Camp(p.Coord, p.Family, p.Level, p.Orientation ?? sampler.OrientationAt(p.Coord)))];
+    }
+
+    /// <summary>The whale-road budget of an island: <c>clamp(round(land / WhaleTilesPer), 1, MaxWhaleCampsPerIsland)</c>.</summary>
+    public static int WhaleCountFor(int landTileCount) =>
+        Math.Clamp(((2 * landTileCount) + WhaleTilesPer) / (2 * WhaleTilesPer), 1, MaxWhaleCampsPerIsland);
+
+    /// <summary>
+    /// The pure sea pass (the first water camp, <see cref="CampFamilies.Whaleroad"/>), mirrored bit for bit by
+    /// <c>placeWhaleRoads</c> in <c>campPlacement.ts</c>. For a green island of at least <see cref="MinCampIslandTiles"/>
+    /// land tiles: candidates are the hexes whose distance to the island's nearest land tile is
+    /// <see cref="WhaleMinShoreDistance"/>..<see cref="WhaleMaxShoreDistance"/> and whose nearest land of any island is
+    /// that island's (no land of another island at the same or a shorter distance, so no land within
+    /// <see cref="WhaleClearRadius"/> and two islands never offer the same hex). <see cref="WhaleCountFor"/> picks by
+    /// farthest-point sampling at least <see cref="MinWhaleSpacing"/> apart (first pick: best hash; ties: hash, then q, r).
+    /// </summary>
+    /// <param name="isLand">Whether a hex of the whole world is land, of any island (wasted ones too).</param>
+    public static IReadOnlyList<Placement> PlaceWhaleRoads(
+        IReadOnlyList<HexCoord> islandTiles,
+        Func<HexCoord, bool> isLand,
+        int worldSeed,
+        int islandIndex)
+    {
+        ArgumentNullException.ThrowIfNull(islandTiles);
+        ArgumentNullException.ThrowIfNull(isLand);
+
+        if (islandTiles.Count < MinCampIslandTiles)
+        {
+            return [];
+        }
+
+        var seed = worldSeed + (islandIndex * 300_007);
+        var count = WhaleCountFor(islandTiles.Count);
+        var own = new HashSet<HexCoord>(islandTiles);
+
+        // Distance to the nearest island tile of every hex out to WhaleMaxShoreDistance, by expanding rings
+        // from the coast (a tile with a neighbour outside the island): no scan of the world.
+        var shore = new Dictionary<HexCoord, int>();
+        var frontier = new List<HexCoord>();
+        foreach (var tile in islandTiles)
+        {
+            foreach (var n in tile.Neighbours())
+            {
+                if (!own.Contains(n) && shore.TryAdd(n, 1))
+                {
+                    frontier.Add(n);
+                }
+            }
+        }
+
+        for (var d = 2; d <= WhaleMaxShoreDistance; d++)
+        {
+            var next = new List<HexCoord>();
+            foreach (var hex in frontier)
+            {
+                foreach (var n in hex.Neighbours())
+                {
+                    if (!own.Contains(n) && shore.TryAdd(n, d))
+                    {
+                        next.Add(n);
+                    }
+                }
+            }
+
+            frontier = next;
+        }
+
+        var candidates = shore
+            .Where(e => e.Value >= WhaleMinShoreDistance)
+            .Select(e => (Coord: e.Key, Shore: e.Value))
+            .OrderBy(c => c.Coord.Q)
+            .ThenBy(c => c.Coord.R)
+            .Select(c => new WhaleCandidate(c.Coord, c.Shore, ValueNoise.Hash2(c.Coord.Q, c.Coord.R, seed + WhaleHashSalt)))
+            .ToList();
+        if (candidates.Count == 0)
+        {
+            return [];
+        }
+
+        // Open-sea validity is checked lazily, only for candidates that would win a pick (rejecting a winner is the
+        // same as never having offered it): no land of another island within the candidate's own shore distance.
+        var validity = new sbyte[candidates.Count];
+        bool IsOpenSea(int i)
+        {
+            if (validity[i] == 0)
+            {
+                var candidate = candidates[i];
+                validity[i] = 1;
+                foreach (var hex in candidate.Coord.WithinRadius(candidate.Shore))
+                {
+                    if (!own.Contains(hex) && isLand(hex))
+                    {
+                        validity[i] = 2;
+                        break;
+                    }
+                }
+            }
+
+            return validity[i] == 1;
+        }
+
+        var minDistance = new int[candidates.Count];
+        Array.Fill(minDistance, int.MaxValue);
+        var chosen = new List<WhaleCandidate>();
+        var picked = new bool[candidates.Count];
+
+        while (chosen.Count < count)
+        {
+            // Farthest from every road so far, at least MinWhaleSpacing from all; ties by hash, then (Q, R).
+            var order = Enumerable.Range(0, candidates.Count)
+                .Where(i => !picked[i] && minDistance[i] >= MinWhaleSpacing && validity[i] != 2)
+                .OrderByDescending(i => minDistance[i])
+                .ThenByDescending(i => candidates[i].Hash)
+                .ThenBy(i => i);
+
+            var index = -1;
+            foreach (var i in order)
+            {
+                if (IsOpenSea(i))
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            if (index < 0)
+            {
+                break;
+            }
+
+            picked[index] = true;
+            chosen.Add(candidates[index]);
+            for (var i = 0; i < candidates.Count; i++)
+            {
+                var distance = candidates[i].Coord.DistanceTo(candidates[index].Coord);
+                if (distance < minDistance[i])
+                {
+                    minDistance[i] = distance;
+                }
+            }
+        }
+
+        return [.. chosen.Select(c => new Placement(c.Coord, CampFamilies.Whaleroad, RollWhaleLevel(c, seed), null))];
+    }
+
+    /// <summary>Cubic level roll of a whale road, <c>1 + floor(u^3 * 5)</c>, on the sea pass's own salt.</summary>
+    private static int RollWhaleLevel(WhaleCandidate candidate, int seed)
+    {
+        var u = ValueNoise.Hash2(candidate.Coord.Q, candidate.Coord.R, seed + WhaleLevelSalt);
+        return 1 + Math.Min(MaxCampLevel - 1, (int)Math.Floor(u * u * u * MaxCampLevel));
+    }
+
+    private sealed record WhaleCandidate(HexCoord Coord, int Shore, double Hash);
 
     /// <summary>The strong-camp budget of an island: none below <see cref="MinCampIslandTiles"/>, else <c>clamp(round(land / StrongCampTilesPer), 0, MaxStrongCampsPerIsland)</c>.</summary>
     public static int StrongCountFor(int landTileCount) =>

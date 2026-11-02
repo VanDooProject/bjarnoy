@@ -244,7 +244,7 @@ public class WorldGeneratorTests
 public class AllLandTestOptionsTests
 {
     /// <summary>
-    /// The "everything near the origin is grass" options FieldBattleServiceTests and
+    /// The "everything near the origin is land" options FieldBattleServiceTests and
     /// ShipMovementEndpointsTests build a world from (same numbers, duplicated there
     /// because those assemblies do not reference this one). If the island shape changes
     /// so that this stops holding, both need another seed.
@@ -275,7 +275,7 @@ public class AllLandTestOptionsTests
         };
         var sampler = new TerrainSampler(options);
 
-        Assert.All(HexCoord.Origin.WithinRadius(30), c => Assert.Equal(Terrain.Grass, sampler.TerrainAt(c)));
+        Assert.All(HexCoord.Origin.WithinRadius(30), c => Assert.True(sampler.TerrainAt(c).IsLand(), $"{c} is not land"));
     }
 }
 

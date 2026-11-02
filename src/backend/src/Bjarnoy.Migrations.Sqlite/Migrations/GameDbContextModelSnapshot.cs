@@ -956,6 +956,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("Level")
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTimeOffset?>("OutsideRealmSince")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Q")
                         .HasColumnType("INTEGER");
 
@@ -1646,6 +1649,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("REAL");
 
                     b.Property<bool>("FrozenIslesEnabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Hidden")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("IslandCellSize")

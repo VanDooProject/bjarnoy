@@ -3,77 +3,82 @@
  "title": "wall from a wide river to the sea, ending in the sea-end piece, seals the corner: the enemy cannot enter, the friendly army walks through the gate",
  "seed": 11,
  "radius": 1000,
- "generation": { "islandCellSize": 260, "islandMaxReach": 0, "islandMinGap": 0, "islandLargeShare": 0.12 },
+ "generation": {
+  "islandCellSize": 260,
+  "islandMaxReach": 0,
+  "islandMinGap": 0,
+  "islandLargeShare": 0.12
+ },
  "window": {
-  "q": 205,
-  "r": -650,
+  "q": 368,
+  "r": -831,
   "size": 22
  },
  "px": 36,
  "walls": [
   [
-   202,
-   -651
+   365,
+   -832
   ],
   [
-   203,
-   -651
+   366,
+   -832
   ],
   [
-   204,
-   -651
+   367,
+   -832
   ],
   [
-   205,
-   -651
+   368,
+   -832
   ],
   [
-   206,
-   -651
+   369,
+   -832
   ],
   [
-   207,
-   -651
+   370,
+   -832
   ],
   [
-   208,
-   -651
+   371,
+   -832
   ],
   [
-   209,
-   -651
+   372,
+   -832
   ],
   [
-   210,
-   -651
+   373,
+   -832
   ]
  ],
  "gates": [
   [
-   205,
-   -651
+   368,
+   -832
   ]
  ],
  "routes": [
   {
    "from": [
-    206,
-    -653
+    369,
+    -834
    ],
    "to": [
-    207,
-    -649
+    370,
+    -830
    ],
    "army": "enemy"
   },
   {
    "from": [
-    207,
-    -653
+    370,
+    -834
    ],
    "to": [
-    206,
-    -649
+    369,
+    -830
    ],
    "army": "friendly"
   }

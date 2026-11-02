@@ -961,6 +961,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("Level")
                         .HasColumnType("integer");
 
+                    b.Property<DateTimeOffset?>("OutsideRealmSince")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("Q")
                         .HasColumnType("integer");
 
@@ -1651,6 +1654,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasColumnType("double precision");
 
                     b.Property<bool>("FrozenIslesEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("Hidden")
                         .HasColumnType("boolean");
 
                     b.Property<int>("IslandCellSize")

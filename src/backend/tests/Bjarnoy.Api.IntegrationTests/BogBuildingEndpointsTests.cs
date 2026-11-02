@@ -181,7 +181,7 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
         var (client, settlement, hexes) = await SetUpAsync();
         using var _ = client;
 
-        foreach (var type in new[] { "farm", "tower", "storagehouse", "townsquare", "barracks", "meadery" })
+        foreach (var type in new[] { "farm", "storagehouse", "townsquare", "barracks", "meadery" })
         {
             foreach (var hex in new[] { "moss1", "creek", "half", "shore", "lake" })
             {
@@ -190,6 +190,21 @@ public sealed class BogBuildingEndpointsTests : IAsyncLifetime
                 Assert.Equal("TerrainNotAllowed", await response.RejectionAsync(Ct));
             }
         }
+    }
+
+    [Fact]
+    public async Task The_tower_is_placed_on_plain_moss_and_on_no_other_bog_hex()
+    {
+        var (client, settlement, hexes) = await SetUpAsync();
+        using var _ = client;
+
+        foreach (var hex in new[] { "creek", "half", "shore", "lake" })
+        {
+            var response = await Build(client, settlement.Id, "tower", hexes[hex]);
+            Assert.Equal("TerrainNotAllowed", await response.RejectionAsync(Ct));
+        }
+
+        Assert.Equal(HttpStatusCode.Accepted, (await Build(client, settlement.Id, "tower", hexes["moss1"])).StatusCode);
     }
 
     [Fact]

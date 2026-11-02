@@ -1543,6 +1543,25 @@ describe('placeGiantsForIsland (demo giant placement v2)', () => {
     for (const anchor of anchors) expect(hexDistance(at!, anchor)).toBeGreaterThanOrEqual(5);
   });
 
+  it('places the island’s whale roads on open sea 6 to 10 hexes off its coast, with no guard range', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    model.placeGiantsForIsland(near, DEMO_SEED);
+    const roads = hexesInRadius(near, 80).flatMap((c) => {
+      const camp = model.campAt(c);
+      return camp?.family === 'whaleroad' ? [{ coord: c, camp }] : [];
+    });
+    expect(roads.length).toBeGreaterThan(0);
+    const land = hexesInRadius(near, 120).filter((c) => model.isLand(c.q, c.r));
+    for (const { coord, camp } of roads) {
+      expect(camp.guardRange).toBe(0);
+      expect(model.terrainOf(coord.q, coord.r)).toBe('sea');
+      const shore = Math.min(...land.map((l) => hexDistance(l, coord)));
+      expect(shore).toBeGreaterThanOrEqual(6);
+      expect(shore).toBeLessThanOrEqual(10);
+    }
+  });
+
   it('places an island’s giants once, however many times it is visited', () => {
     const model = new WorldModel(DEMO_SEED);
     const near = model.findLandfall({ q: 0, r: 0 })!;
@@ -1571,6 +1590,12 @@ describe('WorldModel wildlife camps', () => {
     // A second call for a hex that already has a camp leaves it alone.
     model.setCamps([{ family: 'boarwallow', coord, level: 1, orientation: 'W' }]);
     expect(model.getTile(3, 4).camp?.family).toBe('wolfden');
+  });
+
+  it('setCamps gives a whale road (a water camp) no guard range and no start-position exclusion', () => {
+    const model = new WorldModel(1);
+    model.setCamps([{ family: 'whaleroad', coord: { q: 3, r: 4 }, level: 5, orientation: 'SE' }]);
+    expect(model.getTile(3, 4).camp).toEqual({ family: 'whaleroad', level: 5, orientation: 'SE', strong: true, guardRange: 0 });
   });
 
   it('a camp hex is not buildable', () => {
@@ -2061,11 +2086,20 @@ describe('WorldModel bog buildings', () => {
 
   it('refuses every grass building on bog ground (the PR3 open point)', () => {
     const { model, settlement, hex } = bogSettlement();
-    for (const type of ['farm', 'tower', 'storagehouse', 'townsquare', 'meadery', 'barracks', 'smithy', 'lumberjack', 'quarry'] as const) {
+    for (const type of ['farm', 'storagehouse', 'townsquare', 'meadery', 'barracks', 'smithy', 'lumberjack', 'quarry'] as const) {
       for (const i of [0, 1, 2, 3, 4, 5, 6]) {
         expect(model.placeBuilding(settlement.id, hex(i), type), `${type} on hex ${i}`).toBe(false);
       }
     }
+  });
+
+  it('places a tower on plain moss but on no other bog hex', () => {
+    const { model, settlement, hex } = bogSettlement();
+    for (const i of [1, 2, 3, 4, 5, 6, 7]) {
+      expect(model.placeBuilding(settlement.id, hex(i), 'tower'), `tower on bog hex ${i}`).toBe(false);
+    }
+    expect(model.placeBuilding(settlement.id, hex(0), 'tower')).toBe(true);
+    expect(model.getTile(hex(0).q, hex(0).r).buildingType).toBe('tower');
   });
 
   it('refuses a new quarry even on a mountain hex inside the realm (new placement is switched off)', () => {
@@ -2300,6 +2334,28 @@ describe('WorldModel palisade and gate', () => {
     expect(model.palisadePlacement(coastal, false)).toEqual({ ok: true });
     expect(model.placeBuilding(settlement.id, coastal, 'palisade')).toBe(true);
     expect(model.getTile(coastal.q, coastal.r).terrain).toBe('sea');
+  });
+
+  it('marks a gate the server reports outside the realm, and clears it when the realm reaches it again', () => {
+    const { model, settlement, line } = walledSetting(3);
+    const snapshot = (outsideRealmSince: string | null) => ({
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.resources,
+      buildings: [
+        { q: line[0]!.q, r: line[0]!.r, type: 'palisade', level: 1 },
+        { q: line[1]!.q, r: line[1]!.r, type: 'palisadegate', level: 2, outsideRealmSince },
+      ],
+    });
+    const key = `${line[1]!.q},${line[1]!.r}`;
+
+    model.applyServerSnapshot(settlement.id, snapshot('2026-11-01T10:00:00Z'));
+    expect(model.standingPalisadeWalls().get(key)?.outsideRealm).toBe(true);
+    expect(model.standingPalisadeWalls().get(`${line[0]!.q},${line[0]!.r}`)?.outsideRealm).toBeUndefined();
+
+    model.applyServerSnapshot(settlement.id, snapshot(null));
+    expect(model.standingPalisadeWalls().get(key)?.outsideRealm).toBeUndefined();
   });
 
   it('hands the pathfinder only standing walls (a level-0 foundation does not block), each with its owner', () => {

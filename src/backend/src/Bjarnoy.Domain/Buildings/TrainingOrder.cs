@@ -97,6 +97,12 @@ public enum TrainRejection
     /// parameter. Independent of any future Shipyard building requirement.
     /// </summary>
     SettlementNotCoastal,
+
+    /// <summary>
+    /// The building the unit is trained in stands outside the realm and has no function until the realm reaches it again
+    /// (<c>docs/design/economy.md</c> section 5, "Buildings outside the realm decay").
+    /// </summary>
+    BuildingOutsideRealm,
 }
 
 /// <summary>The outcome of asking to train units.</summary>

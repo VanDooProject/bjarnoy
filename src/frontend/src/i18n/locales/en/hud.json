@@ -1,7 +1,6 @@
 {
   "nav": {
     "settlement": "Settlement",
-    "worldMap": "World map",
     "leaderboards": "Leaderboards",
     "messages": "Messages",
     "reports": "Reports",
@@ -140,6 +139,7 @@
       "campOccupied": "Occupied by wild beasts",
       "maxLevel": "Max level",
       "noLandUnitsAtHome": "No land units at home",
+      "noShipsAtHome": "No ships at home",
       "siege": "Siege",
       "noRamAtHome": "Needs a battering ram at home"
     },
@@ -220,6 +220,8 @@
     "descOutsideBorder": "Outside your realm's border — claim more land to build here.",
     "descOpenWater": "Open water. No building can stand here.",
     "descUpgrade": "Raise this building further to grow what it produces for your settlement.",
+    "outsideRealm": "Outside your realm: this building has no function and keeps losing levels until your realm reaches it again.",
+    "outsideRealmLosesIn": "Outside your realm: this building has no function. It loses a level in {time}.",
     "descBuildEmpty": "Empty ground inside your border. Tap the hex to place a building.",
     "runesSlotted": "Runes: {slotted} / {total} slotted",
     "inStorage": "In storage",
