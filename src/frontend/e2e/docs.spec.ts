@@ -194,7 +194,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     const example = page.getByTestId("utgard-example");
     await example.scrollIntoViewIfNeeded();
     await expect(example.locator("canvas")).toBeVisible();
-    await expect(example).toContainText("two rings of walls");
+    await expect(example).toContainText("two wall lines");
     const box = await example.locator("canvas").boundingBox();
     expect(box!.x + box!.width).toBeLessThanOrEqual(390);
     const overflow = await page
