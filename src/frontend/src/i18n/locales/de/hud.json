@@ -194,6 +194,9 @@
     "garrison": "Garnison",
     "garrisonEmpty": "Hier stehen noch keine Einheiten.",
     "guests": "Gäste",
+    "sendHome": "Heimschicken",
+    "sendingHome": "Wird heimgeschickt…",
+    "sendHomeError": "Die Armee konnte nicht heimgeschickt werden.",
     "unknownSettlement": "Unbekannte Siedlung"
   },
   "queueDrawer": {

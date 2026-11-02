@@ -400,6 +400,26 @@ public sealed class ArmyService(
             .ToListAsync(cancellationToken);
 
     /// <summary>
+    /// The host's way to send a guest home: recalls the guest army
+    /// <paramref name="armyId"/> from <paramref name="hostSettlementId"/>
+    /// through exactly the path <see cref="RecallAsync"/> takes. Refused as
+    /// <see cref="RecallOutcome.ArmyNotFound"/> unless the army exists and is
+    /// currently a guest at that host — the host has no say over any other
+    /// army.
+    /// </summary>
+    public async Task<RecallResult> SendGuestHomeAsync(Guid hostSettlementId, Guid armyId, CancellationToken cancellationToken = default)
+    {
+        var isGuestHere = await _dbContext.Armies
+            .AsNoTracking()
+            .AnyAsync(a => a.Id == armyId && a.IsSupporting && a.TargetSettlementId == hostSettlementId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return isGuestHere
+            ? await RecallAsync(armyId, cancellationToken).ConfigureAwait(false)
+            : new RecallResult(RecallOutcome.ArmyNotFound);
+    }
+
+    /// <summary>
     /// Turns an army around mid-journey — or, for a <see cref="ArmyLocation.Supporting"/>
     /// guest, calls it home from its host (issue #40 phase 4 §4). Refused (as
     /// <see cref="RecallOutcome.NothingToRecall"/>) when it is already
