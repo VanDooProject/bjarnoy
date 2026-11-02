@@ -28,7 +28,7 @@ describe('docsPages', () => {
     const routes = router
       .getRoutes()
       .map((r) => r.path)
-      .filter((p) => p.startsWith('/docs/') || p === '/tech-tree')
+      .filter((p) => p.startsWith('/docs/'))
       .sort();
     expect(DOCS_PAGES.map((p) => p.to).sort()).toEqual(routes);
     expect(new Set(DOCS_PAGES.map((p) => p.id)).size).toBe(DOCS_PAGES.length);

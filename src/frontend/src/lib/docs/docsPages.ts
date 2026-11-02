@@ -82,7 +82,7 @@ export const DOCS_GROUPS: DocsGroupEntry[] = [
     page('bogLands', '/docs/bog-lands', 'bog_SE_variant004', 'icon', ['tiles', 'production', 'wildlifeCamps']),
   ]),
   group('building', [
-    page('techTree', '/tech-tree', 'druidhut_SE_level006', 'backdrop', ['production', 'shrines', 'walls']),
+    page('techTree', '/docs/tech-tree', 'druidhut_SE_level006', 'backdrop', ['production', 'shrines', 'walls']),
     page('production', '/docs/production', 'anim:reindeerherder:4', 'icon', ['techTree', 'shrines', 'bogLands']),
     // The Shrine of Thor's art family is `torshrine` (buildingArt.ts); its last level is 3.
     page('shrines', '/docs/shrines', 'torshrine_SE_level003', 'icon', ['techTree', 'production', 'landMovement']),
