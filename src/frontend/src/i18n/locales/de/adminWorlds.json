@@ -1,0 +1,78 @@
+{
+  "title": "Welten",
+  "loading": "Lädt …",
+  "loadError": "Die Welten konnten nicht geladen werden.",
+  "create": {
+    "heading": "Welt erstellen",
+    "name": "Name",
+    "namePlaceholder": "Midgard",
+    "seed": "Seed",
+    "seedPlaceholder": "zufällig",
+    "radius": "Radius",
+    "maxPlayers": "Max. Spieler",
+    "generating": "Wird erzeugt …",
+    "submit": "Welt erstellen",
+    "nameTooShort": "Ein Weltname braucht mindestens drei Zeichen.",
+    "createError": "Die Welt konnte nicht erstellt werden."
+  },
+  "columns": {
+    "name": "Name",
+    "status": "Status",
+    "runState": "Laufstatus",
+    "players": "Spieler",
+    "spawns": "Freie Startplätze",
+    "spawnsHint": "Wie vielen neuen Spielern auf der Karte gerade noch ein Startplatz bleibt (von allen Startpositionen). Nahe Startpositionen blockieren sich gegenseitig, und sowohl erste Siedlungen als auch Erweiterungen belegen welche. Die Spielergrenze ist nicht eingerechnet.",
+    "joinable": "Beitritt",
+    "endboss": "Endboss",
+    "frozenIsles": "Eisinseln",
+    "hidden": "Ausgeblendet",
+    "seed": "Seed"
+  },
+  "joins": {
+    "closed": "Geschlossen",
+    "open": "Offen"
+  },
+  "endbossStatus": {
+    "triggered": "Ausgelöst",
+    "scheduled": "Geplant",
+    "none": "—"
+  },
+  "frozenIsles": {
+    "enabled": "Aktiv",
+    "disabled": "Inaktiv"
+  },
+  "yes": "Ja",
+  "no": "Nein",
+  "fields": {
+    "name": "Name",
+    "speedFactor": "Tempofaktor",
+    "startsAt": "Beginn",
+    "closedToNewPlayers": "Für neue Spieler geschlossen",
+    "frozenIslesEnabled": "Eisinseln aktiv",
+    "hidden": "Für Spieler ausgeblendet",
+    "endbossAt": "Endboss am"
+  },
+  "dateInvalid": "Bitte im Format {pattern} eingeben.",
+  "speedFactorTooLow": "Der Tempofaktor muss größer als 0 sein.",
+  "saveError": "Speichern fehlgeschlagen.",
+  "runStateError": "Der Laufstatus konnte nicht geändert werden.",
+  "saving": "Speichert …",
+  "saveSettings": "Einstellungen speichern",
+  "runStateLabels": {
+    "pause": "pausieren",
+    "maintenance": "in Wartung setzen",
+    "lock": "sperren",
+    "resume": "fortsetzen"
+  },
+  "graceMinutes": "Kulanz (Min.)",
+  "reseedLink": "Karte neu erzeugen …",
+  "confirmRunState": "Welt „{name}“ {label}?",
+  "runStates": {
+    "running": "Läuft",
+    "paused": "Pausiert",
+    "maintenance": "In Wartung",
+    "locked": "Gesperrt"
+  },
+  "runStateSince": "{state} seit {date} ({relative})",
+  "applyRunState": "Übernehmen"
+}

@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
+import DateTimeField from '../../components/admin/DateTimeField.vue';
 import type { AdminWorldResponse } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
+import { dateTimePattern, formatDateTime, formatRelativeTime, parseDateTime } from '../../lib/dateTimeFormat';
 import { DEFAULT_GENERATION } from '../../lib/map/worldGenerator';
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const worlds = ref<AdminWorldResponse[]>([]);
 const loading = ref(true);
@@ -15,11 +17,15 @@ const loadError = ref<string | null>(null);
 // Per-world draft form state, keyed by world id — lets each panel be edited
 // independently without clobbering the others.
 interface Draft {
+  name: string;
   speedFactor: string;
   startsAt: string;
   joinsClosed: boolean;
   frozenIslesEnabled: boolean;
+  hidden: boolean;
   endbossAt: string;
+  /** The run state picked in the dropdown; only applied with the Apply button. */
+  runState: string;
   graceMinutes: string;
   saving: boolean;
   error: string | null;
@@ -29,31 +35,30 @@ const drafts = reactive<Record<string, Draft>>({});
 
 function draftFor(world: AdminWorldResponse): Draft {
   return {
+    name: world.name,
     speedFactor: String(world.speedFactor),
-    startsAt: toLocalInput(world.startsAt),
+    startsAt: formatDateTime(world.startsAt, locale.value),
     joinsClosed: world.joinsClosed,
     frozenIslesEnabled: world.frozenIslesEnabled,
-    endbossAt: toLocalInput(world.endbossAt),
+    hidden: world.hidden,
+    endbossAt: formatDateTime(world.endbossAt, locale.value),
+    runState: world.runState,
     graceMinutes: '0',
     saving: false,
     error: null,
   };
 }
 
-// <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in local time, and
-// hands back the same shape — round-trip through Date to convert to/from
-// the ISO 8601 the backend sends/expects.
-function toLocalInput(iso: string | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function fromLocalInput(local: string): string | null {
-  if (!local) return null;
-  return new Date(local).toISOString();
-}
+// The date fields hold text in the UI language's layout; when the language
+// changes, re-write what is typed into the new layout so it still parses.
+watch(locale, (next, prev) => {
+  for (const draft of Object.values(drafts)) {
+    for (const key of ['startsAt', 'endbossAt'] as const) {
+      const parsed = parseDateTime(draft[key], prev);
+      if (parsed.ok) draft[key] = formatDateTime(parsed.iso, next);
+    }
+  }
+});
 
 // Creating a world (issue #105). Its own draft, separate from the per-world
 // settings drafts above — this one has no world to key off yet.
@@ -124,9 +129,22 @@ async function saveSettings(world: AdminWorldResponse) {
   const draft = drafts[world.id];
   if (!draft || draft.saving) return;
 
+  const name = draft.name.trim();
+  if (name.length < 3) {
+    draft.error = t('adminWorlds.create.nameTooShort');
+    return;
+  }
+
   const speedFactor = Number(draft.speedFactor);
   if (!Number.isFinite(speedFactor) || speedFactor <= 0) {
     draft.error = t('adminWorlds.speedFactorTooLow');
+    return;
+  }
+
+  const startsAt = parseDateTime(draft.startsAt, locale.value);
+  const endbossAt = parseDateTime(draft.endbossAt, locale.value);
+  if (!startsAt.ok || !endbossAt.ok) {
+    draft.error = t('adminWorlds.dateInvalid', { pattern: dateTimePattern(locale.value) });
     return;
   }
 
@@ -134,19 +152,35 @@ async function saveSettings(world: AdminWorldResponse) {
   draft.error = null;
   try {
     const updated = await api.adminUpdateWorldSettings(world.id, {
+      name,
       speedFactor,
-      startsAt: fromLocalInput(draft.startsAt),
+      startsAt: startsAt.iso,
       joinsClosed: draft.joinsClosed,
       frozenIslesEnabled: draft.frozenIslesEnabled,
-      endbossAt: fromLocalInput(draft.endbossAt),
+      hidden: draft.hidden,
+      endbossAt: endbossAt.iso,
     });
+    // Saving the settings must not throw away a run state that was picked
+    // but not applied yet.
+    const pendingRunState = draft.runState;
     applyUpdated(updated);
+    drafts[updated.id].runState = pendingRunState;
   } catch (err) {
     draft.error = err instanceof ApiError ? err.message : t('adminWorlds.saveError');
   } finally {
     draft.saving = false;
   }
 }
+
+// The run states a world can be put in, with the backend action that gets
+// it there (POST /admin/worlds/{id}/run-state).
+const RUN_STATES = ['running', 'paused', 'maintenance', 'locked'] as const;
+const ACTION_FOR_STATE: Record<string, string> = {
+  running: 'resume',
+  paused: 'pause',
+  maintenance: 'maintenance',
+  locked: 'lock',
+};
 
 const RUN_STATE_LABELS = computed<Record<string, string>>(() => ({
   pause: t('adminWorlds.runStateLabels.pause'),
@@ -155,9 +189,29 @@ const RUN_STATE_LABELS = computed<Record<string, string>>(() => ({
   resume: t('adminWorlds.runStateLabels.resume'),
 }));
 
-async function setRunState(world: AdminWorldResponse, action: string) {
+function runStateName(state: string): string {
+  return (RUN_STATES as readonly string[]).includes(state) ? t(`adminWorlds.runStates.${state}`) : state;
+}
+
+function runStateSinceText(world: AdminWorldResponse): string {
+  return t('adminWorlds.runStateSince', {
+    state: runStateName(world.runState),
+    date: formatDateTime(world.runStateSince, locale.value),
+    relative: formatRelativeTime(world.runStateSince, new Date(), locale.value),
+  });
+}
+
+/** The grace field only matters when resuming a world that is not running. */
+function showsGrace(world: AdminWorldResponse): boolean {
+  return drafts[world.id]?.runState === 'running' && world.runState !== 'running';
+}
+
+async function applyRunState(world: AdminWorldResponse) {
   const draft = drafts[world.id];
-  if (!draft || draft.saving) return;
+  if (!draft || draft.saving || draft.runState === world.runState) return;
+
+  const action = ACTION_FOR_STATE[draft.runState];
+  if (!action) return;
 
   const label = RUN_STATE_LABELS.value[action] ?? action;
   if (!window.confirm(t('adminWorlds.confirmRunState', { label, name: world.name }))) return;
@@ -220,6 +274,7 @@ async function setRunState(world: AdminWorldResponse, action: string) {
           <th>{{ $t('adminWorlds.columns.joinable') }}</th>
           <th>{{ $t('adminWorlds.columns.endboss') }}</th>
           <th>{{ $t('adminWorlds.columns.frozenIsles') }}</th>
+          <th>{{ $t('adminWorlds.columns.hidden') }}</th>
           <th>{{ $t('adminWorlds.columns.seed') }}</th>
         </tr>
       </thead>
@@ -227,12 +282,13 @@ async function setRunState(world: AdminWorldResponse, action: string) {
         <tr v-for="world in worlds" :key="world.id">
           <td>{{ world.name }}</td>
           <td>{{ world.status }}</td>
-          <td>{{ world.runState }}</td>
+          <td>{{ runStateName(world.runState) }}</td>
           <td>{{ world.playerCount }} / {{ world.maxPlayers }}</td>
           <td>{{ world.freeSpawnCount }} / {{ world.spawnCount }}</td>
           <td>{{ world.joinsClosed ? $t('adminWorlds.joins.closed') : $t('adminWorlds.joins.open') }}</td>
           <td>{{ world.endbossTriggeredAt ? $t('adminWorlds.endbossStatus.triggered') : world.endbossAt ? $t('adminWorlds.endbossStatus.scheduled') : $t('adminWorlds.endbossStatus.none') }}</td>
           <td>{{ world.frozenIslesEnabled ? $t('adminWorlds.frozenIsles.enabled') : $t('adminWorlds.frozenIsles.disabled') }}</td>
+          <td>{{ world.hidden ? $t('adminWorlds.yes') : $t('adminWorlds.no') }}</td>
           <td>{{ world.seed }}</td>
         </tr>
       </tbody>
@@ -242,6 +298,9 @@ async function setRunState(world: AdminWorldResponse, action: string) {
       <h2>{{ world.name }}</h2>
 
       <div class="fields">
+        <label :for="`name-${world.id}`">{{ $t('adminWorlds.fields.name') }}</label>
+        <input :id="`name-${world.id}`" v-model="drafts[world.id].name" type="text" />
+
         <label :for="`speed-${world.id}`">{{ $t('adminWorlds.fields.speedFactor') }}</label>
         <input
           :id="`speed-${world.id}`"
@@ -252,7 +311,7 @@ async function setRunState(world: AdminWorldResponse, action: string) {
         />
 
         <label :for="`starts-${world.id}`">{{ $t('adminWorlds.fields.startsAt') }}</label>
-        <input :id="`starts-${world.id}`" v-model="drafts[world.id].startsAt" type="datetime-local" />
+        <DateTimeField :id="`starts-${world.id}`" v-model="drafts[world.id].startsAt" />
 
         <label :for="`closed-${world.id}`">{{ $t('adminWorlds.fields.closedToNewPlayers') }}</label>
         <input :id="`closed-${world.id}`" v-model="drafts[world.id].joinsClosed" type="checkbox" />
@@ -260,8 +319,12 @@ async function setRunState(world: AdminWorldResponse, action: string) {
         <label :for="`frozen-${world.id}`">{{ $t('adminWorlds.fields.frozenIslesEnabled') }}</label>
         <input :id="`frozen-${world.id}`" v-model="drafts[world.id].frozenIslesEnabled" type="checkbox" />
 
+        <label :for="`hidden-${world.id}`">{{ $t('adminWorlds.fields.hidden') }}</label>
+        <input :id="`hidden-${world.id}`" v-model="drafts[world.id].hidden" type="checkbox" />
+
+
         <label :for="`endboss-${world.id}`">{{ $t('adminWorlds.fields.endbossAt') }}</label>
-        <input :id="`endboss-${world.id}`" v-model="drafts[world.id].endbossAt" type="datetime-local" />
+        <DateTimeField :id="`endboss-${world.id}`" v-model="drafts[world.id].endbossAt" />
       </div>
 
       <p v-if="drafts[world.id]?.error" class="error">{{ drafts[world.id].error }}</p>
@@ -271,15 +334,22 @@ async function setRunState(world: AdminWorldResponse, action: string) {
           {{ drafts[world.id]?.saving ? $t('adminWorlds.saving') : $t('adminWorlds.saveSettings') }}
         </button>
 
-        <span class="run-state-actions">
-          <button :disabled="drafts[world.id]?.saving" @click="setRunState(world, 'pause')">{{ $t('adminWorlds.runStateActions.pause') }}</button>
-          <button :disabled="drafts[world.id]?.saving" @click="setRunState(world, 'maintenance')">{{ $t('adminWorlds.runStateActions.maintenance') }}</button>
-          <button :disabled="drafts[world.id]?.saving" @click="setRunState(world, 'lock')">{{ $t('adminWorlds.runStateActions.lock') }}</button>
-          <label class="grace">
+        <span class="run-state">
+          <span class="run-state-since">{{ runStateSinceText(world) }}</span>
+          <select v-model="drafts[world.id].runState" :aria-label="$t('adminWorlds.columns.runState')">
+            <option v-for="state in RUN_STATES" :key="state" :value="state">{{ runStateName(state) }}</option>
+          </select>
+          <label v-if="showsGrace(world)" class="grace">
             {{ $t('adminWorlds.graceMinutes') }}
             <input v-model="drafts[world.id].graceMinutes" type="number" min="0" step="1" />
           </label>
-          <button :disabled="drafts[world.id]?.saving" @click="setRunState(world, 'resume')">{{ $t('adminWorlds.runStateActions.resume') }}</button>
+          <button
+            class="apply-run-state"
+            :disabled="drafts[world.id]?.saving || drafts[world.id]?.runState === world.runState"
+            @click="applyRunState(world)"
+          >
+            {{ $t('adminWorlds.applyRunState') }}
+          </button>
         </span>
 
         <!-- Issue #133. Its own route, not a button here: regenerating the map
@@ -329,6 +399,9 @@ async function setRunState(world: AdminWorldResponse, action: string) {
   font-size: 13px;
   color: var(--muted);
 }
+.fields .datetime-field {
+  align-items: flex-start;
+}
 .fields input[type='checkbox'] {
   justify-self: start;
 }
@@ -339,12 +412,23 @@ async function setRunState(world: AdminWorldResponse, action: string) {
   margin-top: 16px;
   flex-wrap: wrap;
 }
-.run-state-actions {
+.run-state {
   display: flex;
   align-items: center;
   gap: 8px;
   padding-left: 16px;
   border-left: 1px solid var(--panel-border);
+}
+.run-state-since {
+  font-size: 13px;
+  color: var(--muted);
+}
+.run-state select {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: var(--text);
 }
 .grace {
   display: flex;

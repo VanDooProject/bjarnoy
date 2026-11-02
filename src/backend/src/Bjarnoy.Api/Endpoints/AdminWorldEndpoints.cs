@@ -137,7 +137,7 @@ public static class AdminWorldEndpoints
         }
     }
 
-    private static async Task<Results<Ok<AdminWorldResponse>, NotFound, ValidationProblem>> UpdateSettings(
+    private static async Task<Results<Ok<AdminWorldResponse>, NotFound, ValidationProblem, Conflict<ProblemDetails>>> UpdateSettings(
         Guid worldId,
         UpdateWorldSettingsRequest request,
         WorldService worlds,
@@ -147,6 +147,12 @@ public static class AdminWorldEndpoints
         ArgumentNullException.ThrowIfNull(request);
 
         var errors = new Dictionary<string, string[]>();
+
+        var newName = request.Name?.Trim();
+        if (newName is not null && newName.Length < 3)
+        {
+            errors[nameof(request.Name)] = ["A world name needs at least 3 characters."];
+        }
 
         if (request.SpeedFactor is <= 0)
         {
@@ -179,16 +185,31 @@ public static class AdminWorldEndpoints
             await settlements.RetuneSpeedAsync(worldId, world.SpeedFactor, newSpeedFactor, cancellationToken);
         }
 
-        var updated = await worlds.UpdateAdminSettingsAsync(
-            worldId,
-            request.SpeedFactor,
-            request.StartsAt.HasValue,
-            request.StartsAt.Value,
-            request.JoinsClosed,
-            request.FrozenIslesEnabled,
-            request.EndbossAt.HasValue,
-            request.EndbossAt.Value,
-            cancellationToken);
+        WorldEntity? updated;
+        try
+        {
+            updated = await worlds.UpdateAdminSettingsAsync(
+                worldId,
+                request.SpeedFactor,
+                request.StartsAt.HasValue,
+                request.StartsAt.Value,
+                request.JoinsClosed,
+                request.FrozenIslesEnabled,
+                request.EndbossAt.HasValue,
+                request.EndbossAt.Value,
+                newName,
+                request.Hidden,
+                cancellationToken);
+        }
+        catch (WorldCreationException ex)
+        {
+            return TypedResults.Conflict(new ProblemDetails
+            {
+                Title = "The world could not be renamed.",
+                Detail = ex.Message,
+                Status = StatusCodes.Status409Conflict,
+            });
+        }
 
         if (updated is null)
         {
