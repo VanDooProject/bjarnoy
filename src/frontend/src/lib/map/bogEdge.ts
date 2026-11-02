@@ -95,23 +95,27 @@ export function bogEdgesOf(
 ): BogEdge[] {
   if (!isBogGround(getTile(c.q, c.r))) return [];
   const across = DIRS.map((d) => getTile(c.q + d.q, c.r + d.r));
+  const rivers = DIRS.map((d) => getRiver(c.q + d.q, c.r + d.r));
+  // A river hex draws the river art, whose banks are grass whatever terrain (grass or forest) it stands on.
+  const neighbourAt = (i: number): BogEdgeNeighbour | null => {
+    const neighbour = bogEdgeNeighbour(across[i]);
+    return neighbour && rivers[i] ? 'grass' : neighbour;
+  };
   // What the border continues as past a corner of polygon edge `edge` (facing `neighbour`), going round through the
   // polygon edge `next`: along this hex's own edge `next` when that faces non-bog ground, otherwise along the edge
   // between the bog hex there and the same `neighbour`, which is the same kind.
   const continuesAs = (next: number, neighbour: BogEdgeNeighbour) => {
-    const tile = across[EDGE_FOR_DIR[next]];
-    return isBogGround(tile) ? neighbour : bogEdgeNeighbour(tile);
+    const i = EDGE_FOR_DIR[next];
+    return isBogGround(across[i]) ? neighbour : neighbourAt(i);
   };
   const edges: BogEdge[] = [];
-  DIRS.forEach((d, i) => {
-    const q = c.q + d.q;
-    const r = c.r + d.r;
-    const neighbour = bogEdgeNeighbour(across[i]);
+  DIRS.forEach((_, i) => {
+    const neighbour = neighbourAt(i);
     if (!neighbour) return;
     const edge = EDGE_FOR_DIR[i];
     const found: BogEdge = { edge, neighbour };
-    // A river hex is grass terrain with its water in the art: border its banks, not the water.
-    const river = getRiver(q, r);
+    // A river hex has its water in the art: border its banks, not the water.
+    const river = rivers[i];
     const gap = river ? riverGapOn(river, TILE_ORIENTATIONS[(i + 3) % 6]) : null;
     if (gap) found.gap = gap;
     const other = neighbour === 'grass' ? 'forest' : 'grass';
