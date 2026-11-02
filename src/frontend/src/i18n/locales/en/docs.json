@@ -66,7 +66,7 @@
       "ships": {
         "shrines": "Njörd's shrine makes your ships attack harder.",
         "walls": "Walls do not stop fleets.",
-        "wildlifeCamps": "Wildlife camps never ambush a fleet."
+        "wildlifeCamps": "The whale road, the one camp at sea, ambushes fleets."
       },
       "wildlifeCamps": {
         "landMovement": "Camps ambush armies on the road.",
@@ -530,7 +530,8 @@
       "building": "Once a camp is cleared you can build on its hex (not Fenrir's brood), and the building removes the camp for as long as it stands.",
       "respawn": "A cleared camp refills only while its hex lies outside every realm. An empty camp inside a realm stays empty; when the building on it is gone and the hex is outside every realm, the camp comes back.",
       "neverBuilt": "The eagle's eyrie on its sea stack and Fenrir's brood in the wastes are never built on: the empty nest stays on the map, and Fenrir's brood keeps coming back.",
-      "hunting": "Hunting: send land units to a camp's hex with the Hunt order. Your army attack is fought against the beasts' defense, a tie goes to the camp. The loser loses everything, the winner part of its force. A win clears the camp and pays its loot.",
+      "atSea": "The whale road lies on open sea, far off the coast. It holds no land and burns no towers. A fleet that sails onto its hex while it is not calm is ambushed there, and only ships can hunt it. It pays food only, as much as your surviving ships can carry, and always comes back after you clear it.",
+      "hunting": "Hunting: send land units (ships for the whale road) to a camp's hex with the Hunt order. Your army attack is fought against the beasts' defense, a tie goes to the camp. The loser loses everything, the winner part of its force. A win clears the camp and pays its loot.",
       "regrowth": "Regrowth: a damaged camp regrows its beasts evenly over 4 hours (weak camps) or 8 hours (strong camps).",
       "calm": "Calm: after any fight a camp is calm for 24 hours. It regrows but does not attack.",
       "leveling": "Leveling: every 10th clear of a camp, by any player, raises its level by 1, up to 100. It never drops back. Its guard range stays as rolled, so a farmed camp gets tougher but does not claim more land.",
@@ -1234,7 +1235,7 @@
       "targets": "A fleet can attack, raid or support settlements that hold shoreline. It cannot take catapults along.",
       "walls": "{walls} do not stop fleets.",
       "wallsLink": "Walls",
-      "camps": "Wildlife camps never ambush a fleet (see {camps}).",
+      "camps": "Land camps never ambush a fleet. The whale road, a camp on open sea, ambushes a fleet that sails onto its hex (see {camps}).",
       "campsLink": "Wildlife camps"
     },
     "battles": {
