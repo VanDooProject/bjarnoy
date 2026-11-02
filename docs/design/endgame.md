@@ -64,7 +64,7 @@ the ground + 3 like palisade ends. A breached wall hex (level 0) is passable.
 
 ## Siege engines
 
-- **Catapult**: siege power 40, trained at the Archery Range. It burns towers and every ordinary building
+- **Catapult**: siege power 40, trained at the Siege Workshop. It burns towers and every ordinary building
   (bridges included) but **cannot damage a wall**.
 - **Ram** (new `UnitType.Ram`, class Siege): the same siege power (40, the same `SiegeResolver.LevelsDestroyed`),
   more staying power, slower. Attack 10, **defense 30** (catapult 10), **speed 1.0** (catapult 1.5), carry 0,

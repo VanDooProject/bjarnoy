@@ -51,7 +51,12 @@
       "founding": {
         "landMovement": "Wie schnell Siedler jedes Feld überqueren.",
         "wildlifeCamps": "Starke Lager können Siedler unterwegs überfallen.",
-        "bogLands": "Landeplätze brauchen Moor in Reichweite für Lehm und Eisen."
+        "realm": "Eine neue Siedlung hält Abstand zu deinem Gebiet, Wachtürme eingerechnet."
+      },
+      "realm": {
+        "founding": "Wo eine neue Siedlung landen darf, wird von jeder Gebietsgrenze aus gemessen, Wachtürme eingerechnet.",
+        "walls": "Auch Mauern stehen innerhalb deines Gebiets und brauchen einen Wachturm der Stufe 5.",
+        "wildlifeCamps": "Starke Lager greifen Wachtürme an."
       },
       "landMovement": {
         "walls": "Ein Mauerfeld hält jede Landarmee auf.",
@@ -126,6 +131,10 @@
       "founding": {
         "title": "Siedlungen gründen",
         "description": "Siedler aus der Wagnerei und wo eine neue Siedlung landen kann."
+      },
+      "realm": {
+        "title": "Das Gebiet erweitern",
+        "description": "Wie weit dein Anspruch reicht, wie Wachtürme die Grenze hinausschieben und wie viele du bauen darfst."
       },
       "landMovement": {
         "title": "Bewegung an Land",
@@ -218,22 +227,22 @@
       "lumberjack": "Schlägt Holz auf bewaldetem Boden – das Holz hinter jeder Wand und jedem Dach.",
       "quarry": "Bricht Stein aus einem Bergkamm – die Knochen jeder Festung.",
       "odinstatue": "Odins Statue steht auf Gras und wird ab Langhaus 25 hinter einer Druidenhütte der Stufe 10 freigeschaltet. Weisheit: Jeder Bau in dieser Siedlung dauert pro Stufe 2 % kürzer (auf Stufe 5 sind es 10 %). Raben: Das Gebiet, die Türme und die Armeen der Siedlung sehen pro Stufe 2 Ringe weiter (auf Stufe 5 sind es 10). Sie zählt als der eine Schrein der Siedlung.",
-      "palisade": "Ein Feld der Siedlungsmauer auf Gras, Wald oder Sand im eigenen Gebiet. Es wird ab Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet (Palisade und Tor teilen sich eine Karte im Techbaum). Mauern verzweigen sich nie: Kein Feld darf drei Mauernachbarn haben. Ob ein Feld als Gerade, Kurve oder Ende gezeichnet wird, hängt von den benachbarten Mauerfeldern ab. Jedes Mauerfeld hält jede Landarmee auf, auch die des Besitzers. Ein einzelnes Mauerende (mit einem Mauernachbarn) ist nur halb offen: Jede Armee überquert es, nur langsamer, es sei denn, es grenzt an einen Berg oder einen breiten Fluss. An der Küste endet die Mauer auf einem Flachwasserfeld, dem Seeende, und das Meer bleibt Meer. Gewinnt ein Angreifer eine Belagerung, die ein Mauerfeld zum Ziel hat, nimmt sie ihm eine Stufe, egal wie viele Rammböcke übrig sind (nur Rammböcke beschädigen eine Mauer). Feuer wird das später auch tun.",
+      "palisade": "Ein Feld der Siedlungsmauer auf Gras, Wald oder Sand im eigenen Gebiet. Es wird ab Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet (Palisade und Tor teilen sich eine Karte im Techbaum). Mauern verzweigen sich nie: Kein Feld darf drei Mauernachbarn haben. Ob ein Feld als Gerade, Kurve oder Ende gezeichnet wird, hängt von den benachbarten Mauerfeldern ab. Jedes Mauerfeld hält jede Landarmee auf, auch die des Besitzers. Ein einzelnes Mauerende (mit einem Mauernachbarn) ist nur halb offen: Jede Armee überquert es, nur langsamer, es sei denn, es grenzt an einen Berg oder einen breiten Fluss. An der Küste endet die Mauer auf einem Flachwasserfeld, dem Seeende, und das Meer bleibt Meer. Gewinnt ein Angreifer eine Belagerung, die ein Mauerfeld zum Ziel hat, nimmt sie ihm eine Stufe, egal wie viele Rammböcke übrig sind (an Land beschädigen nur Rammböcke eine Mauer; eine Flotte, die gegen das Seeende geschickt wird, ebenfalls). Feuer wird das später auch tun.",
       "palisadegate": "Ein Mauerfeld mit Tor. Es lässt sich nur dort setzen, wo die Mauer gerade zwischen zwei gegenüberliegenden Mauerfeldern verläuft. Die Armeen des Besitzers und seiner Freunde (dieselbe Gilde oder eine Gilde, die mit ihr im Frieden ist) passieren es so schnell wie den Boden darunter. Jede andere Armee wird wie an jedem Mauerfeld aufgehalten. Freischaltung, Voraussetzung, Stufen und Kosten sind dieselben wie bei der Palisade, beide teilen sich eine Karte im Techbaum.",
       "reindeerherder": "Eine Hirtenhütte mit Rentiergehege auf offenem Grasland. Es ist das erste Nahrungsgebäude der Siedlung und von Anfang an verfügbar.",
       "farm": "Baut auf offenem Grasland Nahrung an und hält den Tisch des Langhauses gefüllt. Der Bauernhof lässt sich auf jeder Insel bauen, unabhängig vom Boden, und wird ab Langhaus 4 hinter einem Rentierhirten der Stufe 3 freigeschaltet (Bauernhof und Kürbisfarm teilen sich eine Karte im Techbaum).",
       "storagehouse": "Schafft auf Gras zusätzlichen Platz für die Ernte. Erreicht ein Rohstoff das Lagerlimit, stoppt seine Produktion – ein volles Lager verschenkt also Ertrag.",
-      "tower": "Ein Wachturm auf Gras oder Sand an der Grenze, der das beanspruchte Gebiet weiter nach außen schiebt. Ein Turm beansprucht Land und sieht nur dann etwas, wenn er mit einem deiner Langhäuser verbunden ist: Er muss auf Land stehen, das ein Langhaus oder ein anderer verbundener Turm beansprucht. Fällt ein Turm der Kette, sind alle Türme dahinter abgeschnitten und beanspruchen nichts, bis du die Verbindung wieder aufbaust. Abgeschnittene Türme zählen nicht zu deinem Turmlimit.",
+      "tower": "Ein Wachturm an der Grenze, der das beanspruchte Gebiet weiter nach außen schiebt. Ein Turm beansprucht Land und sieht nur dann etwas, wenn er mit einem deiner Langhäuser verbunden ist: Er muss auf Land stehen, das ein Langhaus oder ein anderer verbundener Turm beansprucht. Fällt ein Turm der Kette, sind alle Türme dahinter abgeschnitten und beanspruchen nichts, bis du die Verbindung wieder aufbaust. Abgeschnittene Türme zählen nicht zu deinem Turmlimit. Du baust ihn auf Gras, Sand, Wald oder schlichtem Moorboden.",
       "fishinghut": "Ein Steg über flachem Wasser, von dem aus du Untiefen befischst, die ein Bauernhof nie erreichen könnte. Die Hütte steht auch auf Pfählen am Halbufer eines Moorsees.",
       "pumpkinfarm": "Eine zweite Ernte für Gras: Kürbisse neben den gewöhnlichen Feldern, ertragreicher als der Bauernhof. Sie lässt sich nur auf einer Insel mit Kürbisboden bauen (den Boden jeder Insel bestimmt das Spiel, nicht du). Das ist der Bonus, den eine „fruchtbarere“ Insel freischaltet.",
       "shrineofthor": "Für Thor auf Gras errichtet, hinter einer Waffenschmiede der Stufe 5. Die Gunst des Kriegsgottes stärkt den Angriff deiner Landeinheiten (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
       "shrineoffreyja": "Für Freyja auf Gras errichtet. Ihre Gunst steigert die Nahrungsproduktion. Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
       "shrineofullr": "Für Ullr auf Gras errichtet. Seine Gunst steigert die Holzproduktion. Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
       "shrineofnjord": "Für Njörd auf Küstenwasser errichtet, hinter einer Werft der Stufe 10. Die Gunst des Meeresgottes stärkt den Angriff deiner Schiffe (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
-      "archeryrange": "Bildet auf Gras oder Sand die Fernkämpfer der Landarmee aus: Bogenschützen und, sobald eine in der Kaserne ausgebildete Berserker-Linie steht, Katapulte. Sie übernimmt das anstelle des Langhauses.",
+      "archeryrange": "Bildet auf Gras oder Sand die Bogenschützen der Landarmee aus. Sie übernimmt das anstelle des Langhauses.",
       "dockyard": "Bildet auf flachem (Küsten-)Wasser Schiffe aus, anstelle des Langhauses.",
       "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras. Sie setzt voraus, dass sowohl das Langhaus als auch das Lagerhaus dieser Siedlung auf Stufe 15 stehen.",
-      "barracks": "Bildet auf Gras oder Sand an der Grenze die Kernlinie der Landarmee aus – Thralls, Speerkämpfer, Axtkämpfer und Berserker – anstelle des Langhauses. Den Rest des Truppenspektrums (Bogenschützen, Katapulte) bildet der Schießplatz aus. Beide bilden nie dieselbe Einheit aus.",
+      "barracks": "Bildet auf Gras oder Sand an der Grenze die Kernlinie der Landarmee aus – Thralls, Speerkämpfer, Axtkämpfer und Berserker – anstelle des Langhauses. Die Bogenschützen bildet der Schießplatz aus, die Belagerungswaffen die Belagerungswerkstatt. Keine Einheit lässt sich an zwei Gebäuden ausbilden.",
       "sawmill": "Verarbeitet Holz direkt auf einem geraden, sanft gebogenen oder eng gebogenen Flussfeld – ein Wasserrad, das sich mit der Strömung dreht, wie bei der Getreidemühle. Sie liefert kein eigenes Holz, sondern steigert jeden Holzfäller im Umkreis ihrer Stufe. Mit steigender Stufe wachsen Reichweite und Bonus.",
       "meadery": "Züchtet Bienen auf Gras hinter einem Bauernhof der Stufe 5 – Bienenkörbe, eine Honigpresse und ein Metkeller. Sie hat noch keine eigene Wirkung, der Met ist für einen künftigen Moralbonus gedacht.",
       "townsquare": "Der eigene Marktplatz des Dorfes auf Gras. Er hat noch keine eigene Wirkung, ist aber als künftige Voraussetzung oder künftiger Bonus vorgesehen.",
@@ -245,7 +254,7 @@
       "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See), hinter einer Ziegelei der Stufe 3: von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %.",
       "hammerschmiede": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es liefert kein eigenes Eisen, sondern steigert jede Raseneisenerz-Grube in der Reichweite seiner Stufe (höhere Stufen: größere Reichweite und stärkerer Bonus).",
       "bridge": "Öffnet einen breiten Fluss für Landarmeen. Es beginnt mit einem Damm, dann folgen ein Steg, die Königsbrücke und schließlich eine Wehrbrücke mit Wehranlagen, die nur du und deine Freunde überqueren dürft. Angreifer brennen eine Wehrbrücke Stufe um Stufe nieder.",
-      "siegeworkshop": "Bildet auf Gras oder Sand Rammböcke aus, anstelle des Langhauses. Wird ab Langhaus 18 hinter einem Schießplatz der Stufe 3 freigeschaltet. Rammböcke sind die einzige Waffe, die Mauern bricht (Türme treffen sie auch); Katapulte, am Schießplatz ausgebildet, brennen Türme und alle anderen Gebäude nieder."
+      "siegeworkshop": "Bildet auf Gras anstelle des Langhauses die Belagerungswaffen aus: Katapulte, sobald eine in der Kaserne ausgebildete Berserker-Linie steht, und Rammböcke. Du schaltest sie ab Langhaus 18 frei, wenn ein Schießplatz der Stufe 3 steht. Nur Rammböcke brechen Mauern (Türme treffen sie auch); Katapulte brennen Türme und alle anderen Gebäude nieder."
     },
     "table": {
       "level": "Stufe",
@@ -873,9 +882,10 @@
     },
     "sieges": {
       "heading": "Belagerung",
-      "body": "Eine Mauer lässt sich durchbrechen, und zwar Stufe um Stufe. Das schaffen nur Rammböcke, und nur bei einem Angriff auf die Siedlung, zu der die Mauer gehört. Katapulte können keine Mauer beschädigen; sie brennen Türme und alle anderen Gebäude nieder.",
+      "body": "Eine Mauer lässt sich durchbrechen, und zwar Stufe um Stufe. Das schaffen Rammböcke und Flotten, aber nur bei einem Angriff auf die Siedlung, zu der die Mauer gehört. Katapulte können keine Mauer beschädigen; sie brennen Türme und alle anderen Gebäude nieder.",
       "rules": {
         "who": "Schick einen Angriff (oder einen Raubzug) mit Rammböcken gegen die Siedlung und wähl beim Losschicken das Mauerfeld als Ziel. Bei der Mauer eines Rivalen erledigt das die Aktion „Belagern“ im Ringmenü für dich (sie braucht einen Rammbock zu Hause). Gewinnt deine Armee die Schlacht, schlagen die überlebenden Rammböcke auf dieses Feld. Ein einziger überlebender Rammbock genügt. Verliert deine Armee die Schlacht, schlägt nichts zu. Rammböcke werden in der Belagerungswerkstatt ausgebildet.",
+        "ships": "Gewinnt eine Flotte ihren Kampf, beschädigt sie das Gebäude, gegen das du sie geschickt hast, auf dieselbe Weise, auch das Seeende einer Mauer. Einem Mauerfeld nimmt sie dann ebenfalls genau eine Stufe.",
         "target": "Wählst du kein Ziel oder steht das gewählte Gebäude bei der Ankunft nicht mehr, trifft die Belagerung ein zufälliges Gebäude der Siedlung, das deine überlebenden Belagerungswaffen beschädigen können. Eine Mauer, die nur Katapulten genannt wird, nimmt keinen Schaden.",
         "level": "Eine gewonnene Belagerung nimmt einem Mauerfeld genau eine Stufe, egal wie viele Rammböcke überleben. Das gilt auch für das Tor. Die meisten Gebäude verlieren gegen eine starke Armee mehrere Stufen auf einmal, eine Mauer bricht dagegen Stufe für Stufe. Palisade und Tor haben {levels} Stufen, ein fertig ausgebautes Mauerfeld braucht also {levels} gewonnene Belagerungen. Eine beschädigte Mauer hält Armeen weiter auf, bis ihre letzte Stufe fällt.",
         "gone": "Auf Stufe 0 ist das Mauerfeld weg: Das Feld ist wieder freier Boden, und Armeen ziehen hindurch. Ein Bauauftrag, der noch für dieses Feld wartet, entfällt.",
@@ -1030,6 +1040,56 @@
       "sea": "Eine Gründung über das Meer gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
     }
   },
+  "realm": {
+    "title": "Das Gebiet erweitern",
+    "intro": "Das Land, das du hältst, ist dein Gebiet; auf der Karte zieht sich eine goldene Grenze darum. Das Langhaus beansprucht die ersten Ringe um sich herum. Darüber hinaus wächst dein Gebiet nur durch Wachtürme an seiner Grenze.",
+    "claim": {
+      "heading": "Der Anspruch deines Langhauses",
+      "body": "Dein {longhouse} beansprucht auf Stufe 1 alle Felder im Umkreis von {level1}, ab Stufe 2 im Umkreis von {level2}. Weiter reicht es nie: Höhere Langhaus-Stufen schieben die Grenze nicht weiter hinaus."
+    },
+    "towers": {
+      "heading": "Wachtürme schieben die Grenze hinaus",
+      "body": "Ab Langhaus-Stufe {level} kannst du einen {tower} bauen. Er beansprucht die Felder rund um sich selbst, so viele Ringe wie seine Stufe: Stufe 1 seine Nachbarfelder, Stufe 2 zwei Ringe und so weiter.",
+      "rules": {
+        "inside": "Ein Wachturm muss innerhalb deines Gebiets stehen. Baust du ihn an der Grenze, rückt die Grenze rund um ihn nach außen.",
+        "chain": "Er darf auch auf Boden stehen, den erst ein anderer Wachturm beansprucht. Seine Ringe reichen dann noch weiter, und dein Gebiet wächst Turm für Turm über die Insel.",
+      "cut": "Ein Wachturm beansprucht nur Land, solange er über eine Kette von Türmen mit einem deiner Langhäuser verbunden ist. Fällt ein Turm in der Kette, beanspruchen und sehen die Türme dahinter nichts mehr, bis du die Lücke schließt – es sei denn, ein anderes deiner Langhäuser auf der Insel erreicht sie noch. Ein abgeschnittener Turm zählt nicht zu deinem Turmlimit.",
+        "built": "Land beansprucht ein Wachturm erst, wenn er steht. Eine Baustelle bringt noch nichts."
+      }
+    },
+    "example": {
+      "heading": "Ein Beispiel",
+      "alt": "Eine Beispielinsel mit dem Langhaus nahe der Mitte, der goldenen Grenze um das beanspruchte Land und den Wachtürmen, die die Grenze hinausschieben.",
+      "step": "Schritt",
+      "steps": {
+        "1": "Schritt 1: ein Langhaus der Stufe 2 allein. Sein Anspruch reicht 3 Felder weit, dort endet die Grenze.",
+        "2": "Schritt 2: ein Wachturm der Stufe 2 auf einem Waldfeld am Rand des Gebiets. Er beansprucht zwei Ringe um sich, die Grenze wächst um ihn herum.",
+        "3": "Schritt 3: ein Wachturm der Stufe 1 auf schlichtem Moorboden, im Land des ersten Turms. Er beansprucht einen Ring mehr, und die Grenze rückt weiter hinaus."
+      }
+    },
+    "count": {
+      "heading": "Wie viele Wachtürme",
+      "body": "Die Stufe deines Langhauses bestimmt, wie viele Wachtürme du haben darfst: einen ab Stufe {level}, danach einen weiteren für jede zweite Stufe nach Stufe 5.",
+      "levels": "Langhaus-Stufe",
+      "towers": "Wachtürme",
+      "range": "{from}–{to}"
+    },
+    "where": {
+      "heading": "Wo ein Wachturm steht",
+      "body": "Ein Wachturm steht auf Gras, Sand, Wald oder schlichtem Moorboden, innerhalb deines Gebiets. Auf Flüssen, Bergen und Wasser kannst du keinen bauen, ebenso wenig auf Moorufer, Moorbach, Moorquelle oder Moorsee. Der Wachturm ersetzt das Feld, auf dem er steht, und behält den Boden um sich: Jeder Boden hat deshalb seinen eigenen Turm.",
+      "alt": "Ein Wachturm auf {ground}.",
+      "grounds": {
+        "grass": "Gras",
+        "sand": "Sand",
+        "forest": "Wald",
+        "bog": "Moorboden"
+      }
+    },
+    "giants": {
+      "heading": "Riesen",
+      "body": "Ein Riese füllt sieben Felder. Du nimmst ihn nur in dein Gebiet auf, wenn dein Anspruch alle sieben abdeckt. Reicht er nur über einen Teil, bekommst du keines davon."
+    }
+  },
   "landMovement": {
     "title": "Bewegung an Land",
     "intro": "Wie Armeen das Land durchqueren: Geländekosten, Flüsse, Berge und Mauern.",
@@ -1175,12 +1235,13 @@
     "battles": {
       "heading": "Kämpfe",
       "same": "Flotten kämpfen nach denselben Regeln wie Armeen an Land: Angriff gegen Verteidigung, bei Gleichstand gewinnt der Verteidiger.",
+      "shore": "Du schickst eine Flotte gegen ein einzelnes Gebäude am Ufer des Gegners: ein Gebäude auf einem Küstenfeld oder im Küstenwasser, innerhalb des Gebiets der Siedlung. Die Flotte segelt bis zu diesem Gebäude, und dort wird gekämpft. Das Langhaus der Siedlung darf auch im Landesinneren stehen.",
+      "damage": "Gewinnt die Flotte, beschädigt sie dieses Gebäude. Je mehr deiner Schiffe den Kampf überstehen, desto mehr Stufen verliert es. Sonst wird nichts von der Siedlung getroffen. Steht das Gebäude bei der Ankunft nicht mehr, wird trotzdem gekämpft, aber nichts beschädigt.",
       "tower": "Ein {tower} der verteidigenden Siedlung gibt pro Stufe {percent} % Verteidigung dazu.",
       "njord": "Der {shrine} steigert den Angriff deiner Schiffe auf Stufe 1 um {low} %, bis Stufe 5 um {high} %. Mehr unter {shrines}.",
       "shrinesLink": "Schreine"
     },
     "adminNote": {
-      "route": "Bekannte Lücke (Issue #450): Eine Siedlung, deren Mitte im Landesinneren liegt, kann eine Flotte noch nicht angreifen oder plündern – auch wenn ihr Land bis an die Küste reicht.",
       "sea": "Eine Gründung über das Meer (eine Karve trägt {karve} Siedler, ein Langschiff {longship}, also je eine ganze Gründungsgruppe) gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
     }
   },

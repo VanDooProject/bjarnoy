@@ -63,7 +63,7 @@ public sealed record UnitDefinition
     /// <summary>
     /// Siege power this unit contributes toward building destruction (issue
     /// #40 phase 5) — zero for every unit except <see cref="UnitClass.Siege"/>
-    /// (the Catapult). Kept separate from <see cref="Attack"/>/<see cref="Defense"/>
+    /// (the Catapult) and the <see cref="UnitClass.Ship"/>s (starting values). Kept separate from <see cref="Attack"/>/<see cref="Defense"/>
     /// since it only matters for <see cref="SiegeResolver"/>'s
     /// levels-destroyed formula, never for ordinary battle power. A
     /// placeholder balance figure, not a tuned number — see
@@ -96,9 +96,9 @@ public sealed record UnitDefinition
     /// Which building type this unit trains at — the Longhouse for every
     /// civilian, <see cref="BuildingType.Barracks"/> for the basic melee
     /// land roster (Spearman, Axeman, Berserker),
-    /// <see cref="BuildingType.ArcheryRange"/> for the archer land roster
-    /// (Bowman, Catapult), <see cref="BuildingType.SiegeWorkshop"/> for the
-    /// battering ram, <see cref="BuildingType.Dockyard"/> for
+    /// <see cref="BuildingType.ArcheryRange"/> for the archer
+    /// (Bowman), <see cref="BuildingType.SiegeWorkshop"/> for the siege
+    /// engines (Catapult, Ram), <see cref="BuildingType.Dockyard"/> for
     /// ships. Defaults to the Longhouse.
     /// </summary>
     public BuildingType RequiredBuildingType { get; init; } = BuildingType.Longhouse;

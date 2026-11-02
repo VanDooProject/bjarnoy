@@ -209,6 +209,13 @@ public sealed class PlotReservationService(
             new PlotSuggestion(islandId, plot, alternatives, reserved, reservedUntil));
     }
 
+    /// <summary>
+    /// The island of the plot currently pinned to <paramref name="ownerId"/> — their live reservation, else the last
+    /// plot offered — or null when there is none. Purely a read: it takes no reservation and refreshes nothing.
+    /// </summary>
+    public Guid? PinnedIslandId(Guid worldId, string ownerId) =>
+        _store.GetReservation(worldId, ownerId)?.IslandId ?? _store.GetLastSuggestion(worldId, ownerId)?.IslandId;
+
     public void Release(Guid worldId, string ownerId) => _store.Release(worldId, ownerId);
 
     /// <summary>

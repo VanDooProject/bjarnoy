@@ -264,6 +264,10 @@
 
 ## CLAUDE
 - ask questions if anything is unclear or you need more context
+- a decision with a few clear options (pick a rule variant, yes/no on a proposal, which of two fixes) goes through the
+  `AskUserQuestion` tool, several questions in one call, recommended option first — not as a numbered prose list I have to
+  answer by retyping it. Context the question needs goes into the question itself or into the chat text right before it.
+  Open questions that need my own words (what something should be called, a new rule) stay in the chat
 - if u take screenshots always show the in chat to me too
 - for planning u can use a opus or fable subtask/subagent
 - artifacts that go through rounds (UX reviews, design options, motion
@@ -353,10 +357,23 @@
     API + Vite dev server + .NET Playwright Chromium) also passes, but needs
     the same prep as CI's `aspire-e2e.yml`, otherwise it just hangs until
     timeout waiting for the `frontend` resource: `npm ci` in `src/frontend`
-    and the vendored `bg_assets_hextile` art (see above). No
-    `playwright.ps1 install` needed — `Microsoft.Playwright` 1.56 finds the
-    pre-installed `/opt/pw-browsers/chromium-1194` via
-    `PLAYWRIGHT_BROWSERS_PATH`. Run it from
+    and the vendored `bg_assets_hextile` art (see above).
+    `playwright.ps1 install` is blocked by the egress proxy, and
+    `Microsoft.Playwright` 1.56 launches
+    `$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-1194/chrome-linux/headless_shell`,
+    while the sandbox image now ships a newer revision with another layout
+    (`/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell`
+    as of 2026-11-02). Without a fix every test fails within seconds with
+    "Executable doesn't exist at .../chromium_headless_shell-1194/...".
+    Link the present binary to the path it asks for (sandbox-only, nothing
+    to commit; check the revision numbers in the error and under
+    `/opt/pw-browsers` first):
+    ```bash
+    sudo mkdir -p /opt/pw-browsers/chromium_headless_shell-1194/chrome-linux
+    sudo ln -sf /opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell \
+      /opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell
+    ```
+    Run it from
     `src/backend/tests/Bjarnoy.AppHost.Tests` with **`CI=true dotnet test`**;
     a single class can be targeted with
     `CI=true dotnet test -- --filter-class "*ChatFlowTests"`. The suite
@@ -380,14 +397,14 @@
   `chromium-browser` binary via apt/snap. A working Chromium is
   pre-installed at `/opt/pw-browsers` (`PLAYWRIGHT_BROWSERS_PATH` is
   already set to it) — the catch is that its bundled revision
-  (`chromium-1194`) often doesn't match the exact browser revision the
+  (`chromium-1243` as of 2026-11-02) often doesn't match the exact browser revision the
   project's pinned `@playwright/test` version expects, so the default
   project config's `chrome-headless-shell` launch fails with "Executable
   doesn't exist at .../chromium_headless_shell-<other number>". Point the
   launch at the real, present binary instead of the mismatched shell one:
   add `launchOptions: { executablePath:
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' }` (check the exact
-  folder name under `/opt/pw-browsers` first, it can differ) to the
+  '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' }` (check the exact
+  folder names under `/opt/pw-browsers` first, they change with the image) to the
   `chromium` project's `use` block in `playwright.config.ts` **locally,
   uncommitted, for the duration of your own verification run only** —
   revert it before committing, it's a sandbox-path hack, not a real repo

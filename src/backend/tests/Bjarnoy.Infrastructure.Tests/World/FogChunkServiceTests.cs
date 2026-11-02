@@ -195,10 +195,13 @@ public class FogChunkServiceTests : IDisposable
     {
         // The end-to-end seam proof: service output (DB -> sources -> halo ->
         // per-chunk bake -> PNG -> decode) against the reference whole-world
-        // Generate over the same inputs.
+        // Generate over the same inputs. The tower on (0, 3) stands inside the
+        // level-3 longhouse's claim (radius 3), so it is chained and sees; the
+        // one on (-1, 31) is cut off from every longhouse and sees nothing
+        // (economy.md section 5), so the reference leaves it out.
         const int radius = 40;
         var worldId = AddWorld(radius);
-        AddSettlement(worldId, "player-1", 0, 0, level: 3, towers: (-1, 31, 2));
+        AddSettlement(worldId, "player-1", 0, 0, level: 3, towers: [(0, 3, 2), (-1, 31, 2)]);
         AddSettlement(worldId, "player-1", -30, 5, level: 1);
         AddSettlement(worldId, "player-1", 33, -3, level: 2);
         await _dbContext.SaveChangesAsync(Ct);
@@ -208,7 +211,7 @@ public class FogChunkServiceTests : IDisposable
         var sources = new List<FogVisionSource>
         {
             FogVisionRadii.ToVisionSource(new HexCoord(0, 0), 3),
-            FogVisionRadii.ToTowerVisionSource(new HexCoord(-1, 31), 2),
+            FogVisionRadii.ToTowerVisionSource(new HexCoord(0, 3), 2),
             FogVisionRadii.ToVisionSource(new HexCoord(-30, 5), 1),
             FogVisionRadii.ToVisionSource(new HexCoord(33, -3), 2),
         };

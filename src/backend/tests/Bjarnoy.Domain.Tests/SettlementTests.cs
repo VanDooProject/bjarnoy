@@ -134,6 +134,7 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.PumpkinFarm, Terrain.Mountain, false)]
     [InlineData(BuildingType.Tower, Terrain.Sand, true)]
     [InlineData(BuildingType.Tower, Terrain.Grass, true)]
+    [InlineData(BuildingType.Tower, Terrain.Forest, true)]
     [InlineData(BuildingType.Tower, Terrain.Mountain, false)]
     [InlineData(BuildingType.Sawmill, Terrain.Grass, true)]
     [InlineData(BuildingType.Sawmill, Terrain.Forest, false)]
@@ -155,6 +156,7 @@ public class BuildingCatalogueTests
     [Theory]
     [InlineData(BuildingType.Longhouse)]
     [InlineData(BuildingType.StorageHouse)]
+    [InlineData(BuildingType.SiegeWorkshop)]
     public void Anchor_and_support_buildings_are_gated_to_grass(BuildingType type)
     {
         var definition = BuildingCatalogue.Get(type, 1);
@@ -167,11 +169,9 @@ public class BuildingCatalogueTests
     }
 
     [Theory]
-    [InlineData(BuildingType.Tower)]
     [InlineData(BuildingType.ArcheryRange)]
-    [InlineData(BuildingType.SiegeWorkshop)]
     [InlineData(BuildingType.Barracks)]
-    public void The_tower_and_archery_range_are_gated_to_grass_or_sand(BuildingType type)
+    public void The_archery_range_siege_workshop_and_barracks_are_gated_to_grass_or_sand(BuildingType type)
     {
         var definition = BuildingCatalogue.Get(type, 1);
 

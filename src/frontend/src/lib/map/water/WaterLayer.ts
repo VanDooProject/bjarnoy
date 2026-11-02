@@ -213,13 +213,12 @@ const CAUSTIC_CULL_SOFTEN_TILES = 0.03;
  * it is one line; a per-ribbon distance means there is no line at all, and loops
  * that fall entirely inside their own keep-off are gone rather than clipped.
  *
- * 0.5 tiles is wide relative to the 0.35 default keep-off on purpose: the range
- * has to be several ribbon spacings across before neighbouring ribbons stop
- * ending at visibly similar distances. Not wider, though — the mask's far field
- * saturates at 1.5 tiles, and a keep-off anywhere near that means the ribbon is
- * missing from the whole of the water the eye takes in around an island.
+ * 0.1 tiles, the same as the default keep-off: the
+ * ribbons end 0.1 to 0.2 tiles out, inside the foam band (default width 0.3 tiles), not a
+ * visible gap before it, and the spread is only what breaks up a shared cut
+ * line. Not wider, though — the mask's far field saturates at 1.5 tiles.
  */
-const CAUSTIC_CULL_SPREAD_TILES = 0.5;
+const CAUSTIC_CULL_SPREAD_TILES = 0.1;
 
 /**
  * The second, finer caustic net (§4.2c) — same idiom as the one above, at a
@@ -265,25 +264,6 @@ const CAUSTIC_BLOB_SOFT = 0.18;
 const CAUSTIC_BLOB_ALPHA = 0.42;
 const CAUSTIC_BLOB_COLOR = 0x0d1728;
 
-/**
- * What fraction of its width the foam keeps over a prop tile (§4.4b).
- *
- * Not zero. Taking the foam off the tile entirely was the first attempt and it
- * was worse than the artifact: foam is the coastline's outline as much as it is
- * water, so a bare stretch of shore is found by the eye immediately — much
- * faster than a ribbon crossing a rock. Half width still leaves the boat or rock
- * its own patch of still water while keeping the outline closed.
- *
- * A quarter, and the shader scales the band's ragged edge by the same factor
- * (see `shrink` in waterShader.ts). Half was tried in between and read as no
- * narrowing at all next to a rock: the edge noise is an absolute 0.09 tiles, so
- * left unscaled it swung a nominally 0.15-tile band out past 0.23 and back into
- * the stone. With the edge scaled too, a quarter is a quarter everywhere along
- * the band rather than only at its mean, which is what the earlier "too thin to
- * survive the art" reading was actually measuring.
- */
-const PROP_FOAM_SCALE = 0.25;
-
 function hexToRgb01(hex: number): [number, number, number] {
   return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
 }
@@ -315,6 +295,15 @@ function placeholderTaintTexture(): Texture {
     source: new BufferImageSource({ resource: new Uint8Array([0]), width: 1, height: 1, format: 'r8unorm' }),
   });
   return sharedPlaceholderTaintTexture;
+}
+
+let sharedPlaceholderDryTexture: Texture | null = null;
+/** A 1x1 "nothing is dry" texture (alpha 0, which is what the shader reads), bound in world mode and before the art masks are ready. */
+function placeholderDryTexture(): Texture {
+  sharedPlaceholderDryTexture ??= new Texture({
+    source: new BufferImageSource({ resource: new Uint8Array([0, 0, 0, 0]), width: 1, height: 1 }),
+  });
+  return sharedPlaceholderDryTexture;
 }
 
 let sharedPlaceholderNoFoamTexture: Texture | null = null;
@@ -423,8 +412,6 @@ export class WaterLayer {
       uCausticBlobSoft: { value: CAUSTIC_BLOB_SOFT, type: 'f32' },
       uCausticBlobAlpha: { value: CAUSTIC_BLOB_ALPHA, type: 'f32' },
       uCausticBlobColor: { value: new Float32Array([blobR, blobG, blobB]), type: 'vec3<f32>' },
-      uPropMute: { value: 0, type: 'f32' },
-      uPropFoamScale: { value: PROP_FOAM_SCALE, type: 'f32' },
       // What the mask's far channel is normalised over, so the shader can decode
       // G back into tile widths the same way uNearSpan decodes R.
       uFarReach: { value: FOAM_REACH_TILES, type: 'f32' },
@@ -453,6 +440,7 @@ export class WaterLayer {
           uWaterMask: placeholderTexture().source,
           uWaterTaint: placeholderTaintTexture().source,
           uWaterNoFoam: placeholderNoFoamTexture().source,
+          uWaterDry: placeholderDryTexture().source,
         },
       }),
     });
@@ -567,6 +555,15 @@ export class WaterLayer {
   }
 
   /**
+   * Binds the art dry mask (`WaterDryLayer.texture`), a texture over the same
+   * world rect as the water mask. `null` goes back to the 1x1 "nothing is dry"
+   * texture. The texture is owned by the caller, not destroyed here.
+   */
+  setDryTexture(texture: Texture | null): void {
+    this.mesh.shader!.resources.uWaterDry = (texture ?? placeholderDryTexture()).source;
+  }
+
+  /**
    * Hides the layer without discarding its mask — for the states §3.6 lists
    * where water must not draw at all (landing-page preview, and a `deepFogOnly`
    * rebuild where the whole viewport is under opaque mist and this would be
@@ -615,12 +612,6 @@ export class WaterLayer {
     u.uCausticFine = waterDebugFlags.fineCaustics ? 1 : 0;
     u.uCausticBlobs = waterDebugFlags.causticShadows ? 1 : 0;
     u.uShorelineFoam = waterDebugFlags.shorelineFoam ? 1 : 0;
-    // Settlement mode only. The mute protects the boat and rock painted on the
-    // coastal water art, and world mode does not draw sea tiles at all
-    // (HexMapRenderer's rebuildTerrainFlat skips them; the sea there is this
-    // shader's own body). Honouring it there would thin the foam on a fifth of
-    // every coastline to protect art that isn't on screen.
-    u.uPropMute = this.mode === 'settlement' && waterDebugFlags.propTileMute ? 1 : 0;
     // Clamped to the far channel's own range: past it G is saturated, so a
     // larger value would silently mean "never fade in" rather than "start
     // further out".

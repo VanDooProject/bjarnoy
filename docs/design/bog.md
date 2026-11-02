@@ -240,6 +240,9 @@ construction, so with them the spawn share is 23.3% of all bogs. Ways to bring i
 of 52 bogs; on the rest no river passes the site's disc in a way that satisfies the single-path and R11 checks, and loosening the
 river-tile margins and the disc test moved it by one island). The owner decided more bogs; whether 23.3% is acceptable is theirs to confirm.
 
+*Superseded (owner decision):* the 20% rule is lifted for the planned gap-fill bogs, so about a third of all bogs may start a river; see
+[`world-generation-rules.md`](./world-generation-rules.md#bog-and-lakes).
+
 ## Art pack orientation convention
 
 Pixel-measured against the vendored art (bg_assets_hextile edba233). Directions 0..5 = E, NE, NW, W, SW, SE;
@@ -256,7 +259,7 @@ Pixel-measured against the vendored art (bg_assets_hextile edba233). Directions 
 
 Texture keys: `bog`, `lake`, `bogcreek`, `bogcreekbend`, `bogcreekspring`, `lakeinlet`, `lakeshore`, `lakehalf`,
 `lakemouth`. `normalizeBogFrames` renames `variantNNN` to contiguous variants; lake variants above 3 (fish weir,
-both boats) are dropped. The variant is `tile.variant % variants.length`.
+both boats) are dropped. The variant is `tile.variant % variants.length`, over the looks the game shows: look 0 (the bare plain hex) is retired for the moss and every creek, spring, inlet, shore, half and mouth family (`RETIRED_BOG_VARIANTS`), so those hexes always draw a decorated look; the open lake keeps its plain water.
 
 ## Buildings
 

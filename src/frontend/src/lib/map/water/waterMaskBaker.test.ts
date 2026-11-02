@@ -28,7 +28,7 @@ function regionFor(halfWidth: number): WaterMaskRegion {
 /** A stand-in worker that records what was posted and lets the test answer by hand. */
 class FakeWorker {
   static last: FakeWorker | null = null;
-  posted: { id: number; region: WaterMaskRegion; buildingHexes?: number[]; noFoamHexes?: number[] }[] = [];
+  posted: { id: number; region: WaterMaskRegion; noFoamHexes?: number[] }[] = [];
   onmessage: ((event: { data: unknown }) => void) | null = null;
   onerror: (() => void) | null = null;
   terminated = false;
@@ -36,7 +36,7 @@ class FakeWorker {
   constructor() {
     FakeWorker.last = this;
   }
-  postMessage(request: { id: number; region: WaterMaskRegion; buildingHexes?: number[]; noFoamHexes?: number[] }) {
+  postMessage(request: { id: number; region: WaterMaskRegion; noFoamHexes?: number[] }) {
     this.posted.push(request);
   }
   terminate() {
@@ -77,14 +77,6 @@ describe('WaterMaskBaker', () => {
     expect(mask!.width).toBe(region.width);
     // Inline means the caller already has it; nothing arrives through the callback.
     expect(applied).toHaveLength(0);
-  });
-
-  it('sends the building hexes along, so the worker can answer hasWaterProp itself', () => {
-    installFakeWorker();
-    const baker = new WaterMaskBaker(() => {});
-    const region = regionFor(400);
-    baker.bake({ ...input(region), buildingHexes: [11, 22] }, LAND_EVERYWHERE);
-    expect(FakeWorker.last!.posted[0].buildingHexes).toEqual([11, 22]);
   });
 
   it('sends the river-mouth hexes along, and hands the revision they were read at back with the result', () => {

@@ -122,9 +122,4 @@ export class StaticWorldModel extends WorldModel {
     }
     return keys;
   }
-
-  /** No buildings on the docs island — used only by the water-mask bake (`WaterLayer`), itself moot since the docs preview always suppresses the water shader (`HexMapRenderer.rebuildAll`'s `waterSuppressed`). */
-  override buildingHexKeys(): number[] {
-    return [];
-  }
 }

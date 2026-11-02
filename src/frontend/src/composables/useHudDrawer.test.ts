@@ -58,6 +58,27 @@ describe('useHudDrawer', () => {
     expect(drawer.isOpen.value).toBe(false);
   });
 
+  it('snaps back closed when a fast short drag is held still before release', () => {
+    // Regression: release speed used to be the last move's speed, kept
+    // however long the finger then rested, so this still counted as a flick.
+    const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(300));
+    drawer.onPointerDown(fakeEvent(0, 0));
+    drawer.onPointerMove(fakeEvent(10, 2));
+    drawer.onPointerMove(fakeEvent(20, 4)); // 5 px/ms, well past the flick speed
+    drawer.onPointerUp(fakeEvent(20, 300)); // released after resting ~300ms
+    expect(drawer.isOpen.value).toBe(false);
+  });
+
+  it('a close flick held still before release leaves an open drawer open', () => {
+    const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(300));
+    drawer.toggle();
+    drawer.onPointerDown(fakeEvent(200, 0));
+    drawer.onPointerMove(fakeEvent(180, 2));
+    drawer.onPointerMove(fakeEvent(170, 4)); // 30px up fast, 10% of the drawer
+    drawer.onPointerUp(fakeEvent(170, 300));
+    expect(drawer.isOpen.value).toBe(true);
+  });
+
   it('opens on a fast downward flick even far short of the distance threshold', () => {
     const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(300));
     drawer.onPointerDown(fakeEvent(0, 0));
@@ -276,7 +297,8 @@ describe('useHudDrawer', () => {
       drawer.onPointerMove(fakeEvent(250, 50)); // 50px up: 10px scrolls, remaining 40px closes
       expect(el.scrollTop).toBe(200); // scrolled all the way to the end
       expect(drawer.currentOffset()).toBe(260); // 300 - 40
-      drawer.onPointerUp(fakeEvent(200, 100)); // drag further past the close threshold
+      drawer.onPointerMove(fakeEvent(50, 100)); // 200px further up: 60/300 = 20%, past the close threshold
+      drawer.onPointerUp(fakeEvent(50, 300)); // released at rest, so the distance alone decides
       expect(drawer.isOpen.value).toBe(false);
     });
 

@@ -284,9 +284,9 @@ development.
 | `GET /api/v1/worlds/{id}/islands` | its islands and their start positions |
 | `GET /api/v1/worlds/{id}/tiles?qMin=&qMax=&rMin=&rMax=` | terrain for a window |
 | `POST /api/v1/worlds/{id}/settlements` | found a settlement on a start position |
-| `GET /api/v1/worlds/{id}/settlements` | settlements in a world |
+| `GET /api/v1/worlds/{id}/settlements` | settlements in a world the caller can see (their own plus explored rivals'); `mine` marks the caller's own |
 | `POST /api/v1/worlds/{id}/state` | pause, lock, maintain or resume a world |
-| `GET /api/v1/settlements/{id}` | a settlement as of now, completing what its queue owed |
+| `GET /api/v1/settlements/{id}` | a settlement as of now, completing what its queue owed; owner only. `realm` lists every settlement of its realm (the owner's settlements on that island, itself first) with the connected claim discs the chain rule gives each (`ConnectedRealm`, economy.md section 5); the live client draws the realm's border from it |
 | `POST /api/v1/settlements/{id}/builds` | queue a building |
 | `GET /api/v1/buildings` | the catalogue: costs, durations, allowed terrain |
 | `POST /api/v1/messages` | send a direct message to another player |
@@ -309,7 +309,7 @@ npx openapi-typescript http://localhost:5180/openapi/v1.json \
 ```
 
 `GET /api/v1/buildings` also has a frontend-only fallback: the tech-tree page
-(`/tech-tree`) needs to render without a backend in demo mode, so
+(`/docs/tech-tree`) needs to render without a backend in demo mode, so
 `src/frontend/src/data/building-catalogue.json` is a committed snapshot of
 that endpoint's response, regenerated the same way against a running backend:
 

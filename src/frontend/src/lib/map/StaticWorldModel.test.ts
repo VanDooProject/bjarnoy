@@ -109,10 +109,9 @@ describe('StaticWorldModel', () => {
     });
   });
 
-  it('has no rivers and no buildings', () => {
+  it('has no rivers', () => {
     const world = new StaticWorldModel([tile({ q: 0, r: 0 })]);
     expect(world.getRiverTile(0, 0)).toBeUndefined();
-    expect(world.buildingHexKeys()).toEqual([]);
   });
 
   it('sees its own wall hexes, so a palisade draws the piece its wall neighbours decide', () => {

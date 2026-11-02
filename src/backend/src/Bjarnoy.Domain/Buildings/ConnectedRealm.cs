@@ -40,6 +40,9 @@ public sealed class ConnectedRealm
     /// <summary>Every connected disc of the player's settlements on the island (longhouse discs and connected towers' discs).</summary>
     public IReadOnlyList<(HexCoord Centre, int Radius)> AllDiscs => _allDiscs;
 
+    /// <summary>The ids of the settlements this realm was resolved from.</summary>
+    public IReadOnlyCollection<Guid> SettlementIds => _discsBySettlement.Keys;
+
     /// <summary>The connected discs <paramref name="settlementId"/> contributes: its longhouse disc first, then its connected towers'.</summary>
     public IReadOnlyList<(HexCoord Centre, int Radius)> DiscsOf(Guid settlementId) =>
         _discsBySettlement.TryGetValue(settlementId, out var discs) ? discs : [];

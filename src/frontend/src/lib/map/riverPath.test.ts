@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isoGridPosition, isoTopPoints } from '../hex/geometry';
-import { riverPathFor } from './riverPath';
-import type { RiverTile } from './types';
+import { bogCreekPathFor, riverPathFor } from './riverPath';
+import type { BogTile, RiverTile } from './types';
 
 const W = 200;
 const H = 150;
@@ -89,5 +89,40 @@ describe('riverPathFor', () => {
     const grid = isoGridPosition(ORIGIN, W, H);
     const center = { x: grid.x + W / 2, y: grid.y + H / 2 };
     approxEqual(drawing.segments[0]!.to, center);
+  });
+});
+
+describe('bogCreekPathFor', () => {
+  function bogTile(overrides: Partial<BogTile>): BogTile {
+    return { q: 0, r: 0, kind: 'creek', inDirections: [], outDirection: null, waterEdges: [], ...overrides };
+  }
+
+  it('carries a river on into the bog: the creek meets the river tile before it on their shared edge', () => {
+    // The river ends on ORIGIN flowing out E; the bog's first creek tile is EAST_NEIGHBOR, flowing in from W.
+    const river = riverPathFor(ORIGIN, riverTile({ inDirections: ['W'], outDirection: 'E' }), null, W, H);
+    const creek = bogCreekPathFor(EAST_NEIGHBOR, bogTile({ q: 1, r: 0, inDirections: ['W'], outDirection: 'E' }), W, H);
+
+    expect(creek).not.toBeNull();
+    approxEqual(river.segments[0]!.to, creek!.segments[0]!.from);
+  });
+
+  it('draws a lake mouth from its inflow to its outflow edge', () => {
+    const mouth = bogTile({ kind: 'mouth', inDirections: ['E'], outDirection: 'W', waterEdges: ['W'] });
+    const drawing = bogCreekPathFor(ORIGIN, mouth, W, H);
+    const asRiver = riverPathFor(ORIGIN, riverTile({ inDirections: ['E'], outDirection: 'W' }), null, W, H);
+
+    expect(drawing!.segments).toEqual(asRiver.segments);
+    expect(drawing!.springDot).toBeUndefined();
+  });
+
+  it('draws a creek spring as a pond dot with one outflow leg', () => {
+    const drawing = bogCreekPathFor(ORIGIN, bogTile({ kind: 'creekspring', outDirection: 'SE' }), W, H);
+
+    expect(drawing!.segments).toHaveLength(1);
+    expect(drawing!.springDot).toBeDefined();
+  });
+
+  it.each(['bog', 'lake', 'inlet', 'shore', 'half'] as const)('draws nothing on a %s tile', (kind) => {
+    expect(bogCreekPathFor(ORIGIN, bogTile({ kind, waterEdges: kind === 'bog' || kind === 'lake' ? [] : ['W'] }), W, H)).toBeNull();
   });
 });

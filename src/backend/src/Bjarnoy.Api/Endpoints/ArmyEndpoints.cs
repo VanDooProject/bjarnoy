@@ -52,6 +52,16 @@ public static class ArmyEndpoints
             // legitimate guest-owner caller).
             .RequireHostOrGuestOwner();
 
+        settlements.MapPost("/{settlementId:guid}/guests/{armyId:guid}/send-home", SendGuestHome)
+            .WithName("SendGuestArmyHome")
+            .WithSummary("Sends a guest (support) army stationed at this settlement back home — the host's recall.")
+            // Host owner only: the guest's own owner recalls through
+            // RecallArmy. 204 with no body, since the guest's full
+            // ArmyResponse (route, provisions) is owner-only.
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .RequireSettlementOwner()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
+
         var armies = app.MapGroup("/api/v1/armies")
             .WithApiVersionSet(versionSet)
             .WithTags("Armies");
@@ -286,6 +296,53 @@ public static class ArmyEndpoints
         return Results.Json(new AuthErrorResponse("not_owner"), statusCode: StatusCodes.Status403Forbidden);
     }
 
+    /// <summary>
+    /// True when a refused recall means "no such army to recall" (404) —
+    /// unknown, not a guest there, or arrived home during this very settle.
+    /// Shared by <see cref="Recall"/> and <see cref="SendGuestHome"/>.
+    /// </summary>
+    private static bool RecallMissing(RecallResult result) =>
+        result.Outcome == RecallOutcome.ArmyNotFound
+        || (result.Outcome == RecallOutcome.NothingToRecall && result.Army is null);
+
+    /// <summary>
+    /// The 409 body for a recall that was understood but cannot happen, or
+    /// null when it did not conflict — the one place the texts are written,
+    /// for <see cref="Recall"/> and <see cref="SendGuestHome"/>.
+    /// </summary>
+    private static ProblemDetails? RecallConflict(RecallResult result) => result.Outcome switch
+    {
+        RecallOutcome.NothingToRecall => new ProblemDetails
+        {
+            Title = "Nothing to recall.",
+            Detail = "The army is already heading home.",
+            Status = StatusCodes.Status409Conflict,
+        },
+        RecallOutcome.NoRouteHome => new ProblemDetails
+        {
+            Title = "No route home.",
+            Detail = "The army cannot be recalled: no route home exists from where it currently is.",
+            Status = StatusCodes.Status409Conflict,
+        },
+        _ => null,
+    };
+
+    private static async Task<Results<NoContent, NotFound, Conflict<ProblemDetails>>> SendGuestHome(
+        Guid settlementId,
+        Guid armyId,
+        ArmyService armies,
+        CancellationToken cancellationToken)
+    {
+        var result = await armies.SendGuestHomeAsync(settlementId, armyId, cancellationToken);
+
+        if (RecallMissing(result))
+        {
+            return TypedResults.NotFound();
+        }
+
+        return RecallConflict(result) is { } conflict ? TypedResults.Conflict(conflict) : TypedResults.NoContent();
+    }
+
     private static async Task<Results<Ok<ArmyResponse>, NotFound, Conflict<ProblemDetails>>> Recall(
         Guid armyId,
         ArmyService armies,
@@ -294,35 +351,14 @@ public static class ArmyEndpoints
     {
         var result = await armies.RecallAsync(armyId, cancellationToken);
 
-        if (result.Outcome == RecallOutcome.ArmyNotFound)
+        if (RecallMissing(result))
         {
             return TypedResults.NotFound();
         }
 
-        if (result.Outcome == RecallOutcome.NothingToRecall)
+        if (RecallConflict(result) is { } conflict)
         {
-            if (result.Army is null)
-            {
-                // Arrived home during this very settle — no army left to recall.
-                return TypedResults.NotFound();
-            }
-
-            return TypedResults.Conflict(new ProblemDetails
-            {
-                Title = "Nothing to recall.",
-                Detail = "The army is already heading home.",
-                Status = StatusCodes.Status409Conflict,
-            });
-        }
-
-        if (result.Outcome == RecallOutcome.NoRouteHome)
-        {
-            return TypedResults.Conflict(new ProblemDetails
-            {
-                Title = "No route home.",
-                Detail = "The army cannot be recalled: no route home exists from where it currently is.",
-                Status = StatusCodes.Status409Conflict,
-            });
+            return TypedResults.Conflict(conflict);
         }
 
         var found = await armies.GetAsync(armyId, cancellationToken);
@@ -592,8 +628,10 @@ public static class ArmyEndpoints
                     "An army must be either all ships or all non-ships, not a mix.",
                 DispatchRejection.DestinationNotSea => "The destination is not sea; fleets can only path over water.",
                 DispatchRejection.WaypointNotSea => "A waypoint is not sea; fleets can only path over water.",
-                DispatchRejection.DefenderHasNoShoreline =>
-                    "The target settlement is fully inland and cannot be reached by ship.",
+                DispatchRejection.FleetTargetBuildingRequired =>
+                    "A fleet must be sent at one building on the target settlement's shore.",
+                DispatchRejection.FleetTargetBuildingNotOnShore =>
+                    "That building is not on the target settlement's shore, so a fleet cannot reach it.",
                 DispatchRejection.WrongSettlerCount =>
                     $"A founding mission requires exactly {Founding.RequiredSettlers} settlers, no more, no fewer.",
                 DispatchRejection.InsufficientShipCapacityForSettlers =>
