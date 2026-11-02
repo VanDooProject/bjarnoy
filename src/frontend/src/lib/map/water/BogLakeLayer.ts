@@ -34,6 +34,7 @@ export class BogLakeLayer {
       uCatsPaws: { value: 0, type: 'f32' },
       uFoamWidth: { value: 0, type: 'f32' },
       uFoamSpacing: { value: 0, type: 'f32' },
+      uFoamStyle: { value: 0, type: 'f32' },
     });
     this.geometry = new MeshGeometry({
       positions: new Float32Array(8),
@@ -88,6 +89,7 @@ export class BogLakeLayer {
     u.uCatsPaws = waterDebugFlags.bogLakeCatsPaws ? waterDebugTuning.bogLakeCatsPawsStrength : 0;
     u.uFoamWidth = waterDebugTuning.bogLakeFoamWidth;
     u.uFoamSpacing = waterDebugTuning.bogLakeFoamSpacing;
+    u.uFoamStyle = waterDebugTuning.bogLakeFoamStyle;
     u.uBandHalf = waterDebugTuning.bogLakeBandHalf;
     u.uGustPeak = GUST_PEAK_PHASE + waterDebugTuning.bogLakeGustPhaseOffset;
     this.mesh.visible = waterDebugFlags.water && this.hasLake && !this.suppressed && !this.motionOff;

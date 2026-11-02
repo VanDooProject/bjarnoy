@@ -1135,7 +1135,8 @@ export interface WaterDebugTuning {
   bogLakeFoamSpacing: number;      // 15 — world units between foam lines
   bogLakeBandHalf: number;         // 0.16 — gust band half-width, in periods
   mapAnimationSpeed: number;       // 1 — debug playback speed of every map animation: tile clips, lake gust, sea water, squiggles, fog drift
-  bogLakeGustPhaseOffset: number;  // 0 — shifts the lake gust against the sway, in periods (added to GUST_PEAK_PHASE)
+  bogLakeGustPhaseOffset: number;  // -0.125 (-2 sway frames, GUST_LAKE_PHASE_OFFSET) — shifts the lake gust against the sway, in periods (added to GUST_PEAK_PHASE)
+  bogLakeFoamStyle: number;        // 0 — foam line style under evaluation (0 strands, 1 tapered, 2 crest + shadow, 3 micro curls, 4 ring arcs, 5 glint squiggles)
   causticCullHexes: number; // 0.25 — the *closest* a ribbon may come to shore;
                             //        each one takes its own distance from here
                             //        up to + CAUSTIC_CULL_SPREAD_TILES

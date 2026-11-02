@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BufferImageSource, Texture } from 'pixi.js';
 import { BogLakeLayer } from './BogLakeLayer';
 import { BOG_LAKE_FRAGMENT } from './bogLakeShader';
-import { GUST_PEAK_PHASE, gustTime } from './bogLakeGust';
+import { GUST_LAKE_PHASE_OFFSET, GUST_PEAK_PHASE, gustTime } from './bogLakeGust';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
 
 // Wiring only (no GPU): which flag reaches which uniform, and when the mesh shows. See WaterLayer.test.ts for the jsdom canvas stub.
@@ -106,9 +106,18 @@ describe('BogLakeLayer', () => {
 
   it('shifts the gust peak by the debug phase offset', () => {
     const layer = new BogLakeLayer(TILE_W);
+    layer.tick(0);
+    expect(uniformsOf(layer).uGustPeak).toBeCloseTo(GUST_PEAK_PHASE + GUST_LAKE_PHASE_OFFSET, 9);
     waterDebugTuning.bogLakeGustPhaseOffset = -0.1;
     layer.tick(0);
     expect(uniformsOf(layer).uGustPeak).toBeCloseTo(GUST_PEAK_PHASE - 0.1, 9);
+  });
+
+  it('passes the foam style through', () => {
+    const layer = new BogLakeLayer(TILE_W);
+    waterDebugTuning.bogLakeFoamStyle = 3;
+    layer.tick(0);
+    expect(uniformsOf(layer).uFoamStyle).toBe(3);
   });
 
   it('runs the gust on the forests\' clock', () => {
@@ -116,7 +125,7 @@ describe('BogLakeLayer', () => {
     layer.tick(2500);
     expect(uniformsOf(layer).uTime).toBeCloseTo(2.5, 9);
     expect(uniformsOf(layer).uGustTime).toBeCloseTo(gustTime(2500), 9);
-    expect(uniformsOf(layer).uGustPeak).toBe(GUST_PEAK_PHASE);
+    expect(uniformsOf(layer).uGustPeak).toBeCloseTo(GUST_PEAK_PHASE + GUST_LAKE_PHASE_OFFSET, 9);
   });
 
   it('is hidden, not frozen, while lake wind motion is off', () => {

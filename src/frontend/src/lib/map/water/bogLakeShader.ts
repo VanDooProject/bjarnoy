@@ -39,6 +39,8 @@ uniform float uCatsPaws;
 // Foam lines: half-width of a line as a share of the line spacing, and the spacing in world units.
 uniform float uFoamWidth;
 uniform float uFoamSpacing;
+// Foam line style (design round 4): 0 strands, 1 tapered strands, 2 crest + shadow, 3 micro curls, 4 ring arcs, 5 glint squiggles.
+uniform float uFoamStyle;
 
 // bogLakeGust.ts gustPhase, with the time term already in uGustTime: the same wave the forest sway frames are drawn in.
 const float GUST_WAVELENGTH = ${glFloat(GUST_WAVELENGTH)};
@@ -77,6 +79,86 @@ float gustEnvelope(vec2 w) {
   return e * e * (3.0 - 2.0 * e);
 }
 
+// Distance to the nearest crest line across the wind, in world units, and the line's index: the crests are wiggly lines roughly
+// perpendicular to the wind (+x), uFoamSpacing apart, sliding downwind.
+vec2 crestField(vec2 w, float t) {
+  float u = w.x + 7.0 * (fbm(vec2(w.y * 0.05, w.x * 0.01 + t * 0.2)) - 0.5) * 2.0;
+  float k = u / max(uFoamSpacing, 1.0) - t * 1.2;
+  return vec2((fract(k) - 0.5) * uFoamSpacing, floor(k));
+}
+
+// Foam look for uFoamStyle: x = light alpha, y = dark alpha (premultiplied black under it), before strength, envelope and mask.
+vec2 foamLook(vec2 w, float t) {
+  float halfW = uFoamWidth * uFoamSpacing;
+  if (uFoamStyle < 0.5) {
+    // 0 strands: the first version, even width, broken into pieces.
+    vec2 c = crestField(w, t);
+    float line = 1.0 - smoothstep(halfW * 0.5, halfW * 1.5, abs(c.x));
+    float seg = smoothstep(0.45, 0.6, vnoise(vec2(c.y * 3.7, w.y * 0.07 + c.y)));
+    return vec2(line * seg * 0.9, 0.0);
+  }
+  if (uFoamStyle < 2.5) {
+    // 1 tapered strands: short pieces that swell in the middle and thin out to points at both ends.
+    // 2 crest + shadow: the same, with a darker trough line just downwind of each crest (cel-shaded ripple).
+    vec2 c = crestField(w, t);
+    float segLen = 26.0;
+    float a = w.y / segLen + hash21(vec2(c.y, 3.1));
+    float id = floor(a);
+    float along = fract(a);
+    float keep = step(0.35, hash21(vec2(c.y, id)));
+    float taper = pow(max(sin(3.14159 * along), 0.0), 0.8);
+    float hw = halfW * (0.35 + 0.9 * taper);
+    float line = (1.0 - smoothstep(hw * 0.6, hw * 1.3, abs(c.x))) * keep * smoothstep(0.02, 0.2, taper);
+    if (uFoamStyle < 1.5) return vec2(line * 0.9, 0.0);
+    float shadowOffset = halfW * 2.4;
+    float shadow = (1.0 - smoothstep(hw * 0.5, hw * 1.4, abs(c.x - shadowOffset))) * keep * smoothstep(0.02, 0.2, taper);
+    return vec2(line * 0.85, shadow * 0.45);
+  }
+  if (uFoamStyle < 3.5) {
+    // 3 micro curls: small crescent ripples scattered in the band, opening downwind, each fading in and out.
+    float cell = uFoamSpacing * 0.8;
+    vec2 q = w + vec2(-t * 18.0, 0.0);
+    vec2 id = floor(q / cell);
+    float h = hash21(id + 0.7);
+    if (h < 0.4) return vec2(0.0);
+    vec2 centre = (id + 0.25 + 0.5 * vec2(hash21(id + 1.3), hash21(id + 2.9))) * cell;
+    vec2 p = (q - centre) * vec2(1.0, 0.6);
+    float rad = cell * (0.22 + 0.12 * hash21(id + 4.1));
+    float ring = abs(length(p) - rad);
+    float ang = atan(p.y, p.x);
+    float arc = 1.0 - smoothstep(0.4, 1.6, abs(ang));
+    float curl = (1.0 - smoothstep(halfW * 0.25, halfW * 0.7, ring)) * arc;
+    float beat = smoothstep(0.25, 0.85, 0.5 + 0.5 * sin(t * (1.2 + 1.5 * h) + h * 30.0));
+    return vec2(curl * beat * 0.9, 0.0);
+  }
+  if (uFoamStyle < 4.5) {
+    // 4 ring arcs: fragments of wide concentric rings, like ripples spreading from a disturbance upwind, broken by noise.
+    float cell = uFoamSpacing * 6.0;
+    vec2 q = w + vec2(-t * 18.0, 0.0);
+    vec2 id = floor(q / cell);
+    vec2 centre = (id + vec2(0.1, 0.5)) * cell;
+    vec2 p = (q - centre) * vec2(1.0, 1.6);
+    float r = length(p);
+    float k = r / uFoamSpacing - t * 0.8;
+    float d = (fract(k) - 0.5) * uFoamSpacing;
+    float ring = 1.0 - smoothstep(halfW * 0.5, halfW * 1.3, abs(d));
+    float frag = smoothstep(0.45, 0.62, vnoise(vec2(floor(k) * 2.3, atan(p.y, p.x) * 3.0)));
+    float fade = 1.0 - smoothstep(cell * 0.3, cell * 0.95, r);
+    return vec2(ring * frag * fade * 0.85, 0.0);
+  }
+  // 5 glint squiggles: short bright wavy threads running with the wind, like light refracted on a ruffled surface.
+  float row = uFoamSpacing * 0.7;
+  float yy = w.y / row;
+  float rid = floor(yy);
+  float yIn = (fract(yy) - 0.5) * row;
+  float x = w.x - t * 30.0 + hash21(vec2(rid, 9.0)) * 200.0;
+  float hr = hash21(vec2(rid, 2.0));
+  float wave = (sin(x * (0.22 + 0.25 * hr) + hr * 6.28) * (0.6 + 0.4 * vnoise(vec2(x * 0.05, rid))) + 0.4 * (vnoise(vec2(x * 0.11, rid * 3.3)) - 0.5)) * row * 0.16;
+  float thread = 1.0 - smoothstep(halfW * 0.3, halfW * 0.8, abs(yIn - wave));
+  float seg = smoothstep(0.55, 0.7, vnoise(vec2(x * 0.04, rid * 5.1)));
+  return vec2(thread * seg * 0.9, 0.0);
+}
+
 // Premultiplied colour c at alpha a.
 vec4 over(vec3 c, float a) { return vec4(c * a, a); }
 
@@ -113,14 +195,11 @@ void main() {
     acc = stack(over(vec3(0.42, 0.60, 0.78), clamp(uSheen * env * n * 0.3, 0.0, 1.0)), acc);
   }
 
-  // Foam lines: wiggly white crest strands across the wind, broken into pieces, sliding downwind. Top of the stack.
+  // Foam lines (foamLook, uFoamStyle): light crests across the wind, sliding downwind; style 2 adds a dark trough line. Top of the stack.
   if (uFoam > 0.0) {
-    float u = w.x + 7.0 * (fbm(vec2(w.y * 0.05, w.x * 0.01 + t * 0.2)) - 0.5) * 2.0;
-    float k = u / max(uFoamSpacing, 1.0) - t * 1.2;
-    float f = fract(k) - 0.5;
-    float line = 1.0 - smoothstep(uFoamWidth * 0.5, uFoamWidth * 1.5, abs(f));
-    float seg = smoothstep(0.45, 0.6, vnoise(vec2(floor(k) * 3.7, w.y * 0.07 + floor(k))));
-    acc = stack(over(vec3(0.92, 0.95, 0.97), clamp(uFoam * line * seg * env * 0.9, 0.0, 1.0)), acc);
+    vec2 f = foamLook(w, t);
+    acc = stack(vec4(vec3(0.0), clamp(uFoam * f.y * env, 0.0, 1.0)), acc);
+    acc = stack(over(vec3(0.92, 0.95, 0.97), clamp(uFoam * f.x * env, 0.0, 1.0)), acc);
   }
 
   finalColor = acc * lake;

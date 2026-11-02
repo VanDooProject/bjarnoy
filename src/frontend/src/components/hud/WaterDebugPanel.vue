@@ -96,6 +96,7 @@ const SLIDERS: {
   { key: 'causticFineDensity', label: 'Fine net: density', needs: 'fineCaustics', range: CAUSTIC_DENSITY, format: times },
   { key: 'causticFinePhase', label: 'Fine net: phase shift', needs: 'fineCaustics', range: CAUSTIC_PHASE, format: (v) => `${v.toFixed(1)} s` },
   { key: 'bogLakeFoamStrength', label: 'Bog lake foam: strength', needs: 'bogLakeFoam', range: BOG_LAKE_STRENGTH, format: times },
+  { key: 'bogLakeFoamStyle', label: 'Bog lake foam: style', needs: 'bogLakeFoam', range: { min: 0, max: 5, step: 1 }, format: (v) => ['strands', 'tapered', 'crest + shadow', 'micro curls', 'ring arcs', 'glint squiggles'][Math.round(v)] ?? String(v) },
   { key: 'bogLakeFoamWidth', label: 'Bog lake foam: line width', needs: 'bogLakeFoam', range: { min: 0.01, max: 0.15, step: 0.005 }, format: (v) => v.toFixed(3) },
   { key: 'bogLakeFoamSpacing', label: 'Bog lake foam: spacing', needs: 'bogLakeFoam', range: { min: 6, max: 40, step: 1 }, format: (v) => `${v.toFixed(0)} u` },
   { key: 'bogLakeSheenStrength', label: 'Bog lake sheen: strength', needs: 'bogLakeSheen', range: BOG_LAKE_STRENGTH, format: times },

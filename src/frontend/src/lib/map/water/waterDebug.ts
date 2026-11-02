@@ -9,6 +9,7 @@
 // Debug panel only, deliberately. There is no player-facing graphics-settings
 // UI in this app today and this feature is not the place to invent one.
 
+import { GUST_LAKE_PHASE_OFFSET } from './bogLakeGust';
 import { GUST_BAND_HALF_WIDTH } from './bogLakeShader';
 
 export interface WaterDebugFlags {
@@ -198,8 +199,10 @@ export interface WaterDebugTuning {
    * in step with the trees. 1 is what ships; 0 pauses them.
    */
   mapAnimationSpeed: number;
-  /** Shifts the bog lake gust against the forest sway, in gust periods (0 = on the trees' furthest lean, the measured `GUST_PEAK_PHASE`). */
+  /** Shifts the bog lake gust against the forest sway, in gust periods (0 = on the trees' furthest lean, the measured `GUST_PEAK_PHASE`; ships at `GUST_LAKE_PHASE_OFFSET`, -2 frames). */
   bogLakeGustPhaseOffset: number;
+  /** Foam line style (design round 4): 0 strands, 1 tapered strands, 2 crest + shadow, 3 micro curls, 4 ring arcs, 5 glint squiggles. */
+  bogLakeFoamStyle: number;
 }
 
 export const waterDebugTuning: WaterDebugTuning = {
@@ -223,7 +226,8 @@ export const waterDebugTuning: WaterDebugTuning = {
   bogLakeFoamSpacing: 15,
   bogLakeBandHalf: GUST_BAND_HALF_WIDTH,
   mapAnimationSpeed: 1,
-  bogLakeGustPhaseOffset: 0,
+  bogLakeFoamStyle: 0,
+  bogLakeGustPhaseOffset: GUST_LAKE_PHASE_OFFSET,
 };
 
 /**

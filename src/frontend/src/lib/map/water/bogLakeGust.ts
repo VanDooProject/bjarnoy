@@ -25,6 +25,12 @@ export const GUST_SWAY = { wavelength: GUST_WAVELENGTH, frames_per_column: GUST_
  */
 export const GUST_PEAK_PHASE = 0.34;
 
+/**
+ * The lake gust's shift against that lean, in periods: -2 sway frames, chosen by eye in the bog lake lab (the band reads as in step
+ * slightly ahead of the measured furthest lean). The debug panel's phase offset starts here.
+ */
+export const GUST_LAKE_PHASE_OFFSET = -2 / 16;
+
 /** The time term of the gust phase, in periods, wrapped to [0, 1): what the shader gets as `uGustTime` (small, so float32 keeps its precision). */
 export function gustTime(clockMs: number): number {
   const t = (clockMs / 1000) * (GUST_FPS / GUST_PERIOD_FRAMES);
