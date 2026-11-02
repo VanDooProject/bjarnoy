@@ -1035,7 +1035,7 @@ pixels, half 8334 of 8354, inlet all, and 2196 of 4707 on the mouth, whose brigh
 lakes, not creeks). The 0/1 map is eroded by one source pixel (the bank outline stays clear; `dryMaskHalf` grows instead) and box-downsampled
 to half resolution. The frame's own top layer (`boglake*` without `_base`: lily pads, reed islands, reeds, which the game draws over the
 water) is cut out too, grown by one source pixel, so nothing on the lake is placed under them. The `virtual:water-dry-masks` module bakes it for every `boglake*` frame, always (the family name decides, not a match
-ratio), into a second atlas, `lake`; both atlases go through one packing and PNG encoding function.
+ratio), into a second atlas, `lake` (and the same masks without the top layer cut out into a third, `lakeShore`, for the shore band below); all of them go through one packing and PNG encoding function.
 
 At runtime `WaterDryLayer('lake')` (the same class as the sea's dry layer, only its atlas differs) draws those masks, placed like the tile
 art, into a render texture over the bounding rect of the lake hexes' base art. It redraws when the terrain is rebuilt, never per frame. The
@@ -1063,7 +1063,7 @@ checks.
 | `float uFoamWidth`, `uFoamSpacing` | foam line half-width as a share of the spacing (0.04), spacing in world units (15) |
 | `vec2 uLakeOrigin`, `uLakeSize` | the world rect the lake mask covers (min corner, size): maps a world point onto the mask for point samples |
 | `float uBlops`, `uBlopDensity`, `uBlopSize` | blops strength (0 = off), chance a cell's cycle shows its curl (1), curl size multiplier (1) |
-| `sampler2D uShoreMask` | the lake mask blurred once (`SHORE_BLUR_STRENGTH`), same rect and UVs as `uLakeMask`: alpha falls towards the shore |
+| `sampler2D uShoreMask` | the shore water (lakes without the pads and islands cut out, plus the mouths' creek water) blurred once (`SHORE_BLUR_STRENGTH`), same rect and UVs as `uLakeMask`: alpha falls towards the land shore |
 | `float uShore`, `uShoreEdge`, `uShoreWobble` | shore band strength (0 = off), blurred-mask level of its inner edge (0.8), wobble multiplier (1) |
 
 **Blops.** Independent of the wind (not gated by the gust band): micro curls that appear at random spots on the lake, grow and drift,
@@ -1080,13 +1080,16 @@ tuning `bogLakeBlopsStrength` (1), `bogLakeBlopDensity` (0.5), `bogLakeBlopSize`
 
 **Shore band.** Like the river's cartoon bank band (§4.4e, style 2), without its patches and glints: a near-white band (alpha up to 0.75)
 along the lake's shore, bottom of the stack (gust looks and blops draw over it). The lake shader has no distance-to-bank field like the
-river's `B`, so `BogLakeLayer.setLake` blurs the lake mask once with a `BlurFilter` (`SHORE_BLUR_STRENGTH` 3, quality 3) into a second render
-texture of the same size, `uShoreMask`, together with the lake mouths' creek water (`WaterDryLayer('river')`, the river water masks
-drawn over the same rect: only `boglake_mouth` frames have one), so the line where a creek's water meets the lake is no shore; it is redrawn with the lake mask (terrain rebuild), never per frame, so the band costs one texture
-read per pixel. The blurred alpha rises from about 0.5 at the shore to 1 a few world units in; the band is where it is below
-`uShoreEdge` (0.8, `bogLakeShoreEdge`), with a soft edge of ±0.02. The edge moves a little: value noise drifting with time
-(`± 0.06 * uShoreWobble`) plus a slow breathing (`0.02 * uShoreWobble * sin(0.7 t + noise)`). The lake mask has lily pads and reed islands
-cut out, so they and the reed islands get a rim of the band too (as the river band thickens around reeds). Flag `bogLakeShore` (**on**), tuning
+river's `B`, so `BogLakeLayer.setLake` blurs the shore water once with a `BlurFilter` (`SHORE_BLUR_STRENGTH` 6, quality 3) into a
+second render texture the size of the lake mask, `uShoreMask`. The shore water is two masks drawn over the lake rect: the lakes **without**
+their top layer cut out (`WaterDryLayer('lakeShore')`, the `lakeShore` atlas of `virtual:water-dry-masks`: `lakeWetMaskHalf` with no `top`),
+so lily pads and reed islands are water to the blur and only the land shore gets the band; and the lake mouths' creek water
+(`WaterDryLayer('river')`, the river water masks: only `boglake_mouth` frames have one), so the line where a creek's water meets the lake is
+no shore. It is redrawn with the lake mask (terrain rebuild), never per frame, so the band costs one texture read per pixel. The blurred
+alpha rises from about 0.5 at the shore to 1 some world units in; the band is where it is below `uShoreEdge` (0.8, `bogLakeShoreEdge`),
+with a soft edge of ±0.02. The edge moves a little: value noise drifting with time (`± 0.06 * uShoreWobble`) plus a slow breathing
+(`0.02 * uShoreWobble * sin(0.7 t + noise)`). The overlay is still cut by `uLakeMask`, so the pads and islands cover the band where it
+passes under them. Flag `bogLakeShore` (**on**), tuning
 `bogLakeShoreStrength` (1), `bogLakeShoreEdge` (0.8), `bogLakeShoreWobble` (1). Hidden with the rest of the layer (water off, suppression,
 "Lake motion" off).
 

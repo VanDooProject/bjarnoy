@@ -75,10 +75,11 @@ export function maskEntries<C>(
 }
 
 /**
- * Which mask atlas a layer draws: the sea hexes' dry masks, the bog lakes' wet masks, or the river water masks (river, creek and lake
- * mouth water; the bog lake layer draws the lake mouths' creek water with it, for the shore band).
+ * Which mask atlas a layer draws: the sea hexes' dry masks, the bog lakes' wet masks, the bog lakes' wet masks without the lily pads
+ * and reed islands cut out (the shore band's water), or the river water masks (river, creek and lake mouth water; the bog lake layer
+ * draws the lake mouths' creek water with it, for the shore band).
  */
-export type MaskKind = 'dry' | 'lake' | 'river';
+export type MaskKind = 'dry' | 'lake' | 'lakeShore' | 'river';
 
 interface LoadedMasks {
   data: MaskAtlasData;
@@ -104,9 +105,9 @@ function loadMasks(kind: MaskKind): Promise<LoadedMasks> {
   return masksPromises[kind]!;
 }
 
-async function dryAtlas(kind: 'dry' | 'lake'): Promise<MaskAtlasData> {
+async function dryAtlas(kind: 'dry' | 'lake' | 'lakeShore'): Promise<MaskAtlasData> {
   const { default: all } = await import('virtual:water-dry-masks');
-  return kind === 'lake' ? all.lake : all;
+  return kind === 'dry' ? all : all[kind];
 }
 
 function cellTexture(masks: LoadedMasks, name: string, frame: DryMaskFrame): Texture {

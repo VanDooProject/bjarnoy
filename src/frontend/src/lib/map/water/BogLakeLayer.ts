@@ -13,18 +13,17 @@ function bogLakeGlProgram(): GlProgram {
 }
 
 /** Blur strength (px, in the mask's 1 px per world unit) that turns the lake mask into the shore band's distance-like field. */
-export const SHORE_BLUR_STRENGTH = 3;
+export const SHORE_BLUR_STRENGTH = 6;
 const SHORE_BLUR_QUALITY = 3;
 
 export class BogLakeLayer {
   readonly mesh: Mesh<MeshGeometry, Shader>;
   private readonly uniforms: UniformGroup;
   private readonly geometry: MeshGeometry;
-  // The lake mask blurred, same size: the shader reads the distance to the shore off it. Redrawn in setLake, never per frame.
+  // The shore water (setLake) blurred, the lake mask's size: the shader reads the distance to the shore off it. Redrawn in setLake, never per frame.
   private shoreTarget: RenderTexture | null = null;
   private readonly shoreContainer = new Container();
-  private readonly shoreSprite = new Sprite();
-  private readonly mouthWaterSprite = new Sprite();
+  private readonly shoreSprites: Sprite[] = [];
   private hasLake = false;
   private suppressed = false;
   // "Lake motion" off (the player's setting, or the device's reduced-motion setting under 'auto'): the whole layer (gusts, blops) is hidden, not frozen. A frozen gust is a band of foam and dark patches standing still on the lake, which reads as a rendering
@@ -70,26 +69,26 @@ export class BogLakeLayer {
       }),
     });
     this.shoreContainer.filters = [new BlurFilter({ strength: SHORE_BLUR_STRENGTH, quality: SHORE_BLUR_QUALITY })];
-    this.shoreContainer.addChild(this.mouthWaterSprite, this.shoreSprite);
     this.mesh.eventMode = 'none';
     this.mesh.visible = false;
   }
 
   /**
    * Binds the lake mask render texture (`WaterDryLayer('lake').texture`) and moves the quad onto the world `rect` it was drawn over. `null`
-   * (no lakes in view) hides the layer. The texture is owned by the caller. `renderer` draws the blurred copy of the mask that gives the
-   * shader its shore distance; it is only used (and may be null) when a texture is given. `mouthWater` (same rect and size as `texture`)
-   * is the lake mouths' creek water: blurred in with the lake, so the line where the creek water meets the lake is no shore.
+   * (no lakes in view) hides the layer. The textures are owned by the caller. `shoreWater` (same rect and size as `texture`) is the water
+   * the shore band is measured from: the lakes without their lily pads and reed islands cut out (`'lakeShore'`), so only the land shore
+   * gets the band, and the lake mouths' creek water (`'river'`), so a creek meeting the lake is no shore. `renderer` blurs it into the
+   * texture the shader reads the shore distance from; it is only used (and may be null) when a texture is given.
    */
   setLake(
     renderer: Renderer | null,
     texture: Texture | null,
     rect: { minX: number; minY: number; maxX: number; maxY: number } | null,
-    mouthWater: Texture | null = null,
+    shoreWater: readonly Texture[] = [],
   ): void {
     this.hasLake = texture !== null && rect !== null;
     this.mesh.shader!.resources.uLakeMask = (texture ?? placeholderDryTexture()).source;
-    const shore = texture && renderer ? this.drawShore(renderer, texture, mouthWater) : null;
+    const shore = texture && renderer ? this.drawShore(renderer, texture, shoreWater) : null;
     this.mesh.shader!.resources.uShoreMask = (shore ?? placeholderDryTexture()).source;
     if (!rect) return;
     const { minX, minY, maxX, maxY } = rect;
@@ -102,24 +101,22 @@ export class BogLakeLayer {
     positions.update();
   }
 
-  /** Blurs the lake mask (with the mouths' creek water) into the shore render texture (same size, resized in place). Runs when the mask is redrawn. */
-  private drawShore(renderer: Renderer, mask: Texture, mouthWater: Texture | null): Texture {
+  /** Blurs the shore water into the shore render texture (the lake mask's size, resized in place). Runs when the mask is redrawn. */
+  private drawShore(renderer: Renderer, mask: Texture, shoreWater: readonly Texture[]): Texture {
     const { width, height } = mask;
     if (!this.shoreTarget) {
       this.shoreTarget = RenderTexture.create({ width, height, resolution: 1, scaleMode: 'linear' });
     } else if (this.shoreTarget.width !== width || this.shoreTarget.height !== height) {
       this.shoreTarget.source.resize(width, height, 1);
     }
-    this.shoreSprite.texture = mask;
-    this.shoreSprite.position.set(0, 0);
-    this.shoreSprite.width = width;
-    this.shoreSprite.height = height;
-    this.mouthWaterSprite.visible = mouthWater !== null;
-    if (mouthWater) {
-      this.mouthWaterSprite.texture = mouthWater;
-      this.mouthWaterSprite.width = width;
-      this.mouthWaterSprite.height = height;
-    }
+    shoreWater.forEach((water, i) => {
+      const sprite = (this.shoreSprites[i] ??= new Sprite());
+      sprite.texture = water;
+      sprite.width = width;
+      sprite.height = height;
+      if (!sprite.parent) this.shoreContainer.addChild(sprite);
+    });
+    for (let i = shoreWater.length; i < this.shoreSprites.length; i++) this.shoreSprites[i]!.removeFromParent();
     renderer.render({ container: this.shoreContainer, target: this.shoreTarget, clear: true, clearColor: [0, 0, 0, 0] });
     return this.shoreTarget;
   }
@@ -158,7 +155,8 @@ export class BogLakeLayer {
 
   destroy(): void {
     this.mesh.destroy();
-    this.shoreContainer.destroy({ children: true });
+    for (const sprite of this.shoreSprites) sprite.destroy();
+    this.shoreContainer.destroy();
     this.shoreTarget?.destroy(true);
     this.shoreTarget = null;
   }
