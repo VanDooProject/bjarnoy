@@ -2,8 +2,11 @@ using System.Net;
 using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.World;
+using Microsoft.Extensions.DependencyInjection;
 using SkiaSharp;
 
 namespace Bjarnoy.Api.IntegrationTests;
@@ -99,6 +102,27 @@ public sealed class FogChunkEndpointsTests : IAsyncLifetime
 
         // Chunks with nothing in reach are empty: no PNG, the "0" version.
         Assert.Contains(body.Chunks, c => c.Png is null && c.Version == "0");
+    }
+
+    [Fact]
+    public async Task A_settlement_whose_longhouse_is_destroyed_reveals_nothing_around_its_centre()
+    {
+        var (worldId, settlement, owner) = await FoundedAsync();
+        var home = FogChunkLayout.ChunkOf(new HexCoord(settlement.Q, settlement.R));
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            db.PlacedBuildings.RemoveRange(
+                db.PlacedBuildings.Where(b => b.SettlementId == settlement.Id && b.Type == BuildingType.Longhouse));
+            await db.SaveChangesAsync(Ct);
+        }
+
+        using var client = _factory.CreateClient();
+        var response = await client.SendAsync(Get(Url(worldId, home.U, home.U, home.V, home.V), owner), Ct);
+
+        var chunk = Assert.Single((await response.ReadStrictAsync<FogChunksResponse>(Ct)).Chunks);
+        Assert.Null(chunk.Png);
+        Assert.Equal(FogChunkService.EmptyVersion, chunk.Version);
     }
 
     [Fact]
