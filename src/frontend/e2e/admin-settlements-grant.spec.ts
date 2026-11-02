@@ -37,6 +37,8 @@ const CAPACITY = resourceLine(750, 750, 900, 375);
 function settlementResponse(stock: ReturnType<typeof resourceLine>) {
   return {
     id: SETTLEMENT_ID,
+    realmId: SETTLEMENT_ID,
+    linkedMemberIds: [SETTLEMENT_ID],
     worldId: WORLD_ID,
     islandId: 'island-1',
     name: "Astrid's realm",

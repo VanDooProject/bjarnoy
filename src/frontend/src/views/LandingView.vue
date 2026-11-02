@@ -536,7 +536,7 @@ const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
     (c) => world.model.getTile(c.q, c.r).terrain,
     (c) => {
       const tile = world.model.getTile(c.q, c.r);
-      return tile.ownerId === settlement.id && !tile.buildingType;
+      return world.isRealmSettlement(tile.ownerId) && !tile.buildingType;
     },
   );
 });
@@ -669,7 +669,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   // full settlement view's job once onboarding hands off to it), so any
   // other click (the longhouse, a rival's tile, open water) just closes
   // whatever ring is open rather than opening some other UI for it.
-  if (tile.ownerId === world.selectedSettlementId && !tile.buildingType && categoriesFor(tile).length > 0) {
+  if (world.isRealmSettlement(tile.ownerId) && !tile.buildingType && categoriesFor(tile).length > 0) {
     if (!withinBuildableRange(coord)) {
       showInvalidClickMessage(t('landing.invalidClick.beyondClaim'));
       closeRing();

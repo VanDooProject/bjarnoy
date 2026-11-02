@@ -420,6 +420,10 @@ export interface RealmMemberResponse {
 
 export interface SettlementResponse {
   id: string;
+  /** The oldest member of the linked realm this settlement belongs to; equals `id` when it is the oldest or unlinked. */
+  realmId: string;
+  /** Every member of the linked realm, oldest first, including this settlement. */
+  linkedMemberIds: string[];
   worldId: string;
   islandId: string;
   name: string;
@@ -449,6 +453,8 @@ export interface SettlementResponse {
 
 export interface SettlementSummary {
   id: string;
+  /** The oldest member of the linked realm; `name` is that member's (the realm's) name. */
+  realmId: string;
   name: string;
   ownerName: string;
   q: number;

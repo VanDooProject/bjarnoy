@@ -83,6 +83,8 @@ function summary(overrides: Partial<AdminSettlementSummary> = {}): AdminSettleme
 function detail(overrides: Partial<SettlementResponse> = {}): SettlementResponse {
   return {
     id: 'settlement-1',
+    realmId: 'settlement-1',
+    linkedMemberIds: ['settlement-1'],
     worldId: 'world-1',
     islandId: 'island-1',
     name: 'Bjornstad',
