@@ -171,7 +171,7 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
         // asserted '/' from reading RegisterView.vue alone and failed
         // against this guard).
         await Assertions.Expect(page).ToHaveURLAsync(
-            new Regex(@"/settlement$"), new PageAssertionsToHaveURLOptions { Timeout = 10_000 });
+            new Regex(@"/settlement(#q=[^#]*)?$"), new PageAssertionsToHaveURLOptions { Timeout = 10_000 });
 
         var accountMenuTrigger = page.GetByTestId("account-menu-trigger");
         await Assertions.Expect(accountMenuTrigger).ToBeVisibleAsync(new() { Timeout = 10_000 });
@@ -224,7 +224,7 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
         // version, which cannot get past this step (no backend to restore
         // a realm from — see that spec's own comment).
         await Assertions.Expect(page).ToHaveURLAsync(
-            new Regex(@"/settlement$"), new PageAssertionsToHaveURLOptions { Timeout = 15_000 });
+            new Regex(@"/settlement(#q=[^#]*)?$"), new PageAssertionsToHaveURLOptions { Timeout = 15_000 });
         await Assertions.Expect(returningLoginPanel).Not.ToBeVisibleAsync();
         await Assertions.Expect(accountMenuTrigger).ToBeVisibleAsync(new() { Timeout = 10_000 });
 
