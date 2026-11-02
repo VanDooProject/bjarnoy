@@ -105,6 +105,30 @@ public sealed class FogChunkEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Ground_explored_before_the_longhouse_is_destroyed_stays_explored()
+    {
+        // Losing sight is not losing the memory: the persisted explored chunks only ever grow.
+        var (worldId, settlement, owner) = await FoundedAsync();
+        var home = FogChunkLayout.ChunkOf(new HexCoord(settlement.Q, settlement.R));
+        using var client = _factory.CreateClient();
+        var before = Assert.Single((await (await client.SendAsync(Get(Url(worldId, home.U, home.U, home.V, home.V), owner), Ct))
+            .ReadStrictAsync<FogChunksResponse>(Ct)).Chunks);
+        Assert.NotNull(before.Png);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            db.PlacedBuildings.RemoveRange(
+                db.PlacedBuildings.Where(b => b.SettlementId == settlement.Id && b.Type == BuildingType.Longhouse));
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var after = Assert.Single((await (await client.SendAsync(Get(Url(worldId, home.U, home.U, home.V, home.V), owner), Ct))
+            .ReadStrictAsync<FogChunksResponse>(Ct)).Chunks);
+        Assert.NotNull(after.Png);
+    }
+
+    [Fact]
     public async Task A_settlement_whose_longhouse_is_destroyed_reveals_nothing_around_its_centre()
     {
         var (worldId, settlement, owner) = await FoundedAsync();
