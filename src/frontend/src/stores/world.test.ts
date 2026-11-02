@@ -2003,6 +2003,7 @@ describe('useWorldStore refreshCampStates', () => {
     q: 2,
     r: 1,
     family: 'wolfden',
+    orientation: 'SE',
     level: 2,
     effectiveLevel: 2,
     strong: true,
@@ -2027,6 +2028,27 @@ describe('useWorldStore refreshCampStates', () => {
 
     expect(getWorldCamps).toHaveBeenCalledWith('world-1');
     expect(store.model.campAt({ q: 2, r: 1 })?.empty).toBe(true);
+    expect(store.campStatesVersion).toBe(1);
+
+    await store.refreshCampStates();
+    expect(store.campStatesVersion).toBe(1);
+  });
+
+  it('adds a camp it first learns about from the poll (a newly seen island) with its state', async () => {
+    getWorldCamps.mockReset().mockResolvedValue([{ ...campState, family: 'bearrapids', orientation: 'NE', strong: true }]);
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    expect(store.model.campAt({ q: 2, r: 1 })).toBeUndefined();
+
+    await store.refreshCampStates();
+
+    expect(store.model.campAt({ q: 2, r: 1 })).toMatchObject({
+      family: 'bearrapids',
+      orientation: 'NE',
+      level: 2,
+      empty: true,
+      clears: 1,
+    });
     expect(store.campStatesVersion).toBe(1);
 
     await store.refreshCampStates();

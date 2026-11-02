@@ -1595,6 +1595,7 @@ describe('WorldModel wildlife camps', () => {
       q,
       r,
       family: 'wolfden',
+      orientation: 'SE',
       level: 2,
       effectiveLevel: 3,
       strong: true,

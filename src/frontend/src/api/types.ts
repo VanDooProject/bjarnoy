@@ -140,6 +140,8 @@ export interface CampStateResponse {
   q: number;
   r: number;
   family: string;
+  /** The camp tile's own orientation, so a camp first learned about from this poll can be added to the model. */
+  orientation: string;
   level: number;
   effectiveLevel: number;
   strong: boolean;
