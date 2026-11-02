@@ -167,9 +167,10 @@ const NEIGHBOURS: readonly (readonly [number, number])[] = [
  * face leaves that strip without flow, a dark line along every seam. Only the edges the water crosses get the rim: past any
  * other edge lies a neighbour's land, which the river's own skirt water must not be drawn onto. The rims of two
  * neighbouring river cells overlap; the field crosses the shared edge at a right angle in both, so whichever is drawn last
- * makes no difference.
+ * makes no difference. Seven, not two: the art's water spills up to about 6.5 texels past the face at the corners and past those
+ * edges (measured on every `rivertile*` frame in use), and a narrower rim left that spill without ripples.
  */
-export const FACE_PAD_TEXELS = 2;
+export const FACE_PAD_TEXELS = 7;
 
 /**
  * Which texels are inside the top face (centre in the polygon), `padded` (inside plus one texel all round: where edge seeds

@@ -1037,7 +1037,7 @@ reference the tests check the potential against.
 The ripple texture (`RiverFlowLayer`, `computeRiverRipple`) is RGBA8 per frame cell: R,G = `cos theta`, `sin theta` `* 0.5 + 0.5`
 (a filtering-safe encoding, unlike a wrapped phase, which would smear across the 2 pi jump), B the distance to the bank over `RIVER_CENTRE_TEXELS = 16` (0 at the bank, 1 in the middle; the shader fades the ripples out at the shore over the first quarter of it, the same 4 texels as before, and bows the crests with the rest, see below; a dry texel within 3 texels of an in or out edge segment is not a bank, because
 the art's water stops a texel or two short of the top face edge and that rim would otherwise fade every seam to nothing), A 255 on the
-water texels of the hex top face and of a 2-texel rim past its in and out edges (`FACE_PAD_TEXELS`), and all four 0 everywhere else,
+water texels of the hex top face and of a 7-texel rim past its in and out edges (`FACE_PAD_TEXELS`: the art's water spills up to about 6.5 texels past the face at the corners and past those edges), and all four 0 everywhere else,
 dry texels inside the face included. Clipped exactly to the face, a cell left a strip along every seam without flow: the art's water
 stops a texel or two short of the face edge, so what shows there is the neighbouring hex's skirt water. The rim carries the ripples
 over that strip, and because the cell is transparent where it is dry, its own dry strip does not cover the rim of the cell next to

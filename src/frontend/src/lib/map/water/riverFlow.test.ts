@@ -685,3 +685,23 @@ describe.skipIf(!vendoredArt)('computeRiverFlow across a slanted seam of the rea
     }
   }, 120_000);
 });
+
+describe.skipIf(!vendoredArt)('computeRiverRipple coverage on the real art', () => {
+  it('covers every painted water texel of the frame, banks of both sides and the spill past the top face included', async () => {
+    // The art's water spills up to about 6.5 texels past the top face at the hex corners and past the in and out edges; a 2-texel
+    // rim left that strip without ripples, a gap of plain water along one bank where the river meets the next hex.
+    for (const [name, inDirs, outDir] of [
+      ['rivertile_bend120_island_NW_base', ['E'], 'NW'],
+      ['rivertile_bend_SE_base', ['SE'], 'W'],
+      ['rivertile_bend_W_base', ['SE'], 'NE'],
+      ['rivertile_y_narrow_SE_base', ['E', 'SE'], 'W'],
+      ['rivertile_bend180_meander_NW_base', ['E'], 'W'],
+    ] as const) {
+      const f = await riverFrameInput(name);
+      const { data } = computeRiverRipple({ ...f, inEdges: inDirs.map(topFaceEdgeIndex), outEdge: topFaceEdgeIndex(outDir) });
+      const missed: string[] = [];
+      for (let y = 0; y < f.ch; y++) for (let x = 0; x < f.cw; x++) if (f.mask[y * f.cw + x]! >= WATER_THRESHOLD && data[(y * f.cw + x) * 4 + 3] === 0) missed.push(`${x},${y}`);
+      expect(missed.slice(0, 5), `${name}: ${missed.length} water texels uncovered`).toEqual([]);
+    }
+  }, 120_000);
+});
