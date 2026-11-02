@@ -4,6 +4,8 @@
  * load into the new build; this module owns that decision.
  */
 
+import { hasUnsavedInput } from '../composables/useUnsavedInput';
+
 const RELOAD_KEY = 'bjarnoy.updateReload';
 /** The same target is not hard-loaded twice within this window (reload loop guard). */
 const RELOAD_LOOP_WINDOW_MS = 10_000;
@@ -88,5 +90,48 @@ export function installChunkErrorHandling(router: {
   globalThis.addEventListener('vite:preloadError', () => {
     markUpdatePending();
     hardLoad(globalThis.location.href);
+  });
+}
+
+// --- Build id and the moments a pending update is applied ---
+
+let ownBuildId: string | null = null;
+
+/** The entry chunk's file name (`assets/index-<hash>.js`), taken from the entry module's own URL. */
+export function buildIdFromEntryUrl(entryUrl: string): string {
+  return new URL(entryUrl).pathname.replace(/^\//, '');
+}
+
+export function setOwnBuildId(id: string): void {
+  ownBuildId = id;
+}
+
+/** A response's `X-App-Build` differing from this bundle's id means a newer build was deployed. */
+export function checkBuildHeader(headerValue: string | null): void {
+  if (headerValue !== null && headerValue !== ownBuildId) markUpdatePending();
+}
+
+/**
+ * Router guard: with an update pending, a navigation inside the app becomes a
+ * full page load of the target (the SPA navigation would run old code and,
+ * for a lazy route, likely fail). The first navigation is the page load itself.
+ */
+export function updateNavigationGuard(to: { fullPath: string }, from: { matched: unknown[] }): boolean {
+  if (!updatePending || from.matched.length === 0) return true;
+  return !hardLoad(to.fullPath);
+}
+
+/** Focus lost: apply a pending update unless the player has unsaved input. */
+export function reloadWhenIdle(): boolean {
+  if (!updatePending || hasUnsavedInput()) return false;
+  globalThis.location.reload();
+  return true;
+}
+
+/** Installed once from main.ts. */
+export function installFocusReload(): void {
+  globalThis.addEventListener('blur', reloadWhenIdle);
+  globalThis.document.addEventListener('visibilitychange', () => {
+    if (globalThis.document.visibilityState === 'hidden') reloadWhenIdle();
   });
 }

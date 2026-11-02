@@ -39,6 +39,9 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
     /// <summary>Set by <see cref="WithBuild"/>; null means an unstamped build.</summary>
     private BuildInfoOptions? _build;
 
+    /// <summary>Set by <see cref="WithBuildId"/>; a web root of its own holding <c>build-id.txt</c>.</summary>
+    private string? _buildIdWebRoot;
+
     /// <summary>Set by <see cref="WithDiagnostics"/>; null leaves it to the build.</summary>
     private DiagnosticsOptions? _diagnostics;
 
@@ -114,6 +117,20 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
             BuiltAt = builtAt,
             RuntimeCommit = runtimeCommit,
         };
+
+        return this;
+    }
+
+    /// <summary>
+    /// Serves a web root that holds a <c>build-id.txt</c> with this content,
+    /// as the Docker image does after the frontend build.
+    /// </summary>
+    public BjarnoyApiFactory WithBuildId(string content)
+    {
+        _buildIdWebRoot = Path.Combine(Path.GetTempPath(), $"bjarnoy-webroot-{Guid.CreateVersion7():N}");
+        Directory.CreateDirectory(_buildIdWebRoot);
+        File.Copy(Path.Combine(TestWebRootPath, "index.html"), Path.Combine(_buildIdWebRoot, "index.html"));
+        File.WriteAllText(Path.Combine(_buildIdWebRoot, "build-id.txt"), content);
 
         return this;
     }
@@ -242,7 +259,7 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         // Stand in for the built frontend the Docker image bakes into wwwroot,
         // so the SPA-fallback tests do not depend on whether anyone has run a
         // frontend build.
-        builder.UseWebRoot(TestWebRootPath);
+        builder.UseWebRoot(_buildIdWebRoot ?? TestWebRootPath);
 
         // SetMinimumLevel only sets a fallback used when no rule matches, and
         // appsettings.json's "Logging:LogLevel:Default": "Information" is
@@ -264,6 +281,18 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
+
+        if (disposing && _buildIdWebRoot is not null)
+        {
+            try
+            {
+                Directory.Delete(_buildIdWebRoot, recursive: true);
+            }
+            catch (IOException)
+            {
+                // A leftover temp directory is not worth failing a test run over.
+            }
+        }
 
         if (!disposing || _databaseFile is null)
         {

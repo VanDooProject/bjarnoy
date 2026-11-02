@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../stores/auth';
 import { useGuildStore } from '../stores/guild';
 import { useWorldStore } from '../stores/world';
+import { useUnsavedInput } from '../composables/useUnsavedInput';
 import type { GuildBoardTopicKind, GuildFeeTier, GuildRole } from '../api/types';
 import type { MessageSchema } from '../i18n/schema';
 
@@ -125,6 +126,9 @@ const newTopicTitle = ref('');
 const newTopicKind = ref<GuildBoardTopicKind>('discussion');
 const newTopicBody = ref('');
 const replyBody = ref('');
+useUnsavedInput(() =>
+  [foundName, foundTag, foundDescription, newTopicTitle, newTopicBody, replyBody].some((field) => field.value.trim() !== ''),
+);
 
 async function openTopic(topicId: string) {
   if (!current.value) return;

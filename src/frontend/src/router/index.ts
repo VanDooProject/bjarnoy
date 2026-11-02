@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { updateNavigationGuard } from '../lib/appUpdate';
 import { resolveAuthGuard } from './authGuard';
 import { awaitShowcaseManifests, startAtlasManifestLoad } from './atlasGuard';
 import { useAuthStore } from '../stores/auth';
@@ -286,6 +287,9 @@ export const router = createRouter({
     },
   ],
 });
+
+// First guard: with a newer build deployed, navigating loads it instead of running old code.
+router.beforeEach(updateNavigationGuard);
 
 router.beforeEach(async (to) => {
   // Awaited once (see `ensureInitialized`) so a page reload restores a

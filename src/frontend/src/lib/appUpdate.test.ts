@@ -1,11 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { registerUnsavedInput } from '../composables/useUnsavedInput';
 import {
+  buildIdFromEntryUrl,
+  checkBuildHeader,
   handleChunkLoadError,
   hardLoad,
   installChunkErrorHandling,
   isChunkLoadError,
   isUpdatePending,
+  markUpdatePending as markPending,
+  reloadWhenIdle,
   resetAppUpdate,
+  setOwnBuildId,
+  updateNavigationGuard,
 } from './appUpdate';
 
 function stubBrowser(href = 'https://game.test/settlement') {
@@ -101,5 +108,76 @@ describe('installChunkErrorHandling', () => {
 
     listeners.get('vite:preloadError')?.();
     expect(loc.reload).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('build id', () => {
+  beforeEach(() => resetAppUpdate());
+
+  it('is the entry module URL path without the leading slash', () => {
+    expect(buildIdFromEntryUrl('https://game.test/assets/index-BhkDhqzG.js')).toBe('assets/index-BhkDhqzG.js');
+  });
+
+  it('marks an update pending only for a different X-App-Build', () => {
+    setOwnBuildId('assets/index-A.js');
+    checkBuildHeader(null);
+    checkBuildHeader('assets/index-A.js');
+    expect(isUpdatePending()).toBe(false);
+    checkBuildHeader('assets/index-B.js');
+    expect(isUpdatePending()).toBe(true);
+  });
+});
+
+describe('updateNavigationGuard', () => {
+  beforeEach(() => resetAppUpdate());
+  afterEach(() => vi.unstubAllGlobals());
+  const initial = { matched: [] };
+  const inApp = { matched: [{}] };
+
+  it('lets every navigation through while no update is pending', () => {
+    const loc = stubBrowser();
+    expect(updateNavigationGuard({ fullPath: '/login' }, inApp)).toBe(true);
+    expect(loc.assign).not.toHaveBeenCalled();
+  });
+
+  it('turns an in-app navigation into a full page load once an update is pending', () => {
+    const loc = stubBrowser();
+    markPending();
+    expect(updateNavigationGuard({ fullPath: '/login' }, inApp)).toBe(false);
+    expect(loc.assign).toHaveBeenCalledWith('https://game.test/login');
+  });
+
+  it('leaves the initial navigation alone', () => {
+    const loc = stubBrowser();
+    markPending();
+    expect(updateNavigationGuard({ fullPath: '/login' }, initial)).toBe(true);
+    expect(loc.assign).not.toHaveBeenCalled();
+  });
+});
+
+describe('reloadWhenIdle', () => {
+  beforeEach(() => resetAppUpdate());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('does nothing without a pending update', () => {
+    const loc = stubBrowser();
+    expect(reloadWhenIdle()).toBe(false);
+    expect(loc.reload).not.toHaveBeenCalled();
+  });
+
+  it('reloads a pending update when nothing is unsaved', () => {
+    const loc = stubBrowser();
+    markPending();
+    expect(reloadWhenIdle()).toBe(true);
+    expect(loc.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps unsaved input and waits for the next navigation', () => {
+    const loc = stubBrowser();
+    markPending();
+    const unregister = registerUnsavedInput(() => true);
+    expect(reloadWhenIdle()).toBe(false);
+    expect(loc.reload).not.toHaveBeenCalled();
+    unregister();
   });
 });

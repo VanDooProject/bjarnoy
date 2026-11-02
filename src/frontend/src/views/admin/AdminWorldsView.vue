@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import type { AdminWorldResponse } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
+import { useUnsavedInput } from '../../composables/useUnsavedInput';
 import { DEFAULT_GENERATION } from '../../lib/map/worldGenerator';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -65,6 +66,18 @@ const newWorld = reactive({
   creating: false,
   error: null as string | null,
 });
+
+function editedFields(d: Draft): string {
+  return JSON.stringify([d.speedFactor, d.startsAt, d.joinsClosed, d.frozenIslesEnabled, d.endbossAt, d.graceMinutes]);
+}
+
+// A new-world form with a name or seed typed, or a world setting changed but not saved.
+useUnsavedInput(
+  () =>
+    newWorld.name !== '' ||
+    newWorld.seed !== '' ||
+    worlds.value.some((world) => !!drafts[world.id] && editedFields(drafts[world.id]) !== editedFields(draftFor(world))),
+);
 
 async function createWorld() {
   if (newWorld.creating) return;
