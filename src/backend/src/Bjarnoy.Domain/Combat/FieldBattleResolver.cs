@@ -151,8 +151,8 @@ public static class FieldBattleResolver
         }
 
         var longhouseLevel = buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
-        var centreRadius = Settlement.ClaimRadiusForLonghouseLevel(longhouseLevel);
-        if (settlementCentre.DistanceTo(hex) > centreRadius)
+        if (Settlement.LonghouseDisc(settlementCentre, longhouseLevel) is not { } centreDisc
+            || centreDisc.Centre.DistanceTo(hex) > centreDisc.Radius)
         {
             return FieldBattleClaim.None;
         }

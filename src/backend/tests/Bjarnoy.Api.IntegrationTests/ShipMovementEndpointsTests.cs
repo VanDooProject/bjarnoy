@@ -409,6 +409,8 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
             attacker.CapacityFood = 100_000;
 
             var target = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, targetOwner, targetCentre.Q, targetCentre.R);
+            // A settlement without a Longhouse claims nothing, so the target has its (level 1) Longhouse at the centre.
+            target.Buildings.Add(new PlacedBuildingEntity { SettlementId = target.Id, Q = targetCentre.Q, R = targetCentre.R, Type = BuildingType.Longhouse, Level = 1 });
             target.Buildings.Add(new PlacedBuildingEntity { SettlementId = target.Id, Q = shoreBuilding.Q, R = shoreBuilding.R, Type = BuildingType.Farm, Level = 5 });
             target.Buildings.Add(new PlacedBuildingEntity { SettlementId = target.Id, Q = inlandBuilding.Q, R = inlandBuilding.R, Type = BuildingType.Farm, Level = 5 });
             db.Settlements.AddRange(attacker, target);

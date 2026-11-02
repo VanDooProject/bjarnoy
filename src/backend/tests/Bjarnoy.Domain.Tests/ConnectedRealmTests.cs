@@ -91,6 +91,79 @@ public class ConnectedRealmTests
         Assert.True(rebuilt.IsTowerConnected(A, new HexCoord(7, 0)));
     }
 
+    private static RealmSettlement Razed(Guid id, HexCoord centre, params PlacedBuilding[] towers) => new(id, centre, [.. towers]);
+
+    [Fact]
+    public void A_settlement_without_a_longhouse_contributes_no_disc_not_even_its_centre_hex()
+    {
+        var realm = ConnectedRealm.Resolve([Razed(A, new HexCoord(0, 0))]);
+
+        Assert.Empty(realm.DiscsOf(A));
+        Assert.Empty(realm.AllDiscs);
+        Assert.False(realm.Covers(new HexCoord(0, 0)));
+    }
+
+    [Fact]
+    public void A_level_zero_longhouse_is_treated_as_destroyed()
+    {
+        var realm = ConnectedRealm.Resolve([new RealmSettlement(A, new HexCoord(0, 0), [new PlacedBuilding(new HexCoord(0, 0), BuildingType.Longhouse, 0)])]);
+
+        Assert.Empty(realm.DiscsOf(A));
+    }
+
+    [Fact]
+    public void A_razed_settlements_tower_inside_another_own_longhouse_disc_stays_connected()
+    {
+        // B's longhouse at 10 (reach 3) covers A's tower at 8; A's own longhouse is destroyed.
+        var realm = ConnectedRealm.Resolve([Razed(A, new HexCoord(0, 0), Tower(8)), Settlement(B, new HexCoord(10, 0))]);
+
+        Assert.True(realm.IsTowerConnected(A, new HexCoord(8, 0)));
+        Assert.Equal([(new HexCoord(8, 0), 2)], realm.DiscsOf(A));
+        Assert.False(Claims(realm, 0));
+    }
+
+    [Fact]
+    public void A_razed_settlements_tower_reachable_only_through_its_own_gone_longhouse_is_cut_off()
+    {
+        var realm = ConnectedRealm.Resolve([Razed(A, new HexCoord(0, 0), Tower(2), Tower(4))]);
+
+        Assert.False(realm.IsTowerConnected(A, new HexCoord(2, 0)));
+        Assert.False(realm.IsTowerConnected(A, new HexCoord(4, 0)));
+        Assert.Empty(realm.AllDiscs);
+    }
+
+    [Fact]
+    public void A_chain_from_another_settlement_through_connected_towers_still_reaches_a_razed_settlements_tower()
+    {
+        // B's longhouse at 10 (reach 3) -> B's tower at 8 (reach 2) -> A's tower at 6 (reach 2); A's longhouse at 0 is destroyed.
+        var realm = ConnectedRealm.Resolve([Razed(A, new HexCoord(0, 0), Tower(6)), Settlement(B, new HexCoord(10, 0), Tower(8))]);
+
+        Assert.True(realm.IsTowerConnected(B, new HexCoord(8, 0)));
+        Assert.True(realm.IsTowerConnected(A, new HexCoord(6, 0)));
+        Assert.True(Claims(realm, 4));
+        Assert.False(Claims(realm, 0));
+    }
+
+    [Fact]
+    public void A_razed_settlement_claims_nothing_by_itself()
+    {
+        var razed = new Bjarnoy.Domain.Buildings.Settlement
+        {
+            Id = A,
+            Name = "A",
+            Centre = new HexCoord(0, 0),
+            Resources = StockFor(1),
+            Buildings = [new PlacedBuilding(new HexCoord(1, 0), BuildingType.Tower, 2)],
+        };
+
+        Assert.Empty(razed.ClaimDiscs);
+        Assert.False(razed.Claims(new HexCoord(0, 0)));
+        Assert.False(razed.Claims(new HexCoord(1, 0)));
+        Assert.Equal(0, razed.ClaimRadius);
+        Assert.Null(Bjarnoy.Domain.Buildings.Settlement.LonghouseDisc(new HexCoord(0, 0), 0));
+        Assert.Equal((new HexCoord(0, 0), 2), Bjarnoy.Domain.Buildings.Settlement.LonghouseDisc(new HexCoord(0, 0), 1));
+    }
+
     [Fact]
     public void A_level_zero_stub_claims_nothing_and_connects_nothing()
     {
