@@ -115,9 +115,14 @@ export function checkBuildHeader(headerValue: string | null): void {
  * Router guard: with an update pending, a navigation inside the app becomes a
  * full page load of the target (the SPA navigation would run old code and,
  * for a lazy route, likely fail). The first navigation is the page load itself.
+ * A hash-only change (the world/settlement zoom switch, `/settlement#world`) stays
+ * in the app: it loads no code and would cut a zoom gesture off mid-way.
  */
-export function updateNavigationGuard(to: { fullPath: string }, from: { matched: unknown[] }): boolean {
-  if (!updatePending || from.matched.length === 0) return true;
+export function updateNavigationGuard(
+  to: { fullPath: string; path: string },
+  from: { matched: unknown[]; path: string },
+): boolean {
+  if (!updatePending || from.matched.length === 0 || to.path === from.path) return true;
   return !hardLoad(to.fullPath);
 }
 

@@ -131,27 +131,35 @@ describe('build id', () => {
 describe('updateNavigationGuard', () => {
   beforeEach(() => resetAppUpdate());
   afterEach(() => vi.unstubAllGlobals());
-  const initial = { matched: [] };
-  const inApp = { matched: [{}] };
+  const initial = { matched: [], path: '/' };
+  const inApp = { matched: [{}], path: '/settlement' };
 
   it('lets every navigation through while no update is pending', () => {
     const loc = stubBrowser();
-    expect(updateNavigationGuard({ fullPath: '/login' }, inApp)).toBe(true);
+    expect(updateNavigationGuard({ fullPath: '/login', path: '/login' }, inApp)).toBe(true);
     expect(loc.assign).not.toHaveBeenCalled();
   });
 
   it('turns an in-app navigation into a full page load once an update is pending', () => {
     const loc = stubBrowser();
     markPending();
-    expect(updateNavigationGuard({ fullPath: '/login' }, inApp)).toBe(false);
+    expect(updateNavigationGuard({ fullPath: '/login', path: '/login' }, inApp)).toBe(false);
     expect(loc.assign).toHaveBeenCalledWith('https://game.test/login');
   });
 
   it('leaves the initial navigation alone', () => {
     const loc = stubBrowser();
     markPending();
-    expect(updateNavigationGuard({ fullPath: '/login' }, initial)).toBe(true);
+    expect(updateNavigationGuard({ fullPath: '/login', path: '/login' }, initial)).toBe(true);
     expect(loc.assign).not.toHaveBeenCalled();
+  });
+
+  it('keeps a hash-only change (world/settlement zoom switch) in the app', () => {
+    const loc = stubBrowser();
+    markPending();
+    expect(updateNavigationGuard({ fullPath: '/settlement#world', path: '/settlement' }, inApp)).toBe(true);
+    expect(loc.assign).not.toHaveBeenCalled();
+    expect(loc.reload).not.toHaveBeenCalled();
   });
 });
 
