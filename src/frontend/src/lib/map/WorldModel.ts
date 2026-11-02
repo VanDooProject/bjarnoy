@@ -2312,12 +2312,14 @@ export class WorldModel {
    * authoritative camps (`IslandResponse.camps`); demo mode feeds it
    * `placeCamps` output. Idempotent and additive, like `setGiants`: a hex that
    * already has a camp is left untouched. Strength and guard range are derived
-   * from the shared family table, so they cannot disagree with the server.
+   * from the shared family table, so they cannot disagree with the server. Returns whether any camp was added.
    */
-  setCamps(camps: { family: string; coord: AxialCoord; level: number; orientation: TileOrientation }[]) {
+  setCamps(camps: { family: string; coord: AxialCoord; level: number; orientation: TileOrientation }[]): boolean {
+    let added = false;
     for (const camp of camps) {
       const tile = this.getTile(camp.coord.q, camp.coord.r);
       if (tile.camp) continue;
+      added = true;
       const strong = isStrongCampFamily(camp.family);
       const strength: CampStrength = strong ? 'strong' : 'weak';
       tile.camp = {
@@ -2329,6 +2331,7 @@ export class WorldModel {
       };
       this.campByHex.set(coordKey(camp.coord), { ...tile.camp, q: camp.coord.q, r: camp.coord.r });
     }
+    return added;
   }
 
   /**

@@ -27,6 +27,8 @@ import {
   waterMaskTerrainFor,
   worldGiantOutline,
   worldHexFill,
+  worldCampMarkers,
+  worldPawHalfSize,
   worldRiverColor,
 } from './HexMapRenderer';
 import { StaticWorldModel } from './StaticWorldModel';
@@ -1113,5 +1115,29 @@ describe('world-map giants', () => {
 
   it('draws no outline around the giant mountain, which has no function of its own', () => {
     expect(worldGiantOutline('giantmountain')).toBeUndefined();
+  });
+});
+
+describe('worldCampMarkers', () => {
+  const strong = { q: 1, r: 2, strong: true, removed: false };
+  const weak = { q: 3, r: 4, strong: false, removed: false };
+
+  it('draws nothing for a player who is not premium', () => {
+    expect(worldCampMarkers([strong, weak], false)).toEqual([]);
+  });
+
+  it('skips a removed camp', () => {
+    expect(worldCampMarkers([{ ...strong, removed: true }, weak], true).map((m) => [m.q, m.r])).toEqual([[3, 4]]);
+  });
+
+  it('colours a strong camp red and a weak one neutral', () => {
+    const [strongMarker, weakMarker] = worldCampMarkers([strong, weak], true);
+    expect(strongMarker).toEqual({ q: 1, r: 2, color: 0xe2705f });
+    expect(weakMarker).toEqual({ q: 3, r: 4, color: 0xe8e2d0 });
+  });
+
+  it('keeps the paw readable when zoomed far out and bounded when zoomed in', () => {
+    expect(worldPawHalfSize(0.01)).toBeGreaterThanOrEqual(5);
+    expect(worldPawHalfSize(100)).toBeLessThanOrEqual(11);
   });
 });

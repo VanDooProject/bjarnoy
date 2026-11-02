@@ -470,6 +470,12 @@ export interface HexMapRendererOptions {
    */
   hideSettlementBadge?: boolean;
   /**
+   * World mode only: draw a paw symbol on every standing wildlife camp the model knows (`worldCampMarkers`). The host
+   * sets it for premium players; absent means no camp symbols at all. Changeable after mount with
+   * `setShowCampMarkers`.
+   */
+  showCampMarkers?: boolean;
+  /**
    * Landing-page static preview: fixes the camera to fit the whole preview
    * island on screen and disables drag/wheel/pinch zoom, while clicks/taps
    * still pass through (founding a settlement must keep working) — unlike
@@ -1429,6 +1435,37 @@ export function worldGiantOutline(family: GiantFamily): number | undefined {
 export function worldRiverColor(river: Pick<RiverTile, 'wasted'>): number {
   return river.wasted ? LAVA_COLOR : RIVER_COLOR;
 }
+/** World-map paw colour of a strong wildlife camp: the overlay's one red. */
+const CAMP_STRONG_COLOR = 0xe2705f;
+/** World-map paw colour of a weak wildlife camp: a light neutral. */
+const CAMP_WEAK_COLOR = 0xe8e2d0;
+
+/** One paw symbol on the world map. */
+export interface WorldCampMarker {
+  q: number;
+  r: number;
+  color: number;
+}
+
+/**
+ * Which camps get a paw symbol on the world map, and in which colour: none unless `show` (premium players), never a
+ * removed camp (a building stands on its hex), strong camps red and weak ones neutral.
+ */
+export function worldCampMarkers(
+  camps: readonly { q: number; r: number; strong: boolean; removed?: boolean }[],
+  show: boolean,
+): WorldCampMarker[] {
+  if (!show) return [];
+  return camps
+    .filter((camp) => !camp.removed)
+    .map((camp) => ({ q: camp.q, r: camp.r, color: camp.strong ? CAMP_STRONG_COLOR : CAMP_WEAK_COLOR }));
+}
+
+/** Half-size in screen pixels of a world-map paw at `zoom`: grows a little with the map but stays readable zoomed out. */
+export function worldPawHalfSize(zoom: number): number {
+  return Math.min(11, Math.max(5, 4 * zoom + 4));
+}
+
 /** An army already turned around and heading home. */
 const RETURNING_COLOR = 0x8fa3af;
 /** Attack target indicator (crossed sword + axe) — the one red in the overlay, matching RIVAL's "someone else's" reading. */
@@ -5122,6 +5159,8 @@ export class HexMapRenderer {
       label.visible = true;
     }
 
+    this.drawCampPaws(fogActive);
+
     const now = Date.now();
 
     // Issue #46 phase 3: trade carts in transit, interpolated between their
@@ -5166,6 +5205,43 @@ export class HexMapRenderer {
     this.drawArmyOverlay();
     this.hideUnusedIcons();
     for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
+  }
+
+  /**
+   * World mode: a paw symbol for every standing camp (`worldCampMarkers`) on explored ground and inside the viewport,
+   * in screen pixels (markerLayer does not scale with the camera), so it stays readable zoomed out. A dark rim keeps it
+   * legible over any terrain.
+   */
+  private drawCampPaws(fogActive: boolean) {
+    if (!this.options.showCampMarkers) return;
+    const { worldModel } = this.options;
+    const half = worldPawHalfSize(this.camera.zoom);
+    const markers = worldCampMarkers(worldModel.camps(), true);
+    for (const marker of markers) {
+      if (fogActive && !worldModel.isExplored(marker.q, marker.r)) continue;
+      const grid = isoGridPosition({ q: marker.q, r: marker.r }, TILE_W, TILE_H);
+      const centre = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
+      if (!isIslandNearViewport(centre, this.viewport, half * 2)) continue;
+      this.drawPaw(centre.x, centre.y, half, marker.color);
+    }
+  }
+
+  /** One paw: a pad ellipse and four toe circles, on a slightly larger dark copy that reads as the rim. */
+  private drawPaw(x: number, y: number, half: number, color: number) {
+    const rim = 1.5;
+    const pad = { x, y: y + half * 0.35, rx: half * 0.58, ry: half * 0.46 };
+    const toeR = half * 0.24;
+    const toes = [
+      { x: x - half * 0.7, y: y - half * 0.12 },
+      { x: x - half * 0.26, y: y - half * 0.62 },
+      { x: x + half * 0.26, y: y - half * 0.62 },
+      { x: x + half * 0.7, y: y - half * 0.12 },
+    ];
+    const g = this.markerLayer;
+    g.ellipse(pad.x, pad.y, pad.rx + rim, pad.ry + rim).fill({ color: 0x0b1116, alpha: 0.85 });
+    for (const toe of toes) g.circle(toe.x, toe.y, toeR + rim).fill({ color: 0x0b1116, alpha: 0.85 });
+    g.ellipse(pad.x, pad.y, pad.rx, pad.ry).fill({ color });
+    for (const toe of toes) g.circle(toe.x, toe.y, toeR).fill({ color });
   }
 
   // zip 9's settlement view floats a name badge over the longhouse hex
@@ -6138,6 +6214,14 @@ export class HexMapRenderer {
       }
     }
     this.rebuildAll();
+  }
+
+  /**
+   * Switches the world map's camp paw symbols on or off (`showCampMarkers`). Unlike `updateOptions` it does not
+   * re-aim the camera or rebuild the terrain: world mode redraws its markers every tick.
+   */
+  setShowCampMarkers(show: boolean) {
+    this.options = { ...this.options, showCampMarkers: show };
   }
 
   /**

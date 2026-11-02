@@ -1395,7 +1395,9 @@ export const useWorldStore = defineStore('world', {
      */
     /**
      * Live mode: fetches every camp's live state (`GET /worlds/{id}/camps`) and merges it onto the
-     * model's camps (`WorldModel.setCampStates`); bumps `campStatesVersion` only on a real change so
+     * model's camps (`WorldModel.setCampStates`) after adding the camps the model does not know yet — the
+     * server sends states only for islands the player has seen, so a newly seen island's camps first arrive
+     * here (`WorldModel.setCamps` is additive); bumps `campStatesVersion` only on a real change so
      * the map redraws (a cleared camp swaps its art) without a rebuild per poll. Never throws: a
      * failed fetch leaves the previous state. A no-op in demo mode, where every camp stays guarded.
      */
@@ -1403,7 +1405,16 @@ export const useWorldStore = defineStore('world', {
       if (DEMO_MODE || !this.worldId) return;
       try {
         const states = await api.getWorldCamps(this.worldId);
-        if (this.model.setCampStates(states)) this.campStatesVersion += 1;
+        const added = this.model.setCamps(
+          states.map((state) => ({
+            family: state.family,
+            coord: { q: state.q, r: state.r },
+            level: state.level,
+            orientation: state.orientation as TileOrientation,
+          })),
+        );
+        const updated = this.model.setCampStates(states);
+        if (added || updated) this.campStatesVersion += 1;
       } catch (err) {
         console.warn('camp states refresh failed', err);
       }
