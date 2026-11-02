@@ -24,22 +24,16 @@ namespace Bjarnoy.AppHost.Tests;
 /// confirm the page finds its own way back to <c>/settlement</c> instead of
 /// bricking.
 /// </summary>
-public class PlotSuggestion409RecoveryTests
+public class PlotSuggestion409RecoveryTests(AppHostFixture fixture)
 {
     [Fact]
     public async Task ReloadingWithAStaleSettlementIdRecoversOntoSettlementInsteadOfBricking()
     {
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(6)).Token;
 
-        var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Bjarnoy_AppHost>(cancellationToken);
-        appHost.Services.ConfigureHttpClientDefaults(clientBuilder => clientBuilder.AddStandardResilienceHandler());
-
-        await using var app = await appHost.BuildAsync(cancellationToken);
-        await app.StartAsync(cancellationToken);
-
-        var resourceNotifications = app.Services.GetRequiredService<ResourceNotificationService>();
-        await resourceNotifications.WaitForResourceHealthyAsync("api", cancellationToken);
-        await resourceNotifications.WaitForResourceHealthyAsync("frontend", cancellationToken);
+        await fixture.ResetAsync(cancellationToken);
+        var app = fixture.App;
+        var resourceNotifications = fixture.ResourceNotifications;
 
         var frontendUrl = app.GetEndpoint("frontend").ToString();
         using var apiClient = app.CreateHttpClient("api");

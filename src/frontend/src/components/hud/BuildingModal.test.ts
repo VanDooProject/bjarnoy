@@ -12,6 +12,7 @@ import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
 import enApiErrors from '../../i18n/locales/en/apiErrors.json';
 import type { Tile } from '../../lib/map/types';
+import type { RenownResponse } from '../../api/types';
 
 const flags = vi.hoisted(() => ({ demo: false }));
 vi.mock('../../config', async (importOriginal) => {
@@ -117,5 +118,162 @@ describe('BuildingModal Town Square feast', () => {
 
     expect(wrapper.get('[data-testid="feast-button"]').attributes('disabled')).toBeDefined();
     expect(wrapper.get('[data-testid="feast-reason"]').text()).toMatch(/live world/i);
+  });
+
+  describe('renown progress', () => {
+    const renownOf = (over: Partial<RenownResponse> = {}): RenownResponse => ({
+      total: 12340,
+      settlementCount: 1,
+      requiredForNextSettlement: 55000,
+      canFoundAnother: false,
+      perHour: 48,
+      pendingFeastRenown: 0,
+      ...over,
+    });
+
+    it('shows the total, target, hourly rate and an ETA at that rate', () => {
+      const world = useWorldStore();
+      rich(world);
+      world.hud.renown = renownOf();
+      const wrapper = mountModal();
+
+      expect(wrapper.get('[data-testid="renown-line"]').text()).toBe('Renown 12,340 / 55,000 for settlement no. 2');
+      expect(wrapper.get('[data-testid="renown-rate"]').text()).toContain('+48 renown per hour');
+      expect(wrapper.get('[data-testid="renown-missing"]').text()).toContain('42,660');
+      // 42 660 / 48 = 888.75 h = 37 d 0 h 45 min
+      expect(wrapper.get('[data-testid="renown-eta"]').text()).toBe('About 37 d 0 h at this rate (without feasts)');
+      expect(wrapper.find('[data-testid="renown-eta-feast"]').exists()).toBe(false);
+    });
+
+    it('uses hours and minutes for a near target', () => {
+      const world = useWorldStore();
+      rich(world);
+      world.hud.renown = renownOf({ total: 54000 });
+      const wrapper = mountModal();
+
+      expect(wrapper.get('[data-testid="renown-eta"]').text()).toContain('20 h 50 min');
+    });
+
+    it('says so when the renown already covers the next settlement', () => {
+      const world = useWorldStore();
+      rich(world);
+      world.hud.renown = renownOf({ total: 60000, canFoundAnother: true });
+      const wrapper = mountModal();
+
+      expect(wrapper.get('[data-testid="renown-enough"]').text()).toMatch(/already have enough renown/i);
+      expect(wrapper.find('[data-testid="renown-eta"]').exists()).toBe(false);
+    });
+
+    it('adds the running feast to the outlook', () => {
+      const world = useWorldStore();
+      rich(world);
+      world.hud.renown = renownOf({ total: 52000, pendingFeastRenown: 4629 });
+      world.hud.feast = {
+        startedAtGameTime: '2026-01-01T00:00:00Z',
+        endsAtGameTime: '2026-01-01T12:00:00Z',
+        endsInSeconds: 4 * 3600 + 12 * 60,
+        renownGain: 4629,
+      };
+      world.hud.feastFetchedAt = Date.now();
+      const wrapper = mountModal();
+
+      expect(wrapper.get('[data-testid="feast-countdown"]').text()).toContain('+4629');
+      // 3000 missing at 48/h = 62.5 h without; the feast lands after 4 h 12 min and covers it.
+      expect(wrapper.get('[data-testid="renown-eta"]').text()).toContain('2 d 14 h');
+      expect(wrapper.get('[data-testid="renown-eta-feast"]').text()).toContain('4 h 12 min');
+    });
+
+    it('demo mode shows no renown numbers', () => {
+      flags.demo = true;
+      const world = useWorldStore();
+      rich(world);
+      world.hud.renown = renownOf();
+      const wrapper = mountModal();
+
+      expect(wrapper.find('[data-testid="renown-progress"]').exists()).toBe(false);
+      expect(wrapper.get('[data-testid="renown-demo"]').text()).toMatch(/live world/i);
+    });
+  });
+});
+
+describe('BuildingModal actions', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    flags.demo = false;
+  });
+
+  it('is info-only on an empty claimed tile: a pointer to the ring, no cost line, no action button', () => {
+    rich(useWorldStore());
+    const wrapper = mountModal({ q: 1, r: 1, terrain: 'forest' } as Tile);
+
+    expect(wrapper.text()).toContain('Tap the hex to place a building');
+    expect(wrapper.text()).not.toMatch(/build cost/i);
+    expect(wrapper.find('button.primary').exists()).toBe(false);
+  });
+
+  it('still offers the upgrade action on a built tile', async () => {
+    rich(useWorldStore());
+    const wrapper = mountModal({ q: 1, r: 1, terrain: 'grass', buildingType: 'farm', buildingLevel: 1 } as Tile);
+
+    const button = wrapper.get('button.primary');
+    expect(button.text()).toContain('Upgrade to level 2');
+    await button.trigger('click');
+    expect(wrapper.emitted('upgrade')).toHaveLength(1);
+  });
+});
+
+describe('BuildingModal outside the realm', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    flags.demo = false;
+  });
+
+  const farm = (): Tile => ({ q: 4, r: 0, terrain: 'grass', buildingType: 'farm', buildingLevel: 5 }) as Tile;
+
+  function placeOutside(world: ReturnType<typeof useWorldStore>, seconds: number | null) {
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.buildings = [
+      { q: 4, r: 0, type: 'farm', level: 5, outsideRealmSince: '2026-11-01T10:00:00Z', nextLevelLossInSeconds: seconds },
+    ];
+  }
+
+  it('shows one line with the time to the next lost level and offers no upgrade', () => {
+    const world = useWorldStore();
+    rich(world);
+    placeOutside(world, 26 * 3600);
+    const wrapper = mountModal(farm());
+
+    const line = wrapper.get('[data-testid="outside-realm"]').text();
+    expect(line).toContain('Outside your realm');
+    expect(line).toContain('no function');
+    expect(line).toContain('loses a level in 1 day, 2 hours');
+    expect(wrapper.find('.actions').exists()).toBe(false);
+    expect(wrapper.find('.stats').exists()).toBe(false);
+  });
+
+  it('still says it has no function when the server gave no time', () => {
+    const world = useWorldStore();
+    placeOutside(world, null);
+
+    expect(mountModal(farm()).get('[data-testid="outside-realm"]').text()).toContain('no function');
+  });
+
+  it('shows nothing of it for a building inside the realm', () => {
+    const world = useWorldStore();
+    rich(world);
+    world.hud.buildings = [{ q: 4, r: 0, type: 'farm', level: 5 }];
+    const wrapper = mountModal(farm());
+
+    expect(wrapper.find('[data-testid="outside-realm"]').exists()).toBe(false);
+    expect(wrapper.find('.actions').exists()).toBe(true);
+  });
+
+  it('hides the Town Square feast while the square is outside the realm', () => {
+    const world = useWorldStore();
+    rich(world);
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.buildings = [{ q: 2, r: 1, type: 'townsquare', level: 3, outsideRealmSince: '2026-11-01T10:00:00Z', nextLevelLossInSeconds: 3600 }];
+
+    expect(mountModal(townSquare(3)).find('[data-testid="feast"]').exists()).toBe(false);
   });
 });

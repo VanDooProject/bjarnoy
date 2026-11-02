@@ -126,7 +126,11 @@ function readStatus(message: MessageResponse): string | null {
 <template>
   <div class="conversation-view">
     <p v-if="loading" class="muted">{{ $t('common.states.loading') }}</p>
-    <p v-else-if="loadError" class="error">{{ loadError }}</p>
+    <template v-else-if="loadError">
+      <p class="error">{{ loadError }}</p>
+      <!-- the header's own back link below only renders once the thread loaded -->
+      <router-link to="/messages" class="back">{{ $t('messages.conversation.backToMessages') }}</router-link>
+    </template>
 
     <template v-else>
       <header class="head">

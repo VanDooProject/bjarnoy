@@ -23,10 +23,10 @@ import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { useHudDrawer } from '../../composables/useHudDrawer';
 import { isHudDrawerOpen, setHudDrawerCloseFn } from '../../composables/hudDrawerOpenState';
-import { isHudBarAtBottom, isHudBarMounted, isSettlementBubbleShown } from '../../composables/hudSettlementBubbleState';
+import { isHudBarAtBottom, isHudBarMounted, isHudRail, isSettlementBubbleShown } from '../../composables/hudSettlementBubbleState';
 import { isHudDrawerPending } from '../../composables/hudDrawerPendingState';
-import { hudBarHeightPx, DEFAULT_HUD_BAR_HEIGHT } from '../../composables/hudBarHeight';
-import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
+import { hudBarHeightPx, hudRailHeightPx, hudRailWidthPx, DEFAULT_HUD_BAR_HEIGHT } from '../../composables/hudBarHeight';
+import { HUD_COMPACT_QUERY, HUD_RAIL_QUERY } from '../../lib/breakpoints';
 import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{
@@ -51,6 +51,17 @@ const props = defineProps<{
    * onto.
    */
   docked?: boolean;
+  /**
+   * A map overlay whose phone-width band would carry nothing but the nav's
+   * account trigger (LandingView's founded branch: HudNav with no
+   * ResourceBar beside it). On a phone such a bar drops its full-width band
+   * entirely — no background, no reserved height — and floats its contents
+   * as chips instead: the drawer's ☰ joined to the settlement bubble at the
+   * top-left, the trigger (and the ProfileNudge hanging from it) at the
+   * top-right, each 16px from the screen's edges. Desktop, docked pages and
+   * the landscape rail are unaffected.
+   */
+  floating?: boolean;
 }>();
 
 const world = useWorldStore();
@@ -98,11 +109,33 @@ const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
 // to "is there a drawer slot" regardless of docked/map context.
 const hasDrawerSlot = computed(() => !!slots.drawer);
 const dragEnabled = computed(() => isCompact.value && hasDrawerSlot.value);
+
+// Landscape rail: on a short landscape phone (HUD_RAIL_QUERY) the full-width
+// bar is replaced by a floating column at the top-left — the ☰ button, then
+// the resource pills as stacked bubbles — and the drawer opens as a side sheet
+// from the left instead of pulling down. Only for a bar that has a drawer to
+// open (the pre-founding landing bar, with its title, keeps today's compact
+// bar) and that is a map overlay (a docked docs header keeps it too).
+const isRailViewport = useMediaQuery(HUD_RAIL_QUERY);
+const isRail = computed(() => isCompact.value && isRailViewport.value && hasDrawerSlot.value && !props.docked);
+// Portrait phone, `floating` caller (see the prop): no band, just chips. The
+// rail wins in landscape — it already floats this same nav content.
+const isFloating = computed(
+  () => !!props.floating && isCompact.value && hasDrawerSlot.value && !props.docked && !isRail.value,
+);
+// Either chip layout: the ☰ button joins the settlement bubble at the
+// top-left instead of a grabber sitting on a band.
+const isChipLayout = computed(() => isRail.value || isFloating.value);
+// The drawer's drag gesture (pull the bar down, flick it shut) only exists on
+// the top/bottom bar — there is no band left to grab in either chip layout,
+// so the rail's sheet and the floating bar's drawer open and close by tap.
+const dragGestureEnabled = computed(() => dragEnabled.value && !isChipLayout.value);
 // Docked pages (docs) are a sticky in-flow header, not a map overlay — there
 // is no "bottom of the screen" for them to dock to, so the global
 // top/bottom preference (a map-only concept) is forced to 'top' there
-// regardless of what the player has chosen for the map bar.
-const barPosition = computed(() => (props.docked ? 'top' : hudPrefs.barPosition));
+// regardless of what the player has chosen for the map bar. The rail and the
+// floating chips have no edge to dock to either: they always sit at the top.
+const barPosition = computed(() => (props.docked || isChipLayout.value ? 'top' : hudPrefs.barPosition));
 
 // Mobile-only settlement bubble: on a phone the bar has no room for the
 // name/caption inline (see `.titles`, hidden below under isCompact), so it
@@ -120,8 +153,30 @@ const barPosition = computed(() => (props.docked ? 'top' : hudPrefs.barPosition)
 // instead (see `.mobile-title` below), not a second "Lv N · M hexes" bubble
 // that has nothing to do with them.
 const claimedHexes = computed(() => world.hud.claimedHexes);
+/**
+ * The floating chips' margin to the screen's top and side edges — the phone
+ * settlement bubble's own existing 16px side gutter (`.settlement-bubble`'s
+ * `left`), so the gap above the chips equals the gap beside them. Kept in sync
+ * with `.hud-bar--floating`'s own `inset`.
+ */
+const FLOATING_EDGE = '16px';
 const showSettlementBubble = computed(() => isCompact.value && !props.title && !!world.hud.settlementName);
-const settlementBubbleTop = computed(() => (barPosition.value === 'top' ? `${hudBarHeightPx.value + 8}px` : '8px'));
+// In rail mode there is no bar band at all (hudBarHeightPx is 0): the bubble
+// sits at the top edge, to the right of the rail.
+// Floating: the same edge margin as at the sides.
+const settlementBubbleTop = computed(() => {
+  if (isFloating.value) return FLOATING_EDGE;
+  if (isRail.value) return '8px';
+  return barPosition.value === 'top' ? `${hudBarHeightPx.value + 8}px` : '8px';
+});
+// Rail and floating: the ☰ button and the settlement bubble read as one
+// capsule — the bubble starts at the chips' own left edge and leaves room for
+// the button, which paints above it (the bar is z 40, the bubble z 36).
+const settlementBubbleLeft = computed(() => {
+  if (isFloating.value) return FLOATING_EDGE;
+  return isRail.value ? 'calc(8px + env(safe-area-inset-left, 0px))' : undefined;
+});
+const railJoined = computed(() => isChipLayout.value && showSettlementBubble.value && !isHudDrawerOpen.value);
 // Finding #13: only counts as "shown" once it's actually visible on screen —
 // the drawer hides it (`v-show="!isHudDrawerOpen"` below) without unmounting
 // it, so a plain `showSettlementBubble` alone would keep DemoModeBadge.vue
@@ -145,6 +200,9 @@ watch(
   { immediate: true },
 );
 onBeforeUnmount(() => { isHudBarAtBottom.value = false; });
+// ResourceBar.vue (stacked pills, no expanded layout) reads this shared flag.
+watch(isRail, (rail) => { isHudRail.value = rail; }, { immediate: true });
+onBeforeUnmount(() => { isHudRail.value = false; });
 
 const drawerContentRef = ref<HTMLElement | null>(null);
 const drawerHeight = ref(0);
@@ -166,8 +224,14 @@ watch(
     drawerObserver?.disconnect();
     if (!el || typeof ResizeObserver === 'undefined') return;
     drawerObserver = new ResizeObserver((entries) => {
-      const rect = entries[0]?.contentRect;
-      if (rect) drawerHeight.value = rect.height;
+      // Border-box, not `contentRect`: `.hud-drawer-content` is padded
+      // (12px top/bottom + the bottom safe-area inset), and `contentRect`
+      // excludes padding, which sized the drawer that much too short and
+      // cut off its last row (same mistake as the bar's Finding #16 below).
+      const entry = entries[0];
+      if (!entry) return;
+      drawerHeight.value = entry.borderBoxSize?.[0]?.blockSize
+        ?? entry.target.getBoundingClientRect().height;
     });
     drawerObserver.observe(el);
   },
@@ -189,9 +253,16 @@ const windowInnerHeight = ref(typeof window !== 'undefined' ? window.innerHeight
 function onWindowResize() { windowInnerHeight.value = window.innerHeight; }
 onMounted(() => window.addEventListener('resize', onWindowResize));
 onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize));
+// Floating: there is no band for the drawer to hang from (hudBarHeightPx is
+// 0), so it drops down from just under the chips instead — measured, like the
+// band, in `syncBarMeasurements`.
+const floatingDrawerTopPx = ref(0);
+const drawerTopPx = computed(() => (isFloating.value ? floatingDrawerTopPx.value : hudBarHeightPx.value));
 const availableDrawerHeight = computed(() =>
-  Math.max(0, Math.min(drawerHeight.value, windowInnerHeight.value - hudBarHeightPx.value)),
+  Math.max(0, Math.min(drawerHeight.value, windowInnerHeight.value - drawerTopPx.value)),
 );
+// The rail's side sheet is as tall as the screen and slides sideways, so none
+// of the height maths above applies to it.
 
 // The bar itself is no longer always exactly 64px tall on mobile — once the
 // drawer is open, ResourceBar's pills switch to their expanded (desktop-style
@@ -201,6 +272,8 @@ const availableDrawerHeight = computed(() =>
 // assuming a fixed 64px. Same "watch the ref" pattern as drawerContentRef
 // above, for the same reason.
 const barRef = ref<HTMLElement | null>(null);
+/** The rail's own margin to the screen edges (top and left), see `.hud-bar--rail`. */
+const RAIL_MARGIN_PX = 8;
 let barObserver: ResizeObserver | null = null;
 watch(
   barRef,
@@ -208,28 +281,69 @@ watch(
     barObserver?.disconnect();
     if (!el || typeof ResizeObserver === 'undefined') return;
     barObserver = new ResizeObserver(() => {
-      // Finding #16: `contentRect` excludes border/padding — this element has
-      // a 1px border (`.hud-bar`'s `border-bottom`/`border-top`), so reading
-      // it gave 63px on a desktop bar that is actually 64px border-box tall,
-      // shifting every consumer of this value (RingMenu's bounds, ArmyPanel's
-      // `--hud-inset-bottom`, ...) by a stray pixel. `getBoundingClientRect`
-      // reports the real, rendered border-box height regardless of
-      // box-sizing, so desktop (where this never actually changes) reads
-      // exactly 64 again.
-      const el2 = barRef.value;
-      if (el2) hudBarHeightPx.value = el2.getBoundingClientRect().height;
+      syncBarMeasurements();
     });
     barObserver.observe(el);
   },
   { immediate: true },
 );
+// What the (header) element's size means depends on the mode: the full-width
+// bar's own height is the top/bottom band every overlay clears; the rail has
+// no band (0), and its own footprint is published separately instead.
+function syncBarMeasurements() {
+  const el2 = barRef.value;
+  if (isRail.value) {
+    hudBarHeightPx.value = 0;
+    if (el2) {
+      const rect = el2.getBoundingClientRect();
+      // `right`, not `width`: measured from the screen's left edge, so a
+      // notch's safe-area inset (which the rail's `left` includes) is cleared too.
+      hudRailWidthPx.value = Math.max(0, rect.right - RAIL_MARGIN_PX);
+      hudRailHeightPx.value = rect.height + RAIL_MARGIN_PX;
+    }
+    return;
+  }
+  hudRailWidthPx.value = 0;
+  hudRailHeightPx.value = 0;
+  if (isFloating.value) {
+    // No band, so nothing for the map's overlays to clear: they reclaim the
+    // top of the screen (`--hud-inset-top` 0), as in rail mode.
+    hudBarHeightPx.value = 0;
+    if (el2) floatingDrawerTopPx.value = el2.getBoundingClientRect().bottom + 8;
+    return;
+  }
+  if (el2) {
+    // Finding #16: `contentRect` excludes border/padding — this element has
+    // a 1px border (`.hud-bar`'s `border-bottom`/`border-top`), so reading
+    // it gave 63px on a desktop bar that is actually 64px border-box tall,
+    // shifting every consumer of this value (RingMenu's bounds, ArmyPanel's
+    // `--hud-inset-bottom`, ...) by a stray pixel. `getBoundingClientRect`
+    // reports the real, rendered border-box height regardless of
+    // box-sizing, so desktop (where this never actually changes) reads
+    // exactly 64 again.
+    hudBarHeightPx.value = el2.getBoundingClientRect().height;
+  }
+}
+// Entering/leaving rail mode swaps the whole layout, so re-measure at once
+// rather than waiting for the observer (flush 'post': after the class change).
+watch([isRail, isFloating], () => syncBarMeasurements(), { flush: 'post', immediate: true });
 onBeforeUnmount(() => {
   barObserver?.disconnect();
   hudBarHeightPx.value = DEFAULT_HUD_BAR_HEIGHT;
+  hudRailWidthPx.value = 0;
+  hudRailHeightPx.value = 0;
 });
 
 const drawerScrollRef = ref<HTMLElement | null>(null);
-const drawer = useHudDrawer(barPosition, availableDrawerHeight, () => drawerScrollRef.value);
+const drawerEl = ref<HTMLElement | null>(null);
+// liveOffset: the rendered height, so grabbing mid open/close animation
+// continues from where the drawer is showing rather than its target.
+const drawer = useHudDrawer(
+  barPosition,
+  availableDrawerHeight,
+  () => drawerScrollRef.value,
+  () => drawerEl.value?.getBoundingClientRect().height ?? null,
+);
 // Finding #12: hands this instance's own `close` to the shared singleton so
 // MapView/LandingView's mutual-exclusion watch (opening the queue drawer
 // should close this one) can reach it — see hudDrawerOpenState.ts's own
@@ -264,22 +378,25 @@ watch(dragEnabled, (enabled) => {
 });
 
 function onBarPointerDown(e: PointerEvent) {
-  if (dragEnabled.value) drawer.onPointerDown(e);
+  if (dragGestureEnabled.value) drawer.onPointerDown(e);
 }
 function onBarPointerMove(e: PointerEvent) {
-  if (dragEnabled.value) drawer.onPointerMove(e);
+  if (dragGestureEnabled.value) drawer.onPointerMove(e);
 }
 function onBarPointerUp(e: PointerEvent) {
-  if (dragEnabled.value) drawer.onPointerUp(e);
+  if (dragGestureEnabled.value) drawer.onPointerUp(e);
 }
 function onBarPointerCancel(e: PointerEvent) {
-  if (dragEnabled.value) drawer.onPointerCancel(e);
+  if (dragGestureEnabled.value) drawer.onPointerCancel(e);
 }
 // Finding #7: wired to both the bar and the drawer's own `lostpointercapture`
 // — see useHudDrawer's own comment on why a lost capture must not strand the
 // drag.
 function onBarLostPointerCapture(e: PointerEvent) {
-  if (dragEnabled.value) drawer.onLostPointerCapture(e);
+  if (dragGestureEnabled.value) drawer.onLostPointerCapture(e);
+}
+function onBarTouchMove(e: TouchEvent) {
+  if (dragGestureEnabled.value) drawer.onTouchMove(e);
 }
 function onGripClick() {
   if (dragEnabled.value) drawer.toggle();
@@ -313,12 +430,24 @@ const drawerVisible = computed(() => dragEnabled.value && (drawer.isOpen.value |
 // towards open.
 watch(drawer.isOpen, (open) => { isHudDrawerOpen.value = open; }, { immediate: true });
 onBeforeUnmount(() => { isHudDrawerOpen.value = false; });
+// Rail: a left side sheet. Its box is fixed by CSS (`.hud-drawer--rail`); only
+// the slide is driven from here, and only the committed open/closed state
+// (there is no drag).
+// The rail (☰ + pills) stays on screen above the open sheet, so the sheet's
+// own content starts to the right of it.
+const railDrawerStyle = computed(() => ({
+  transform: drawer.isOpen.value ? 'translateX(0)' : 'translateX(-100%)',
+  paddingLeft: `${hudRailWidthPx.value + 8}px`,
+}));
 const drawerStyle = computed(() => ({
   height: `${drawer.currentOffset()}px`,
   transition: drawer.dragging.value ? 'none' : 'height 180ms ease',
-  [barPosition.value === 'top' ? 'top' : 'bottom']: `${hudBarHeightPx.value}px`,
+  [barPosition.value === 'top' ? 'top' : 'bottom']: `${drawerTopPx.value}px`,
 }));
 const backdropStyle = computed(() => {
+  if (isRail.value) {
+    return { opacity: drawer.isOpen.value ? 0.6 : 0, pointerEvents: drawer.isOpen.value ? ('auto' as const) : ('none' as const) };
+  }
   const openFraction = availableDrawerHeight.value > 0 ? Math.min(1, drawer.currentOffset() / availableDrawerHeight.value) : 0;
   return {
     opacity: openFraction * 0.6,
@@ -331,17 +460,22 @@ const backdropStyle = computed(() => {
   <header
     ref="barRef"
     class="hud-bar"
+    :style="{ '--settlement-bubble-top': settlementBubbleTop }"
     :class="{
       'hud-bar--docked': docked,
       'hud-bar--bottom': dragEnabled && barPosition === 'bottom',
       'hud-bar--drag-enabled': dragEnabled,
       'hud-bar--auto-height': isCompact,
+      'hud-bar--rail': isRail,
+      'hud-bar--floating': isFloating,
+      'hud-bar--rail-joined': railJoined,
     }"
     @pointerdown="onBarPointerDown"
     @pointermove="onBarPointerMove"
     @pointerup="onBarPointerUp"
     @pointercancel="onBarPointerCancel"
     @lostpointercapture="onBarLostPointerCapture"
+    @touchmove="onBarTouchMove"
     @click.capture="onClickCapture"
   >
     <!-- The logo lives in the mobile settlement-bubble instead (below) —
@@ -370,25 +504,6 @@ const backdropStyle = computed(() => {
       </span>
       <span class="mobile-title-text">{{ props.title }}</span>
     </div>
-    <div class="hud-bar-right">
-      <!-- Finding #1: this used to wrap `<slot />` in its own
-           `overflow-x: auto` scroller so 5 resource pills + nav + locale
-           switcher could fit a phone width — but that clips every
-           absolutely-positioned dropdown anywhere inside it (a nav account
-           menu, ReturningPlayerMenu's panel, ProfileNudge) to the scroller's
-           own ~30px visible height, ON DESKTOP TOO, since this wrapper was
-           unconditional. Mobile HUD bar rework, phase 2: ResourceBar's own
-           compact pill row briefly took over horizontal scrolling instead
-           (`.resource-bar.compact`) — that's gone too now, in favour of
-           wrapping onto a second line, since a pill scrolled half past the
-           bar's own edge is just as much a "half-cut pill" as one clipped by
-           a wrapper (see ResourceBar.vue's own comment). HudNav/
-           ReturningPlayerMenu never needed to scroll, they just needed room,
-           which removing this wrapper also restores (see `.hud-bar-right`'s
-           own `justify-content: flex-end` below, no longer defeated by this
-           intermediate flex box). -->
-      <slot />
-    </div>
     <!-- Mobile HUD bar rework, phase 2: an Android-notification-shade style
          grabber replaces the old inline chevron button — the owner's
          annotated screenshot called out the chevron (and the avatar) for
@@ -415,11 +530,31 @@ const backdropStyle = computed(() => {
            sign once tucked away. -->
       <span v-if="isHudDrawerPending" class="grip-dot" aria-hidden="true" />
     </button>
+    <div class="hud-bar-right">
+      <!-- Finding #1: this used to wrap `<slot />` in its own
+           `overflow-x: auto` scroller so 5 resource pills + nav + locale
+           switcher could fit a phone width — but that clips every
+           absolutely-positioned dropdown anywhere inside it (a nav account
+           menu, ReturningPlayerMenu's panel, ProfileNudge) to the scroller's
+           own ~30px visible height, ON DESKTOP TOO, since this wrapper was
+           unconditional. Mobile HUD bar rework, phase 2: ResourceBar's own
+           compact pill row briefly took over horizontal scrolling instead
+           (`.resource-bar.compact`) — that's gone too now, in favour of
+           wrapping onto a second line, since a pill scrolled half past the
+           bar's own edge is just as much a "half-cut pill" as one clipped by
+           a wrapper (see ResourceBar.vue's own comment). HudNav/
+           ReturningPlayerMenu never needed to scroll, they just needed room,
+           which removing this wrapper also restores (see `.hud-bar-right`'s
+           own `justify-content: flex-end` below, no longer defeated by this
+           intermediate flex box). -->
+      <slot />
+    </div>
   </header>
   <div
     v-if="showSettlementBubble"
     class="settlement-bubble"
-    :style="{ top: settlementBubbleTop }"
+    :class="{ 'settlement-bubble--rail': isChipLayout, 'settlement-bubble--floating': isFloating }"
+    :style="{ top: settlementBubbleTop, left: settlementBubbleLeft }"
     v-show="!isHudDrawerOpen"
   >
     <span class="logo-hex" aria-hidden="true">
@@ -440,14 +575,21 @@ const backdropStyle = computed(() => {
   />
   <div
     v-if="dragEnabled"
+    ref="drawerEl"
     class="hud-drawer"
-    :class="{ 'hud-drawer--bottom': barPosition === 'bottom' }"
-    :style="drawerStyle"
+    :class="{
+      'hud-drawer--bottom': barPosition === 'bottom',
+      'hud-drawer--rail': isRail,
+      'hud-drawer--rail-open': isRail && drawer.isOpen.value,
+      'hud-drawer--floating': isFloating,
+    }"
+    :style="isRail ? railDrawerStyle : drawerStyle"
     @pointerdown="onBarPointerDown"
     @pointermove="onBarPointerMove"
     @pointerup="onBarPointerUp"
     @pointercancel="onBarPointerCancel"
     @lostpointercapture="onBarLostPointerCapture"
+    @touchmove="onBarTouchMove"
     @click.capture="onClickCapture"
   >
     <!-- The collapsed bar (and its grip) stays pinned to the screen's own
@@ -464,8 +606,8 @@ const backdropStyle = computed(() => {
          touch (driven in JS from useHudDrawer's own gesture — see
          `drawerScrollRef`/onBarPointerMove above and its own comment on
          `scrollEl`). Not the ResizeObserver's own target — that stays on
-         `.hud-drawer-content` so its contentRect keeps reporting the
-         content's natural (unclipped) height, not this wrapper's capped one. -->
+         `.hud-drawer-content` so its border-box keeps reporting the
+         content's natural (unclipped) height, padding included, not this wrapper's capped one. -->
     <div ref="drawerScrollRef" class="hud-drawer-scroll">
       <div
         :id="drawerContentId"
@@ -510,7 +652,8 @@ const backdropStyle = computed(() => {
 /* Still needed although the bar itself takes clicks now: ProfileNudge sets
    `pointer-events: none` on its floating panel, and its buttons inherit
    that unless something opts them back in. */
-.hud-bar-right :deep(button) {
+.hud-bar-right :deep(button),
+.hud-bar-right :deep(a) {
   pointer-events: auto;
 }
 /* A page header rather than a map overlay: in the document flow, stuck to
@@ -711,6 +854,159 @@ const backdropStyle = computed(() => {
   bottom: 1px;
 }
 
+/* Landscape rail (see `isRail` in the script): on a short landscape phone the
+   full-width bar is replaced by a floating column at the top-left, with no
+   bar background — the round ☰ button first, then ResourceBar's pills as
+   stacked bubbles (their own styling lives in ResourceBar.vue). The header
+   itself lets clicks through to the map between the bubbles; each bubble
+   takes its own. `.hud-bar.hud-bar--rail.hud-bar--drag-enabled` out-ranks
+   every padding/pointer/height rule of the bar above regardless of order. */
+.hud-bar.hud-bar--rail.hud-bar--drag-enabled {
+  inset: 8px auto auto calc(8px + env(safe-area-inset-left, 0px));
+  width: max-content;
+  height: auto;
+  min-height: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  pointer-events: none;
+  touch-action: auto;
+}
+.hud-bar--rail .hud-bar-right {
+  flex: none;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 6px;
+  pointer-events: none;
+}
+/* A bar with no ResourceBar in it (the founded landing page) keeps its nav
+   content, as one more bubble in the column. */
+.hud-bar--rail .hud-bar-right :deep(.hud-nav) {
+  /* Floats in the top-right corner rather than in the left column, so its
+     popovers (the account-creation nudge, the returning-player menu) hang
+     down from there the way they do from a top bar. */
+  position: fixed;
+  top: 8px;
+  right: calc(8px + env(safe-area-inset-right, 0px));
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: rgba(6, 12, 16, 0.94);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+/* The ☰ button: the same dark translucent circle as the settlement bubble
+   and the Trade button. Static (first item of the column), not absolutely
+   positioned like the pull-down grabber. The glyph is CSS-drawn (the
+   grabber's `.grip-handle` span, as three stacked lines via box-shadow) so
+   no raw text sits in the template. */
+.hud-bar--rail .hud-grip,
+.hud-bar--floating .hud-grip {
+  /* Relative, not the grabber's absolute: first item of the column (and the
+     anchor of the pending dot below). */
+  position: relative;
+  left: auto;
+  bottom: auto;
+  transform: none;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(6, 12, 16, 0.94);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+.hud-bar--rail .hud-grip:focus-visible,
+.hud-bar--floating .hud-grip:focus-visible {
+  border-radius: 50%;
+}
+.hud-bar--rail .grip-handle,
+.hud-bar--floating .grip-handle {
+  width: 16px;
+  height: 2px;
+  background: var(--text);
+  opacity: 0.9;
+  box-shadow: 0 -5px 0 var(--text), 0 5px 0 var(--text);
+}
+.hud-bar--rail .grip-dot,
+.hud-bar--floating .grip-dot {
+  top: 5px;
+  right: 5px;
+}
+
+/* Floating (portrait phone, `floating` caller — see the prop): the band is
+   gone — no background, border, shadow or reserved height — leaving a
+   transparent row that only spans the screen to place its two chips: the ☰
+   button (joined to the settlement bubble, as in the rail) at the left, the
+   nav's account trigger at the right. The row itself lets map clicks through;
+   each chip takes its own. The same 16px margin to the top and side edges
+   (TopBar's own FLOATING_EDGE, which places the settlement bubble), so there
+   is no empty band above the chips. Same specificity trick as the rail rule
+   above. */
+.hud-bar.hud-bar--floating.hud-bar--drag-enabled {
+  inset: 16px 16px auto 16px;
+  height: auto;
+  min-height: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  pointer-events: none;
+  touch-action: auto;
+}
+.hud-bar--floating .hud-bar-right {
+  flex: 0 1 auto;
+  pointer-events: none;
+}
+/* No band to divide from any more: HudNav's own left divider/padding go. */
+.hud-bar--floating .hud-bar-right :deep(.hud-nav) {
+  padding-left: 0;
+  border-left: none;
+}
+/* ProfileNudge hangs from the trigger chip, right-aligned with it (so 16px
+   from the screen's edge), and is never wider than the screen minus both 16px
+   gutters, so it stays wholly on screen on the narrowest phones. */
+.hud-bar--floating .hud-bar-right :deep(.nudge:not(.in-drawer)) {
+  width: min(300px, calc(100vw - 32px));
+}
+/* The drawer drops from under the chips (its `top` is measured, see
+   `floatingDrawerTopPx`) and opens/closes by tap only, so its content
+   scrolls natively instead of through the drag gesture. */
+.hud-drawer--floating {
+  touch-action: auto;
+  border-top: 1px solid var(--panel-border);
+}
+/* The ☰ button inside the settlement bubble's capsule (`railJoined`): it
+   drops its own circle so the two read as one pill. */
+.hud-bar--rail-joined .hud-grip {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.settlement-bubble.settlement-bubble--rail {
+  height: 40px;
+  box-sizing: border-box;
+  padding-left: 48px;
+}
+/* Floating: the ☰ eats 48px of the capsule, so let the name use the row up
+   to the trigger chip on the right instead of the usual 58vw cap — 16px edge
+   + 8px gap + the trigger's own 132px max-width (ReturningPlayerMenu.vue's
+   phone rule) + 16px edge. */
+.settlement-bubble.settlement-bubble--floating {
+  max-width: calc(100vw - 172px);
+}
 /* Mobile-only settlement bubble — replaces the inline `.titles` name/caption
    (hidden above under isCompact) since the bar itself has no room for it.
    `top` is set inline (settlementBubbleTop) to land in the same slot
@@ -826,6 +1122,21 @@ const backdropStyle = computed(() => {
   height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* `.hud-drawer`'s own `touch-action: none` stops at this element: a
+     scroll container starts a fresh touch-action scope for its contents, so
+     without repeating it here a finger on overflowing drawer content is
+     claimed by the browser's native pan (`pointercancel`), and the drawer
+     can no longer be dragged closed by touch. Touch scrolling of this
+     element is driven from useHudDrawer instead (see `scrollEl` there);
+     wheel and `scrollIntoView` stay native. The chip layouts' drawers
+     (the rail sheet and the floating drawer) have no drag, so nothing
+     drives their scrolling from script: they opt back into native touch
+     scrolling below. */
+  touch-action: none;
+}
+.hud-drawer--rail .hud-drawer-scroll,
+.hud-drawer--floating .hud-drawer-scroll {
+  touch-action: auto;
 }
 .hud-drawer--bottom .hud-drawer-scroll {
   /* A flex column (not `column-reverse`, which would flip `scrollTop`
@@ -849,5 +1160,35 @@ const backdropStyle = computed(() => {
      area's top, making it unreachable), a margin on the content itself only
      ever collapses to 0 once there's no spare space left to push through. */
   margin-top: auto;
+}
+
+/* Landscape rail: the drawer is a side sheet from the left instead of a
+   pull-down — full height, slid in by the inline `transform` (see
+   `railDrawerStyle`). No drag, so no `touch-action: none` either. */
+.hud-drawer--rail {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: auto;
+  width: min(300px, 80vw);
+  height: auto;
+  box-sizing: border-box;
+  border-bottom: none;
+  border-right: 1px solid var(--panel-border);
+  box-shadow: 12px 0 30px rgba(0, 0, 0, 0.35);
+  background: linear-gradient(90deg, rgba(6, 12, 16, 0.97), rgba(6, 12, 16, 0.93));
+  touch-action: auto;
+  /* Hidden once slid out (after the slide, so it still animates away): its
+     shadow must not bleed onto the screen's edge, nor its content be focusable. */
+  visibility: hidden;
+  transition: transform 180ms ease, visibility 0s linear 180ms;
+}
+.hud-drawer--rail-open {
+  visibility: visible;
+  transition: transform 180ms ease, visibility 0s;
+}
+html[data-hud-motion='reduced'] .hud-drawer--rail,
+html[data-hud-motion='reduced'] .hud-drawer--rail-open {
+  transition: none;
 }
 </style>

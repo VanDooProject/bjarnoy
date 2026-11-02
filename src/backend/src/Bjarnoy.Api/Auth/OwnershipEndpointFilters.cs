@@ -84,6 +84,36 @@ public sealed class FieldReportOwnershipEndpointFilter : IEndpointFilter
 }
 
 /// <summary>
+/// The camp-report sibling of <see cref="ReportOwnershipEndpointFilter"/>: a camp report belongs only to the
+/// player's settlement (<c>CampReportEntity.SettlementId</c>) — the camp has no owner — so only that settlement's
+/// owner may read it. Fits <c>ArmyEndpoints.GetCampReport</c>.
+/// </summary>
+public sealed class CampReportOwnershipEndpointFilter : IEndpointFilter
+{
+    public async ValueTask<object?> InvokeAsync(
+        EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(next);
+
+        var reportId = context.GetArgument<Guid>(0);
+
+        var reports = context.HttpContext.RequestServices.GetRequiredService<CampReportService>();
+        var report = await reports.GetAsync(reportId, context.HttpContext.RequestAborted);
+        if (report is null)
+        {
+            return await next(context);
+        }
+
+        var realms = context.HttpContext.RequestServices.GetRequiredService<RealmDirectory>();
+        var refusal = await OwnershipGate.EnforceAnyAsync(
+            context.HttpContext, [report.SettlementId], realms, context.HttpContext.RequestAborted);
+
+        return refusal ?? await next(context);
+    }
+}
+
+/// <summary>
 /// Refuses a settlement-mutating request with 403 unless the caller can prove
 /// they own the target settlement. See <see cref="OwnershipGate"/> for the
 /// actual rule; this filter only resolves the settlement id.
@@ -205,7 +235,7 @@ public sealed class ArmyOwnershipEndpointFilter : IEndpointFilter
 /// not (owned by the <c>Abandoned</c> system user, provable only by the
 /// founding browser's own local id). This gates mutations, via the endpoint
 /// filters above; <see cref="Bjarnoy.Api.Endpoints.WorldEndpoints"/>'s
-/// per-world reads (membership/fog-mask/plot-suggestion) apply the same
+/// per-world reads (membership/fog-chunks/plot-suggestion) apply the same
 /// "claimed realm, header alone is no longer enough" rule to their own
 /// scoping via <see cref="CallerRealmResolver"/> instead, since none of them
 /// take a settlement id to run this gate against directly.

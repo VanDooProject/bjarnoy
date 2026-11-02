@@ -149,9 +149,12 @@ that acquire state (an owner, a building) will ever become rows.
 `TerrainSampler` is a bit-exact port of the frontend's
 `src/frontend/src/lib/map/worldGenerator.ts`, down to JavaScript's
 integer-coercion semantics. That is what lets the client render terrain it was
-never sent. The parity tests hold the two together with checksums taken from
-running the TypeScript under Node over 102,487 hexes across seven seeds; if
-either side is changed deliberately, regenerate them **from the TypeScript**.
+never sent. The parity tests hold the two together with shared fixtures generated from
+the TypeScript (`src/shared/island-shape-golden.json`, `terrain-checksum-golden.json`,
+plus the river and wasted-terrain goldens; `scripts/regen-goldens/` builds them, and
+`GoldenRegenerationTests` rebuilds the river one from a real generation run); if
+either side is changed deliberately, regenerate them **from the TypeScript** and
+run both suites.
 
 The server owns what the client cannot derive, and those are the parts that get
 persisted:
@@ -281,9 +284,9 @@ development.
 | `GET /api/v1/worlds/{id}/islands` | its islands and their start positions |
 | `GET /api/v1/worlds/{id}/tiles?qMin=&qMax=&rMin=&rMax=` | terrain for a window |
 | `POST /api/v1/worlds/{id}/settlements` | found a settlement on a start position |
-| `GET /api/v1/worlds/{id}/settlements` | settlements in a world |
+| `GET /api/v1/worlds/{id}/settlements` | settlements in a world the caller can see (their own plus explored rivals'); `mine` marks the caller's own |
 | `POST /api/v1/worlds/{id}/state` | pause, lock, maintain or resume a world |
-| `GET /api/v1/settlements/{id}` | a settlement as of now, completing what its queue owed |
+| `GET /api/v1/settlements/{id}` | a settlement as of now, completing what its queue owed; owner only. `realm` lists every settlement of its realm (the owner's settlements on that island, itself first) with the connected claim discs the chain rule gives each (`ConnectedRealm`, economy.md section 5); the live client draws the realm's border from it |
 | `POST /api/v1/settlements/{id}/builds` | queue a building |
 | `GET /api/v1/buildings` | the catalogue: costs, durations, allowed terrain |
 | `POST /api/v1/messages` | send a direct message to another player |
@@ -306,7 +309,7 @@ npx openapi-typescript http://localhost:5180/openapi/v1.json \
 ```
 
 `GET /api/v1/buildings` also has a frontend-only fallback: the tech-tree page
-(`/tech-tree`) needs to render without a backend in demo mode, so
+(`/docs/tech-tree`) needs to render without a backend in demo mode, so
 `src/frontend/src/data/building-catalogue.json` is a committed snapshot of
 that endpoint's response, regenerated the same way against a running backend:
 
@@ -502,10 +505,10 @@ Two things in the build are easy to miss:
   so the image's `HEALTHCHECK` has something to probe `/health` with — that is
   what `depends_on: service_healthy` and an orchestrator's status both read.
   And `libfontconfig1`, which SkiaSharp's `libSkiaSharp.so` links against:
-  without it the fog-mask endpoint is the one thing that 500s in a container
+  without it the fog-chunks endpoint is the one thing that 500s in a container
   and nowhere else, reporting `/app/liblibSkiaSharp: cannot open shared object
   file` — a missing *dependency of* a native asset, not a missing asset. The
-  image smoke test fetches a fog mask for that reason.
+  image smoke test founds a settlement and fetches its fog chunk for that reason (an empty chunk is never encoded, so it has to be one with something in reach).
 
 ## Behind a proxy
 

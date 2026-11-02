@@ -185,11 +185,13 @@ onMounted(() => {
 }
 /* Mobile-readiness audit: `.back` (43x17) and `.link` (20px tall) were both
    well under a comfortable touch target on a phone. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .back,
   .link {
     min-height: 44px;
-    display: inline-flex;
+    /* `flex`, not `inline-flex`: each keeps its own line as on desktop —
+       inline, a short "Log in" link ran straight into "← Back". */
+    display: flex;
     align-items: center;
   }
 }

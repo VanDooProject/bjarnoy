@@ -19,12 +19,12 @@ const PREVIEW_LEVEL: Record<string, number> = {
   shrineoffreyja: 2,
   shrineofullr: 2,
   shrineofnjord: 2,
+  odinstatue: 2,
   archeryrange: 2,
   dockyard: 7,
   greatstorehouse: 4,
   barracks: 2,
-  fisherhut: 2,
-  // Shares FisherHut's art family now — see buildingArt.ts's
+  // Shares the fisherhut art family — see buildingArt.ts's
   // BUILDING_ART_FAMILIES.
   fishinghut: 2,
   // Flat/inland family only — same simplification buildingArt.ts's preview
@@ -44,17 +44,23 @@ const TYPE_LABELS: Record<string, string> = {
   shrineoffreyja: 'Shrine of Freyja',
   shrineofullr: 'Shrine of Ullr',
   shrineofnjord: 'Shrine of Njörd',
+  odinstatue: 'Odin Statue',
+  reindeerherder: 'Reindeer herder',
   archeryrange: 'Archery range',
+  siegeworkshop: 'Siege workshop',
   dockyard: 'Dockyard',
   greatstorehouse: 'Great storehouse',
-  fisherhut: 'Fisher hut',
   townsquare: 'Town square',
   cropmill: 'Crop mill',
   druidhut: "Druid's hut",
   cartworkshop: 'Cart workshop',
   claybrickworks: 'Clay brickworks',
+  bogoreworks: 'Bog-ore works',
+  hammerschmiede: 'Hammer Forge',
   // Display name only; the internal type stays `smithy`.
   smithy: 'Weaponsmith',
+  palisadegate: 'Palisade gate',
+  bridge: 'Bridge',
 };
 
 export function typeLabel(type: string): string {
@@ -72,11 +78,15 @@ const SHORT_LABELS: Record<string, string> = {
   storagehouse: 'Storage',
   greatstorehouse: 'Great st.',
   pumpkinfarm: 'Pumpkin',
+  reindeerherder: 'Herder',
+  druidhut: 'Druid',
+  odinstatue: 'Odin',
   shrineofthor: 'Thor',
   shrineoffreyja: 'Freyja',
   shrineofullr: 'Ullr',
   shrineofnjord: 'Njörd',
   archeryrange: 'Archery',
+  siegeworkshop: 'Siege',
 };
 
 export function shortLabel(type: string): string {
@@ -109,6 +119,7 @@ export type GraphCategory = (typeof GRAPH_CATEGORY_ORDER)[number];
 const GRAPH_CATEGORY_OF: Record<string, GraphCategory> = {
   longhouse: 'anchor',
   lumberjack: 'production',
+  reindeerherder: 'production',
   farm: 'production',
   quarry: 'production',
   pumpkinfarm: 'production',
@@ -116,21 +127,27 @@ const GRAPH_CATEGORY_OF: Record<string, GraphCategory> = {
   meadery: 'production',
   cropmill: 'production',
   claybrickworks: 'production',
+  bogoreworks: 'production',
+  hammerschmiede: 'production',
   tower: 'military',
   archeryrange: 'military',
+  siegeworkshop: 'military',
   barracks: 'military',
   smithy: 'military',
+  palisade: 'military',
+  palisadegate: 'military',
   storagehouse: 'logistics',
   greatstorehouse: 'logistics',
   cartworkshop: 'logistics',
   townsquare: 'logistics',
+  bridge: 'logistics',
   druidhut: 'logistics',
   shrineofthor: 'religion',
   shrineoffreyja: 'religion',
   shrineofullr: 'religion',
   shrineofnjord: 'religion',
+  odinstatue: 'religion',
   fishinghut: 'water',
-  fisherhut: 'water',
   dockyard: 'water',
 };
 

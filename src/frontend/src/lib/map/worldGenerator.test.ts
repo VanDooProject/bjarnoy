@@ -5,7 +5,19 @@
 // exercises `enumerateIslands`, demo mode's own island list, directly.
 import { describe, expect, it } from 'vitest';
 import { hexDistance } from '../hex/coords';
-import { DEFAULT_GENERATION, enumerateIslands, generateTile, soilAt, wastedVariantAt, type WorldSeed } from './worldGenerator';
+import {
+  DEFAULT_GENERATION,
+  enumerateIslands,
+  enumerateIslandShapes,
+  generateTile,
+  islandsTooClose,
+  MOUNTAIN_SHAPE_WEIGHTS,
+  soilAt,
+  terrainAt,
+  variantAt,
+  wastedVariantAt,
+  type WorldSeed,
+} from './worldGenerator';
 import { WorldModel } from './WorldModel';
 
 const SEED: WorldSeed = { seed: 20260824, generation: DEFAULT_GENERATION };
@@ -33,36 +45,65 @@ describe('soilAt', () => {
 });
 
 describe('enumerateIslands', () => {
-  it('finds at least one island within a modest radius of the origin', () => {
-    const islands = enumerateIslands(SEED, 30);
-    expect(islands.length).toBeGreaterThan(0);
+  // A production-size world: islands ~150 hexes across, ~100+ apart.
+  const WORLD_RADIUS = DEFAULT_GENERATION.worldRadius;
+
+  it('finds islands across the world', () => {
+    const islands = enumerateIslands(SEED, WORLD_RADIUS);
+    expect(islands.length).toBeGreaterThan(5);
   });
 
-  it('only returns islands within the requested radius', () => {
-    const radius = 30;
-    for (const island of enumerateIslands(SEED, radius)) {
-      expect(hexDistance({ q: 0, r: 0 }, island)).toBeLessThanOrEqual(radius);
+  it('only returns islands whose cell centre is within the requested radius', () => {
+    const near = enumerateIslands(SEED, 400);
+    const all = enumerateIslands(SEED, WORLD_RADIUS);
+    expect(near.length).toBeGreaterThan(0);
+    expect(near.length).toBeLessThan(all.length);
+    // Every island that is left is one the full list has too.
+    const allIds = new Set(all.map((i) => i.id));
+    for (const island of near) expect(allIds.has(island.id)).toBe(true);
+  });
+
+  it('never puts an island beyond the world radius: the world edge drops an island rather than cutting it', () => {
+    for (const island of enumerateIslands(SEED, WORLD_RADIUS * 2)) {
+      expect(hexDistance({ q: 0, r: 0 }, island)).toBeLessThanOrEqual(WORLD_RADIUS);
     }
   });
 
   it('gives every island a distinct id and a non-empty name', () => {
-    const islands = enumerateIslands(SEED, 40);
+    const islands = enumerateIslands(SEED, WORLD_RADIUS);
     const ids = new Set(islands.map((i) => i.id));
     expect(ids.size).toBe(islands.length);
     for (const island of islands) expect(island.name.length).toBeGreaterThan(0);
   });
 
   it('is deterministic for the same seed and radius', () => {
-    expect(enumerateIslands(SEED, 30)).toEqual(enumerateIslands(SEED, 30));
+    expect(enumerateIslands(SEED, WORLD_RADIUS)).toEqual(enumerateIslands(SEED, WORLD_RADIUS));
   });
 
-  it('places each island centre on actual land, so WorldModel.islandFootprint has something to measure', () => {
+  it('places each island label on actual land (a crescent\'s middle is water), so WorldModel.islandFootprint has something to measure', () => {
     const model = new WorldModel(SEED.seed, SEED.generation);
-    const islands = enumerateIslands(SEED, 30);
+    const islands = enumerateIslands(SEED, WORLD_RADIUS);
     expect(islands.length).toBeGreaterThan(0);
     for (const island of islands) {
       expect(model.isLand(island.q, island.r)).toBe(true);
     }
+  });
+});
+
+describe('mountain shape ratios', () => {
+  it('rolls the table shape rarely and splits the rest between cone, saddleback and corrie', () => {
+    expect(MOUNTAIN_SHAPE_WEIGHTS.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 10);
+    expect(MOUNTAIN_SHAPE_WEIGHTS[1]).toBeLessThan(0.05);
+
+    const counts = [0, 0, 0, 0];
+    for (let q = 0; q < 400; q++) {
+      for (let r = 0; r < 400; r++) {
+        if (terrainAt(q, r, SEED) === 'mountain') counts[variantAt(q, r, SEED)]!++;
+      }
+    }
+    const total = counts.reduce((a, b) => a + b, 0);
+    expect(total).toBeGreaterThan(1500);
+    counts.forEach((n, shape) => expect(Math.abs(n / total - MOUNTAIN_SHAPE_WEIGHTS[shape]!)).toBeLessThan(0.03));
   });
 });
 
@@ -106,5 +147,28 @@ describe('wastedVariantAt', () => {
   it('uses both frames of dead forest and black sand', () => {
     expect(histogram('forest')).toHaveLength(2);
     expect(histogram('sand')).toHaveLength(2);
+  });
+});
+
+describe('wasted islands and the min gap', () => {
+  it('keeps every kept wasted island the min gap away from green islands and from each other', () => {
+    for (const seed of [1, 2]) {
+      const world: WorldSeed = { seed, generation: DEFAULT_GENERATION };
+      const gap = DEFAULT_GENERATION.islandMinGap;
+      const green = enumerateIslandShapes(world, false);
+      const wasted = enumerateIslandShapes(world, true);
+      expect(wasted.length).toBeGreaterThanOrEqual(5);
+      for (const w of wasted) {
+        expect(green.some((g) => islandsTooClose(w, g, gap))).toBe(false);
+        expect(wasted.some((o) => o !== w && islandsTooClose(w, o, gap))).toBe(false);
+      }
+    }
+  });
+
+  it('drops nothing on a legacy world (min gap 0): wasted islands there still crowd green ones', () => {
+    const generation = { ...DEFAULT_GENERATION, islandCellSize: 260, islandMaxReach: 0, islandMinGap: 0, islandLargeShare: 0.12 };
+    const world: WorldSeed = { seed: 1, generation };
+    const green = enumerateIslandShapes(world, false);
+    expect(enumerateIslandShapes(world, true).some((w) => green.some((g) => islandsTooClose(w, g, 24)))).toBe(true);
   });
 });

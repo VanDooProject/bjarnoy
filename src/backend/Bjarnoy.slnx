@@ -14,4 +14,7 @@
     <Project Path="tests/Bjarnoy.Domain.Tests/Bjarnoy.Domain.Tests.csproj" />
     <Project Path="tests/Bjarnoy.Infrastructure.Tests/Bjarnoy.Infrastructure.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Bjarnoy.WorldReviewCli/Bjarnoy.WorldReviewCli.csproj" />
+  </Folder>
 </Solution>

@@ -49,6 +49,26 @@ export const useGuildStore = defineStore('guild', {
       if (!state.current || !auth.user) return null;
       return state.current.members.find((m) => m.userId === auth.user!.id) ?? null;
     },
+    /**
+     * The accounts whose palisade gates open for this player's armies besides their own: the other members of the player's guild and the
+     * members of every guild with an active peace treaty with it. Needs `guilds` (loadGuilds) and `treaties` (loadTreaties for the player's
+     * guild); the server decides the real routes the same way, this only drives the client's range tint.
+     */
+    friendlyUserIds(state): Set<string> {
+      const auth = useAuthStore();
+      const friends = new Set<string>();
+      const mine = auth.user ? state.guilds.find((g) => g.members.some((m) => m.userId === auth.user!.id)) : undefined;
+      if (!mine) return friends;
+      const atPeace = new Set<string>([mine.id]);
+      for (const t of state.treaties) {
+        if (t.status !== 'active') continue;
+        if (t.proposerGuildId === mine.id) atPeace.add(t.targetGuildId);
+        else if (t.targetGuildId === mine.id) atPeace.add(t.proposerGuildId);
+      }
+      for (const g of state.guilds) if (atPeace.has(g.id)) for (const m of g.members) friends.add(m.userId);
+      friends.delete(auth.user!.id);
+      return friends;
+    },
     isLeader(): boolean {
       return this.myMembership?.role === 'leader';
     },
@@ -84,6 +104,13 @@ export const useGuildStore = defineStore('guild', {
       } finally {
         this.currentLoading = false;
       }
+    },
+    /** What the map needs to know who a gate opens for: the world's guilds, then the treaties of the player's own. */
+    async loadFriends(worldId: string) {
+      await this.loadGuilds(worldId);
+      const auth = useAuthStore();
+      const mine = auth.user ? this.guilds.find((g) => g.members.some((m) => m.userId === auth.user!.id)) : undefined;
+      if (mine) await this.loadTreaties(mine.id);
     },
     async createGuild(worldId: string, body: CreateGuildRequest): Promise<GuildResponse | null> {
       this.actionPending = true;

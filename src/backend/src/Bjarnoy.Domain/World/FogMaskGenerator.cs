@@ -97,6 +97,21 @@ public static class FogMaskGenerator
         IReadOnlySet<HexCoord> persistedExplored,
         FogMaskOptions? options = null)
     {
+        ArgumentNullException.ThrowIfNull(persistedExplored);
+        return Generate(bounds, sources, persistedExplored.Contains, options);
+    }
+
+    /// <summary>
+    /// The chunk-friendly form of <see cref="Generate(MaskBounds, IReadOnlyList{FogVisionSource}, IReadOnlySet{HexCoord}, FogMaskOptions?)"/>:
+    /// explored history is a lookup, not a materialised set, so a caller
+    /// with a chunked store never has to build a hash set of the world.
+    /// </summary>
+    public static FogMaskBuffer Generate(
+        MaskBounds bounds,
+        IReadOnlyList<FogVisionSource> sources,
+        Func<HexCoord, bool> isExplored,
+        FogMaskOptions? options = null)
+    {
         options ??= new FogMaskOptions();
 
         var hexTexels = new List<MaskTexel>();
@@ -124,7 +139,7 @@ public static class FogMaskGenerator
         foreach (var texel in hexTexels)
         {
             var hex = FogMaskLayout.ToHex(texel);
-            var explored = persistedExplored.Contains(hex);
+            var explored = isExplored(hex);
 
             var unknown = explored
                 ? (byte)0
@@ -175,6 +190,81 @@ public static class FogMaskGenerator
         }
 
         return new FogMaskBuffer { Bounds = bounds, Cells = cells };
+    }
+
+    /// <summary>
+    /// Generates the mask for <paramref name="window"/> such that every texel
+    /// equals what <see cref="Generate(MaskBounds, IReadOnlyList{FogVisionSource}, Func{HexCoord, bool}, FogMaskOptions?)"/>
+    /// would put there over any larger region — i.e. a chunk edge has no
+    /// seam. An odd-parity interpolation texel on the window's edge averages
+    /// diagonal neighbours that live in the next window, so the bake runs
+    /// over the window grown by one texel per side (where those neighbours
+    /// are real hexes) and is cropped back. <paramref name="sources"/> must
+    /// include the halo (see <see cref="SourcesAffecting"/>).
+    /// </summary>
+    public static FogMaskBuffer GenerateWindow(
+        MaskBounds window,
+        IReadOnlyList<FogVisionSource> sources,
+        Func<HexCoord, bool> isExplored,
+        FogMaskOptions? options = null)
+    {
+        var padded = new MaskBounds(window.MinU - 1, window.MinV - 1, window.MaxU + 1, window.MaxV + 1);
+        var full = Generate(padded, sources, isExplored, options);
+
+        var cells = new FogMaskCell[window.Width * window.Height];
+        for (var v = window.MinV; v < window.MaxV; v++)
+        {
+            Array.Copy(
+                full.Cells,
+                ((v - padded.MinV) * padded.Width) + (window.MinU - padded.MinU),
+                cells,
+                (v - window.MinV) * window.Width,
+                window.Width);
+        }
+
+        return new FogMaskBuffer { Bounds = window, Cells = cells };
+    }
+
+    /// <summary>
+    /// The sources that can influence any texel of <paramref name="window"/>
+    /// (§3's "source halo"): those within their own ring-plus-ramp reach of
+    /// it, not only those whose own hex falls inside. Conservative — a source
+    /// is dropped only when it provably cannot reach: a hex at step distance
+    /// d is at most d texels away in u and 2d in v (<c>v = 2r + q</c>), and
+    /// the euclidean reach is widened to steps by 2/√3 exactly like
+    /// <see cref="MultiSourceDistance"/> does. The window itself is grown by
+    /// the one-texel border <see cref="GenerateWindow"/> bakes.
+    /// </summary>
+    public static List<FogVisionSource> SourcesAffecting(
+        MaskBounds window, IEnumerable<FogVisionSource> sources, FogMaskOptions? options = null)
+    {
+        options ??= new FogMaskOptions();
+        var result = new List<FogVisionSource>();
+        foreach (var source in sources)
+        {
+            var steps = ReachSteps(source, options);
+            var texel = FogMaskLayout.ToTexel(source.Coord);
+            if (texel.U >= window.MinU - 1 - steps && texel.U < window.MaxU + 1 + steps
+                && texel.V >= window.MinV - 1 - (2 * steps) && texel.V < window.MaxV + 1 + (2 * steps))
+            {
+                result.Add(source);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// The farthest step count from <paramref name="source"/> at which it can
+    /// still change a baked value (either ramp).
+    /// </summary>
+    public static int ReachSteps(FogVisionSource source, FogMaskOptions? options = null)
+    {
+        options ??= new FogMaskOptions();
+        var reach = Math.Max(
+            Math.Max(0, source.ExploredRadius) + Math.Max(0, options.UnknownMarginHexes),
+            Math.Max(0, source.VisibleRadius) + Math.Max(0, options.OutOfSightMarginHexes));
+        return (int)Math.Ceiling(reach * StepsPerEuclideanUnit);
     }
 
     /// <summary>

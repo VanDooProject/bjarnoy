@@ -11,17 +11,23 @@ export type BuildingOutput =
   | { kind: 'resourceRate'; resource: 'wood' | 'stone' | 'food' | 'iron'; amount: number }
   | { kind: 'populationCapacity'; amount: number }
   | { kind: 'storageCapacity'; amount: number }
-  | { kind: 'visionRing'; amount: number };
+  | { kind: 'visionRing'; amount: number; explored: number };
 
 export type BuildingModifier =
   | { kind: 'borderAnchor' }
   | { kind: 'trainsLandTroops' }
   | { kind: 'trainsShips' }
-  | { kind: 'trainsCivilianCrews' }
-  | { kind: 'terrainBoost'; terrain: 'forest' | 'mountain'; percent: number }
+  | { kind: 'trainsCivilians' }
+  | { kind: 'terrainBoost'; terrain: 'forest' | 'mountain' | 'bog' | 'lake'; percent: number }
   | { kind: 'coastal'; percent?: number }
   | { kind: 'shrineFavour'; percent: number; domain: 'landAttack' | 'food' | 'wood' | 'shipAttack' }
-  | { kind: 'radiusBoost'; percent: number; range: number; resource: 'wood' | 'food' };
+  | { kind: 'odinFavour'; buildTimePercent: number; visionRings: number }
+  | { kind: 'radiusBoost'; percent: number; range: number; resource: 'wood' | 'food' | 'iron' }
+  // A wall hex (docs/design/economy.md section 5): it blocks every land army; the gate lets the owner's through.
+  | { kind: 'palisadeWall' }
+  | { kind: 'palisadeGate' }
+  // A bridge (docs/design/economy.md section 5): it opens a wide river to land armies, the better the higher its level.
+  | { kind: 'bridge'; level: number };
 
 /**
  * Structured (not pre-formatted) so callers in different render contexts —
@@ -32,7 +38,16 @@ export type BuildingModifier =
 export interface BuildingLevelStats {
   output?: BuildingOutput;
   modifier?: BuildingModifier;
-  workers?: { cap: number };
+}
+
+/** Mirrors `FogVisionRadii.TowerVisibleRadius`: a tower sees its level + 1 rings (line of sight). */
+export function towerVisibleRadius(level: number): number {
+  return Math.max(0, level) + 1;
+}
+
+/** Mirrors `FogVisionRadii.TowerExploredRadius`: a tower scouts (explores) its level + 3 rings (`ScoutRingHexes`). */
+export function towerExploredRadius(level: number): number {
+  return Math.max(0, level) + 3;
 }
 
 /**
@@ -42,14 +57,17 @@ export interface BuildingLevelStats {
  * `boostMultiplier` below). A building with no entry here (Farm/PumpkinFarm
  * included) gets no such bonus. Sawmill has no entry either — it has no
  * production of its own to be terrain-boosted any more, see
- * `RADIUS_BOOST_TARGET`/`radiusBoostPercent`/`radiusBoostRange` below.
+ * `RADIUS_BOOST_TARGETS`/`radiusBoostPercent`/`radiusBoostRange` below.
  */
-export const BOOST_TERRAIN: Partial<Record<BuildingKind, Terrain>> = {
+export const BOOST_TERRAIN: Partial<Record<BuildingKind, Terrain | readonly Terrain[]>> = {
   lumberjack: 'forest',
   quarry: 'mountain',
   // The hut itself already stands on coastal water; more open sea around it
-  // is what the backend rewards, not the land it backs onto.
-  fishinghut: 'sea',
+  // is what the backend rewards, not the land it backs onto. A hut on a bog
+  // lake's half shore counts the lake hexes around it the same way.
+  fishinghut: ['sea', 'lake'],
+  // The bog around a bog-ore works: any bog hex (moss, shore, creek, mouth, spring) or lake water.
+  bogoreworks: ['bog', 'lake'],
 };
 
 /** Mirrors `BuildingCatalogue.BoostMultiplier`'s 10%-per-neighbour curve, capped at 50% (5 of 6 neighbours). */
@@ -58,15 +76,26 @@ function boostMultiplier(matchingNeighbours: number): number {
 }
 
 /**
- * Which resource (and, implicitly, which building type — Lumberjack for
- * Sawmill, Farm/PumpkinFarm for CropMill) a radius-boost producer raises the
- * output of within its range, mirroring `BuildingCatalogue.cs`'s
- * `RadiusBoostTargets`. Sawmill/CropMill have no production of their own any
- * more — this replaces it.
+ * Which resource a radius-boost building raises the output of within its
+ * range (see `RADIUS_BOOST_TARGETS` for which buildings). Sawmill/CropMill have
+ * no production of their own any more — this replaces it.
  */
-export const RADIUS_BOOST_RESOURCE: Partial<Record<BuildingKind, 'wood' | 'food'>> = {
+export const RADIUS_BOOST_RESOURCE: Partial<Record<BuildingKind, 'wood' | 'food' | 'iron'>> = {
   sawmill: 'wood',
   cropmill: 'food',
+  // Raises the bog-ore works within range (BuildingCatalogue.RadiusBoostTargets).
+  hammerschmiede: 'iron',
+};
+
+/**
+ * Which building types a radius-boost building raises, mirroring
+ * `BuildingCatalogue.cs`'s `RadiusBoostTargets`. Crop Mill grinds grain, so it
+ * boosts Farm only — Pumpkin Farm is a different crop and is not boosted.
+ */
+export const RADIUS_BOOST_TARGETS: Partial<Record<BuildingKind, readonly BuildingKind[]>> = {
+  sawmill: ['lumberjack'],
+  cropmill: ['farm'],
+  hammerschmiede: ['bogoreworks'],
 };
 
 /** The level the mills (Sawmill, Crop Mill) top out at — where their boost reaches +100%. */
@@ -87,7 +116,7 @@ export function radiusBoostRange(level: number): number {
 /**
  * Mirrors `BuildingCatalogue.MaxLevelFor` (docs/design/economy.md §4):
  * Longhouse 30; resource producers and Storage House 25; military/civic
- * buildings and the mills 20; Tower and Great Storehouse 10; shrines 5.
+ * buildings and the mills 20; Tower and Great Storehouse 10; shrines 5; Palisade and Palisade Gate 3; Bridge 4.
  * `hut` is demo-only (no backend entry) and gets the small-building ceiling.
  */
 export function maxLevelFor(type: BuildingKind): number {
@@ -97,10 +126,11 @@ export function maxLevelFor(type: BuildingKind): number {
     case 'lumberjack':
     case 'quarry':
     case 'claybrickworks':
+    case 'reindeerherder':
     case 'farm':
     case 'pumpkinfarm':
     case 'fishinghut':
-    case 'fisherhut':
+    case 'bogoreworks':
     case 'storagehouse':
       return 25;
     case 'barracks':
@@ -113,6 +143,7 @@ export function maxLevelFor(type: BuildingKind): number {
     case 'meadery':
     case 'sawmill':
     case 'cropmill':
+    case 'hammerschmiede':
       return 20;
     case 'tower':
     case 'greatstorehouse':
@@ -122,6 +153,14 @@ export function maxLevelFor(type: BuildingKind): number {
     case 'shrineoffreyja':
     case 'shrineofullr':
     case 'shrineofnjord':
+    case 'odinstatue':
+      return 5;
+    case 'palisade':
+    case 'palisadegate':
+      return 3;
+    case 'bridge':
+      return 4;
+    case 'siegeworkshop':
       return 5;
     default:
       return 0;
@@ -138,10 +177,49 @@ export function maxTowers(longhouseLevel: number): number {
 }
 
 /**
- * Mirrors `BuildingCatalogue.AdditionalStorageHouseLevel`: an additional
- * storage house may only be placed once one already stands at this level.
+ * Every shrine building type — `BuildingCatalogue.GodOf(type) is not null`. A
+ * settlement raises at most one of them in total
+ * (`BuildRejection.SettlementAlreadyHasShrine`).
  */
-export const ADDITIONAL_STORAGE_HOUSE_LEVEL = 10;
+export const SHRINE_BUILDING_TYPES: ReadonlySet<string> = new Set([
+  'shrineofthor',
+  'shrineoffreyja',
+  'shrineofullr',
+  'shrineofnjord',
+  'odinstatue',
+]);
+
+/**
+ * Mirrors `Settlement.BuildTimeFactor`: Odin's Wisdom takes 2% off every
+ * build's duration per Odin Statue level (levels past 5 keep level 5's 10%).
+ */
+export function wisdomBuildTimeFactor(odinLevel: number): number {
+  return 1 - 0.02 * Math.min(Math.max(odinLevel, 0), 5);
+}
+
+/**
+ * Mirrors `Settlement.VisionBonusRings`: Odin's Ravens add two rings of fog
+ * vision per Odin Statue level (10 at level 5) to the settlement's claim, its
+ * towers and its travelling armies.
+ */
+export function ravensRings(odinLevel: number): number {
+  return 2 * Math.min(Math.max(odinLevel, 0), 5);
+}
+
+/**
+ * Mirrors `BuildingCatalogue.AdditionalStorageHouseRequirement`: with
+ * `existing` storage houses held (standing plus queued), one more needs
+ * `min(existing, 4)` of them at level `min(10 + 5·(existing − 1), 25)` — 1 at
+ * L10, 2 at L15, 3 at L20, then 4 at L25 (the max), after which any number
+ * more is allowed. `{ count: 0, level: 0 }` for the first house.
+ */
+export function additionalStorageHouseRequirement(existing: number): { count: number; level: number } {
+  if (existing < 1) return { count: 0, level: 0 };
+  return { count: Math.min(existing, 4), level: Math.min(10 + 5 * (existing - 1), 25) };
+}
+
+/** Mirrors `BuildingCatalogue.BogOreWorksIronAtLevelOne`: iron per hour of a level-1 bog-ore works. */
+export const BOG_ORE_WORKS_IRON_AT_LEVEL_ONE = 20;
 
 /** Mirrors `BuildingCatalogue.ProductionFor`: a level's total output is `perHourAtLevelOne · 1.20^(level−1)`. */
 function producerOutput(perHourAtLevelOne: number, level: number, multiplier = 1): number {
@@ -153,13 +231,30 @@ function geometricCapacity(c1: number, growth: number, level: number): number {
   return Math.round((c1 * (Math.pow(growth, level) - 1)) / (growth - 1));
 }
 
-/** How many of `tile`'s six direct neighbours (never `tile` itself) are `terrain`. */
+/** How many of `tile`'s six direct neighbours (never `tile` itself) are `terrain` (or any of them, when several). */
 export function matchingNeighbourCount(
   tile: AxialCoord,
-  terrain: Terrain,
+  terrain: Terrain | readonly Terrain[],
   getTile: (q: number, r: number) => Tile,
 ): number {
-  return neighbors(tile).filter((c) => getTile(c.q, c.r).terrain === terrain).length;
+  const wanted = typeof terrain === 'string' ? [terrain] : terrain;
+  return neighbors(tile).filter((c) => wanted.includes(getTile(c.q, c.r).terrain)).length;
+}
+
+/**
+ * `buildingStatsFor` for a building standing on `tile`: reads the boost terrain's neighbour count off the map, and knows a
+ * Fishing Hut on a bog lake's half shore boosts by lake (not coastal) water. One helper for the hover card, the building
+ * modal and the ring menu, so they can't drift apart.
+ */
+export function buildingStatsAt(
+  type: BuildingKind,
+  level: number,
+  tile: AxialCoord & { bog?: Tile['bog'] },
+  getTile: (q: number, r: number) => Tile,
+): BuildingLevelStats {
+  const boostTerrain = BOOST_TERRAIN[type];
+  const matching = boostTerrain ? matchingNeighbourCount(tile, boostTerrain, getTile) : 0;
+  return buildingStatsFor(type, level, matching, type === 'fishinghut' && tile.bog?.kind === 'half');
 }
 
 /** Whether any of `tile`'s six direct neighbours is one of `terrains`. */
@@ -178,30 +273,33 @@ export function buildingStatsFor(
   type: BuildingKind,
   level: number,
   matchingNeighbours = 0,
+  onLake = false,
 ): BuildingLevelStats {
   switch (type) {
-    // Farm and PumpkinFarm are deliberately excluded from BuildingCatalogue.cs's
-    // Boosts table (they work a fixed field, not a resource that concentrates
-    // nearby) — no terrain or water adjacency changes their output. Farm is
-    // always buildable; PumpkinFarm is gated to Pumpkin-soil islands (see
-    // ringCatalogue.ts's cropAllowedHere) and yields more, the "more fertile"
-    // island's bonus crop.
-    case 'farm': {
-      const workersCap = level * 4;
-      return {
-        output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(40, level) },
-        workers: { cap: workersCap },
-      };
-    }
+    // ReindeerHerder, Farm and PumpkinFarm are deliberately excluded from
+    // BuildingCatalogue.cs's Boosts table (they work a herd or a fixed field,
+    // not a resource that concentrates nearby) — no terrain or water adjacency
+    // changes their output. The herder is the starting food building; Farm is
+    // buildable everywhere from LH 4; PumpkinFarm is gated to Pumpkin-soil
+    // islands (see ringCatalogue.ts's cropAllowedHere) and yields more, the
+    // "more fertile" island's bonus crop.
+    case 'reindeerherder':
+    case 'farm':
+      return { output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(40, level) } };
     case 'hut':
       return { output: { kind: 'populationCapacity', amount: level * 5 } };
     case 'tower':
-      return { output: { kind: 'visionRing', amount: level }, modifier: { kind: 'borderAnchor' } };
+      return {
+        output: { kind: 'visionRing', amount: towerVisibleRadius(level), explored: towerExploredRadius(level) },
+        modifier: { kind: 'borderAnchor' },
+      };
     // No production/storage of its own — trains the land combat/siege
     // roster in place of the Longhouse. No combat bonus (deferred), unlike
     // Tower, which is why this reads the same as Tower's own "no output"
     // shape rather than inventing a stat line with nothing behind it.
     case 'archeryrange':
+    // The Siege Workshop trains the battering ram, the other half of the siege roster.
+    case 'siegeworkshop':
       return { modifier: { kind: 'trainsLandTroops' } };
     case 'dockyard':
       return { modifier: { kind: 'trainsShips' } };
@@ -211,16 +309,6 @@ export function buildingStatsFor(
     // UnitCatalogue's doc comment on the backend for the exact split).
     case 'barracks':
       return { modifier: { kind: 'trainsLandTroops' } };
-    // A third food-producer variant alongside Farm/PumpkinFarm — same
-    // fixed-field shape, no terrain/adjacency boost (mirrors those two's
-    // exclusion from BuildingCatalogue.cs's Boosts table).
-    case 'fisherhut': {
-      const workersCap = level * 4;
-      return {
-        output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(42, level) },
-        workers: { cap: workersCap },
-      };
-    }
     // No production of its own — boosts every Lumberjack within its level's
     // range instead (see radiusBoostPercent/radiusBoostRange above).
     case 'sawmill':
@@ -241,13 +329,8 @@ export function buildingStatsFor(
     // Mirrors BuildingCatalogue.cs's GreatStorehouse(level): 2500 * (1.30^L - 1) / 0.30 per resource.
     case 'greatstorehouse':
       return { output: { kind: 'storageCapacity', amount: geometricCapacity(2500, 1.3, level) } };
-    case 'pumpkinfarm': {
-      const workersCap = level * 4;
-      return {
-        output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(44, level) },
-        workers: { cap: workersCap },
-      };
-    }
+    case 'pumpkinfarm':
+      return { output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(44, level) } };
     case 'lumberjack': {
       const multiplier = boostMultiplier(matchingNeighbours);
       const output = producerOutput(40, level, multiplier);
@@ -279,12 +362,37 @@ export function buildingStatsFor(
       const output = producerOutput(40, level, multiplier);
       return {
         output: { kind: 'resourceRate', resource: 'food', amount: output },
-        modifier:
-          multiplier > 1
+        modifier: onLake
+          ? multiplier > 1
+            ? { kind: 'terrainBoost', terrain: 'lake', percent: Math.round((multiplier - 1) * 100) }
+            : undefined
+          : multiplier > 1
             ? { kind: 'coastal', percent: Math.round((multiplier - 1) * 100) }
             : { kind: 'coastal' },
       };
     }
+    // Iron, from bog moss only; boosted by the bog, creeks and lakes around it (10% each, capped at 50%) and by the
+    // Hammer Forge. P1 is BuildingCatalogue.BogOreWorksIronAtLevelOne, tuned in the Economy lab.
+    case 'bogoreworks': {
+      const multiplier = boostMultiplier(matchingNeighbours);
+      return {
+        output: { kind: 'resourceRate', resource: 'iron', amount: producerOutput(BOG_ORE_WORKS_IRON_AT_LEVEL_ONE, level, multiplier) },
+        modifier:
+          multiplier > 1
+            ? { kind: 'terrainBoost', terrain: 'bog', percent: Math.round((multiplier - 1) * 100) }
+            : undefined,
+      };
+    }
+    // No production of its own: raises every bog-ore works within range, like the Sawmill raises Lumberjacks.
+    case 'hammerschmiede':
+      return {
+        modifier: {
+          kind: 'radiusBoost',
+          percent: Math.round(radiusBoostPercent(level)),
+          range: radiusBoostRange(level),
+          resource: 'iron',
+        },
+      };
     // Mirrors ShrineCatalogue.Favour.cs: +10% at level 1, +3%/level after,
     // capped at level 5 (+22%) so slotted runes always have headroom.
     case 'shrineofthor':
@@ -302,13 +410,24 @@ export function buildingStatsFor(
               : 'shipAttack';
       return { modifier: { kind: 'shrineFavour', percent: favour, domain } };
     }
+    // Mirrors ShrineCatalogue.Favour(Odin): Wisdom takes 2% off every build per
+    // level, Ravens adds two rings of vision per level (levels past 5 keep the
+    // level-5 favour).
+    case 'odinstatue':
+      return {
+        modifier: {
+          kind: 'odinFavour',
+          buildTimePercent: Math.round((1 - wisdomBuildTimeFactor(level)) * 100),
+          visionRings: ravensRings(level),
+        },
+      };
     // No production or storage of its own yet — its mead is meant for a
     // future morale-boost mechanic, same "no output" shape as townsquare/
     // druidhut below (see BuildingCatalogue.cs's Meadery doc comment).
     case 'meadery':
       return {};
-    // No production of its own — boosts every Farm/PumpkinFarm within range
-    // instead, same shape as Sawmill above.
+    // No production of its own — boosts every Farm (not PumpkinFarm, see
+    // RADIUS_BOOST_TARGETS) within range instead, same shape as Sawmill above.
     case 'cropmill':
       return {
         modifier: {
@@ -327,9 +446,17 @@ export function buildingStatsFor(
       return {};
     // Mirrors BuildingCatalogue.cs's CartWorkshop(level): purely a training
     // gate for the civilian roster it took over from the longhouse
-    // (Provisioner/SettlerCrew) — no storage or production of its own.
+    // (Provisioner/Settler) — no storage or production of its own.
     case 'cartworkshop':
-      return { modifier: { kind: 'trainsCivilianCrews' } };
+      return { modifier: { kind: 'trainsCivilians' } };
+    // A wall hex: no production, it stops land armies (the gate lets only its owner's through).
+    case 'palisade':
+      return { modifier: { kind: 'palisadeWall' } };
+    case 'palisadegate':
+      return { modifier: { kind: 'palisadeGate' } };
+    // A bridge on a wide river: no production, it lets land armies over (the better the higher the level; BridgeIndex.cs).
+    case 'bridge':
+      return { modifier: { kind: 'bridge', level } };
     // No production or storage of its own yet — see BuildingType.TownSquare/
     // DruidHut's own doc comments on the backend (a future civic/rune
     // mechanic), same "no output" shape as the default case below.
@@ -354,22 +481,26 @@ const PRODUCER_COST: ResourceLine = { wood: 50, stone: 40, food: 15, iron: 0 };
 const SMALL_BUILDING_COST: ResourceLine = { wood: 100, stone: 80, food: 0, iron: 0 };
 const BASE_COST: Record<BuildingKind, ResourceLine> = {
   hut: PRODUCER_COST,
+  reindeerherder: PRODUCER_COST,
   farm: PRODUCER_COST,
   pumpkinfarm: PRODUCER_COST,
   fishinghut: PRODUCER_COST,
-  fisherhut: PRODUCER_COST,
   lumberjack: PRODUCER_COST,
   quarry: PRODUCER_COST,
   claybrickworks: PRODUCER_COST,
+  bogoreworks: PRODUCER_COST,
+  hammerschmiede: SMALL_BUILDING_COST,
   longhouse: { wood: 120, stone: 100, food: 60, iron: 0 },
   tower: { wood: 120, stone: 200, food: 0, iron: 0 },
   shrineofthor: { wood: 180, stone: 140, food: 60, iron: 0 },
   shrineoffreyja: { wood: 180, stone: 140, food: 60, iron: 0 },
   shrineofullr: { wood: 180, stone: 140, food: 60, iron: 0 },
   shrineofnjord: { wood: 180, stone: 140, food: 60, iron: 0 },
+  odinstatue: { wood: 180, stone: 140, food: 60, iron: 0 },
   storagehouse: { wood: 80, stone: 60, food: 0, iron: 0 },
   greatstorehouse: { wood: 300, stone: 260, food: 0, iron: 0 },
   archeryrange: { wood: 140, stone: 100, food: 0, iron: 0 },
+  siegeworkshop: { wood: 220, stone: 160, food: 0, iron: 0 },
   dockyard: { wood: 200, stone: 120, food: 0, iron: 0 },
   barracks: { wood: 130, stone: 110, food: 0, iron: 0 },
   sawmill: SMALL_BUILDING_COST,
@@ -379,6 +510,11 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   townsquare: { wood: 160, stone: 140, food: 40, iron: 0 },
   druidhut: { wood: 160, stone: 110, food: 80, iron: 0 },
   cartworkshop: { wood: 150, stone: 110, food: 0, iron: 0 },
+  // One wall hex, plain or gate: BuildingCatalogue.PalisadeHex.
+  palisade: { wood: 40, stone: 10, food: 0, iron: 0 },
+  palisadegate: { wood: 40, stone: 10, food: 0, iron: 0 },
+  // Level 1 of BuildingCatalogue.BridgeLevels (the catalogue holds every level's own cost; demo mode raises it level by level).
+  bridge: { wood: 120, stone: 0, food: 20, iron: 0 },
 };
 
 /** Resource cost to build `type` at `targetLevel` (1 for a fresh build, current level + 1 for an upgrade). */

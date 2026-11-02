@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -290,9 +291,9 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
         // Regression: the world list and /view used to persist newly explored
         // ground too. The frontend polls the world list in the same tick as
         // the fog mask, so for a brand-new player both requests inserted the
-        // first player_explored row and the loser 500'd on the
-        // (WorldId, OwnerId) unique index (seen on Postgres in aspire-e2e).
-        // Only the fog mask may write it.
+        // first explored-chunk row and the loser 500'd on the
+        // chunk primary key (seen on Postgres in aspire-e2e, when it was one row).
+        // Only the fog chunks read may write it.
         using var client = Client();
         var worldId = await CreateWorldAsync(client);
         var owner = Unique("owner");
@@ -307,16 +308,18 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
         await using (var scope = _factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-            Assert.False(await db.PlayerExplored.AnyAsync(e => e.WorldId == worldId && e.OwnerId == owner, Ct));
+            Assert.False(await db.PlayerExploredChunks.AnyAsync(e => e.WorldId == worldId && e.OwnerId == owner, Ct));
         }
 
-        var fog = await client.GetAsync($"/api/v1/worlds/{worldId}/fog-mask", Ct);
+        var chunk = FogChunkLayout.ChunkOf(new HexCoord(settlement.Q, settlement.R));
+        var fog = await client.GetAsync(
+            $"/api/v1/worlds/{worldId}/fog-chunks?cuMin={chunk.U}&cuMax={chunk.U}&cvMin={chunk.V}&cvMax={chunk.V}", Ct);
         Assert.Equal(HttpStatusCode.OK, fog.StatusCode);
 
         await using (var scope = _factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-            Assert.True(await db.PlayerExplored.AnyAsync(e => e.WorldId == worldId && e.OwnerId == owner, Ct));
+            Assert.True(await db.PlayerExploredChunks.AnyAsync(e => e.WorldId == worldId && e.OwnerId == owner, Ct));
         }
     }
 

@@ -39,6 +39,43 @@ describe('worldMaskBounds', () => {
     expect(() => worldMaskBounds(-1)).toThrow(RangeError);
   });
 
+  // The pre-chunking implementation, kept as the oracle for the closed form:
+  // it walked every hex of the disc (~48M at radius 4000). Mirrors
+  // FogMaskLayoutTests.cs's WorldBounds_closed_form_equals_the_brute_force_hex_walk.
+  it.each([0, 1, 2, 3, 7, 16, 31, 60, 101])('closed form equals the brute-force hex walk at radius %i', (radius) => {
+    let minU = Infinity;
+    let minV = Infinity;
+    let maxU = -Infinity;
+    let maxV = -Infinity;
+    for (const hex of hexesInRadius({ q: 0, r: 0 }, radius)) {
+      const { u, v } = toTexel(hex);
+      minU = Math.min(minU, u);
+      maxU = Math.max(maxU, u);
+      minV = Math.min(minV, v);
+      maxV = Math.max(maxV, v);
+    }
+
+    const bounds = worldMaskBounds(radius);
+
+    expect(bounds.minU).toBe(minU - 1);
+    expect(bounds.minV).toBe(minV - 1);
+    expect(bounds.maxU).toBe(maxU + 2);
+    expect(bounds.maxV).toBe(maxV + 2);
+    expect(bounds.width).toBe(bounds.maxU - bounds.minU);
+    expect(bounds.height).toBe(bounds.maxV - bounds.minV);
+  });
+
+  it('answers radius 4000 at once instead of walking 48M hexes', () => {
+    expect(worldMaskBounds(4000)).toEqual({
+      minU: -4001,
+      minV: -8001,
+      maxU: 4002,
+      maxV: 8002,
+      width: 8003,
+      height: 16003,
+    });
+  });
+
   it('matches the half-open range at radius 0', () => {
     // A single hex at the origin: odd-q col=0,row=0 -> texel (0,0), padded by
     // one texel on every side.
@@ -146,6 +183,22 @@ describe('fogMaskPlacement', () => {
     // +q in axial is +1 odd-q column; +r at fixed q is +1 odd-q row.
     expect(u({ q: 1, r: 0 }) - u({ q: 0, r: 0 })).toBeCloseTo(1, 10);
     expect(v({ q: 0, r: 1 }) - v({ q: 0, r: 0 })).toBeCloseTo(2, 10);
+  });
+
+  it('places any texel window, not only a whole world: a hex inside a chunk window samples its own texel', () => {
+    // The live mask is a chunk window (fogChunks.ts windowBounds), so the
+    // same affine has to be right for a rectangle that is nowhere near the
+    // world's own bounds.
+    const window = { minU: 64, minV: -128, maxU: 192, maxV: 0, width: 128, height: 128 };
+    const placement = fogMaskPlacement(window, TILE_W, TILE_H);
+    const hex = toHex({ u: 100, v: -50 }); // even parity, inside the window
+    const texel = toTexel(hex);
+    expect(texel).toEqual({ u: 100, v: -50 });
+
+    const uv = toMaskUV(hexCentreWorld(hex), placement);
+
+    expect(uv.u * window.width).toBeCloseTo(texel.u - window.minU + 0.5, 10);
+    expect(uv.v * window.height).toBeCloseTo(texel.v - window.minV + 0.5, 10);
   });
 
   it('keeps every hex in the radius inside the 0..1 UV box', () => {

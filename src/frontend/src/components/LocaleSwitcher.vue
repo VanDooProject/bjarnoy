@@ -83,7 +83,7 @@ function selectLocale(code: SupportedLocale): void {
   border-color: var(--gold);
 }
 /* Same breakpoint as lib/breakpoints.ts's HUD_COMPACT_MAX_WIDTH. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .locale-switcher:not(.in-drawer) {
     display: none;
   }

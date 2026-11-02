@@ -28,7 +28,7 @@ public enum EndpointAccessKind
     /// <summary>
     /// The handler resolves the caller's own realm itself, via
     /// <see cref="CallerRealmResolver"/>, rather than delegating to an
-    /// endpoint filter — the per-world reads (membership, fog-mask,
+    /// endpoint filter — the per-world reads (membership, fog-chunks,
     /// plot-suggestion, the fog-gated world settlement list, the fog-gated
     /// settlement view) that predate accounts and were never settlement-id
     /// shaped to begin with. See <see cref="CallerRealmResolver"/>'s own
@@ -95,6 +95,10 @@ public static class EndpointAccessBuilderExtensions
     /// <summary>For a field-battle-report-by-id read — see <see cref="FieldReportOwnershipEndpointFilter"/>.</summary>
     public static RouteHandlerBuilder RequireFieldReportParty(this RouteHandlerBuilder builder) =>
         builder.AddEndpointFilter<FieldReportOwnershipEndpointFilter>().WithMetadata(EndpointAccess.ReportParty);
+
+    /// <summary>For a camp-report-by-id read — see <see cref="CampReportOwnershipEndpointFilter"/>.</summary>
+    public static RouteHandlerBuilder RequireCampReportOwner(this RouteHandlerBuilder builder) =>
+        builder.AddEndpointFilter<CampReportOwnershipEndpointFilter>().WithMetadata(EndpointAccess.ReportParty);
 
     /// <summary>
     /// For a handler that resolves the caller's own realm itself via

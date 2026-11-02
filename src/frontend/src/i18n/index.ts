@@ -8,7 +8,9 @@ import deLanding from './locales/de/landing.json';
 import enWorlds from './locales/en/worlds.json';
 import deWorlds from './locales/de/worlds.json';
 import enOnboarding from './locales/en/onboarding.json';
+import enQuests from './locales/en/quests.json';
 import deOnboarding from './locales/de/onboarding.json';
+import deQuests from './locales/de/quests.json';
 import enDemoModeBadge from './locales/en/demoModeBadge.json';
 import deDemoModeBadge from './locales/de/demoModeBadge.json';
 import enLogin from './locales/en/login.json';
@@ -37,6 +39,7 @@ import enDocs from './locales/en/docs.json';
 import deDocs from './locales/de/docs.json';
 import enShowcase from './locales/en/showcase.json';
 import deShowcase from './locales/de/showcase.json';
+import deAdminWorldReview from './locales/de/adminWorldReview.json';
 import enAdminActivityChart from './locales/en/adminActivityChart.json';
 import enAdminActivity from './locales/en/adminActivity.json';
 import enAdminEconomy from './locales/en/adminEconomy.json';
@@ -47,6 +50,7 @@ import enAdminSettlements from './locales/en/adminSettlements.json';
 import enAdminUsers from './locales/en/adminUsers.json';
 import enAdminWorldReseed from './locales/en/adminWorldReseed.json';
 import enAdminWorlds from './locales/en/adminWorlds.json';
+import enAdminWorldReview from './locales/en/adminWorldReview.json';
 import enArmyEditor from './locales/en/armyEditor.json';
 import enGarrisonForm from './locales/en/garrisonForm.json';
 import enGrantResourcesForm from './locales/en/grantResourcesForm.json';
@@ -95,6 +99,7 @@ export const i18n = createI18n({
       landing: enLanding,
       worlds: enWorlds,
       onboarding: enOnboarding,
+      quests: enQuests,
       demoModeBadge: enDemoModeBadge,
       login: enLogin,
       register: enRegister,
@@ -122,6 +127,8 @@ export const i18n = createI18n({
       adminUsers: enAdminUsers,
       adminWorldReseed: enAdminWorldReseed,
       adminWorlds: enAdminWorlds,
+      // The world review panel (admin, but translated: en + de).
+      adminWorldReview: enAdminWorldReview,
       armyEditor: enArmyEditor,
       garrisonForm: enGarrisonForm,
       grantResourcesForm: enGrantResourcesForm,
@@ -133,6 +140,7 @@ export const i18n = createI18n({
       landing: deLanding,
       worlds: deWorlds,
       onboarding: deOnboarding,
+      quests: deQuests,
       demoModeBadge: deDemoModeBadge,
       login: deLogin,
       register: deRegister,
@@ -147,6 +155,7 @@ export const i18n = createI18n({
       simulator: deSimulator,
       docs: deDocs,
       showcase: deShowcase,
+      adminWorldReview: deAdminWorldReview,
     },
   },
   datetimeFormats,

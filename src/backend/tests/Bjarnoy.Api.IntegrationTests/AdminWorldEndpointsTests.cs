@@ -125,6 +125,63 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
     }
 
     [Fact]
+    public async Task Admin_world_list_counts_free_spawn_spots_left_by_first_and_expansion_settlements()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var islands = (await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct))!
+            .Where(i => i.StartPositions.Count > 0)
+            .ToList();
+        Assert.True(islands.Count >= 2, "the test seed needs two islands with start positions");
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var empty = await ListedAsync();
+        Assert.Equal(islands.Sum(i => i.StartPositions.Count), empty.SpawnCount);
+        Assert.InRange(empty.FreeSpawnCount, 1, empty.SpawnCount);
+
+        var first = await FoundSettlementAsync(client, world);
+        var afterFirst = await ListedAsync();
+        Assert.True(afterFirst.FreeSpawnCount < empty.FreeSpawnCount);
+
+        // An expansion: a second settlement on another island, owned by the
+        // same player. It is not a new player, but it still takes spawn spots
+        // a new player could have joined on.
+        var island = islands.First(i => i.Id != first.IslandId);
+        var plot = island.StartPositions[0];
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var firstRow = await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == first.Id, Ct);
+            db.Settlements.Add(new SettlementEntity
+            {
+                WorldId = world.Id,
+                IslandId = island.Id,
+                UserId = firstRow.UserId,
+                Name = "Grimhold",
+                OwnerName = firstRow.OwnerName,
+                OwnerId = firstRow.OwnerId,
+                CentreQ = plot.Q,
+                CentreR = plot.R,
+                FoundedAt = firstRow.FoundedAt,
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var afterExpansion = await ListedAsync();
+        Assert.True(afterExpansion.FreeSpawnCount < afterFirst.FreeSpawnCount);
+        Assert.Equal(empty.SpawnCount, afterExpansion.SpawnCount);
+
+        async Task<AdminWorldResponse> ListedAsync()
+        {
+            var listResponse = await client.GetAsync("/api/v1/admin/worlds", Ct);
+            Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+            var worlds = await listResponse.ReadStrictAsync<IReadOnlyList<AdminWorldResponse>>(Ct);
+            return Assert.Single(worlds, w => w.Id == world.Id);
+        }
+    }
+
+    [Fact]
     public async Task Admin_can_update_speed_factor_start_date_stop_join_and_endboss()
     {
         using var client = _fixture.CreateClient();
@@ -674,11 +731,23 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
             "/api/v1/admin/worlds", SqliteApiFixture.StrictJson, Ct);
         var admin = listed!.Single(w => w.Id == world.Id);
 
-        var defaults = WorldGenerationOptions.ForSeed(world.Seed);
+        var defaults = TestWorlds.For(world.Seed);
         Assert.Equal(defaults.IslandCellSize, admin.Generation.IslandCellSize);
         Assert.Equal(defaults.IslandChance, admin.Generation.IslandChance);
-        Assert.Equal(defaults.IslandMinRadius, admin.Generation.IslandMinRadius);
-        Assert.Equal(defaults.IslandMaxRadius, admin.Generation.IslandMaxRadius);
+        Assert.Equal(defaults.IslandMinWidth, admin.Generation.IslandMinWidth);
+        Assert.Equal(defaults.IslandMaxWidth, admin.Generation.IslandMaxWidth);
+        Assert.Equal(defaults.IslandMinSegments, admin.Generation.IslandMinSegments);
+        Assert.Equal(defaults.IslandMaxSegments, admin.Generation.IslandMaxSegments);
+        Assert.Equal(defaults.IslandMinElongation, admin.Generation.IslandMinElongation);
+        Assert.Equal(defaults.IslandMaxElongation, admin.Generation.IslandMaxElongation);
+        Assert.Equal(defaults.IslandMinBend, admin.Generation.IslandMinBend);
+        Assert.Equal(defaults.IslandMaxBend, admin.Generation.IslandMaxBend);
+        Assert.Equal(defaults.IslandCoastWarp, admin.Generation.IslandCoastWarp);
+        Assert.Equal(defaults.IslandCoastWarpScale, admin.Generation.IslandCoastWarpScale);
+        Assert.Equal(defaults.IslandCoastNoise, admin.Generation.IslandCoastNoise);
+        Assert.Equal(defaults.IslandCoastNoiseScale, admin.Generation.IslandCoastNoiseScale);
+        Assert.Equal(defaults.IslandSmallShare, admin.Generation.IslandSmallShare);
+        Assert.Equal(defaults.IslandLargeShare, admin.Generation.IslandLargeShare);
         Assert.Equal(defaults.BeachThreshold, admin.Generation.BeachThreshold);
         Assert.Equal(defaults.MountainThreshold, admin.Generation.MountainThreshold);
         Assert.Equal(defaults.MountainRockiness, admin.Generation.MountainRockiness);
@@ -687,7 +756,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
     }
 
     [Fact]
-    public async Task Previewing_with_a_much_larger_island_radius_produces_fewer_bigger_islands()
+    public async Task Previewing_with_much_wider_islands_produces_fewer_bigger_islands()
     {
         using var client = _fixture.CreateClient();
         var world = await CreateWorldAsync(client);
@@ -696,30 +765,46 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         async Task<WorldSeedPreviewResponse> PreviewAsync(WorldGenerationSettingsOverrides? overrides) =>
             await (await client.PostJsonAsync(
                 $"/api/v1/admin/worlds/{world.Id}/preview-seed",
-                // Radius raised to 60 (the created world's own radius, 30, is
-                // too small to host more than one default-sized island after
-                // the island-shape retune, which breaks the "fewer islands"
-                // comparison below regardless of the override values).
-                new PreviewWorldSeedRequest(Seed: 2024, Radius: 60, Generation: overrides),
+                new PreviewWorldSeedRequest(Seed: 2024, Radius: 600, Generation: overrides),
                 Ct)).ReadStrictAsync<WorldSeedPreviewResponse>(Ct);
 
+        // The created world is a compact one (see TestWorlds): widths 8-14 on 66-hex cells.
         var defaultSized = await PreviewAsync(overrides: null);
-        // IslandCellSize bumped 40->64: after the island-shape retune, a
-        // MaxRadius of 25 needs a bigger reach budget than CellSize 40 allows
-        // (see WorldGenerationOptions.Validate's reach-budget check).
         var bigIslands = await PreviewAsync(new WorldGenerationSettingsOverrides(
-            IslandMinRadius: 20.0, IslandMaxRadius: 25.0, IslandCellSize: 64));
+            IslandMinWidth: 20.0, IslandMaxWidth: 28.0, IslandCellSize: 200, IslandMaxReach: 240.0));
 
         // Same seed, only the island-size knobs changed: far fewer, much
         // bigger islands than the default-sized preview of the same seed.
         Assert.True(
             bigIslands.IslandCount < defaultSized.IslandCount,
-            $"expected fewer islands with a much larger radius, got {bigIslands.IslandCount} vs {defaultSized.IslandCount}");
+            $"expected fewer islands with much wider ones, got {bigIslands.IslandCount} vs {defaultSized.IslandCount}");
         var averageBigIslandSize = (double)bigIslands.Islands.Sum(i => i.TileCount) / bigIslands.Islands.Count;
         var averageDefaultIslandSize = (double)defaultSized.Islands.Sum(i => i.TileCount) / defaultSized.Islands.Count;
         Assert.True(
             averageBigIslandSize > averageDefaultIslandSize,
             $"expected bigger average island size, got {averageBigIslandSize} vs {averageDefaultIslandSize}");
+    }
+
+    [Fact]
+    public async Task Previewing_returns_the_generation_it_used_so_the_client_renders_that_terrain()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var preview = await (await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/preview-seed",
+            new PreviewWorldSeedRequest(
+                Seed: 2024,
+                Radius: 400,
+                Generation: new WorldGenerationSettingsOverrides(IslandMinWidth: 10.0, IslandCoastNoise: 0.5)),
+            Ct)).ReadStrictAsync<WorldSeedPreviewResponse>(Ct);
+
+        Assert.Equal(400, preview.Generation.WorldRadius);
+        Assert.Equal(10.0, preview.Generation.IslandMinWidth);
+        Assert.Equal(0.5, preview.Generation.IslandCoastNoise);
+        // Not overridden: the world's own (compact) value.
+        Assert.Equal(TestWorlds.For(1).IslandMaxWidth, preview.Generation.IslandMaxWidth);
     }
 
     [Fact]
@@ -729,14 +814,14 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         var world = await CreateWorldAsync(client);
         Authorize(client, await CreateAdminTokenAsync(client));
 
-        // Only IslandMinRadius is overridden; MinimumIslandTiles is left null
+        // Only IslandMinWidth is overridden; MinimumIslandTiles is left null
         // and should still reflect the world's own (default) value, not some
         // other fallback.
         var response = await client.PostJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/preview-seed",
             new PreviewWorldSeedRequest(
                 Seed: 2024,
-                Generation: new WorldGenerationSettingsOverrides(IslandMinRadius: 6.0)),
+                Generation: new WorldGenerationSettingsOverrides(IslandMinWidth: 10.0)),
             Ct);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -759,7 +844,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
             $"/api/v1/admin/worlds/{world.Id}/preview-seed",
             new PreviewWorldSeedRequest(
                 Seed: 2024,
-                Generation: new WorldGenerationSettingsOverrides(IslandMinRadius: 10.0, IslandMaxRadius: 2.0)),
+                Generation: new WorldGenerationSettingsOverrides(IslandMinWidth: 30.0, IslandMaxWidth: 20.0)),
             Ct);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -773,18 +858,15 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         var world = await CreateWorldAsync(client);
         Authorize(client, await CreateAdminTokenAsync(client));
 
-        // IslandMaxRadius trimmed 14.0->13.0: after the island-shape retune,
-        // 14.0 exceeds the reach budget the default IslandCellSize (36)
-        // allows (see WorldGenerationOptions.Validate's reach-budget check).
-        // Radius raised 30(world default)->60: seed 9002 at radius 30 no
-        // longer produces any islands at all with these overrides.
+        // Radius raised from the created world's own 30: at that radius the world
+        // edge rule leaves no room for any island.
         var response = await client.PostJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/reseed",
             new ReseedWorldRequest(
                 world.Name,
                 Seed: 9002,
-                Radius: 60,
-                Generation: new WorldGenerationSettingsOverrides(IslandMinRadius: 6.0, IslandMaxRadius: 13.0)),
+                Radius: 400,
+                Generation: new WorldGenerationSettingsOverrides(IslandMinWidth: 10.0, IslandMaxWidth: 13.0)),
             Ct);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -793,8 +875,119 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
             "/api/v1/admin/worlds", SqliteApiFixture.StrictJson, Ct);
         var admin = listed!.Single(w => w.Id == world.Id);
 
-        Assert.Equal(6.0, admin.Generation.IslandMinRadius);
-        Assert.Equal(13.0, admin.Generation.IslandMaxRadius);
+        Assert.Equal(10.0, admin.Generation.IslandMinWidth);
+        Assert.Equal(13.0, admin.Generation.IslandMaxWidth);
+    }
+
+    // ---- World review (preview-seed's review, review-seeds) ----
+
+    [Fact]
+    public async Task A_seed_preview_carries_the_candidates_world_review()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/preview-seed", new PreviewWorldSeedRequest(Seed: 9001, Radius: 400), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var preview = await response.ReadStrictAsync<WorldSeedPreviewResponse>(Ct);
+        var review = preview.Review;
+
+        Assert.Equal(9001, review.Summary.Seed);
+        Assert.Equal(400, review.Summary.Radius);
+        Assert.Equal(preview.Islands.Count(i => !i.Wasted), review.Summary.GreenIslands);
+        Assert.Equal(preview.Islands.Sum(i => i.StartPositions.Count), review.Summary.LandingSpots);
+        Assert.Equal(0, review.Summary.BogRuleViolations);
+        Assert.Equal(0, review.Summary.InlandRiverMouths);
+        Assert.Equal(review.Findings.Count, review.Summary.Errors + review.Summary.Warnings + review.Summary.Infos);
+
+        // Every finding names an island of the preview and a hex the admin map can centre on.
+        var indices = preview.Islands.Select(i => i.Index).ToHashSet();
+        Assert.All(review.Findings, f =>
+        {
+            Assert.Contains(f.Island, indices);
+            Assert.Contains(f.Severity, new[] { "error", "warn", "info" });
+            Assert.Contains(f.Kind, new[] { "cutOffLand", "missingBog", "noLandingSpots", "bogRuleViolation", "inlandRiverMouth", "wastedNearGreen" });
+            Assert.False(string.IsNullOrWhiteSpace(f.Message));
+        });
+    }
+
+    [Fact]
+    public async Task Reviewing_a_seed_range_ranks_the_candidates_best_first_and_persists_nothing()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var before = await ReadWorldStateAsync(world.Id);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/review-seeds", new ReviewWorldSeedsRequest(SeedFrom: 500, Count: 3, Radius: 400), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.ReadStrictAsync<WorldSeedReviewResponse>(Ct);
+
+        Assert.Equal(world.Id, result.WorldId);
+        Assert.Equal(400, result.Radius);
+        Assert.Equal(400, result.Generation.WorldRadius);
+        Assert.Equal([500, 501, 502], result.Seeds.Select(s => s.Seed).Order());
+        Assert.All(result.Seeds, s => Assert.Equal(400, s.Radius));
+
+        // Best first: fewer errors, then fewer warnings, then less cut-off land.
+        var ranked = result.Seeds
+            .OrderBy(s => s.Errors).ThenBy(s => s.Warnings).ThenBy(s => s.CutOffTiles).ThenByDescending(s => s.LandingSpots).ThenBy(s => s.Seed)
+            .Select(s => s.Seed);
+        Assert.Equal(ranked, result.Seeds.Select(s => s.Seed));
+
+        // A seed's summary is the one its own preview reports.
+        var preview = await (await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/preview-seed", new PreviewWorldSeedRequest(Seed: 501, Radius: 400), Ct))
+            .ReadStrictAsync<WorldSeedPreviewResponse>(Ct);
+        Assert.Equal(preview.Review.Summary, result.Seeds.Single(s => s.Seed == 501));
+
+        var after = await ReadWorldStateAsync(world.Id);
+        Assert.Equal(before.Seed, after.Seed);
+        Assert.Equal(before.IslandIds, after.IslandIds);
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(1, ReviewWorldSeedsRequest.MaxCount + 1)]
+    [InlineData(int.MaxValue, 2)]
+    public async Task A_seed_range_review_refuses_a_bad_range(int seedFrom, int count)
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/review-seeds", new ReviewWorldSeedsRequest(seedFrom, count), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Only_an_admin_reviews_seeds_and_only_for_a_world_that_exists()
+    {
+        using var anonymous = _fixture.CreateClient();
+        var world = await CreateWorldAsync(anonymous);
+        var request = new ReviewWorldSeedsRequest(1, 1);
+
+        var unauthorized = await anonymous.PostJsonAsync($"/api/v1/admin/worlds/{world.Id}/review-seeds", request, Ct);
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+
+        using var player = _fixture.CreateClient();
+        var registered = await player.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(UniqueName("player"), "correct-horse-battery"), Ct);
+        Authorize(player, (await registered.ReadStrictAsync<AuthResponse>(Ct)).AccessToken);
+        var forbidden = await player.PostJsonAsync($"/api/v1/admin/worlds/{world.Id}/review-seeds", request, Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
+        using var client = _fixture.CreateClient();
+        Authorize(client, await CreateAdminTokenAsync(client));
+        var missing = await client.PostJsonAsync($"/api/v1/admin/worlds/{Guid.CreateVersion7()}/review-seeds", request, Ct);
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }
 
     private async Task<IReadOnlyList<Guid>> TriggerDueEndbossesAsync()

@@ -35,13 +35,17 @@ builder.AddServiceDefaults();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddGameDatabase(builder.Configuration);
 builder.Services.AddScoped<WorldService>();
+builder.Services.AddScoped<CampService>();
 builder.Services.AddScoped<SettlementService>();
 builder.Services.AddScoped<RealmDirectory>();
 builder.Services.AddScoped<TradeService>();
 builder.Services.AddScoped<FieldBattleService>();
+builder.Services.AddScoped<CampAmbushService>();
+builder.Services.AddScoped<CampAggressionService>();
 builder.Services.AddScoped<ArmyService>();
 builder.Services.AddScoped<BattleReportService>();
 builder.Services.AddScoped<FieldBattleReportService>();
+builder.Services.AddScoped<CampReportService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<GuildService>();
@@ -58,13 +62,13 @@ builder.Services.AddOptions<PlotReservationOptions>()
     .ValidateOnStart();
 
 // The per-user write-throttle UserActivityService keeps in IMemoryCache, and
-// FogMaskService's computed-mask cache (map-fog-v2.md §3) shares the same one.
+// FogChunkService's per-chunk mask cache (map-fog-v2.md §3) shares the same one.
 builder.Services.AddMemoryCache();
-builder.Services.AddScoped<FogMaskService>();
+builder.Services.AddScoped<FogChunkService>();
 // The fog-gated settlement/settlement-list reads (SettlementEndpoints.GetView/
-// ListForWorld) need the same explored-area computation FogMaskService bakes
-// its PNG from — see ExploredAreaService's own remarks for why it's a
-// separate, shared service rather than something only FogMaskService owns.
+// ListForWorld) need the same explored-area computation FogChunkService bakes
+// its chunks from — see ExploredAreaService's own remarks for why it's a
+// separate, shared service rather than something only FogChunkService owns.
 builder.Services.AddScoped<ExploredAreaService>();
 builder.Services.AddOptions<UserActivityOptions>()
     .Bind(builder.Configuration.GetSection(UserActivityOptions.SectionName))
@@ -174,9 +178,30 @@ if (migrationCommand == MigrationCommandKind.None)
     // running this. See EndbossTriggerHostedService.
     builder.Services.AddHostedService<EndbossTriggerHostedService>();
 
+    // Strong wildlife camps attacking towers inside their guard range — same reasoning as above; the scan is
+    // CampAggressionService.ProcessDueWorldsAsync. Tests that drive it by hand switch the timer off with
+    // CampAggression:Enabled=false so a tick cannot race them.
+    if (builder.Configuration.GetValue("CampAggression:Enabled", true))
+    {
+        builder.Services.AddHostedService<CampAggressionHostedService>();
+    }
+
+    // Buildings outside the realm decay: the sweep that applies the realm state to settlements nobody is looking at
+    // (SettlementService.SweepRealmStateAsync). Tests that drive it by hand switch the timer off with RealmSweep:Enabled=false.
+    if (builder.Configuration.GetValue("RealmSweep:Enabled", true))
+    {
+        builder.Services.AddHostedService<RealmStateHostedService>();
+    }
+
     // The leaderboard/weekly-stats aggregation job (issue #43) — same "the
     // migrator never serves requests" reasoning as the endboss trigger above.
-    builder.Services.AddHostedService<WeeklyAggregationHostedService>();
+    // Tests that drive LeaderboardService by hand switch the timer off with
+    // LeaderboardAggregation:Enabled=false: a tick landing mid-test would refresh the boards from a half-seeded
+    // world and stamp the watermark, making the test's own explicit refresh a no-op (RefreshInterval).
+    if (builder.Configuration.GetValue("LeaderboardAggregation:Enabled", true))
+    {
+        builder.Services.AddHostedService<WeeklyAggregationHostedService>();
+    }
 
     // Prunes expired UserActivitySessionEntity rows on a schedule — same "the
     // migrator never serves requests" reasoning as the endboss trigger above.
@@ -226,7 +251,10 @@ if (databaseOptions.MigrateOnStartup)
     // --ensure-world` (MigrationCommand.EnsureWorldAsync), for that reason.
     var worldService = scope.ServiceProvider.GetRequiredService<WorldService>();
     var worldSeedLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    await worldService.SeedDefaultWorldIfNoneAsync(MigrationCommand.DefaultWorldName, worldSeedLogger);
+    var defaultWorldRadius = MigrationCommand.ReadDefaultWorldRadius(
+        scope.ServiceProvider.GetRequiredService<IConfiguration>());
+    await worldService.SeedDefaultWorldIfNoneAsync(
+        MigrationCommand.DefaultWorldName, worldSeedLogger, defaultWorldRadius);
 }
 
 // Seeds the first Admin from ADMIN_BOOTSTRAP_USERNAME/ADMIN_BOOTSTRAP_PASSWORD

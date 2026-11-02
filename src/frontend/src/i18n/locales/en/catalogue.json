@@ -7,7 +7,6 @@
     "farm": "Farm",
     "storagehouse": "Storehouse",
     "tower": "Watchtower",
-    "fisherhut": "Fisher's Hut",
     "fishinghut": "Fishing Hut",
     "pumpkinfarm": "Pumpkin Farm",
     "shrineofthor": "Shrine of Thor",
@@ -25,7 +24,15 @@
     "smithy": "Weaponsmith",
     "druidhut": "Druid's Hut",
     "cartworkshop": "Cart Workshop",
-    "claybrickworks": "Clay Brickworks"
+    "claybrickworks": "Clay Brickworks",
+    "bogoreworks": "Bog-Ore Works",
+    "hammerschmiede": "Hammer Forge",
+    "odinstatue": "Odin Statue",
+    "palisade": "Palisade",
+    "palisadegate": "Palisade Gate",
+    "bridge": "Bridge",
+    "siegeworkshop": "Siege workshop",
+    "reindeerherder": "Reindeer Herder"
   },
   "units": {
     "thrall": "Thrall",
@@ -35,8 +42,10 @@
     "berserker": "Berserker",
     "provisioner": "Provisioner",
     "catapult": "Catapult",
+    "ram": "Battering ram",
     "karve": "Karve",
-    "longship": "Longship"
+    "longship": "Longship",
+    "settler": "Settler"
   },
   "giants": {
     "giantmountain": "Giant mountain",
@@ -44,12 +53,30 @@
     "giantvolcano": "Volcano",
     "giantutgard": "Utgard"
   },
+  "camps": {
+    "wolfden": "Wolf den",
+    "bearrapids": "Bear rapids",
+    "sealhaulout": "Seal haul-out",
+    "walrushaulout": "Walrus haul-out",
+    "boarwallow": "Boar wallow",
+    "eagleeyrie": "Eagle eyrie",
+    "fenrirbrood": "Fenrir's brood",
+    "moosemire": "Moose mire",
+    "beaverlodge": "Beaver lodge",
+    "cranedance": "Crane dance",
+    "harewarren": "Hare warren",
+    "deerglade": "Deer glade",
+    "otterslide": "Otter slide",
+    "whaleroad": "Whale road"
+  },
   "terrain": {
     "sea": "Open water",
     "sand": "Shore",
     "grass": "Grassland",
     "forest": "Forest",
-    "mountain": "Mountain"
+    "mountain": "Mountain",
+    "bog": "Bogland",
+    "lake": "Bog lake"
   },
   "wastedTerrain": {
     "wasteland": "Wasteland",
@@ -68,7 +95,8 @@
     "attack": "Attack",
     "support": "Support",
     "raid": "Raid",
-    "found": "Found settlement"
+    "found": "Found settlement",
+    "hunt": "Hunt"
   },
   "runes": {
     "types": {
@@ -114,5 +142,82 @@
       "weeklyResourcesLooted": "Weekly Resources Looted",
       "biggestArmy": "Biggest Army"
     }
+  },
+  "beasts": {
+    "wolfden": {
+      "young": "Wolf pup",
+      "adult": "Wolf",
+      "alpha": "Alpha wolf"
+    },
+    "boarwallow": {
+      "young": "Piglet",
+      "adult": "Boar",
+      "alpha": "Tusker"
+    },
+    "bearrapids": {
+      "young": "Cub",
+      "adult": "Bear",
+      "alpha": "Great bear"
+    },
+    "fenrirbrood": {
+      "young": "Black pup",
+      "adult": "Black wolf",
+      "alpha": "Fenrir's get"
+    },
+    "walrushaulout": {
+      "young": "Calf",
+      "adult": "Walrus",
+      "alpha": "Walrus bull"
+    },
+    "eagleeyrie": {
+      "young": "Eaglet",
+      "adult": "Sea eagle",
+      "alpha": "Old sea eagle"
+    },
+    "moosemire": {
+      "young": "Calf",
+      "adult": "Moose",
+      "alpha": "Moose bull"
+    },
+    "sealhaulout": {
+      "young": "Pup",
+      "adult": "Seal",
+      "alpha": "Seal bull"
+    },
+    "beaverlodge": {
+      "young": "Kit",
+      "adult": "Beaver",
+      "alpha": "Old beaver"
+    },
+    "cranedance": {
+      "young": "Chick",
+      "adult": "Crane",
+      "alpha": "Lead crane"
+    },
+    "harewarren": {
+      "young": "Leveret",
+      "adult": "Hare",
+      "alpha": "Jack hare"
+    },
+    "deerglade": {
+      "young": "Fawn",
+      "adult": "Deer",
+      "alpha": "Stag"
+    },
+    "otterslide": {
+      "young": "Pup",
+      "adult": "Otter",
+      "alpha": "Old otter"
+    },
+    "whaleroad": {
+      "young": "Whale calf",
+      "adult": "Humpback",
+      "alpha": "Old bull"
+    }
+  },
+  "endgame": {
+    "utgardwall": "Utgard wall",
+    "utgardgate": "Utgard gate",
+    "jotunwatchtower": "Jötun watchtower"
   }
 }

@@ -6,7 +6,8 @@
 // pill also carries a cap (`WorldModel.storageCapForDisplay`) and a fill-progress
 // underline, matching the reference's "4,965 / 12,000" + green bar.
 //
-// Mobile HUD bar rework: below HUD_COMPACT_QUERY there simply isn't room for
+// Mobile HUD bar rework: below HUD_COMPACT_QUERY (and, on desktop, whenever the
+// full row doesn't fit beside the nav, see `desktopCollapsed`) there simply isn't room for
 // the stacked value/rate/fill layout, so each pill collapses to one line
 // that tap-cycles through stock -> rate -> max capacity (see `stage`/
 // `cycle` below) — a single shared stage, not one per pill, so tapping any
@@ -31,14 +32,17 @@
 // judged against "would full notation fit", never against whatever is
 // currently on screen — that's what keeps the row from flip-flopping right
 // at the boundary.
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
-import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
+import { isHudRail } from '../../composables/hudSettlementBubbleState';
+import { HUD_COMPACT_QUERY, HUD_RAIL_TALL_QUERY } from '../../lib/breakpoints';
 import { formatHudNumber } from '../../lib/hud/compactNumber';
 import type { MessageSchema } from '../../i18n/schema';
+import { animate, motionEnabled } from '../../lib/motion';
+import type { ResourceKind } from '../../lib/map/types';
 
 const props = defineProps<{
   // Issue #16 "ring menu": dims the resource pills while a ring is open —
@@ -52,25 +56,93 @@ const world = useWorldStore();
 const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
-const isExpanded = computed(() => isCompact.value && isHudDrawerOpen.value);
+// Landscape rail (TopBar.vue's `isHudRail`): the pills are a column of
+// separate floating bubbles at a fixed width, never the pull-down drawer's
+// "expanded" layout and never measured against a row — see `updateFit`.
+// One line per pill by default (the usual stock -> rate -> cap tap cycle);
+// two lines (stock, then rate or cap) once the viewport is tall enough.
+const isRail = computed(() => isCompact.value && isHudRail.value);
+const isTall = useMediaQuery(HUD_RAIL_TALL_QUERY);
+const railTwoLine = computed(() => isRail.value && isTall.value);
+const isExpanded = computed(() => isCompact.value && isHudDrawerOpen.value && !isRail.value);
+
+// Desktop: the bar takes the room left beside the nav, and when the full
+// desktop row (stacked value / rate / fill per pill) doesn't fit it, it
+// renders the very same collapsed pills the phone uses (one line per pill,
+// tap cycles stock -> rate -> cap, short "k"/"M" notation once even those
+// don't fit) instead of running out under the realm name. Decided by
+// `updateFit` below against the hidden full desktop row, never against what
+// is on screen.
+const desktopCollapsed = ref(false);
+/** Whether the collapsed one-line pills are showing (always on a phone, on desktop only when the full row doesn't fit). */
+const collapsed = computed(() => isCompact.value || desktopCollapsed.value);
 
 // Issue #158: each pill's fill track gains a dim reserved segment — the
 // stock is not split into two bars, `reserved` is a *portion* of `value`
 // already sitting in stock, earmarked for the waiting build queue and
 // unspendable elsewhere. Always zero in demo mode (`hud.reserved` never
 // changes from its empty default there — see stores/world.ts).
+// X8: after a confirmed build the affected pills count down from the old to the
+// new value instead of snapping. `tickBack` is the part of the spend the number
+// has not come down by yet; it is added to the live stock (so production ticks
+// keep showing meanwhile) and shrinks to zero over TICK_DOWN_MS. Driven by the
+// store's explicit `hud.lastSpend` event, never by watching the values: an
+// ordinary production tick must not trigger it.
+const TICK_DOWN_MS = 420;
+const tickBack = reactive<Record<ResourceKind, number>>({ wood: 0, stone: 0, food: 0, iron: 0 });
+const tickFrames = new Map<ResourceKind, number>();
+
+function tickDown(kind: ResourceKind, amount: number) {
+  cancelTick(kind);
+  const t0 = performance.now();
+  tickBack[kind] = amount;
+  const step = (now: number) => {
+    const k = Math.min(1, (now - t0) / TICK_DOWN_MS);
+    tickBack[kind] = amount * (1 - k);
+    if (k < 1) tickFrames.set(kind, requestAnimationFrame(step));
+    else tickFrames.delete(kind);
+  };
+  tickFrames.set(kind, requestAnimationFrame(step));
+}
+function cancelTick(kind: ResourceKind) {
+  const frame = tickFrames.get(kind);
+  if (frame !== undefined) cancelAnimationFrame(frame);
+  tickFrames.delete(kind);
+  tickBack[kind] = 0;
+}
+
+watch(
+  () => world.hud.lastSpend,
+  async (spend) => {
+    if (!spend) return;
+    const kinds = (Object.keys(spend.cost) as ResourceKind[]).filter((kind) => (spend.cost[kind] ?? 0) > 0);
+    if (motionEnabled()) for (const kind of kinds) tickDown(kind, spend.cost[kind]!);
+    await nextTick();
+    for (const kind of kinds) {
+      for (const el of barRef.value?.querySelectorAll(`[data-res="${kind}"]`) ?? []) {
+        // A red flash that eases back to the pill's own colours; a plain short fade under reduced motion.
+        const flash = [{ offset: 0, color: '#f0a396', background: 'rgba(226,112,95,.45)' }];
+        void animate(el, flash, { duration: 650, easing: 'ease-out', reduced: flash });
+      }
+    }
+  },
+);
+onBeforeUnmount(() => {
+  for (const kind of [...tickFrames.keys()]) cancelTick(kind);
+});
+
 const pills = computed(() => [
-  { key: 'wood', color: 'var(--wood)', value: world.hud.resources.wood, rate: world.hud.rates.wood, cap: world.hud.storageCap.wood, reserved: world.hud.reserved.wood },
-  { key: 'stone', color: 'var(--stone)', value: world.hud.resources.stone, rate: world.hud.rates.stone, cap: world.hud.storageCap.stone, reserved: world.hud.reserved.stone },
-  { key: 'food', color: 'var(--food)', value: world.hud.resources.food, rate: world.hud.rates.food, cap: world.hud.storageCap.food, reserved: world.hud.reserved.food },
-  { key: 'iron', color: 'var(--iron)', value: world.hud.resources.iron, rate: world.hud.rates.iron, cap: world.hud.storageCap.iron, reserved: world.hud.reserved.iron },
+  { key: 'wood', color: 'var(--wood)', value: world.hud.resources.wood + tickBack.wood, rate: world.hud.rates.wood, cap: world.hud.storageCap.wood, reserved: world.hud.reserved.wood },
+  { key: 'stone', color: 'var(--stone)', value: world.hud.resources.stone + tickBack.stone, rate: world.hud.rates.stone, cap: world.hud.storageCap.stone, reserved: world.hud.reserved.stone },
+  { key: 'food', color: 'var(--food)', value: world.hud.resources.food + tickBack.food, rate: world.hud.rates.food, cap: world.hud.storageCap.food, reserved: world.hud.reserved.food },
+  { key: 'iron', color: 'var(--iron)', value: world.hud.resources.iron + tickBack.iron, rate: world.hud.rates.iron, cap: world.hud.storageCap.iron, reserved: world.hud.reserved.iron },
 ]);
 
 const population = computed(() => world.hud.population);
 
 // --- Number formatting (full by default, short only once measured to not fit) ---
 
-/** Whether the phone row is currently showing short "k"/"M" notation instead of full grouped numbers. Always false on desktop. */
+/** Whether the collapsed row is currently showing short "k"/"M" notation instead of full grouped numbers. Only ever true while the collapsed pills show. */
 const useShortNotation = ref(false);
 
 /**
@@ -145,6 +217,32 @@ function cycle() {
 
 onBeforeUnmount(clearRevertTimer);
 
+// Two-line rail pills: the first line is always the stock, and a tap only
+// cycles the second line between the rate and the cap.
+type Line2 = 0 | 1;
+const line2 = ref<Line2>(0);
+function cycleLine2() {
+  line2.value = (line2.value === 0 ? 1 : 0) as Line2;
+  clearRevertTimer();
+  if (line2.value !== 0) {
+    revertTimer = setTimeout(() => {
+      line2.value = 0;
+      revertTimer = null;
+    }, AUTO_REVERT_MS);
+  }
+}
+function onPillTap() {
+  if (railTwoLine.value) cycleLine2();
+  else cycle();
+}
+function line2Text(rate: number, cap: number): string {
+  return line2.value === 1 ? t('hud.resourceBar.capSuffix', { n: fmt(cap) }) : t('hud.resourceBar.rate', { n: fmtRate(rate) });
+}
+/** The text a rail pill shows (both lines, for the aria-label) — in two-line mode the stock and its second line, otherwise the one cycling line. */
+function pillSummary(value: number, rate: number, cap: number): string {
+  return railTwoLine.value ? `${fmt(value)} ${line2Text(rate, cap)}` : stageText(value, rate, cap);
+}
+
 // Cap stage now reuses the exact same "/{n}" the expanded view's cap line
 // shows (owner's call — a bare "/3,000" reads as continuing the "current"
 // line's own cap, exactly like the expanded pill directly above it does),
@@ -166,14 +264,43 @@ function stageText(value: number, rate: number, cap: number, forceFull = false):
 // tested by hand.
 const barRef = ref<HTMLElement | null>(null);
 const measureRef = ref<HTMLElement | null>(null);
+/** Desktop only: hidden clone of the full desktop row (full notation), what `desktopCollapsed` is judged against. */
+const desktopMeasureRef = ref<HTMLElement | null>(null);
 let resizeObserver: ResizeObserver | null = null;
 
 /** Smallest evenly spread gap short notation may leave before the font steps down a size. */
 const MIN_TIGHT_GAP_PX = 8;
 
+/** The rail's pills have a fixed width: numbers of six digits and up switch to "k"/"M" together. */
+const RAIL_SHORT_FROM = 100_000;
+
 async function updateFit(): Promise<void> {
   if (!isCompact.value) {
-    useShortNotation.value = false;
+    // Desktop: does the full row fit the room beside the nav? Always judged
+    // against the hidden desktop clone, never the row on screen, so the
+    // decision cannot flip-flop at the boundary. When it doesn't fit, the
+    // collapsed pills take over and the short-notation step below applies.
+    if (!desktopMeasureRef.value) await nextTick();
+    const desktopBar = barRef.value;
+    const desktopMeasure = desktopMeasureRef.value;
+    if (!desktopBar || !desktopMeasure) return;
+    const fits = desktopMeasure.scrollWidth <= desktopBar.clientWidth;
+    desktopCollapsed.value = !fits;
+    if (fits) {
+      useShortNotation.value = false;
+      useTightFont.value = false;
+      return;
+    }
+    // Let the collapsed markup and its measuring clone render first.
+    await nextTick();
+  } else {
+    desktopCollapsed.value = false;
+  }
+  if (isRail.value) {
+    // No row to measure: the rail is a fixed-width column, so only the size
+    // of the numbers decides, and the font never steps down.
+    const all = [...pills.value, { value: population.value.current, rate: population.value.rate, cap: population.value.max }];
+    useShortNotation.value = all.some((p) => Math.max(Math.abs(p.value), Math.abs(p.rate), Math.abs(p.cap)) >= RAIL_SHORT_FROM);
     useTightFont.value = false;
     return;
   }
@@ -212,17 +339,24 @@ onBeforeUnmount(() => {
 // shows one stage's text at a time), and collapsed <-> expanded (a
 // completely different markup shape) — a bar *resize* (rotation, drawer
 // animation) is already covered by the ResizeObserver above.
-watch([pills, population, stage, isExpanded, isCompact, locale], () => void updateFit(), { deep: true });
+watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => void updateFit(), { deep: true });
 </script>
 
 <template>
   <div
     ref="barRef"
     class="resource-bar"
-    :class="{ disabled: props.ringOpen, compact: isCompact && !isExpanded, expanded: isExpanded, 'tight-font': useTightFont }"
+    :class="{
+      disabled: props.ringOpen,
+      compact: collapsed && !isExpanded,
+      expanded: isExpanded,
+      'tight-font': useTightFont,
+      'resource-bar--rail': isRail,
+      'resource-bar--rail-2': railTwoLine,
+    }"
   >
-    <template v-if="!isCompact || isExpanded">
-      <div v-for="pill in pills" :key="pill.key" class="resource">
+    <template v-if="!collapsed || isExpanded">
+      <div v-for="pill in pills" :key="pill.key" class="resource" :data-res="pill.key">
         <span class="hex-icon" :style="{ background: pill.color }" />
         <div class="numbers">
           <span class="value">
@@ -259,17 +393,21 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
         :key="pill.key"
         type="button"
         class="resource resource--compact"
+        :data-res="pill.key"
         :data-stage="stage"
-        :aria-label="t(`catalogue.resources.${pill.key}`) + ': ' + stageText(pill.value, pill.rate, pill.cap)"
-        @click="cycle"
+        :aria-label="t(`catalogue.resources.${pill.key}`) + ': ' + pillSummary(pill.value, pill.rate, pill.cap)"
+        @click="onPillTap"
       >
         <span class="hex-icon" :style="{ background: pill.color }" />
         <div class="numbers-compact">
-          <span class="value-compact" :class="`stage-${stage}`">
-            {{ stageText(pill.value, pill.rate, pill.cap) }}
-            <span v-if="stage === 0 && pill.reserved > 0" class="reserved-hint">
+          <span class="value-compact" :class="railTwoLine ? 'stage-0' : `stage-${stage}`">
+            {{ railTwoLine ? fmt(pill.value) : stageText(pill.value, pill.rate, pill.cap) }}
+            <span v-if="stage === 0 && pill.reserved > 0 && !isRail" class="reserved-hint">
               {{ t('hud.resourceBar.reserved', { n: fmt(pill.reserved) }) }}
             </span>
+          </span>
+          <span v-if="railTwoLine" class="value-compact value-line2" :class="line2 === 0 ? 'stage-1' : 'stage-2'">
+            {{ line2Text(pill.rate, pill.cap) }}
           </span>
           <span class="fill-track">
             <span class="fill" :style="{ width: fillPct(pill.value, pill.cap) + '%', background: pill.color }" />
@@ -289,13 +427,16 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
         type="button"
         class="resource resource--compact population"
         :data-stage="stage"
-        :aria-label="t('hud.nav.settlement') + ': ' + stageText(population.current, population.rate, population.max)"
-        @click="cycle"
+        :aria-label="t('hud.nav.settlement') + ': ' + pillSummary(population.current, population.rate, population.max)"
+        @click="onPillTap"
       >
         <span class="hex-icon" style="background: var(--pop, #7fb3d5)" />
         <div class="numbers-compact">
-          <span class="value-compact" :class="`stage-${stage}`">
-            {{ stageText(population.current, population.rate, population.max) }}
+          <span class="value-compact" :class="railTwoLine ? 'stage-0' : `stage-${stage}`">
+            {{ railTwoLine ? fmt(population.current) : stageText(population.current, population.rate, population.max) }}
+          </span>
+          <span v-if="railTwoLine" class="value-compact value-line2" :class="line2 === 0 ? 'stage-1' : 'stage-2'">
+            {{ line2Text(population.rate, population.max) }}
           </span>
           <span class="fill-track">
             <span class="fill" :style="{ width: fillPct(population.current, population.max) + '%', background: 'var(--pop, #7fb3d5)' }" />
@@ -308,9 +449,10 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
   <!-- Hidden fit-measurement clone (see `updateFit` above) — same shape as
        the visible row above, always in full notation, never wrapped, laid
        out off-screen via `position: fixed` so it can't affect `.hud-bar-right`'s
-       real layout or be seen/hit-tested. Exists only on phones. -->
+       real layout or be seen/hit-tested. Exists wherever the collapsed pills
+       can show (phones, and desktop once the full row stopped fitting). -->
   <div
-    v-if="isCompact"
+    v-if="collapsed && !isRail"
     ref="measureRef"
     class="resource-bar resource-bar--measure"
     :class="{ compact: !isExpanded, expanded: isExpanded }"
@@ -355,6 +497,38 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
       </div>
     </template>
   </div>
+
+  <!-- Desktop twin of the clone above: the full desktop row, always in full
+       notation, deciding whether the room beside the nav is enough for it
+       (`desktopCollapsed`). -->
+  <div
+    v-if="!isCompact"
+    ref="desktopMeasureRef"
+    class="resource-bar resource-bar--measure"
+    aria-hidden="true"
+    data-measure="desktop"
+    inert
+  >
+    <div v-for="pill in pills" :key="pill.key" class="resource">
+      <span class="hex-icon" :style="{ background: pill.color }" />
+      <div class="numbers">
+        <span class="value">
+          {{ fmt(pill.value, true) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(pill.cap, true) }) }}</span>
+          <span v-if="pill.reserved > 0" class="reserved-hint">{{ t('hud.resourceBar.reserved', { n: fmt(pill.reserved, true) }) }}</span>
+        </span>
+        <span class="rate">{{ t('hud.resourceBar.rate', { n: fmtRate(pill.rate, true) }) }}</span>
+        <span class="fill-track" />
+      </div>
+    </div>
+    <div v-if="population.max > 0" class="resource population">
+      <span class="hex-icon" style="background: var(--pop, #7fb3d5)" />
+      <div class="numbers">
+        <span class="value">{{ fmt(population.current, true) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(population.max, true) }) }}</span></span>
+        <span class="rate">{{ t('hud.resourceBar.rate', { n: fmtRate(population.rate, true) }) }}</span>
+        <span class="fill-track" />
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -362,7 +536,12 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
   display: flex;
   align-items: center;
   gap: 22px;
-  flex: none;
+  /* Takes the room left beside the nav (the fit check in the script above
+     compares the full desktop row against exactly this width); the pills sit
+     at its right end, next to the nav, as when everything fits. */
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
   transition: opacity 0.15s ease;
 }
 .resource-bar.disabled {
@@ -594,6 +773,60 @@ watch([pills, population, stage, isExpanded, isCompact, locale], () => void upda
 .resource-bar.compact .fill-track {
   min-width: 0;
   margin-top: 2px;
+}
+
+/* Landscape rail (TopBar.vue's `hud-bar--rail`): the pills stack as a column
+   of separate floating bubbles, each in the same dark translucent pill as the
+   settlement bubble and Trade button, at a fixed width — nothing here is
+   measured against a row (`updateFit` only picks short notation by number
+   size). One line per pill (84px) by default, two (92px: stock, then rate or
+   cap) when the viewport is tall enough (`resource-bar--rail-2`). Placed
+   after the `.compact` rules so it wins at equal specificity. */
+.resource-bar--rail.compact {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  flex: none;
+  gap: 6px;
+}
+.resource-bar--rail .resource--compact {
+  width: 84px;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  gap: 6px;
+  border-radius: 14px;
+  background: rgba(6, 12, 16, 0.94);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+.resource-bar--rail.compact .resource--compact + .resource--compact {
+  /* Undo the row's separator reset above: every rail pill is a full bubble. */
+  padding-left: 8px;
+  border-left: 1px solid var(--panel-border);
+}
+.resource-bar--rail-2 .resource--compact {
+  width: 92px;
+}
+.resource-bar--rail .numbers-compact {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.resource-bar--rail .value-compact {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.resource-bar--rail .value-line2 {
+  font-size: 11px;
+}
+.resource-bar--rail .reserved-hint {
+  display: none;
+}
+.resource-bar--rail.compact .fill-track {
+  margin-top: 3px;
+}
+.resource-bar--rail-2.compact .fill-track {
+  margin-top: 4px;
 }
 
 /* Hidden fit-measurement clone (see `updateFit` in the script above) — laid

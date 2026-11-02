@@ -11,7 +11,7 @@
 //   only working by accident against whatever was open in an editor at the
 //   time.
 import { describe, expect, it } from 'vitest';
-import { buildingArt, buildingArtByFamily, buildingLayers, buildingLayersForType } from './buildingArt';
+import { buildingArt, buildingArtByFamily, buildingLayers, buildingLayersForType, terrainVariantArt } from './buildingArt';
 
 describe('buildingArtByFamily', () => {
   it('resolves art for each of the sawmill families', () => {
@@ -92,11 +92,28 @@ describe('buildingLayersForType', () => {
     expect(buildingLayersForType('magictower', 1)).toBeUndefined();
   });
 
+  it('resolves the Siege Workshop at every level, on the grass base', () => {
+    for (const level of [1, 2, 3, 4, 5]) expect(buildingLayersForType('siegeworkshop', level)?.top).toBeDefined();
+  });
+
   it('resolves FishingHut through the shared fisherhut family, not the old single-level art', () => {
     expect(buildingLayersForType('fishinghut', 1)?.top).toBeDefined();
   });
 
   it('is undefined for an unmapped type', () => {
     expect(buildingLayersForType('not-a-real-type', 1)).toBeUndefined();
+  });
+});
+
+// Backs the tiles docs page's sand look picker: a look resolves to its own
+// frame, and a missing one fails loudly instead of quietly showing the plain
+// tile in its place.
+describe('terrainVariantArt', () => {
+  it('resolves a decorated look the pack ships', () => {
+    expect(terrainVariantArt('grasstile', 0)).toBeDefined();
+  });
+
+  it('throws for a look the pack does not ship', () => {
+    expect(() => terrainVariantArt('grasstile', 99)).toThrow();
   });
 });

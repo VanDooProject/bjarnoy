@@ -80,25 +80,27 @@ function powerOf(side: FieldBattleSide): number {
           <span v-if="wasDefending(s)" class="defending-tag">{{ t('hud.fieldBattleReport.defending') }}</span>
         </h3>
         <p class="power">{{ t('hud.fieldBattleReport.power') }}: {{ Math.round(powerOf(s)) }}</p>
-        <table class="lines">
-          <thead>
-            <tr>
-              <th>{{ t('hud.battleReport.unit') }}</th>
-              <th>{{ t('hud.battleReport.lost') }}</th>
-              <th>{{ t('hud.battleReport.survived') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in rowsFor(s)" :key="row.unit">
-              <td>{{ unitName(row.unit) }}</td>
-              <td class="lost">{{ row.lost }}</td>
-              <td class="survived">{{ row.survived }}</td>
-            </tr>
-            <tr v-if="!rowsFor(s).length">
-              <td colspan="3" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="lines-scroll">
+          <table class="lines">
+            <thead>
+              <tr>
+                <th>{{ t('hud.battleReport.unit') }}</th>
+                <th>{{ t('hud.battleReport.lost') }}</th>
+                <th>{{ t('hud.battleReport.survived') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in rowsFor(s)" :key="row.unit">
+                <td>{{ unitName(row.unit) }}</td>
+                <td class="lost">{{ row.lost }}</td>
+                <td class="survived">{{ row.survived }}</td>
+              </tr>
+              <tr v-if="!rowsFor(s).length">
+                <td colspan="3" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
 
@@ -200,6 +202,13 @@ function powerOf(side: FieldBattleSide): number {
   margin: 0 0 8px;
   font-size: 13px;
   color: var(--text);
+}
+/* Mobile-readiness audit: lets a table with more/longer columns than a
+   360px-wide dialog panel can fit (e.g. German unit names) scroll
+   horizontally inside its own section, instead of overflowing the panel or
+   forcing the whole modal to scroll sideways. */
+.lines-scroll {
+  overflow-x: auto;
 }
 .lines {
   width: 100%;

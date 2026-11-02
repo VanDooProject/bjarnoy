@@ -5,6 +5,7 @@ using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Units;
+using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -136,7 +137,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Forbidden, garrison.StatusCode);
 
         var world = await playerWriting.PostJsonAsync(
-            "/api/v1/admin/worlds", new CreateWorldRequest(Unique("w"), 7, 40), Ct);
+            "/api/v1/admin/worlds", TestWorlds.CreateRequest(Unique("w"), 7, 40), Ct);
         Assert.Equal(HttpStatusCode.Forbidden, world.StatusCode);
     }
 
@@ -171,6 +172,115 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
             $"/api/v1/settlements/{settlement.Id}/builds", new QueueBuildRequest("tower", grass[1].Q, grass[1].R), Ct);
         Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
         Assert.Equal("TowerLimitReached", await second.RejectionAsync(Ct));
+    }
+
+    /// <summary>
+    /// The chain rule (<c>docs/design/economy.md</c> section 5): a chain of towers A - B - C is placed through the editor,
+    /// then the middle link A is razed. B and C are cut off from the longhouse, so ground only they claimed refuses a
+    /// build with <c>HexNotInSettlement</c>, and they stop counting against the tower limit (while all three are
+    /// connected a further tower is <c>TowerLimitReached</c>).
+    /// </summary>
+    [Fact]
+    public async Task A_burnt_link_cuts_off_the_far_towers_so_they_stop_claiming_and_stop_counting_against_the_limit()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        var centre = new HexCoord(settlement.Q, settlement.R);
+
+        var adminToken = await CreateAdminTokenAsync(client);
+        Authorize(client, adminToken);
+        Assert.Equal(
+            HttpStatusCode.OK,
+            (await client.PutJsonAsync(
+                $"/api/v1/admin/settlements/{settlement.Id}/buildings/{settlement.Q}/{settlement.R}/level",
+                new SetBuildingLevelRequest(3), Ct)).StatusCode);
+
+        async Task<AdminSettlementLayoutResponse> LayoutAsync() =>
+            (await client.GetFromJsonAsync<AdminSettlementLayoutResponse>(
+                $"/api/v1/admin/settlements/{settlement.Id}/layout", SqliteApiFixture.StrictJson, Ct))!;
+
+        // The next link of the chain: a free grass hex three away from the last tower, as far out as the layout allows.
+        async Task<HexCoord> PlaceTowerAsync(HexCoord from, bool insideLonghouseDisc)
+        {
+            var layout = await LayoutAsync();
+            var next = layout.Hexes
+                .Where(h => h.Terrain == "grass" && h.Building is null && !h.IsCentre)
+                .Select(h => new HexCoord(h.Q, h.R))
+                .Where(c => c.DistanceTo(from) == 3 && (c.DistanceTo(centre) <= 3) == insideLonghouseDisc)
+                .OrderByDescending(c => c.DistanceTo(centre))
+                .Cast<HexCoord?>()
+                .FirstOrDefault();
+            Assert.True(next is not null, "no grass hex at the right distance for the next tower of the chain");
+
+            var placed = await client.PutJsonAsync(
+                $"/api/v1/admin/settlements/{settlement.Id}/buildings/{next!.Value.Q}/{next.Value.R}",
+                new PlaceBuildingRequest("tower", 3), Ct);
+            Assert.Equal(HttpStatusCode.OK, placed.StatusCode);
+            return next.Value;
+        }
+
+        // A stands on the longhouse's edge, B and C reach out beyond the longhouse's own disc.
+        var firstLayout = await LayoutAsync();
+        var a = firstLayout.Hexes
+            .Where(h => h.Terrain == "grass" && h.Building is null && !h.IsCentre)
+            .Select(h => new HexCoord(h.Q, h.R))
+            .Where(c => c.DistanceTo(centre) == 3)
+            .Cast<HexCoord?>()
+            .FirstOrDefault();
+        Assert.True(a is not null, "no grass hex on the longhouse's edge");
+        Assert.Equal(
+            HttpStatusCode.OK,
+            (await client.PutJsonAsync(
+                $"/api/v1/admin/settlements/{settlement.Id}/buildings/{a!.Value.Q}/{a.Value.R}",
+                new PlaceBuildingRequest("tower", 3), Ct)).StatusCode);
+        var b = await PlaceTowerAsync(a.Value, insideLonghouseDisc: false);
+        var c = await PlaceTowerAsync(b, insideLonghouseDisc: false);
+
+        // Ground only C's disc claims.
+        var chained = await LayoutAsync();
+        var farGround = chained.Hexes
+            .Where(h => h.Terrain == "grass" && h.Building is null)
+            .Select(h => new HexCoord(h.Q, h.R))
+            .Where(x => x.DistanceTo(c) <= 3 && x.DistanceTo(centre) > 3)
+            .Cast<HexCoord?>()
+            .FirstOrDefault();
+        Assert.True(farGround is not null, "no free grass hex that only the far tower claims");
+
+        // A free grass hex inside the longhouse's own disc, for the tower-limit probe.
+        var nearGround = chained.Hexes
+            .Where(h => h.Terrain == "grass" && h.Building is null && !h.IsCentre)
+            .Select(h => new HexCoord(h.Q, h.R))
+            .Where(x => x.DistanceTo(centre) <= 2)
+            .Cast<HexCoord?>()
+            .FirstOrDefault();
+        Assert.True(nearGround is not null, "no free grass hex next to the longhouse");
+
+        // Connected: three towers use up the limit of one.
+        client.DefaultRequestHeaders.Authorization = null;
+        var refusedWhileConnected = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds", new QueueBuildRequest("tower", nearGround!.Value.Q, nearGround.Value.R), Ct);
+        Assert.Equal(HttpStatusCode.Conflict, refusedWhileConnected.StatusCode);
+        Assert.Equal("TowerLimitReached", await refusedWhileConnected.RejectionAsync(Ct));
+
+        // The middle link falls (razing A leaves B and C standing, cut off).
+        Authorize(client, adminToken);
+        var razed = await client.DeleteAsync(
+            $"/api/v1/admin/settlements/{settlement.Id}/buildings/{a.Value.Q}/{a.Value.R}", Ct);
+        Assert.Equal(HttpStatusCode.OK, razed.StatusCode);
+        var cutOff = await LayoutAsync();
+        Assert.DoesNotContain(cutOff.Hexes, h => h.Q == farGround!.Value.Q && h.R == farGround.Value.R);
+        client.DefaultRequestHeaders.Authorization = null;
+
+        // The far ground is no longer inside the realm.
+        var refusedFar = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds", new QueueBuildRequest("farm", farGround!.Value.Q, farGround.Value.R), Ct);
+        Assert.Equal(HttpStatusCode.Conflict, refusedFar.StatusCode);
+        Assert.Equal("HexNotInSettlement", await refusedFar.RejectionAsync(Ct));
+
+        // And the cut-off towers no longer count against the limit.
+        var acceptedNow = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds", new QueueBuildRequest("tower", nearGround.Value.Q, nearGround.Value.R), Ct);
+        Assert.Equal(HttpStatusCode.Accepted, acceptedNow.StatusCode);
     }
 
     /// <summary>
@@ -301,7 +411,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         Assert.Equal(settlement.Q, centre.Q);
         Assert.Equal("longhouse", centre.Building);
         Assert.Equal(settlement.LonghouseLevel, centre.Level);
-        Assert.Contains("farm", layout.BuildingTypes);
+        Assert.Contains("reindeerherder", layout.BuildingTypes);
     }
 
     [Fact]
@@ -470,7 +580,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
 
         var name = Unique("world");
         var created = await client.PostJsonAsync(
-            "/api/v1/admin/worlds", new CreateWorldRequest(name, Seed: 21, Radius: 40, MaxPlayers: 42), Ct);
+            "/api/v1/admin/worlds", TestWorlds.CreateRequest(name, seed: 21, radius: 40, maxPlayers: 42), Ct);
 
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var world = await created.ReadStrictAsync<AdminWorldResponse>(Ct);
@@ -482,7 +592,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         Assert.Contains(listed!, w => w.Id == world.Id);
 
         var duplicate = await client.PostJsonAsync(
-            "/api/v1/admin/worlds", new CreateWorldRequest(name, Seed: 22, Radius: 40), Ct);
+            "/api/v1/admin/worlds", TestWorlds.CreateRequest(name, seed: 22, radius: 40), Ct);
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
     }
 
@@ -493,7 +603,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         Authorize(client, await CreateAdminTokenAsync(client));
 
         var response = await client.PostJsonAsync(
-            "/api/v1/admin/worlds", new CreateWorldRequest(Unique("seedless"), Seed: null, Radius: 30), Ct);
+            "/api/v1/admin/worlds", TestWorlds.CreateRequest(Unique("seedless"), seed: null, radius: 30), Ct);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         // Whatever seed was drawn must be persisted, or the map is not reproducible.
@@ -508,7 +618,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
     [InlineData("", 4242, 30)]
     [InlineData("ab", 4242, 30)]
     [InlineData("valid-name", 4242, 0)]
-    [InlineData("valid-name", 4242, 5000)]
+    [InlineData("valid-name", 4242, 5001)]
     public async Task Invalid_admin_world_creation_requests_are_rejected(string name, int seed, int radius)
     {
         using var client = Client();

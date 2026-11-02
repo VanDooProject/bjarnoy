@@ -22,6 +22,7 @@ import { useI18n } from 'vue-i18n';
 import WorldList from './WorldList.vue';
 import { useWorldStore } from '../../stores/world';
 import type { MessageSchema } from '../../i18n/schema';
+import HudMenuLocaleRow from './HudMenuLocaleRow.vue';
 
 // `unclaimedRealm`: the player already founded a realm but hasn't named a
 // jarl (registered) yet — for them "I already have a realm" as the headline
@@ -30,9 +31,15 @@ import type { MessageSchema } from '../../i18n/schema';
 // CTA, so it stays reachable after that nudge is dismissed with "Later"),
 // with logging into an existing realm demoted to the sub-line and the
 // second row of the panel.
-withDefaults(defineProps<{ nudging?: boolean; unclaimedRealm?: boolean }>(), {
+//
+// `chip`: on a phone, the trigger floats over the bare map rather than
+// sitting on a dark bar (the founded landing's floating header, and the
+// in-game bar's top-right chip — see HudNav.vue), so it gets a
+// background of its own, the same chip look as the settlement bubble.
+withDefaults(defineProps<{ nudging?: boolean; unclaimedRealm?: boolean; chip?: boolean }>(), {
   nudging: false,
   unclaimedRealm: false,
+  chip: false,
 });
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -101,7 +108,7 @@ watch(() => route.fullPath, close);
     <button
       type="button"
       class="trigger"
-      :class="{ 'is-nudging': nudging }"
+      :class="{ 'is-nudging': nudging, 'trigger--chip': chip }"
       aria-haspopup="menu"
       :aria-expanded="open"
       data-testid="returning-player-trigger"
@@ -113,7 +120,11 @@ watch(() => route.fullPath, close);
           <span class="trigger-sub">{{ t('hud.returningPlayer.nameJarlTriggerSub') }}</span>
         </template>
         <template v-else>
-          <span class="trigger-main">{{ t('hud.returningPlayer.trigger') }}</span>
+          <span class="trigger-main trigger-main--full">{{ t('hud.returningPlayer.trigger') }}</span>
+          <!-- The compact phone bar has ~92px for this line: "I already
+               have a realm" ellipsised to "I already hav…", which said
+               nothing. The menu it opens leads with "Log in" anyway. -->
+          <span class="trigger-main trigger-main--short">{{ t('hud.returningPlayer.logIn') }}</span>
           <span class="trigger-sub">{{ t('hud.returningPlayer.triggerSub') }}</span>
         </template>
       </span>
@@ -123,6 +134,8 @@ watch(() => route.fullPath, close);
            LandingView.vue's `.signup-facts-sep`. -->
       <span class="caret" aria-hidden="true"></span>
       <span v-if="nudging" class="nudge-dot" aria-hidden="true" />
+      <!-- Caller-provided corner badge (HudNav: the unread reports count). -->
+      <slot name="trigger-badge" />
     </button>
     <div v-if="open" class="panel menu" role="menu" data-testid="returning-player-menu">
       <div class="notch" />
@@ -145,7 +158,13 @@ watch(() => route.fullPath, close);
       >
         {{ t('hud.returningPlayer.logIn') }}
       </button>
+      <!-- Caller-provided rows below this menu's own actions (HudNav: the nav
+           entries that have no room inline), same `.row` look as the rows
+           above. `close` lets a row dismiss the panel. The account actions
+           stay first: they are what this menu is for. -->
+      <slot name="entries" :close="close" />
       <div class="divider" role="separator" />
+      <HudMenuLocaleRow />
       <WorldList compact />
     </div>
     <slot name="nudge" />
@@ -235,11 +254,9 @@ watch(() => route.fullPath, close);
   border-radius: 8px;
   animation: avatar-glow 1.5s ease-in-out infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-  .trigger.is-nudging {
-    animation: none;
-    box-shadow: 0 0 0 3px rgba(255, 197, 92, 0.3), 0 0 18px 4px rgba(255, 197, 92, 0.35);
-  }
+html[data-hud-motion='reduced'] .trigger.is-nudging {
+  animation: none;
+  box-shadow: 0 0 0 3px rgba(255, 197, 92, 0.3), 0 0 18px 4px rgba(255, 197, 92, 0.35);
 }
 .nudge-dot {
   position: absolute;
@@ -325,7 +342,7 @@ watch(() => route.fullPath, close);
    single line of text. Same breakpoint as lib/breakpoints.ts's
    HUD_COMPACT_MAX_WIDTH — plain CSS here can't read that JS constant, so it
    has to be repeated as a literal (see that file's own comment). */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .trigger {
     max-width: 132px;
     min-height: 44px;
@@ -340,5 +357,18 @@ watch(() => route.fullPath, close);
     white-space: nowrap;
     text-overflow: ellipsis;
   }
+  .trigger-main--full {
+    display: none;
+  }
+  .trigger-main.trigger-main--short {
+    display: inline-block;
+  }
+  .trigger.trigger--chip {
+    background: rgba(6, 12, 16, 0.94);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  }
+}
+.trigger-main--short {
+  display: none;
 }
 </style>

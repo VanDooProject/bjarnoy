@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import deCatalogue from './locales/de/catalogue.json';
 import buildingCatalogue from '../data/building-catalogue.json';
 import unitCatalogue from '../data/unit-catalogue.json';
 import {
@@ -29,6 +30,13 @@ describe('catalogueNames', () => {
     for (const type of buildingTypes) {
       expect(buildingName(type), type).not.toBe(type);
     }
+  });
+
+  it('names the Siege Workshop and the battering ram', () => {
+    expect(buildingName('siegeworkshop')).toBe('Siege workshop');
+    expect(unitName('ram')).toBe('Battering ram');
+    expect(deCatalogue.buildings.siegeworkshop).toBe('Belagerungswerkstatt');
+    expect(deCatalogue.units.ram).toBe('Rammbock');
   });
 
   it('has a translated name for every real unit type', () => {
@@ -96,5 +104,17 @@ describe('catalogueNames', () => {
   it('falls back to the raw key for an unrecognized type', () => {
     expect(buildingName('not-a-real-building')).toBe('not-a-real-building');
     expect(unitName('not-a-real-unit')).toBe('not-a-real-unit');
+  });
+});
+
+describe('beastName', () => {
+  it('names all three tiers of every camp family', async () => {
+    const { CAMP_FAMILIES } = await import('../lib/map/campPlacement');
+    const { beastName } = await import('./catalogueNames');
+    for (const f of CAMP_FAMILIES) {
+      for (const tier of ['young', 'adult', 'alpha']) {
+        expect(beastName(f.family, tier), `${f.family}.${tier}`).not.toBe(tier);
+      }
+    }
   });
 });

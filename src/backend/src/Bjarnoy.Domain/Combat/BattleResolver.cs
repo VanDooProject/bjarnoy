@@ -236,39 +236,13 @@ public static class BattleResolver
             return ([], [.. stacks]);
         }
 
-        var exact = new double[stacks.Count];
-        var floored = new int[stacks.Count];
-        var totalExact = 0.0;
-
-        for (var i = 0; i < stacks.Count; i++)
-        {
-            exact[i] = stacks[i].Count * fraction;
-            floored[i] = (int)Math.Floor(exact[i]);
-            totalExact += exact[i];
-        }
-
-        var targetTotal = (int)Math.Round(totalExact, MidpointRounding.AwayFromZero);
-        var remainder = targetTotal - floored.Sum();
-
-        var order = Enumerable.Range(0, stacks.Count)
-            .OrderByDescending(i => exact[i] - floored[i])
-            .ThenBy(_ => rng.Next())
-            .ToList();
-
-        for (var k = 0; k < remainder && k < order.Count; k++)
-        {
-            var index = order[k];
-            if (floored[index] < stacks[index].Count)
-            {
-                floored[index]++;
-            }
-        }
+        var lostCounts = ProportionalLossCounts([.. stacks.Select(s => s.Count)], fraction, rng);
 
         var losses = new List<UnitStack>();
         var survivors = new List<UnitStack>();
         for (var i = 0; i < stacks.Count; i++)
         {
-            var lost = Math.Min(floored[i], stacks[i].Count);
+            var lost = lostCounts[i];
             if (lost > 0)
             {
                 losses.Add(new UnitStack(stacks[i].Type, lost));
@@ -283,6 +257,59 @@ public static class BattleResolver
 
         return (losses, survivors);
     }
+
+    /// <summary>
+    /// The floor + largest-remainder rounding of <see cref="ApplyProportionalLosses"/> over plain
+    /// counts (also used for a wildlife camp's three beast tiers by <c>CampBattleResolver</c>):
+    /// how many of each entry are lost when <paramref name="fraction"/> of the total is lost.
+    /// </summary>
+    internal static int[] ProportionalLossCounts(IReadOnlyList<int> counts, double fraction, Random rng)
+    {
+        fraction = Math.Clamp(fraction, 0.0, 1.0);
+
+        var floored = new int[counts.Count];
+        if (counts.Count == 0 || fraction <= 0)
+        {
+            return floored;
+        }
+
+        var exact = new double[counts.Count];
+        var totalExact = 0.0;
+
+        for (var i = 0; i < counts.Count; i++)
+        {
+            exact[i] = counts[i] * fraction;
+            floored[i] = (int)Math.Floor(exact[i]);
+            totalExact += exact[i];
+        }
+
+        var targetTotal = (int)Math.Round(totalExact, MidpointRounding.AwayFromZero);
+        var remainder = targetTotal - floored.Sum();
+
+        var order = Enumerable.Range(0, counts.Count)
+            .OrderByDescending(i => exact[i] - floored[i])
+            .ThenBy(_ => rng.Next())
+            .ToList();
+
+        for (var k = 0; k < remainder && k < order.Count; k++)
+        {
+            var index = order[k];
+            if (floored[index] < counts[index])
+            {
+                floored[index]++;
+            }
+        }
+
+        for (var i = 0; i < counts.Count; i++)
+        {
+            floored[i] = Math.Min(floored[i], counts[i]);
+        }
+
+        return floored;
+    }
+
+    /// <summary>Internal view of <c>SafeRatioPow</c> for <c>CampBattleResolver</c>.</summary>
+    internal static double SafeRatioPowInternal(double loserPower, double winnerPower) => SafeRatioPow(loserPower, winnerPower);
 
     /// <summary>
     /// Surviving attacker <c>CarryCapacity</c> total, filled from

@@ -6,6 +6,15 @@
     "cta": "Name your jarl",
     "later": "Later"
   },
+  "motionPrompt": {
+    "eyebrow": "Animations reduced",
+    "title": "Play with animations?",
+    "body": "Your device asks for less motion, so menus and the map are held still.",
+    "turnOn": "Turn on",
+    "keep": "Keep reduced",
+    "close": "Dismiss",
+    "footer": "Change anytime: Profile → Graphics"
+  },
   "returningLogin": {
     "eyebrow": "Your realm is waiting",
     "title": "Welcome back, {name}",

@@ -43,23 +43,30 @@ export interface WorldSummaryResponse {
 
 /** Mirrors `WorldGenerationResponse` — see that record's own doc comments for field semantics. */
 export interface WorldGenerationResponse {
+  /** The world radius: an island that could cross it is not generated, so terrain depends on it. */
+  worldRadius: number;
   islandCellSize: number;
   islandChance: number;
-  islandMinRadius: number;
-  islandMaxRadius: number;
+  islandMaxReach: number;
+  islandMinGap: number;
+  islandMinWidth: number;
+  islandMaxWidth: number;
+  islandMinSegments: number;
+  islandMaxSegments: number;
+  islandMinElongation: number;
+  islandMaxElongation: number;
+  islandMinBend: number;
+  islandMaxBend: number;
+  islandCoastWarp: number;
+  islandCoastWarpScale: number;
+  islandCoastNoise: number;
+  islandCoastNoiseScale: number;
+  islandSmallShare: number;
+  islandLargeShare: number;
   beachThreshold: number;
   mountainThreshold: number;
   mountainRockiness: number;
   forestRockiness: number;
-  islandMinLobes: number;
-  islandMaxLobes: number;
-  islandMaxElongation: number;
-  islandBendiness: number;
-  islandLobeBlend: number;
-  islandLobeMinScale: number;
-  islandLobeMaxScale: number;
-  islandCoastWarp: number;
-  islandCoastWarpScale: number;
 }
 
 /** Mirrors `WorldMovementResponse` — see that record's own doc comments for field semantics. */
@@ -81,6 +88,22 @@ export interface RiverTileResponse {
   shape: 'spring' | 'straight' | 'bend' | 'confluence' | 'mouth' | 'bend60';
   inDirections: string[];
   outDirection: string | null;
+  /** `river` (default when absent), `stream` (half width) or `widen` (stream in, river out) or `riverstream` (a wide-Y join of a river and a stream). */
+  width?: 'river' | 'stream' | 'widen' | 'riverstream';
+}
+
+/**
+ * Mirrors `BogTileResponse` — one hex of an island's bogland (see `lib/map/bogGenerator.ts` and
+ * `docs/design/bog.md`). A `lake` hex is terrain `lake`, every other kind terrain `bog`; `inDirections`/
+ * `outDirection` are the flow of a creek, mouth or spring, `waterEdges` the lake neighbours of a shore or mouth.
+ */
+export interface BogTileResponse {
+  q: number;
+  r: number;
+  kind: 'bog' | 'lake' | 'inlet' | 'shore' | 'half' | 'mouth' | 'creek' | 'creekspring';
+  inDirections: string[];
+  outDirection: string | null;
+  waterEdges: string[];
 }
 
 /**
@@ -97,6 +120,103 @@ export interface GiantResponse {
   orientation: string;
 }
 
+/**
+ * Mirrors `CampResponse` — a wildlife camp (see `lib/map/campPlacement.ts` and
+ * `docs/design/wildlife-camps.md`). Spawn and render only for now; every camp is
+ * guarded. `orientation` is the tile's own rotation wire name.
+ */
+export interface CampResponse {
+  family: string;
+  q: number;
+  r: number;
+  level: number;
+  orientation: string;
+  strong: boolean;
+  guardRange: number;
+}
+
+/** Mirrors `CampStateResponse` — a wildlife camp's live state (`GET /worlds/{id}/camps`). */
+export interface CampStateResponse {
+  q: number;
+  r: number;
+  family: string;
+  /** The camp tile's own orientation, so a camp first learned about from this poll can be added to the model. */
+  orientation: string;
+  level: number;
+  effectiveLevel: number;
+  strong: boolean;
+  guardRange: number;
+  garrison: BeastCounts;
+  fullGarrison: BeastCounts;
+  empty: boolean;
+  calmUntil: string | null;
+  aggressive: boolean;
+  clears: number;
+  removed: boolean;
+  leftover: ResourceLine;
+}
+
+export interface BeastCounts {
+  young: number;
+  adult: number;
+  alpha: number;
+}
+
+export type BeastTier = 'young' | 'adult' | 'alpha';
+
+export interface CampReportUnitLine {
+  type: string;
+  sent: number;
+  lost: number;
+}
+
+export interface CampReportBeastLine {
+  tier: BeastTier;
+  before: number;
+  lost: number;
+}
+
+/** Mirrors `CampReportResponse` — a wildlife camp fight (hunt, ambush or tower attack). */
+export interface CampReportResponse {
+  id: string;
+  kind: 'hunt' | 'ambush' | 'tower';
+  occurredAt: string;
+  camp: { q: number; r: number; family: string; effectiveLevel: number };
+  settlementId: string;
+  armyId: string | null;
+  winner: 'army' | 'camp';
+  armyPower: number;
+  campPower: number;
+  units: CampReportUnitLine[];
+  beasts: CampReportBeastLine[];
+  loot: ResourceLine;
+  campCleared: boolean;
+  tower: { q: number; r: number } | null;
+  towerBurned: boolean;
+}
+
+/**
+ * Mirrors `UtgardWallResponse` — one hex of an Utgard wall ring (see `lib/map/endgamePlacement.ts` and `docs/design/endgame.md`).
+ * `piece` is the wall piece (`straight180`, `bend60`, `bend120`, `gate180`, `end` or `end_coast` on a sea hex); the atlas family is
+ * `utgardwall_<piece>`. `level` is 2 full, 1 damaged, 0 breached rubble.
+ */
+export interface UtgardWallResponse {
+  q: number;
+  r: number;
+  ring: 'inner' | 'outer';
+  piece: string;
+  orientation: string;
+  isGate: boolean;
+  level: number;
+}
+
+/** Mirrors `JotunTowerResponse` — a Jötun watchtower; `orientation` is the tile's own rotation wire name. */
+export interface JotunTowerResponse {
+  q: number;
+  r: number;
+  orientation: string;
+}
+
 export interface IslandResponse {
   id: string;
   index: number;
@@ -107,6 +227,13 @@ export interface IslandResponse {
   startPositions: TileCoordinate[];
   riverTiles: RiverTileResponse[];
   giants: GiantResponse[];
+  camps: CampResponse[];
+  /** This island's bogland (empty when it has none). */
+  bogTiles: BogTileResponse[];
+  /** The Utgard wall rings of a wasted island with Utgard (empty otherwise). */
+  utgardWalls?: UtgardWallResponse[];
+  /** The Jötun watchtowers of a wasted island with Utgard (empty otherwise). */
+  jotunTowers?: JotunTowerResponse[];
   /** True for a wasted island — only ever present once the world's endboss has triggered (hidden before that). */
   wasted: boolean;
 }
@@ -182,6 +309,14 @@ export interface PlacedBuildingResponse {
   level: number;
   /** Which art-pack rotation to render with — set only for a building whose art has a fixed connection to something around it (e.g. the fishing hut's dock). */
   orientation?: string | null;
+  /**
+   * Game instant the building's hex stopped being inside the player's realm — from then on it has no function and loses levels
+   * (docs/design/economy.md section 5, "Buildings outside the realm decay"). Null/absent while it is inside. The server owns the
+   * rule; the client only shows it (`lib/map/realmDecay.ts`).
+   */
+  outsideRealmSince?: string | null;
+  /** Seconds until the next level is lost while outside the realm; null while inside, with a frozen world clock, or in a rival's view. */
+  nextLevelLossInSeconds?: number | null;
 }
 
 export interface BuildOrderResponse {
@@ -258,6 +393,31 @@ export interface FeastOfferResponse {
   renownGain: number;
 }
 
+/**
+ * An onboarding quest and where the settlement stands on it (economy.md
+ * section 7). Mirrors `QuestResponse`; the reward is wood/stone/food, paid
+ * once per settlement on claim and clamped to storage.
+ */
+export interface QuestResponse {
+  id: string;
+  completed: boolean;
+  claimed: boolean;
+  reward: ResourceLine;
+}
+
+/** One connected claim disc of a realm, exactly as the server resolves it. */
+export interface ClaimDiscResponse {
+  q: number;
+  r: number;
+  radius: number;
+}
+
+/** One settlement of the caller's realm with its connected claim discs (longhouse disc first, then each connected tower's disc). */
+export interface RealmMemberResponse {
+  settlementId: string;
+  discs: ClaimDiscResponse[];
+}
+
 export interface SettlementResponse {
   id: string;
   worldId: string;
@@ -272,7 +432,7 @@ export interface SettlementResponse {
   construction: ConstructionResponse;
   buildings: PlacedBuildingResponse[];
   queue: BuildOrderResponse[];
-  /** Units standing at this settlement (issue #55: includes trained `settlercrew`). */
+  /** Units standing at this settlement (issue #55: includes trained `settler`). */
   garrison: UnitStackResponse[];
   trainingQueue: TrainingOrderResponse[];
   runes: RuneInstanceResponse[];
@@ -280,7 +440,11 @@ export interface SettlementResponse {
   feast: FeastResponse | null;
   /** Cost and gain of the next feast; null without a Town Square. */
   nextFeast: FeastOfferResponse | null;
+  /** The onboarding quests, in presentation order. */
+  quests: QuestResponse[];
   world: WorldClockResponse;
+  /** Every settlement of the selected settlement's realm (itself first) with its connected claim discs; only the caller's own. */
+  realm: RealmMemberResponse[];
 }
 
 export interface SettlementSummary {
@@ -291,6 +455,23 @@ export interface SettlementSummary {
   r: number;
   longhouseLevel: number;
   islandId: string;
+  /** Whether the settlement belongs to the caller. */
+  mine: boolean;
+}
+
+/**
+ * Mirrors `WallResponse` (`GET /worlds/{id}/walls`): one standing wall hex of another player's settlement, fog-gated like
+ * the settlement list. `ownerUserId` is null for an anonymous settlement.
+ */
+export interface WorldWall {
+  q: number;
+  r: number;
+  type: 'palisade' | 'palisadegate';
+  level: number;
+  settlementId: string;
+  ownerUserId: string | null;
+  /** The wall's hex lies outside its owner's realm: a gate there has no function and is open to every army. */
+  outsideRealm?: boolean;
 }
 
 /**
@@ -311,7 +492,7 @@ export interface SettlementViewResponse {
   buildings: PlacedBuildingResponse[];
 }
 
-// Settlement expansion (issue #55) — mirrors the settler-crew additions to
+// Settlement expansion (issue #55) — mirrors the settler additions to
 // SettlementContracts.cs and ArmyContracts.cs. `UnitStackResponse`,
 // `TrainingOrderResponse`, `TrainUnitsRequest`, `UnitDefinitionResponse`,
 // `DispatchArmyRequest`, `MovementResponse`, `ArmyResponse` and `ArmySummary`
@@ -320,7 +501,7 @@ export interface SettlementViewResponse {
 // mission, so it rides those same shapes rather than duplicating them; see
 // `HexPoint` there too (used in place of what used to be `HexPointRequest`).
 // `mission` on `DispatchArmyRequest` is `"move" | "attack" | "support" |
-// "raid" | "found"` — `found` requires exactly 3 `settlercrew` in `units`
+// "raid" | "found"` — `found` requires exactly 5 `settler` in `units`
 // (plus, for a sea convoy, enough Karve/Longship capacity to carry them) and
 // no `targetSettlementId`; `destination` is the target hex to colonise.
 
@@ -333,6 +514,10 @@ export interface RenownResponse {
   settlementCount: number;
   requiredForNextSettlement: number;
   canFoundAnother: boolean;
+  /** Renown per hour the standing building levels accrue (feasts excluded). */
+  perHour: number;
+  /** Renown running (or uncollected) feasts will still add. */
+  pendingFeastRenown: number;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/TradeContracts.cs — see
@@ -486,6 +671,9 @@ export interface AdminWorldResponse {
   status: string;
   maxPlayers: number;
   playerCount: number;
+  /** How many new players could still found on the map right now; nearby start positions block each other. */
+  freeSpawnCount: number;
+  spawnCount: number;
   speedFactor: number;
   startsAt: string | null;
   joinsClosed: boolean;
@@ -509,20 +697,27 @@ export interface AdminWorldResponse {
 export interface WorldGenerationSettings {
   islandCellSize: number;
   islandChance: number;
-  islandMinRadius: number;
-  islandMaxRadius: number;
+  islandMinWidth: number;
+  islandMaxWidth: number;
+  islandMinSegments: number;
+  islandMaxSegments: number;
+  islandMinElongation: number;
+  islandMaxElongation: number;
+  islandMinBend: number;
+  islandMaxBend: number;
+  islandCoastWarp: number;
+  islandCoastWarpScale: number;
+  islandCoastNoise: number;
+  islandCoastNoiseScale: number;
+  islandSmallShare: number;
+  islandLargeShare: number;
   beachThreshold: number;
   mountainThreshold: number;
   mountainRockiness: number;
   forestRockiness: number;
   minimumIslandTiles: number;
-  islandMinLobes: number;
-  islandMaxLobes: number;
-  islandMaxElongation: number;
-  islandBendiness: number;
-  islandLobeBlend: number;
-  islandCoastWarp: number;
-  islandCoastWarpScale: number;
+  islandMaxReach: number;
+  islandMinGap: number;
 }
 
 /**
@@ -533,20 +728,27 @@ export interface WorldGenerationSettings {
 export interface WorldGenerationSettingsOverrides {
   islandCellSize?: number;
   islandChance?: number;
-  islandMinRadius?: number;
-  islandMaxRadius?: number;
+  islandMinWidth?: number;
+  islandMaxWidth?: number;
+  islandMinSegments?: number;
+  islandMaxSegments?: number;
+  islandMinElongation?: number;
+  islandMaxElongation?: number;
+  islandMinBend?: number;
+  islandMaxBend?: number;
+  islandCoastWarp?: number;
+  islandCoastWarpScale?: number;
+  islandCoastNoise?: number;
+  islandCoastNoiseScale?: number;
+  islandSmallShare?: number;
+  islandLargeShare?: number;
   beachThreshold?: number;
   mountainThreshold?: number;
   mountainRockiness?: number;
   forestRockiness?: number;
   minimumIslandTiles?: number;
-  islandMinLobes?: number;
-  islandMaxLobes?: number;
-  islandMaxElongation?: number;
-  islandBendiness?: number;
-  islandLobeBlend?: number;
-  islandCoastWarp?: number;
-  islandCoastWarpScale?: number;
+  islandMaxReach?: number;
+  islandMinGap?: number;
 }
 
 /**
@@ -588,6 +790,13 @@ export interface PreviewIslandResponse {
   tileCount: number;
   startPositions: TileCoordinate[];
   riverTiles: RiverTileResponse[];
+  giants: GiantResponse[];
+  camps: CampResponse[];
+  bogTiles: BogTileResponse[];
+  utgardWalls?: UtgardWallResponse[];
+  jotunTowers?: JotunTowerResponse[];
+  /** True for an island generated from the wasted-island terrain layer (its river tiles are lava streams). */
+  wasted: boolean;
 }
 
 export interface WorldSeedPreviewResponse {
@@ -597,6 +806,83 @@ export interface WorldSeedPreviewResponse {
   islandCount: number;
   landTileCount: number;
   islands: PreviewIslandResponse[];
+  /** The full generation constants (world radius included) the candidate was generated with. */
+  generation: WorldGenerationResponse;
+  /** The candidate's world review: cut-off land, missing bogs, islands without landing spots, broken generator guarantees. */
+  review: WorldReviewResponse;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminWorldReviewContracts.cs.
+
+export type WorldReviewFindingKind =
+  | 'cutOffLand'
+  | 'missingBog'
+  | 'noLandingSpots'
+  | 'bogRuleViolation'
+  | 'inlandRiverMouth'
+  | 'wastedNearGreen';
+
+export type WorldReviewSeverity = 'error' | 'warn' | 'info';
+
+/** The counts of a world review. `cutOffShare`/`worstIslandCutOffShare` are fractions (0.02 = 2%). */
+export interface WorldReviewSummary {
+  seed: number;
+  radius: number;
+  greenIslands: number;
+  wastedIslands: number;
+  landTiles: number;
+  landingSpots: number;
+  islandsWithLandingCandidate: number;
+  islandsWithoutLandingSpots: number;
+  islandsMissingBog: number;
+  /** Reported cut-off regions (at least the backend's minimum region size). */
+  cutOffRegions: number;
+  /** Every cut-off walkable hex, small regions included. */
+  cutOffTiles: number;
+  cutOffShare: number;
+  worstIslandCutOffShare: number;
+  bogRuleViolations: number;
+  inlandRiverMouths: number;
+  wastedNearGreen: number;
+  errors: number;
+  warnings: number;
+  infos: number;
+}
+
+export interface WorldReviewFinding {
+  kind: WorldReviewFindingKind;
+  severity: WorldReviewSeverity;
+  /** The island's index in the preview (`PreviewIslandResponse.index`). */
+  island: number;
+  /** A representative hex the preview map can centre on. */
+  q: number;
+  r: number;
+  /** Hexes involved (a cut-off region's size, a violation count, a distance), or 0. */
+  size: number;
+  /** A short English description from the backend. */
+  message: string;
+}
+
+export interface WorldReviewResponse {
+  summary: WorldReviewSummary;
+  /** Worst first. */
+  findings: WorldReviewFinding[];
+}
+
+/** Reviews `count` (at most 8) consecutive seeds from `seedFrom`; radius/generation as in `PreviewWorldSeedRequest`. */
+export interface ReviewWorldSeedsRequest {
+  seedFrom: number;
+  count?: number;
+  radius?: number;
+  generation?: WorldGenerationSettingsOverrides;
+}
+
+export interface WorldSeedReviewResponse {
+  worldId: string;
+  radius: number;
+  /** Best first: fewest errors, then warnings, then cut-off land, then most landing spots. */
+  seeds: WorldReviewSummary[];
+  generation: WorldGenerationResponse;
 }
 
 /**
@@ -1061,6 +1347,8 @@ export interface BuildingDefinitionResponse {
   allowedTerrain: string[];
   /** Placed on shallow (coastal) water instead of any land terrain — see BuildingDefinition.RequiresCoastalWater. */
   requiresCoastalWater: boolean;
+  /** Land terrain AND (as an exception) coastal water: the palisade's sea end. */
+  alsoOnCoastalWater?: boolean;
   requiredLonghouseLevel: number;
   /** Construction slots one order for this building occupies while building — ignored when `occupiesAllSlots` is set. */
   slotCost: number;
@@ -1198,8 +1486,8 @@ export interface UnitCountRequest {
 /**
  * `waypoints`: ordered intermediate hexes, empty/omitted for a direct route.
  * `destination`: required for `mission: 'move'` (the default); ignored for
- * attack/support/raid, whose destination is always the target settlement's
- * own hex. `provisions`: food loaded onto the army, capped by carry capacity
+ * attack/support/raid, whose destination is the target settlement's own hex
+ * (a fleet attack/raid sails to `targetBuildingCoord` instead). `provisions`: food loaded onto the army, capped by carry capacity
  * and what the settlement can afford.
  */
 export interface DispatchArmyRequest {
@@ -1286,9 +1574,9 @@ export interface ArmySummary {
 
 /**
  * Mirrors `GuestArmySummary` (issue #40 phase 4) — a Support army as its
- * *host* settlement sees it: counts only, since the host cannot command a
- * guest garrison (no recall/action buttons on this view — only the owner,
- * reading their own settlement's `armies`, can recall it). `ownerSettlementId`
+ * *host* settlement sees it: counts only, with no route or provisions (the host can only send a
+ * guest home, via `sendGuestHome`; its owner recalls it from their own
+ * settlement's `armies`). `ownerSettlementId`
  * is the guest's home, not its current location (which is always the
  * settlement `getSettlementGuests` was asked about).
  */
@@ -1457,4 +1745,25 @@ export interface UnitDefinitionResponse {
   requiredUnitType: string | null;
   /** The building type whose ring trains this unit (`UnitDefinition.RequiredBuildingType`, e.g. `"longhouse"`, `"barracks"`, `"cartworkshop"`) — at least one must stand for the unit to be trainable. */
   requiredBuildingType: string;
+  /** What this siege engine can damage (`UnitDefinition.SiegeTargets`): `"walls"`, `"towers"`, `"buildings"`; empty for a unit without siege power. */
+  siegeTargets: string[];
+}
+
+/** Mirrors `FogChunkResponse` — one 64 x 64-texel chunk of the fog mask (map-fog-v2.md §3). `png` is base64, or null for an empty (fully unknown) chunk. */
+export interface FogChunkResponse {
+  cu: number;
+  cv: number;
+  /** Changes exactly when this chunk's pixels would; "0" for an empty chunk. */
+  version: string;
+  png: string | null;
+}
+
+/** Mirrors `FogChunksResponse` — `GET /worlds/{worldId}/fog-chunks`: every chunk of the requested inclusive rectangle. */
+export interface FogChunksResponse {
+  chunkSize: number;
+  cuMin: number;
+  cuMax: number;
+  cvMin: number;
+  cvMax: number;
+  chunks: FogChunkResponse[];
 }

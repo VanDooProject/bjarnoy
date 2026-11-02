@@ -102,6 +102,14 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public void The_background_aggregation_timer_is_off_so_it_cannot_race_explicit_refreshes()
+    {
+        Assert.DoesNotContain(
+            _factory.Services.GetServices<Microsoft.Extensions.Hosting.IHostedService>(),
+            s => s is Bjarnoy.Api.Hosting.WeeklyAggregationHostedService);
+    }
+
+    [Fact]
     public async Task Directory_reports_dark_reserved_boards_and_lights_up_once_computed()
     {
         using var client = Client();

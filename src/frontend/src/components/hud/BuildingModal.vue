@@ -9,26 +9,26 @@ import { useI18n } from 'vue-i18n';
 import type { Tile } from '../../lib/map/types';
 import type { ResourceLine } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
+import { formatBuildingModifier, formatBuildingOutput } from '../../lib/map/buildingStatsText';
 import { buildingName, terrainName, resourceName, runeTypeName, runeRarityName } from '../../i18n/catalogueNames';
 import { DEMO_MODE } from '../../config';
 import { apiErrorMessage } from '../../i18n/apiErrors';
 import { FEAST_HOURS, feastCost, feastRenown } from '../../lib/economy/feasts';
 import { formatCountdown } from '../../composables/useQueueOrders';
+import { formatFullNumber } from '../../lib/hud/compactNumber';
 import { useWorldStore } from '../../stores/world';
+import { isOutsideRealm, secondsToNextLevelLoss, formatDecayWait } from '../../lib/map/realmDecay';
 import {
-  BOOST_TERRAIN,
-  buildingStatsFor,
+  buildingStatsAt,
   buildingUpgradeCost,
-  matchingNeighbourCount,
-  type BuildingKind,
-  type BuildingOutput,
-  type BuildingModifier,
+  SHRINE_BUILDING_TYPES,
 } from '../../lib/map/buildingEconomy';
 
 const world = useWorldStore();
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-import { buildingArt, terrainArt } from '../../lib/map/buildingArt';
+import { buildingArtOnTile, terrainArt } from '../../lib/map/buildingArt';
+import { tileIsBuildable } from '../../lib/map/ringCatalogue';
 import AtlasSprite from '../AtlasSprite.vue';
 
 const props = defineProps<{
@@ -42,7 +42,7 @@ const props = defineProps<{
   /** Why the last build/upgrade attempt was rejected by the backend, or null once dismissed by a fresh attempt. */
   error?: string | null;
 }>();
-const emit = defineEmits<{ close: []; build: []; upgrade: [] }>();
+const emit = defineEmits<{ close: []; upgrade: [] }>();
 
 // Issue #53: shrine slots by level, mirroring ShrineCatalogue.Slots.cs.
 function shrineSlotsFor(level: number): number {
@@ -52,8 +52,12 @@ function shrineSlotsFor(level: number): number {
   return 1;
 }
 
-const SHRINE_TYPES = new Set(['shrineofthor', 'shrineoffreyja', 'shrineofullr', 'shrineofnjord']);
-const isShrine = computed(() => SHRINE_TYPES.has(props.tile.buildingType ?? ''));
+// A building outside the realm has no function and loses levels (docs/design/economy.md section 5). The server marks it
+// (`outsideRealmSince`); this window only shows the state, and offers nothing that state refuses (no upgrade, no runes, no feast).
+const placedHere = computed(() => world.hud.buildings.find((b) => b.q === props.tile.q && b.r === props.tile.r));
+const outsideRealm = computed(() => props.mine && !!props.tile.buildingType && isOutsideRealm(placedHere.value));
+
+const isShrine = computed(() => SHRINE_BUILDING_TYPES.has(props.tile.buildingType ?? ''));
 // Level 0 is the foundation stub while the shrine is still under
 // construction (Enqueue) — it grants no favour and has no slots yet, mirrored
 // by Settlement.SlotRune/ActiveEffect rejecting it backend-side.
@@ -127,12 +131,59 @@ const nowMs = ref(Date.now());
 let feastTimer: ReturnType<typeof setInterval> | undefined;
 onMounted(() => {
   feastTimer = setInterval(() => (nowMs.value = Date.now()), 1000);
+  if (isTownSquare.value && props.mine && !DEMO_MODE) void world.loadRenownLive();
 });
 onBeforeUnmount(() => clearInterval(feastTimer));
+const levelLossIn = computed(() =>
+  outsideRealm.value ? secondsToNextLevelLoss(placedHere.value, world.hud.queueFetchedAt, nowMs.value) : null,
+);
+const outsideRealmLine = computed(() =>
+  levelLossIn.value === null
+    ? t('hud.buildingModal.outsideRealm')
+    : t('hud.buildingModal.outsideRealmLosesIn', { time: formatDecayWait(levelLossIn.value, locale.value) }),
+);
+
 const feastRemaining = computed(() => {
   const f = runningFeast.value;
   if (!f || f.endsInSeconds === null) return null;
   return Math.max(0, f.endsInSeconds - (nowMs.value - world.hud.feastFetchedAt) / 1000);
+});
+
+// Renown progress towards the next settlement. Live worlds only: the demo has
+// no renown, so nothing is shown there rather than invented numbers.
+const renown = computed(() => (DEMO_MODE ? null : world.hud.renown));
+const fmt = (value: number) => formatFullNumber(value, locale.value);
+/** "13 d 6 h", "4 h 12 min", "12 min". */
+function formatEta(seconds: number): string {
+  const totalMin = Math.max(1, Math.round(seconds / 60));
+  const days = Math.floor(totalMin / 1440);
+  const hours = Math.floor((totalMin % 1440) / 60);
+  const minutes = totalMin % 60;
+  if (days > 0) return t('hud.buildingModal.renownEtaDays', { days, hours });
+  if (hours > 0) return t('hud.buildingModal.renownEtaHours', { hours, minutes });
+  return t('hud.buildingModal.renownEtaMinutes', { minutes });
+}
+const renownProgress = computed(() => {
+  const r = renown.value;
+  if (!r) return null;
+  const missing = Math.max(0, r.requiredForNextSettlement - r.total);
+  const feastSeconds = runningFeast.value ? feastRemaining.value : null;
+  const hasFeast = r.pendingFeastRenown > 0 && feastSeconds !== null;
+  let eta: number | null = null;
+  let etaWithFeast: number | null = null;
+  if (!r.canFoundAnother && r.perHour > 0) eta = (missing / r.perHour) * 3600;
+  if (!r.canFoundAnother && hasFeast) {
+    const atFeast = r.total + (r.perHour * feastSeconds) / 3600;
+    if (atFeast >= r.requiredForNextSettlement) etaWithFeast = eta;
+    else if (atFeast + r.pendingFeastRenown >= r.requiredForNextSettlement) etaWithFeast = feastSeconds;
+    else if (r.perHour > 0) etaWithFeast = ((missing - r.pendingFeastRenown) / r.perHour) * 3600;
+  }
+  return {
+    fraction: r.requiredForNextSettlement > 0 ? Math.min(1, r.total / r.requiredForNextSettlement) : 1,
+    missing,
+    eta,
+    etaWithFeast: hasFeast && etaWithFeast !== null && etaWithFeast !== eta ? etaWithFeast : null,
+  };
 });
 
 const feastDisabledReason = computed(() => {
@@ -156,16 +207,15 @@ async function holdFeast() {
 
 const art = computed(() => {
   const { buildingType, buildingLevel, terrain } = props.tile;
-  return (buildingType ? buildingArt(buildingType, buildingLevel ?? 1) : undefined) ?? terrainArt(terrain);
+  return (buildingType ? buildingArtOnTile(buildingType, buildingLevel ?? 1, props.tile) : undefined) ?? terrainArt(terrain);
 });
-// Open water is otherwise unbuildable, but a fishing hut already standing
+// Open water is otherwise unbuildable, but a water building (fishing hut,
+// dockyard, shrine of Njörd — see `isWaterOnlyBuilding`) already standing
 // on a coastal-water tile still has to be inspectable/upgradeable here —
 // this only ever sees such a tile with a building on it already (nothing in
 // this modal's own `build` flow offers water as a target), so it can't be
 // mistaken for turning open water buildable from empty.
-const buildable = computed(
-  () => props.tile.terrain !== 'sea' || props.tile.buildingType === 'fishinghut' || props.tile.buildingType === 'shrineofnjord',
-);
+const buildable = computed(() => tileIsBuildable(props.tile));
 
 const name = computed(() =>
   props.tile.buildingType ? buildingName(props.tile.buildingType) : terrainName(props.tile.terrain),
@@ -181,82 +231,29 @@ const level = computed(() => props.tile.buildingLevel ?? 0);
 // HexMapRenderer.ts, so the modal's "current stats" match whatever the hover
 // tooltip just showed.
 const getTile = (q: number, r: number): Tile => world.model.getTile(q, r);
-const matchingNeighbours = computed(() => {
-  const boostTerrain = props.tile.buildingType ? BOOST_TERRAIN[props.tile.buildingType] : undefined;
-  return boostTerrain ? matchingNeighbourCount(props.tile, boostTerrain, getTile) : 0;
-});
 
-// Mirrors HexTooltip.vue's formatOutput/formatModifier.
-function formatOutput(output: BuildingOutput): string {
-  switch (output.kind) {
-    case 'resourceRate':
-      return t('hud.hoverTooltip.outputResourceRate', { amount: output.amount, resource: resourceName(output.resource) });
-    case 'populationCapacity':
-      return t('hud.hoverTooltip.outputPopulationCapacity', { amount: output.amount });
-    case 'storageCapacity':
-      return t('hud.hoverTooltip.outputStorageCapacity', { amount: output.amount });
-    case 'visionRing':
-      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount });
-  }
-}
-
-function formatModifier(modifier: BuildingModifier): string {
-  switch (modifier.kind) {
-    case 'borderAnchor':
-      return t('hud.hoverTooltip.modifierBorderAnchor');
-    case 'trainsLandTroops':
-      return t('hud.hoverTooltip.modifierTrainsLandTroops');
-    case 'trainsShips':
-      return t('hud.hoverTooltip.modifierTrainsShips');
-    case 'trainsCivilianCrews':
-      return t('hud.hoverTooltip.modifierTrainsCivilianCrews');
-    case 'terrainBoost':
-      return t('hud.hoverTooltip.modifierTerrainBoost', { terrain: terrainName(modifier.terrain), percent: modifier.percent });
-    case 'coastal':
-      return modifier.percent
-        ? t('hud.hoverTooltip.modifierCoastalBoost', { percent: modifier.percent })
-        : t('hud.hoverTooltip.modifierCoastal');
-    case 'shrineFavour':
-      if (modifier.domain === 'shipAttack') {
-        return t('hud.hoverTooltip.modifierShrineFavourShipAttack', { percent: modifier.percent });
-      }
-      if (modifier.domain === 'landAttack') {
-        return t('hud.hoverTooltip.modifierShrineFavourLandAttack', { percent: modifier.percent });
-      }
-      return t('hud.hoverTooltip.modifierShrineFavour', {
-        percent: modifier.percent,
-        domain: t(modifier.domain === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
-      });
-    case 'radiusBoost':
-      return t('hud.hoverTooltip.modifierRadiusBoost', {
-        percent: modifier.percent,
-        range: modifier.range,
-        resource: t(modifier.resource === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
-      });
-  }
-}
-
-// The existing building's current-level output/modifier/workers — undefined
+// The existing building's current-level output/modifier — undefined
 // (and hidden) for an empty tile, since there's nothing standing yet.
 const buildingStats = computed(() =>
-  props.tile.buildingType ? buildingStatsFor(props.tile.buildingType, level.value, matchingNeighbours.value) : undefined,
+  props.tile.buildingType ? buildingStatsAt(props.tile.buildingType, level.value, props.tile, getTile) : undefined,
 );
 const currentStats = computed(() =>
   buildingStats.value
     ? {
-        output: buildingStats.value.output ? formatOutput(buildingStats.value.output) : undefined,
-        modifier: buildingStats.value.modifier ? formatModifier(buildingStats.value.modifier) : undefined,
-        workers: buildingStats.value.workers ? t('hud.hoverTooltip.workersValue', { cap: buildingStats.value.workers.cap }) : undefined,
+        output: buildingStats.value.output ? formatBuildingOutput(buildingStats.value.output, t) : undefined,
+        modifier: buildingStats.value.modifier ? formatBuildingModifier(buildingStats.value.modifier, t) : undefined,
       }
     : undefined,
 );
 
-// "hut" is the fixed default a fresh build here places (see
-// SettlementView.vue's build()); an existing building instead costs its own
-// next level.
-const upgradeType = computed<BuildingKind>(() => props.tile.buildingType ?? 'hut');
+// Only an existing building has an action here (upgrade); a fresh build
+// is placed from the ring menu, so an empty tile has no cost to show.
 const upgradeLevel = computed(() => level.value + 1);
-const upgradeCost = computed<ResourceLine>(() => buildingUpgradeCost(upgradeType.value, upgradeLevel.value));
+const upgradeCost = computed<ResourceLine>(() =>
+  props.tile.buildingType
+    ? buildingUpgradeCost(props.tile.buildingType, upgradeLevel.value)
+    : { wood: 0, stone: 0, food: 0, iron: 0 },
+);
 
 const costLine = computed(() =>
   (Object.keys(upgradeCost.value) as (keyof ResourceLine)[])
@@ -302,9 +299,7 @@ const actionLabel = computed(() => {
   if (props.busy) return t('hud.buildingModal.queuing');
   if (noSlotNoQueue.value) return t('hud.buildingModal.noFreeSlotPremium');
   if (noFreeSlot.value) return t('hud.buildingModal.queueBuild');
-  return props.tile.buildingType
-    ? t('hud.buildingModal.upgradeToLevel', { level: level.value + 1 })
-    : t('hud.buildingModal.buildHere');
+  return t('hud.buildingModal.upgradeToLevel', { level: level.value + 1 });
 });
 </script>
 
@@ -325,7 +320,8 @@ const actionLabel = computed(() => {
           <button class="close" @click="emit('close')">{{ t('hud.buildingModal.close') }}</button>
         </div>
 
-        <p v-if="!mine && tile.buildingType" class="desc">
+        <p v-if="outsideRealm" class="desc outside-realm" data-testid="outside-realm">{{ outsideRealmLine }}</p>
+        <p v-else-if="!mine && tile.buildingType" class="desc">
           {{ t('hud.buildingModal.descHeldByOther') }}
         </p>
         <p v-else-if="!mine" class="desc">{{ t('hud.buildingModal.descOutsideBorder') }}</p>
@@ -334,7 +330,7 @@ const actionLabel = computed(() => {
           {{ tile.buildingType ? t('hud.buildingModal.descUpgrade') : t('hud.buildingModal.descBuildEmpty') }}
         </p>
 
-        <dl v-if="currentStats && (currentStats.output || currentStats.modifier || currentStats.workers)" class="stats">
+        <dl v-if="!outsideRealm && currentStats && (currentStats.output || currentStats.modifier)" class="stats">
           <template v-if="currentStats.output">
             <dt>{{ t('hud.hoverTooltip.output') }}</dt>
             <dd>{{ currentStats.output }}</dd>
@@ -343,13 +339,9 @@ const actionLabel = computed(() => {
             <dt>{{ t('hud.hoverTooltip.modifier') }}</dt>
             <dd>{{ currentStats.modifier }}</dd>
           </template>
-          <template v-if="currentStats.workers">
-            <dt>{{ t('hud.hoverTooltip.workers') }}</dt>
-            <dd>{{ currentStats.workers }}</dd>
-          </template>
         </dl>
 
-        <div v-if="isShrine && mine && shrineBuilt" class="runes">
+        <div v-if="isShrine && mine && shrineBuilt && !outsideRealm" class="runes">
           <div class="runes-head">
             {{ t('hud.buildingModal.runesSlotted', { slotted: slottedRunes.length, total: shrineSlots }) }}
           </div>
@@ -379,7 +371,7 @@ const actionLabel = computed(() => {
           </template>
         </div>
 
-        <div v-if="isTownSquare && mine" class="feast" data-testid="feast">
+        <div v-if="isTownSquare && mine && !outsideRealm" class="feast" data-testid="feast">
           <div class="runes-head">{{ t('hud.buildingModal.feastTitle') }}</div>
           <p class="desc feast-desc">{{ t('hud.buildingModal.feastDesc') }}</p>
           <dl class="stats">
@@ -390,6 +382,33 @@ const actionLabel = computed(() => {
             <dt>{{ t('hud.buildingModal.feastGain') }}</dt>
             <dd data-testid="feast-gain">{{ t('hud.buildingModal.feastRenown', { renown: Math.round(feastOffer.renownGain) }) }}</dd>
           </dl>
+          <div v-if="renown && renownProgress" class="renown-progress" data-testid="renown-progress">
+            <div class="renown-line" data-testid="renown-line">
+              {{
+                t('hud.buildingModal.renownProgress', {
+                  total: fmt(renown.total),
+                  required: fmt(renown.requiredForNextSettlement),
+                  n: renown.settlementCount + 1,
+                })
+              }}
+            </div>
+            <div class="renown-bar" role="progressbar" :aria-valuenow="Math.round(renownProgress.fraction * 100)" aria-valuemin="0" aria-valuemax="100">
+              <div class="renown-bar-fill" :style="{ width: `${renownProgress.fraction * 100}%` }" />
+            </div>
+            <div class="desc" data-testid="renown-rate">{{ t('hud.buildingModal.renownRate', { rate: fmt(renown.perHour) }) }}</div>
+            <div v-if="renown.canFoundAnother" class="desc" data-testid="renown-enough">{{ t('hud.buildingModal.renownEnough') }}</div>
+            <template v-else>
+              <div class="desc" data-testid="renown-missing">{{ t('hud.buildingModal.renownMissing', { missing: fmt(renownProgress.missing) }) }}</div>
+              <div v-if="renownProgress.eta !== null" class="desc" data-testid="renown-eta">
+                {{ t('hud.buildingModal.renownEta', { time: formatEta(renownProgress.eta) }) }}
+              </div>
+              <div v-else class="desc" data-testid="renown-eta">{{ t('hud.buildingModal.renownNoRate') }}</div>
+              <div v-if="renownProgress.etaWithFeast !== null" class="desc" data-testid="renown-eta-feast">
+                {{ t('hud.buildingModal.renownEtaFeast', { time: formatEta(renownProgress.etaWithFeast) }) }}
+              </div>
+            </template>
+          </div>
+          <p v-else-if="DEMO_MODE" class="desc" data-testid="renown-demo">{{ t('hud.buildingModal.renownDemo') }}</p>
           <p v-if="runningFeast && !DEMO_MODE" class="feast-running" data-testid="feast-countdown">
             {{
               feastRemaining === null
@@ -404,13 +423,11 @@ const actionLabel = computed(() => {
           </button>
         </div>
 
-        <div v-if="mine && buildable && waitingOrderHere" class="actions">
+        <div v-if="mine && buildable && waitingOrderHere && !outsideRealm" class="actions">
           <p class="desc queued-note">{{ t('hud.buildingModal.queuedNote') }}</p>
         </div>
-        <div v-else-if="mine && buildable" class="actions">
-          <div class="cost">
-            {{ tile.buildingType ? t('hud.buildingModal.upgradeCost') : t('hud.buildingModal.buildCost') }}: {{ costLine }}
-          </div>
+        <div v-else-if="mine && buildable && tile.buildingType && !outsideRealm" class="actions">
+          <div class="cost">{{ t('hud.buildingModal.upgradeCost') }}: {{ costLine }}</div>
           <p v-if="!canAfford" class="desc afford-note">
             {{ t('hud.buildingModal.notEnoughResources') }}
           </p>
@@ -419,14 +436,10 @@ const actionLabel = computed(() => {
           </i18n-t>
           <p v-if="error" class="desc afford-note">{{ error }}</p>
           <button
-            v-if="tile.buildingType"
             class="primary"
             :disabled="busy || !canAfford || noSlotNoQueue"
             @click="emit('upgrade')"
           >
-            {{ actionLabel }}
-          </button>
-          <button v-else class="primary" :disabled="busy || !canAfford || noSlotNoQueue" @click="emit('build')">
             {{ actionLabel }}
           </button>
         </div>
@@ -583,6 +596,23 @@ const actionLabel = computed(() => {
   margin: 8px 0;
   color: var(--gold);
 }
+.renown-progress {
+  margin: 8px 0;
+}
+.renown-line {
+  color: var(--gold);
+}
+.renown-bar {
+  height: 6px;
+  margin: 4px 0;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.renown-bar-fill {
+  height: 100%;
+  background: var(--gold);
+}
 .feast .afford-note {
   margin-top: 8px;
 }
@@ -637,7 +667,7 @@ const actionLabel = computed(() => {
    `.body` at a 367px content width, so this stacks art above body and lets
    the whole modal scroll vertically instead. Last in the file so it wins
    over the desktop `.art`/`.body` rules above at equal specificity. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .modal {
     flex-direction: column;
     max-height: 90vh;

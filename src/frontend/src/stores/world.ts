@@ -16,6 +16,8 @@ import type {
   TrainingOrderResponse,
   FeastOfferResponse,
   FeastResponse,
+  QuestResponse,
+  RenownResponse,
   UnitStackResponse,
   WorldMovementResponse,
 } from '../api/types';
@@ -25,17 +27,35 @@ import { usePlayerStore } from './player';
 import type { AxialCoord } from '../lib/hex/coords';
 import {
   buildAttackDispatchRequest,
+  buildHuntDispatchRequest,
   buildFieldOrderRequest,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
 } from '../lib/units/armyDispatch';
-import { WorldModel } from '../lib/map/WorldModel';
+import { DemoTradeError, WorldModel } from '../lib/map/WorldModel';
+import { evaluateDemoQuests, questBit } from '../lib/quests';
 import { useConnectionStatusStore } from './connectionStatus';
 import { fogPerfStats } from '../lib/map/fog/fogPerfStats';
-import { buildDemoFogMask, DEMO_MASK_RADIUS } from '../lib/map/fog/demoFogMask';
+import { buildDemoFogMask, demoMaskBounds } from '../lib/map/fog/demoFogMask';
+import {
+  FOG_CHUNK_SIZE,
+  FogChunkCache,
+  fogWindowFor,
+  rangeContains,
+  rangesEqual,
+  stitchWindow,
+  windowBounds,
+  worldChunkRange,
+  chunkOfTexel,
+  type ChunkRange,
+} from '../lib/map/fog/fogChunks';
+import { decodeChunkPng, pixelsToBitmap } from '../lib/map/fog/fogChunkCodec';
+import { toTexel, type MaskBounds } from '../lib/map/fog/fogMaskLayout';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
+import type { PalisadePiece } from '../lib/map/palisadeTiles';
 import type { CartShipment, ResourceKind, Resources, Tile, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
+import { isPendingOrder, makePendingOrder } from '../lib/hud/pendingBuild';
 
 // How often live mode re-polls a settlement to pick up build-queue
 // completions and rate changes it didn't cause itself (see
@@ -50,9 +70,28 @@ const LIVE_POLL_MS = 4000;
 // full websocket/animation loop, which the design doc explicitly defers.
 const ARMY_POLL_MS = 2000;
 
+// How long the camera has to sit still before a viewport that left the loaded
+// fog window triggers a refetch (map-fog-v2.md §3: chunks are fetched "as the
+// camera moves", debounced — a fast pan across many chunks is one request at
+// the end of it, not one per chunk boundary crossed).
+const FOG_VIEWPORT_DEBOUNCE_MS = 150;
+
+// The decoded chunks behind the fog window, and the pending viewport-refetch
+// timer. Module scope, not Pinia state: neither is app state Vue needs to
+// proxy (a cache of pixel buffers, a timer handle), same reasoning as
+// `fogMaskBitmap`'s markRaw.
+const fogChunkCache = new FogChunkCache();
+let fogViewportTimer: ReturnType<typeof setTimeout> | null = null;
+
 // Demo mode's seed — kept as its own constant since both the initial
-// `WorldModel` below and its island labels have to agree on it.
-const DEMO_SEED = 20260824;
+// `WorldModel` below and its island labels have to agree on it. The e2e suite
+// founds on this seed's landfall and needs sand in the level-1 realm and coastal
+// water within the level-8 one (SettlementPage.findHex), and open sea in view of
+// the settlement (water-shader.spec). 20260824 lost all three when the
+// island-density change moved its landfall inland, and 20260830 when the bog
+// guarantee did (demo founding re-runs findLandfall after placing the island's
+// giants, which pushed it to 58,244); 20260831 founds on the coast at 51,48.
+const DEMO_SEED = 20260831;
 
 /**
  * Discriminated result of `refreshPlotSuggestion`, replacing the bare
@@ -103,7 +142,7 @@ export class AlreadyFoundedError extends Error {
 function buildDemoModel(): WorldModel {
   const model = new WorldModel(DEMO_SEED);
   if (DEMO_MODE) {
-    model.setIslands(enumerateIslands({ seed: DEMO_SEED, generation: DEFAULT_GENERATION }, DEMO_MASK_RADIUS));
+    model.setIslands(enumerateIslands({ seed: DEMO_SEED, generation: DEFAULT_GENERATION }, DEFAULT_GENERATION.worldRadius));
   }
   return model;
 }
@@ -116,6 +155,8 @@ export const useWorldStore = defineStore('world', {
   state: () => ({
     model: markRaw(buildDemoModel()),
     selectedSettlementId: null as string | null,
+    /** Demo mode only: bitmask of the onboarding quests already claimed (the server keeps this in live mode). */
+    demoClaimedQuests: 0,
     // Set by WorldMapView (`setWorldMapActive`) so `refreshWorldSettlements`
     // knows it's safe to paint every rival's territory — the world map is
     // the one legitimate place that shows the whole world, unlike the
@@ -194,10 +235,15 @@ export const useWorldStore = defineStore('world', {
       // WorldModel places buildings instantly and has no queue to show.
       queue: [] as BuildOrderResponse[],
       queueFetchedAt: 0,
+      // X8: the last *confirmed* spend (a build that was accepted / placed),
+      // as an explicit event for the resource bar's tick-down — never derived
+      // from watching `resources`, which also moves with every production
+      // tick. `cost` holds only the resources that really dropped.
+      lastSpend: null as { cost: Partial<Resources>; at: number } | null,
       // Trade system (PR 2): live-mode-only snapshots of the trade board,
       // this settlement's own offers, and its shipments — see
-      // `refreshTradeAsync`. Always empty in demo mode; TradePanel.vue reads
-      // `WorldModel`'s own demo trade offers directly there instead (there
+      // `refreshTradeAsync`. Always empty in demo mode; the trade UI (removed until
+      // trade is redesigned) read `WorldModel`'s own demo trade offers directly there instead (there
       // are no shipments to show in demo mode at all — see
       // `WorldModel.acceptTradeOffer`'s doc comment).
       tradeBoard: [] as TradeOfferResponse[],
@@ -216,6 +262,13 @@ export const useWorldStore = defineStore('world', {
       feast: null as FeastResponse | null,
       nextFeast: null as FeastOfferResponse | null,
       feastFetchedAt: 0,
+      // Onboarding quests (economy.md section 7): live mode mirrors
+      // `SettlementResponse.quests`; demo mode evaluates the same list locally
+      // in `syncHud` (`lib/quests.ts`) against `demoClaimedQuests`.
+      quests: [] as QuestResponse[],
+      // The account's renown progress (Town Square modal); null in demo mode
+      // and until the first live read.
+      renown: null as RenownResponse | null,
       // Issue #53: a settlement's rune inventory, refreshed the same way as
       // the build queue above — always empty in demo mode, since shrines and
       // runes have no local WorldModel simulation, only the live backend.
@@ -243,6 +296,8 @@ export const useWorldStore = defineStore('world', {
     // drawn on the map (HexMapRenderer.setArmyOverlay) while selected. Not a
     // computed getter: selection persists across `refreshArmies` polls by id.
     selectedArmyId: null as string | null,
+    // Bumped when a camp-state refresh changed something the map draws (MapView watches it).
+    campStatesVersion: 0,
     // Waypoint-editing / dispatch-composition state — see `startDispatch`/
     // `addWaypoint`/`confirmDispatch`. `null` while no dispatch is being
     // composed; SettlementView threads this into SettlementCanvas's
@@ -262,12 +317,15 @@ export const useWorldStore = defineStore('world', {
       // `buildAttackDispatchRequest`'s own comment). 'support' (issue #40
       // phase 4) is shaped identically to 'attack' — a target settlement plus
       // optional waypoints — see `buildSupportDispatchRequest`.
-      mission: 'move' | 'attack' | 'support';
+      // 'hunt' targets a wildlife camp's hex (`targetCamp`); the route holds only intermediate waypoints.
+      mission: 'move' | 'attack' | 'support' | 'hunt';
       targetSettlementId: string | null;
+      targetCamp: { q: number; r: number } | null;
       // Issue #40 phase 5: the coordinate of a building within the target
       // settlement a Catapult-carrying Attack would prefer to hit — a
       // *preference*, not a guarantee (see `buildAttackDispatchRequest`'s own
-      // comment). `null` means "no preference", the same as never having
+      // comment). A fleet Attack must always name one (a building on the
+      // target's shore): the fleet sails to it and only it can be damaged. `null` means "no preference", the same as never having
       // picked one. Always `null` outside `mission: 'attack'` — a Move/Support
       // dispatch has no battle to apply it in (see `setDispatchMission`).
       targetBuildingCoord: { q: number; r: number } | null;
@@ -345,6 +403,21 @@ export const useWorldStore = defineStore('world', {
     // with no explanation).
     fogMaskError: null as unknown,
     /**
+     * Where `fogMaskBitmap` sits in mask-texel space: the chunk window a live
+     * mask is stitched to (`windowBounds`), or the whole demo world. The
+     * renderer places the texture by it (`HexMapRenderer.setFogMask`).
+     */
+    fogMaskBounds: null as MaskBounds | null,
+    /**
+     * The chunk rectangle the camera currently sees, as last reported by the
+     * renderer (`requestFogViewport`). Null until it has reported once.
+     */
+    fogViewport: null as ChunkRange | null,
+    /** The chunk window `fogMaskBitmap` was last stitched from — the fetch's `ETag` scope. */
+    fogWindow: null as ChunkRange | null,
+    /** `ETag` of the last successful fog-chunks response for `fogWindow`. */
+    fogEtag: null as string | null,
+    /**
      * `WorldModel.fogSignature()` as of the last demo fog bake, so the poll
      * can skip a bake that would reproduce the mask already on screen. Null
      * until the first one lands.
@@ -368,7 +441,7 @@ export const useWorldStore = defineStore('world', {
     // hexPath.ts) for the same reason worldGenerator.ts's constants moved
     // out — a live world's numbers always take priority once fetched.
     movementRules: {
-      land: { grass: 1.0, sand: 1.1, forest: 1.3, mountain: 2.0 },
+      land: { grass: 1.0, sand: 1.1, forest: 1.3, mountain: 2.0, bog: 2.0 },
       sea: { sea: 1.0 },
       riverCrossingCost: 8.0,
     } as WorldMovementResponse,
@@ -472,7 +545,22 @@ export const useWorldStore = defineStore('world', {
             shape: tile.shape,
             inDirections: tile.inDirections as TileOrientation[],
             outDirection: tile.outDirection as TileOrientation | null,
+            width: tile.width ?? 'river',
             wasted: island.wasted,
+          })),
+        ),
+      );
+      // Server-generated bogland (see `IslandResponse.bogTiles`): bog moss, lakes, shores, creeks. It is
+      // terrain the seed alone cannot give, so it goes in before anything that reads terrain (giants, camps).
+      this.model.setBogTiles(
+        this.islands.flatMap((island) =>
+          (island.bogTiles ?? []).map((tile) => ({
+            q: tile.q,
+            r: tile.r,
+            kind: tile.kind,
+            inDirections: tile.inDirections as TileOrientation[],
+            outDirection: tile.outDirection as TileOrientation | null,
+            waterEdges: tile.waterEdges as TileOrientation[],
           })),
         ),
       );
@@ -489,6 +577,45 @@ export const useWorldStore = defineStore('world', {
           })),
         ),
       );
+      // Server-generated wildlife camps (see `IslandResponse.camps`): the server is
+      // authoritative on where they stand, their family, level and rotation; this
+      // only tags the tiles for rendering (`WorldModel.setCamps`).
+      this.model.setCamps(
+        this.islands.flatMap((island) =>
+          (island.camps ?? []).map((camp) => ({
+            family: camp.family,
+            coord: { q: camp.q, r: camp.r },
+            level: camp.level,
+            orientation: camp.orientation as TileOrientation,
+          })),
+        ),
+      );
+      // Server-generated Utgard walls and Jötun watchtowers of the wasted islands (see `IslandResponse.utgardWalls`): tagged for
+      // rendering and the client's route preview; the server is authoritative on pieces, rotations and levels.
+      this.model.setUtgardWalls(
+        this.islands.flatMap((island) =>
+          (island.utgardWalls ?? []).map((wall) => ({
+            coord: { q: wall.q, r: wall.r },
+            ring: wall.ring,
+            piece: wall.piece as PalisadePiece,
+            dir: wall.orientation as TileOrientation,
+            isGate: wall.isGate,
+            level: wall.level,
+          })),
+        ),
+      );
+      this.model.setJotunTowers(
+        this.islands.flatMap((island) =>
+          (island.jotunTowers ?? []).map((tower) => ({
+            coord: { q: tower.q, r: tower.r },
+            orientation: tower.orientation as TileOrientation,
+            level: 2,
+          })),
+        ),
+      );
+      // Live camp state (garrison, cleared, calm...) on top of the static camp tags above; a failure
+      // only leaves every camp showing as guarded, so it never blocks the bootstrap.
+      await this.refreshCampStates();
       this.liveReady = true;
       // Fog-gated (ExploredAreaService): for a caller with an existing realm
       // (a returning/claimed player), this pulls in their own settlements and
@@ -693,6 +820,53 @@ export const useWorldStore = defineStore('world', {
       await this.refreshLiveSettlement();
     },
     /**
+     * W3: `queueBuildLive` with an optimistic client-only order. A pending
+     * entry goes into `hud.queue` first, so the construction dial on `at`
+     * shows "…" at once, then the request runs and a refresh replaces the
+     * pending entry with the real order (or, on a refusal, the entry is
+     * removed again and the error rethrown; the stock never changed). A poll
+     * refresh in the meantime keeps the pending entry (see
+     * `refreshLiveSettlement`). With `cost`, a confirmed build also records
+     * `hud.lastSpend` for the resource bar's tick-down, limited to the
+     * resources whose stock really dropped (a reserved, waiting order does
+     * not spend yet).
+     */
+    async queueBuildOptimistic(building: string, at: AxialCoord, cost?: Partial<Resources>) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      const pending = makePendingOrder(building, at);
+      const before = { ...this.hud.resources };
+      this.hud.queue = [...this.hud.queue, pending];
+      try {
+        await api.queueBuild(
+          this.selectedSettlementId, { building, q: at.q, r: at.r }, this.ownerId ?? undefined,
+        );
+      } catch (err) {
+        this.hud.queue = this.hud.queue.filter((o) => o.id !== pending.id);
+        throw err;
+      }
+      // Confirmed. The refresh swaps the pending entry for the real order; a
+      // failed refresh must not read as a refused build, the poll catches up.
+      try {
+        await this.refreshLiveSettlement();
+      } catch (err) {
+        console.warn('Refresh after a confirmed build failed; the next poll will catch up', err);
+      } finally {
+        this.hud.queue = this.hud.queue.filter((o) => o.id !== pending.id);
+      }
+      if (cost) {
+        const spent: Partial<Resources> = {};
+        for (const kind of Object.keys(cost) as (keyof Resources)[]) {
+          if ((cost[kind] ?? 0) > 0 && this.hud.resources[kind] < before[kind]) spent[kind] = cost[kind];
+        }
+        this.recordSpend(spent);
+      }
+    },
+    /** X8: announces a confirmed spend; the resource bar counts the affected pills down. Empty costs are ignored. */
+    recordSpend(cost: Partial<Resources>) {
+      if (!Object.values(cost).some((v) => (v ?? 0) > 0)) return;
+      this.hud.lastSpend = { cost: { ...cost }, at: Date.now() };
+    },
+    /**
      * Live mode: cancels a still-queued build order, refunding its cost. For
      * a brand-new building this also clears the level-0 foundation stub the
      * backend placed on `Enqueue` — `refreshLiveSettlement`'s reconciliation
@@ -725,6 +899,48 @@ export const useWorldStore = defineStore('world', {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
       await api.holdFeast(this.selectedSettlementId, this.ownerId ?? undefined);
       await this.refreshLiveSettlement();
+      await this.loadRenownLive();
+    },
+    /**
+     * Claims a completed onboarding quest's resource reward, exactly once
+     * (economy.md section 7). Live mode posts to the backend and refreshes the
+     * settlement; throws `ApiError` on rejection (not completed, already
+     * claimed). Demo mode has no backend, so it checks the same rules against
+     * the local model and pays into the local stock (clamped to storage).
+     */
+    async claimQuest(questId: string) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      if (!DEMO_MODE) {
+        await api.claimQuest(this.selectedSettlementId, questId, this.ownerId ?? undefined);
+        await this.refreshLiveSettlement();
+        return;
+      }
+      this.syncHud();
+      const settlement = this.model.getSettlement(this.selectedSettlementId);
+      const bit = questBit(questId);
+      if (!settlement || bit < 0) throw new DemoTradeError('UnknownQuest');
+      const quest = this.hud.quests.find((q) => q.id === questId);
+      if (!quest || quest.claimed) throw new DemoTradeError('AlreadyClaimed');
+      if (!quest.completed) throw new DemoTradeError('NotCompleted');
+      const cap = this.model.storageCapForDisplay(settlement.id);
+      for (const kind of ['wood', 'stone', 'food'] as const) {
+        settlement.resources[kind] = Math.min(cap[kind], settlement.resources[kind] + quest.reward[kind]);
+      }
+      this.demoClaimedQuests |= 1 << bit;
+      this.syncHud();
+    },
+    /**
+     * Live mode: reads the account's renown (total, rate, next-settlement
+     * target, pending feast renown) into `hud.renown`. No-op in demo mode;
+     * a failed read keeps whatever was last shown.
+     */
+    async loadRenownLive() {
+      if (DEMO_MODE || !this.worldId) return;
+      try {
+        this.hud.renown = await api.getRenown(this.worldId);
+      } catch {
+        // Transient hiccup: the modal keeps its last figures.
+      }
     },
     /**
      * Pulls the settlement's current resources/level/buildings/garrison/
@@ -756,9 +972,12 @@ export const useWorldStore = defineStore('world', {
         rates: { ...response.resources.ratePerHour },
         capacity: { ...response.resources.capacity },
         buildings: response.buildings,
+        realm: response.realm,
       });
       this.hud.buildings = response.buildings;
-      this.hud.queue = response.queue;
+      // An optimistic build still waiting for its answer (W3) must outlive a
+      // poll that was in flight when it was added; its own refresh clears it.
+      this.hud.queue = [...response.queue, ...this.hud.queue.filter(isPendingOrder)];
       this.hud.queueFetchedAt = Date.now();
       // `available` is not set here directly — `syncHud()` below (and every
       // subsequent tick) derives it live from `hud.resources`/`hud.reserved`,
@@ -772,6 +991,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.feast = response.feast;
       this.hud.nextFeast = response.nextFeast;
       this.hud.feastFetchedAt = Date.now();
+      this.hud.quests = response.quests ?? [];
       this.syncHud();
     },
     /**
@@ -797,8 +1017,8 @@ export const useWorldStore = defineStore('world', {
     /**
      * Live mode: posts a trade offer at this settlement's longhouse.
      * Throws `ApiError` on rejection (e.g. `RatioExceeded`,
-     * `NotEnoughResources`) — TradePanel.vue surfaces `err.problem?.rejection`.
-     * A no-op in demo mode; TradePanel.vue calls `world.model.postTradeOffer`
+     * `NotEnoughResources`) — the trade UI (removed until trade is redesigned) surfaced `err.problem?.rejection`.
+     * A no-op in demo mode; the trade UI called `world.model.postTradeOffer`
      * directly there instead (see the file's other DEMO_MODE branches).
      */
     async postTradeOfferLive(
@@ -841,9 +1061,9 @@ export const useWorldStore = defineStore('world', {
     },
     /**
      * Live mode: pulls the trade board, this settlement's own offers, and
-     * its shipments in one go, for TradePanel.vue. No-op in demo mode
+     * its shipments in one go, for the trade UI (removed until trade is redesigned). No-op in demo mode
      * (`hud.tradeBoard`/`myTradeOffers`/`shipments` stay empty there —
-     * TradePanel.vue reads `WorldModel`'s demo trade offers directly).
+     * the trade UI read `WorldModel`'s demo trade offers directly).
      */
     async refreshTradeAsync() {
       if (DEMO_MODE || !this.selectedSettlementId) return;
@@ -991,12 +1211,21 @@ export const useWorldStore = defineStore('world', {
       this.hud.runes = [];
       this.hud.feast = null;
       this.hud.nextFeast = null;
+      this.hud.quests = [];
+      this.demoClaimedQuests = 0;
+      this.hud.renown = null;
       this.hud.tradeBoard = [];
       this.hud.myTradeOffers = [];
       this.hud.shipments = [];
       this.fogMaskBitmap?.close();
       this.fogMaskBitmap = null;
+      this.fogMaskBounds = null;
+      this.fogWindow = null;
+      this.fogEtag = null;
       this.fogMaskError = null;
+      fogChunkCache.clear();
+      if (fogViewportTimer) clearTimeout(fogViewportTimer);
+      fogViewportTimer = null;
     },
     /**
      * Recovers from a world that has stopped existing out from under this
@@ -1032,18 +1261,14 @@ export const useWorldStore = defineStore('world', {
       if (this.worldId) usePlayerStore().enterWorld(this.worldId, null);
     },
     /**
-     * Live mode: pulls every settlement in the world (not just this
-     * player's) into the model, data-only — no tile is painted here.
-     * Registered with the settlement's own id as its `ownerId`, which can
-     * never equal the local player's id, so it always renders as a rival
-     * once a caller claims its territory (`WorldModel.claimTerritory` /
-     * `claimTerritoryOnIsland` / `claimAllTerritory`) — the world map claims
-     * everyone (matching `prototypes/worldmap`'s `marks`), while the
-     * landing/settlement preview only claims the island it's showing.
-     */
-    /**
      * Registers a batch of `SettlementSummary` rows into the local
-     * `WorldModel`, data-only — shared by `refreshWorldSettlements` (the
+     * `WorldModel`, data-only — no tile is painted here (a caller claims
+     * territory afterwards: `claimTerritory` / `claimTerritoryOnIsland` /
+     * `claimAllTerritory`). The player's own settlements (`mine`) are
+     * registered with the local player's id as `ownerId`, so they group with
+     * the selected settlement's realm and render as the player's own; every
+     * other settlement keeps its own id as `ownerId`, which can never equal
+     * the player's id, so it renders as a rival. Shared by `refreshWorldSettlements` (the
      * fog-gated world list) and `refreshPlotSuggestion` (a suggestion's own
      * `islandSettlements`), so the two don't duplicate this loop.
      */
@@ -1052,7 +1277,7 @@ export const useWorldStore = defineStore('world', {
         if (summary.id === this.selectedSettlementId) continue;
         this.model.registerSettlement({
           id: summary.id,
-          ownerId: summary.id,
+          ownerId: summary.mine ? (this.ownerId ?? summary.id) : summary.id,
           ownerName: summary.ownerName,
           name: summary.name,
           q: summary.q,
@@ -1067,8 +1292,14 @@ export const useWorldStore = defineStore('world', {
     },
     async refreshWorldSettlements() {
       if (DEMO_MODE || !this.worldId) return;
-      const summaries = await api.listSettlements(this.worldId, this.ownerId ?? undefined);
+      // Rival walls ride the same cadence: the settlement list is data-only, so this is the only way the client learns where another
+      // player's palisades stand (to draw them, offer Siege on them and route around them). A failed walls read keeps the last set.
+      const [summaries, walls] = await Promise.all([
+        api.listSettlements(this.worldId, this.ownerId ?? undefined),
+        api.listWalls(this.worldId, this.ownerId ?? undefined).catch(() => null),
+      ]);
       this.registerSettlementSummaries(summaries);
+      if (walls) this.model.applyRivalWalls(walls);
       if (this.worldMapActive) {
         this.model.claimAllTerritory();
       } else {
@@ -1163,6 +1394,32 @@ export const useWorldStore = defineStore('world', {
      * own army list does. No-op in demo mode. See `armies`'s own comment for
      * why home garrison never appears here.
      */
+    /**
+     * Live mode: fetches every camp's live state (`GET /worlds/{id}/camps`) and merges it onto the
+     * model's camps (`WorldModel.setCampStates`) after adding the camps the model does not know yet — the
+     * server sends states only for islands the player has seen, so a newly seen island's camps first arrive
+     * here (`WorldModel.setCamps` is additive); bumps `campStatesVersion` only on a real change so
+     * the map redraws (a cleared camp swaps its art) without a rebuild per poll. Never throws: a
+     * failed fetch leaves the previous state. A no-op in demo mode, where every camp stays guarded.
+     */
+    async refreshCampStates() {
+      if (DEMO_MODE || !this.worldId) return;
+      try {
+        const states = await api.getWorldCamps(this.worldId);
+        const added = this.model.setCamps(
+          states.map((state) => ({
+            family: state.family,
+            coord: { q: state.q, r: state.r },
+            level: state.level,
+            orientation: state.orientation as TileOrientation,
+          })),
+        );
+        const updated = this.model.setCampStates(states);
+        if (added || updated) this.campStatesVersion += 1;
+      } catch (err) {
+        console.warn('camp states refresh failed', err);
+      }
+    },
     async refreshArmies() {
       if (DEMO_MODE || !this.selectedSettlementId) return;
       const [summaries, guests] = await Promise.all([
@@ -1178,6 +1435,8 @@ export const useWorldStore = defineStore('world', {
       this.armiesFetchedAt = Date.now();
       this.guestArmies = guests;
       this.guestArmiesFetchedAt = Date.now();
+      // Hunts, ambushes and regrowth change camps; piggy-back the camp refresh on the army poll.
+      await this.refreshCampStates();
       // An army that arrived home (and was folded back/deleted — see the
       // `armies` state comment) simply stops appearing in the list; drop a
       // selection that's no longer valid rather than leaving the map overlay
@@ -1195,6 +1454,12 @@ export const useWorldStore = defineStore('world', {
     /** Live mode: recalls an in-transit army, then refreshes so its turned-around state shows immediately. Throws `ApiError` on rejection (e.g. it's already heading home). */
     async recallArmyLive(armyId: string) {
       await api.recallArmy(armyId, this.ownerId ?? undefined);
+      await this.refreshArmies();
+    },
+    /** Live mode: the host sends a guest army stationed at the selected settlement home, then refreshes so the row disappears. Throws `ApiError` on rejection (e.g. no route home). */
+    async sendGuestHomeLive(armyId: string) {
+      if (!this.selectedSettlementId) return;
+      await api.sendGuestHome(this.selectedSettlementId, armyId, this.ownerId ?? undefined);
       await this.refreshArmies();
     },
     /**
@@ -1285,6 +1550,7 @@ export const useWorldStore = defineStore('world', {
         error: null,
         mission: 'move',
         targetSettlementId: null,
+        targetCamp: null,
         targetBuildingCoord: null,
       };
       this.dispatchTargetBuildings = null;
@@ -1302,22 +1568,32 @@ export const useWorldStore = defineStore('world', {
      * to fill in. Units are still picked manually (no default selection);
      * this only sets the mission and destination the tap already implied.
      */
-    startDispatchAt(coord: AxialCoord, opts: { mission?: 'attack' | 'support'; targetSettlementId?: string } = {}) {
+    startDispatchAt(
+      coord: AxialCoord,
+      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string; targetBuildingCoord?: AxialCoord } = {},
+    ) {
       this.startDispatch();
       if (!this.dispatchDraft) return;
-      if (opts.mission && opts.targetSettlementId) {
+      if (opts.mission === 'hunt') {
+        this.dispatchDraft.mission = 'hunt';
+        this.dispatchDraft.targetCamp = { q: coord.q, r: coord.r };
+      } else if (opts.mission && opts.targetSettlementId) {
         this.dispatchDraft.mission = opts.mission;
         this.setDispatchTarget(opts.targetSettlementId);
+        // The "Siege" ring action on a rival wall: an Attack on the wall's settlement that prefers the wall hex, the same
+        // draft state the target-building picker sets (setDispatchTarget cleared it, so it is set after).
+        if (opts.targetBuildingCoord) this.setDispatchTargetBuilding({ q: opts.targetBuildingCoord.q, r: opts.targetBuildingCoord.r });
       } else {
         this.addWaypoint(coord);
       }
     },
     /** Switching mission clears the plotted route/target — a move destination and an attack's/support's waypoint-only route aren't interchangeable, and a stale target settlement from a previous draft shouldn't silently carry over. */
-    setDispatchMission(mission: 'move' | 'attack' | 'support') {
+    setDispatchMission(mission: 'move' | 'attack' | 'support' | 'hunt') {
       if (!this.dispatchDraft) return;
       this.dispatchDraft.mission = mission;
       this.dispatchDraft.route = [];
       this.dispatchDraft.targetSettlementId = null;
+      this.dispatchDraft.targetCamp = null;
       this.dispatchDraft.targetBuildingCoord = null;
       this.dispatchDraft.error = null;
     },
@@ -1450,12 +1726,16 @@ export const useWorldStore = defineStore('world', {
             )
           : draft.mission === 'support'
             ? buildSupportDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetSettlementId)
-            : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
+            : draft.mission === 'hunt'
+              ? buildHuntDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetCamp)
+              : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
       if (!request) {
         if (Object.values(draft.unitCounts).every((c) => c <= 0)) {
           draft.error = i18n.global.t('common.errors.selectAtLeastOneUnit');
         } else if (draft.mission === 'move' && draft.route.length === 0) {
           draft.error = i18n.global.t('common.errors.clickMapForDestination');
+        } else if (draft.mission === 'hunt' && !draft.targetCamp) {
+          draft.error = i18n.global.t('common.errors.chooseCampToHunt');
         } else if ((draft.mission === 'attack' || draft.mission === 'support') && !draft.targetSettlementId) {
           draft.error = i18n.global.t('common.errors.chooseSettlementFor', { mission: draft.mission });
         } else {
@@ -1499,6 +1779,12 @@ export const useWorldStore = defineStore('world', {
       this.hud.buildingsPlaced = this.model.countBuildings(settlement.id);
       this.hud.placedBuildingTypes = this.model.listPlacedBuildings(settlement.id);
       this.hud.claimedHexes = this.model.claimedHexCount(settlement.id);
+      if (DEMO_MODE) {
+        this.hud.quests = evaluateDemoQuests(
+          { level: settlement.level, counts: this.model.countPlacedBuildingsByType(settlement.id) },
+          this.demoClaimedQuests,
+        );
+      }
       this.hud.population = this.model.populationFor(settlement.id);
       this.hud.tick += 1;
     },
@@ -1554,14 +1840,54 @@ export const useWorldStore = defineStore('world', {
       this.demoFogPollHandle = null;
     },
     /**
-     * Fetches and decodes the current player's fog mask (map-fog-v2.md
-     * §2.2/§3), stashing it on `fogMaskBitmap` and the fetch's own timing/
-     * version on `fogPerfStats` (read by FogPerfPanel). A no-op in demo mode
-     * (there is no backend to ask) or before a world/owner is known. Polled
-     * alongside the rest of live mode's HUD sync (startHudSync, LIVE_POLL_MS)
-     * — the view layer (WorldMapView.vue/SettlementView.vue) watches
-     * `fogMaskBitmap` and pushes it into the renderer via
-     * `HexMapRenderer.setFogMask`.
+     * The chunk window to fetch now. While the camera stays inside the window
+     * already loaded, that same window (no refetch, no shift — the margin is
+     * the hysteresis); once it leaves, a fresh window around it. Before the
+     * renderer has reported a viewport, the ground around the player's own
+     * settlement, so the first fetch already has what they will look at.
+     */
+    desiredFogWindow(): ChunkRange {
+      const world = this.worldRadius !== null ? worldChunkRange(this.worldRadius) : null;
+      let viewport = this.fogViewport;
+      if (!viewport) {
+        const own = this.selectedSettlementId ? this.model.getSettlement(this.selectedSettlementId) : undefined;
+        const texel = toTexel({ q: own?.q ?? 0, r: own?.r ?? 0 });
+        const chunk = chunkOfTexel(texel.u, texel.v);
+        viewport = { cuMin: chunk.cu, cuMax: chunk.cu, cvMin: chunk.cv, cvMax: chunk.cv };
+      }
+      const needed = fogWindowFor(viewport, world, 0);
+      return this.fogWindow && rangeContains(this.fogWindow, needed) ? this.fogWindow : fogWindowFor(viewport, world);
+    },
+    /**
+     * The renderer's report of which chunks the camera sees (it calls this
+     * when that rectangle changes, not per frame). Cheap when the viewport is
+     * still inside the loaded window; otherwise schedules one debounced
+     * `fetchFogMask`. A no-op in demo mode (its mask is the whole demo world).
+     */
+    requestFogViewport(range: ChunkRange) {
+      this.fogViewport = range;
+      if (DEMO_MODE || !this.worldId || !this.ownerId) return;
+      const world = this.worldRadius !== null ? worldChunkRange(this.worldRadius) : null;
+      if (this.fogWindow && rangeContains(this.fogWindow, fogWindowFor(range, world, 0))) return;
+      if (fogViewportTimer) clearTimeout(fogViewportTimer);
+      fogViewportTimer = setTimeout(() => {
+        fogViewportTimer = null;
+        void this.fetchFogMask();
+      }, FOG_VIEWPORT_DEBOUNCE_MS);
+    },
+    /**
+     * Fetches the current player's fog mask for the chunk window around the
+     * camera (map-fog-v2.md §3): one batched call, only the chunks whose
+     * server `version` changed are decoded, and everything held is stitched
+     * into one window bitmap (the shader keeps sampling a single texture),
+     * stashed on `fogMaskBitmap` + `fogMaskBounds`, with the fetch's own
+     * timing/version on `fogPerfStats` (read by FogPerfPanel). A no-op in
+     * demo mode (there is no backend to ask) or before a world/owner is
+     * known. Polled alongside the rest of live mode's HUD sync (startHudSync,
+     * LIVE_POLL_MS — an unchanged window is a body-less 304) and re-run by
+     * `requestFogViewport` when the camera leaves the window; the view layer
+     * (MapView.vue/LandingView.vue) watches `fogMaskBitmap` and pushes it
+     * into the renderer via `HexMapRenderer.setFogMask`.
      */
     async fetchFogMask() {
       if (DEMO_MODE || !this.worldId || !this.ownerId) return;
@@ -1577,17 +1903,51 @@ export const useWorldStore = defineStore('world', {
 
       fogPerfStats.maskFetchInFlight = true;
       const startedAt = performance.now();
+      let succeeded = false;
       try {
-        const { bitmap, version } = await api.getFogMask(this.worldId, this.ownerId);
-        // Close the previous bitmap only once the new one is actually in
-        // hand — closing it eagerly before the fetch settles would leave a
-        // failed request having discarded the one usable bitmap this store
-        // had.
-        this.fogMaskBitmap?.close();
-        this.fogMaskBitmap = markRaw(bitmap);
-        fogPerfStats.maskVersion = version;
+        const window = this.desiredFogWindow();
+        const sameWindow = rangesEqual(window, this.fogWindow);
+        const result = await api.getFogChunks(this.worldId, this.ownerId, window, sameWindow ? this.fogEtag : null);
+
+        if (!result.notModified) {
+          const { data } = result;
+          if (data.chunkSize !== FOG_CHUNK_SIZE) {
+            throw new Error(`fog chunk size ${data.chunkSize} does not match this client's ${FOG_CHUNK_SIZE}`);
+          }
+
+          fogChunkCache.retain(window);
+          const stale = data.chunks.filter((chunk) => !fogChunkCache.isCurrent(chunk));
+          const decoded = await Promise.all(
+            stale.map(async (chunk) => (chunk.png ? decodeChunkPng(chunk.png) : null)),
+          );
+          stale.forEach((chunk, i) => fogChunkCache.set(chunk, decoded[i]));
+
+          if (stale.length > 0 || !sameWindow) {
+            const bounds = windowBounds(window);
+            const bitmap = await pixelsToBitmap(
+              stitchWindow(window, fogChunkCache.pixelsByKey()),
+              bounds.width,
+              bounds.height,
+            );
+            // Close the previous bitmap only once the new one is actually in
+            // hand — closing it eagerly before the fetch settles would leave
+            // a failed request having discarded the one usable bitmap this
+            // store had.
+            this.fogMaskBitmap?.close();
+            this.fogMaskBitmap = markRaw(bitmap);
+            this.fogMaskBounds = bounds;
+          }
+
+          this.fogWindow = window;
+          this.fogEtag = result.etag;
+          fogPerfStats.maskVersion = result.etag;
+        } else {
+          this.fogWindow = window;
+        }
+
         this.fogMaskError = null;
         useConnectionStatusStore().clear('fogMask');
+        succeeded = true;
       } catch (err) {
         if (isWorldNotFound(err)) {
           // Unlike a transient failure, this world is never going to start
@@ -1612,6 +1972,17 @@ export const useWorldStore = defineStore('world', {
         fogPerfStats.maskFetchMs = performance.now() - startedAt;
         fogPerfStats.maskFetchInFlight = false;
       }
+
+      // The camera may have left the window while this fetch was in flight
+      // (its own viewport request found the guard held and dropped out). Only
+      // after a success: a failing fetch must wait for the next poll, not
+      // spin.
+      if (succeeded && this.fogViewport) {
+        const world = this.worldRadius !== null ? worldChunkRange(this.worldRadius) : null;
+        if (this.fogWindow && !rangeContains(this.fogWindow, fogWindowFor(this.fogViewport, world, 0))) {
+          this.requestFogViewport(this.fogViewport);
+        }
+      }
     },
     /**
      * Demo mode's counterpart to `fetchFogMask` — there is no backend to
@@ -1627,7 +1998,7 @@ export const useWorldStore = defineStore('world', {
       // mask (generateCells' nested texel loop, then an OffscreenCanvas
       // PNG encode/decode round trip through convertToBlob/createImageBitmap)
       // is real synchronous+CPU work, not a network wait — measured at
-      // several *seconds* against DEMO_MASK_RADIUS on a loaded machine,
+      // several *seconds* on a loaded machine,
       // i.e. comparable to or longer than LIVE_POLL_MS itself. With no
       // guard, the interval fires again before the previous bake finishes,
       // so a second bake's cell loop runs concurrently with the first —
@@ -1649,14 +2020,16 @@ export const useWorldStore = defineStore('world', {
       fogPerfStats.maskFetchInFlight = true;
       const startedAt = performance.now();
       try {
-        const bitmap = await buildDemoFogMask(this.model);
+        const bounds = demoMaskBounds(this.model);
+        const bitmap = await buildDemoFogMask(this.model, bounds);
         if (!bitmap) return;
         // Recorded only once a bake actually produced a mask, so a bail-out
         // (no settlement yet) doesn't suppress the first real bake.
         this.demoFogSignature = signature;
         this.fogMaskBitmap?.close();
         this.fogMaskBitmap = markRaw(bitmap);
-        this.worldRadius = DEMO_MASK_RADIUS;
+        this.fogMaskBounds = bounds;
+        this.worldRadius = DEFAULT_GENERATION.worldRadius;
         fogPerfStats.maskVersion = 'demo';
       } finally {
         fogPerfStats.maskFetchMs = performance.now() - startedAt;

@@ -1,6 +1,7 @@
 {
   "title": "Nachrichten",
   "empty": "Noch keine Unterhaltungen — besuche das Profil eines Spielers, um ihm eine Nachricht zu senden.",
+  "backToGame": "← Zurück",
   "loadError": "Deine Nachrichten konnten nicht geladen werden.",
   "pager": {
     "previous": "Zurück",

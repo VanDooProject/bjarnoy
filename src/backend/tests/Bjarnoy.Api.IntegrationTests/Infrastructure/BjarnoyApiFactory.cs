@@ -1,3 +1,4 @@
+using System.Globalization;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Hosting;
 using Bjarnoy.Domain.World;
@@ -164,7 +165,7 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         int maxPlayers = 500,
         CancellationToken cancellationToken = default)
     {
-        var options = WorldGenerationOptions.ForSeed(seed ?? Random.Shared.Next()) with { Radius = radius };
+        var options = TestWorlds.For(seed ?? Random.Shared.Next(), radius);
         options.Validate();
 
         await using var scope = Services.CreateAsyncScope();
@@ -188,6 +189,21 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         builder.UseSetting($"{DatabaseOptions.SectionName}:Provider", _provider.ToString());
         builder.UseSetting($"{DatabaseOptions.SectionName}:ConnectionString", _connectionString);
         builder.UseSetting($"{DatabaseOptions.SectionName}:MigrateOnStartup", "false");
+
+        // Camp aggression is driven by hand in the tests that cover it (CampAggressionService.ProcessWorldAsync);
+        // the hosted scan would only race them on the test clock.
+        builder.UseSetting("CampAggression:Enabled", "false");
+        builder.UseSetting("RealmSweep:Enabled", "false");
+
+        // Same for the leaderboard poll: its real 60 s wall-clock timer can fire mid-test on a loaded machine,
+        // refresh a half-seeded world and stamp the watermark, so the test's explicit RefreshCurrentBoardsAsync
+        // is then skipped as "still fresh" (the fake clock has not moved) and the board misses entries.
+        builder.UseSetting("LeaderboardAggregation:Enabled", "false");
+
+        // The default world (MigrationCommand's --ensure-world, Program.cs's startup seeding) is otherwise
+        // generated at the production radius of 4000: minutes of every core, during which every other
+        // test's requests starve into HttpClient's 100 s timeout. The tests only need *a* world there.
+        builder.UseSetting(MigrationCommand.DefaultWorldRadiusKey, TestWorlds.MinimumRadius.ToString(CultureInfo.InvariantCulture));
 
         // A fixed key so tokens minted by one test are still valid tokens (not
         // that any test relies on that) and so the app has something to sign

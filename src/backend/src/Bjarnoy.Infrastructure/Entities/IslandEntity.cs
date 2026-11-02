@@ -1,3 +1,5 @@
+using Bjarnoy.Domain.World;
+
 namespace Bjarnoy.Infrastructure.Entities;
 
 /// <summary>
@@ -36,6 +38,34 @@ public class IslandEntity
     public List<HexPoint> StartPositions { get; set; } = [];
 
     /// <summary>
+    /// The distinct 64 x 64 fog chunks (<see cref="FogChunkLayout"/>) this island's land hexes fall in, computed at world
+    /// generation. An island counts as "seen" by a player when they have explored anything in one of these chunks — the
+    /// cutoff the camp endpoints use (<c>docs/design/wildlife-camps.md</c>). Empty for islands generated before the
+    /// column existed: their camps are simply not sent until the world is reseeded.
+    /// </summary>
+    public List<FogChunkCoord> FogChunks { get; set; } = [];
+
+    /// <summary>
+    /// <see cref="StartPositions"/> minus any that stands on a river hex. Worlds generated before start positions
+    /// avoided rivers still store such plots (a Longhouse on a wide river leaves a land army with no way home, so
+    /// every land dispatch fails); a filter here, rather than a migration, keeps them from ever being handed out or
+    /// founded on. Order is preserved.
+    /// </summary>
+    public List<HexPoint> FoundableStartPositions() => WithoutRiverHexes(StartPositions, RiverTiles);
+
+    /// <summary>The <paramref name="startPositions"/> not standing on any of <paramref name="riverTiles"/>, in order.</summary>
+    public static List<HexPoint> WithoutRiverHexes(List<HexPoint> startPositions, IReadOnlyCollection<RiverTileRecord> riverTiles)
+    {
+        if (riverTiles.Count == 0)
+        {
+            return startPositions;
+        }
+
+        var rivers = riverTiles.Select(t => (t.Q, t.R)).ToHashSet();
+        return [.. startPositions.Where(p => !rivers.Contains((p.Q, p.R)))];
+    }
+
+    /// <summary>
     /// This island's rivers, one entry per river tile — see
     /// <c>Bjarnoy.Domain.World.RiverGenerator</c>.
     /// </summary>
@@ -51,6 +81,19 @@ public class IslandEntity
     public List<RiverTileRecord> RiverTiles { get; set; } = [];
 
     /// <summary>
+    /// This island's bogland, one entry per bog hex (moss, lake water, shores, creeks, mouths) — see
+    /// <c>Bjarnoy.Domain.World.BogGenerator</c>.
+    /// </summary>
+    /// <remarks>
+    /// Persisted like <see cref="RiverTiles"/>: the bog is placed by a whole-island pass over the drainage network
+    /// (the through river, sinks, spawns, enclosed sea pockets) and is not derivable from the seed hex by hex. Its lake
+    /// and moss hexes are also the only place the game learns that a hex is <c>bog</c> or <c>lake</c> terrain (see
+    /// <c>WorldTerrain</c>). Empty for an island stored before bogs existed; a reseed adds them. Stored as a single
+    /// column, see <see cref="Persistence.BogTileListConverter"/> for the encoding.
+    /// </remarks>
+    public List<BogTileRecord> BogTiles { get; set; } = [];
+
+    /// <summary>
     /// This island's 7-hex giant features — see
     /// <c>Bjarnoy.Domain.World.GiantGenerator</c>.
     /// </summary>
@@ -64,6 +107,29 @@ public class IslandEntity
     /// <see cref="Persistence.GiantListConverter"/> for the encoding.
     /// </remarks>
     public List<GiantRecord> Giants { get; set; } = [];
+
+    /// <summary>
+    /// This island's wildlife camps — see <c>Bjarnoy.Domain.World.CampGenerator</c>.
+    /// </summary>
+    /// <remarks>
+    /// Persisted for the same reason <see cref="Giants"/> is: placement samples the whole
+    /// island (farthest-point over every candidate tile, rivers, giants) and camps are placed
+    /// before start positions, which they shape. Empty for an island stored before camps
+    /// existed; a reseed adds them. Stored as a single column, see
+    /// <see cref="Persistence.CampListConverter"/> for the encoding.
+    /// </remarks>
+    public List<CampRecord> Camps { get; set; } = [];
+
+    /// <summary>
+    /// This wasted island's Utgard wall rings — see <c>Bjarnoy.Domain.World.EndgameGenerator</c>. A wall hex's level changes
+    /// as siege engines breach it, so the column is the live state, not just the generated one. Empty for every green island, for a
+    /// wasted island without Utgard and for an island stored before the endgame existed (a reseed adds them). See
+    /// <see cref="Persistence.UtgardWallListConverter"/> for the encoding.
+    /// </summary>
+    public List<UtgardWallRecord> UtgardWalls { get; set; } = [];
+
+    /// <summary>This wasted island's Jötun watchtowers — empty like <see cref="UtgardWalls"/>. See <see cref="Persistence.JotunTowerListConverter"/>.</summary>
+    public List<JotunTowerRecord> JotunTowers { get; set; } = [];
 
     /// <summary>
     /// True for an island generated from the wasted-island terrain layer —
@@ -84,6 +150,58 @@ public class IslandEntity
 /// </summary>
 public readonly record struct GiantRecord(int Q, int R, string Family, int Orientation);
 
+/// <summary>
+/// A stored wildlife camp. <c>Orientation</c> is the domain's <c>TileOrientation</c> by its plain
+/// numeric index, like <see cref="GiantRecord"/>. Strength is not stored: it follows from the
+/// family (<c>CampFamilies</c>).
+/// </summary>
+public readonly record struct CampRecord(int Q, int R, string Family, int Level, int Orientation);
+
+/// <summary>
+/// A stored Utgard wall hex. <c>Ring</c>, <c>Piece</c> and <c>Dir</c> are the domain's <c>UtgardRing</c>, <c>PalisadePiece</c> and
+/// <c>TileOrientation</c> values by their plain numeric index, like <see cref="GiantRecord"/>.
+/// </summary>
+public readonly record struct UtgardWallRecord(int Q, int R, int Ring, int Piece, int Dir, bool IsGate, int Level);
+
+/// <summary>A stored Jötun watchtower. <c>Orientation</c> is the domain's <c>TileOrientation</c> by its plain numeric index.</summary>
+public readonly record struct JotunTowerRecord(int Q, int R, int Orientation);
+
+/// <summary>
+/// A stored bog hex. <c>Kind</c>, <c>InDirections</c>, <c>OutDirection</c> and <c>WaterEdges</c> are the domain's
+/// <c>BogTileKind</c>/<c>TileOrientation</c> values by their plain numeric index, like <see cref="RiverTileRecord"/>.
+/// </summary>
+public readonly record struct BogTileRecord(
+    int Q, int R, int Kind, IReadOnlyList<int> InDirections, int? OutDirection, IReadOnlyList<int> WaterEdges)
+{
+    public bool Equals(BogTileRecord other) =>
+        Q == other.Q
+        && R == other.R
+        && Kind == other.Kind
+        && OutDirection == other.OutDirection
+        && InDirections.SequenceEqual(other.InDirections)
+        && WaterEdges.SequenceEqual(other.WaterEdges);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Q);
+        hash.Add(R);
+        hash.Add(Kind);
+        hash.Add(OutDirection);
+        foreach (var direction in InDirections)
+        {
+            hash.Add(direction);
+        }
+
+        foreach (var direction in WaterEdges)
+        {
+            hash.Add(direction);
+        }
+
+        return hash.ToHashCode();
+    }
+}
+
 /// <summary>A stored hex coordinate. Kept separate from the domain's
 /// <c>HexCoord</c> so persistence concerns never leak into the game rules.</summary>
 public readonly record struct HexPoint(int Q, int R);
@@ -96,12 +214,14 @@ public readonly record struct HexPoint(int Q, int R);
 /// plain numeric index, not the enums themselves, so this type (and its
 /// converter) never has to change shape when the domain enums do.
 /// </summary>
-public readonly record struct RiverTileRecord(int Q, int R, int Shape, IReadOnlyList<int> InDirections, int? OutDirection)
+public readonly record struct RiverTileRecord(
+    int Q, int R, int Shape, IReadOnlyList<int> InDirections, int? OutDirection, int Width = 0)
 {
     public bool Equals(RiverTileRecord other) =>
         Q == other.Q
         && R == other.R
         && Shape == other.Shape
+        && Width == other.Width
         && OutDirection == other.OutDirection
         && InDirections.SequenceEqual(other.InDirections);
 
@@ -111,6 +231,7 @@ public readonly record struct RiverTileRecord(int Q, int R, int Shape, IReadOnly
         hash.Add(Q);
         hash.Add(R);
         hash.Add(Shape);
+        hash.Add(Width);
         hash.Add(OutDirection);
         foreach (var direction in InDirections)
         {

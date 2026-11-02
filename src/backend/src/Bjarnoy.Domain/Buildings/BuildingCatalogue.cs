@@ -10,7 +10,7 @@ namespace Bjarnoy.Domain.Buildings;
 /// <remarks>
 /// Cost, production and build time are all geometric in the level (the
 /// Travian shape): cost ×1.30 per level (Longhouse ×1.34), production ×1.20,
-/// build time ×1.33 (Longhouse ×1.30). Because cost outgrows output, a
+/// build time ×1.33 (the Longhouse starts at 1.5 min, so level 2 takes about 2). Because cost outgrows output, a
 /// producer's payback time rises about 8% per level — the next level is
 /// always worth building, just less obviously. Buildings cost no iron. Each
 /// building has its own maximum level (<see cref="MaxLevelFor"/>). The
@@ -32,29 +32,78 @@ public static class BuildingCatalogue
 
     private const double BuildTimeGrowth = 1.33;
 
-    private const double LonghouseBuildTimeGrowth = 1.30;
-
     /// <summary>
     /// The highest level <paramref name="type"/> can be built to
     /// (<c>docs/design/economy.md</c> §4): Longhouse 30; resource producers and
-    /// Storage House 25; military/civic buildings and the mills 20; Tower and
-    /// Great Storehouse 10; shrines 5. Unknown/removed types return 0.
+    /// Storage House 25 (the bog-ore works too); military/civic buildings and the mills (the Hammerschmiede too) 20; Tower and
+    /// Great Storehouse 10; shrines 5; Palisade and Palisade Gate 3; Bridge 4; Siege Workshop 5. Unknown/removed types return 0.
     /// </summary>
     public static int MaxLevelFor(BuildingType type) => type switch
     {
         BuildingType.Longhouse => 30,
         BuildingType.Lumberjack or BuildingType.Quarry or BuildingType.ClayBrickworks
             or BuildingType.Farm or BuildingType.PumpkinFarm or BuildingType.FishingHut
-            or BuildingType.FisherHut or BuildingType.StorageHouse => 25,
+            or BuildingType.ReindeerHerder or BuildingType.BogOreWorks or BuildingType.StorageHouse => 25,
         BuildingType.Barracks or BuildingType.ArcheryRange or BuildingType.Dockyard
             or BuildingType.TownSquare or BuildingType.CartWorkshop or BuildingType.DruidHut
             or BuildingType.Smithy or BuildingType.Meadery or BuildingType.Sawmill
-            or BuildingType.CropMill => 20,
+            or BuildingType.CropMill or BuildingType.Hammerschmiede => 20,
         BuildingType.Tower or BuildingType.GreatStorehouse => 10,
         BuildingType.ShrineOfThor or BuildingType.ShrineOfFreyja
-            or BuildingType.ShrineOfUllr or BuildingType.ShrineOfNjord => 5,
+            or BuildingType.ShrineOfUllr or BuildingType.ShrineOfNjord
+            or BuildingType.OdinStatue => 5,
+        BuildingType.Palisade or BuildingType.PalisadeGate => 3,
+        BuildingType.Bridge => 4,
+        BuildingType.SiegeWorkshop => 5,
         _ => 0,
     };
+
+    /// <summary>The shortest time a building outside the realm takes from its top level to gone in a 1x world.</summary>
+    public static readonly TimeSpan MinDecayTime = TimeSpan.FromDays(7);
+
+    /// <summary>The longest time a building outside the realm takes from its top level to gone in a 1x world.</summary>
+    public static readonly TimeSpan MaxDecayTime = TimeSpan.FromDays(30);
+
+    /// <summary>The world speed at and above which the decay bounds stop shrinking (the 100x bounds hold).</summary>
+    public const double DecayBoundsMaxSpeed = 100;
+
+    /// <summary>
+    /// The shortest and longest time to gone in a world running at <paramref name="speedFactor"/>: on a log scale of speed
+    /// (<c>t = clamp(ln s / ln 100, 0, 1)</c>) the minimum falls from 7 days at 1x to 1 hour at 100x
+    /// (<c>168^(1-t)</c> hours) and the maximum from 30 days to 24 hours (<c>720^(1-t) * 24^t</c> hours).
+    /// </summary>
+    public static (TimeSpan Min, TimeSpan Max) DecayBounds(double speedFactor)
+    {
+        var t = speedFactor <= 1 ? 0.0 : Math.Min(1.0, Math.Log(speedFactor) / Math.Log(DecayBoundsMaxSpeed));
+        return (
+            TimeSpan.FromHours(Math.Pow(168, 1 - t)),
+            TimeSpan.FromHours(Math.Pow(720, 1 - t) * Math.Pow(24, t)));
+    }
+
+    /// <summary>
+    /// How long a building with <paramref name="maxLevel"/> levels takes from its top level to gone once the realm no longer
+    /// reaches it (<c>docs/design/economy.md</c> section 5): <paramref name="maxLevel"/> x 24 hours divided by the world's
+    /// <paramref name="speedFactor"/>, clamped to <see cref="DecayBounds"/> of that speed (7 to 30 days at 1x).
+    /// </summary>
+    public static TimeSpan DecayTimeToGone(int maxLevel, double speedFactor = 1.0)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxLevel, 1);
+        var (min, max) = DecayBounds(speedFactor);
+        var time = TimeSpan.FromHours(24.0 * maxLevel / Math.Max(speedFactor, 1e-9));
+        return time < min ? min : time > max ? max : time;
+    }
+
+    /// <summary>The time a <paramref name="type"/> outside the realm takes from its top level to gone (<see cref="DecayTimeToGone(int)"/> of its max level).</summary>
+    public static TimeSpan DecayTimeToGone(BuildingType type, double speedFactor = 1.0) => DecayTimeToGone(MaxLevelFor(type), speedFactor);
+
+    /// <summary>One level of a building with <paramref name="maxLevel"/> levels is lost every this long outside the realm: its <see cref="DecayTimeToGone(int)"/> divided by <paramref name="maxLevel"/>.</summary>
+    public static TimeSpan DecayInterval(int maxLevel, double speedFactor = 1.0) => DecayTimeToGone(maxLevel, speedFactor) / maxLevel;
+
+    /// <summary>One level of a <paramref name="type"/> outside the realm is lost every this long (<see cref="DecayInterval(int)"/> of its max level).</summary>
+    public static TimeSpan DecayInterval(BuildingType type, double speedFactor = 1.0) => DecayInterval(MaxLevelFor(type), speedFactor);
+
+    /// <summary>Whether a <paramref name="type"/> outside the realm decays: every building does except the Longhouse, which makes the realm.</summary>
+    public static bool Decays(BuildingType type) => type != BuildingType.Longhouse;
 
     /// <summary>What a settlement can store before it builds a storage house.</summary>
     public static ResourceAmounts BaseStorageCapacity { get; } = ResourceAmounts.Uniform(500);
@@ -95,10 +144,9 @@ public static class BuildingCatalogue
     /// building each; the late game comes in tiers (LH 15, 20, 25).
     /// </para>
     /// <para>
-    /// Farm stays at LH 1 for now: the Reindeer Herder that replaces it as the
-    /// starting food building arrives in a later change, which moves Farm to
-    /// LH 4. Pumpkin Farm is at LH 4 already and stays soil-gated (see
-    /// <see cref="Settlement.PlanBuild"/>'s islandSoil parameter).
+    /// The Reindeer Herder is the starting food building (LH 1). Farm and Pumpkin
+    /// Farm both unlock at LH 4 behind a level-3 Herder; Pumpkin Farm stays
+    /// soil-gated (see <see cref="Settlement.PlanBuild"/>'s islandSoil parameter).
     /// </para>
     /// </remarks>
     private static readonly IReadOnlyDictionary<BuildingType, int> UnlockLevels =
@@ -108,13 +156,17 @@ public static class BuildingCatalogue
             [BuildingType.Quarry] = 1,
             [BuildingType.ClayBrickworks] = 1,
             [BuildingType.StorageHouse] = 1,
-            [BuildingType.Farm] = 1,
+            [BuildingType.ReindeerHerder] = 1,
             [BuildingType.FishingHut] = 2,
-            [BuildingType.FisherHut] = 2,
             [BuildingType.Tower] = 3,
+            [BuildingType.Farm] = 4,
             [BuildingType.PumpkinFarm] = 4,
             [BuildingType.Barracks] = 5,
+            [BuildingType.BogOreWorks] = 3,
             [BuildingType.TownSquare] = 6,
+            [BuildingType.Palisade] = 7,
+            [BuildingType.PalisadeGate] = 7,
+            [BuildingType.Bridge] = 7,
             [BuildingType.Dockyard] = 8,
             [BuildingType.ArcheryRange] = 9,
             [BuildingType.CartWorkshop] = 10,
@@ -122,13 +174,26 @@ public static class BuildingCatalogue
             [BuildingType.DruidHut] = 12,
             [BuildingType.Smithy] = 15,
             [BuildingType.GreatStorehouse] = 15,
+            [BuildingType.SiegeWorkshop] = 18,
             [BuildingType.Sawmill] = 20,
             [BuildingType.CropMill] = 20,
+            [BuildingType.Hammerschmiede] = 20,
             [BuildingType.ShrineOfUllr] = 25,
             [BuildingType.ShrineOfFreyja] = 25,
             [BuildingType.ShrineOfNjord] = 25,
             [BuildingType.ShrineOfThor] = 25,
+            [BuildingType.OdinStatue] = 25,
         };
+
+    /// <summary>
+    /// Buildings that can no longer be placed anew while their type, art and numbers stay: the Quarry is switched off for now.
+    /// Quarries already standing (or queued) in a saved world keep producing and upgrading —
+    /// <see cref="Settlement.PlanBuild"/> only refuses a level-1 order (<see cref="BuildRejection.NewPlacementDisabled"/>).
+    /// </summary>
+    public static IReadOnlySet<BuildingType> NewPlacementDisabled { get; } = new HashSet<BuildingType>
+    {
+        BuildingType.Quarry,
+    };
 
     /// <summary>
     /// The Longhouse level <paramref name="type"/> unlocks at (1 for the
@@ -150,17 +215,23 @@ public static class BuildingCatalogue
         BuildingType.Lumberjack,
         BuildingType.Quarry,
         BuildingType.ClayBrickworks,
+        BuildingType.ReindeerHerder,
         BuildingType.Farm,
         BuildingType.PumpkinFarm,
         BuildingType.FishingHut,
-        BuildingType.FisherHut,
+        BuildingType.BogOreWorks,
     };
 
     /// <summary>
-    /// A settlement may only place an additional storage house once one
-    /// already stands at this level.
+    /// What a settlement must already hold before it may place one more storage
+    /// house, given it has <paramref name="existing"/> (standing plus queued) of
+    /// them: <c>min(existing, 4)</c> storage houses at level
+    /// <c>min(10 + 5·(existing − 1), 25)</c>. So 1 house at L10 unlocks the
+    /// second, 2 at L15 the third, 3 at L20 the fourth, and four maxed (L25)
+    /// houses unlock any number more. Returns <c>(0, 0)</c> for the first house.
     /// </summary>
-    public const int AdditionalStorageHouseLevel = 10;
+    public static (int Count, int Level) AdditionalStorageHouseRequirement(int existing) =>
+        existing < 1 ? (0, 0) : (Math.Min(existing, 4), Math.Min(10 + 5 * (existing - 1), 25));
 
     /// <summary>
     /// The Longhouse level needed to build <paramref name="type"/> at
@@ -186,15 +257,14 @@ public static class BuildingCatalogue
     /// Every entry must be met, not any one of them. The lines are: Tower →
     /// Barracks → Archery Range → Weaponsmith (Smithy) → Shrine of Thor for
     /// the military; Fishing Hut → Dockyard → Shrine of Njörd for the water;
-    /// Lumberjack → Sawmill → Shrine of Ullr and Farm → Meadery / Crop Mill →
+    /// Lumberjack → Sawmill → Shrine of Ullr and Reindeer Herder → Farm → Meadery / Crop Mill →
     /// Shrine of Freyja for the land; Town Square → Cart Workshop / Druid Hut
     /// for the civic line; Storage House → Great Storehouse for storage. See
     /// <c>docs/design/economy.md</c> §5.
     /// </para>
     /// <para>
-    /// Storage House, Quarry, Clay Brickworks, Lumberjack, Tower, Town Square
-    /// and Pumpkin Farm gate nothing on their own way in (Pumpkin Farm stays
-    /// soil-gated only): Quarry needs a Mountain hex, and
+    /// Storage House, Quarry, Clay Brickworks, Lumberjack, Reindeer Herder,
+    /// Tower and Town Square need nothing standing before them: Quarry needs a Mountain hex, and
     /// <see cref="World.WorldGenerator"/> does not guarantee one within reach
     /// of a starting position — anything behind a Quarry would be unreachable
     /// for an unlucky map roll rather than merely expensive.
@@ -203,20 +273,31 @@ public static class BuildingCatalogue
     private static readonly IReadOnlyDictionary<BuildingType, IReadOnlyList<BuildingPrerequisite>> PrerequisiteTable =
         new Dictionary<BuildingType, IReadOnlyList<BuildingPrerequisite>>
         {
+            [BuildingType.Farm] = [new(BuildingType.ReindeerHerder, 3)],
+            [BuildingType.PumpkinFarm] = [new(BuildingType.ReindeerHerder, 3)],
             [BuildingType.Barracks] = [new(BuildingType.Tower, 3)],
+            [BuildingType.Palisade] = [new(BuildingType.Tower, 5)],
+            [BuildingType.PalisadeGate] = [new(BuildingType.Tower, 5)],
+            [BuildingType.Bridge] = [new(BuildingType.TownSquare, 1)],
             [BuildingType.Dockyard] = [new(BuildingType.FishingHut, 5)],
             [BuildingType.ArcheryRange] = [new(BuildingType.Barracks, 5)],
+            [BuildingType.SiegeWorkshop] = [new(BuildingType.ArcheryRange, 3)],
             [BuildingType.CartWorkshop] = [new(BuildingType.TownSquare, 3)],
+            [BuildingType.BogOreWorks] = [new(BuildingType.ClayBrickworks, 3)],
             [BuildingType.Meadery] = [new(BuildingType.Farm, 5)],
             [BuildingType.DruidHut] = [new(BuildingType.TownSquare, 5)],
             [BuildingType.Smithy] = [new(BuildingType.Barracks, 10)],
             [BuildingType.GreatStorehouse] = [new(BuildingType.StorageHouse, 15)],
             [BuildingType.Sawmill] = [new(BuildingType.Lumberjack, 10)],
             [BuildingType.CropMill] = [new(BuildingType.Farm, 10)],
+            [BuildingType.Hammerschmiede] = [new(BuildingType.BogOreWorks, 10)],
             [BuildingType.ShrineOfUllr] = [new(BuildingType.Sawmill, 5)],
             [BuildingType.ShrineOfFreyja] = [new(BuildingType.CropMill, 5)],
             [BuildingType.ShrineOfNjord] = [new(BuildingType.Dockyard, 10)],
             [BuildingType.ShrineOfThor] = [new(BuildingType.Smithy, 5)],
+            // A settlement holds only one shrine, so Odin cannot ask for
+            // another one as a feeder; the Druid Hut is the civic line's end.
+            [BuildingType.OdinStatue] = [new(BuildingType.DruidHut, 10)],
         };
 
     /// <summary>
@@ -248,10 +329,12 @@ public static class BuildingCatalogue
             BuildingType.Longhouse => Longhouse(level),
             BuildingType.Lumberjack => Producer(type, level, Forest, new ResourceAmounts(Wood: 40, 0, 0, 0)),
             BuildingType.Quarry => Producer(type, level, Ridge, new ResourceAmounts(0, Stone: 40, 0, 0)),
-            // Farm is the settlement's always-available staple, buildable on
-            // any island regardless of soil. It stays at LH 1 until the
-            // Reindeer Herder replaces it as the starting food building (a
-            // later change moves Farm to LH 4).
+            // The starting food building: any grass, any island, LH 1. No
+            // terrain boost, like Farm (a herd is not a concentrating resource).
+            BuildingType.ReindeerHerder => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 40, 0)),
+            // Buildable on any island regardless of soil, from LH 4 behind a
+            // level-3 Reindeer Herder (it and PumpkinFarm are one tech-tree
+            // card, split into two types only by their soil rule).
             BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 40, 0)),
             BuildingType.StorageHouse => StorageHouse(level),
             BuildingType.Tower => Tower(level),
@@ -268,11 +351,14 @@ public static class BuildingCatalogue
             BuildingType.ShrineOfFreyja => Shrine(type, level),
             BuildingType.ShrineOfUllr => Shrine(type, level),
             BuildingType.ShrineOfNjord => Shrine(type, level),
+            BuildingType.OdinStatue => Shrine(type, level),
             BuildingType.GreatStorehouse => GreatStorehouse(level),
+            BuildingType.Palisade or BuildingType.PalisadeGate => PalisadeHex(type, level),
+            BuildingType.Bridge => BridgeHex(level),
             BuildingType.ArcheryRange => ArcheryRange(level),
+            BuildingType.SiegeWorkshop => SiegeWorkshop(level),
             BuildingType.Dockyard => Dockyard(level),
             BuildingType.Barracks => Barracks(level),
-            BuildingType.FisherHut => FisherHut(level),
             // Grass qualifies terrain-wise, but only a hex that is itself a
             // Straight/Bend river tile is actually buildable — see
             // BuildingDefinition.RequiresRiverShape. Unlocks at LH 20 behind
@@ -312,7 +398,21 @@ public static class BuildingCatalogue
                 Producer(type, level, SandOrGrass, ResourceAmounts.Zero, SmallBuildingCost, 4),
             BuildingType.DruidHut => DruidHut(level),
             BuildingType.CartWorkshop => CartWorkshop(level),
-            BuildingType.ClayBrickworks => Producer(type, level, Grass, new ResourceAmounts(0, Stone: 36, 0, 0)),
+            // The start's stone source: on plain bog moss (the landing spots guarantee bog in reach), not on grass.
+            BuildingType.ClayBrickworks =>
+                Producer(type, level, Bog, new ResourceAmounts(0, Stone: 36, 0, 0))
+                    with { RequiresBogKind = PlainBogOnly },
+            // Iron, on plain bog moss only (not a shore, mouth, creek or lake). Its own P1 is tuned in the Economy lab
+            // (docs/design/economy.md section 8); terrain boost in Boosts, the Hammerschmiede's radius boost below.
+            BuildingType.BogOreWorks =>
+                Producer(type, level, Bog, new ResourceAmounts(0, 0, 0, Iron: BogOreWorksIronAtLevelOne))
+                    with { RequiresBogKind = PlainBogOnly },
+            // A hammer mill on a bog creek. Like the Sawmill it produces nothing and raises the producers within its range
+            // (RadiusBoostTargets): the bog-ore works. TODO(art): bog-creek Hammerschmiede - for now the frontend draws the
+            // river hammer mill on the creek.
+            BuildingType.Hammerschmiede =>
+                Producer(type, level, Bog, ResourceAmounts.Zero, SmallBuildingCost, 4)
+                    with { RequiresBogKind = CreekOnly },
             _ => null,
         };
 
@@ -393,7 +493,8 @@ public static class BuildingCatalogue
     {
         ArgumentNullException.ThrowIfNull(buildings);
 
-        var placed = buildings.Where(b => b.Level >= 1).ToList();
+        // A building outside the realm has no function: it neither produces nor boosts nor stores (PlacedBuilding.IsFunctioning).
+        var placed = buildings.Where(b => b.Level >= 1 && b.IsFunctioning).ToList();
 
         // Radius-boost sources standing among these buildings, with their
         // level's percent/range already resolved once rather than per
@@ -465,6 +566,7 @@ public static class BuildingCatalogue
         BuildingType.ShrineOfFreyja => GodType.Freyja,
         BuildingType.ShrineOfUllr => GodType.Ullr,
         BuildingType.ShrineOfNjord => GodType.Njord,
+        BuildingType.OdinStatue => GodType.Odin,
         _ => null,
     };
 
@@ -473,6 +575,19 @@ public static class BuildingCatalogue
     private static readonly IReadOnlySet<Terrain> Grass = new HashSet<Terrain> { Terrain.Grass };
     private static readonly IReadOnlySet<Terrain> SandOrGrass = new HashSet<Terrain> { Terrain.Sand, Terrain.Grass };
     private static readonly IReadOnlySet<Terrain> Sea = new HashSet<Terrain> { Terrain.Sea };
+    private static readonly IReadOnlySet<Terrain> Bog = new HashSet<Terrain> { Terrain.Bog };
+
+    /// <summary>Bog and lake hexes: what boosts a bog-ore works (the bog around it, its creeks and lakes) and a lake fishing hut (the lake).</summary>
+    private static readonly IReadOnlySet<Terrain> BogOrLake = new HashSet<Terrain> { Terrain.Bog, Terrain.Lake };
+
+    private static readonly IReadOnlySet<Terrain> SeaOrLake = new HashSet<Terrain> { Terrain.Sea, Terrain.Lake };
+
+    private static readonly IReadOnlySet<BogTileKind> PlainBogOnly = new HashSet<BogTileKind> { BogTileKind.Bog };
+    private static readonly IReadOnlySet<BogTileKind> CreekOnly = new HashSet<BogTileKind> { BogTileKind.Creek };
+    private static readonly IReadOnlySet<BogTileKind> HalfShoreOnly = new HashSet<BogTileKind> { BogTileKind.Half };
+
+    /// <summary>Iron per hour of a level-1 bog-ore works (<c>docs/design/economy.md</c> section 8); the Economy lab numbers are in that page.</summary>
+    public const double BogOreWorksIronAtLevelOne = 20;
 
     /// <summary>
     /// Terrain-bound producers boosted by their matching neighbour terrain.
@@ -488,7 +603,10 @@ public static class BuildingCatalogue
             // The hut itself already stands on coastal water; more open sea
             // around it (rather than the land it backs onto) is what makes a
             // fishing spot better.
-            [BuildingType.FishingHut] = new(Sea, PerTilePercent: 0.10, CapPercent: 0.50),
+            // A lake Fishing Hut (on a half shore) counts the lake hexes around it the way the coastal one counts sea.
+            [BuildingType.FishingHut] = new(SeaOrLake, PerTilePercent: 0.10, CapPercent: 0.50),
+            // The bog around a bog-ore works: any bog hex (moss, shore, creek, spring, mouth) or lake water.
+            [BuildingType.BogOreWorks] = new(BogOrLake, PerTilePercent: 0.10, CapPercent: 0.50),
             // Sawmill no longer has an entry here — it produces nothing of
             // its own to boost with terrain any more, see RadiusBoostTargets
             // below for its replacement mechanic (boosting Lumberjack
@@ -509,6 +627,7 @@ public static class BuildingCatalogue
         {
             [BuildingType.Sawmill] = new HashSet<BuildingType> { BuildingType.Lumberjack },
             [BuildingType.CropMill] = new HashSet<BuildingType> { BuildingType.Farm },
+            [BuildingType.Hammerschmiede] = new HashSet<BuildingType> { BuildingType.BogOreWorks },
         };
 
     /// <summary>
@@ -604,7 +723,7 @@ public static class BuildingCatalogue
         Type = BuildingType.Longhouse,
         Level = level,
         Cost = new ResourceAmounts(Wood: 120, Stone: 100, Food: 60, Iron: 0) * CostFactor(level, LonghouseCostGrowth),
-        BuildDuration = Duration(3, level, LonghouseBuildTimeGrowth),
+        BuildDuration = Duration(1.5, level),
         // The anchor feeds its own settlement a little, so a new holding is
         // never completely stalled. Linear in level (unlike every other
         // producer): +15 wood, +12 stone, +15 food, +2 iron per level.
@@ -641,7 +760,9 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 120, Stone: 200, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(8, level),
-        AllowedTerrain = SandOrGrass,
+        // Stands on grass, sand, forest or plain bog moss (the palisade's rule); the tower replaces the tile under it.
+        AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Sand, Terrain.Forest },
+        AlsoOnBogKinds = PlainBogOnly,
         // Unlocks at LH 3, later than the first producers on purpose: a tower
         // extends the realm, so opening it at the very first longhouse level
         // made expansion the obvious first move rather than a decision. It is
@@ -667,21 +788,8 @@ public static class BuildingCatalogue
         BuildDuration = Duration(3, level),
         ProductionPerHour = ProductionFor(new ResourceAmounts(0, 0, Food: 40, 0), level),
         RequiresCoastalWater = true,
-    };
-
-    /// <summary>
-    /// A second, later coastal food producer alongside <see cref="FishingHut"/> —
-    /// same shape (RequiresCoastalWater, the hex under it stays plain
-    /// <see cref="World.Terrain.Sea"/>), just its own cost/production tier.
-    /// </summary>
-    private static BuildingDefinition FisherHut(int level) => new()
-    {
-        Type = BuildingType.FisherHut,
-        Level = level,
-        Cost = LevelOneProducerCost * CostFactor(level),
-        BuildDuration = Duration(3, level),
-        ProductionPerHour = ProductionFor(new ResourceAmounts(0, 0, Food: 42, 0), level),
-        RequiresCoastalWater = true,
+        // Also on a lake's half shore (three water edges), drawn with the lake art.
+        LakeShoreKinds = HalfShoreOnly,
     };
 
     /// <summary>
@@ -745,6 +853,53 @@ public static class BuildingCatalogue
     };
 
     /// <summary>
+    /// One hex of the wall (<c>docs/design/economy.md</c> section 5), the same definition for the plain palisade and the gate:
+    /// 40 wood and 10 stone at level 1, 2 minutes, then the standard growth (cost x1.30, time x1.33 per level), three levels. It stands
+    /// on grass, forest, sand or plain bog moss, or as the wall's sea end on a coastal-water hex (<see cref="BuildingDefinition.AlsoOnCoastalWater"/>;
+    /// the gate is refused there by <see cref="Palisades.PalisadeRules"/>). Unlocks at LH 7 behind a level-5 Tower; no production,
+    /// storage or claim of its own.
+    /// </summary>
+    // TODO(docs/design/economy.md section 5): fire takes a level off a wall hex at a time until it is gone; nothing burns walls yet.
+    private static BuildingDefinition PalisadeHex(BuildingType type, int level) => new()
+    {
+        Type = type,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 40, Stone: 10, Food: 0, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(2, level),
+        AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Forest, Terrain.Sand },
+        AlsoOnCoastalWater = true,
+        AlsoOnBogKinds = PlainBogOnly,
+    };
+
+    /// <summary>
+    /// Wood, stone, food, iron and build minutes of each bridge level, spelled out per level (no cost growth): wood-heavy, stone from
+    /// level 3, no iron (<c>docs/design/economy.md</c> section 5).
+    /// </summary>
+    private static readonly (ResourceAmounts Cost, TimeSpan Duration)[] BridgeLevels =
+    [
+        (new ResourceAmounts(Wood: 120, Stone: 0, Food: 20, Iron: 0), TimeSpan.FromMinutes(10)),
+        (new ResourceAmounts(Wood: 220, Stone: 0, Food: 30, Iron: 0), TimeSpan.FromMinutes(20)),
+        (new ResourceAmounts(Wood: 380, Stone: 160, Food: 40, Iron: 0), TimeSpan.FromMinutes(45)),
+        (new ResourceAmounts(Wood: 660, Stone: 340, Food: 60, Iron: 0), TimeSpan.FromMinutes(90)),
+    ];
+
+    /// <summary>
+    /// The bridge over a wide river hex (<c>docs/design/economy.md</c> section 5): it stands on the river tile itself (grass, forest or
+    /// sand under it), on a Straight, Bend or Bend60 tile only (<see cref="BuildingDefinition.RequiresRiverShape"/>; any river art
+    /// variant, the bridge swaps it for the plain channel). <see cref="Settlement.PlanBuild"/> additionally requires the tile to be a wide
+    /// river and the island not wasted. Unlocks at LH 7 behind a level-1 Town Square; no production, storage or claim of its own.
+    /// </summary>
+    private static BuildingDefinition BridgeHex(int level) => new()
+    {
+        Type = BuildingType.Bridge,
+        Level = level,
+        Cost = BridgeLevels[level - 1].Cost,
+        BuildDuration = BridgeLevels[level - 1].Duration,
+        AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Forest, Terrain.Sand },
+        RequiresRiverShape = SawmillRiverShapes,
+    };
+
+    /// <summary>
     /// A late-game storage tier (LH 15, 10 levels) behind a level-15
     /// <see cref="BuildingType.StorageHouse"/> (see
     /// <see cref="Settlement.PlanBuild"/>'s
@@ -781,15 +936,27 @@ public static class BuildingCatalogue
         // Archery Range), behind a level-5 Barracks.
     };
 
+    /// <summary>
+    /// Trains the siege engines, catapult and battering ram (<see cref="Units.UnitDefinition.RequiredBuildingType"/>); the ram is the only engine that
+    /// breaches walls (<c>docs/design/economy.md</c> section 5). Five levels, no production, storage or combat bonus of its own. The tunable defaults
+    /// mirror <see cref="ArcheryRange"/> one tier up: wood and stone costs about 1.6 times higher (buildings cost no iron), a slightly longer build.
+    /// </summary>
+    private static BuildingDefinition SiegeWorkshop(int level) => new()
+    {
+        Type = BuildingType.SiegeWorkshop,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 220, Stone: 160, Food: 0, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(10, level),
+        AllowedTerrain = Grass,
+    };
+
     // Same shape as FishingHut: RequiresCoastalWater rather than
     // AllowedTerrain, the hex under it stays Terrain.Sea. No production or
     // storage of its own — it trains the ship roster in place of the
     // Longhouse (see Units.UnitDefinition.RequiredBuildingType).
     //
-    // Deferred follow-up, not implemented here: ships departing a fleet
-    // should render from the Dockyard's own hex rather than the settlement
-    // centre — that needs an Army/pathing rendering change out of scope for
-    // this pass.
+    // When the settlement centre is inland, fleets depart from and return to
+    // the Dockyard's hex (see Army.FleetAnchor).
     private static BuildingDefinition Dockyard(int level) => new()
     {
         Type = BuildingType.Dockyard,
@@ -852,7 +1019,7 @@ public static class BuildingCatalogue
     };
 
     /// <summary>
-    /// Trains the civilian Provisioner/SettlerCrew half of the roster in
+    /// Trains the civilian Provisioner/Settler half of the roster in
     /// place of the Longhouse (see
     /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>) — the basic
     /// melee/archer/ship split's shape, applied to the civilian line.

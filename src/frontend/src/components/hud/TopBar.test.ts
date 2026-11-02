@@ -17,6 +17,9 @@ import TopBar from './TopBar.vue';
 import { useWorldStore } from '../../stores/world';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
+import { isHudBarAtBottom, isHudRail } from '../../composables/hudSettlementBubbleState';
+import { hudBarHeightPx, hudRailHeightPx, hudRailWidthPx } from '../../composables/hudBarHeight';
+import { HUD_COMPACT_QUERY, HUD_RAIL_QUERY } from '../../lib/breakpoints';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 
@@ -35,15 +38,20 @@ function mountTopBar(props?: Record<string, unknown>, slots?: Record<string, str
 // does it now.
 const DRAWER_SLOT = { drawer: '<div class="fake-drawer-content" />' };
 
-function stubCompactMediaQuery(matches: boolean) {
+// Answers per query, like a real browser: the compact query and the landscape
+// rail query are separate facts (a portrait phone is compact but not rail).
+function stubMediaQueries(matching: string[]) {
   vi.stubGlobal(
     'matchMedia',
-    vi.fn().mockReturnValue({
-      matches,
+    vi.fn().mockImplementation((query: string) => ({
+      matches: matching.includes(query),
       addEventListener: () => {},
       removeEventListener: () => {},
-    }),
+    })),
   );
+}
+function stubCompactMediaQuery(matches: boolean) {
+  stubMediaQueries(matches ? [HUD_COMPACT_QUERY] : []);
 }
 
 describe('TopBar', () => {
@@ -262,6 +270,259 @@ describe('TopBar', () => {
 
       expect(wrapper.find('.settlement-bubble').exists()).toBe(false);
       wrapper.unmount();
+    });
+  });
+  // Landscape rail: a phone held sideways is compact AND short-landscape —
+  // the full-width bar becomes a floating column and the drawer a side sheet.
+  describe('landscape rail (compact + rail media queries matched)', () => {
+    beforeEach(() => {
+      stubMediaQueries([HUD_COMPACT_QUERY, HUD_RAIL_QUERY]);
+    });
+
+    it('applies the rail class when both queries match and a drawer slot exists', async () => {
+      const wrapper = mountTopBar(undefined, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('.hud-bar').classes()).toContain('hud-bar--rail');
+      expect(wrapper.get('.hud-drawer').classes()).toContain('hud-drawer--rail');
+      expect(isHudRail.value).toBe(true);
+      // The toggle keeps its identity: the first thing in the rail, still `.hud-grip`.
+      const grip = wrapper.get('.hud-grip');
+      expect(grip.attributes('aria-controls')).toBeTruthy();
+      expect(grip.attributes('aria-expanded')).toBe('false');
+      wrapper.unmount();
+      expect(isHudRail.value).toBe(false);
+    });
+
+    it('does not apply to a bar without a drawer slot (the pre-founding landing bar)', async () => {
+      const wrapper = mountTopBar({ title: 'Bjarnoy' });
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('.hud-bar').classes()).not.toContain('hud-bar--rail');
+      expect(isHudRail.value).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('does not apply to a docked header', async () => {
+      const wrapper = mountTopBar({ docked: true }, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('.hud-bar').classes()).not.toContain('hud-bar--rail');
+      expect(isHudRail.value).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('does not apply to a portrait phone (compact, but not short-landscape)', async () => {
+      stubMediaQueries([HUD_COMPACT_QUERY]);
+      const wrapper = mountTopBar(undefined, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('.hud-bar').classes()).not.toContain('hud-bar--rail');
+      expect(wrapper.get('.hud-drawer').classes()).not.toContain('hud-drawer--rail');
+      wrapper.unmount();
+    });
+
+    it('does not apply on desktop even if the rail query alone matches', async () => {
+      stubMediaQueries([HUD_RAIL_QUERY]);
+      const wrapper = mountTopBar(undefined, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.find('.hud-bar--rail').exists()).toBe(false);
+      expect(wrapper.find('.hud-grip').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('ignores the bottom docking preference and publishes no top band', async () => {
+      useHudPrefsStore().setBarPosition('bottom');
+      hudBarHeightPx.value = 64;
+      const wrapper = mountTopBar(undefined, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('.hud-bar').classes()).not.toContain('hud-bar--bottom');
+      expect(wrapper.get('.hud-drawer').classes()).not.toContain('hud-drawer--bottom');
+      expect(isHudBarAtBottom.value).toBe(false);
+      expect(hudBarHeightPx.value).toBe(0);
+      wrapper.unmount();
+      expect(hudRailWidthPx.value).toBe(0);
+      expect(hudRailHeightPx.value).toBe(0);
+    });
+
+    it('the grip toggles the side sheet, which slides in from the left', async () => {
+      const wrapper = mountTopBar(undefined, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      const drawer = wrapper.get('.hud-drawer');
+      expect(drawer.attributes('style')).toContain('translateX(-100%)');
+
+      await wrapper.get('.hud-grip').trigger('click');
+      expect(wrapper.get('.hud-grip').attributes('aria-expanded')).toBe('true');
+      expect(drawer.attributes('style')).toContain('translateX(0)');
+      expect(drawer.classes()).toContain('hud-drawer--rail-open');
+      expect(isHudDrawerOpen.value).toBe(true);
+
+      await wrapper.get('.hud-grip').trigger('click');
+      expect(drawer.attributes('style')).toContain('translateX(-100%)');
+      wrapper.unmount();
+    });
+
+    it('closes on Escape and on a backdrop tap', async () => {
+      const wrapper = mountTopBar(undefined, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      await wrapper.get('.hud-grip').trigger('click');
+      expect(wrapper.get('.hud-drawer-backdrop').attributes('style')).toContain('opacity: 0.6');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      await wrapper.vm.$nextTick();
+      expect(wrapper.get('.hud-grip').attributes('aria-expanded')).toBe('false');
+
+      await wrapper.get('.hud-grip').trigger('click');
+      await wrapper.get('.hud-drawer-backdrop').trigger('click');
+      expect(wrapper.get('.hud-grip').attributes('aria-expanded')).toBe('false');
+      wrapper.unmount();
+    });
+
+    it('has no drag gesture: a pull on the bar never opens the drawer', async () => {
+      const wrapper = mountTopBar(undefined, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      // jsdom's MouseEvent has getter-only coordinates, so build plain events.
+      const fire = (type: string, clientY: number) =>
+        wrapper.get('.hud-bar').element.dispatchEvent(
+          Object.assign(new Event(type, { bubbles: true }), { clientY, pointerId: 1, isPrimary: true, pointerType: 'touch' }),
+        );
+      fire('pointerdown', 10);
+      fire('pointermove', 200);
+      fire('pointerup', 200);
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('.hud-grip').attributes('aria-expanded')).toBe('false');
+      wrapper.unmount();
+    });
+
+    it('joins the settlement bubble to the menu button as one capsule at the top-left', async () => {
+      const world = useWorldStore();
+      world.hud.settlementName = 'Unnamed realm';
+      hudRailWidthPx.value = 92;
+      const wrapper = mountTopBar(undefined, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+      const bubble = wrapper.get('.settlement-bubble');
+      expect(bubble.attributes('style')).toContain('top: 8px');
+      // Starts at the rail's own left edge (the ☰ button paints inside it).
+      expect(bubble.attributes('style')).toContain('left: calc(8px');
+      expect(bubble.classes()).toContain('settlement-bubble--rail');
+      expect(wrapper.get('.hud-bar').classes()).toContain('hud-bar--rail-joined');
+      wrapper.unmount();
+    });
+  });
+
+  // Phone screenshot: LandingView's founded bar was a full-width band whose
+  // only content was the "Name your jarl" trigger, hugging the very top edge
+  // (its nudge glow/dot clipped by the viewport). `floating` drops the band
+  // for chips on a portrait phone.
+  describe('floating (portrait phone, `floating` prop)', () => {
+    beforeEach(() => {
+      stubMediaQueries([HUD_COMPACT_QUERY]);
+    });
+
+    it('drops the band and publishes no top inset, so the map reclaims the space', async () => {
+      hudBarHeightPx.value = 64;
+      const wrapper = mountTopBar({ floating: true }, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('.hud-bar').classes()).toContain('hud-bar--floating');
+      expect(wrapper.get('.hud-drawer').classes()).toContain('hud-drawer--floating');
+      expect(hudBarHeightPx.value).toBe(0);
+      expect(isHudRail.value).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('ignores the bottom docking preference', async () => {
+      useHudPrefsStore().setBarPosition('bottom');
+      const wrapper = mountTopBar({ floating: true }, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('.hud-bar').classes()).not.toContain('hud-bar--bottom');
+      expect(isHudBarAtBottom.value).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('joins the settlement bubble to the menu button, 16px from the top and side edges', async () => {
+      useWorldStore().hud.settlementName = 'Unnamed realm';
+      const wrapper = mountTopBar({ floating: true }, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      const bubble = wrapper.get('.settlement-bubble');
+      expect(bubble.attributes('style')).toContain('top: 16px');
+      expect(bubble.attributes('style')).toContain('left: 16px');
+      expect(bubble.classes()).toContain('settlement-bubble--floating');
+      expect(wrapper.get('.hud-bar').classes()).toContain('hud-bar--rail-joined');
+      wrapper.unmount();
+    });
+
+    it('the menu button toggles the drawer by tap, and a pull does nothing', async () => {
+      const wrapper = mountTopBar({ floating: true }, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+
+      const fire = (type: string, clientY: number) =>
+        wrapper.get('.hud-bar').element.dispatchEvent(
+          Object.assign(new Event(type, { bubbles: true }), { clientY, pointerId: 1, isPrimary: true, pointerType: 'touch' }),
+        );
+      fire('pointerdown', 10);
+      fire('pointermove', 200);
+      fire('pointerup', 200);
+      await wrapper.vm.$nextTick();
+      expect(wrapper.get('.hud-grip').attributes('aria-expanded')).toBe('false');
+
+      await wrapper.get('.hud-grip').trigger('click');
+      expect(wrapper.get('.hud-grip').attributes('aria-expanded')).toBe('true');
+      expect(isHudDrawerOpen.value).toBe(true);
+      wrapper.unmount();
+    });
+
+    it('sizes the open drawer to the content element\'s border-box, not its padding-less contentRect', async () => {
+      stubCompactMediaQuery(true);
+      const callbacks: Array<(entries: unknown[]) => void> = [];
+      vi.stubGlobal('ResizeObserver', class {
+        constructor(cb: (entries: unknown[]) => void) { callbacks.push(cb); }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      });
+      const wrapper = mountTopBar(undefined, DRAWER_SLOT);
+      await wrapper.vm.$nextTick();
+      await wrapper.vm.$nextTick();
+
+      const content = wrapper.get('.hud-drawer-content').element;
+      // Padded content: 300px of border-box, only 276px of contentRect.
+      const entry = {
+        target: content,
+        contentRect: { height: 276 },
+        borderBoxSize: [{ blockSize: 300, inlineSize: 390 }],
+      };
+      for (const cb of callbacks) cb([entry]);
+      await wrapper.get('.hud-grip').trigger('click');
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('.hud-drawer').attributes('style')).toContain('height: 300px');
+      wrapper.unmount();
+    });
+
+    it('keeps the band without the prop, on desktop, docked, and in landscape rail', async () => {
+      const cases: Array<[string[], Record<string, unknown>]> = [
+        [[HUD_COMPACT_QUERY], {}],
+        [[], { floating: true }],
+        [[HUD_COMPACT_QUERY], { floating: true, docked: true }],
+        [[HUD_COMPACT_QUERY, HUD_RAIL_QUERY], { floating: true }],
+      ];
+      for (const [queries, props] of cases) {
+        stubMediaQueries(queries);
+        const wrapper = mountTopBar(props, DRAWER_SLOT);
+        await wrapper.vm.$nextTick();
+        expect(wrapper.get('.hud-bar').classes()).not.toContain('hud-bar--floating');
+        wrapper.unmount();
+      }
     });
   });
 });

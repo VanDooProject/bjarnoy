@@ -19,6 +19,8 @@ import {
   type GraphCategory,
 } from '../../lib/techtree/buildingPresentation';
 import { buildGraph, hoverSets } from '../../lib/techtree/graph';
+import { useMediaQuery } from '../../composables/useMediaQuery';
+import { TOUCH_QUERY } from '../../lib/breakpoints';
 import {
   BYPASS_Y,
   CARD_H,
@@ -37,6 +39,7 @@ const props = defineProps<{ byType: Record<string, BuildingDefinitionResponse[] 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const hovered = ref<string | null>(null);
+const isTouch = useMediaQuery(TOUCH_QUERY);
 const hoveredCategory = ref<GraphCategory | null>(null);
 
 const nodes = computed(() => buildTechTreeNodes(props.byType));
@@ -121,7 +124,9 @@ const status = computed(() => {
     const label = nodes.value.find((n) => n.type === hovered.value)?.label ?? '';
     return `${label} — gold is what it needs, dimmed gold is what it leads to.`;
   }
-  return 'Hover a building to trace what it needs, or a family to pick out its buildings.';
+  return isTouch.value
+    ? 'Tap a family to pick out its buildings, or a building to jump to its levels.'
+    : 'Hover a building to trace what it needs, or a family to pick out its buildings.';
 });
 
 function focusBuilding(type: string) {

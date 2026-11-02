@@ -25,8 +25,24 @@ namespace Bjarnoy.Domain.Shrines;
 /// Attack bonus for <see cref="Units.UnitClass.Ship"/> units, e.g. 0.10 for
 /// +10% — Njörd's domain.
 /// </param>
+/// <param name="BuildTimeReduction">
+/// Share taken off every build order's duration in the settlement, e.g. 0.10
+/// for -10% — Odin's Wisdom. Not a percentage bonus like the others and not
+/// subject to the stacking cap (<see cref="Capped"/>): only the Odin Statue
+/// grants it, and its level caps it at 0.10.
+/// </param>
+/// <param name="VisionBonusRings">
+/// Extra rings of fog-of-war vision for everything tied to the settlement —
+/// its claim, its towers and its travelling armies — Odin's Ravens. A whole
+/// number of hexes, not a fraction, and likewise outside the stacking cap.
+/// </param>
 public readonly record struct ShrineEffect(
-    ResourceAmounts ProductionBonus, double StorageBonus, double LandAttackBonus = 0, double ShipAttackBonus = 0)
+    ResourceAmounts ProductionBonus,
+    double StorageBonus,
+    double LandAttackBonus = 0,
+    double ShipAttackBonus = 0,
+    double BuildTimeReduction = 0,
+    int VisionBonusRings = 0)
 {
     public static ShrineEffect Zero => default;
 
@@ -34,7 +50,9 @@ public readonly record struct ShrineEffect(
         a.ProductionBonus + b.ProductionBonus,
         a.StorageBonus + b.StorageBonus,
         a.LandAttackBonus + b.LandAttackBonus,
-        a.ShipAttackBonus + b.ShipAttackBonus);
+        a.ShipAttackBonus + b.ShipAttackBonus,
+        a.BuildTimeReduction + b.BuildTimeReduction,
+        a.VisionBonusRings + b.VisionBonusRings);
 
     /// <summary>
     /// Clamps every component to <paramref name="maxProductionBonus"/> /
@@ -50,5 +68,7 @@ public readonly record struct ShrineEffect(
             Math.Min(ProductionBonus.Iron, maxProductionBonus)),
         Math.Min(StorageBonus, maxStorageBonus),
         Math.Min(LandAttackBonus, maxAttackBonus),
-        Math.Min(ShipAttackBonus, maxAttackBonus));
+        Math.Min(ShipAttackBonus, maxAttackBonus),
+        BuildTimeReduction,
+        VisionBonusRings);
 }

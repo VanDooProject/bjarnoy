@@ -5,7 +5,10 @@
 // renders one.
 import type { ResourceLine } from '../../api/types';
 import { resourceName } from '../../i18n/catalogueNames';
-import { ADDITIONAL_STORAGE_HOUSE_LEVEL, maxTowers } from './buildingEconomy';
+import { i18n } from '../../i18n';
+import { additionalStorageHouseRequirement, maxTowers } from './buildingEconomy';
+import { campHexBuildable } from './campRules';
+import type { BogTileKind } from './types';
 import type { RiverVariant } from './worldGenerator';
 
 const RESOURCE_KEYS: (keyof ResourceLine)[] = ['wood', 'stone', 'food', 'iron'];
@@ -51,14 +54,28 @@ export function towerLimitLock(towersHeld: number, longhouseLevel: number): stri
 }
 
 /**
- * The reason an *additional* storage house can't be placed: the settlement
- * already holds one (standing or queued) and its best is below level 10 —
- * mirrors `Settlement.PlanBuild`'s `BuildRejection.StorageHouseTooLow`. The
- * first storage house is never locked by this.
+ * The reason a *new* shrine can't be placed: the settlement already holds one
+ * (standing or queued) — mirrors `Settlement.PlanBuild`'s
+ * `BuildRejection.SettlementAlreadyHasShrine`. A settlement raises one shrine
+ * in total, of any god.
  */
-export function storageHouseLock(storageHousesHeld: number, bestStorageLevel: number): string | undefined {
-  if (storageHousesHeld < 1 || bestStorageLevel >= ADDITIONAL_STORAGE_HOUSE_LEVEL) return undefined;
-  return `Raise a storage house to level ${ADDITIONAL_STORAGE_HOUSE_LEVEL} before building another`;
+export function shrineLimitLock(shrinesHeld: number): string | undefined {
+  if (shrinesHeld < 1) return undefined;
+  return i18n.global.t('hud.ringMenu.shrineLimitLock') as string;
+}
+
+/**
+ * The reason an *additional* storage house can't be placed: with `n` held
+ * (standing or queued) it needs `min(n, 4)` of them at level
+ * `min(10 + 5·(n − 1), 25)` — mirrors `Settlement.PlanBuild`'s
+ * `BuildRejection.StorageHouseTooLow`. `standingLevels` are the levels of the
+ * standing houses. The first storage house is never locked by this.
+ */
+export function storageHouseLock(storageHousesHeld: number, standingLevels: readonly number[]): string | undefined {
+  if (storageHousesHeld < 1) return undefined;
+  const { count, level } = additionalStorageHouseRequirement(storageHousesHeld);
+  if (standingLevels.filter((l) => l >= level).length >= count) return undefined;
+  return i18n.global.t('hud.ringMenu.storageHouseLock', { count, level }, count) as string;
 }
 
 /**
@@ -82,6 +99,9 @@ export function storageHouseLock(storageHousesHeld: number, bestStorageLevel: nu
 const RIVER_SHAPES_BY_TYPE: Partial<Record<string, ReadonlySet<string>>> = {
   sawmill: new Set(['straight', 'bend', 'bend60']),
   cropmill: new Set(['straight']),
+  // The bridge's three tiles (3D_assets hextile135-137) are the straight, the 120 degree bend and the 60 degree bend; whether the
+  // hex is also a *wide* river is the bridge rules' (`WorldModel.bridgePlacement`, shown as a lock), not a shape question.
+  bridge: new Set(['straight', 'bend', 'bend60']),
 };
 
 /**
@@ -107,18 +127,19 @@ const EXCLUDED_VARIANTS_BY_TYPE: Partial<Record<string, ReadonlySet<RiverVariant
  * bubble), this is a fixed property of the hex itself: a hex that will
  * never grow a matching river should not offer the bubble at all, so
  * callers filter it out of the category rather than rendering it locked.
- * Every other buildable type has no such requirement (Fisher Hut moved to
- * the water category instead — see `RingMenu`'s `WATER_CATEGORY` — since
- * it's now built on coastal water itself, exactly like Fishing Hut/
- * Dockyard, with no separate check needed).
+ * Every other buildable type has no such requirement (the water buildings —
+ * see `isWaterOnlyBuilding` — need coastal water, checked separately).
  */
 export function riverBuildingAllowedHere(
   type: string,
   riverShape: string | undefined,
   riverVariant: RiverVariant = 'plain',
+  riverWidth: string = 'river',
 ): boolean {
   const allowedShapes = RIVER_SHAPES_BY_TYPE[type];
   if (!allowedShapes) return true;
+  // The river buildings' art is river width: a stream or widening hex never takes one.
+  if (riverWidth !== 'river') return false;
   if (riverShape === undefined || !allowedShapes.has(riverShape)) return false;
   return !EXCLUDED_VARIANTS_BY_TYPE[type]?.has(riverVariant);
 }
@@ -137,6 +158,16 @@ export function cropAllowedHere(type: string, soil: 'wheat' | 'pumpkin' | undefi
 }
 
 /**
+ * Buildings that can no longer be placed anew (the Quarry, for now); ones already standing keep producing and upgrading.
+ * Mirrors `BuildingCatalogue.NewPlacementDisabled` / `BuildRejection.NewPlacementDisabled`; `WorldModel.placeBuilding` (new
+ * placements only) refuses them, and the build ring simply does not list them.
+ */
+const NEW_PLACEMENT_DISABLED: ReadonlySet<string> = new Set(['quarry']);
+export function newPlacementDisabled(type: string): boolean {
+  return NEW_PLACEMENT_DISABLED.has(type);
+}
+
+/**
  * The exact shortfall against `cost`, e.g. "40 Wood, 15 Stone" — omits any
  * resource `stock` already covers. Mirrors `trainingEconomy.ts`'s
  * `formatCostLine` (which shows the whole price), but for what's still
@@ -147,4 +178,120 @@ export function formatMissingResources(cost: ResourceLine, stock: ResourceLine):
   return RESOURCE_KEYS.filter((key) => cost[key] > stock[key])
     .map((key) => `${Math.ceil(cost[key] - stock[key])} ${resourceName(key)}`)
     .join(', ');
+}
+
+/**
+ * The bog kinds each bog-bound building stands on — mirrors `BuildingDefinition.RequiresBogKind` in `BuildingCatalogue.cs`:
+ * Clay Brickworks and bog-ore works on plain moss (not a shore, mouth, creek or lake), the Hammer Forge on a creek
+ * (straight or bend; not a mouth or a spring).
+ */
+const BOG_KINDS_BY_TYPE: Readonly<Partial<Record<string, ReadonlySet<BogTileKind>>>> = {
+  claybrickworks: new Set<BogTileKind>(['bog']),
+  bogoreworks: new Set<BogTileKind>(['bog']),
+  hammerschmiede: new Set<BogTileKind>(['creek']),
+};
+
+/** The bog kinds a water building may stand on instead of coastal water — mirrors `BuildingDefinition.LakeShoreKinds`: the Fishing Hut on a lake's half shore. */
+const LAKE_SHORE_KINDS_BY_TYPE: Readonly<Partial<Record<string, ReadonlySet<BogTileKind>>>> = {
+  fishinghut: new Set<BogTileKind>(['half']),
+};
+
+/** Whether `type` is one of the buildings that stand only on some bog kind (bog-ore works, Clay Brickworks, Hammer Forge). */
+export function isBogBoundBuilding(type: string | undefined): boolean {
+  return type !== undefined && BOG_KINDS_BY_TYPE[type] !== undefined;
+}
+
+/** Whether a Fishing Hut on `tile` is a lake hut (stands on a bog lake's half shore) rather than a coastal one. */
+export function isLakeShoreHut(tile: { buildingType?: string; bog?: { kind: BogTileKind } }): boolean {
+  return tile.buildingType !== undefined && LAKE_SHORE_KINDS_BY_TYPE[tile.buildingType]?.has(tile.bog?.kind ?? 'bog') === true;
+}
+
+/** Grass, forest, sand or plain bog moss (not a shore, mouth, creek or lake): the ground a wall hex and a tower stand on. */
+function wallOrTowerGround(tile: { terrain: string; bog?: { kind: BogTileKind } }): boolean {
+  if (tile.terrain === 'bog') return tile.bog?.kind === 'bog';
+  return tile.terrain === 'grass' || tile.terrain === 'forest' || tile.terrain === 'sand';
+}
+
+/**
+ * Whether `type` may stand on this one hex, from its terrain, coastal-water flag and bog kind — the client mirror of
+ * `BuildingDefinition.AllowsHex` (river shape and soil rules are separate, see `riverBuildingAllowedHere`/`cropAllowedHere`).
+ * Nothing stands on a lake or on open sea; the coastal-water buildings stand on coastal water, or (Fishing Hut) on a lake's
+ * half shore; bog ground takes only the bog buildings (and that hut), never anything a grass building would.
+ */
+export function buildingAllowedOnHex(
+  type: string,
+  tile: { terrain: string; isCoastalWater?: boolean; bog?: { kind: BogTileKind } },
+): boolean {
+  if (tile.terrain === 'lake') return false;
+  // A wall stands on grass, forest, sand or plain bog moss; the palisade (not the gate) also on coastal water, as the wall's sea end. Whether the
+  // hex then takes one is the wall rules' (`WorldModel.palisadePlacement`). The tower stands on the same ground, but never on water.
+  if (type === 'palisade' || type === 'palisadegate') {
+    if (tile.terrain === 'sea') return type === 'palisade' && tile.isCoastalWater === true;
+    return wallOrTowerGround(tile);
+  }
+  if (type === 'tower') return wallOrTowerGround(tile);
+  // A bridge stands on the river tile's own ground: grass, forest or sand (never mountain; BuildingCatalogue.BridgeHex).
+  if (type === 'bridge') return tile.terrain === 'grass' || tile.terrain === 'forest' || tile.terrain === 'sand';
+  const bogKinds = BOG_KINDS_BY_TYPE[type];
+  if (bogKinds) return tile.terrain === 'bog' && tile.bog !== undefined && bogKinds.has(tile.bog.kind);
+  if (isWaterOnlyBuilding(type)) {
+    if (tile.terrain === 'sea') return tile.isCoastalWater === true;
+    return tile.terrain === 'bog' && tile.bog !== undefined && LAKE_SHORE_KINDS_BY_TYPE[type]?.has(tile.bog.kind) === true;
+  }
+  return tile.terrain !== 'sea' && tile.terrain !== 'bog';
+}
+
+/**
+ * Buildings that stand directly on a coastal-water hex instead of on land
+ * (matches BuildingDefinition.RequiresCoastalWater on the backend; the Fishing Hut also stands on a lake's half shore, see
+ * `buildingAllowedOnHex`). The one
+ * place the frontend decides this: placement (`WorldModel.placeBuilding`)
+ * and the building modal's "can this hex be inspected/upgraded" check both
+ * read it, so a new water building is covered everywhere by adding it here.
+ */
+const WATER_ONLY_BUILDINGS: ReadonlySet<string> = new Set(['fishinghut', 'dockyard', 'shrineofnjord']);
+
+export function isWaterOnlyBuilding(type: string | undefined): boolean {
+  return type !== undefined && WATER_ONLY_BUILDINGS.has(type);
+}
+
+/**
+ * Whether the building modal treats a tile as buildable/upgradeable: any
+ * non-sea tile, or a sea tile that already carries a water building (open
+ * water itself is never offered as an empty build target).
+ */
+export function tileIsBuildable(tile: {
+  terrain: string;
+  buildingType?: string;
+  camp?: { family: string; empty?: boolean };
+}): boolean {
+  // A wildlife camp hex is buildable only once the camp is cleared (never Fenrir's brood).
+  if (tile.camp && !tile.buildingType && !campHexBuildable(tile.camp)) return false;
+  return (tile.terrain !== 'sea' && tile.terrain !== 'lake') || isWaterOnlyBuilding(tile.buildingType) || isWallBuilding(tile.buildingType);
+}
+
+/** The palisade and its gate: the wall hexes (`BuildingType.Palisade`/`PalisadeGate`). */
+export function isWallBuilding(type: string | undefined): boolean {
+  return type === 'palisade' || type === 'palisadegate';
+}
+
+/**
+ * The reason a wall hex can't be placed (a refusal of `WorldModel.palisadePlacement`), in the player's words, or `undefined` when it
+ * can. Like `longhouseLock` it is shown as an explained, disabled bubble: the hex is a fine place for a wall in general, just not for this
+ * one right now.
+ */
+export function palisadeLock(placement: { ok: true } | { ok: false; reason: string }): string | undefined {
+  if (placement.ok) return undefined;
+  const key = ['branch', 'gateNotStraight', 'river', 'seaEnd', 'occupied'].includes(placement.reason) ? placement.reason : 'terrain';
+  return i18n.global.t(`hud.ringMenu.palisadeLock.${key}`) as string;
+}
+
+/**
+ * The reason a bridge can't be placed on a river hex that otherwise takes one (a Straight, Bend or Bend60 tile; `riverBuildingAllowedHere`
+ * hides the bubble on every other hex), in the player's words, or `undefined` when it can: the river there is not a wide one, which a
+ * land army already crosses (`BuildRejection.BridgeNeedsWideRiver`), or the island is wasted.
+ */
+export function bridgeLock(placement: { ok: true } | { ok: false; reason: 'notWide' | 'wasted' }): string | undefined {
+  if (placement.ok) return undefined;
+  return i18n.global.t(`hud.ringMenu.bridgeLock.${placement.reason}`) as string;
 }

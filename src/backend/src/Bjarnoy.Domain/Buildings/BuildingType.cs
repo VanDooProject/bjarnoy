@@ -93,12 +93,13 @@ public enum BuildingType
     Barracks = 14,
 
     /// <summary>
-    /// Food, on grass — a third food-producer variant alongside
-    /// <see cref="Farm"/> and <see cref="PumpkinFarm"/>. Unlike
-    /// <see cref="FishingHut"/> it doesn't stand on water itself, but its
-    /// hex must be adjacent to some (see
-    /// <see cref="BuildingDefinition.RequiresAdjacentToWater"/>). Flat/inland
-    /// art only.
+    /// <b>Obsolete — merged into <see cref="FishingHut"/></b>
+    /// (<c>docs/design/economy.md</c>). The value stays in the enum only
+    /// because persisted rows store the integer; it has no definition in
+    /// <see cref="BuildingCatalogue"/>, is not in
+    /// <see cref="BuildingCatalogue.AllTypes"/>, cannot be built, and a stored
+    /// FisherHut (or queued order for one) becomes a FishingHut at the same
+    /// hex and level when its settlement is loaded.
     /// </summary>
     FisherHut = 15,
 
@@ -169,7 +170,7 @@ public enum BuildingType
     DruidHut = 23,
 
     /// <summary>
-    /// Trains the civilian Provisioner/SettlerCrew half of the roster in
+    /// Trains the civilian Provisioner/Settler half of the roster in
     /// place of the Longhouse (see
     /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>), plus a
     /// modest storage bonus. Behind a level-3 <see cref="StorageHouse"/> and
@@ -178,11 +179,72 @@ public enum BuildingType
     CartWorkshop = 24,
 
     /// <summary>
-    /// Stone, on grass — an alternative to <see cref="Quarry"/> that needs
-    /// no Mountain hex (<see cref="World.WorldGenerator"/> does not
-    /// guarantee one within reach of a starting position), at a lower rate.
+    /// Stone, on plain bog — the start's stone source (<see cref="World.WorldGenerator"/> guarantees bog in reach of a
+    /// landing spot, not a Mountain hex), an alternative to <see cref="Quarry"/> at a lower rate.
     /// </summary>
     ClayBrickworks = 25,
+
+    /// <summary>
+    /// Iron, on plain bog moss (<see cref="World.BogTileKind.Bog"/>: not a shore, mouth, creek or lake) — the game's iron
+    /// producer (<c>docs/design/economy.md</c> section 8, <c>docs/design/bog.md</c>). Boosted by the bog, creek and
+    /// lake hexes around it and, later, by the <see cref="Hammerschmiede"/>. Unlocks at Longhouse level 3 with no feeder.
+    /// </summary>
+    BogOreWorks = 26,
+
+    /// <summary>
+    /// A water-powered hammer mill on a bog creek (<see cref="World.BogTileKind.Creek"/>, straight or bend; never a mouth,
+    /// spring or lake). Produces nothing of its own: it raises every <see cref="BogOreWorks"/> within its range, the way the
+    /// <see cref="Sawmill"/> raises Lumberjacks. Unlocks at Longhouse level 20 behind a level-10 bog-ore works.
+    /// </summary>
+    Hammerschmiede = 27,
+
+    /// <summary>
+    /// Food, on grass — the starting food building, unlocked at Longhouse 1.
+    /// <see cref="Farm"/> and <see cref="PumpkinFarm"/> now come later (LH 4,
+    /// behind a level-3 Reindeer Herder). Appended at the end so persisted
+    /// integers do not shift.
+    /// </summary>
+    ReindeerHerder = 28,
+
+    /// <summary>
+    /// Raised to Odin (<see cref="Shrines.GodType.Odin"/>), on grass, at
+    /// Longhouse 25 behind a level-10 <see cref="DruidHut"/>. Counts as a shrine:
+    /// a settlement holds only one shrine in total. Its favour is not a
+    /// production or attack bonus but two effects on its own settlement —
+    /// Wisdom (shorter builds) and Ravens (wider vision). Appended at the end so
+    /// persisted integers do not shift.
+    /// </summary>
+    OdinStatue = 29,
+
+    /// <summary>
+    /// One hex of the settlement's wall (<c>docs/design/economy.md</c> section 5): on grass, forest or sand inside the claim, or on a
+    /// coastal-water hex as the wall's sea end. Unlocks at Longhouse 7 behind a level-5 <see cref="Tower"/>, three levels. Which piece
+    /// it draws as (straight, bend, end) follows its wall neighbours (<see cref="Palisades.PalisadeRules"/>). Every palisade hex
+    /// blocks land armies, the owner's included; a land end (one wall neighbour) is half open. Appended at the end so persisted
+    /// integers do not shift.
+    /// </summary>
+    Palisade = 30,
+
+    /// <summary>
+    /// A palisade hex with a gate: only on a hex that resolves to a straight, passable for the wall owner's armies only. Shares the
+    /// Palisade's unlock, prerequisite, costs and levels (one tech-tree card). Appended at the end so persisted integers do not shift.
+    /// </summary>
+    PalisadeGate = 31,
+
+    /// <summary>
+    /// A bridge on a wide river hex (<c>docs/design/economy.md</c> section 5): wide rivers are impassable to land armies until one
+    /// stands there. Four levels (causeway, footbridge, king's bridge, guarded bridge) that make the crossing slower, then quicker, then
+    /// free, then free for the owner and their friends only. Unlocks at Longhouse 7 behind a level-1 <see cref="TownSquare"/>. Appended at
+    /// the end so persisted integers do not shift.
+    /// </summary>
+    Bridge = 32,
+
+    /// <summary>
+    /// The Siege Workshop (<c>docs/design/economy.md</c> section 5): trains the battering ram, in place of the Longhouse
+    /// (<see cref="Units.UnitDefinition.RequiredBuildingType"/>). Five levels on grass or sand; unlocks at Longhouse 18 behind a
+    /// level-3 <see cref="ArcheryRange"/>. Appended at the end so persisted integers do not shift.
+    /// </summary>
+    SiegeWorkshop = 33,
 }
 
 public static class BuildingTypeExtensions
@@ -215,6 +277,14 @@ public static class BuildingTypeExtensions
         BuildingType.DruidHut => "druidhut",
         BuildingType.CartWorkshop => "cartworkshop",
         BuildingType.ClayBrickworks => "claybrickworks",
+        BuildingType.BogOreWorks => "bogoreworks",
+        BuildingType.Hammerschmiede => "hammerschmiede",
+        BuildingType.ReindeerHerder => "reindeerherder",
+        BuildingType.OdinStatue => "odinstatue",
+        BuildingType.Palisade => "palisade",
+        BuildingType.PalisadeGate => "palisadegate",
+        BuildingType.Bridge => "bridge",
+        BuildingType.SiegeWorkshop => "siegeworkshop",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

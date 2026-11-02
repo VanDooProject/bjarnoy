@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { defineComponent, h, type Ref } from 'vue';
+import { defineComponent, h, nextTick, type Ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { animationPreference } from '../lib/perf/animationPreference';
@@ -74,6 +74,27 @@ describe('useAnimationClock', () => {
     const { wrapper, now } = mountClock();
     vi.advanceTimersByTime(500);
     expect(now.value).toBeGreaterThan(0);
+    wrapper.unmount();
+  });
+
+  // Regression: a visitor without an account can only switch animations on from the docs page
+  // itself (AnimationPausedNote); the clock used to read the setting once, on mount.
+  it("starts ticking when the setting is switched to 'on' after mount, and stops again on 'off'", async () => {
+    mockMatchMedia(true);
+    const { wrapper, now } = mountClock();
+    vi.advanceTimersByTime(1000);
+    expect(now.value).toBe(0);
+
+    animationPreference.setting = 'on';
+    await nextTick();
+    vi.advanceTimersByTime(500);
+    expect(now.value).toBeGreaterThan(0);
+
+    animationPreference.setting = 'off';
+    await nextTick();
+    const stopped = now.value;
+    vi.advanceTimersByTime(500);
+    expect(now.value).toBe(stopped);
     wrapper.unmount();
   });
 });

@@ -55,6 +55,8 @@ public class GiantPlacementGoldenTests
         "grass" => Terrain.Grass,
         "forest" => Terrain.Forest,
         "mountain" => Terrain.Mountain,
+        "bog" => Terrain.Bog,
+        "lake" => Terrain.Lake,
         _ => throw new InvalidOperationException($"Unknown terrain wire name '{wireName}'."),
     };
 

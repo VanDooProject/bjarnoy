@@ -42,7 +42,13 @@ function preview(body: string): string {
 
 <template>
   <div class="messages">
-    <h1>{{ $t('messages.title') }}</h1>
+    <!-- Mobile review: this page had no way back into the game at all —
+         on a phone (no browser chrome in a home-screen app) that was a dead
+         end. -->
+    <header class="title-row">
+      <h1>{{ $t('messages.title') }}</h1>
+      <router-link to="/settlement" class="back">{{ $t('messages.backToGame') }}</router-link>
+    </header>
 
     <p v-if="loading" class="muted">{{ $t('common.states.loading') }}</p>
     <p v-else-if="loadError" class="error">{{ loadError }}</p>
@@ -83,6 +89,26 @@ function preview(body: string): string {
   max-width: 720px;
   margin: 0 auto;
   padding: 24px 16px;
+}
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+}
+.back:hover {
+  border-color: var(--gold);
 }
 .conversations {
   list-style: none;

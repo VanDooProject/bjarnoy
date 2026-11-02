@@ -1,0 +1,497 @@
+using Bjarnoy.Domain.World;
+
+namespace Bjarnoy.Domain.Tests;
+
+/// <summary>
+/// The island shape's own rules (not the frontend agreement, which
+/// <see cref="IslandShapeGoldenTests"/> covers): islands are never cut — at a cell border, or
+/// by the world edge — never reach further than their cell block scans, come in the
+/// advertised size classes, and the cell-based <see cref="WorldGenerator"/> finds exactly
+/// the landmasses a brute-force scan of every hex does.
+/// </summary>
+public class IslandGenerationTests
+{
+    private static int Round(double v) => (int)Math.Floor(v + 0.5);
+
+    private static HexCoord CentreHex(IslandShape s) =>
+        HexCoord.FromOddQ(new OffsetCoord(Round(s.CentreX), Round(s.CentreY)));
+
+    private static int Cell(int coordinate, int cellSize) => (int)Math.Floor((double)coordinate / cellSize);
+
+    // ---- world edge --------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void No_land_lies_beyond_the_world_radius_at_any_scale(int seed)
+    {
+        foreach (var options in new[]
+        {
+            WorldGenerationOptions.Compact(seed, 260),
+            WorldGenerationOptions.Compact(seed, 420) with { IslandChance = 1.0 },
+            TestWorlds.Options(seed),
+        })
+        {
+            var world = TestWorlds.Generate(options);
+            Assert.All(world.Islands, i => Assert.All(i.Tiles, t => Assert.True(
+                t.DistanceTo(HexCoord.Origin) <= options.Radius,
+                $"seed {seed} radius {options.Radius}: island {i.Index} tile {t} is past the world edge")));
+        }
+    }
+
+    [Fact]
+    public void An_island_that_could_cross_the_radius_is_dropped_and_one_that_cannot_is_kept()
+    {
+        // The rule, exactly: hex distance of the rounded centre + 1.42 * reach must fit the
+        // radius. For every island of a big world, shrink the world to just under that
+        // and the cell yields no island; grow it to just over and the cell yields it again.
+        var big = new TerrainSampler(WorldGenerationOptions.ForSeed(11) with { Radius = 4000 });
+        var checkedShapes = 0;
+        foreach (var shape in big.EnumerateIslandShapes().Take(25))
+        {
+            var need = CentreHex(shape).DistanceTo(HexCoord.Origin) + (1.42 * shape.Reach);
+            var tooSmall = new TerrainSampler(WorldGenerationOptions.ForSeed(11) with { Radius = (int)Math.Floor(need) - 1 });
+            var justRight = new TerrainSampler(WorldGenerationOptions.ForSeed(11) with { Radius = (int)Math.Ceiling(need) + 1 });
+
+            Assert.Null(tooSmall.IslandShapeAt(shape.CellCol, shape.CellRow));
+            Assert.NotNull(justRight.IslandShapeAt(shape.CellCol, shape.CellRow));
+            checkedShapes++;
+        }
+
+        Assert.True(checkedShapes >= 10, "the big world should hold plenty of islands to check");
+    }
+
+    [Fact]
+    public void Shrinking_the_world_never_moves_an_island_it_keeps()
+    {
+        // Dropping at the edge must not change any surviving island: same centre, same shape.
+        var big = new TerrainSampler(WorldGenerationOptions.ForSeed(6) with { Radius = 2500 });
+        var small = new TerrainSampler(WorldGenerationOptions.ForSeed(6) with { Radius = 1000 });
+
+        var kept = small.EnumerateIslandShapes().ToList();
+        Assert.NotEmpty(kept);
+        foreach (var shape in kept)
+        {
+            var same = big.IslandShapeAt(shape.CellCol, shape.CellRow)!;
+            Assert.Equal(shape.CentreX, same.CentreX);
+            Assert.Equal(shape.CentreY, same.CentreY);
+            Assert.Equal(shape.Width, same.Width);
+        }
+    }
+
+    // ---- reach clamp / never cut at cell borders ---------------------------------------
+
+    [Fact]
+    public void An_island_never_reaches_further_than_its_cell_block_scans()
+    {
+        // Extreme shape knobs: long, wide, bendy, warped — the reach clamp has to shrink these.
+        var extreme = WorldGenerationOptions.ForSeed(5) with
+        {
+            Radius = 5000,
+            IslandMinWidth = 60.0,
+            IslandMaxWidth = 90.0,
+            IslandMinElongation = 12.0,
+            IslandMaxElongation = 18.0,
+            IslandMaxSegments = 12,
+            IslandCoastWarp = 20.0,
+            IslandCoastWarpScale = 120.0,
+        };
+        var legacy = WorldGenerationOptions.ForSeed(5) with
+        {
+            Radius = 5000, IslandCellSize = 260, IslandMaxReach = 0.0, IslandMinGap = 0.0,
+        };
+        foreach (var options in new[] { WorldGenerationOptions.ForSeed(5) with { Radius = 5000 }, extreme, legacy })
+        {
+            var sampler = new TerrainSampler(options);
+            var cs = options.IslandCellSize;
+            var span = IslandShapeConstants.ScanSpan(options);
+            var clamped = 0;
+            foreach (var shape in sampler.EnumerateIslandShapes().Take(60))
+            {
+                if (shape.ClampFactor < 1.0)
+                {
+                    clamped++;
+                }
+
+                // Everything an island can claim sits inside the block of cells a hex scans around
+                // its own (3x3 on legacy worlds, 5x5 at the default cells): the box outside which
+                // no hex is land never leaves it.
+                Assert.True(shape.MinCol >= (shape.CellCol - span) * cs, $"cell {shape.CellCol},{shape.CellRow}: box starts left of the block");
+                Assert.True(shape.MaxCol < (shape.CellCol + span + 1) * cs, $"cell {shape.CellCol},{shape.CellRow}: box ends right of the block");
+                Assert.True(shape.MinRow >= (shape.CellRow - span) * cs, $"cell {shape.CellCol},{shape.CellRow}: box starts above the block");
+                Assert.True(shape.MaxRow < (shape.CellRow + span + 1) * cs, $"cell {shape.CellCol},{shape.CellRow}: box ends below the block");
+                Assert.True(shape.Reach <= IslandShapeConstants.ReachBudget(options) + options.IslandCoastWarp + IslandShapeConstants.Warp2 + 1e-9);
+            }
+
+            Assert.True(options == extreme ? clamped > 0 : true, "the extreme options must actually exercise the clamp");
+        }
+    }
+
+    [Theory]
+    [InlineData(4)]
+    [InlineData(9)]
+    public void An_island_is_never_cut_at_a_cell_border(int seed)
+    {
+        // "Cut at a cell border" would mean an island claiming a hex that the hex does not
+        // scan (that hex sees its own cell and ScanSpan rings around it, nothing further).
+        // Walk the whole reach box of every island in a compact world and check that every
+        // hex the island alone says is land is one whose scan block includes the island's
+        // own cell — and that the island does claim land at all.
+        var options = WorldGenerationOptions.Compact(seed, 600) with { IslandChance = 1.0 };
+        var sampler = new TerrainSampler(options);
+        var cs = options.IslandCellSize;
+        var span = IslandShapeConstants.ScanSpan(options);
+        var landHexes = 0;
+
+        foreach (var shape in sampler.EnumerateIslandShapes())
+        {
+            // A box one cell wider than the scan box on every side, so a claim beyond it would show.
+            for (var col = shape.MinCol - cs; col <= shape.MaxCol + cs; col++)
+            {
+                for (var row = shape.MinRow - cs; row <= shape.MaxRow + cs; row++)
+                {
+                    var hex = HexCoord.FromOddQ(new OffsetCoord(col, row));
+                    if (sampler.DepthOfShape(shape, hex, wasted: false) is null)
+                    {
+                        continue;
+                    }
+
+                    landHexes++;
+                    Assert.True(
+                        Math.Abs(Cell(col, cs) - shape.CellCol) <= span && Math.Abs(Cell(row, cs) - shape.CellRow) <= span,
+                        $"cell {shape.CellCol},{shape.CellRow} claims ({col},{row}), outside the block a hex there scans");
+                    Assert.InRange(col, shape.MinCol, shape.MaxCol);
+                    Assert.InRange(row, shape.MinRow, shape.MaxRow);
+                }
+            }
+        }
+
+        Assert.True(landHexes > 1000, $"only {landHexes} land hexes: the world is too empty to test anything");
+    }
+
+    // ---- min gap -----------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void No_two_kept_islands_come_closer_than_the_min_gap(int seed)
+    {
+        // Of two islands too close, the outranked one is never generated: so no pair of kept
+        // islands is too close, at any distance (not only within the rings the rule checks).
+        var options = WorldGenerationOptions.ForSeed(seed) with { Radius = 2000 };
+        var sampler = new TerrainSampler(options);
+        var shapes = sampler.EnumerateIslandShapes().ToList();
+        Assert.True(shapes.Count > 50, $"only {shapes.Count} islands");
+        for (var i = 0; i < shapes.Count; i++)
+        {
+            for (var j = i + 1; j < shapes.Count; j++)
+            {
+                Assert.False(
+                    TerrainSampler.IslandsTooClose(shapes[i], shapes[j], options.IslandMinGap),
+                    $"cells {shapes[i].CellCol},{shapes[i].CellRow} and {shapes[j].CellCol},{shapes[j].CellRow} are closer than {options.IslandMinGap} hexes");
+            }
+        }
+
+        // ... while without the rule the same cells do hold such pairs, so the test has teeth.
+        var unruled = new TerrainSampler(options with { IslandMinGap = 0.0 }).EnumerateIslandShapes().ToList();
+        Assert.True(unruled.Count > shapes.Count);
+        Assert.Contains(unruled, a => unruled.Any(b => !ReferenceEquals(a, b) && TerrainSampler.IslandsTooClose(a, b, options.IslandMinGap)));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void No_kept_wasted_island_comes_within_the_min_gap_of_a_green_or_another_wasted_island(int seed)
+    {
+        // A wasted island keeps the same sea lane as green islands do: from every kept green island
+        // (green always wins) and from every other kept wasted island (ranked like green ones).
+        var options = WorldGenerationOptions.ForSeed(seed);
+        var sampler = new TerrainSampler(options);
+        var green = sampler.EnumerateIslandShapes().ToList();
+        var wasted = sampler.EnumerateIslandShapes(wasted: true).ToList();
+        Assert.True(wasted.Count >= 5, $"only {wasted.Count} wasted islands");
+        foreach (var w in wasted)
+        {
+            Assert.DoesNotContain(green, g => TerrainSampler.IslandsTooClose(w, g, options.IslandMinGap));
+            Assert.DoesNotContain(wasted, o => !ReferenceEquals(o, w) && TerrainSampler.IslandsTooClose(w, o, options.IslandMinGap));
+        }
+
+        // ... while without the rule wasted islands do crowd (or sit on) green ones, so the test has teeth.
+        var unruled = new TerrainSampler(options with { IslandMinGap = 0.0 });
+        var unruledGreen = unruled.EnumerateIslandShapes().ToList();
+        Assert.Contains(unruled.EnumerateIslandShapes(wasted: true), w => unruledGreen.Any(g => TerrainSampler.IslandsTooClose(w, g, options.IslandMinGap)));
+    }
+
+    [Fact]
+    public void A_wasted_island_is_only_dropped_for_being_too_close_to_green_or_an_outranking_wasted_island()
+    {
+        // The rule drops nothing else: every wasted island the default world has but a world without
+        // the rule keeps is too close to a kept green island or to a wasted candidate.
+        var options = WorldGenerationOptions.ForSeed(1);
+        var sampler = new TerrainSampler(options);
+        var green = sampler.EnumerateIslandShapes().ToList();
+        var kept = sampler.EnumerateIslandShapes(wasted: true).Select(s => (s.CellCol, s.CellRow)).ToHashSet();
+        var all = new TerrainSampler(options with { IslandMinGap = 0.0 }).EnumerateIslandShapes(wasted: true).ToList();
+        var dropped = all.Where(s => !kept.Contains((s.CellCol, s.CellRow))).ToList();
+        Assert.NotEmpty(dropped);
+        Assert.All(dropped, d => Assert.True(
+            green.Any(g => TerrainSampler.IslandsTooClose(d, g, options.IslandMinGap))
+                || all.Any(o => !ReferenceEquals(o, d) && TerrainSampler.IslandsTooClose(d, o, options.IslandMinGap)),
+            $"wasted cell {d.CellCol},{d.CellRow} was dropped with nothing near it"));
+    }
+
+    [Fact]
+    public void Legacy_worlds_keep_their_wasted_islands_where_they_touch_green_ones()
+    {
+        // Old worlds (IslandMinGap 0) keep the old wasted terrain: no wasted island is dropped for a
+        // green neighbour, so wasted islands that crowd green ones are still there. (The shapes and
+        // terrain themselves are pinned bit for bit by the legacy scenario in island-shape-golden.json.)
+        var legacy = WorldGenerationOptions.ForSeed(1) with { IslandCellSize = 260, IslandMaxReach = 0.0, IslandMinGap = 0.0, IslandLargeShare = 0.12 };
+        var sampler = new TerrainSampler(legacy);
+        var green = sampler.EnumerateIslandShapes().ToList();
+        Assert.Contains(sampler.EnumerateIslandShapes(wasted: true), w => green.Any(g => TerrainSampler.IslandsTooClose(w, g, 24.0)));
+    }
+
+    [Fact]
+    public void An_island_is_only_dropped_for_an_outranking_neighbour_too_close()
+    {
+        // Every island the rule drops has a neighbour that is too close and outranks it: a larger
+        // class, or the same class and a higher roll. So a large island only ever gives way to a
+        // large one, and the rule thins the smaller classes around the big islands.
+        var options = WorldGenerationOptions.ForSeed(3) with { Radius = 2000 };
+        var kept = new TerrainSampler(options).EnumerateIslandShapes().Select(s => (s.CellCol, s.CellRow)).ToHashSet();
+        var dropped = new TerrainSampler(options with { IslandMinGap = 0.0 }).EnumerateIslandShapes()
+            .Where(s => !kept.Contains((s.CellCol, s.CellRow))).ToList();
+        Assert.NotEmpty(dropped);
+
+        // The outranking neighbour may itself sit past the world edge (an island dropped there
+        // still keeps its neighbours away), so look for it in a bigger world: the edge never
+        // changes a shape, only whether it is kept.
+        var candidates = new TerrainSampler(options with { IslandMinGap = 0.0, Radius = WorldGenerationOptions.MaxRadius }).EnumerateIslandShapes().ToList();
+
+        bool Outranks(IslandShape a, IslandShape b) =>
+            a.SizeClass != b.SizeClass
+                ? a.SizeClass > b.SizeClass
+                : ValueNoise.Hash2(a.CellCol, a.CellRow, options.Seed + 307) > ValueNoise.Hash2(b.CellCol, b.CellRow, options.Seed + 307);
+
+        foreach (var d in dropped)
+        {
+            Assert.Contains(candidates, o => !ReferenceEquals(o, d) && Outranks(o, d) && TerrainSampler.IslandsTooClose(d, o, options.IslandMinGap));
+        }
+
+        Assert.True(
+            dropped.Count(s => s.SizeClass != IslandSizeClass.Large) > dropped.Count(s => s.SizeClass == IslandSizeClass.Large),
+            "the rule should mostly thin the smaller classes");
+    }
+
+    [Fact]
+    public void Land_sits_within_reach_of_its_islands_centre()
+    {
+        // Reach is the farthest land from the centre, warps included: every land hex an island
+        // alone claims is within Reach of the centre (in offset space).
+        var options = WorldGenerationOptions.ForSeed(3);
+        var sampler = new TerrainSampler(options);
+        foreach (var shape in sampler.EnumerateIslandShapes().Take(6))
+        {
+            for (var col = shape.MinCol; col <= shape.MaxCol; col += 3)
+            {
+                for (var row = shape.MinRow; row <= shape.MaxRow; row += 3)
+                {
+                    var hex = HexCoord.FromOddQ(new OffsetCoord(col, row));
+                    if (sampler.DepthOfShape(shape, hex, wasted: false) is null)
+                    {
+                        continue;
+                    }
+
+                    var dx = col - shape.CentreX;
+                    var dy = row - shape.CentreY;
+                    Assert.True(
+                        Math.Sqrt((dx * dx) + (dy * dy)) <= shape.Reach + 1e-9,
+                        $"land at ({col},{row}) is farther than reach {shape.Reach:0.#} from cell {shape.CellCol},{shape.CellRow}'s centre");
+                }
+            }
+        }
+    }
+
+    // ---- size classes ------------------------------------------------------------------
+
+    [Fact]
+    public void Size_classes_come_in_the_advertised_mix_and_order_by_size()
+    {
+        var options = WorldGenerationOptions.ForSeed(21) with { Radius = WorldGenerationOptions.MaxRadius };
+        var sampler = new TerrainSampler(options);
+        var shapes = sampler.EnumerateIslandShapes().ToList();
+        Assert.True(shapes.Count > 200, $"only {shapes.Count} islands in a radius-5000 world");
+
+        double Share(IslandSizeClass c) => (double)shapes.Count(s => s.SizeClass == c) / shapes.Count;
+
+        // Mostly B, some A, a few C (a large island also clears its neighbours, which thins
+        // the medium/small classes around it).
+        Assert.True(Share(IslandSizeClass.Medium) > Share(IslandSizeClass.Small), "B should be the most common class");
+        Assert.InRange(Share(IslandSizeClass.Small), 0.15, 0.45);
+        Assert.InRange(Share(IslandSizeClass.Large), 0.03, 0.20);
+
+        // A < B < C by island size (widest half-width of the spine).
+        double MeanWidth(IslandSizeClass c) => shapes.Where(s => s.SizeClass == c).Average(s => s.Width.Max() / s.ClampFactor);
+        Assert.True(MeanWidth(IslandSizeClass.Small) < MeanWidth(IslandSizeClass.Medium));
+        Assert.True(MeanWidth(IslandSizeClass.Medium) < MeanWidth(IslandSizeClass.Large));
+    }
+
+    [Fact]
+    public void A_large_island_clears_the_cells_around_it()
+    {
+        var options = WorldGenerationOptions.ForSeed(21) with { Radius = WorldGenerationOptions.MaxRadius };
+        var sampler = new TerrainSampler(options);
+        var large = sampler.EnumerateIslandShapes().Where(s => s.SizeClass == IslandSizeClass.Large).ToList();
+        Assert.NotEmpty(large);
+
+        foreach (var l in large)
+        {
+            for (var dc = -1; dc <= 1; dc++)
+            {
+                for (var dr = -1; dr <= 1; dr++)
+                {
+                    if (dc == 0 && dr == 0)
+                    {
+                        continue;
+                    }
+
+                    var neighbour = sampler.IslandShapeAt(l.CellCol + dc, l.CellRow + dr);
+                    if (neighbour is null)
+                    {
+                        continue;
+                    }
+
+                    // The only neighbour that can survive a kept large island is another
+                    // large island that lost the tie-break and was demoted to medium.
+                    var rawHash = ValueNoise.Hash2(neighbour.CellCol, neighbour.CellRow, options.Seed + 301);
+                    Assert.True(
+                        neighbour.SizeClass == IslandSizeClass.Medium && rawHash > 1.0 - options.IslandLargeShare,
+                        $"large island at {l.CellCol},{l.CellRow} has a surviving {neighbour.SizeClass} neighbour at {neighbour.CellCol},{neighbour.CellRow}");
+                }
+            }
+        }
+    }
+
+    // ---- cell-based generation vs brute force ------------------------------------------
+
+    /// <summary>The landmasses of <paramref name="isLand"/> over every hex of the world disc, by flood fill.</summary>
+    private static List<HashSet<HexCoord>> BruteForceLandmasses(int radius, Func<HexCoord, bool> isLand)
+    {
+        var land = new HashSet<HexCoord>(HexCoord.Origin.WithinRadius(radius).Where(isLand));
+        var seen = new HashSet<HexCoord>();
+        var masses = new List<HashSet<HexCoord>>();
+        foreach (var start in land.OrderBy(c => c.Q).ThenBy(c => c.R))
+        {
+            if (!seen.Add(start))
+            {
+                continue;
+            }
+
+            var mass = new HashSet<HexCoord> { start };
+            var pending = new Stack<HexCoord>();
+            pending.Push(start);
+            while (pending.TryPop(out var c))
+            {
+                foreach (var n in c.Neighbours())
+                {
+                    if (land.Contains(n) && seen.Add(n))
+                    {
+                        mass.Add(n);
+                        pending.Push(n);
+                    }
+                }
+            }
+
+            masses.Add(mass);
+        }
+
+        return masses;
+    }
+
+    [Theory]
+    [InlineData(1, 300)]
+    [InlineData(2, 300)]
+    [InlineData(3, 500)]
+    public void Cell_based_generation_finds_exactly_the_landmasses_a_full_scan_finds(int seed, int radius)
+    {
+        var options = WorldGenerationOptions.Compact(seed, radius) with { IslandChance = 1.0 };
+        var world = TestWorlds.Generate(options);
+        var sampler = new TerrainSampler(options);
+
+        foreach (var (wasted, isLand) in new (bool, Func<HexCoord, bool>)[]
+        {
+            (false, c => sampler.IsLand(c)),
+            (true, c => sampler.WastedTerrainAt(c).IsLand()),
+        })
+        {
+            var expected = BruteForceLandmasses(radius, isLand)
+                .Where(m => m.Count >= options.MinimumIslandTiles)
+                .OrderBy(m => m.Min(c => (c.Q, c.R)))
+                .ToList();
+            var actual = world.Islands.Where(i => i.IsWasted == wasted).ToList();
+
+            Assert.Equal(expected.Count, actual.Count);
+            for (var i = 0; i < expected.Count; i++)
+            {
+                Assert.True(
+                    expected[i].SetEquals(actual[i].Tiles),
+                    $"seed {seed} radius {radius} (wasted: {wasted}) island #{i}: {actual[i].TileCount} tiles vs brute force {expected[i].Count}");
+            }
+        }
+
+        // Sizes of what was thrown away never inflate the count past what a full scan sees.
+        var bruteTotal = BruteForceLandmasses(radius, c => sampler.IsLand(c)).Sum(m => m.Count);
+        var keptTotal = world.Islands.Where(i => !i.IsWasted).Sum(i => i.TileCount);
+        Assert.InRange(world.LandTileCount, keptTotal, bruteTotal);
+    }
+
+    [Fact]
+    public void Islands_are_indexed_by_their_lowest_tile_and_their_tiles_are_sorted()
+    {
+        var world = TestWorlds.Compact(5, 500);
+        var green = world.Islands.Where(i => !i.IsWasted).ToList();
+        Assert.True(green.Count > 3);
+
+        Assert.Equal(Enumerable.Range(0, world.Islands.Count), world.Islands.Select(i => i.Index));
+        foreach (var island in world.Islands)
+        {
+            Assert.Equal(island.Tiles.OrderBy(t => t.Q).ThenBy(t => t.R), island.Tiles);
+        }
+
+        var firsts = green.Select(i => (i.Tiles[0].Q, i.Tiles[0].R)).ToList();
+        Assert.Equal(firsts.OrderBy(t => t.Q).ThenBy(t => t.R), firsts);
+    }
+
+    [Fact]
+    public void Parallel_per_island_work_gives_the_same_world_every_time()
+    {
+        var options = WorldGenerationOptions.Compact(8, 500) with { IslandChance = 1.0 };
+        var first = new WorldGenerator(options).Generate(TestContext.Current.CancellationToken);
+        var second = new WorldGenerator(options).Generate(TestContext.Current.CancellationToken);
+
+        Assert.Equal(first.LandTileCount, second.LandTileCount);
+        Assert.Equal(
+            first.Islands.Select(i => (i.Index, i.Name, i.Centre, i.Tiles.Count, i.RiverTiles.Count, i.Giants.Count)),
+            second.Islands.Select(i => (i.Index, i.Name, i.Centre, i.Tiles.Count, i.RiverTiles.Count, i.Giants.Count)));
+        Assert.Equal(first.Islands.Select(i => i.StartPositions), second.Islands.Select(i => i.StartPositions));
+        Assert.Equal(first.Islands.Select(i => i.RiverTiles), second.Islands.Select(i => i.RiverTiles));
+    }
+
+    [Fact]
+    public void Wasted_islands_still_never_touch_green_land_with_the_new_shape()
+    {
+        var world = TestWorlds.Default(6);
+        var sampler = new TerrainSampler(world.Options);
+        var wastedIslands = world.Islands.Where(i => i.IsWasted).ToList();
+        Assert.NotEmpty(wastedIslands);
+
+        foreach (var tile in wastedIslands.SelectMany(i => i.Tiles))
+        {
+            Assert.False(sampler.IsLand(tile), $"wasted tile {tile} is green land");
+            Assert.All(tile.Neighbours(), n => Assert.False(sampler.IsLand(n), $"wasted tile {tile} touches green land at {n}"));
+        }
+    }
+}

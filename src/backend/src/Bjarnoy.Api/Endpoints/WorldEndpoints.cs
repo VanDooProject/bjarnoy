@@ -1,9 +1,12 @@
+using System.Security.Claims;
 using Asp.Versioning;
 using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Bjarnoy.Infrastructure.Services.PlotReservations;
 using Bjarnoy.Infrastructure.World;
@@ -47,15 +50,28 @@ public static class WorldEndpoints
 
         worlds.MapGet("/{worldId:guid}/islands", GetIslands)
             .WithName("GetWorldIslands")
-            .WithSummary("Lists the islands of a world, with their start positions.");
+            .WithSummary("Lists the islands of a world, with their start positions; camps only for the islands the caller has seen part of.")
+            .RequireCallerRealm();
+
+        worlds.MapGet("/{worldId:guid}/camps", GetCamps)
+            .WithName("GetWorldCamps")
+            .WithSummary("The live state (garrison, calm, clears, loot left) at the world's game time of every wildlife camp on an island the caller has seen part of, optionally for one island.")
+            .RequireCallerRealm();
+
+        worlds.MapGet("/{worldId:guid}/walls", GetWalls)
+            .WithName("GetWorldWalls")
+            .WithSummary("Every standing palisade/gate hex of the rival settlements the caller has explored (their own walls excluded).")
+            .RequireCallerRealm();
 
         worlds.MapGet("/{worldId:guid}/tiles", GetTiles)
             .WithName("GetWorldTiles")
             .WithSummary("Returns the terrain of an axial rectangle of hexes.");
 
-        worlds.MapGet("/{worldId:guid}/fog-mask", GetFogMask)
-            .WithName("GetWorldFogMask")
-            .WithSummary("The requesting player's fog-of-war mask, as an RGBA8 PNG (map-fog-v2.md §2.2).")
+        worlds.MapGet("/{worldId:guid}/fog-chunks", GetFogChunks)
+            .WithName("GetWorldFogChunks")
+            .WithSummary(
+                "The requesting player's fog-of-war mask for a rectangle of 64x64-texel chunks, " +
+                "one RGBA8 PNG per chunk (map-fog-v2.md §2.2/§3).")
             .RequireCallerRealm();
 
         worlds.MapGet("/{worldId:guid}/plot-suggestion", GetPlotSuggestion)
@@ -190,9 +206,18 @@ public static class WorldEndpoints
             worldId, settlement?.Id.ToString(), settlement?.Name));
     }
 
+    /// <summary>
+    /// The islands of a world — labels, start positions and the rest are the same for everyone, but
+    /// <see cref="IslandResponse.Camps"/> ships only for islands the caller has seen part of (<see cref="SeenIslandIdsAsync"/>);
+    /// every other island answers an empty camp list.
+    /// </summary>
     private static async Task<Results<Ok<IReadOnlyList<IslandResponse>>, NotFound<ProblemDetails>>> GetIslands(
         Guid worldId,
+        HttpContext httpContext,
         WorldService worlds,
+        ExploredAreaService exploredArea,
+        RealmDirectory realms,
+        PlotReservationService reservations,
         CancellationToken cancellationToken)
     {
         var world = await worlds.GetWorldAsync(worldId, cancellationToken);
@@ -213,7 +238,122 @@ public static class WorldEndpoints
             islands = [.. islands.Where(i => !i.IsWasted)];
         }
 
-        IReadOnlyList<IslandResponse> response = [.. islands.Select(IslandResponse.From)];
+        var seen = await SeenIslandIdsAsync(worldId, httpContext, exploredArea, realms, reservations, cancellationToken);
+        IReadOnlyList<IslandResponse> response = [.. islands.Select(i => IslandResponse.From(i, seen.Contains(i.Id)))];
+
+        return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// The islands the caller has seen part of (<see cref="ExploredAreaService.SeenIslandIdsAsync"/>), plus the island of
+    /// their pinned pre-founding plot suggestion. A caller that does not resolve to a realm, or has no explored area,
+    /// has seen none. The one cutoff for the camp data of <see cref="GetIslands"/> and <see cref="GetCamps"/>.
+    /// </summary>
+    private static async Task<HashSet<Guid>> SeenIslandIdsAsync(
+        Guid worldId,
+        HttpContext httpContext,
+        ExploredAreaService exploredArea,
+        RealmDirectory realms,
+        PlotReservationService reservations,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return [];
+        }
+
+        var area = await exploredArea.GetAsync(worldId, realm.OwnerId!, persist: false, cancellationToken);
+        if (area is null)
+        {
+            return [];
+        }
+
+        return await exploredArea.SeenIslandIdsAsync(
+            area, reservations.PinnedIslandId(worldId, realm.OwnerId!), cancellationToken);
+    }
+
+    /// <summary>
+    /// The live state of every wildlife camp at the world's game clock, optionally narrowed to one island, limited to the
+    /// islands the caller has seen part of like <see cref="IslandResponse.Camps"/> (<see cref="SeenIslandIdsAsync"/>).
+    /// Read-only — a camp's garrison is settled in memory from its stored snapshot,
+    /// never written on this path. Wasted islands' camps stay hidden until the endboss has triggered, like the islands.
+    /// </summary>
+    private static async Task<Results<Ok<IReadOnlyList<CampStateResponse>>, NotFound<ProblemDetails>>> GetCamps(
+        Guid worldId,
+        Guid? islandId,
+        HttpContext httpContext,
+        WorldService worlds,
+        CampService campService,
+        ExploredAreaService exploredArea,
+        RealmDirectory realms,
+        PlotReservationService reservations,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var world = await worlds.GetWorldAsync(worldId, cancellationToken);
+        if (world is null)
+        {
+            return TypedResults.NotFound(WorldNotFoundProblem());
+        }
+
+        var now = world.ToClock().ToGameTime(timeProvider.GetUtcNow());
+        var camps = await campService.LoadCampsAsync(
+            worldId, now, islandId, includeWasted: world.EndbossTriggeredAt is not null, cancellationToken);
+        var seen = await SeenIslandIdsAsync(worldId, httpContext, exploredArea, realms, reservations, cancellationToken);
+        camps = [.. camps.Where(c => seen.Contains(c.IslandId))];
+        var realm = await campService.LoadRealmAsync(worldId, cancellationToken);
+
+        IReadOnlyList<CampStateResponse> response = [.. camps.Select(c => CampStateResponse.From(c, now, realm))];
+        return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// The standing wall hexes (level 1 or more) of the world's rival settlements, so a live client can draw, hit-test and plan routes
+    /// around walls it never fetched a settlement for. Gated exactly like <c>GET /worlds/{id}/settlements</c> (<c>SettlementEndpoints.ListForWorld</c>):
+    /// a settlement's walls are listed only when its centre hex is in the caller's explored area, and the caller's own settlements are
+    /// left out (their walls already ship in their own settlement read). No resolvable realm or world answers an empty list.
+    /// </summary>
+    private static async Task<Ok<IReadOnlyList<WallResponse>>> GetWalls(
+        Guid worldId,
+        HttpContext httpContext,
+        GameDbContext db,
+        ExploredAreaService exploredArea,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<WallResponse>>([]);
+        }
+
+        var area = await exploredArea.GetAsync(worldId, realm.OwnerId!, persist: false, cancellationToken);
+        if (area is null)
+        {
+            return TypedResults.Ok<IReadOnlyList<WallResponse>>([]);
+        }
+
+        var idClaim = httpContext.User.Identity?.IsAuthenticated == true
+            ? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            : null;
+        var callerUserId = Guid.TryParse(idClaim, out var parsedUserId) ? parsedUserId : (Guid?)null;
+
+        var rows = (await WorldPalisades.ListStandingAsync(db, worldId, cancellationToken))
+            .Where(w => w.OwnerId != realm.OwnerId && !(callerUserId is not null && w.UserId == callerUserId))
+            .ToList();
+
+        var explored = await exploredArea.ExploredAmongAsync(
+            area, rows.Select(w => new HexCoord(w.CentreQ, w.CentreR)).Distinct(), cancellationToken);
+
+        IReadOnlyList<WallResponse> response =
+        [
+            .. rows
+                .Where(w => explored.Contains(new HexCoord(w.CentreQ, w.CentreR)))
+                .Select(w => new WallResponse(
+                    w.Q, w.R, w.Type.ToWireName(), w.Level, w.SettlementId,
+                    w.UserId == SystemUserIds.Abandoned ? null : w.UserId, w.OutsideRealm)),
+        ];
 
         return TypedResults.Ok(response);
     }
@@ -267,9 +407,10 @@ public static class WorldEndpoints
             return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
+        var bog = await worlds.GetBogOverlayAsync(worldId, cancellationToken);
         IReadOnlyList<TileResponse> tiles =
         [
-            .. WorldService.GetTiles(world, qMin, qMax, rMin, rMax).Select(TileResponse.From),
+            .. WorldService.GetTiles(world, qMin, qMax, rMin, rMax, bog).Select(TileResponse.From),
         ];
 
         return TypedResults.Ok(new TileChunkResponse(worldId, qMin, qMax, rMin, rMax, tiles));
@@ -284,15 +425,26 @@ public static class WorldEndpoints
     /// realm is refused with 403 rather than handed that realm's fog history.
     /// Per <c>map-fog-v2.md</c> §1f, this endpoint must stay player-scoped
     /// even though <c>/tiles</c> above is deliberately open. The resolved
-    /// owner id is passed straight through to <see cref="FogMaskService"/>
+    /// owner id is passed straight through to <see cref="FogChunkService"/>
     /// unchanged — its explored-tile history is keyed by <c>OwnerId</c>,
     /// which is exactly why the resolver hands back the realm's original one
     /// rather than anything from this request.
     /// </summary>
-    private static async Task<IResult> GetFogMask(
+    /// <remarks>
+    /// The rectangle is inclusive on both ends, in chunk coordinates
+    /// (<c>cuMin..cuMax</c> x <c>cvMin..cvMax</c>, see <c>FogChunkLayout</c>),
+    /// mirroring <see cref="GetTiles"/>'s <c>qMin..qMax</c> shape. The
+    /// response's <c>ETag</c> covers the whole rectangle, so the SPA's
+    /// re-poll of an unchanged viewport is a 304 with no body.
+    /// </remarks>
+    private static async Task<IResult> GetFogChunks(
         Guid worldId,
+        int cuMin,
+        int cuMax,
+        int cvMin,
+        int cvMax,
         HttpContext httpContext,
-        FogMaskService fogMask,
+        FogChunkService fogChunks,
         RealmDirectory realms,
         CancellationToken cancellationToken)
     {
@@ -307,13 +459,21 @@ public static class WorldEndpoints
             return NotOwnerRefusal();
         }
 
-        var result = await fogMask.GeneratePlayerMaskAsync(worldId, realm.OwnerId!, cancellationToken);
-        if (!result.Accepted)
+        var result = await fogChunks.GetChunksAsync(worldId, realm.OwnerId!, cuMin, cuMax, cvMin, cvMax, cancellationToken);
+        switch (result.Rejection)
         {
-            // FogMaskRejection's only value besides None: the world itself
-            // doesn't exist (map-fog-v2.md's slice never rejects for an
-            // owner having no settlements — that renders an all-fog mask).
-            return TypedResults.NotFound(WorldNotFoundProblem());
+            case FogChunkRejection.WorldNotFound:
+                return TypedResults.NotFound(WorldNotFoundProblem());
+            case FogChunkRejection.InvalidRange:
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["range"] = ["cuMax/cvMax must be greater than or equal to cuMin/cvMin."],
+                });
+            case FogChunkRejection.TooManyChunks:
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["range"] = [$"At most {FogChunkService.MaxChunksPerRequest} chunks may be fetched in one call."],
+                });
         }
 
         var eTag = $"\"{result.ETag}\"";
@@ -323,13 +483,13 @@ public static class WorldEndpoints
         }
 
         httpContext.Response.Headers.ETag = eTag;
-        return TypedResults.File(result.Png!, "image/png");
+        return TypedResults.Ok(FogChunksResponse.From(cuMin, cuMax, cvMin, cvMax, result.Chunks!));
     }
 
     /// <summary>
     /// Backend-owned counterpart to the landing page's old client-side plot
     /// finder — see <see cref="PlotReservationService"/>. Same
-    /// <see cref="CallerRealmResolver"/>-based scoping as <see cref="GetFogMask"/>
+    /// <see cref="CallerRealmResolver"/>-based scoping as <see cref="GetFogChunks"/>
     /// (a claimed player's JWT resolves to their realm even from a fresh
     /// browser, and someone else's already-claimed realm under the header is
     /// refused with 403) — never echoes any owner id, IP, or another
@@ -400,13 +560,17 @@ public static class WorldEndpoints
 
         var suggestion = result.Suggestion!;
 
+        var callerIdClaim = httpContext.User.Identity?.IsAuthenticated == true
+            ? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            : null;
+        var callerUserId = Guid.TryParse(callerIdClaim, out var parsedCallerId) ? parsedCallerId : (Guid?)null;
+
         var islandSettlementEntities = await settlements.GetForIslandAsync(suggestion.IslandId, cancellationToken);
         IReadOnlyList<SettlementSummary> islandSettlements =
         [
-            .. islandSettlementEntities.Select(s => new SettlementSummary(
-                s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
-                s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
-                s.IslandId)),
+            .. islandSettlementEntities.Select(s => SettlementSummary.From(
+                s,
+                s.OwnerId == realm.OwnerId || (callerUserId is not null && s.UserId == callerUserId))),
         ];
 
         return TypedResults.Ok(new PlotSuggestionResponse(
@@ -454,7 +618,7 @@ public static class WorldEndpoints
     };
 
     /// <summary>
-    /// The 403 the fog-mask and plot-suggestion endpoints answer with on
+    /// The 403 the fog-chunks and plot-suggestion endpoints answer with on
     /// <see cref="CallerRealmOutcome.Refused"/> — the same body
     /// <see cref="OwnershipGate"/> uses for a mutation from the wrong caller,
     /// since this is the same rule applied to a read.

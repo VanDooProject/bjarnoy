@@ -1,6 +1,7 @@
 {
   "title": "Messages",
   "empty": "No conversations yet — visit a player's profile to send them a message.",
+  "backToGame": "← Back",
   "loadError": "Could not load your messages.",
   "pager": {
     "previous": "Previous",

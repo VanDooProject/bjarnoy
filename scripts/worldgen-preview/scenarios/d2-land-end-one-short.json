@@ -1,0 +1,80 @@
+{
+ "name": "d2-land-end-one-short",
+ "title": "the same wall one hex short of the coast: the enemy goes round the end or over its half-open hex, whichever is cheaper",
+ "seed": 11,
+ "radius": 1000,
+ "generation": {
+  "islandCellSize": 260,
+  "islandMaxReach": 0,
+  "islandMinGap": 0,
+  "islandLargeShare": 0.12
+ },
+ "window": {
+  "q": 368,
+  "r": -831,
+  "size": 22
+ },
+ "px": 36,
+ "walls": [
+  [
+   365,
+   -832
+  ],
+  [
+   366,
+   -832
+  ],
+  [
+   367,
+   -832
+  ],
+  [
+   368,
+   -832
+  ],
+  [
+   369,
+   -832
+  ],
+  [
+   370,
+   -832
+  ],
+  [
+   371,
+   -832
+  ]
+ ],
+ "gates": [
+  [
+   368,
+   -832
+  ]
+ ],
+ "routes": [
+  {
+   "from": [
+    369,
+    -834
+   ],
+   "to": [
+    370,
+    -830
+   ],
+   "army": "enemy"
+  },
+  {
+   "from": [
+    370,
+    -834
+   ],
+   "to": [
+    369,
+    -830
+   ],
+   "army": "friendly"
+  }
+ ],
+ "flood": 0,
+ "labels": true
+}

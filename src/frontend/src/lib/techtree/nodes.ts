@@ -9,52 +9,38 @@ import {
   type BuildingModifier,
   type BuildingOutput,
 } from '../map/buildingEconomy';
+import { i18n } from '../../i18n';
+import { formatBuildingModifier, formatBuildingOutput, type StatsTranslate } from '../map/buildingStatsText';
 import { graphCategoryOf, shortLabel, typeLabel, type GraphCategory } from './buildingPresentation';
 import { ANCHOR, columnX, rowY, TECH_TREE_LAYOUT, type Slot } from './layout';
 
-const TERRAIN_LABELS: Record<string, string> = {
-  forest: 'Forest',
-  mountain: 'Mountain',
-};
+// The graph stays English whatever the player's locale (see
+// buildingPresentation.ts), so the shared stats text is translated with the
+// English messages. A card stands for every level of a bridge, so it says what
+// a bridge is for rather than the one level's crossing speed.
+const englishText: StatsTranslate = (key, named) => i18n.global.t(key, named ?? {}, { locale: 'en' }) as string;
 
-// The graph is raw English by design (see buildingPresentation.ts) — mirrors
-// MapView.vue/HexTooltip.vue's formatOutput/formatModifier but without
-// routing through vue-i18n, since this module is plain data, not a component.
 function formatOutput(output: BuildingOutput): string {
-  switch (output.kind) {
-    case 'resourceRate':
-      return `+${output.amount} ${output.resource}/h`;
-    case 'populationCapacity':
-      return `+${output.amount} population capacity`;
-    case 'storageCapacity':
-      return `+${output.amount} storage capacity`;
-    case 'visionRing':
-      return `Vision +${output.amount} ring`;
-  }
+  return formatBuildingOutput(output, englishText);
 }
 
 function formatModifier(modifier: BuildingModifier): string {
-  switch (modifier.kind) {
-    case 'borderAnchor':
-      return 'Border anchor';
-    case 'trainsLandTroops':
-      return 'Trains land troops';
-    case 'trainsShips':
-      return 'Trains ships';
-    case 'trainsCivilianCrews':
-      return 'Trains provisioners/settler crews';
-    case 'terrainBoost':
-      return `${TERRAIN_LABELS[modifier.terrain] ?? modifier.terrain} (+${modifier.percent}%)`;
-    case 'coastal':
-      return modifier.percent ? `Coastal (+${modifier.percent}%)` : 'Coastal';
-    case 'shrineFavour':
-      if (modifier.domain === 'shipAttack') return `+${modifier.percent}% ship attack`;
-      if (modifier.domain === 'landAttack') return `+${modifier.percent}% land unit attack`;
-      return `+${modifier.percent}% ${modifier.domain === 'wood' ? 'Wood' : 'Food'} production`;
-    case 'radiusBoost':
-      return `+${modifier.percent}% ${modifier.resource === 'wood' ? 'Wood' : 'Food'} within ${modifier.range} ${modifier.range === 1 ? 'ring' : 'rings'}`;
-  }
+  if (modifier.kind === 'bridge') return 'Opens a wide river to land armies';
+  return formatBuildingModifier(modifier, englishText);
 }
+
+/**
+ * Card-per-type exceptions: one card standing for several building types. Farm
+ * and Pumpkin Farm are separate types only because their soil rule differs
+ * (Pumpkin Farm needs a Pumpkin-soil island), so the tree shows one card with
+ * one unlock level and one prerequisite, and the other type has no slot of its
+ * own in `TECH_TREE_LAYOUT`.
+ */
+export const MERGED_CARDS: Readonly<Record<string, { label: string; absorbs: readonly string[] }>> = {
+  farm: { label: 'Farm / Pumpkin Farm (by soil)', absorbs: ['pumpkinfarm'] },
+  // The wall hex and its gate share every number (unlock, prerequisite, levels, cost); only a gate's placement rule differs.
+  palisade: { label: 'Palisade / Gate', absorbs: ['palisadegate'] },
+};
 
 export interface TechTreeChip {
   text: string;
@@ -124,7 +110,7 @@ export function buildTechTreeNodes(
 
     nodes.push({
       type,
-      label: typeLabel(type),
+      label: MERGED_CARDS[type]?.label ?? typeLabel(type),
       gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : '',
       category: graphCategoryOf(type),
       x: columnX(col),

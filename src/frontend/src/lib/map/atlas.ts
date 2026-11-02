@@ -18,6 +18,16 @@
 // (playback/fps/pause per clip) alongside the frames Spritesheet already
 // understands — read directly off the raw manifest, not through Spritesheet.
 import { Assets, Spritesheet, Texture } from 'pixi.js';
+import {
+  MANIFESTS,
+  PAGE_NAME_RE,
+  atlasManifestVersion,
+  discoveredCategories,
+  discoveredPages,
+  loadAtlasManifests,
+} from './atlasManifests';
+
+export { atlasManifestVersion, loadAtlasManifests };
 
 export interface AtlasFrameMeta {
   family: string;
@@ -31,7 +41,7 @@ export interface AtlasFrameMeta {
  * pointing at `terrain`'s own `grasstile_E_base`, so the packer doesn't have
  * to duplicate terrain art into every building category that stands on
  * plain ground). `findFrameIn` resolves this synchronously (terrain's pages
- * are eagerly imported same as every other category); `loadPages` resolves
+ * are resolved from already-fetched manifests, same as every other category); `loadPages` resolves
  * it into a live Pixi `Texture` by loading `category` (already cached once
  * terrain has loaded) and copying its `frame`'s texture across. Not present
  * in the currently vendored atlas — every lookup degrades to "no aliases",
@@ -89,6 +99,32 @@ export interface AtlasClip {
    * yet); `rest` above is what every clip that exists today uses.
    */
   rest_by_camera?: Record<string, string>;
+  /** True for a clip every tile must play on the one global clock (a wind-sway clip), so a gust stays continuous across tiles. */
+  shared_clock?: boolean;
+  /**
+   * Gust-wave metadata of a sway clip: the art is rendered so a tree's phase is `frame / N - s / wavelength` (s = position along screen-right in
+   * render units), so a tile in map column k must show frame `(g - k * frames_per_column) mod N`. Read it through `swayFramesPerColumn`.
+   */
+  sway?: { wavelength: number; frames_per_column: number };
+}
+
+/** The clip's `sway.frames_per_column` when it is a non-negative integer, else 0 (no per-column offset: a malformed `sway` is ignored). */
+export function swayFramesPerColumn(clip: Pick<AtlasClip, 'sway'>): number {
+  const n = (clip.sway as { frames_per_column?: unknown } | undefined)?.frames_per_column;
+  return typeof n === 'number' && Number.isInteger(n) && n >= 0 ? n : 0;
+}
+
+/**
+ * A sway clip's period in frames: `round(frames_per_column * wavelength / 1.5)` (16 for frames_per_column 4, wavelength 6). Returns it only when it is a
+ * positive integer, else 0 (no period known: the caller treats the whole clip as one period).
+ */
+export function swayPeriodFrames(clip: Pick<AtlasClip, 'sway'>): number {
+  const sway = clip.sway as { wavelength?: unknown; frames_per_column?: unknown } | undefined;
+  const w = sway?.wavelength;
+  const f = sway?.frames_per_column;
+  if (typeof w !== 'number' || typeof f !== 'number' || !Number.isFinite(w) || !Number.isFinite(f)) return 0;
+  const p = Math.round((f * w) / 1.5);
+  return Number.isInteger(p) && p > 0 ? p : 0;
 }
 
 // Exported (only) so atlas.test.ts can build synthetic manifests for the
@@ -123,6 +159,8 @@ export interface AtlasManifest {
   clips?: Record<string, AtlasClip>;
 }
 
+// The manifests themselves are fetched lazily (see atlasManifests.ts) — only
+// their URLs are globbed, so page discovery works before anything is loaded.
 // Atlas pages live in the VanDooProject/bg_assets_hextile submodule's own
 // atlas/ directory, alongside (not replacing) the individual hextiles/
 // PNGs buildingArt.ts still uses (see textures.ts's module doc comment).
@@ -132,10 +170,6 @@ export interface AtlasManifest {
 // per tile/orientation/level, and the page count isn't fixed (rectpack
 // decides it), so discovering pages by filename is simpler than importing
 // each one by a name that can change as the art set grows.
-const ATLAS_JSON = import.meta.glob('../../../vendor/bg_assets_hextile/atlas/*.json', {
-  eager: true,
-  import: 'default',
-}) as Record<string, AtlasManifest>;
 const ATLAS_WEBP = import.meta.glob('../../../vendor/bg_assets_hextile/atlas/*.webp', {
   eager: true,
   import: 'default',
@@ -156,17 +190,16 @@ const ATLAS_WEBP = import.meta.glob('../../../vendor/bg_assets_hextile/atlas/*.w
 export const ATLAS_PACKS = ['wasted', 'frozen'] as const;
 export type AtlasPack = (typeof ATLAS_PACKS)[number];
 
-const PAGE_NAME_RE = /\/([a-z0-9-]+)-(\d+)\.json$/;
-
 // Exported (only) so atlas.test.ts can build a synthetic index for
-// pagesForIndex/findFrameIn/findClipIn without touching the real, eagerly
-// globbed vendored atlas.
+// pagesForIndex/findFrameIn/findClipIn without touching the real
+// vendored atlas.
 export interface AtlasPageIndex {
   json: Record<string, AtlasManifest>;
   webp: Record<string, string>;
 }
 
-const REAL_INDEX: AtlasPageIndex = { json: ATLAS_JSON, webp: ATLAS_WEBP };
+/** `json` is the live manifest store: it only holds the manifests fetched so far. */
+const REAL_INDEX: AtlasPageIndex = { json: MANIFESTS, webp: ATLAS_WEBP };
 
 // Exported (only) so atlas.test.ts can check page discovery — in particular
 // that `match[1]` is compared for exact equality, so `pagesForIndex(idx,
@@ -190,10 +223,6 @@ export function pagesForIndex(
   }
   pages.sort((a, b) => a.page - b.page);
   return pages;
-}
-
-function pagesFor(category: string): { manifest: AtlasManifest; webpUrl: string }[] {
-  return pagesForIndex(REAL_INDEX, category);
 }
 
 /**
@@ -225,8 +254,21 @@ function withBuildingLevel1(category: string): readonly string[] {
  * error.
  */
 // Exported (only) so atlas.test.ts can check the search order directly.
-export function categorySearchOrder(category: string): readonly string[] {
-  return [category, ...ATLAS_PACKS.map((pack) => `${pack}-${category}`)].flatMap(withBuildingLevel1);
+export function categorySearchOrder(category: string, index: AtlasPageIndex = REAL_INDEX): readonly string[] {
+  const order = [category, ...ATLAS_PACKS.map((pack) => `${pack}-${category}`)];
+  if (category === 'showcase') {
+    // The showcase atlas is split into `showcase` plus one `<group>-showcase`
+    // category per group (wasted, frozen, camps, bog, ...) — and new groups
+    // appear without ATLAS_PACKS knowing them (they are not map packs), so
+    // search whatever showcase categories exist, in sorted order.
+    const groups = new Set(order.slice(1));
+    for (const path of Object.keys(index.json)) {
+      const cat = PAGE_NAME_RE.exec(path)?.[1];
+      if (cat?.endsWith('-showcase')) groups.add(cat);
+    }
+    return ['showcase', ...[...groups].sort()];
+  }
+  return order.flatMap(withBuildingLevel1);
 }
 
 export interface LoadedAtlas {
@@ -258,14 +300,17 @@ export interface AtlasFrameRect {
   spriteSourceSize: { x: number; y: number; w: number; h: number };
 }
 
-// Manifests/webp URLs are already resolved eagerly at import time (see
-// ATLAS_JSON/ATLAS_WEBP above), so an HTML consumer that only needs a
+// Manifests are fetched lazily (see atlasManifests.ts) and webp URLs are
+// resolved at import time, so once a category's manifests are in, an HTML consumer that only needs a
 // frame's pixel rect for CSS sprite rendering — not a live Pixi Texture —
 // can look it up synchronously, with no Assets.load/Spritesheet.parse cost.
 // Exported (only) so atlas.test.ts can verify the core-then-pack fallback
 // against synthetic manifests without needing real pack pages vendored.
 export function findFrameIn(index: AtlasPageIndex, category: string, name: string): AtlasFrameRect | undefined {
-  for (const cat of categorySearchOrder(category)) {
+  // Manifests are fetched lazily: reading the version makes a computed/
+  // template that calls this re-run once more manifests have arrived.
+  void atlasManifestVersion.value;
+  for (const cat of categorySearchOrder(category, index)) {
     for (const { manifest, webpUrl } of pagesForIndex(index, cat)) {
       const frame = manifest.frames[name];
       if (frame) {
@@ -305,7 +350,7 @@ export function findAtlasFrame(category: string, name: string): AtlasFrameRect |
  * `AtlasFrameRect`s (via `findAtlasFrame` on the same category), for a
  * caller that wants to cycle through them without re-looking-up each name.
  * Synchronous for the same reason `findAtlasFrame` is — manifests are
- * eagerly imported, so no `Assets.load`/`Spritesheet.parse` is needed just
+ * already fetched, so no `Assets.load`/`Spritesheet.parse` is needed just
  * to read pixel geometry.
  */
 // Exported (only) so atlas.test.ts can verify the same fallback for clips.
@@ -318,7 +363,8 @@ export function findClipIn(
   // its rest through the plain `rest` field regardless of this.
   orientation?: string,
 ): (AtlasClip & { frameRects: AtlasFrameRect[]; restRect?: AtlasFrameRect }) | undefined {
-  for (const cat of categorySearchOrder(category)) {
+  void atlasManifestVersion.value; // See findFrameIn.
+  for (const cat of categorySearchOrder(category, index)) {
     for (const { manifest } of pagesForIndex(index, cat)) {
       const clip = manifest.clips?.[name];
       if (!clip) continue;
@@ -392,49 +438,22 @@ function evictOnReject(key: string, promise: Promise<LoadedAtlas>): void {
  * from 1, `total` is the category's page count known up front (`pages.length`,
  * fixed before the loop starts) — a best-effort progress signal for
  * HexMapRenderer's loading-state overlay (see `MapLoadState.progress`).
- * Sequential (one `Assets.load` at a time, same as before this was added),
- * so this is exact, not an estimate.
+ * Pages are counted in page order (see `loadPages` on when their downloads
+ * overlap), so this is exact, not an estimate.
  */
 export type AtlasPageProgress = (loaded: number, total: number) => void;
 
+type PageInput = { manifest: AtlasManifest; webpUrl: string };
+
 /**
- * Loads and parses every page already discovered for one category (see
- * `pagesFor`), merging them into a single frame/clip lookup. Shared by
- * `loadAtlasCategory`/`loadAtlasPackCategory`/`loadOptionalAtlasCategory` —
- * the only difference between them is what happens when `pages` is empty.
- *
- * A page's own `meta.bjarnoy.aliases` (see `AtlasAliasEntry`) are resolved
- * only after every page has parsed — each alias just copies an already-
- * loaded frame's live `Texture` across from its target category (loading
- * that category too, via `loadAtlasCategory`, if it somehow isn't resident
- * yet; terrain — the only target today — always is by the time a building
- * category's aliases are read). A target that doesn't resolve (missing
- * category or frame — a bad/stale alias) just warns and drops that one
- * alias, same graceful-degradation contract as every other lookup here.
+ * Copies each alias's target texture (from its own category, loading it if
+ * need be) into `textures`/`frameMeta`. See `loadPages`.
  */
-async function loadPages(
-  pages: { manifest: AtlasManifest; webpUrl: string }[],
-  onPage?: AtlasPageProgress,
-): Promise<LoadedAtlas> {
-  const textures: Record<string, Texture> = {};
-  const frameMeta: Record<string, AtlasFrameMeta> = {};
-  const clips: Record<string, AtlasClip> = {};
-  const aliases: Record<string, AtlasAliasEntry> = {};
-
-  let loaded = 0;
-  for (const { manifest, webpUrl } of pages) {
-    const pageTexture = await Assets.load<Texture>(webpUrl);
-    const sheet = new Spritesheet(pageTexture, manifest);
-    await sheet.parse();
-    Object.assign(textures, sheet.textures);
-    for (const [name, frame] of Object.entries(manifest.frames)) {
-      if (frame.bjarnoy) frameMeta[name] = frame.bjarnoy;
-    }
-    Object.assign(clips, manifest.clips ?? {});
-    Object.assign(aliases, manifest.meta.bjarnoy?.aliases ?? {});
-    onPage?.(++loaded, pages.length);
-  }
-
+async function resolveAliases(
+  aliases: Record<string, AtlasAliasEntry>,
+  textures: Record<string, Texture>,
+  frameMeta: Record<string, AtlasFrameMeta>,
+): Promise<void> {
   for (const [name, alias] of Object.entries(aliases)) {
     try {
       const target = await loadAtlasCategory(alias.category);
@@ -449,20 +468,105 @@ async function loadPages(
       console.warn(`atlas.ts: alias "${name}" points at unavailable category "${alias.category}"`, err);
     }
   }
+}
 
+/**
+ * Loads and parses every page already discovered for one category (see
+ * `pagesFor`), merging them into a single frame/clip lookup. Shared by
+ * `loadAtlasCategory`/`loadAtlasPackCategory`/`loadOptionalAtlasCategory` —
+ * the only difference between them is what happens when `pages` is empty.
+ *
+ * A page's own `meta.bjarnoy.aliases` (see `AtlasAliasEntry`) each just copy
+ * an already-loaded frame's live `Texture` across from its target category
+ * (loading that category too, via `loadAtlasCategory`, if it somehow isn't
+ * resident yet; terrain — the only target today — always is by the time a
+ * building category's aliases are read). A target that doesn't resolve
+ * (missing category or frame — a bad/stale alias) just warns and drops that
+ * one alias, same graceful-degradation contract as every other lookup here.
+ *
+ * `onPartial`, when given, is called after every page except the last with
+ * a snapshot of everything loaded so far (aliases of the loaded pages
+ * resolved, same as the final result) — pages arrive in priority order, so a
+ * consumer can start drawing the early art before the rest has downloaded.
+ * Each snapshot has its own record objects (later pages never mutate it).
+ */
+async function loadPages(
+  pages: PageInput[],
+  onPage?: AtlasPageProgress,
+  onPartial?: (partial: LoadedAtlas) => void,
+): Promise<LoadedAtlas> {
+  const textures: Record<string, Texture> = {};
+  const frameMeta: Record<string, AtlasFrameMeta> = {};
+  const clips: Record<string, AtlasClip> = {};
+  const aliases: Record<string, AtlasAliasEntry> = {};
+
+  // Without `onPartial` nothing is drawn until every page is in, so the
+  // pages are fetched and decoded all at once rather than one after another:
+  // one at a time, the category costs the sum of every page's round trip and
+  // decode (the terrain atlas's six pages took 7-10 s on a busy 4-core
+  // machine, with the landing page's "Loading map" overlay and the guided
+  // pointer waiting on all of it), where at once it costs about the slowest
+  // page. With `onPartial` the pages stay one at a time, so the first page's
+  // bytes are not shared with the rest and its art shows as early as it can.
+  // Each early start gets a no-op catch so a page that fails while an earlier
+  // one is still awaited is not reported as an unhandled rejection; the
+  // failure still surfaces when the loop reaches that page.
+  const prefetched = onPartial
+    ? null
+    : pages.map(({ webpUrl }) => {
+        const load = Assets.load<Texture>(webpUrl);
+        load.catch(() => {});
+        return load;
+      });
+
+  let loaded = 0;
+  for (const [i, { manifest, webpUrl }] of pages.entries()) {
+    const pageTexture = await (prefetched ? prefetched[i] : Assets.load<Texture>(webpUrl));
+    const sheet = new Spritesheet(pageTexture, manifest);
+    await sheet.parse();
+    Object.assign(textures, sheet.textures);
+    for (const [name, frame] of Object.entries(manifest.frames)) {
+      if (frame.bjarnoy) frameMeta[name] = frame.bjarnoy;
+    }
+    Object.assign(clips, manifest.clips ?? {});
+    Object.assign(aliases, manifest.meta.bjarnoy?.aliases ?? {});
+    onPage?.(++loaded, pages.length);
+
+    if (onPartial && loaded < pages.length) {
+      const snapshot: LoadedAtlas = { textures: { ...textures }, frameMeta: { ...frameMeta }, clips: { ...clips } };
+      await resolveAliases(aliases, snapshot.textures, snapshot.frameMeta);
+      try {
+        onPartial(snapshot);
+      } catch (err) {
+        console.warn('atlas.ts: onPartial callback threw', err);
+      }
+    }
+  }
+
+  await resolveAliases(aliases, textures, frameMeta);
   return { textures, frameMeta, clips };
 }
 
-function loadCategoryOrEmpty(key: string, onPage?: AtlasPageProgress): Promise<LoadedAtlas> {
+/** The category's loaded pages. Only meaningful once its manifests are in (`loadAtlasManifests`). */
+function pagesFor(category: string): PageInput[] {
+  return pagesForIndex(REAL_INDEX, category);
+}
+
+function loadCategoryOrEmpty(
+  key: string,
+  onPage?: AtlasPageProgress,
+  onPartial?: (partial: LoadedAtlas) => void,
+): Promise<LoadedAtlas> {
   const cached = cache.get(key);
   if (cached) return cached;
 
   const promise = (async () => {
+    await loadAtlasManifests(key);
     const pages = pagesFor(key);
     if (pages.length === 0) {
       return { textures: {}, frameMeta: {}, clips: {} };
     }
-    return loadPages(pages, onPage);
+    return loadPages(pages, onPage, onPartial);
   })();
 
   cache.set(key, promise);
@@ -470,32 +574,44 @@ function loadCategoryOrEmpty(key: string, onPage?: AtlasPageProgress): Promise<L
   return promise;
 }
 
+let resolveBuildingStaticLoaded: () => void = () => {};
+/** Resolves once `buildings-static` has been loaded via `loadAtlasCategory` — what `startBackgroundAtlasLoad` waits for. */
+const buildingStaticLoaded = new Promise<void>((resolve) => {
+  resolveBuildingStaticLoaded = resolve;
+});
+
 /**
  * Loads and parses every page of one atlas category, merging them into a
  * single frame/clip lookup. Throws if the category has no vendored pages at
  * all — for a core category (`terrain`, `buildings-static`, ...) that's a
  * real error, unlike a pack category (see `loadAtlasPackCategory`).
  *
- * `onPage`, when given, is only actually invoked the first time this
- * category is loaded — a later call while the category is already cached
- * (in flight or resolved) returns the same `Promise` without replaying
- * progress, same as it returns the same `LoadedAtlas` without replaying the
- * page loads themselves.
+ * `onPage`/`onPartial` (see `loadPages`), when given, are only actually
+ * invoked the first time this category is loaded — a later call while the
+ * category is already cached (in flight or resolved) returns the same
+ * `Promise` without replaying progress, same as it returns the same
+ * `LoadedAtlas` without replaying the page loads themselves.
  */
-export function loadAtlasCategory(category: string, onPage?: AtlasPageProgress): Promise<LoadedAtlas> {
+export function loadAtlasCategory(
+  category: string,
+  onPage?: AtlasPageProgress,
+  onPartial?: (partial: LoadedAtlas) => void,
+): Promise<LoadedAtlas> {
   const cached = cache.get(category);
   if (cached) return cached;
 
   const promise = (async () => {
+    await loadAtlasManifests(category);
     const pages = pagesFor(category);
     if (pages.length === 0) {
       throw new Error(`atlas.ts: no vendored pages found for atlas category "${category}"`);
     }
-    return loadPages(pages, onPage);
+    return loadPages(pages, onPage, onPartial);
   })();
 
   cache.set(category, promise);
   evictOnReject(category, promise);
+  if (category === 'buildings-static') void promise.then(resolveBuildingStaticLoaded, () => {});
   return promise;
 }
 
@@ -508,19 +624,23 @@ export function loadAtlasCategory(category: string, onPage?: AtlasPageProgress):
  * e.g. a pack with no buildings of its own) should degrade to "nothing to
  * draw" rather than fail the whole load.
  */
-export function loadAtlasPackCategory(pack: AtlasPack, category: string): Promise<LoadedAtlas> {
-  return loadCategoryOrEmpty(`${pack}-${category}`);
+export function loadAtlasPackCategory(
+  pack: AtlasPack,
+  category: string,
+  onPartial?: (partial: LoadedAtlas) => void,
+): Promise<LoadedAtlas> {
+  return loadCategoryOrEmpty(`${pack}-${category}`, undefined, onPartial);
 }
 
 /**
  * Loads a *core* (non-pack) category that may not exist at all yet — same
  * empty-if-missing degradation as `loadAtlasPackCategory`, but for a plain
  * category name rather than a `${pack}-${category}` one. Used for
- * `buildings-level1` (see `textures.ts`'s `loadLevel1Atlases`): the older,
- * currently vendored atlas has no such category at all (every building
- * frame still lives in `buildings-static`), which must degrade to "nothing
- * to draw yet" rather than the hard failure `loadAtlasCategory` gives a
- * genuinely-missing core category.
+ * `buildings-level1` (see `textures.ts`'s `loadLevel1Atlases`): the older
+ * atlas has no such category at all (every building frame still lives in
+ * `buildings-static`), which must degrade to "nothing to draw yet" rather
+ * than the hard failure `loadAtlasCategory` gives a genuinely-missing core
+ * category.
  */
 export function loadOptionalAtlasCategory(category: string): Promise<LoadedAtlas> {
   return loadCategoryOrEmpty(category);
@@ -558,4 +678,135 @@ export async function unloadAtlasCategory(category: string): Promise<void> {
   } catch (err) {
     console.warn(`atlas.ts: failed to unload atlas category "${category}"`, err);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Background warm-up: manifests first, then page bytes, once the art the map
+// needs to draw is in.
+// ---------------------------------------------------------------------------
+
+const CORE_PRELOAD_ORDER = ['terrain', 'buildings-level1', 'buildings-static'];
+
+function isShowcaseCategory(category: string): boolean {
+  return category === 'showcase' || category.endsWith('-showcase');
+}
+
+/**
+ * Manifest order: the map's own art (terrain, buildings-level1,
+ * buildings-static), then the showcase categories — small, and what the ring
+ * menu and building modal read their art from (`buildingArt.ts`) — then
+ * buildings-anim, then everything else (packs...).
+ */
+function manifestPriority(category: string): number {
+  const core = CORE_PRELOAD_ORDER.indexOf(category);
+  if (core >= 0) return core;
+  if (isShowcaseCategory(category)) return CORE_PRELOAD_ORDER.length;
+  if (category === 'buildings-anim') return CORE_PRELOAD_ORDER.length + 1;
+  return CORE_PRELOAD_ORDER.length + 2;
+}
+
+/** Page-byte order: buildings-anim, then the packs, then the showcase pages (docs art, CSS-loaded on demand anyway). */
+function prefetchPriority(category: string): number {
+  if (category === 'buildings-anim') return 0;
+  return isShowcaseCategory(category) ? 2 : 1;
+}
+
+function byPriority(categories: readonly string[], priority: (category: string) => number): string[] {
+  return [...categories].sort((a, b) => {
+    const pa = priority(a);
+    const pb = priority(b);
+    return pa !== pb ? pa - pb : a < b ? -1 : a > b ? 1 : 0;
+  });
+}
+
+/**
+ * Fetches the manifests of `categories` (default: every discovered one) one
+ * category after the other, in priority order (`manifestPriority`) — each is awaited before the
+ * next starts so the bandwidth goes to the important ones first. A failing
+ * category doesn't stop the rest; the first error is rethrown at the end.
+ */
+export async function preloadAtlasManifests(categories?: string[]): Promise<void> {
+  let firstError: unknown;
+  let failed = false;
+  for (const category of byPriority(categories ?? discoveredCategories(), manifestPriority)) {
+    try {
+      await loadAtlasManifests(category);
+    } catch (err) {
+      if (!failed) firstError = err;
+      failed = true;
+    }
+  }
+  if (failed) throw firstError;
+}
+
+/**
+ * Just the showcase manifests (`showcase` and every `<group>-showcase`) —
+ * what the docs pages that build their initial state from the showcase art
+ * at setup (the wildlife camps and bog lands pages) wait for before they
+ * render; see `router/atlasGuard.ts`. Small next to the rest: the animation
+ * manifests alone are about six times their size.
+ */
+export function preloadShowcaseManifests(): Promise<void> {
+  return preloadAtlasManifests(discoveredCategories().filter(isShowcaseCategory));
+}
+
+const prefetchedPages = new Set<string>();
+
+/**
+ * Background warm-up of the page *bytes* (HTTP cache only — nothing is
+ * decoded or uploaded to the GPU): sequentially fetches every webp page, in
+ * ascending page number, of each given category that isn't being loaded via
+ * `loadAtlasCategory` already. Low priority, skipped entirely on a
+ * data-saver connection, errors are swallowed (a later real load just
+ * fetches normally), and a page is never fetched twice — calling this again
+ * only fetches what the earlier calls didn't. `signal` cancels the rest.
+ */
+export async function prefetchAtlasPages(categories: readonly string[], signal?: AbortSignal): Promise<void> {
+  const connection = typeof navigator !== 'undefined' ? (navigator as { connection?: { saveData?: boolean } }).connection : undefined;
+  if (connection?.saveData) return;
+
+  for (const category of categories) {
+    for (const { path } of discoveredPages(category)) {
+      if (signal?.aborted) return;
+      // Re-checked per page: the category may have been loaded for real meanwhile.
+      if (cache.has(category)) break;
+      const webpUrl = ATLAS_WEBP[path.slice(0, -'.json'.length) + '.webp'];
+      if (!webpUrl || prefetchedPages.has(webpUrl)) continue;
+      prefetchedPages.add(webpUrl);
+      try {
+        const res = await fetch(webpUrl, { priority: 'low', signal } as RequestInit);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        await res.blob();
+      } catch (err) {
+        prefetchedPages.delete(webpUrl);
+        console.debug(`atlas.ts: prefetch of "${webpUrl}" failed`, err);
+        if (signal?.aborted) return;
+      }
+    }
+  }
+}
+
+let backgroundLoad: Promise<void> | null = null;
+
+/**
+ * Once the map's own art is in (`buildings-static` loaded via
+ * `loadAtlasCategory`; terrain and level-1 come before it), warms the network
+ * for everything else so no later load has to wait on it: all manifests
+ * first (priority order), then the page bytes of buildings-anim, the pack
+ * categories, and the showcase categories. Called once from main.ts;
+ * repeated calls return the same promise. Decoding is deliberately not part
+ * of this — animations can be switched off to save GPU memory, packs load on
+ * reveal — it only removes the network wait.
+ */
+export function startBackgroundAtlasLoad(): Promise<void> {
+  backgroundLoad ??= (async () => {
+    await buildingStaticLoaded;
+    try {
+      await preloadAtlasManifests();
+    } catch (err) {
+      console.warn('atlas.ts: background manifest preload failed', err);
+    }
+    await prefetchAtlasPages(byPriority(discoveredCategories(), prefetchPriority));
+  })();
+  return backgroundLoad;
 }

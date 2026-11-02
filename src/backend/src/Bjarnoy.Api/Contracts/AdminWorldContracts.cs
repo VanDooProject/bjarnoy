@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Bjarnoy.Api.Json;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Services;
 
 namespace Bjarnoy.Api.Contracts;
 
@@ -11,6 +12,8 @@ public sealed record AdminWorldResponse(
     string Status,
     int MaxPlayers,
     int PlayerCount,
+    int FreeSpawnCount,
+    int SpawnCount,
     double SpeedFactor,
     DateTimeOffset? StartsAt,
     bool JoinsClosed,
@@ -23,7 +26,7 @@ public sealed record AdminWorldResponse(
     int Seed,
     WorldGenerationSettingsResponse Generation)
 {
-    public static AdminWorldResponse From(WorldEntity world, int playerCount)
+    public static AdminWorldResponse From(WorldEntity world, int playerCount, SpawnCapacity spawns)
     {
         ArgumentNullException.ThrowIfNull(world);
 
@@ -33,6 +36,8 @@ public sealed record AdminWorldResponse(
             world.Status.ToString().ToLowerInvariant(),
             world.MaxPlayers,
             playerCount,
+            spawns.Free,
+            spawns.Total,
             world.SpeedFactor,
             world.StartsAt,
             world.JoinsClosed,
@@ -58,20 +63,27 @@ public sealed record AdminWorldResponse(
 public sealed record WorldGenerationSettingsResponse(
     int IslandCellSize,
     double IslandChance,
-    double IslandMinRadius,
-    double IslandMaxRadius,
+    double IslandMinWidth,
+    double IslandMaxWidth,
+    int IslandMinSegments,
+    int IslandMaxSegments,
+    double IslandMinElongation,
+    double IslandMaxElongation,
+    double IslandMinBend,
+    double IslandMaxBend,
+    double IslandCoastWarp,
+    double IslandCoastWarpScale,
+    double IslandCoastNoise,
+    double IslandCoastNoiseScale,
+    double IslandSmallShare,
+    double IslandLargeShare,
     double BeachThreshold,
     double MountainThreshold,
     double MountainRockiness,
     double ForestRockiness,
     int MinimumIslandTiles,
-    int IslandMinLobes,
-    int IslandMaxLobes,
-    double IslandMaxElongation,
-    double IslandBendiness,
-    double IslandLobeBlend,
-    double IslandCoastWarp,
-    double IslandCoastWarpScale)
+    double IslandMaxReach,
+    double IslandMinGap)
 {
     public static WorldGenerationSettingsResponse From(WorldGenerationOptions options)
     {
@@ -80,20 +92,27 @@ public sealed record WorldGenerationSettingsResponse(
         return new WorldGenerationSettingsResponse(
             options.IslandCellSize,
             options.IslandChance,
-            options.IslandMinRadius,
-            options.IslandMaxRadius,
+            options.IslandMinWidth,
+            options.IslandMaxWidth,
+            options.IslandMinSegments,
+            options.IslandMaxSegments,
+            options.IslandMinElongation,
+            options.IslandMaxElongation,
+            options.IslandMinBend,
+            options.IslandMaxBend,
+            options.IslandCoastWarp,
+            options.IslandCoastWarpScale,
+            options.IslandCoastNoise,
+            options.IslandCoastNoiseScale,
+            options.IslandSmallShare,
+            options.IslandLargeShare,
             options.BeachThreshold,
             options.MountainThreshold,
             options.MountainRockiness,
             options.ForestRockiness,
             options.MinimumIslandTiles,
-            options.IslandMinLobes,
-            options.IslandMaxLobes,
-            options.IslandMaxElongation,
-            options.IslandBendiness,
-            options.IslandLobeBlend,
-            options.IslandCoastWarp,
-            options.IslandCoastWarpScale);
+            options.IslandMaxReach,
+            options.IslandMinGap);
     }
 }
 
@@ -106,20 +125,27 @@ public sealed record WorldGenerationSettingsResponse(
 public sealed record WorldGenerationSettingsOverrides(
     int? IslandCellSize = null,
     double? IslandChance = null,
-    double? IslandMinRadius = null,
-    double? IslandMaxRadius = null,
+    double? IslandMinWidth = null,
+    double? IslandMaxWidth = null,
+    int? IslandMinSegments = null,
+    int? IslandMaxSegments = null,
+    double? IslandMinElongation = null,
+    double? IslandMaxElongation = null,
+    double? IslandMinBend = null,
+    double? IslandMaxBend = null,
+    double? IslandCoastWarp = null,
+    double? IslandCoastWarpScale = null,
+    double? IslandCoastNoise = null,
+    double? IslandCoastNoiseScale = null,
+    double? IslandSmallShare = null,
+    double? IslandLargeShare = null,
     double? BeachThreshold = null,
     double? MountainThreshold = null,
     double? MountainRockiness = null,
     double? ForestRockiness = null,
     int? MinimumIslandTiles = null,
-    int? IslandMinLobes = null,
-    int? IslandMaxLobes = null,
-    double? IslandMaxElongation = null,
-    double? IslandBendiness = null,
-    double? IslandLobeBlend = null,
-    double? IslandCoastWarp = null,
-    double? IslandCoastWarpScale = null);
+    double? IslandMaxReach = null,
+    double? IslandMinGap = null);
 
 /// <remarks>
 /// Init-only properties rather than the positional parameters this used to
@@ -186,6 +212,11 @@ public sealed record PreviewWorldSeedRequest(
 /// A generated-but-not-stored map. Islands carry no id — nothing was
 /// persisted, so there is nothing to have an id — which is exactly what makes
 /// this different from the <see cref="IslandResponse"/> the live map reads.
+/// <see cref="Generation"/> is the full set of constants (world radius included)
+/// the candidate was generated with, so the client renders exactly that terrain
+/// instead of the defaults. <see cref="Review"/> is the candidate's world review
+/// (cut-off land, missing bogs, islands without landing spots, broken generator
+/// guarantees), so the admin can tell a seed worth switching away from.
 /// </summary>
 public sealed record WorldSeedPreviewResponse(
     Guid WorldId,
@@ -193,7 +224,9 @@ public sealed record WorldSeedPreviewResponse(
     int Radius,
     int IslandCount,
     int LandTileCount,
-    IReadOnlyList<PreviewIslandResponse> Islands);
+    IReadOnlyList<PreviewIslandResponse> Islands,
+    WorldGenerationResponse Generation,
+    WorldReviewResponse Review);
 
 /// <inheritdoc cref="WorldSeedPreviewResponse"/>
 public sealed record PreviewIslandResponse(
@@ -205,7 +238,11 @@ public sealed record PreviewIslandResponse(
     IReadOnlyList<TileCoordinate> StartPositions,
     IReadOnlyList<RiverTileResponse> RiverTiles,
     IReadOnlyList<GiantResponse> Giants,
-    bool Wasted)
+    bool Wasted,
+    IReadOnlyList<CampResponse> Camps,
+    IReadOnlyList<BogTileResponse> BogTiles,
+    IReadOnlyList<UtgardWallResponse> UtgardWalls,
+    IReadOnlyList<JotunTowerResponse> JotunTowers)
 {
     public static PreviewIslandResponse From(GeneratedIsland island)
     {
@@ -220,7 +257,11 @@ public sealed record PreviewIslandResponse(
             [.. island.StartPositions.Select(p => new TileCoordinate(p.Q, p.R))],
             [.. island.RiverTiles.Select(RiverTileResponse.FromDomain)],
             [.. island.Giants.Select(GiantResponse.FromDomain)],
-            island.IsWasted);
+            island.IsWasted,
+            [.. island.Camps.Select(CampResponse.FromDomain)],
+            [.. island.BogTiles.Select(BogTileResponse.FromDomain)],
+            [.. island.UtgardWalls.Select(UtgardWallResponse.FromDomain)],
+            [.. island.JotunTowers.Select(JotunTowerResponse.FromDomain)]);
     }
 }
 

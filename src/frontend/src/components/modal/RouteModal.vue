@@ -15,7 +15,18 @@ import { useMediaQuery } from '../../composables/useMediaQuery';
 import { MOBILE_MODAL_QUERY } from '../../lib/breakpoints';
 import type { MessageSchema } from '../../i18n/schema';
 
-const props = defineProps<{ title: string }>();
+const props = defineProps<{
+  title: string;
+  /** `data-testid` for the panel, for e2e tests that need to find a specific modal. */
+  testid?: string;
+  /**
+   * What mobile's back chevron does. Defaults to `close()`, same as the
+   * desktop × and Escape — a modal with its own "up one level" step (e.g.
+   * ReportsModal.vue's detail -> list) overrides it instead of closing
+   * straight through to the background route.
+   */
+  onBack?: () => void;
+}>();
 
 const router = useRouter();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -61,6 +72,8 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') close();
 }
 
+const handleBack = computed(() => props.onBack ?? close);
+
 const backLabel = computed(() => t('profile.back'));
 const backChevron = computed(() => t('profile.backChevron'));
 const closeLabel = computed(() => t('profile.close'));
@@ -75,11 +88,12 @@ const closeLabel = computed(() => t('profile.close'));
       role="dialog"
       aria-modal="true"
       :aria-label="props.title || undefined"
+      :data-testid="props.testid"
       tabindex="-1"
       @keydown="onKeydown"
     >
       <div v-if="isMobile" class="mobile-header">
-        <button type="button" class="back-button" :aria-label="backLabel" @click="close">
+        <button type="button" class="back-button" :aria-label="backLabel" @click="handleBack">
           <span aria-hidden="true">{{ backChevron }}</span>
         </button>
         <span class="mobile-title">{{ props.title }}</span>

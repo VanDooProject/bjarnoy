@@ -39,14 +39,13 @@ import { computed, onUnmounted, ref, watchEffect } from 'vue';
 import type { AxialCoord } from '../../lib/hex/coords';
 import { useMapAnchor, type MapAnchorRenderer } from '../../composables/useMapAnchor';
 import { useMediaQuery } from '../../composables/useMediaQuery';
-import { arrowTipOffset, HEX_TARGET_RADIUS_PX } from '../../lib/map/guidanceArrowGeometry';
+import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
+import { ARROW_TIP_GAP_PX, arrowTipOffset, HEX_TARGET_RADIUS_PX } from '../../lib/map/guidanceArrowGeometry';
 import { placeChip, type ChipSide } from '../../lib/map/guidanceChipPlacement';
 import {
-  DEMO_BADGE_ROW_PX,
   isSettlementBubbleShown,
   SETTLEMENT_BUBBLE_ROW_PX,
 } from '../../composables/hudSettlementBubbleState';
-import { DEMO_MODE } from '../../config';
 
 const props = withDefaults(
   defineProps<{
@@ -65,10 +64,25 @@ const props = withDefaults(
      * one flat value for both was wrong.
      */
     targetRadius?: number;
+    /** Gap, in px, between the tip and the target's edge; the hex default unless a ring bubble sets its own. */
+    tipGap?: number;
+    /** Arrow size factor (1 = full size); a cramped ring point at its bubble with a smaller arrow. */
+    scale?: number;
     /** Which side of the arrow the label chip sits on. */
     chipSide?: 'left' | 'right';
+    /**
+     * CSS selector of the blocks (the landing hero, the landfall banner) the chip must stay below
+     * on phones, where they span the width: the chip's `above` slot is otherwise only kept clear
+     * of the HUD. Every visible match counts.
+     */
+    clearBelowSelector?: string;
+    /**
+     * Screen discs the chip must never cover: the ring menu's bubbles (RingMenu's `bubbles` emit, the
+     * same circles the arrow keeps clear of), so the label does not hide what it points at or its neighbours.
+     */
+    avoid?: readonly { x: number; y: number; r: number }[];
   }>(),
-  { angle: 38, targetRadius: HEX_TARGET_RADIUS_PX, chipSide: 'left' },
+  { angle: 38, targetRadius: HEX_TARGET_RADIUS_PX, tipGap: ARROW_TIP_GAP_PX, scale: 1, chipSide: 'left', avoid: () => [] },
 );
 
 const anchorEl = ref<HTMLElement | null>(null);
@@ -89,7 +103,7 @@ watchEffect(() => {
 // guidance step changes, not every frame the way the anchor position does),
 // so a plain computed — recalculated on prop change, not per animation
 // frame — is the right cost here.
-const tipOffset = computed(() => arrowTipOffset(props.angle, props.targetRadius));
+const tipOffset = computed(() => arrowTipOffset(props.angle, props.targetRadius, props.tipGap, props.scale));
 
 // Keeps the label chip fully on screen, clear of the HUD bar, instead of the
 // old CSS-only placement (side of the arrow on desktop, centred above it on
@@ -104,6 +118,11 @@ const shiftEl = ref<HTMLElement | null>(null);
 // `chipSide` is desktop-only; below 768px "above" reads better regardless of
 // the prop, matching the old media query's intent (see the CSS comment).
 const isMobile = useMediaQuery('(max-width: 768px)');
+// A short landscape phone (844x390) is wider than 768px but its founding hero
+// is still a block the chip has to clear (LandingView's `(max-height: 500px)`
+// left column sits right where the plot's chip lands), so the clearance below
+// follows the whole phone HUD breakpoint, not just the narrow-width one.
+const isCompactHud = useMediaQuery(HUD_COMPACT_QUERY);
 
 function insetPx(styles: CSSStyleDeclaration, name: string): number {
   const value = parseFloat(styles.getPropertyValue(name));
@@ -130,14 +149,22 @@ function tick() {
 
   const arrowRect = rotate.getBoundingClientRect();
   const anchorStyles = getComputedStyle(anchor);
-  // On phones the settlement bubble (and, in demo mode, the demo badge)
-  // stack in rows just below the bar — keep the chip clear of those too.
-  const overlayRows = isMobile.value
-    ? (isSettlementBubbleShown.value ? SETTLEMENT_BUBBLE_ROW_PX : 0) + (DEMO_MODE ? DEMO_BADGE_ROW_PX : 0)
-    : 0;
+  // On phones the settlement bubble sits in a row just below the bar —
+  // keep the chip clear of it too.
+  const overlayRows = isMobile.value && isSettlementBubbleShown.value ? SETTLEMENT_BUBBLE_ROW_PX : 0;
+  let clearBelow = 0;
+  if (isCompactHud.value && props.clearBelowSelector) {
+    // Every match counts (the founding hero, then the landfall banner that
+    // replaces it at the top once a plot is claimed), not just the first.
+    for (const block of document.querySelectorAll(props.clearBelowSelector)) {
+      const rect = block.getBoundingClientRect();
+      if (rect.height > 0) clearBelow = Math.max(clearBelow, rect.bottom + 6);
+    }
+  }
   const safe = {
-    left: 8,
-    top: insetPx(anchorStyles, '--hud-inset-top') + 8 + overlayRows,
+    // The landscape rail's width (0 elsewhere) — the chip stays right of it.
+    left: insetPx(anchorStyles, '--hud-inset-left') + 8,
+    top: Math.max(insetPx(anchorStyles, '--hud-inset-top') + 8 + overlayRows, clearBelow),
     right: window.innerWidth - 8,
     bottom: window.innerHeight - insetPx(anchorStyles, '--hud-inset-bottom') - 8,
   };
@@ -147,6 +174,8 @@ function tick() {
     { width, height },
     safe,
     prefer,
+    undefined,
+    props.avoid,
   );
 
   // `.chip` is `position: absolute` inside `.shift`, which carries a
@@ -179,7 +208,7 @@ onUnmounted(() => cancelAnimationFrame(frame));
     ref="anchorEl"
     class="anchor"
     data-testid="guidance-pointer"
-    :style="{ '--rotate': `${angle}deg`, '--tip-dx': `${tipOffset.x}px`, '--tip-dy': `${tipOffset.y}px` }"
+    :style="{ '--rotate': `${angle}deg`, '--scale': scale, '--tip-dx': `${tipOffset.x}px`, '--tip-dy': `${tipOffset.y}px` }"
   >
     <!-- `.shift` carries the tip-offset translate for BOTH the arrow and the
          chip, so the chip stays visually attached to the (now correctly
@@ -235,15 +264,13 @@ onUnmounted(() => cancelAnimationFrame(frame));
   transform: translate(var(--tip-dx, 0px), var(--tip-dy, 0px));
 }
 .rotate {
-  transform: rotate(var(--rotate));
+  transform: rotate(var(--rotate)) scale(var(--scale, 1));
 }
 .bob {
   animation: pointer-bob 1.15s ease-in-out infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-  .bob {
-    animation: none;
-  }
+html[data-hud-motion='reduced'] .bob {
+  animation: none;
 }
 .arrow-svg {
   display: block;

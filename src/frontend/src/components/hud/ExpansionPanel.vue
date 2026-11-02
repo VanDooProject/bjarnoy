@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Settlement expansion (issue #55): renown, training settler crews, and
+// Settlement expansion (issue #55): renown, training settlers, and
 // dispatching/recalling/retargeting a founding convoy.
 //
 // Deliberately a small, self-contained panel that polls the API directly
@@ -23,6 +23,8 @@ import { useAuthStore } from '../../stores/auth';
 import { api } from '../../api/client';
 import { apiErrorMessage } from '../../i18n/apiErrors';
 import { DEMO_MODE } from '../../config';
+import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
+import { SETTLERS_PER_FOUNDING } from '../../lib/founding';
 import type { ArmySummary, RenownResponse, SettlementResponse } from '../../api/types';
 
 const world = useWorldStore();
@@ -38,15 +40,33 @@ const convoys = ref<ArmySummary[]>([]);
 const error = ref<string | null>(null);
 const busy = ref(false);
 
-const settlerCrewCount = computed(
-  () => settlement.value?.garrison.find((g) => g.unit === 'settlercrew')?.count ?? 0,
+const settlerCount = computed(
+  () => settlement.value?.garrison.find((g) => g.unit === 'settler')?.count ?? 0,
 );
 const foundingConvoys = computed(() => convoys.value.filter((a) => a.mission === 'found'));
 
 // Founding-dispatch form.
 const destQ = ref(0);
 const destR = ref(0);
-const provisions = ref(200);
+// The founding convoy is always 5 settlers (`SETTLERS_PER_FOUNDING`);
+// the backend rejects provisions above their combined `foodCarryCapacity`
+// (`ProvisionsExceedCarryCapacity`), so the form defaults to and is capped at
+// that total, read from the unit catalogue rather than hard-coded.
+const unitCatalogue = useUnitCatalogueStore();
+const maxProvisions = computed(
+  () => (unitCatalogue.byType['settler']?.foodCarryCapacity ?? 0) * SETTLERS_PER_FOUNDING,
+);
+const provisionsInput = ref<number | null>(null);
+const provisions = computed(() =>
+  Math.min(Math.max(provisionsInput.value ?? maxProvisions.value, 0), maxProvisions.value),
+);
+function onProvisionsInput(e: Event) {
+  const el = e.target as HTMLInputElement;
+  const raw = el.valueAsNumber;
+  if (Number.isNaN(raw)) return;
+  provisionsInput.value = Math.min(Math.max(raw, 0), maxProvisions.value);
+  if (provisionsInput.value !== raw) el.value = String(provisionsInput.value);
+}
 const retargetFor = ref<string | null>(null);
 
 async function refresh() {
@@ -68,6 +88,7 @@ async function refresh() {
 
 let timer: ReturnType<typeof setInterval> | null = null;
 onMounted(() => {
+  void unitCatalogue.load();
   refresh();
   timer = setInterval(refresh, 5000);
 });
@@ -75,12 +96,12 @@ onUnmounted(() => {
   if (timer) clearInterval(timer);
 });
 
-async function trainSettlerCrews() {
+async function trainSettlers() {
   if (!world.selectedSettlementId) return;
   busy.value = true;
   error.value = null;
   try {
-    await api.trainUnits(world.selectedSettlementId, { unit: 'settlercrew', count: 3 });
+    await api.trainUnits(world.selectedSettlementId, { unit: 'settler', count: SETTLERS_PER_FOUNDING });
     await refresh();
   } catch (e) {
     error.value = apiErrorMessage(e, t('hud.expansionPanel.trainingFailed'));
@@ -95,7 +116,7 @@ async function dispatchFounding() {
   error.value = null;
   try {
     await api.dispatchArmy(world.selectedSettlementId, {
-      units: [{ unit: 'settlercrew', count: 3 }],
+      units: [{ unit: 'settler', count: SETTLERS_PER_FOUNDING }],
       destination: { q: destQ.value, r: destR.value },
       provisions: provisions.value,
       mission: 'found',
@@ -187,11 +208,11 @@ watch(visible, (isVisible) => {
     </div>
 
     <div class="expansion-row">
-      <span>{{ t('hud.expansionPanel.settlerCrewsInGarrison') }}</span>
-      <strong>{{ settlerCrewCount }}</strong>
+      <span>{{ t('hud.expansionPanel.settlersInGarrison') }}</span>
+      <strong>{{ settlerCount }}</strong>
     </div>
-    <button type="button" class="expansion-button" :disabled="busy" @click="trainSettlerCrews">
-      {{ t('hud.expansionPanel.trainSettlerCrews') }}
+    <button type="button" class="expansion-button" :disabled="busy" @click="trainSettlers">
+      {{ t('hud.expansionPanel.trainSettlers') }}
     </button>
 
     <template v-if="renown">
@@ -201,15 +222,22 @@ watch(visible, (isVisible) => {
       </div>
     </template>
 
-    <div v-if="settlerCrewCount >= 3 && renown?.canFoundAnother" class="expansion-form">
+    <div v-if="settlerCount >= SETTLERS_PER_FOUNDING && renown?.canFoundAnother" class="expansion-form">
       <div class="expansion-form-row">
         <label>{{ t('hud.expansionPanel.targetHex') }}</label>
         <input v-model.number="destQ" type="number" aria-label="Target Q" />
         <input v-model.number="destR" type="number" aria-label="Target R" />
       </div>
       <div class="expansion-form-row">
-        <label>{{ t('hud.expansionPanel.provisions') }}</label>
-        <input v-model.number="provisions" type="number" min="0" aria-label="Provisions" />
+        <label>{{ t('hud.expansionPanel.provisions', { max: maxProvisions }) }}</label>
+        <input
+          :value="provisions"
+          type="number"
+          min="0"
+          :max="maxProvisions"
+          aria-label="Provisions"
+          @input="onProvisionsInput"
+        />
       </div>
       <button type="button" class="expansion-button" :disabled="busy" @click="dispatchFounding">
         {{ t('hud.expansionPanel.foundHere') }}
@@ -258,7 +286,7 @@ watch(visible, (isVisible) => {
    (see BuildQueuePanel.vue, whose rules this shares) overflowing a very
    narrow viewport — its left/top position vs. mobile's QueueDrawer handle is
    pre-existing and out of scope here (see MapView.vue's ringBounds comment). */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .expansion-card {
     max-width: calc(100vw - 24px);
   }

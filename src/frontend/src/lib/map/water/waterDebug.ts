@@ -9,6 +9,12 @@
 // Debug panel only, deliberately. There is no player-facing graphics-settings
 // UI in this app today and this feature is not the place to invent one.
 
+import { GUST_LAKE_PHASE_OFFSET } from './bogLakeGust';
+import { GUST_BAND_HALF_WIDTH } from './bogLakeShader';
+
+/** The bog lake foam line styles, by `uFoamStyle` index (bogLakeShader.ts foamLook). */
+export const BOG_LAKE_FOAM_STYLES = ['strands', 'tapered strands', 'crest + shadow', 'micro curls', 'ring arcs', 'glint squiggles'] as const;
+
 export interface WaterDebugFlags {
   /** The whole water layer. Off hides the mesh entirely — the pre-shader look. */
   water: boolean;
@@ -45,13 +51,6 @@ export interface WaterDebugFlags {
   causticShadows: boolean;
   /** Shader shoreline foam (§4.3). */
   shorelineFoam: boolean;
-  /**
-   * Quieten the shader over the coastal water tiles whose art carries a prop — a
-   * beached boat or a rock (§4.4b): the surface pattern goes, and the foam
-   * narrows to a quarter of its width rather than disappearing. Off draws both
-   * straight across the prop, which is the artifact this exists to fix.
-   */
-  propTileMute: boolean;
   /** Shader sea body under the world map (§4.1); off lets WorldMapCanvas's CSS gradient show through. Never drawn in settlement mode — the painted water tiles are the sea body there. */
   seaBody: boolean;
   /**
@@ -79,6 +78,15 @@ export interface WaterDebugFlags {
    * it. Goes away with the split itself once the art pack ships split.
    */
   legacyTileSplit: boolean;
+  /**
+   * Bog lakes, settlement view (§ "Bog lakes — gusts in step with the forest"): thin white foam lines across the wind inside the gust band
+   * that travels over the lake water with the forests' wind gust. Calm between gusts.
+   */
+  bogLakeFoam: boolean;
+  /** Bog lakes: a soft, broad lightening of the water inside the gust band. */
+  bogLakeSheen: boolean;
+  /** Bog lakes: cat's paws, darker matte patches where the gust roughens the water. */
+  bogLakeCatsPaws: boolean;
 }
 
 export const waterDebugFlags: WaterDebugFlags = {
@@ -89,11 +97,13 @@ export const waterDebugFlags: WaterDebugFlags = {
   fineCaustics: true,
   causticShadows: true,
   shorelineFoam: true,
-  propTileMute: true,
   seaBody: true,
   legacyWaveSquiggles: true,
   showWaterMask: false,
   legacyTileSplit: true,
+  bogLakeFoam: true,
+  bogLakeSheen: true,
+  bogLakeCatsPaws: true,
 };
 
 /**
@@ -124,7 +134,9 @@ export interface WaterDebugTuning {
   /**
    * How close to the shore the caustic ribbons are allowed to come, in hexes.
    * Inside it they are simply absent — cut, not faded, since a half-strength
-   * ribbon reads as a smudge and a belt of them reads as a second coastline. The
+   * ribbon reads as a smudge and a belt of them reads as a second coastline.
+   * The default (0.1) lets them end inside the foam band, whose default
+   * width is `foamWidthHexes` 0.3. The
    * cut line wanders by CAUSTIC_CULL_JITTER_TILES either side of this so it
    * isn't a clean offset curve of the coast.
    *
@@ -174,13 +186,33 @@ export interface WaterDebugTuning {
    * offsetting one in time does.
    */
   causticFinePhase: number;
+  /** Multipliers on the bog lake gust's looks (1 is what ships). Only used while the matching flag is on. */
+  bogLakeFoamStrength: number;
+  bogLakeSheenStrength: number;
+  bogLakeCatsPawsStrength: number;
+  /** Half-width of a foam line, as a share of the line spacing. */
+  bogLakeFoamWidth: number;
+  /** Distance between foam lines, in world units. */
+  bogLakeFoamSpacing: number;
+  /** Half-width of the gust band, in gust periods (0.16 is about 0.9 hex). */
+  bogLakeBandHalf: number;
+  /**
+   * Debug playback speed of every map animation: the tile clips (forest sway, buildings, camps) and the bog lake gust on the shared
+   * `animClockMs`, the sea water shader, the world map's wave squiggles and the fog drift. They slow down together, so the lake gust stays
+   * in step with the trees. 1 is what ships; 0 pauses them.
+   */
+  mapAnimationSpeed: number;
+  /** Shifts the bog lake gust against the forest sway, in gust periods (0 = on the trees' furthest lean, the measured `GUST_PEAK_PHASE`; ships at `GUST_LAKE_PHASE_OFFSET`, -2 frames). */
+  bogLakeGustPhaseOffset: number;
+  /** Foam line style, an index into `BOG_LAKE_FOAM_STYLES`; micro curls ship, the others stay selectable for showing them. */
+  bogLakeFoamStyle: number;
 }
 
 export const waterDebugTuning: WaterDebugTuning = {
   foamWidthHexes: 0.3,
   foamSurge: 0.18,
   waveSpeed: 1,
-  causticCullHexes: 0.35,
+  causticCullHexes: 0.1,
   causticThickness: 1,
   causticBrightness: 1,
   causticDensity: 1,
@@ -190,6 +222,15 @@ export const waterDebugTuning: WaterDebugTuning = {
   // A little over half the coarse net's ~30s breathing period, so the two are
   // close to opposed rather than merely unequal.
   causticFinePhase: 17,
+  bogLakeFoamStrength: 1,
+  bogLakeSheenStrength: 1,
+  bogLakeCatsPawsStrength: 1,
+  bogLakeFoamWidth: 0.04,
+  bogLakeFoamSpacing: 15,
+  bogLakeBandHalf: GUST_BAND_HALF_WIDTH,
+  mapAnimationSpeed: 1,
+  bogLakeFoamStyle: BOG_LAKE_FOAM_STYLES.indexOf('micro curls'),
+  bogLakeGustPhaseOffset: GUST_LAKE_PHASE_OFFSET,
 };
 
 /**

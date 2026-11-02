@@ -53,6 +53,30 @@ public sealed record GeneratedIsland
     public required IReadOnlyList<Giant> Giants { get; init; }
 
     /// <summary>
+    /// This island's bogland: moss, lakes with a river through them, shores, creeks and mouths (one entry per hex; a
+    /// lake tile is <see cref="Terrain.Lake"/>, every other entry <see cref="Terrain.Bog"/>), plus the tiles of any enclosed sea
+    /// pocket turned into a lake. Empty for an island with no room for a bog. See <see cref="BogGenerator"/> and
+    /// <c>docs/design/bog.md</c>.
+    /// </summary>
+    public IReadOnlyList<BogTile> BogTiles { get; init; } = [];
+
+    /// <summary>
+    /// This island's wildlife camps. Empty for an island with no tile a camp can stand on.
+    /// See <see cref="CampGenerator"/> and <c>docs/design/wildlife-camps.md</c>.
+    /// </summary>
+    public IReadOnlyList<Camp> Camps { get; init; } = [];
+
+    /// <summary>
+    /// The Utgard wall rings around a wasted island's Utgard (none, one or two rings; inner ring level 2, outer level 1).
+    /// Empty for every green island and for a wasted island without Utgard. See <see cref="EndgameGenerator"/> and
+    /// <c>docs/design/endgame.md</c>.
+    /// </summary>
+    public IReadOnlyList<UtgardWall> UtgardWalls { get; init; } = [];
+
+    /// <summary>This wasted island's Jötun watchtowers. Empty like <see cref="UtgardWalls"/>.</summary>
+    public IReadOnlyList<JotunTower> JotunTowers { get; init; } = [];
+
+    /// <summary>
     /// True for an island generated from the wasted-island terrain layer
     /// (see <see cref="TerrainSampler.WastedTerrainAt"/>): hidden as sea
     /// until the world's endboss triggers, no start positions, its rivers

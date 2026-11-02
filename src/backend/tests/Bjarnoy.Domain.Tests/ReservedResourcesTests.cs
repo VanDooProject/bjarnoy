@@ -26,7 +26,7 @@ public sealed class ReservedResourcesTests
     private static Settlement FoundFullyReserved()
     {
         var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 2)]);
-        var farmCost = BuildingCatalogue.Get(BuildingType.Farm, 1).Cost;
+        var farmCost = BuildingCatalogue.Get(BuildingType.ReindeerHerder, 1).Cost;
 
         var settlement = new Settlement
         {
@@ -48,9 +48,9 @@ public sealed class ReservedResourcesTests
         // Fill both construction slots first, so the reservation-testing
         // order below must go to the waiting queue.
         var neighbours = Centre.Neighbours();
-        var active1 = settlement.PlanBuild(BuildingType.Farm, neighbours[0], Terrain.Grass, T0, Guid.CreateVersion7());
+        var active1 = settlement.PlanBuild(BuildingType.ReindeerHerder, neighbours[0], Terrain.Grass, T0, Guid.CreateVersion7());
         var withActive1 = settlement.Enqueue(active1.Order!, T0);
-        var active2 = withActive1.PlanBuild(BuildingType.Farm, neighbours[1], Terrain.Grass, T0, Guid.CreateVersion7());
+        var active2 = withActive1.PlanBuild(BuildingType.ReindeerHerder, neighbours[1], Terrain.Grass, T0, Guid.CreateVersion7());
         var withActive2 = withActive1.Enqueue(active2.Order!, T0);
 
         // A tiny reservation is enough to prove the point, but we want the
@@ -63,7 +63,7 @@ public sealed class ReservedResourcesTests
                 withActive2.Resources.At(T0) + farmCost, withActive2.Resources.RatePerHour, ResourceAmounts.Uniform(10_000), T0),
         };
         var waiting = withMore.PlanBuild(
-            BuildingType.Farm, neighbours[2], Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+            BuildingType.ReindeerHerder, neighbours[2], Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
         var withWaiting = withMore.Enqueue(waiting.Order!, T0);
 
         Assert.Single(withWaiting.WaitingOrders);
@@ -79,7 +79,7 @@ public sealed class ReservedResourcesTests
         var settlement = FoundFullyReserved();
 
         var decision = settlement.PlanBuild(
-            BuildingType.Farm, Centre.Neighbours()[3], Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.ReindeerHerder, Centre.Neighbours()[3], Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.NotEnoughResources, decision.Rejection);
     }

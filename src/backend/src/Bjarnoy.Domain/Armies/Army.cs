@@ -62,6 +62,15 @@ public enum ArmyMission
     /// at all, letting it fall through to ordinary standing/auto-return.
     /// </summary>
     Found = 4,
+
+    /// <summary>
+    /// Travel to a wildlife camp's hex (<see cref="Army.TargetCampCoord"/>) and fight its garrison on arrival
+    /// (<c>docs/design/wildlife-camps.md</c>, "Hunting a camp"). Land units hunt land camps, fleets hunt water camps
+    /// (the whale road) and neither the other. Like <see cref="Attack"/> there
+    /// is no standing at the destination: survivors (if any) and loot start the precomputed return leg at once,
+    /// see <see cref="Army.SettleHuntArrival"/>.
+    /// </summary>
+    Hunt = 5,
 }
 
 /// <summary>
@@ -127,12 +136,13 @@ public sealed record Army
     public Guid? TargetSettlementId { get; init; }
 
     /// <summary>
-    /// The building this <see cref="ArmyMission.Attack"/> army was told to
-    /// hit with any surviving catapults (issue #40 phase 5) — a coordinate
+    /// The building this <see cref="ArmyMission.Attack"/>/<see cref="ArmyMission.Raid"/> army was told to
+    /// hit with its surviving siege power (catapults, issue #40 phase 5; ships) — a coordinate
     /// within the target settlement, not an arbitrary hex. <see langword="null"/>
     /// means "no preference": <see cref="Combat.SiegeResolver.Resolve"/>
     /// picks uniformly at random among whatever buildings the defender
-    /// actually has standing when the army arrives. Only ever set for
+    /// actually has standing when the army arrives. Always set for a fleet (it is the building on the
+    /// target's shore the fleet sails to, and the only building it can damage; if it is gone at arrival, nothing is hit). Only ever set for
     /// <see cref="ArmyMission.Attack"/> — see <see cref="PlanDispatch"/>.
     /// Deliberately unvalidated against the target's actual layout at
     /// dispatch time (that layout can change before the army arrives — see
@@ -140,6 +150,13 @@ public sealed record Army
     /// what checks whether a building still stands there.
     /// </summary>
     public HexCoord? TargetBuildingCoord { get; init; }
+
+    /// <summary>
+    /// The wildlife camp this <see cref="ArmyMission.Hunt"/> army was sent to fight. Its path may end on a
+    /// neighbour hex when the camp's own hex is not walkable, so this is not necessarily the route's last hex.
+    /// <see langword="null"/> for every other mission.
+    /// </summary>
+    public HexCoord? TargetCampCoord { get; init; }
 
     /// <summary>
     /// Resources looted from a won <see cref="ArmyMission.Attack"/> battle,
@@ -197,15 +214,10 @@ public sealed record Army
     /// centred on that tower's own hex, not the settlement's centre. Only
     /// consulted when <paramref name="mission"/> is <see cref="ArmyMission.Attack"/>
     /// or <see cref="ArmyMission.Raid"/> and the requested units are a fleet
-    /// (issue #40 phase 6, design doc §8): a fleet can only reach a
-    /// settlement that claims at least one <see cref="Shoreline.IsShoreline"/>
-    /// hex anywhere in its territory — a tower can extend that territory to
-    /// the coast even when the centre disc alone never reaches it, so every
-    /// disc is walked, not just the one around <paramref name="destination"/>.
-    /// <see langword="null"/> or empty is treated as a single zero-radius
-    /// disc at <paramref name="destination"/> (only <paramref name="destination"/>
-    /// itself must be a shoreline hex) — a safe default for callers that
-    /// have not computed the target's real territory. Ignored for land
+    /// (design doc §8): the fleet's <paramref name="targetBuildingCoord"/> must lie inside
+    /// this territory (a tower can extend it to the coast even when the centre disc alone never reaches it,
+    /// so every disc counts) and be on its shore. <see langword="null"/> or empty is treated as a single
+    /// zero-radius disc at <paramref name="destination"/>. Ignored for land
     /// armies and for every other mission.
     /// </param>
     /// <param name="isHexFoundable">
@@ -236,6 +248,17 @@ public sealed record Army
     /// every <see cref="HexPathfinder"/> call this makes. <see langword="null"/>
     /// (the default) prices no hex as a river.
     /// </param>
+    /// <param name="walls">
+    /// The palisade rules for this army's owner (<see cref="PalisadeIndex.ForOwner"/>): every wall hex blocks, a gate of the owner's
+    /// passes, a half-open end costs the ground plus <see cref="HexPathfinder.HalfOpenEndCost"/>. <see langword="null"/> (the default) means no wall.
+    /// Threaded alongside <c>isRiver</c>/<c>isWideRiver</c> into every route and travel-time query of this method, and into the
+    /// same-named parameter of the other planning methods here.
+    /// </param>
+    /// <param name="isWideRiver">
+    /// Which river hexes are wide and so impassable to a land army, threaded alongside
+    /// <paramref name="isRiver"/> into every <see cref="HexPathfinder"/> call this makes.
+    /// <see langword="null"/> (the default) treats every river hex as a crossable stream.
+    /// </param>
     public static DispatchDecision PlanDispatch(
         Settlement settlement,
         IReadOnlyList<UnitStack> requestedUnits,
@@ -253,7 +276,11 @@ public sealed record Army
         bool renownAndSlotAllowed = true,
         double speedFactor = 1.0,
         Func<HexCoord, bool>? isRiver = null,
-        IGiantIndex? giants = null)
+        Func<HexCoord, bool>? isWideRiver = null,
+        IGiantIndex? giants = null,
+        WallRules? walls = null,
+        HexCoord? targetCampCoord = null,
+        bool targetCampIsWater = false)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
@@ -270,8 +297,8 @@ public sealed record Army
         // against different terrain/pathfinder tables.
         //
         // ArmyMission.Found gets one narrow exception (issue #55 §2 "by
-        // sea"): Ship stacks alongside UnitType.SettlerCrew stacks are read
-        // as "the ships are carrying the crews" rather than an illegal mix —
+        // sea"): Ship stacks alongside UnitType.Settler stacks are read
+        // as "the ships are carrying the settlers" rather than an illegal mix —
         // there is still no general ferry mechanic, so any other non-Ship
         // class alongside Ship remains rejected even for Found.
         var requestedClasses = normalisedRequest
@@ -284,7 +311,7 @@ public sealed record Army
             && nonShipClasses.Count > 0
             && nonShipClasses.SetEquals([UnitClass.Civilian])
             && normalisedRequest.Where(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Civilian)
-                .All(s => s.Type == UnitType.SettlerCrew);
+                .All(s => s.Type == UnitType.Settler);
 
         bool isFleet;
         if (isSettlerEmbark)
@@ -300,14 +327,35 @@ public sealed record Army
             }
         }
 
+        if (mission == ArmyMission.Hunt)
+        {
+            // The camp itself is looked up by the caller, which passes its hex as targetCampCoord only when one
+            // exists (and says whether it stands on the sea). Land units hunt land camps and fleets hunt water
+            // camps (the whale road); neither can reach the other's.
+            if (targetCampCoord is null)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.NoCampAtDestination);
+            }
+
+            if (isFleet && !targetCampIsWater)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.HuntRequiresLandUnits);
+            }
+
+            if (!isFleet && targetCampIsWater && requestedClasses.Count > 0)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.HuntRequiresFleet);
+            }
+        }
+
         if (isFoundingConvoy)
         {
-            var settlerCrews = normalisedRequest
-                .Where(s => s.Type == UnitType.SettlerCrew)
+            var settlerCount = normalisedRequest
+                .Where(s => s.Type == UnitType.Settler)
                 .Sum(s => s.Count);
-            if (settlerCrews != Founding.RequiredSettlerCrews)
+            if (settlerCount != Founding.RequiredSettlers)
             {
-                return DispatchDecision.Rejected(DispatchRejection.WrongSettlerCrewCount);
+                return DispatchDecision.Rejected(DispatchRejection.WrongSettlerCount);
             }
 
             if (isFleet)
@@ -315,7 +363,7 @@ public sealed record Army
                 var shipCapacity = normalisedRequest
                     .Where(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Ship)
                     .Sum(s => Founding.ShipCapacity(s.Type) * s.Count);
-                if (settlerCrews > shipCapacity)
+                if (settlerCount > shipCapacity)
                 {
                     return DispatchDecision.Rejected(DispatchRejection.InsufficientShipCapacityForSettlers);
                 }
@@ -360,29 +408,32 @@ public sealed record Army
             return DispatchDecision.Rejected(DispatchRejection.TargetBuildingRequiresAttackMission);
         }
 
-        // Ships raid resources only (design doc §8) — a fleet attacking a
-        // fully inland settlement has no shoreline to land on at all. Land
-        // armies are unaffected. (A fleet can never carry a Catapult in the
-        // first place — Catapult is UnitClass.Siege, not Ship, so the mixed-
-        // class rejection above already makes "an all-Ship dispatch with a
-        // catapult in it" unreachable; no separate check is needed here.)
+        // A fleet Attack/Raid is always sent at one building on the target's shore: it sails to that building's
+        // hex, the fight happens there, and a won fight damages only that building. The target's Longhouse may be
+        // inland. "On the shore" = inside the target's claim and either a shoreline land hex or a sea hex (the
+        // coastal-water buildings: Dockyard, Fishing Hut, Shrine of Njörd). Whether a building actually stands there
+        // is checked at arrival, like for catapults. Land armies are unaffected (and a fleet can never carry a
+        // Catapult: Catapult is UnitClass.Siege, so the mixed-class rejection above already covers it).
+        var routeDestination = destination;
         if (mission is ArmyMission.Attack or ArmyMission.Raid && isFleet)
         {
+            if (targetBuildingCoord is not { } shoreBuilding)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.FleetTargetBuildingRequired);
+            }
+
             IReadOnlyList<(HexCoord Centre, int Radius)> discs =
                 targetClaimDiscs is { Count: > 0 } ? targetClaimDiscs : [(destination, 0)];
-            // Filtered through the territory rule, not the raw disc union —
-            // a giant hex only geometrically inside a disc but not actually
-            // claimed (its footprint isn't fully covered) must not count as
-            // the defender's shoreline either.
-            var giantIndex = giants ?? GiantIndex.Empty;
-            var targetHasShoreline = discs
-                .SelectMany(disc => disc.Centre.WithinRadius(disc.Radius))
-                .Where(coord => Territory.Claims(discs, coord, giantIndex))
-                .Any(coord => Shoreline.IsShoreline(coord, terrainAt));
-            if (!targetHasShoreline)
+            // The territory rule, not the raw disc union: a giant hex only geometrically inside a disc but not
+            // actually claimed must not count as the defender's shore either.
+            var onShore = Territory.Claims(discs, shoreBuilding, giants ?? GiantIndex.Empty)
+                && (terrainAt(shoreBuilding) == Terrain.Sea || Shoreline.IsShoreline(shoreBuilding, terrainAt));
+            if (!onShore)
             {
-                return DispatchDecision.Rejected(DispatchRejection.DefenderHasNoShoreline);
+                return DispatchDecision.Rejected(DispatchRejection.FleetTargetBuildingNotOnShore);
             }
+
+            routeDestination = shoreBuilding;
         }
 
         var settlementDecision = settlement.PlanDispatch(requestedUnits, provisions, now);
@@ -397,23 +448,18 @@ public sealed record Army
         // every HexPathfinder call for this dispatch.
         var isLandUnit = !isFleet;
 
-        // A land army's Attack/Support destination is always a real
-        // settlement's own centre — inherently land — so this check applies
-        // to it exactly as before fleets existed. A fleet's Attack/Support
-        // destination is that same settlement centre, which is land too —
-        // but landing there is exactly the point for a fleet (see FindPath's
-        // isLandUnit remarks on the beaching/harbor exemption it applies at
-        // both route endpoints), so this generic sea-only check is skipped
-        // only for that one combination; the real fleet-reachability gate for
-        // Attack is DefenderHasNoShoreline above, not this check. A sea Found
-        // convoy's destination is, by definition, the land hex it means to
-        // land settlers on (issue #55 §2) — same beaching exemption, no
-        // separate shoreline check needed: HexPathfinder can only ever reach
-        // that land hex by sea if it is adjacent to reachable open water,
-        // which is exactly what "shoreline" means (see Shoreline.IsShoreline);
-        // any other land hex fails as UnreachableLeg below instead.
+        // A land army's Attack/Support destination is always a real settlement's own centre — inherently land — so
+        // this check applies to it exactly as before fleets existed. A fleet's Attack/Raid destination is the shore
+        // building it was sent at (a shoreline land hex or a sea hex), and its Support destination is the settlement
+        // centre, which is land; landing on land is exactly the point for a fleet (see FindPath's isLandUnit remarks
+        // on the beaching/harbor exemption it applies at both route endpoints), so this generic sea-only check is
+        // skipped for those missions. The real fleet-reachability gate for Attack/Raid is the shore-building check
+        // above, not this one. A sea Found convoy's destination is, by definition, the land hex it means to land
+        // settlers on (issue #55 §2) — same beaching exemption, no separate shoreline check needed:
+        // HexPathfinder can only ever reach that land hex by sea if it is adjacent to reachable open water, which is
+        // exactly what "shoreline" means (see Shoreline.IsShoreline); any other land hex fails as UnreachableLeg below.
         var skipDestinationTerrainCheck = isFleet && mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid or ArmyMission.Found;
-        if (!skipDestinationTerrainCheck && terrainAt(destination).IsLand() != isLandUnit)
+        if (!skipDestinationTerrainCheck && !terrainAt(routeDestination).IsTraversable(isLandUnit))
         {
             return DispatchDecision.Rejected(isFleet
                 ? DispatchRejection.DestinationNotSea
@@ -422,7 +468,7 @@ public sealed record Army
 
         foreach (var waypoint in waypoints)
         {
-            if (terrainAt(waypoint).IsLand() != isLandUnit)
+            if (!terrainAt(waypoint).IsTraversable(isLandUnit))
             {
                 return DispatchDecision.Rejected(isFleet
                     ? DispatchRejection.WaypointNotSea
@@ -430,12 +476,18 @@ public sealed record Army
             }
         }
 
-        List<HexCoord> stops = [settlement.Centre, .. waypoints, destination];
-        List<HexCoord> fullPath = [settlement.Centre];
+        // A fleet leaves from (and returns to) its settlement's harbour hex, which is the centre only when the
+        // centre itself touches the sea (see FleetAnchor); a land army leaves from the building that trained its
+        // slowest unit (see TrainingSite).
+        var origin = isFleet
+            ? FleetAnchor(settlement, terrainAt)
+            : TrainingSite(settlement.Centre, settlement.Buildings, settlementDecision.Stacks!);
+        List<HexCoord> stops = [origin, .. waypoints, routeDestination];
+        List<HexCoord> fullPath = [origin];
 
         for (var i = 0; i < stops.Count - 1; i++)
         {
-            var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver);
+            var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
             if (leg is null || leg.Count == 0)
             {
                 return DispatchDecision.Rejected(DispatchRejection.UnreachableLeg);
@@ -449,15 +501,15 @@ public sealed record Army
         var speed = stacks.Min(s => UnitCatalogue.Get(s.Type).Speed);
         var upkeepPerHour = stacks.Sum(s => UnitCatalogue.Get(s.Type).UpkeepPerHour * s.Count);
 
-        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
-        var returnPath = HexPathfinder.FindPath(destination, settlement.Centre, terrainAt, isLandUnit, isRiver);
+        var returnPath = HexPathfinder.FindPath(routeDestination, origin, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (returnPath is null || returnPath.Count == 0)
         {
             return DispatchDecision.Rejected(DispatchRejection.UnreachableLeg);
         }
 
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         // Every mission, Support included, needs the full round trip: a guest
         // does not burn its own provisions while hosted (Settlement.SettleTo
@@ -485,6 +537,7 @@ public sealed record Army
             Mission = mission,
             TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             TargetBuildingCoord = mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null,
+            TargetCampCoord = mission == ArmyMission.Hunt ? targetCampCoord : null,
         };
 
         return DispatchDecision.Accept(settlementDecision.Settlement!, army);
@@ -538,11 +591,16 @@ public sealed record Army
     /// phase 3.
     /// </para>
     /// </remarks>
+    /// <param name="defenderRealm">
+    /// The defender's chain-rule realm (<see cref="ConnectedRealm"/>, including the player's other settlements on the island),
+    /// or <see langword="null"/> to resolve the defender alone. Only connected towers count for the defence bonus.
+    /// </param>
     public static ArmyArrivalResult SettleArrival(
         Army army, Settlement defenderSettlement, double defenderSpeedFactor, DateTimeOffset now, int seed,
         IReadOnlyList<UnitStack>? guestDefenderStacks = null,
         double landAttackBonusPercent = 0,
-        double shipAttackBonusPercent = 0)
+        double shipAttackBonusPercent = 0,
+        ConnectedRealm? defenderRealm = null)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(defenderSettlement);
@@ -573,11 +631,9 @@ public sealed record Army
         // ordinary garrison starvation between reads.
         var settledDefender = defenderSettlement.SettleTo(battleInstant, defenderSpeedFactor).Settlement;
 
-        var towerLevel = settledDefender.Buildings
-            .Where(b => b.Type == BuildingType.Tower)
-            .Select(b => b.Level)
-            .DefaultIfEmpty(0)
-            .Max();
+        // Only a tower connected to a longhouse (ConnectedRealm) adds its defence bonus; a cut-off one claims and defends nothing.
+        var towerLevel = (defenderRealm ?? ConnectedRealm.Resolve([settledDefender.AsRealmSettlement()]))
+            .HighestConnectedTowerLevel(settledDefender.Id, settledDefender.Buildings);
         var defenseBonusPercent = BuildingCatalogue.TowerDefenseBonusPercent(towerLevel);
 
         var lootAvailable = settledDefender.Resources.At(battleInstant);
@@ -632,7 +688,8 @@ public sealed record Army
         // nothing extra is needed here for that to fall out correctly.
         var siege = plan.Winner == BattleWinner.Attacker
             ? Combat.SiegeResolver.Resolve(
-                plan.AttackerSurvivors, defenderPostBattle.Buildings, army.TargetBuildingCoord, seed)
+                plan.AttackerSurvivors, defenderPostBattle.Buildings, army.TargetBuildingCoord, seed,
+                randomFallback: !army.IsFleet)
             : Combat.SiegeOutcome.None;
 
         if (siege.Applied)
@@ -683,6 +740,148 @@ public sealed record Army
         };
 
         return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan, guestLosses, siege);
+    }
+
+    /// <summary>
+    /// The army after a hunt fought at <paramref name="battleInstant"/> (the outbound leg's arrival): the
+    /// survivors of <paramref name="plan"/>, carrying <see cref="CampFightPlan.Loot"/>, are put straight onto the
+    /// precomputed return leg, retreat-immune like <see cref="SettleArrival"/>'s survivors, with the provisions
+    /// burned on the way out already deducted. Returns <see langword="null"/> when nobody survived.
+    /// An empty-camp pickup is a plan with every unit surviving, so it turns the army home the same way.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The army is not on its outbound leg.</exception>
+    public Army? SettleHuntArrival(CampFightPlan plan, DateTimeOffset battleInstant)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+
+        if (Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit)
+        {
+            throw new InvalidOperationException("A hunt can only be settled on the outbound leg.");
+        }
+
+        if (plan.ArmySurvivors.Sum(s => s.Count) == 0)
+        {
+            return null;
+        }
+
+        var movement = inTransit.Movement;
+        var elapsedOutboundHours = (battleInstant - movement.DepartedAt).TotalHours;
+        var provisionsAtBattle = Math.Max(0, Provisions - (TotalUpkeepPerHour * elapsedOutboundHours));
+
+        var returning = new Movement.Movement
+        {
+            DepartedAt = battleInstant,
+            Path = movement.ReturnPath,
+            CumulativeHours = movement.ReturnCumulativeHours,
+            ReturnPath = movement.ReturnPath,
+            ReturnCumulativeHours = movement.ReturnCumulativeHours,
+            TurnAroundAt = battleInstant,
+            IsReturning = true,
+            RetreatImmune = true,
+        };
+
+        return this with
+        {
+            Stacks = plan.ArmySurvivors,
+            Location = new ArmyLocation.InTransit(returning),
+            Provisions = provisionsAtBattle,
+            Loot = plan.Loot,
+        };
+    }
+
+    /// <summary>
+    /// The hex a fleet departs from and returns to. A settlement's centre may be inland, and a fleet's route may only
+    /// touch land at its two endpoints with every hex in between sea, so an inland centre could never start a route.
+    /// Training ships only requires the settlement's claim to touch the shore, and a Dockyard stands on a coastal sea
+    /// hex inside that claim: so when the centre is not itself a shoreline hex (see <see cref="Shoreline.IsShoreline"/>)
+    /// the fleet uses the Dockyard nearest the centre (ties by Q, then R). A coastal centre is kept as it is, and so is
+    /// the centre when there is no Dockyard.
+    /// </summary>
+    public static HexCoord FleetAnchor(HexCoord centre, IEnumerable<PlacedBuilding> buildings, Func<HexCoord, Terrain> terrainAt)
+    {
+        ArgumentNullException.ThrowIfNull(buildings);
+        ArgumentNullException.ThrowIfNull(terrainAt);
+
+        if (Shoreline.IsShoreline(centre, terrainAt))
+        {
+            return centre;
+        }
+
+        return buildings
+            .Where(b => b.Type == BuildingType.Dockyard && b.IsFunctioning)
+            .Select(b => b.Coord)
+            .OrderBy(c => c.DistanceTo(centre)).ThenBy(c => c.Q).ThenBy(c => c.R)
+            .Cast<HexCoord?>()
+            .FirstOrDefault() ?? centre;
+    }
+
+    /// <inheritdoc cref="FleetAnchor(HexCoord, IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain})"/>
+    public static HexCoord FleetAnchor(Settlement settlement, Func<HexCoord, Terrain> terrainAt)
+    {
+        ArgumentNullException.ThrowIfNull(settlement);
+        return FleetAnchor(settlement.Centre, settlement.Buildings, terrainAt);
+    }
+
+    /// <summary>
+    /// The hex this army starts from and walks back to: <see cref="FleetAnchor(HexCoord, IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain})"/>
+    /// for a fleet, <see cref="TrainingSite"/> for a land army.
+    /// </summary>
+    public HexCoord HomeHex(HexCoord centre, IEnumerable<PlacedBuilding> buildings, Func<HexCoord, Terrain> terrainAt) =>
+        IsFleet ? FleetAnchor(centre, buildings, terrainAt) : TrainingSite(centre, buildings, Stacks);
+
+    /// <summary>
+    /// The hex a land army leaves from and returns to: the building that trained its slowest unit type (ties: lowest
+    /// <see cref="UnitType"/>). With several of that building the one nearest <paramref name="centre"/> (ties by Q,
+    /// then R); with none (demolished) or no units, the centre.
+    /// </summary>
+    public static HexCoord TrainingSite(HexCoord centre, IEnumerable<PlacedBuilding> buildings, IEnumerable<UnitStack> stacks)
+    {
+        ArgumentNullException.ThrowIfNull(buildings);
+        ArgumentNullException.ThrowIfNull(stacks);
+
+        var slowest = stacks
+            .Where(s => s.Count > 0)
+            .Select(s => s.Type)
+            .OrderBy(t => UnitCatalogue.Get(t).Speed).ThenBy(t => (int)t)
+            .Cast<UnitType?>()
+            .FirstOrDefault();
+        if (slowest is not { } type)
+        {
+            return centre;
+        }
+
+        var required = UnitCatalogue.Get(type).RequiredBuildingType;
+        return buildings
+            .Where(b => b.Type == required)
+            .Select(b => b.Coord)
+            .OrderBy(c => c.DistanceTo(centre)).ThenBy(c => c.Q).ThenBy(c => c.R)
+            .Cast<HexCoord?>()
+            .FirstOrDefault() ?? centre;
+    }
+
+    /// <summary>
+    /// The hex a <see cref="ArmyMission.Hunt"/> route ends on: the camp's own hex when the hunters can stand on it
+    /// (always for a fleet at a water camp: the whale road's own sea hex), otherwise its traversable neighbour nearest to
+    /// <paramref name="from"/> (ties by neighbour order). Falls back to the camp's hex when no neighbour is traversable
+    /// either, so the dispatch is refused as an unwalkable destination.
+    /// </summary>
+    /// <param name="isFleet">The hunters are ships (they traverse sea, not land).</param>
+    public static HexCoord HuntRouteDestination(
+        HexCoord camp, HexCoord from, Func<HexCoord, Terrain> terrainAt, bool isFleet = false)
+    {
+        ArgumentNullException.ThrowIfNull(terrainAt);
+
+        var isLandUnit = !isFleet;
+        if (terrainAt(camp).IsTraversable(isLandUnit))
+        {
+            return camp;
+        }
+
+        return camp.Neighbours()
+            .Where(n => terrainAt(n).IsTraversable(isLandUnit))
+            .OrderBy(n => n.DistanceTo(from))
+            .Cast<HexCoord?>()
+            .FirstOrDefault() ?? camp;
     }
 
     /// <summary>Merges two stack lists into one, aggregated by type.</summary>
@@ -816,8 +1015,8 @@ public sealed record Army
 
         var targetHex = inTransit.Movement.Path[^1];
 
-        // Exactly RequiredSettlerCrews were required at dispatch (PlanDispatch's
-        // WrongSettlerCrewCount rejection), so every SettlerCrew stack present
+        // Exactly RequiredSettlers were required at dispatch (PlanDispatch's
+        // WrongSettlerCount rejection), so every Settler stack present
         // is consumed entire; whatever else travelled along (ships that
         // carried them, any escort) is what the new settlement starts with —
         // "undefended except for any escort units that travelled with the
@@ -826,7 +1025,7 @@ public sealed record Army
         // sailed settlers over with no other escort ends up with the ships
         // themselves as the only "defenders", exactly as reasonable a v1
         // reading of "leaves it undefended except escorts" as any other.
-        var garrisonForNewSettlement = army.Stacks.Where(s => s.Type != UnitType.SettlerCrew).ToList();
+        var garrisonForNewSettlement = army.Stacks.Where(s => s.Type != UnitType.Settler).ToList();
 
         return new FoundingArrivalResult(
             Arrived: true, ShouldFound: true, Army: null, GarrisonForNewSettlement: garrisonForNewSettlement, FoundedAt: targetHex);
@@ -865,9 +1064,16 @@ public sealed record Army
     /// convoy prices river crossings exactly like every other movement.
     /// <see langword="null"/> (the default) charges no river penalty.
     /// </param>
+    /// <param name="isWideRiver">
+    /// Which river hexes are wide and so impassable to a land army, threaded alongside
+    /// <paramref name="isRiver"/> into every <see cref="HexPathfinder"/> call this makes.
+    /// <see langword="null"/> (the default) treats every river hex as a crossable stream.
+    /// </param>
     public static RetargetFoundingResult RetargetFounding(
         Army army, HexCoord newTarget, DateTimeOffset now, HexCoord home, Func<HexCoord, Terrain> terrainAt,
-        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null)
+        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null,
+        Func<HexCoord, bool>? isWideRiver = null,
+        WallRules? walls = null)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(terrainAt);
@@ -901,13 +1107,13 @@ public sealed record Army
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
         }
 
-        var path = HexPathfinder.FindPath(fromHex, newTarget, terrainAt, isLandUnit, isRiver);
+        var path = HexPathfinder.FindPath(fromHex, newTarget, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (path is null || path.Count == 0)
         {
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
         }
 
-        var returnPath = HexPathfinder.FindPath(newTarget, home, terrainAt, isLandUnit, isRiver);
+        var returnPath = HexPathfinder.FindPath(newTarget, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (returnPath is null || returnPath.Count == 0)
         {
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
@@ -915,8 +1121,8 @@ public sealed record Army
 
         var speed = army.TotalSpeed;
         var upkeepPerHour = army.TotalUpkeepPerHour;
-        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver);
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         var provisionsNow = army.ProvisionsAt(now);
         var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
@@ -1020,9 +1226,16 @@ public sealed record Army
     /// the recall route's <see cref="HexPathfinder"/> call. <see langword="null"/>
     /// (the default) prices no hex as a river.
     /// </param>
+    /// <param name="isWideRiver">
+    /// Which river hexes are wide and so impassable to a land army, threaded alongside
+    /// <paramref name="isRiver"/> into every <see cref="HexPathfinder"/> call this makes.
+    /// <see langword="null"/> (the default) treats every river hex as a crossable stream.
+    /// </param>
     public Army? Recall(
         DateTimeOffset now, HexCoord home, Func<HexCoord, Terrain> terrainAt, HexCoord? currentHex = null,
-        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null)
+        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null,
+        Func<HexCoord, bool>? isWideRiver = null,
+        WallRules? walls = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
@@ -1041,20 +1254,18 @@ public sealed record Army
                 return null;
         }
 
-        // Stacks are never mixed (PlanDispatch's MixedFleetAndLandUnits
-        // rejection guarantees that at dispatch time), so "all Ship" or "no
-        // Ship" is an exhaustive, unambiguous read of which pathfinder table
-        // this army's own recall route needs.
-        var isLandUnit = Stacks.Count == 0 || Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
+        // Any ship makes the whole army a fleet (a sea Found convoy carries settlers on its ships), the same
+        // read IsFleet and HomeHex use, so the route table always matches the home hex.
+        var isLandUnit = !IsFleet;
 
-        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver);
+        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (path is null || path.Count == 0)
         {
             return null;
         }
 
         var speed = TotalSpeed;
-        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         // ProvisionsAt returns the raw Provisions field for anything other
         // than InTransit — including Supporting, which is exactly right here:
@@ -1097,27 +1308,29 @@ public sealed record Army
     /// <returns>
     /// <see langword="null"/> only if no route home exists at all — should
     /// not happen in practice for an army that was already mid-journey
-    /// (issue #159's river-crossing case aside, no hex on a reachable route is
-    /// ever itself unreachable), but handled defensively rather than throwing.
+    /// (it came from home over land it was allowed to walk, and the same
+    /// rules price the way back), but handled defensively rather than throwing.
     /// </returns>
     public Army ForceFieldRetreat(
         DateTimeOffset battleInstant, HexCoord fromHex, HexCoord home, Func<HexCoord, Terrain> terrainAt,
-        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null)
+        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null,
+        Func<HexCoord, bool>? isWideRiver = null,
+        WallRules? walls = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
-        var isLandUnit = Stacks.Count == 0 || Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
+        var isLandUnit = !IsFleet;
 
         // No route home is not expected in practice (this army's original
         // route already crossed fromHex), but rather than throw, it is left
         // standing exactly where it fought — still immune, just going
         // nowhere — a safe degenerate case rather than a crash.
-        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver) is { Count: > 0 } found
+        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost) is { Count: > 0 } found
             ? found
             : (List<HexCoord>)[fromHex];
 
         var speed = TotalSpeed;
-        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         var retreatMovement = new Movement.Movement
         {
@@ -1179,6 +1392,7 @@ public sealed record Army
     /// </param>
     /// <param name="home">The army's home settlement's own hex — needed to price the new return leg, exactly as <see cref="Recall"/> needs it.</param>
     /// <param name="isRiver">Optional river-tile lookup (issue #159 part A), threaded into every <see cref="HexPathfinder"/> call this makes.</param>
+    /// <param name="isWideRiver">Optional wide-river lookup (impassable to a land army), threaded alongside <paramref name="isRiver"/>.</param>
     public static FieldOrderResult PlanFieldOrder(
         Army army,
         IReadOnlyList<HexCoord> waypoints,
@@ -1188,7 +1402,9 @@ public sealed record Army
         Func<HexCoord, Terrain> terrainAt,
         bool isPremium,
         double speedFactor = 1.0,
-        Func<HexCoord, bool>? isRiver = null)
+        Func<HexCoord, bool>? isRiver = null,
+        Func<HexCoord, bool>? isWideRiver = null,
+        WallRules? walls = null)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(waypoints);
@@ -1200,9 +1416,9 @@ public sealed record Army
         }
 
         var movement = inTransit.Movement;
-        var isLandUnit = army.Stacks.Count == 0 || army.Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
+        var isLandUnit = !army.IsFleet;
 
-        if (terrainAt(destination).IsLand() != isLandUnit)
+        if (!terrainAt(destination).IsTraversable(isLandUnit))
         {
             return FieldOrderResult.Rejected(isLandUnit
                 ? FieldOrderRejection.DestinationNotLand
@@ -1211,7 +1427,7 @@ public sealed record Army
 
         foreach (var waypoint in waypoints)
         {
-            if (terrainAt(waypoint).IsLand() != isLandUnit)
+            if (!terrainAt(waypoint).IsTraversable(isLandUnit))
             {
                 return FieldOrderResult.Rejected(isLandUnit
                     ? FieldOrderRejection.WaypointNotLand
@@ -1250,7 +1466,7 @@ public sealed record Army
             fullPath = [fromHex];
             for (var i = 0; i < stops.Count - 1; i++)
             {
-                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver);
+                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
                 if (leg is null || leg.Count == 0)
                 {
                     return FieldOrderResult.Rejected(FieldOrderRejection.UnreachableLeg);
@@ -1271,7 +1487,7 @@ public sealed record Army
             fullPath = [.. movement.Path];
             for (var i = 0; i < stops.Count - 1; i++)
             {
-                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver);
+                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
                 if (leg is null || leg.Count == 0)
                 {
                     return FieldOrderResult.Rejected(FieldOrderRejection.UnreachableLeg);
@@ -1281,7 +1497,7 @@ public sealed record Army
             }
         }
 
-        var returnPath = HexPathfinder.FindPath(destination, home, terrainAt, isLandUnit, isRiver);
+        var returnPath = HexPathfinder.FindPath(destination, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (returnPath is null || returnPath.Count == 0)
         {
             return FieldOrderResult.Rejected(FieldOrderRejection.UnreachableLeg);
@@ -1289,8 +1505,8 @@ public sealed record Army
 
         var speed = army.TotalSpeed;
         var upkeepPerHour = army.TotalUpkeepPerHour;
-        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
         if (provisionsAtDeparture < totalFoodNeeded)
@@ -1383,28 +1599,34 @@ public sealed record Army
     /// the fresh return route's <see cref="HexPathfinder"/> call.
     /// <see langword="null"/> (the default) prices no hex as a river.
     /// </param>
+    /// <param name="isWideRiver">
+    /// Which river hexes are wide and so impassable to a land army, threaded alongside
+    /// <paramref name="isRiver"/> into every <see cref="HexPathfinder"/> call this makes.
+    /// <see langword="null"/> (the default) treats every river hex as a crossable stream.
+    /// </param>
     public Army? TeleportTo(
         HexCoord coord, HexCoord home, DateTimeOffset now, Func<HexCoord, Terrain> terrainAt,
-        double? provisions = null, double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null)
+        double? provisions = null, double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null,
+        Func<HexCoord, bool>? isWideRiver = null,
+        WallRules? walls = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
-        // Same exhaustive read of the army's unit class Recall uses — stacks
-        // are never mixed (PlanDispatch guarantees it at dispatch time).
-        var isLandUnit = Stacks.Count == 0 || Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
+        // Same read of the army's unit class Recall uses: any ship makes it a fleet (see IsFleet).
+        var isLandUnit = !IsFleet;
 
-        if (terrainAt(coord).IsLand() != isLandUnit)
+        if (!terrainAt(coord).IsTraversable(isLandUnit))
         {
             return null;
         }
 
-        var returnPath = HexPathfinder.FindPath(coord, home, terrainAt, isLandUnit, isRiver);
+        var returnPath = HexPathfinder.FindPath(coord, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (returnPath is null || returnPath.Count == 0)
         {
             return null;
         }
 
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, TotalSpeed, isLandUnit, speedFactor, isRiver);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, TotalSpeed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         var provisionsNow = provisions is { } given ? Math.Max(0, given) : ProvisionsAt(now);
 
         var movement = Movement.Movement.Create(
@@ -1606,23 +1828,28 @@ public enum DispatchRejection
     WaypointNotSea,
 
     /// <summary>
-    /// A fleet's <see cref="ArmyMission.Attack"/> target settlement claims no
-    /// <see cref="Shoreline.IsShoreline"/> hex — a fully inland
-    /// settlement cannot be reached by ship at all (issue #40 phase 6, design
-    /// doc §8). Never raised for a land army.
+    /// A fleet <see cref="ArmyMission.Attack"/>/<see cref="ArmyMission.Raid"/> named no target building: a fleet is
+    /// always sent at one building on the target's shore. Never raised for a land army.
     /// </summary>
-    DefenderHasNoShoreline,
+    FleetTargetBuildingRequired,
+
+    /// <summary>
+    /// A fleet <see cref="ArmyMission.Attack"/>/<see cref="ArmyMission.Raid"/>'s target building hex is not on the
+    /// target's shore: outside the target's claim, or neither a <see cref="Shoreline.IsShoreline"/> land hex nor a
+    /// <see cref="Terrain.Sea"/> hex. Never raised for a land army.
+    /// </summary>
+    FleetTargetBuildingNotOnShore,
 
     /// <summary>
     /// An <see cref="ArmyMission.Found"/> dispatch did not name exactly
-    /// <see cref="Founding.RequiredSettlerCrews"/>
-    /// <see cref="UnitType.SettlerCrew"/> — too few to found, or more than the
+    /// <see cref="Founding.RequiredSettlers"/>
+    /// <see cref="UnitType.Settler"/> — too few to found, or more than the
     /// mission consumes (issue #55 §1).
     /// </summary>
-    WrongSettlerCrewCount,
+    WrongSettlerCount,
 
     /// <summary>
-    /// An <see cref="ArmyMission.Found"/> sea convoy named more settler crews
+    /// An <see cref="ArmyMission.Found"/> sea convoy named more settlers
     /// than its ships can carry — see <see cref="Founding.ShipCapacity"/>.
     /// </summary>
     InsufficientShipCapacityForSettlers,
@@ -1640,6 +1867,15 @@ public enum DispatchRejection
     /// settlement — see <see cref="Founding.IsHexFoundable"/>.
     /// </summary>
     TargetHexNotFoundable,
+
+    /// <summary>A <see cref="ArmyMission.Hunt"/> dispatch's destination hex holds no wildlife camp.</summary>
+    NoCampAtDestination,
+
+    /// <summary>A <see cref="ArmyMission.Hunt"/> dispatch of ships named a land camp; fleets only hunt water camps (the whale road).</summary>
+    HuntRequiresLandUnits,
+
+    /// <summary>A <see cref="ArmyMission.Hunt"/> dispatch of land units named a water camp (the whale road); only fleets reach one.</summary>
+    HuntRequiresFleet,
 }
 
 /// <summary>The outcome of asking to dispatch an army — mirrors <see cref="BuildDecision"/>.</summary>

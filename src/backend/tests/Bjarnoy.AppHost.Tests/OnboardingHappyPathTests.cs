@@ -34,22 +34,16 @@ namespace Bjarnoy.AppHost.Tests;
 /// founding browser's own — proving the JWT, not the header, is what found
 /// it).
 /// </remarks>
-public class OnboardingHappyPathTests
+public class OnboardingHappyPathTests(AppHostFixture fixture)
 {
     [Fact]
     public async Task TheFullOnboardingHappyPathEndsWithTheSameRealmAfterALogoutLoginRoundTrip()
     {
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(8)).Token;
 
-        var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Bjarnoy_AppHost>(cancellationToken);
-        appHost.Services.ConfigureHttpClientDefaults(clientBuilder => clientBuilder.AddStandardResilienceHandler());
-
-        await using var app = await appHost.BuildAsync(cancellationToken);
-        await app.StartAsync(cancellationToken);
-
-        var resourceNotifications = app.Services.GetRequiredService<ResourceNotificationService>();
-        await resourceNotifications.WaitForResourceHealthyAsync("api", cancellationToken);
-        await resourceNotifications.WaitForResourceHealthyAsync("frontend", cancellationToken);
+        await fixture.ResetAsync(cancellationToken);
+        var app = fixture.App;
+        var resourceNotifications = fixture.ResourceNotifications;
 
         var frontendUrl = app.GetEndpoint("frontend").ToString();
         using var apiClient = app.CreateHttpClient("api");
@@ -83,7 +77,7 @@ public class OnboardingHappyPathTests
             $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
         var settlement = Assert.Single(settlements!);
 
-        // The two guided buildings the tray tracks (farm, lumberjack — see
+        // The two guided buildings the tray tracks (reindeerherder, lumberjack — see
         // LandingView.vue's GUIDED_BUILD_TERRAIN) each need their own
         // terrain, both guaranteed adjacent to any start position (see
         // LandingBuildQueueTests's own comment on WorldGenerator's
@@ -127,17 +121,13 @@ public class OnboardingHappyPathTests
             cancellationToken);
         speedUpResponse.EnsureSuccessStatusCode();
 
-        // --- Guided build 1: Farm on the grass hex, via the REAL ring menu -----
+        // --- Guided build 1: Reindeer Herder on the grass hex, via the REAL ring menu -----
         await LiveFrontendTestHelpers.ClickHexAsync(page, grassTile.Q, grassTile.R);
-        var farmBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Farm" });
-        await Assertions.Expect(farmBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
-        await farmBubble.ClickAsync();
+        await LiveFrontendTestHelpers.BuildThroughRingAsync(page, "Resource", "Reindeer Herder");
 
         // --- Guided build 2: Lumberjack on the forest hex, via the ring menu ---
         await LiveFrontendTestHelpers.ClickHexAsync(page, forestTile.Q, forestTile.R);
-        var lumberjackBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Lumberjack" });
-        await Assertions.Expect(lumberjackBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
-        await lumberjackBubble.ClickAsync();
+        await LiveFrontendTestHelpers.BuildThroughRingAsync(page, "Resource", "Lumberjack");
 
         // Both queued against the real backend; startHudSync()'s poll picks
         // them up with no reload/click once the sped-up world resolves them
@@ -150,18 +140,16 @@ public class OnboardingHappyPathTests
 
         var settlementAfterCompletion = await apiClient.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlement.Id}", cancellationToken);
-        Assert.Contains(settlementAfterCompletion!.Buildings, b => b.Type == "farm");
+        Assert.Contains(settlementAfterCompletion!.Buildings, b => b.Type == "reindeerherder");
         Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "lumberjack");
 
-        var completionBanner = page.GetByTestId("onboarding-banner");
-        await Assertions.Expect(completionBanner).ToBeVisibleAsync(new() { Timeout = 10_000 });
-        await page.GetByTestId("onboarding-continue").ClickAsync();
-        await Assertions.Expect(page).ToHaveURLAsync(
-            new Regex(@"/settlement$"), new PageAssertionsToHaveURLOptions { Timeout = 10_000 });
-
         // --- Profile nudge -> a real /register form -----------------------------
+        // Onboarding complete: the "Name your jarl" nudge is the one call to
+        // action on the landing page — the completion banner waits until it
+        // is answered — so registration starts straight from here.
         var profileNudgeCta = page.GetByTestId("profile-nudge-cta");
         await Assertions.Expect(profileNudgeCta).ToBeVisibleAsync(new() { Timeout = 10_000 });
+        await Assertions.Expect(page.GetByTestId("onboarding-banner")).ToHaveCountAsync(0);
         await profileNudgeCta.ClickAsync();
         await Assertions.Expect(page).ToHaveURLAsync(
             new Regex(@"/register$"), new PageAssertionsToHaveURLOptions { Timeout = 10_000 });

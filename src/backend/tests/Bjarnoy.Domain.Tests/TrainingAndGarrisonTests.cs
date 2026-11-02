@@ -137,7 +137,7 @@ public class TrainingAndGarrisonTests
     [Fact]
     public void Training_a_ship_at_a_non_coastal_settlement_is_refused()
     {
-        var settlement = Found(longhouseLevel: 5, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.Dockyard, 1)]);
+        var settlement = Found(longhouseLevel: 8, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.Dockyard, 1)]);
 
         var decision = settlement.PlanTrain(UnitType.Karve, 1, T0, Guid.CreateVersion7(), hasShoreline: false);
 
@@ -147,7 +147,7 @@ public class TrainingAndGarrisonTests
     [Fact]
     public void Training_a_ship_at_a_coastal_settlement_is_accepted()
     {
-        var settlement = Found(longhouseLevel: 5, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.Dockyard, 1)]);
+        var settlement = Found(longhouseLevel: 8, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.Dockyard, 1)]);
 
         var decision = settlement.PlanTrain(UnitType.Karve, 1, T0, Guid.CreateVersion7(), hasShoreline: true);
 
@@ -158,7 +158,7 @@ public class TrainingAndGarrisonTests
     [Fact]
     public void A_land_unit_cannot_be_trained_without_an_archery_range()
     {
-        var settlement = Found(longhouseLevel: 5);
+        var settlement = Found(longhouseLevel: 9);
 
         var decision = settlement.PlanTrain(UnitType.Bowman, 1, T0, Guid.CreateVersion7());
 
@@ -169,11 +169,35 @@ public class TrainingAndGarrisonTests
     public void A_land_unit_can_be_trained_once_an_archery_range_stands()
     {
         var settlement = Found(
-            longhouseLevel: 5, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.ArcheryRange, 1)]);
+            longhouseLevel: 9, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.ArcheryRange, 1)]);
 
         var decision = settlement.PlanTrain(UnitType.Bowman, 1, T0, Guid.CreateVersion7());
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_ram_is_trained_at_a_siege_workshop_and_not_at_an_archery_range()
+    {
+        var withRange = Found(
+            longhouseLevel: 20, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.ArcheryRange, 5)]);
+        var withWorkshop = Found(
+            longhouseLevel: 20, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.SiegeWorkshop, 1)]);
+
+        Assert.Equal(TrainRejection.UnitNotAvailable, withRange.PlanTrain(UnitType.Ram, 1, T0, Guid.CreateVersion7()).Rejection);
+        Assert.True(withWorkshop.PlanTrain(UnitType.Ram, 1, T0, Guid.CreateVersion7()).Accepted);
+    }
+
+    [Fact]
+    public void A_catapult_is_trained_at_a_siege_workshop_and_not_at_an_archery_range()
+    {
+        var withRange = Found(
+            longhouseLevel: 20, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.ArcheryRange, 5)]);
+        var withWorkshop = Found(
+            longhouseLevel: 20, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.SiegeWorkshop, 1)]);
+
+        Assert.Equal(TrainRejection.UnitNotAvailable, withRange.PlanTrain(UnitType.Catapult, 1, T0, Guid.CreateVersion7()).Rejection);
+        Assert.True(withWorkshop.PlanTrain(UnitType.Catapult, 1, T0, Guid.CreateVersion7()).Accepted);
     }
 
     /// <summary>The basic melee slice of the roster is gated by a Barracks standing, not just the longhouse level.</summary>
@@ -201,7 +225,7 @@ public class TrainingAndGarrisonTests
     [Fact]
     public void A_ship_cannot_be_trained_without_a_dockyard()
     {
-        var settlement = Found(longhouseLevel: 5);
+        var settlement = Found(longhouseLevel: 8);
 
         var decision = settlement.PlanTrain(UnitType.Karve, 1, T0, Guid.CreateVersion7(), hasShoreline: true);
 

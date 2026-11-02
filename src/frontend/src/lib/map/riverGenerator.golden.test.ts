@@ -9,9 +9,11 @@
 // `src/shared/*.json` fixture.
 import { describe, expect, it } from 'vitest';
 import goldenFixtureJson from '../../../../shared/river-generation-golden.json';
-import { coordKey, type AxialCoord } from '../hex/coords';
+import { coordKey, neighbors, type AxialCoord } from '../hex/coords';
 import { DEFAULT_GENERATION, islandDepthAt, terrainAt, wastedDepthAt, type WorldSeed } from './worldGenerator';
 import { generateRivers } from './riverGenerator';
+import { riverArtFor } from './textures';
+import { mouthSeaDirection } from './types';
 import type { RiverTileShape, Terrain, TileOrientation } from './types';
 
 interface RiverScenario {
@@ -27,6 +29,7 @@ interface RiverScenario {
     shape: RiverTileShape;
     inDirections: TileOrientation[];
     outDirection: TileOrientation | null;
+    width: 'river' | 'stream' | 'widen' | 'riverstream';
     wasted: boolean;
   }[];
 }
@@ -49,7 +52,7 @@ describe('river-generation golden fixture (river generation parity)', () => {
     // via the same `worldGenerator.ts` this island's terrain itself came
     // from — agree byte-for-byte with what the backend's `TerrainSampler`
     // computed for it.
-    const world: WorldSeed = { seed: scenario.worldSeed, generation: DEFAULT_GENERATION };
+    const world: WorldSeed = { seed: scenario.worldSeed, generation: { ...DEFAULT_GENERATION, worldRadius: 1000 } };
     const depthAt = (c: AxialCoord) => (scenario.wasted ? wastedDepthAt(c.q, c.r, world) : islandDepthAt(c.q, c.r, world));
     const globalIsLand = (c: AxialCoord) => terrainAt(c.q, c.r, world) !== 'sea';
 
@@ -65,5 +68,23 @@ describe('river-generation golden fixture (river generation parity)', () => {
     );
 
     expect(actual).toEqual(scenario.rivers);
-  });
+    // The valley-stream island has 21k tiles and 16 bog sites with the gap fill: generating it takes about 7 s, over the 5 s default.
+  }, 30_000);
+
+  it.each(fixture.scenarios.filter((s) => !s.wasted))(
+    '$name: every sea mouth is a river-width delta with the sea straight ahead of its single inflow',
+    (scenario: RiverScenario) => {
+      const terrainByHex = new Map<string, Terrain>(scenario.tiles.map(([q, r, terrain]) => [coordKey({ q, r }), terrain]));
+      const isSea = (c: AxialCoord): boolean => (terrainByHex.get(coordKey(c)) ?? 'sea') === 'sea';
+      const mouths = scenario.rivers.filter((r) => r.shape === 'mouth');
+      expect(mouths.length).toBeGreaterThan(0);
+      for (const mouth of mouths) {
+        expect(mouth.width).toBe('river');
+        expect(mouth.inDirections).toHaveLength(1);
+        // The sea direction the way `WorldModel.seaFacingDirectionOf` finds it.
+        const seaDirection = mouthSeaDirection(mouth.inDirections[0]!, neighbors({ q: mouth.q, r: mouth.r }).map(isSea));
+        expect(riverArtFor(mouth, seaDirection).shape).toBe('delta');
+      }
+    },
+  );
 });

@@ -96,6 +96,33 @@ public class ArmyTests
     }
 
     [Fact]
+    public void Dispatch_is_rejected_when_the_destination_is_walled_in_by_mountains()
+    {
+        var settlement = Found();
+        var target = new HexCoord(5, 0);
+        var ring = target.Neighbours().ToHashSet();
+        Terrain TerrainAt(HexCoord c) => ring.Contains(c) ? Terrain.Mountain : Terrain.Grass;
+
+        var decision = Dispatch(settlement, target, provisions: 40, terrainAt: TerrainAt);
+
+        Assert.Equal(DispatchRejection.UnreachableLeg, decision.Rejection);
+    }
+
+    [Fact]
+    public void Dispatch_is_rejected_when_a_wide_river_cuts_the_only_way_and_accepted_when_it_is_a_stream()
+    {
+        var settlement = Found();
+        var riverWall = Enumerable.Range(-15, 31).Select(r => new HexCoord(2, r)).ToHashSet();
+
+        DispatchDecision Send(Func<HexCoord, bool>? isWide) => Army.PlanDispatch(
+            settlement, [new UnitStack(UnitType.Spearman, 5)], 40, [], new HexCoord(5, 0), T0, Guid.CreateVersion7(),
+            AllGrass(), isRiver: riverWall.Contains, isWideRiver: isWide);
+
+        Assert.Equal(DispatchRejection.UnreachableLeg, Send(riverWall.Contains).Rejection);
+        Assert.True(Send(_ => false).Accepted);
+    }
+
+    [Fact]
     public void Dispatch_is_rejected_when_provisions_do_not_cover_the_round_trip()
     {
         var settlement = Found();

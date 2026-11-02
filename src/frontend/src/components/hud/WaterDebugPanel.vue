@@ -8,6 +8,7 @@
 import { reactive, watch } from 'vue';
 import DebugPanel from './DebugPanel.vue';
 import {
+  BOG_LAKE_FOAM_STYLES,
   waterDebugFlags,
   waterDebugTuning,
   type WaterDebugFlags,
@@ -35,11 +36,13 @@ const LABELS: Record<keyof WaterDebugFlags, string> = {
   fineCaustics: 'Caustics: fine highlight net',
   causticShadows: 'Caustics: drifting dark blobs',
   shorelineFoam: 'Shoreline foam',
-  propTileMute: 'Quieten the shader over boat/rock tiles',
   seaBody: 'Sea body (world map; off = CSS gradient)',
   legacyWaveSquiggles: 'World map: Graphics wave squiggles',
   showWaterMask: 'Debug: show the raw water mask',
   legacyTileSplit: 'Split unsplit tall art in code',
+  bogLakeFoam: 'Bog lakes: gust foam lines',
+  bogLakeSheen: 'Bog lakes: gust sheen',
+  bogLakeCatsPaws: "Bog lakes: gust cat's paws",
 };
 
 // Brackets the shipped values on both sides, so "is this too wide / too still"
@@ -64,6 +67,8 @@ const CAUSTIC_PHASE = { min: 0, max: 30, step: 0.5 };
 // Down to a third, where the net thins out to a few big loops, and up to 2.5x,
 // where the ribbons start to touch and the water reads as a lace rather than a
 // network. Both ends are worth being able to reach.
+// Multipliers on the shipped (deliberately subtle) lake gust; 1.00 is what ships.
+const BOG_LAKE_STRENGTH = { min: 0, max: 3, step: 0.05 };
 const CAUSTIC_DENSITY = { min: 0.3, max: 2.5, step: 0.05 };
 
 /**
@@ -91,8 +96,19 @@ const SLIDERS: {
   { key: 'causticFineBrightness', label: 'Fine net: brightness', needs: 'fineCaustics', range: CAUSTIC_BRIGHTNESS, format: times },
   { key: 'causticFineDensity', label: 'Fine net: density', needs: 'fineCaustics', range: CAUSTIC_DENSITY, format: times },
   { key: 'causticFinePhase', label: 'Fine net: phase shift', needs: 'fineCaustics', range: CAUSTIC_PHASE, format: (v) => `${v.toFixed(1)} s` },
+  { key: 'bogLakeFoamStrength', label: 'Bog lake foam: strength', needs: 'bogLakeFoam', range: BOG_LAKE_STRENGTH, format: times },
+  { key: 'bogLakeFoamWidth', label: 'Bog lake foam: line width', needs: 'bogLakeFoam', range: { min: 0.01, max: 0.15, step: 0.005 }, format: (v) => v.toFixed(3) },
+  { key: 'bogLakeFoamSpacing', label: 'Bog lake foam: spacing', needs: 'bogLakeFoam', range: { min: 6, max: 40, step: 1 }, format: (v) => `${v.toFixed(0)} u` },
+  { key: 'bogLakeSheenStrength', label: 'Bog lake sheen: strength', needs: 'bogLakeSheen', range: BOG_LAKE_STRENGTH, format: times },
+  { key: 'bogLakeCatsPawsStrength', label: "Bog lake cat's paws: strength", needs: 'bogLakeCatsPaws', range: BOG_LAKE_STRENGTH, format: times },
+  { key: 'mapAnimationSpeed', label: 'All map animations: playback speed', needs: 'water', range: { min: 0, max: 1.5, step: 0.05 }, format: times },
+  { key: 'bogLakeGustPhaseOffset', label: 'Bog lake gust: phase offset', needs: 'water', range: { min: -0.5, max: 0.5, step: 0.01 }, format: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(2)} period (${(v * 16).toFixed(1)} frames)` },
+  { key: 'bogLakeBandHalf', label: 'Bog lake gust: band half-width', needs: 'water', range: { min: 0.05, max: 0.5, step: 0.01 }, format: (v) => `${v.toFixed(2)} period` },
   { key: 'waveSpeed', label: 'Wave speed', needs: 'midWaterWaves', range: WAVE_SPEED, format: (v) => `${v.toFixed(1)}\u00d7` },
 ];
+
+// Debug-only panel text, like LABELS and SLIDERS above.
+const FOAM_STYLE_LABEL = 'Bog lake foam: style';
 
 watch([flags, tuning], () => emit('change'), { flush: 'post' });
 </script>
@@ -102,6 +118,13 @@ watch([flags, tuning], () => emit('change'), { flush: 'post' });
     <label v-for="(label, key) in LABELS" :key="key" class="row">
       <input type="checkbox" v-model="flags[key]" />
       <span>{{ label }}</span>
+    </label>
+
+    <label class="row slider-row" :class="{ disabled: !flags.bogLakeFoam }">
+      <span class="slider-label">{{ FOAM_STYLE_LABEL }}</span>
+      <select v-model.number="tuning.bogLakeFoamStyle" :disabled="!flags.bogLakeFoam" data-testid="bog-lake-foam-style">
+        <option v-for="(name, index) in BOG_LAKE_FOAM_STYLES" :key="name" :value="index">{{ name }}</option>
+      </select>
     </label>
 
     <div

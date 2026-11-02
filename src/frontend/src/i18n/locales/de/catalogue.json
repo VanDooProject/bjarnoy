@@ -7,7 +7,6 @@
     "farm": "Bauernhof",
     "storagehouse": "Lagerhaus",
     "tower": "Wachturm",
-    "fisherhut": "Fischerhütte",
     "fishinghut": "Fischerhütte",
     "pumpkinfarm": "Kürbisfarm",
     "shrineofthor": "Schrein des Thor",
@@ -25,7 +24,15 @@
     "smithy": "Waffenschmiede",
     "druidhut": "Druidenhütte",
     "cartworkshop": "Wagnerei",
-    "claybrickworks": "Ziegelei"
+    "claybrickworks": "Ziegelei",
+    "bogoreworks": "Raseneisenerz-Grube",
+    "hammerschmiede": "Hammerschmiede",
+    "odinstatue": "Odin-Statue",
+    "palisade": "Palisade",
+    "palisadegate": "Palisaden-Tor",
+    "bridge": "Brücke",
+    "siegeworkshop": "Belagerungswerkstatt",
+    "reindeerherder": "Rentierhirte"
   },
   "units": {
     "thrall": "Knecht",
@@ -35,8 +42,10 @@
     "berserker": "Berserker",
     "provisioner": "Versorger",
     "catapult": "Katapult",
+    "ram": "Rammbock",
     "karve": "Karve",
-    "longship": "Langschiff"
+    "longship": "Langschiff",
+    "settler": "Siedler"
   },
   "giants": {
     "giantmountain": "Riesenberg",
@@ -44,12 +53,30 @@
     "giantvolcano": "Vulkan",
     "giantutgard": "Utgard"
   },
+  "camps": {
+    "wolfden": "Wolfsbau",
+    "bearrapids": "Bärenstromschnelle",
+    "sealhaulout": "Robbenbank",
+    "walrushaulout": "Walross-Liegeplatz",
+    "boarwallow": "Wildschweinsuhle",
+    "eagleeyrie": "Adlerhorst",
+    "fenrirbrood": "Fenrirs Brut",
+    "moosemire": "Elchmoor",
+    "beaverlodge": "Biberburg",
+    "cranedance": "Kranichtanz",
+    "harewarren": "Hasenbau",
+    "deerglade": "Hirschlichtung",
+    "otterslide": "Otterrutsche",
+    "whaleroad": "Walweg"
+  },
   "terrain": {
     "sea": "Offenes Wasser",
     "sand": "Ufer",
     "grass": "Grasland",
     "forest": "Wald",
-    "mountain": "Gebirge"
+    "mountain": "Gebirge",
+    "bog": "Moorland",
+    "lake": "Moorsee"
   },
   "wastedTerrain": {
     "wasteland": "Ödland",
@@ -68,7 +95,8 @@
     "attack": "Angriff",
     "support": "Unterstützung",
     "raid": "Überfall",
-    "found": "Siedlung gründen"
+    "found": "Siedlung gründen",
+    "hunt": "Jagd"
   },
   "runes": {
     "types": {
@@ -114,5 +142,82 @@
       "weeklyResourcesLooted": "Geplünderte Rohstoffe diese Woche",
       "biggestArmy": "Größte Armee"
     }
+  },
+  "beasts": {
+    "wolfden": {
+      "young": "Wolfswelpe",
+      "adult": "Wolf",
+      "alpha": "Leitwolf"
+    },
+    "boarwallow": {
+      "young": "Frischling",
+      "adult": "Keiler",
+      "alpha": "Hauer"
+    },
+    "bearrapids": {
+      "young": "Bärenjunges",
+      "adult": "Bär",
+      "alpha": "Großbär"
+    },
+    "fenrirbrood": {
+      "young": "Schwarzer Welpe",
+      "adult": "Schwarzwolf",
+      "alpha": "Fenrirs Sprössling"
+    },
+    "walrushaulout": {
+      "young": "Walrosskalb",
+      "adult": "Walross",
+      "alpha": "Walrossbulle"
+    },
+    "eagleeyrie": {
+      "young": "Jungadler",
+      "adult": "Seeadler",
+      "alpha": "Alter Seeadler"
+    },
+    "moosemire": {
+      "young": "Elchkalb",
+      "adult": "Elch",
+      "alpha": "Elchbulle"
+    },
+    "sealhaulout": {
+      "young": "Heuler",
+      "adult": "Robbe",
+      "alpha": "Robbenbulle"
+    },
+    "beaverlodge": {
+      "young": "Jungbiber",
+      "adult": "Biber",
+      "alpha": "Alter Biber"
+    },
+    "cranedance": {
+      "young": "Kranichküken",
+      "adult": "Kranich",
+      "alpha": "Leitkranich"
+    },
+    "harewarren": {
+      "young": "Junghase",
+      "adult": "Hase",
+      "alpha": "Rammler"
+    },
+    "deerglade": {
+      "young": "Rehkitz",
+      "adult": "Hirsch",
+      "alpha": "Platzhirsch"
+    },
+    "otterslide": {
+      "young": "Otterjunges",
+      "adult": "Otter",
+      "alpha": "Alter Bulle"
+    },
+    "whaleroad": {
+      "young": "Walkalb",
+      "adult": "Buckelwal",
+      "alpha": "Alter Bulle"
+    }
+  },
+  "endgame": {
+    "utgardwall": "Utgardmauer",
+    "utgardgate": "Utgardtor",
+    "jotunwatchtower": "Jötunn-Wachturm"
   }
 }

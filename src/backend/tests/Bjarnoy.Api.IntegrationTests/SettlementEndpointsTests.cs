@@ -110,6 +110,41 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_stored_start_position_on_a_river_hex_cannot_be_founded_on()
+    {
+        // Worlds generated before the generator skipped rivers keep such plots in islands.StartPositions; founding
+        // there leaves every land dispatch without a way home, so the founding path filters them out.
+        using var client = Client();
+        var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var island = islands!.First(i => i.StartPositions.Count > 1);
+        var onRiver = island.StartPositions[0];
+        var dry = island.StartPositions[1];
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var entity = await db.Islands.SingleAsync(i => i.Id == island.Id, Ct);
+            entity.RiverTiles = [.. entity.RiverTiles, new RiverTileRecord(onRiver.Q, onRiver.R, 0, [], null, 0)];
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var refused = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(island.Id, onRiver.Q, onRiver.R, "Wetstead", "Ulf", OwnerId),
+            Ct);
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Equal("NotAStartPosition", await refused.RejectionAsync(Ct));
+
+        var accepted = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(island.Id, dry.Q, dry.R, "Drystead", "Ulf", OwnerId),
+            Ct);
+        Assert.Equal(HttpStatusCode.Created, accepted.StatusCode);
+    }
+
+    [Fact]
     public async Task The_same_plot_cannot_be_founded_twice()
     {
         using var client = Client();
@@ -197,11 +232,10 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     public async Task Spacing_is_enforced_within_an_island_but_never_across_separate_islands()
     {
         using var client = Client();
-        // Seed 51: re-picked again after the island-shape retune (bigger,
-        // more-elongated islands) moved every seed's terrain — seed 5/60 no
-        // longer places two islands close enough to exercise the
-        // cross-island case below.
-        var world = await _factory.CreateWorldAsync(Unique("w"), 51, 60, cancellationToken: Ct);
+        // Compact seed 31 (found by scanning seeds 1-300 after the island-density change): has an island with two
+        // start positions closer than MinimumSpacing and a second island with a
+        // start position that close to the first — the cross-island case below.
+        var world = await _factory.CreateWorldAsync(Unique("w"), 31, 300, cancellationToken: Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
@@ -234,7 +268,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             }
         }
 
-        Assert.True(sameIsland is not null, "Seed 51/radius 60 no longer has an island dense enough to exercise same-island spacing.");
+        Assert.True(sameIsland is not null, "Compact seed 31 no longer has an island dense enough to exercise same-island spacing.");
         var (islandId, first, second) = sameIsland!.Value;
 
         var founded = await client.PostJsonAsync(
@@ -265,7 +299,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             }
         }
 
-        Assert.True(crossIsland is not null, "Seed 51/radius 60 no longer has two islands close enough to exercise cross-island spacing.");
+        Assert.True(crossIsland is not null, "Compact seed 31 no longer has two islands close enough to exercise cross-island spacing.");
         var (crossIslandId, crossPlot) = crossIsland!.Value;
 
         var crossFounded = await client.PostJsonAsync(
@@ -354,9 +388,12 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             var domain = entity.ToDomain();
 
             var line = HexLine(centre, candidateCoord);
-            var towerCoords = new[] { 0.4, 0.7, 0.95 }
-                .Select(fraction => line[(int)Math.Round(fraction * (line.Length - 1))])
-                .Distinct()
+            // Each tower stands inside the previous one's disc (the first within the founding longhouse's own radius of 2), so the
+            // whole chain is connected and claims (the chain rule).
+            var towerCoords = Enumerable.Range(0, line.Length)
+                .Select(step => 2 + (step * 9))
+                .TakeWhile(index => index < line.Length - 1)
+                .Select(index => line[index])
                 .ToList();
 
             domain = domain with
@@ -469,13 +506,13 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Single(duringBuild!.Queue);
         // Issue #97: a brand-new building already stakes its level-0
         // foundation the instant it's queued, not just once it completes.
-        Assert.Contains(duringBuild.Buildings, b => b.Type == "farm" && b.Level == 0);
+        Assert.Contains(duringBuild.Buildings, b => b.Type == "reindeerherder" && b.Level == 0);
 
         _factory.Time.Advance(TimeSpan.FromHours(2));
         var afterBuild = await GetAsync(client, settlement.Id);
 
         Assert.Empty(afterBuild!.Queue);
-        Assert.Contains(afterBuild.Buildings, b => b.Type == "farm" && b.Level == 1);
+        Assert.Contains(afterBuild.Buildings, b => b.Type == "reindeerherder" && b.Level == 1);
         Assert.True(afterBuild.Resources.RatePerHour.Food > settlement.Resources.RatePerHour.Food);
     }
 
@@ -503,7 +540,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var after = await GetAsync(client, settlement.Id);
         Assert.Contains(
-            after!.Buildings, b => b.Q == order!.Q && b.R == order.R && b.Type == "farm" && b.Level == 0);
+            after!.Buildings, b => b.Q == order!.Q && b.R == order.R && b.Type == "reindeerherder" && b.Level == 0);
     }
 
     [Fact]
@@ -544,7 +581,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
     private Task<HttpResponseMessage> QueueFarmAtAsync(HttpClient client, Guid settlementId, int q, int r) =>
         client.PostJsonAsync(
-            $"/api/v1/settlements/{settlementId}/builds", new QueueBuildRequest("farm", q, r), Ct);
+            $"/api/v1/settlements/{settlementId}/builds", new QueueBuildRequest("reindeerherder", q, r), Ct);
 
     /// <summary>
     /// Level-1-buildable building types spanning grass, forest and mountain —
@@ -554,7 +591,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     /// all grass). Tower is deliberately excluded — it needs longhouse level
     /// 2, which these level-1 fixtures never have.
     /// </summary>
-    private static readonly string[] AnyLevel1Building = ["farm", "lumberjack", "quarry", "storagehouse"];
+    private static readonly string[] AnyLevel1Building = ["reindeerherder", "lumberjack", "quarry", "storagehouse"];
 
     /// <summary>
     /// Queues one legal building on <paramref name="count"/> distinct
@@ -976,7 +1013,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Equal(1, hut.Level);
         Assert.NotNull(hut.Orientation);
 
-        var expectedOrientation = new TerrainSampler(WorldGenerationOptions.ForSeed(1) with { Radius = 60 })
+        var expectedOrientation = new TerrainSampler(TestWorlds.For(1, 60))
             .FishingHutOrientation(waterCoord, centre)
             .ToWireName();
         Assert.Equal(expectedOrientation, hut.Orientation);
@@ -1010,11 +1047,42 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds",
-            new QueueBuildRequest("farm", settlement.Q + 1, settlement.R),
+            new QueueBuildRequest("reindeerherder", settlement.Q + 1, settlement.R),
             Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal("WorldPaused", await response.RejectionAsync(Ct));
+    }
+
+    [Fact]
+    public async Task Building_on_a_wildlife_camp_hex_is_refused_and_the_neighbouring_hex_is_not()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        var campHex = new HexCoord(settlement.Q + 1, settlement.R);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var island = await db.Islands.SingleAsync(i => i.Id == settlement.IslandId, Ct);
+            island.Camps = [new CampRecord(campHex.Q, campHex.R, CampFamilies.Wolfden, 3, 0)];
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var refused = await QueueFarmAtAsync(client, settlement.Id, campHex.Q, campHex.R);
+
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Equal("HexOccupiedByCamp", await refused.RejectionAsync(Ct));
+
+        // The rule is per hex: no other hex of the settlement reports the camp rejection.
+        foreach (var (dq, dr) in NeighbourOffsets.Where(o => (o.Dq, o.Dr) != (1, 0)))
+        {
+            var other = await QueueFarmAtAsync(client, settlement.Id, settlement.Q + dq, settlement.R + dr);
+            if (other.StatusCode == HttpStatusCode.Conflict)
+            {
+                Assert.NotEqual("HexOccupiedByCamp", await other.RejectionAsync(Ct));
+            }
+        }
     }
 
     [Fact]
@@ -1061,7 +1129,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var afterResume = await GetAsync(client, settlement.Id);
         Assert.Empty(afterResume!.Queue);
-        Assert.Contains(afterResume.Buildings, b => b.Type == "farm");
+        Assert.Contains(afterResume.Buildings, b => b.Type == "reindeerherder");
     }
 
     [Fact]
@@ -1097,7 +1165,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         var settled = await GetAsync(client, settlement.Id);
 
         // Time kept running, so the farm finished.
-        Assert.Contains(settled!.Buildings, b => b.Type == "farm");
+        Assert.Contains(settled!.Buildings, b => b.Type == "reindeerherder");
         Assert.True(settled.World.Running);
         Assert.False(settled.World.AcceptsCommands);
 
@@ -1188,7 +1256,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds",
-            new QueueBuildRequest("farm", settlement.Q + 1, settlement.R),
+            new QueueBuildRequest("reindeerherder", settlement.Q + 1, settlement.R),
             Ct);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -1204,7 +1272,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds",
-            new QueueBuildRequest("farm", settlement.Q + 1, settlement.R),
+            new QueueBuildRequest("reindeerherder", settlement.Q + 1, settlement.R),
             Ct);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -1271,7 +1339,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds",
-            new QueueBuildRequest("farm", settlement.Q + 1, settlement.R),
+            new QueueBuildRequest("reindeerherder", settlement.Q + 1, settlement.R),
             Ct);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -1339,7 +1407,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         {
             var response = await client.PostJsonAsync(
                 $"/api/v1/settlements/{settlement.Id}/builds",
-                new QueueBuildRequest("farm", settlement.Q + dq, settlement.R + dr),
+                new QueueBuildRequest("reindeerherder", settlement.Q + dq, settlement.R + dr),
                 Ct);
 
             if (response.StatusCode == HttpStatusCode.Accepted)

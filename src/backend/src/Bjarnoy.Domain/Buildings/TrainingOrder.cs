@@ -40,7 +40,7 @@ public sealed record TrainingOrder
     /// <summary>
     /// Cost multiplier actually charged for this batch, on top of the
     /// catalogue's flat per-unit <see cref="UnitDefinition.TrainingCost"/>
-    /// (issue #55 §4: settler-crew training escalates per settlement the
+    /// (issue #55 §4: settler training escalates per settlement the
     /// player already holds — see
     /// <see cref="Settlers.Founding.CostMultiplier"/>). 1.0 for every
     /// ordinary unit. Set once by <see cref="Settlement.PlanTrain"/> and must
@@ -97,6 +97,12 @@ public enum TrainRejection
     /// parameter. Independent of any future Shipyard building requirement.
     /// </summary>
     SettlementNotCoastal,
+
+    /// <summary>
+    /// The building the unit is trained in stands outside the realm and has no function until the realm reaches it again
+    /// (<c>docs/design/economy.md</c> section 5, "Buildings outside the realm decay").
+    /// </summary>
+    BuildingOutsideRealm,
 }
 
 /// <summary>The outcome of asking to train units.</summary>

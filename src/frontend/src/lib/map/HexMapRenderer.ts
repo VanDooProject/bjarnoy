@@ -32,32 +32,66 @@
 // instead of slicing across their canopy. Fog-of-war dimming sits above
 // everything, since a scouted-but-not-currently-visible hex needs to dim
 // its whole tile, props included.
-import { Application, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
+import {
+  circleIntersectsRect,
+  circlesIntersect,
+  markerFadeStep,
+  type OcclusionCircle,
+} from './markerOcclusion';
+import { Application, Container, Graphics, GraphicsContext, Sprite, Text, TextStyle, Texture, UPDATE_PRIORITY } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
-import { coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
+import { axialToOddQ, coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
+import { formatCountdownShort } from '../hud/countdown';
+import {
+  DIAL_FINISH_MS,
+  dialFinishFrame,
+  dialRejectFrame,
+  DIAL_REJECT_MS,
+  polylinePartial,
+  retainFinishingDials,
+  dialProgress,
+  dialRemainingSeconds,
+  hexPerimeterPath,
+  dialScale,
+  dialHoverStep,
+  dialRadiusPx,
+  pickTappedDial,
+  nextTapReveal,
+  DIAL_TAP_REVEAL_MS,
+  type ConstructionDial,
+} from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
-import type { WorldModel } from './WorldModel';
-import type { RiverTile, Settlement, Terrain, Tile } from './types';
-import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount, type BuildingLevelStats } from './buildingEconomy';
+import { attachFramePacing } from './framePacing';
+import { splitBorderEdges } from './realmBorderEdges';
+import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
+import type { IslandLabel, RiverTile, Settlement, Terrain, Tile } from './types';
+import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
-import { waterDebugFlags, waterPerfStats } from './water/waterDebug';
-import { hasWaterProp, type TerrainLookup, type WaterMask } from './water/waterMask';
+import { WaterDryLayer, entriesWorldBounds, maskEntries, type DryEntry } from './water/waterDryMask';
+import { BogLakeLayer } from './water/BogLakeLayer';
+import { LAKE_FRAME_RE } from './water/dryMaskCore';
+import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './water/waterDebug';
+import type { TerrainLookup, WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
-import { fogMaskPlacement } from './fog/fogMaskLayout';
-import { riverPathFor } from './riverPath';
+import { fogMaskPlacement, type MaskBounds } from './fog/fogMaskLayout';
+import { chunkRangeOfTexels, rangesEqual, type ChunkRange } from './fog/fogChunks';
+import { bogCreekPathFor, riverPathFor, type RiverDrawing } from './riverPath';
 import {
   TILE_ART_NATIVE_H,
   TILE_ART_NATIVE_W,
   TILE_ART_TOPFACE_H_FRAC,
   TILE_ART_TOPFACE_Y_FRAC,
   baseTextureFor,
+  campArtFor,
+  drawnCampOf,
+  endgameDrawTile,
   giantArtFamilyFor,
   giantTopAnimFor,
   giantTopTextureFor,
@@ -69,6 +103,7 @@ import {
   loadTerrainAtlas,
   mergeTileTextures,
   riverBuildingArtFor,
+  palisadeArtFor,
   riverTexturesFor,
   textureKeyFor,
   topAnimFor,
@@ -80,10 +115,15 @@ import {
   type TileTextures,
 } from './textures';
 import { giantCrop, giantFootprintOutline } from './giantTiles';
+import type { GiantFamily } from './giantPlacement';
+import { bogEdgeShapes, bogEdgesOf, isBogGround, type BogEdgeShape } from './bogEdge';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
+import { DOUBLE_TAP_MS, DOUBLE_TAP_ZOOM_MS, doubleTapZoomLog, isDoubleTap, type Tap } from './doubleTap';
 import { animationPreference } from '../perf/animationPreference';
-import { advanceClipFrame } from './clipPlayback';
+import { antialiasPreference } from '../perf/antialiasPreference';
+import { advanceClipFrame, clipTimingOf, phasedStart, sharedClockPlayback, swayPeriodOffset } from './clipPlayback';
+import { hash2 } from './worldGenerator';
 
 export type RenderMode = 'world' | 'settlement';
 
@@ -123,7 +163,27 @@ const WORLD_TERRAIN_FILL: Record<Terrain, number> = {
   grass: 0x4e7a3a,
   forest: 0x365e2f,
   mountain: 0x5f6b6d,
+  bog: 0x5b6234, // the moss: duller and yellower than the grass, like the art
+  lake: 0x27445e, // dark slate blue, the bog water's own colour
 };
+
+/**
+ * A revealed wasted island's flat world-map colours, picked from its tile art's top faces
+ * (`wasteland`, `deadforest`, `blacksand`, `mountaintile_jagged`): ash-brown ground, darker under the
+ * dead trees, grey black sand, lighter jagged rock. Keyed by the hex's wire terrain, which stays
+ * grass/forest/sand/mountain on a wasted island (see `Tile.wasted`).
+ */
+const WORLD_WASTED_FILL: Partial<Record<Terrain, number>> = {
+  grass: 0x47403c,
+  forest: 0x302c29,
+  sand: 0x646772,
+  mountain: 0x6b625a,
+};
+
+/** A world-map hex's flat fill: the wasted palette on a revealed wasted island, else the terrain's own. */
+export function worldHexFill(terrain: Terrain, wasted: boolean): number {
+  return (wasted ? WORLD_WASTED_FILL[terrain] : undefined) ?? WORLD_TERRAIN_FILL[terrain];
+}
 
 // zip 7's own prototype (prototypes/worldmap/Viking Realm.dc.html, sea()
 // method, "playful" style — the one shown in docs/design/img/worldmap.png)
@@ -190,6 +250,13 @@ export const LABEL_STYLES = {
   }),
   cart: new TextStyle({ fill: CART_COLOR, fontFamily: 'sans-serif', fontWeight: 'normal', fontSize: 11 }),
   badgeName: new TextStyle({ fill: 0xe8f0f5, fontFamily: 'sans-serif', fontWeight: 'bold', fontSize: 13 }),
+  dialTime: new TextStyle({
+    fill: 0xffffff,
+    fontFamily: "'Barlow', sans-serif",
+    fontWeight: 'bold',
+    fontSize: 12,
+    dropShadow: { color: 0x000000, alpha: 0.9, blur: 2, distance: 1, angle: Math.PI / 2 },
+  }),
   badgeSuffix: new TextStyle({ fill: 0xe8f0f5, fontFamily: 'sans-serif', fontWeight: '400', fontSize: 12 }),
 } as const;
 
@@ -322,6 +389,9 @@ function createSpriteLayer(): SpriteLayer {
   return { pool: [], active: new Map(), container };
 }
 
+/** Salt of the per-tile hash that sets each animated tile's start phase (`syncTopAnim`). */
+const TILE_ANIM_PHASE_SALT = 40503;
+
 /** One hex's live `buildings-anim` playback state — see `syncTopAnim`/`advanceTopAnimations`. */
 interface TopAnimState {
   clip: TileAnimClip;
@@ -357,6 +427,13 @@ export interface HexMapRendererOptions {
    * position. Ignored once `settlementId` is set.
    */
   previewCenter?: AxialCoord;
+  /** Radius of the no-settlement preview crop around `previewCenter` (default `PREVIEW_ISLAND_RADIUS`); the showcase frame shows a wider one than the landing page. */
+  previewRadius?: number;
+  /**
+   * Radius of the hexes actually drawn in preview mode (default `previewRadius`); never below it. The locked camera still fits `previewRadius`,
+   * so a larger value pushes the crop's hexagonal outline out of the frame instead of cutting through the island inside it.
+   */
+  previewRenderRadius?: number;
   /**
    * A single hex to keep highlighted every frame, independent of hover —
    * zip 6a's "click to place" glow on the one buildable plot before the
@@ -395,6 +472,12 @@ export interface HexMapRendererOptions {
    */
   hideSettlementBadge?: boolean;
   /**
+   * World mode only: draw a paw symbol on every standing wildlife camp the model knows (`worldCampMarkers`). The host
+   * sets it for premium players; absent means no camp symbols at all. Changeable after mount with
+   * `setShowCampMarkers`.
+   */
+  showCampMarkers?: boolean;
+  /**
    * Landing-page static preview: fixes the camera to fit the whole preview
    * island on screen and disables drag/wheel/pinch zoom, while clicks/taps
    * still pass through (founding a settlement must keep working) — unlike
@@ -403,10 +486,14 @@ export interface HexMapRendererOptions {
    */
   lockCamera?: boolean;
   /**
-   * Only meaningful alongside `lockCamera`: lets the page itself scroll
-   * under a wheel/touch gesture over the canvas instead of the renderer
-   * eating it for camera zoom/pan (which `lockCamera` already disables
-   * anyway — see `zoomBy`'s own doc comment). The landing page's locked
+   * Lets the page itself scroll under a wheel/touch gesture over the canvas
+   * instead of the renderer eating it for camera zoom/pan. With `lockCamera`
+   * (which already disables those — see `zoomBy`'s own doc comment) that is
+   * all there is to it. Without it, drag still pans (mouse; a touch drag along
+   * the axis the host's `touch-action` leaves to the page scrolls the page
+   * instead), pinch zooms, and a wheel with ctrl/meta held (a trackpad pinch,
+   * or ctrl+wheel) zooms while a plain wheel scrolls the page until the user presses on the map (it then zooms
+   * until the pointer leaves the canvas; see `wheelPassesToPage`). The landing page's locked
    * preview is a small island beside hero copy with no reason to block page
    * scroll; the Wasted Lands docs page's own locked island sits inline in a
    * scrolling article and needs the opposite of `SettlementCanvas.vue`'s
@@ -415,6 +502,27 @@ export interface HexMapRendererOptions {
    * which don't otherwise know or care about the host's CSS.
    */
   allowPageScroll?: boolean;
+  /**
+   * Settlement-mode preview (no settlement) only: draw every hex within the
+   * drawn radius (`previewDrawRadius`) — the sea's own tile art, and any land
+   * in it — instead of only the preview island's land. The showcase's village
+   * frame uses it so the island sits in its sea rather than on the host's
+   * CSS background.
+   */
+  previewSea?: boolean;
+  /**
+   * Settlement-mode preview (no settlement) only: starts at the same fitted
+   * framing as `lockCamera`, but drag-pan and wheel/pinch zoom stay enabled
+   * and every camera change is clamped by `confineCamera` — zoom never drops
+   * below the fit zoom and the centre never leaves the bounding box of the
+   * island's land inside the fit, so the visitor can look closely at the island but not wander off it.
+   *
+   * 'world' mode: the same clamp around the hex disc of `previewRadius` at `previewCenter` (the showcase hero map).
+   * The camera starts fitted to that disc, never zooms out past it, its centre stays inside the disc's bounding box,
+   * zooming in stops short of the world-to-settlement switch, and the idle drift is off. Hexes are not capped to the disc:
+   * the camera never sees past what its clamp allows, so everything in view is drawn and no cut-off edge can come into frame.
+   */
+  confineCamera?: boolean;
   onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
   /** zip 9: "hover = stats tooltip". Fired on every hover change, `null` on leave. */
   onHoverChange?: (info: HoverInfo | null) => void;
@@ -525,11 +633,23 @@ export interface ArmyOverlayData {
   draftWaypoints: AxialCoord[];
   /** Issue #93: attack/support target indicators. Optional — an empty list draws nothing. */
   targets?: ArmyOverlayTarget[];
+  /**
+   * Odin's Ravens: extra rings added to the live army-vision radius
+   * (`ARMY_VISION_RADIUS_HEXES`) — mirrors the backend's
+   * `FogVisionRadii.ArmyVisionRadius(bonusRings)`. These are all the selected
+   * settlement's own armies, so one number covers them.
+   */
+  visionBonusRings?: number;
 }
 
 /**
  * What `drawArmyOverlay` actually placed on screen on its most recent frame
  * — read back via `lastArmyOverlayFrame()`.
+ *
+ * Recorded when the overlay is rebuilt, which is not always inside a rendered
+ * tick (`rebuildAll` also runs from atlas-load callbacks), so it can run ahead
+ * of the canvas by one frame: anything that judges the pixels waits for
+ * `whenFrameRendered()` first.
  *
  * Not a test-only hook (nothing in the draw path branches on whether anyone
  * reads it): it is the same "ask the renderer where it really put things"
@@ -548,9 +668,9 @@ export interface ArmyOverlayFrame {
 /**
  * What the settlement view's hover tooltip needs, plus screen position to
  * anchor it. Issue #16 "better hover" wants a richer card for buildings
- * (title + level, an output rate, a modifier line, worker count, "click to
- * open") like the mockup's "Crop farm LEVEL 2 / Output +72 food/h /
- * Workers 8/8 / CLICK TO OPEN". None of that is
+ * (title + level, an output rate, a modifier line, "click to open") like
+ * the mockup's "Crop farm LEVEL 2 / Output +72 food/h / CLICK TO OPEN"
+ * (its "Workers 8/8" line was dropped: the backend has no workers). None of that is
  * tracked per-building anywhere (the backend/WorldModel only know a
  * settlement's *aggregate* rates, not a single building's own output) so
  * `stats` below is derived deterministically from the building's
@@ -568,7 +688,29 @@ export type HoverSubject =
   // fully covers that terrain. Generic over `family` (not a `'giantmountain'`
   // literal) so a future giant building needs no change here; HexTooltip.vue
   // falls back to the family id itself for one with no translated name yet.
-  | { kind: 'giant'; family: string };
+  | { kind: 'giant'; family: string }
+  // A wildlife camp (campPlacement.ts): named for the camp with its level; HexTooltip.vue
+  // shows the localised family name, level and whether it is a strong camp.
+  | {
+      kind: 'camp';
+      family: string;
+      /** The camp's effective level (rolled level plus clears / 10) once live state is known. */
+      level: number;
+      strong: boolean;
+      /** Live state (`WorldModel.setCampStates`); absent in demo mode, where every camp is guarded. */
+      live?: {
+        garrison: { young: number; adult: number; alpha: number };
+        fullGarrison: { young: number; adult: number; alpha: number };
+        empty: boolean;
+        calmUntil: string | null;
+        aggressive: boolean;
+        clears: number;
+      };
+    }
+  // An Utgard wall piece (a gate is named apart) at its current level: 2 intact, 1 damaged, 0 breached.
+  | { kind: 'utgardwall'; gate: boolean; level: number }
+  // A Jötun watchtower at its current level: 2 garrisoned, 1 damaged, 0 taken.
+  | { kind: 'jotuntower'; level: number };
 
 export interface HoverInfo {
   screenX: number;
@@ -578,7 +720,7 @@ export interface HoverInfo {
   subject: HoverSubject;
   // Present whenever the tile belongs to a settlement (building or claimed
   // terrain); absent for unclaimed ground.
-  owner?: { settlementName: string; ownerName: string; mine: boolean };
+  owner?: { settlementName: string; ownerName: string; mine: boolean; /** The owning account, for the friend check of a guarded bridge. */ ownerId?: string };
   // Building stats are only ever populated for the viewer's own buildings —
   // see hoverInfoFor. `premiumLocked` tells HexTooltip.vue to render a gated
   // "Pro" upsell row in their place for a building tile that belongs to
@@ -617,6 +759,28 @@ export function terrainTitleFor(
  */
 export function hoverSubjectFor(tile: Tile, river: RiverTile | undefined): HoverSubject {
   if (tile.giant) return { kind: 'giant', family: tile.giant.family };
+  if (tile.camp && !tile.camp.removed) {
+    const camp = tile.camp;
+    return {
+      kind: 'camp',
+      family: camp.family,
+      level: camp.effectiveLevel ?? camp.level,
+      strong: camp.strong,
+      live:
+        camp.garrison && camp.fullGarrison
+          ? {
+              garrison: camp.garrison,
+              fullGarrison: camp.fullGarrison,
+              empty: !!camp.empty,
+              calmUntil: camp.calmUntil ?? null,
+              aggressive: !!camp.aggressive,
+              clears: camp.clears ?? 0,
+            }
+          : undefined,
+    };
+  }
+  if (tile.utgardWall) return { kind: 'utgardwall', gate: tile.utgardWall.isGate, level: tile.utgardWall.level };
+  if (tile.jotunTower) return { kind: 'jotuntower', level: tile.jotunTower.level };
   if (tile.buildingType) return { kind: 'building', buildingType: tile.buildingType, level: tile.buildingLevel ?? 1 };
   const { terrain, isRiver, wasted } = terrainTitleFor(tile, river);
   return { kind: 'terrain', terrain, isRiver, wasted };
@@ -760,6 +924,15 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
   return points;
 }
 
+// Construction progress dial (see `constructionDial.ts`): drawn in screen space
+// by `drawConstructionDials` (scaled with the map, grows on hover) over a building under construction — white track, yellow elapsed arc,
+// remaining time inside.
+const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
+// Dial height above the tile centre: half a tile, so the dial's middle sits on
+// the hex's upper edge and the dial overlaps its own tile instead of floating
+// above it.
+const CONSTRUCTION_DIAL_LIFT = TILE_H / 2;
+
 const WORLD_DEFAULT_ZOOM = 0.22;
 // Ceiling for the settlement camera's initial zoom — settlement level 1's
 // explored radius is ~5 hexes, which at 0.85 filled almost the entire
@@ -798,6 +971,51 @@ const PREVIEW_FIT_VERTICAL_OVERHANG = TILE_TOPFACE_Y_OFFSET + TILE_H / 2;
 // sitting inside the frame rather than exactly touching its edge.
 const PREVIEW_FIT_MARGIN = 24;
 
+/** Radius of the preview hexes `rebuildTerrain` draws: at least the radius the camera fits, so the fitted island is never itself culled. */
+export function previewDrawRadius(options: { previewRadius?: number; previewRenderRadius?: number }): number {
+  const fit = options.previewRadius ?? PREVIEW_ISLAND_RADIUS;
+  return Math.max(fit, options.previewRenderRadius ?? fit);
+}
+
+/**
+ * The settlement-mode preview's (no settlement yet: the landing page, onboarding) ground crop of `coords`.
+ * landing-page-defects.md L5: a small radius crop around `previewCenter` (deliberate framing, matching the mockup's own
+ * scale) intersected with landmass membership, so a *foreign* island a world seed placed nearby within that radius
+ * doesn't bleed in, and water isn't drawn (`previewCropTiles` only returns land). `previewSea` widens it to the whole
+ * drawn disc, so the sea there draws its own tile art. This is also exactly the tile set `settlementCameraOrigin`'s
+ * locked-preview branch (L4) fits the camera to; the two must agree. `previewCropTiles` is cached per centre inside
+ * WorldModel, so this is cheap on every rebuild.
+ */
+export function previewGroundCoords(
+  coords: AxialCoord[],
+  worldModel: Pick<WorldModel, 'previewCropTiles'>,
+  options: { previewCenter?: AxialCoord; previewSea?: boolean; previewRadius?: number; previewRenderRadius?: number },
+): AxialCoord[] {
+  const center = options.previewCenter ?? { q: 0, r: 0 };
+  const radius = previewDrawRadius(options);
+  const keys = new Set(
+    (options.previewSea ? hexesInRadius(center, radius) : worldModel.previewCropTiles(center, radius)).map(coordKey),
+  );
+  return coords.filter((c) => keys.has(coordKey(c)));
+}
+
+/**
+ * Client (viewport) point -> canvas layout pixels. `rect` is the canvas's
+ * `getBoundingClientRect()`, `layout` its `offsetWidth/Height`: they differ
+ * only under a CSS `zoom` on an ancestor, where the rect is in zoomed pixels
+ * and the layout size is not — the ratio is that zoom. Pure so it's testable
+ * without a canvas.
+ */
+export function clientToCanvasPoint(
+  client: { x: number; y: number },
+  rect: { left: number; top: number; width: number; height: number },
+  layout: { width: number; height: number },
+): { x: number; y: number } {
+  const sx = layout.width > 0 ? rect.width / layout.width : 1;
+  const sy = layout.height > 0 ? rect.height / layout.height : 1;
+  return { x: (client.x - rect.left) / sx, y: (client.y - rect.top) / sy };
+}
+
 /**
  * World-space bounding box (tile centres, via `isoGridPosition`) of a
  * preview island's actually-drawn tiles — the same tile list
@@ -835,6 +1053,29 @@ export function previewIslandBounds(tiles: AxialCoord[]): {
     if (cy > maxY) maxY = cy;
   }
   return { minX, maxX, minY, maxY, centerX: (minX + maxX) / 2, centerY: (minY + maxY) / 2 };
+}
+
+/**
+ * Whether an island whose centre sits at screen point `centre` can have any
+ * part of itself or its name label inside the viewport. An island reaches at
+ * most `marginPx` (generation.islandMaxReach hexes at the current zoom) from
+ * its centre, and its label sits within that reach too, so a centre further
+ * than that outside the viewport rectangle can be skipped without measuring
+ * its (potentially 100k-tile) footprint. An unsized viewport (before the
+ * first resize) culls nothing.
+ */
+export function isIslandNearViewport(
+  centre: { x: number; y: number },
+  viewport: { width: number; height: number },
+  marginPx: number,
+): boolean {
+  if (viewport.width === 0 || viewport.height === 0) return true;
+  return (
+    centre.x >= -marginPx &&
+    centre.x <= viewport.width + marginPx &&
+    centre.y >= -marginPx &&
+    centre.y <= viewport.height + marginPx
+  );
 }
 
 /**
@@ -878,6 +1119,51 @@ export function previewFitZoom(params: {
   const usableHalfWidth = (0.5 - Math.abs(screenBiasX)) * viewport.width;
   const zoom = Math.min(usableHalfWidth / halfExtentX, viewport.height / 2 / halfExtentY);
   return Math.min(maxZoom, Math.max(minZoom, zoom));
+}
+
+/**
+ * The fit camera and clamp limits of a confined 'world' frame: the hex disc of `radius` around `center`,
+ * fitted to the viewport (zoom never drops below that fit) with the camera centre kept inside the disc's
+ * bounding box. Pure, so it is unit-testable without Pixi.
+ */
+export function worldConfineFrame(
+  center: AxialCoord,
+  radius: number,
+  viewport: { width: number; height: number },
+): {
+  camera: Camera;
+  limits: { bounds: { minX: number; maxX: number; minY: number; maxY: number }; minZoom: number };
+} {
+  const tiles = hexesInRadius(center, radius);
+  const bounds = previewIslandBounds(tiles)!;
+  const fit = previewFitZoom({
+    tiles,
+    screenBiasX: 0,
+    viewport,
+    fallbackZoom: WORLD_DEFAULT_ZOOM,
+    minZoom: 0.01,
+    maxZoom: 4,
+  });
+  return { camera: { x: bounds.centerX, y: bounds.centerY, zoom: fit }, limits: { bounds, minZoom: fit } };
+}
+
+/**
+ * Clamps a camera for `HexMapRendererOptions.confineCamera`: zoom is raised
+ * to at least `minZoom` (the fit zoom, so the island can't be zoomed out
+ * past its fitted framing) and the centre is pulled back inside `bounds`
+ * (the island's land inside the fit, see `previewIslandBounds`). The upper
+ * zoom bound is the caller's own. Pure, so it's unit-testable without Pixi.
+ */
+export function confineCamera(
+  camera: Camera,
+  bounds: { minX: number; maxX: number; minY: number; maxY: number },
+  minZoom: number,
+): Camera {
+  return {
+    x: Math.min(bounds.maxX, Math.max(bounds.minX, camera.x)),
+    y: Math.min(bounds.maxY, Math.max(bounds.minY, camera.y)),
+    zoom: Math.max(minZoom, camera.zoom),
+  };
 }
 // How long the camera takes to ease from one position/zoom to another (see
 // animateCameraTo) — used for the founding transition (zip 6a: fog should
@@ -1127,6 +1413,61 @@ const WHEEL_IDLE_MS = 180;
 const ROUTE_COLOR = 0x5ab0e6;
 /** World-map river stroke colour — a sibling tone to ROUTE_COLOR, tuned to read against WORLD_TERRAIN_FILL's grass/forest. */
 const RIVER_COLOR = 0x4fa8d8;
+/** World-map lava stream colour (a wasted island's rivers): the glow of the lavastream art. */
+const LAVA_COLOR = 0xe8702a;
+
+/**
+ * How a giant's 7-hex footprint reads on the flat world map: its ground stays as it is, and the giants that do
+ * something get a light outline around the footprint, coloured after their art: lava orange for the volcano, the
+ * runes' cyan for the shrine and the Utgard tower. The giant mountain has no function of its own, so it gets none
+ * (hovering it still highlights the footprint).
+ */
+const WORLD_GIANT_OUTLINE: Partial<Record<GiantFamily, number>> = {
+  giantvolcano: 0xe8702a,
+  giantshrine: 0x6fe3e0,
+  giantutgard: 0x6fe3e0,
+};
+
+/** The world-map outline colour around a giant's footprint, or `undefined` for a giant drawn without one. */
+export function worldGiantOutline(family: GiantFamily): number | undefined {
+  return WORLD_GIANT_OUTLINE[family];
+}
+
+/** The world-map stroke colour of a river tile: lava on a wasted island, water everywhere else. */
+export function worldRiverColor(river: Pick<RiverTile, 'wasted'>): number {
+  return river.wasted ? LAVA_COLOR : RIVER_COLOR;
+}
+/** World-map paw colour of a strong wildlife camp: the overlay's one red. */
+const CAMP_STRONG_COLOR = 0xe2705f;
+/** World-map paw colour of a weak wildlife camp: a light neutral. */
+const CAMP_WEAK_COLOR = 0xe8e2d0;
+
+/** One paw symbol on the world map. */
+export interface WorldCampMarker {
+  q: number;
+  r: number;
+  color: number;
+}
+
+/**
+ * Which camps get a paw symbol on the world map, and in which colour: none unless `show` (premium players), never a
+ * removed camp (a building stands on its hex), strong camps red and weak ones neutral.
+ */
+export function worldCampMarkers(
+  camps: readonly { q: number; r: number; strong: boolean; removed?: boolean }[],
+  show: boolean,
+): WorldCampMarker[] {
+  if (!show) return [];
+  return camps
+    .filter((camp) => !camp.removed)
+    .map((camp) => ({ q: camp.q, r: camp.r, color: camp.strong ? CAMP_STRONG_COLOR : CAMP_WEAK_COLOR }));
+}
+
+/** Half-size in screen pixels of a world-map paw at `zoom`: grows a little with the map but stays readable zoomed out. */
+export function worldPawHalfSize(zoom: number): number {
+  return Math.min(14, Math.max(8, 6 * zoom + 7));
+}
+
 /** An army already turned around and heading home. */
 const RETURNING_COLOR = 0x8fa3af;
 /** Attack target indicator (crossed sword + axe) — the one red in the overlay, matching RIVAL's "someone else's" reading. */
@@ -1152,6 +1493,9 @@ export function waypointGrabRadiusPx(pointerType: string | undefined): number {
   return pointerType === 'touch' ? WAYPOINT_GRAB_RADIUS_PX_TOUCH : WAYPOINT_GRAB_RADIUS_PX;
 }
 
+/** The parts of a pointer event `handleClick` reads — a held touch tap (see `pendingTap`) keeps just these. */
+type TapPoint = Pick<PointerEvent, 'clientX' | 'clientY' | 'pointerType'>;
+
 /**
  * Whether releasing a grabbed draft-waypoint pin counts as a tap (fires
  * `onWaypointTap`) rather than a drag (already applied hex-by-hex via
@@ -1164,6 +1508,41 @@ export function waypointGrabRadiusPx(pointerType: string | undefined): number {
  */
 export function isWaypointTap(startCoordKey: string, lastCoordKey: string, movedPx: number): boolean {
   return lastCoordKey === startCoordKey && movedPx < DRAG_CLICK_SLOP_PX;
+}
+
+/**
+ * Whether a wheel event over the canvas goes to the page (scrolls it) instead of the map's zoom.
+ * Only `allowPageScroll` hosts ever pass: a locked camera cannot zoom, so its wheel always scrolls the
+ * page; otherwise a plain wheel scrolls the page until the user has pressed on the map (`engaged`,
+ * cleared again when the pointer leaves), while ctrl/meta + wheel (trackpad pinch) zooms at any time.
+ */
+export function wheelPassesToPage(o: {
+  allowPageScroll: boolean;
+  engaged: boolean;
+  modifier: boolean;
+  lockCamera: boolean;
+}): boolean {
+  if (!o.allowPageScroll) return false;
+  return o.lockCamera || !(o.engaged || o.modifier);
+}
+
+/**
+ * `HexMapRenderer.waterMaskTerrain`'s lookup, as a pure function of the model
+ * and mode so it can be tested without a renderer.
+ *
+ * `isLand` is `isLandOrLake`, not `isLand`: a bog lake is water to the game
+ * (`WorldModel.isLand` says so), but to the water mask it is land. Lakes are
+ * drawn entirely by their own art, so the sea's shader must never reach into
+ * them. This is also what the bake worker already answers (its
+ * seed-only `isLandFor` never sees a bog lake), so both bake paths agree.
+ */
+export function waterMaskTerrainFor(worldModel: WorldModel): TerrainLookup {
+  const isLand = (q: number, r: number) => worldModel.isLandOrLake(q, r);
+  const isWastedLand = (q: number, r: number) => worldModel.isWastedLandAt(q, r);
+  // River mouths carry no sea foam (both modes draw foam). The worker gets the
+  // same hexes as a list (`riverMouthHexKeys`), so both bake paths agree.
+  const noFoam = (q: number, r: number) => worldModel.getRiverTile(q, r)?.shape === 'mouth';
+  return { isLand, isWastedLand, noFoam };
 }
 
 /**
@@ -1185,7 +1564,9 @@ export function clampAnimationDeltaMs(deltaMs: number, maxMs = 100): number {
 /** One child of the camera-transformed `world` container — see `worldLayerOrder`. */
 export type WorldLayerName =
   | 'water'
+  | 'bogLake'
   | 'terrainBase'
+  | 'bogEdges'
   | 'waves'
   | 'terrainFlat'
   | 'rivers'
@@ -1234,9 +1615,11 @@ export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] 
   // terrainTop (see riverTexturesFor), so riverLayer is simply never added
   // to the scene graph there (rebuildRivers is never called for that mode
   // either, so it always stays empty).
+  // The bog lake gust sits right on the ground art it shades, under `bogEdges`: the bog edge fringe paints moss over the rim of a lake
+  // tile, and the lake mask (baked from the tile art alone) can't know that, so anything drawn later has to cover the gust, not take it.
   return mode === 'world'
-    ? ['water', 'terrainBase', 'waves', 'terrainFlat', 'rivers', ...rest]
-    : ['terrainBase', 'waves', 'terrainFlat', 'water', ...rest];
+    ? ['water', 'terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'rivers', ...rest]
+    : ['terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'water', ...rest];
 }
 
 /**
@@ -1302,7 +1685,16 @@ export interface TextureLoadDeps {
    * full building stage still runs.
    */
   loadLevel1?: () => Promise<TileTextures>;
-  loadBuildings: (onProgress: (loaded: number, total: number) => void) => Promise<TileTextures>;
+  /**
+   * `onPartial` is called with the art built from the pages loaded so far
+   * (pages arrive in priority order; each partial is a superset of the
+   * previous one) before the final result resolves — `startTextureLoad`
+   * merges and draws each, so buildings appear page by page.
+   */
+  loadBuildings: (
+    onProgress: (loaded: number, total: number) => void,
+    onPartial: (partial: TileTextures) => void,
+  ) => Promise<TileTextures>;
   merge: (base: TileTextures, buildings: TileTextures) => TileTextures;
   isDestroyed: () => boolean;
   getTextures: () => TileTextures | null;
@@ -1378,9 +1770,17 @@ export function startTextureLoad(deps: TextureLoadDeps): TextureLoadHandles {
       }
     }
     try {
-      const buildings = await deps.loadBuildings((loaded, total) => {
-        if (settlement) deps.emit({ phase: 'buildings', progress: loadProgressFraction(loaded, total) });
-      });
+      const buildings = await deps.loadBuildings(
+        (loaded, total) => {
+          if (settlement) deps.emit({ phase: 'buildings', progress: loadProgressFraction(loaded, total) });
+        },
+        (partial) => {
+          const base = deps.getTextures();
+          if (deps.isDestroyed() || !base) return;
+          deps.setTextures(deps.merge(base, partial));
+          deps.rebuildAll();
+        },
+      );
       const base = deps.getTextures();
       if (deps.isDestroyed() || !base) return;
       deps.setTextures(deps.merge(base, buildings));
@@ -1400,6 +1800,7 @@ const ARMY_RESYNC_MS = 450;
 
 export class HexMapRenderer {
   private app: Application | null = null;
+  private detachFramePacing?: () => void;
   private world = new Container();
   private terrainBase = createSpriteLayer();
   private terrainTop = createSpriteLayer();
@@ -1410,6 +1811,11 @@ export class HexMapRenderer {
   // survives *between* rebuilds, so a looping clip doesn't reset its phase
   // every time the camera merely moves.
   private topAnimState = new Map<string, TopAnimState>();
+  /** The global animation clock in ms (advanced by `advanceTopAnimations`): where a `sharedClock` clip joins its cycle. */
+  private animClockMs = 0;
+  // Map animation time (ms) for the water shader and the world map's wave squiggles: real time scaled by the debug
+  // `waterDebugTuning.mapAnimationSpeed`, so a slowed-down map slows everything on it together.
+  private mapAnimMs = 0;
   // Pooled overlay sprites for an overlay clip's parts-only frames (see
   // `TopAnimState.overlay`) — a sibling pool to `terrainTop.pool`, kept
   // separate because these sprites aren't `terrainTop.active`'s own entries
@@ -1454,11 +1860,30 @@ export class HexMapRenderer {
    */
   private fadeIns = new Map<Sprite, { delayMs: number; durationMs: number; elapsedMs: number }>();
   private terrainFlat = new Graphics();
+  // The bog/grass edge border (bogEdge.ts): settlement mode only, the lowest thing drawn over the ground art.
+  // Two child containers, `under` then `over`: the peat rims of every edge sit under the moss of every edge. Each
+  // visible bog hex shows a pooled Graphics in each, sharing that hex's cached GraphicsContext (see rebuildBogEdges).
+  private bogEdgeLayer = new Container();
+  private bogEdgeUnder = new Container();
+  private bogEdgeOver = new Container();
+  private bogEdgeUnderPool: Graphics[] = [];
+  private bogEdgeOverPool: Graphics[] = [];
+  private bogEdgeCache = new Map<string, { under: GraphicsContext | null; over: GraphicsContext | null }>();
+  private bogEdgeCacheKey = '';
   private waveLayer = new Graphics();
   // docs/design/water-shader.md. Constructed in the constructor rather than
   // here because which view this is decides whether it draws a sea body at all
   // (§4.1), and `options` isn't in scope for a field initialiser.
   private waterLayer: WaterLayer;
+  // The art dry mask (docs/design/water-shader.md §4.4b): where the sea-hex art is not plain water. Settlement mode only.
+  private waterDry = new WaterDryLayer();
+  private waterDryEntries: DryEntry[] = [];
+  private waterDryLoadStarted = false;
+  // Bog lakes' gust (settlement mode only): the lake wet masks drawn over the lakes' bounding rect, and the mesh that shades them.
+  private bogLakeLayer: BogLakeLayer;
+  private bogLakeMask = new WaterDryLayer('lake');
+  private bogLakeEntries: DryEntry[] = [];
+  private bogLakeLoadStarted = false;
   // The world rect the current water mask was baked over — `null` until the
   // first bake. Re-baked only when the viewport leaves it (§2.2), not per
   // rebuild: a rebuild happens on every 0.4-tile camera move, the mask's own
@@ -1476,6 +1901,14 @@ export class HexMapRenderer {
    * until some unrelated camera move happened to invalidate coverage anyway.
    */
   private waterMaskWastedRevealed = false;
+  /**
+   * `worldModel.riverRevision` for the bake behind `waterMaskRegionBuilt`. The
+   * mask's no-foam field depends on where the river mouths are, which the
+   * worker only learns from the request, so — exactly like the reveal flag —
+   * `maybeBakeWaterMask` drops the recorded region when the model's revision
+   * has moved (rivers arrive after the first bake in live mode).
+   */
+  private waterMaskRiverRevision = 0;
   /**
    * Set whenever a rebuild wanted a bake but deferred it (see
    * `maybeBakeWaterMask`), and cleared by the bake that services it.
@@ -1508,9 +1941,9 @@ export class HexMapRenderer {
    * fetched and compiled while the map is still loading, instead of on the
    * first camera move that needs a mask.
    */
-  private maskBaker = new WaterMaskBaker((mask, region, bakeMs, wastedRevealed) => {
+  private maskBaker = new WaterMaskBaker((mask, region, bakeMs, wastedRevealed, riverRevision) => {
     if (this.destroyed) return;
-    this.applyWaterMask(mask, region, bakeMs, true, wastedRevealed);
+    this.applyWaterMask(mask, region, bakeMs, true, wastedRevealed, riverRevision);
   });
   private wavePoints: WavePoint[] = [];
   // Mirrors rebuildAll's local `deepFogOnly` (see isEntirelyDeepFog) so
@@ -1520,6 +1953,10 @@ export class HexMapRenderer {
   // frames between rebuilds during a drag.
   private deepFogOnly = false;
   private borderLayer = new Graphics();
+  // Settlement mode: one Graphics per bordered hex holding that hex's FRONT border edges, parented to `terrainTop` at
+  // the hex's depth key + BORDER_FRONT_Z so they draw over the hex's own topping (+0.5 is its animation overlay) but
+  // under the toppings of the hexes in front. Pooled like the bog edge graphics; unused ones are hidden on rebuild.
+  private borderFrontPool: Graphics[] = [];
   private riverLayer = new Graphics();
   private hoverLayer = new Graphics();
   // zip 6a: "click to place" — a persistent (not hover-gated) pulsing glow
@@ -1549,6 +1986,9 @@ export class HexMapRenderer {
   // hidden under fog with no extra check needed here.
   private rangeLayer = new Graphics();
   private rangeOverlay: AxialCoord[] | null = null;
+  // Construction progress dials — just stores data, drawn every tick into
+  // `highlightLayer` (above the buildings) in settlement mode only.
+  private constructionDials: ConstructionDial[] | null = null;
   // Fog v2 (docs/design/map-fog-v2.md §2.4/§4): two screen-space Pixi Mesh
   // layers sampling the fetched mask texture through a shared GLSL shader —
   // see fog/FogMaskLayer.ts. blackFogLayer (out-of-sight tint) sits between
@@ -1582,8 +2022,18 @@ export class HexMapRenderer {
   // so the view doesn't jump.
   private cameraAnim: { from: Camera; to: Camera; startedAt: number; durationMs: number } | null = null;
   private markerLayer = new Graphics();
+  // World mode's camp paws (drawCampPaws): under both fog layers, like the terrain they mark, so the fog covers them
+  // the way it covers the ground (markerLayer sits above the out-of-sight fog).
+  private campPawLayer = new Graphics();
   private labelPool: Text[] = [];
   private labelsUsed = 0;
+  /**
+   * World-space Y of each island's bottom edge, for placing its name label.
+   * Measuring it walks the island's whole footprint, so it is done once per
+   * island and kept here, valid only for the island list it was measured from.
+   */
+  private islandBottomCache = new Map<string, number>();
+  private islandBottomCacheFor: IslandLabel[] | null = null;
   // Issue #40 phase 2: see `setArmyOverlay` — drawn every tick alongside the
   // settlement badge (rebuildMarkers), same "recomputed from hex coords on
   // every rebuild" pattern as everything else in this layer, so it keeps up
@@ -1661,6 +2111,12 @@ export class HexMapRenderer {
    * `syncAnimationAtlases` only loads/unloads each one once per toggle.
    */
   private animationsEnabled = false;
+  // Water / fog motion (the player's per-device "Water motion" / "Fog drift"
+  // settings, wired by useHexMapRenderer). Off means frozen in place, not
+  // hidden. Default on so a bare renderer (tests, landing preview) animates
+  // as it always has.
+  private waterMotion = true;
+  private fogMotion = true;
   private animCoreReady = false;
   private wastedAnimReady = false;
   /**
@@ -1701,6 +2157,16 @@ export class HexMapRenderer {
   // same expensive rebuild work a drag already de-prioritises.
   private wheeling = false;
   private wheelIdleTimer: ReturnType<typeof setTimeout> | null = null;
+  // Touch double-tap-to-zoom (doubleTap.ts). A touch tap is held here for
+  // DOUBLE_TAP_MS before it reaches handleClick, so a second tap can still
+  // turn it into a zoom instead of opening the ring menu. The timer is
+  // paused while a new gesture is down (see onPointerDown) and that
+  // gesture's end decides: double tap, a separate tap, or a drag/pinch that
+  // drops it.
+  private pendingTap: { tap: Tap; click: TapPoint; timer: ReturnType<typeof setTimeout> | null } | null = null;
+  // The running double-tap zoom: `applied` is the log-zoom already handed to
+  // zoomBy, so each frame applies only the difference (see tickDoubleTapZoom).
+  private doubleTapZoom: { screen: { x: number; y: number }; startedAt: number; applied: number } | null = null;
   // Issue #16 "clicking elsewhere on the map with a ring open should close
   // it, not open a new one": beginDragFrom's synthetic drag (started to
   // dismiss a ring on backdrop mousedown, see beginDragFrom below) ends in
@@ -1710,6 +2176,18 @@ export class HexMapRenderer {
   private suppressNextClick = false;
   private lastPointer = { x: 0, y: 0 };
   private hoveredKey: string | null = null;
+  /** Mouse position in canvas px while hovering the canvas (never set for touch/pen); null otherwise. */
+  private hoverPointer: { x: number; y: number } | null = null;
+  /** Per-dial hover tween progress 0..1 (`dialHoverStep`), keyed by `coordKey`; absent = 0. */
+  private dialHover = new Map<string, number>();
+  /** Dial revealed by a touch/pen tap (acts as hovered); see `handleDialTap`. */
+  private tapRevealKey: string | null = null;
+  private tapRevealAtMs = 0;
+  /** Screen-space circle (canvas px) of an open ring menu; markers beneath it fade out. See `setMarkerOcclusion`. */
+  private markerOcclusion: OcclusionCircle | null = null;
+  /** Per-marker visibility 0..1 (`markerFadeStep`): dials keyed by `coordKey`, badges by settlement id. Absent = 1. */
+  private dialVisibility = new Map<string, number>();
+  private badgeVisibility = new Map<string, number>();
   // Issue #16 "ring menu": while a RingMenu is open, its DOM overlay sits on
   // top of the canvas, but this renderer's own pointer tracking is a
   // window-level listener (see onPointerMove below) that keeps resolving a
@@ -1722,6 +2200,18 @@ export class HexMapRenderer {
   // settlement must keep working). See `zoomBy` and the pan branch of
   // `onPointerMove`.
   private lockCamera = false;
+  // allowPageScroll hosts: set by a pointerdown on the canvas, cleared when the pointer leaves it. While set, a plain wheel zooms (see wheelPassesToPage).
+  private wheelEngaged = false;
+  /** See `renderedFrames`. */
+  private frames = 0;
+  // `confineCamera` option: user input stays enabled but is clamped to these
+  // limits, cached by `settlementCameraOrigin` (recomputed on every resize)
+  // so a pointer move never re-measures the crop.
+  private cameraTouched = false;
+  private confineLimits: {
+    bounds: { minX: number; maxX: number; minY: number; maxY: number };
+    minZoom: number;
+  } | null = null;
   // zip 4: "world view is already on screen and moving when the page loads" —
   // a gentle idle drift on the world map, cancelled on first user input.
   private idleDrift: boolean;
@@ -1730,13 +2220,17 @@ export class HexMapRenderer {
 
   constructor(options: HexMapRendererOptions) {
     this.options = options;
+    this.bogEdgeLayer.addChild(this.bogEdgeUnder, this.bogEdgeOver);
     this.waterLayer = new WaterLayer(options.mode, TILE_W, TILE_H);
-    this.idleDrift = options.mode === 'world';
+    this.bogLakeLayer = new BogLakeLayer(TILE_W);
+    this.idleDrift = options.mode === 'world' && !options.confineCamera;
     this.lockCamera = !!options.lockCamera;
     this.camera =
       options.mode === 'settlement'
         ? this.settlementCameraOrigin()
-        : { x: 0, y: 0, zoom: WORLD_DEFAULT_ZOOM };
+        : options.confineCamera
+          ? this.worldConfinedCameraOrigin()
+          : { x: 0, y: 0, zoom: WORLD_DEFAULT_ZOOM };
     this.loadState = options.mode === 'settlement' ? { phase: 'terrain' } : READY_LOAD_STATE;
   }
 
@@ -1755,11 +2249,27 @@ export class HexMapRenderer {
     return worldX - (biasX * this.viewport.width) / zoom;
   }
 
+  /**
+   * `confineCamera` in 'world' mode: the fit camera for the hex disc of `previewRadius` around `previewCenter`
+   * (the same `previewFitZoom`/`previewIslandBounds` pair the settlement preview uses), and the limits `clampCamera`
+   * enforces afterwards — centre inside the disc's bounding box, zoom between the fit and just below the
+   * world-to-settlement switch (a confined frame never swaps modes, see `zoomBy`).
+   */
+  private worldConfinedCameraOrigin(): Camera {
+    const frame = worldConfineFrame(
+      this.options.previewCenter ?? { q: 0, r: 0 },
+      this.options.previewRadius ?? PREVIEW_ISLAND_RADIUS,
+      this.viewport,
+    );
+    this.confineLimits = frame.limits;
+    return frame.camera;
+  }
+
   private settlementCameraOrigin(): Camera {
     const settlement = this.settlement();
     if (!settlement) {
       const at = this.options.previewCenter ?? { q: 0, r: 0 };
-      if (this.lockCamera) {
+      if (this.lockCamera || this.options.confineCamera) {
         // Locked static preview (landing page): fit the whole island to the
         // current viewport instead of the fixed PREVIEW_ZOOM, so it stays
         // fully framed regardless of viewport size/aspect. Bounds match
@@ -1778,7 +2288,16 @@ export class HexMapRenderer {
         // asymmetric crop while pushing the long side out of frame. `at`
         // still decides *which* island and *where* the crop is taken from;
         // it stops being the camera target.
-        const tiles = this.options.worldModel.previewCropTiles(at);
+        // When the preview draws past its fit radius (the showcase frame), the
+        // island continues out of frame on every side, so the framing is the
+        // whole hex disc around `at` (land or not), centred on `at` itself —
+        // the land crop's own box would drift the camera away from wherever
+        // the sea eats into the disc.
+        const fitRadius = this.options.previewRadius ?? PREVIEW_ISLAND_RADIUS;
+        const tiles =
+          previewDrawRadius(this.options) > fitRadius
+            ? hexesInRadius(at, fitRadius)
+            : this.options.worldModel.previewCropTiles(at, fitRadius);
         const bounds = previewIslandBounds(tiles);
         const zoom = previewFitZoom({
           tiles,
@@ -1788,6 +2307,23 @@ export class HexMapRenderer {
           minZoom: 0.05,
           maxZoom: 4,
         });
+        // The confine box is the island's own land inside the fit (not the
+        // whole fitted disc, which can be mostly sea), so the view's centre
+        // always sits over the island.
+        const land = this.options.confineCamera
+          ? previewIslandBounds(this.options.worldModel.previewCropTiles(at, fitRadius))
+          : null;
+        this.confineLimits = land
+          ? {
+              bounds: {
+                minX: this.biasedCenterX(land.minX, zoom),
+                maxX: this.biasedCenterX(land.maxX, zoom),
+                minY: land.minY,
+                maxY: land.maxY,
+              },
+              minZoom: zoom,
+            }
+          : null;
         // `bounds` is only null if `at` itself has no reachable land (a
         // malformed/empty seed) — fall back to centring on the plot itself
         // rather than propagating a NaN camera.
@@ -1864,7 +2400,9 @@ export class HexMapRenderer {
   private layersByName(): Record<WorldLayerName, Container> {
     return {
       water: this.waterLayer.mesh,
+      bogLake: this.bogLakeLayer.mesh,
       terrainBase: this.terrainBase.container,
+      bogEdges: this.bogEdgeLayer,
       waves: this.waveLayer,
       terrainFlat: this.terrainFlat,
       rivers: this.riverLayer,
@@ -1885,7 +2423,8 @@ export class HexMapRenderer {
       resolution: Math.min(window.devicePixelRatio || 1, 2),
       autoDensity: true,
       backgroundAlpha: 0,
-      antialias: true,
+      // A per-device setting (antialiasPreference.ts): MSAA multiplies the fill cost of every blended pixel, which a slow renderer feels.
+      antialias: antialiasPreference.enabled,
     });
     this.app = app;
     this.viewport = { width, height };
@@ -1964,7 +2503,7 @@ export class HexMapRenderer {
           return null;
         }),
       loadLevel1: () => loadLevel1Atlases(),
-      loadBuildings: (onProgress) => loadBuildingAtlases(onProgress),
+      loadBuildings: (onProgress, onPartial) => loadBuildingAtlases(onProgress, onPartial),
       merge: mergeTileTextures,
       isDestroyed: () => this.destroyed,
       getTextures: () => this.textures,
@@ -2019,9 +2558,11 @@ export class HexMapRenderer {
     // troop/settlement labels read as veiled by it rather than floating in
     // front; whiteMistLayer (never-scouted) sits over everything, since
     // nothing should show through ground that's never been seen at all.
-    app.stage.addChild(this.world, this.blackFogLayer.mesh, this.markerLayer, this.whiteMistLayer.mesh);
+    app.stage.addChild(this.world, this.campPawLayer, this.blackFogLayer.mesh, this.markerLayer, this.whiteMistLayer.mesh);
 
     app.ticker.add(this.onTick);
+    // See framePacing.ts: a loop whose frames outlast the vsync interval otherwise starves input and timers.
+    this.detachFramePacing = attachFramePacing(app.ticker);
 
     this.applyCameraTransform();
     this.rebuildAll();
@@ -2036,8 +2577,22 @@ export class HexMapRenderer {
     // had (re-projected onto the new viewport), a locked one has no other
     // event (no drag, no wheel) that would ever re-fit it.
     if (this.lockCamera) this.camera = this.settlementCameraOrigin();
+    else if (this.options.confineCamera && (this.options.mode === 'world' || !this.settlement())) {
+      // Refreshes the cached limits for the new viewport. Until the visitor
+      // has moved the camera it follows the fit; afterwards it is only
+      // re-clamped, so a resize doesn't throw away where they were looking.
+      const origin =
+        this.options.mode === 'world' ? this.worldConfinedCameraOrigin() : this.settlementCameraOrigin();
+      this.camera = this.cameraTouched ? this.clampCamera(this.camera) : origin;
+    }
     this.applyCameraTransform();
     this.scheduleCull();
+  }
+
+  /** `confineCamera` clamp (identity when not confined). */
+  private clampCamera(camera: Camera): Camera {
+    const limits = this.confineLimits;
+    return limits ? confineCamera(camera, limits.bounds, limits.minZoom) : camera;
   }
 
   private applyCameraTransform() {
@@ -2052,11 +2607,15 @@ export class HexMapRenderer {
     // itself (fogShader.ts's own screenToWorld-equivalent).
     this.blackFogLayer.setCamera(this.camera, this.viewport);
     this.whiteMistLayer.setCamera(this.camera, this.viewport);
+    this.notifyFogViewport();
   }
 
   private onTick = () => {
+    this.frames++;
     this.options.worldModel.tick();
-    this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
+    // waterDebugTuning.mapAnimationSpeed: debug playback speed of every map animation (1 ships), so they all slow down together.
+    this.mapAnimMs += this.app!.ticker.deltaMS * waterDebugTuning.mapAnimationSpeed;
+    this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS) * waterDebugTuning.mapAnimationSpeed);
     this.advanceTransitionFades(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
     // Feeds the 'auto' animation governor (animationPreference.ts) — in both
     // modes, not just settlement: the governor is measuring this device's
@@ -2093,13 +2652,15 @@ export class HexMapRenderer {
     // check per frame, and it can only ever do work on the first frame after
     // the gesture that owes it ends.
     if (this.waterMaskDirty && !this.dragging && !this.wheeling) this.maybeBakeWaterMask();
-    this.waterLayer.tick(performance.now());
+    this.waterLayer.tick(this.mapAnimMs);
+    this.bogLakeLayer.tick(this.animClockMs);
     if (this.idleDrift) {
       this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
       this.applyCameraTransform();
       this.scheduleCull();
     }
     this.tickCameraAnim();
+    this.tickDoubleTapZoom();
     const now = performance.now();
     // isFogActive() mirrors rebuildTerrain's/rebuildBorders' own bypass: no
     // settlement yet (settlement-mode preview) or the local player hasn't
@@ -2116,8 +2677,8 @@ export class HexMapRenderer {
     };
     this.blackFogLayer.setDebug(debug);
     this.whiteMistLayer.setDebug(debug);
-    this.blackFogLayer.tick(now, fogDebugFlags.drift, fogDebugTuning.driftSpeed);
-    this.whiteMistLayer.tick(now, fogDebugFlags.drift, fogDebugTuning.driftSpeed);
+    this.blackFogLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed * waterDebugTuning.mapAnimationSpeed);
+    this.whiteMistLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed * waterDebugTuning.mapAnimationSpeed);
     this.drawRangeOverlay();
     this.drawHighlight();
   };
@@ -2280,6 +2841,7 @@ export class HexMapRenderer {
     // backdrop's own handler instead of this canvas-scoped listener — but
     // kept as a defensive guard rather than relying on that DOM layering.
     if (this.interactionLocked) return;
+    this.wheelEngaged = true;
     // A second finger landing while a pin drag is in progress is ignored
     // entirely, rather than cancelled over into a pinch: onWaypointMove has
     // already written the pin's position to the store per hex it crossed,
@@ -2287,6 +2849,8 @@ export class HexMapRenderer {
     // to let the first finger keep driving the pin and drop the second.
     if (this.waypointDrag) return;
     if (this.pinch.count === 0) {
+      this.doubleTapZoom = null;
+      this.pausePendingTap();
       // Issue #93 "drag to move a placed waypoint": a pointerdown that lands
       // on a draft pin grabs *that pin* rather than starting a camera pan —
       // the two gestures are the same input, so the pin has to win the
@@ -2295,6 +2859,7 @@ export class HexMapRenderer {
       const screen = this.pointerScreen(e);
       const grabbed = this.draftWaypointAt(screen, e.pointerType);
       if (grabbed !== null && screen) {
+        this.dropPendingTap();
         this.idleDrift = false;
         const startCoordKey = coordKey(this.armyOverlay!.draftWaypoints[grabbed]);
         this.waypointDrag = {
@@ -2322,10 +2887,27 @@ export class HexMapRenderer {
 
   /** Pointer position relative to the canvas — the space `hexCenterScreen`/`toScreen` report in. */
   private pointerScreen(e: PointerEvent): { x: number; y: number } | null {
+    return this.clientToCanvas(e.clientX, e.clientY);
+  }
+
+  /**
+   * Viewport (client) coordinates -> canvas layout pixels, the space
+   * `this.viewport` and the camera maths live in. A plain
+   * `client - rect.left` is only right when the canvas is laid out 1:1; under
+   * a CSS `zoom` on an ancestor (the docs pages' `.docs-scale` on big
+   * monitors) `getBoundingClientRect()` and the pointer both report zoomed
+   * pixels while `offsetWidth` stays unzoomed, so every hit-test landed
+   * `zoom` times too far from the canvas origin. Dividing by that ratio
+   * undoes it (and is exactly 1 everywhere else).
+   */
+  private clientToCanvas(clientX: number, clientY: number): { x: number; y: number } | null {
     const canvas = this.app?.canvas;
     if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    return clientToCanvasPoint(
+      { x: clientX, y: clientY },
+      canvas.getBoundingClientRect(),
+      { width: canvas.offsetWidth, height: canvas.offsetHeight },
+    );
   }
 
   /**
@@ -2439,16 +3021,13 @@ export class HexMapRenderer {
       if (!step) return;
       this.dragMoved += Math.abs(step.pan.x) + Math.abs(step.pan.y);
       if (this.lockCamera) return;
-      this.camera = {
+      this.camera = this.clampCamera({
         ...this.camera,
         x: this.camera.x - step.pan.x / this.camera.zoom,
         y: this.camera.y - step.pan.y / this.camera.zoom,
-      };
-      const canvas = this.app?.canvas;
-      const rect = canvas?.getBoundingClientRect();
-      const screen = rect
-        ? { x: step.midpoint.x - rect.left, y: step.midpoint.y - rect.top }
-        : step.midpoint;
+      });
+      this.cameraTouched = true;
+      const screen = this.clientToCanvas(step.midpoint.x, step.midpoint.y) ?? step.midpoint;
       this.zoomBy(screen, step.factor);
       return;
     }
@@ -2464,11 +3043,12 @@ export class HexMapRenderer {
     // so onPointerUp's click-vs-drag slop check keeps working (founding must
     // stay clickable) — only the actual camera pan is skipped.
     if (this.lockCamera) return;
-    this.camera = {
+    this.camera = this.clampCamera({
       ...this.camera,
       x: this.camera.x - dx / this.camera.zoom,
       y: this.camera.y - dy / this.camera.zoom,
-    };
+    });
+    this.cameraTouched = true;
     this.applyCameraTransform();
     this.scheduleCull();
   };
@@ -2535,7 +3115,9 @@ export class HexMapRenderer {
     if (this.pinch.count > 0) return; // e.g. three fingers down to two — still pinching
     if (!allowClick) this.suppressNextClick = true;
     if (this.dragging && this.dragMoved < DRAG_CLICK_SLOP_PX && !this.suppressNextClick) {
-      this.handleClick(e);
+      this.handleTap(e);
+    } else {
+      this.dropPendingTap();
     }
     this.suppressNextClick = false;
     // `dragging` is true for *any* pointerdown, a stationary click included,
@@ -2567,6 +3149,7 @@ export class HexMapRenderer {
   }
 
   private onPointerLeave = () => {
+    this.wheelEngaged = false;
     this.setHoveredCoord(null);
   };
 
@@ -2585,13 +3168,16 @@ export class HexMapRenderer {
       this.setHoveredCoord(null);
       return;
     }
-    const rect = canvas.getBoundingClientRect();
-    const screen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const screen = this.clientToCanvas(e.clientX, e.clientY);
+    if (!screen) return;
+    // Hover (and so the dial's grow-on-hover) is a mouse affordance only.
+    this.hoverPointer = e.pointerType === 'mouse' ? screen : null;
     const world = screenToWorld(this.camera, screen, this.viewport);
     this.setHoveredCoord(isoPixelToAxial(world, TILE_W, TILE_H));
   }
 
   private setHoveredCoord(coord: AxialCoord | null) {
+    if (!coord) this.hoverPointer = null;
     const key = coord ? coordKey(coord) : null;
     if (key === this.hoveredKey) return;
     this.hoveredKey = key;
@@ -2638,6 +3224,17 @@ export class HexMapRenderer {
   }
 
   /**
+   * How many frames the render loop has run since mount (each tick is followed
+   * by its render). Read-only, for a test/debug script that has to wait for the
+   * map to actually draw a change rather than for wall-clock time: on a device
+   * whose frames are expensive the loop is paced (framePacing.ts) and can run
+   * at a frame a second, so a fixed sleep can end before a single frame drew.
+   */
+  get renderedFrames(): number {
+    return this.frames;
+  }
+
+  /**
    * Screen-space centre of a hex's top face — e.g. for a test/debug script
    * (see main.ts's __demoWorld-style hooks) to click a specific known hex
    * precisely, rather than guessing pixel offsets that only happen to land
@@ -2662,7 +3259,7 @@ export class HexMapRenderer {
     const screen = this.toScreen({ x: grid.x + TILE_W, y: grid.y + TILE_CENTER_Y_OFFSET });
     const owner = tile.ownerId ? this.options.worldModel.getSettlement(tile.ownerId) : undefined;
     const mine = owner?.ownerId === this.options.playerId;
-    const ownerInfo = owner ? { settlementName: owner.name, ownerName: owner.ownerName, mine } : undefined;
+    const ownerInfo = owner ? { settlementName: owner.name, ownerName: owner.ownerName, mine, ownerId: owner.ownerId } : undefined;
 
     const subject = hoverSubjectFor(tile, river);
     if (subject.kind === 'building') {
@@ -2697,27 +3294,32 @@ export class HexMapRenderer {
    * See the HoverInfo doc comment: building stats aren't tracked
    * per-building anywhere, so these are derived deterministically from the
    * building's own type/level/neighbours purely so the hover card has
-   * something concrete to show, matching the mockup's "Output +240 food/h /
-   * Workers 8/8" for a farm. The formulas themselves live in
+   * something concrete to show, matching the mockup's "Output +240 food/h"
+   * for a farm. The formulas themselves live in
    * buildingEconomy.ts so BuildingModal.vue shows the exact same numbers.
    */
   private buildingStats(tile: Tile, level: number): BuildingLevelStats | undefined {
     if (!tile.buildingType) return undefined;
-    const boostTerrain = BOOST_TERRAIN[tile.buildingType];
-    const matchingNeighbours = boostTerrain ? matchingNeighbourCount(tile, boostTerrain, this.getTile) : 0;
-    return buildingStatsFor(tile.buildingType, level, matchingNeighbours);
+    return buildingStatsAt(tile.buildingType, level, tile, this.getTile);
   }
 
   private getTile = (q: number, r: number): Tile => this.options.worldModel.getTile(q, r);
 
   private onWheel = (e: WheelEvent) => {
-    if (this.options.allowPageScroll) return;
+    if (
+      wheelPassesToPage({
+        allowPageScroll: !!this.options.allowPageScroll,
+        engaged: this.wheelEngaged,
+        modifier: e.ctrlKey || e.metaKey,
+        lockCamera: this.lockCamera,
+      })
+    )
+      return;
     e.preventDefault();
     if (this.interactionLocked) return;
-    const canvas = this.app?.canvas;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const screen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const screen = this.clientToCanvas(e.clientX, e.clientY);
+    if (!screen) return;
+    this.doubleTapZoom = null;
     const factor = Math.exp(-e.deltaY * 0.001);
     this.zoomBy(screen, factor);
   };
@@ -2732,19 +3334,28 @@ export class HexMapRenderer {
    * inter-touch distances) and calls this, picking up the `lockCamera` guard
    * and zoom clamp for free. See docs/design/zoom-transition.md §2/§9.
    */
+  /** Zoom-in limit: 4, or for a confined 'world' frame (it never switches modes) just below where the world view would. */
+  private maxZoom(): number {
+    return this.options.mode === 'world' && this.options.confineCamera
+      ? Math.min(4, zoomTransitionTuning.enterSettlementZoom * 0.99)
+      : 4;
+  }
+
   private zoomBy(screen: { x: number; y: number }, factor: number) {
     if (this.lockCamera) return;
     this.idleDrift = false;
     const prevZoom = this.camera.zoom;
     const before = screenToWorld(this.camera, screen, this.viewport);
-    const zoom = Math.min(4, Math.max(0.05, this.camera.zoom * factor));
+    // A confined preview floors the zoom here, before the zoom-around-the-cursor offset below, so the limit never shifts the view sideways.
+    const zoom = Math.min(this.maxZoom(), Math.max(this.confineLimits?.minZoom ?? 0.05, this.camera.zoom * factor));
     this.camera = { ...this.camera, zoom };
     const after = screenToWorld(this.camera, screen, this.viewport);
-    this.camera = {
+    this.camera = this.clampCamera({
       ...this.camera,
       x: this.camera.x + (before.x - after.x),
       y: this.camera.y + (before.y - after.y),
-    };
+    });
+    this.cameraTouched = true;
     this.applyCameraTransform();
     this.noteZoomActivity();
     this.scheduleCull();
@@ -2755,7 +3366,11 @@ export class HexMapRenderer {
     // threshold never spuriously re-triggers — only an actual gesture
     // crossing the line does. Mode flips in place (no camera move, which is
     // what makes this continuous); the route push is the caller's job.
-    const crossing = transitionForZoom(this.options.mode, prevZoom, zoom, zoomTransitionTuning);
+    // A confined preview never swaps modes: it is a self-contained frame, and
+    // its fit zoom is not guaranteed to sit above the exit threshold.
+    const crossing = this.confineLimits
+      ? null
+      : transitionForZoom(this.options.mode, prevZoom, zoom, zoomTransitionTuning);
     if (crossing) {
       const target: RenderMode = crossing === 'enter' ? 'settlement' : 'world';
       // Drop the terrain/water/building layers (this.world — fog and the
@@ -2808,11 +3423,91 @@ export class HexMapRenderer {
     this.wheeling = false;
   }
 
-  private handleClick(e: PointerEvent) {
-    const canvas = this.app?.canvas;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const screen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  /**
+   * A gesture ended as a tap. Mouse/pen clicks, and every tap on a
+   * `lockCamera` preview (which can't zoom), go straight to handleClick. A
+   * touch tap is held for DOUBLE_TAP_MS (`pendingTap`): a second tap close
+   * by in that window zooms in around it instead, otherwise the held tap
+   * fires as a normal click.
+   */
+  private handleTap(e: PointerEvent) {
+    if (e.pointerType !== 'touch' || this.lockCamera) {
+      this.flushPendingTap();
+      this.handleClick(e);
+      return;
+    }
+    // The event's own timestamp, not the time this handler runs: on a busy
+    // main thread both taps' events can queue up and be handled long after
+    // the finger lifted, which must not push a real double tap out of the window.
+    const tap: Tap = { at: { x: e.clientX, y: e.clientY }, timeMs: e.timeStamp };
+    if (this.pendingTap && isDoubleTap(this.pendingTap.tap, tap)) {
+      this.dropPendingTap();
+      const screen = this.clientToCanvas(e.clientX, e.clientY);
+      if (screen) this.doubleTapZoom = { screen, startedAt: performance.now(), applied: 0 };
+      return;
+    }
+    this.flushPendingTap();
+    const click: TapPoint = { clientX: e.clientX, clientY: e.clientY, pointerType: e.pointerType };
+    this.pendingTap = { tap, click, timer: null };
+    this.armPendingTap();
+  }
+
+  private armPendingTap() {
+    const pending = this.pendingTap;
+    if (!pending) return;
+    pending.timer = setTimeout(() => {
+      pending.timer = null;
+      if (this.pendingTap !== pending) return;
+      this.pendingTap = null;
+      if (this.destroyed || this.interactionLocked) return;
+      this.handleClick(pending.click);
+    }, DOUBLE_TAP_MS);
+  }
+
+  /** A new gesture started: hold the pending tap until that gesture's end decides what it was. */
+  private pausePendingTap() {
+    if (this.pendingTap?.timer != null) {
+      clearTimeout(this.pendingTap.timer);
+      this.pendingTap.timer = null;
+    }
+  }
+
+  /** Fires the held touch tap now (a new tap landed too far away or too late to pair with it). */
+  private flushPendingTap() {
+    const pending = this.pendingTap;
+    if (!pending) return;
+    this.dropPendingTap();
+    if (!this.interactionLocked) this.handleClick(pending.click);
+  }
+
+  private dropPendingTap() {
+    if (this.pendingTap?.timer != null) clearTimeout(this.pendingTap.timer);
+    this.pendingTap = null;
+  }
+
+  /**
+   * One frame of the double-tap zoom: applies this frame's share of the
+   * eased log-zoom through zoomBy, so the anchor point, clamps and the
+   * world<->settlement threshold crossing all behave exactly as for a wheel
+   * or pinch, and zoomBy's own idle timer bakes the settled view.
+   */
+  private tickDoubleTapZoom() {
+    const anim = this.doubleTapZoom;
+    if (!anim) return;
+    const elapsed = performance.now() - anim.startedAt;
+    const target = doubleTapZoomLog(elapsed);
+    const step = target - anim.applied;
+    anim.applied = target;
+    if (elapsed >= DOUBLE_TAP_ZOOM_MS) this.doubleTapZoom = null;
+    if (step > 0) this.zoomBy(anim.screen, Math.exp(step));
+  }
+
+  private handleClick(e: TapPoint) {
+    const screen = this.clientToCanvas(e.clientX, e.clientY);
+    if (!screen) return;
+    // Touch/pen has no hover: a tap on a construction dial reveals it instead
+    // of reaching the tile below. Mouse clicks always go to the tile.
+    if (e.pointerType !== 'mouse' && this.handleDialTap(screen)) return;
     const world = screenToWorld(this.camera, screen, this.viewport);
     const coord = isoPixelToAxial(world, TILE_W, TILE_H);
     const tile = this.options.worldModel.getTile(coord.q, coord.r);
@@ -2823,6 +3518,29 @@ export class HexMapRenderer {
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
     const anchor = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET });
     this.options.onHexClick?.(coord, tile, anchor);
+  }
+
+  /**
+   * Touch tap at canvas point `screen`: when it lands on a construction dial
+   * (`pickTappedDial`) toggles that dial's tap-reveal and returns true (the
+   * caller must not dispatch the tap to the tile); otherwise clears any
+   * reveal and returns false so the tap behaves normally.
+   */
+  private handleDialTap(screen: { x: number; y: number }): boolean {
+    const nowMs = Date.now();
+    const mapScale = this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM;
+    const targets = (this.constructionDials ?? [])
+      .filter((d) => d.rejectedAtMs === undefined)
+      .filter((d) => !this.isDialOccluded(this.dialScreenPoint(d.coord), mapScale))
+      .map((d) => {
+        const key = coordKey(d.coord);
+        const p = this.dialScreenPoint(d.coord);
+        return { key, cx: p.x, cy: p.y, r: dialRadiusPx(dialScale(mapScale, this.dialHover.get(key) ?? 0).zs) };
+      });
+    const hit = pickTappedDial(screen, targets);
+    this.tapRevealKey = nextTapReveal(this.tapRevealKey, hit);
+    this.tapRevealAtMs = nowMs;
+    return hit !== null;
   }
 
   /**
@@ -2992,6 +3710,22 @@ export class HexMapRenderer {
       });
   }
 
+  /** Freezes (false) or resumes (true) the water: shader clocks and the world map's wave squiggles. */
+  setWaterMotion(enabled: boolean) {
+    this.waterMotion = enabled;
+    this.waterLayer.setFrozen(!enabled);
+  }
+
+  /** Shows (true) or hides (false) the wind gust on the bog lakes: the player's "Wind on lakes" motion setting. */
+  setLakeMotion(enabled: boolean) {
+    this.bogLakeLayer.setMotion(enabled);
+  }
+
+  /** Freezes (false) or resumes (true) the drift of the fog and mist layers. */
+  setFogMotion(enabled: boolean) {
+    this.fogMotion = enabled;
+  }
+
   /**
    * Turns `buildings-anim` art on/off, per the `animationPreference`
    * singleton (see `useHexMapRenderer`'s wiring). Just records the wanted
@@ -3035,7 +3769,13 @@ export class HexMapRenderer {
       const generation = this.animGeneration;
       if (!this.animCoreReady) {
         this.animCoreReady = true;
-        loadAnimAtlases()
+        loadAnimAtlases((partial) => {
+          // Clips arrive page by page; merge each batch as it lands (same
+          // guards as the final result below).
+          if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
+          this.textures = mergeTileTextures(this.textures, partial);
+          this.rebuildAll();
+        })
           .then((anim) => {
             if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
             this.textures = mergeTileTextures(this.textures, anim);
@@ -3048,7 +3788,11 @@ export class HexMapRenderer {
       }
       if (!this.wastedAnimReady && this.options.worldModel.isWastedRevealed()) {
         this.wastedAnimReady = true;
-        loadPackAnimAtlases('wasted')
+        loadPackAnimAtlases('wasted', (partial) => {
+          if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
+          this.textures = mergeTileTextures(this.textures, partial);
+          this.rebuildAll();
+        })
           .then((anim) => {
             if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
             this.textures = mergeTileTextures(this.textures, anim);
@@ -3128,6 +3872,12 @@ export class HexMapRenderer {
     const rect = visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN);
     this.rebuildBounds = this.scanBoundsOfRect(rect);
     const coords = this.coordsInRect(rect, this.scanClipSources(fogActive));
+    // The ground and everything drawn straight onto it (the bog edge border) share one crop, so nothing outlines a hex
+    // the preview never draws.
+    const groundCoords =
+      this.options.mode === 'settlement' && !this.settlement()
+        ? previewGroundCoords(coords, this.options.worldModel, this.options)
+        : coords;
     const deepFogOnly =
       this.options.mode === 'world' && fogActive && fogDebugFlags.terrainCull && this.isEntirelyDeepFog(rect);
     this.deepFogOnly = deepFogOnly;
@@ -3141,7 +3891,7 @@ export class HexMapRenderer {
       fogPerfStats.terrainDrawnCount = 0;
       fogPerfStats.terrainCulledCount = 0;
     } else {
-      this.rebuildTerrain(coords, fogActive);
+      this.rebuildTerrain(groundCoords, fogActive);
     }
     fogPerfStats.terrainMs = performance.now() - phaseStart;
 
@@ -3150,6 +3900,10 @@ export class HexMapRenderer {
     } else {
       this.riverLayer.clear();
     }
+
+    phaseStart = performance.now();
+    this.rebuildBogEdges(groundCoords);
+    fogPerfStats.bogEdgesMs = performance.now() - phaseStart;
 
     phaseStart = performance.now();
     this.rebuildBorders(coords, fogActive, deepFogOnly);
@@ -3179,6 +3933,7 @@ export class HexMapRenderer {
     // the most expensive thing on screen.
     const waterSuppressed = deepFogOnly || !this.isFogActive();
     this.waterLayer.setSuppressed(waterSuppressed);
+    this.bogLakeLayer.setSuppressed(waterSuppressed);
     // A suppressed mesh has nothing to read the mask, so a bake owed from
     // before it was suppressed is owed no longer — the next rebuild that
     // un-suppresses it re-asks the coverage question from scratch.
@@ -3210,7 +3965,11 @@ export class HexMapRenderer {
     // The reveal flag isn't part of the viewport, so a coverage check alone
     // would never notice it flipped — drop the recorded region outright so
     // the coverage check below always misses and a fresh bake goes out.
-    if (this.waterMaskRegionBuilt && this.waterMaskWastedRevealed !== worldModel.isWastedRevealed()) {
+    if (
+      this.waterMaskRegionBuilt &&
+      (this.waterMaskWastedRevealed !== worldModel.isWastedRevealed() ||
+        this.waterMaskRiverRevision !== worldModel.riverRevision)
+    ) {
       this.waterMaskRegionBuilt = null;
     }
     const viewport = visibleWorldRect(this.camera, this.viewport);
@@ -3248,16 +4007,15 @@ export class HexMapRenderer {
         tileHeight: TILE_H,
         seed: worldModel.seed,
         generation: worldModel.generation,
-        // Only settlement mode reads the prop channel (WaterLayer sets
-        // uPropMute nowhere else), so only it pays for the list — and the
-        // list, not a lookup, is what lets that mode bake off-thread at all.
-        buildingHexes: this.options.mode === 'settlement' ? worldModel.buildingHexKeys() : undefined,
         wastedRevealed: worldModel.isWastedRevealed(),
+        // Both modes draw sea foam, so both need the mouths.
+        noFoamHexes: worldModel.riverMouthHexKeys(),
+        riverRevision: worldModel.riverRevision,
       },
       this.waterMaskTerrain(),
     );
     if (!mask) return; // off to the worker; applyWaterMask finishes it
-    this.applyWaterMask(mask, region, performance.now() - bakeStart, false, worldModel.isWastedRevealed());
+    this.applyWaterMask(mask, region, performance.now() - bakeStart, false, worldModel.isWastedRevealed(), worldModel.riverRevision);
   }
 
   /**
@@ -3274,6 +4032,7 @@ export class HexMapRenderer {
     bakeMs: number,
     onWorker: boolean,
     wastedRevealed: boolean,
+    riverRevision: number,
   ) {
     waterPerfStats.bakeMs = bakeMs;
     waterPerfStats.bakedOnWorker = onWorker;
@@ -3289,36 +4048,64 @@ export class HexMapRenderer {
     this.waterLayer.setMask(mask);
     this.waterMaskRegionBuilt = region;
     this.waterMaskWastedRevealed = wastedRevealed;
+    this.waterMaskRiverRevision = riverRevision;
+    this.refreshWaterDry();
+  }
+
+  /**
+   * Redraws the art dry mask over the water mask's region and binds it to the
+   * water shader. Runs when a mask is applied or the sea hexes' art changes,
+   * not per frame. Waits for the (lazily decoded) mask atlas on first use.
+   */
+  private refreshWaterDry() {
+    const region = this.waterMaskRegionBuilt;
+    const renderer = this.app?.renderer;
+    if (this.options.mode !== 'settlement' || !region || !renderer) return;
+    if (!this.waterDry.ready) {
+      if (!this.waterDryLoadStarted) {
+        this.waterDryLoadStarted = true;
+        this.waterDry.load().then(
+          () => this.refreshWaterDry(),
+          (err) => console.warn('HexMapRenderer: water dry masks failed to load', err),
+        );
+      }
+      return;
+    }
+    this.waterLayer.setDryTexture(this.waterDry.draw(renderer, region.rect, this.waterDryEntries, TILE_W));
+  }
+
+  /**
+   * Redraws the bog lakes' wet mask over the lakes' bounding rect and hands it to the gust mesh. Runs when the terrain is rebuilt, not per
+   * frame. Waits for the (lazily decoded) lake mask atlas on first use.
+   */
+  private refreshBogLake() {
+    const renderer = this.app?.renderer;
+    if (this.options.mode !== 'settlement' || !renderer) return;
+    const bounds = entriesWorldBounds(this.bogLakeEntries, TILE_W);
+    if (!bounds) {
+      this.bogLakeLayer.setLake(null, null);
+      return;
+    }
+    if (!this.bogLakeMask.ready) {
+      if (!this.bogLakeLoadStarted) {
+        this.bogLakeLoadStarted = true;
+        this.bogLakeMask.load().then(
+          () => this.refreshBogLake(),
+          (err) => console.warn('HexMapRenderer: bog lake masks failed to load', err),
+        );
+      }
+      return;
+    }
+    this.bogLakeLayer.setLake(this.bogLakeMask.draw(renderer, bounds, this.bogLakeEntries, TILE_W), bounds);
   }
 
   /**
    * What the bake is allowed to ask about terrain — the *fallback* path's
    * lookup, used only where there is no worker to bake on (jsdom, a browser
    * that refuses a module worker).
-   *
-   * World mode hands over an `isLand`-only lookup rather than the WorldModel
-   * itself. `TerrainLookup.getTile`/`hasProp` exist solely to spot the
-   * coastal-water prop tiles the A channel mutes (`hasWaterProp`), and
-   * `WaterLayer.tick` only ever sets `uPropMute` in settlement mode — world
-   * mode draws no sea tiles, so there is no painted boat or rock to protect.
-   * Omitting both is the documented way to say so: it zeroes the A channel,
-   * which is what the world-mode shader reads anyway, and drops both a second
-   * WorldModel lookup per texel and the extra distance transform the prop ramp
-   * would need.
-   *
-   * Settlement mode answers through `hasProp` rather than `getTile` so the
-   * fallback asks the same question the worker does, terrain-only, instead of
-   * materialising a `Tile` per water texel.
    */
   private waterMaskTerrain(): TerrainLookup {
-    const { worldModel } = this.options;
-    const isWastedLand = (q: number, r: number) => worldModel.isWastedLandAt(q, r);
-    if (this.options.mode !== 'settlement') return { isLand: (q, r) => worldModel.isLand(q, r), isWastedLand };
-    return {
-      isLand: (q, r) => worldModel.isLand(q, r),
-      hasProp: (q, r) => hasWaterProp(worldModel.getTile(q, r)),
-      isWastedLand,
-    };
+    return waterMaskTerrainFor(this.options.worldModel);
   }
 
   /**
@@ -3407,36 +4194,10 @@ export class HexMapRenderer {
     };
     const baseEntries = new Map<string, Entry>();
     const topEntries = new Map<string, Entry>();
-    const settlement = this.settlement();
-    const preview = !settlement;
-    const previewCenter = this.options.previewCenter ?? { q: 0, r: 0 };
-    // landing-page-defects.md L5: culled by `previewCropTiles` — a small
-    // radius crop around `previewCenter` (deliberate framing, matching the
-    // mockup's own scale, not itself a bug) intersected with landmass
-    // membership, so a *foreign* island a world seed happened to place
-    // nearby within that same radius no longer bleeds in (computed once per
-    // rebuild here, then checked per-hex via a Set — not re-flooded per
-    // hex; `previewCropTiles`/`previewIslandTiles` are cached per centre
-    // inside WorldModel, so this is cheap even though rebuildTerrain runs
-    // on every camera change). This is also exactly the tile set
-    // `settlementCameraOrigin`'s locked-preview branch (L4) fits the camera
-    // to — the two must agree, or the framing goes wrong again (see that
-    // method's own comment).
-    const previewTileKeys = preview
-      ? new Set(worldModel.previewCropTiles(previewCenter).map((c) => coordKey(c)))
-      : null;
     const fogSources =
       fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];
 
     for (const c of coords) {
-      // zip 6a: before a settlement exists, this is the landing page's
-      // preview — a small crop of one island, not a slice of the whole
-      // (unfogged) world. Water isn't drawn at all (matching how world mode
-      // treats sea — see rebuildTerrainFlat) and membership in
-      // `previewTileKeys` already excludes it (`previewCropTiles` only ever
-      // returns land), so this one check replaces the old sea check and the
-      // old (membership-blind) radius check both.
-      if (preview && !previewTileKeys!.has(coordKey(c))) continue;
       // Terrain is drawn under the fog (not just on explored ground) so it
       // can show through the thin part of the unexplored mist near the
       // scouted ring, instead of the tile popping into existence only once
@@ -3502,6 +4263,50 @@ export class HexMapRenderer {
         fogPerfStats.terrainDrawnCount++;
         continue;
       }
+      // A wildlife camp (see campPlacement.ts) is an animated topping on the hex's own
+      // ground: the ground's base, the camp's guarded (level 1) art on top, its tile
+      // rotation mapped onto the rotations that art ships (campArtFor). A river camp
+      // (bears, otters) stands on its river tile and brings its own river base with it. A camp
+      // whose art cannot be resolved (a river camp off a straight river) falls through
+      // and draws as plain ground.
+      if (drawnCampOf(tile)) {
+        const campArt = campArtFor(textures, tile, river);
+        if (campArt) {
+          const campTile = { ...tile, orientation: campArt.orientation };
+          baseEntries.set(key, { texture: baseTextureFor(textures, campTile, campArt.riverArt), coord: c });
+          const campTop = topTextureFor(textures, campTile, campArt.riverArt);
+          if (campTop) {
+            topEntries.set(key, { texture: campTop, coord: c, anim: topAnimFor(textures, campTile, campArt.riverArt) });
+          }
+          fogPerfStats.terrainDrawnCount++;
+          continue;
+        }
+      }
+      // An Utgard wall piece or a Jötun watchtower (a wasted island's endgame sites) draws its server-resolved piece and camera at its
+      // current level, on the hex's own ground (the sea end brings its own coastal base).
+      const endgame = endgameDrawTile(tile);
+      if (endgame) {
+        baseEntries.set(key, { texture: baseTextureFor(textures, endgame.tile, endgame.art), coord: c });
+        const siteTop = topTextureFor(textures, endgame.tile, endgame.art);
+        if (siteTop) topEntries.set(key, { texture: siteTop, coord: c, anim: topAnimFor(textures, endgame.tile, endgame.art) });
+        fogPerfStats.terrainDrawnCount++;
+        continue;
+      }
+      // A wall hex (palisade or gate) draws the piece and camera its wall neighbours decide (palisadeArtFor), on its own ground (on
+      // coastal water, the sea end brings its own base). The whole visible region is re-resolved on every rebuild, so a hex whose
+      // neighbour was just placed or razed comes out with its new piece.
+      if (tile.buildingType === 'palisade' || tile.buildingType === 'palisadegate') {
+        const wallArt = palisadeArtFor({
+          wallNeighbours: worldModel.wallNeighbourFlags(c),
+          coastalWater: tile.terrain === 'sea',
+          gate: tile.buildingType === 'palisadegate',
+        });
+        baseEntries.set(key, { texture: baseTextureFor(textures, tile, wallArt), coord: c });
+        const wallTop = topTextureFor(textures, tile, wallArt);
+        if (wallTop) topEntries.set(key, { texture: wallTop, coord: c });
+        fogPerfStats.terrainDrawnCount++;
+        continue;
+      }
       // A Sawmill/Crop Mill is built directly on a river tile
       // (WorldModel.placeBuilding mirrors BuildingCatalogue's
       // RequiresRiverShape) — its building+river composite art replaces the
@@ -3524,7 +4329,7 @@ export class HexMapRenderer {
         // Only a Mouth's orientation actually needs this (see
         // riverTexturesFor/mouthOrientationOf) — skip the neighbour scan
         // for every other shape.
-        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c) : null;
+        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
         // Likewise, only a Spring's art actually branches on this.
         const springShape = river.shape === 'spring' ? worldModel.springShapeAt(c) : undefined;
         // Only straight/bend/bend60 (and never a wasted/lava tile — see
@@ -3556,6 +4361,19 @@ export class HexMapRenderer {
 
     this.syncSpriteLayer(this.terrainBase, baseEntries);
     this.syncSpriteLayer(this.terrainTop, topEntries);
+
+    // The base art of every sea hex, for the water shader's dry mask. Placed
+    // exactly as syncSpriteLayer places the sprite.
+    // The same goes for the bog lakes' wet mask, from the base art of every hex that carries lake water: the lake itself and the bog
+    // tiles around it (inlet, shore, half, mouth), which is why the frame name decides and not the hex's terrain.
+    const artOrigin = (c: AxialCoord) => {
+      const grid = isoGridPosition(c, TILE_W, TILE_H);
+      return { x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET };
+    };
+    this.waterDryEntries = maskEntries(baseEntries.values(), (c) => worldModel.getTile(c.q, c.r).terrain === 'sea', artOrigin);
+    this.bogLakeEntries = maskEntries(baseEntries.values(), (_c, texture) => LAKE_FRAME_RE.test(texture.label ?? ''), artOrigin);
+    this.refreshWaterDry();
+    this.refreshBogLake();
   }
 
   // zip 7: world-map islands are flat coloured hexes, not tile art — see
@@ -3581,6 +4399,8 @@ export class HexMapRenderer {
     });
     const fogSources =
       fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];
+    // Giants whose footprint got drawn this pass, by anchor key: outlined once all fills are down.
+    const giants = new Map<string, { anchor: AxialCoord; family: GiantFamily }>();
 
     for (const c of coords) {
       // Flat world-map hexes are coloured from terrain alone (WORLD_TERRAIN_FILL),
@@ -3608,8 +4428,19 @@ export class HexMapRenderer {
 
       const grid = isoGridPosition(c, TILE_W, TILE_H);
       const flat = inflated.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
-      this.terrainFlat.poly(flat).fill({ color: WORLD_TERRAIN_FILL[terrain] });
+      this.terrainFlat.poly(flat).fill({ color: worldHexFill(terrain, worldModel.isWastedLandAt(c.q, c.r)) });
+      // A giant's footprint gets outlined once all fills are down (few hexes, so the Tile lookup for its family is cheap).
+      const anchor = worldModel.giantAnchorAt(c);
+      const family = anchor ? (worldModel.getTile(c.q, c.r).giant?.family as GiantFamily | undefined) : undefined;
+      if (anchor && family) giants.set(coordKey(anchor), { anchor, family });
       fogPerfStats.terrainDrawnCount++;
+    }
+
+    for (const { anchor, family } of giants.values()) {
+      const color = worldGiantOutline(family);
+      if (color === undefined) continue;
+      const outline = giantFootprintOutline(anchor, TILE_W, TILE_H).flatMap((p) => [p.x, p.y]);
+      this.terrainFlat.poly(outline).stroke({ width: 2.5, color, alpha: 0.8, join: 'round' });
     }
   }
 
@@ -3627,7 +4458,9 @@ export class HexMapRenderer {
 
     for (const c of coords) {
       const river = worldModel.getRiverTile(c.q, c.r);
-      if (!river) continue;
+      // A bog carries its river on as creek, lake-mouth and creek-spring bog tiles (no river tile there).
+      const bog = river ? undefined : worldModel.getBogTile(c.q, c.r);
+      if (!river && !bog) continue;
 
       if (
         fogActive &&
@@ -3638,8 +4471,18 @@ export class HexMapRenderer {
         continue;
       }
 
-      const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c) : null;
-      const { segments, springDot } = riverPathFor(c, river, seaDirection, TILE_W, TILE_H);
+      let drawing: RiverDrawing | null;
+      if (river) {
+        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c, river.inDirections[0]) : null;
+        drawing = riverPathFor(c, river, seaDirection, TILE_W, TILE_H);
+      } else {
+        drawing = bogCreekPathFor(c, bog!, TILE_W, TILE_H);
+      }
+      if (!drawing) continue;
+      const { segments, springDot } = drawing;
+      // A stream is half a river's width: draw its line thinner.
+      const streamScale = river?.width === 'stream' ? 0.55 : 1;
+      const color = river ? worldRiverColor(river) : RIVER_COLOR;
 
       for (const { from, control, to } of segments) {
         // Double stroke, same "wide soft casing under a crisp line" trick
@@ -3649,14 +4492,14 @@ export class HexMapRenderer {
         this.riverLayer
           .moveTo(from.x, from.y)
           .quadraticCurveTo(control.x, control.y, to.x, to.y)
-          .stroke({ width: 5, color: RIVER_COLOR, alpha: 0.35, cap: 'round', join: 'round' });
+          .stroke({ width: 5 * streamScale, color, alpha: 0.35, cap: 'round', join: 'round' });
         this.riverLayer
           .moveTo(from.x, from.y)
           .quadraticCurveTo(control.x, control.y, to.x, to.y)
-          .stroke({ width: 2.2, color: RIVER_COLOR, alpha: 0.95, cap: 'round', join: 'round' });
+          .stroke({ width: 2.2 * streamScale, color, alpha: 0.95, cap: 'round', join: 'round' });
       }
       if (springDot) {
-        this.riverLayer.circle(springDot.x, springDot.y, 3).fill({ color: RIVER_COLOR, alpha: 0.95 });
+        this.riverLayer.circle(springDot.x, springDot.y, 3).fill({ color, alpha: 0.95 });
       }
     }
   }
@@ -3758,7 +4601,8 @@ export class HexMapRenderer {
       return;
     }
     const alpha = WAVE_ALPHA * fade;
-    const now = Date.now();
+    // Frozen water holds the squiggles at a fixed phase instead of the map animation clock (mapAnimMs).
+    const now = this.waterMotion ? this.mapAnimMs : 0;
     this.waveLayer.clear();
     for (const p of this.wavePoints) {
       const s = (Math.sin((now / p.periodMs) * Math.PI * 2 + p.phase) + 1) / 2;
@@ -3812,7 +4656,7 @@ export class HexMapRenderer {
         layer.active.set(key, sprite);
       }
       if (isTopLayer) {
-        this.syncTopAnim(key, sprite, anim, texture);
+        this.syncTopAnim(key, sprite, anim, texture, coord);
       } else {
         sprite.texture = texture;
       }
@@ -4015,7 +4859,7 @@ export class HexMapRenderer {
    * legacy, non-overlay clip needs no second sprite at all — `sprite` itself
    * still cycles through full frames exactly as before.
    */
-  private syncTopAnim(key: string, sprite: Sprite, anim: TileAnimClip | undefined, staticTexture: Texture) {
+  private syncTopAnim(key: string, sprite: Sprite, anim: TileAnimClip | undefined, staticTexture: Texture, coord: AxialCoord) {
     const existing = this.topAnimState.get(key);
     if (!anim) {
       if (existing) this.releaseTopAnim(key);
@@ -4035,14 +4879,29 @@ export class HexMapRenderer {
       this.topOverlayPool.push(existing.overlay);
     }
     const overlay = anim.rest !== undefined ? (this.topOverlayPool.pop() ?? new Sprite()) : undefined;
-    const initial = topAnimTextures(anim, 0);
+    // Every tile gets its own deterministic phase `h` so identical animated tiles (all sawmills' wheels) are visibly out of step.
+    // A shared-clock clip (terrain wind sway) joins the global clock mid-cycle so neighbouring tiles stay in phase; it shifts by its map column
+    // (the integer `col` isoGridPosition places the tile by) so the gust wave is continuous across tiles, plus whole sway periods (see
+    // `swayPeriodOffset`) so a long clip's animals desync while its trees keep the forests' wind phase. Others start at their phase in the cycle.
+    const { col, row } = axialToOddQ(coord);
+    const h = hash2(col, row, TILE_ANIM_PHASE_SALT);
+    const timing = clipTimingOf({ ...anim, frameRects: anim.textures });
+    const start = anim.sharedClock
+      ? sharedClockPlayback(
+          timing,
+          this.animClockMs,
+          (anim.framesPerColumn ?? 0) * col + swayPeriodOffset(anim.textures.length, anim.swayPeriod, h),
+        )
+      : phasedStart(timing, h);
+    const initial = topAnimTextures(anim, start.frame);
     sprite.texture = initial.base;
     if (overlay) overlay.texture = initial.overlay!;
-    this.topAnimState.set(key, { clip: anim, sprite, frame: 0, playedMs: 0, overlay });
+    this.topAnimState.set(key, { clip: anim, sprite, frame: start.frame, playedMs: start.playedMs, overlay });
   }
 
   /** Advances every active top-layer clip by `deltaMs` of playback, called once per app tick regardless of whether a rebuild ran this frame. */
   private advanceTopAnimations(deltaMs: number) {
+    this.animClockMs += deltaMs;
     for (const state of this.topAnimState.values()) {
       // clipPlayback.ts owns the frame math, so the clip's `pause` - the hold
       // on its last frame between cycles - applies on the map too.
@@ -4065,9 +4924,120 @@ export class HexMapRenderer {
     }
   }
 
+  private rebuildBogEdges(coords: AxialCoord[]) {
+    const { worldModel, mode } = this.options;
+    if (mode !== 'settlement') {
+      this.syncBogEdgeGraphics([], []);
+      return;
+    }
+    // The geometry depends on nothing but the hex and its neighbours (bog, giant, river), so it is built once per hex
+    // and only thrown away when one of those changes (or the cache has grown past a few screens of bog).
+    const cacheKey = `${worldModel.riverRevision}|${worldModel.overlayRevision}`;
+    if (cacheKey !== this.bogEdgeCacheKey || this.bogEdgeCache.size > 4000) {
+      this.clearBogEdgeCache();
+      this.bogEdgeCacheKey = cacheKey;
+    }
+    const getTile = (q: number, r: number) => worldModel.getTile(q, r);
+    const getRiver = (q: number, r: number) => worldModel.getRiverTile(q, r);
+    const top = isoTopPoints(TILE_W, TILE_H);
+    const centre = { x: TILE_W / 2, y: TILE_H / 2 };
+    const underCtx: GraphicsContext[] = [];
+    const overCtx: GraphicsContext[] = [];
+    // Not gated on exploration: it follows the ground art, which draws under the fog too.
+    for (const c of coords) {
+      // Only bog hexes are cached, so the cache holds a few screens of bog, not every hex the camera has passed.
+      if (!isBogGround(worldModel.getTile(c.q, c.r))) continue;
+      const key = coordKey(c);
+      let entry = this.bogEdgeCache.get(key);
+      if (!entry) {
+        const under: BogEdgeShape[] = [];
+        const over: BogEdgeShape[] = [];
+        const grid = isoGridPosition(c, TILE_W, TILE_H);
+        for (const { edge, neighbour, gap, flushStart, flushEnd } of bogEdgesOf(getTile, getRiver, c)) {
+          const a = top[edge];
+          const b = top[(edge + 1) % 6];
+          // Unit normal pointing out of the hex, measured in the squashed top-face space the edge itself lives in.
+          const mid = { x: (a.x + b.x) / 2 - centre.x, y: (a.y + b.y) / 2 - centre.y };
+          const len = Math.hypot(mid.x, mid.y);
+          const shapes = bogEdgeShapes(
+            neighbour,
+            { x: grid.x + a.x, y: grid.y + a.y },
+            { x: grid.x + b.x, y: grid.y + b.y },
+            { x: mid.x / len, y: mid.y / len },
+            [c.q, c.r, edge],
+            gap,
+            flushStart,
+            flushEnd,
+          );
+          for (const shape of shapes) (shape.under ? under : over).push(shape);
+        }
+        // A bog hex with no bordered edges caches nulls too, so it is not recomputed on every rebuild.
+        entry = { under: this.bogEdgeContext(under), over: this.bogEdgeContext(over) };
+        this.bogEdgeCache.set(key, entry);
+      }
+      if (entry.under) underCtx.push(entry.under);
+      if (entry.over) overCtx.push(entry.over);
+    }
+    this.syncBogEdgeGraphics(underCtx, overCtx);
+  }
+
+  private bogEdgeContext(shapes: BogEdgeShape[]): GraphicsContext | null {
+    if (shapes.length === 0) return null;
+    const ctx = new GraphicsContext();
+    for (const shape of shapes) {
+      const flat = shape.points.flatMap((p) => [p.x, p.y]);
+      if (shape.fill) ctx.poly(flat).fill(shape.fill);
+      // A rim under the moss ends flat: a round end would poke past the corner cap that covers it.
+      if (shape.stroke) {
+        ctx.poly(flat, false).stroke({ ...shape.stroke, join: 'round', cap: shape.under ? 'butt' : 'round' });
+      }
+    }
+    return ctx;
+  }
+
+  /** Show one pooled Graphics per context in each half of the layer and hide the rest. */
+  private syncBogEdgeGraphics(underCtx: GraphicsContext[], overCtx: GraphicsContext[]) {
+    const sync = (parent: Container, pool: Graphics[], contexts: GraphicsContext[]) => {
+      for (let i = 0; i < contexts.length; i++) {
+        let g = pool[i];
+        if (!g) {
+          // Handed the shared context up front, so the Graphics owns none of its own.
+          g = new Graphics(contexts[i]);
+          pool.push(g);
+          parent.addChild(g);
+        } else {
+          g.context = contexts[i];
+        }
+        g.visible = true;
+      }
+      for (let i = contexts.length; i < pool.length; i++) pool[i].visible = false;
+    };
+    sync(this.bogEdgeUnder, this.bogEdgeUnderPool, underCtx);
+    sync(this.bogEdgeOver, this.bogEdgeOverPool, overCtx);
+  }
+
+  /**
+   * Drop every cached context. Pooled Graphics only borrow a context (`Graphics.destroy()` would not touch one passed
+   * in, and they are never destroyed anyway), so they are pointed at nothing-to-show first and the contexts destroyed
+   * here, the one place they die.
+   */
+  private clearBogEdgeCache() {
+    this.syncBogEdgeGraphics([], []);
+    for (const { under, over } of this.bogEdgeCache.values()) {
+      under?.destroy();
+      over?.destroy();
+    }
+    this.bogEdgeCache.clear();
+  }
+
   private rebuildBorders(coords: AxialCoord[], fogActive: boolean, deepFogOnly: boolean) {
     const { worldModel, mode, playerId } = this.options;
     this.borderLayer.clear();
+    let frontUsed = 0;
+    // Hide the pooled front-edge graphics up front: every early return below leaves them hidden.
+    const hideUnusedFront = () => {
+      for (let i = frontUsed; i < this.borderFrontPool.length; i++) this.borderFrontPool[i].visible = false;
+    };
     fogPerfStats.borderedHexCount = 0;
 
     if (deepFogOnly) {
@@ -4075,10 +5045,14 @@ export class HexMapRenderer {
       // reach this viewport, so nothing in it is explored — there is no
       // border to draw and no per-hex loop worth running over what can be
       // thousands of hexes in a low-zoom world-map viewport.
+      hideUnusedFront();
       return;
     }
 
-    if (!fogDebugFlags.realmBorders) return;
+    if (!fogDebugFlags.realmBorders) {
+      hideUnusedFront();
+      return;
+    }
 
     for (const c of coords) {
       if (fogActive && !worldModel.isExplored(c.q, c.r)) continue;
@@ -4106,26 +5080,43 @@ export class HexMapRenderer {
       // drew a solid mesh over the whole realm instead of a border around it.
       this.borderLayer.poly(flat).fill({ color, alpha: 0.12 });
 
-      for (const edge of outerEdgesOf(worldModel, c, tile.ownerId)) {
-        const a = top[edge[0]];
-        const b = top[edge[1]];
-        this.borderLayer.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
-        this.borderLayer
-          .moveTo(a.x, a.y)
-          .lineTo(b.x, b.y)
-          .stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
+      // Back edges (and in world mode, which has no tall art, all edges) stay in the layer under the toppings; in
+      // settlement mode the front edges go to their own graphic in terrainTop so the hex's own art can't hide them.
+      const { back, front } = splitBorderEdges(outerEdgesOf(worldModel, c, tile.ownerId));
+      if (mode === 'settlement') {
+        strokeBorderEdges(this.borderLayer, top, back, color);
+        if (front.length > 0) {
+          let g = this.borderFrontPool[frontUsed];
+          if (!g) {
+            g = new Graphics();
+            this.borderFrontPool.push(g);
+            this.terrainTop.container.addChild(g);
+          }
+          frontUsed++;
+          g.clear();
+          g.visible = true;
+          g.zIndex = isoDepthKey(c) + BORDER_FRONT_Z;
+          strokeBorderEdges(g, top, front, color);
+        }
+      } else {
+        strokeBorderEdges(this.borderLayer, top, [...back, ...front], color);
       }
     }
+    hideUnusedFront();
   }
 
   private rebuildMarkers() {
     this.markerLayer.clear();
+    this.campPawLayer.clear();
     // markerLayer.clear() only wipes the Graphics geometry, not the pooled
     // Sprite/Text children parented to it — each pass counts what it used and
     // hides the rest, same bookkeeping labels already do (labelsUsed).
     this.iconsUsed = 0;
     if (this.options.mode === 'settlement') {
+      this.labelsUsed = 0;
       if (!this.options.hideSettlementBadge) this.rebuildSettlementLabels();
+      this.drawConstructionDials();
+      for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
       this.drawArmyOverlay();
       this.hideUnusedIcons();
       return;
@@ -4179,10 +5170,24 @@ export class HexMapRenderer {
     // between a settlement and an island id; demo mode never populates it,
     // so its island names simply stay neutral there, same as before.
     const myIslandId = worldModel.listSettlements().find((s) => s.ownerId === playerId)?.islandId;
-    for (const island of worldModel.listIslands()) {
+    const islands = worldModel.listIslands();
+    // setIslands() swaps in a new array (and clears the model's footprint
+    // cache), so a changed reference means every cached bottom is stale.
+    if (this.islandBottomCacheFor !== islands) {
+      this.islandBottomCache.clear();
+      this.islandBottomCacheFor = islands;
+    }
+    // A world with thousands of islands (the showcase page, or a player who has
+    // explored a lot) would otherwise measure every one every tick. An island
+    // reaches at most islandMaxReach hexes from its centre; a centre further
+    // than that outside the viewport can't show itself or its label.
+    const reach = worldModel.generation.islandMaxReach;
+    const cullMarginPx = reach > 0 ? reach * TILE_W * this.camera.zoom : Infinity;
+    for (const island of islands) {
       if (fogActive && !worldModel.isExplored(island.q, island.r)) continue;
       const grid = isoGridPosition({ q: island.q, r: island.r }, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
+      if (!isIslandNearViewport(center, this.viewport, cullMarginPx)) continue;
       const mineIsland = island.id === myIslandId;
       // Reference styling: uppercase, letter-spaced small-caps label, muted
       // gray for other islands, gold + bold for the player's own (see
@@ -4195,16 +5200,22 @@ export class HexMapRenderer {
       // offset either overlaps a big island or floats far below a small one
       // — instead, measure the real bottom edge from the island's actual
       // (flood-filled, cached) tile footprint and clear past that.
-      let bottomWorldY = grid.y + TILE_H; // this hex's own bottom vertex, as a floor
-      for (const tile of worldModel.islandFootprint(island)) {
-        const tileGrid = isoGridPosition(tile, TILE_W, TILE_H);
-        bottomWorldY = Math.max(bottomWorldY, tileGrid.y + TILE_H);
+      let bottomWorldY = this.islandBottomCache.get(island.id);
+      if (bottomWorldY === undefined) {
+        bottomWorldY = grid.y + TILE_H; // this hex's own bottom vertex, as a floor
+        for (const tile of worldModel.islandFootprint(island)) {
+          const tileGrid = isoGridPosition(tile, TILE_W, TILE_H);
+          bottomWorldY = Math.max(bottomWorldY, tileGrid.y + TILE_H);
+        }
+        this.islandBottomCache.set(island.id, bottomWorldY);
       }
       const bottom = this.toScreen({ x: grid.x + TILE_W / 2, y: bottomWorldY });
       label.anchor.set(0.5, 0);
       label.position.set(center.x, bottom.y + 10 * this.camera.zoom + 6);
       label.visible = true;
     }
+
+    this.drawCampPaws();
 
     const now = Date.now();
 
@@ -4252,6 +5263,43 @@ export class HexMapRenderer {
     for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
   }
 
+  /**
+   * World mode: a paw symbol for every standing camp (`worldCampMarkers`) inside the viewport. The model only holds the
+   * camps of islands the player has seen part of (the server's cutoff); the paws sit under the fog (campPawLayer), so
+   * the fog covers them like the ground. Drawn in screen pixels (campPawLayer, like markerLayer, does not scale with the
+   * camera), so it stays readable zoomed out; a dark rim keeps it legible over any terrain.
+   */
+  private drawCampPaws() {
+    if (!this.options.showCampMarkers) return;
+    const { worldModel } = this.options;
+    const half = worldPawHalfSize(this.camera.zoom);
+    const markers = worldCampMarkers(worldModel.camps(), true);
+    for (const marker of markers) {
+      const grid = isoGridPosition({ q: marker.q, r: marker.r }, TILE_W, TILE_H);
+      const centre = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
+      if (!isIslandNearViewport(centre, this.viewport, half * 2)) continue;
+      this.drawPaw(centre.x, centre.y, half, marker.color);
+    }
+  }
+
+  /** One paw: a pad ellipse and four toe circles, on a slightly larger dark copy that reads as the rim. */
+  private drawPaw(x: number, y: number, half: number, color: number) {
+    const rim = 1.5;
+    const pad = { x, y: y + half * 0.35, rx: half * 0.58, ry: half * 0.46 };
+    const toeR = half * 0.24;
+    const toes = [
+      { x: x - half * 0.7, y: y - half * 0.12 },
+      { x: x - half * 0.26, y: y - half * 0.62 },
+      { x: x + half * 0.26, y: y - half * 0.62 },
+      { x: x + half * 0.7, y: y - half * 0.12 },
+    ];
+    const g = this.campPawLayer;
+    g.ellipse(pad.x, pad.y, pad.rx + rim, pad.ry + rim).fill({ color: 0x0b1116, alpha: 0.85 });
+    for (const toe of toes) g.circle(toe.x, toe.y, toeR + rim).fill({ color: 0x0b1116, alpha: 0.85 });
+    g.ellipse(pad.x, pad.y, pad.rx, pad.ry).fill({ color });
+    for (const toe of toes) g.circle(toe.x, toe.y, toeR).fill({ color });
+  }
+
   // zip 9's settlement view floats a name badge over the longhouse hex
   // itself — a dot + settlement name in a dark rounded pill, bordered in
   // the owner's colour (Viking Realm.dc.html's `labels`: "HAFRSVIK" over
@@ -4261,7 +5309,6 @@ export class HexMapRenderer {
   // glued to the hex while the camera pans.
   private rebuildSettlementLabels() {
     const { worldModel, playerId } = this.options;
-    this.labelsUsed = 0;
 
     for (const settlement of worldModel.listSettlements()) {
       // Don't reveal a rival's name over ground you haven't scouted.
@@ -4335,22 +5382,178 @@ export class HexMapRenderer {
       // (see above), so this only needs a small breathing-room margin.
       const pillY = top.y - 10 * zoomScale - pillH;
 
+      // Beneath an open ring menu the badge fades out instead of showing through the bubbles.
+      const occluded =
+        this.markerOcclusion !== null &&
+        circleIntersectsRect(this.markerOcclusion, { x: pillX, y: pillY, w: pillW, h: pillH });
+      const dtMs = this.app ? clampAnimationDeltaMs(this.app.ticker.deltaMS) : 0;
+      const vis = markerFadeStep(
+        this.badgeVisibility.get(settlement.id) ?? 1,
+        occluded,
+        dtMs,
+        animationPreference.reducedMotion,
+      );
+      if (vis < 1) this.badgeVisibility.set(settlement.id, vis);
+      else this.badgeVisibility.delete(settlement.id);
+      if (vis <= 0) {
+        nameLabel.visible = false;
+        suffixLabel.visible = false;
+        continue;
+      }
+      nameLabel.alpha = vis;
+      suffixLabel.alpha = 0.6 * vis;
+
       this.markerLayer
         .roundRect(pillX, pillY, pillW, pillH, pillH / 2)
-        .fill({ color: 0x08121a, alpha: 0.8 })
-        .stroke({ width: 1, color, alpha: 0.9 });
+        .fill({ color: 0x08121a, alpha: 0.8 * vis })
+        .stroke({ width: 1, color, alpha: 0.9 * vis });
       // Reference mockup: a small hex (not a round dot), matching the same
       // pointy-top hexagon TopBar's logo badge and ResourceBar's icons use
       // elsewhere in the HUD, not the isometric tile's own hex shape.
       this.markerLayer
         .poly(hexPoints(pillX + padX + dotR, pillY + pillH / 2, dotR))
-        .fill({ color });
+        .fill({ color, alpha: vis });
       nameLabel.position.set(pillX + padX + dotR * 2 + gap, pillY + pillH / 2);
       suffixLabel.position.set(nameLabel.x + nameLabel.width + nameGap, pillY + pillH / 2);
       nameLabel.visible = true;
       suffixLabel.visible = true;
     }
-    for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
+  }
+
+  /**
+   * Construction progress dials, in screen space (markerLayer): they scale
+   * exactly with the map (`camera.zoom / SETTLEMENT_DEFAULT_ZOOM`, no floor),
+   * so a dial stays the same fraction of a tile at every zoom. The time label
+   * is dropped while it would be under `DIAL_MIN_LABEL_PX` on screen (the ring
+   * and progress edge still draw); see `dialScale`. Hovering a dial with the
+   * mouse (on the dial itself or on its hex) eases it up to at least its
+   * default-zoom size and shows its time; hovered dials are drawn last so they
+   * sit above their neighbours. Must run before the unused-label hide loop in
+   * `rebuildMarkers` since it acquires pooled labels. A completed dial plays
+   * `dialFinishFrame` (pop, flash, shockwaves, check mark) and is then pruned.
+   */
+  private drawConstructionDials() {
+    if (!this.constructionDials) return;
+    const nowMs = Date.now();
+    const mapScale = this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM;
+    const g = this.markerLayer;
+    const strokePath = (path: number[], width: number, color: number, alpha: number) => {
+      if (path.length < 4) return;
+      g.moveTo(path[0], path[1]);
+      for (let i = 2; i < path.length; i += 2) g.lineTo(path[i], path[i + 1]);
+      g.stroke({ width, color, alpha, cap: 'round', join: 'round' });
+    };
+    const live = this.constructionDials.filter((d) =>
+      d.rejectedAtMs !== undefined ? nowMs - d.rejectedAtMs < DIAL_REJECT_MS : d.endMs === null || nowMs - d.endMs < DIAL_FINISH_MS,
+    );
+    if (live.length !== this.constructionDials.length) this.constructionDials = live.length > 0 ? live : null;
+    // Hover pass: advance each dial's tween, then draw the hovered ones last.
+    const dtMs = this.app ? clampAnimationDeltaMs(this.app.ticker.deltaMS) : 0;
+    const reduced = animationPreference.reducedMotion;
+    const pointer = this.hoverPointer;
+    const seen = new Set<string>();
+    if (this.tapRevealKey !== null && nowMs - this.tapRevealAtMs >= DIAL_TAP_REVEAL_MS) this.tapRevealKey = null;
+    const placed = live.map((dial) => {
+      const anchor = this.dialScreenPoint(dial.coord);
+      // A refused build's "…" dial shakes, then shrinks and fades (dialRejectFrame).
+      const reject = dial.rejectedAtMs !== undefined ? dialRejectFrame(nowMs - dial.rejectedAtMs) : null;
+      const key = coordKey(dial.coord);
+      seen.add(key);
+      const cx = anchor.x + (reject?.offsetX ?? 0);
+      const cy = anchor.y;
+      let hoverT = this.dialHover.get(key) ?? 0;
+      // On the dial's drawn disc (it sits half a tile above its hex, so the hex alone is the wrong hit test) or on its hex.
+      const r0 = dialRadiusPx(dialScale(mapScale, hoverT, reject?.scale ?? 1).zs, reject?.scale ?? 1);
+      // Beneath an open ring: fade out and don't react to hover (or a tap reveal).
+      const occluded = this.isDialOccluded({ x: cx, y: cy }, mapScale);
+      const vis = markerFadeStep(this.dialVisibility.get(key) ?? 1, occluded, dtMs, reduced);
+      if (vis < 1) this.dialVisibility.set(key, vis);
+      else this.dialVisibility.delete(key);
+      const hovered =
+        !reject &&
+        !occluded &&
+        (this.tapRevealKey === key ||
+          (pointer !== null && (Math.hypot(pointer.x - cx, pointer.y - cy) <= r0 || this.hoveredKey === key)));
+      hoverT = dialHoverStep(hoverT, hovered, dtMs, reduced);
+      if (hoverT > 0) this.dialHover.set(key, hoverT);
+      else this.dialHover.delete(key);
+      return { dial, reject, cx, cy, hoverT, vis };
+    });
+    for (const key of this.dialHover.keys()) if (!seen.has(key)) this.dialHover.delete(key);
+    for (const key of this.dialVisibility.keys()) if (!seen.has(key)) this.dialVisibility.delete(key);
+    if (this.tapRevealKey !== null && !seen.has(this.tapRevealKey)) this.tapRevealKey = null;
+    placed.sort((a, b) => a.hoverT - b.hoverT);
+    for (const { dial, reject, cx, cy, hoverT, vis } of placed) {
+      if (vis <= 0) continue;
+      const progress = dialProgress(dial, nowMs);
+      const remaining = dialRemainingSeconds(dial, nowMs);
+      const dAlpha = (reject?.alpha ?? 1) * vis;
+      const { zs, showLabel } = dialScale(mapScale, hoverT, reject?.scale ?? 1);
+      const r = dialRadiusPx(zs, reject?.scale ?? 1);
+      const frame = dial.endMs !== null && nowMs >= dial.endMs ? dialFinishFrame(nowMs - dial.endMs) : null;
+
+      if (frame) {
+        const fr = r * frame.scale;
+        const a = frame.alpha * vis;
+        g.poly(hexPoints(cx, cy, fr)).fill({ color: 0x08121a, alpha: 0.85 * a });
+        g.poly(hexPoints(cx, cy, fr)).fill({ color: CONSTRUCTION_DIAL_ELAPSED_COLOR, alpha: 0.75 * frame.flash * a });
+        strokePath(hexPerimeterPath(cx, cy, fr, 1), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, a);
+        for (const ring of frame.rings) {
+          if (ring.alpha <= 0) continue;
+          g.poly(hexPoints(cx, cy, r * ring.scale)).stroke({
+            width: 3 * zs,
+            color: CONSTRUCTION_DIAL_ELAPSED_COLOR,
+            alpha: ring.alpha * a,
+            join: 'round',
+          });
+        }
+        const check = polylinePartial(
+          [
+            { x: cx - 0.38 * fr, y: cy + 0.02 * fr },
+            { x: cx - 0.1 * fr, y: cy + 0.3 * fr },
+            { x: cx + 0.4 * fr, y: cy - 0.25 * fr },
+          ],
+          frame.check,
+        );
+        strokePath(check, 5 * zs, 0xffffff, a);
+        continue;
+      }
+
+      g.poly(hexPoints(cx, cy, r))
+        .fill({ color: 0x08121a, alpha: 0.85 * dAlpha })
+        .stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.3 * dAlpha, join: 'round' });
+      strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
+      if (!showLabel) continue;
+      const label = this.acquireLabel(LABEL_STYLES.dialTime, zs * 1.2 * (reject?.scale ?? 1));
+      label.alpha = dAlpha;
+      label.text = remaining === null ? '…' : formatCountdownShort(remaining);
+      label.tint = remaining !== null && remaining <= 60 ? CONSTRUCTION_DIAL_ELAPSED_COLOR : 0xffffff;
+      label.anchor.set(0.5);
+      label.position.set(cx, cy);
+      label.visible = true;
+    }
+  }
+
+  /** True when a dial centred at `p` (at its resting size) overlaps the open ring's footprint. */
+  private isDialOccluded(p: { x: number; y: number }, mapScale: number): boolean {
+    if (!this.markerOcclusion) return false;
+    const r = dialRadiusPx(dialScale(mapScale, 0).zs);
+    return circlesIntersect(this.markerOcclusion, { x: p.x, y: p.y, r });
+  }
+
+  /**
+   * While a ring menu is open, markers beneath it (construction dials, the
+   * settlement name badge) fade out so they don't show through between its
+   * DOM bubbles. `circle` is the ring's footprint in canvas px; null restores
+   * them. Markers outside the circle are unaffected.
+   */
+  setMarkerOcclusion(circle: OcclusionCircle | null) {
+    this.markerOcclusion = circle;
+  }
+
+  /** Current marker visibility 0..1 (read-only): dials by `coordKey` ("q,r"), badges by settlement id; absent = fully visible. */
+  markerVisibility(): { dials: Record<string, number>; badges: Record<string, number> } {
+    return { dials: Object.fromEntries(this.dialVisibility), badges: Object.fromEntries(this.badgeVisibility) };
   }
 
   private hideUnusedIcons() {
@@ -4428,6 +5631,7 @@ export class HexMapRenderer {
     if (label.style !== style) label.style = style;
     label.scale.set(scale);
     label.alpha = 1;
+    label.tint = 0xffffff;
     this.labelsUsed++;
     return label;
   }
@@ -4435,6 +5639,17 @@ export class HexMapRenderer {
   /** Current camera zoom — for the zoom-transition debug panel's live readout and e2e assertions on camera continuity. `camera` itself stays private. */
   get cameraZoom(): number {
     return this.camera.zoom;
+  }
+
+  /**
+   * True while the founding transition (animateCameraTo) is still easing the
+   * camera toward the new settlement — every hex's screen point
+   * (`hexCenterScreen`) is still moving. e2e founding helpers wait for this to
+   * clear before reading a hex's screen point to click it, rather than racing
+   * the ease. `cameraAnim` itself stays private.
+   */
+  get cameraAnimating(): boolean {
+    return this.cameraAnim !== null;
   }
 
   /**
@@ -4477,6 +5692,39 @@ export class HexMapRenderer {
     this.camera = { ...this.camera, x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
     this.applyCameraTransform();
     this.rebuildAll();
+  }
+
+  /**
+   * Slides the map so everything drawn on it moves (dx, dy) screen px: eased over `durationMs`, or
+   * at once when that is 0. The ring menu uses it to bring a tile near an edge to where its ring
+   * fits as a circle (MapView's onHexClick). False when the camera cannot move (a locked camera).
+   */
+  panScreenBy(dx: number, dy: number, durationMs = 0): boolean {
+    if (!this.app || this.lockCamera) return false;
+    if (dx === 0 && dy === 0) return true;
+    const to = { ...this.camera, x: this.camera.x - dx / this.camera.zoom, y: this.camera.y - dy / this.camera.zoom };
+    this.cameraTouched = true;
+    if (durationMs > 0) {
+      this.animateCameraTo(to, durationMs);
+    } else {
+      this.cameraAnim = null;
+      this.camera = to;
+      this.applyCameraTransform();
+      this.rebuildAll();
+    }
+    return true;
+  }
+
+  /**
+   * Resolves once the renderer has drawn a frame after this call (at once if it is not mounted). Two animation frames are no
+   * guarantee of one: the render loop is paced when its frames are expensive (see `framePacing.ts`), so a spec that has to
+   * look at what was drawn - a screenshot after `forceRebuild` - waits for this instead of counting `requestAnimationFrame`s.
+   */
+  whenFrameRendered(): Promise<void> {
+    const ticker = this.app?.ticker;
+    if (!ticker) return Promise.resolve();
+    // After the render, which the Application runs at LOW.
+    return new Promise((resolve) => ticker.addOnce(() => resolve(), undefined, UPDATE_PRIORITY.UTILITY));
   }
 
   /**
@@ -4587,25 +5835,57 @@ export class HexMapRenderer {
   }
 
   /**
-   * Fog v2 (docs/design/map-fog-v2.md §2.4/§3): hands the renderer a freshly
-   * fetched (or, in demo mode, generated) mask bitmap for a world of the
-   * given `radius`. `radius` picks the same world-to-mask-UV placement
-   * (worldMaskBounds, mirroring the backend's FogMaskLayout.WorldBounds) on
-   * every call, so this is cheap to call again even when only the texture
-   * itself changed. `bitmap` null is a no-op — both fog layers already
-   * default an unbound mask to fully-unknown, so there's nothing useful to
-   * do before the first real fetch resolves.
+   * Hands in the under-construction dials (`constructionDialsFromQueue`).
+   * Like `setRangeOverlay`, this only stores the data; `drawHighlight` redraws
+   * the animated progress every tick (settlement mode only). `null` clears.
    */
-  setFogMask(radius: number, bitmap: ImageBitmap | null) {
+  setConstructionDials(dials: ConstructionDial[] | null) {
+    const merged = retainFinishingDials(this.constructionDials ?? [], dials ?? [], Date.now());
+    this.constructionDials = merged.length > 0 ? merged : null;
+  }
+
+  /**
+   * The server refused a build that was shown optimistically: the "…" dial on
+   * `coord` shakes, then shrinks and fades (`dialRejectFrame`) even though its
+   * pending order is already gone from the queue.
+   */
+  rejectConstructionDial(coord: AxialCoord) {
+    const rest = (this.constructionDials ?? []).filter((d) => d.coord.q !== coord.q || d.coord.r !== coord.r);
+    this.constructionDials = [...rest, { coord, startMs: null, endMs: null, rejectedAtMs: Date.now() }];
+  }
+
+  /**
+   * Screen position (the space `hexCenterScreen` reports in) of the middle of
+   * the construction dial over `coord`: the hex's centre lifted by the same
+   * `CONSTRUCTION_DIAL_LIFT` `drawConstructionDials` uses, so an HTML overlay
+   * (the queue card's flying token) starts exactly where the dial is drawn.
+   */
+  dialScreenPoint(coord: AxialCoord): { x: number; y: number } {
+    const grid = isoGridPosition(coord, TILE_W, TILE_H);
+    return this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET - CONSTRUCTION_DIAL_LIFT });
+  }
+
+  /**
+   * Fog v2 (docs/design/map-fog-v2.md §2.4/§3): hands the renderer a freshly
+   * fetched (or, in demo mode, generated) mask bitmap and the texel
+   * rectangle it covers — the chunk window a live mask is stitched into, or
+   * the whole demo world (`worldMaskBounds`). The placement is derived from
+   * `bounds` on every call, so this is cheap to call again even when only the
+   * texture itself changed, and the previous texture keeps its own placement
+   * for the cross-fade (FogMaskLayer.setMaskTexture). Ground outside `bounds`
+   * reads as fully unknown (fogShader.ts's sampleMask) — §3's default for a
+   * chunk that isn't loaded. `bitmap` null is a no-op — both fog layers
+   * already default an unbound mask to fully-unknown, so there's nothing
+   * useful to do before the first real fetch resolves.
+   */
+  setFogMask(bounds: MaskBounds, bitmap: ImageBitmap | null) {
     if (!bitmap) return;
 
-    const placement = fogMaskPlacement(radius, TILE_W, TILE_H);
-    this.blackFogLayer.setPlacement(placement);
-    this.whiteMistLayer.setPlacement(placement);
+    const placement = fogMaskPlacement(bounds, TILE_W, TILE_H);
 
     const texture = Texture.from(bitmap);
-    this.blackFogLayer.setMaskTexture(texture);
-    this.whiteMistLayer.setMaskTexture(texture);
+    this.blackFogLayer.setMaskTexture(texture, placement);
+    this.whiteMistLayer.setMaskTexture(texture, placement);
 
     // Both layers now hold `texture` as their current mask and the previous
     // one as uMaskPrev, mid cross-fade (FogMaskLayer.setMaskTexture, §2.6).
@@ -4615,6 +5895,42 @@ export class HexMapRenderer {
     this.previousFogMaskTexture?.destroy(true);
     this.previousFogMaskTexture = this.fogMaskTexture;
     this.fogMaskTexture = texture;
+  }
+
+  /**
+   * Registers who wants to know which fog chunks the camera sees (the world
+   * store's `requestFogViewport`). Called with the current rectangle at once
+   * and again whenever it changes — chunk-granular, so a pan inside one
+   * chunk costs nothing — never per frame. Pass `null` to unregister.
+   */
+  setFogViewportListener(listener: ((range: ChunkRange) => void) | null) {
+    this.fogViewportListener = listener;
+    this.lastFogViewportRange = null;
+    this.notifyFogViewport();
+  }
+
+  private fogViewportListener: ((range: ChunkRange) => void) | null = null;
+  private lastFogViewportRange: ChunkRange | null = null;
+
+  /**
+   * The chunk rectangle under the camera, from the same texel maths as the
+   * mask placement (u = world x / (0.75 tile width), v = 2 * world y / tile
+   * height — half-texel corrections omitted: the window's margin is far
+   * bigger than that). Reported only when it changes.
+   */
+  private notifyFogViewport() {
+    if (!this.fogViewportListener || this.viewport.width <= 0 || this.viewport.height <= 0) return;
+    const rect = visibleWorldRect(this.camera, this.viewport);
+    const colPitch = 0.75 * TILE_W;
+    const range = chunkRangeOfTexels(
+      rect.minX / colPitch,
+      rect.maxX / colPitch,
+      (2 * rect.minY) / TILE_H,
+      (2 * rect.maxY) / TILE_H,
+    );
+    if (rangesEqual(range, this.lastFogViewportRange)) return;
+    this.lastFogViewportRange = range;
+    this.fogViewportListener(range);
   }
 
   /** World-space centre of a hex's top face — `hexCenterScreen` before the camera transform. */
@@ -4912,7 +6228,7 @@ export class HexMapRenderer {
     // §1c: pushed every tick, independent of any mask fetch — see
     // FogMaskLayer.setArmyVisionSources's own remarks on why this stays out
     // of the cached mask texture entirely.
-    const armyVisionRadiusWorld = ARMY_VISION_RADIUS_HEXES * TILE_W;
+    const armyVisionRadiusWorld = (ARMY_VISION_RADIUS_HEXES + Math.max(0, overlay.visionBonusRings ?? 0)) * TILE_W;
     this.blackFogLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
     this.whiteMistLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
 
@@ -4957,6 +6273,14 @@ export class HexMapRenderer {
   }
 
   /**
+   * Switches the world map's camp paw symbols on or off (`showCampMarkers`). Unlike `updateOptions` it does not
+   * re-aim the camera or rebuild the terrain: world mode redraws its markers every tick.
+   */
+  setShowCampMarkers(show: boolean) {
+    this.options = { ...this.options, showCampMarkers: show };
+  }
+
+  /**
    * The zoom-driven world<->settlement transition (docs/design/
    * zoom-transition.md §4/§8) — a level-of-detail switch only: `mode`
    * changes, nothing about `settlementId`/the camera does, which is what
@@ -4988,6 +6312,7 @@ export class HexMapRenderer {
       // is the only thing that ever sets or refreshes them).
       this.syncSpriteLayer(this.terrainBase, new Map());
       this.syncSpriteLayer(this.terrainTop, new Map());
+      this.syncBogEdgeGraphics([], []);
       this.topAnimState.clear();
       this.blackFogLayer.setArmyVisionSources([], 0);
       this.whiteMistLayer.setArmyVisionSources([], 0);
@@ -5006,6 +6331,13 @@ export class HexMapRenderer {
     this.options.mode = mode;
     this.idleDrift = mode === 'world';
     this.waterLayer.setMode(mode);
+    // World mode draws no sea tiles, so nothing is dry there.
+    this.waterDryEntries = [];
+    this.bogLakeEntries = [];
+    if (mode === 'world') {
+      this.waterLayer.setDryTexture(null);
+      this.bogLakeLayer.setLake(null, null);
+    }
     // Reinsert every layer in the new mode's order — addChild only moves a
     // single already-parented child to the end, it doesn't reorder the rest
     // (see worldLayerOrder's own doc comment on why the water mesh's
@@ -5036,8 +6368,11 @@ export class HexMapRenderer {
     // Otherwise a zoom gesture still settling when the renderer goes away
     // would fire its rebuild into a torn-down app (see noteZoomActivity).
     this.endZoomActivity();
+    this.dropPendingTap();
     this.pinch.clear();
     this.app?.ticker.remove(this.onTick);
+    this.detachFramePacing?.();
+    this.detachFramePacing = undefined;
     // app.destroy({ children: true }) destroys everything still attached to
     // the stage, but the fog layers' meshes are — see mount()'s addChild —
     // so this covers them too; only the mask textures they hold are
@@ -5049,6 +6384,11 @@ export class HexMapRenderer {
     this.blackFogLayer.destroy();
     this.whiteMistLayer.destroy();
     this.waterLayer.destroy();
+    this.waterDry.destroy();
+    this.bogLakeMask.destroy();
+    this.bogLakeLayer.destroy();
+    // The cached bog edge contexts are only borrowed by the pooled Graphics, so the stage teardown below won't free them.
+    this.clearBogEdgeCache();
     this.app?.destroy(false, { children: true });
     this.app = null;
   }
@@ -5071,6 +6411,19 @@ const NEIGHBOR_DIRS: AxialCoord[] = [
 // the realm's true outer edges get a border stroke, not every claimed
 // hex's full hexagon outline.
 const EDGE_FOR_DIR = [3, 2, 1, 0, 5, 4];
+
+/** Sort offset of a hex's front border edges in `terrainTop`: above its topping (+0 sprite, +0.5 overlay), below the next hex's. */
+const BORDER_FRONT_Z = 0.6;
+
+/** The two overlapping strokes (wide faint under thin solid) that fake the border glow, for the given corner-index edges. */
+function strokeBorderEdges(g: Graphics, top: { x: number; y: number }[], edges: readonly [number, number][], color: number) {
+  for (const edge of edges) {
+    const a = top[edge[0]];
+    const b = top[edge[1]];
+    g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
+    g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
+  }
+}
 
 /** Corner-index pairs (into isoTopPoints()) of a claimed hex's edges that face an unclaimed/rival neighbour. */
 function outerEdgesOf(worldModel: WorldModel, c: AxialCoord, ownerId: string): [number, number][] {

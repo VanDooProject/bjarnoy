@@ -95,11 +95,18 @@ public enum BuildRejection
     RequiredBuildingTooLow,
 
     /// <summary>
-    /// A shrine to this god already stands somewhere else on the island — a
-    /// settlement can raise all four gods' shrines, just never a second one
-    /// to the same god (see <see cref="BuildingCatalogue.GodOf"/>).
+    /// A shrine to this god already stands somewhere else on the island —
+    /// never a second one to the same god (see <see cref="BuildingCatalogue.GodOf"/>).
     /// </summary>
     ShrineGodAlreadyOnIsland,
+
+    /// <summary>
+    /// A shrine (of any god, see <see cref="BuildingCatalogue.GodOf"/>) was
+    /// ordered on a new hex while this settlement already holds one — standing
+    /// or queued. A settlement raises at most one shrine in total; levelling
+    /// the existing shrine is never refused for this reason.
+    /// </summary>
+    SettlementAlreadyHasShrine,
 
     /// <summary>
     /// PumpkinFarm was ordered on a Wheat-soil island — it's the bonus crop
@@ -121,11 +128,47 @@ public enum BuildRejection
     TowerLimitReached,
 
     /// <summary>
-    /// An additional Storage House was ordered while the settlement's best one
-    /// is below <see cref="BuildingCatalogue.AdditionalStorageHouseLevel"/>.
+    /// An additional Storage House was ordered while the settlement does not yet
+    /// hold the houses at the level <see cref="BuildingCatalogue.AdditionalStorageHouseRequirement"/> asks for.
     /// The first storage house and upgrades are never refused for this reason.
     /// </summary>
     StorageHouseTooLow,
+
+    /// <summary>
+    /// A wildlife camp stands on the hex — never buildable while the camp is there. Every camp
+    /// counts as guarded for now (no clearing yet), see <c>docs/design/wildlife-camps.md</c>.
+    /// </summary>
+    HexOccupiedByCamp,
+
+    /// <summary>
+    /// A palisade (or gate) would leave some wall hex with three or more wall neighbours: walls never branch
+    /// (<see cref="Palisades.PalisadeRules"/>).
+    /// </summary>
+    PalisadeWouldBranch,
+
+    /// <summary>
+    /// A gate was ordered where its piece would not resolve to a straight (or where placing it would turn a neighbouring gate): a gate only
+    /// stands between two opposite wall hexes.
+    /// </summary>
+    GateNotOnStraight,
+
+    /// <summary>
+    /// A bridge was ordered on a river hex that is not a wide river (a stream, or a river tile the army already crosses): bridges are
+    /// for the impassable wide rivers only.
+    /// </summary>
+    BridgeNeedsWideRiver,
+
+    /// <summary>
+    /// A new building of a type that is switched off for placement (<see cref="BuildingCatalogue.NewPlacementDisabled"/>, currently the
+    /// Quarry) was ordered. Upgrading one that already stands is never refused for this reason.
+    /// </summary>
+    NewPlacementDisabled,
+
+    /// <summary>
+    /// An Utgard wall hex or a Jötun watchtower stands on the hex — never buildable (<c>docs/design/endgame.md</c>). Rubble of a
+    /// breached wall counts: the hex stays taken.
+    /// </summary>
+    HexOccupiedByEndgameSite,
 }
 
 /// <summary>The outcome of asking to build something.</summary>

@@ -4,10 +4,11 @@ import type { Router, RouteLocationRaw } from 'vue-router';
  * Every route that renders as a modal over whatever page was showing before
  * — see App.vue's background-route pattern and RouteModal.vue's dialog
  * chrome. `own-profile`/`profile` were the first (ProfileModal.vue);
- * `leaderboards`/`guild` reuse the exact same pattern instead of rendering
- * as full pages through `<router-view>`.
+ * `leaderboards`/`guild` and the battle-reports inbox (`reports`/
+ * `report-detail`) reuse the exact same pattern instead of rendering as
+ * full pages through `<router-view>`.
  */
-export const MODAL_ROUTE_NAMES = ['own-profile', 'profile', 'leaderboards', 'guild'] as const;
+export const MODAL_ROUTE_NAMES = ['own-profile', 'profile', 'leaderboards', 'guild', 'reports', 'report-detail'] as const;
 
 export type ModalRouteName = (typeof MODAL_ROUTE_NAMES)[number];
 
@@ -45,4 +46,14 @@ export function modalLocation(router: Router, path: string): RouteLocationRaw {
     path,
     state: backgroundView ? { backgroundView } : undefined,
   };
+}
+
+/**
+ * The reports inbox (the list, or one report's detail) as a modal location
+ * — see `modalLocation`. List -> detail and back stay on modal routes, so
+ * they keep the original background rather than stacking the list behind
+ * the detail.
+ */
+export function reportsLocation(router: Router, reportId?: string): RouteLocationRaw {
+  return modalLocation(router, reportId ? `/reports/${reportId}` : '/reports');
 }

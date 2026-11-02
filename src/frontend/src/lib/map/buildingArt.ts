@@ -10,6 +10,7 @@
 // level for yet (e.g. `hut`/vikinghut isn't in showcase at all) fall back
 // to the older, lower-res per-level hextiles/ PNG.
 import { findAtlasFrame, findAtlasClip, type AtlasClip, type AtlasFrameRect } from './atlas';
+import { TILE_ORIENTATIONS as TILE_DIRECTIONS, type TileOrientation } from './types';
 
 /** Either a showcase atlas frame (preferred) or a plain PNG URL fallback — <AtlasSprite>/<img> render either uniformly. */
 export type ArtRef = { kind: 'atlas'; frame: AtlasFrameRect } | { kind: 'png'; url: string };
@@ -20,6 +21,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   shrineofthor: 'torshrine',
   shrineoffreyja: 'freyjashrine',
   shrineofullr: 'ullrshrine',
+  odinstatue: 'odinstatue',
   shrineofnjord: 'njordshrine',
   // `farm_crop` is the legacy, non-scripted family (VanDooProject/3d_assets'
   // asset-inventory.md: "Legacy, non-scripted... its lowest level used to be
@@ -28,7 +30,8 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   // levels up) — doesn't replace Pumpkin Farm's own `farm_pumpkin` family,
   // which stays legacy for now.
   farm: 'farm',
-  tower: 'towerbuilding',
+  reindeerherder: 'reindeerherder',
+  tower: 'stavetower',
   // The docs preview always shows the corrie landform, one of the two the
   // pack carves a quarry into — see the docs page's own variant picker for
   // the saddleback alternative (`quarry_saddleback`, resolved directly by
@@ -38,14 +41,14 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   lumberjack: 'lumberjack',
   storagehouse: 'storagebuilding',
   archeryrange: 'archeryrange',
+  siegeworkshop: 'siegeworkshop',
   dockyard: 'dockyard',
   greatstorehouse: 'bigstoragehouse',
   barracks: 'barracks',
-  fisherhut: 'fisherhut',
   // Fishing Hut used to fall back to a legacy single-level composite
   // (`fishinghutbuilding`, no per-level art) — the pack's real, leveled
-  // fisherman's-hut art (already used for the separate FisherHut building)
-  // is the newer, better look, so both share the same family now.
+  // fisherman's-hut art (the `fisherhut` art family, which was once also a
+  // separate building) is the newer, better look.
   fishinghut: 'fisherhut',
   // A Sawmill is never actually on plain ground (placing one requires a
   // river shape — BuildingCatalogue.SawmillRiverShapes), so the preview
@@ -61,11 +64,19 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   druidhut: 'druidhut',
   cartworkshop: 'cartworkshop',
   claybrickworks: 'claybrickworks',
+  bogoreworks: 'bogoreworks',
+  // The river hammer mill: a placeholder for the Hammer Forge on a bog creek (TODO(art): bog-creek Hammer Forge).
+  hammerschmiede: 'hammerschmiede',
+  // The wall set (3D_assets docs/wall-tiles.md): the preview shows the straight and the straight with its gate.
+  palisade: 'palisade_straight180',
+  palisadegate: 'palisade_gate180',
+  // The river bridge (3D_assets hextile135_riverbridge): the preview shows the straight crossing (undefined until the atlas has it).
+  bridge: 'riverbridge',
 };
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin,freyjashrine,storagebuilding,archeryrange,dockyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,stavetower,farm_pumpkin,freyjashrine,storagebuilding,archeryrange,dockyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
   { eager: true, import: 'default' },
 ) as Record<string, string>;
 
@@ -89,6 +100,8 @@ const TERRAIN_SHOWCASE_FAMILY: Record<string, string> = {
   grass: 'grasstile',
   forest: 'foresttile',
   mountain: 'mountaintile',
+  bog: 'bog',
+  lake: 'boglake',
 };
 
 /**
@@ -156,6 +169,30 @@ export function buildingArt(type: string, level = 1): ArtRef | undefined {
   const family = BUILDING_ART_FAMILIES[type];
   if (!family) return undefined;
   return buildingArtByFamily(family, level);
+}
+
+/**
+ * `buildingArt` for a building standing on `tile`: a Fishing Hut on a bog lake's half shore is the lake hut
+ * (`fisherhut_lake`), a Hammer Forge on a creek bend the bend mill (`hammerschmiede_bend`; the river mill is the
+ * placeholder art for now), a tower on sand, forest or plain bog moss the stave tower made for that ground. Everything else is `buildingArt`.
+ */
+export function buildingArtOnTile(
+  type: string,
+  level: number,
+  tile: { terrain?: string; bog?: { kind: string; inDirections: readonly TileOrientation[]; outDirection: TileOrientation | null } },
+): ArtRef | undefined {
+  if (type === 'tower' && tile.bog?.kind === 'bog') return buildingArtByFamily('stavetower_bog', level);
+  if (type === 'tower' && tile.terrain === 'forest') return buildingArtByFamily('stavetower_forest', level);
+  if (type === 'tower' && tile.terrain === 'sand') return buildingArtByFamily('stavetower_sand', level);
+  if (type === 'fishinghut' && tile.bog?.kind === 'half') return buildingArtByFamily('fisherhut_lake', level);
+  if (type === 'hammerschmiede' && tile.bog?.kind === 'creek') {
+    const straight =
+      tile.bog.inDirections[0] !== undefined &&
+      tile.bog.outDirection !== null &&
+      (TILE_DIRECTIONS.indexOf(tile.bog.inDirections[0]) + 3) % 6 === TILE_DIRECTIONS.indexOf(tile.bog.outDirection);
+    return buildingArtByFamily(straight ? 'hammerschmiede' : 'hammerschmiede_bend', level);
+  }
+  return buildingArt(type, level);
 }
 
 /**
@@ -260,6 +297,21 @@ export function terrainArt(terrain: string): ArtRef {
  */
 export function terrainArtByFamily(family: string, decorated = false): ArtRef {
   return terrainFamilyArt(family, decorated);
+}
+
+/**
+ * One decorated look of a terrain family — the flattened `_variantNNN`
+ * showcase frame (or loose PNG) — for a caller like the docs tiles page's
+ * sand look picker. Throws when the pack has no such look, the same as
+ * `terrainFamilyArt`.
+ */
+export function terrainVariantArt(family: string, variant: number): ArtRef {
+  const name = `${family}_SE_variant${String(variant).padStart(3, '0')}`;
+  const frame = findAtlasFrame('showcase', name);
+  if (frame) return { kind: 'atlas', frame };
+  const pngUrl = terrainPngByName[name];
+  if (!pngUrl) throw new Error(`buildingArt.ts: no terrain art for "${name}"`);
+  return { kind: 'png', url: pngUrl };
 }
 
 /** Art for coastal (shallow) water — a rendering variant of `sea`, not a `Terrain` of its own (see `Tile.isCoastalWater`), so it isn't reachable through `terrainArt`. */

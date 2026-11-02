@@ -10,6 +10,8 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { buildingName } from '../../i18n/catalogueNames';
 import type { ChecklistRow, ChecklistRowKey, OnboardingGuidance } from '../../lib/map/onboardingGuidance';
+import { useMediaQuery } from '../../composables/useMediaQuery';
+import { TOUCH_QUERY } from '../../lib/breakpoints';
 
 const props = defineProps<{
   guidance: OnboardingGuidance;
@@ -17,6 +19,7 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const isTouch = useMediaQuery(TOUCH_QUERY);
 
 function nameFor(key: ChecklistRowKey): string {
   return key === 'longhouse' ? t('landing.tray.longhouseName') : buildingName(key);
@@ -24,8 +27,9 @@ function nameFor(key: ChecklistRowKey): string {
 
 function subtextFor(row: ChecklistRow): string {
   if (row.state === 'done') return t('landing.tray.placed');
-  if (row.key === 'longhouse') return t('landing.tray.clickToPlace');
-  return props.hasFounded ? t('landing.tray.clickEmptyHex') : t('landing.tray.foundFirst');
+  if (row.key === 'longhouse') return isTouch.value ? t('landing.tray.tapToPlace') : t('landing.tray.clickToPlace');
+  if (!props.hasFounded) return t('landing.tray.foundFirst');
+  return isTouch.value ? t('landing.tray.tapEmptyHex') : t('landing.tray.clickEmptyHex');
 }
 </script>
 
@@ -125,10 +129,8 @@ function subtextFor(row: ChecklistRow): string {
   animation: checklist-tick 1.6s ease-in-out infinite;
   transform-origin: center;
 }
-@media (prefers-reduced-motion: reduce) {
-  .tray-item.current {
-    animation: none;
-  }
+html[data-hud-motion='reduced'] .tray-item.current {
+  animation: none;
 }
 .tray-item.current .name,
 .tray-item.current .sub {
@@ -196,6 +198,70 @@ function subtextFor(row: ChecklistRow): string {
     right: 12px;
     transform: none;
     width: min(340px, calc(100vw - 24px));
+  }
+}
+
+/* Short-landscape phones, slim strip: docked in the corner the tray still
+   stood ~150px tall, and at 667x375 the landfall plot (the island is
+   framed, not the plot) ended up under it, swallowing the founding tap.
+   Here the tray is one line instead of three: the current step's card on
+   the left, the step count on the right, and the progress bar as a thin
+   rule along the bottom edge. The title goes — the step count and the
+   card already say what it is. */
+@media (max-height: 500px) {
+  .tray {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px 10px;
+  }
+  .tray-title {
+    display: none;
+  }
+  .tray-header {
+    order: 2;
+    margin-bottom: 0;
+  }
+  .tray-rows {
+    order: 1;
+    flex: 1;
+    min-width: 0;
+  }
+  .tray-progress {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 4px;
+    height: 3px;
+    margin-bottom: 0;
+  }
+  .tray-item {
+    gap: 8px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    min-width: 0;
+  }
+  .tray-item > div:last-child {
+    min-width: 0;
+  }
+  .dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+  }
+  .tray-item.done .dot {
+    font-size: 12px;
+  }
+  .name {
+    font-size: 13px;
+    line-height: 1.2;
+  }
+  .sub {
+    font-size: 11px;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 </style>

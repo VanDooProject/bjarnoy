@@ -83,27 +83,21 @@ public static class FogMaskLayout
     /// bounding box for a world of that <c>Radius</c> (see
     /// <see cref="WorldGenerationOptions.Radius"/>).
     /// </summary>
+    /// <remarks>
+    /// Closed form, O(1): with <c>u = q</c> and <c>v = 2r + q</c> (the odd-q
+    /// offset algebra collapses to that for every hex, negative or not), a
+    /// hex disc of radius R spans <c>u in [-R, R]</c> and
+    /// <c>v = r + (q + r) in [-2R, 2R]</c> — the extremes are hit at
+    /// <c>(q, r) = (+-R, 0)</c> and <c>(0, +-R)</c>. Walking the disc
+    /// instead would be ~48M hexes at radius 4000.
+    /// </remarks>
     public static MaskBounds WorldBounds(int radius)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(radius);
 
-        var minU = int.MaxValue;
-        var minV = int.MaxValue;
-        var maxU = int.MinValue;
-        var maxV = int.MinValue;
-
-        foreach (var hex in HexCoord.Origin.WithinRadius(radius))
-        {
-            var texel = ToTexel(hex);
-            minU = Math.Min(minU, texel.U);
-            minV = Math.Min(minV, texel.V);
-            maxU = Math.Max(maxU, texel.U);
-            maxV = Math.Max(maxV, texel.V);
-        }
-
         // Every even-parity texel needs its odd-parity interpolation
         // neighbours available too, so the box grows by one texel on every
         // side of the tight hex bound.
-        return new MaskBounds(minU - 1, minV - 1, maxU + 2, maxV + 2);
+        return new MaskBounds(-radius - 1, (-2 * radius) - 1, radius + 2, (2 * radius) + 2);
     }
 }

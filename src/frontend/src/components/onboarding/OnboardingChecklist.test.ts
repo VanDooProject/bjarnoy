@@ -20,7 +20,7 @@ function mountChecklist(hasFounded: boolean, placedTypes: string[] = []) {
 describe('OnboardingChecklist', () => {
   it('shows real building names, not a generic "Building N"', () => {
     const wrapper = mountChecklist(true, ['longhouse']);
-    expect(wrapper.text()).toContain('Farm');
+    expect(wrapper.text()).toContain('Reindeer Herder');
     expect(wrapper.text()).toContain('Lumberjack');
     expect(wrapper.text()).not.toContain('Building 2');
     expect(wrapper.text()).not.toContain('Building 3');
@@ -37,14 +37,14 @@ describe('OnboardingChecklist', () => {
     const wrapper = mountChecklist(true, ['longhouse', 'lumberjack']);
     const current = wrapper.findAll('.tray-item.current');
     expect(current).toHaveLength(1);
-    expect(current[0].text()).toContain('Farm');
+    expect(current[0].text()).toContain('Reindeer Herder');
   });
 
   it('a done row shows the checkmark styling and "Placed"', () => {
-    const wrapper = mountChecklist(true, ['longhouse', 'farm']);
+    const wrapper = mountChecklist(true, ['longhouse', 'reindeerherder']);
     const done = wrapper.findAll('.tray-item.done');
     expect(done).toHaveLength(2);
-    expect(done.some((row) => row.text().includes('Farm') && row.text().includes('Placed'))).toBe(true);
+    expect(done.some((row) => row.text().includes('Reindeer Herder') && row.text().includes('Placed'))).toBe(true);
   });
 
   it('before founding, guided rows point at founding first, not "click an empty hex"', () => {

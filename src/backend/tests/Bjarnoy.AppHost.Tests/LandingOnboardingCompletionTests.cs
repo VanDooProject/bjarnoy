@@ -31,29 +31,26 @@ namespace Bjarnoy.AppHost.Tests;
 /// backend's real claim radius at level 1 (<c>Settlement.ClaimRadius</c>)
 /// might reject depending on exactly where it lands.
 /// </remarks>
-public class LandingOnboardingCompletionTests
+public class LandingOnboardingCompletionTests(AppHostFixture fixture)
 {
     [Fact]
     public async Task CompletingBothGuidedBuildingsHandsOffToSettlementViaTheCompletionBanner()
     {
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(6)).Token;
 
-        var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Bjarnoy_AppHost>(cancellationToken);
-        appHost.Services.ConfigureHttpClientDefaults(clientBuilder => clientBuilder.AddStandardResilienceHandler());
-
-        await using var app = await appHost.BuildAsync(cancellationToken);
-        await app.StartAsync(cancellationToken);
-
-        var resourceNotifications = app.Services.GetRequiredService<ResourceNotificationService>();
-        await resourceNotifications.WaitForResourceHealthyAsync("api", cancellationToken);
-        await resourceNotifications.WaitForResourceHealthyAsync("frontend", cancellationToken);
+        await fixture.ResetAsync(cancellationToken);
+        var app = fixture.App;
+        var resourceNotifications = fixture.ResourceNotifications;
 
         var frontendUrl = app.GetEndpoint("frontend").ToString();
         using var apiClient = app.CreateHttpClient("api");
 
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
-        var page = await browser.NewPageAsync();
+        // Reduced motion, like OnboardingHappyPathTests: the "Name your jarl"
+        // nudge bobs (ProfileNudge.vue's nudge-bob), and Playwright never
+        // sees its "Later" button stable enough to click while it moves.
+        var page = await browser.NewPageAsync(new BrowserNewPageOptions { ReducedMotion = ReducedMotion.Reduce });
         var consoleErrors = page.CollectConsoleErrors();
 
         await LiveFrontendTestHelpers.FoundStartingSettlementAsync(page, frontendUrl);
@@ -72,7 +69,7 @@ public class LandingOnboardingCompletionTests
             $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
         var settlement = Assert.Single(settlements!);
 
-        // The two guided buildings the tray tracks (farm, lumberjack — see
+        // The two guided buildings the tray tracks (reindeerherder, lumberjack — see
         // LandingView.vue's GUIDED_BUILD_TERRAIN) each need their own
         // terrain, both guaranteed adjacent to any start position (see
         // LandingBuildQueueTests's own comment on WorldGenerator's
@@ -122,7 +119,7 @@ public class LandingOnboardingCompletionTests
 
         var queuedFarm = await apiClient.PostAsJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds",
-            new QueueBuildRequest("farm", grassTile.Q, grassTile.R),
+            new QueueBuildRequest("reindeerherder", grassTile.Q, grassTile.R),
             cancellationToken);
         queuedFarm.EnsureSuccessStatusCode();
 
@@ -152,15 +149,22 @@ public class LandingOnboardingCompletionTests
         var settlementAfterCompletion = await apiClient.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlement.Id}", cancellationToken);
         Assert.Empty(settlementAfterCompletion!.Queue);
-        Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "farm");
+        Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "reindeerherder");
         Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "lumberjack");
 
         // Onboarding is complete (both guided buildings actually standing —
         // onboardingGuidance.deriveOnboardingGuidance's `complete`) the
-        // moment both rows flip — the completion banner (OnboardingBanner.vue)
-        // replaces the checklist and its own explicit "Enter your
-        // settlement" button is what hands off to /settlement now.
+        // moment both rows flip. For an anonymous player the "Name your
+        // jarl" nudge is the one call to action first; the completion banner
+        // (OnboardingBanner.vue) and its "Enter your settlement" hand-off
+        // follow once the nudge is answered.
+        var profileNudge = page.GetByTestId("profile-nudge");
+        await Assertions.Expect(profileNudge).ToBeVisibleAsync(new() { Timeout = 10_000 });
         var completionBanner = page.GetByTestId("onboarding-banner");
+        await Assertions.Expect(completionBanner).ToHaveCountAsync(0);
+
+        await page.GetByTestId("profile-nudge-later").ClickAsync();
+        await Assertions.Expect(profileNudge).ToHaveCountAsync(0);
         await Assertions.Expect(completionBanner).ToBeVisibleAsync(new() { Timeout = 10_000 });
         await Assertions.Expect(completionBanner).ToContainTextAsync("All three placed.");
 

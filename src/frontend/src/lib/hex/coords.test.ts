@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hexDistance, hexEuclideanDistance, hexesInRadius } from './coords';
+import { hexDistance, hexEuclideanDistance, hexesInRadius, hexRing } from './coords';
 
 describe('hexEuclideanDistance', () => {
   // The whole point of this metric over hexDistance is the *shape* of its
@@ -57,5 +57,27 @@ describe('hexEuclideanDistance', () => {
       hexEuclideanDistance({ q: -1, r: 4 }, { q: 3, r: -2 }),
       10,
     );
+  });
+});
+
+describe('hexRing', () => {
+  it('is the single hex itself at radius 0', () => {
+    expect(hexRing({ q: 3, r: -2 }, 0)).toEqual([{ q: 3, r: -2 }]);
+  });
+
+  it.each([1, 2, 5, 17])('holds exactly the 6r hexes at distance r (r = %i), each once', (radius) => {
+    const centre = { q: -4, r: 9 };
+    const ring = hexRing(centre, radius);
+    expect(ring).toHaveLength(6 * radius);
+    expect(new Set(ring.map((c) => `${c.q},${c.r}`)).size).toBe(6 * radius);
+    for (const c of ring) expect(hexDistance(centre, c)).toBe(radius);
+  });
+
+  it('rings 0..r together are exactly the disc of radius r', () => {
+    const centre = { q: 2, r: 2 };
+    const fromRings = new Set<string>();
+    for (let radius = 0; radius <= 8; radius++) for (const c of hexRing(centre, radius)) fromRings.add(`${c.q},${c.r}`);
+    const disc = new Set(hexesInRadius(centre, 8).map((c) => `${c.q},${c.r}`));
+    expect(fromRings).toEqual(disc);
   });
 });

@@ -1,4 +1,5 @@
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
 
 namespace Bjarnoy.Domain.Tests;
@@ -22,9 +23,10 @@ public class UnitCatalogueTests
 
     [Theory]
     [InlineData(UnitType.Thrall, 1, true)]
-    [InlineData(UnitType.Spearman, 1, true)]
-    [InlineData(UnitType.Axeman, 2, false)]
-    [InlineData(UnitType.Axeman, 3, true)]
+    [InlineData(UnitType.Spearman, 4, false)]
+    [InlineData(UnitType.Spearman, 5, true)]
+    [InlineData(UnitType.Axeman, 5, false)]
+    [InlineData(UnitType.Axeman, 6, true)]
     public void A_unit_with_no_prerequisite_is_gated_only_by_longhouse_level(
         UnitType type, int longhouseLevel, bool expectedAvailable)
     {
@@ -34,30 +36,33 @@ public class UnitCatalogueTests
     [Fact]
     public void A_unit_with_a_prerequisite_needs_both_its_own_and_the_prerequisites_longhouse_level()
     {
-        // Berserker itself needs longhouse 6, but Axeman (its prerequisite)
-        // needs longhouse 3 — both must be satisfied, so a high-enough
+        // Berserker itself needs longhouse 20, and Axeman (its prerequisite)
+        // needs longhouse 6 — both must be satisfied, so a high-enough
         // longhouse alone is not tested here, only the composed rule.
-        Assert.False(UnitCatalogue.IsAvailable(UnitType.Berserker, 5));
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.Berserker, 6));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Berserker, 19));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Berserker, 20));
     }
 
     [Fact]
     public void A_chained_prerequisite_recurses_through_every_link()
     {
-        // Catapult requires Berserker, which requires Axeman. At longhouse 10
+        // Catapult requires Berserker, which requires Axeman. At longhouse 20
         // every link in the chain is satisfied.
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.Catapult, 10));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Catapult, 20));
 
-        // At longhouse 6, Berserker itself is available (needs 6) but
-        // Catapult additionally needs longhouse 10 for itself.
-        Assert.False(UnitCatalogue.IsAvailable(UnitType.Catapult, 6));
+        // Below 20 Berserker is not available, so neither is Catapult, even
+        // though Axeman (the chain's first link, longhouse 6) is.
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Axeman, 19));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Catapult, 19));
     }
 
     [Fact]
     public void Longship_requires_karve_to_be_available_first()
     {
-        Assert.False(UnitCatalogue.IsAvailable(UnitType.Longship, 7));
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.Longship, 8));
+        // The Karve is available from longhouse 8 (its Dockyard), but the Longship is an elite unit (longhouse 20).
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Karve, 8));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Longship, 19));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Longship, 20));
     }
 
     [Fact]
@@ -69,39 +74,39 @@ public class UnitCatalogueTests
 
         // No buildingLevelOf lookup: old longhouse-only behavior, unaffected
         // by the new training-building gate.
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.Bowman, 4));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Bowman, 9));
 
         // With a lookup, an absent Archery Range blocks a land unit even
         // though the longhouse is high enough.
-        Assert.False(UnitCatalogue.IsAvailable(UnitType.Bowman, 4, _ => 0));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Bowman, 9, _ => 0));
         Assert.True(UnitCatalogue.IsAvailable(
-            UnitType.Bowman, 4, t => t == BuildingType.ArcheryRange ? 1 : 0));
+            UnitType.Bowman, 9, t => t == BuildingType.ArcheryRange ? 1 : 0));
     }
 
     [Fact]
     public void A_basic_melee_unit_needs_a_barracks_when_a_building_lookup_is_supplied()
     {
         // Spearman is the basic melee slice of the roster — gated on
-        // Barracks, not ArcheryRange (which now only trains Bowman/Catapult).
+        // Barracks, not ArcheryRange (which now only trains the Bowman).
 
         // No buildingLevelOf lookup: old longhouse-only behavior, unaffected
         // by the new training-building gate.
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.Spearman, 1));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Spearman, 5));
 
         // With a lookup, an absent Barracks blocks a land unit even though
         // the longhouse is high enough.
-        Assert.False(UnitCatalogue.IsAvailable(UnitType.Spearman, 1, _ => 0));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Spearman, 5, _ => 0));
         Assert.True(UnitCatalogue.IsAvailable(
-            UnitType.Spearman, 1, t => t == BuildingType.Barracks ? 1 : 0));
+            UnitType.Spearman, 5, t => t == BuildingType.Barracks ? 1 : 0));
     }
 
     [Fact]
     public void A_ship_needs_a_dockyard_when_a_building_lookup_is_supplied()
     {
-        Assert.True(UnitCatalogue.IsAvailable(UnitType.Karve, 5));
-        Assert.False(UnitCatalogue.IsAvailable(UnitType.Karve, 5, _ => 0));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Karve, 8));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Karve, 8, _ => 0));
         Assert.True(UnitCatalogue.IsAvailable(
-            UnitType.Karve, 5, t => t == BuildingType.Dockyard ? 1 : 0));
+            UnitType.Karve, 8, t => t == BuildingType.Dockyard ? 1 : 0));
     }
 
     [Fact]
@@ -126,9 +131,9 @@ public class UnitCatalogueTests
     public void The_basic_melee_and_thrall_roster_requires_a_barracks()
     {
         // Barracks (BuildingType.Barracks) trains the basic melee slice of
-        // the land roster plus Thrall; ArcheryRange keeps the archer/siege
-        // slice (Bowman, Catapult), and Cart Workshop trains the rest of the
-        // civilian roster (Provisioner, SettlerCrew). Documents that split
+        // the land roster plus Thrall; ArcheryRange keeps the archer
+        // (Bowman), SiegeWorkshop the siege engines (Catapult, Ram), and Cart Workshop trains the rest of the
+        // civilian roster (Provisioner, Settler). Documents that split
         // so a future roster change updates this test deliberately rather
         // than by accident.
         Assert.Equal(
@@ -139,21 +144,155 @@ public class UnitCatalogueTests
     }
 
     [Fact]
-    public void The_catapult_has_a_positive_siege_power_and_nothing_else_does()
+    public void The_catapult_the_ram_and_the_ships_have_a_positive_siege_power_and_nothing_else_does()
     {
-        // Only the Catapult contributes to SiegeResolver's building-damage
-        // math (issue #40 phase 5) — every other unit type is 0.
+        // Only these contribute to SiegeResolver's building-damage math (catapult and ram on land, the ships when a
+        // fleet attack hits a shore building) — every other unit type is 0.
         foreach (var type in UnitCatalogue.AllTypes)
         {
             var definition = UnitCatalogue.Get(type);
-            if (type == UnitType.Catapult)
+            if (type is UnitType.Catapult or UnitType.Ram || definition.Class == UnitClass.Ship)
             {
-                Assert.True(definition.SiegePower > 0, "the Catapult must have a positive siege power");
+                Assert.True(definition.SiegePower > 0, $"{type} must have a positive siege power");
             }
             else
             {
                 Assert.Equal(0, definition.SiegePower);
             }
+        }
+    }
+
+    [Fact]
+    public void The_thrall_costs_no_iron_and_every_other_unit_costs_iron()
+    {
+        // docs/design/economy.md section 8: iron is an indirect gate for the army.
+        Assert.Equal(0, UnitCatalogue.Get(UnitType.Thrall).TrainingCost.Iron);
+        foreach (var type in UnitCatalogue.AllTypes.Where(t => t != UnitType.Thrall))
+        {
+            Assert.True(UnitCatalogue.Get(type).TrainingCost.Iron > 0, $"{type} costs no iron");
+        }
+    }
+
+    [Fact]
+    public void A_units_longhouse_gate_is_never_below_the_unlock_level_of_the_building_that_trains_it()
+    {
+        // The Thrall is the one exception: it has no Longhouse gate of its own (1), its Barracks (LH 5) is the gate.
+        foreach (var type in UnitCatalogue.AllTypes.Where(t => t != UnitType.Thrall))
+        {
+            var definition = UnitCatalogue.Get(type);
+            Assert.True(
+                definition.RequiredLonghouseLevel >= BuildingCatalogue.UnlockLevel(definition.RequiredBuildingType),
+                $"{type} (LH {definition.RequiredLonghouseLevel}) unlocks before its {definition.RequiredBuildingType} "
+                + $"(LH {BuildingCatalogue.UnlockLevel(definition.RequiredBuildingType)})");
+        }
+    }
+
+    [Theory]
+    [InlineData(UnitType.Thrall, 1)]
+    [InlineData(UnitType.Spearman, 5)]
+    [InlineData(UnitType.Axeman, 6)]
+    [InlineData(UnitType.Karve, 8)]
+    [InlineData(UnitType.Bowman, 9)]
+    [InlineData(UnitType.Provisioner, 10)]
+    [InlineData(UnitType.Settler, 10)]
+    [InlineData(UnitType.Berserker, 20)]
+    [InlineData(UnitType.Catapult, 20)]
+    [InlineData(UnitType.Ram, 20)]
+    [InlineData(UnitType.Longship, 20)]
+    public void Unit_gates_follow_the_building_ladder(UnitType type, int longhouseLevel)
+    {
+        Assert.Equal(longhouseLevel, UnitCatalogue.Get(type).RequiredLonghouseLevel);
+    }
+
+    [Fact]
+    public void Only_the_first_spearmen_run_on_the_longhouse_trickle_everything_else_waits_for_the_bog_ore_works()
+    {
+        // The Longhouse trickle is the only iron before the bog-ore works (LH 3): the Thrall needs none and the Barracks'
+        // first Spearman (LH 5) is what the trickle carries; every other iron unit opens with or after the bog-ore works.
+        var bogOre = BuildingCatalogue.UnlockLevel(BuildingType.BogOreWorks);
+        foreach (var type in UnitCatalogue.AllTypes.Where(t => t is not (UnitType.Thrall or UnitType.Spearman)))
+        {
+            Assert.True(UnitCatalogue.Get(type).RequiredLonghouseLevel >= bogOre, $"{type} opens before the bog-ore works");
+        }
+    }
+
+    [Fact]
+    public void The_elite_units_open_where_the_hammerschmiede_does()
+    {
+        var hammer = BuildingCatalogue.UnlockLevel(BuildingType.Hammerschmiede);
+        foreach (var type in new[] { UnitType.Berserker, UnitType.Catapult, UnitType.Ram, UnitType.Longship })
+        {
+            Assert.Equal(hammer, UnitCatalogue.Get(type).RequiredLonghouseLevel);
+        }
+    }
+
+    [Fact]
+    public void A_unit_never_opens_before_its_prerequisite_unit()
+    {
+        foreach (var type in UnitCatalogue.AllTypes)
+        {
+            var definition = UnitCatalogue.Get(type);
+            if (definition.RequiredUnitType is { } prerequisite)
+            {
+                Assert.True(definition.RequiredLonghouseLevel >= UnitCatalogue.Get(prerequisite).RequiredLonghouseLevel);
+            }
+        }
+    }
+
+    [Fact]
+    public void The_ram_is_a_slower_sturdier_catapult_with_the_same_siege_power()
+    {
+        var ram = UnitCatalogue.Get(UnitType.Ram);
+        var catapult = UnitCatalogue.Get(UnitType.Catapult);
+
+        Assert.Equal("ram", UnitType.Ram.ToWireName());
+        Assert.Equal(UnitClass.Siege, ram.Class);
+        Assert.Equal(10, ram.Attack);
+        Assert.Equal(30, ram.Defense);
+        Assert.Equal(1.0, ram.Speed);
+        Assert.True(ram.Speed < catapult.Speed);
+        Assert.Equal(catapult.SiegePower, ram.SiegePower);
+        Assert.Equal(0, ram.CarryCapacity);
+        Assert.Equal(3, ram.UpkeepPerHour);
+        Assert.Equal(new ResourceAmounts(Wood: 400, Stone: 100, Food: 40, Iron: 150), ram.TrainingCost);
+        Assert.Equal(TimeSpan.FromHours(1), ram.TrainingDuration);
+        Assert.Equal(UnitType.Berserker, ram.RequiredUnitType);
+        Assert.Equal(BuildingType.SiegeWorkshop, ram.RequiredBuildingType);
+    }
+
+    [Fact]
+    public void The_siege_workshop_trains_the_ram_and_the_archery_range_does_not()
+    {
+        // The ram needs a Siege Workshop standing (its Berserker prerequisite a Barracks); an Archery Range, which keeps
+        // the bowman and the catapult, is not enough.
+        int Standing(BuildingType trains, BuildingType t) => t == trains || t == BuildingType.Barracks ? 1 : 0;
+
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Ram, 20, t => Standing(BuildingType.ArcheryRange, t)));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Ram, 20, t => Standing(BuildingType.SiegeWorkshop, t)));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Catapult, 20, t => Standing(BuildingType.ArcheryRange, t)));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Catapult, 20, t => Standing(BuildingType.SiegeWorkshop, t)));
+    }
+
+    [Fact]
+    public void Siege_engines_carry_what_they_can_damage_and_nothing_else_does()
+    {
+        Assert.Equal(SiegeTargets.Towers | SiegeTargets.Buildings, UnitCatalogue.Get(UnitType.Catapult).SiegeTargets);
+        Assert.Equal(SiegeTargets.Walls | SiegeTargets.Towers, UnitCatalogue.Get(UnitType.Ram).SiegeTargets);
+        foreach (var type in UnitCatalogue.AllTypes.Where(t => UnitCatalogue.Get(t).SiegePower == 0))
+        {
+            Assert.Equal(SiegeTargets.None, UnitCatalogue.Get(type).SiegeTargets);
+        }
+    }
+
+    [Fact]
+    public void The_ships_can_damage_walls_towers_and_buildings()
+    {
+        // A fleet damages whatever shore building it was sent at (SiegeResolver.LevelsTakenFrom still caps a wall or bridge at one level).
+        foreach (var type in UnitCatalogue.AllTypes.Where(t => UnitCatalogue.Get(t).Class == UnitClass.Ship))
+        {
+            Assert.Equal(
+                SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
+                UnitCatalogue.Get(type).SiegeTargets);
         }
     }
 }

@@ -5,6 +5,7 @@ using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.World;
+using Bjarnoy.Domain.World.Review;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -50,7 +51,11 @@ public static class AdminWorldEndpoints
 
         worlds.MapPost("/{worldId:guid}/preview-seed", PreviewSeed)
             .WithName("AdminPreviewWorldSeed")
-            .WithSummary("Generates a candidate map in memory and returns its islands. Persists nothing.");
+            .WithSummary("Generates a candidate map in memory and returns its islands and its world review. Persists nothing.");
+
+        worlds.MapPost("/{worldId:guid}/review-seeds", ReviewSeeds)
+            .WithName("AdminReviewWorldSeeds")
+            .WithSummary("Generates and reviews a range of candidate seeds in memory, returning their review summaries best first. Persists nothing.");
 
         worlds.MapPost("/{worldId:guid}/reseed", Reseed)
             .WithName("AdminReseedWorld")
@@ -65,10 +70,11 @@ public static class AdminWorldEndpoints
     {
         var entities = await worlds.GetWorldsAsync(cancellationToken);
         var playerCounts = await worlds.GetPlayerCountsAsync(cancellationToken);
+        var spawnCapacity = await worlds.GetSpawnCapacityAsync(cancellationToken: cancellationToken);
 
         IReadOnlyList<AdminWorldResponse> response =
         [
-            .. entities.Select(w => AdminWorldResponse.From(w, playerCounts.GetValueOrDefault(w.Id))),
+            .. entities.Select(w => AdminWorldResponse.From(w, playerCounts.GetValueOrDefault(w.Id), spawnCapacity.GetValueOrDefault(w.Id))),
         ];
 
         return TypedResults.Ok(response);
@@ -97,10 +103,9 @@ public static class AdminWorldEndpoints
             });
         }
 
-        var options = WorldGenerationOptions.ForSeed(request.Seed ?? Random.Shared.Next()) with
-        {
-            Radius = request.Radius,
-        };
+        var options = ApplyOverrides(
+            WorldGenerationOptions.ForSeed(request.Seed ?? Random.Shared.Next()) with { Radius = request.Radius },
+            request.Generation);
 
         try
         {
@@ -118,9 +123,10 @@ public static class AdminWorldEndpoints
         {
             var world = await worlds.CreateWorldAsync(
                 request.Name.Trim(), options, request.MaxPlayers, autoSeed: request.Seed is null, cancellationToken);
+            var spawns = await worlds.GetSpawnCapacityAsync(world.Id, cancellationToken);
 
             return TypedResults.Created(
-                $"/api/v1/admin/worlds/{world.Id}", AdminWorldResponse.From(world, playerCount: 0));
+                $"/api/v1/admin/worlds/{world.Id}", AdminWorldResponse.From(world, playerCount: 0, spawns.GetValueOrDefault(world.Id)));
         }
         catch (WorldCreationException ex)
         {
@@ -192,7 +198,8 @@ public static class AdminWorldEndpoints
         }
 
         var playerCount = await worlds.GetPlayerCountAsync(worldId, cancellationToken);
-        return TypedResults.Ok(AdminWorldResponse.From(updated, playerCount));
+        var spawns = await worlds.GetSpawnCapacityAsync(worldId, cancellationToken);
+        return TypedResults.Ok(AdminWorldResponse.From(updated, playerCount, spawns.GetValueOrDefault(worldId)));
     }
 
     /// <summary>
@@ -220,6 +227,7 @@ public static class AdminWorldEndpoints
         }
 
         var generated = await WorldService.PreviewAsync(options, cancellationToken);
+        var review = await Task.Run(() => WorldReview.Review(generated, cancellationToken), cancellationToken);
 
         return TypedResults.Ok(new WorldSeedPreviewResponse(
             worldId,
@@ -227,8 +235,80 @@ public static class AdminWorldEndpoints
             options.Radius,
             generated.Islands.Count,
             generated.LandTileCount,
-            [.. generated.Islands.Select(PreviewIslandResponse.From)]));
+            [.. generated.Islands.Select(PreviewIslandResponse.From)],
+            WorldGenerationResponse.From(options),
+            WorldReviewResponse.From(review)));
     }
+
+    /// <summary>
+    /// Generates and reviews <see cref="ReviewWorldSeedsRequest.Count"/> consecutive candidate seeds and answers their
+    /// review summaries best first, so an admin can pick a clean seed to preview. Nothing is written. The seeds run in
+    /// parallel, at most <see cref="SeedParallelism"/> at a time (each generation is itself parallel over its islands), and
+    /// the request's cancellation stops them: closing the page does not leave the server generating worlds.
+    /// </summary>
+    private static async Task<Results<Ok<WorldSeedReviewResponse>, NotFound, ValidationProblem>> ReviewSeeds(
+        Guid worldId,
+        ReviewWorldSeedsRequest request,
+        WorldService worlds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request.Count is < 1 or > ReviewWorldSeedsRequest.MaxCount)
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(request.Count)] = [$"Review between 1 and {ReviewWorldSeedsRequest.MaxCount} seeds at a time."],
+            });
+        }
+
+        if (request.SeedFrom > int.MaxValue - (request.Count - 1))
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(request.SeedFrom)] = ["The seed range runs past the largest seed."],
+            });
+        }
+
+        var world = await worlds.GetWorldAsync(worldId, cancellationToken);
+        if (world is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var options = new WorldGenerationOptions[request.Count];
+        for (var i = 0; i < request.Count; i++)
+        {
+            if (!TryBuildOptions(world, request.SeedFrom + i, request.Radius, request.Generation, out options[i], out var errors))
+            {
+                return TypedResults.ValidationProblem(errors);
+            }
+        }
+
+        var summaries = new WorldReviewSummary[request.Count];
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, request.Count),
+            new ParallelOptions { MaxDegreeOfParallelism = SeedParallelism, CancellationToken = cancellationToken },
+            (i, token) =>
+            {
+                var generated = new WorldGenerator(options[i]).Generate(token);
+                summaries[i] = WorldReview.Review(generated, token).Summary;
+                return ValueTask.CompletedTask;
+            });
+
+        Array.Sort(summaries, WorldReviewSummary.BestFirst);
+        return TypedResults.Ok(new WorldSeedReviewResponse(
+            worldId,
+            options[0].Radius,
+            [.. summaries.Select(WorldReviewSummaryResponse.From)],
+            WorldGenerationResponse.From(options[0])));
+    }
+
+    /// <summary>
+    /// How many candidate seeds generate at once: half the cores (at least one). A generation already spreads its islands
+    /// over every core, so more seeds at once mostly adds memory - a radius-4000 world holds a few hundred MB while it is built.
+    /// </summary>
+    private static int SeedParallelism => Math.Max(1, Environment.ProcessorCount / 2);
 
     /// <summary>
     /// Commits a candidate map. The point of no return: every settlement in the
@@ -292,13 +372,47 @@ public static class AdminWorldEndpoints
 
             default:
                 var playerCount = await worlds.GetPlayerCountAsync(worldId, cancellationToken);
+                var spawns = await worlds.GetSpawnCapacityAsync(worldId, cancellationToken);
                 return TypedResults.Ok(new ReseedWorldResponse(
-                    AdminWorldResponse.From(result.World!, playerCount),
+                    AdminWorldResponse.From(result.World!, playerCount, spawns.GetValueOrDefault(worldId)),
                     options.Seed,
                     result.IslandCount,
                     result.DeletedSettlements));
         }
     }
+
+    /// <summary>
+    /// <paramref name="current"/> with every non-null field of <paramref name="generation"/>
+    /// laid over it — a <see langword="null"/> field keeps the current value, which is what
+    /// makes every one of them optional to send.
+    /// </summary>
+    private static WorldGenerationOptions ApplyOverrides(
+        WorldGenerationOptions current, WorldGenerationSettingsOverrides? generation) => current with
+    {
+        IslandCellSize = generation?.IslandCellSize ?? current.IslandCellSize,
+        IslandChance = generation?.IslandChance ?? current.IslandChance,
+        IslandMinWidth = generation?.IslandMinWidth ?? current.IslandMinWidth,
+        IslandMaxWidth = generation?.IslandMaxWidth ?? current.IslandMaxWidth,
+        IslandMinSegments = generation?.IslandMinSegments ?? current.IslandMinSegments,
+        IslandMaxSegments = generation?.IslandMaxSegments ?? current.IslandMaxSegments,
+        IslandMinElongation = generation?.IslandMinElongation ?? current.IslandMinElongation,
+        IslandMaxElongation = generation?.IslandMaxElongation ?? current.IslandMaxElongation,
+        IslandMinBend = generation?.IslandMinBend ?? current.IslandMinBend,
+        IslandMaxBend = generation?.IslandMaxBend ?? current.IslandMaxBend,
+        IslandCoastWarp = generation?.IslandCoastWarp ?? current.IslandCoastWarp,
+        IslandCoastWarpScale = generation?.IslandCoastWarpScale ?? current.IslandCoastWarpScale,
+        IslandCoastNoise = generation?.IslandCoastNoise ?? current.IslandCoastNoise,
+        IslandCoastNoiseScale = generation?.IslandCoastNoiseScale ?? current.IslandCoastNoiseScale,
+        IslandSmallShare = generation?.IslandSmallShare ?? current.IslandSmallShare,
+        IslandLargeShare = generation?.IslandLargeShare ?? current.IslandLargeShare,
+        BeachThreshold = generation?.BeachThreshold ?? current.BeachThreshold,
+        MountainThreshold = generation?.MountainThreshold ?? current.MountainThreshold,
+        MountainRockiness = generation?.MountainRockiness ?? current.MountainRockiness,
+        ForestRockiness = generation?.ForestRockiness ?? current.ForestRockiness,
+        MinimumIslandTiles = generation?.MinimumIslandTiles ?? current.MinimumIslandTiles,
+        IslandMaxReach = generation?.IslandMaxReach ?? current.IslandMaxReach,
+        IslandMinGap = generation?.IslandMinGap ?? current.IslandMinGap,
+    };
 
     /// <summary>
     /// The generation options a preview/reseed request asks for: the world's own
@@ -315,27 +429,13 @@ public static class AdminWorldEndpoints
         out WorldGenerationOptions options,
         out Dictionary<string, string[]> errors)
     {
-        options = world.ToGenerationOptions() with
-        {
-            Seed = seed ?? Random.Shared.Next(),
-            Radius = radius ?? world.Radius,
-            IslandCellSize = generation?.IslandCellSize ?? world.IslandCellSize,
-            IslandChance = generation?.IslandChance ?? world.IslandChance,
-            IslandMinRadius = generation?.IslandMinRadius ?? world.IslandMinRadius,
-            IslandMaxRadius = generation?.IslandMaxRadius ?? world.IslandMaxRadius,
-            BeachThreshold = generation?.BeachThreshold ?? world.BeachThreshold,
-            MountainThreshold = generation?.MountainThreshold ?? world.MountainThreshold,
-            MountainRockiness = generation?.MountainRockiness ?? world.MountainRockiness,
-            ForestRockiness = generation?.ForestRockiness ?? world.ForestRockiness,
-            MinimumIslandTiles = generation?.MinimumIslandTiles ?? world.MinimumIslandTiles,
-            IslandMinLobes = generation?.IslandMinLobes ?? world.IslandMinLobes,
-            IslandMaxLobes = generation?.IslandMaxLobes ?? world.IslandMaxLobes,
-            IslandMaxElongation = generation?.IslandMaxElongation ?? world.IslandMaxElongation,
-            IslandBendiness = generation?.IslandBendiness ?? world.IslandBendiness,
-            IslandLobeBlend = generation?.IslandLobeBlend ?? world.IslandLobeBlend,
-            IslandCoastWarp = generation?.IslandCoastWarp ?? world.IslandCoastWarp,
-            IslandCoastWarpScale = generation?.IslandCoastWarpScale ?? world.IslandCoastWarpScale,
-        };
+        options = ApplyOverrides(
+            world.ToGenerationOptions() with
+            {
+                Seed = seed ?? Random.Shared.Next(),
+                Radius = radius ?? world.Radius,
+            },
+            generation);
 
         try
         {
@@ -395,6 +495,7 @@ public static class AdminWorldEndpoints
         }
 
         var playerCount = await worlds.GetPlayerCountAsync(worldId, cancellationToken);
-        return TypedResults.Ok(AdminWorldResponse.From(updated, playerCount));
+        var spawns = await worlds.GetSpawnCapacityAsync(worldId, cancellationToken);
+        return TypedResults.Ok(AdminWorldResponse.From(updated, playerCount, spawns.GetValueOrDefault(worldId)));
     }
 }

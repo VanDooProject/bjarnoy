@@ -8,7 +8,6 @@
 // grid (waterMaskLayout.ts) and with a different transform.
 import { hexesInRadius } from '../../hex/coords';
 import { isoPixelToAxial, isoTopPoints } from '../../hex/geometry';
-import type { Tile } from '../types';
 import type { WaterMaskRegion } from './waterMaskLayout';
 
 /**
@@ -36,29 +35,15 @@ export interface TerrainLookup {
    */
   isWastedLand?(q: number, r: number): boolean;
   /**
-   * The whole tile, when the caller has one — only used to spot the coastal
-   * water variants that carry a prop (`hasWaterProp`). Optional so a test can
-   * still pass a bare `isLand`, and because a caller that omits neither this
-   * nor `hasProp` gets a mask whose A channel is simply all zero: no prop
-   * tiles, nothing muted.
+   * Whether `(q, r)` is a hex whose surroundings must carry no shoreline foam
+   * — a river mouth (`RiverTile.shape === 'mouth'`). The sea's foam band would
+   * otherwise be drawn across the freshwater outflow the mouth art paints.
+   * Answered for land and water hexes alike (a mouth sits on the coast, so
+   * which side it falls on is the caller's business). Drives the `noFoam`
+   * field (§ below). Optional, and omitted entirely, so a caller with no river
+   * mouths (or a test) gets an all-zero field without passing `() => false`.
    */
-  getTile?(q: number, r: number): Tile;
-  /**
-   * `hasWaterProp` for this hex, when the caller can answer it without
-   * materialising a `Tile`.
-   *
-   * Preferred over `getTile` where both are present, and it exists because of
-   * where the answer is needed. The bake asks this question once per *water
-   * texel* — well over half a million of them on a zoomed-out map — and
-   * `getTile` makes the caller build (and cache) a whole tile to answer it:
-   * measured, the settlement bake spent 2.3x what the world bake spent, purely
-   * on going through `WorldModel.getTile` rather than a terrain-only lookup.
-   * It also cannot be answered at all by a caller that has no `Tile` to hand,
-   * which is precisely the bake worker's situation — every input to
-   * `hasWaterProp` is derivable from the world seed except which hexes carry a
-   * building, and that is a short list easily sent across.
-   */
-  hasProp?(q: number, r: number): boolean;
+  noFoam?(q: number, r: number): boolean;
 }
 
 /**
@@ -90,44 +75,8 @@ export const FOAM_REACH_TILES = 1.5;
  */
 export const NEAR_SPAN_TILES = 0.6;
 
-/**
- * How far past a prop tile's own hex the shader mute fades out, in tile widths.
- *
- * The mute exists because two of the three `coastalwatertile_*` variants aren't
- * plain water: `variant000` paints a beached boat and `variant001` a rock, both
- * lit and shaded as solid objects sitting *in* the water. Animated foam and
- * caustic ribbons drawn flat across them read as painted onto the object rather
- * than flowing around it, which is exactly the illusion the props are there to
- * create.
- *
- * Faded rather than switched. A per-hex boolean would cut the foam collar off
- * at a hexagon edge, and a hexagonal hole in a coastline is far more visible
- * than either the prop or the foam — the same failure mode `isNearLand` has in
- * the wave field, and the reason §4.2's coast fade is continuous too.
- *
- * 0.2 tiles, cut back from 0.4: measured on screen, the longer ramp left 30% of
- * one island's coastline at muted width and another 31% part-way, because a
- * single prop reaches over 1.8 hex edges of coast. A fifth of a tile is still
- * several mask texels, which is all the ramp needs to not read as an edge.
- */
-export const PROP_MUTE_FADE_TILES = 0.2;
-
-/**
- * Whether a tile renders with one of the coastal-water props, and so wants the
- * shader muted over it.
- *
- * The conditions are `baseTextureFor`'s, because that is what decides which art
- * actually gets drawn: only sea, only coastal water, only without a building on
- * it (a fishing hut or dockyard replaces the coastal tile with its own art, so
- * there is no prop to protect), and only a non-zero variant — index 0 is the
- * plain coastal tile, which `worldGenerator`'s weights make 80% of the coast.
- */
-export function hasWaterProp(tile: Tile): boolean {
-  return tile.terrain === 'sea' && !!tile.isCoastalWater && !tile.buildingType && (tile.variant ?? 0) > 0;
-}
-
 export interface WaterMask {
-  /** RGBA8, `width * height * 4`. R: signed near distance (0.5 = coastline). G: far distance from land. B: per-hex seed. A: prop-tile shader mute (§4.4). */
+  /** RGBA8, `width * height * 4`. R: signed near distance (0.5 = coastline). G: far distance from land. B: per-hex seed. A: unused, baked opaque (255). */
   data: Uint8Array;
   width: number;
   height: number;
@@ -147,6 +96,18 @@ export interface WaterMask {
    * refinement of any of the four.
    */
   taint: Uint8Array;
+  /**
+   * Foam-suppression field for river mouths: one byte per texel, `width *
+   * height`, 255 on a no-foam hex (`TerrainLookup.noFoam`) and out to
+   * `NO_FOAM_INNER_TILES` from it, fading to 0 by `NO_FOAM_REACH_TILES`. The
+   * shader multiplies the shoreline foam by `1 - noFoam`. All zero wherever
+   * the lookup carries no `noFoam` or it never answers true over `region`, so
+   * masks for worlds without mouths are byte-identical to before this existed.
+   *
+   * A separate array for the same reason as `taint`: the RGBA byte is spent,
+   * and this is its own quantity.
+   */
+  noFoam: Uint8Array;
 }
 
 const EDT_INF = 1e20;
@@ -308,22 +269,6 @@ export function euclideanDistanceTransform(seeds: Uint8Array, width: number, hei
 }
 
 /**
- * The prop-tile mute ramp: 1 on the prop hex itself, smoothly to 0 `fade` world
- * units outside it.
- *
- * Smoothstep rather than a linear ramp so the *rate* of the fade also goes to
- * zero at its far end — a linear ramp meets the unmuted water at a corner, and
- * a corner in a multiplier applied to a bright foam band is visible as a ring
- * even though the value itself is continuous there.
- */
-export function propMute(distance: number, fade: number): number {
-  if (distance <= 0) return 1;
-  if (distance >= fade) return 0;
-  const t = distance / fade;
-  return 1 - t * t * (3 - 2 * t);
-}
-
-/**
  * Out to `TAINT_INNER_TILES` of a wasted-land hex, water renders fully
  * tainted (dark/ash) — the tainted look is meant to read as *this stretch of
  * sea*, not a thin ring hugging the shore. `FOAM_REACH_TILES` for comparison
@@ -343,9 +288,8 @@ export const TAINT_REACH_TILES = 2.5;
 
 /**
  * The taint ramp: 1 within `inner` world units of wasted land, smoothly to 0
- * by `reach`. Same smoothstep shape as `propMute` and for the same reason
- * (a linear ramp's corner at the far end reads as a visible ring in a colour
- * mix) — just with a flat plateau in front of it instead of starting the
+ * by `reach`. Smoothstep (a linear ramp's corner at the far end reads as a visible ring
+ * in a colour mix) — just with a flat plateau in front of it instead of starting the
  * fade at distance zero, since taint is not meant to be a thin band.
  */
 export function taintFade(distance: number, inner: number, reach: number): number {
@@ -353,6 +297,32 @@ export function taintFade(distance: number, inner: number, reach: number): numbe
   if (distance >= reach) return 0;
   const t = (distance - inner) / (reach - inner);
   return 1 - t * t * (3 - 2 * t);
+}
+
+/**
+ * Out to this many tile widths from a river-mouth hex the foam is fully
+ * suppressed. Chosen to cover everything settlement foam can reach past the
+ * coast: foamWidthHexes 0.3 x (1 + surge 0.18) + noise 0.09 is about 0.44
+ * tiles (`waterDebug.ts` defaults, the `foamReach` line in `waterShader.ts`),
+ * so a mouth on the coast has no foam left on its own water.
+ */
+export const NO_FOAM_INNER_TILES = 0.45;
+
+/**
+ * Where the no-foam field reaches zero, in tile widths. Only a short fade
+ * beyond `NO_FOAM_INNER_TILES`, so foam on the neighbouring coast resumes
+ * close to the mouth instead of being cleared along the shore.
+ */
+export const NO_FOAM_REACH_TILES = 0.7;
+
+/**
+ * The no-foam ramp: 1 within `inner` world units of a no-foam hex, smoothly to
+ * 0 by `reach`. Smoothstep, the same shape as `taintFade` and for the same
+ * reason — a linear ramp's corner at the far end reads as a visible edge where
+ * the foam comes back.
+ */
+export function noFoamFade(distance: number, inner: number, reach: number): number {
+  return taintFade(distance, inner, reach);
 }
 
 /**
@@ -384,27 +354,19 @@ export function waterNoiseSeed(q: number, r: number): number {
 export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHeight: number, terrain: TerrainLookup): WaterMask {
   const { width, height, texelWorldSize, rect } = region;
   const count = width * height;
-  // `hasProp` where the caller has it, `getTile` where it only has that, and
-  // null where it has neither — which is the documented way to ask for an
-  // all-zero A channel.
-  const propAt: ((q: number, r: number) => boolean) | null = terrain.hasProp
-    ? (q, r) => terrain.hasProp!(q, r)
-    : terrain.getTile
-      ? (q, r) => hasWaterProp(terrain.getTile!(q, r))
-      : null;
   const water = new Uint8Array(count);
   const land = new Uint8Array(count);
   const seed = new Uint8Array(count);
-  const prop = new Uint8Array(count);
   const wasted = new Uint8Array(count);
   let wastedTexels = 0;
+  const noFoamSrc = new Uint8Array(count);
+  let noFoamTexels = 0;
   // Which hex each texel fell in, kept for the refine pass below rather than
   // recomputed there. `isoPixelToAxial` is cheap now but not free, and the
   // refine pass would otherwise ask it the exact same question a second time
   // for every texel near a coast — which is most of the texels that matter.
   const hexQ = new Int32Array(count);
   const hexR = new Int32Array(count);
-  let propTexels = 0;
 
   // One `isoPixelToAxial` per texel: a rounded estimate plus at most seven
   // point-in-hexagon tests. At 1024^2 in the clamped worst case that, plus the
@@ -422,13 +384,13 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
       land[row + x] = isLand ? 1 : 0;
       water[row + x] = isLand ? 0 : 1;
       seed[row + x] = waterNoiseSeed(hex.q, hex.r);
-      if (!isLand && propAt !== null && propAt(hex.q, hex.r)) {
-        prop[row + x] = 1;
-        propTexels++;
-      }
       if (terrain.isWastedLand && terrain.isWastedLand(hex.q, hex.r)) {
         wasted[row + x] = 1;
         wastedTexels++;
+      }
+      if (terrain.noFoam && terrain.noFoam(hex.q, hex.r)) {
+        noFoamSrc[row + x] = 1;
+        noFoamTexels++;
       }
     }
   }
@@ -460,25 +422,25 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
   // isoGridPosition's own column pitch, hoisted for the inlined copy below.
   const colPitch = tileWidth * 0.75;
 
-  // Distance out of the prop hexes, for the A channel's mute ramp. The same
-  // transform the distance field itself uses, so this is one extra O(n) pass —
-  // and skipped outright on the common region with no prop tile in it, which is
-  // most of them (only ~20% of coastal hexes carry a prop, and coastal hexes
-  // are a thin set to begin with).
-  const distanceFromProp = propTexels > 0 ? euclideanDistanceTransform(prop, width, height, yCurvature) : null;
-  const propFadeWorld = PROP_MUTE_FADE_TILES * tileWidth;
-
   // Distance out of the wasted-land texels, for the taint field. Raster only
   // — no mitre refine pass like the near field's — because the taint ramp is
   // over a tile wide (TAINT_INNER_TILES plus its fade), so the texel-raster
   // error that the refine pass exists to correct on the *foam* band (a third
   // of a tile wide) is invisible at this scale. Skipped outright, like the
-  // prop distance above, when the region has no wasted land in it at all —
+  // earlier distance fields, when the region has no wasted land in it at all —
   // which keeps a world with none, or one not yet revealed, baking a taint
   // field of all zero at no extra cost.
   const distanceFromWasted = wastedTexels > 0 ? euclideanDistanceTransform(wasted, width, height, yCurvature) : null;
   const taintInnerWorld = TAINT_INNER_TILES * tileWidth;
   const taintReachWorld = TAINT_REACH_TILES * tileWidth;
+
+  // Distance out of the river-mouth texels, for the no-foam field. Raster only
+  // for the same reason as taint (a fade a quarter of a tile wide is soft
+  // enough that texel-raster error is invisible), and skipped outright when
+  // the region has no mouth, so such masks stay byte-identical plus zeros.
+  const distanceFromNoFoam = noFoamTexels > 0 ? euclideanDistanceTransform(noFoamSrc, width, height, yCurvature) : null;
+  const noFoamInnerWorld = NO_FOAM_INNER_TILES * tileWidth;
+  const noFoamReachWorld = NO_FOAM_REACH_TILES * tileWidth;
 
   // The refine pass's candidate list for one hex, reused across the run of
   // texels that fall in it.
@@ -502,6 +464,7 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
 
   const data = new Uint8Array(count * 4);
   const taint = new Uint8Array(count);
+  const noFoam = new Uint8Array(count);
   for (let y = 0; y < height; y++) {
     const wy = rect.minY + (y + 0.5) * texelWorldSize;
     for (let x = 0; x < width; x++) {
@@ -553,12 +516,16 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
       data[i * 4 + 0] = Math.round(255 * Math.min(1, Math.max(0, 0.5 + near / (2 * nearSpanWorld))));
       data[i * 4 + 1] = Math.round(255 * Math.min(1, rasterOutward / reachWorld));
       data[i * 4 + 2] = seed[i];
-      data[i * 4 + 3] = distanceFromProp === null ? 0 : Math.round(255 * propMute(distanceFromProp[i] * texelWorldSize, propFadeWorld));
+      data[i * 4 + 3] = 255;
       taint[i] =
         distanceFromWasted === null
           ? 0
           : Math.round(255 * taintFade(distanceFromWasted[i] * texelWorldSize, taintInnerWorld, taintReachWorld));
+      noFoam[i] =
+        distanceFromNoFoam === null
+          ? 0
+          : Math.round(255 * noFoamFade(distanceFromNoFoam[i] * texelWorldSize, noFoamInnerWorld, noFoamReachWorld));
     }
   }
-  return { data, width, height, region, taint };
+  return { data, width, height, region, taint, noFoam };
 }

@@ -14,7 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Bjarnoy.Api.IntegrationTests;
 
 /// <summary>
-/// Settlement expansion end to end (issue #55): train settler crews, accrue
+/// Settlement expansion end to end (issue #55): train settlers, accrue
 /// renown, dispatch a founding convoy, and resolve it on arrival — mirroring
 /// <see cref="SettlementEndpointsTests"/>/<see cref="AdminSettlementEndpointsTests"/>'s
 /// harness shape (a real HTTP stack, a real EF model, the clock advanced by
@@ -167,7 +167,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
     /// Founds a first settlement anonymously, then registers a real account
     /// claiming it (see <c>AuthEndpointsTests.Registering_with_an_existing_local_owner_id_claims_its_unowned_settlements</c>),
     /// and — via a throwaway admin token — levels its Longhouse to 5 (settler
-    /// crews require it) and grants a large resource stock so training is
+    /// settlers require it) and grants a large resource stock so training is
     /// never blocked on cost.
     /// </summary>
     private async Task<(Guid WorldId, SettlementResponse Settlement, AuthResponse Player, IslandResponse Island)>
@@ -201,7 +201,8 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
 
         var levelResponse = await client.PutJsonAsync(
             $"/api/v1/admin/settlements/{settlement.Id}/buildings/{plot.Q}/{plot.R}/level",
-            new SetBuildingLevelRequest(5), Ct);
+            // Longhouse 10: the Cart Workshop, and with it the Settler, opens at 10 (UnitCatalogue).
+            new SetBuildingLevelRequest(10), Ct);
         Assert.Equal(HttpStatusCode.OK, levelResponse.StatusCode);
 
         var grantResponse = await client.PostJsonAsync(
@@ -209,9 +210,9 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
             new GrantResourcesRequest(Wood: 1_000_000, Stone: 1_000_000, Food: 1_000_000, Iron: 1_000_000), Ct);
         Assert.Equal(HttpStatusCode.OK, grantResponse.StatusCode);
 
-        // SettlerCrew trains at a Cart Workshop (see
+        // Settler trains at a Cart Workshop (see
         // UnitCatalogue.RequiredBuildingType) — grant one before
-        // TrainThreeSettlerCrewsAsync below.
+        // TrainFiveSettlersAsync below.
         var layout = await client.GetFromJsonAsync<AdminSettlementLayoutResponse>(
             $"/api/v1/admin/settlements/{settlement.Id}/layout", SqliteApiFixture.StrictJson, Ct);
         var grassHex = layout!.Hexes.First(h => !h.IsCentre && h.Building is null && h.Terrain == "grass");
@@ -225,39 +226,39 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Trains exactly 3 settler crews and fast-forwards the clock until the
+    /// Trains exactly 5 settlers and fast-forwards the clock until the
     /// batch completes. Returns the refreshed tokens (see
     /// <see cref="RefreshAsync"/>) so a caller doing a further time-skip
     /// afterwards refreshes from the current refresh token, not a rotated-out
     /// one.
     /// </summary>
-    private async Task<AuthResponse> TrainThreeSettlerCrewsAsync(HttpClient client, Guid settlementId, string refreshToken)
+    private async Task<AuthResponse> TrainFiveSettlersAsync(HttpClient client, Guid settlementId, string refreshToken)
     {
         var response = await client.PostJsonAsync(
-            $"/api/v1/settlements/{settlementId}/units", new TrainUnitsRequest("settlercrew", 3), Ct);
+            $"/api/v1/settlements/{settlementId}/units", new TrainUnitsRequest("settler", 5), Ct);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
 
-        // 3 crews x 40 minutes each, per UnitCatalogue — well past the
+        // 5 settlers x 24 minutes each, per UnitCatalogue — well past the
         // 15-minute access token lifetime, so refresh before the next call.
         _factory.Time.Advance(TimeSpan.FromMinutes(121));
         var refreshed = await RefreshAsync(client, refreshToken);
 
         var settled = await client.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlementId}", SqliteApiFixture.StrictJson, Ct);
-        Assert.Contains(settled!.Garrison, g => g.Unit == "settlercrew" && g.Count == 3);
+        Assert.Contains(settled!.Garrison, g => g.Unit == "settler" && g.Count == 5);
 
         return refreshed;
     }
 
     [Fact]
-    public async Task The_unit_catalogue_includes_the_settler_crew()
+    public async Task The_unit_catalogue_includes_the_settler()
     {
         using var client = Client();
 
         var catalogue = await client.GetFromJsonAsync<List<UnitDefinitionResponse>>(
             "/api/v1/units", SqliteApiFixture.StrictJson, Ct);
 
-        Assert.Contains(catalogue!, u => u.Type == "settlercrew" && u.Class == "civilian");
+        Assert.Contains(catalogue!, u => u.Type == "settler" && u.Class == "civilian");
     }
 
     [Fact]
@@ -282,8 +283,8 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         var (worldId, _, player, _) = await SetUpPlayerReadyToExpandAsync(client);
         Authorize(client, player.AccessToken);
 
-        // Longhouse level 5 + a Cart Workshop => 6 renown/hour; 100 hours is
-        // hundreds of renown, nowhere near the 55 000 the 2nd settlement needs.
+        // Longhouse level 10 + a Cart Workshop => 11 renown/hour; 100 hours is
+        // about a thousand renown, nowhere near the 55 000 the 2nd settlement needs.
         _factory.Time.Advance(TimeSpan.FromHours(100));
         await RefreshAsync(client, player.RefreshToken);
 
@@ -293,6 +294,40 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         Assert.True(renown!.Total >= 500);
         Assert.True(renown.Total < 55_000);
         Assert.False(renown.CanFoundAnother);
+    }
+
+    [Fact]
+    public async Task Renown_reports_its_hourly_rate_and_the_renown_a_running_feast_still_owes()
+    {
+        using var client = Client();
+        var (worldId, settlement, player, _) = await SetUpPlayerReadyToExpandAsync(client);
+        var adminToken = await CreateAdminTokenAsync(client);
+        await PlaceTownSquareAsync(client, settlement.Id, adminToken, player.AccessToken);
+
+        var before = await client.GetFromJsonAsync<RenownResponse>(
+            $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
+        var current = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
+
+        // One renown per standing building level per hour.
+        Assert.Equal(current!.Buildings.Sum(b => b.Level) * RenownAccount.PointsPerLevelPerHour, before!.PerHour);
+        Assert.True(before.PerHour > 0);
+        Assert.Equal(0, before.PendingFeastRenown);
+
+        var started = await client.PostAsync($"/api/v1/settlements/{settlement.Id}/feast", null, Ct);
+        Assert.Equal(HttpStatusCode.Accepted, started.StatusCode);
+
+        var during = await client.GetFromJsonAsync<RenownResponse>(
+            $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(Feasts.RenownFor(3), during!.PendingFeastRenown, 3);
+
+        _factory.Time.Advance(TimeSpan.FromHours(13));
+        var auth = await RefreshAsync(client, player.RefreshToken);
+        var after = await client.GetFromJsonAsync<RenownResponse>(
+            $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(0, after!.PendingFeastRenown);
+        Assert.True(after.Total >= Feasts.RenownFor(3));
+        Assert.NotNull(auth);
     }
 
     private async Task GrantRenownAsync(Guid userId, double total)
@@ -420,14 +455,14 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         using var client = Client();
         var (_, settlement, player, island) = await SetUpPlayerReadyToExpandAsync(client);
         Authorize(client, player.AccessToken);
-        await TrainThreeSettlerCrewsAsync(client, settlement.Id, player.RefreshToken);
+        await TrainFiveSettlersAsync(client, settlement.Id, player.RefreshToken);
 
         var target = island.StartPositions[3];
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/armies",
             new DispatchArmyRequest(
-                [new UnitCountRequest("settlercrew", 3)], null,
-                // 3 SettlerCrews carry at most 3 * 40 = 120 food
+                [new UnitCountRequest("settler", 5)], null,
+                // 5 Settlers carry at most 5 * 40 = 200 food
                 // (FoodCarryCapacity); this must be the rejection under
                 // test — a renown/slot gate, not carry capacity.
                 new HexPointRequest(target.Q, target.R), 100, "found"),
@@ -443,7 +478,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         var (worldId, settlement, player, island) = await SetUpPlayerReadyToExpandAsync(client);
         Authorize(client, player.AccessToken);
 
-        var afterTraining = await TrainThreeSettlerCrewsAsync(client, settlement.Id, player.RefreshToken);
+        var afterTraining = await TrainFiveSettlersAsync(client, settlement.Id, player.RefreshToken);
 
         // Clear the renown threshold for a 2nd settlement (feasts and buildings
         // are covered on their own above; 55 000 renown is weeks of play).
@@ -464,11 +499,11 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         var dispatch = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/armies",
             new DispatchArmyRequest(
-                [new UnitCountRequest("settlercrew", 3)], null,
-                // 3 SettlerCrews carry at most 3 * 40 = 120 food
+                [new UnitCountRequest("settler", 5)], null,
+                // 5 Settlers carry at most 5 * 40 = 200 food
                 // (FoodCarryCapacity) — a higher request is rejected before
                 // Found-specific validation is ever reached.
-                new HexPointRequest(target.Q, target.R), 120, "found"),
+                new HexPointRequest(target.Q, target.R), 200, "found"),
             Ct);
 
         Assert.True(dispatch.IsSuccessStatusCode, $"dispatch was refused: {await dispatch.Content.ReadAsStringAsync(Ct)}");

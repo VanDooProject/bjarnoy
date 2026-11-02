@@ -17,7 +17,7 @@ import {
   diagonalNeighboursForInterpolation,
   isHexTexel,
   toHex,
-  worldMaskBounds,
+  maskBounds,
   type MaskBounds,
   type MaskTexel,
 } from './fogMaskLayout';
@@ -30,16 +30,39 @@ import {
 const UNKNOWN_MARGIN_HEXES = 14;
 const OUT_OF_SIGHT_MARGIN_HEXES = 2;
 
-// Demo worlds are boundless and procedurally generated on demand — there is
-// no stored world radius the way a live world has one (see WorldModel's own
-// "no stored radius anywhere" comment). LandingView always founds the demo
-// settlement within 40 hexes of the origin (`findLandfall({ q: 0, r: 0 })`,
-// maxRadius 40), so a mask bounded at this radius comfortably covers the
-// settlement plus its explored/visible margins for a normal session. A very
-// high-level settlement's fog can in principle reach past this bound — that
-// ground just reads as "never scouted" out there (the shader's own
-// out-of-bounds handling, fogShader.ts's sampleMask), never a leak or crash.
-export const DEMO_MASK_RADIUS = 60;
+// Demo worlds are procedurally generated on demand and their islands are far apart (the nearest
+// one to the origin can be hundreds of hexes away), so the demo mask is not a fixed disc around the
+// origin: it is a texel window around the demo settlements' explored reach (`demoMaskBounds`), the
+// same chunk-window placement (`fogMaskPlacement(bounds, ...)`) a live world's stitched mask uses.
+// Ground outside the window just reads as "never scouted" (the shader's own out-of-bounds handling,
+// fogShader.ts's sampleMask), never a leak or crash.
+
+/** Hexes of slack around the explored reach: the unknown-ramp margin plus room for growth. */
+const WINDOW_SLACK_HEXES = UNKNOWN_MARGIN_HEXES + 6;
+
+/**
+ * The texel window the demo mask covers: every settlement's explored radius (towers included) plus
+ * the ramp margin, as one bounding rectangle. With `u = q` and `v = 2r + q`, a hex disc of radius R
+ * around `(q, r)` spans `u in [q - R, q + R]` and `v in [2r + q - 2R, 2r + q + 2R]`, padded by one
+ * texel like `worldMaskBounds`.
+ */
+export function demoMaskBounds(model: WorldModel): MaskBounds {
+  let minU = Infinity;
+  let minV = Infinity;
+  let maxU = -Infinity;
+  let maxV = -Infinity;
+  for (const s of model.listSettlements()) {
+    const R = model.exploredRadius(s) + WINDOW_SLACK_HEXES;
+    const centreV = 2 * s.r + s.q;
+    minU = Math.min(minU, s.q - R - 1);
+    maxU = Math.max(maxU, s.q + R + 2);
+    minV = Math.min(minV, centreV - 2 * R - 1);
+    maxV = Math.max(maxV, centreV + 2 * R + 2);
+  }
+  // No settlement yet: an empty window (buildDemoFogMask bakes nothing then anyway).
+  if (minU === Infinity) return maskBounds(0, 0, 1, 1);
+  return maskBounds(minU, minV, maxU, maxV);
+}
 
 function ramp(distance: number, marginHexes: number): number {
   if (!Number.isFinite(distance)) return 255;
@@ -129,7 +152,7 @@ function generateCells(model: WorldModel, bounds: MaskBounds): DemoFogMaskCell[]
   }
 
   // Pass 2: interpolation-only texels, averaged from their four diagonal hex
-  // neighbours — an out-of-bounds neighbour (edge of DEMO_MASK_RADIUS) reads
+  // neighbours — an out-of-bounds neighbour (edge of the window) reads
   // as fully unknown rather than being skipped, matching the backend.
   for (let v = bounds.minV; v < bounds.maxV; v++) {
     for (let u = bounds.minU; u < bounds.maxU; u++) {
@@ -166,10 +189,12 @@ function generateCells(model: WorldModel, bounds: MaskBounds): DemoFogMaskCell[]
  * (matches setFogMask's own "bitmap null is a no-op": nothing has been
  * founded, so there's nothing meaningful to reveal).
  */
-export async function buildDemoFogMask(model: WorldModel): Promise<ImageBitmap | null> {
+export async function buildDemoFogMask(
+  model: WorldModel,
+  bounds: MaskBounds = demoMaskBounds(model),
+): Promise<ImageBitmap | null> {
   if (model.listSettlements().length === 0) return null;
 
-  const bounds = worldMaskBounds(DEMO_MASK_RADIUS);
   const cells = generateCells(model, bounds);
 
   const data = new Uint8ClampedArray(bounds.width * bounds.height * 4);

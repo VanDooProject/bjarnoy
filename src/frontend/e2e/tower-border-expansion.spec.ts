@@ -169,12 +169,15 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
     );
     expect(farClaimedAfterSnapshot).toBe(true);
 
-    // One real painted frame past forceRebuild's synchronous PixiJS graphics
-    // update, matching waitForMapReady's own double-rAF wait elsewhere in
-    // this suite.
-    await page.evaluate(
-      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)))),
-    );
+    // One real painted frame past forceRebuild's synchronous PixiJS graphics update. Counting animation frames is not
+    // enough: the render loop is paced when its frames are expensive (framePacing.ts), so two of them need not
+    // include a render. Then the double-rAF waitForMapReady uses, for that frame to reach the screen.
+    await page.evaluate(async () => {
+      await (window as unknown as { __settlementRenderer: () => { whenFrameRendered: () => Promise<void> } })
+        .__settlementRenderer()
+        .whenFrameRendered();
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined))));
+    });
     const after = await page.screenshot({ clip });
 
     // The rendered border literally moved: this region — the far hex and its

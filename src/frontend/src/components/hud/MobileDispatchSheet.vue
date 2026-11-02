@@ -18,14 +18,16 @@ import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { useAuthStore } from '../../stores/auth';
 import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
-import { missionName, unitName } from '../../i18n/catalogueNames';
+import HuntTargetSummary from './HuntTargetSummary.vue';
+import { isWaterCampFamily } from '../../lib/map/campPlacement';
+import { campName, missionName, unitName } from '../../i18n/catalogueNames';
 import {
   classifyUnitSelection,
-  hasCatapultSelected,
+  isHuntUnit,
   isUnitSelectableFor,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
-import { buildingLabel } from '../../lib/units/battleReports';
+import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
 
 const world = useWorldStore();
 const auth = useAuthStore();
@@ -52,12 +54,23 @@ const garrisonRows = computed(() =>
     .filter((g) => g.count > 0)
     .map((g) => ({ unit: g.unit, label: unitName(g.unit), available: g.count })),
 );
+// The hunt target is a camp on the sea (the whale road): fleets only.
+const huntAtSea = computed(() => {
+  void world.campStatesVersion;
+  const target = draft.value?.targetCamp;
+  const camp = target ? world.model.campAt(target) : undefined;
+  return !!camp && isWaterCampFamily(camp.family);
+});
 const selectionKind = computed(() => classifyUnitSelection(draft.value?.unitCounts ?? {}, catalogue.byType));
 function isRowSelectable(unit: string): boolean {
+  // A hunt takes land units against a land camp and ships against a water camp, so the other class is locked out from the start.
+  if (draft.value?.mission === 'hunt' && !isHuntUnit(unit, catalogue.byType, huntAtSea.value)) return false;
   return isUnitSelectableFor(unit, selectionKind.value, catalogue.byType);
 }
 const hasLockedOutUnits = computed(() =>
-  selectionKind.value !== 'none' && selectionKind.value !== 'mixed'
+  draft.value?.mission === 'hunt'
+    ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
+    : selectionKind.value !== 'none' && selectionKind.value !== 'mixed'
     ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
     : false,
 );
@@ -100,13 +113,15 @@ const hasUnitsSelected = computed(() =>
 const hasDestination = computed(() =>
   draft.value?.mission === 'attack' || draft.value?.mission === 'support'
     ? !!draft.value.targetSettlementId
-    : routeLength.value > 0,
+    : draft.value?.mission === 'hunt'
+      ? !!draft.value.targetCamp
+      : routeLength.value > 0,
 );
 const canConfirm = computed(
-  () => !DEMO_MODE && hasUnitsSelected.value && hasDestination.value && !draft.value?.submitting,
+  () => !DEMO_MODE && hasUnitsSelected.value && hasDestination.value && !buildingPicker.isMissingRequiredPick.value && !draft.value?.submitting,
 );
 
-function setMission(mission: 'move' | 'attack' | 'support') {
+function setMission(mission: 'move' | 'attack' | 'support' | 'hunt') {
   world.setDispatchMission(mission);
 }
 
@@ -131,31 +146,7 @@ function clearTarget() {
   world.setDispatchTarget(null);
 }
 
-const showBuildingPicker = computed(
-  () => draft.value?.mission === 'attack' && !!selectedTarget.value && hasCatapultSelected(draft.value.unitCounts),
-);
-const targetBuildingRows = computed(() => {
-  if (!draft.value?.targetSettlementId) return [];
-  if (world.dispatchTargetBuildingsFor !== draft.value.targetSettlementId) return [];
-  return (world.dispatchTargetBuildings ?? []).map((b) => ({
-    q: b.q,
-    r: b.r,
-    label: buildingLabel(b.type),
-    level: b.level,
-  }));
-});
-const selectedBuildingLabel = computed(() => {
-  const coord = draft.value?.targetBuildingCoord;
-  if (!coord) return null;
-  const row = targetBuildingRows.value.find((b) => b.q === coord.q && b.r === coord.r);
-  return row ? `${row.label} (${t('hud.armyPanel.buildingLevelCoord', { level: row.level, q: coord.q, r: coord.r })})` : `(${coord.q}, ${coord.r})`;
-});
-function pickBuildingTarget(q: number, r: number) {
-  world.setDispatchTargetBuilding({ q, r });
-}
-function clearBuildingTarget() {
-  world.setDispatchTargetBuilding(null);
-}
+const buildingPicker = useDispatchTargetBuilding(computed(() => !!selectedTarget.value));
 
 async function startDispatch() {
   await world.confirmDispatch();
@@ -191,6 +182,10 @@ const summaryText = computed(() => {
     return t('hud.dispatchSheet.stopsSummary', { count: n, stopWord: t('hud.dispatchSheet.stopWord', n) });
   }
   if (!draft.value) return '';
+  if (draft.value.mission === 'hunt') {
+    const camp = draft.value.targetCamp ? world.model.campAt(draft.value.targetCamp) : undefined;
+    if (camp) return t('hud.dispatchSheet.toTarget', { name: campName(camp.family) });
+  }
   if (draft.value.mission !== 'move' && selectedTarget.value) {
     return t('hud.dispatchSheet.toTarget', { name: selectedTarget.value.name });
   }
@@ -255,9 +250,13 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
           <button type="button" class="mission-tab support" :class="{ active: draft.mission === 'support' }" @click="setMission('support')">
             {{ missionName('support') }}
           </button>
+          <button v-if="draft.mission === 'hunt'" type="button" class="mission-tab attack active">
+            {{ missionName('hunt') }}
+          </button>
         </div>
 
-        <template v-if="draft.mission !== 'move'">
+        <HuntTargetSummary v-if="draft.mission === 'hunt'" :target="draft.targetCamp" :unit-counts="draft.unitCounts" />
+        <template v-else-if="draft.mission !== 'move'">
           <div v-if="selectedTarget" class="target-selected">
             <span>{{ t('hud.armyPanel.target') }} <strong>{{ selectedTarget.name }}</strong> ({{ selectedTarget.ownerName }})</span>
             <button type="button" class="secondary change-target" @click="clearTarget">{{ t('hud.armyPanel.change') }}</button>
@@ -278,22 +277,34 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
             <p v-else class="status-subtext">{{ t('hud.armyPanel.noSettlementsFound') }}</p>
           </div>
 
-          <div v-if="showBuildingPicker" class="building-picker">
-            <p class="status-subtext">{{ t('hud.armyPanel.buildingPickerHint') }}</p>
-            <div v-if="selectedBuildingLabel" class="target-selected">
-              <span>{{ t('hud.armyPanel.target') }} <strong>{{ selectedBuildingLabel }}</strong></span>
-              <button type="button" class="secondary change-target" @click="clearBuildingTarget">{{ t('hud.armyPanel.clear') }}</button>
+          <div v-if="buildingPicker.showPicker.value" class="building-picker">
+            <p class="status-subtext">{{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetBuildingPickerHint' : 'hud.armyPanel.buildingPickerHint') }}</p>
+            <p v-if="!buildingPicker.isRequired.value" class="status-subtext" data-testid="engine-reach">{{ t('hud.armyPanel.engineReach') }}</p>
+            <div v-if="buildingPicker.selectedLabel.value" class="target-selected">
+              <span>{{ t('hud.armyPanel.target') }} <strong>{{ buildingPicker.selectedLabel.value }}</strong></span>
+              <button type="button" class="secondary change-target" @click="buildingPicker.clear">{{ t('hud.armyPanel.clear') }}</button>
             </div>
+            <p v-if="buildingPicker.selectedUnreachable.value" class="status-subtext" data-testid="target-unreachable">{{ t('hud.armyPanel.cannotDamage') }}</p>
             <template v-else>
               <p v-if="world.dispatchTargetBuildingsLoading" class="status-subtext">{{ t('hud.armyPanel.loadingEnemyLayout') }}</p>
-              <p v-else-if="world.dispatchTargetBuildingsError" class="status-subtext">{{ t('hud.armyPanel.layoutLoadError') }}</p>
-              <div v-else-if="targetBuildingRows.length" class="target-list building-list">
-                <button v-for="b in targetBuildingRows" :key="`${b.q},${b.r}`" type="button" class="target-row" @click="pickBuildingTarget(b.q, b.r)">
+              <p v-else-if="world.dispatchTargetBuildingsError" class="status-subtext">{{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetLayoutLoadError' : 'hud.armyPanel.layoutLoadError') }}</p>
+              <div v-else-if="buildingPicker.rows.value.length" class="target-list building-list">
+                <button
+                  v-for="b in buildingPicker.rows.value"
+                  :key="`${b.q},${b.r}`"
+                  type="button"
+                  class="target-row"
+                  :class="{ 'out-of-reach': !b.damageable }"
+                  :disabled="!b.damageable"
+                  :title="b.damageable ? undefined : t('hud.armyPanel.cannotDamage')"
+                  data-testid="building-target"
+                  @click="buildingPicker.pick(b.q, b.r)"
+                >
                   <span class="target-name">{{ b.label }}</span>
-                  <span class="target-owner">{{ t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) }}</span>
+                  <span class="target-owner">{{ b.damageable ? t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) : t('hud.armyPanel.cannotDamage') }}</span>
                 </button>
               </div>
-              <p v-else class="status-subtext">{{ t('hud.armyPanel.noPreference') }}</p>
+              <p v-else class="status-subtext">{{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetNoShoreBuilding' : 'hud.armyPanel.noPreference') }}</p>
             </template>
           </div>
         </template>
@@ -462,10 +473,12 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
 }
 .mission-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 .mission-tab {
-  flex: 1;
+  /* Four tabs (move, attack, support, hunt) do not fit one row of the panel: wrap rather than clip. */
+  flex: 1 1 auto;
   padding: 6px 10px;
   background: transparent;
   border: 1px solid var(--panel-border);
@@ -540,6 +553,10 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
   font-size: 12px;
   text-align: left;
   cursor: pointer;
+}
+.target-row.out-of-reach {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .target-owner {
   color: var(--muted);

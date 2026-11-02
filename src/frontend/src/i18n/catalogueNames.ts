@@ -11,6 +11,10 @@ export const terrainName = (terrain: string) => lookup(`terrain.${terrain}`, ter
 /** A wasted tile's terrain name — `family` is `textures.ts`'s wasted-island `TextureKey` (e.g. `'wasteland'`), not the wire `Terrain`. */
 export const wastedTerrainName = (family: string) => lookup(`wastedTerrain.${family}`, family);
 export const giantName = (family: string) => lookup(`giants.${family}`, family);
+export const campName = (family: string) => lookup(`camps.${family}`, family);
+/** An endgame site's name: `utgardwall`, `utgardgate` or `jotunwatchtower`. */
+export const endgameName = (site: string) => lookup(`endgame.${site}`, site);
+export const beastName = (family: string, tier: string) => lookup(`beasts.${family}.${tier}`, tier);
 export const resourceName = (resource: string) => lookup(`resources.${resource}`, resource);
 export const missionName = (mission: string) => lookup(`missions.${mission}`, mission);
 export const runeTypeName = (type: string) => lookup(`runes.types.${type}`, type);

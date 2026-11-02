@@ -34,7 +34,7 @@ describe('TechTreeGraph', () => {
     wrapper.unmount();
   });
 
-  it('leaves buildings hidden from the docs out', () => {
+  it('draws no card for the Fisher Hut, merged into the Fishing Hut', () => {
     const wrapper = mountGraph();
 
     expect(wrapper.find('a[href="#fisherhut"]').exists()).toBe(false);
@@ -64,7 +64,7 @@ describe('TechTreeGraph', () => {
       expect(card(wrapper, type).classes(), type).toContain('card--soft');
     }
     // Unrelated.
-    expect(card(wrapper, 'quarry').classes()).toContain('card--dim');
+    expect(card(wrapper, 'claybrickworks').classes()).toContain('card--dim');
 
     expect(wrapper.find('.link--full').exists()).toBe(true);
     expect(wrapper.find('.link--soft').exists()).toBe(true);

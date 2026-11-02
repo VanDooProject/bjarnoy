@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue';
-import { clampOffset, shouldOpenOnRelease, splitDrawerDragDelta } from '../lib/hud/drawerDrag';
+import { clampOffset, releaseVelocity, shouldOpenOnRelease, splitDrawerDragDelta, type DragSample } from '../lib/hud/drawerDrag';
 import type { HudBarPosition } from '../stores/hudPrefs';
 
 // Android-notification-shade-style pull-down for the mobile-only HUD bar
@@ -11,6 +11,8 @@ import type { HudBarPosition } from '../stores/hudPrefs';
 const DRAG_INTENT_PX = 8;
 const OPEN_THRESHOLD_RATIO = 0.3;
 const FLICK_VELOCITY_PX_MS = 0.5;
+// Release speed is how far the drawer moved over this long before the finger lifted.
+const RELEASE_VELOCITY_WINDOW_MS = 100;
 
 export function useHudDrawer(
   edge: Ref<HudBarPosition>,
@@ -23,6 +25,13 @@ export function useHudDrawer(
   // callers/tests that don't care about scrolling (e.g. useHudDrawer.test.ts's
   // plain-number gestures), which keeps the drag-only behaviour untouched.
   scrollEl?: () => HTMLElement | null,
+  // Optional getter for the drawer's height *as currently rendered* (null =
+  // unknown). The open/close animation is a CSS height transition (see
+  // TopBar.vue's `drawerStyle`), so mid-animation that differs from the
+  // resting target. A grab seeds from it at arm time, otherwise the drawer
+  // snaps to its target under the finger the moment the transition is
+  // switched off for the drag. Omitted by callers/tests that don't animate.
+  liveOffset?: () => number | null,
 ) {
   const isOpen = ref(false);
   const dragging = ref(false);
@@ -35,7 +44,9 @@ export function useHudDrawer(
   let startOffset = 0;
   let lastY = 0;
   let lastT = 0;
-  let velocity = 0; // px/ms, positive = towards open
+  // The drawer's offset over the gesture's recent past, for the release
+  // speed (see releaseVelocity in drawerDrag.ts). Trimmed to the window.
+  let samples: DragSample[] = [];
   // Set once per gesture, at arm time: whether this gesture began on an
   // already fully-open drawer (as opposed to opening it from the collapsed
   // bar) — only then is there a scroll container to give priority to. See
@@ -115,7 +126,7 @@ export function useHudDrawer(
     lastY = e.clientY;
     lastT = e.timeStamp;
     startOffset = restingOffset();
-    velocity = 0;
+    samples = [];
     armed = false;
   }
 
@@ -134,10 +145,17 @@ export function useHudDrawer(
       // capture-capable for the rest of the drag).
       capturedTarget = e.currentTarget as Element | null;
       capturedTarget?.setPointerCapture?.(pointerId);
+      // Grabbed mid-animation: continue from the height on screen, not the
+      // target it was heading for. Done here rather than at pointerdown
+      // because the transition keeps running during the intent threshold.
+      const live = liveOffset?.();
+      if (live != null && Number.isFinite(live)) startOffset = Math.min(Math.max(live, 0), drawerHeight.value);
       // Scroll-vs-drag routing only ever applies to a gesture that begins on
-      // an already fully-open drawer (`startOffset > 0` — see the spec's own
-      // "gestures that start on the collapsed bar are unaffected" carve-out).
-      scrollPriority = startOffset > 0;
+      // an already open drawer (`isOpen` and still showing some height — a
+      // drawer grabbed mid-close has no scroll position to give priority to;
+      // see the spec's "gestures that start on the collapsed bar are
+      // unaffected" carve-out).
+      scrollPriority = isOpen.value && startOffset > 0;
       // Seeds the running offset that every branch below now accumulates
       // onto incrementally (move-by-move), rather than recomputing from
       // `startOffset` + the *total* delta since gesture start each time —
@@ -149,8 +167,10 @@ export function useHudDrawer(
       // a value computed from the raw total finger movement (which would
       // ignore the portion of it already spent on scrolling).
       dragOffset.value = startOffset;
+      // Where the drawer stood when the finger went down (`lastT` is still
+      // the pointerdown's own timeStamp: unarmed moves don't advance it).
+      samples = [{ t: lastT, offset: startOffset }];
     }
-    const dt = e.timeStamp - lastT;
     // This move's own incremental, *raw* (screen-space, unflipped) delta —
     // as opposed to the total delta since gesture start, and as opposed to
     // useHudDrawer's own "opening direction is positive" convention.
@@ -192,12 +212,13 @@ export function useHudDrawer(
       }
     }
     dragOffset.value = clampOffset(dragOffset.value + appliedDelta, drawerHeight.value);
-    // A fast flick's release velocity (see shouldOpenOnRelease/onPointerUp
-    // below) has to be measured against how far the *drawer* actually moved,
-    // not the raw finger speed — a fast swipe that's entirely absorbed by
-    // scrolling the content (appliedDelta 0) must not register as a closing
-    // flick just because the finger itself moved quickly.
-    if (dt > 0) velocity = appliedDelta / dt;
+    // Release speed has to follow the *drawer*, not the raw finger: a fast
+    // swipe entirely absorbed by scrolling the content (appliedDelta 0)
+    // must not register as a closing flick just because the finger moved.
+    samples.push({ t: e.timeStamp, offset: dragOffset.value });
+    // Keep one sample at or before the window's start, drop the older ones.
+    const windowStart = e.timeStamp - RELEASE_VELOCITY_WINDOW_MS;
+    while (samples.length > 2 && samples[1].t <= windowStart) samples.shift();
   }
 
   function teardown() {
@@ -213,7 +234,7 @@ export function useHudDrawer(
     if (pointerId === null || e.pointerId !== pointerId) return;
     const wasArmed = armed;
     const finalOffset = dragOffset.value;
-    const finalVelocity = velocity;
+    const finalVelocity = releaseVelocity(samples, e.timeStamp, RELEASE_VELOCITY_WINDOW_MS);
     teardown();
     if (!wasArmed) return; // a tap, not a drag — the chevron/pill/link handles taps separately
     suppressNextClick = true;
@@ -251,6 +272,15 @@ export function useHudDrawer(
    */
   function onLostPointerCapture(e: PointerEvent) {
     if (pointerId === null || e.pointerId !== pointerId) return;
+    // `lostpointercapture` bubbles. A touch pointer starts out implicitly
+    // captured by whatever it went down on (a pill's `.fill`, the grip, a
+    // nav link inside the drawer), so moving the capture to the bar/drawer
+    // at arm time fires `lostpointercapture` on that child, and it bubbles
+    // up to the very listener this handler sits behind. Treating that as
+    // "our capture was lost" tore down every touch drag on its second move,
+    // so only a drawer dragged with a mouse (no implicit capture) ever
+    // opened. Only the element this gesture captured itself counts.
+    if (capturedTarget !== null && e.target !== capturedTarget) return;
     teardown();
   }
 
@@ -265,6 +295,23 @@ export function useHudDrawer(
   }
   function close() {
     isOpen.value = false;
+  }
+
+  /**
+   * Bound (non-passive) to `touchmove` on the same elements as the pointer
+   * handlers. Once a drag is armed, its touch moves are canceled so the
+   * browser drops the gesture's scroll/fling recognition outright. Without
+   * this, `touch-action: none` alone still let Chromium start a fling at
+   * `touchend` (its fling controller sees the fling before the touch-action
+   * filter throws its scroll updates away), invisible on screen but "active"
+   * for a few hundred ms — and Chromium deliberately swallows the next tap
+   * that cancels an active fling, so a link tapped right after flicking the
+   * drawer open did nothing. Moves before the 8px intent threshold are left
+   * alone: canceling those would also cancel the tap of a slightly jittery
+   * finger.
+   */
+  function onTouchMove(e: TouchEvent) {
+    if (armed && e.cancelable) e.preventDefault();
   }
 
   /** Call from a capture-phase click handler; returns true if this click should be swallowed. */
@@ -284,6 +331,7 @@ export function useHudDrawer(
     onPointerUp,
     onPointerCancel,
     onLostPointerCapture,
+    onTouchMove,
     cancelDrag,
     toggle,
     close,

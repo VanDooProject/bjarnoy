@@ -195,6 +195,8 @@ export class FogMaskLayer {
       uViewport: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
       uWorldToMaskScale: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
       uWorldToMaskOffset: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
+      uWorldToMaskScalePrev: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
+      uWorldToMaskOffsetPrev: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
       uTier: { value: tier === 'outOfSight' ? 0 : 1, type: 'f32' },
       uScoutedColor: { value: new Float32Array([scoutedR, scoutedG, scoutedB]), type: 'vec3<f32>' },
       uUnexploredColor: { value: new Float32Array([unexploredR, unexploredG, unexploredB]), type: 'vec3<f32>' },
@@ -292,8 +294,22 @@ export class FogMaskLayer {
    * reveal cross-fade, shared by a settlement's founding reveal and a mask
    * simply finishing a fetch after a moment of default-unknown.
    */
-  setMaskTexture(texture: Texture): void {
+  setMaskTexture(texture: Texture, placement?: FogMaskPlacement): void {
     const shader = this.mesh.shader!;
+    // The texture being replaced keeps the placement it was uploaded with, so
+    // the cross-fade samples both generations where each actually sits — the
+    // mask is a chunk window that moves with the camera (fogChunks.ts), and
+    // sampling the old one through the new placement would smear it.
+    const scale = this.uniforms.uniforms.uWorldToMaskScale as Float32Array;
+    const offset = this.uniforms.uniforms.uWorldToMaskOffset as Float32Array;
+    const scalePrev = this.uniforms.uniforms.uWorldToMaskScalePrev as Float32Array;
+    const offsetPrev = this.uniforms.uniforms.uWorldToMaskOffsetPrev as Float32Array;
+    scalePrev[0] = scale[0];
+    scalePrev[1] = scale[1];
+    offsetPrev[0] = offset[0];
+    offsetPrev[1] = offset[1];
+    if (placement) this.setPlacement(placement);
+
     shader.resources.uMaskPrev = shader.resources.uMask;
     shader.resources.uMask = texture.source;
     this.fadeStartedAt = performance.now();

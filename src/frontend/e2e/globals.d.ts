@@ -26,6 +26,8 @@ declare global {
     __fogDebug: Record<string, boolean>;
     /** Debug-only water-shader switches — see main.ts and `waterDebugFlags`. */
     __waterDebug: Record<string, boolean>;
+    /** Debug-only water counters — see main.ts and `waterPerfStats`. */
+    __waterPerf: { bakes: number };
   }
 }
 

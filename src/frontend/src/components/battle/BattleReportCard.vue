@@ -65,50 +65,54 @@ const siegeSummary = computed(() => (props.report.siege ? siegeSummaryLine(props
     <div class="sides">
       <section class="side">
         <h3>{{ t('hud.battleReport.attacker') }}</h3>
-        <table class="lines">
-          <thead>
-            <tr>
-              <th>{{ t('hud.battleReport.unit') }}</th>
-              <th>{{ t('hud.battleReport.sent') }}</th>
-              <th>{{ t('hud.battleReport.lost') }}</th>
-              <th>{{ t('hud.battleReport.survived') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="line in report.attackerLines" :key="line.unit">
-              <td>{{ unitName(line.unit) }}</td>
-              <td>{{ line.sent }}</td>
-              <td class="lost">{{ line.lost }}</td>
-              <td class="survived">{{ line.survived }}</td>
-            </tr>
-            <tr v-if="!report.attackerLines.length">
-              <td colspan="4" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="lines-scroll">
+          <table class="lines">
+            <thead>
+              <tr>
+                <th>{{ t('hud.battleReport.unit') }}</th>
+                <th>{{ t('hud.battleReport.sent') }}</th>
+                <th>{{ t('hud.battleReport.lost') }}</th>
+                <th>{{ t('hud.battleReport.survived') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="line in report.attackerLines" :key="line.unit">
+                <td>{{ unitName(line.unit) }}</td>
+                <td>{{ line.sent }}</td>
+                <td class="lost">{{ line.lost }}</td>
+                <td class="survived">{{ line.survived }}</td>
+              </tr>
+              <tr v-if="!report.attackerLines.length">
+                <td colspan="4" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section class="side">
         <h3>{{ t('hud.battleReport.defender') }}</h3>
-        <table class="lines">
-          <thead>
-            <tr>
-              <th>{{ t('hud.battleReport.unit') }}</th>
-              <th>{{ t('hud.battleReport.lost') }}</th>
-              <th>{{ t('hud.battleReport.survived') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="line in report.defenderLines" :key="line.unit">
-              <td>{{ unitName(line.unit) }}</td>
-              <td class="lost">{{ line.lost }}</td>
-              <td class="survived">{{ line.survived }}</td>
-            </tr>
-            <tr v-if="!report.defenderLines.length">
-              <td colspan="3" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="lines-scroll">
+          <table class="lines">
+            <thead>
+              <tr>
+                <th>{{ t('hud.battleReport.unit') }}</th>
+                <th>{{ t('hud.battleReport.lost') }}</th>
+                <th>{{ t('hud.battleReport.survived') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="line in report.defenderLines" :key="line.unit">
+                <td>{{ unitName(line.unit) }}</td>
+                <td class="lost">{{ line.lost }}</td>
+                <td class="survived">{{ line.survived }}</td>
+              </tr>
+              <tr v-if="!report.defenderLines.length">
+                <td colspan="3" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
 
@@ -212,6 +216,13 @@ const siegeSummary = computed(() => (props.report.siege ? siegeSummaryLine(props
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
+}
+/* Mobile-readiness audit: lets a table with more/longer columns than a
+   360px-wide dialog panel can fit (e.g. German unit names) scroll
+   horizontally inside its own section, instead of overflowing the panel or
+   forcing the whole modal to scroll sideways. */
+.lines-scroll {
+  overflow-x: auto;
 }
 .lines {
   width: 100%;

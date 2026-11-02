@@ -49,6 +49,14 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<FieldBattleReportLineEntity> FieldBattleReportLines => Set<FieldBattleReportLineEntity>();
 
+    public DbSet<CampStateEntity> CampStates => Set<CampStateEntity>();
+
+    public DbSet<CampReportEntity> CampReports => Set<CampReportEntity>();
+
+    public DbSet<CampReportUnitLineEntity> CampReportUnitLines => Set<CampReportUnitLineEntity>();
+
+    public DbSet<CampReportBeastLineEntity> CampReportBeastLines => Set<CampReportBeastLineEntity>();
+
     public DbSet<UserEntity> Users => Set<UserEntity>();
 
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
@@ -87,7 +95,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<UserActivitySessionEntity> UserActivitySessions => Set<UserActivitySessionEntity>();
 
-    public DbSet<PlayerExploredEntity> PlayerExplored => Set<PlayerExploredEntity>();
+    public DbSet<PlayerExploredChunkEntity> PlayerExploredChunks => Set<PlayerExploredChunkEntity>();
 
     /// <summary>
     /// Set by <see cref="ConcurrentWriteExecutor"/> while it runs a request as
@@ -308,13 +316,31 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .HasConversion(new HexListConverter())
                 .Metadata.SetValueComparer(HexListConverter.Comparer);
 
+            island.Property(i => i.FogChunks)
+                .HasConversion(new FogChunkListConverter())
+                .Metadata.SetValueComparer(FogChunkListConverter.Comparer);
+
             island.Property(i => i.RiverTiles)
                 .HasConversion(new RiverTileListConverter())
                 .Metadata.SetValueComparer(RiverTileListConverter.Comparer);
 
+            island.Property(i => i.BogTiles)
+                .HasConversion(new BogTileListConverter())
+                .Metadata.SetValueComparer(BogTileListConverter.Comparer);
+
             island.Property(i => i.Giants)
                 .HasConversion(new GiantListConverter())
                 .Metadata.SetValueComparer(GiantListConverter.Comparer);
+
+            island.Property(i => i.Camps)
+                .HasConversion(new CampListConverter())
+                .Metadata.SetValueComparer(CampListConverter.Comparer);
+            island.Property(i => i.UtgardWalls)
+                .HasConversion(new UtgardWallListConverter())
+                .Metadata.SetValueComparer(UtgardWallListConverter.Comparer);
+            island.Property(i => i.JotunTowers)
+                .HasConversion(new JotunTowerListConverter())
+                .Metadata.SetValueComparer(JotunTowerListConverter.Comparer);
         });
 
         modelBuilder.Entity<SettlementEntity>(settlement =>
@@ -590,6 +616,62 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             line.Property(l => l.Id).ValueGeneratedNever();
             line.Property(l => l.Side).HasConversion<int>();
             line.Property(l => l.UnitType).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<CampStateEntity>(state =>
+        {
+            state.ToTable("camp_states");
+            state.HasKey(c => new { c.WorldId, c.Q, c.R });
+            state.HasOne(c => c.World)
+                .WithMany()
+                .HasForeignKey(c => c.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CampReportEntity>(report =>
+        {
+            report.ToTable("camp_reports");
+            report.HasKey(r => r.Id);
+            report.Property(r => r.Id).ValueGeneratedNever();
+            report.Property(r => r.Family).HasMaxLength(32).IsRequired();
+
+            // The inbox reads by the player's settlement id — see CampReportService.GetForSettlementAsync.
+            report.HasIndex(r => r.SettlementId);
+
+            report.HasOne<WorldEntity>()
+                .WithMany()
+                .HasForeignKey(r => r.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            report.HasOne<SettlementEntity>()
+                .WithMany()
+                .HasForeignKey(r => r.SettlementId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            report.HasMany(r => r.UnitLines)
+                .WithOne(l => l.CampReport!)
+                .HasForeignKey(l => l.CampReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            report.HasMany(r => r.BeastLines)
+                .WithOne(l => l.CampReport!)
+                .HasForeignKey(l => l.CampReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CampReportUnitLineEntity>(line =>
+        {
+            line.ToTable("camp_report_unit_lines");
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
+            line.Property(l => l.UnitType).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<CampReportBeastLineEntity>(line =>
+        {
+            line.ToTable("camp_report_beast_lines");
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
         });
 
         modelBuilder.Entity<UserEntity>(user =>
@@ -1061,21 +1143,19 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             session.HasIndex(s => s.StartedAtUtc);
         });
 
-        modelBuilder.Entity<PlayerExploredEntity>(explored =>
+        modelBuilder.Entity<PlayerExploredChunkEntity>(chunk =>
         {
-            explored.ToTable("player_explored");
-            explored.HasKey(e => e.Id);
-            explored.Property(e => e.Id).ValueGeneratedNever();
-            explored.Property(e => e.OwnerId).IsRequired();
+            chunk.ToTable("player_explored_chunks");
 
-            // One row per player per world — FogMaskService reads/writes it
-            // by this exact pair every call, and it's what "the same player
-            // asking again" means for this table.
-            explored.HasIndex(e => new { e.WorldId, e.OwnerId }).IsUnique();
+            // (WorldId, OwnerId) first so "everything this player explored in
+            // this world" and any chunk-rectangle read are range scans on the
+            // primary key itself; no separate index needed.
+            chunk.HasKey(c => new { c.WorldId, c.OwnerId, c.ChunkU, c.ChunkV });
+            chunk.Property(c => c.OwnerId).HasMaxLength(200).IsRequired();
 
-            explored.HasOne(e => e.World)
+            chunk.HasOne(c => c.World)
                 .WithMany()
-                .HasForeignKey(e => e.WorldId)
+                .HasForeignKey(c => c.WorldId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

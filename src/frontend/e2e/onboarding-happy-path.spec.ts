@@ -2,7 +2,7 @@ import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
-import { waitForMapReady } from './helpers';
+import { buildThroughOpenRing, enterSettlementAfterOnboarding, openHudDrawer, waitForMapReady } from './helpers';
 
 /**
  * The full onboarding happy path, driven through the real UI end to end:
@@ -35,8 +35,10 @@ import { waitForMapReady } from './helpers';
 /**
  * Shared setup for every happy path in this file: mocks the auth endpoints
  * (demo mode has no backend), makes landfall, places both guided buildings
- * through the real ring menu and continues into /settlement — leaving the
- * "Name your jarl" nudge on screen, which is where the paths diverge.
+ * through the real ring menu and moves on into /settlement — leaving the
+ * "Name your jarl" nudge unanswered, which is where the paths diverge. While
+ * the nudge is up it is the only call to action on the landing page (no
+ * completion banner), so the move goes through the HUD's Settlement link.
  */
 async function foundAndFinishGuidedBuilds(page: Page) {
   const username = `e2ejarl${Date.now()}`;
@@ -71,36 +73,37 @@ async function foundAndFinishGuidedBuilds(page: Page) {
   await expect(settlement.banner).toBeVisible();
   await expect(settlement.banner).toContainText('Landfall made.');
 
-  // --- Guided build 1: Farm on a grass hex, via the real ring menu -------
+  // --- Guided build 1: Reindeer Herder on a grass hex, via the real ring menu -------
   const grassHex = await settlement.findHex({ terrain: 'grass' });
   await settlement.clickHex(grassHex);
-  const farm = settlement.ring.action('Farm');
-  await expect(farm).toBeVisible();
-  await expect(farm).toBeEnabled();
   const buildingsBeforeFarm = await settlement.countBuildings();
-  await farm.click();
-  await expect.poll(() => settlement.countBuildings(), { timeout: 5_000 }).toBeGreaterThan(buildingsBeforeFarm);
+  await buildThroughOpenRing(settlement, 'Resource', 'Reindeer Herder');
+  // Read once, not `expect.poll(..., { timeout: 5_000 })`: in demo mode the
+  // bubble's click handler places the building synchronously
+  // (LandingView.vue's onRingSelect -> useBuildRing's placeBuildingDemo), so the
+  // count is final by the time `click()` resolves - there is nothing to wait
+  // for. A poll only added a wall-clock limit on one `page.evaluate` round
+  // trip, and on a starved runner a single round trip takes 2-8 s (measured
+  // with the page's main thread idle: the time goes to the processes around
+  // it, not to the app). The farm was placed in every failed run; the poll's
+  // first read just never got back inside 5 s.
+  expect(await settlement.countBuildings()).toBe(buildingsBeforeFarm + 1);
 
   // --- Guided build 2: Lumberjack on a forest hex, via the ring menu -----
-  // LandingView.vue's GUIDED_BUILD_TERRAIN maps Lumberjack -> forest, the
-  // same way Farm requires grass — only the tile-matching action is
-  // enabled (see landing.spec.ts's ring-gating test for that regression
-  // coverage). This spec just needs a forest hex to actually place it on.
+  // The ring is the map's own: a forest hex offers the Lumberjack (landing.spec.ts covers what each hex offers).
+  // This spec just needs a forest hex to actually place it on.
   const forestHex = await settlement.findHex({ terrain: 'forest' });
   await settlement.clickHex(forestHex);
-  const lumberjack = settlement.ring.action('Lumberjack');
-  await expect(lumberjack).toBeVisible();
-  await expect(lumberjack).toBeEnabled();
   const buildingsBeforeLumberjack = await settlement.countBuildings();
-  await lumberjack.click();
-  await expect
-    .poll(() => settlement.countBuildings(), { timeout: 5_000 })
-    .toBeGreaterThan(buildingsBeforeLumberjack);
+  await buildThroughOpenRing(settlement, 'Resource', 'Lumberjack');
+  // Synchronous placement, as for the farm above.
+  expect(await settlement.countBuildings()).toBe(buildingsBeforeLumberjack + 1);
 
   // --- Completion hand-off -------------------------------------------------
-  await expect(settlement.banner).toBeVisible();
-  await expect(settlement.banner).toContainText('All three placed.');
-  await settlement.continueButton.click();
+  await expect(settlement.checklist).toHaveCount(0);
+  await expect(settlement.profileNudge).toBeVisible();
+  await expect(settlement.banner).toHaveCount(0);
+  await enterSettlementAfterOnboarding(page);
   await page.waitForURL('**/settlement');
   await waitForMapReady(page);
 
@@ -135,10 +138,9 @@ const SCREEN_SIZES: ScreenSize[] = [
 
 /** The account/registration entry points, wherever this screen size puts them. */
 function accountHud(page: Page, phone: boolean) {
-  const grip = page.locator('.hud-grip');
   const scope = phone ? page.locator('.hud-drawer') : page;
   async function reveal() {
-    if (phone && (await grip.getAttribute('aria-expanded')) !== 'true') await grip.click();
+    if (phone) await openHudDrawer(page);
   }
   return {
     /** Opens the phone drawer if it isn't already; a no-op on desktop. */
@@ -306,12 +308,19 @@ for (const size of SCREEN_SIZES) {
 
       // --- "Name your jarl" leads, "Log in" follows -------------------------
       if (size.phone) {
-        // The in-game phone bar has no room for the trigger; its entries
-        // live in the drawer's account section instead (MobileHudDrawer.vue).
-        const entries = page.locator('.hud-drawer .drawer-account button');
-        await expect(entries.nth(0)).toHaveAttribute('data-testid', 'drawer-account-name-jarl');
-        await expect(entries.nth(1)).toHaveAttribute('data-testid', 'drawer-account-login');
-        await entries.nth(0).click();
+        // The in-game phone bar has no room for the trigger: it floats as a
+        // chip under the bar (HudNav.vue), stepping aside while the drawer is
+        // open, and the drawer no longer repeats its entries.
+        await expect(page.locator('.hud-drawer [data-testid^="drawer-account-"]')).toHaveCount(0);
+        await page.locator('.hud-grip').click();
+        const trigger = page.getByTestId('returning-player-trigger');
+        await expect(trigger).toBeVisible();
+        await expect(trigger).toContainText('Name your jarl');
+        await trigger.click();
+        const rows = page.getByTestId('returning-player-menu').getByRole('menuitem');
+        await expect(rows.nth(0)).toHaveAttribute('data-testid', 'returning-player-name-jarl');
+        await expect(rows.nth(1)).toHaveAttribute('data-testid', 'returning-player-login');
+        await rows.nth(0).click();
       } else {
         const trigger = page.getByTestId('returning-player-trigger');
         await expect(trigger).toContainText('Name your jarl');

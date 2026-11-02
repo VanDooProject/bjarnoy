@@ -3,6 +3,7 @@ using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Armies;
+using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
@@ -51,6 +52,16 @@ public static class ArmyEndpoints
             // SettlementOwnershipEndpointFilter (it would also refuse a
             // legitimate guest-owner caller).
             .RequireHostOrGuestOwner();
+
+        settlements.MapPost("/{settlementId:guid}/guests/{armyId:guid}/send-home", SendGuestHome)
+            .WithName("SendGuestArmyHome")
+            .WithSummary("Sends a guest (support) army stationed at this settlement back home — the host's recall.")
+            // Host owner only: the guest's own owner recalls through
+            // RecallArmy. 204 with no body, since the guest's full
+            // ArmyResponse (route, provisions) is owner-only.
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .RequireSettlementOwner()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
 
         var armies = app.MapGroup("/api/v1/armies")
             .WithApiVersionSet(versionSet)
@@ -116,6 +127,17 @@ public static class ArmyEndpoints
             .WithSummary("Lists field battle reports touching a settlement, either side, newest first (issue #206).")
             .RequireSettlementOwner();
 
+        reports.MapGet("/camp-reports/{reportId:guid}", GetCampReport)
+            .WithName("GetCampReport")
+            .WithSummary("Fetches one wildlife camp report (hunt, ambush or tower) by id.")
+            // Only the player's settlement owner — a camp has no owner.
+            .RequireCampReportOwner();
+
+        reports.MapGet("/settlements/{settlementId:guid}/camp-reports", ListCampReportsForSettlement)
+            .WithName("ListSettlementCampReports")
+            .WithSummary("Lists wildlife camp reports of a settlement, newest first.")
+            .RequireSettlementOwner();
+
         return app;
     }
 
@@ -150,7 +172,7 @@ public static class ArmyEndpoints
             return TypedResults.BadRequest(new ProblemDetails
             {
                 Title = "Unknown mission.",
-                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, found.",
+                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, found, hunt.",
                 Status = StatusCodes.Status400BadRequest,
             });
         }
@@ -279,6 +301,53 @@ public static class ArmyEndpoints
         return Results.Json(new AuthErrorResponse("not_owner"), statusCode: StatusCodes.Status403Forbidden);
     }
 
+    /// <summary>
+    /// True when a refused recall means "no such army to recall" (404) —
+    /// unknown, not a guest there, or arrived home during this very settle.
+    /// Shared by <see cref="Recall"/> and <see cref="SendGuestHome"/>.
+    /// </summary>
+    private static bool RecallMissing(RecallResult result) =>
+        result.Outcome == RecallOutcome.ArmyNotFound
+        || (result.Outcome == RecallOutcome.NothingToRecall && result.Army is null);
+
+    /// <summary>
+    /// The 409 body for a recall that was understood but cannot happen, or
+    /// null when it did not conflict — the one place the texts are written,
+    /// for <see cref="Recall"/> and <see cref="SendGuestHome"/>.
+    /// </summary>
+    private static ProblemDetails? RecallConflict(RecallResult result) => result.Outcome switch
+    {
+        RecallOutcome.NothingToRecall => new ProblemDetails
+        {
+            Title = "Nothing to recall.",
+            Detail = "The army is already heading home.",
+            Status = StatusCodes.Status409Conflict,
+        },
+        RecallOutcome.NoRouteHome => new ProblemDetails
+        {
+            Title = "No route home.",
+            Detail = "The army cannot be recalled: no route home exists from where it currently is.",
+            Status = StatusCodes.Status409Conflict,
+        },
+        _ => null,
+    };
+
+    private static async Task<Results<NoContent, NotFound, Conflict<ProblemDetails>>> SendGuestHome(
+        Guid settlementId,
+        Guid armyId,
+        ArmyService armies,
+        CancellationToken cancellationToken)
+    {
+        var result = await armies.SendGuestHomeAsync(settlementId, armyId, cancellationToken);
+
+        if (RecallMissing(result))
+        {
+            return TypedResults.NotFound();
+        }
+
+        return RecallConflict(result) is { } conflict ? TypedResults.Conflict(conflict) : TypedResults.NoContent();
+    }
+
     private static async Task<Results<Ok<ArmyResponse>, NotFound, Conflict<ProblemDetails>>> Recall(
         Guid armyId,
         ArmyService armies,
@@ -287,35 +356,14 @@ public static class ArmyEndpoints
     {
         var result = await armies.RecallAsync(armyId, cancellationToken);
 
-        if (result.Outcome == RecallOutcome.ArmyNotFound)
+        if (RecallMissing(result))
         {
             return TypedResults.NotFound();
         }
 
-        if (result.Outcome == RecallOutcome.NothingToRecall)
+        if (RecallConflict(result) is { } conflict)
         {
-            if (result.Army is null)
-            {
-                // Arrived home during this very settle — no army left to recall.
-                return TypedResults.NotFound();
-            }
-
-            return TypedResults.Conflict(new ProblemDetails
-            {
-                Title = "Nothing to recall.",
-                Detail = "The army is already heading home.",
-                Status = StatusCodes.Status409Conflict,
-            });
-        }
-
-        if (result.Outcome == RecallOutcome.NoRouteHome)
-        {
-            return TypedResults.Conflict(new ProblemDetails
-            {
-                Title = "No route home.",
-                Detail = "The army cannot be recalled: no route home exists from where it currently is.",
-                Status = StatusCodes.Status409Conflict,
-            });
+            return TypedResults.Conflict(conflict);
         }
 
         var found = await armies.GetAsync(armyId, cancellationToken);
@@ -346,7 +394,7 @@ public static class ArmyEndpoints
                 RetargetFoundingRejection.NotAFoundingMission => "This army is not on a founding mission.",
                 RetargetFoundingRejection.NothingToRetarget =>
                     "The convoy is already returning, already home, or arrived home during this settle.",
-                RetargetFoundingRejection.TargetNotReachable => "No route exists to the new target hex.",
+                RetargetFoundingRejection.TargetNotReachable => NoLandRoute,
                 RetargetFoundingRejection.InsufficientProvisionsForRoundTrip =>
                     "The provisions remaining would not cover the round trip to the new target.",
                 _ => "Refused.",
@@ -403,6 +451,9 @@ public static class ArmyEndpoints
         return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));
     }
 
+    /// <summary>Why a land army has no route: mountains and wide rivers stop it (streams and open land do not).</summary>
+    private const string NoLandRoute = "No land route: mountains and wide rivers can't be crossed.";
+
     private static ProblemDetails FieldOrderProblem(FieldOrderRejection rejection)
     {
         var problem = new ProblemDetails
@@ -418,7 +469,7 @@ public static class ArmyEndpoints
                 FieldOrderRejection.DestinationNotSea => "The destination is not sea; fleets can only path over water.",
                 FieldOrderRejection.WaypointNotLand => "A waypoint is not land; sea pathing is not supported yet.",
                 FieldOrderRejection.WaypointNotSea => "A waypoint is not sea; fleets can only path over water.",
-                FieldOrderRejection.UnreachableLeg => "No route exists for one or more legs of the new journey.",
+                FieldOrderRejection.UnreachableLeg => NoLandRoute,
                 FieldOrderRejection.InsufficientProvisionsForRoundTrip =>
                     "The provisions remaining would not cover the round trip to the new destination.",
                 FieldOrderRejection.PremiumRequired =>
@@ -474,6 +525,27 @@ public static class ArmyEndpoints
         return TypedResults.Ok(response);
     }
 
+    private static async Task<Results<Ok<CampReportResponse>, NotFound>> GetCampReport(
+        Guid reportId,
+        CampReportService reports,
+        CancellationToken cancellationToken)
+    {
+        var report = await reports.GetAsync(reportId, cancellationToken);
+        return report is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(CampReportResponse.From(report));
+    }
+
+    private static async Task<Ok<IReadOnlyList<CampReportResponse>>> ListCampReportsForSettlement(
+        Guid settlementId,
+        CampReportService reports,
+        CancellationToken cancellationToken)
+    {
+        var entities = await reports.GetForSettlementAsync(settlementId, cancellationToken);
+        IReadOnlyList<CampReportResponse> response = [.. entities.Select(CampReportResponse.From)];
+        return TypedResults.Ok(response);
+    }
+
     /// <summary>Internal, not private: reused by <see cref="SimulatorEndpoints"/> to parse the simulator's own attack/raid mission field.</summary>
     internal static bool TryParseMission(string? value, out ArmyMission mission)
     {
@@ -504,6 +576,12 @@ public static class ArmyEndpoints
         if (string.Equals(value, "found", StringComparison.OrdinalIgnoreCase))
         {
             mission = ArmyMission.Found;
+            return true;
+        }
+
+        if (string.Equals(value, "hunt", StringComparison.OrdinalIgnoreCase))
+        {
+            mission = ArmyMission.Hunt;
             return true;
         }
 
@@ -541,7 +619,7 @@ public static class ArmyEndpoints
                 DispatchRejection.InsufficientResources => "Not enough food to load the requested provisions (some may be reserved for queued construction).",
                 DispatchRejection.DestinationNotLand => "The destination is not land; sea pathing is not supported yet.",
                 DispatchRejection.WaypointNotLand => "A waypoint is not land; sea pathing is not supported yet.",
-                DispatchRejection.UnreachableLeg => "No land route exists for one or more legs of the journey.",
+                DispatchRejection.UnreachableLeg => NoLandRoute,
                 DispatchRejection.InsufficientProvisionsForRoundTrip =>
                     "The loaded provisions would not cover the full round trip's upkeep.",
                 DispatchRejection.TargetSettlementRequired => "This mission requires a target settlement.",
@@ -555,16 +633,21 @@ public static class ArmyEndpoints
                     "An army must be either all ships or all non-ships, not a mix.",
                 DispatchRejection.DestinationNotSea => "The destination is not sea; fleets can only path over water.",
                 DispatchRejection.WaypointNotSea => "A waypoint is not sea; fleets can only path over water.",
-                DispatchRejection.DefenderHasNoShoreline =>
-                    "The target settlement is fully inland and cannot be reached by ship.",
-                DispatchRejection.WrongSettlerCrewCount =>
-                    "A founding mission requires exactly 3 settler crews, no more, no fewer.",
+                DispatchRejection.FleetTargetBuildingRequired =>
+                    "A fleet must be sent at one building on the target settlement's shore.",
+                DispatchRejection.FleetTargetBuildingNotOnShore =>
+                    "That building is not on the target settlement's shore, so a fleet cannot reach it.",
+                DispatchRejection.WrongSettlerCount =>
+                    $"A founding mission requires exactly {Founding.RequiredSettlers} settlers, no more, no fewer.",
                 DispatchRejection.InsufficientShipCapacityForSettlers =>
-                    "The ships in this convoy cannot carry this many settler crews (Karve: 1, Longship: 2).",
+                    $"The ships in this convoy cannot carry this many settlers (each ship carries {Founding.ShipCapacity(UnitType.Karve)}).",
                 DispatchRejection.RenownOrSettlementSlotRequirementNotMet =>
                     "Not enough renown for another settlement yet, or founding requires a real account.",
                 DispatchRejection.TargetHexNotFoundable =>
                     "The target hex is too close to an already-claimed settlement's border.",
+                DispatchRejection.NoCampAtDestination => "No wildlife camp stands on the destination hex.",
+                DispatchRejection.HuntRequiresLandUnits => "Ships cannot hunt a camp on land; only land units can.",
+                DispatchRejection.HuntRequiresFleet => "Only ships can hunt a camp at sea (the whale road); land units cannot reach it.",
                 _ => "Refused.",
             },
             Status = StatusCodes.Status409Conflict,

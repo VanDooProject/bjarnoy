@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Settlers;
@@ -129,6 +130,15 @@ public class SettlementEntity
     /// </summary>
     public double PendingFeastRenown { get; set; }
 
+    /// <summary>Bitmask of claimed onboarding quests (<see cref="Settlement.ClaimedQuests"/>).</summary>
+    public int ClaimedQuests { get; set; }
+
+    /// <summary>Whether a hunt was ever dispatched from here (<see cref="Settlement.HuntStarted"/>).</summary>
+    public bool HuntStarted { get; set; }
+
+    /// <summary>Whether the garrison ever held the quest troops (<see cref="Settlement.TroopsTrained"/>).</summary>
+    public bool TroopsTrained { get; set; }
+
     /// <summary>
     /// Optimistic-concurrency token (issue #341). Every request loads the
     /// whole settlement, acts on a domain snapshot and writes it all back, so
@@ -148,6 +158,20 @@ public class SettlementEntity
     public ResourceAmounts Capacity =>
         new(CapacityWood, CapacityStone, CapacityFood, CapacityIron);
 
+    /// <summary>Maps a removed type that was merged into another onto its successor.</summary>
+    private static BuildingType Merged(BuildingType type) =>
+        type == BuildingType.FisherHut ? BuildingType.FishingHut : type;
+
+    /// <summary>
+    /// The hex <paramref name="army"/> departs from and returns to: <see cref="Army.HomeHex"/> over this settlement's centre
+    /// and (loaded) <see cref="Buildings"/>. The one place that maps stored settlement columns to an army's home hex.
+    /// </summary>
+    public HexCoord HomeHexFor(Army army, Func<HexCoord, Terrain> terrainAt)
+    {
+        ArgumentNullException.ThrowIfNull(army);
+        return army.HomeHex(new HexCoord(CentreQ, CentreR), Buildings.Select(b => b.ToPlacedBuilding()), terrainAt);
+    }
+
     /// <summary>Rebuilds the domain aggregate from the stored columns.</summary>
     public Settlement ToDomain() => new()
     {
@@ -166,12 +190,15 @@ public class SettlementEntity
         // BuildingType.MagicTower) has no catalogue definition any more, so it
         // is dropped here rather than lingering as a building nothing can
         // total, upgrade or render; its queued orders go with it.
+        // A stored FisherHut (merged into FishingHut) is converted, not
+        // dropped: same hex, same level, same queued target level.
         Buildings =
         [
             .. Buildings
-                .Where(b => BuildingCatalogue.MaxLevelFor(b.Type) > 0)
+                .Where(b => BuildingCatalogue.MaxLevelFor(Merged(b.Type)) > 0)
                 .OrderBy(b => b.Q).ThenBy(b => b.R)
-                .Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, Math.Min(b.Level, BuildingCatalogue.MaxLevelFor(b.Type)))),
+                .Select(b => new PlacedBuilding(
+                    new HexCoord(b.Q, b.R), Merged(b.Type), Math.Min(b.Level, BuildingCatalogue.MaxLevelFor(Merged(b.Type))), b.OutsideRealmSince)),
         ],
         Queue =
         [
@@ -180,12 +207,12 @@ public class SettlementEntity
             // QueuedAt — deterministic queue order is what makes SettleTo's
             // same-hex contiguity rule (issue #158 stage 1d) correct with no
             // extra bookkeeping.
-            .. Queue.Where(o => BuildingCatalogue.MaxLevelFor(o.Type) > 0)
+            .. Queue.Where(o => BuildingCatalogue.MaxLevelFor(Merged(o.Type)) > 0)
                 .OrderBy(o => o.StartedAt ?? DateTimeOffset.MaxValue).ThenBy(o => o.QueuedAt).ThenBy(o => o.Id)
                 .Select(o => new BuildOrder
                 {
                     Id = o.Id,
-                    Type = o.Type,
+                    Type = Merged(o.Type),
                     TargetLevel = o.TargetLevel,
                     Coord = new HexCoord(o.Q, o.R),
                     QueuedAt = o.QueuedAt,
@@ -213,6 +240,9 @@ public class SettlementEntity
             ? new Feast(startedAt, endsAt, FeastRenownGain)
             : null,
         PendingFeastRenown = PendingFeastRenown,
+        ClaimedQuests = ClaimedQuests,
+        HuntStarted = HuntStarted,
+        TroopsTrained = TroopsTrained,
         Runes =
         [
             .. Runes.OrderBy(r => r.Id).Select(r => new RuneInstance
@@ -258,6 +288,9 @@ public class SettlementEntity
         FeastEndsAt = settlement.Feast?.EndsAt;
         FeastRenownGain = settlement.Feast?.RenownGain ?? 0;
         PendingFeastRenown = settlement.PendingFeastRenown;
+        ClaimedQuests = settlement.ClaimedQuests;
+        HuntStarted = settlement.HuntStarted;
+        TroopsTrained = settlement.TroopsTrained;
 
         SyncBuildings(settlement);
         SyncQueue(settlement);
@@ -290,12 +323,14 @@ public class SettlementEntity
                     R = placed.Coord.R,
                     Type = placed.Type,
                     Level = placed.Level,
+                    OutsideRealmSince = placed.OutsideRealmSince,
                 });
             }
             else
             {
                 existing.Type = placed.Type;
                 existing.Level = placed.Level;
+                existing.OutsideRealmSince = placed.OutsideRealmSince;
             }
         }
     }
@@ -443,6 +478,15 @@ public class PlacedBuildingEntity
     public BuildingType Type { get; set; }
 
     public int Level { get; set; }
+
+    /// <summary>
+    /// Game instant the building's hex stopped being inside the player's realm (<see cref="PlacedBuilding.OutsideRealmSince"/>);
+    /// null while it is inside.
+    /// </summary>
+    public DateTimeOffset? OutsideRealmSince { get; set; }
+
+    /// <summary>The domain value of this building (stored columns as they are, no catalogue clamp).</summary>
+    public PlacedBuilding ToPlacedBuilding() => new(new HexCoord(Q, R), Type, Level, OutsideRealmSince);
 }
 
 /// <summary>A build in progress. Completes by clock; nothing advances it.</summary>

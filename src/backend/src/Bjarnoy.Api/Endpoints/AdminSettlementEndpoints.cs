@@ -6,6 +6,7 @@ using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -108,6 +109,7 @@ public static class AdminSettlementEndpoints
     private static async Task<Results<Ok<SettlementResponse>, NotFound>> Get(
         Guid settlementId,
         SettlementService settlements,
+        GameDbContext db,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -118,13 +120,14 @@ public static class AdminSettlementEndpoints
         }
 
         var (entity, clock) = found.Value;
-        return TypedResults.Ok(SettlementResponse.From(entity, clock, clock.ToGameTime(time.GetUtcNow())));
+        return TypedResults.Ok(await SettlementResponse.ForOwnerAsync(db, entity, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken));
     }
 
     private static async Task<Results<Ok<SettlementResponse>, NotFound>> GrantResources(
         Guid settlementId,
         GrantResourcesRequest request,
         SettlementService settlements,
+        GameDbContext db,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -138,13 +141,14 @@ public static class AdminSettlementEndpoints
         }
 
         var clock = result.Clock!.Value;
-        return TypedResults.Ok(SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+        return TypedResults.Ok(await SettlementResponse.ForOwnerAsync(db, result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken));
     }
 
     private static async Task<Results<Ok<CompleteQueuesResponse>, NotFound>> CompleteQueues(
         Guid settlementId,
         CompleteQueuesRequest? request,
         SettlementService settlements,
+        GameDbContext db,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -161,7 +165,7 @@ public static class AdminSettlementEndpoints
         return TypedResults.Ok(new CompleteQueuesResponse(
             result.CompletedBuilds,
             result.CompletedTraining,
-            SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow()))));
+            await SettlementResponse.ForOwnerAsync(db, result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken)));
     }
 
     private static async Task<Results<Ok<AdminSettlementLayoutResponse>, NotFound>> GetLayout(
@@ -177,13 +181,13 @@ public static class AdminSettlementEndpoints
 
         var (entity, _) = found.Value;
         var domain = entity.ToDomain();
-        var sampler = new TerrainSampler(entity.World!.ToGenerationOptions());
+        var sampler = await settlements.GetSamplerAsync(entity.World!, cancellationToken);
         var giants = await settlements.LoadGiantIndexAsync(entity.WorldId, cancellationToken);
 
         // The editor paints the whole claimed territory, not just the
         // occupied hexes: an empty buildable hex is exactly what an admin
         // wants to click on, and terrain is what decides whether anything
-        // may go there. The full union of discs (Settlement.ClaimDiscs), not
+        // may go there. The full union of the realm's connected discs (ConnectedRealm.AllDiscs), not
         // just the centre disc: PlaceBuilding below accepts a new building
         // anywhere Settlement.Claims already reaches — including inside an
         // existing tower's own satellite disc, chaining allowed — so this
@@ -192,7 +196,7 @@ public static class AdminSettlementEndpoints
         // the same territory rule PlaceBuilding enforces (Territory.Claims):
         // a giant only paints as claimable once every one of its 7 footprint
         // hexes is covered by this settlement's discs.
-        var discs = domain.ClaimDiscs.ToList();
+        var discs = (await settlements.LoadRealmAsync(entity, domain, cancellationToken)).AllDiscs.ToList();
         IReadOnlyList<AdminSettlementHexResponse> hexes =
         [
             .. discs
@@ -230,6 +234,7 @@ public static class AdminSettlementEndpoints
         int r,
         PlaceBuildingRequest request,
         SettlementService settlements,
+        GameDbContext db,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -246,7 +251,7 @@ public static class AdminSettlementEndpoints
         var result = await settlements.PlaceBuildingAsync(
             settlementId, new HexCoord(q, r), type, request.Level, cancellationToken);
 
-        return BuildingEditResult(result, request.Level, time);
+        return await BuildingEditResult(result, request.Level, db, time, cancellationToken);
     }
 
     private static async Task<Results<Ok<SettlementResponse>, NotFound, ValidationProblem>> RazeBuilding(
@@ -254,18 +259,20 @@ public static class AdminSettlementEndpoints
         int q,
         int r,
         SettlementService settlements,
+        GameDbContext db,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
         var result = await settlements.RazeBuildingAsync(settlementId, new HexCoord(q, r), cancellationToken);
 
-        return BuildingEditResult(result, level: null, time);
+        return await BuildingEditResult(result, level: null, db, time, cancellationToken);
     }
 
     private static async Task<Results<Ok<SettlementResponse>, NotFound, ValidationProblem>> AdjustGarrison(
         Guid settlementId,
         AdjustGarrisonRequest request,
         SettlementService settlements,
+        GameDbContext db,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -300,12 +307,12 @@ public static class AdminSettlementEndpoints
 
         var clock = result.Clock!.Value;
         return TypedResults.Ok(
-            SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+            await SettlementResponse.ForOwnerAsync(db, result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken));
     }
 
     /// <summary>Shared shaping of a <see cref="AdminBuildingEditServiceResult"/> into the two rejection HTTP shapes and the happy one.</summary>
-    private static Results<Ok<SettlementResponse>, NotFound, ValidationProblem> BuildingEditResult(
-        AdminBuildingEditServiceResult result, int? level, TimeProvider time)
+    private static async Task<Results<Ok<SettlementResponse>, NotFound, ValidationProblem>> BuildingEditResult(
+        AdminBuildingEditServiceResult result, int? level, GameDbContext db, TimeProvider time, CancellationToken cancellationToken)
     {
         switch (result.Outcome)
         {
@@ -336,7 +343,7 @@ public static class AdminSettlementEndpoints
 
         var clock = result.Clock!.Value;
         return TypedResults.Ok(
-            SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+            await SettlementResponse.ForOwnerAsync(db, result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken));
     }
 
     /// <summary>Wire name (or enum name) to <see cref="BuildingType"/> — same lookup <see cref="SettlementEndpoints"/> uses for a player's build.</summary>
@@ -378,6 +385,7 @@ public static class AdminSettlementEndpoints
         int r,
         SetBuildingLevelRequest request,
         SettlementService settlements,
+        GameDbContext db,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -403,13 +411,14 @@ public static class AdminSettlementEndpoints
         }
 
         var clock = result.Clock!.Value;
-        return TypedResults.Ok(SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+        return TypedResults.Ok(await SettlementResponse.ForOwnerAsync(db, result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken));
     }
 
     private static async Task<Results<Ok<SettlementResponse>, NotFound, ValidationProblem>> GrantRune(
         Guid settlementId,
         GrantRuneRequest request,
         SettlementService settlements,
+        GameDbContext db,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -444,7 +453,7 @@ public static class AdminSettlementEndpoints
         }
 
         var clock = result.Clock!.Value;
-        return TypedResults.Ok(SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+        return TypedResults.Ok(await SettlementResponse.ForOwnerAsync(db, result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken));
     }
 
     private static bool TryParseRuneType(string value, out RuneType type)

@@ -21,7 +21,7 @@
 // concept of the settlement map's fps governor (`AnimationGovernor`; that
 // only gates the map's own `buildings-anim` atlas load), so 'auto' never
 // measures anything here, it simply isn't forced off by it.
-import { onBeforeUnmount, onMounted, ref, type Ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
 import { animationPreference } from '../lib/perf/animationPreference';
 
 const DEFAULT_INTERVAL_MS = 1000 / 8;
@@ -63,12 +63,33 @@ export function useAnimationClock(intervalMs = DEFAULT_INTERVAL_MS): Ref<number>
     now.value = t - start;
   }
 
-  onMounted(() => {
-    if (!clockShouldRun()) return;
+  function startClock(): void {
+    if (raf || !clockShouldRun()) return;
+    start = 0;
+    lastTickAt = 0;
     raf = requestAnimationFrame(tick);
-  });
-  onBeforeUnmount(() => {
+  }
+
+  function stopClock(): void {
     if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+  }
+
+  onMounted(startClock);
+  // The setting can change while a page is open - the docs pages' "Play animations" button
+  // (AnimationPausedNote.vue) is how a visitor without an account turns them on - so a change
+  // starts or stops the clock right away rather than on the next mount. A stop leaves `now` where it
+  // was, so the frame on screen holds.
+  const stopWatch = watch(
+    () => animationPreference.setting,
+    () => {
+      stopClock();
+      startClock();
+    },
+  );
+  onBeforeUnmount(() => {
+    stopWatch();
+    stopClock();
   });
 
   return now;

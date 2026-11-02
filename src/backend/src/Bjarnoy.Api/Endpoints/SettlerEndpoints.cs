@@ -55,7 +55,10 @@ public static class SettlerEndpoints
         var total = await renown.AccrueAsync(userId, worldId, cancellationToken);
         var settlementCount = await settlements.GetSettlementCountAsync(userId, worldId, cancellationToken);
 
-        return TypedResults.Ok(RenownResponse.From(total, settlementCount));
+        var perHour = await renown.GetPerHourAsync(userId, worldId, cancellationToken);
+        var pendingFeastRenown = await renown.GetPendingFeastRenownAsync(userId, worldId, cancellationToken);
+
+        return TypedResults.Ok(RenownResponse.From(total, settlementCount, perHour, pendingFeastRenown));
     }
 
     private static async Task<Ok<IReadOnlyList<SettlementSummary>>> ListOwnSettlements(
@@ -72,9 +75,7 @@ public static class SettlerEndpoints
         [
             .. entities
                 .Where(s => s.UserId == userId)
-                .Select(s => new SettlementSummary(
-                    s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
-                    s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0, s.IslandId)),
+                .Select(s => SettlementSummary.From(s, mine: true)),
         ];
 
         return TypedResults.Ok(response);

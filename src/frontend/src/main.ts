@@ -5,12 +5,14 @@ import { DEMO_MODE } from './config';
 import { i18n, initLocale } from './i18n';
 import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './lib/map/water/waterDebug';
 import { fogDebugFlags, fogDebugTuning, fogPerfStats } from './lib/map/HexMapRenderer';
+import { installHudMotionAttribute } from './lib/perf/hudMotionAttribute';
 import { zoomTransitionTuning } from './lib/map/zoomTransition';
 import { router } from './router';
 import { useWorldStore } from './stores/world';
 import './style.css';
 
 initLocale();
+installHudMotionAttribute();
 
 const app = createApp(App);
 app.use(createPinia());
@@ -18,6 +20,10 @@ app.use(router);
 app.use(i18n);
 
 app.mount('#app');
+
+// Once the map's own art is in, warm the network for the rest of the atlas
+// (see atlas.ts). Imported lazily so Pixi stays out of the entry chunk.
+void import('./lib/map/atlas').then((atlas) => atlas.startBackgroundAtlasLoad());
 
 // Demo-mode-only debug hooks: let test/screenshot scripts (e.g.
 // scripts/screenshot-helpers) drive the app past what the real UI exposes

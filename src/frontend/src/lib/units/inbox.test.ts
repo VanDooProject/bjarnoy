@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { filterInbox, inboxUnreadCount, isInboxItemUnread, mergeInbox } from './inbox';
-import type { BattleReportResponse, FieldBattleReportResponse, TradeReportResponse } from '../../api/types';
+import type { BattleReportResponse, CampReportResponse, FieldBattleReportResponse, TradeReportResponse } from '../../api/types';
 
 function battle(id: string, occurredAt: string): BattleReportResponse {
   return {
@@ -120,5 +120,38 @@ describe('isInboxItemUnread / inboxUnreadCount', () => {
   it('counts only items newer than lastSeenIso, across both kinds', () => {
     expect(inboxUnreadCount(items, '2026-08-29T11:00:00.000Z')).toBe(1);
     expect(inboxUnreadCount(items, '2026-08-29T08:00:00.000Z')).toBe(2);
+  });
+});
+
+describe('inbox camp reports', () => {
+  const camp = (id: string, occurredAt: string): CampReportResponse => ({
+    id,
+    kind: 'hunt',
+    occurredAt,
+    camp: { q: 1, r: 2, family: 'wolfden', effectiveLevel: 1 },
+    settlementId: 's',
+    armyId: 'a',
+    winner: 'army',
+    armyPower: 300,
+    campPower: 195,
+    units: [],
+    beasts: [],
+    loot: { wood: 0, stone: 0, food: 0, iron: 0 },
+    campCleared: true,
+    tower: null,
+    towerBurned: false,
+  });
+
+  it('merges camp reports newest-first with the other kinds and filters them under "camp"', () => {
+    const items = mergeInbox([battle('b1', '2026-01-01T00:00:00Z')], [], [], [camp('c1', '2026-01-03T00:00:00Z'), camp('c2', '2026-01-02T00:00:00Z')]);
+    expect(items.map((i) => i.report.id)).toEqual(['c1', 'c2', 'b1']);
+    expect(filterInbox(items, 'camp').map((i) => i.kind)).toEqual(['camp', 'camp']);
+    expect(filterInbox(items, 'battle').map((i) => i.kind)).toEqual(['battle']);
+  });
+
+  it('counts camp reports as unread like the other kinds', () => {
+    const items = mergeInbox([], [], [], [camp('c1', '2026-01-03T00:00:00Z'), camp('c2', '2026-01-01T00:00:00Z')]);
+    expect(inboxUnreadCount(items, '2026-01-02T00:00:00Z')).toBe(1);
+    expect(inboxUnreadCount(items, null)).toBe(2);
   });
 });

@@ -25,6 +25,7 @@ import type {
   DispatchArmyRequest,
   FieldBattleReportResponse,
   FieldOrderRequest,
+  FogChunksResponse,
   FoundSettlementRequest,
   GrantResourcesRequest,
   GrantRuneRequest,
@@ -51,6 +52,8 @@ import type {
   ReseedWorldRequest,
   ReseedWorldResponse,
   WorldSeedPreviewResponse,
+  ReviewWorldSeedsRequest,
+  WorldSeedReviewResponse,
   PagedConversationsResponse,
   PagedMessagesResponse,
   PagedReportsResponse,
@@ -79,6 +82,7 @@ import type {
   SettlementViewResponse,
   SlotRuneRequest,
   SettlementSummary,
+  WorldWall,
   ShipmentResponse,
   SimulatorRequest,
   SimulatorResponse,
@@ -96,6 +100,8 @@ import type {
   WorldMembershipResponse,
   WorldResponse,
   WorldSummaryResponse,
+  CampReportResponse,
+  CampStateResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -200,38 +206,56 @@ async function request<T>(path: string, init?: RequestInit, allowRefresh = true)
   return (await res.json()) as T;
 }
 
-export interface ImageBitmapResponse {
-  bitmap: ImageBitmap;
-  /** The response's `ETag` header, if any — the fog mask endpoint's version id (map-fog-v2.md §3). */
-  version: string | null;
+/** The inclusive chunk rectangle `GET /worlds/{id}/fog-chunks` takes. */
+export interface FogChunkRect {
+  cuMin: number;
+  cuMax: number;
+  cvMin: number;
+  cvMax: number;
 }
 
 /**
- * Fetches a binary (non-JSON) response and decodes it as an `ImageBitmap` —
- * the fog mask endpoint's `image/png` body, per `map-fog-v2.md` §2.2/§3.
- * `createImageBitmap` decodes off the main thread, same reasoning §1d gives
- * for picking PNG over JSON in the first place. No 401-refresh retry (unlike
- * `request<T>`): the fog mask endpoint doesn't require a JWT — anonymous play
- * proves ownership via `ownerId` the same way the mutating endpoints do — so
- * there is no access token whose expiry this call needs to react to.
+ * Result of a conditional fog-chunks fetch: either the rectangle is unchanged
+ * since the `ETag` the caller sent (`notModified`, no body), or the new body
+ * plus the `ETag` to send next time.
  */
-async function requestImageBitmap(path: string, ownerId?: string): Promise<ImageBitmapResponse> {
+export type FogChunksResult =
+  | { notModified: true }
+  | { notModified: false; data: FogChunksResponse; etag: string | null };
+
+/**
+ * `GET /worlds/{id}/fog-chunks` (map-fog-v2.md §3) — one batched, conditional
+ * read of a chunk rectangle. Not `request<T>` because of the 304, which has no
+ * body to parse. No 401-refresh retry either: the endpoint doesn't require a
+ * JWT — anonymous play proves ownership via `ownerId` the same way the
+ * mutating endpoints do — so there is no access token whose expiry this call
+ * needs to react to.
+ */
+async function requestFogChunks(
+  worldId: string,
+  ownerId: string,
+  rect: FogChunkRect,
+  etag?: string | null,
+): Promise<FogChunksResult> {
   const accessToken = authHooks.getAccessToken();
+  const path =
+    `/worlds/${worldId}/fog-chunks?cuMin=${rect.cuMin}&cuMax=${rect.cuMax}&cvMin=${rect.cvMin}&cvMax=${rect.cvMax}`;
   const res = await fetchOrThrow('GET', path, {
     headers: {
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...ownerHeader(ownerId),
+      ...(etag ? { 'If-None-Match': etag } : {}),
     },
   });
+
+  if (res.status === 304) return { notModified: true };
 
   if (!res.ok) {
     const problem = await res.json().catch(() => undefined);
     throw new ApiError(res.status, problem, 'GET', path);
   }
 
-  const blob = await res.blob();
-  const bitmap = await createImageBitmap(blob);
-  return { bitmap, version: res.headers.get('ETag') };
+  return { notModified: false, data: (await res.json()) as FogChunksResponse, etag: res.headers.get('ETag') };
 }
 
 export const api = {
@@ -245,9 +269,11 @@ export const api = {
   listJoinableWorlds: () => request<JoinableWorldResponse[]>('/worlds/joinable'),
   // Whether `ownerId` already has a realm in `worldId` — same X-Owner-Id
   // anonymous-play ownership proof as the rest of this file's `ownerHeader`
-  // calls (e.g. getFogMask/getPlotSuggestion below). 400s without it.
+  // calls (e.g. getFogChunks/getPlotSuggestion below). 400s without it.
   getWorldMembership: (worldId: string, ownerId: string) =>
     request<WorldMembershipResponse>(`/worlds/${worldId}/membership`, { headers: ownerHeader(ownerId) }),
+  getWorldCamps: (worldId: string, islandId?: string) =>
+    request<CampStateResponse[]>(`/worlds/${worldId}/camps${islandId ? `?islandId=${encodeURIComponent(islandId)}` : ''}`),
   getIslands: (worldId: string) => request<IslandResponse[]>(`/worlds/${worldId}/islands`),
   foundSettlement: (worldId: string, body: FoundSettlementRequest) =>
     request<SettlementResponse>(`/worlds/${worldId}/settlements`, {
@@ -260,6 +286,10 @@ export const api = {
   // anonymous caller with no realm at all) just gets an empty list back.
   listSettlements: (worldId: string, ownerId?: string) =>
     request<SettlementSummary[]>(`/worlds/${worldId}/settlements`, { headers: ownerHeader(ownerId) }),
+  // Every standing palisade/gate hex of the rival settlements the caller has explored (their own walls excluded) — same fog rule
+  // and X-Owner-Id handling as `listSettlements`, so the live client can draw, hit-test and route around other players' walls.
+  listWalls: (worldId: string, ownerId?: string) =>
+    request<WorldWall[]>(`/worlds/${worldId}/walls`, { headers: ownerHeader(ownerId) }),
   // `ownerId` becomes the `X-Owner-Id` header the backend's ownership
   // filter reads for an anonymous (unclaimed) settlement — see
   // SettlementOwnershipEndpointFilter. Harmless to omit or send stale for a
@@ -357,6 +387,12 @@ export const api = {
       body: JSON.stringify({}),
       headers: ownerHeader(ownerId),
     }),
+  claimQuest: (settlementId: string, questId: string, ownerId?: string) =>
+    request<SettlementResponse>(`/settlements/${settlementId}/quests/${encodeURIComponent(questId)}/claim`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: ownerHeader(ownerId),
+    }),
   sendMessage: (body: SendMessageRequest) =>
     request<MessageResponse>('/messages', { method: 'POST', body: JSON.stringify(body) }),
   listConversations: (params?: { page?: number; pageSize?: number }) => {
@@ -380,7 +416,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  // Settlement expansion (issue #55): settler-crew founding convoys ride the
+  // Settlement expansion (issue #55): settler founding convoys ride the
   // same generic army-dispatch endpoints the troop system's backend exposes
   // (dispatchArmy/getSettlementArmies/getArmy/recallArmy below); only the
   // founding-specific retarget and renown reads are new here.
@@ -439,6 +475,11 @@ export const api = {
   // the world, which is why its body carries the re-typed world name.
   adminPreviewWorldSeed: (worldId: string, body: PreviewWorldSeedRequest) =>
     request<WorldSeedPreviewResponse>(`/admin/worlds/${worldId}/preview-seed`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminReviewWorldSeeds: (worldId: string, body: ReviewWorldSeedsRequest) =>
+    request<WorldSeedReviewResponse>(`/admin/worlds/${worldId}/review-seeds`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
@@ -589,6 +630,15 @@ export const api = {
     request<ArmyResponse>(`/armies/${armyId}`, { headers: ownerHeader(ownerId) }),
   recallArmy: (armyId: string, ownerId?: string) =>
     request<ArmyResponse>(`/armies/${armyId}/recall`, { method: 'POST', headers: ownerHeader(ownerId) }),
+  // The host's recall of a guest army stationed at its settlement. Mirrors
+  // ArmyEndpoints.cs's `/settlements/{id}/guests/{armyId}/send-home`: 204, no
+  // body — the guest's full ArmyResponse is owner-only. `ownerId` proves the
+  // *host* settlement's ownership.
+  sendGuestHome: (settlementId: string, armyId: string, ownerId?: string) =>
+    request<void>(`/settlements/${settlementId}/guests/${armyId}/send-home`, {
+      method: 'POST',
+      headers: ownerHeader(ownerId),
+    }),
   // Issue #156 phase 1: sends an army already out in the field onward to a
   // new hex — 'move on' if it's standing, 'append goal' if it's still
   // travelling. Mirrors ArmyEndpoints.cs's `/armies/{id}/orders`.
@@ -626,6 +676,11 @@ export const api = {
     request<FieldBattleReportResponse[]>(`/settlements/${settlementId}/field-reports`, {
       headers: ownerHeader(ownerId),
     }),
+  // Wildlife camp fights (hunt / ambush / tower attack) — `ArmyEndpoints`' camp-report routes.
+  getCampReport: (reportId: string, ownerId?: string) =>
+    request<CampReportResponse>(`/camp-reports/${reportId}`, { headers: ownerHeader(ownerId) }),
+  getSettlementCampReports: (settlementId: string, ownerId?: string) =>
+    request<CampReportResponse[]>(`/settlements/${settlementId}/camp-reports`, { headers: ownerHeader(ownerId) }),
   getMyLeaderboardRank: (
     worldId: string,
     scope: LeaderboardScope,
@@ -688,14 +743,17 @@ export const api = {
   // its own friendly copy instead of showing raw problem text.
   simulate: (body: SimulatorRequest) =>
     request<SimulatorResponse>('/simulator', { method: 'POST', body: JSON.stringify(body) }),
-  // The requesting player's fog-of-war mask (map-fog-v2.md §2.2/§3) as a
-  // decoded ImageBitmap. `ownerId` is required, not optional like the
-  // mutating endpoints' — GetWorldFogMask 400s without it, since there is no
-  // "public" fog mask the way there's a public settlement list.
-  getFogMask: (worldId: string, ownerId: string) => requestImageBitmap(`/worlds/${worldId}/fog-mask`, ownerId),
+  // The requesting player's fog-of-war mask for a rectangle of 64x64-texel
+  // chunks (map-fog-v2.md §2.2/§3), one batched conditional call per viewport.
+  // `ownerId` is required, not optional like the mutating endpoints' —
+  // GetWorldFogChunks 400s without it, since there is no "public" fog mask
+  // the way there's a public settlement list. Pass the previous response's
+  // `etag` for the same rectangle to get a body-less 304 when nothing changed.
+  getFogChunks: (worldId: string, ownerId: string, rect: FogChunkRect, etag?: string | null) =>
+    requestFogChunks(worldId, ownerId, rect, etag),
   // The backend-owned plot suggestion (see PlotReservationService): pinned
   // per `ownerId` across reloads, held with a short exclusive reservation.
-  // `ownerId` is required, same reasoning as getFogMask's own.
+  // `ownerId` is required, same reasoning as getFogChunks's own.
   getPlotSuggestion: (worldId: string, ownerId: string) =>
     request<PlotSuggestionResponse>(`/worlds/${worldId}/plot-suggestion`, {
       headers: { ...ownerHeader(ownerId), 'X-Client-Fingerprint': clientFingerprint() },

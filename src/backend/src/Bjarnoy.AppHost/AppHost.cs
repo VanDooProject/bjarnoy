@@ -57,19 +57,22 @@ static string GetOrCreatePersistedDevAdminPassword()
     return generated;
 }
 
+// Radius of the world the API/migrator seed on an empty database. Normal
+// `dotnet run` leaves it unset (full-size world); the AppHost tests set it to
+// keep each test's startup world cheap.
+var defaultWorldRadius = builder.Configuration["World:DefaultRadius"];
+
 var postgres = builder.AddPostgres("postgres", password: postgresPassword);
 
-// Bjarnoy.AppHost.Tests builds and starts this whole AppHost fresh for every
-// [Fact] — several independent instances in the same CI job, one after
-// another. WithDataVolume()'s volume name comes from this resource alone,
-// with nothing distinguishing one test's instance from the next, so a
-// persistent volume here would carry Postgres state (including whichever
-// test's admin account got seeded first, and *its* password) from one test
-// straight into the next's supposedly-fresh database — exactly the bug that
+// Bjarnoy.AppHost.Tests runs on CI, where a persistent volume would carry
+// Postgres state (including whichever run's admin account got seeded first,
+// and *its* password) into a supposedly fresh database — exactly the bug that
 // made AdminBootstrapLoginTests intermittently 401 with "wrong password"
 // despite generating a correct one every time. Session-lifetime, volume-less
-// Postgres (the default) gives every test run its own genuinely empty
-// database instead; only interactive local dev gets the persistent one.
+// Postgres (the default) gives every CI run its own genuinely empty database
+// instead; only interactive local dev gets the persistent one. (The tests
+// share one stack and restore gamedb from a snapshot before each test, see
+// AppHostFixture; locally they need CI=true to match.)
 if (!isCI)
 {
     postgres = postgres
@@ -94,6 +97,11 @@ var migrator = builder.AddProject<Projects.Bjarnoy_Api>("migrator", launchProfil
     .WithEnvironment("Database__Provider", "PostgreSql")
     .WithEnvironment("Database__ConnectionString", gamedb.Resource.ConnectionStringExpression)
     .WithExplicitStart();
+
+if (!string.IsNullOrEmpty(defaultWorldRadius))
+{
+    migrator.WithEnvironment("World__DefaultRadius", defaultWorldRadius);
+}
 
 // launchProfileName: null — suppresses the "http"/"https" endpoints AddProject
 // would otherwise infer from launchSettings.json's fixed ports (5180/7180).
@@ -126,6 +134,11 @@ var api = builder.AddProject<Projects.Bjarnoy_Api>("api", launchProfileName: nul
     // leave room for.
     .WithEnvironment("ADMIN_BOOTSTRAP_PASSWORD", adminPasswordValue)
     .WithHttpHealthCheck("/health");
+
+if (!string.IsNullOrEmpty(defaultWorldRadius))
+{
+    api.WithEnvironment("World__DefaultRadius", defaultWorldRadius);
+}
 
 var frontend = builder.AddNpmApp("frontend", "../../../frontend", "dev")
     .WithReference(api)

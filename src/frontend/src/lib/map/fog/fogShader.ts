@@ -102,6 +102,11 @@ uniform vec2 uCameraPos;
 uniform float uZoom;
 uniform vec2 uWorldToMaskScale;
 uniform vec2 uWorldToMaskOffset;
+// The placement uMaskPrev was uploaded with: the mask is a chunk window that
+// moves with the camera, so the texture being faded out generally sits at a
+// different place than the one fading in (see FogMaskLayer.setMaskTexture).
+uniform vec2 uWorldToMaskScalePrev;
+uniform vec2 uWorldToMaskOffsetPrev;
 uniform float uTier;
 uniform vec3 uScoutedColor;
 uniform vec3 uUnexploredColor;
@@ -339,7 +344,8 @@ void main() {
   // draw, not per-pixel divergence.
   vec4 m = sampleMask(uMask, maskUV);
   if (uMaskBlend < 1.0) {
-    m = mix(sampleMask(uMaskPrev, maskUV), m, uMaskBlend);
+    vec2 maskUVPrev = world * uWorldToMaskScalePrev + uWorldToMaskOffsetPrev;
+    m = mix(sampleMask(uMaskPrev, maskUVPrev), m, uMaskBlend);
   }
 
   // §1c: a live army's real-time vision only ever reveals — it multiplies

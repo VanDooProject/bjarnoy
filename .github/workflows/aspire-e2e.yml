@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - 'src/backend/**'
+      - 'src/shared/**'
       - 'src/frontend/**'
       - '.github/workflows/aspire-e2e.yml'
   pull_request:
     paths:
       - 'src/backend/**'
+      - 'src/shared/**'
       - 'src/frontend/**'
       - '.github/workflows/aspire-e2e.yml'
 
@@ -65,12 +67,15 @@ jobs:
       # regression here means an `aspire run`/`dotnet run` developer would
       # hit it too.
       - name: Aspire persistence E2E test
-        run: dotnet test --configuration Release --no-build
+        run: dotnet test --configuration Release --no-build --report-xunit-trx --report-xunit-trx-filename apphost.trx --results-directory ${{ runner.temp }}/test-results
         working-directory: src/backend/tests/Bjarnoy.AppHost.Tests
 
+      # The job log is capped, so a failing test's name can scroll out of view.
+      # The TRX names every failed test and carries its assertion output.
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: aspire-e2e-results
-          path: src/backend/tests/Bjarnoy.AppHost.Tests/TestResults/
+          path: ${{ runner.temp }}/test-results/
           retention-days: 7
+          if-no-files-found: warn

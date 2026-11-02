@@ -55,7 +55,8 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture postgres)
             $"/api/v1/worlds/{created.Id}/islands", SqliteApiFixture.StrictJson, Ct);
 
         Assert.NotNull(islands);
-        Assert.Equal(created.Islands.Count, islands.Count);
+        // The islands endpoint hides wasted islands until the reveal.
+        Assert.Equal(created.Islands.Count(i => !i.IsWasted), islands.Count);
         Assert.Contains(islands, i => i.StartPositions.Count > 0);
     }
 

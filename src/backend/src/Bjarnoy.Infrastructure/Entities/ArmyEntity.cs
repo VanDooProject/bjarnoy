@@ -61,6 +61,14 @@ public class ArmyEntity
     public int? TargetBuildingR { get; set; }
 
     /// <summary>
+    /// The wildlife camp an <see cref="ArmyMission.Hunt"/> army was sent to fight — see <see cref="Army.TargetCampCoord"/>.
+    /// Both columns set or both null.
+    /// </summary>
+    public int? TargetCampQ { get; set; }
+
+    public int? TargetCampR { get; set; }
+
+    /// <summary>
     /// True when <c>Location</c> is <see cref="ArmyLocation.Supporting"/> — a
     /// guest army standing at <see cref="TargetSettlementId"/> (issue #40
     /// phase 4). Mutually exclusive with <see cref="AtHome"/> and an active
@@ -132,6 +140,7 @@ public class ArmyEntity
             Mission = (ArmyMission)Mission,
             TargetSettlementId = TargetSettlementId,
             TargetBuildingCoord = TargetBuildingQ is { } q ? new HexCoord(q, TargetBuildingR!.Value) : null,
+            TargetCampCoord = TargetCampQ is { } cq ? new HexCoord(cq, TargetCampR!.Value) : null,
             Loot = new ResourceAmounts(LootWood, LootStone, LootFood, LootIron),
         };
     }
@@ -145,6 +154,8 @@ public class ArmyEntity
         TargetSettlementId = army.TargetSettlementId;
         TargetBuildingQ = army.TargetBuildingCoord?.Q;
         TargetBuildingR = army.TargetBuildingCoord?.R;
+        TargetCampQ = army.TargetCampCoord?.Q;
+        TargetCampR = army.TargetCampCoord?.R;
         Provisions = army.Provisions;
         LootWood = army.Loot.Wood;
         LootStone = army.Loot.Stone;

@@ -29,7 +29,7 @@ const catalogue = useBuildingCatalogueStore();
 const units = useUnitCatalogueStore();
 
 const PALETTE = ['#ffc55c', '#5cb8ff', '#7bd88f', '#ff7a7a', '#c39bff', '#ff9f5c', '#5ce1d6', '#e6e07a', '#ff8fc7', '#a3b1c2'];
-const DEFAULT_TYPES = ['longhouse', 'lumberjack', 'quarry', 'farm', 'storagehouse', 'barracks'];
+const DEFAULT_TYPES = ['longhouse', 'lumberjack', 'quarry', 'reindeerherder', 'storagehouse', 'barracks'];
 
 onMounted(() => {
   void catalogue.load();
@@ -145,7 +145,7 @@ watch(
   },
   { immediate: true },
 );
-const settlerCost = computed(() => settlerCostFrom(units.byType['settlercrew']?.trainingCost));
+const settlerCost = computed(() => settlerCostFrom(units.byType['settler']?.trainingCost));
 
 type ProfileKey = 'active' | 'checkins4' | 'checkins2' | 'always24' | 'custom';
 const PROFILE_KEYS: ProfileKey[] = ['active', 'checkins4', 'checkins2', 'always24', 'custom'];
@@ -425,7 +425,7 @@ function costText(line: { wood: number; stone: number; food: number; iron: numbe
               <input v-model.number="renownThreshold" type="number" min="0" step="500" data-testid="renown-threshold" />
             </label>
             <p class="muted small note">{{ $t('adminEconomy.pacing.renownNote') }}</p>
-            <p class="muted small note">{{ $t('adminEconomy.pacing.settlerCrewNote') }}: {{ costText(settlerCost) }}</p>
+            <p class="muted small note">{{ $t('adminEconomy.pacing.settlerNote') }}: {{ costText(settlerCost) }}</p>
           </fieldset>
           <fieldset>
             <legend>{{ $t('adminEconomy.pacing.profiles') }}</legend>
