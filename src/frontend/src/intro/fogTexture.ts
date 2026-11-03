@@ -69,7 +69,7 @@ export function createFogCanvas(size = 256, seed = 0x5a6a): HTMLCanvasElement {
   const img = ctx.createImageData(size, size);
   for (let i = 0; i < noise.length; i++) {
     // Stretch the mid-range so the fog has clear wisps and gaps.
-    const a = Math.min(1, Math.max(0, (noise[i] - 0.25) / 0.6));
+    const a = Math.min(1, Math.max(0, (noise[i] - 0.3) / 0.45));
     img.data[i * 4] = 255;
     img.data[i * 4 + 1] = 255;
     img.data[i * 4 + 2] = 255;
