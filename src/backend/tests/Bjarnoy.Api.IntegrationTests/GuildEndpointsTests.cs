@@ -3,7 +3,6 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
-using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Guilds;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -13,7 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Bjarnoy.Api.IntegrationTests;
 
 /// <summary>
-/// Guilds through the real HTTP stack: founding, membership, the fee, the
+/// Guilds through the real HTTP stack: founding, membership, the
 /// board, and peace treaties. See docs/design/guild-alliance-system.md.
 /// </summary>
 public sealed class GuildEndpointsTests : IAsyncLifetime
@@ -53,7 +52,7 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
     /// Founds a settlement anonymously (as settlement founding still allows)
     /// under a fresh owner id, then registers a real account claiming it —
     /// the only way a settlement ends up owned by a real <c>UserId</c>, which
-    /// is what guild membership/fee logic keys off.
+    /// is what guild membership logic keys off.
     /// </summary>
     private async Task<(AuthResponse Auth, Guid WorldId, Guid SettlementId)> RegisterWithSettlementAsync(HttpClient client)
     {
@@ -110,16 +109,6 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
         return await RegisterAsync(client, ownerId);
     }
 
-    /// <summary>Admin god-mode, used directly against the database like AuthEndpointsTests.SetStatusAsync.</summary>
-    private async Task GrantResourcesAsync(Guid settlementId, ResourceAmounts delta)
-    {
-        await using var scope = _factory.Services.CreateAsyncScope();
-        var settlements = scope.ServiceProvider.GetRequiredService<
-            Bjarnoy.Infrastructure.Services.SettlementService>();
-        var result = await settlements.GrantResourcesAsync(settlementId, delta, Ct);
-        Assert.True(result.Accepted);
-    }
-
     [Fact]
     public async Task Founding_a_guild_makes_the_founder_its_leader()
     {
@@ -135,7 +124,6 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var guild = await response.ReadStrictAsync<GuildResponse>(Ct);
 
-        Assert.Equal("copper", guild.FeeTier);
         Assert.Equal(1, guild.MemberCount);
         var leader = Assert.Single(guild.Members);
         Assert.Equal(auth.User.Id, leader.UserId);
@@ -170,7 +158,7 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{worldId}/guilds", new CreateGuildRequest(Unique("Hird"), "CAP", null), Ct))
             .ReadStrictAsync<GuildResponse>(Ct);
 
-        // Copper's base cap is 10; the founder already counts as one member,
+        // The base cap is 10; the founder already counts as one member,
         // so filling in 9 more (inserted directly — they need no settlement
         // of their own, since a member without one just contributes nothing
         // to the longhouse bonus) reaches the cap exactly.
@@ -291,33 +279,44 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Paying_the_fee_deducts_it_and_extends_when_the_member_is_next_overdue()
+    public async Task Guild_caps_are_the_fixed_base_plus_half_the_highest_member_longhouse_level()
     {
         using var client = Client();
         var (auth, worldId, settlementId) = await RegisterWithSettlementAsync(client);
-
-        // FoundingStock has no Iron; the Copper fee needs 50 of every
-        // resource, so this test tops up just enough Iron for one payment
-        // the way an admin would — the second payment below must still fail.
-        await GrantResourcesAsync(settlementId, new ResourceAmounts(0, 0, 0, 50));
-
         Authorize(client, auth.AccessToken);
+
         var guild = await (await client.PostJsonAsync(
-            $"/api/v1/worlds/{worldId}/guilds", new CreateGuildRequest(Unique("Hird"), "FEE", null), Ct))
+            $"/api/v1/worlds/{worldId}/guilds", new CreateGuildRequest(Unique("Hird"), "CAP", null), Ct))
             .ReadStrictAsync<GuildResponse>(Ct);
 
-        var paid = await client.PostJsonAsync($"/api/v1/guilds/{guild.Id}/fee-payment", new { }, Ct);
-        Assert.Equal(HttpStatusCode.OK, paid.StatusCode);
-        var member = await paid.ReadStrictAsync<GuildMemberResponse>(Ct);
-        Assert.False(member.FeeOverdue);
+        var baseCaps = await client.GetFromJsonAsync<GuildCapsResponse>(
+            $"/api/v1/guilds/{guild.Id}/caps", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(GuildRules.MemberCap(await LonghouseLevelAsync(settlementId)), baseCaps!.MemberCap);
+        Assert.Equal(1, baseCaps.MaxActivePeaceTreaties);
 
-        var settlementAfter = await client.GetFromJsonAsync<SettlementResponse>(
-            $"/api/v1/settlements/{settlementId}", SqliteApiFixture.StrictJson, Ct);
-        Assert.Equal(0, settlementAfter!.Resources.Stock.Iron);
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var updated = await db.PlacedBuildings
+                .Where(b => b.SettlementId == settlementId && b.Type == Bjarnoy.Domain.Buildings.BuildingType.Longhouse)
+                .ExecuteUpdateAsync(u => u.SetProperty(b => b.Level, 6), Ct);
+            Assert.Equal(1, updated);
+        }
 
-        var secondPayment = await client.PostJsonAsync($"/api/v1/guilds/{guild.Id}/fee-payment", new { }, Ct);
-        Assert.Equal(HttpStatusCode.Conflict, secondPayment.StatusCode);
-        Assert.Equal("NotEnoughResources", await secondPayment.RejectionAsync(Ct));
+        var raised = await client.GetFromJsonAsync<GuildCapsResponse>(
+            $"/api/v1/guilds/{guild.Id}/caps", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(13, raised!.MemberCap);
+        Assert.Equal(1, raised.MaxActivePeaceTreaties);
+    }
+
+    private async Task<int> LonghouseLevelAsync(Guid settlementId)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        return await db.PlacedBuildings
+            .Where(b => b.SettlementId == settlementId && b.Type == Bjarnoy.Domain.Buildings.BuildingType.Longhouse)
+            .Select(b => b.Level)
+            .SingleAsync(Ct);
     }
 
     [Fact]
@@ -396,7 +395,7 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{worldId}/guilds", new CreateGuildRequest(Unique("Hird"), "CP1", null), Ct))
             .ReadStrictAsync<GuildResponse>(Ct);
 
-        // Copper allows exactly one active/pending treaty.
+        // A guild may hold exactly one active/pending treaty.
         var leaderB = await JoinWorldWithSettlementAsync(client, worldId);
         Authorize(client, leaderB.AccessToken);
         var guildB = await (await client.PostJsonAsync(

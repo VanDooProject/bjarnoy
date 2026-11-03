@@ -437,39 +437,6 @@ public sealed class LinkedRealmEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_guild_fee_larger_than_one_members_share_is_paid_from_the_pool()
-    {
-        var scene = await SetUpAsync();
-
-        // One settlement of the player on another island would be as eligible as the pair; keep only the pair.
-        await WithDbAsync(async db =>
-        {
-            db.Settlements.Remove(await db.Settlements.FirstAsync(s => s.Id == scene.Unlinked, Ct));
-            await db.SaveChangesAsync(Ct);
-            return true;
-        });
-
-        // The Copper fee is 50 of everything: each member holds 30 iron, the pool 60.
-        await SetStockAsync((scene.Oldest, new ResourceAmounts(300, 300, 300, 30)), (scene.Newest, new ResourceAmounts(300, 300, 300, 30)));
-        var userId = (await ReadAsync(scene.Oldest)).UserId;
-
-        await using (var scope = _factory.Services.CreateAsyncScope())
-        {
-            var guilds = scope.ServiceProvider.GetRequiredService<GuildService>();
-            var created = await guilds.CreateAsync(scene.WorldId, userId, "Linked Guild", "LNK", null, Ct);
-            Assert.True(created.Accepted, created.Rejection.ToString());
-            var paid = await guilds.PayFeeAsync(created.Guild!.Id, userId, Ct);
-            Assert.True(paid.Accepted, paid.Rejection.ToString());
-        }
-
-        var oldest = await ReadAsync(scene.Oldest);
-        var newest = await ReadAsync(scene.Newest);
-        Assert.Equal(10, Total(oldest, newest, s => s.StockIron), 3);
-        Assert.Equal(550, Total(oldest, newest, s => s.StockWood), 3);
-        AssertSharesEven(oldest, newest);
-    }
-
-    [Fact]
     public async Task Posting_a_trade_offer_keeps_the_guest_upkeep_in_the_stored_food_rate()
     {
         // Regression: the trade paths settled with a plain SettleTo that knew nothing of hosted guests (or terrain boosts), so the
