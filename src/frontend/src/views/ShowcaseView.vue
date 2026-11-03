@@ -171,7 +171,6 @@ const ENGINEERING: EngineeringCard[] = [
         <div class="hero-copy">
           <div class="eyebrow">{{ t('showcase.hero.eyebrow') }}</div>
           <h1>{{ t('showcase.hero.title') }}</h1>
-          <p class="tagline">{{ t('showcase.hero.tagline') }}</p>
           <p class="pitch">{{ t('showcase.hero.pitch') }}</p>
           <div class="cta-row">
             <button type="button" class="cta primary" @click="goPlay">{{ t('showcase.hero.playCta') }}</button>
@@ -309,12 +308,7 @@ section {
 }
 .hero-copy h1 {
   font-size: clamp(32px, 5vw, 52px);
-  margin: 8px 0 4px;
-}
-.tagline {
-  font-size: 18px;
-  color: var(--gold);
-  margin: 0 0 12px;
+  margin: 8px 0 16px;
 }
 .pitch {
   color: var(--muted);
