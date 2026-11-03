@@ -13,6 +13,8 @@ Part of [Skirmish](README.md). Where units stand, how they are sent and where th
 - Only the units on a hex fight there: the garrison of that hex and the armies standing on it. An attack on one longhouse
   of a linked realm is defended by that longhouse's garrison, not by the rest of the realm.
 - The tower bonus counts only the towers whose claim disc covers the hex.
+- In a fight in the open field, an army is at home on a hex inside your realm or an ally's. The bonus there comes only
+  from the towers whose claim disc covers that hex.
 - A fleet that attacks a shore building fights only the units on that building's hex. If none stand there, it damages the
   building without a fight.
 
