@@ -152,6 +152,13 @@ export const router = createRouter({
       beforeEnter: () => startAtlasManifestLoad(),
     },
     {
+      path: '/docs/saga',
+      name: 'saga-docs',
+      component: () => import('../views/SagaView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
       path: '/docs/tiles',
       name: 'tile-docs',
       component: () => import('../views/TileDocsView.vue'),
