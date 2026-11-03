@@ -16,7 +16,7 @@ async function cameraZoom(page: Page): Promise<number> {
   });
 }
 
-test.describe('double tap to zoom on touch', { tag: '@g3' }, () => {
+test.describe('double tap to zoom on touch', { tag: '@g1' }, () => {
   test.use({ hasTouch: true });
 
   test('a double tap on the world map zooms in', async ({ page }) => {
