@@ -1260,7 +1260,7 @@
     "battles": {
       "heading": "Kämpfe",
       "same": "Flotten kämpfen nach denselben Regeln wie Armeen an Land: Angriff gegen Verteidigung, bei Gleichstand gewinnt der Verteidiger.",
-      "shipsOnly": "Es kämpfen nur Schiffe. Landtruppen halten sich auf beiden Seiten heraus: die Truppen auf deinen Schiffen genauso wie die Besatzung an Land in der angegriffenen Siedlung. Hat die Siedlung keine Schiffe im Hafen, gibt es keinen Kampf: Deine Flotte siegt und geht direkt auf das Gebäude los.",
+      "shipsOnly": "Es kämpfen nur Schiffe, und zwar nur die, die an der angegriffenen Stelle liegen. Landtruppen halten sich auf beiden Seiten heraus: die Truppen auf deinen Schiffen genauso wie die Besatzung an Land in der angegriffenen Siedlung. Deine Schiffe im Hafen verteidigen deine Werft (oder dein Langhaus, wenn es am Ufer steht), verbündete Flotten verteidigen dein Langhaus. Greift eine Flotte irgendein anderes Gebäude an deiner Küste an, trifft sie auf keine Schiffe: Es gibt keinen Kampf, die Flotte siegt und geht direkt auf das Gebäude los.",
       "shore": "Du schickst eine Flotte gegen ein einzelnes Gebäude am Ufer des Gegners: ein Gebäude auf einem Küstenfeld oder im Küstenwasser, innerhalb des Gebiets der Siedlung. Die Flotte segelt bis zu diesem Gebäude, und dort wird gekämpft. Das Langhaus der Siedlung darf auch im Landesinneren stehen.",
       "damage": "Gewinnt die Flotte, beschädigt sie dieses Gebäude. Je mehr deiner Schiffe den Kampf überstehen, desto mehr Stufen verliert es. Sonst wird nichts von der Siedlung getroffen. Steht das Gebäude bei der Ankunft nicht mehr, wird nichts beschädigt.",
       "tower": "Ein {tower} der verteidigenden Siedlung gibt pro Stufe {percent} % Verteidigung dazu.",

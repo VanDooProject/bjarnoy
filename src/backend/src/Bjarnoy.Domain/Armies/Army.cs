@@ -562,10 +562,15 @@ public sealed record Army
         IReadOnlyList<UnitStack>? guestDefenderStacks = null,
         double landAttackBonusPercent = 0,
         double shipAttackBonusPercent = 0,
-        ConnectedRealm? defenderRealm = null)
+        ConnectedRealm? defenderRealm = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(defenderSettlement);
+        if (army.IsFleet)
+        {
+            ArgumentNullException.ThrowIfNull(terrainAt);
+        }
 
         if (army.Mission is not (ArmyMission.Attack or ArmyMission.Raid)
             || army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit
@@ -605,14 +610,26 @@ public sealed record Army
         // resolver sees, so combined defense power (and hence the win/loss
         // outcome itself) properly reflects everyone standing on the wall.
         //
-        // A fleet's battle is fought by ships only, on both sides (docs/design/economy.md, "Fleets"): the attacker's
-        // passengers stay aboard, and the defender's land units (garrison and guests) stay out of it. A defender without
-        // ships at home has nobody to fight: the resolver gives the fleet a costless win, and the siege below applies.
-        // The passengers the surviving ships cannot carry drown (ShipCargo.Rejoin).
-        var combinedDefense = MergeStacksByType(settledDefender.Garrison, guestDefenderStacks);
+        // A fleet's battle is fought by the ships standing on the target hex only (docs/design/economy.md, "Fleets"): the
+        // attacker's passengers stay aboard, and the defender's land units (garrison and guests) stay out of it. The home
+        // ships stand at the fleet anchor (Dockyard, or a shoreline centre), the guests' ships at the centre. A defender
+        // with no ships on the target hex has nobody to fight: the resolver gives the fleet a costless win, and the siege
+        // below applies. The passengers the surviving ships cannot carry drown (ShipCargo.Rejoin).
+        IReadOnlyList<UnitStack> fightingGuests = guestDefenderStacks;
+        IReadOnlyList<UnitStack> fightingHome = settledDefender.Garrison;
+        if (army.IsFleet)
+        {
+            var target = army.TargetBuildingCoord;
+            var homeFights = target == FleetAnchor(settledDefender.Centre, settledDefender.Buildings, terrainAt!);
+            var guestsFight = target == settledDefender.Centre;
+            fightingHome = homeFights ? ShipCargo.Ships(settledDefender.Garrison) : [];
+            fightingGuests = guestsFight ? ShipCargo.Ships(guestDefenderStacks) : [];
+        }
+
+        var combinedDefense = MergeStacksByType(fightingHome, fightingGuests);
         var (attackerFighters, passengers) = ShipCargo.SplitForFight(army.Stacks);
         var plan = BattleResolver.Resolve(
-            attackerFighters, army.IsFleet ? ShipCargo.Ships(combinedDefense) : combinedDefense, defenseBonusPercent, lootAvailable, seed,
+            attackerFighters, combinedDefense, defenseBonusPercent, lootAvailable, seed,
             raid: army.Mission == ArmyMission.Raid,
             landAttackBonusPercent: landAttackBonusPercent,
             shipAttackBonusPercent: shipAttackBonusPercent);
@@ -644,8 +661,8 @@ public sealed record Army
         // the guest total across the actual guest Army records, happens one
         // layer up in ArmyService — this method only knows the pooled guest
         // total, never individual guest armies, to keep it DB-free.
-        var homeLosses = SplitPooledByOwner(plan.DefenderLosses, settledDefender.Garrison, guestDefenderStacks, wantHome: true);
-        var guestLosses = SplitPooledByOwner(plan.DefenderLosses, settledDefender.Garrison, guestDefenderStacks, wantHome: false);
+        var homeLosses = SplitPooledByOwner(plan.DefenderLosses, fightingHome, fightingGuests, wantHome: true);
+        var guestLosses = SplitPooledByOwner(plan.DefenderLosses, fightingHome, fightingGuests, wantHome: false);
         var homeSurvivors = SubtractStacks(settledDefender.Garrison, homeLosses);
 
         var defenderPostBattle = settledDefender with { Garrison = homeSurvivors, Resources = afterLoot };

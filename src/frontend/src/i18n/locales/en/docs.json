@@ -1260,7 +1260,7 @@
     "battles": {
       "heading": "Battles",
       "same": "Fleets fight by the same rules as armies on land: attack against defence, and a tie goes to the defender.",
-      "shipsOnly": "Only ships fight. On both sides, land troops stay out of it: the troops aboard your ships, and the land garrison of the settlement you attack. If the settlement has no ships at home, there is no fight: your fleet wins and goes straight for the building.",
+      "shipsOnly": "Only ships fight, and only the ones at the spot you attack. On both sides, land troops stay out of it: the troops aboard your ships, and the land garrison of the settlement you attack. Your ships at home defend your Dockyard (or your Longhouse, if it stands on the shore); allied fleets defend your Longhouse. Anywhere else on your shore, an attacking fleet meets no ships: there is no fight, the fleet wins and goes straight for the building.",
       "shore": "You send a fleet at one building on the enemy's shore: a building on a shoreline hex or on coastal water, inside the settlement's claim. The fleet sails to that building and the fight happens there. The settlement's Longhouse can stand inland.",
       "damage": "If the fleet wins, it damages that building, and the more of your ships survive the fight, the more levels it loses. Nothing else of the settlement is hit. If the building is gone when the fleet arrives, nothing is damaged.",
       "tower": "A defending settlement's {tower} adds {percent}% defence per level.",
