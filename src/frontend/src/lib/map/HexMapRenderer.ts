@@ -489,6 +489,11 @@ export interface HexMapRendererOptions {
   /** Called whenever the camera transform is applied (pan, zoom, resize, re-framing). The host debounces. */
   onCameraChange?: () => void;
   /**
+   * Fired when a wheel over the canvas is left to the page (an `allowPageScroll` host, a plain wheel, the reader not yet
+   * pressed on the map) while the camera can zoom (not `lockCamera`). A host shows its "use ctrl to zoom" hint from it.
+   */
+  onWheelToPage?: () => void;
+  /**
    * Lets the page itself scroll under a wheel/touch gesture over the canvas
    * instead of the renderer eating it for camera zoom/pan. With `lockCamera`
    * (which already disables those — see `zoomBy`'s own doc comment) that is
@@ -1512,6 +1517,9 @@ type TapPoint = Pick<PointerEvent, 'clientX' | 'clientY' | 'pointerType'>;
 export function isWaypointTap(startCoordKey: string, lastCoordKey: string, movedPx: number): boolean {
   return lastCoordKey === startCoordKey && movedPx < DRAG_CLICK_SLOP_PX;
 }
+
+/** One zoom-button step (`zoomStep`). */
+const ZOOM_STEP = 1.25;
 
 /**
  * Whether a wheel event over the canvas goes to the page (scrolls it) instead of the map's zoom.
@@ -3320,8 +3328,10 @@ export class HexMapRenderer {
         modifier: e.ctrlKey || e.metaKey,
         lockCamera: this.lockCamera,
       })
-    )
+    ) {
+      if (!this.lockCamera) this.options.onWheelToPage?.();
       return;
+    }
     e.preventDefault();
     if (this.interactionLocked) return;
     const screen = this.clientToCanvas(e.clientX, e.clientY);
@@ -3330,6 +3340,15 @@ export class HexMapRenderer {
     const factor = Math.exp(-e.deltaY * 0.001);
     this.zoomBy(screen, factor);
   };
+
+  /** One zoom-button step (a docs map's +/-): zooms around the canvas centre, 1.25x in or out, through the same `zoomBy` the wheel uses. */
+  zoomStep(direction: 1 | -1) {
+    if (this.interactionLocked) return;
+    const canvas = this.app?.canvas;
+    if (!canvas) return;
+    this.doubleTapZoom = null;
+    this.zoomBy({ x: canvas.offsetWidth / 2, y: canvas.offsetHeight / 2 }, direction === 1 ? ZOOM_STEP : 1 / ZOOM_STEP);
+  }
 
   /**
    * Anchor-preserving zoom: rescales the camera around a fixed screen point
