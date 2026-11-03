@@ -291,6 +291,41 @@ public class GoldenRegenerationTests
         }
 
         static int Rings(GeneratedIsland i) => i.UtgardWalls.Select(w => w.Ring).Distinct().Count();
+        static bool IsDocsUtgardExample(Candidate c)
+        {
+            var island = c.Island;
+            if (island.TileCount < 250 || island.TileCount > 900 || Rings(island) != 2 || island.JotunTowers.Count < 3 || island.RiverTiles.Count == 0)
+            {
+                return false;
+            }
+
+            // A tower stands between the lines when an army starting at Utgard reaches it without crossing the outer line: a flood over
+            // the island's walkable land (no mountain, lava or giant) that the outer wall hexes stop.
+            var anchor = island.Giants.First(g => g.Family == GiantGenerator.UtgardFamily).Anchor;
+            var sampler = new TerrainSampler(TestWorlds.Options(c.Seed));
+            var land = island.Tiles.ToHashSet();
+            var lava = island.RiverTiles.Select(t => t.Coord).ToHashSet();
+            var giantHexes = island.Giants.SelectMany(g => Giant.Footprint(g.Anchor)).ToHashSet();
+            var outerWalls = island.UtgardWalls.Where(w => w.Ring == UtgardRing.Outer).Select(w => w.Coord).ToHashSet();
+            var reached = new HashSet<HexCoord>();
+            var open = new Stack<HexCoord>(Giant.Footprint(anchor).SelectMany(f => f.Neighbours()));
+            while (open.Count > 0)
+            {
+                var hex = open.Pop();
+                if (!land.Contains(hex) || giantHexes.Contains(hex) || lava.Contains(hex) || outerWalls.Contains(hex)
+                    || sampler.WastedTerrainAt(hex) == Terrain.Mountain || !reached.Add(hex))
+                {
+                    continue;
+                }
+
+                foreach (var n in hex.Neighbours())
+                {
+                    open.Push(n);
+                }
+            }
+
+            return island.JotunTowers.Any(t => reached.Contains(t.Coord));
+        }
         static bool TwoGatesEverywhere(GeneratedIsland i) =>
             i.UtgardWalls.GroupBy(w => w.Ring).All(g => g.Count(w => w.IsGate) == 2);
 
@@ -304,17 +339,24 @@ public class GoldenRegenerationTests
                 && c.Island.UtgardWalls.Any(w => w.Piece == Palisades.PalisadePiece.EndCoast))),
             ("wasted_island_one_ring", Smallest("one ring", c => Rings(c.Island) == 1 && c.Island.UtgardWalls.Any(w => w.IsGate))),
             ("wasted_island_closed_two_rings_max_towers", candidates.Where(c => Rings(c.Island) == 2 && c.Island.JotunTowers.Count == 6)
-                .OrderByDescending(c => c.Island.UtgardWalls.Count).ThenBy(c => c.Seed).FirstOrDefault()
+                .OrderBy(c => c.Island.UtgardWalls.Count(w => w.Piece is Palisades.PalisadePiece.End or Palisades.PalisadePiece.EndCoast))
+                .ThenByDescending(c => c.Island.UtgardWalls.Count).ThenBy(c => c.Seed).FirstOrDefault()
                 ?? throw new InvalidOperationException("no two-ring six-tower island")),
             ("wasted_island_most_open_ends", candidates
                 .OrderByDescending(c => c.Island.UtgardWalls.Count(w => w.Piece is Palisades.PalisadePiece.End or Palisades.PalisadePiece.EndCoast))
                 .ThenBy(c => c.Island.TileCount).ThenBy(c => c.Seed).First()),
+            // The docs Utgard example (src/frontend/src/lib/docs/utgardIslandExample.json is a copy of this scenario): a real, mid-sized
+            // island with both wall lines, three or more towers (one of them between the two lines), a lava stream, preferably a shore end.
+            ("docs_utgard_example", candidates.Where(IsDocsUtgardExample)
+                .OrderByDescending(c => c.Island.UtgardWalls.Any(w => w.Piece == Palisades.PalisadePiece.EndCoast))
+                .ThenBy(c => c.Island.TileCount).ThenBy(c => c.Seed).FirstOrDefault()
+                ?? throw new InvalidOperationException("no island fits the docs Utgard example in seeds 1-40")),
         };
 
         var options = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
         var sb = new StringBuilder();
         sb.Append("{\n  \"_comment\": ").Append(JsonSerializer.Serialize(
-            "Cross-language parity fixture for the endgame map (EndgameGenerator.PlaceCore backend / placeEndgame frontend): given a real wasted island's tiles (with terrain), its river (lava) tiles, its giants (anchor and family), its camp hexes, a world seed and an island index, both sides must place the same Utgard wall hexes (ring, piece, camera file, gate flag, level) and the same Jotun watchtowers, in the same order. Covers: an island with two rings, shore ends and two gates per ring, one with a single ring, a big island with the maximum six towers (both rings closed all the way round), and the island whose rings are cut into the most runs (land ends and shore ends). Every scenario is a real wasted island of a real WorldGenerator.Generate() run at radius 1000 (the smallest of seeds 1-40 with the wanted feature). Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). EndgamePlacementGoldenTests.cs (backend) and endgamePlacement.golden.test.ts (frontend) each compute against this fixture with their own production implementation, then assert the frozen `walls` and `towers` lists (order matters: walls by ring then ring order, towers in placement order).",
+            "Cross-language parity fixture for the endgame map (EndgameGenerator.PlaceCore backend / placeEndgame frontend): given a real wasted island's tiles (with terrain), its river (lava) tiles, its giants (anchor and family), its camp hexes, a world seed and an island index, both sides must place the same Utgard wall hexes (the natural wall loops through each ring band: ring, piece, camera file, gate flag, level) and the same Jotun watchtowers, in the same order. Covers: the island the docs Utgard example shows (docs_utgard_example: both wall lines, a tower between them, a lava stream), an island with two rings, shore ends and two gates per ring, one with a single ring, a big island with the maximum six towers (the two-ring island with the fewest open ends), and the island whose rings are cut into the most runs (land ends and shore ends). Every scenario is a real wasted island of a real WorldGenerator.Generate() run at radius 1000 (the smallest of seeds 1-40 with the wanted feature). Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). EndgamePlacementGoldenTests.cs (backend) and endgamePlacement.golden.test.ts (frontend) each compute against this fixture with their own production implementation, then assert the frozen `walls` and `towers` lists (order matters: walls by ring then ring order, towers in placement order).",
             options)).Append(",\n  \"scenarios\": [\n");
 
         for (var s = 0; s < scenarios.Length; s++)

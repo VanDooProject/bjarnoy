@@ -10,6 +10,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RouteModal from './RouteModal.vue';
+import { mapCovered } from '../../composables/useMapCover';
 import { createTestI18n } from '../../test/i18n';
 import enProfile from '../../i18n/locales/en/profile.json';
 
@@ -51,6 +52,31 @@ afterEach(() => {
 });
 
 describe('RouteModal', () => {
+  it('covers the map while mounted on a phone-size screen, and releases it on unmount', async () => {
+    setIsMobile(true);
+    const router = testRouter();
+    await router.push('/leaderboards');
+    await router.isReady();
+
+    const wrapper = mountModal(router);
+    await wrapper.vm.$nextTick();
+    expect(mapCovered.value).toBe(true);
+    wrapper.unmount();
+    expect(mapCovered.value).toBe(false);
+  });
+
+  it('does not cover the map on desktop, where it stays visible behind the backdrop', async () => {
+    setIsMobile(false);
+    const router = testRouter();
+    await router.push('/leaderboards');
+    await router.isReady();
+
+    const wrapper = mountModal(router);
+    await wrapper.vm.$nextTick();
+    expect(mapCovered.value).toBe(false);
+    wrapper.unmount();
+  });
+
   it('renders the slotted content', async () => {
     const router = testRouter();
     await router.push('/leaderboards');

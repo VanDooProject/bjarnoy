@@ -1306,6 +1306,8 @@ describe('useWorldStore fetchFogMask', () => {
     expect(pixelsToBitmap).toHaveBeenCalledWith(expect.any(Uint8ClampedArray), 192, 192);
     expect(store.fogMaskBounds).toEqual({ minU: -64, minV: -64, maxU: 128, maxV: 128, width: 192, height: 192 });
     expect(store.fogMaskBitmap).not.toBeNull();
+    // The coverage is built from the same stitched window.
+    expect(store.fogCoverage).not.toBeNull();
   });
 
   it('decodes only the chunks whose version changed and closes the bitmap it replaces', async () => {
@@ -1618,7 +1620,7 @@ describe('useWorldStore refreshDemoFogMask', () => {
     const secondRefresh = store.refreshDemoFogMask(); // fired before the first resolves
     expect(buildDemoFogMask).toHaveBeenCalledTimes(1);
 
-    resolveFirst!({ close: vi.fn() });
+    resolveFirst!({ bitmap: { close: vi.fn() }, coverage: {} });
     await Promise.all([firstRefresh, secondRefresh]);
     expect(buildDemoFogMask).toHaveBeenCalledTimes(1);
 
@@ -1626,7 +1628,7 @@ describe('useWorldStore refreshDemoFogMask', () => {
     // — this isn't a one-shot latch. The fog has to actually move for that,
     // since an unchanged fog is now skipped (see the test below); founding a
     // settlement claims territory, which is exactly what moves it.
-    buildDemoFogMask.mockResolvedValueOnce({ close: vi.fn() });
+    buildDemoFogMask.mockResolvedValueOnce({ bitmap: { close: vi.fn() }, coverage: {} });
     store.model.foundSettlement('player-1', 'You', 'Second', { q: 20, r: 20 });
     await store.refreshDemoFogMask();
     expect(buildDemoFogMask).toHaveBeenCalledTimes(2);
@@ -1640,7 +1642,7 @@ describe('useWorldStore refreshDemoFogMask', () => {
   // timer, so the poll now compares WorldModel.fogSignature() first.
   it('skips the bake when nothing the fog is drawn from has changed', async () => {
     buildDemoFogMask.mockReset();
-    buildDemoFogMask.mockResolvedValue({ close: vi.fn() });
+    buildDemoFogMask.mockResolvedValue({ bitmap: { close: vi.fn() }, coverage: {} });
     const store = await loadStoreModule(true);
 
     await store.refreshDemoFogMask();
@@ -1672,10 +1674,11 @@ describe('useWorldStore refreshDemoFogMask', () => {
     expect(buildDemoFogMask).toHaveBeenCalledTimes(1);
     expect(store.fogMaskBitmap).toBeNull();
 
-    buildDemoFogMask.mockResolvedValueOnce({ close: vi.fn() });
+    buildDemoFogMask.mockResolvedValueOnce({ bitmap: { close: vi.fn() }, coverage: {} });
     await store.refreshDemoFogMask();
     expect(buildDemoFogMask).toHaveBeenCalledTimes(2);
     expect(store.fogMaskBitmap).not.toBeNull();
+    expect(store.fogCoverage).not.toBeNull();
   });
 });
 

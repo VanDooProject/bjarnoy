@@ -797,6 +797,21 @@ texture's own placement (`uWorldToMaskScalePrev`/`OffsetPrev`) because the windo
 moves with the camera. The LIVE_POLL_MS poll re-requests the current window with
 the last `ETag`; demo mode keeps its whole-world bake.
 
+**The mask is also the client's explored state.** The stitched window's pixels
+become a `FogCoverage` (`lib/map/fog/fogCoverage.ts`) next to the bitmap, built
+once per mask update (demo bakes it from its own pixels the same way). R = 0 on a
+hex texel means the server counts the hex explored (persisted history §1e OR
+current discs), so `WorldModel.isExplored` reads it in addition to the
+client's own vision-derived set: after a reload, ground explored by a settlement
+whose Longhouse was destroyed since is still explored for hover, borders and
+markers. The terrain cull (`isPastTerrainCull`, the clipped viewport scan,
+`isEntirelyDeepFog`) keeps a hex while it is within `FOG_TERRAIN_CULL_HEXES` of a
+current vision disc **or** the mask is not provably opaque there
+(R < 255 × `FOG_MIST_OPAQUE_AT_RAMP`, dilated by one hex for bilinear filtering
+and sprite overhang). Outside the window the mask reads unknown, so only the
+vision discs count there; before the first mask arrives the cull is vision-only.
+No extra request or response field: the fog-chunks read already carries it.
+
 **Not done here** (still the plans above): guild-shared sources (§1a), the
 per-player raw-distance-buffer tier of the cache (only the final PNG is cached),
 eager prefetch of a player's own history on session start, and the §2.8 debug

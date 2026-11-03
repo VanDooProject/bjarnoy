@@ -116,13 +116,18 @@ Docs pages (the tile docs, the wasted lands page) play their own clips with
 `useAnimationClock`: frozen under Off, and under reduced motion unless the
 setting is On. They don't run the fps governor.
 
-## Hidden tabs
+## Hidden tabs and covered maps
 
 The Pixi ticker stops when the tab is hidden (`document.hidden`) and starts
 again when it is visible, so a background tab doesn't render, advance clips
 or rebuild. A tab that is visible but not focused (another window in front,
 a second monitor) keeps rendering and animating: that is a player watching
 the map.
+
+The ticker also stops while a phone-size route modal (profile, reports,
+leaderboards, ...) covers the whole screen with an opaque panel, and starts
+again when it closes (`useMapCover` -> `HexMapRenderer.setCovered`). A desktop
+modal leaves the map visible behind its backdrop and keeps it running.
 
 The fps governor ignores frames while hidden and restarts its current
 window when the tab comes back, so neither the throttled frames a browser

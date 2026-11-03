@@ -257,7 +257,6 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
       await page.waitForTimeout(20);
     }
     await page.mouse.up();
-    await page.waitForTimeout(300);
 
     const after = await settlement.screenshot();
     expect(Buffer.compare(before, after)).not.toBe(0);

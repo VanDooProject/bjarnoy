@@ -149,6 +149,7 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
         <li>{{ $t('docs.wildlifeCamps.rules.building') }}</li>
         <li>{{ $t('docs.wildlifeCamps.rules.respawn') }}</li>
         <li>{{ $t('docs.wildlifeCamps.rules.neverBuilt') }}</li>
+        <li>{{ $t('docs.wildlifeCamps.rules.atSea') }}</li>
         <li>{{ $t('docs.wildlifeCamps.rules.hunting') }}</li>
         <li>{{ $t('docs.wildlifeCamps.rules.regrowth') }}</li>
         <li>{{ $t('docs.wildlifeCamps.rules.calm') }}</li>

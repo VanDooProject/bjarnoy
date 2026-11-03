@@ -12,10 +12,6 @@ import { canPlacePalisade, isRefusal, tileOfWallHex, type PalisadePiece, type Wa
 import { UtgardFamily } from './giantPlacement';
 import type { Terrain, TileOrientation } from './types';
 
-/** Hex distance of the inner ring from Utgard's anchor (two hexes clear of the 7-hex fortress). */
-export const InnerRingRadius = 3;
-/** Hex distance of the outer ring from Utgard's anchor. */
-export const OuterRingRadius = 6;
 /** A ring is built only when at least this share of its hexes can take a wall. */
 export const MinRingLandShare = 0.6;
 /** Gates per ring, on straight pieces as far apart as the ring allows. */
@@ -48,10 +44,6 @@ export interface EndgameSites {
   walls: UtgardWallPlacement[];
   /** Tower hexes in placement order (orientation is the tile's own, attached by the caller). */
   towers: AxialCoord[];
-}
-
-export function ringRadius(ring: UtgardRing): number {
-  return ring === 'inner' ? InnerRingRadius : OuterRingRadius;
 }
 
 export function ringLevel(ring: UtgardRing): number {
@@ -123,9 +115,10 @@ export function placeEndgame(
   const giantHexes = new Set<string>();
   for (const giant of giants) for (const hex of footprint(giant.anchor)) giantHexes.add(coordKey(hex));
 
-  const walls = placeWalls(anchor, terrainOf, isRiver, giantHexes, campHexes, seed);
+  const { walls, outerLoop } = placeWalls(anchor, terrainOf, isRiver, giantHexes, campHexes, seed);
   const wallHexes = new Set(walls.map((w) => coordKey(w.coord)));
-  const towers = placeTowers(islandTiles, anchor, terrainOf, isRiver, giantHexes, campHexes, wallHexes, seed);
+  const insideOuter = outerLoop ? insideLoop(anchor, outerLoop) : new Set<string>();
+  const towers = placeTowers(islandTiles, anchor, terrainOf, isRiver, giantHexes, campHexes, wallHexes, insideOuter, seed);
   return { walls, towers };
 }
 
@@ -136,13 +129,17 @@ function placeWalls(
   giantHexes: ReadonlySet<string>,
   campHexes: ReadonlySet<string>,
   seed: number,
-): UtgardWallPlacement[] {
+): { walls: UtgardWallPlacement[]; outerLoop: AxialCoord[] | null } {
   const ctx = { terrainAt: terrainOf, isRiver };
   const result: UtgardWallPlacement[] = [];
+  let outerLoop: AxialCoord[] | null = null;
   const emptyWalls: WallSet = { walls: new Set(), gates: new Set() };
 
+  // The outer line keeps one clear hex from the inner one, so the two rings never touch.
+  const nearInner = new Set<string>();
   for (const kind of ['inner', 'outer'] as const) {
-    const hexes = ring(anchor, ringRadius(kind));
+    const hexes = naturalLoop(anchor, kind, terrainOf, isRiver, giantHexes, seed, kind === 'outer' ? nearInner : undefined);
+    if (kind === 'inner') for (const hex of hexes) for (const c of [hex, ...neighbors(hex)]) nearInner.add(coordKey(c));
     const eligible = hexes.map((hex) => {
       const key = coordKey(hex);
       return (
@@ -154,11 +151,173 @@ function placeWalls(
       );
     });
     const eligibleCount = eligible.filter(Boolean).length;
-    if (eligibleCount < MinRingLandShare * hexes.length) continue;
+    if (hexes.length === 0 || eligibleCount < MinRingLandShare * hexes.length) continue;
 
     result.push(...resolveRing(hexes, eligible, terrainOf, seed, kind));
+    if (kind === 'outer') outerLoop = hexes;
   }
-  return result;
+  return { walls: result, outerLoop };
+}
+
+/**
+ * The hexes a closed loop round the anchor encloses (the loop itself excluded): a flood from the anchor that the loop's hexes stop.
+ * Only set membership, so its order cannot differ between the two sides.
+ */
+export function insideLoop(anchor: AxialCoord, loop: readonly AxialCoord[]): Set<string> {
+  const wall = new Set(loop.map(coordKey));
+  const limit = RingBands.outer[1] + 1;
+  const inside = new Set<string>([coordKey(anchor)]);
+  const queue: AxialCoord[] = [anchor];
+  while (queue.length > 0) {
+    const c = queue.pop()!;
+    for (const n of neighbors(c)) {
+      const key = coordKey(n);
+      if (inside.has(key) || wall.has(key) || hexDistance(n, anchor) > limit) continue;
+      inside.add(key);
+      queue.push(n);
+    }
+  }
+  return inside;
+}
+
+/** Hex-distance band each ring's line may wander in: [min, max] from Utgard's anchor. One clear hex always separates the two bands. */
+export const RingBands: Record<UtgardRing, readonly [number, number]> = { inner: [3, 6], outer: [7, 11] };
+/** Control points of the ring's wobble round the full circle (more on the longer outer ring). */
+const RingNoisePoints: Record<UtgardRing, number> = { inner: 5, outer: 8 };
+/** The finer second octave: its own control points (more than twice the first's) and how far it pushes the target in or out. */
+const RingDetailPoints: Record<UtgardRing, number> = { inner: 11, outer: 17 };
+const RingDetailAmplitude = 0.9;
+/** Range the wobble's target distance is drawn from, per ring. */
+const RingTargetRange: Record<UtgardRing, readonly [number, number]> = { inner: [2.6, 6.4], outer: [6.6, 11.4] };
+/** Cost of a hex the line can follow without a wall (mountain, lava, sea, a giant) against a hex that needs one. */
+const BarrierStepCost = 0.35;
+const WallStepCost = 1;
+/** Cost of a sea hex: the line keeps to land where the band allows, so a small island's ring hugs its coast instead of running out to sea. */
+const SeaStepCost = 15;
+/** Cost per hex of distance between a hex and the wobble's target distance at its angle. */
+const TargetPull = 3;
+
+/**
+ * The closed line one ring follows round Utgard, as a cycle of hexes (each adjacent to the next, no two non-consecutive ones
+ * adjacent): the cheapest loop through the ring's band, where a hex costs more the further it is from a wobbling target distance
+ * (value noise round the circle) and much less when the terrain itself already stops an army (mountain, lava, sea, a giant), so the
+ * line bends towards those and leaves them to close the ring.
+ */
+export function naturalLoop(
+  anchor: AxialCoord,
+  kind: UtgardRing,
+  terrainOf: (c: AxialCoord) => Terrain,
+  isRiver: (c: AxialCoord) => boolean,
+  giantHexes: ReadonlySet<string>,
+  seed: number,
+  blocked: ReadonlySet<string> = new Set(),
+): AxialCoord[] {
+  const [minD, maxD] = RingBands[kind];
+  const points = RingNoisePoints[kind];
+  const [lo, hi] = RingTargetRange[kind];
+  const salt = kind === 'inner' ? 601 : 607;
+  const control = Array.from({ length: points }, (_, k) => lo + (hi - lo) * hash2(k, points, seed + salt));
+  const detailPoints = RingDetailPoints[kind];
+  const detail = Array.from({ length: detailPoints }, (_, k) => RingDetailAmplitude * (2 * hash2(k, detailPoints, seed + salt + 2) - 1));
+  const periodic = (values: number[], u: number) => {
+    const x = u * values.length;
+    const k = Math.floor(x);
+    const f = x - k;
+    return values[k % values.length]! * (1 - f) + values[(k + 1) % values.length]! * f;
+  };
+
+  // The band's hexes in a fixed order (distance, then ring order), with their angle and step cost.
+  const nodes: { hex: AxialCoord; u: number; cost: number }[] = [];
+  const index = new Map<string, number>();
+  for (let d = minD; d <= maxD; d++) {
+    const hexes = ring(anchor, d);
+    hexes.forEach((hex, i) => {
+      if (blocked.has(coordKey(hex))) return;
+      const u = i / (6 * d);
+      const target = periodic(control, u) + periodic(detail, u);
+      const terrain = terrainOf(hex);
+      const barrier = terrain === 'mountain' || isRiver(hex) || giantHexes.has(coordKey(hex));
+      index.set(coordKey(hex), nodes.length);
+      // True (Euclidean) distance in hex widths: a constant hex distance is a hexagon, so the wobble is measured round a circle.
+      const dq = hex.q - anchor.q;
+      const dr = hex.r - anchor.r;
+      const radius = Math.sqrt(dq * dq + dq * dr + dr * dr);
+      nodes.push({ hex, u, cost: (terrain === 'sea' ? SeaStepCost : barrier ? BarrierStepCost : WallStepCost) + TargetPull * Math.abs(radius - target) });
+    });
+  }
+  const n = nodes.length;
+  const adjacency = nodes.map(({ hex }) =>
+    DIRECTIONS.map((dir) => index.get(coordKey({ q: hex.q + dir.q, r: hex.r + dir.r }))).filter((j): j is number => j !== undefined),
+  );
+  // Crossing the cut at u = 0 going round (u rising) moves a lap up; back across, a lap down.
+  const lapStep = (a: number, b: number) => (nodes[a]!.u >= 0.75 && nodes[b]!.u < 0.25 ? 1 : nodes[a]!.u < 0.25 && nodes[b]!.u >= 0.75 ? -1 : 0);
+
+  let best: { cost: number; path: number[] } | null = null;
+  for (let s = 0; s < n; s++) {
+    if (nodes[s]!.u !== 0) continue;
+    // Dijkstra over (hex, lap) from (s, 0) to (s, 1); O(V^2) with fixed tie-breaks so both sides walk the same way.
+    const dist = new Array<number>(2 * n).fill(Infinity);
+    const prev = new Array<number>(2 * n).fill(-1);
+    const done = new Array<boolean>(2 * n).fill(false);
+    dist[s] = 0;
+    const goal = n + s;
+    for (;;) {
+      let v = -1;
+      for (let i = 0; i < 2 * n; i++) if (!done[i] && dist[i]! < Infinity && (v === -1 || dist[i]! < dist[v]!)) v = i;
+      if (v === -1 || v === goal) break;
+      done[v] = true;
+      const lap = v >= n ? 1 : 0;
+      const a = v - lap * n;
+      for (const b of adjacency[a]!) {
+        const nextLap = lap + lapStep(a, b);
+        if (nextLap < 0 || nextLap > 1) continue;
+        if (nextLap === 0 && b === s) continue;
+        const w = nextLap * n + b;
+        const cost = dist[v]! + nodes[b]!.cost;
+        if (cost < dist[w]!) {
+          dist[w] = cost;
+          prev[w] = v;
+        }
+      }
+    }
+    if (dist[goal] === Infinity) continue;
+    if (best !== null && dist[goal]! >= best.cost) continue;
+    const path: number[] = [];
+    for (let v = prev[goal]!; v !== -1; v = prev[v]!) path.push(v % n);
+    path.reverse();
+    best = { cost: dist[goal]!, path };
+  }
+  if (!best) return [];
+  return withoutChords(best.path.map((i) => nodes[i]!.hex));
+}
+
+/**
+ * Cuts shortcuts out of a closed hex path until no two non-consecutive hexes are the same or adjacent: at the first such pair (lowest
+ * i, then lowest j) the shorter of the two arcs between them is dropped (the forward one on a tie). The result is a simple cycle the
+ * palisade rules can resolve into one closed wall without a branch or a 60 degree bend.
+ */
+export function withoutChords(cycle: AxialCoord[]): AxialCoord[] {
+  let c = [...cycle];
+  for (;;) {
+    const n = c.length;
+    let cut: [number, number] | null = null;
+    for (let i = 0; i < n && !cut; i++) {
+      for (let j = i + 2; j < n; j++) {
+        if (i === 0 && j === n - 1) continue;
+        const d = hexDistance(c[i]!, c[j]!);
+        if (d <= 1) {
+          cut = [i, j];
+          break;
+        }
+      }
+    }
+    if (!cut || n <= 6) return c;
+    const [i, j] = cut;
+    const forward = j - i - 1;
+    const backward = n - (j - i) - 1 + (hexDistance(c[i]!, c[j]!) === 0 ? 1 : 0);
+    if (forward <= backward) c = [...c.slice(0, i + 1), ...c.slice(hexDistance(c[i]!, c[j]!) === 0 ? j + 1 : j)];
+    else c = c.slice(i, hexDistance(c[i]!, c[j]!) === 0 ? j : j + 1);
+  }
 }
 
 /** One qualified ring: runs, shore ends, refused runs dropped, gates, pieces. */
@@ -307,10 +466,12 @@ function placeTowers(
   giantHexes: ReadonlySet<string>,
   campHexes: ReadonlySet<string>,
   wallHexes: ReadonlySet<string>,
+  insideOuter: ReadonlySet<string>,
   seed: number,
 ): AxialCoord[] {
   const count = towerCountFor(islandTiles.length);
-  const minDistanceFromAnchor = OuterRingRadius + 1;
+  // Towers stand outside the inner wall line - between the two lines when there is room, or beyond the outer one.
+  const minDistanceFromAnchor = RingBands.inner[1] + 1;
   const fp = footprint(anchor);
 
   const candidates: { coord: AxialCoord; hash: number }[] = [];
@@ -320,19 +481,23 @@ function placeTowers(
     const key = coordKey(hex);
     if (isRiver(hex) || giantHexes.has(key) || campHexes.has(key) || wallHexes.has(key)) continue;
     if (hexDistance(hex, anchor) <= minDistanceFromAnchor) continue;
+    if (neighbors(hex).some((n) => wallHexes.has(coordKey(n)))) continue;
     // Utgard's footprint is the anchor and its neighbours; a tower keeps MinTowerSpacing from every one of them.
     if (fp.some((f) => hexDistance(f, hex) < MinTowerSpacing)) continue;
     candidates.push({ coord: hex, hash: hash2(hex.q, hex.r, seed + 401) });
   }
 
+  // If there is room between the two wall lines (inside the outer line's loop), the first tower stands there.
+  const between = candidates.filter((c) => insideOuter.has(coordKey(c.coord)));
+
   const towers: AxialCoord[] = [];
   while (towers.length < count) {
     let best: { coord: AxialCoord; hash: number } | null = null;
     let bestSpread = -1;
-    for (const candidate of candidates) {
+    for (const candidate of towers.length === 0 && between.length > 0 ? between : candidates) {
       if (towers.some((t) => hexDistance(t, candidate.coord) < MinTowerSpacing)) continue;
 
-      // The first tower is the highest hash; every later one the farthest from Utgard and the towers so far.
+      // The first tower is the highest hash (of those between the lines, if any); every later one the farthest from Utgard and the towers so far.
       let spread = 0;
       if (towers.length > 0) {
         spread = hexDistance(candidate.coord, anchor);

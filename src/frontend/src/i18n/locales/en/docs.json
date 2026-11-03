@@ -66,7 +66,7 @@
       "ships": {
         "shrines": "Njörd's shrine makes your ships attack harder.",
         "walls": "Walls do not stop fleets.",
-        "wildlifeCamps": "Wildlife camps never ambush a fleet."
+        "wildlifeCamps": "The whale road, the one camp at sea, ambushes fleets."
       },
       "wildlifeCamps": {
         "landMovement": "Camps ambush armies on the road.",
@@ -382,12 +382,13 @@
     },
     "defences": {
       "heading": "Utgard's defences",
-      "body": "The giants don't leave their islands open. Jötun watchtowers guard the approaches, and walls in Utgard's own masonry close the ground between them, down to the waterline.",
+      "body": "The giants don't leave their islands open. Jötun watchtowers guard the approaches, and walls in Utgard's own masonry close the ground round the giant, down to the waterline.",
       "example": {
-        "alt": "An example Utgard: the giant in the middle, a ring of walls round it with one gate, and Jötun watchtowers outside the ring.",
+        "alt": "An example Utgard: the giant in the middle, two lines of walls round it with gates, and Jötun watchtowers outside the inner line.",
         "hoverHint": "Point at a hex to see what it is.",
-        "caption": "Utgard stands inside two rings of walls. The inner ring is stronger (level 2) than the outer one (level 1), and watchtowers guard the ground outside."
+        "caption": "Utgard stands inside two wall lines. The inner one is stronger (level 2) than the outer one (level 1), and watchtowers guard the ground outside the inner line, one of them between the two lines where there is room. The lines follow the lie of the land and close themselves on mountains and at the coast, so they are never perfect circles."
       },
+      "wallsTechNote": "Each wall line is the cheapest closed loop through a distance band round Utgard's anchor (inner 3 to 6 hexes, outer 7 to 11), pulled towards a wobbling target distance. Mountains, rivers and giant hexes cost far less than a hex that needs a wall, so the line runs through them; sea costs far more, so it keeps to land. The outer line stays one hex clear of the inner one. Towers stand more than 7 hexes from Utgard and never on or next to a wall hex.",
       "level": "Level",
       "watchtower": {
         "heading": "Jötun watchtower",
@@ -419,7 +420,7 @@
         "holding": "An army standing on a site holds it. Every hour the jötnar that regrew come out and fight it in a full battle. While the army wins, the site stays down.",
         "loot": "A holding army takes loot every hour (300 at a watchtower, 1,000 at Utgard: 40% iron, 30% food, 30% stone) until its carry capacity is full. What it cannot carry is lost.",
         "aggression": "Sites with jötnar ambush armies that come into their guard range and burn player towers inside it unless an army defends them. After a fight a site is calm for 1 hour.",
-        "walls": "Utgard stands inside one or two rings of walls, if the island has room: the inner ring at level 2, the outer one at level 1. They block land armies, and their gates never open for players.",
+        "walls": "Utgard stands inside one or two rings of walls, if the island has room. They bend with the land instead of running in a circle: the inner ring at level 2, the outer one at level 1. They block land armies, and their gates never open for players.",
         "breaching": "Walls are breached by an Attack with rams that names the wall: only rams damage a wall, one level per won strike. At level 0 the wall is breached and armies can pass. Utgard's walls have no settlement to attack, so they are assaulted directly.",
         "wallPace": "An Utgard wall loses at most one level a day, and repairs one level a day while no army stands on or next to it. The inner ring needs two strikes a day apart, with an army kept beside it in between.",
         "ram": "The ram is the wall breaker: the same siege power as the catapult, much tougher and slower, trained at the Siege Workshop. It damages walls and towers; catapults burn towers and every other building but cannot touch a wall.",
@@ -531,7 +532,8 @@
       "building": "Once a camp is cleared you can build on its hex (not Fenrir's brood), and the building removes the camp for as long as it stands.",
       "respawn": "A cleared camp refills only while its hex lies outside every realm. An empty camp inside a realm stays empty; when the building on it is gone and the hex is outside every realm, the camp comes back.",
       "neverBuilt": "The eagle's eyrie on its sea stack and Fenrir's brood in the wastes are never built on: the empty nest stays on the map, and Fenrir's brood keeps coming back.",
-      "hunting": "Hunting: send land units to a camp's hex with the Hunt order. Your army attack is fought against the beasts' defense, a tie goes to the camp. The loser loses everything, the winner part of its force. A win clears the camp and pays its loot.",
+      "atSea": "The whale road lies on open sea, far off the coast. It holds no land and burns no towers. A fleet that sails onto its hex while it is not calm is ambushed there, and only ships can hunt it. It pays food only, as much as your surviving ships can carry, and always comes back after you clear it.",
+      "hunting": "Hunting: send land units (ships for the whale road) to a camp's hex with the Hunt order. Your army attack is fought against the beasts' defense, a tie goes to the camp. The loser loses everything, the winner part of its force. A win clears the camp and pays its loot.",
       "regrowth": "Regrowth: a damaged camp regrows its beasts evenly over 4 hours (weak camps) or 8 hours (strong camps).",
       "calm": "Calm: after any fight a camp is calm for 24 hours. It regrows but does not attack.",
       "leveling": "Leveling: every 10th clear of a camp, by any player, raises its level by 1, up to 100. It never drops back. Its guard range stays as rolled, so a farmed camp gets tougher but does not claim more land.",
@@ -1060,7 +1062,7 @@
       "rules": {
         "inside": "A tower has to stand inside your realm. Build one at the border and the border moves out round it.",
         "chain": "A tower may also stand on ground only another tower has claimed. Its rings then reach further still, so a realm grows tower by tower across an island.",
-      "cut": "A tower only claims while it is chained to one of your longhouses through towers that are themselves chained. If a tower in the chain falls, the towers beyond it claim and see nothing until the link is rebuilt, unless another of your longhouses on the island still reaches them. A cut-off tower does not count against your tower limit.",
+        "cut": "A tower only claims while it is chained to one of your longhouses through towers that are themselves chained. If a tower in the chain falls, the towers beyond it claim and see nothing until the link is rebuilt, unless another of your longhouses on the island still reaches them. A cut-off tower does not count against your tower limit.",
         "built": "A tower claims land once it stands. A tower still under construction adds nothing."
       }
     },
@@ -1244,7 +1246,7 @@
       "targets": "A fleet can attack, raid or support settlements that hold shoreline.",
       "walls": "{walls} do not stop fleets.",
       "wallsLink": "Walls",
-      "camps": "Wildlife camps never ambush a fleet (see {camps}).",
+      "camps": "Land camps never ambush a fleet. The whale road, a camp on open sea, ambushes a fleet that sails onto its hex (see {camps}).",
       "campsLink": "Wildlife camps"
     },
     "troops": {
@@ -1321,5 +1323,11 @@
       },
       "cap": "Shrines and runes add up, but any one kind of bonus stops at +{percent}%."
     }
+  },
+  "mapZoom": {
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "hintCtrl": "Ctrl + scroll to zoom",
+    "hintCmd": "⌘ + scroll to zoom"
   }
 }

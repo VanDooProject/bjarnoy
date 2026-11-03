@@ -1,12 +1,13 @@
 <script setup lang="ts">
-// The Wasted Lands docs page's Utgard example: a small hand-placed wasted island (lib/docs/utgardExample.ts) with Utgard in the middle,
-// a ring of Utgard wall round it with a gate, and Jötun watchtowers outside, drawn by the game's own HexMapRenderer through a
+// The Wasted Lands docs page's Utgard example: a real wasted island from the world generator (lib/docs/utgardExample.ts) with Utgard on it,
+// two lines of Utgard wall round it with gates, and Jötun watchtowers outside the inner one, drawn by the game's own HexMapRenderer through a
 // StaticWorldModel like WallExample.vue. The renderer picks every wall hex's piece and rotation from its neighbours. Hovering a hex
 // names it.
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { useDocsMapRenderer } from '../../composables/useDocsMapRenderer';
+import DocsMapControls from './DocsMapControls.vue';
 import { StaticWorldModel } from '../../lib/map/StaticWorldModel';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import {
@@ -23,6 +24,8 @@ world.setRivers(buildUtgardExampleStreams());
 
 const NAME_KEY = {
   utgard: 'docs.wastedLands.island.giantWasted',
+  volcano: 'docs.wastedLands.island.giantVolcano',
+  camp: 'docs.wildlifeCamps.title',
   wall: 'docs.wastedLands.defences.walls.heading',
   gate: 'docs.wastedLands.defences.pieces.gate',
   tower: 'docs.wastedLands.defences.watchtower.heading',
@@ -36,7 +39,7 @@ const hovered = ref<HoverInfo | null>(null);
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-useDocsMapRenderer(canvas, container, {
+const { zoomIn, zoomOut, wheelHint } = useDocsMapRenderer(canvas, container, {
   worldModel: world,
   previewCenter: UTGARD_CENTRE,
   onHoverChange: (info: HoverInfo | null) => {
@@ -53,8 +56,9 @@ const captionText = computed(() => {
 
 <template>
   <div class="utgard-example" data-testid="utgard-example">
-    <div ref="container" class="map-host" role="img" :aria-label="$t('docs.wastedLands.defences.example.alt')">
-      <canvas ref="canvas" class="docs-map-canvas" />
+    <div ref="container" class="map-host">
+      <canvas ref="canvas" class="docs-map-canvas" role="img" :aria-label="$t('docs.wastedLands.defences.example.alt')" />
+      <DocsMapControls :zoom-in="zoomIn" :zoom-out="zoomOut" :wheel-hint="wheelHint" />
     </div>
     <p class="caption" data-testid="utgard-example-caption">{{ captionText }}</p>
     <p class="note">{{ $t('docs.wastedLands.defences.example.caption') }}</p>

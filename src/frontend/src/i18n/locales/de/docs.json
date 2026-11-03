@@ -66,7 +66,7 @@
       "ships": {
         "shrines": "Njörds Schrein lässt deine Schiffe härter zuschlagen.",
         "walls": "Mauern halten keine Flotten auf.",
-        "wildlifeCamps": "Wildtierlager überfallen nie eine Flotte."
+        "wildlifeCamps": "Der Walweg, das einzige Lager auf See, überfällt Flotten."
       },
       "wildlifeCamps": {
         "landMovement": "Lager überfallen Armeen unterwegs.",
@@ -382,12 +382,13 @@
     },
     "defences": {
       "heading": "Utgards Wehranlagen",
-      "body": "Die Riesen lassen ihre Inseln nicht schutzlos. Jötun-Wachtürme bewachen die Zugänge, und Mauern aus Utgards eigenem Mauerwerk schließen das Land dazwischen bis hinunter zum Wasser.",
+      "body": "Die Riesen lassen ihre Inseln nicht schutzlos. Jötun-Wachtürme bewachen die Zugänge, und Mauern aus Utgards eigenem Mauerwerk schließen das Land rund um den Riesen bis hinunter zum Wasser.",
       "example": {
-        "alt": "Ein Beispiel-Utgard: der Riese in der Mitte, ein Mauerring mit einem Tor darum und Jötun-Wachtürme außerhalb des Rings.",
+        "alt": "Ein Beispiel-Utgard: der Riese in der Mitte, zwei Mauerlinien mit Toren darum und Jötun-Wachtürme außerhalb der inneren Linie.",
         "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
-        "caption": "Utgard steht hinter zwei Mauerringen. Der innere Ring ist mit Stufe 2 stärker als der äußere mit Stufe 1, und Wachtürme sichern das Land davor."
+        "caption": "Utgard steht hinter zwei Mauerlinien. Die innere hat Stufe 2, die äußere Stufe 1, und Wachtürme sichern das Land außerhalb der inneren Linie, einer davon zwischen den beiden Linien, wenn dort Platz ist. Die Linien folgen dem Gelände und schließen sich an Bergen und an der Küste von selbst, es sind also keine glatten Kreise."
       },
+      "wallsTechNote": "Jede Mauerlinie ist die günstigste geschlossene Schleife durch ein Entfernungsband um Utgards Anker (innen 3 bis 6 Felder, außen 7 bis 11), gezogen zu einer schwankenden Zielentfernung. Berge, Flüsse und Riesenfelder kosten weit weniger als ein Feld, das eine Mauer braucht, die Linie läuft also durch sie hindurch. Meer kostet weit mehr, die Linie bleibt daher an Land. Die äußere Linie hält ein Feld Abstand zur inneren. Wachtürme stehen mehr als 7 Felder von Utgard entfernt, nie auf und nie neben einem Mauerfeld.",
       "level": "Stufe",
       "watchtower": {
         "heading": "Jötun-Wachturm",
@@ -419,7 +420,7 @@
         "holding": "Eine Armee, die auf einem Ort steht, besetzt ihn. Jede Stunde kommen die nachgewachsenen Jötnar heraus und kämpfen in einer vollen Schlacht gegen sie. Solange die Armee gewinnt, bleibt der Ort unten.",
         "loot": "Eine besetzende Armee erhält jede Stunde Beute (300 an einem Wachturm, 1.000 an Utgard: 40 % Eisen, 30 % Nahrung, 30 % Stein), bis ihre Tragkraft voll ist. Was sie nicht tragen kann, geht verloren.",
         "aggression": "Orte mit Jötnar überfallen Armeen, die in ihre Wachreichweite kommen, und brennen Spielertürme dort nieder, sofern keine Armee sie verteidigt. Nach einem Kampf ist ein Ort 1 Stunde lang ruhig.",
-        "walls": "Utgard steht, wenn die Insel genug Platz hat, hinter einem oder zwei Mauerringen: Der innere hat Stufe 2, der äußere Stufe 1. Sie halten Landarmeen auf, und ihre Tore öffnen sich nie für Spieler.",
+        "walls": "Utgard steht, wenn die Insel genug Platz hat, hinter einem oder zwei Mauerringen, die sich dem Gelände anpassen statt im Kreis zu laufen: Der innere hat Stufe 2, der äußere Stufe 1. Sie halten Landarmeen auf, und ihre Tore öffnen sich nie für Spieler.",
         "breaching": "Mauern brichst du mit einem Angriff mit Rammböcken, der die Mauer als Ziel nennt: Nur Rammböcke beschädigen eine Mauer, eine Stufe pro gewonnenem Schlag. Auf Stufe 0 ist die Mauer durchbrochen, und Armeen kommen hindurch. Utgards Mauern gehören zu keiner Siedlung, die man angreifen könnte, daher werden sie direkt gestürmt.",
         "wallPace": "Eine Utgardmauer verliert höchstens eine Stufe pro Tag und wird um eine Stufe pro Tag repariert, solange keine Armee auf oder neben ihr steht. Für den inneren Ring brauchst du zwei Schläge im Abstand eines Tages, und dazwischen muss eine Armee neben ihm bleiben.",
         "ram": "Der Rammbock ist der Mauerbrecher: Er hat dieselbe Belagerungskraft wie das Katapult, ist aber viel zäher und langsamer, und wird in der Belagerungswerkstatt ausgebildet. Er beschädigt Mauern und Türme; Katapulte brennen Türme und alle anderen Gebäude nieder, können aber keine Mauer anrühren.",
@@ -531,7 +532,8 @@
       "building": "Sobald ein Lager geräumt ist, kannst du auf seinem Feld bauen (nur bei Fenrirs Brut nicht). Solange das Gebäude steht, bleibt das Lager entfernt.",
       "respawn": "Ein geräumtes Lager füllt sich nur wieder auf, solange sein Feld außerhalb jedes Reichs liegt. Ein leeres Lager innerhalb eines Reichs bleibt leer. Steht das Gebäude darauf nicht mehr und liegt das Feld außerhalb jedes Reichs, kehrt das Lager zurück.",
       "neverBuilt": "Auf dem Adlerhorst auf seiner Brandungssäule und auf Fenrirs Brut in den Ödlanden wird nie gebaut. Das leere Nest bleibt auf der Karte, und Fenrirs Brut kehrt immer wieder zurück.",
-      "hunting": "Jagd: Schick Landeinheiten mit dem Jagdbefehl auf das Feld eines Lagers. Der Angriff deiner Armee wird gegen die Verteidigung der Tiere ausgekämpft, bei Gleichstand gewinnt das Lager. Der Verlierer verliert alles, der Gewinner einen Teil seiner Streitmacht. Ein Sieg räumt das Lager und zahlt seine Beute aus.",
+      "atSea": "Der Walweg liegt auf offener See, weit vor der Küste. Er beansprucht kein Land und brennt keine Türme nieder. Segelt eine Flotte auf sein Feld, solange er nicht ruhig ist, gerät sie dort in einen Hinterhalt. Jagen kannst du ihn nur mit Schiffen. Er liefert nur Nahrung, so viel deine überlebenden Schiffe tragen können, und kehrt nach jeder Räumung zurück.",
+      "hunting": "Jagd: Schick Landeinheiten (zum Walweg Schiffe) mit dem Jagdbefehl auf das Feld eines Lagers. Der Angriff deiner Armee wird gegen die Verteidigung der Tiere ausgekämpft, bei Gleichstand gewinnt das Lager. Der Verlierer verliert alles, der Gewinner einen Teil seiner Streitmacht. Ein Sieg räumt das Lager und zahlt seine Beute aus.",
       "regrowth": "Nachwuchs: Ein angeschlagenes Lager bekommt seine Tiere gleichmäßig über 4 Stunden (schwache Lager) oder 8 Stunden (starke Lager) zurück.",
       "calm": "Ruhe: Nach jedem Kampf ist ein Lager 24 Stunden lang ruhig. Es wächst weiter nach, greift aber nicht an.",
       "leveling": "Aufstieg: Jede 10. Räumung eines Lagers, egal durch welchen Spieler, hebt seine Stufe um 1, höchstens bis 100. Die Stufe sinkt nie wieder. Die Reichweite bleibt, wie sie ausgewürfelt wurde: Ein abgefarmtes Lager wird also stärker, beansprucht aber nicht mehr Land.",
@@ -1060,7 +1062,7 @@
       "rules": {
         "inside": "Ein Wachturm muss innerhalb deines Gebiets stehen. Baust du ihn an der Grenze, rückt die Grenze rund um ihn nach außen.",
         "chain": "Er darf auch auf Boden stehen, den erst ein anderer Wachturm beansprucht. Seine Ringe reichen dann noch weiter, und dein Gebiet wächst Turm für Turm über die Insel.",
-      "cut": "Ein Wachturm beansprucht nur Land, solange er über eine Kette von Türmen mit einem deiner Langhäuser verbunden ist. Fällt ein Turm in der Kette, beanspruchen und sehen die Türme dahinter nichts mehr, bis du die Lücke schließt – es sei denn, ein anderes deiner Langhäuser auf der Insel erreicht sie noch. Ein abgeschnittener Turm zählt nicht zu deinem Turmlimit.",
+        "cut": "Ein Wachturm beansprucht nur Land, solange er über eine Kette von Türmen mit einem deiner Langhäuser verbunden ist. Fällt ein Turm in der Kette, beanspruchen und sehen die Türme dahinter nichts mehr, bis du die Lücke schließt – es sei denn, ein anderes deiner Langhäuser auf der Insel erreicht sie noch. Ein abgeschnittener Turm zählt nicht zu deinem Turmlimit.",
         "built": "Land beansprucht ein Wachturm erst, wenn er steht. Eine Baustelle bringt noch nichts."
       }
     },
@@ -1244,7 +1246,7 @@
       "targets": "Eine Flotte kann Siedlungen angreifen, plündern oder unterstützen, die Küste beanspruchen.",
       "walls": "{walls} halten Flotten nicht auf.",
       "wallsLink": "Mauern",
-      "camps": "Wildtierlager überfallen nie eine Flotte (siehe {camps}).",
+      "camps": "Lager an Land überfallen nie eine Flotte. Der Walweg liegt auf offener See und überfällt jede Flotte, die auf sein Feld segelt (siehe {camps}).",
       "campsLink": "Wildtierlager"
     },
     "troops": {
@@ -1321,5 +1323,11 @@
       },
       "cap": "Schreine und Runen addieren sich, aber jede Art von Bonus endet bei +{percent} %."
     }
+  },
+  "mapZoom": {
+    "zoomIn": "Hineinzoomen",
+    "zoomOut": "Herauszoomen",
+    "hintCtrl": "Strg + Mausrad zum Zoomen",
+    "hintCmd": "⌘ + Mausrad zum Zoomen"
   }
 }

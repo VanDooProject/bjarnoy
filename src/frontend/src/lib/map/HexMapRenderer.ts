@@ -71,6 +71,7 @@ import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
+import type { FogCoverageLookup } from './fog/fogCoverage';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
 import { WaterDryLayer, entriesWorldBounds, maskEntries, type DryEntry } from './water/waterDryMask';
@@ -488,6 +489,11 @@ export interface HexMapRendererOptions {
   lockCamera?: boolean;
   /** Called whenever the camera transform is applied (pan, zoom, resize, re-framing). The host debounces. */
   onCameraChange?: () => void;
+  /**
+   * Fired when a wheel over the canvas is left to the page (an `allowPageScroll` host, a plain wheel, the reader not yet
+   * pressed on the map) while the camera can zoom (not `lockCamera`). A host shows its "use ctrl to zoom" hint from it.
+   */
+  onWheelToPage?: () => void;
   /**
    * Lets the page itself scroll under a wheel/touch gesture over the canvas
    * instead of the renderer eating it for camera zoom/pan. With `lockCamera`
@@ -1294,20 +1300,30 @@ export function coveredRowSpans(q: number, sources: FogSource[], out: number[]):
     if (dq < -s.radius || dq > s.radius) continue;
     const lo = s.r + Math.max(-s.radius, -dq - s.radius);
     const hi = s.r + Math.min(s.radius, -dq + s.radius);
-    // Insertion sort by `lo` — `sources` is a handful of settlements, so this
-    // beats allocating and sorting an array per column.
-    let i = count;
-    while (i > 0 && out[(i - 1) * 2] > lo) {
-      out[i * 2] = out[(i - 1) * 2];
-      out[i * 2 + 1] = out[(i - 1) * 2 + 1];
-      i--;
-    }
-    out[i * 2] = lo;
-    out[i * 2 + 1] = hi;
+    insertSpan(out, count, lo, hi);
     count++;
   }
+  return mergeSpans(out, count);
+}
+
+/**
+ * Inserts `[lo, hi]` into `out`'s first `count` intervals, keeping them sorted by `lo` — an insertion sort, since
+ * the lists are a handful of intervals long, which beats allocating and sorting an array per column.
+ */
+function insertSpan(out: number[], count: number, lo: number, hi: number): void {
+  let i = count;
+  while (i > 0 && out[(i - 1) * 2] > lo) {
+    out[i * 2] = out[(i - 1) * 2];
+    out[i * 2 + 1] = out[(i - 1) * 2 + 1];
+    i--;
+  }
+  out[i * 2] = lo;
+  out[i * 2 + 1] = hi;
+}
+
+/** Merges the overlapping/adjacent intervals of `out`'s first `count` sorted ones in place; returns the new count. */
+function mergeSpans(out: number[], count: number): number {
   if (count < 2) return count;
-  // Merge overlapping/adjacent intervals in place.
   let write = 0;
   for (let read = 1; read < count; read++) {
     const lo = out[read * 2];
@@ -1321,6 +1337,38 @@ export function coveredRowSpans(q: number, sources: FogSource[], out: number[]):
     }
   }
   return write + 1;
+}
+
+/**
+ * Adds the intervals `extra` (`[lo, hi, ...]`, as `FogCoverage.rSpans` returns them) to the first `count` merged
+ * intervals already in `out` — the union the viewport scan needs of the vision discs and the server-explored ground.
+ * Returns the new count; `out` stays sorted and merged.
+ */
+export function unionRowSpans(out: number[], count: number, extra: readonly number[]): number {
+  for (let i = 0; i < extra.length; i += 2) {
+    insertSpan(out, count, extra[i], extra[i + 1]);
+    count++;
+  }
+  return mergeSpans(out, count);
+}
+
+/** The slice of `FogCoverage` the terrain cull asks about. */
+export interface OpaqueCoverage {
+  isOpaque(q: number, r: number): boolean;
+}
+
+/**
+ * Whether an unexplored hex is past the terrain cull: further than `FOG_TERRAIN_CULL_HEXES` from every current-vision
+ * source and, once the server's mask is known, under provably opaque mist there (`FogCoverage.isOpaque`) — the mask
+ * keeps ground explored earlier (a destroyed Longhouse, a reload) clear after its vision discs are gone.
+ */
+export function isPastTerrainCullOf(
+  q: number,
+  r: number,
+  sources: FogSource[],
+  coverage: OpaqueCoverage | null,
+): boolean {
+  return distanceBeyondSources(q, r, sources) > FOG_TERRAIN_CULL_HEXES && (!coverage || coverage.isOpaque(q, r));
 }
 
 
@@ -1511,6 +1559,9 @@ type TapPoint = Pick<PointerEvent, 'clientX' | 'clientY' | 'pointerType'>;
 export function isWaypointTap(startCoordKey: string, lastCoordKey: string, movedPx: number): boolean {
   return lastCoordKey === startCoordKey && movedPx < DRAG_CLICK_SLOP_PX;
 }
+
+/** One zoom-button step (`zoomStep`). */
+const ZOOM_STEP = 1.25;
 
 /**
  * Whether a wheel event over the canvas goes to the page (scrolls it) instead of the map's zoom.
@@ -2826,15 +2877,32 @@ export class HexMapRenderer {
    * slowing it down — deliberately keyed off tab visibility, not window
    * focus/blur: an unfocused-but-visible tab (e.g. a second monitor) must
    * keep animating normally.
+   *
+   * The ticker also stops while something opaque covers the whole map
+   * (`setCovered`, e.g. the fullscreen phone route modal): rendering frames
+   * nobody can see costs CPU/GPU/battery. Both reasons feed one decision in
+   * `updateTickerRunning` so neither can restart a ticker the other stopped.
    */
   private onVisibilityChange = () => {
+    this.updateTickerRunning();
+  };
+
+  private covered = false;
+
+  /** Tells the renderer an opaque surface fully hides (true) or no longer hides (false) the map. */
+  setCovered(covered: boolean) {
+    this.covered = covered;
+    this.updateTickerRunning();
+  }
+
+  private updateTickerRunning() {
     if (!this.app) return;
-    if (document.hidden) {
+    if (document.hidden || this.covered) {
       this.app.ticker.stop();
     } else {
       this.app.ticker.start();
     }
-  };
+  }
 
   private onTouchStart = (e: TouchEvent) => {
     if (this.options.allowPageScroll) return;
@@ -3319,8 +3387,10 @@ export class HexMapRenderer {
         modifier: e.ctrlKey || e.metaKey,
         lockCamera: this.lockCamera,
       })
-    )
+    ) {
+      if (!this.lockCamera) this.options.onWheelToPage?.();
       return;
+    }
     e.preventDefault();
     if (this.interactionLocked) return;
     const screen = this.clientToCanvas(e.clientX, e.clientY);
@@ -3329,6 +3399,15 @@ export class HexMapRenderer {
     const factor = Math.exp(-e.deltaY * 0.001);
     this.zoomBy(screen, factor);
   };
+
+  /** One zoom-button step (a docs map's +/-): zooms around the canvas centre, 1.25x in or out, through the same `zoomBy` the wheel uses. */
+  zoomStep(direction: 1 | -1) {
+    if (this.interactionLocked) return;
+    const canvas = this.app?.canvas;
+    if (!canvas) return;
+    this.doubleTapZoom = null;
+    this.zoomBy({ x: canvas.offsetWidth / 2, y: canvas.offsetHeight / 2 }, direction === 1 ? ZOOM_STEP : 1 / ZOOM_STEP);
+  }
 
   /**
    * Anchor-preserving zoom: rescales the camera around a fixed screen point
@@ -3610,6 +3689,7 @@ export class HexMapRenderer {
     // `axialToOddQ`'s col *is* the axial q, so the column loop below is
     // already a loop over q and the spans can be applied to it directly.
     const spans: number[] = [];
+    const coverage = this.options.worldModel.getFogCoverage();
     for (let col = colMin; col <= colMax; col++) {
       // r = row - offset, so the viewport's row range becomes this column's
       // own r range.
@@ -3620,7 +3700,9 @@ export class HexMapRenderer {
         for (let r = rMin; r <= rMax; r++) out.push({ q: col, r });
         continue;
       }
-      const count = coveredRowSpans(col, clipSources, spans);
+      let count = coveredRowSpans(col, clipSources, spans);
+      // The server-explored ground is the second source: columns the discs miss still draw where the mask is clear.
+      if (coverage) count = unionRowSpans(spans, count, coverage.rSpans(col));
       for (let i = 0; i < count; i++) {
         const lo = Math.max(rMin, spans[i * 2]);
         const hi = Math.min(rMax, spans[i * 2 + 1]);
@@ -3640,16 +3722,15 @@ export class HexMapRenderer {
    * explored. This is the same predicate the per-hex cull already applies,
    * hoisted to bound the loop instead of being asked inside it.
    *
-   * Sound because a hex survives the cull only if it is explored, or within
-   * `exploredRadius + FOG_TERRAIN_CULL_HEXES` of some settlement — and every
-   * explored hex is itself within `exploredRadius` of the settlement that
-   * explored it: `exploredHexesFor` walks each vision disc out to
+   * Sound because a hex survives the cull only if it is explored in the model
+   * (a client-side explored hex is within `exploredRadius` of the settlement
+   * that explored it: `exploredHexesFor` walks each current vision disc out to
    * `disc.radius + FOG_SCOUT_RING`, and `exploredRadius` is the max over those
-   * same discs, and every disc the settlement ever explored from (so losing
-   * sight never shrinks it), of
-   * `distance(settlement, disc) + disc.radius + FOG_SCOUT_RING`,
-   * which bounds it by the triangle inequality. Settlements are never removed
-   * from the model, so no explored hex can outlive the source that covers it.
+   * same discs of `distance(settlement, disc) + disc.radius + FOG_SCOUT_RING`,
+   * which bounds it by the triangle inequality), within
+   * `exploredRadius + FOG_TERRAIN_CULL_HEXES` of some settlement, or clear in
+   * the server's `FogCoverage` — and `coordsInRect` scans all three: these
+   * discs, plus the coverage's own per-column spans.
    *
    * Null whenever the cull is not in force — no fog, or the debug flag off —
    * since then any hex in the viewport can draw.
@@ -4145,6 +4226,16 @@ export class HexMapRenderer {
    */
   private isEntirelyDeepFog(rect: { minX: number; minY: number; maxX: number; maxY: number }): boolean {
     const { worldModel } = this.options;
+    // Ground the server's mask leaves clear (explored earlier, no vision discs any more) is not under opaque fog.
+    const coverage = worldModel.getFogCoverage();
+    if (coverage) {
+      const colPitch = TILE_W * 0.75;
+      const colMin = Math.floor(rect.minX / colPitch) - 1;
+      const colMax = Math.ceil(rect.maxX / colPitch) + 1;
+      const rowMin = Math.floor(rect.minY / TILE_H) - 1;
+      const rowMax = Math.ceil(rect.maxY / TILE_H) + 1;
+      if (coverage.anyClearIn(colMin, colMax, rowMin, rowMax)) return false;
+    }
     for (const s of worldModel.listSettlements()) {
       const grid = isoGridPosition({ q: s.q, r: s.r }, TILE_W, TILE_H);
       // TILE_W alone already exceeds one hex's actual pixel pitch in every
@@ -4164,7 +4255,9 @@ export class HexMapRenderer {
 
   /**
    * Once-per-rebuild prune of the settlement list to the ones whose
-   * explored ring can still reach `bounds` (see fogSourcesNear). Shared by
+   * explored ring (current vision; ground the server's `FogCoverage` keeps
+   * clear is checked separately in `isPastTerrainCull`) can still reach
+   * `bounds` (see fogSourcesNear). Shared by
    * isPastTerrainCull's two callers (rebuildTerrain, rebuildTerrainFlat) so
    * a single settlement walk replaces what would otherwise be a fresh
    * distanceBeyondExplored scan over every settlement, per hex.
@@ -4182,7 +4275,7 @@ export class HexMapRenderer {
    * and rebuildTerrainFlat (world-map flat fill) so the two agree.
    */
   private isPastTerrainCull(q: number, r: number, fogSources: FogSource[]): boolean {
-    return distanceBeyondSources(q, r, fogSources) > FOG_TERRAIN_CULL_HEXES;
+    return isPastTerrainCullOf(q, r, fogSources, this.options.worldModel.getFogCoverage());
   }
 
   private rebuildTerrain(coords: AxialCoord[], fogActive: boolean) {
@@ -5926,12 +6019,19 @@ export class HexMapRenderer {
    * texture itself changed, and the previous texture keeps its own placement
    * for the cross-fade (FogMaskLayer.setMaskTexture). Ground outside `bounds`
    * reads as fully unknown (fogShader.ts's sampleMask) — §3's default for a
-   * chunk that isn't loaded. `bitmap` null is a no-op — both fog layers
+   * chunk that isn't loaded. `coverage` is the same pixels as per-hex lookups: the world model keeps it
+   * (`isExplored`) and the terrain cull, borders and markers read it, so they are rebuilt when its clear set changes.
+   * `bitmap` null is a no-op — both fog layers
    * already default an unbound mask to fully-unknown, so there's nothing
    * useful to do before the first real fetch resolves.
    */
-  setFogMask(bounds: MaskBounds, bitmap: ImageBitmap | null) {
+  setFogMask(bounds: MaskBounds, bitmap: ImageBitmap | null, coverage: FogCoverageLookup) {
     if (!bitmap) return;
+
+    const { worldModel } = this.options;
+    const previousSignature = worldModel.getFogCoverage()?.signature;
+    worldModel.setFogCoverage(coverage);
+    if (coverage.signature !== previousSignature) this.forceRebuild();
 
     const placement = fogMaskPlacement(bounds, TILE_W, TILE_H);
 

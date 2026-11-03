@@ -5,6 +5,7 @@
 // realm border the map draws round your own territory.
 import { ref, watch } from 'vue';
 import { useDocsMapRenderer } from '../../composables/useDocsMapRenderer';
+import DocsMapControls from './DocsMapControls.vue';
 import { StaticWorldModel } from '../../lib/map/StaticWorldModel';
 import { REALM_EXAMPLE_PLAYER, REALM_EXAMPLE_STEPS, applyRealmExampleStep } from '../../lib/docs/realmExample';
 
@@ -17,7 +18,7 @@ const canvas = ref<HTMLCanvasElement | null>(null);
 
 // useHexMapRenderer reads its options once, at mount: a later step goes through the same model's `setTiles` and the renderer's
 // `forceRebuild`, as WastedIsland.vue does.
-const { renderer } = useDocsMapRenderer(canvas, container, {
+const { renderer, zoomIn, zoomOut, wheelHint } = useDocsMapRenderer(canvas, container, {
   worldModel: world,
   playerId: REALM_EXAMPLE_PLAYER,
   previewCenter: { q: 3, r: 0 },
@@ -33,8 +34,9 @@ const lastStep = REALM_EXAMPLE_STEPS.length - 1;
 
 <template>
   <div class="realm-example" data-testid="realm-example">
-    <div ref="container" class="map-host" role="img" :aria-label="$t('docs.realm.example.alt')">
-      <canvas ref="canvas" class="docs-map-canvas" />
+    <div ref="container" class="map-host">
+      <canvas ref="canvas" class="docs-map-canvas" role="img" :aria-label="$t('docs.realm.example.alt')" />
+      <DocsMapControls :zoom-in="zoomIn" :zoom-out="zoomOut" :wheel-hint="wheelHint" />
     </div>
     <p class="caption" data-testid="realm-example-caption">{{ $t(`docs.realm.example.steps.${step + 1}`) }}</p>
     <label class="step-slider">
