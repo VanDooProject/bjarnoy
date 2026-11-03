@@ -33,7 +33,7 @@ import type {
   GuestArmySummary,
   GuildBoardTopicResponse,
   GuildMemberResponse,
-  GuildPerksResponse,
+  GuildCapsResponse,
   GuildResponse,
   GuildTreatyResponse,
   IslandResponse,
@@ -74,7 +74,6 @@ import type {
   RetargetFoundingRequest,
   SendMessageRequest,
   SetBuildingLevelRequest,
-  SetGuildFeeTierRequest,
   SetGuildMemberRoleRequest,
   SetUserPremiumRequest,
   SetUserStatusRequest,
@@ -702,7 +701,7 @@ export const api = {
   createGuild: (worldId: string, body: CreateGuildRequest) =>
     request<GuildResponse>(`/worlds/${worldId}/guilds`, { method: 'POST', body: JSON.stringify(body) }),
   getGuild: (guildId: string) => request<GuildResponse>(`/guilds/${guildId}`),
-  getGuildPerks: (guildId: string) => request<GuildPerksResponse>(`/guilds/${guildId}/perks`),
+  getGuildCaps: (guildId: string) => request<GuildCapsResponse>(`/guilds/${guildId}/caps`),
   joinGuild: (guildId: string) =>
     request<GuildMemberResponse>(`/guilds/${guildId}/join`, { method: 'POST' }),
   leaveGuild: (guildId: string) => request<unknown>(`/guilds/${guildId}/leave`, { method: 'POST' }),
@@ -713,10 +712,6 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
-  setGuildFeeTier: (guildId: string, body: SetGuildFeeTierRequest) =>
-    request<GuildResponse>(`/guilds/${guildId}/fee-tier`, { method: 'PUT', body: JSON.stringify(body) }),
-  payGuildFee: (guildId: string) =>
-    request<GuildMemberResponse>(`/guilds/${guildId}/fee-payment`, { method: 'POST' }),
   listGuildTopics: (guildId: string) => request<GuildBoardTopicResponse[]>(`/guilds/${guildId}/board/topics`),
   createGuildTopic: (guildId: string, body: CreateGuildTopicRequest) =>
     request<GuildBoardTopicResponse>(`/guilds/${guildId}/board/topics`, {

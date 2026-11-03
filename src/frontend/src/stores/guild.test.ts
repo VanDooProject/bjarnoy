@@ -5,10 +5,9 @@ import type { GuildResponse, GuildTreatyResponse } from '../api/types';
 const api = {
   listWorldGuilds: vi.fn(),
   getGuild: vi.fn(),
-  getGuildPerks: vi.fn(),
+  getGuildCaps: vi.fn(),
   createGuild: vi.fn(),
   joinGuild: vi.fn(),
-  setGuildFeeTier: vi.fn(),
   createGuildTopic: vi.fn(),
   getGuildTopic: vi.fn(),
   replyToGuildTopic: vi.fn(),
@@ -42,12 +41,11 @@ function guildFixture(overrides: Partial<GuildResponse> = {}): GuildResponse {
     name: 'Bjornstad Hird',
     tag: 'BJH',
     description: null,
-    feeTier: 'copper',
     memberCount: 2,
     createdAt: '2026-01-01T00:00:00Z',
     members: [
-      { userId: 'user-1', role: 'leader', joinedAt: '2026-01-01T00:00:00Z', feeOverdue: false },
-      { userId: 'user-2', role: 'member', joinedAt: '2026-01-02T00:00:00Z', feeOverdue: true },
+      { userId: 'user-1', role: 'leader', joinedAt: '2026-01-01T00:00:00Z' },
+      { userId: 'user-2', role: 'member', joinedAt: '2026-01-02T00:00:00Z' },
     ],
     ...overrides,
   };
@@ -84,24 +82,22 @@ describe('useGuildStore', () => {
     expect(store.guilds).toEqual([]);
   });
 
-  it('loads a guild together with its perks', async () => {
+  it('loads a guild together with its caps', async () => {
     api.getGuild.mockReset().mockResolvedValue(guildFixture());
-    api.getGuildPerks
+    api.getGuildCaps
       .mockReset()
-      .mockResolvedValue({ tradeCapacityBonus: 0, allowUnitSupport: false, memberCap: 10, maxActivePeaceTreaties: 1 });
+      .mockResolvedValue({ memberCap: 10, maxActivePeaceTreaties: 1 });
     const store = await freshStore();
 
     await store.loadGuild('guild-1');
 
     expect(store.current?.id).toBe('guild-1');
-    expect(store.perks?.memberCap).toBe(10);
+    expect(store.caps?.memberCap).toBe(10);
   });
 
   it('derives membership and role getters for a member of the guild', async () => {
     api.getGuild.mockReset().mockResolvedValue(guildFixture());
-    api.getGuildPerks.mockReset().mockResolvedValue({
-      tradeCapacityBonus: 0,
-      allowUnitSupport: false,
+    api.getGuildCaps.mockReset().mockResolvedValue({
       memberCap: 10,
       maxActivePeaceTreaties: 1,
     });
@@ -116,9 +112,7 @@ describe('useGuildStore', () => {
 
   it('finds no membership for a user outside the guild', async () => {
     api.getGuild.mockReset().mockResolvedValue(guildFixture());
-    api.getGuildPerks.mockReset().mockResolvedValue({
-      tradeCapacityBonus: 0,
-      allowUnitSupport: false,
+    api.getGuildCaps.mockReset().mockResolvedValue({
       memberCap: 10,
       maxActivePeaceTreaties: 1,
     });
@@ -148,20 +142,6 @@ describe('useGuildStore', () => {
 
     expect(topic?.id).toBe('topic-1');
     expect(store.topics[0]?.id).toBe('topic-1');
-  });
-
-  it('reloads the current guild and perks after changing the fee tier', async () => {
-    api.setGuildFeeTier.mockReset().mockResolvedValue(guildFixture({ feeTier: 'gold' }));
-    api.getGuildPerks
-      .mockReset()
-      .mockResolvedValue({ tradeCapacityBonus: 0.25, allowUnitSupport: true, memberCap: 30, maxActivePeaceTreaties: 6 });
-    const store = await freshStore();
-
-    const ok = await store.setFeeTier('guild-1', 'gold');
-
-    expect(ok).toBe(true);
-    expect(store.current?.feeTier).toBe('gold');
-    expect(store.perks?.allowUnitSupport).toBe(true);
   });
 
   it('replaces the matching treaty in place after a response', async () => {
@@ -197,7 +177,7 @@ describe('useGuildStore', () => {
   it('counts guildmates and members of guilds at peace as friends, not the player, proposed treaties or strangers', async () => {
     currentUserId = 'user-1';
     const store = await freshStore();
-    const member = (userId: string) => ({ userId, role: 'member' as const, joinedAt: '2026-01-01T00:00:00Z', feeOverdue: false });
+    const member = (userId: string) => ({ userId, role: 'member' as const, joinedAt: '2026-01-01T00:00:00Z' });
     store.guilds = [
       guildFixture(),
       guildFixture({ id: 'guild-2', members: [member('user-3')] }),

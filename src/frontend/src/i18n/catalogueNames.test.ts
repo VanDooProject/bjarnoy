@@ -6,7 +6,6 @@ import unitCatalogue from '../data/unit-catalogue.json';
 import {
   buildingName,
   guildBoardTopicName,
-  guildFeeTierName,
   guildRoleName,
   leaderboardCategoryName,
   leaderboardScopeName,
@@ -72,12 +71,9 @@ describe('catalogueNames', () => {
     }
   });
 
-  it('has a translated name for every guild role, fee tier and board topic', () => {
+  it('has a translated name for every guild role and board topic', () => {
     for (const role of ['leader', 'officer', 'member']) {
       expect(guildRoleName(role), role).not.toBe(role);
-    }
-    for (const tier of ['copper', 'silver', 'gold']) {
-      expect(guildFeeTierName(tier), tier).not.toBe(tier);
     }
     for (const kind of ['discussion', 'announcement', 'report']) {
       expect(guildBoardTopicName(kind), kind).not.toBe(kind);

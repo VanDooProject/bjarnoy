@@ -4,7 +4,7 @@ namespace Bjarnoy.Infrastructure.Entities;
 
 /// <summary>
 /// A guild (alliance): a world-scoped group of players sharing a message
-/// board and diplomacy, gated by a recurring fee. See
+/// board and diplomacy. See
 /// docs/design/guild-alliance-system.md for the full design and what is
 /// deliberately deferred past this v1 slice.
 /// </summary>
@@ -21,9 +21,6 @@ public class GuildEntity
     public required string Tag { get; set; }
 
     public string? Description { get; set; }
-
-    /// <summary>Drives the member cap contribution, the peace treaty cap, and <see cref="GuildRules.Perks"/>.</summary>
-    public GuildFeeTier FeeTier { get; set; } = GuildFeeTier.Copper;
 
     public DateTimeOffset CreatedAt { get; set; }
 
@@ -60,16 +57,6 @@ public class GuildMembershipEntity
     public GuildRole Role { get; set; } = GuildRole.Member;
 
     public DateTimeOffset JoinedAt { get; set; }
-
-    /// <summary>
-    /// Null until the member's first fee payment; the member is overdue
-    /// whenever this is in the past. Paying deducts <see cref="GuildRules.FeeCost"/>
-    /// from the member's settlement in the guild's world and extends this by
-    /// <see cref="GuildRules.FeePeriod"/> — see <c>GuildService.PayFeeAsync</c>.
-    /// A guild is never auto-purged for an overdue member in v1; that is a
-    /// deliberate deferral, see the design doc.
-    /// </summary>
-    public DateTimeOffset? FeePaidThroughAt { get; set; }
 }
 
 /// <summary>A guild message board topic. Its first reply carries the opening message.</summary>

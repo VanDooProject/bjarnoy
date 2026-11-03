@@ -1,16 +1,5 @@
 namespace Bjarnoy.Domain.Guilds;
 
-/// <summary>
-/// A guild's recurring fee tier. Drives its member cap contribution, its peace
-/// treaty cap, and the forward-looking perks in <see cref="GuildRules.Perks"/>.
-/// </summary>
-public enum GuildFeeTier
-{
-    Copper = 0,
-    Silver = 1,
-    Gold = 2,
-}
-
 /// <summary>A member's standing within a guild. Exactly one member holds <see cref="Leader"/> at a time.</summary>
 public enum GuildRole
 {
@@ -45,14 +34,6 @@ public enum PeaceTreatyStatus
 
 public static class GuildEnumExtensions
 {
-    public static string ToWireName(this GuildFeeTier tier) => tier switch
-    {
-        GuildFeeTier.Copper => "copper",
-        GuildFeeTier.Silver => "silver",
-        GuildFeeTier.Gold => "gold",
-        _ => throw new ArgumentOutOfRangeException(nameof(tier), tier, "Unknown fee tier"),
-    };
-
     public static string ToWireName(this GuildRole role) => role switch
     {
         GuildRole.Leader => "leader",
