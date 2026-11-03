@@ -36,7 +36,7 @@ public static class BuildingCatalogue
     /// The highest level <paramref name="type"/> can be built to
     /// (<c>docs/design/economy.md</c> §4): Longhouse 30; resource producers and
     /// Storage House 25 (the bog-ore works too); military/civic buildings and the mills (the Hammerschmiede too) 20; Tower and
-    /// Great Storehouse 10; shrines 5; Palisade and Palisade Gate 3; Bridge 4; Siege Workshop 5. Unknown/removed types return 0.
+    /// Great Storehouse 10; shrines 5; Palisade and Palisade Gate 3; Bridge 4; Siege Workshop 20. Unknown/removed types return 0.
     /// </summary>
     public static int MaxLevelFor(BuildingType type) => type switch
     {
@@ -54,7 +54,7 @@ public static class BuildingCatalogue
             or BuildingType.OdinStatue => 5,
         BuildingType.Palisade or BuildingType.PalisadeGate => 3,
         BuildingType.Bridge => 4,
-        BuildingType.SiegeWorkshop => 5,
+        BuildingType.SiegeWorkshop => 20,
         _ => 0,
     };
 
@@ -938,7 +938,7 @@ public static class BuildingCatalogue
 
     /// <summary>
     /// Trains the siege engines, catapult and battering ram (<see cref="Units.UnitDefinition.RequiredBuildingType"/>); the ram is the only engine that
-    /// breaches walls (<c>docs/design/economy.md</c> section 5). Five levels, no production, storage or combat bonus of its own. The tunable defaults
+    /// breaches walls (<c>docs/design/economy.md</c> section 5). Twenty levels, no production, storage or combat bonus of its own. The tunable defaults
     /// mirror <see cref="ArcheryRange"/> one tier up: wood and stone costs about 1.6 times higher (buildings cost no iron), a slightly longer build.
     /// </summary>
     private static BuildingDefinition SiegeWorkshop(int level) => new()

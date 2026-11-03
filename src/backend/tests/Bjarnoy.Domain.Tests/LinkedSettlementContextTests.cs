@@ -257,7 +257,7 @@ public sealed class LinkedSettlementContextTests
         var withBuild = s with { Queue = [waiting, active] };
         Assert.Equal(active.CompletesAt, withBuild.NextCompletionAt);
 
-        var training = new TrainingOrder { Id = Guid.CreateVersion7(), UnitType = UnitType.Spearman, Count = 1, StartedAt = T0, PerUnitDuration = TimeSpan.FromMinutes(1) };
+        var training = new TrainingOrder { Id = Guid.CreateVersion7(), UnitType = UnitType.Spearman, Count = 1, StartedAt = T0, PerUnitDuration = TimeSpan.FromMinutes(1), BuildingCoord = new HexCoord(1, 1) };
         var both = withBuild with { TrainingQueue = [training] };
         Assert.Equal(training.CompletesAt, both.NextCompletionAt);
     }

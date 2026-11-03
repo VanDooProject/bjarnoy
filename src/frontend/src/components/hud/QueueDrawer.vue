@@ -19,7 +19,6 @@ import { useWorldStore } from '../../stores/world';
 import GuestList from './GuestList.vue';
 import { hudRailHeightPx } from '../../composables/hudBarHeight';
 import {
-  MAX_TRAINING_QUEUE_LENGTH,
   formatCountdownShort,
   useBuildOrders,
   useTrainingOrders,
@@ -436,16 +435,17 @@ function onDrawerLeave(el: Element, done: () => void) {
           <template v-if="trainingOrders.length">
             <div class="status-card-header" :class="{ 'has-section-above': buildOrders.length }">
               <span class="status-card-title">{{ t('hud.trainingQueue.title') }}</span>
-              <span class="status-card-count">{{ t('hud.trainingQueue.slots', { used: trainingOrders.length, total: MAX_TRAINING_QUEUE_LENGTH }) }}</span>
+              <span class="status-card-count">{{ t('hud.trainingQueue.orders', { count: trainingOrders.length }) }}</span>
             </div>
-            <div v-for="o in trainingOrders" :key="o.key" class="status-row">
+            <div v-for="o in trainingOrders" :key="o.key" class="status-row" :class="{ 'is-waiting': o.waiting }">
               <div class="status-row-top">
                 <span class="status-row-name">{{ o.name }}</span>
                 <span class="status-row-time">{{ o.remaining }}</span>
               </div>
-              <div class="status-progress">
+              <div v-if="!o.waiting" class="status-progress">
                 <div class="status-progress-fill" :class="{ 'is-done': o.done }" :style="{ width: `${Math.round(o.progress * 100)}%` }" />
               </div>
+              <div class="status-subtext">{{ o.building }}</div>
               <div class="status-subtext">{{ o.subtext }}</div>
             </div>
           </template>

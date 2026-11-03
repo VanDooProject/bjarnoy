@@ -148,7 +148,7 @@ describe('buildingStatsFor terrain-adjacency boost (mirrors BuildingCatalogue.cs
     });
   });
 
-  it('barracks trains the land army in place of the Longhouse, same as Archery Range', () => {
+  it('barracks trains the land army, same as Archery Range', () => {
     expect(buildingStatsFor('barracks', 1, 0)).toEqual({ modifier: { kind: 'trainsLandTroops' } });
   });
 

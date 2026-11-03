@@ -35,9 +35,18 @@ public sealed record QueueBuildRequest(
 /// <param name="Q">The hex a shrine stands on, to slot this rune into.</param>
 public sealed record SlotRuneRequest(int Q, int R);
 
+/// <param name="Q">The building the order is placed from (the one whose window the player is in).</param>
+/// <param name="R">See <paramref name="Q"/>.</param>
+/// <param name="Split">"here" (default), "evenly" or "fastest" (premium).</param>
 public sealed record TrainUnitsRequest(
     [property: Required] string Unit,
-    [property: Range(1, int.MaxValue)] int Count);
+    [property: Range(1, int.MaxValue)] int Count,
+    int Q,
+    int R,
+    string Split = "here");
+
+/// <summary>The parts one train request was split into, one per building that got units.</summary>
+public sealed record TrainUnitsResponse(IReadOnlyList<TrainingOrderResponse> Orders);
 
 /// <param name="Stock">Whole units, as a player sees them.</param>
 /// <param name="RatePerHour">
@@ -173,6 +182,10 @@ public sealed record RuneInstanceResponse(
 /// The batch's full duration (<c>PerUnitDuration * Count</c>), for the same
 /// absolute-progress reason as <see cref="BuildOrderResponse.TotalSeconds"/>.
 /// </param>
+/// <param name="Q">The building that trains this part (hex Q).</param>
+/// <param name="R">The building that trains this part (hex R).</param>
+/// <param name="StartsAtGameTime">When the first unit starts; later than now while the building trains earlier parts.</param>
+/// <param name="StartsInSeconds">Game time until the part starts: 0 once started, null while the world is frozen.</param>
 public sealed record TrainingOrderResponse(
     Guid Id,
     string Unit,
@@ -180,7 +193,25 @@ public sealed record TrainingOrderResponse(
     int CompletedCount,
     DateTimeOffset CompletesAtGameTime,
     double? CompletesInSeconds,
-    double TotalSeconds);
+    double TotalSeconds,
+    int Q,
+    int R,
+    DateTimeOffset StartsAtGameTime,
+    double? StartsInSeconds)
+{
+    public static TrainingOrderResponse From(TrainingOrder o, GameClock clock, DateTimeOffset gameNow) => new(
+        o.Id,
+        o.UnitType.ToWireName(),
+        o.Count,
+        o.CompletedCount(gameNow),
+        o.CompletesAt,
+        clock.FreezesTime ? null : o.RemainingAt(gameNow).TotalSeconds,
+        o.PerUnitDuration.TotalSeconds * o.Count,
+        o.BuildingCoord.Q,
+        o.BuildingCoord.R,
+        o.StartedAt,
+        clock.FreezesTime ? null : Math.Max(0, (o.StartedAt - gameNow).TotalSeconds));
+}
 
 /// <param name="MaxWaitingOrders">
 /// Zero means the waiting queue is premium-locked for this settlement — the
@@ -363,14 +394,7 @@ public sealed record SettlementResponse(
                     ? o.BaseDuration.TotalSeconds * domain.BuildTimeFactor / speedFactor
                     : (o.CompletesAt!.Value - o.StartedAt!.Value).TotalSeconds))],
             [.. domain.Garrison.Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
-            [.. domain.TrainingQueue.Select(o => new TrainingOrderResponse(
-                o.Id,
-                o.UnitType.ToWireName(),
-                o.Count,
-                o.CompletedCount(gameNow),
-                o.CompletesAt,
-                clock.FreezesTime ? null : o.RemainingAt(gameNow).TotalSeconds,
-                o.PerUnitDuration.TotalSeconds * o.Count))],
+            [.. domain.TrainingQueue.Select(o => TrainingOrderResponse.From(o, clock, gameNow))],
             [.. domain.Runes.Select(r => new RuneInstanceResponse(
                 r.Id, r.Type.ToWireName(), r.Rarity.ToWireName(), r.SlottedAt?.Q, r.SlottedAt?.R))],
             domain.Feast is { } feast && !feast.IsComplete(gameNow) ? FeastResponse.From(feast, clock, gameNow) : null,

@@ -230,6 +230,7 @@ public class SettlementEntity
             .. TrainingQueue.OrderBy(o => o.StartedAt).Select(o => new TrainingOrder
             {
                 Id = o.Id,
+                BuildingCoord = new HexCoord(o.BuildingQ, o.BuildingR),
                 UnitType = o.UnitType,
                 Count = o.Count,
                 StartedAt = o.StartedAt,
@@ -421,6 +422,8 @@ public class SettlementEntity
             {
                 Id = order.Id,
                 SettlementId = Id,
+                BuildingQ = order.BuildingCoord.Q,
+                BuildingR = order.BuildingCoord.R,
                 UnitType = order.UnitType,
                 Count = order.Count,
                 StartedAt = order.StartedAt,
@@ -542,11 +545,16 @@ public class TrainingOrderEntity
 
     public SettlementEntity? Settlement { get; set; }
 
+    /// <summary>The hex of the building that trains this part.</summary>
+    public int BuildingQ { get; set; }
+
+    public int BuildingR { get; set; }
+
     public UnitType UnitType { get; set; }
 
     public int Count { get; set; }
 
-    /// <summary>Game instant, not wall time.</summary>
+    /// <summary>Game instant, not wall time. In the future while the building still trains earlier parts.</summary>
     public DateTimeOffset StartedAt { get; set; }
 
     /// <summary>Time to train a single unit; the batch trains one after another.</summary>

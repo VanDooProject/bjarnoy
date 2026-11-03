@@ -70,7 +70,7 @@
     "MissionNotFieldOrderable": "Die Mission dieser Armee kann nicht umgeleitet werden.",
     "PremiumRequired": "Dafür wird Premium benötigt.",
     "UnitNotAvailable": "Diese Einheit ist bei dieser Langhaus-Stufe noch nicht verfügbar.",
-    "TrainingQueueFull": "Die Ausbildungsschlange ist voll.",
+    "TrainingQueueFull": "Die Ausbildungsschlange dieses Gebäudes ist voll.",
     "InvalidCount": "Die Anzahl muss mindestens 1 sein.",
     "SettlementNotCoastal": "Schiffe können nur in einer Siedlung mit Küste ausgebildet werden.",
     "UsernameTaken": "Dieser Benutzername ist bereits vergeben.",

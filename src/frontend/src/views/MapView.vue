@@ -550,9 +550,9 @@ const modalBusy = ref(false);
 // `console.error`'d, and cleared whenever a fresh attempt starts, the modal
 // closes, or a different tile is selected.
 const actionError = ref<string | null>(null);
-// Issue #40 phase 1: a separate modal from BuildingModal (train has no
-// per-hex build/upgrade action, it lists the whole unit roster at once) —
-// see the ring's 'train' action below.
+// A building's training window, separate from BuildingModal (it lists the units that building
+// trains with a quantity picker each, not a single build/upgrade action) — see the ring's
+// 'train' action below.
 const trainModalOpen = ref(false);
 
 const modalMine = computed(
@@ -958,18 +958,12 @@ const rootActions = computed<RingAction[]>(() => {
             : t('hud.ringMenu.actions.notWiredYet'),
       },
     ];
-    // Training is queued against the settlement, not a specific hex, so the
-    // action itself is the same TrainingModal regardless of which building
-    // opens it (see onRingSelect's 'train' case) — only which tiles offer the
-    // action changes. Originally longhouse-only (issue #40 phase 1); every
-    // building any UnitDefinition.RequiredBuildingType now points at
-    // (archery range and dockyard for land troops/ships, then barracks and
-    // cart workshop once Thrall/Provisioner/Settler moved off the
-    // longhouse) gets the same action. The backend enforces the real gate
-    // either way — this is just where the UI surfaces the button.
+    // Training belongs to a building: every building any UnitDefinition.RequiredBuildingType
+    // points at (barracks, archery range, siege workshop, dockyard, cart workshop) offers the
+    // action, which opens that building's own TrainingModal. The longhouse trains no unit.
+    // The backend enforces the real gate either way — this is just where the UI surfaces the button.
     if (
-      tile.buildingType === 'longhouse'
-      || tile.buildingType === 'archeryrange'
+      tile.buildingType === 'archeryrange'
       || tile.buildingType === 'siegeworkshop'
       || tile.buildingType === 'dockyard'
       || tile.buildingType === 'barracks'
@@ -1378,7 +1372,8 @@ async function upgrade() {
         @upgrade="upgrade"
       />
       <TrainingModal
-        v-if="selectedTile && trainModalOpen"
+        v-if="selectedTile?.buildingType && trainModalOpen"
+        :building="{ type: selectedTile.buildingType, q: selectedTile.q, r: selectedTile.r, level: selectedTile.buildingLevel ?? 0 }"
         @close="closeTrainModal"
         @trained="closeTrainModal"
       />

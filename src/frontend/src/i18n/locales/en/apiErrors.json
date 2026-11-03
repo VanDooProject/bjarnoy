@@ -70,7 +70,7 @@
     "MissionNotFieldOrderable": "This army's mission can't be redirected.",
     "PremiumRequired": "This action requires Premium.",
     "UnitNotAvailable": "That unit is not available at this longhouse level yet.",
-    "TrainingQueueFull": "The training queue is full.",
+    "TrainingQueueFull": "This building's training queue is full.",
     "InvalidCount": "The count must be at least 1.",
     "SettlementNotCoastal": "Ships can only be trained at a settlement with a shoreline.",
     "UsernameTaken": "That username is taken.",

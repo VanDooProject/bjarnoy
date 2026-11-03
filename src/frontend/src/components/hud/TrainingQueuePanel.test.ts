@@ -24,8 +24,12 @@ function order(overrides: Partial<TrainingOrderResponse> = {}): TrainingOrderRes
   return {
     id: 'training-1',
     unit: 'spearman',
+    q: 3,
+    r: -2,
     count: 5,
     completedCount: 0,
+    startsAtGameTime: '2026-01-01T00:00:00Z',
+    startsInSeconds: 0,
     completesAtGameTime: '2026-01-01T00:00:00Z',
     completesInSeconds: 100,
     totalSeconds: 100,

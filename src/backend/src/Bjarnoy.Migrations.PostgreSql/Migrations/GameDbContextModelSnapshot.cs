@@ -1400,6 +1400,12 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("BuildingQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BuildingR")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Count")
                         .HasColumnType("integer");
 

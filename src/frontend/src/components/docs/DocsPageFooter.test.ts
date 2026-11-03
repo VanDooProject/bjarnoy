@@ -50,6 +50,6 @@ describe('DocsPageFooter', () => {
   it('walks across groups: the last of one group links to the first of the next', () => {
     expect(mountFooter('bogLands').get('[data-testid=docs-next]').attributes('href')).toBe('/docs/tech-tree');
     wrapper!.unmount();
-    expect(mountFooter('founding').get('[data-testid=docs-prev]').attributes('href')).toBe('/docs/walls');
+    expect(mountFooter('training').get('[data-testid=docs-prev]').attributes('href')).toBe('/docs/walls');
   });
 });

@@ -1323,7 +1323,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/units",
-            new TrainUnitsRequest("thrall", 1),
+            new TrainUnitsRequest("thrall", 1, 0, 0),
             Ct);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -1342,7 +1342,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/units",
-            new TrainUnitsRequest("axeman", 1),
+            new TrainUnitsRequest("axeman", 1, 0, 0),
             Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);

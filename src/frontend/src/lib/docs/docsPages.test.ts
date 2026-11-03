@@ -38,7 +38,7 @@ describe('docsPages', () => {
   it('keeps the hub order: island, building, move, beyond', () => {
     expect(DOCS_GROUPS.map((g) => g.id)).toEqual(['island', 'building', 'move', 'beyond']);
     expect(DOCS_PAGES.map((p) => p.id)).toEqual([
-      'tiles', 'bogLands', 'techTree', 'production', 'shrines', 'walls', 'founding', 'realm', 'landMovement', 'ships', 'wildlifeCamps', 'wastedLands',
+      'tiles', 'bogLands', 'techTree', 'production', 'shrines', 'walls', 'training', 'founding', 'realm', 'landMovement', 'ships', 'wildlifeCamps', 'wastedLands',
     ]);
   });
 
@@ -73,7 +73,7 @@ describe('docsPages', () => {
     const modes = Object.fromEntries(DOCS_PAGES.map((p) => [p.id, p.headerArt]));
     expect(modes).toEqual({
       tiles: 'icon', bogLands: 'icon', walls: 'icon', shrines: 'icon', production: 'icon', wildlifeCamps: 'icon',
-      techTree: 'backdrop', founding: 'backdrop', realm: 'backdrop', landMovement: 'backdrop', ships: 'backdrop', wastedLands: 'backdrop',
+      techTree: 'backdrop', training: 'backdrop', founding: 'backdrop', realm: 'backdrop', landMovement: 'backdrop', ships: 'backdrop', wastedLands: 'backdrop',
     });
   });
 
@@ -82,7 +82,8 @@ describe('docsPages', () => {
     expect(docsPageByPath('/docs')).toBeUndefined();
     expect(docsGroupOf('shrines').id).toBe('building');
     expect(docsNeighbours('shrines')).toMatchObject({ previous: { id: 'production' }, next: { id: 'walls' } });
-    expect(docsNeighbours('walls').next?.id).toBe('founding');
+    expect(docsNeighbours('walls').next?.id).toBe('training');
+    expect(docsNeighbours('training')).toMatchObject({ previous: { id: 'walls' }, next: { id: 'founding' } });
     expect(docsNeighbours('tiles').previous).toBeUndefined();
     expect(docsNeighbours('wastedLands').next).toBeUndefined();
     expect(docsPageById('ships').to).toBe('/docs/ships');

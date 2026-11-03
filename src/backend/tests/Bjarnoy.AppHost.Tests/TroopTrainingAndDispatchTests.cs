@@ -187,19 +187,15 @@ public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
         var canvas = page.Locator("canvas");
         await canvas.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 60_000 });
 
-        // --- Open the Longhouse's ring menu and queue one Thrall ---
-        // SettlementView centres the camera on the settlement itself here
-        // (no screenBiasX, unlike the landing page's preview) — the
-        // Longhouse sits at dead centre of the canvas.
+        // --- Open the Barracks' ring menu (training belongs to the building) and queue one Thrall ---
         var trainUnitsBubble = page.GetByRole(AriaRole.Button, new() { Name = "Train units" });
         var ringOpened = false;
         for (var attempt = 0; attempt < 10 && !ringOpened; attempt++)
         {
-            var box = await canvas.BoundingBoxAsync()
-                ?? throw new InvalidOperationException("Settlement canvas never rendered a bounding box.");
-            await page.Mouse.ClickAsync(box.X + box.Width / 2, box.Y + box.Height / 2);
             try
             {
+                // The renderer is null until the canvas has mounted it, which throws a PlaywrightException: retry.
+                await LiveFrontendTestHelpers.ClickHexAsync(page, barracksHex.Q, barracksHex.R);
                 await Assertions.Expect(trainUnitsBubble).ToBeVisibleAsync(new() { Timeout = 2_000 });
                 ringOpened = true;
             }
@@ -208,7 +204,7 @@ public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
                 await page.WaitForTimeoutAsync(1_000);
             }
         }
-        Assert.True(ringOpened, "Clicking the Longhouse never opened its ring menu with a 'Train units' action.");
+        Assert.True(ringOpened, "Clicking the Barracks never opened its ring menu with a 'Train units' action.");
 
         await trainUnitsBubble.ClickAsync();
 
@@ -223,8 +219,8 @@ public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
         // straight to closeTrainModal — the modal disappearing is itself proof
         // world.trainUnitsLive's POST succeeded (an ApiError would instead
         // leave the modal open with errorText set).
-        await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Train units" }))
-            .Not.ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await Assertions.Expect(page.Locator(".unit-row"))
+            .ToHaveCountAsync(0, new() { Timeout = 15_000 });
 
         // --- Verify the queued order, via the UI ... ---
         var trainingQueuePanel = page.Locator(".training-queue-panel");

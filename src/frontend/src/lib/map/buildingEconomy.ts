@@ -161,7 +161,7 @@ export function maxLevelFor(type: BuildingKind): number {
     case 'bridge':
       return 4;
     case 'siegeworkshop':
-      return 5;
+      return 20;
     default:
       return 0;
   }
@@ -314,7 +314,7 @@ export function buildingStatsFor(
         modifier: { kind: 'borderAnchor' },
       };
     // No production/storage of its own — trains the land combat/siege
-    // roster in place of the Longhouse. No combat bonus (deferred), unlike
+    // roster. No combat bonus (deferred), unlike
     // Tower, which is why this reads the same as Tower's own "no output"
     // shape rather than inventing a stat line with nothing behind it.
     case 'archeryrange':

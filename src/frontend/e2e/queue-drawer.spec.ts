@@ -74,8 +74,12 @@ test.describe('mobile queue drawer', { tag: '@g2' }, () => {
         {
           id: 'training-1',
           unit: 'spearman',
+          q: 3,
+          r: -2,
           count: 10,
           completedCount: 4,
+          startsAtGameTime: new Date(Date.now() - 20_000).toISOString(),
+          startsInSeconds: 0,
           completesAtGameTime: new Date(Date.now() + 80_000).toISOString(),
           completesInSeconds: 80,
           totalSeconds: 80,

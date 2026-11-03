@@ -161,31 +161,43 @@ public class RealmDecayTests
         Assert.Equal(s.Resources.Stock.Wood + refund.Wood, applied.Resources.Stock.Wood, 6);
     }
 
-    [Fact]
-    public void Queued_training_is_cancelled_and_refunded_when_the_last_training_building_leaves_the_realm()
+    private static TrainingOrder TrainingAt(HexCoord building, int count = 4) => new()
     {
-        var barracks = new PlacedBuilding(Far, BuildingType.Barracks, 3);
-        var training = new TrainingOrder { Id = Guid.CreateVersion7(), UnitType = UnitType.Thrall, Count = 4, StartedAt = T0, PerUnitDuration = TimeSpan.FromMinutes(10) };
-        var s = Make([Longhouse, barracks], stock: 100) with { TrainingQueue = [training] };
+        Id = Guid.CreateVersion7(),
+        BuildingCoord = building,
+        UnitType = UnitType.Thrall,
+        Count = count,
+        StartedAt = T0,
+        PerUnitDuration = TimeSpan.FromMinutes(10),
+    };
+
+    [Fact]
+    public void Training_of_a_building_that_leaves_the_realm_is_cancelled_and_refunded_in_full_while_other_buildings_keep_training()
+    {
+        var leaving = new PlacedBuilding(Far, BuildingType.Barracks, 3);
+        var inside = new PlacedBuilding(new HexCoord(1, 0), BuildingType.Barracks, 3);
+        var kept = TrainingAt(inside.Coord, 2);
+        var s = Make([Longhouse, inside, leaving], stock: 100) with { TrainingQueue = [TrainingAt(Far, 4), kept] };
         var refund = UnitCatalogue.Get(UnitType.Thrall).TrainingCost * 4;
 
         var (applied, _) = s.ApplyRealmState(Realm(s), T0);
 
-        Assert.Empty(applied.TrainingQueue);
+        Assert.Equal(kept.Id, Assert.Single(applied.TrainingQueue).Id);
         Assert.Equal(s.Resources.Stock.Wood + refund.Wood, applied.Resources.Stock.Wood, 6);
     }
 
     [Fact]
-    public void Training_stays_while_another_barracks_still_works()
+    public void Training_of_a_building_that_decays_away_is_cancelled_and_refunded()
     {
-        var out1 = new PlacedBuilding(Far, BuildingType.Barracks, 3);
-        var inside = new PlacedBuilding(new HexCoord(1, 0), BuildingType.Barracks, 3);
-        var training = new TrainingOrder { Id = Guid.CreateVersion7(), UnitType = UnitType.Thrall, Count = 4, StartedAt = T0, PerUnitDuration = TimeSpan.FromMinutes(10) };
-        var s = Make([Longhouse, inside, out1]) with { TrainingQueue = [training] };
+        var barracks = new PlacedBuilding(Far, BuildingType.Barracks, 1, OutsideRealmSince: T0);
+        var s = Make([Longhouse, barracks], stock: 100) with { TrainingQueue = [TrainingAt(Far, 3)] };
+        var refund = UnitCatalogue.Get(UnitType.Thrall).TrainingCost * 3;
 
-        var (applied, _) = s.ApplyRealmState(Realm(s), T0);
+        var (applied, _) = s.ApplyRealmState(Realm(s), T0 + BuildingCatalogue.DecayInterval(BuildingType.Barracks, 1.0));
 
-        Assert.Single(applied.TrainingQueue);
+        Assert.DoesNotContain(applied.Buildings, b => b.Coord == Far);
+        Assert.Empty(applied.TrainingQueue);
+        Assert.True(applied.Resources.Stock.Wood >= s.Resources.Stock.Wood + refund.Wood - 1e-6);
     }
 
     [Fact]

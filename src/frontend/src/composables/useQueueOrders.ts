@@ -11,12 +11,6 @@ import { useWorldStore } from '../stores/world';
 import { formatCountdown, formatCountdownShort } from '../lib/hud/countdown';
 import { isPendingOrder } from '../lib/hud/pendingBuild';
 
-// Mirrors Settlement.MaxTrainingQueueLength (backend) — no endpoint exposes
-// this as data, so it's kept in sync here manually. Shared by
-// TrainingQueuePanel.vue and QueueDrawer.vue rather than each keeping its
-// own copy.
-export const MAX_TRAINING_QUEUE_LENGTH = 5;
-
 export { formatCountdown, formatCountdownShort };
 
 export interface BuildOrderRow {
@@ -94,6 +88,10 @@ export interface TrainingOrderRow {
   progress: number;
   done: boolean;
   subtext: string;
+  /** Which building trains this part ("Barracks, level 7 · hex 3, -2"). */
+  building: string;
+  /** A part queued behind another one in its building: no progress bar, it shows when it starts instead. */
+  waiting: boolean;
 }
 
 export function useTrainingOrders(): ComputedRef<TrainingOrderRow[]> {
@@ -111,6 +109,13 @@ export function useTrainingOrders(): ComputedRef<TrainingOrderRow[]> {
       }
     }
     return world.hud.trainingQueue.map((o) => {
+      // One building trains one part at a time: a part whose start is still ahead (or unknown, on a frozen clock) is waiting.
+      const startsNow = o.startsInSeconds === null ? null : Math.max(0, o.startsInSeconds - elapsed);
+      const waiting = startsNow === null || startsNow > 0.5;
+      const placed = world.hud.buildings.find((b) => b.q === o.q && b.r === o.r);
+      const building = placed
+        ? t('hud.trainingQueue.inBuilding', { building: buildingName(placed.type), level: placed.level, q: o.q, r: o.r })
+        : t('hud.buildQueue.hexSubtext', { q: o.q, r: o.r });
       const remainingAtFetch = o.completesInSeconds;
       const remainingNow = remainingAtFetch === null ? null : Math.max(0, remainingAtFetch - elapsed);
       const totalSeconds = o.totalSeconds;
@@ -118,17 +123,26 @@ export function useTrainingOrders(): ComputedRef<TrainingOrderRow[]> {
         remainingAtFetch === null || totalSeconds <= 0
           ? 1
           : 1 - Math.max(0, Math.min(1, (remainingNow ?? 0) / totalSeconds));
+      if (waiting) progress = 0;
       progress = Math.max(progress, lastProgress.get(o.id) ?? 0);
       lastProgress.set(o.id, progress);
-      const done = remainingNow !== null && remainingNow <= 0.5;
+      const done = !waiting && remainingNow !== null && remainingNow <= 0.5;
       return {
         key: o.id,
         name: t('hud.trainingQueue.orderName', { count: o.count, unit: unitName(o.unit) }),
-        remaining: remainingNow === null ? '—' : formatCountdown(remainingNow),
-        remainingSeconds: remainingNow,
+        remaining: waiting
+          ? startsNow === null
+            ? t('hud.trainingQueue.waiting')
+            : t('hud.trainingQueue.startsIn', { time: formatCountdown(startsNow) })
+          : remainingNow === null
+            ? '—'
+            : formatCountdown(remainingNow),
+        remainingSeconds: waiting ? null : remainingNow,
         progress,
         done,
         subtext: t('hud.trainingQueue.trainedCount', { completed: o.completedCount, total: o.count }),
+        building,
+        waiting,
       };
     });
   });

@@ -1,8 +1,9 @@
 using Bjarnoy.Domain.Units;
+using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Buildings;
 
-/// <summary>A batch of units being trained at a settlement.</summary>
+/// <summary>A batch of units being trained in one building of a settlement.</summary>
 /// <remarks>
 /// <para>
 /// Mirrors <see cref="BuildOrder"/>'s "settled by clock, not by a background
@@ -27,14 +28,20 @@ public sealed record TrainingOrder
 {
     public required Guid Id { get; init; }
 
+    /// <summary>The hex of the building that trains this part. One building trains its parts one after another.</summary>
+    public required HexCoord BuildingCoord { get; init; }
+
     public required UnitType UnitType { get; init; }
 
     /// <summary>How many units this batch trains.</summary>
     public required int Count { get; init; }
 
+    /// <summary>
+    /// When the first unit starts: now, or later when the building still trains earlier parts. A future value means the part is queued.
+    /// </summary>
     public required DateTimeOffset StartedAt { get; init; }
 
-    /// <summary>Time to train a single unit; the batch trains one after another.</summary>
+    /// <summary>Time to train a single unit (fixed when ordered, from the building's level); the batch trains one after another.</summary>
     public required TimeSpan PerUnitDuration { get; init; }
 
     /// <summary>
@@ -103,14 +110,33 @@ public enum TrainRejection
     /// (<c>docs/design/economy.md</c> section 5, "Buildings outside the realm decay").
     /// </summary>
     BuildingOutsideRealm,
+
+    /// <summary>The requested hex holds no building of the type that trains the unit.</summary>
+    WrongBuilding,
+
+    /// <summary>The "fastest" split is a premium feature.</summary>
+    PremiumRequired,
 }
 
-/// <summary>The outcome of asking to train units.</summary>
-public sealed record TrainDecision(TrainRejection Rejection, TrainingOrder? Order = null)
+/// <summary>How an order is spread over the buildings that can train the unit.</summary>
+public enum TrainingSplit
 {
-    public bool Accepted => Rejection == TrainRejection.None && Order is not null;
+    /// <summary>Only the requested building.</summary>
+    Here = 0,
 
-    public static TrainDecision Rejected(TrainRejection reason) => new(reason);
+    /// <summary>Over all functioning buildings of the type that have room, the count divided evenly (remainder to the highest levels).</summary>
+    Evenly,
 
-    public static TrainDecision Accept(TrainingOrder order) => new(TrainRejection.None, order);
+    /// <summary>Premium: split so every part finishes as early as possible, counting each building's backlog and speed.</summary>
+    Fastest,
+}
+
+/// <summary>The outcome of asking to train units: one part per building that gets units.</summary>
+public sealed record TrainDecision(TrainRejection Rejection, IReadOnlyList<TrainingOrder> Orders)
+{
+    public bool Accepted => Rejection == TrainRejection.None && Orders.Count > 0;
+
+    public static TrainDecision Rejected(TrainRejection reason) => new(reason, []);
+
+    public static TrainDecision Accept(IReadOnlyList<TrainingOrder> orders) => new(TrainRejection.None, orders);
 }

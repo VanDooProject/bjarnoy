@@ -35,8 +35,12 @@ function trainingOrder(overrides: Partial<TrainingOrderResponse> = {}): Training
   return {
     id: 'training-1',
     unit: 'spearman',
+    q: 3,
+    r: -2,
     count: 5,
     completedCount: 0,
+    startsAtGameTime: '2026-01-01T00:00:00Z',
+    startsInSeconds: 0,
     completesAtGameTime: '2026-01-01T00:00:00Z',
     completesInSeconds: 100,
     totalSeconds: 100,
@@ -185,6 +189,47 @@ describe('useTrainingOrders', () => {
     await wrapper.vm.$nextTick();
 
     expect(result.value[0].progress).toBeGreaterThanOrEqual(beforePoll);
+    wrapper.unmount();
+  });
+
+  it('marks a part that starts later as waiting, with a start countdown and no progress', async () => {
+    const world = useWorldStore();
+    world.hud.trainingQueueFetchedAt = Date.now();
+    world.hud.trainingQueue = [trainingOrder({ startsInSeconds: 30, completesInSeconds: 90, totalSeconds: 60 })];
+
+    const { wrapper, result } = mountWithOrders(useTrainingOrders);
+    expect(result.value[0].waiting).toBe(true);
+    expect(result.value[0].remainingSeconds).toBeNull();
+    expect(result.value[0].remaining).toBe('Starts in 0:30');
+    expect(result.value[0].progress).toBe(0);
+
+    // The countdown runs on locally: once its start has passed it is a running part.
+    vi.advanceTimersByTime(31_000);
+    world.hud.tick += 1;
+    await wrapper.vm.$nextTick();
+    expect(result.value[0].waiting).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('treats a part with an unknown start (frozen clock) as waiting without a time', () => {
+    const world = useWorldStore();
+    world.hud.trainingQueueFetchedAt = Date.now();
+    world.hud.trainingQueue = [trainingOrder({ startsInSeconds: null, completesInSeconds: null })];
+
+    const { wrapper, result } = mountWithOrders(useTrainingOrders);
+    expect(result.value[0].waiting).toBe(true);
+    expect(result.value[0].remaining).toBe('Waiting');
+    wrapper.unmount();
+  });
+
+  it('labels each part with the building that trains it', () => {
+    const world = useWorldStore();
+    world.hud.buildings = [{ type: 'archeryrange', q: 3, r: -2, level: 4 }];
+    world.hud.trainingQueueFetchedAt = Date.now();
+    world.hud.trainingQueue = [trainingOrder()];
+
+    const { wrapper, result } = mountWithOrders(useTrainingOrders);
+    expect(result.value[0].building).toBe('Archery Range, level 4 · hex 3, -2');
     wrapper.unmount();
   });
 });

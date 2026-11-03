@@ -364,7 +364,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
             new PlaceBuildingRequest("barracks", 1), Ct);
 
         var queued = await client.PostJsonAsync(
-            $"/api/v1/settlements/{settlement.Id}/units", new TrainUnitsRequest("thrall", 3), Ct);
+            $"/api/v1/settlements/{settlement.Id}/units", new TrainUnitsRequest("thrall", 3, barracksHex.Q, barracksHex.R), Ct);
         Assert.Equal(HttpStatusCode.Accepted, queued.StatusCode);
 
         var response = await client.PostJsonAsync(

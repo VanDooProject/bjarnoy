@@ -19,7 +19,7 @@ import type { MessageSchema } from '../../i18n/schema';
 import { unitName } from '../../i18n/catalogueNames';
 import GuestList from './GuestList.vue';
 import { useWorldStore } from '../../stores/world';
-import { MAX_TRAINING_QUEUE_LENGTH, useTrainingOrders } from '../../composables/useQueueOrders';
+import { useTrainingOrders } from '../../composables/useQueueOrders';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -48,20 +48,21 @@ const guestCount = computed(() => world.guestArmies.length);
     <template v-if="orders.length">
       <div class="status-card-header">
         <span class="status-card-title">{{ t('hud.trainingQueue.title') }}</span>
-        <span class="status-card-count">{{ t('hud.trainingQueue.slots', { used: orders.length, total: MAX_TRAINING_QUEUE_LENGTH }) }}</span>
+        <span class="status-card-count">{{ t('hud.trainingQueue.orders', { count: orders.length }) }}</span>
       </div>
-      <div v-for="o in orders" :key="o.key" class="status-row">
+      <div v-for="o in orders" :key="o.key" class="status-row" :class="{ 'is-waiting': o.waiting }">
         <div class="status-row-top">
           <span class="status-row-name">{{ o.name }}</span>
           <span class="status-row-time">{{ o.remaining }}</span>
         </div>
-        <div class="status-progress">
+        <div v-if="!o.waiting" class="status-progress">
           <div
             class="status-progress-fill"
             :class="{ 'is-done': o.done }"
             :style="{ width: `${Math.round(o.progress * 100)}%` }"
           />
         </div>
+        <div class="status-subtext">{{ o.building }}</div>
         <div class="status-subtext">{{ o.subtext }}</div>
       </div>
     </template>
@@ -90,6 +91,13 @@ const guestCount = computed(() => world.guestArmies.length);
 </template>
 
 <style scoped>
+/* An order queued behind another one in its building reads dim: no progress bar, "Starts in …" in place of a countdown. */
+.status-row.is-waiting {
+  opacity: 0.55;
+}
+.status-row.is-waiting .status-row-time {
+  color: var(--muted);
+}
 /*
  * `.status-card`/`.status-row`/`.status-progress`/`.status-subtext`/
  * `.status-card-header`/`.status-card-title`/`.status-card-count` are

@@ -235,6 +235,19 @@ public static class UnitCatalogue
     /// <summary>The definition for a unit type.</summary>
     public static UnitDefinition Get(UnitType type) => Definitions[type];
 
+    /// <summary>Training time saved per level of the training building (1%).</summary>
+    public const double TrainingTimeSavedPerLevel = 0.01;
+
+    /// <summary>The factor on a unit's catalogue training time in a building of <paramref name="buildingLevel"/> (level 20: 0.8).</summary>
+    public static double TrainingTimeFactor(int buildingLevel) => 1.0 - TrainingTimeSavedPerLevel * Math.Max(0, buildingLevel);
+
+    /// <summary>
+    /// The time one <paramref name="type"/> takes in a building of <paramref name="buildingLevel"/> in a world at
+    /// <paramref name="speedFactor"/>.
+    /// </summary>
+    public static TimeSpan TrainingTime(UnitType type, int buildingLevel, double speedFactor = 1.0) =>
+        TimeSpan.FromTicks(Math.Max(1, (long)(Get(type).TrainingDuration.Ticks * TrainingTimeFactor(buildingLevel) / speedFactor)));
+
     public static UnitDefinition? TryGet(UnitType type) =>
         Definitions.TryGetValue(type, out var definition) ? definition : null;
 

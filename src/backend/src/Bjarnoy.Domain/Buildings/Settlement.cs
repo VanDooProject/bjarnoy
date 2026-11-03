@@ -61,13 +61,11 @@ public sealed record Settlement
     public const int DefaultMaxOrdersPerHex = 1;
 
     /// <summary>
-    /// Training orders that may be queued at once. A separate, more generous
-    /// limit from <see cref="MaxQueueLength"/>: build slots gate a scarce
-    /// resource (hexes to build on), while training batches are just requests
-    /// to spend resources over time, so there is no reason to make it as
-    /// scarce.
+    /// Training parts that may be queued in one building at once. A separate, more generous limit from
+    /// <see cref="MaxQueueLength"/>: build slots gate a scarce resource (hexes to build on), while training parts are just
+    /// requests to spend resources over time.
     /// </summary>
-    public const int MaxTrainingQueueLength = 5;
+    public const int MaxTrainingPartsPerBuilding = 5;
 
     /// <summary>
     /// The stacking cap on a shrine/rune bonus (issue #53): additive, then
@@ -2023,7 +2021,8 @@ public sealed record Settlement
         var stillStanding = buildings.Any(b => b.Coord == targetCoord);
         var queue = stillStanding ? Queue : [.. Queue.Where(o => o.Coord != targetCoord)];
 
-        return this with { Buildings = buildings, Queue = queue, Resources = resources };
+        var updated = this with { Buildings = buildings, Queue = queue, Resources = resources };
+        return stillStanding ? updated : updated.CancelTrainingAt(new HashSet<HexCoord> { targetCoord }, now);
     }
 
     /// <summary>
@@ -2141,7 +2140,7 @@ public sealed record Settlement
         var updated = this with { Buildings = buildings, Queue = queue, Resources = resources };
 
         // What leaving the realm cancels (docs/design/economy.md section 5): queued upgrades and foundations on the hex, refunded by
-        // the ordinary cancel; queued training of a unit whose training building no longer functions anywhere, refunded in full.
+        // the ordinary cancel; queued training of the buildings that left the realm or are gone, refunded in full.
         foreach (var coord in leaving.Select(b => b.Coord).Concat(foundations))
         {
             foreach (var order in updated.Queue.Where(o => o.Coord == coord).ToList())
@@ -2155,29 +2154,25 @@ public sealed record Settlement
             updated = updated with { Buildings = [.. updated.Buildings.Where(b => !(foundations.Contains(b.Coord) && b.Level < 1))] };
         }
 
-        if (leaving.Count > 0)
-        {
-            updated = updated.CancelUnservedTraining(leaving.Select(b => b.Type).ToHashSet(), now);
-        }
+        updated = updated.CancelTrainingAt(leaving.Select(b => b.Coord).Concat(removed).ToHashSet(), now);
 
         // Dropped orders may have held construction slots: let the head of the waiting queue take them now.
         return (updated.PromoteWaitingOrders(now, speedFactor).Settlement, true);
     }
 
     /// <summary>
-    /// Cancels and refunds in full (cost x count x cost multiplier) the queued training of every unit whose training building is one of
-    /// <paramref name="buildingTypes"/> and has no functioning building left (<see cref="PlacedBuilding.IsFunctioning"/>).
+    /// Cancels and refunds in full (cost x count x cost multiplier) every queued training part of the buildings on
+    /// <paramref name="coords"/>: they left the realm, are gone or no longer train.
     /// </summary>
-    private Settlement CancelUnservedTraining(IReadOnlySet<BuildingType> buildingTypes, DateTimeOffset now)
+    private Settlement CancelTrainingAt(IReadOnlySet<HexCoord> coords, DateTimeOffset now)
     {
         var resources = Resources;
         var kept = new List<TrainingOrder>();
         foreach (var order in TrainingQueue)
         {
-            var definition = UnitCatalogue.Get(order.UnitType);
-            if (buildingTypes.Contains(definition.RequiredBuildingType) && HighestLevelOf(definition.RequiredBuildingType) < 1)
+            if (coords.Contains(order.BuildingCoord))
             {
-                resources = resources.Deposit(definition.TrainingCost * order.Count * order.CostMultiplier, now);
+                resources = resources.Deposit(UnitCatalogue.Get(order.UnitType).TrainingCost * order.Count * order.CostMultiplier, now);
             }
             else
             {
@@ -2200,12 +2195,12 @@ public sealed record Settlement
         var resources = Resources.WithRate(
             ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity, now);
 
-        return this with
+        return (this with
         {
             Buildings = buildings,
             Queue = [.. Queue.Where(o => o.Coord != editedCoord)],
             Resources = resources,
-        };
+        }).CancelTrainingAt(new HashSet<HexCoord> { editedCoord }, now);
     }
 
     /// <summary>
@@ -2475,13 +2470,25 @@ public sealed record Settlement
     /// sped up for testing/admin purposes still trained units at the
     /// unscaled rate while every building finished faster.
     /// </param>
+    /// <param name="newOrderId">Makes the id of each part; one part is created per building that gets units.</param>
+    /// <param name="buildingCoord">
+    /// The building the player orders from: it must hold a building of the unit's required type. Alone it takes the whole order
+    /// for <see cref="TrainingSplit.Here"/>.
+    /// </param>
+    /// <param name="isPremium">Whether the owner is premium; <see cref="TrainingSplit.Fastest"/> needs it.</param>
     public TrainDecision PlanTrain(
-        UnitType type, int count, DateTimeOffset now, Guid orderId, bool hasShoreline = false,
+        UnitType type, int count, DateTimeOffset now, Func<Guid> newOrderId, HexCoord buildingCoord,
+        TrainingSplit split = TrainingSplit.Here, bool isPremium = false, bool hasShoreline = false,
         double costMultiplier = 1.0, double speedFactor = 1.0)
     {
         if (count <= 0)
         {
             return TrainDecision.Rejected(TrainRejection.InvalidCount);
+        }
+
+        if (split == TrainingSplit.Fastest && !isPremium)
+        {
+            return TrainDecision.Rejected(TrainRejection.PremiumRequired);
         }
 
         if (!UnitCatalogue.IsAvailable(type, LonghouseLevel, t => HighestLevelOf(t)))
@@ -2499,12 +2506,35 @@ public sealed record Settlement
             return TrainDecision.Rejected(TrainRejection.SettlementNotCoastal);
         }
 
-        if (TrainingQueue.Count >= MaxTrainingQueueLength)
+        var definition = UnitCatalogue.Get(type);
+        var requested = Buildings.Where(b => b.Coord == buildingCoord).Cast<PlacedBuilding?>().FirstOrDefault();
+        if (requested is not { } here || here.Type != definition.RequiredBuildingType)
+        {
+            return TrainDecision.Rejected(TrainRejection.WrongBuilding);
+        }
+
+        var candidates = split == TrainingSplit.Here
+            ? new List<PlacedBuilding> { here }
+            : Buildings.Where(b => b.Type == definition.RequiredBuildingType).ToList();
+        candidates.RemoveAll(b => b.Level < 1 || !b.IsFunctioning);
+        if (candidates.Count == 0)
+        {
+            return TrainDecision.Rejected(TrainRejection.BuildingOutsideRealm);
+        }
+
+        var slots = candidates
+            .Where(b => TrainingQueue.Count(o => o.BuildingCoord == b.Coord) < MaxTrainingPartsPerBuilding)
+            .Select(b => new TrainingSlot(
+                b.Coord,
+                b.Level,
+                TrainingQueue.Where(o => o.BuildingCoord == b.Coord).Select(o => o.CompletesAt).Append(now).Max(),
+                UnitCatalogue.TrainingTime(type, b.Level, speedFactor)))
+            .ToList();
+        if (slots.Count == 0)
         {
             return TrainDecision.Rejected(TrainRejection.TrainingQueueFull);
         }
 
-        var definition = UnitCatalogue.Get(type);
         var totalCost = definition.TrainingCost * count * costMultiplier;
         // Issue #158 stage 1c: a reservation earmarked for the waiting build
         // queue must be unspendable on anything else, training included.
@@ -2513,38 +2543,43 @@ public sealed record Settlement
             return TrainDecision.Rejected(TrainRejection.NotEnoughResources);
         }
 
-        var perUnitDuration = speedFactor == 1.0
-            ? definition.TrainingDuration
-            : TimeSpan.FromTicks((long)(definition.TrainingDuration.Ticks / speedFactor));
-
-        return TrainDecision.Accept(new TrainingOrder
+        var shares = split switch
         {
-            Id = orderId,
+            TrainingSplit.Evenly => TrainingPlanner.Evenly(slots, count),
+            TrainingSplit.Fastest => TrainingPlanner.Fastest(slots, count, now),
+            _ => [(slots[0], count)],
+        };
+
+        return TrainDecision.Accept([.. shares.Select(share => new TrainingOrder
+        {
+            Id = newOrderId(),
+            BuildingCoord = share.Slot.Coord,
             UnitType = type,
-            Count = count,
-            StartedAt = now,
-            PerUnitDuration = perUnitDuration,
+            Count = share.Units,
+            StartedAt = share.Slot.Start,
+            PerUnitDuration = share.Slot.UnitTime,
             CostMultiplier = costMultiplier,
-        });
+        })]);
     }
 
     /// <summary>
-    /// Pays for <paramref name="order"/> (cost × batch size × <see cref="TrainingOrder.CostMultiplier"/>)
-    /// and appends it to the training queue.
+    /// Pays for <paramref name="orders"/> (the parts of one <see cref="PlanTrain"/> decision; cost × units × <see cref="TrainingOrder.CostMultiplier"/>,
+    /// charged once) and appends them to the training queue.
     /// </summary>
-    public Settlement EnqueueTraining(TrainingOrder order, DateTimeOffset now)
+    public Settlement EnqueueTraining(IReadOnlyList<TrainingOrder> orders, DateTimeOffset now)
     {
-        ArgumentNullException.ThrowIfNull(order);
+        ArgumentNullException.ThrowIfNull(orders);
 
-        var definition = UnitCatalogue.Get(order.UnitType);
-        var totalCost = definition.TrainingCost * order.Count * order.CostMultiplier;
+        var totalCost = orders
+            .GroupBy(o => (o.UnitType, o.CostMultiplier))
+            .Aggregate(ResourceAmounts.Zero, (sum, g) => sum + UnitCatalogue.Get(g.Key.UnitType).TrainingCost * g.Sum(o => o.Count) * g.Key.CostMultiplier);
         if (!TrySpendAvailable(totalCost, now, out var paid))
         {
             throw new InvalidOperationException(
                 "Cannot enqueue training that is not affordable; call PlanTrain first.");
         }
 
-        return this with { Resources = paid, TrainingQueue = [.. TrainingQueue, order] };
+        return this with { Resources = paid, TrainingQueue = [.. TrainingQueue, .. orders] };
     }
 
     /// <summary>

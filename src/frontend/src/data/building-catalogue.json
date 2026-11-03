@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-10-30T12:38:56.877Z"
+    "generatedAt": "2026-11-02T22:39:10.654Z"
   },
   "data": [
     {
@@ -17611,7 +17611,7 @@
         "wood": 220,
         "stone": 160,
         "food": 0,
-        "iron": 40
+        "iron": 0
       },
       "buildSeconds": 600,
       "productionPerHour": {
@@ -17649,7 +17649,7 @@
         "wood": 286,
         "stone": 208,
         "food": 0,
-        "iron": 52
+        "iron": 0
       },
       "buildSeconds": 798,
       "productionPerHour": {
@@ -17682,7 +17682,7 @@
         "wood": 371.8,
         "stone": 270.40000000000003,
         "food": 0,
-        "iron": 67.60000000000001
+        "iron": 0
       },
       "buildSeconds": 1061,
       "productionPerHour": {
@@ -17715,7 +17715,7 @@
         "wood": 483.34000000000003,
         "stone": 351.52,
         "food": 0,
-        "iron": 87.88
+        "iron": 0
       },
       "buildSeconds": 1412,
       "productionPerHour": {
@@ -17748,7 +17748,7 @@
         "wood": 628.3420000000001,
         "stone": 456.9760000000001,
         "food": 0,
-        "iron": 114.24400000000003
+        "iron": 0
       },
       "buildSeconds": 1877,
       "productionPerHour": {
@@ -17769,6 +17769,501 @@
       "requiresCoastalWater": false,
       "alsoOnCoastalWater": false,
       "requiredLonghouseLevel": 18,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "siegeworkshop",
+      "level": 6,
+      "cost": {
+        "wood": 816.8446000000001,
+        "stone": 594.0688000000001,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 2497,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "alsoOnCoastalWater": false,
+      "requiredLonghouseLevel": 18,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "siegeworkshop",
+      "level": 7,
+      "cost": {
+        "wood": 1061.8979800000002,
+        "stone": 772.2894400000001,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 3321,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "alsoOnCoastalWater": false,
+      "requiredLonghouseLevel": 18,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "siegeworkshop",
+      "level": 8,
+      "cost": {
+        "wood": 1380.4673740000005,
+        "stone": 1003.9762720000003,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 4417,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "alsoOnCoastalWater": false,
+      "requiredLonghouseLevel": 18,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "siegeworkshop",
+      "level": 9,
+      "cost": {
+        "wood": 1794.6075862000005,
+        "stone": 1305.1691536000003,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 5874,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "alsoOnCoastalWater": false,
+      "requiredLonghouseLevel": 18,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "siegeworkshop",
+      "level": 10,
+      "cost": {
+        "wood": 2332.9898620600006,
+        "stone": 1696.7198996800005,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 7813,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "alsoOnCoastalWater": false,
+      "requiredLonghouseLevel": 18,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "siegeworkshop",
+      "level": 11,
+      "cost": {
+        "wood": 3032.886820678001,
+        "stone": 2205.7358695840007,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 10391,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "alsoOnCoastalWater": false,
+      "requiredLonghouseLevel": 18,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "siegeworkshop",
+      "level": 12,
+      "cost": {
+        "wood": 3942.752866881401,
+        "stone": 2867.456630459201,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 13820,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "alsoOnCoastalWater": false,
+      "requiredLonghouseLevel": 18,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "siegeworkshop",
+      "level": 13,
+      "cost": {
+        "wood": 5125.578726945822,
+        "stone": 3727.6936195969615,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 18381,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "alsoOnCoastalWater": false,
+      "requiredLonghouseLevel": 18,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "siegeworkshop",
+      "level": 14,
+      "cost": {
+        "wood": 6663.2523450295685,
+        "stone": 4846.00170547605,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 24447,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "alsoOnCoastalWater": false,
+      "requiredLonghouseLevel": 18,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "siegeworkshop",
+      "level": 15,
+      "cost": {
+        "wood": 8662.22804853844,
+        "stone": 6299.802217118866,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 32514,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "alsoOnCoastalWater": false,
+      "requiredLonghouseLevel": 18,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "siegeworkshop",
+      "level": 16,
+      "cost": {
+        "wood": 11260.89646309997,
+        "stone": 8189.742882254524,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 43244,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "alsoOnCoastalWater": false,
+      "requiredLonghouseLevel": 18,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "siegeworkshop",
+      "level": 17,
+      "cost": {
+        "wood": 14639.165402029963,
+        "stone": 10646.665746930883,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 57515,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "alsoOnCoastalWater": false,
+      "requiredLonghouseLevel": 18,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "siegeworkshop",
+      "level": 18,
+      "cost": {
+        "wood": 19030.915022638957,
+        "stone": 13840.66547101015,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 76494,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "alsoOnCoastalWater": false,
+      "requiredLonghouseLevel": 18,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "siegeworkshop",
+      "level": 19,
+      "cost": {
+        "wood": 24740.18952943064,
+        "stone": 17992.865112313193,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 101737,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "alsoOnCoastalWater": false,
+      "requiredLonghouseLevel": 19,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "siegeworkshop",
+      "level": 20,
+      "cost": {
+        "wood": 32162.246388259835,
+        "stone": 23390.72464600715,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 135311,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "alsoOnCoastalWater": false,
+      "requiredLonghouseLevel": 20,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
