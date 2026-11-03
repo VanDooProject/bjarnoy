@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, provide, shallowRef, watch } from 'vue';
 import './introFog.css';
 import { BEATS, BEAT_COMPONENTS } from './beats/registry';
 import { introFogUrl } from './fogTexture';
-import { introText, type IntroLocale } from './introText';
+import { introText, readingMs, type IntroLocale } from './introText';
+import { INTRO_BEAT } from './beats/types';
 import { IntroSequencer, type IntroState } from './sequencer';
 
 // Mode, locale and reducedMotion are read once at mount: the sequencer is built
@@ -25,11 +26,16 @@ const sequencer = new IntroSequencer({
   beats: BEATS,
   mode: props.mode,
   reducedMotion: props.reducedMotion,
+  // the hold lasts at least as long as its narration takes to read
+  holdMinMs: readingMs(introText(props.locale, 'beats.hold')),
   onChange: (s) => (state.value = s),
 });
 state.value = sequencer.state;
 
 const meta = computed(() => BEATS.find((b) => b.id === state.value.beat)!);
+provide(INTRO_BEAT, computed(() => state.value.beat));
+// "Land!" cuts in at once instead of waiting for the narration's out-in crossfade
+const isCall = computed(() => state.value.beat === 'landfall');
 const beatStyle = computed(() => ({
   '--beat-duration': `${meta.value.durationMs}ms`,
   '--loop-period': `${meta.value.loopMs ?? meta.value.durationMs}ms`,
@@ -78,13 +84,21 @@ onBeforeUnmount(() => sequencer.dispose());
     </svg>
 
     <Transition name="intro-fade">
-      <div :key="state.beat" class="beat-layer" :style="beatStyle">
+      <!-- beats sharing a scene keep one mounted component; the beat switches on it -->
+      <div :key="meta.scene ?? state.beat" class="beat-layer" :style="beatStyle">
         <component :is="BEAT_COMPONENTS[state.beat]" :paused="state.phase === 'waitingForPlay'" />
       </div>
     </Transition>
 
-    <Transition name="intro-fade" mode="out-in">
-      <p v-if="state.phase !== 'ended'" :key="state.beat" class="narration" aria-live="polite" data-testid="intro-narration">
+    <Transition :name="isCall ? 'intro-call' : 'intro-fade'" :mode="isCall ? undefined : 'out-in'">
+      <p
+        v-if="state.phase !== 'ended'"
+        :key="state.beat"
+        class="narration"
+        :class="{ 'is-call': isCall }"
+        aria-live="polite"
+        data-testid="intro-narration"
+      >
         {{ introText(locale, 'beats.' + state.beat) }}
       </p>
     </Transition>
@@ -160,6 +174,12 @@ onBeforeUnmount(() => sequencer.dispose());
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
   pointer-events: none;
 }
+.narration.is-call {
+  font-size: clamp(2rem, 7vw, 4rem);
+  font-style: italic;
+  color: #1b262e;
+  text-shadow: 0 0 18px rgba(233, 240, 244, 0.95), 0 0 4px rgba(233, 240, 244, 0.9);
+}
 .intro-btn {
   position: absolute;
   min-height: 44px;
@@ -211,6 +231,17 @@ onBeforeUnmount(() => sequencer.dispose());
 }
 .intro-fade-enter-from,
 .intro-fade-leave-to {
+  opacity: 0;
+}
+.intro-call-enter-active,
+.intro-call-leave-active {
+  transition: opacity 250ms ease, transform 250ms ease;
+}
+.intro-call-enter-from {
+  opacity: 0;
+  transform: translateY(8px) scale(0.96);
+}
+.intro-call-leave-to {
   opacity: 0;
 }
 @keyframes intro-out {
