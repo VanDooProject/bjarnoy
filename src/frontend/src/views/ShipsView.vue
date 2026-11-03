@@ -12,7 +12,8 @@ import { resourceName, unitName } from '../i18n/catalogueNames';
 import { prerequisitesOf } from '../lib/techtree/nodes';
 import { favourAt } from '../lib/docs/shrineDocs';
 import { formatMinutes } from '../lib/docs/landMovementDocs';
-import { SHIP_SETTLER_CAPACITY, TOWER_DEFENCE_PERCENT_PER_LEVEL, minutesPerSeaHex } from '../lib/docs/shipDocs';
+import { TOWER_DEFENCE_PERCENT_PER_LEVEL, minutesPerSeaHex } from '../lib/docs/shipDocs';
+import { SETTLERS_PER_FOUNDING } from '../lib/founding';
 
 // The ships page: the dockyard, a table of the two ships and the rules for fleets at sea. Ship figures come from the
 // unit catalogue, the dockyard's from the building catalogue; the sea rules are mirrored in shipDocs.ts.
@@ -29,6 +30,10 @@ onMounted(() => {
 const RESOURCES = ['wood', 'stone', 'food', 'iron'] as const;
 
 const ships = computed(() => units.definitions.filter((u) => u.class === 'ship'));
+// What land units take aboard, smallest first.
+const passengers = computed(() =>
+  units.definitions.filter((u) => u.cargoSlots > 0).sort((a, b) => a.cargoSlots - b.cargoSlots),
+);
 const dockyard = computed(() => ({
   longhouse: buildings.byType.dockyard?.[0]?.requiredLonghouseLevel ?? 0,
   needs: prerequisitesOf(buildings.byType, 'dockyard'),
@@ -92,6 +97,10 @@ const loc = computed(() => String(locale.value));
               <th scope="row" class="name">{{ $t('docs.ships.table.rows.loot') }}</th>
               <td v-for="ship in ships" :key="ship.type" class="value">{{ n(ship.carryCapacity) }}</td>
             </tr>
+            <tr data-row="slots">
+              <th scope="row" class="name">{{ $t('docs.ships.table.rows.slots') }}</th>
+              <td v-for="ship in ships" :key="ship.type" class="value">{{ n(ship.shipSlots) }}</td>
+            </tr>
             <tr data-row="food">
               <th scope="row" class="name">{{ $t('docs.ships.table.rows.food') }}</th>
               <td v-for="ship in ships" :key="ship.type" class="value">{{ n(ship.foodCarryCapacity) }}</td>
@@ -124,7 +133,6 @@ const loc = computed(() => String(locale.value));
       <h2>{{ $t('docs.ships.sailing.heading') }}</h2>
       <ul class="rules">
         <li>{{ $t('docs.ships.sailing.sea') }}</li>
-        <li>{{ $t('docs.ships.sailing.troops') }}</li>
         <li>{{ $t('docs.ships.sailing.targets') }}</li>
         <i18n-t keypath="docs.ships.sailing.walls" tag="li" scope="global">
           <template #walls>
@@ -139,10 +147,38 @@ const loc = computed(() => String(locale.value));
       </ul>
     </section>
 
+    <section id="troops" class="block">
+      <h2>{{ $t('docs.ships.troops.heading') }}</h2>
+      <p class="text">{{ $t('docs.ships.troops.slots') }}</p>
+      <div v-if="passengers.length > 0" class="table-scroll">
+        <table data-testid="slots-table">
+          <thead>
+            <tr>
+              <th scope="col">{{ $t('docs.ships.troops.unit') }}</th>
+              <th scope="col">{{ $t('docs.ships.troops.unitSlots') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="unit in passengers" :key="unit.type" :data-unit="unit.type">
+              <th scope="row" class="name">{{ unitName(unit.type) }}</th>
+              <td class="value">{{ n(unit.cargoSlots) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ul class="rules">
+        <li>{{ $t('docs.ships.troops.anyTrip') }}</li>
+        <li>{{ $t('docs.ships.troops.speed') }}</li>
+        <li>{{ $t('docs.ships.troops.fight') }}</li>
+        <li>{{ $t('docs.ships.troops.drown') }}</li>
+      </ul>
+    </section>
+
     <section id="battles" class="block">
       <h2>{{ $t('docs.ships.battles.heading') }}</h2>
       <ul class="rules">
         <li>{{ $t('docs.ships.battles.same') }}</li>
+        <li>{{ $t('docs.ships.battles.shipsOnly') }}</li>
         <li>{{ $t('docs.ships.battles.shore') }}</li>
         <li>{{ $t('docs.ships.battles.damage') }}</li>
         <i18n-t keypath="docs.ships.battles.tower" tag="li" scope="global">
@@ -162,7 +198,7 @@ const loc = computed(() => String(locale.value));
     </template>
 
     <DocsAdminNote class="block">
-      <p>{{ $t('docs.ships.adminNote.sea', { karve: SHIP_SETTLER_CAPACITY.karve, longship: SHIP_SETTLER_CAPACITY.longship }) }}</p>
+      <p>{{ $t('docs.ships.adminNote.sea', { settlers: SETTLERS_PER_FOUNDING }) }}</p>
     </DocsAdminNote>
   </DocsPageLayout>
 </template>

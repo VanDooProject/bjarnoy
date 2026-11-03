@@ -30,6 +30,20 @@ public sealed record CampFightPlan(
 public static class CampBattleResolver
 {
     /// <summary>
+    /// A camp ambushes a marching <paramref name="army"/>: <see cref="CampAttack"/> with the army's fleet rules. A fleet's
+    /// passengers do not fight; the ships that survive carry what they can and the rest drown (<see cref="ShipCargo.Rejoin"/>).
+    /// </summary>
+    public static CampFightPlan Ambush(CampGarrison garrison, Camp camp, IReadOnlyList<UnitStack> army, int seed)
+    {
+        ArgumentNullException.ThrowIfNull(army);
+
+        var (fighters, passengers) = ShipCargo.SplitForFight(army);
+        var plan = CampAttack(garrison, camp, fighters, seed);
+        var (losses, survivors) = ShipCargo.Rejoin(plan.ArmyLosses, plan.ArmySurvivors, passengers);
+        return plan with { ArmyLosses = losses, ArmySurvivors = survivors };
+    }
+
+    /// <summary>
     /// The army hunts the camp: army attack against beast <em>defense</em>; a tie goes to the camp. The loser
     /// loses everything, the winner <c>(loser/winner)^1.5</c> of its own, no raid caps.
     /// <see cref="CampFightPlan.ArmyPower"/> is the attack power, <see cref="CampFightPlan.CampPower"/> the beasts' defense.
@@ -51,6 +65,23 @@ public static class CampBattleResolver
         ResourceAmounts leftover = default)
     {
         ArgumentNullException.ThrowIfNull(army);
+
+        // A fleet's passengers do not fight; the ships that survive carry what they can (ShipCargo.Rejoin).
+        var (fighters, passengers) = ShipCargo.SplitForFight(army);
+        var plan = HuntFight(fighters, garrison, camp, effectiveLevel, seed, landAttackBonusPercent, leftover);
+        var (losses, survivors) = ShipCargo.Rejoin(plan.ArmyLosses, plan.ArmySurvivors, passengers);
+        return plan with { ArmyLosses = losses, ArmySurvivors = survivors };
+    }
+
+    private static CampFightPlan HuntFight(
+        IReadOnlyList<UnitStack> army,
+        CampGarrison garrison,
+        Camp camp,
+        int effectiveLevel,
+        int seed,
+        double landAttackBonusPercent,
+        ResourceAmounts leftover)
+    {
 
         var strength = camp.Strong ? CampStrength.Strong : CampStrength.Weak;
         var armyPower = army.Sum(s => UnitCatalogue.Get(s.Type).Attack * s.Count * (1 + (landAttackBonusPercent / 100.0)));

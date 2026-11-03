@@ -88,14 +88,11 @@ public enum ArmyMission
 /// collection cannot do.
 /// </para>
 /// <para>
-/// An army is either a fleet (every stack <see cref="UnitClass.Ship"/>) or a
-/// land army (no stack <see cref="UnitClass.Ship"/>) — never both (issue #40
-/// phase 6 §2; <see cref="PlanDispatch"/> rejects a mixed dispatch outright).
+/// An army is a fleet when any stack is a <see cref="UnitClass.Ship"/>; its other stacks are passengers riding in the ships'
+/// slots (<see cref="ShipCargo"/>). Otherwise it is a land army.
 /// A fleet's destination/waypoints must be <see cref="Terrain.Sea"/>, a land
 /// army's must be land — <see cref="HexPathfinder"/> treats the opposite
-/// terrain as impassable either way. There is no transport/ferry mechanic:
-/// land troops cannot be carried by ship (design doc §8, explicitly
-/// deferred).
+/// terrain as impassable either way.
 /// </para>
 /// </remarks>
 public sealed record Army
@@ -108,11 +105,8 @@ public sealed record Army
     public IReadOnlyList<UnitStack> Stacks { get; init; } = [];
 
     /// <summary>
-    /// True when every stack is <see cref="UnitClass.Ship"/> — an army is
-    /// either a fleet or a land army, never both (see this file's own class
-    /// remarks), so checking any one stack settles it for the whole army.
-    /// False for an empty army, same as every other <c>isFleet</c> check in
-    /// this file.
+    /// True when any stack is a <see cref="UnitClass.Ship"/> (the rest are passengers, see this file's own class
+    /// remarks). False for an empty army, same as every other <c>isFleet</c> check in this file.
     /// </summary>
     public bool IsFleet => Stacks.Count > 0 && Stacks.Any(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Ship);
 
@@ -167,8 +161,8 @@ public sealed record Army
     /// </summary>
     public ResourceAmounts Loot { get; init; }
 
-    /// <summary>The slowest unit type present sets the pace — a catapult army crawls at catapult speed.</summary>
-    public double TotalSpeed => Stacks.Count == 0 ? 0 : Stacks.Min(s => UnitCatalogue.Get(s.Type).Speed);
+    /// <summary>The slowest unit type present sets the pace — a catapult army crawls at catapult speed. A fleet moves at its slowest ship; passengers do not slow it.</summary>
+    public double TotalSpeed => ShipCargo.Pace(Stacks);
 
     public double TotalUpkeepPerHour => Stacks.Sum(s => UnitCatalogue.Get(s.Type).UpkeepPerHour * s.Count);
 
@@ -289,41 +283,21 @@ public sealed record Army
 
         var normalisedRequest = requestedUnits.Where(s => s.Count > 0).ToList();
 
-        // Shape validation only — whether a requested unit type even exists is
-        // Settlement.PlanDispatch's job below; this only rejects mixing the
-        // two unit-class families (issue #40 phase 6 §2). A fleet (every
-        // requested class is UnitClass.Ship) and a land army (no Ship class
-        // requested) are otherwise handled identically from here on, just
-        // against different terrain/pathfinder tables.
-        //
-        // ArmyMission.Found gets one narrow exception (issue #55 §2 "by
-        // sea"): Ship stacks alongside UnitType.Settler stacks are read
-        // as "the ships are carrying the settlers" rather than an illegal mix —
-        // there is still no general ferry mechanic, so any other non-Ship
-        // class alongside Ship remains rejected even for Found.
+        // Any request with at least one ship is a fleet, for every mission; the non-ship stacks in it are its
+        // passengers (docs/design/economy.md, "Troops on ships"). Whether a requested unit type even exists is
+        // Settlement.PlanDispatch's job below.
         var requestedClasses = normalisedRequest
             .Select(s => UnitCatalogue.Get(s.Type).Class)
             .ToHashSet();
         var isFoundingConvoy = mission == ArmyMission.Found;
-        var nonShipClasses = requestedClasses.Where(c => c != UnitClass.Ship).ToHashSet();
-        var isSettlerEmbark = isFoundingConvoy
-            && requestedClasses.Contains(UnitClass.Ship)
-            && nonShipClasses.Count > 0
-            && nonShipClasses.SetEquals([UnitClass.Civilian])
-            && normalisedRequest.Where(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Civilian)
-                .All(s => s.Type == UnitType.Settler);
+        var isFleet = requestedClasses.Contains(UnitClass.Ship);
 
-        bool isFleet;
-        if (isSettlerEmbark)
+        if (isFleet)
         {
-            isFleet = true;
-        }
-        else
-        {
-            isFleet = requestedClasses.Count > 0 && requestedClasses.All(c => c == UnitClass.Ship);
-            if (!isFleet && requestedClasses.Contains(UnitClass.Ship))
+            // Passengers need slots on the ships, whatever the mission.
+            if (ShipCargo.SlotsNeeded(ShipCargo.Passengers(normalisedRequest)) > ShipCargo.SlotsOffered(normalisedRequest))
             {
-                return DispatchDecision.Rejected(DispatchRejection.MixedFleetAndLandUnits);
+                return DispatchDecision.Rejected(DispatchRejection.InsufficientShipCapacity);
             }
         }
 
@@ -356,17 +330,6 @@ public sealed record Army
             if (settlerCount != Founding.RequiredSettlers)
             {
                 return DispatchDecision.Rejected(DispatchRejection.WrongSettlerCount);
-            }
-
-            if (isFleet)
-            {
-                var shipCapacity = normalisedRequest
-                    .Where(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Ship)
-                    .Sum(s => Founding.ShipCapacity(s.Type) * s.Count);
-                if (settlerCount > shipCapacity)
-                {
-                    return DispatchDecision.Rejected(DispatchRejection.InsufficientShipCapacityForSettlers);
-                }
             }
 
             if (!renownAndSlotAllowed)
@@ -412,8 +375,7 @@ public sealed record Army
         // hex, the fight happens there, and a won fight damages only that building. The target's Longhouse may be
         // inland. "On the shore" = inside the target's claim and either a shoreline land hex or a sea hex (the
         // coastal-water buildings: Dockyard, Fishing Hut, Shrine of Njörd). Whether a building actually stands there
-        // is checked at arrival, like for catapults. Land armies are unaffected (and a fleet can never carry a
-        // Catapult: Catapult is UnitClass.Siege, so the mixed-class rejection above already covers it).
+        // is checked at arrival, like for catapults. Land armies are unaffected.
         var routeDestination = destination;
         if (mission is ArmyMission.Attack or ArmyMission.Raid && isFleet)
         {
@@ -498,7 +460,7 @@ public sealed record Army
         }
 
         var stacks = settlementDecision.Stacks!;
-        var speed = stacks.Min(s => UnitCatalogue.Get(s.Type).Speed);
+        var speed = ShipCargo.Pace(stacks);
         var upkeepPerHour = stacks.Sum(s => UnitCatalogue.Get(s.Type).UpkeepPerHour * s.Count);
 
         var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
@@ -600,10 +562,15 @@ public sealed record Army
         IReadOnlyList<UnitStack>? guestDefenderStacks = null,
         double landAttackBonusPercent = 0,
         double shipAttackBonusPercent = 0,
-        ConnectedRealm? defenderRealm = null)
+        ConnectedRealm? defenderRealm = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(defenderSettlement);
+        if (army.IsFleet)
+        {
+            ArgumentNullException.ThrowIfNull(terrainAt);
+        }
 
         if (army.Mission is not (ArmyMission.Attack or ArmyMission.Raid)
             || army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit
@@ -642,12 +609,33 @@ public sealed record Army
         // §3): their stacks are merged, by type, into the defense side the
         // resolver sees, so combined defense power (and hence the win/loss
         // outcome itself) properly reflects everyone standing on the wall.
-        var combinedDefense = MergeStacksByType(settledDefender.Garrison, guestDefenderStacks);
+        //
+        // A fleet's battle is fought by the ships standing on the target hex only (docs/design/economy.md, "Fleets"): the
+        // attacker's passengers stay aboard, and the defender's land units (garrison and guests) stay out of it. The home
+        // ships stand at the fleet anchor (Dockyard, or a shoreline centre), the guests' ships at the centre. A defender
+        // with no ships on the target hex has nobody to fight: the resolver gives the fleet a costless win, and the siege
+        // below applies. The passengers the surviving ships cannot carry drown (ShipCargo.Rejoin).
+        IReadOnlyList<UnitStack> fightingGuests = guestDefenderStacks;
+        IReadOnlyList<UnitStack> fightingHome = settledDefender.Garrison;
+        if (army.IsFleet)
+        {
+            var target = army.TargetBuildingCoord;
+            var homeFights = target == FleetAnchor(settledDefender.Centre, settledDefender.Buildings, terrainAt!);
+            var guestsFight = target == settledDefender.Centre;
+            fightingHome = homeFights ? ShipCargo.Ships(settledDefender.Garrison) : [];
+            fightingGuests = guestsFight ? ShipCargo.Ships(guestDefenderStacks) : [];
+        }
+
+        var combinedDefense = MergeStacksByType(fightingHome, fightingGuests);
+        var (attackerFighters, passengers) = ShipCargo.SplitForFight(army.Stacks);
         var plan = BattleResolver.Resolve(
-            army.Stacks, combinedDefense, defenseBonusPercent, lootAvailable, seed,
+            attackerFighters, combinedDefense, defenseBonusPercent, lootAvailable, seed,
             raid: army.Mission == ArmyMission.Raid,
             landAttackBonusPercent: landAttackBonusPercent,
             shipAttackBonusPercent: shipAttackBonusPercent);
+        var shipSurvivors = plan.AttackerSurvivors;
+        var (attackerLosses, attackerSurvivors) = ShipCargo.Rejoin(plan.AttackerLosses, shipSurvivors, passengers);
+        plan = plan with { AttackerLosses = attackerLosses, AttackerSurvivors = attackerSurvivors };
 
         // Loot leaves the defender's stock at the instant of battle even
         // though it does not reach the attacker's own stock until the
@@ -673,8 +661,8 @@ public sealed record Army
         // the guest total across the actual guest Army records, happens one
         // layer up in ArmyService — this method only knows the pooled guest
         // total, never individual guest armies, to keep it DB-free.
-        var homeLosses = SplitPooledByOwner(plan.DefenderLosses, settledDefender.Garrison, guestDefenderStacks, wantHome: true);
-        var guestLosses = SplitPooledByOwner(plan.DefenderLosses, settledDefender.Garrison, guestDefenderStacks, wantHome: false);
+        var homeLosses = SplitPooledByOwner(plan.DefenderLosses, fightingHome, fightingGuests, wantHome: true);
+        var guestLosses = SplitPooledByOwner(plan.DefenderLosses, fightingHome, fightingGuests, wantHome: false);
         var homeSurvivors = SubtractStacks(settledDefender.Garrison, homeLosses);
 
         var defenderPostBattle = settledDefender with { Garrison = homeSurvivors, Resources = afterLoot };
@@ -688,7 +676,8 @@ public sealed record Army
         // nothing extra is needed here for that to fall out correctly.
         var siege = plan.Winner == BattleWinner.Attacker
             ? Combat.SiegeResolver.Resolve(
-                plan.AttackerSurvivors, defenderPostBattle.Buildings, army.TargetBuildingCoord, seed,
+                // A fleet's siege is its surviving ships'; the siege engines aboard are passengers and do not fire.
+                army.IsFleet ? shipSurvivors : plan.AttackerSurvivors, defenderPostBattle.Buildings, army.TargetBuildingCoord, seed,
                 randomFallback: !army.IsFleet)
             : Combat.SiegeOutcome.None;
 
@@ -1808,14 +1797,6 @@ public enum DispatchRejection
     TargetBuildingRequiresAttackMission,
 
     /// <summary>
-    /// A dispatch requested both <see cref="UnitClass.Ship"/> and non-Ship
-    /// unit types together (issue #40 phase 6 §2) — an army must be either a
-    /// fleet or a land army, never both; there is no transport/ferry
-    /// mechanic yet (design doc §8, explicitly deferred).
-    /// </summary>
-    MixedFleetAndLandUnits,
-
-    /// <summary>
     /// A fleet's destination is not <see cref="Terrain.Sea"/> — the fleet
     /// mirror of <see cref="DestinationNotLand"/> (issue #40 phase 6).
     /// </summary>
@@ -1849,10 +1830,9 @@ public enum DispatchRejection
     WrongSettlerCount,
 
     /// <summary>
-    /// An <see cref="ArmyMission.Found"/> sea convoy named more settlers
-    /// than its ships can carry — see <see cref="Founding.ShipCapacity"/>.
+    /// A fleet's passengers (its non-ship units) need more slots than its ships offer — see <see cref="ShipCargo"/>.
     /// </summary>
-    InsufficientShipCapacityForSettlers,
+    InsufficientShipCapacity,
 
     /// <summary>
     /// The dispatching player's renown and current settlement count do not

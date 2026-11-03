@@ -366,9 +366,10 @@ engines can damage; if there are none, no siege happens. Rams and catapults are 
 **Fleets.** A fleet Attack or Raid is always sent at one building on the target's shore: a building inside the target's
 claim on a shoreline land hex or on a sea hex (Dockyard, Fishing Hut, Shrine of Njörd, a wall's sea end). Without one the
 dispatch is refused (`FleetTargetBuildingRequired`, `FleetTargetBuildingNotOnShore`). The fleet's route ends at that
-building's hex and the target's Longhouse may be inland. The battle there is fought by ships only: the defender's ships
-at home (and guest fleets supporting it) against the attacking ships; land troops on either side stay out of it. Without
-ships at home there is no battle and the fleet's siege hits the building.
+building's hex and the target's Longhouse may be inland. The battle there is fought by the ships standing on that hex
+only: the defender's ships at home when the target is the hex they are anchored at (its Dockyard, or a centre on the
+shore), and allied fleets supporting it when the target is its centre. Land troops on either side stay out of it. With no
+ships on that hex there is no battle and the fleet's siege hits the building.
 A won fight damages only that building, by `LevelsDestroyed` of the surviving ships' siege power (Karve 10, Longship 20,
 starting values to be tuned; catapult 40), walls and bridges one level as above. A fleet has no random fallback: if the
 building is gone when it arrives, nothing is damaged.
@@ -377,7 +378,7 @@ building is gone when it arrives, nothing is damaged.
 dispatch whose passengers need more slots than its ships have is refused (`InsufficientShipCapacity`). A fleet moves at the
 speed of its slowest ship; passengers do not slow it. Passengers eat from the fleet's provisions. They stay on board during a
 fleet battle and do not fight; they only go ashore at a beach camp (`skirmish/beach-camp.md`). When ships are lost, the
-passengers beyond what the surviving ships can carry drown. Starting values, to be tuned:
+passengers beyond what the surviving ships can carry drown, the units that take the most slots first. Starting values, to be tuned:
 
 | Ship | Slots |
 |---|---|

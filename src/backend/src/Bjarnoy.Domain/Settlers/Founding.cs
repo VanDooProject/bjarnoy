@@ -25,25 +25,6 @@ public static class Founding
     public const int RequiredSettlers = 5;
 
     /// <summary>
-    /// How many settlers one ship can carry across open water (issue #55
-    /// §2 "by sea") — there is no general ferry/transport mechanic in this
-    /// codebase (troop system design doc, explicitly deferred); this is a
-    /// narrow, founding-only exception: a <see cref="UnitType.Karve"/> or
-    /// <see cref="UnitType.Longship"/> mixed into a
-    /// <see cref="Armies.ArmyMission.Found"/> dispatch alongside
-    /// <see cref="UnitType.Settler"/> stacks is read as "the ships are
-    /// carrying the settlers", not as an illegal mixed-class dispatch — see
-    /// <see cref="Armies.Army.PlanDispatch"/>.
-    /// </summary>
-    // Each ship carries exactly one founding party; a Longship must not carry two.
-    public static int ShipCapacity(UnitType shipType) => shipType switch
-    {
-        UnitType.Karve => RequiredSettlers,
-        UnitType.Longship => RequiredSettlers,
-        _ => 0,
-    };
-
-    /// <summary>
     /// Settler training cost multiplier for a player who already holds
     /// <paramref name="existingSettlementCount"/> settlements (issue #55 §4):
     /// roughly doubles per settlement already held, Travian-style. Owning

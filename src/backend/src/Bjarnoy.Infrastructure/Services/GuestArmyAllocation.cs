@@ -59,7 +59,28 @@ internal static class GuestArmyAllocation
         foreach (var army in guestArmies)
         {
             army.Stacks.RemoveAll(s => s.Count <= 0);
+            DrownPassengersBeyondSlots(army);
         }
+    }
+
+    /// <summary>
+    /// A guest fleet that lost ships can no longer carry all its passengers: the ones the surviving ships have no slots for
+    /// drown (<see cref="ShipCargo.DropOverflow"/>), so every place that takes ships off a guest army shares the rule.
+    /// </summary>
+    private static void DrownPassengersBeyondSlots(ArmyEntity army)
+    {
+        var (ships, passengers) = ShipCargo.SplitForFight([.. army.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))]);
+        if (passengers.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var drowned in ShipCargo.DropOverflow(ships, passengers).Drowned)
+        {
+            army.Stacks.First(s => s.UnitType == drowned.Type).Count -= drowned.Count;
+        }
+
+        army.Stacks.RemoveAll(s => s.Count <= 0);
     }
 
     /// <summary>

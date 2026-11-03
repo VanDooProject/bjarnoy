@@ -219,6 +219,26 @@ public static class FieldBattleResolver
         ArgumentNullException.ThrowIfNull(sideAStacks);
         ArgumentNullException.ThrowIfNull(sideBStacks);
 
+        // A fleet's passengers do not fight: only its ships do, and the passengers the surviving ships cannot carry drown
+        // (ShipCargo.Rejoin). A land army has no passengers and fights as before.
+        var (fightersA, passengersA) = ShipCargo.SplitForFight(sideAStacks);
+        var (fightersB, passengersB) = ShipCargo.SplitForFight(sideBStacks);
+        var plan = ResolveFight(fightersA, sideAClaim, fightersB, sideBClaim, sideALootCarried, sideBLootCarried, seed);
+        var (lossesA, survivorsA) = ShipCargo.Rejoin(plan.SideALosses, plan.SideASurvivors, passengersA);
+        var (lossesB, survivorsB) = ShipCargo.Rejoin(plan.SideBLosses, plan.SideBSurvivors, passengersB);
+        return plan with { SideALosses = lossesA, SideASurvivors = survivorsA, SideBLosses = lossesB, SideBSurvivors = survivorsB };
+    }
+
+    private static FieldBattlePlan ResolveFight(
+        IReadOnlyList<UnitStack> sideAStacks,
+        FieldBattleClaim sideAClaim,
+        IReadOnlyList<UnitStack> sideBStacks,
+        FieldBattleClaim sideBClaim,
+        ResourceAmounts sideALootCarried,
+        ResourceAmounts sideBLootCarried,
+        int seed)
+    {
+
         // Exactly one side defending is the only case that gets asymmetric
         // treatment — see the remarks above.
         var asymmetric = sideAClaim.Claims ^ sideBClaim.Claims;

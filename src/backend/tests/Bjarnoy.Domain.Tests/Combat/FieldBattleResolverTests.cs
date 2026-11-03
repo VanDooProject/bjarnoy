@@ -237,4 +237,34 @@ public class FieldBattleResolverTests
         Assert.Equal(FieldBattleWinner.SideA, plan.Winner);
         Assert.Equal(5, plan.LootTakenByWinner.Wood);
     }
+
+    private static int Count(IEnumerable<UnitStack> stacks, UnitType type) => stacks.Where(s => s.Type == type).Sum(s => s.Count);
+
+    [Fact]
+    public void A_fleets_passengers_do_not_fight_and_drown_beyond_the_slots_of_the_ships_left()
+    {
+        // Side A: 4 Longships (attack 240, 80 slots) carrying 80 spearmen, who would add 1200 attack on land.
+        var sideA = new[] { new UnitStack(UnitType.Longship, 4), new UnitStack(UnitType.Spearman, 80) };
+        var sideB = new[] { new UnitStack(UnitType.Longship, 3) };
+
+        var plan = FieldBattleResolver.Resolve(sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, NoLoot, seed: 1);
+
+        Assert.Equal(240, plan.SideAPower);
+        Assert.Equal(FieldBattleWinner.SideA, plan.Winner);
+        // The winner loses at most half of its ships (the raid cap): 2 of 4 left, 40 slots for 80 spearmen.
+        Assert.Equal(2, Count(plan.SideASurvivors, UnitType.Longship));
+        Assert.Equal(40, Count(plan.SideASurvivors, UnitType.Spearman));
+        Assert.Equal(40, Count(plan.SideALosses, UnitType.Spearman));
+    }
+
+    [Fact]
+    public void A_land_army_in_a_field_battle_has_no_passengers_and_fights_whole()
+    {
+        var sideA = new[] { new UnitStack(UnitType.Axeman, 10), new UnitStack(UnitType.Spearman, 10) };
+        var sideB = new[] { new UnitStack(UnitType.Spearman, 10) };
+
+        var plan = FieldBattleResolver.Resolve(sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, NoLoot, seed: 1);
+
+        Assert.Equal(550, plan.SideAPower);
+    }
 }

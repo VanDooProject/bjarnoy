@@ -1195,7 +1195,7 @@
     },
     "pace": {
       "heading": "Wie schnell Armeen ziehen",
-      "body": "Das Tempo wird in Feldern pro Stunde auf Gras angegeben. Eine Armee zieht so schnell wie ihre langsamste Einheit.",
+      "body": "Das Tempo wird in Feldern pro Stunde auf Gras angegeben. Eine Armee zieht so schnell wie ihre langsamste Einheit. Eine Flotte fährt so schnell wie ihr langsamstes Schiff; Truppen an Bord bremsen sie nicht.",
       "start": "Deine Truppen ziehen aus dem Gebäude los, in dem sie ausgebildet wurden, und kehren dorthin zurück. Eine Armee aus mehreren Einheitentypen bricht vom Gebäude ihrer langsamsten Einheit auf.",
       "example": "Zum Beispiel braucht ein {unit} für ein Grasfeld {minutes}.",
       "columns": {
@@ -1269,6 +1269,7 @@
         "speed": "Tempo (Felder pro Stunde)",
         "perHex": "Zeit pro Seefeld",
         "loot": "Beutekapazität",
+        "slots": "Truppenplätze",
         "food": "Nahrungskapazität",
         "upkeep": "Unterhalt pro Stunde",
         "cost": "Kosten ({resources})",
@@ -1280,24 +1281,34 @@
     "sailing": {
       "heading": "Auf See",
       "sea": "Schiffe fahren nur auf dem Meer. Küstenwasser und offene See kosten gleich viel, Moorseen sind für sie gesperrt.",
-      "troops": "Schiffe tragen Beute, aber keine Landtruppen.",
-      "targets": "Eine Flotte kann Siedlungen angreifen, plündern oder unterstützen, die Küste beanspruchen. Katapulte kann sie nicht mitnehmen.",
+      "targets": "Eine Flotte kann Siedlungen angreifen, plündern oder unterstützen, die Küste beanspruchen.",
       "walls": "{walls} halten Flotten nicht auf.",
       "wallsLink": "Mauern",
       "camps": "Lager an Land überfallen nie eine Flotte. Der Walweg liegt auf offener See und überfällt jede Flotte, die auf sein Feld segelt (siehe {camps}).",
       "campsLink": "Wildtierlager"
     },
+    "troops": {
+      "heading": "Truppen an Bord",
+      "slots": "Schiffe tragen Landtruppen in Plätzen. Jedes Schiff bietet eine bestimmte Zahl an Plätzen (siehe Tabelle oben), und jede Einheit belegt einige davon (Tabelle unten).",
+      "anyTrip": "Eine Flotte kann auf jeder Fahrt Truppen mitnehmen: beim Angriff, Plündern, Unterstützen, Gründen und Jagen. Brauchen die Truppen mehr Plätze, als die Schiffe haben, läuft die Flotte nicht aus.",
+      "speed": "Eine Flotte fährt so schnell wie ihr langsamstes Schiff. Die Truppen an Bord bremsen sie nicht, und sie essen vom Proviant der Flotte.",
+      "fight": "Truppen an Bord kämpfen nicht – weder bei einem Flottenangriff noch bei einem Überfall auf See.",
+      "drown": "Gehen Schiffe verloren, ertrinken die Truppen, für die auf den übrigen Schiffen kein Platz mehr ist. Die größten Einheiten trifft es zuerst.",
+      "unit": "Einheit",
+      "unitSlots": "Plätze"
+    },
     "battles": {
       "heading": "Kämpfe",
       "same": "Flotten kämpfen nach denselben Regeln wie Armeen an Land: Angriff gegen Verteidigung, bei Gleichstand gewinnt der Verteidiger.",
+      "shipsOnly": "Es kämpfen nur Schiffe, und zwar nur die, die an der angegriffenen Stelle liegen. Landtruppen halten sich auf beiden Seiten heraus: die Truppen auf deinen Schiffen genauso wie die Besatzung an Land in der angegriffenen Siedlung. Deine Schiffe im Hafen verteidigen deine Werft (oder dein Langhaus, wenn es am Ufer steht), verbündete Flotten verteidigen dein Langhaus. Greift eine Flotte irgendein anderes Gebäude an deiner Küste an, trifft sie auf keine Schiffe: Es gibt keinen Kampf, die Flotte siegt und geht direkt auf das Gebäude los.",
       "shore": "Du schickst eine Flotte gegen ein einzelnes Gebäude am Ufer des Gegners: ein Gebäude auf einem Küstenfeld oder im Küstenwasser, innerhalb des Gebiets der Siedlung. Die Flotte segelt bis zu diesem Gebäude, und dort wird gekämpft. Das Langhaus der Siedlung darf auch im Landesinneren stehen.",
-      "damage": "Gewinnt die Flotte, beschädigt sie dieses Gebäude. Je mehr deiner Schiffe den Kampf überstehen, desto mehr Stufen verliert es. Sonst wird nichts von der Siedlung getroffen. Steht das Gebäude bei der Ankunft nicht mehr, wird trotzdem gekämpft, aber nichts beschädigt.",
+      "damage": "Gewinnt die Flotte, beschädigt sie dieses Gebäude. Je mehr deiner Schiffe den Kampf überstehen, desto mehr Stufen verliert es. Sonst wird nichts von der Siedlung getroffen. Steht das Gebäude bei der Ankunft nicht mehr, wird nichts beschädigt.",
       "tower": "Ein {tower} der verteidigenden Siedlung gibt pro Stufe {percent} % Verteidigung dazu.",
       "njord": "Der {shrine} steigert den Angriff deiner Schiffe auf Stufe 1 um {low} %, bis Stufe 5 um {high} %. Mehr unter {shrines}.",
       "shrinesLink": "Schreine"
     },
     "adminNote": {
-      "sea": "Eine Gründung über das Meer (eine Karve trägt {karve} Siedler, ein Langschiff {longship}, also je eine ganze Gründungsgruppe) gibt es in den Regeln, aber noch keine Oberfläche dafür (Issue #447)."
+      "sea": "Eine Gründung über das Meer folgt der Platzregel oben: Die {settlers} Siedler einer Gründungsgruppe belegen {settlers} Plätze (ShipCargo). Eine Oberfläche dafür gibt es noch nicht (Issue #447)."
     }
   },
   "shrines": {

@@ -608,11 +608,10 @@ export interface ArmyOverlayMarker {
   selected: boolean;
   returning: boolean;
   /**
-   * Whether every unit in this army is a ship (`classifyUnitSelection` ===
-   * `'fleet'` — see `lib/units/armyDispatch.ts`). Picks the marker: the ship
-   * icon for a fleet, the flag for a land army (docs/design/ship-movement.md
-   * §4). A mixed army can't be dispatched at all, so this is effectively a
-   * two-way choice in practice.
+   * Whether this army has a ship (`classifyUnitSelection` === `'fleet'` — see
+   * `lib/units/armyDispatch.ts`; its land units are passengers). Picks the
+   * marker: the ship icon for a fleet, the flag for a land army
+   * (docs/design/ship-movement.md §4).
    */
   isFleet: boolean;
   /** Issue #94: present only while in transit — the renderer interpolates along it every frame. */

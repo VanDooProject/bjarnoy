@@ -630,8 +630,6 @@ public static class ArmyEndpoints
                 DispatchRejection.DestinationRequired => "A move mission requires a destination.",
                 DispatchRejection.TargetBuildingRequiresAttackMission =>
                     "A target building may only be given for an attack mission.",
-                DispatchRejection.MixedFleetAndLandUnits =>
-                    "An army must be either all ships or all non-ships, not a mix.",
                 DispatchRejection.DestinationNotSea => "The destination is not sea; fleets can only path over water.",
                 DispatchRejection.WaypointNotSea => "A waypoint is not sea; fleets can only path over water.",
                 DispatchRejection.FleetTargetBuildingRequired =>
@@ -640,8 +638,8 @@ public static class ArmyEndpoints
                     "That building is not on the target settlement's shore, so a fleet cannot reach it.",
                 DispatchRejection.WrongSettlerCount =>
                     $"A founding mission requires exactly {Founding.RequiredSettlers} settlers, no more, no fewer.",
-                DispatchRejection.InsufficientShipCapacityForSettlers =>
-                    $"The ships in this convoy cannot carry this many settlers (each ship carries {Founding.ShipCapacity(UnitType.Karve)}).",
+                DispatchRejection.InsufficientShipCapacity =>
+                    "The ships in this fleet do not have enough slots for the troops aboard.",
                 DispatchRejection.RenownOrSettlementSlotRequirementNotMet =>
                     "Not enough renown for another settlement yet, or founding requires a real account.",
                 DispatchRejection.TargetHexNotFoundable =>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SEA_HEX_COST, SHIP_SETTLER_CAPACITY, TOWER_DEFENCE_PERCENT_PER_LEVEL, minutesPerSeaHex } from './shipDocs';
+import { SEA_HEX_COST, TOWER_DEFENCE_PERCENT_PER_LEVEL, minutesPerSeaHex } from './shipDocs';
 import units from '../../data/unit-catalogue.json';
 
 describe('shipDocs', () => {
@@ -8,10 +8,6 @@ describe('shipDocs', () => {
     const speed = (type: string) => units.data.find((u) => u.type === type)!.speed;
     expect(minutesPerSeaHex(speed('karve'))).toBe(7.5);
     expect(minutesPerSeaHex(speed('longship'))).toBe(6);
-  });
-
-  it('lets a Karve and a Longship each carry one founding party of five Settlers', () => {
-    expect(SHIP_SETTLER_CAPACITY).toEqual({ karve: 5, longship: 5 });
   });
 
   it('adds 5% defence per Watchtower level', () => {

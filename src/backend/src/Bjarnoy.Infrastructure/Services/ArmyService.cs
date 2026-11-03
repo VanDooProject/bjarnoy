@@ -1021,10 +1021,12 @@ public sealed class ArmyService(
         var landAttackBonusPercent = attackerSettlement?.AttackBonusPercent(UnitClass.Infantry) ?? 0;
         var shipAttackBonusPercent = attackerSettlement?.AttackBonusPercent(UnitClass.Ship) ?? 0;
 
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, attackerEntity!.World!, cancellationToken).ConfigureAwait(false);
+
         var seed = Random.Shared.Next();
         var arrival = Army.SettleArrival(
             domain, session.Store.PooledView(targetId), session.SpeedFactor, battleInstant, seed, guestDefenderStacks,
-            landAttackBonusPercent, shipAttackBonusPercent, session.Store.Realm);
+            landAttackBonusPercent, shipAttackBonusPercent, session.Store.Realm, sampler.TerrainAt);
 
         // Guaranteed true: the caller only reaches this method when the
         // outbound leg's ArrivesAt has already passed for a not-yet-returning

@@ -1195,7 +1195,7 @@
     },
     "pace": {
       "heading": "How fast armies move",
-      "body": "Speed is counted in hexes per hour on grass. An army marches at the speed of its slowest unit.",
+      "body": "Speed is counted in hexes per hour on grass. An army marches at the speed of its slowest unit. A fleet moves at the speed of its slowest ship; troops aboard do not slow it.",
       "start": "Your troops set out from the building that trained them and return there. An army of several unit types leaves from the building of its slowest unit.",
       "example": "Example: a {unit} crosses a grass hex in {minutes}.",
       "columns": {
@@ -1269,6 +1269,7 @@
         "speed": "Speed (hexes per hour)",
         "perHex": "Time per sea hex",
         "loot": "Loot capacity",
+        "slots": "Troop slots",
         "food": "Food capacity",
         "upkeep": "Upkeep per hour",
         "cost": "Cost ({resources})",
@@ -1280,24 +1281,34 @@
     "sailing": {
       "heading": "At sea",
       "sea": "Ships sail on the sea only. Coastal and open water cost the same, and bog lakes are closed to them.",
-      "troops": "Ships carry loot, not land troops.",
-      "targets": "A fleet can attack, raid or support settlements that hold shoreline. It cannot take catapults along.",
+      "targets": "A fleet can attack, raid or support settlements that hold shoreline.",
       "walls": "{walls} do not stop fleets.",
       "wallsLink": "Walls",
       "camps": "Land camps never ambush a fleet. The whale road, a camp on open sea, ambushes a fleet that sails onto its hex (see {camps}).",
       "campsLink": "Wildlife camps"
     },
+    "troops": {
+      "heading": "Troops aboard",
+      "slots": "Ships carry land troops in slots. Each ship has room for a number of slots (see the table above) and every unit takes some (table below).",
+      "anyTrip": "A fleet can take troops on any trip: attack, raid, support, founding or hunting. If the troops need more slots than the ships have, the fleet cannot set out.",
+      "speed": "A fleet moves at the speed of its slowest ship. The troops aboard do not slow it, and they eat from the fleet's provisions.",
+      "fight": "Troops aboard do not fight, neither in a fleet attack nor in an ambush at sea.",
+      "drown": "When ships are lost, the troops the remaining ships cannot carry drown. The biggest units go first.",
+      "unit": "Unit",
+      "unitSlots": "Slots"
+    },
     "battles": {
       "heading": "Battles",
       "same": "Fleets fight by the same rules as armies on land: attack against defence, and a tie goes to the defender.",
+      "shipsOnly": "Only ships fight, and only the ones at the spot you attack. On both sides, land troops stay out of it: the troops aboard your ships, and the land garrison of the settlement you attack. Your ships at home defend your Dockyard (or your Longhouse, if it stands on the shore); allied fleets defend your Longhouse. Anywhere else on your shore, an attacking fleet meets no ships: there is no fight, the fleet wins and goes straight for the building.",
       "shore": "You send a fleet at one building on the enemy's shore: a building on a shoreline hex or on coastal water, inside the settlement's claim. The fleet sails to that building and the fight happens there. The settlement's Longhouse can stand inland.",
-      "damage": "If the fleet wins, it damages that building, and the more of your ships survive the fight, the more levels it loses. Nothing else of the settlement is hit. If the building is gone when the fleet arrives, the fight still happens, but nothing is damaged.",
+      "damage": "If the fleet wins, it damages that building, and the more of your ships survive the fight, the more levels it loses. Nothing else of the settlement is hit. If the building is gone when the fleet arrives, nothing is damaged.",
       "tower": "A defending settlement's {tower} adds {percent}% defence per level.",
       "njord": "The {shrine} raises your ships' attack by {low}% at level 1, up to {high}% at level 5. See {shrines}.",
       "shrinesLink": "Shrines"
     },
     "adminNote": {
-      "sea": "Founding by sea (a Karve carries {karve} settlers, a Longship {longship}, one founding party each) exists in the rules but has no interface yet (issue #447)."
+      "sea": "Founding by sea follows the slot rule above: the {settlers} settlers of a founding party take {settlers} slots (ShipCargo). It has no interface yet (issue #447)."
     }
   },
   "shrines": {

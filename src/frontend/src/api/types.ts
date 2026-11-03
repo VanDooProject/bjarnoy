@@ -1757,6 +1757,10 @@ export interface UnitDefinitionResponse {
   speed: number;
   carryCapacity: number;
   foodCarryCapacity: number;
+  /** Slots this unit takes aboard a ship (0 for ships). */
+  cargoSlots: number;
+  /** Slots this ship offers to land troops (0 for every other unit). */
+  shipSlots: number;
   upkeepPerHour: number;
   trainingCost: ResourceLine;
   trainingSeconds: number;
