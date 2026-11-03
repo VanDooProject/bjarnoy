@@ -66,7 +66,7 @@
       "ships": {
         "shrines": "Njörds Schrein lässt deine Schiffe härter zuschlagen.",
         "walls": "Mauern halten keine Flotten auf.",
-        "wildlifeCamps": "Wildtierlager überfallen nie eine Flotte."
+        "wildlifeCamps": "Der Walweg, das einzige Lager auf See, überfällt Flotten."
       },
       "wildlifeCamps": {
         "landMovement": "Lager überfallen Armeen unterwegs.",
@@ -531,7 +531,8 @@
       "building": "Sobald ein Lager geräumt ist, kannst du auf seinem Feld bauen (nur bei Fenrirs Brut nicht). Solange das Gebäude steht, bleibt das Lager entfernt.",
       "respawn": "Ein geräumtes Lager füllt sich nur wieder auf, solange sein Feld außerhalb jedes Reichs liegt. Ein leeres Lager innerhalb eines Reichs bleibt leer. Steht das Gebäude darauf nicht mehr und liegt das Feld außerhalb jedes Reichs, kehrt das Lager zurück.",
       "neverBuilt": "Auf dem Adlerhorst auf seiner Brandungssäule und auf Fenrirs Brut in den Ödlanden wird nie gebaut. Das leere Nest bleibt auf der Karte, und Fenrirs Brut kehrt immer wieder zurück.",
-      "hunting": "Jagd: Schick Landeinheiten mit dem Jagdbefehl auf das Feld eines Lagers. Der Angriff deiner Armee wird gegen die Verteidigung der Tiere ausgekämpft, bei Gleichstand gewinnt das Lager. Der Verlierer verliert alles, der Gewinner einen Teil seiner Streitmacht. Ein Sieg räumt das Lager und zahlt seine Beute aus.",
+      "atSea": "Der Walweg liegt auf offener See, weit vor der Küste. Er beansprucht kein Land und brennt keine Türme nieder. Segelt eine Flotte auf sein Feld, solange er nicht ruhig ist, gerät sie dort in einen Hinterhalt. Jagen kannst du ihn nur mit Schiffen. Er liefert nur Nahrung, so viel deine überlebenden Schiffe tragen können, und kehrt nach jeder Räumung zurück.",
+      "hunting": "Jagd: Schick Landeinheiten (zum Walweg Schiffe) mit dem Jagdbefehl auf das Feld eines Lagers. Der Angriff deiner Armee wird gegen die Verteidigung der Tiere ausgekämpft, bei Gleichstand gewinnt das Lager. Der Verlierer verliert alles, der Gewinner einen Teil seiner Streitmacht. Ein Sieg räumt das Lager und zahlt seine Beute aus.",
       "regrowth": "Nachwuchs: Ein angeschlagenes Lager bekommt seine Tiere gleichmäßig über 4 Stunden (schwache Lager) oder 8 Stunden (starke Lager) zurück.",
       "calm": "Ruhe: Nach jedem Kampf ist ein Lager 24 Stunden lang ruhig. Es wächst weiter nach, greift aber nicht an.",
       "leveling": "Aufstieg: Jede 10. Räumung eines Lagers, egal durch welchen Spieler, hebt seine Stufe um 1, höchstens bis 100. Die Stufe sinkt nie wieder. Die Reichweite bleibt, wie sie ausgewürfelt wurde: Ein abgefarmtes Lager wird also stärker, beansprucht aber nicht mehr Land.",
@@ -1244,7 +1245,7 @@
       "targets": "Eine Flotte kann Siedlungen angreifen, plündern oder unterstützen, die Küste beanspruchen. Katapulte kann sie nicht mitnehmen.",
       "walls": "{walls} halten Flotten nicht auf.",
       "wallsLink": "Mauern",
-      "camps": "Wildtierlager überfallen nie eine Flotte (siehe {camps}).",
+      "camps": "Lager an Land überfallen nie eine Flotte. Der Walweg liegt auf offener See und überfällt jede Flotte, die auf sein Feld segelt (siehe {camps}).",
       "campsLink": "Wildtierlager"
     },
     "battles": {
