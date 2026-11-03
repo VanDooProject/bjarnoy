@@ -86,7 +86,7 @@ public sealed class CampAmbushService(
         var effectiveLevel = state.EffectiveLevel(camp);
 
         var seed = Random.Shared.Next();
-        var plan = CampBattleResolver.CampAttack(garrison, camp, domain.Stacks, seed);
+        var plan = CampBattleResolver.Ambush(garrison, camp, domain.Stacks, seed);
 
         await _campService.UpsertStateAsync(
             worldId, camp.Coord, state.AfterFight(camp, ambush.At, plan.BeastSurvivors), cancellationToken).ConfigureAwait(false);

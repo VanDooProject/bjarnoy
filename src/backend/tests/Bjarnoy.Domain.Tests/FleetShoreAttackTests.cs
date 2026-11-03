@@ -153,7 +153,7 @@ public class FleetShoreAttackTests
     public void A_lost_fleet_fight_damages_nothing()
     {
         var farm = new PlacedBuilding(ShoreHex, BuildingType.Farm, 9);
-        var defender = Found(TargetCentre, [new UnitStack(UnitType.Spearman, 1000)], farm);
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Longship, 100)], farm);
 
         var arrival = Arrive(defender);
 
@@ -173,5 +173,142 @@ public class FleetShoreAttackTests
         Assert.False(arrival.Siege!.Applied);
         Assert.All(arrival.DefenderSettlement.Buildings, b => Assert.True(b.Level > 0));
         Assert.Equal(2, arrival.DefenderSettlement.Buildings.Count);
+    }
+
+    private static Army SendLoaded(UnitStack[] requested, ArmyMission mission = ArmyMission.Attack)
+    {
+        var attacker = Found(Home, requested, new PlacedBuilding(Dock, BuildingType.Dockyard, 1));
+        var decision = Army.PlanDispatch(
+            attacker, requested, Math.Min(150, requested.Sum(u => UnitCatalogue.Get(u.Type).FoodCarryCapacity * u.Count)), [], TargetCentre, T0,
+            Guid.CreateVersion7(), Strait, mission, Guid.CreateVersion7(),
+            targetBuildingCoord: ShoreHex, targetClaimDiscs: [(TargetCentre, ClaimRadius)]);
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        return decision.Army!;
+    }
+
+    private static ArmyArrivalResult ArriveWith(
+        Army army, Settlement defender, IReadOnlyList<UnitStack>? guests = null) =>
+        Army.SettleArrival(army, defender, 1.0, MovementOf(army).ArrivesAt, seed: 1, guests);
+
+    private static int Count(IEnumerable<UnitStack> stacks, UnitType type) => stacks.Where(s => s.Type == type).Sum(s => s.Count);
+
+    [Fact]
+    public void Without_ships_at_home_there_is_no_fight_the_land_garrison_stays_out_and_the_siege_applies()
+    {
+        var farm = new PlacedBuilding(ShoreHex, BuildingType.Farm, 9);
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Spearman, 1000), new UnitStack(UnitType.Axeman, 1000)], farm);
+
+        var arrival = Arrive(defender);
+
+        Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
+        Assert.Empty(arrival.Battle.AttackerLosses);
+        Assert.Empty(arrival.Battle.DefenderLosses);
+        Assert.Equal(1000, Count(arrival.DefenderSettlement.Garrison, UnitType.Spearman));
+        Assert.Equal(1000, Count(arrival.DefenderSettlement.Garrison, UnitType.Axeman));
+        Assert.True(arrival.Siege!.Applied);
+        Assert.Equal(ShoreHex, arrival.Siege.TargetCoord);
+        Assert.Equal(5, Count(arrival.Army!.Stacks, UnitType.Karve));
+    }
+
+    [Fact]
+    public void Only_the_defenders_ships_fight_the_fleet_and_the_land_units_at_home_take_no_losses()
+    {
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Spearman, 1000), new UnitStack(UnitType.Longship, 1)],
+            new PlacedBuilding(ShoreHex, BuildingType.Farm, 9));
+
+        var arrival = Arrive(defender);
+
+        // 5 Karves attack 25 against one Longship's defence of 40: the Longship holds, the spearmen did not add to it.
+        Assert.Equal(40, arrival.Battle!.DefensePower);
+        Assert.Equal(BattleWinner.Defender, arrival.Battle.Winner);
+        Assert.DoesNotContain(arrival.Battle.DefenderLosses, s => s.Type == UnitType.Spearman);
+        Assert.Equal(1000, Count(arrival.DefenderSettlement.Garrison, UnitType.Spearman));
+    }
+
+    [Fact]
+    public void Guest_ships_defend_alongside_the_home_ships_and_guest_land_units_are_not_charged_losses()
+    {
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Longship, 1)], new PlacedBuilding(ShoreHex, BuildingType.Farm, 9));
+        UnitStack[] guests = [new(UnitType.Longship, 1), new(UnitType.Spearman, 50)];
+
+        var arrival = ArriveWith(SendLoaded([new UnitStack(UnitType.Karve, 5)]), defender, guests);
+
+        Assert.Equal(80, arrival.Battle!.DefensePower);
+        Assert.DoesNotContain(arrival.GuestLosses, s => s.Type == UnitType.Spearman);
+    }
+
+    [Fact]
+    public void Passengers_sail_through_a_won_fight_and_come_home_with_the_ships()
+    {
+        var army = SendLoaded([new UnitStack(UnitType.Karve, 5), new UnitStack(UnitType.Spearman, 50)]);
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Spearman, 1000)], new PlacedBuilding(ShoreHex, BuildingType.Farm, 9));
+
+        var arrival = ArriveWith(army, defender);
+
+        Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
+        Assert.Equal(5, Count(arrival.Army!.Stacks, UnitType.Karve));
+        Assert.Equal(50, Count(arrival.Army.Stacks, UnitType.Spearman));
+        Assert.Equal(25, arrival.Battle.AttackPower);
+    }
+
+    [Fact]
+    public void Siege_engines_aboard_do_not_fire_only_the_surviving_ships_do()
+    {
+        // 1 Longship (siege power 20) carries 2 rams (siege power 40 each); only the ship's 20 count.
+        var army = SendLoaded([new UnitStack(UnitType.Longship, 1), new UnitStack(UnitType.Ram, 2)]);
+        var defender = Found(TargetCentre, [], new PlacedBuilding(ShoreHex, BuildingType.Farm, 9));
+
+        var arrival = ArriveWith(army, defender);
+
+        Assert.True(arrival.Siege!.Applied);
+        Assert.Equal(9 - SiegeResolver.LevelsDestroyed(20), arrival.Siege.LevelAfter);
+        Assert.Equal(2, Count(arrival.Army!.Stacks, UnitType.Ram));
+    }
+
+    [Fact]
+    public void Passengers_drown_beyond_the_slots_of_the_ships_that_survive_a_won_fight()
+    {
+        var army = SendLoaded([new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Spearman, 90)]);
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Longship, 6)], new PlacedBuilding(ShoreHex, BuildingType.Farm, 9));
+
+        var arrival = ArriveWith(army, defender);
+
+        Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
+        var ships = Count(arrival.Army!.Stacks, UnitType.Longship);
+        Assert.InRange(ships, 1, 4);
+        var kept = Count(arrival.Army.Stacks, UnitType.Spearman);
+        Assert.Equal(Math.Min(90, ships * 20), kept);
+        Assert.Equal(90 - kept, Count(arrival.Battle.AttackerLosses, UnitType.Spearman));
+        Assert.Equal(kept, Count(arrival.Battle.AttackerSurvivors, UnitType.Spearman));
+    }
+
+    [Fact]
+    public void Passengers_drown_with_a_fleet_that_loses_all_its_ships()
+    {
+        var army = SendLoaded([new UnitStack(UnitType.Karve, 5), new UnitStack(UnitType.Spearman, 50)]);
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Longship, 100)], new PlacedBuilding(ShoreHex, BuildingType.Farm, 9));
+
+        var arrival = ArriveWith(army, defender);
+
+        Assert.Equal(BattleWinner.Defender, arrival.Battle!.Winner);
+        Assert.Null(arrival.Army);
+        Assert.Equal(50, Count(arrival.Battle.AttackerLosses, UnitType.Spearman));
+        Assert.Empty(arrival.Battle.AttackerSurvivors);
+    }
+
+    [Fact]
+    public void A_land_armys_attack_still_fights_the_whole_garrison()
+    {
+        UnitStack[] force = [new UnitStack(UnitType.Axeman, 20), new UnitStack(UnitType.Provisioner, 20)];
+        var attacker = Found(Home, force);
+        var decision = Army.PlanDispatch(
+            attacker, force, 400, [], TargetCentre, T0,
+            Guid.CreateVersion7(), _ => Terrain.Grass, ArmyMission.Attack, Guid.CreateVersion7(),
+            targetClaimDiscs: [(TargetCentre, ClaimRadius)]);
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Spearman, 10), new UnitStack(UnitType.Longship, 1)]);
+
+        var arrival = Army.SettleArrival(decision.Army!, defender, 1.0, MovementOf(decision.Army!).ArrivesAt, seed: 1);
+
+        Assert.Equal((10 * 35) + 40, arrival.Battle!.DefensePower);
     }
 }

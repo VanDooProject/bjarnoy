@@ -81,4 +81,32 @@ public static class ShipCargo
         var lost = drownedBy.Select(kv => new UnitStack(kv.Key, kv.Value)).ToList();
         return (kept, lost);
     }
+
+    /// <summary>
+    /// Who fights for <paramref name="stacks"/>: a fleet's ships (its passengers stay out of every fight at sea, in a fleet attack,
+    /// a field battle, an ambush or a hunt), a land army's units. <c>Passengers</c> is empty for a land army.
+    /// </summary>
+    public static (IReadOnlyList<UnitStack> Fighters, IReadOnlyList<UnitStack> Passengers) SplitForFight(
+        IReadOnlyList<UnitStack> stacks)
+    {
+        var ships = Ships(stacks);
+        return ships.Count > 0 ? (ships, Passengers(stacks)) : (stacks, []);
+    }
+
+    /// <summary>
+    /// Puts a fleet's <paramref name="passengers"/> back with the result of a fight its ships fought alone: the passengers the
+    /// surviving ships can still carry stay with the survivors, the rest (<see cref="DropOverflow"/>) are added to the losses.
+    /// With no passengers (a land army) the fight's result comes back unchanged. The one place every fight at sea ends in.
+    /// </summary>
+    public static (IReadOnlyList<UnitStack> Losses, IReadOnlyList<UnitStack> Survivors) Rejoin(
+        IReadOnlyList<UnitStack> fighterLosses, IReadOnlyList<UnitStack> fighterSurvivors, IReadOnlyList<UnitStack> passengers)
+    {
+        if (passengers.Count == 0)
+        {
+            return (fighterLosses, fighterSurvivors);
+        }
+
+        var (kept, drowned) = DropOverflow(fighterSurvivors, passengers);
+        return ([.. fighterLosses, .. drowned], [.. fighterSurvivors, .. kept]);
+    }
 }

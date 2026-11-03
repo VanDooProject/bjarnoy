@@ -378,7 +378,7 @@ building is gone when it arrives, nothing is damaged.
 dispatch whose passengers need more slots than its ships have is refused (`InsufficientShipCapacity`). A fleet moves at the
 speed of its slowest ship; passengers do not slow it. Passengers eat from the fleet's provisions. They stay on board during a
 fleet battle and do not fight; they only go ashore at a beach camp (`skirmish/beach-camp.md`). When ships are lost, the
-passengers beyond what the surviving ships can carry drown. Starting values, to be tuned:
+passengers beyond what the surviving ships can carry drown, the units that take the most slots first. Starting values, to be tuned:
 
 | Ship | Slots |
 |---|---|

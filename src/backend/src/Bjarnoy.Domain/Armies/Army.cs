@@ -604,12 +604,21 @@ public sealed record Army
         // §3): their stacks are merged, by type, into the defense side the
         // resolver sees, so combined defense power (and hence the win/loss
         // outcome itself) properly reflects everyone standing on the wall.
+        //
+        // A fleet's battle is fought by ships only, on both sides (docs/design/economy.md, "Fleets"): the attacker's
+        // passengers stay aboard, and the defender's land units (garrison and guests) stay out of it. A defender without
+        // ships at home has nobody to fight: the resolver gives the fleet a costless win, and the siege below applies.
+        // The passengers the surviving ships cannot carry drown (ShipCargo.Rejoin).
         var combinedDefense = MergeStacksByType(settledDefender.Garrison, guestDefenderStacks);
+        var (attackerFighters, passengers) = ShipCargo.SplitForFight(army.Stacks);
         var plan = BattleResolver.Resolve(
-            army.Stacks, combinedDefense, defenseBonusPercent, lootAvailable, seed,
+            attackerFighters, army.IsFleet ? ShipCargo.Ships(combinedDefense) : combinedDefense, defenseBonusPercent, lootAvailable, seed,
             raid: army.Mission == ArmyMission.Raid,
             landAttackBonusPercent: landAttackBonusPercent,
             shipAttackBonusPercent: shipAttackBonusPercent);
+        var shipSurvivors = plan.AttackerSurvivors;
+        var (attackerLosses, attackerSurvivors) = ShipCargo.Rejoin(plan.AttackerLosses, shipSurvivors, passengers);
+        plan = plan with { AttackerLosses = attackerLosses, AttackerSurvivors = attackerSurvivors };
 
         // Loot leaves the defender's stock at the instant of battle even
         // though it does not reach the attacker's own stock until the
@@ -650,7 +659,8 @@ public sealed record Army
         // nothing extra is needed here for that to fall out correctly.
         var siege = plan.Winner == BattleWinner.Attacker
             ? Combat.SiegeResolver.Resolve(
-                plan.AttackerSurvivors, defenderPostBattle.Buildings, army.TargetBuildingCoord, seed,
+                // A fleet's siege is its surviving ships'; the siege engines aboard are passengers and do not fire.
+                army.IsFleet ? shipSurvivors : plan.AttackerSurvivors, defenderPostBattle.Buildings, army.TargetBuildingCoord, seed,
                 randomFallback: !army.IsFleet)
             : Combat.SiegeOutcome.None;
 

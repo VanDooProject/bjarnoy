@@ -254,4 +254,54 @@ public class CampBattleResolverTests
 
         Assert.Equal(leftover, after.Leftover);
     }
+
+    private static int Count(IEnumerable<UnitStack> stacks, UnitType type) => stacks.Where(s => s.Type == type).Sum(s => s.Count);
+
+    [Fact]
+    public void A_hunting_fleets_passengers_do_not_fight_and_drown_beyond_the_slots_of_the_surviving_ships()
+    {
+        // 5 Longships attack 300 (100 slots) against 195; the 50 axemen aboard (100 slots) would have added 2000.
+        var army = new[] { new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 50) };
+
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1);
+
+        Assert.Equal(300, plan.ArmyPower);
+        Assert.Equal(CampFightWinner.Army, plan.Winner);
+        var ships = Count(plan.ArmySurvivors, UnitType.Longship);
+        Assert.InRange(ships, 1, 4);
+        Assert.Equal(ships * 10, Count(plan.ArmySurvivors, UnitType.Axeman));
+        Assert.Equal(50 - (ships * 10), Count(plan.ArmyLosses, UnitType.Axeman));
+    }
+
+    [Fact]
+    public void A_fleet_without_passengers_hunts_as_before()
+    {
+        var plan = CampBattleResolver.Hunt([new UnitStack(UnitType.Longship, 5)], FullStrong(), Strong(), 1, seed: 1);
+
+        Assert.Equal(300, plan.ArmyPower);
+        Assert.Equal(5, Count(plan.ArmyLosses, UnitType.Longship) + Count(plan.ArmySurvivors, UnitType.Longship));
+    }
+
+    [Fact]
+    public void An_ambush_is_fought_by_the_ships_alone_and_a_lost_fleet_drowns_its_passengers()
+    {
+        // The Karve's defence is 30; the 10 spearmen aboard (350 defence on land) stay out of it.
+        var fleet = new[] { new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Spearman, 10) };
+
+        var plan = CampBattleResolver.Ambush(FullStrong(), Strong(), fleet, seed: 1);
+
+        Assert.Equal(30, plan.ArmyPower);
+        Assert.Equal(CampFightWinner.Camp, plan.Winner);
+        Assert.Empty(plan.ArmySurvivors);
+        Assert.Equal(10, Count(plan.ArmyLosses, UnitType.Spearman));
+        Assert.Equal(1, Count(plan.ArmyLosses, UnitType.Karve));
+    }
+
+    [Fact]
+    public void An_ambush_on_a_land_army_fights_everyone()
+    {
+        var plan = CampBattleResolver.Ambush(FullStrong(), Strong(), [new UnitStack(UnitType.Spearman, 10)], seed: 1);
+
+        Assert.Equal(350, plan.ArmyPower);
+    }
 }

@@ -545,8 +545,8 @@ public class ArmyTests
     [Theory]
     [InlineData(10, 0, true)]
     [InlineData(11, 0, false)]
-    [InlineData(5, 1, true)]
-    [InlineData(6, 1, false)]
+    [InlineData(8, 1, true)]
+    [InlineData(9, 1, false)]
     public void Fleet_dispatch_is_refused_when_the_passengers_need_more_slots_than_one_karve_offers(
         int spearmen, int bowmen, bool accepted)
     {
@@ -607,11 +607,12 @@ public class ArmyTests
     [Fact]
     public void Land_army_still_moves_at_its_slowest_unit()
     {
-        var army = Dispatch(Found(garrison: [new UnitStack(UnitType.Spearman, 2), new UnitStack(UnitType.Ram, 1)]),
-            new HexCoord(4, 0), provisions: 40,
-            requested: [new UnitStack(UnitType.Spearman, 2), new UnitStack(UnitType.Ram, 1)]).Army!;
+        var decision = Dispatch(Found(garrison: [new UnitStack(UnitType.Spearman, 2), new UnitStack(UnitType.Ram, 1)]),
+            new HexCoord(1, 0), provisions: 15,
+            requested: [new UnitStack(UnitType.Spearman, 2), new UnitStack(UnitType.Ram, 1)]);
 
-        Assert.Equal(UnitCatalogue.Get(UnitType.Ram).Speed, army.TotalSpeed);
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        Assert.Equal(UnitCatalogue.Get(UnitType.Ram).Speed, decision.Army!.TotalSpeed);
     }
 
     [Fact]
