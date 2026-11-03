@@ -204,7 +204,30 @@ public static class LiveFrontendTestHelpers
                 + $"Hero status: [{string.Join(" | ", heroStatus)}]. "
                 + $"Recent console messages: [{string.Join(" | ", recentConsole)}]");
         }
+
+        // Founding starts the renderer's founding ease (animateCameraTo):
+        // until it lands every hex's hexCenterScreen is still sliding toward
+        // the settlement framing, so a caller that reads a hex's screen point
+        // right after this returns (ClickHexAsync) and clicks it hits
+        // whatever hex has moved under that point by then — the ring opens on
+        // the wrong hex or not at all. Same wait as the demo suite's
+        // e2e/helpers.ts claimLandfall: no preview and not animating is the
+        // settled camera.
+        await page.WaitForFunctionAsync(SettledCameraScript, null, new() { Timeout = 15_000 });
     }
+
+    /// <summary>
+    /// Whether the founding hand-off has finished on the canvas:
+    /// <c>previewCenter</c> is cleared by the same <c>updateOptions</c> call
+    /// that starts the camera ease, so no preview and not animating means the
+    /// camera has settled on the new settlement.
+    /// </summary>
+    private const string SettledCameraScript = """
+        () => {
+          const renderer = window.__settlementRenderer?.();
+          return !!renderer && !renderer.previewCenter && !renderer.cameraAnimating;
+        }
+        """;
 
     /// <summary>
     /// Clicks the hex at axial <paramref name="q"/>/<paramref name="r"/> —
