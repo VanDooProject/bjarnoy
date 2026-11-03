@@ -20,7 +20,6 @@ export const missionName = (mission: string) => lookup(`missions.${mission}`, mi
 export const runeTypeName = (type: string) => lookup(`runes.types.${type}`, type);
 export const runeRarityName = (rarity: string) => lookup(`runes.rarities.${rarity}`, rarity);
 export const guildRoleName = (role: string) => lookup(`guild.roles.${role}`, role);
-export const guildFeeTierName = (tier: string) => lookup(`guild.feeTiers.${tier}`, tier);
 export const guildBoardTopicName = (kind: string) => lookup(`guild.boardTopics.${kind}`, kind);
 export const leaderboardScopeName = (scope: string) => lookup(`leaderboard.scopes.${scope}`, scope);
 export const leaderboardCategoryName = (category: string) => lookup(`leaderboard.categories.${category}`, category);
