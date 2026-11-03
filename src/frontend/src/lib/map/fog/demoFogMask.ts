@@ -21,6 +21,7 @@ import {
   type MaskBounds,
   type MaskTexel,
 } from './fogMaskLayout';
+import { FogCoverage } from './fogCoverage';
 
 // Mirrors FogMaskOptions' defaults (UnknownMarginHexes / OutOfSightMarginHexes)
 // — UNKNOWN_MARGIN_HEXES also matches HexMapRenderer's own
@@ -185,14 +186,14 @@ function generateCells(model: WorldModel, bounds: MaskBounds): DemoFogMaskCell[]
 
 /**
  * Bakes a fog mask bitmap for demo mode straight from `WorldModel`'s state
- * — see this module's own top comment. `null` once there's no settlement yet
+ * — see this module's own top comment — together with the `FogCoverage` of the same pixels. `null` once there's no settlement yet
  * (matches setFogMask's own "bitmap null is a no-op": nothing has been
  * founded, so there's nothing meaningful to reveal).
  */
 export async function buildDemoFogMask(
   model: WorldModel,
   bounds: MaskBounds = demoMaskBounds(model),
-): Promise<ImageBitmap | null> {
+): Promise<{ bitmap: ImageBitmap; coverage: FogCoverage } | null> {
   if (model.listSettlements().length === 0) return null;
 
   const cells = generateCells(model, bounds);
@@ -205,6 +206,7 @@ export async function buildDemoFogMask(
     data[i * 4 + 2] = cell.noise;
     data[i * 4 + 3] = 255;
   }
+  const coverage = new FogCoverage(bounds, data);
   const image = new ImageData(data, bounds.width, bounds.height);
-  return createImageBitmap(image);
+  return { bitmap: await createImageBitmap(image), coverage };
 }
