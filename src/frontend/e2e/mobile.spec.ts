@@ -171,7 +171,7 @@ test.describe('phone layout, landscape', { tag: '@g1' }, () => {
 
   test('the onboarding checklist leaves the landing plot tappable', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await page.goto('/');
+    await page.goto('/#no-intro');
     await waitForMapReady(page);
 
     // The plot's own screen point must hit the canvas, not an overlay sitting
@@ -226,7 +226,7 @@ test.describe('phone layout, landscape (667x375)', { tag: '@g1' }, () => {
   // screen point must reach the canvas, and a tap there must found.
   test('the slim checklist leaves the landing plot tappable', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await page.goto('/');
+    await page.goto('/#no-intro');
     await waitForMapReady(page);
     expect(await plotHitsCanvas(page)).toBe(true);
 

@@ -83,7 +83,7 @@ public static class LiveFrontendTestHelpers
     /// </summary>
     public static async Task FoundStartingSettlementAsync(IPage page, string frontendUrl)
     {
-        await page.GotoAsync(frontendUrl, new PageGotoOptions { Timeout = 120_000 });
+        await page.GotoAsync($"{frontendUrl}#no-intro", new PageGotoOptions { Timeout = 120_000 });
 
         // This is the bug FoundingSettlementPersistenceTests exists for:
         // DemoModeBadge.vue only renders while config.ts's DEMO_MODE is true,
