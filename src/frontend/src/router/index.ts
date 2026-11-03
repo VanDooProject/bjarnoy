@@ -159,6 +159,11 @@ export const router = createRouter({
       beforeEnter: () => awaitShowcaseManifests(),
     },
     {
+      path: '/docs/saga/replay',
+      name: 'saga-replay',
+      component: () => import('../views/SagaReplayView.vue'),
+    },
+    {
       path: '/docs/tiles',
       name: 'tile-docs',
       component: () => import('../views/TileDocsView.vue'),
