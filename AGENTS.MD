@@ -292,10 +292,11 @@
   its own page or section in the same artifact and link the rounds to each
   other — never overwrite or delete an earlier round's content when
   publishing the next one, I still compare against it
-- artifacts with motion (animations, motion demos, story beats, ...) get a
-  toggle that switches reduced motion on and off inside the page, next to
-  following `prefers-reduced-motion` — I can't change that setting on my
-  machine (it's off), so the reduced-motion path has to be viewable there
+- artifacts with motion (animations, motion demos, story beats, ...) loop by
+  default and ignore `prefers-reduced-motion` by default (full motion); a
+  toggle inside the page switches to the reduced-motion version — I can't
+  change that setting on my machine, so the reduced-motion path has to be
+  viewable there
 - don't report that you followed one of these rules (e.g. "renamed the
   branch because of the naming rule") — that's expected. Only tell me when
   you did **not** follow a rule, and why
