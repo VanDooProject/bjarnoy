@@ -52,7 +52,7 @@ describe('LandingIntro', () => {
 
   it('narrates the current beat in the chosen locale', async () => {
     const w = await mountIntro({ locale: 'de' });
-    expect(w.get('[data-testid="intro-narration"]').text()).toBe('Am Feuer des Skalden');
+    expect(w.get('[data-testid="intro-narration"]').text()).toBe('Hör zu! Rück näher ans Feuer und erfahre, wie die Jarle ihre Heimat verloren.');
   });
 
   it('replay: skip from the start leads to the white end screen whose buttons emit', async () => {
