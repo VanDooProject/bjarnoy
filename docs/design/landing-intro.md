@@ -17,9 +17,9 @@ then hands over to the real map.
 
 ## Timing
 
-- The intro plays once, then the hold runs until the map tiles are loaded, then the exit plays. The hold lasts at least
-  as long as its narration takes to read (1 s plus its words at 230 words per minute); tiles that load earlier wait for
-  that.
+- The intro plays once, then the hold, then the exit.
+- The hold plays at least as long as its narration takes to read (1 s plus the words at 230 words per minute). After
+  that it ends as soon as the tiles are loaded. Skip ends it at once.
 - Optional beats (3) are dropped when the tiles are already loaded before the beat starts.
 - Once the tiles are loaded and the sequence is still playing, a skip button shows. Pressing it starts the exit
   (fog lifts) right away.
