@@ -21,6 +21,7 @@ public sealed class SettlementRaceInterceptor : DbCommandInterceptor
     private Guid _settlementId;
     private Func<Task>? _competing;
     private bool _repeat;
+    private bool _afterGroupLoad;
     private bool _busy;
     private bool _firedSinceLastWrite;
 
@@ -31,8 +32,13 @@ public sealed class SettlementRaceInterceptor : DbCommandInterceptor
     /// Races reads of <paramref name="settlementId"/>: <paramref name="competing"/> runs after the first such read of
     /// each attempt, once when <paramref name="repeat"/> is false, on every attempt when it is true.
     /// </summary>
-    public void Arm(Guid settlementId, Func<Task> competing, bool repeat)
+    /// <param name="afterGroupLoad">
+    /// Fire after the last query of the settlement's linked-group load (the hosted-armies read) instead of after the
+    /// first settlement read, so the outer request holds a fully stale group when the competing write commits.
+    /// </param>
+    public void Arm(Guid settlementId, Func<Task> competing, bool repeat, bool afterGroupLoad = false)
     {
+        _afterGroupLoad = afterGroupLoad;
         _settlementId = settlementId;
         _competing = competing;
         _repeat = repeat;
@@ -63,7 +69,7 @@ public sealed class SettlementRaceInterceptor : DbCommandInterceptor
             _firedSinceLastWrite = false;
         }
 
-        if (_competing is { } competing && !_busy && !_firedSinceLastWrite && IsFullReadOfTarget(command))
+        if (_competing is { } competing && !_busy && !_firedSinceLastWrite && IsTrigger(command))
         {
             if (!_repeat)
             {
@@ -94,8 +100,16 @@ public sealed class SettlementRaceInterceptor : DbCommandInterceptor
             || text.StartsWith("DELETE", StringComparison.Ordinal);
     }
 
+    private bool IsTrigger(DbCommand command) => _afterGroupLoad ? IsHostedArmiesReadOfTarget(command) : IsFullReadOfTarget(command);
+
+    private bool IsHostedArmiesReadOfTarget(DbCommand command) =>
+        command.CommandText.Contains("armies", StringComparison.Ordinal)
+        && command.Parameters.Cast<DbParameter>().Any(p => p.Value is IEnumerable<Guid> ids && ids.Contains(_settlementId));
+
     private bool IsFullReadOfTarget(DbCommand command) =>
-        command.CommandText.Contains("FROM \"settlements\"", StringComparison.Ordinal)
-        && command.CommandText.Contains("\"placed_buildings\"", StringComparison.Ordinal)
+        // SQLite quotes identifiers, Npgsql emits them bare ("FROM settlements AS s") unless they need quoting; both forms contain the bare table name.
+        (command.CommandText.Contains("FROM \"settlements\"", StringComparison.Ordinal)
+            || command.CommandText.Contains("FROM settlements ", StringComparison.Ordinal))
+        && command.CommandText.Contains("placed_buildings", StringComparison.Ordinal)
         && command.Parameters.Cast<DbParameter>().Any(p => Guid.TryParse(p.Value?.ToString(), out var id) && id == _settlementId);
 }
