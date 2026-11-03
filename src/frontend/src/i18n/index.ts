@@ -39,6 +39,8 @@ import enDocs from './locales/en/docs.json';
 import deDocs from './locales/de/docs.json';
 import enShowcase from './locales/en/showcase.json';
 import deShowcase from './locales/de/showcase.json';
+import enIntro from './locales/en/intro.json';
+import deIntro from './locales/de/intro.json';
 import deAdminWorldReview from './locales/de/adminWorldReview.json';
 import deAdminWorlds from './locales/de/adminWorlds.json';
 import enAdminActivityChart from './locales/en/adminActivityChart.json';
@@ -115,6 +117,7 @@ export const i18n = createI18n({
       simulator: enSimulator,
       docs: enDocs,
       showcase: enShowcase,
+      intro: enIntro,
       // Admin surface (en-only — German deliberately deferred; fallbackLocale
       // below covers these, and src/test/i18n.ts skips the parity check for
       // namespaces with no de/ file).
@@ -156,6 +159,7 @@ export const i18n = createI18n({
       simulator: deSimulator,
       docs: deDocs,
       showcase: deShowcase,
+      intro: deIntro,
       adminWorlds: deAdminWorlds,
       adminWorldReview: deAdminWorldReview,
     },

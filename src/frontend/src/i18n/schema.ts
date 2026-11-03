@@ -18,6 +18,7 @@ import reports from './locales/en/reports.json';
 import simulator from './locales/en/simulator.json';
 import docs from './locales/en/docs.json';
 import showcase from './locales/en/showcase.json';
+import intro from './locales/en/intro.json';
 import adminActivityChart from './locales/en/adminActivityChart.json';
 import adminActivity from './locales/en/adminActivity.json';
 import adminEconomy from './locales/en/adminEconomy.json';
@@ -58,6 +59,7 @@ export interface MessageSchema {
   simulator: typeof simulator;
   docs: typeof docs;
   showcase: typeof showcase;
+  intro: typeof intro;
   // Admin surface (en-only — German is deliberately deferred here; see
   // fallbackLocale in index.ts and the skip clause in src/test/i18n.ts).
   adminActivityChart: typeof adminActivityChart;
