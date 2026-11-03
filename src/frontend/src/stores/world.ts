@@ -38,6 +38,7 @@ import { evaluateDemoQuests, questBit } from '../lib/quests';
 import { useConnectionStatusStore } from './connectionStatus';
 import { fogPerfStats } from '../lib/map/fog/fogPerfStats';
 import { buildDemoFogMask, demoMaskBounds } from '../lib/map/fog/demoFogMask';
+import { FogCoverage, type FogCoverageLookup } from '../lib/map/fog/fogCoverage';
 import {
   FOG_CHUNK_SIZE,
   FogChunkCache,
@@ -402,6 +403,8 @@ export const useWorldStore = defineStore('world', {
     // `ImageBitmap` is a plain, non-reactive resource, not app state Vue
     // needs to proxy.
     fogMaskBitmap: null as ImageBitmap | null,
+    /** The same mask as per-hex lookups (explored / opaque), set and cleared together with `fogMaskBitmap`. */
+    fogCoverage: null as FogCoverageLookup | null,
     // Error of the most recent failed fog mask fetch, cleared by the next
     // success. Lets a view tell "mask still loading" from "mask can't be
     // loaded" while no bitmap exists yet (the map would otherwise stay fogged
@@ -1262,6 +1265,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.shipments = [];
       this.fogMaskBitmap?.close();
       this.fogMaskBitmap = null;
+      this.fogCoverage = null;
       this.fogMaskBounds = null;
       this.fogWindow = null;
       this.fogEtag = null;
@@ -1973,17 +1977,16 @@ export const useWorldStore = defineStore('world', {
 
           if (stale.length > 0 || !sameWindow) {
             const bounds = windowBounds(window);
-            const bitmap = await pixelsToBitmap(
-              stitchWindow(window, fogChunkCache.pixelsByKey()),
-              bounds.width,
-              bounds.height,
-            );
+            const pixels = stitchWindow(window, fogChunkCache.pixelsByKey());
+            const coverage = new FogCoverage(bounds, pixels);
+            const bitmap = await pixelsToBitmap(pixels, bounds.width, bounds.height);
             // Close the previous bitmap only once the new one is actually in
             // hand — closing it eagerly before the fetch settles would leave
             // a failed request having discarded the one usable bitmap this
             // store had.
             this.fogMaskBitmap?.close();
             this.fogMaskBitmap = markRaw(bitmap);
+            this.fogCoverage = markRaw(coverage);
             this.fogMaskBounds = bounds;
           }
 
@@ -2070,13 +2073,14 @@ export const useWorldStore = defineStore('world', {
       const startedAt = performance.now();
       try {
         const bounds = demoMaskBounds(this.model);
-        const bitmap = await buildDemoFogMask(this.model, bounds);
-        if (!bitmap) return;
+        const baked = await buildDemoFogMask(this.model, bounds);
+        if (!baked) return;
         // Recorded only once a bake actually produced a mask, so a bail-out
         // (no settlement yet) doesn't suppress the first real bake.
         this.demoFogSignature = signature;
         this.fogMaskBitmap?.close();
-        this.fogMaskBitmap = markRaw(bitmap);
+        this.fogMaskBitmap = markRaw(baked.bitmap);
+        this.fogCoverage = markRaw(baked.coverage);
         this.fogMaskBounds = bounds;
         this.worldRadius = DEFAULT_GENERATION.worldRadius;
         fogPerfStats.maskVersion = 'demo';

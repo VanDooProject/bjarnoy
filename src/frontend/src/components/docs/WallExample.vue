@@ -4,6 +4,7 @@
 // picks every wall hex's piece and rotation from its neighbours exactly as a world does, sea end included.
 import { ref } from 'vue';
 import { useDocsMapRenderer } from '../../composables/useDocsMapRenderer';
+import DocsMapControls from './DocsMapControls.vue';
 import { StaticWorldModel } from '../../lib/map/StaticWorldModel';
 import { exampleWallHexes, exampleWallTiles } from '../../lib/docs/palisadeDocs';
 
@@ -13,7 +14,7 @@ const pieceCount = exampleWallHexes().length;
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-useDocsMapRenderer(canvas, container, {
+const { zoomIn, zoomOut, wheelHint } = useDocsMapRenderer(canvas, container, {
   worldModel: world,
   // The middle of the wall: the gate's far side, where the run turns towards the sea.
   previewCenter: { q: 1, r: 0 },
@@ -21,9 +22,10 @@ useDocsMapRenderer(canvas, container, {
 </script>
 
 <template>
-  <div class="wall-example" role="img" :aria-label="$t('docs.walls.example.alt', { count: pieceCount })">
+  <div class="wall-example">
     <div ref="container" class="map-host">
-      <canvas ref="canvas" class="docs-map-canvas" />
+      <canvas ref="canvas" class="docs-map-canvas" role="img" :aria-label="$t('docs.walls.example.alt', { count: pieceCount })" />
+      <DocsMapControls :zoom-in="zoomIn" :zoom-out="zoomOut" :wheel-hint="wheelHint" />
     </div>
   </div>
 </template>

@@ -54,15 +54,7 @@
 // vision edge, which is the only place it belongs.
 
 import { NOISE_LATTICE_GLSL } from '../shaderNoise';
-
-/**
- * Width, in ramp units, of the taper that closes the edge-noise window past
- * each tier's `reach` (see edgeBand). Exported and interpolated into the
- * GLSL below rather than written twice, because the renderer derives its
- * terrain cull radius from where this window shuts: past that point the mist
- * is provably fully opaque, and drawing ground under it is wasted fill.
- */
-export const EDGE_NOISE_FADE_RAMP = 0.25;
+import { EDGE_NOISE_FADE_RAMP } from './fogRamp';
 
 export const FOG_VERTEX = `
 in vec2 aPosition;

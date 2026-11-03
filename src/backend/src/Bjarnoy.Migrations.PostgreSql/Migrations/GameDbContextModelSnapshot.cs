@@ -648,9 +648,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<DateTimeOffset?>("DisbandedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("FeeTier")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -679,9 +676,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("FeePaidThroughAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("GuildId")
                         .HasColumnType("uuid");

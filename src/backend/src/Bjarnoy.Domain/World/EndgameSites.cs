@@ -25,11 +25,11 @@ public readonly record struct JotunTower(HexCoord Coord, TileOrientation Orienta
 /// </summary>
 public static class EndgameRules
 {
-    /// <summary>Hex distance of the inner ring from Utgard's anchor (two hexes clear of the 7-hex fortress).</summary>
-    public const int InnerRingRadius = 3;
-
-    /// <summary>Hex distance of the outer ring from Utgard's anchor.</summary>
-    public const int OuterRingRadius = 6;
+    /// <summary>
+    /// Hex-distance band each ring's line may wander in, from Utgard's anchor: inner 3 to 6, outer 7 to 11. One clear hex always
+    /// separates the two bands.
+    /// </summary>
+    public static (int Min, int Max) RingBand(UtgardRing ring) => ring == UtgardRing.Inner ? (3, 6) : (7, 11);
 
     /// <summary>A ring is built only when at least this share of its hexes can take a wall.</summary>
     public const double MinRingLandShare = 0.6;
@@ -58,8 +58,6 @@ public static class EndgameRules
     /// guild, so a jötnar gate is never friendly to a player.
     /// </summary>
     public static readonly Guid JotnarOwnerKey = new("6a6f746e-6172-4a6f-8f74-6e6172776c6c");
-
-    public static int RingRadius(UtgardRing ring) => ring == UtgardRing.Inner ? InnerRingRadius : OuterRingRadius;
 
     public static int RingLevel(UtgardRing ring) => ring == UtgardRing.Inner ? InnerRingLevel : OuterRingLevel;
 

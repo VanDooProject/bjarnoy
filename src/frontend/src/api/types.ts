@@ -1404,8 +1404,6 @@ export interface BuildingDefinitionResponse {
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/GuildContracts.cs.
 
-export type GuildFeeTier = 'copper' | 'silver' | 'gold';
-
 export type GuildRole = 'leader' | 'officer' | 'member';
 
 export type GuildBoardTopicKind = 'discussion' | 'announcement' | 'report';
@@ -1416,10 +1414,6 @@ export interface CreateGuildRequest {
   name: string;
   tag: string;
   description?: string | null;
-}
-
-export interface SetGuildFeeTierRequest {
-  feeTier: GuildFeeTier;
 }
 
 export interface SetGuildMemberRoleRequest {
@@ -1444,13 +1438,10 @@ export interface GuildMemberResponse {
   userId: string;
   role: GuildRole;
   joinedAt: string;
-  feeOverdue: boolean;
 }
 
-/** The member cap, treaty cap and perks a guild's current fee tier unlocks — see `GuildRules` on the backend. */
-export interface GuildPerksResponse {
-  tradeCapacityBonus: number;
-  allowUnitSupport: boolean;
+/** The member cap and treaty cap a guild currently has — see `GuildRules` on the backend. */
+export interface GuildCapsResponse {
   memberCap: number;
   maxActivePeaceTreaties: number;
 }
@@ -1461,7 +1452,6 @@ export interface GuildResponse {
   name: string;
   tag: string;
   description: string | null;
-  feeTier: GuildFeeTier;
   memberCount: number;
   createdAt: string;
   members: GuildMemberResponse[];

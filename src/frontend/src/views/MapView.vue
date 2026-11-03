@@ -321,9 +321,9 @@ watch(mode, (m) => {
 // below uses, since the renderer may not exist yet on the tick a fetch
 // resolves.
 watch(
-  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.fogMaskBounds],
-  ([renderer, bitmap, bounds]) => {
-    if (renderer && bitmap && bounds) renderer.setFogMask(bounds, bitmap);
+  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.fogMaskBounds, () => world.fogCoverage],
+  ([renderer, bitmap, bounds, coverage]) => {
+    if (renderer && bitmap && bounds && coverage) renderer.setFogMask(bounds, bitmap, coverage);
   },
 );
 

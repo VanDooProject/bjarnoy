@@ -15,6 +15,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { useDocsMapRenderer } from '../../composables/useDocsMapRenderer';
+import DocsMapControls from './DocsMapControls.vue';
 import { StaticWorldModel } from '../../lib/map/StaticWorldModel';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import type { AxialCoord } from '../../lib/hex/coords';
@@ -50,7 +51,7 @@ const hovered = ref<{ coord: AxialCoord; rotation: number } | null>(null);
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-const { renderer } = useDocsMapRenderer(canvas, container, {
+const { renderer, zoomIn, zoomOut, wheelHint } = useDocsMapRenderer(canvas, container, {
   worldModel: world,
   previewCenter: { q: 0, r: 0 },
   onHoverChange: (info: HoverInfo | null) => {
@@ -172,6 +173,7 @@ onBeforeUnmount(() => {
 
     <div ref="container" class="map-host">
       <canvas ref="canvas" class="docs-map-canvas" />
+      <DocsMapControls :zoom-in="zoomIn" :zoom-out="zoomOut" :wheel-hint="wheelHint" />
     </div>
 
     <p class="caption" data-testid="island-caption">{{ captionText }}</p>

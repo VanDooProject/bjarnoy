@@ -643,9 +643,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset?>("DisbandedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("FeeTier")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -673,9 +670,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GuildMembershipEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset?>("FeePaidThroughAt")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("GuildId")

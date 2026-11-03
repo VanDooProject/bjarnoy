@@ -769,7 +769,6 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             guild.Property(g => g.Name).HasMaxLength(50).IsRequired();
             guild.Property(g => g.Tag).HasMaxLength(5).IsRequired();
             guild.Property(g => g.Description).HasMaxLength(500);
-            guild.Property(g => g.FeeTier).HasConversion<int>();
 
             // Names and tags are unique within a world, not globally — each
             // world is its own playthrough (MECHANICS.md: a sea/world holds

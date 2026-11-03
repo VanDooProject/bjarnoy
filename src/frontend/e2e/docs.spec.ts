@@ -194,7 +194,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     const example = page.getByTestId("utgard-example");
     await example.scrollIntoViewIfNeeded();
     await expect(example.locator("canvas")).toBeVisible();
-    await expect(example).toContainText("two rings of walls");
+    await expect(example).toContainText("two wall lines");
     const box = await example.locator("canvas").boundingBox();
     expect(box!.x + box!.width).toBeLessThanOrEqual(390);
     const overflow = await page
@@ -879,8 +879,8 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     // at phone width (expectPlayerPage resized the viewport already).
     const example = page.getByTestId("land-example");
     await expect(example.locator("canvas")).toBeVisible();
-    await expect(example.getByTestId("land-example-steps").locator("li")).toHaveCount(9);
-    await expect(example.getByTestId("land-example-total")).toContainText("4 h 15 min");
+    await expect(example.getByTestId("land-example-steps").locator("tbody tr")).toHaveCount(11);
+    await expect(example.getByTestId("land-example-total")).toContainText("4 h 58.5 min");
     const box = await example.locator("canvas").boundingBox();
     expect(box!.x + box!.width).toBeLessThanOrEqual(390);
     const overflow = await page.evaluate(
@@ -1079,3 +1079,28 @@ test.describe(
     }
   },
 );
+
+test.describe("docs map zoom controls", { tag: "@g2" }, () => {
+  test("the zoom button redraws the realm map and a plain wheel shows the ctrl hint", async ({
+    page,
+  }) => {
+    await page.goto("/docs/realm");
+    const mapHost = page.locator(
+      '.realm-example .map-host[data-map-ready="true"]',
+    );
+    await mapHost.waitFor();
+    await mapHost.scrollIntoViewIfNeeded();
+
+    const canvas = mapHost.locator("canvas");
+    const before = await canvas.screenshot();
+    await mapHost.getByTestId("docs-map-zoom-in").click();
+    await expect
+      .poll(async () => (await canvas.screenshot()).equals(before))
+      .toBe(false);
+
+    const box = (await mapHost.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, 100);
+    await expect(mapHost.getByTestId("docs-map-wheel-hint")).toBeVisible();
+  });
+});
