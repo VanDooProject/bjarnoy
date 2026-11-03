@@ -13,6 +13,7 @@ const instances: Array<{
   setWaterMotion: ReturnType<typeof vi.fn>;
   setFogMotion: ReturnType<typeof vi.fn>;
   setLakeMotion: ReturnType<typeof vi.fn>;
+  setCovered: ReturnType<typeof vi.fn>;
 }> = [];
 
 vi.mock("../lib/map/HexMapRenderer", () => ({
@@ -28,6 +29,7 @@ vi.mock("../lib/map/HexMapRenderer", () => ({
     setWaterMotion = vi.fn();
     setFogMotion = vi.fn();
     setLakeMotion = vi.fn();
+    setCovered = vi.fn();
     constructor() {
       instances.push(this);
     }
@@ -36,6 +38,8 @@ vi.mock("../lib/map/HexMapRenderer", () => ({
 
 import { useHexMapRenderer } from "./useHexMapRenderer";
 import { motionPreferences } from "../lib/perf/motionPreferences";
+import { effectScope } from "vue";
+import { useCoversMap } from "./useMapCover";
 
 function mountHost(mode: "settlement" | "world" = "settlement") {
   let api!: ReturnType<typeof useHexMapRenderer>;
@@ -135,6 +139,22 @@ describe("useHexMapRenderer mount failure + retry", () => {
     motionPreferences.water = "auto";
     motionPreferences.lakes = "auto";
     motionPreferences.fog = "auto";
+    wrapper.unmount();
+  });
+
+  it("forwards map coverage changes to the renderer", async () => {
+    const { wrapper } = mountHost();
+    await flush();
+    expect(instances[0]!.setCovered).toHaveBeenLastCalledWith(false);
+
+    const scope = effectScope();
+    scope.run(() => useCoversMap(true));
+    await flush();
+    expect(instances[0]!.setCovered).toHaveBeenLastCalledWith(true);
+
+    scope.stop();
+    await flush();
+    expect(instances[0]!.setCovered).toHaveBeenLastCalledWith(false);
     wrapper.unmount();
   });
 });

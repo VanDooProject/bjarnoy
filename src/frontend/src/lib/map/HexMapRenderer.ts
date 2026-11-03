@@ -2878,15 +2878,32 @@ export class HexMapRenderer {
    * slowing it down — deliberately keyed off tab visibility, not window
    * focus/blur: an unfocused-but-visible tab (e.g. a second monitor) must
    * keep animating normally.
+   *
+   * The ticker also stops while something opaque covers the whole map
+   * (`setCovered`, e.g. the fullscreen phone route modal): rendering frames
+   * nobody can see costs CPU/GPU/battery. Both reasons feed one decision in
+   * `updateTickerRunning` so neither can restart a ticker the other stopped.
    */
   private onVisibilityChange = () => {
+    this.updateTickerRunning();
+  };
+
+  private covered = false;
+
+  /** Tells the renderer an opaque surface fully hides (true) or no longer hides (false) the map. */
+  setCovered(covered: boolean) {
+    this.covered = covered;
+    this.updateTickerRunning();
+  }
+
+  private updateTickerRunning() {
     if (!this.app) return;
-    if (document.hidden) {
+    if (document.hidden || this.covered) {
       this.app.ticker.stop();
     } else {
       this.app.ticker.start();
     }
-  };
+  }
 
   private onTouchStart = (e: TouchEvent) => {
     if (this.options.allowPageScroll) return;
