@@ -41,6 +41,12 @@
   prefer reading the code over stacking up subagent theories — an
   unverified theory that sounds plausible is worse than no theory)
 - if running as sonnet and being stuck as a stronger model like opus on how to fix or debug
+- Sonnet implements from a settled spec: it ports a finished design and
+  wires up code. Creating new visual or motion design (scene composition,
+  silhouettes, animation look, judging whether it reads) stays on Opus or
+  higher
+- when a Sonnet subagent writes new visuals anyway, expect heavy
+  refinement and review every render
 
 # my gameplay wishes and requirements
 - collect the game wishes, requirements and mechanics I state (e.g. "a realm is taken by destroying its Longhouse", "ships can hit
