@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Bjarnoy.Migrations.Sqlite.Migrations
 {
     [DbContext(typeof(GameDbContext))]
-    [Migration("20261103010830_AddTrainingOrderBuilding")]
+    [Migration("20261103022113_AddTrainingOrderBuilding")]
     partial class AddTrainingOrderBuilding
     {
         /// <inheritdoc />
@@ -646,9 +646,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset?>("DisbandedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("FeeTier")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -676,9 +673,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GuildMembershipEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset?>("FeePaidThroughAt")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("GuildId")
