@@ -11,6 +11,8 @@ import { useI18n } from 'vue-i18n';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import type { MessageSchema } from '../../i18n/schema';
 import { formatBuildingModifier, formatBuildingOutput } from '../../lib/map/buildingStatsText';
+import { scaleOutput } from '../../lib/map/buildingEconomy';
+import { useWorldStore } from '../../stores/world';
 import { buildingName, terrainName, wastedTerrainName, giantName, campName, beastName, endgameName } from '../../i18n/catalogueNames';
 
 // Mirrors textures.ts's WASTED_TEXTURE_KEY (grass/forest/sand -> their
@@ -25,6 +27,7 @@ const WASTED_TERRAIN_LABEL_KEY: Partial<Record<string, string>> = {
   sea: 'blacksandcoast',
 };
 
+const world = useWorldStore();
 const props = defineProps<{
   info: HoverInfo;
   /** The other accounts a guarded bridge also lets through (the viewer's guild and the guilds at peace with it; `guild.friendlyUserIds`). */
@@ -119,7 +122,9 @@ const bridgeAccessText = computed(() => {
   return t('hud.hoverTooltip.bridgeAccessClosed');
 });
 
-const outputText = computed(() => (props.info.stats?.output ? formatBuildingOutput(props.info.stats.output, t) : undefined));
+const outputText = computed(() =>
+  props.info.stats?.output ? formatBuildingOutput(scaleOutput(props.info.stats.output, world.worldSpeedFactor), t) : undefined,
+);
 const modifierText = computed(() =>
   props.info.stats?.modifier && props.info.stats.modifier.kind !== 'bridge' ? formatBuildingModifier(props.info.stats.modifier, t) : undefined,
 );

@@ -246,6 +246,26 @@ export function matchingNeighbourCount(
  * Fishing Hut on a bog lake's half shore boosts by lake (not coastal) water. One helper for the hover card, the building
  * modal and the ring menu, so they can't drift apart.
  */
+export function scaleOutput(output: BuildingOutput, speedFactor: number): BuildingOutput {
+  return output.kind === 'resourceRate' ? { ...output, amount: Math.round(output.amount * speedFactor) } : output;
+}
+
+/**
+ * What an upgrade adds, split for the ring card: the output's gain over the current level (`gain`) and the new total.
+ * Both are per hour and already scaled by the world's speed factor, like the server's production (`SettlementService`).
+ * Only a resource rate has a gain; any other output (storage, vision, ...) comes back as `null`.
+ */
+export function upgradeRateGain(
+  current: BuildingOutput | undefined,
+  next: BuildingOutput | undefined,
+  speedFactor: number,
+): { gain: BuildingOutput; total: number } | null {
+  if (current?.kind !== 'resourceRate' || next?.kind !== 'resourceRate' || current.resource !== next.resource) return null;
+  const cur = scaleOutput(current, speedFactor) as typeof current;
+  const nxt = scaleOutput(next, speedFactor) as typeof next;
+  return { gain: { ...nxt, amount: nxt.amount - cur.amount }, total: nxt.amount };
+}
+
 export function buildingStatsAt(
   type: BuildingKind,
   level: number,

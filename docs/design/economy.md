@@ -209,6 +209,17 @@ play.
   does not count against the tower limit while cut off; once it is connected
   again it counts, even if that puts you over the limit (you then can't build
   more towers).
+- **A destroyed longhouse ends the settlement's claim.** A settlement whose
+  Longhouse is destroyed claims nothing at all, not even its centre hex (it
+  contributes no disc to the chain). Its towers stay connected only if they
+  stand within the claim of another Longhouse of yours, directly or through
+  a chain of connected towers; otherwise they are cut off like any other
+  cut-off tower.
+- **A destroyed longhouse also ends the settlement's centre sight.** The settlement's centre vision disc (explored and
+  visible ring, Odin's Ravens included) follows the same decision as its claim (`Settlement.LonghouseDisc`; server
+  `FogVisionRadii.ToVisionSource`, client `WorldModel.visionDiscsFor`): without a standing Longhouse there is no disc, so
+  nothing around the centre is seen or newly explored. Towers still chained to another Longhouse of yours keep their own
+  sight and Ravens rings; armies' own sight is unaffected. Ground explored earlier stays explored.
 - **How a tower claims:** a tower claims every hex within its level of
   itself (level 1 its neighbours, level 2 two rings, …), centred on the
   tower. It has to be built inside the realm, which includes ground another
@@ -232,6 +243,13 @@ play.
   the time to gone is max level × 24 h ÷ world speed, clamped between a
   minimum and a maximum that shrink with world speed on a log scale, from
   7 days–30 days at 1× to 1 hour–1 day at 100× (3.8 hours–2.4 days at 30×).
+- **Linked realms share their stores.** Two of your settlements are linked when their realms touch (share a hex edge). Linked settlements share one stock: it is kept split between them in proportion to each one's storage capacity, per resource; production goes into it and a build in any of them draws from all of them in that ratio. When the link breaks, each keeps its share. The oldest settlement of a linked group is the one the game shows; the stock of the others is shown with it.
+- **A linked group is one realm.** It has one name (the oldest settlement's) and one stock. The newer settlements are left out of every list, yours and your rivals', and rivals see the oldest settlement's name on every longhouse of the group. Only their longhouses and the border stay on the map. You run the whole linked realm from the oldest settlement and can build on any of its hexes from there. A raid on any longhouse of the group can loot the whole stock.
+- A linked realm has one build queue: its construction slots are the members' slots added up, and a build on any of its hexes joins that queue.
+- In a linked realm, build requirements count for the whole realm: its highest longhouse level unlocks buildings on all of its ground, its tower limit is the members' limits added up, and the extra-storage-house requirement counts all of its storage houses.
+- A linked realm's units eat from the shared food. When it runs out, the units with the highest upkeep across the whole realm starve first, until the shared food stops falling.
+- Leaderboards show a linked realm once, under the oldest settlement's name, with the members' scores added up; battle and trade reports use the realm's name.
+- A linked realm holds one shrine in total, like a settlement: while it holds one or more, no new shrine can be built in it. Settlements that each raised a shrine before they linked keep them all, and all of them keep working, so linking settlements is a way to combine favours.
 - **Producers are limited only by territory:** every matching hex inside
   the claim can hold one.
 - **Rivers and bog creeks block space but pay for it.** A river hex can't

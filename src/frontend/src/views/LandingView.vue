@@ -14,7 +14,6 @@ import { useLoadFlow } from '../composables/useLoadFlow';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
-import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 import ReturningPlayerMenu from '../components/hud/ReturningPlayerMenu.vue';
 import MotionPrompt from '../components/onboarding/MotionPrompt.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
@@ -537,7 +536,7 @@ const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
     (c) => world.model.getTile(c.q, c.r).terrain,
     (c) => {
       const tile = world.model.getTile(c.q, c.r);
-      return tile.ownerId === settlement.id && !tile.buildingType;
+      return world.isRealmSettlement(tile.ownerId) && !tile.buildingType;
     },
   );
 });
@@ -573,6 +572,9 @@ function ringStepTarget(): { id: string; spot: { x: number; y: number }; label: 
   const category = ringCategories.value.find((c) => c.id === step.id);
   return { id: step.id!, spot: step.spot, label: t('landing.pointer.openCategory', { category: category?.label ?? '' }) };
 }
+
+// Bumped by the checklist's current step: GuidancePointer plays one poke per change.
+const pointerNudge = ref(0);
 
 const pointerTarget = computed(() => {
   if (joinBlocked.value) return null;
@@ -667,7 +669,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   // full settlement view's job once onboarding hands off to it), so any
   // other click (the longhouse, a rival's tile, open water) just closes
   // whatever ring is open rather than opening some other UI for it.
-  if (tile.ownerId === world.selectedSettlementId && !tile.buildingType && categoriesFor(tile).length > 0) {
+  if (world.isRealmSettlement(tile.ownerId) && !tile.buildingType && categoriesFor(tile).length > 0) {
     if (!withinBuildableRange(coord)) {
       showInvalidClickMessage(t('landing.invalidClick.beyondClaim'));
       closeRing();
@@ -968,13 +970,12 @@ watch(
          being provided, not on `docked`/route context, so simply not
          passing one here is enough.
          Mobile tutorial focus: `v-else` alone would render THIS bar (the
-         pre-founding one, "Bjarnoy" + locale switcher) whenever the founded
+         pre-founding one, "Bjarnoy" + the returning-player menu) whenever the founded
          branch's `v-if` above is false for ANY reason — including
          `hideBarForTutorial`, which is exactly the state that must render no
          bar at all. `v-else-if="!player.hasFoundedSettlement"` keeps this
          branch scoped to its own original condition. -->
     <TopBar v-else-if="!player.hasFoundedSettlement" title="Bjarnoy">
-      <LocaleSwitcher />
       <ReturningPlayerMenu>
         <!-- One-time offer to turn animations on when the device asks for reduced motion. -->
         <template #nudge><MotionPrompt /></template>
@@ -1039,6 +1040,7 @@ watch(
       :scale="pointerTarget.scale"
       :avoid="pointerTarget.mode === 'screen' ? ringBubbles : undefined"
       clear-below-selector=".hero--founding, [data-testid='onboarding-banner'].landfall"
+      :nudge="pointerNudge"
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
 
@@ -1057,6 +1059,8 @@ watch(
       v-if="!joinBlocked && !guidance.complete && !showReturningLoginGate && !(isCompactHudLanding && ringScreen)"
       :guidance="guidance"
       :has-founded="player.hasFoundedSettlement"
+      :can-focus="!!pointerTarget && mapDrawn"
+      @focus="pointerNudge++"
     />
 
     <template v-if="player.hasFoundedSettlement">

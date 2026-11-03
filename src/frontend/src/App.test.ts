@@ -28,7 +28,6 @@ function testRouter(initialPath = '/settlement', { lazySettlement = false } = {}
     routes: [
       // The real router loads MapView lazily; `lazySettlement` mirrors that.
       { path: '/settlement', name: 'settlement', component: lazySettlement ? () => Promise.resolve(SettlementStub) : SettlementStub },
-      { path: '/world', name: 'world', component: WorldStub },
       { path: '/profile', name: 'own-profile', component: WorldStub },
       { path: '/profile/:userName', name: 'profile', component: WorldStub },
       { path: '/leaderboards', name: 'leaderboards', component: WorldStub },
@@ -65,11 +64,11 @@ beforeEach(() => {
 
 describe('App background-route pattern', () => {
   it('renders a normal route (no profile) through router-view as before, with no modal', async () => {
-    const router = testRouter('/world');
+    const router = testRouter('/settlement');
     await router.isReady();
     const wrapper = mountApp(router);
 
-    expect(wrapper.find('.world-stub').exists()).toBe(true);
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
     expect(wrapper.findComponent({ name: 'ProfileModal' }).exists()).toBe(false);
   });
 

@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import WorldMapCanvas from '../../components/map/WorldMapCanvas.vue';
 import WorldReviewPanel from '../../components/admin/WorldReviewPanel.vue';
 import { api, ApiError } from '../../api/client';
+import { useUnsavedInput } from '../../composables/useUnsavedInput';
 import { WorldModel } from '../../lib/map/WorldModel';
 import type {
   AdminWorldResponse,
@@ -143,6 +144,8 @@ function previewScanned(seed: number) {
 }
 
 const confirmName = ref('');
+// The destructive reseed's typed confirmation; the generation fields are re-derivable tuning.
+useUnsavedInput(() => confirmName.value !== '');
 const committing = ref(false);
 const commitError = ref<string | null>(null);
 const committed = ref<{ seed: number; islandCount: number; deletedSettlements: number } | null>(null);

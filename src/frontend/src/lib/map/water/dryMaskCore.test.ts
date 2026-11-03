@@ -5,10 +5,14 @@ import {
   SOURCE_H,
   SOURCE_W,
   WATER_MATCH_MIN_RATIO,
+  LAKE_FRAME_RE,
+  LAKE_REFERENCE_FRAME_RE,
   bestReference,
   cellSourceRect,
   cropHalf,
   dryMaskHalf,
+  isLakeWaterPixel,
+  lakeWetMaskHalf,
   matchRatio,
   orientationOf,
   REFERENCE_FRAME_RE,
@@ -196,5 +200,87 @@ describe('cell rect', () => {
     // Source (80, 220) is texel (40, 110) of the canvas, (40, 35) of the cell starting at y = 150.
     expect(cell[35 * (rect.sw / 2) + 40]).toBe(255);
     expect(cell[0]).toBe(0);
+  });
+});
+
+describe('lakeWetMaskHalf', () => {
+  const LAKE: [number, number, number] = [20, 36, 64];
+  const EARTH: [number, number, number] = [70, 52, 40];
+  /** A lake tile: water on the top face (y 150..250), earth on the prism's side faces below it. */
+  function lakeTile(): Uint8Array {
+    const c = canvas(LAKE, { x: 0, y: 150, w: SOURCE_W, h: 100 });
+    paint(c, { x: 0, y: 250, w: SOURCE_W, h: 50 }, EARTH);
+    return c;
+  }
+
+  it('is wet on every water pixel of a tile identical to the plain lake, and not on its side faces', () => {
+    const mask = lakeWetMaskHalf(lakeTile(), lakeTile());
+    expect(maskAt(mask, 100, 200)).toBe(255);
+    expect(maskAt(mask, 40, 170)).toBe(255);
+    // The side faces repeat the reference but are not blue.
+    expect(maskAt(mask, 100, 280)).toBe(0);
+    // Transparent above the tile.
+    expect(maskAt(mask, 100, 50)).toBe(0);
+  });
+
+  it('is not wet where the art is a bank (grass) instead of the reference water', () => {
+    const art = lakeTile();
+    paint(art, { x: 100, y: 150, w: 100, h: 100 }, [60, 120, 50]);
+    const mask = lakeWetMaskHalf(art, lakeTile());
+    expect(maskAt(mask, 40, 200)).toBe(255);
+    expect(maskAt(mask, 150, 200)).toBe(0);
+  });
+
+  it('is not wet on a brighter creek patch', () => {
+    const art = lakeTile();
+    paint(art, { x: 60, y: 190, w: 40, h: 30 }, [60, 120, 170]);
+    const mask = lakeWetMaskHalf(art, lakeTile());
+    expect(maskAt(mask, 80, 205)).toBe(0);
+    expect(maskAt(mask, 20, 205)).toBe(255);
+  });
+
+  it('is not wet under the frame\'s top layer (a lily pad or reed island drawn over the water), with a pixel of margin', () => {
+    const top = new Uint8Array(SOURCE_W * SOURCE_H * 4);
+    paint(top, { x: 60, y: 180, w: 30, h: 20 }, [70, 120, 60]);
+    const mask = lakeWetMaskHalf(lakeTile(), lakeTile(), top);
+    expect(maskAt(mask, 74, 190)).toBe(0);
+    // Grown by one source pixel around the pad, then the usual erosion: the next few pixels out are not fully wet yet.
+    expect(maskAt(mask, 90, 190)).toBeLessThan(255);
+    expect(maskAt(mask, 110, 190)).toBe(255);
+    // Without the top layer the same spot is water.
+    expect(maskAt(lakeWetMaskHalf(lakeTile(), lakeTile()), 74, 190)).toBe(255);
+  });
+
+  it('keeps a pixel of margin off the bank: eroded, not grown', () => {
+    const art = lakeTile();
+    paint(art, { x: 100, y: 150, w: 100, h: 100 }, [60, 120, 50]);
+    const mask = lakeWetMaskHalf(art, lakeTile());
+    // The last water column next to the bank (x 98, 99) is already off.
+    expect(maskAt(mask, 98, 200)).toBeLessThan(255);
+    expect(maskAt(mask, 94, 200)).toBe(255);
+  });
+
+  it('counts only blue-dominant opaque reference pixels as lake water', () => {
+    const ref = lakeTile();
+    expect(isLakeWaterPixel(ref, (200 * SOURCE_W + 100) * 4)).toBe(true);
+    expect(isLakeWaterPixel(ref, (280 * SOURCE_W + 100) * 4)).toBe(false);
+    expect(isLakeWaterPixel(ref, (50 * SOURCE_W + 100) * 4)).toBe(false);
+  });
+});
+
+describe('lake frame names', () => {
+  it('matches the plain lake and the inlet, shore, half and mouth families, with variants', () => {
+    for (const name of ['boglake_E_base', 'boglake_NW_variant003_base', 'boglake_inlet_SW_base', 'boglake_shore_W_variant002_base', 'boglake_half_NE_base', 'boglake_mouth_SE_variant001_base']) {
+      expect(LAKE_FRAME_RE.test(name), name).toBe(true);
+    }
+    for (const name of ['boglake_E_top', 'watertile_E_base', 'boglake_inlet_E_top', 'bog_E_base']) {
+      expect(LAKE_FRAME_RE.test(name), name).toBe(false);
+    }
+  });
+
+  it('takes only the plain lake as reference', () => {
+    expect(LAKE_REFERENCE_FRAME_RE.test('boglake_E_base')).toBe(true);
+    expect(LAKE_REFERENCE_FRAME_RE.test('boglake_E_variant001_base')).toBe(false);
+    expect(LAKE_REFERENCE_FRAME_RE.test('boglake_shore_E_base')).toBe(false);
   });
 });

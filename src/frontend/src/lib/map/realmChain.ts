@@ -14,7 +14,7 @@
 // settlement's towers, so it cannot rebuild the realm itself); demo mode
 // resolves it locally from the settlements the model knows (`resolveRealm`).
 import { hexDistance, type AxialCoord } from '../hex/coords';
-import { claimRadiusForLevel, towerClaimRadiusForLevel, type ClaimDisc } from './shoreline';
+import { longhouseDiscs, towerClaimRadiusForLevel, type ClaimDisc } from './shoreline';
 
 /** One settlement as the chain rule sees it: its longhouse hex and level, and its standing towers (level 1 or more). */
 export interface RealmSettlementInput {
@@ -29,7 +29,7 @@ export interface RealmSettlementInput {
 export interface ConnectedRealm {
   /** Every connected disc of the player's settlements on the island (longhouse discs and connected towers' discs). */
   allDiscs: ClaimDisc[];
-  /** The connected discs one settlement contributes: its longhouse disc first, then its connected towers' discs. */
+  /** The connected discs one settlement contributes: its longhouse disc first (none when its Longhouse is destroyed), then its connected towers' discs. */
   discsOf(settlementId: string): ClaimDisc[];
   /** Whether the standing tower (level 1 or more) of `settlementId` on `at` is connected. */
   isTowerConnected(settlementId: string, at: AxialCoord): boolean;
@@ -62,9 +62,11 @@ export function resolveRealm(settlements: readonly RealmSettlementInput[]): Conn
   const pending: Array<{ id: string; q: number; r: number; level: number }> = [];
 
   for (const s of settlements) {
-    const centre: ClaimDisc = { q: s.q, r: s.r, radius: claimRadiusForLevel(s.level) };
-    discsBySettlement.set(s.id, [centre]);
-    reached.push(centre);
+    // A settlement whose Longhouse is destroyed (level 0) contributes no disc; its towers can still be reached by another
+    // longhouse of the player.
+    const centre = longhouseDiscs({ q: s.q, r: s.r }, s.level);
+    discsBySettlement.set(s.id, centre);
+    reached.push(...centre);
     for (const t of s.towers) {
       if (t.level >= 1) pending.push({ id: s.id, q: t.q, r: t.r, level: t.level });
     }
@@ -90,8 +92,9 @@ export function resolveRealm(settlements: readonly RealmSettlementInput[]): Conn
 }
 
 /**
- * The realm the server resolved: each member's connected discs, longhouse disc first, then one per connected tower. A tower is
- * connected when a disc of its settlement other than the first is centred on its hex.
+ * The realm the server resolved: each member's connected discs, longhouse disc first (none when its Longhouse is destroyed),
+ * then one per connected tower. A tower is connected when a disc of its settlement is centred on its hex (a tower never
+ * stands on the longhouse's own hex).
  */
 export function realmFromDiscs(
   members: ReadonlyArray<{ settlementId: string; discs: readonly ClaimDisc[] }>,
@@ -103,7 +106,7 @@ export function realmFromDiscs(
     reached.push(...(discsBySettlement.get(m.settlementId) ?? []));
   }
   return buildRealm(reached, discsBySettlement, (id, at) =>
-    (discsBySettlement.get(id) ?? []).some((d, i) => i > 0 && d.q === at.q && d.r === at.r),
+    (discsBySettlement.get(id) ?? []).some((d) => d.q === at.q && d.r === at.r),
   );
 }
 

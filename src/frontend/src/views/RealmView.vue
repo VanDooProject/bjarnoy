@@ -49,6 +49,7 @@ const tocLinks = computed(() =>
         <template #level1>{{ claimRadiusForLevel(1) }}</template>
         <template #level2>{{ claimRadiusForLevel(2) }}</template>
       </i18n-t>
+      <p class="text">{{ $t('docs.realm.claim.destroyed') }}</p>
     </section>
 
     <section id="towers" class="block">
@@ -79,7 +80,7 @@ const tocLinks = computed(() =>
           </thead>
           <tbody>
             <tr v-for="row in rows" :key="row.from" :data-from="row.from">
-              <th scope="row" class="name">{{ $t('docs.realm.count.range', { from: row.from, to: row.to }) }}</th>
+              <th scope="row" class="name">{{ row.from }}</th>
               <td class="value">{{ row.towers }}</td>
             </tr>
           </tbody>
@@ -104,6 +105,11 @@ const tocLinks = computed(() =>
     <section id="giants" class="block">
       <h2>{{ $t('docs.realm.giants.heading') }}</h2>
       <p class="text">{{ $t('docs.realm.giants.body') }}</p>
+    </section>
+
+    <section id="linked" class="block">
+      <h2>{{ $t('docs.realm.linked.heading') }}</h2>
+      <p class="text">{{ $t('docs.realm.linked.body') }}</p>
     </section>
   </DocsPageLayout>
 </template>

@@ -66,15 +66,18 @@ import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import { attachFramePacing } from './framePacing';
 import { splitBorderEdges } from './realmBorderEdges';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
-import type { IslandLabel, RiverTile, Settlement, Terrain, Tile } from './types';
+import { TILE_ORIENTATIONS, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
-import { WaterDryLayer, seaDryEntries, type DryEntry } from './water/waterDryMask';
-import { waterDebugFlags, waterPerfStats } from './water/waterDebug';
+import { WaterDryLayer, entriesWorldBounds, maskEntries, type DryEntry } from './water/waterDryMask';
+import { BogLakeLayer } from './water/BogLakeLayer';
+import { LAKE_FRAME_RE } from './water/dryMaskCore';
+import { RiverFlowLayer, riverFlowOf, type RiverFlowEntry } from './water/riverFlowLayer';
+import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './water/waterDebug';
 import type { TerrainLookup, WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
@@ -483,6 +486,8 @@ export interface HexMapRendererOptions {
    * branch of `onPointerMove`, and `previewFitZoom`.
    */
   lockCamera?: boolean;
+  /** Called whenever the camera transform is applied (pan, zoom, resize, re-framing). The host debounces. */
+  onCameraChange?: () => void;
   /**
    * Lets the page itself scroll under a wheel/touch gesture over the canvas
    * instead of the renderer eating it for camera zoom/pan. With `lockCamera`
@@ -1562,6 +1567,7 @@ export function clampAnimationDeltaMs(deltaMs: number, maxMs = 100): number {
 /** One child of the camera-transformed `world` container — see `worldLayerOrder`. */
 export type WorldLayerName =
   | 'water'
+  | 'bogLake'
   | 'terrainBase'
   | 'bogEdges'
   | 'waves'
@@ -1612,9 +1618,11 @@ export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] 
   // terrainTop (see riverTexturesFor), so riverLayer is simply never added
   // to the scene graph there (rebuildRivers is never called for that mode
   // either, so it always stays empty).
+  // The bog lake gust sits right on the ground art it shades, under `bogEdges`: the bog edge fringe paints moss over the rim of a lake
+  // tile, and the lake mask (baked from the tile art alone) can't know that, so anything drawn later has to cover the gust, not take it.
   return mode === 'world'
-    ? ['water', 'terrainBase', 'bogEdges', 'waves', 'terrainFlat', 'rivers', ...rest]
-    : ['terrainBase', 'bogEdges', 'waves', 'terrainFlat', 'water', ...rest];
+    ? ['water', 'terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'rivers', ...rest]
+    : ['terrainBase', 'bogLake', 'bogEdges', 'waves', 'terrainFlat', 'water', ...rest];
 }
 
 /**
@@ -1808,6 +1816,9 @@ export class HexMapRenderer {
   private topAnimState = new Map<string, TopAnimState>();
   /** The global animation clock in ms (advanced by `advanceTopAnimations`): where a `sharedClock` clip joins its cycle. */
   private animClockMs = 0;
+  // Map animation time (ms) for the water shader and the world map's wave squiggles: real time scaled by the debug
+  // `waterDebugTuning.mapAnimationSpeed`, so a slowed-down map slows everything on it together.
+  private mapAnimMs = 0;
   // Pooled overlay sprites for an overlay clip's parts-only frames (see
   // `TopAnimState.overlay`) — a sibling pool to `terrainTop.pool`, kept
   // separate because these sprites aren't `terrainTop.active`'s own entries
@@ -1871,6 +1882,14 @@ export class HexMapRenderer {
   private waterDry = new WaterDryLayer();
   private waterDryEntries: DryEntry[] = [];
   private waterDryLoadStarted = false;
+  // The river flow field (§4.4e), drawn into its own render texture next to the dry mask: where the river and bog-creek art flows.
+  private riverFlow = new RiverFlowLayer();
+  private riverFlowEntries: RiverFlowEntry[] = [];
+  // Bog lakes' gust (settlement mode only): the lake wet masks drawn over the lakes' bounding rect, and the mesh that shades them.
+  private bogLakeLayer: BogLakeLayer;
+  private bogLakeMask = new WaterDryLayer('lake');
+  private bogLakeEntries: DryEntry[] = [];
+  private bogLakeLoadStarted = false;
   // The world rect the current water mask was baked over — `null` until the
   // first bake. Re-baked only when the viewport leaves it (§2.2), not per
   // rebuild: a rebuild happens on every 0.4-tile camera move, the mask's own
@@ -2209,6 +2228,7 @@ export class HexMapRenderer {
     this.options = options;
     this.bogEdgeLayer.addChild(this.bogEdgeUnder, this.bogEdgeOver);
     this.waterLayer = new WaterLayer(options.mode, TILE_W, TILE_H);
+    this.bogLakeLayer = new BogLakeLayer(TILE_W);
     this.idleDrift = options.mode === 'world' && !options.confineCamera;
     this.lockCamera = !!options.lockCamera;
     this.camera =
@@ -2386,6 +2406,7 @@ export class HexMapRenderer {
   private layersByName(): Record<WorldLayerName, Container> {
     return {
       water: this.waterLayer.mesh,
+      bogLake: this.bogLakeLayer.mesh,
       terrainBase: this.terrainBase.container,
       bogEdges: this.bogEdgeLayer,
       waves: this.waveLayer,
@@ -2593,12 +2614,15 @@ export class HexMapRenderer {
     this.blackFogLayer.setCamera(this.camera, this.viewport);
     this.whiteMistLayer.setCamera(this.camera, this.viewport);
     this.notifyFogViewport();
+    this.options.onCameraChange?.();
   }
 
   private onTick = () => {
     this.frames++;
     this.options.worldModel.tick();
-    this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
+    // waterDebugTuning.mapAnimationSpeed: debug playback speed of every map animation (1 ships), so they all slow down together.
+    this.mapAnimMs += this.app!.ticker.deltaMS * waterDebugTuning.mapAnimationSpeed;
+    this.advanceTopAnimations(clampAnimationDeltaMs(this.app!.ticker.deltaMS) * waterDebugTuning.mapAnimationSpeed);
     this.advanceTransitionFades(clampAnimationDeltaMs(this.app!.ticker.deltaMS));
     // Feeds the 'auto' animation governor (animationPreference.ts) — in both
     // modes, not just settlement: the governor is measuring this device's
@@ -2635,7 +2659,8 @@ export class HexMapRenderer {
     // check per frame, and it can only ever do work on the first frame after
     // the gesture that owes it ends.
     if (this.waterMaskDirty && !this.dragging && !this.wheeling) this.maybeBakeWaterMask();
-    this.waterLayer.tick(performance.now());
+    this.waterLayer.tick(this.mapAnimMs);
+    this.bogLakeLayer.tick(this.animClockMs);
     if (this.idleDrift) {
       this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
       this.applyCameraTransform();
@@ -2659,8 +2684,8 @@ export class HexMapRenderer {
     };
     this.blackFogLayer.setDebug(debug);
     this.whiteMistLayer.setDebug(debug);
-    this.blackFogLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed);
-    this.whiteMistLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed);
+    this.blackFogLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed * waterDebugTuning.mapAnimationSpeed);
+    this.whiteMistLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed * waterDebugTuning.mapAnimationSpeed);
     this.drawRangeOverlay();
     this.drawHighlight();
   };
@@ -3621,7 +3646,9 @@ export class HexMapRenderer {
    * explored hex is itself within `exploredRadius` of the settlement that
    * explored it: `exploredHexesFor` walks each vision disc out to
    * `disc.radius + FOG_SCOUT_RING`, and `exploredRadius` is the max over those
-   * same discs of `distance(settlement, disc) + disc.radius + FOG_SCOUT_RING`,
+   * same discs, and every disc the settlement ever explored from (so losing
+   * sight never shrinks it), of
+   * `distance(settlement, disc) + disc.radius + FOG_SCOUT_RING`,
    * which bounds it by the triangle inequality. Settlements are never removed
    * from the model, so no explored hex can outlive the source that covers it.
    *
@@ -3696,6 +3723,11 @@ export class HexMapRenderer {
   setWaterMotion(enabled: boolean) {
     this.waterMotion = enabled;
     this.waterLayer.setFrozen(!enabled);
+  }
+
+  /** Shows (true) or hides (false) the wind gust on the bog lakes: the player's "Wind on lakes" motion setting. */
+  setLakeMotion(enabled: boolean) {
+    this.bogLakeLayer.setMotion(enabled);
   }
 
   /** Freezes (false) or resumes (true) the drift of the fog and mist layers. */
@@ -3910,6 +3942,7 @@ export class HexMapRenderer {
     // the most expensive thing on screen.
     const waterSuppressed = deepFogOnly || !this.isFogActive();
     this.waterLayer.setSuppressed(waterSuppressed);
+    this.bogLakeLayer.setSuppressed(waterSuppressed);
     // A suppressed mesh has nothing to read the mask, so a bake owed from
     // before it was suppressed is owed no longer — the next rebuild that
     // un-suppresses it re-asks the coverage question from scratch.
@@ -4029,7 +4062,7 @@ export class HexMapRenderer {
   }
 
   /**
-   * Redraws the art dry mask over the water mask's region and binds it to the
+   * Redraws the art dry mask and the river flow field over the water mask's region and binds them to the
    * water shader. Runs when a mask is applied or the sea hexes' art changes,
    * not per frame. Waits for the (lazily decoded) mask atlas on first use.
    */
@@ -4037,17 +4070,43 @@ export class HexMapRenderer {
     const region = this.waterMaskRegionBuilt;
     const renderer = this.app?.renderer;
     if (this.options.mode !== 'settlement' || !region || !renderer) return;
-    if (!this.waterDry.ready) {
+    if (!this.waterDry.ready || !this.riverFlow.ready) {
       if (!this.waterDryLoadStarted) {
         this.waterDryLoadStarted = true;
-        this.waterDry.load().then(
+        Promise.all([this.waterDry.load(), this.riverFlow.load()]).then(
           () => this.refreshWaterDry(),
-          (err) => console.warn('HexMapRenderer: water dry masks failed to load', err),
+          (err) => console.warn('HexMapRenderer: water dry / river masks failed to load', err),
         );
       }
       return;
     }
     this.waterLayer.setDryTexture(this.waterDry.draw(renderer, region.rect, this.waterDryEntries, TILE_W));
+    this.waterLayer.setRiverFlowTexture(this.riverFlow.draw(renderer, this.riverFlowEntries, TILE_W), this.riverFlow.rect, this.riverFlow.psiTexture);
+  }
+
+  /**
+   * Redraws the bog lakes' wet mask over the lakes' bounding rect and hands it to the gust mesh. Runs when the terrain is rebuilt, not per
+   * frame. Waits for the (lazily decoded) lake mask atlas on first use.
+   */
+  private refreshBogLake() {
+    const renderer = this.app?.renderer;
+    if (this.options.mode !== 'settlement' || !renderer) return;
+    const bounds = entriesWorldBounds(this.bogLakeEntries, TILE_W);
+    if (!bounds) {
+      this.bogLakeLayer.setLake(null, null);
+      return;
+    }
+    if (!this.bogLakeMask.ready) {
+      if (!this.bogLakeLoadStarted) {
+        this.bogLakeLoadStarted = true;
+        this.bogLakeMask.load().then(
+          () => this.refreshBogLake(),
+          (err) => console.warn('HexMapRenderer: bog lake masks failed to load', err),
+        );
+      }
+      return;
+    }
+    this.bogLakeLayer.setLake(this.bogLakeMask.draw(renderer, bounds, this.bogLakeEntries, TILE_W), bounds);
   }
 
   /**
@@ -4315,15 +4374,42 @@ export class HexMapRenderer {
 
     // The base art of every sea hex, for the water shader's dry mask. Placed
     // exactly as syncSpriteLayer places the sprite.
-    this.waterDryEntries = seaDryEntries(
-      baseEntries.values(),
-      (c) => worldModel.getTile(c.q, c.r).terrain === 'sea',
-      (c) => {
-        const grid = isoGridPosition(c, TILE_W, TILE_H);
-        return { x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET };
-      },
-    );
+    // The same goes for the bog lakes' wet mask, from the base art of every hex that carries lake water: the lake itself and the bog
+    // tiles around it (inlet, shore, half, mouth), which is why the frame name decides and not the hex's terrain.
+    const artOrigin = (c: AxialCoord) => {
+      const grid = isoGridPosition(c, TILE_W, TILE_H);
+      return { x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET };
+    };
+    this.waterDryEntries = maskEntries(baseEntries.values(), (c) => worldModel.getTile(c.q, c.r).terrain === 'sea', artOrigin);
+    this.bogLakeEntries = maskEntries(baseEntries.values(), (_c, texture) => LAKE_FRAME_RE.test(texture.label ?? ''), artOrigin);
+    this.riverFlowEntries = [];
+    const flowCoords = new Map<string, RiverFlowEntry>();
+    const entryCoords: { entry: RiverFlowEntry; coord: AxialCoord }[] = [];
+    for (const { texture, coord, crop } of baseEntries.values()) {
+      if (!texture || crop) continue;
+      const river = worldModel.getRiverTile(coord.q, coord.r);
+      const seaDirection = river?.shape === 'mouth' ? worldModel.seaFacingDirectionOf(coord, river.inDirections[0]) : null;
+      const flow = riverFlowOf(river, worldModel.getTile(coord.q, coord.r).bog, seaDirection);
+      if (!flow) continue;
+      const grid = isoGridPosition(coord, TILE_W, TILE_H);
+      const entry = { texture, x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET, ...flow };
+      this.riverFlowEntries.push(entry);
+      flowCoords.set(coordKey(coord), entry);
+      entryCoords.push({ entry, coord });
+    }
+    // The neighbouring river hex behind each in and out edge, so a cell can measure the distance to the bank on both sides of a seam.
+    for (const { entry, coord } of entryCoords) {
+      const around = neighbors(coord);
+      const neighbours: NonNullable<RiverFlowEntry['neighbours']> = [];
+      for (const direction of new Set([entry.outDirection, ...entry.inDirections])) {
+        const next = around[TILE_ORIENTATIONS.indexOf(direction)];
+        const other = next ? flowCoords.get(coordKey(next)) : undefined;
+        if (other) neighbours.push({ direction, name: other.texture.label ?? '', x: other.x, y: other.y });
+      }
+      entry.neighbours = neighbours;
+    }
     this.refreshWaterDry();
+    this.refreshBogLake();
   }
 
   // zip 7: world-map islands are flat coloured hexes, not tile art — see
@@ -4551,8 +4637,8 @@ export class HexMapRenderer {
       return;
     }
     const alpha = WAVE_ALPHA * fade;
-    // Frozen water holds the squiggles at a fixed phase instead of Date.now().
-    const now = this.waterMotion ? Date.now() : 0;
+    // Frozen water holds the squiggles at a fixed phase instead of the map animation clock (mapAnimMs).
+    const now = this.waterMotion ? this.mapAnimMs : 0;
     this.waveLayer.clear();
     for (const p of this.wavePoints) {
       const s = (Math.sin((now / p.periodMs) * Math.PI * 2 + p.phase) + 1) / 2;
@@ -5591,6 +5677,23 @@ export class HexMapRenderer {
     return this.camera.zoom;
   }
 
+  /** The hex under the camera centre and the zoom — what the URL hash keeps (lib/mapCameraHash.ts). `camera` itself stays private. */
+  get cameraView(): { coord: AxialCoord; zoom: number } {
+    return { coord: isoPixelToAxial({ x: this.camera.x, y: this.camera.y }, TILE_W, TILE_H), zoom: this.camera.zoom };
+  }
+
+  /** Puts the camera centre on `coord` at `zoom`, as if the player had panned there. No-op on a locked camera. */
+  restoreCameraView(coord: AxialCoord, zoom: number) {
+    if (!this.app || this.lockCamera) return;
+    const grid = isoGridPosition(coord, TILE_W, TILE_H);
+    this.camera = this.clampCamera({ ...this.camera, x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2, zoom });
+    this.cameraTouched = true;
+    this.idleDrift = false;
+    this.cameraAnim = null;
+    this.applyCameraTransform();
+    this.rebuildAll();
+  }
+
   /**
    * True while the founding transition (animateCameraTo) is still easing the
    * camera toward the new settlement — every hex's screen point
@@ -6283,7 +6386,13 @@ export class HexMapRenderer {
     this.waterLayer.setMode(mode);
     // World mode draws no sea tiles, so nothing is dry there.
     this.waterDryEntries = [];
-    if (mode === 'world') this.waterLayer.setDryTexture(null);
+    this.bogLakeEntries = [];
+    this.riverFlowEntries = [];
+    if (mode === 'world') {
+      this.waterLayer.setDryTexture(null);
+      this.bogLakeLayer.setLake(null, null);
+      this.waterLayer.setRiverFlowTexture(null);
+    }
     // Reinsert every layer in the new mode's order — addChild only moves a
     // single already-parented child to the end, it doesn't reorder the rest
     // (see worldLayerOrder's own doc comment on why the water mesh's
@@ -6331,6 +6440,9 @@ export class HexMapRenderer {
     this.whiteMistLayer.destroy();
     this.waterLayer.destroy();
     this.waterDry.destroy();
+    this.riverFlow.destroy();
+    this.bogLakeMask.destroy();
+    this.bogLakeLayer.destroy();
     // The cached bog edge contexts are only borrowed by the pooled Graphics, so the stage teardown below won't free them.
     this.clearBogEdgeCache();
     this.app?.destroy(false, { children: true });

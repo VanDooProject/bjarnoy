@@ -1,7 +1,6 @@
 {
   "nav": {
     "settlement": "Settlement",
-    "worldMap": "World map",
     "leaderboards": "Leaderboards",
     "messages": "Messages",
     "reports": "Reports",
@@ -91,7 +90,7 @@
     "towerLevel0": "Taken"
   },
   "ringMenu": {
-    "shrineLimitLock": "This settlement already has a shrine",
+    "shrineLimitLock": "Your realm already has a shrine",
     "storageHouseLock": "Needs {count} Storehouse at level {level} | Needs {count} Storehouses at level {level}",
     "palisadeLock": {
       "branch": "A wall never branches: this hex would get three wall neighbours",
@@ -140,6 +139,7 @@
       "campOccupied": "Occupied by wild beasts",
       "maxLevel": "Max level",
       "noLandUnitsAtHome": "No land units at home",
+      "noShipsAtHome": "No ships at home",
       "siege": "Siege",
       "noRamAtHome": "Needs a battering ram at home"
     },
@@ -153,9 +153,7 @@
       "level": "Level {level}",
       "upgradeTitle": "Upgrade to level {level}",
       "upgradeSub": "{building} · Level {from} → {to}",
-      "slots": "Build slots",
-      "slotsValue": "{needed} · {free} of {total} free",
-      "slotsAll": "All ({total}) · {free} of {total} free",
+      "givesTotal": "{amount} total",
       "needResources": "Need {resources}",
       "needSlots": "Needs {needed} build slot · {free} of {total} free | Needs {needed} build slots · {free} of {total} free",
       "needSlotsNext": "Needs {needed} build slot · {free} of {total} free · next free in {time} | Needs {needed} build slots · {free} of {total} free · next free in {time}",

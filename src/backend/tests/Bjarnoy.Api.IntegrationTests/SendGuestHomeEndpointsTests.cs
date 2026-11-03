@@ -69,7 +69,7 @@ public sealed class SendGuestHomeEndpointsTests : IAsyncLifetime
     private static SettlementEntity MakeSettlement(
         DateTimeOffset now, Guid worldId, Guid islandId, string ownerId, int centreQ, int centreR)
     {
-        var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
+        var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
         var entity = new SettlementEntity
         {
             WorldId = worldId,
@@ -89,7 +89,7 @@ public sealed class SendGuestHomeEndpointsTests : IAsyncLifetime
             Centre = new HexCoord(centreQ, centreR),
             Buildings = [new PlacedBuilding(new HexCoord(centreQ, centreR), BuildingType.Longhouse, 1)],
             Resources = ResourcePool.Create(
-                ResourceAmounts.Uniform(1000), production, ResourceAmounts.Uniform(10_000), now),
+                capacity * 0.9, production, capacity, now),
         });
         return entity;
     }

@@ -2,12 +2,12 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { WorldMapPage } from './pages';
-import { clickHudMenuEntry, waitForMapReady } from './helpers';
+import { clickHudMenuEntry, gotoWorldMap, waitForMapReady } from './helpers';
 import { DEFAULT_ENTER_SETTLEMENT_ZOOM } from '../src/lib/map/zoomTransition';
 
 // docs/design/zoom-transition.md: a wheel/pinch zoom crossing a threshold
 // switches world<->settlement mode in place — one persistent HexMapRenderer
-// (MapView.vue mounts at both /world and /settlement), not a route-driven
+// (MapView.vue serves both on `/settlement`, world mode as `#world`), not a route-driven
 // remount, so the camera never snaps and fog never flashes. These specs
 // exercise that against the real app (the zoom-transition debug panel's
 // tuning, ?debug=1) rather than only the pure transitionForZoom() unit
@@ -26,7 +26,7 @@ async function cameraZoom(page: Page): Promise<number> {
 }
 
 async function clickNav(page: Page, label: string): Promise<void> {
-  await page.locator('.hud-nav button', { hasText: label }).click();
+  await page.locator('.hud-nav a.link', { hasText: label }).click();
 }
 
 test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
@@ -37,7 +37,7 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     const world = await WorldMapPage.open(page);
     await world.moveTo(await world.centre());
 
-    await expect(page).toHaveURL(/\/world/);
+    await expect(page).toHaveURL(/\/settlement#world$/);
     const zoomBefore = await cameraZoom(page);
 
     // Zoom in until the enter-settlement threshold is crossed (the shipped
@@ -48,9 +48,9 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     for (let i = 0; i < 60; i++) {
       await page.mouse.wheel(0, -120);
       await page.waitForTimeout(15);
-      if (page.url().includes('/settlement')) break;
+      if (!page.url().includes('#world')) break;
     }
-    await expect(page).toHaveURL(/\/settlement/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/, { timeout: 10_000 });
 
     // Continuity: the camera crossed the threshold mid-gesture, not via a
     // reset — it should be somewhere past where it started, not snapped to
@@ -67,9 +67,9 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     for (let i = 0; i < 60; i++) {
       await page.mouse.wheel(0, 120);
       await page.waitForTimeout(15);
-      if (page.url().includes('/world')) break;
+      if (page.url().includes('#world')) break;
     }
-    await expect(page).toHaveURL(/\/world/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/settlement#world$/, { timeout: 10_000 });
 
     const zoomAfterOut = await cameraZoom(page);
     expect(zoomAfterOut).toBeLessThan(zoomAfterIn);
@@ -83,7 +83,7 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     // reload) — a hard `page.goto('...?debug=1')` would reload and lose the
     // founded-settlement state, same reason gotoWorldMap avoids it.
     await page.evaluate(() => {
-      history.replaceState(history.state, '', location.pathname + '?debug=1');
+      history.replaceState(history.state, '', location.pathname + '?debug=1' + location.hash);
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
     await world.moveTo(await world.centre());
@@ -124,7 +124,7 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     // (enabled) transition would react to...
     expect(await cameraZoom(page)).toBeGreaterThan(DEFAULT_ENTER_SETTLEMENT_ZOOM);
     // ...and yet, with the panel's checkbox unchecked, no transition fired.
-    await expect(page).toHaveURL(/\/world/);
+    await expect(page).toHaveURL(/\/settlement\?debug=1#world$/);
   });
 
   test('leaving both map routes tears down the renderer instead of leaking a second canvas', async ({ page }) => {
@@ -133,12 +133,11 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     await expect(world.canvas).toHaveCount(1);
 
     await clickNav(page, 'Settlement');
-    await expect(page).toHaveURL(/\/settlement/);
+    await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
     await waitForMapReady(page);
     await expect(page.locator('canvas')).toHaveCount(1);
 
-    await clickNav(page, 'World map');
-    await expect(page).toHaveURL(/\/world/);
+    await gotoWorldMap(page);
     await expect(page.locator('canvas')).toHaveCount(1);
 
     // Navigate away from both map routes entirely — the renderer must tear

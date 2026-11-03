@@ -249,3 +249,17 @@ html[data-hud-motion='reduced'] .floating-art > :not(.floating-art-shadow),
 html[data-hud-motion='reduced'] .floating-art-shadow {
   animation: none;
 }
+
+/* The canvas of an inline docs map (composables/useDocsMapRenderer.ts): the reader can drag and zoom it, so it shows the grab
+   hand, and `touch-action: pan-y` leaves a one-finger vertical drag to the article's scroll while a pinch still reaches the
+   renderer. (SettlementCanvas.vue's real map uses `touch-action: none` instead: it never scrolls.) */
+.docs-map-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: pan-y;
+  cursor: grab;
+}
+.docs-map-canvas:active {
+  cursor: grabbing;
+}

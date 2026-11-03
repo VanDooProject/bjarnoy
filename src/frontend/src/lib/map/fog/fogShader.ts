@@ -53,6 +53,8 @@
 // is today — the organic, drifting, cloudy behaviour is confined to the
 // vision edge, which is the only place it belongs.
 
+import { NOISE_LATTICE_GLSL } from '../shaderNoise';
+
 /**
  * Width, in ramp units, of the taper that closes the edge-noise window past
  * each tier's `reach` (see edgeBand). Exported and interpolated into the
@@ -155,26 +157,10 @@ uniform vec2 uArmyVisionSources[${MAX_ARMY_VISION_SOURCES}];
 uniform float uArmyVisionCount;
 uniform float uArmyVisionRadius;
 
-// Cheap 2D value noise (hash + smooth interpolation) — no external
-// dependency, good enough for a fog edge; not aiming for the visual quality
-// a real simplex/perlin implementation would give.
-float hash(vec2 p) {
-  p = fract(p * vec2(123.34, 456.21));
-  p += dot(p, p + 45.32);
-  return fract(p.x * p.y);
-}
-
-float noise(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  float a = hash(i);
-  float b = hash(i + vec2(1.0, 0.0));
-  float c = hash(i + vec2(0.0, 1.0));
-  float d = hash(i + vec2(1.0, 1.0));
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
-}
-
+// Value noise (hash + smooth interpolation) from shaderNoise.ts: the lattice
+// values are a texture lookup, because a float ALU hash is not bit-stable on
+// Mali GPUs and seams the noise.
+${NOISE_LATTICE_GLSL}
 // Three octaves, normalised back to roughly 0..1. A single octave of value
 // noise reads as smooth blobs — recognisably procedural; the octaves are
 // what give the edge the frayed, wispy silhouette a hex-ring distance field

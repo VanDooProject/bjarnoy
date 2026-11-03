@@ -28,7 +28,8 @@ public static class TradeEndpoints
             // etc.) — any caller could escrow another settlement's goods.
             // Closed the same way those mutations are.
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .RequireSettlementOwner();
+            .RequireSettlementOwner()
+            .WithConcurrencyRetry();
 
         settlements.MapGet("/{settlementId:guid}/trade-offers/board", Board)
             .WithName("GetTradeBoard")
@@ -40,17 +41,20 @@ public static class TradeEndpoints
             // not a leak. Without this gate a caller could enumerate any
             // settlement's trade range/position by probing arbitrary ids,
             // which is the actual thing being closed here.
-            .RequireSettlementOwner();
+            .RequireSettlementOwner()
+            .WithConcurrencyRetry();
 
         settlements.MapGet("/{settlementId:guid}/trade-offers/mine", Mine)
             .WithName("GetMyTradeOffers")
             .WithSummary("This settlement's own offers, in any state.")
-            .RequireSettlementOwner();
+            .RequireSettlementOwner()
+            .WithConcurrencyRetry();
 
         settlements.MapGet("/{settlementId:guid}/shipments", Shipments)
             .WithName("GetShipments")
             .WithSummary("Cart shipments in transit either way, and recently delivered ones.")
-            .RequireSettlementOwner();
+            .RequireSettlementOwner()
+            .WithConcurrencyRetry();
 
         settlements.MapGet("/{settlementId:guid}/trade-reports", ListReportsForSettlement)
             .WithName("ListSettlementTradeReports")
@@ -67,7 +71,8 @@ public static class TradeEndpoints
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             // The acting settlement comes from the request body and used to be
             // trusted as-is — anyone could act as any settlement here.
-            .RequireRequestSettlementOwner();
+            .RequireRequestSettlementOwner()
+            .WithConcurrencyRetry();
 
         offers.MapPost("/{offerId:guid}/cancel", Cancel)
             .WithName("CancelTradeOffer")
@@ -75,7 +80,8 @@ public static class TradeEndpoints
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             // The acting settlement comes from the request body and used to be
             // trusted as-is — anyone could act as any settlement here.
-            .RequireRequestSettlementOwner();
+            .RequireRequestSettlementOwner()
+            .WithConcurrencyRetry();
 
         return app;
     }

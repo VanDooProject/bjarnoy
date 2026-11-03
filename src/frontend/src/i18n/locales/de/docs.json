@@ -227,6 +227,7 @@
       "anchor": "Anker",
       "production": "Produktion",
       "military": "Militär",
+      "defense": "Verteidigung",
       "logistics": "Logistik",
       "religion": "Schreine",
       "water": "Wasser"
@@ -589,7 +590,8 @@
       "mountain": "Berg",
       "wasteland": "Ödland",
       "bog": "Moor",
-      "riverStraight": "Fluss"
+      "riverStraight": "Fluss",
+      "sea": "Offenes Meer"
     },
     "list": {
       "wolfden": {
@@ -644,6 +646,10 @@
       "otterslide": {
         "name": "Otterrutsche",
         "guards": "Ein Otter schwimmt, einer liegt mit einem Fisch auf dem Treibholz, einer läuft am Ufer und einer wartet am Bau."
+      },
+      "whaleroad": {
+        "name": "Walweg",
+        "guards": "Eine Buckelwalkuh und ihr Kalb tauchen auf offener See auf, Möwen kreisen darüber. Er liegt weit vor der Küste, nur Flotten begegnen ihm, und er liefert Nahrung."
       }
     },
     "beasts": {
@@ -1083,7 +1089,8 @@
     "intro": "Das Land, das du hältst, ist dein Gebiet; auf der Karte zieht sich eine goldene Grenze darum. Das Langhaus beansprucht die ersten Ringe um sich herum. Darüber hinaus wächst dein Gebiet nur durch Wachtürme an seiner Grenze.",
     "claim": {
       "heading": "Der Anspruch deines Langhauses",
-      "body": "Dein {longhouse} beansprucht auf Stufe 1 alle Felder im Umkreis von {level1}, ab Stufe 2 im Umkreis von {level2}. Weiter reicht es nie: Höhere Langhaus-Stufen schieben die Grenze nicht weiter hinaus."
+      "body": "Dein {longhouse} beansprucht auf Stufe 1 alle Felder im Umkreis von {level1}, ab Stufe 2 im Umkreis von {level2}. Weiter reicht es nie: Höhere Langhaus-Stufen schieben die Grenze nicht weiter hinaus.",
+      "destroyed": "Wird das Langhaus einer Siedlung zerstört, beansprucht diese Siedlung gar kein Land mehr. Ihre Wachtürme behalten ihren Anspruch nur, wenn sie im Gebiet eines anderen deiner Langhäuser stehen. Auch die Sicht ist weg: Rund um den Siedlungsmittelpunkt siehst du nichts mehr. Wachtürme im Gebiet eines anderen deiner Langhäuser behalten ihre Sicht."
     },
     "towers": {
       "heading": "Wachtürme schieben die Grenze hinaus",
@@ -1109,8 +1116,7 @@
       "heading": "Wie viele Wachtürme",
       "body": "Die Stufe deines Langhauses bestimmt, wie viele Wachtürme du haben darfst: einen ab Stufe {level}, danach einen weiteren für jede zweite Stufe nach Stufe 5.",
       "levels": "Langhaus-Stufe",
-      "towers": "Wachtürme",
-      "range": "{from}–{to}"
+      "towers": "Wachtürme"
     },
     "where": {
       "heading": "Wo ein Wachturm steht",
@@ -1126,6 +1132,10 @@
     "giants": {
       "heading": "Riesen",
       "body": "Ein Riese füllt sieben Felder. Du nimmst ihn nur in dein Gebiet auf, wenn dein Anspruch alle sieben abdeckt. Reicht er nur über einen Teil, bekommst du keines davon."
+    },
+    "linked": {
+      "heading": "Verbundene Gebiete",
+      "body": "Berühren sich die Gebiete zweier deiner Siedlungen auf einer Insel, verbinden sie sich zu einem Gebiet. Es trägt den Namen deiner ältesten Siedlung darin und hat einen gemeinsamen Vorrat: Alles, was du produzierst, fließt hinein, und alles, was du dort baust, ausbildest oder handelst, bezahlst du daraus. Seine Lagerkapazität ist die aller Siedlungen zusammen, ebenso seine Bauplätze, die sich alle Bauaufträge teilen. Du verwaltest das Gebiet von deiner ältesten Siedlung aus und kannst von dort auf jedem seiner Felder bauen. Deine übrigen Siedlungen darin tauchen in keiner Liste mehr auf, und Rivalen sehen auf jedem Langhaus den Namen der ältesten. Ein Überfall auf eines seiner Langhäuser kann den ganzen Vorrat plündern. Reißt die Verbindung ab, behält jede Siedlung ihren Anteil am Vorrat – im Verhältnis zu ihrer Lagerkapazität."
     }
   },
   "landMovement": {

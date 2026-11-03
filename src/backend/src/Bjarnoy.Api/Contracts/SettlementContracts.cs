@@ -224,7 +224,16 @@ public sealed record TrainingOrderResponse(
 /// "read the cap off the response" trick as <see cref="MaxWaitingOrders"/>,
 /// this time for the stage 1d per-hex stacking tier once it exists.
 /// </param>
-public sealed record ConstructionResponse(int Slots, int SlotsUsed, int MaxWaitingOrders, int WaitingOrders, int MaxOrdersPerHex);
+/// <param name="TowerLimit">
+/// How many towers the realm may hold: the settlement's own limit, or for a linked realm the members' limits added up. The same for
+/// every member.
+/// </param>
+/// <param name="TowersHeld">
+/// The towers counting against <paramref name="TowerLimit"/> (connected standing plus queued, the whole linked realm's): the number a
+/// new tower is checked against.
+/// </param>
+public sealed record ConstructionResponse(
+    int Slots, int SlotsUsed, int MaxWaitingOrders, int WaitingOrders, int MaxOrdersPerHex, int TowerLimit, int TowersHeld);
 
 /// <summary>A Town Square feast in progress (economy.md section 6).</summary>
 /// <param name="EndsAtGameTime">When the feast ends and grants its renown.</param>
@@ -257,10 +266,20 @@ public sealed record FeastOfferResponse(
 /// <param name="Reward">Wood, stone and food paid on claim (clamped to storage).</param>
 public sealed record QuestResponse(string Id, bool Completed, bool Claimed, ResourceLine Reward);
 
+/// <param name="Name">The linked realm's name: the oldest member's (<c>docs/design/economy.md</c> section 5, "A linked group is one realm").</param>
+/// <param name="Resources">
+/// The linked realm's pooled stock, rates and capacity; <see cref="Construction"/> its slots added up. Both are the same for every member.
+/// </param>
+/// <param name="Buildings">
+/// The oldest member's read: every building of every member of the linked realm. A newer member's read: its own.
+/// </param>
+/// <param name="Queue">The oldest member's read: the members' build orders in one FIFO order. A newer member's read: its own.</param>
 /// <param name="Realm">
 /// The owner's read only: every settlement of the realm this settlement belongs to (itself first), each with its
 /// connected claim discs. Lists only the caller's own settlements, never another player's.
 /// </param>
+/// <param name="RealmId">The oldest member of the linked realm this settlement belongs to (itself when it is the oldest or stands alone). A client showing a newer member redirects to it.</param>
+/// <param name="LinkedMemberIds">Every settlement of the linked realm, this one included, oldest first. Just this settlement when it stands alone.</param>
 public sealed record SettlementResponse(
     Guid Id,
     Guid WorldId,
@@ -282,11 +301,14 @@ public sealed record SettlementResponse(
     FeastOfferResponse? NextFeast,
     IReadOnlyList<QuestResponse> Quests,
     WorldClockResponse World,
-    IReadOnlyList<RealmMemberResponse> Realm)
+    IReadOnlyList<RealmMemberResponse> Realm,
+    Guid RealmId,
+    IReadOnlyList<Guid> LinkedMemberIds)
 {
     /// <summary>
-    /// The owner's read: resolves <paramref name="entity"/>'s realm (all of the same player's settlements on the
-    /// island, <see cref="PlayerRealms"/>) and builds the response. Every owner-facing settlement response goes through here.
+    /// The owner's read for a settlement that was just changed (<paramref name="entity"/>, tracked in <paramref name="db"/>): loads its
+    /// linked group settled to <paramref name="gameNow"/> and builds the response. Every owner-facing settlement response goes through
+    /// <see cref="Build"/>.
     /// </summary>
     public static async Task<SettlementResponse> ForOwnerAsync(
         GameDbContext db, SettlementEntity entity, GameClock clock, DateTimeOffset gameNow, CancellationToken ct)
@@ -294,43 +316,47 @@ public sealed record SettlementResponse(
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(entity);
 
-        var realm = await PlayerRealms.ForSettlementAsync(db, entity, entity.ToDomain(), ct).ConfigureAwait(false);
-        return From(entity, clock, gameNow, realm);
+        var session = await new LinkedGroupLoader(db, TimeProvider.System).LoadAsync(entity.Id, gameNow, ct: ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"Settlement {entity.Id} no longer exists.");
+        return Build(session, entity.Id, clock, gameNow);
     }
 
-    public static SettlementResponse From(
-        SettlementEntity entity, GameClock clock, DateTimeOffset gameNow, ConnectedRealm realm)
+    /// <summary>
+    /// The owner's read of <paramref name="id"/> from its already settled linked group: the realm's pooled stock and slots, the oldest
+    /// member's view of the whole group (its name, the union of the buildings, the merged queue), a newer member's own buildings and queue.
+    /// </summary>
+    public static SettlementResponse Build(
+        LinkedGroupSession session, Guid id, GameClock clock, DateTimeOffset gameNow)
     {
-        ArgumentNullException.ThrowIfNull(entity);
-        ArgumentNullException.ThrowIfNull(realm);
+        ArgumentNullException.ThrowIfNull(session);
 
-        var domain = entity.ToDomain();
-        var centre = new HexCoord(entity.CentreQ, entity.CentreR);
+        var store = session.Store;
+        var entity = session.EntityOf(id);
+        var realmId = store.RealmIdOf(id);
+        var component = store.ComponentOf(id);
+        var domain = session.View(id);
 
-        // Only a fishing hut needs its own orientation (see PlacedBuildingResponse),
-        // so the sampler this requires is built lazily rather than for every
-        // settlement read.
-        TerrainSampler? sampler = null;
-        string? OrientationFor(BuildingType type, HexCoord coord)
-        {
-            if (type != BuildingType.FishingHut || entity.World is null)
-            {
-                return null;
-            }
+        // Garrison, training, feast, quests and runes stay the member's own; the group view only widens buildings and queue.
+        var shown = realmId == id ? component : [id];
+        var members = shown.Select(m => (Entity: session.EntityOf(m), Domain: store.Outcome(m).Settlement)).ToList();
 
-            sampler ??= new TerrainSampler(entity.World.ToGenerationOptions());
-            return sampler.FishingHutOrientation(coord, centre).ToWireName();
-        }
+        var speedFactor = session.SpeedFactor;
+        var maxWaitingOrders = session.Anchor.Owner?.IsPremium ?? false ? Settlement.MaxWaitingOrders : 0;
 
-        var speedFactor = entity.World?.SpeedFactor ?? 1.0;
-        var isPremium = entity.Owner?.IsPremium ?? false;
-        var maxWaitingOrders = isPremium ? Settlement.MaxWaitingOrders : 0;
+        // Only a fishing hut needs its own orientation (see PlacedBuildingResponse), read off its own member's shore.
+        string? OrientationFor(SettlementEntity member, BuildingType type, HexCoord coord) =>
+            type == BuildingType.FishingHut
+                ? session.Sampler.FishingHutOrientation(coord, new HexCoord(member.CentreQ, member.CentreR)).ToWireName()
+                : null;
+
+        // Component order is oldest first and the sort is stable, so equal queue times keep the older member first.
+        var queue = members.SelectMany(m => m.Domain.Queue).OrderBy(o => o.QueuedAt).ToList();
 
         return new SettlementResponse(
             entity.Id,
             entity.WorldId,
             entity.IslandId,
-            entity.Name,
+            session.EntityOf(realmId).Name,
             entity.OwnerName,
             entity.CentreQ,
             entity.CentreR,
@@ -346,11 +372,13 @@ public sealed record SettlementResponse(
                 domain.ConstructionSlots,
                 domain.UsedSlots,
                 maxWaitingOrders,
-                domain.WaitingOrders.Count(),
-                Settlement.DefaultMaxOrdersPerHex),
-            [.. domain.Buildings.Select(b =>
-                PlacedBuildingResponse.From(b, OrientationFor(b.Type, b.Coord), gameNow, clock.FreezesTime, speedFactor))],
-            [.. domain.Queue.Select(o => new BuildOrderResponse(
+                domain.GroupWaitingOrders.Count(),
+                Settlement.DefaultMaxOrdersPerHex,
+                domain.TowerLimit,
+                domain.TowersHeld(store.Realm)),
+            [.. members.SelectMany(m => m.Domain.Buildings.Select(b =>
+                PlacedBuildingResponse.From(b, OrientationFor(m.Entity, b.Type, b.Coord), gameNow, clock.FreezesTime, speedFactor)))],
+            [.. queue.Select(o => new BuildOrderResponse(
                 o.Id,
                 o.Coord.Q,
                 o.Coord.R,
@@ -380,10 +408,12 @@ public sealed record SettlementResponse(
             [.. Bjarnoy.Domain.Settlers.Quests.All.Select(q => new QuestResponse(
                 q.Id, q.IsCompleted(domain), domain.HasClaimed(q), ResourceLine.From(q.Reward)))],
             WorldClockResponse.From(clock, gameNow),
-            [.. realm.SettlementIds
-                .OrderBy(id => id == entity.Id ? 0 : 1)
-                .Select(id => new RealmMemberResponse(
-                    id, [.. realm.DiscsOf(id).Select(d => new ClaimDiscResponse(d.Centre.Q, d.Centre.R, d.Radius))]))]);
+            [.. store.Realm.SettlementIds
+                .OrderBy(other => other == entity.Id ? 0 : 1)
+                .Select(other => new RealmMemberResponse(
+                    other, [.. store.Realm.DiscsOf(other).Select(d => new ClaimDiscResponse(d.Centre.Q, d.Centre.R, d.Radius))]))],
+            realmId,
+            [.. component]);
     }
 }
 
@@ -469,18 +499,20 @@ public sealed record BuildingDefinitionResponse(
 }
 
 /// <summary>A settlement as it appears on the world map: enough to draw a marker.</summary>
+/// <param name="Name">The linked realm's name (the oldest member's), the same on every longhouse of the realm.</param>
 /// <param name="Mine">Whether the settlement belongs to the caller (never the owner or user id itself).</param>
+/// <param name="RealmId">The oldest member of the linked realm this settlement belongs to (itself when it stands alone).</param>
 public sealed record SettlementSummary(
-    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine)
+    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine, Guid RealmId)
 {
-    public static SettlementSummary From(SettlementEntity s, bool mine)
+    public static SettlementSummary From(SettlementEntity s, bool mine, RealmLabel realm)
     {
         ArgumentNullException.ThrowIfNull(s);
 
         return new SettlementSummary(
-            s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
+            s.Id, realm.Name, s.OwnerName, s.CentreQ, s.CentreR,
             s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
-            s.IslandId, mine);
+            s.IslandId, mine, realm.RealmId);
     }
 }
 

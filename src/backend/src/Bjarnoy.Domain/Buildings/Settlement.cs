@@ -197,27 +197,53 @@ public sealed record Settlement
     /// the union of this and every placed Tower's own satellite disc; see
     /// <see cref="Claims"/> and <see cref="ClaimDiscs"/>. Backed by
     /// <see cref="BuildingDefinition.ClaimRadius"/> so the number lives in
-    /// one place, alongside every other Longhouse stat.
+    /// one place, alongside every other Longhouse stat. 0 when the Longhouse is destroyed (see <see cref="LonghouseDisc"/>).
     /// </summary>
     public int ClaimRadius => ClaimRadiusForLonghouseLevel(LonghouseLevel);
 
     /// <summary>
-    /// <see cref="ClaimRadius"/> for an arbitrary longhouse level, clamped to
-    /// <c>[1, MaxLevelFor(Longhouse)]</c> — a settlement with no standing
-    /// Longhouse (level 0, e.g. mid-founding) still gets the level-1 radius
-    /// (2, not this property's old level-0 floor of 1: the floor itself grew
-    /// by the same one hex as every other level when the formula changed)
-    /// rather than a lookup failure, and a corrupted/out-of-range level above
-    /// <see cref="BuildingCatalogue.MaxLevelFor"/> is clamped down to it instead
-    /// of throwing — the same defensive clamp <c>SettlementEntity.ToDomain</c>
-    /// already applies for exactly this "a raw DB row could carry a bad
-    /// level" reason. Public so callers with only a raw longhouse level on
-    /// hand (a lightweight DB projection, e.g. <c>SettlementService.GetClaimedSettlementsAsync</c>
-    /// or <c>ArmyService</c>'s siege-arrival check) can compute the same
-    /// number without a full <see cref="Settlement"/> instance.
+    /// <see cref="ClaimRadius"/> for an arbitrary longhouse level, capped at
+    /// <see cref="BuildingCatalogue.MaxLevelFor"/> (a corrupted/out-of-range level is clamped down instead of throwing — the
+    /// same defensive clamp <c>SettlementEntity.ToDomain</c> applies). Level 0 is a settlement whose Longhouse was destroyed
+    /// (every settlement is founded with a level-1 Longhouse, so there is no other level-0 state): it has no claim, so this
+    /// reads 0. A radius of 0 is <em>not</em> a disc — <see cref="LonghouseDisc"/> is the one place that decides whether
+    /// there is a centre disc at all; this number is for callers that only measure distance from the centre (founding's
+    /// spacing, <c>SettlementService.GetClaimedSettlementsAsync</c>). Public so callers with only a raw longhouse level on
+    /// hand (a lightweight DB projection) can compute the same number without a full <see cref="Settlement"/>.
     /// </summary>
     public static int ClaimRadiusForLonghouseLevel(int longhouseLevel) =>
-        BuildingCatalogue.Get(BuildingType.Longhouse, Math.Clamp(longhouseLevel, 1, BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse))).ClaimRadius;
+        longhouseLevel <= 0
+            ? 0
+            : BuildingCatalogue.Get(BuildingType.Longhouse, Math.Min(longhouseLevel, BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse))).ClaimRadius;
+
+    /// <summary>
+    /// The settlement's Longhouse (centre) claim disc, or <see langword="null"/> when it has none: a settlement whose
+    /// Longhouse is destroyed (level 0) has no claim at all, not even its centre hex. The one place that decides this —
+    /// <see cref="ConnectedRealm"/> and <see cref="Combat.FieldBattleResolver.ClaimAt"/> both read it.
+    /// </summary>
+    public static (HexCoord Centre, int Radius)? LonghouseDisc(HexCoord centre, int longhouseLevel) =>
+        longhouseLevel <= 0 ? null : (centre, ClaimRadiusForLonghouseLevel(longhouseLevel));
+
+    /// <summary>
+    /// How many towers the whole (linked) realm may hold: this settlement's limit (<see cref="BuildingCatalogue.MaxTowers"/>) plus
+    /// the other members' limits.
+    /// </summary>
+    public int TowerLimit => BuildingCatalogue.MaxTowers(LonghouseLevel) + (Linked?.OtherTowerLimit ?? 0);
+
+    /// <summary>
+    /// The towers counting against <see cref="TowerLimit"/>: the realm's connected standing and queued towers, this settlement's
+    /// and the other members'. Only connected towers count (<see cref="ConnectedRealm"/>): a cut-off tower claims nothing and
+    /// does not use up the limit.
+    /// </summary>
+    public int TowersHeld(ConnectedRealm connected)
+    {
+        ArgumentNullException.ThrowIfNull(connected);
+
+        return connected.CountConnected(
+            Buildings.Where(b => b.Type == BuildingType.Tower).Select(b => b.Coord)
+                .Concat(Queue.Where(o => o.Type == BuildingType.Tower).Select(o => o.Coord)))
+            + (Linked?.OtherTowerCount ?? 0);
+    }
 
     /// <summary>
     /// How many orders may build in parallel right now (issue #158):
@@ -227,7 +253,36 @@ public sealed record Settlement
     /// building needs <see cref="BuildingDefinition.RequiredLonghouseLevel"/>
     /// &gt;= 1 and nothing can be queued there anyway.
     /// </summary>
-    public int ConstructionSlots => ConstructionSlotsFor(Buildings);
+    public int ConstructionSlots => OwnConstructionSlots + (Linked?.OtherConstructionSlots ?? 0);
+
+    /// <summary>This settlement's own slots, from its own Longhouse only — <see cref="ConstructionSlots"/> without the linked realm.</summary>
+    public int OwnConstructionSlots => ConstructionSlotsFor(Buildings);
+
+    /// <summary>
+    /// The linked-realm view this settlement is read through, or <see langword="null"/> (the default: it stands alone). Set by the
+    /// group-settle algorithm for the duration of one settle; never persisted (<c>ToDomain</c> leaves it null, <c>ApplyDomain</c>
+    /// ignores it).
+    /// </summary>
+    public LinkedQueueContext? Linked { get; init; }
+
+    /// <summary>The earliest instant an active (non-waiting) build order or a training batch completes, or <see langword="null"/> when none is running.</summary>
+    public DateTimeOffset? NextCompletionAt
+    {
+        get
+        {
+            DateTimeOffset? next = null;
+            foreach (var at in Queue.Where(o => !o.IsWaiting && o.CompletesAt is not null).Select(o => o.CompletesAt!.Value)
+                .Concat(TrainingQueue.Select(t => t.CompletesAt)))
+            {
+                if (next is null || at < next)
+                {
+                    next = at;
+                }
+            }
+
+            return next;
+        }
+    }
 
     private static int ConstructionSlotsFor(IReadOnlyList<PlacedBuilding> buildings)
     {
@@ -242,7 +297,7 @@ public sealed record Settlement
     public IEnumerable<BuildOrder> WaitingOrders => Queue.Where(o => o.IsWaiting);
 
     /// <summary>How many construction slots <see cref="ActiveOrders"/> currently occupies.</summary>
-    public int UsedSlots => UsedSlotsFor(Queue, ConstructionSlots);
+    public int UsedSlots => UsedSlotsFor(Linked is null ? Queue : [.. Queue, .. Linked.OtherQueue], ConstructionSlots);
 
     private static int EffectiveSlotCost(BuildOrder order, int constructionSlots)
     {
@@ -256,14 +311,18 @@ public sealed record Settlement
     /// <summary><see cref="ConstructionSlots"/> minus <see cref="UsedSlots"/>, floored at zero.</summary>
     public int FreeSlots => Math.Max(0, ConstructionSlots - UsedSlots);
 
+    /// <summary>Own waiting orders plus, in a linked realm, the other members' waiting orders (FIFO order).</summary>
+    public IEnumerable<BuildOrder> GroupWaitingOrders =>
+        Linked is null ? WaitingOrders : WaitingOrders.Concat(Linked.OtherQueue.Where(o => o.IsWaiting));
+
     /// <summary>
-    /// The cost of every <see cref="WaitingOrders"/> entry, summed —
+    /// The cost of every <see cref="GroupWaitingOrders"/> entry, summed —
     /// resources still physically sitting in <see cref="Resources"/> but
     /// earmarked and unspendable on anything else (issue #158 stage 1c).
     /// Derived, never stored.
     /// </summary>
     public ResourceAmounts ReservedResources =>
-        WaitingOrders.Aggregate(ResourceAmounts.Zero, (sum, o) => sum + BuildingCatalogue.Get(o.Type, o.TargetLevel).Cost);
+        GroupWaitingOrders.Aggregate(ResourceAmounts.Zero, (sum, o) => sum + BuildingCatalogue.Get(o.Type, o.TargetLevel).Cost);
 
     /// <summary>
     /// What is actually free to spend at <paramref name="now"/> — the settled
@@ -596,7 +655,12 @@ public sealed record Settlement
         // food purely by sitting there while nobody looks, with no order due
         // at all. Runs after every completion/promotion above, so a
         // promotion's food spend at this same instant is already reflected.
-        var (deaths, guestDeaths) = ApplyStarvation(ref resources, garrison, guestPool, finalProduction, finalCapacity, now);
+        IReadOnlyList<UnitStack> deaths = [];
+        IReadOnlyList<UnitStack> guestDeaths = [];
+        if (Linked is null)
+        {
+            (deaths, guestDeaths) = ApplyStarvation(ref resources, garrison, guestPool, finalProduction, finalCapacity, now);
+        }
 
         // A guest army arriving or departing changes upkeep from outside this
         // settlement's own Queue/TrainingQueue timeline entirely — there is
@@ -609,7 +673,7 @@ public sealed record Settlement
         // intact for the overwhelming majority of settles where nothing
         // guest-related changed.
         var correctNetProduction = ApplyUpkeep(finalProduction, garrison, guestPool);
-        var rateIsStale = !ApproximatelyEqual(resources.RatePerHour, correctNetProduction);
+        var rateIsStale = Linked is null && !ApproximatelyEqual(resources.RatePerHour, correctNetProduction);
         if (rateIsStale)
         {
             resources = resources.WithRate(correctNetProduction, finalCapacity, now);
@@ -683,72 +747,111 @@ public sealed record Settlement
     /// </remarks>
     public (Settlement Settlement, bool Changed) PromoteWaitingOrders(DateTimeOffset now, double speedFactor = 1.0)
     {
-        var queue = Queue.ToList();
-        var buildings = Buildings.ToList();
-        var resources = Resources;
-        var constructionSlots = ConstructionSlotsFor(buildings);
+        if (Linked is not null)
+        {
+            // A linked realm promotes as a group (LinkedStore), never member by member.
+            return (this, false);
+        }
+
+        var constructionSlots = ConstructionSlotsFor(Buildings);
+        var current = this;
         var changed = false;
 
-        while (true)
+        while (NextPromotable(current.Queue, constructionSlots) is { } candidate)
         {
-            var used = UsedSlotsFor(queue, constructionSlots);
-            var free = Math.Max(0, constructionSlots - used);
-            if (free <= 0)
+            // Reserved resources should already cover this — defensive only (e.g. a caller settling with a stale/short stock).
+            if (current.StartWaitingOrder(candidate.Id, now, speedFactor) is not { } started)
             {
                 break;
             }
 
-            // Queue is already in FIFO/plan order (Enqueue only ever
-            // appends), so list position — not QueuedAt — is the tiebreaker
-            // that actually matters: two orders planned in the same instant
-            // (identical QueuedAt, e.g. two requests landing in the same
-            // tick) still have a real, distinguishable plan order here.
-            var candidate = queue
-                .Where(o => o.IsWaiting)
-                .FirstOrDefault(o =>
-                {
-                    var index = queue.IndexOf(o);
-                    return !queue.Any(other => other.Coord == o.Coord && other.Id != o.Id && queue.IndexOf(other) < index);
-                });
-
-            if (candidate is null)
-            {
-                break;
-            }
-
-            var definition = BuildingCatalogue.Get(candidate.Type, candidate.TargetLevel);
-            var slotCost = definition.OccupiesAllSlots ? constructionSlots : definition.SlotCost;
-            if (slotCost > free)
-            {
-                // Head-of-line blocking: the waiting queue is FIFO, not a
-                // pool a smaller order can jump.
-                break;
-            }
-
-            if (!resources.TrySpend(definition.Cost, now, out var paid))
-            {
-                // Reserved resources should already cover this — defensive
-                // only (e.g. a caller settling with a stale/short stock).
-                break;
-            }
-
-            resources = paid;
-
-            var duration = ScaledBuildDuration(candidate.BaseDuration, speedFactor);
-            var started = candidate with { StartedAt = now, CompletesAt = now + duration };
-            queue[queue.FindIndex(o => o.Id == candidate.Id)] = started;
-
-            if (!buildings.Any(b => b.Coord == started.Coord))
-            {
-                buildings.Add(new PlacedBuilding(started.Coord, started.Type, Level: 0));
-            }
-
+            current = started;
             changed = true;
         }
 
-        return changed
-            ? (this with { Queue = queue, Buildings = buildings, Resources = resources }, true)
-            : (this, false);
+        return (current, changed);
+    }
+
+    /// <summary>
+    /// The waiting order that may start next out of <paramref name="fifoQueue"/> (the whole queue in FIFO/plan order): the first
+    /// waiting order with no earlier order on its hex (stage 1d contiguity), provided its slot cost fits the free slots
+    /// (head-of-line: a smaller order behind it never jumps). <see langword="null"/> when none may start.
+    /// </summary>
+    internal static BuildOrder? NextPromotable(IReadOnlyList<BuildOrder> fifoQueue, int constructionSlots)
+    {
+        var free = Math.Max(0, constructionSlots - UsedSlotsFor(fifoQueue, constructionSlots));
+        if (free <= 0)
+        {
+            return null;
+        }
+
+        // List position — not QueuedAt — is the tiebreaker that actually matters: two orders planned in the same instant
+        // (identical QueuedAt) still have a real, distinguishable plan order here.
+        var candidate = fifoQueue
+            .Where(o => o.IsWaiting)
+            .FirstOrDefault(o =>
+            {
+                var index = IndexOfOrder(fifoQueue, o);
+                return !fifoQueue.Any(other => other.Coord == o.Coord && other.Id != o.Id && IndexOfOrder(fifoQueue, other) < index);
+            });
+
+        if (candidate is null)
+        {
+            return null;
+        }
+
+        var definition = BuildingCatalogue.Get(candidate.Type, candidate.TargetLevel);
+        var slotCost = definition.OccupiesAllSlots ? constructionSlots : definition.SlotCost;
+
+        // Head-of-line blocking: the waiting queue is FIFO, not a pool a smaller order can jump.
+        return slotCost > free ? null : candidate;
+    }
+
+    private static int IndexOfOrder(IReadOnlyList<BuildOrder> queue, BuildOrder order)
+    {
+        for (var i = 0; i < queue.Count; i++)
+        {
+            if (ReferenceEquals(queue[i], order) || queue[i].Equals(order))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Starts one waiting order: spends its cost from <see cref="Resources"/> at <paramref name="now"/>, stamps
+    /// <see cref="BuildOrder.StartedAt"/>/<see cref="BuildOrder.CompletesAt"/> scaled by <paramref name="speedFactor"/> and stakes
+    /// the level-0 stub. <see langword="null"/> when the order is not waiting or the stock cannot pay. Does no slot check — the
+    /// caller picked the order (<see cref="NextPromotable"/>).
+    /// </summary>
+    public Settlement? StartWaitingOrder(Guid orderId, DateTimeOffset now, double speedFactor = 1.0)
+    {
+        var index = Queue.ToList().FindIndex(o => o.Id == orderId && o.IsWaiting);
+        if (index < 0)
+        {
+            return null;
+        }
+
+        var order = Queue[index];
+        var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
+        if (!Resources.TrySpend(definition.Cost, now, out var paid))
+        {
+            return null;
+        }
+
+        var started = order with { StartedAt = now, CompletesAt = now + ScaledBuildDuration(order.BaseDuration, speedFactor) };
+        var queue = Queue.ToList();
+        queue[index] = started;
+
+        var buildings = Buildings.ToList();
+        if (!buildings.Any(b => b.Coord == started.Coord))
+        {
+            buildings.Add(new PlacedBuilding(started.Coord, started.Type, Level: 0));
+        }
+
+        return this with { Queue = queue, Buildings = buildings, Resources = paid };
     }
 
     /// <summary>
@@ -763,43 +866,50 @@ public sealed record Settlement
     /// </summary>
     public Settlement DropUnfundedOrders(DateTimeOffset now)
     {
-        // Queue (and so WaitingOrders, a filter over it) is already in
-        // FIFO/plan order — see PromoteWaitingOrders' remarks.
+        if (Linked is not null)
+        {
+            // Group drop happens in LinkedStore.
+            return this;
+        }
+
+        // Queue (and so WaitingOrders, a filter over it) is already in FIFO/plan order — see PromoteWaitingOrders' remarks.
         var waiting = WaitingOrders.ToList();
         if (waiting.Count == 0)
         {
             return this;
         }
 
-        var stock = Resources.At(now);
+        var keep = FundedWaitingOrderIds(waiting, Resources.At(now));
+        if (keep.Count == waiting.Count)
+        {
+            return this;
+        }
+
+        return this with { Queue = [.. Queue.Where(o => !o.IsWaiting || keep.Contains(o.Id))] };
+    }
+
+    /// <summary>
+    /// The prefix of <paramref name="waitingFifo"/> whose accumulated costs <paramref name="stock"/> covers; the first order it
+    /// cannot cover and every order behind it are left out.
+    /// </summary>
+    internal static IReadOnlySet<Guid> FundedWaitingOrderIds(IEnumerable<BuildOrder> waitingFifo, ResourceAmounts stock)
+    {
         var running = ResourceAmounts.Zero;
         var keep = new HashSet<Guid>();
-        var dropping = false;
 
-        foreach (var order in waiting)
+        foreach (var order in waitingFifo)
         {
-            if (dropping)
-            {
-                continue;
-            }
-
             var candidateTotal = running + BuildingCatalogue.Get(order.Type, order.TargetLevel).Cost;
             if (!stock.Covers(candidateTotal))
             {
-                dropping = true;
-                continue;
+                break;
             }
 
             running = candidateTotal;
             keep.Add(order.Id);
         }
 
-        if (!dropping)
-        {
-            return this;
-        }
-
-        return this with { Queue = [.. Queue.Where(o => !o.IsWaiting || keep.Contains(o.Id))] };
+        return keep;
     }
 
     /// <summary>
@@ -861,34 +971,7 @@ public sealed record Settlement
         resources = resources.SettledTo(crossingTime);
 
         var pooled = MergeByType(garrison, guestPool);
-        var pooledDeaths = new List<UnitStack>();
-        while (pooled.Count > 0)
-        {
-            var netFood = grossProductionPerHour.Food - TotalUpkeepPerHour(pooled);
-            if (netFood >= 0)
-            {
-                break;
-            }
-
-            var index = HighestUpkeepIndex(pooled);
-            var stack = pooled[index];
-            var perUnitUpkeep = UnitCatalogue.Get(stack.Type).UpkeepPerHour;
-            var deficit = -netFood;
-            var unitsToKill = perUnitUpkeep > 0
-                ? Math.Min(stack.Count, (int)Math.Ceiling(deficit / perUnitUpkeep))
-                : stack.Count;
-
-            pooledDeaths.Add(new UnitStack(stack.Type, unitsToKill));
-
-            if (unitsToKill >= stack.Count)
-            {
-                pooled.RemoveAt(index);
-            }
-            else
-            {
-                pooled[index] = stack with { Count = stack.Count - unitsToKill };
-            }
-        }
+        var pooledDeaths = StarvationKills(grossProductionPerHour.Food, pooled);
 
         var finalNetFood = grossProductionPerHour.Food - TotalUpkeepPerHour(pooled);
         resources = resources.WithRate(
@@ -918,6 +1001,56 @@ public sealed record Settlement
         }
 
         return (homeDeaths, guestDeaths);
+    }
+
+    /// <summary>
+    /// Kills, highest-upkeep type first, until <paramref name="grossFoodPerHour"/> covers the upkeep of what is left. Removes the
+    /// dead from <paramref name="pooled"/> in place and returns them (one entry per kill step).
+    /// </summary>
+    internal static List<UnitStack> StarvationKills(double grossFoodPerHour, List<UnitStack> pooled)
+    {
+        var pooledDeaths = new List<UnitStack>();
+        while (pooled.Count > 0)
+        {
+            var netFood = grossFoodPerHour - TotalUpkeepPerHour(pooled);
+            if (netFood >= 0)
+            {
+                break;
+            }
+
+            var index = HighestUpkeepIndex(pooled);
+            var stack = pooled[index];
+            var perUnitUpkeep = UnitCatalogue.Get(stack.Type).UpkeepPerHour;
+            var deficit = -netFood;
+            var unitsToKill = perUnitUpkeep > 0
+                ? Math.Min(stack.Count, (int)Math.Ceiling(deficit / perUnitUpkeep))
+                : stack.Count;
+
+            pooledDeaths.Add(new UnitStack(stack.Type, unitsToKill));
+
+            if (unitsToKill >= stack.Count)
+            {
+                pooled.RemoveAt(index);
+            }
+            else
+            {
+                pooled[index] = stack with { Count = stack.Count - unitsToKill };
+            }
+        }
+
+        return pooledDeaths;
+    }
+
+    /// <summary>This settlement with <paramref name="deaths"/> removed from its home garrison.</summary>
+    internal Settlement WithHomeDeaths(IReadOnlyList<UnitStack> deaths)
+    {
+        var garrison = Garrison.ToList();
+        foreach (var death in deaths)
+        {
+            Reduce(garrison, death.Type, death.Count);
+        }
+
+        return this with { Garrison = garrison };
     }
 
     /// <summary>Merges two stack lists into a new one, aggregated by type — never mutates either input.</summary>
@@ -1253,10 +1386,13 @@ public sealed record Settlement
         // A settlement holds at most one shrine in total, of any god. A
         // queued new shrine already stakes a level-0 stub in Buildings, but the
         // queue is counted too so the answer doesn't hang on that. Levelling
-        // the shrine standing on this same coord is not "another" one.
+        // the shrine standing on this same coord is not "another" one. A linked
+        // realm holds one shrine in total, so the other members' count too.
         if (BuildingCatalogue.GodOf(type) is not null
             && (Buildings.Any(b => BuildingCatalogue.GodOf(b.Type) is not null && b.Coord != coord)
-                || Queue.Any(o => BuildingCatalogue.GodOf(o.Type) is not null && o.Coord != coord)))
+                || Queue.Any(o => BuildingCatalogue.GodOf(o.Type) is not null && o.Coord != coord)
+                || (Linked?.OtherBuildings.Any(b => BuildingCatalogue.GodOf(b.Type) is not null) ?? false)
+                || (Linked?.OtherQueue.Any(o => BuildingCatalogue.GodOf(o.Type) is not null) ?? false)))
         {
             return BuildDecision.Rejected(BuildRejection.SettlementAlreadyHasShrine);
         }
@@ -1295,7 +1431,8 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.LonghousePlacementNotAllowed);
         }
 
-        if (LonghouseLevel < definition.RequiredLonghouseLevel)
+        // A linked realm is one realm: the best Longhouse of the group counts.
+        if (Math.Max(LonghouseLevel, Linked?.GroupLonghouseLevel ?? 0) < definition.RequiredLonghouseLevel)
         {
             return BuildDecision.Rejected(BuildRejection.LonghouseTooLow);
         }
@@ -1308,11 +1445,7 @@ public sealed record Settlement
         // counted by distinct hex across standing buildings and queued orders.
         if (type == BuildingType.Tower && baseLevel == 0)
         {
-            // Only connected towers count (ConnectedRealm): a cut-off tower claims nothing and does not use up the limit.
-            var towerHexes = connected.CountConnected(
-                Buildings.Where(b => b.Type == BuildingType.Tower).Select(b => b.Coord)
-                    .Concat(Queue.Where(o => o.Type == BuildingType.Tower).Select(o => o.Coord)));
-            if (towerHexes >= BuildingCatalogue.MaxTowers(LonghouseLevel))
+            if (TowersHeld(connected) >= TowerLimit)
             {
                 return BuildDecision.Rejected(BuildRejection.TowerLimitReached);
             }
@@ -1324,13 +1457,17 @@ public sealed record Settlement
         // storage house counts (baseLevel 0) — upgrading one is never refused.
         if (type == BuildingType.StorageHouse && baseLevel == 0)
         {
+            // A linked realm counts all of its storage houses, in every member.
             var storageHexes = Buildings.Where(b => b.Type == BuildingType.StorageHouse).Select(b => b.Coord)
                 .Concat(Queue.Where(o => o.Type == BuildingType.StorageHouse).Select(o => o.Coord))
+                .Concat(Linked?.OtherBuildings.Where(b => b.Type == BuildingType.StorageHouse).Select(b => b.Coord) ?? [])
+                .Concat(Linked?.OtherQueue.Where(o => o.Type == BuildingType.StorageHouse).Select(o => o.Coord) ?? [])
                 .Distinct()
                 .Count();
             var (needCount, needLevel) = BuildingCatalogue.AdditionalStorageHouseRequirement(storageHexes);
             if (storageHexes >= 1
-                && Buildings.Count(b => b.Type == BuildingType.StorageHouse && b.Level >= needLevel) < needCount)
+                && Buildings.Count(b => b.Type == BuildingType.StorageHouse && b.Level >= needLevel)
+                    + (Linked?.OtherBuildings.Count(b => b.Type == BuildingType.StorageHouse && b.Level >= needLevel) ?? 0) < needCount)
             {
                 return BuildDecision.Rejected(BuildRejection.StorageHouseTooLow);
             }
@@ -1343,7 +1480,11 @@ public sealed record Settlement
         // answer.
         foreach (var prerequisite in definition.Prerequisites)
         {
-            if (HighestLevelOf(prerequisite.Type) < prerequisite.Level)
+            // A linked realm is one realm: a prerequisite standing in another member counts.
+            var highest = Math.Max(
+                HighestLevelOf(prerequisite.Type),
+                Linked?.OtherBuildings.Where(b => b.Type == prerequisite.Type && b.IsFunctioning).Select(b => b.Level).DefaultIfEmpty(0).Max() ?? 0);
+            if (highest < prerequisite.Level)
             {
                 return BuildDecision.Rejected(BuildRejection.RequiredBuildingTooLow, prerequisite);
             }
@@ -1369,7 +1510,7 @@ public sealed record Settlement
         var earlierOnHexUnfinished = ordersOnHex.Count > 0;
         var fitsNow = !earlierOnHexUnfinished && slotCost <= FreeSlots;
 
-        if (!fitsNow && WaitingOrders.Count() >= maxWaitingOrders)
+        if (!fitsNow && GroupWaitingOrders.Count() >= maxWaitingOrders)
         {
             return BuildDecision.Rejected(maxWaitingOrders <= 0 ? BuildRejection.NoFreeSlot : BuildRejection.QueueFull);
         }
@@ -2069,8 +2210,15 @@ public sealed record Settlement
     public (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) CurrentTotals(
         double speedFactor = 1.0, IReadOnlyList<UnitStack>? guestStacks = null, Func<HexCoord, Terrain>? terrainAt = null)
     {
+        var (production, capacity) = GrossTotals(speedFactor, terrainAt);
+        return (ApplyUpkeep(production, Garrison, guestStacks ?? []), capacity);
+    }
+
+    /// <summary>Boosted production and capacity of what stands (runes and terrain included), production times <paramref name="speedFactor"/>, before any upkeep.</summary>
+    internal (ResourceAmounts GrossProduction, ResourceAmounts Capacity) GrossTotals(double speedFactor, Func<HexCoord, Terrain>? terrainAt)
+    {
         var (production, capacity) = BoostedTotals(Buildings, Runes, terrainAt);
-        return (ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity);
+        return (production * speedFactor, capacity);
     }
 
     /// <summary>Adds an unslotted rune to storage — a raid's spoils, a hex find, an offering's reward.</summary>
@@ -2638,3 +2786,21 @@ public sealed record SettleResult(
     IReadOnlyList<TrainingOrder> TrainingCompleted,
     IReadOnlyList<UnitStack> Deaths,
     IReadOnlyList<UnitStack> GuestDeaths);
+
+/// <summary>
+/// What a <see cref="Settlement"/> needs to know about the other members of its linked realm while a group settle treats them as
+/// one realm (<see cref="Settlement.Linked"/>). Never persisted.
+/// </summary>
+/// <param name="OtherConstructionSlots">Sum of the other members' own construction slots.</param>
+/// <param name="OtherQueue">The other members' build queues, merged in FIFO order.</param>
+/// <param name="GroupLonghouseLevel">The highest Longhouse level in the linked realm.</param>
+/// <param name="OtherTowerLimit">Sum of the other members' tower limits.</param>
+/// <param name="OtherTowerCount">The other members' towers counting against the limit (connected standing plus queued).</param>
+/// <param name="OtherBuildings">The other members' standing buildings, read for build prerequisites.</param>
+public sealed record LinkedQueueContext(
+    int OtherConstructionSlots,
+    IReadOnlyList<BuildOrder> OtherQueue,
+    int GroupLonghouseLevel,
+    int OtherTowerLimit,
+    int OtherTowerCount,
+    IReadOnlyList<PlacedBuilding> OtherBuildings);

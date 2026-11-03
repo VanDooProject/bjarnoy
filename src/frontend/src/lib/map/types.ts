@@ -474,6 +474,8 @@ export interface Settlement {
    */
   capacity?: Resources;
   foundedAt: number;
+  /** Live mode: the oldest member of the linked realm this settlement belongs to (itself when unlinked). */
+  realmId?: string;
   /** Which island (see `IslandLabel`) this settlement sits on, live mode only — used to gold-highlight the player's own island on the world map. */
   islandId?: string;
 }

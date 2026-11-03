@@ -20,7 +20,7 @@ test.describe('mobile queue drawer', { tag: '@g2' }, () => {
       hud: {
         queueFetchedAt: number;
         queue: unknown[];
-        construction: { slots: number; slotsUsed: number; maxWaitingOrders: number; waitingOrders: number; maxOrdersPerHex: number };
+        construction: { slots: number; slotsUsed: number; maxWaitingOrders: number; waitingOrders: number; maxOrdersPerHex: number; towerLimit: number; towersHeld: number };
         trainingQueueFetchedAt: number;
         trainingQueue: unknown[];
         garrison: { unit: string; count: number }[];
@@ -67,7 +67,7 @@ test.describe('mobile queue drawer', { tag: '@g2' }, () => {
           totalSeconds: 50,
         },
       ];
-      world.hud.construction = { slots: 3, slotsUsed: 2, maxWaitingOrders: 3, waitingOrders: 0, maxOrdersPerHex: 1 };
+      world.hud.construction = { slots: 3, slotsUsed: 2, maxWaitingOrders: 3, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 };
 
       world.hud.trainingQueueFetchedAt = Date.now();
       world.hud.trainingQueue = [
@@ -203,5 +203,53 @@ test.describe('mobile queue drawer', { tag: '@g2' }, () => {
         return Math.hypot(after.x - canvasCentre.x, after.y - canvasCentre.y);
       })
       .toBeLessThan(40);
+  });
+
+  // Bug: on a phone a tap on the handle opened the drawer on touchend, the
+  // panel slid in under the finger, and the tap's click then hit a drawer row
+  // there, which selected it and closed the drawer again. A mouse click never
+  // showed it (it lands before the drawer moves), so this taps a real touchscreen.
+  test.describe('on a touchscreen', () => {
+    test.use({ hasTouch: true, isMobile: true });
+
+    test('a tap on the handle opens the drawer even with a row under the finger', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await SettlementPage.found(page);
+      // Enough orders that the list reaches down past the handle.
+      await page.evaluate(() => {
+        const world = (window as unknown as DemoWindow).__demoWorld();
+        const settlement = world.model.getSettlement(world.selectedSettlementId);
+        world.hud.queueFetchedAt = Date.now();
+        world.hud.queue = Array.from({ length: 8 }, (_, i) => ({
+          id: `order-${i}`,
+          q: settlement.q + 1 + i,
+          r: settlement.r,
+          building: 'farm',
+          targetLevel: 2,
+          state: i < 2 ? 'building' : 'waiting',
+          slotCost: 1,
+          completesAtGameTime: new Date(Date.now() + 500_000 + i * 1000).toISOString(),
+          completesInSeconds: 500 + i,
+          totalSeconds: 500,
+        }));
+        world.hud.tick += 1;
+        world.syncHud();
+      });
+
+      const handle = page.locator('.queue-drawer-handle');
+      const body = page.locator('#queue-drawer-body');
+      await expect(body).toHaveAttribute('aria-hidden', 'true');
+      const box = (await handle.boundingBox())!;
+      const tap = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+
+      await page.touchscreen.tap(tap.x, tap.y);
+
+      await expect(body).toHaveAttribute('aria-hidden', 'false');
+      // The setup this guards: once open, a row sits where the finger was.
+      await expect
+        .poll(() => page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest('.status-row-click'), tap))
+        .toBe(true);
+      await expect(body).toHaveAttribute('aria-hidden', 'false');
+    });
   });
 });

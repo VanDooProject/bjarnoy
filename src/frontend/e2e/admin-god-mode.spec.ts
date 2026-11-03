@@ -29,6 +29,8 @@ interface SettlementOverrides {
 function settlement(overrides: SettlementOverrides = {}) {
   return {
     id: SETTLEMENT_ID,
+    realmId: SETTLEMENT_ID,
+    linkedMemberIds: [SETTLEMENT_ID],
     worldId: 'world-1',
     islandId: 'island-1',
     name: 'Bjornstad',

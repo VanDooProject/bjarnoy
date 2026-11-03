@@ -30,7 +30,8 @@ public static class ArmyEndpoints
             .WithSummary("Dispatches units from a settlement's garrison on a move mission.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         settlements.MapGet("/{settlementId:guid}/armies", ListForSettlement)
             .WithName("ListSettlementArmies")
@@ -60,7 +61,8 @@ public static class ArmyEndpoints
             // ArmyResponse (route, provisions) is owner-only.
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         var armies = app.MapGroup("/api/v1/armies")
             .WithApiVersionSet(versionSet)
@@ -75,27 +77,31 @@ public static class ArmyEndpoints
             // ListSettlementArmies (stores/world.ts refreshArmies); nothing
             // reads a hostile army's detail by id today, so there is no
             // fog-gated minimal view to build here.
-            .RequireArmyOwner();
+            .RequireArmyOwner()
+            .WithConcurrencyRetry();
 
         armies.MapPost("/{armyId:guid}/recall", Recall)
             .WithName("RecallArmy")
             .WithSummary("Turns an army around mid-journey to head home early.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireArmyOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         armies.MapPost("/{armyId:guid}/orders", FieldOrder)
             .WithName("FieldOrderArmy")
             .WithSummary("Sends an army already out in the field onward to a new hex (issue #156 phase 1) — 'move on' if it's standing, 'append goal' if it's still travelling.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireArmyOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         armies.MapPost("/{armyId:guid}/retarget-founding", RetargetFounding)
             .WithName("RetargetFoundingConvoy")
             .WithSummary("Redirects an in-transit or parked founding convoy to a different target hex (issue #55).")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .RequireArmyOwner();
+            .RequireArmyOwner()
+            .WithConcurrencyRetry();
 
         var reports = app.MapGroup("/api/v1")
             .WithApiVersionSet(versionSet)
@@ -641,7 +647,8 @@ public static class ArmyEndpoints
                 DispatchRejection.TargetHexNotFoundable =>
                     "The target hex is too close to an already-claimed settlement's border.",
                 DispatchRejection.NoCampAtDestination => "No wildlife camp stands on the destination hex.",
-                DispatchRejection.HuntRequiresLandUnits => "Only land units can hunt a wildlife camp; ships cannot.",
+                DispatchRejection.HuntRequiresLandUnits => "Ships cannot hunt a camp on land; only land units can.",
+                DispatchRejection.HuntRequiresFleet => "Only ships can hunt a camp at sea (the whale road); land units cannot reach it.",
                 _ => "Refused.",
             },
             Status = StatusCodes.Status409Conflict,

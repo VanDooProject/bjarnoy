@@ -18,18 +18,17 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { useWorldStore } from '../../stores/world';
-import { usePlayerStore } from '../../stores/player';
 import { useAuthStore } from '../../stores/auth';
 import { api } from '../../api/client';
 import { apiErrorMessage } from '../../i18n/apiErrors';
 import { DEMO_MODE } from '../../config';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
+import { useUnsavedInput } from '../../composables/useUnsavedInput';
 import { SETTLERS_PER_FOUNDING } from '../../lib/founding';
 import { trainingBuildingsOfType } from '../../lib/units/trainingEconomy';
 import type { ArmySummary, RenownResponse, SettlementResponse } from '../../api/types';
 
 const world = useWorldStore();
-const player = usePlayerStore();
 const auth = useAuthStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -49,6 +48,7 @@ const foundingConvoys = computed(() => convoys.value.filter((a) => a.mission ===
 // Founding-dispatch form.
 const destQ = ref(0);
 const destR = ref(0);
+useUnsavedInput(() => destQ.value !== 0 || destR.value !== 0);
 // The founding convoy is always 5 settlers (`SETTLERS_PER_FOUNDING`);
 // the backend rejects provisions above their combined `foodCarryCapacity`
 // (`ProvisionsExceedCarryCapacity`), so the form defaults to and is capped at
@@ -177,8 +177,7 @@ async function confirmRetarget() {
 
 async function switchTo(settlementId: string) {
   if (settlementId === world.selectedSettlementId) return;
-  player.switchSettlement(settlementId);
-  await world.restoreLiveSettlement(player.id, settlementId);
+  await world.switchToSettlement(settlementId);
   await refresh();
 }
 

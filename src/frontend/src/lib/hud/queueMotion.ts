@@ -122,6 +122,11 @@ export const DRAWER_SLIDE_MS = 220;
  * away as the queue fills / empties: it slides in from, or back out to, the
  * edge instead of popping. `drawer` is the fixed `.queue-drawer` element;
  * its own transform (closed offset, or a drag) is the other end of the slide.
+ *
+ * Only the slide-out holds its end frame (the column is removed right after
+ * it). The slide-in must not: its end frame is the transform read at mount,
+ * the closed offset, and held it would outrank the `.is-open` CSS transform
+ * and the drag's inline one, leaving an "open" drawer parked off-screen.
  */
 export function slideDrawer(drawer: Element, direction: 'in' | 'out'): Promise<void> {
   if (!motionEnabled()) return Promise.resolve();
@@ -132,6 +137,6 @@ export function slideDrawer(drawer: Element, direction: 'in' | 'out'): Promise<v
   return animate(drawer, direction === 'out' ? [rest, away] : [away, rest], {
     duration: DRAWER_SLIDE_MS,
     easing: direction === 'out' ? 'ease-in' : 'cubic-bezier(.2,.9,.3,1.1)',
-    fill: 'both',
+    fill: direction === 'out' ? 'both' : 'backwards',
   });
 }

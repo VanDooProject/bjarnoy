@@ -1,0 +1,1141 @@
+// The river flow field (docs/design/water-shader.md §4.4e).
+//
+// Given a river frame's half-resolution water mask (riverMaskCore.ts) and the
+// tile's upstream and downstream edges, this computes, per mask texel, which way
+// the water runs. The direction is the negative gradient of a harmonic potential
+// solved over the painted water (potential flow: 1 at the in edges, 0 at the out
+// edge, no flux through the banks), so meanders, the 60-degree loop, islands and
+// confluences are followed as painted, the flow crosses every in/out edge
+// perpendicular to it (neighbouring hexes agree there) and, unlike a distance
+// field, it has no cut locus. Pure: no Pixi, no DOM.
+import { isoTopPoints, type Point } from '../../hex/geometry';
+import { TILE_ART_NATIVE_W, TILE_ART_TOPFACE_H_FRAC, TILE_ART_TOPFACE_Y_FRAC } from '../textures';
+import { groundSquash } from './waterMask';
+
+/**
+ * The art is isometric: the top face is drawn `GROUND_SQUASH` (about 0.53) as tall as the ground it lies on. Everything that
+ * measures or solves on the ground (the potential's Laplacian, the flow direction, distances, the crossing direction of an edge)
+ * does so in ground space, (x, y / GROUND_SQUASH). Lengths named "texels" below are ground texels: one texel along x.
+ */
+export const GROUND_SQUASH = groundSquash(TILE_ART_NATIVE_W, TILE_ART_NATIVE_W * TILE_ART_TOPFACE_H_FRAC);
+
+/** A texel counts as water at this mask value. */
+export const WATER_THRESHOLD = 128;
+/**
+ * Off the water a step costs this many times as much (the geodesic fade distance) and conducts this many times less (the
+ * potential): lets the field cross a bridge deck or mill wheel that spans the whole channel, so the upstream half is not cut
+ * off, without leaking across the grass neck of the 60-degree loop.
+ */
+export const NON_WATER_COST = 40;
+/** Ground texels from the bank over which the flow intensity ramps from 0 to 1. */
+export const BANK_FADE_TEXELS = 4;
+/**
+ * Texels from an edge segment within which water texels seed the potential (and the fade distance), counted from the water
+ * closest to the edge: a frame's art can stop a few texels short of the edge it flows through (the river delta's trimmed
+ * canvas), and then the water nearest the edge seeds.
+ */
+export const SEED_REACH = 2;
+/**
+ * A dry texel closer than this to an in/out edge segment is not a bank: the art's water stops a texel or two short of the top
+ * face edge, and that dry rim must not fade the flow to nothing at every seam.
+ */
+export const EDGE_RIM_TEXELS = 3;
+/** The strip along a seam, in texels from the edge line, where this cell's water may show over a neighbour whose own water stops short of the seam. */
+export const SEAM_STRIP_TEXELS = 1.5;
+
+/** Red-black SOR over-relaxation factor, convergence tolerance (largest update of a sweep) and sweep cap. */
+export const SOR_OMEGA = 1.9;
+export const SOR_TOLERANCE = 1e-5;
+export const SOR_MAX_SWEEPS = 6000;
+
+/** A vertical link in screen texels conducts this much (ground space: `phi_xx + s^2 phi_yy = 0`). */
+const VERTICAL_CONDUCTANCE = GROUND_SQUASH * GROUND_SQUASH;
+
+export interface RiverFlowInput {
+  /** The half-resolution mask cell, `cw * ch` bytes (255 = water). */
+  mask: Uint8Array;
+  cw: number;
+  ch: number;
+  /** The hex top face in cell texel coordinates, six points (see `topFacePolygonTexels`). */
+  polygon: readonly Point[];
+  /** Indices of the upstream edges (potential 1); empty for a spring, which is fed by a uniform source instead. */
+  inEdges: readonly number[];
+  /** Index of the downstream edge (potential 0): polygon edge `i` runs `polygon[i]..polygon[i+1]`. */
+  outEdge: number;
+  /**
+   * Edge to fade the flow away from (the creek edge of a bog lake mouth): the intensity falls to 0 over half a hex width of
+   * geodesic distance from it, so the lake stays still. Generic: "fade away from edge E". Only an intensity, not a direction.
+   */
+  fadeEdge?: number;
+  /**
+   * The water mask on a grid that reaches `margin` texels past the cell on every side (cell texel (x, y) is at (x + margin,
+   * y + margin)), where past an in or out edge in `edges` the mask is the union of this cell's and the neighbouring hex's
+   * (`buildBankContext`). The distance to the bank is measured on it, so a bank in the neighbour counts and both hexes of a
+   * seam read the same value there. Without it the cell sees only its own banks.
+   */
+  context?: BankContext;
+  /**
+   * Where this cell's stream function sits in the stream function of the whole drawn river: its own psi (0 right bank, 1 left
+   * bank, kept full range in the texture) is mapped to `lo + (hi - lo) * psi`, stored per cell as bytes (`encodePsiRange`). A cell
+   * feeding one arm of a confluence takes that arm's share of the confluence's range (`confluenceArmRanges`, composed up the
+   * chain), so the lanes continue across that seam. Default [0, 1].
+   */
+  psiRange?: readonly [number, number];
+}
+
+export interface BankContext {
+  mask: Uint8Array;
+  /** The neighbours' water alone, on the same grid: what the neighbour's art shows past a seam. */
+  neighbour: Uint8Array;
+  w: number;
+  h: number;
+  margin: number;
+  /** The in/out edges that have a neighbour's mask in `mask`. */
+  edges: readonly number[];
+}
+
+/**
+ * The hex top face (`isoTopPoints` of the art's top-face size, shifted down to where the art draws it) in the texel
+ * coordinates of the mask cell whose source rect starts at (sx, sy): two source px per texel.
+ */
+export function topFacePolygonTexels(sx: number, sy: number): Point[] {
+  const w = TILE_ART_NATIVE_W;
+  const offsetY = w * TILE_ART_TOPFACE_Y_FRAC;
+  return isoTopPoints(w, w * TILE_ART_TOPFACE_H_FRAC).map((p) => ({ x: (p.x - sx) / 2, y: (p.y + offsetY - sy) / 2 }));
+}
+
+function pointInPolygon(x: number, y: number, poly: readonly Point[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i]!;
+    const b = poly[j]!;
+    if (a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+function distToSegment(px: number, py: number, a: Point, b: Point): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - a.x) * dx + (py - a.y) * dy) / len2));
+  return Math.hypot(px - (a.x + t * dx), py - (a.y + t * dy));
+}
+
+/**
+ * The direction (screen space, unit) in which water crosses polygon edge `edge`, out of the face: from the hex centre to the
+ * edge's midpoint. On the ground that is the edge's normal; the isometric squash keeps "centre to midpoint" a straight line, so
+ * its screen projection is just the screen vector. (The screen perpendicular of a slanted edge is about 30 degrees off.)
+ */
+function crossingDirection(polygon: readonly Point[], edge: number): Point {
+  const a = polygon[edge]!;
+  const b = polygon[(edge + 1) % polygon.length]!;
+  const c = polygon.reduce((acc, p) => ({ x: acc.x + p.x / polygon.length, y: acc.y + p.y / polygon.length }), { x: 0, y: 0 });
+  const dx = (a.x + b.x) / 2 - c.x;
+  const dy = (a.y + b.y) / 2 - c.y;
+  const len = Math.hypot(dx, dy);
+  return { x: dx / len, y: dy / len };
+}
+
+/** Min-heap of (cost, index) pairs, for Dijkstra. */
+class Heap {
+  private costs: number[] = [];
+  private items: number[] = [];
+  get size(): number {
+    return this.items.length;
+  }
+  push(cost: number, item: number): void {
+    let i = this.items.length;
+    this.costs.push(cost);
+    this.items.push(item);
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      if (this.costs[parent]! <= cost) break;
+      this.swap(i, parent);
+      i = parent;
+    }
+  }
+  pop(): { cost: number; item: number } {
+    const top = { cost: this.costs[0]!, item: this.items[0]! };
+    const lastCost = this.costs.pop()!;
+    const lastItem = this.items.pop()!;
+    if (this.items.length > 0) {
+      this.costs[0] = lastCost;
+      this.items[0] = lastItem;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1;
+        const r = l + 1;
+        let m = i;
+        if (l < this.items.length && this.costs[l]! < this.costs[m]!) m = l;
+        if (r < this.items.length && this.costs[r]! < this.costs[m]!) m = r;
+        if (m === i) break;
+        this.swap(i, m);
+        i = m;
+      }
+    }
+    return top;
+  }
+  private swap(a: number, b: number): void {
+    [this.costs[a], this.costs[b]] = [this.costs[b]!, this.costs[a]!];
+    [this.items[a], this.items[b]] = [this.items[b]!, this.items[a]!];
+  }
+}
+
+const NEIGHBOURS: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+/**
+ * Texels past an in or out edge of the top face that still belong to the hex's cell. The art's own water stops 1-2 texels
+ * short of the face edge, and what shows at a seam is the neighbouring hex's skirt under it; a cell clipped exactly to its
+ * face leaves that strip without flow, a dark line along every seam. Only the edges the water crosses get the rim: past any
+ * other edge lies a neighbour's land, which the river's own skirt water must not be drawn onto. The rims of two
+ * neighbouring river cells overlap; the field crosses the shared edge at a right angle in both, so whichever is drawn last
+ * makes no difference. Seven, not two: the art's water spills up to about 6.5 texels past the face at the corners and past those
+ * edges (measured on every `rivertile*` frame in use), and a narrower rim left that spill without ripples.
+ */
+export const FACE_PAD_TEXELS = 7;
+
+/**
+ * Which texels are inside the top face (centre in the polygon), `padded` (inside plus one texel all round: where edge seeds
+ * are picked, so the rim does not move the seed band off the face), which are passable for the solver (padded plus the
+ * rim along the in and out edges), and which the cell covers (inside plus that rim).
+ */
+function faceMasks(input: RiverFlowInput): { inside: Uint8Array; padded: Uint8Array; passable: Uint8Array; cover: Uint8Array } {
+  return faceMasksOn(input.cw, input.ch, input.polygon, [...input.inEdges, input.outEdge], FACE_PAD_TEXELS);
+}
+
+function faceMasksOn(
+  cw: number,
+  ch: number,
+  polygon: readonly Point[],
+  flowEdges: readonly number[],
+  pad: number,
+): { inside: Uint8Array; padded: Uint8Array; passable: Uint8Array; cover: Uint8Array } {
+  const inside = new Uint8Array(cw * ch);
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      if (pointInPolygon(x + 0.5, y + 0.5, polygon)) inside[y * cw + x] = 1;
+    }
+  }
+  const cover = inside.slice();
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      const p = y * cw + x;
+      if (cover[p]) continue;
+      for (const e of flowEdges) {
+        if (distToSegment(x + 0.5, y + 0.5, polygon[e]!, polygon[(e + 1) % polygon.length]!) <= pad) {
+          cover[p] = 1;
+          break;
+        }
+      }
+    }
+  }
+  const padded = new Uint8Array(cw * ch);
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      for (let dy = -1; dy <= 1 && !padded[y * cw + x]; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          const yy = y + dy;
+          if (xx >= 0 && xx < cw && yy >= 0 && yy < ch && inside[yy * cw + xx]) {
+            padded[y * cw + x] = 1;
+            break;
+          }
+        }
+      }
+    }
+  }
+  const passable = new Uint8Array(cw * ch);
+  for (let p = 0; p < passable.length; p++) passable[p] = padded[p]! | cover[p]!;
+  return { inside, padded, passable, cover };
+}
+
+
+/** The water texels that seed edge `edge`: those within `SEED_REACH` of the water closest to the edge segment. */
+function edgeSeeds(input: RiverFlowInput, passable: Uint8Array, edge: number): number[] {
+  const { mask, cw, ch, polygon } = input;
+  const a = polygon[edge]!;
+  const b = polygon[(edge + 1) % polygon.length]!;
+  const edgeDistance = new Float64Array(cw * ch).fill(Infinity);
+  let nearest = Infinity;
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      const p = y * cw + x;
+      if (!passable[p] || mask[p]! < WATER_THRESHOLD) continue;
+      edgeDistance[p] = distToSegment(x + 0.5, y + 0.5, a, b);
+      nearest = Math.min(nearest, edgeDistance[p]!);
+    }
+  }
+  const seeds: number[] = [];
+  if (!Number.isFinite(nearest)) return seeds;
+  for (let p = 0; p < edgeDistance.length; p++) if (edgeDistance[p]! <= nearest + SEED_REACH) seeds.push(p);
+  return seeds;
+}
+
+/**
+ * Geodesic distance (texel units) from the water texels next to polygon edge `edge`, through the passable texels of the top
+ * face. Off-water steps cost `NON_WATER_COST` times as much. Unreached texels are `Infinity`. Used for the lake fade only.
+ */
+function geodesic(input: RiverFlowInput, passable: Uint8Array, edge: number): Float64Array {
+  const { mask, cw, ch } = input;
+  const dist = new Float64Array(cw * ch).fill(Infinity);
+  const heap = new Heap();
+  for (const p of edgeSeeds(input, passable, edge)) {
+    dist[p] = 0;
+    heap.push(0, p);
+  }
+  // Fast marching (the heap-driven upwind eikonal solver): like Dijkstra, but the distance of a texel comes from both axis
+  // neighbours, so it is a Euclidean-accurate front instead of the 8-way staircase of a plain grid walk.
+  const done = new Uint8Array(cw * ch);
+  const hy = 1 / GROUND_SQUASH; // one texel down is 1 / squash ground texels
+  const solve = (x: number, y: number): number => {
+    const cost = mask[y * cw + x]! >= WATER_THRESHOLD ? 1 : NON_WATER_COST;
+    const axis = (x0: number, y0: number, x1: number, y1: number) => {
+      const lo = x0 >= 0 && x0 < cw && y0 >= 0 && y0 < ch && done[y0 * cw + x0] ? dist[y0 * cw + x0]! : Infinity;
+      const hi = x1 >= 0 && x1 < cw && y1 >= 0 && y1 < ch && done[y1 * cw + x1] ? dist[y1 * cw + x1]! : Infinity;
+      return Math.min(lo, hi);
+    };
+    const tx = axis(x - 1, y, x + 1, y);
+    const ty = axis(x, y - 1, x, y + 1);
+    // Upwind eikonal on a grid whose spacing is 1 along x and hy along y: ((u - tx) / 1)^2 + ((u - ty) / hy)^2 = cost^2.
+    const one = Math.min(tx + cost, ty + cost * hy);
+    if (!Number.isFinite(tx) || !Number.isFinite(ty) || one <= Math.max(tx, ty)) return one;
+    const a = 1;
+    const b = 1 / (hy * hy);
+    const qa = a + b;
+    const qb = -2 * (a * tx + b * ty);
+    const qc = a * tx * tx + b * ty * ty - cost * cost;
+    return (-qb + Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc))) / (2 * qa);
+  };
+  while (heap.size > 0) {
+    const { cost, item } = heap.pop();
+    if (done[item] || cost > dist[item]!) continue;
+    done[item] = 1;
+    const x = item % cw;
+    const y = (item - x) / cw;
+    for (const [dx, dy] of NEIGHBOURS) {
+      const xx = x + dx;
+      const yy = y + dy;
+      if (xx < 0 || xx >= cw || yy < 0 || yy >= ch) continue;
+      const q = yy * cw + xx;
+      if (!passable[q] || done[q]) continue;
+      const next = solve(xx, yy);
+      if (next < dist[q]!) {
+        dist[q] = next;
+        heap.push(next, q);
+      }
+    }
+  }
+  return dist;
+}
+
+/** The geodesic distance field to `edge`, exposed for tests and tooling. */
+export function riverGeodesicDistance(input: RiverFlowInput, edge: number): Float64Array {
+  const { passable } = faceMasks(input);
+  return geodesic(input, passable, edge);
+}
+
+/**
+ * Red-black SOR for `laplacian(f) = -source` over the passable texels of a cell, in ground space (see `VERTICAL_CONDUCTANCE`).
+ * Texels in `fixed` keep their value in `f`. A link between two `conducting` texels conducts 1, any other link
+ * `1 / NON_WATER_COST` (so the banks are nearly closed walls unless they are listed as conducting). `source` adds 1 on
+ * every conducting texel. Returns the number of sweeps.
+ */
+function solveLaplace(input: RiverFlowInput, passable: Uint8Array, conducting: Uint8Array, fixed: Uint8Array, f: Float64Array, source: boolean): number {
+  const { cw, ch } = input;
+  const n = cw * ch;
+  // Link conductances to the right, left, down and up neighbours (0 where there is no domain neighbour).
+  const cond = new Float64Array(n * 4);
+  const sum = new Float64Array(n);
+  const link = (p: number, q: number) => (conducting[p] && conducting[q] ? 1 : 1 / NON_WATER_COST);
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      const p = y * cw + x;
+      if (!passable[p]) continue;
+      if (x + 1 < cw && passable[p + 1]) cond[p * 4] = link(p, p + 1);
+      if (x > 0 && passable[p - 1]) cond[p * 4 + 1] = link(p, p - 1);
+      // Ground-space Laplacian phi_xx + s^2 phi_yy in screen texels: vertical links conduct s^2 as much.
+      if (y + 1 < ch && passable[p + cw]) cond[p * 4 + 2] = link(p, p + cw) * VERTICAL_CONDUCTANCE;
+      if (y > 0 && passable[p - cw]) cond[p * 4 + 3] = link(p, p - cw) * VERTICAL_CONDUCTANCE;
+      sum[p] = cond[p * 4]! + cond[p * 4 + 1]! + cond[p * 4 + 2]! + cond[p * 4 + 3]!;
+    }
+  }
+  let sweeps = 0;
+  while (sweeps < SOR_MAX_SWEEPS) {
+    let maxUpdate = 0;
+    for (let colour = 0; colour < 2; colour++) {
+      for (let y = 0; y < ch; y++) {
+        for (let x = (y + colour) & 1; x < cw; x += 2) {
+          const p = y * cw + x;
+          if (!passable[p] || fixed[p]) continue;
+          const c = p * 4;
+          let acc = 0;
+          if (cond[c]! > 0) acc += cond[c]! * f[p + 1]!;
+          if (cond[c + 1]! > 0) acc += cond[c + 1]! * f[p - 1]!;
+          if (cond[c + 2]! > 0) acc += cond[c + 2]! * f[p + cw]!;
+          if (cond[c + 3]! > 0) acc += cond[c + 3]! * f[p - cw]!;
+          const target = (acc + (source && conducting[p] ? 1 : 0)) / sum[p]!;
+          const update = SOR_OMEGA * (target - f[p]!);
+          f[p] = f[p]! + update;
+          maxUpdate = Math.max(maxUpdate, Math.abs(update));
+        }
+      }
+    }
+    sweeps++;
+    if (maxUpdate < SOR_TOLERANCE) break;
+  }
+  return sweeps;
+}
+
+/**
+ * The flow potential over the passable texels: 1 at the water next to each in edge, 0 next to the out edge, harmonic in
+ * between (a spring, with no in edge, has `laplacian = -1` on the water instead). A link between two water texels conducts 1,
+ * any link that touches a dry texel `1 / NON_WATER_COST`, so the banks are (nearly) no-flux walls and a bridge deck still
+ * conducts. Texels outside the padded face are not part of the domain. Solved by red-black SOR.
+ */
+export function riverPotential(input: RiverFlowInput): { phi: Float64Array; sweeps: number; seedEdge: Int8Array } {
+  const { mask, cw, ch, inEdges, outEdge } = input;
+  const { padded, passable } = faceMasks(input);
+  const n = cw * ch;
+  const isWater = (p: number) => passable[p] === 1 && mask[p]! >= WATER_THRESHOLD;
+  const fixed = new Uint8Array(n);
+  const phi = new Float64Array(n);
+  // Which edge's seed band a texel is in (-1: none).
+  const seedEdge = new Int8Array(n).fill(-1);
+  const hasIn = inEdges.some((e) => e !== outEdge);
+  for (const e of inEdges) {
+    if (e === outEdge) continue;
+    for (const p of edgeSeeds(input, padded, e)) {
+      fixed[p] = 1;
+      phi[p] = 1;
+      seedEdge[p] = e;
+    }
+  }
+  for (const p of edgeSeeds(input, padded, outEdge)) {
+    fixed[p] = 1;
+    phi[p] = 0;
+    seedEdge[p] = outEdge;
+  }
+  if (hasIn) for (let p = 0; p < n; p++) if (!fixed[p]) phi[p] = 0.5;
+
+  const conducting = new Uint8Array(n);
+  for (let p = 0; p < n; p++) conducting[p] = isWater(p) ? 1 : 0;
+  const sweeps = solveLaplace(input, passable, conducting, fixed, phi, !hasIn);
+  return { phi, sweeps, seedEdge };
+}
+
+/**
+ * Chamfer distance (texels) from each water texel to the nearest bank: a dry texel of the padded face that is farther than
+ * `EDGE_RIM_TEXELS` from every in/out edge segment. 0 off water.
+ */
+function distanceToBank(input: RiverFlowInput, passable: Uint8Array): Float32Array {
+  const { cw, ch, polygon, inEdges, outEdge, context } = input;
+  // On the context grid (margin texels past the cell, the neighbours' water past the seams) when there is one, else on the cell.
+  const m = context?.margin ?? 0;
+  const w = context?.w ?? cw;
+  const h = context?.h ?? ch;
+  const mask = context?.mask ?? input.mask;
+  const poly = polygon.map((q) => ({ x: q.x + m, y: q.y + m }));
+  const dom = context
+    ? faceMasksOn(w, h, poly, [...inEdges, outEdge], context.margin).passable
+    : passable;
+  const flowEdges = [...new Set([...inEdges, outEdge])];
+  const segments = flowEdges.map((e) => [poly[e]!, poly[(e + 1) % poly.length]!] as const);
+  const withContext = flowEdges.map((e) => context?.edges.includes(e) ?? false);
+  // Past an in or out edge lies the neighbouring river hex. Where its water mask is part of the context its banks count. Where
+  // it is not, this cell sees only its own skirt there, and a dry texel past such an edge line is never a bank, however far past
+  // it is, or every seam would read as a bank and B would dip along it.
+  const centroid = poly.reduce((acc, q) => ({ x: acc.x + q.x / poly.length, y: acc.y + q.y / poly.length }), { x: 0, y: 0 });
+  const side = ([a, b]: readonly [Point, Point], x: number, y: number) => (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
+  const pastFlowEdge = (x: number, y: number) => segments.some((seg, i) => !withContext[i] && side(seg, x, y) * side(seg, centroid.x, centroid.y) < 0);
+  const water = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h && mask[y * w + x]! >= WATER_THRESHOLD;
+  // The art's water often stops a texel or two short of an in or out edge. That dry strip is not a bank. Without the
+  // neighbour: a dry texel within EDGE_RIM_TEXELS of such an edge with water just inward of it (along the crossing direction)
+  // counts as water. With it: water on both sides along the crossing direction within EDGE_RIM_TEXELS + 1, the same test from
+  // either hex. A real bank reaching the edge has no water on its far side and stays a bank, so B does not swell at every seam.
+  const dirs = flowEdges.map((e) => crossingDirection(polygon, e));
+  const shortOfEdge = (x: number, y: number) =>
+    segments.some(([a, b], i) => {
+      if (distToSegment(x + 0.5, y + 0.5, a, b) > EDGE_RIM_TEXELS) return false;
+      const n = dirs[i]!;
+      const reach = (sign: number) => {
+        for (let step = 1; step <= EDGE_RIM_TEXELS + 1; step++) {
+          if (water(Math.round(x + sign * n.x * step), Math.round(y + sign * n.y * step))) return true;
+        }
+        return false;
+      };
+      return withContext[i] ? reach(1) && reach(-1) : reach(-1);
+    });
+  const far = 1e6;
+  const d = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x;
+      if (water(x, y) || !dom[p]) d[p] = far;
+      else d[p] = shortOfEdge(x, y) || pastFlowEdge(x + 0.5, y + 0.5) ? far : 0;
+    }
+  }
+  // Steps in ground texels: a vertical texel is 1 / squash long.
+  const DOWN = 1 / GROUND_SQUASH;
+  const DIAG = Math.hypot(1, DOWN);
+  const relax = (x: number, y: number, dx: number, dy: number, step: number) => {
+    const xx = x + dx;
+    const yy = y + dy;
+    if (xx < 0 || xx >= w || yy < 0 || yy >= h) return;
+    const v = d[yy * w + xx]! + step;
+    if (v < d[y * w + x]!) d[y * w + x] = v;
+  };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      relax(x, y, -1, 0, 1);
+      relax(x, y, 0, -1, DOWN);
+      relax(x, y, -1, -1, DIAG);
+      relax(x, y, 1, -1, DIAG);
+    }
+  }
+  for (let y = h - 1; y >= 0; y--) {
+    for (let x = w - 1; x >= 0; x--) {
+      relax(x, y, 1, 0, 1);
+      relax(x, y, 0, 1, DOWN);
+      relax(x, y, 1, 1, DIAG);
+      relax(x, y, -1, 1, DIAG);
+    }
+  }
+  if (!context) return d;
+  const out = new Float32Array(cw * ch);
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) out[y * cw + x] = d[(y + m) * w + x + m]!;
+  return out;
+}
+
+function smoothstep(e0: number, e1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+}
+
+/** Edge `e` is nearest to the point, among the in and out edges the water crosses (-1 if there are none). */
+function nearestFlowEdge(input: RiverFlowInput, px: number, py: number): number {
+  const { polygon, outEdge } = input;
+  let best = -1;
+  let bestD = Infinity;
+  for (const e of [...input.inEdges.filter((i) => i !== outEdge), outEdge]) {
+    const d = distToSegment(px, py, polygon[e]!, polygon[(e + 1) % polygon.length]!);
+    if (d < bestD) {
+      bestD = d;
+      best = e;
+    }
+  }
+  return best;
+}
+
+/** Everything both flow textures read from one solve of a river frame: the face masks, the potential, the bank distance, the lake fade. */
+function solveRiver(input: RiverFlowInput) {
+  const { mask, cw, ch, fadeEdge } = input;
+  const { inside, passable, cover } = faceMasks(input);
+  const isWater = (x: number, y: number) => x >= 0 && x < cw && y >= 0 && y < ch && mask[y * cw + x]! >= WATER_THRESHOLD && passable[y * cw + x] === 1;
+  const bank = distanceToBank(input, passable);
+  const { phi, seedEdge } = riverPotential(input);
+
+  const fade = fadeEdge === undefined ? null : geodesic(input, passable, fadeEdge);
+  const fadeLength = (Math.max(...input.polygon.map((p) => p.x)) - Math.min(...input.polygon.map((p) => p.x))) / 2;
+  /** Intensity of the water at texel `p`: the bank fade, and the lake fade where there is one. */
+  const intensityAt = (p: number, fadeTexels = BANK_FADE_TEXELS): number => {
+    let intensity = Math.min(1, Math.max(0, bank[p]! / fadeTexels));
+    if (fade) intensity *= 1 - smoothstep(0, fadeLength, fade[p]!);
+    return intensity;
+  };
+  /**
+   * Whether the art shows water at a texel of the rim past an in or out edge that has a neighbour: the neighbour's own water,
+   * or the strip where its water stops short of the seam. Anything else is the neighbour's land (or this hex's skirt under
+   * it), and a ripple there would sit on grass at the corner of a bank.
+   */
+  const rimShowsWater = (x: number, y: number): boolean => {
+    const c = input.context;
+    if (!c) return true;
+    const e = nearestFlowEdge(input, x + 0.5, y + 0.5);
+    if (!c.edges.includes(e)) return true;
+    const nbr = (xx: number, yy: number) => {
+      const i = xx + c.margin;
+      const j = yy + c.margin;
+      return i >= 0 && j >= 0 && i < c.w && j < c.h && c.neighbour[j * c.w + i]! >= WATER_THRESHOLD;
+    };
+    // Only along the seam line: the neighbour's own face draws its water further in, and where it draws none (the water that spills over
+    // its cliff past a non-flow edge) a rim texel there would show a wide block of this cell's marks with a straight edge.
+    const a = input.polygon[e]!;
+    const b = input.polygon[(e + 1) % input.polygon.length]!;
+    if (distToSegment(x + 0.5, y + 0.5, a, b) > SEAM_STRIP_TEXELS) return false;
+    if (nbr(x, y)) return true;
+    // The strip where the neighbour's water stops short of the seam, with its water just further on.
+    const n = crossingDirection(input.polygon, e);
+    for (let step = 1; step <= EDGE_RIM_TEXELS + 1; step++) if (nbr(Math.round(x + n.x * step), Math.round(y + n.y * step))) return true;
+    return false;
+  };
+  return { inside, passable, cover, isWater, phi, seedEdge, intensityAt, rimShowsWater, bank };
+}
+
+/**
+ * The flow direction texture of one river frame cell: RGBA8, `cw * ch * 4` bytes, premultiplied.
+ *
+ * R, G = unit flow direction * 0.5 + 0.5 (art space, +y down). B = intensity: the distance to the bank
+ * over `BANK_FADE_TEXELS`. A = 255 on the water texels with a direction inside the top face and its rim along the in and out edges
+ * (`FACE_PAD_TEXELS`), all four 0 elsewhere. Not drawn any more (the ripple texture is); kept as the direction reference.
+ */
+export function computeRiverFlow(input: RiverFlowInput): Uint8Array {
+  const { cw, ch, outEdge } = input;
+  const { inside, cover, isWater, phi, seedEdge, intensityAt } = solveRiver(input);
+
+  // Negative gradient of the potential over water neighbours: central differences, one-sided where only one side is water.
+  const vx = new Float32Array(cw * ch);
+  const vy = new Float32Array(cw * ch);
+  const has = new Uint8Array(cw * ch);
+  const normals = input.polygon.map((_, e) => crossingDirection(input.polygon, e));
+  const axis = (lo: boolean, hi: boolean, here: number, pLo: number, pHi: number) => (lo && hi ? (pHi - pLo) / 2 : hi ? pHi - here : lo ? here - pLo : 0);
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      if (!isWater(x, y)) continue;
+      const p = y * cw + x;
+      const here = phi[p]!;
+      const l = isWater(x - 1, y);
+      const r = isWater(x + 1, y);
+      const u = isWater(x, y - 1);
+      const d = isWater(x, y + 1);
+      const gx = axis(l, r, here, l ? phi[p - 1]! : 0, r ? phi[p + 1]! : 0);
+      const gy = axis(u, d, here, u ? phi[p - cw]! : 0, d ? phi[p + cw]! : 0);
+      // Inside a seed band the potential is constant, and the rim past the face is a dead end beyond it, flat up to solver
+      // noise: neither has a gradient of its own. Both take the edge's crossing direction, which is what the potential
+      // tends to there anyway, and the neighbouring hex sets the same direction on the same edge, so the seam matches
+      // exactly. (Filled from their neighbours instead, the band's ends against a bank took the bank's direction and left
+      // off-colour spots along every seam.)
+      const edge = seedEdge[p]! >= 0 ? seedEdge[p]! : inside[p] ? -1 : nearestFlowEdge(input, x + 0.5, y + 0.5);
+      if (edge >= 0) {
+        const n = normals[edge]!;
+        const sign = edge === outEdge ? 1 : -1;
+        vx[p] = n.x * sign;
+        vy[p] = n.y * sign;
+        has[p] = 1;
+        continue;
+      }
+      // Ground velocity (-phi_X, -phi_Y) = (-phi_x, -phi_y * s) mapped to the screen (x, y * s): (-phi_x, -s^2 phi_y).
+      vx[p] = -gx;
+      vy[p] = -VERTICAL_CONDUCTANCE * gy;
+      has[p] = Math.hypot(gx, gy) > 1e-9 ? 1 : 0;
+    }
+  }
+  // Fill the texels without a direction (exact stagnation points) from their nearest water neighbours that
+  // have one, ring by ring, so the flow keeps crossing the edge perpendicular to it.
+  for (let pass = 0; pass < 8; pass++) {
+    const filled: number[] = [];
+    for (let y = 0; y < ch; y++) {
+      for (let x = 0; x < cw; x++) {
+        const p = y * cw + x;
+        if (!isWater(x, y) || has[p]) continue;
+        let sx = 0;
+        let sy = 0;
+        let count = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (!isWater(x + dx, y + dy)) continue;
+            const q = (y + dy) * cw + x + dx;
+            if (!has[q]) continue;
+            const len = Math.hypot(vx[q]!, vy[q]!);
+            sx += vx[q]! / len;
+            sy += vy[q]! / len;
+            count++;
+          }
+        }
+        if (count > 0) {
+          vx[p] = sx;
+          vy[p] = sy;
+          filled.push(p);
+        }
+      }
+    }
+    if (filled.length === 0) break;
+    for (const p of filled) has[p] = 1;
+  }
+
+  const out = new Uint8Array(cw * ch * 4);
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      const p = y * cw + x;
+      if (!cover[p]) continue;
+      if (!isWater(x, y) || !has[p]) continue;
+      const dx = vx[p]!;
+      const dy = vy[p]!;
+      const len = Math.hypot(dx, dy);
+      if (len < 1e-9) continue;
+      // Opaque only where there is flow: a dry texel of this cell (the strip along its edge where the art's water stops
+      // short) must not cover the neighbouring river cell's rim, which is the water actually seen there.
+      const o = p * 4;
+      out[o + 3] = 255;
+      const intensity = intensityAt(p);
+      out[o] = Math.round(((dx / len) * 0.5 + 0.5) * 255);
+      out[o + 1] = Math.round(((dy / len) * 0.5 + 0.5) * 255);
+      out[o + 2] = Math.round(intensity * 255);
+    }
+  }
+  return out;
+}
+
+/**
+ * Ground texels from the bank at which the ripple texture's B reaches 1 (the middle of the channel). B is the distance to the bank over
+ * this, not over `BANK_FADE_TEXELS`: the shader both fades the ripples out at the bank (over the first `BANK_FADE_TEXELS` of it)
+ * and lags the crests there, so they bow into arcs and none runs straight along a hex seam.
+ */
+export const RIVER_CENTRE_TEXELS = 16;
+
+/**
+ * Target ripple wavelength in texels of the half-resolution cell (one tile width is about 100 texels): a cell gets
+ * `round(channel length / this)` whole ripple periods between its in and out edges.
+ */
+export const RIPPLE_WAVELENGTH_TEXELS = 12;
+
+/**
+ * The ripple texture of one river frame cell: RGBA8, `cw * ch * 4` bytes, premultiplied, and the number of periods `n` it holds.
+ *
+ * The phase is `theta = 2 pi n phi` with the flow potential `phi` (1 at the in edges, 0 at the out edge; a cell without an in
+ * edge has `phi` normalised by its maximum over the water first), so its contour lines cross the channel and `theta` is
+ * a multiple of 2 pi on every in and out edge: neighbouring hexes and the arms of a confluence agree there. `n` is
+ * `max(1, round(L / RIPPLE_WAVELENGTH_TEXELS))`, `L` the mean geodesic distance (no bank penalty) from the out edge to the in edge
+ * seeds (the maximum over the water for a cell without an in edge). In the seed bands and the rim, where the potential is flat, the
+ * phase continues linearly at the cell's mean rate `2 pi n / L` per texel from the edge line (0 mod 2 pi on it), so a crest is not a flat strip.
+ *
+ * R, G = cos, sin of `theta` * 0.5 + 0.5 (filtering-safe, unlike a wrapped phase). B = distance to the bank over
+ * `RIVER_CENTRE_TEXELS` (0 at the bank, 1 in the middle; the dry rim along an in or out edge is no bank; a lake mouth's fade multiplies it).
+ * A = 255 on the water of the face and its rim along the in and out edges, all four 0 elsewhere.
+ */
+/** The texel-wise minimum of distance fields. */
+function minDistance(fields: Float64Array[]): Float64Array {
+  const out = new Float64Array(fields[0]!.length).fill(Infinity);
+  for (const f of fields) for (let p = 0; p < out.length; p++) out[p] = Math.min(out[p]!, f[p]!);
+  return out;
+}
+
+
+/**
+ * The stream function psi of a river cell: 0 on the bank to the right looking downstream, 1 on the bank to the left, harmonic
+ * in ground space like the potential, so its contour lines are the streamlines (they part and close round islands). The in and
+ * out edge crossings are natural boundaries: psi runs from 0 to 1 across each, distributed by the flow itself.
+ *
+ * Banks are the dry texels `bank` counts as such. Walking the face boundary from the out crossing in polygon order, the boundary
+ * is split by the in and out crossings into arcs; the banks reached from an arc (nearest on dry land) get that arc's value:
+ * 0 or 1 for the two outer banks, `j / k` between the arms of a confluence with k in edges. A spring has no in edge: its one
+ * arc is split in two halves, 0 and 1. A dry component that no arc reaches (an island) has no fixed value.
+ * Which side is right is decided from the out edge's flow direction on the ground, so both hexes of a seam agree.
+ * Returns psi per texel, 0 where it is not defined.
+ */
+function streamFunction(input: RiverFlowInput, passable: Uint8Array, isWaterP: (p: number) => boolean, seedEdge: Int8Array, bank: Float32Array, phi: Float64Array): Float64Array {
+  const { cw, ch, polygon, outEdge } = input;
+  const n = cw * ch;
+  const psi = new Float64Array(n).fill(0.5);
+  const flowIn = input.inEdges.filter((e) => e !== outEdge);
+  const edgeLen = (e: number) => Math.hypot(polygon[(e + 1) % 6]!.x - polygon[e]!.x, polygon[(e + 1) % 6]!.y - polygon[e]!.y);
+  // The stretch of each flow edge the water crosses, as a position along the perimeter (edge index + fraction along the edge).
+  const crossings: { e: number; t0: number; t1: number; u0: number; u1: number }[] = [];
+  for (const e of [outEdge, ...flowIn]) {
+    const a = polygon[e]!;
+    const b = polygon[(e + 1) % 6]!;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    let t0 = Infinity;
+    let t1 = -Infinity;
+    const ctx = input.context;
+    if (ctx && ctx.edges.includes(e)) {
+      // With the neighbour's water known, the stretch of the edge the water crosses is measured on the union of both hexes' water,
+      // the same for both: the two cells then give psi the same values along the seam.
+      const dir = crossingDirection(polygon, e);
+      const len = edgeLen(e);
+      for (let i = 0; i <= Math.ceil(len * 2); i++) {
+        const t = i / Math.ceil(len * 2);
+        for (const step of [-2, -1, 0, 1, 2]) {
+          const x = Math.round(a.x + dx * t + dir.x * step - 0.5) + ctx.margin;
+          const y = Math.round(a.y + dy * t + dir.y * step - 0.5) + ctx.margin;
+          if (x >= 0 && y >= 0 && x < ctx.w && y < ctx.h && ctx.mask[y * ctx.w + x]! >= WATER_THRESHOLD) {
+            t0 = Math.min(t0, t);
+            t1 = Math.max(t1, t);
+            break;
+          }
+        }
+      }
+    } else {
+      for (let p = 0; p < n; p++) {
+        if (seedEdge[p] !== e) continue;
+        const t = Math.max(0, Math.min(1, ((((p % cw) + 0.5) - a.x) * dx + ((Math.floor(p / cw) + 0.5) - a.y) * dy) / (dx * dx + dy * dy)));
+        t0 = Math.min(t0, t);
+        t1 = Math.max(t1, t);
+      }
+    }
+    if (t0 > t1) return psi; // no crossing found: nothing to say
+    const pad = 0.5 / edgeLen(e);
+    crossings.push({ e, t0: Math.max(0, t0 - pad), t1: Math.min(1, t1 + pad), u0: e + Math.max(0, t0 - pad), u1: e + Math.min(1, t1 + pad) });
+  }
+  const out = crossings[0]!;
+  const rest = crossings.slice(1).sort((p, q) => ((p.u0 - out.u1) % 6 + 6) % 6 - ((q.u0 - out.u1) % 6 + 6) % 6);
+  const ordered = [out, ...rest];
+  // Right-hand side looking downstream, on the ground: which way does walking up the perimeter leave the out crossing?
+  const g = GROUND_SQUASH;
+  const flow = crossingDirection(polygon, outEdge);
+  const tangent = { x: polygon[(outEdge + 1) % 6]!.x - polygon[outEdge]!.x, y: (polygon[(outEdge + 1) % 6]!.y - polygon[outEdge]!.y) / g };
+  const right = { x: -flow.y / g, y: flow.x };
+  const firstIsRight = tangent.x * right.x + tangent.y * right.y > 0;
+  const arcs: { u0: number; u1: number; value: number }[] = [];
+  const k = ordered.length - 1;
+  if (k === 0) {
+    const start = out.u1;
+    const end = out.u0 + 6;
+    const mid = (start + end) / 2;
+    arcs.push({ u0: start, u1: mid, value: firstIsRight ? 0 : 1 }, { u0: mid, u1: end, value: firstIsRight ? 1 : 0 });
+  } else {
+    for (let j = 0; j <= k; j++) {
+      const start = ordered[j]!.u1;
+      let end = ordered[(j + 1) % ordered.length]!.u0;
+      while (end < start) end += 6;
+      arcs.push({ u0: start, u1: end, value: firstIsRight ? j / k : 1 - j / k });
+    }
+  }
+  // Seed the banks along each arc, then spread each arc's value over the dry land it reaches (nearest first).
+  const label = new Float64Array(n).fill(NaN);
+  const queue: number[] = [];
+  const centroid = polygon.reduce((acc, q) => ({ x: acc.x + q.x / 6, y: acc.y + q.y / 6 }), { x: 0, y: 0 });
+  const isBank = (p: number) => passable[p] === 1 && !isWaterP(p) && bank[p] === 0;
+  for (const arc of arcs) {
+    const steps = Math.max(2, Math.ceil((arc.u1 - arc.u0) * 120));
+    for (let i = 0; i <= steps; i++) {
+      const u = arc.u0 + ((arc.u1 - arc.u0) * i) / steps;
+      const e = ((Math.floor(u) % 6) + 6) % 6;
+      const t = u - Math.floor(u);
+      const a = polygon[e]!;
+      const b = polygon[(e + 1) % 6]!;
+      let px = a.x + (b.x - a.x) * t;
+      let py = a.y + (b.y - a.y) * t;
+      // Nudged inward, so the sample lands on the face's own boundary texel.
+      const dx = centroid.x - px;
+      const dy = centroid.y - py;
+      const len = Math.hypot(dx, dy);
+      px += (dx / len) * 0.75;
+      py += (dy / len) * 0.75;
+      const x = Math.floor(px);
+      const y = Math.floor(py);
+      if (x < 0 || y < 0 || x >= cw || y >= ch) continue;
+      const p = y * cw + x;
+      if (isBank(p) && Number.isNaN(label[p]!)) {
+        label[p] = arc.value;
+        queue.push(p);
+      }
+    }
+  }
+  for (let head = 0; head < queue.length; head++) {
+    const p = queue[head]!;
+    const x = p % cw;
+    const y = (p - x) / cw;
+    for (const [dx, dy] of NEIGHBOURS) {
+      const xx = x + dx;
+      const yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= cw || yy >= ch) continue;
+      const q = yy * cw + xx;
+      if (Number.isNaN(label[q]!) && isBank(q)) {
+        label[q] = label[p]!;
+        queue.push(q);
+      }
+    }
+  }
+  const fixed = new Uint8Array(n);
+  const conducting = new Uint8Array(n);
+  // Along a crossing psi runs from the value of the bank before it to the value of the bank after it, linearly with the position
+  // on the edge, and is fixed ON the edge line only (the row of texels along it, water or not): both hexes of a seam see the same
+  // stretch of the same edge, so they agree there, and past and before the line psi comes from the solve, in ground space, so
+  // the streamlines cross the edge along the ground normal and not along whatever the band's texel columns happen to be.
+  const arcValueBefore = (j: number) => arcs[(j - 1 + arcs.length) % arcs.length]!.value;
+  const arcValueAfter = (j: number) => arcs[j % arcs.length]!.value;
+  ordered.forEach((c, j) => {
+    const vb = arcValueBefore(j);
+    const va = arcValueAfter(j);
+    const a = polygon[c.e]!;
+    const b = polygon[(c.e + 1) % 6]!;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    for (let p = 0; p < n; p++) {
+      if (!passable[p]) continue;
+      const px = (p % cw) + 0.5;
+      const py = Math.floor(p / cw) + 0.5;
+      const t = ((px - a.x) * dx + (py - a.y) * dy) / (dx * dx + dy * dy);
+      if (t < c.t0 || t > c.t1) continue;
+      // Within one texel of the edge line (the segment's own line, not past its ends).
+      const dist = Math.abs((px - a.x) * dy - (py - a.y) * dx) / Math.hypot(dx, dy);
+      if (dist > 0.75 || bank[p] === 0) continue;
+      const f = (t - c.t0) / Math.max(1e-6, c.t1 - c.t0);
+      fixed[p] = 1;
+      psi[p] = vb + (va - vb) * f;
+    }
+  });
+  void seedEdge;
+  for (let p = 0; p < n; p++) {
+    if (fixed[p]) {
+      conducting[p] = 1;
+    } else if (!Number.isNaN(label[p]!)) {
+      fixed[p] = 1;
+      psi[p] = label[p]!;
+      conducting[p] = 1;
+    } else if (isWaterP(p) || (passable[p] && bank[p]! > 0)) {
+      // Water, and the dry strip where the art's water stops short of an edge (it is no bank).
+      conducting[p] = 1;
+    }
+  }
+  solveLaplace(input, passable, conducting, fixed, psi, false);
+  // An island's shore is a streamline: psi is constant on it, at a value the flow chooses. Solved once with the island left free
+  // (zero flux through it), its value is taken where the stream meets it, at its upstream tip (the island texel with the highest
+  // potential), then the island is fixed there and the whole field solved again.
+  const unlabelled = (p: number) => isBank(p) && Number.isNaN(label[p]!);
+  const seen = new Uint8Array(n);
+  let islands = 0;
+  for (let start = 0; start < n; start++) {
+    if (seen[start] || !unlabelled(start)) continue;
+    const comp: number[] = [start];
+    seen[start] = 1;
+    for (let head = 0; head < comp.length; head++) {
+      const p = comp[head]!;
+      const x = p % cw;
+      const y = (p - x) / cw;
+      for (const [dx, dy] of NEIGHBOURS) {
+        const xx = x + dx;
+        const yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= cw || yy >= ch) continue;
+        const q = yy * cw + xx;
+        if (!seen[q] && unlabelled(q)) {
+          seen[q] = 1;
+          comp.push(q);
+        }
+      }
+    }
+    let tip = comp[0]!;
+    for (const p of comp) if (phi[p]! > phi[tip]!) tip = p;
+    const tx = tip % cw;
+    const ty = (tip - tx) / cw;
+    let sum = 0;
+    let count = 0;
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const xx = tx + dx;
+        const yy = ty + dy;
+        if (xx < 0 || yy < 0 || xx >= cw || yy >= ch) continue;
+        const q = yy * cw + xx;
+        if (isWaterP(q)) {
+          sum += psi[q]!;
+          count++;
+        }
+      }
+    }
+    if (count === 0) continue;
+    const value = sum / count;
+    for (const p of comp) {
+      fixed[p] = 1;
+      conducting[p] = 1;
+      psi[p] = value;
+    }
+    islands++;
+  }
+  if (islands > 0) solveLaplace(input, passable, conducting, fixed, psi, false);
+  return psi;
+}
+
+/**
+ * The stretch of a cell's stream function each of its in edges takes, for the cells feeding it: (right bank value, left bank
+ * value) at the in crossing, in the cell's own psi. A single in edge takes [0, 1]; the arms of a confluence share it, in the order
+ * they come walking the face boundary from the out edge (`j / k` .. `(j + 1) / k`, flipped as `streamFunction` flips them).
+ */
+/**
+ * The psi texture's red and green bytes for a cell's range (`psiRange`: the cell's psi 0..1 maps to `lo + (hi - lo) * psi` in the
+ * psi of the whole river): R = offset * 128, G = round(log2(1 / |scale|) * 16), plus 128 when the scale is negative. Offsets and
+ * scales are fractions j / 2^n (arms of a confluence share its range in halves), exact in this encoding down to 7 levels.
+ */
+export function encodePsiRange([lo, hi]: readonly [number, number]): [number, number] {
+  const scale = hi - lo;
+  const magnitude = Math.min(127, Math.max(0, Math.round(Math.log2(1 / Math.max(Math.abs(scale), 1e-6)) * 16)));
+  return [Math.min(255, Math.max(0, Math.round(lo * 128))), magnitude + (scale < 0 ? 128 : 0)];
+}
+
+/** The inverse of `encodePsiRange`: [offset, scale]. */
+export function decodePsiRange(r: number, g: number): [number, number] {
+  const negative = g >= 128;
+  return [r / 128, (negative ? -1 : 1) * 2 ** (-(g - (negative ? 128 : 0)) / 16)];
+}
+
+export function confluenceArmRanges(polygon: readonly Point[], outEdge: number, inEdges: readonly number[]): Map<number, [number, number]> {
+  const out = new Map<number, [number, number]>();
+  const arms = inEdges.filter((e) => e !== outEdge).sort((a, b) => (((a - outEdge) % 6) + 6) % 6 - (((b - outEdge) % 6) + 6) % 6);
+  const k = arms.length;
+  if (k === 0) return out;
+  const g = GROUND_SQUASH;
+  const flow = crossingDirection(polygon, outEdge);
+  const tangent = { x: polygon[(outEdge + 1) % 6]!.x - polygon[outEdge]!.x, y: (polygon[(outEdge + 1) % 6]!.y - polygon[outEdge]!.y) / g };
+  const firstIsRight = tangent.x * (-flow.y / g) + tangent.y * flow.x > 0;
+  const value = (j: number) => (firstIsRight ? j / k : 1 - j / k);
+  arms.forEach((e, i) => {
+    const before = value(i);
+    const after = value(i + 1);
+    // Looking downstream at an in crossing is looking inward: which end of the edge, walking up the perimeter, is the right one?
+    const inFlow = crossingDirection(polygon, e);
+    const t = { x: polygon[(e + 1) % 6]!.x - polygon[e]!.x, y: (polygon[(e + 1) % 6]!.y - polygon[e]!.y) / g };
+    const upIsRight = t.x * (inFlow.y / g) + t.y * -inFlow.x > 0;
+    out.set(e, upIsRight ? [after, before] : [before, after]);
+  });
+  return out;
+}
+
+/** The stream function of a cell (`streamFunction`), for tests and tooling: psi per texel, in 0..1. */
+export function riverStreamFunction(input: RiverFlowInput): Float64Array {
+  const { passable, isWater, seedEdge, bank, phi } = solveRiver(input);
+  return streamFunction(input, passable, (q) => isWater(q % input.cw, Math.floor(q / input.cw)), seedEdge, bank, phi);
+}
+
+export function computeRiverRipple(input: RiverFlowInput): { data: Uint8Array; psi: Uint8Array; periods: number; inside: Uint8Array } {
+  const { mask, cw, ch, outEdge } = input;
+  const { inside, passable, cover, isWater, phi, seedEdge, intensityAt, rimShowsWater, bank } = solveRiver(input);
+  const hasIn = input.inEdges.some((e) => e !== outEdge);
+
+  const dist = geodesic(input, passable, outEdge);
+  let length = 0;
+  let count = 0;
+  let maxDist = 0;
+  let maxPhi = 0;
+  for (let p = 0; p < cw * ch; p++) {
+    if (!passable[p] || mask[p]! < WATER_THRESHOLD) continue;
+    if (Number.isFinite(dist[p]!)) maxDist = Math.max(maxDist, dist[p]!);
+    maxPhi = Math.max(maxPhi, phi[p]!);
+    if (hasIn && seedEdge[p]! >= 0 && seedEdge[p] !== outEdge && Number.isFinite(dist[p]!)) {
+      length += dist[p]!;
+      count++;
+    }
+  }
+  const channelLength = hasIn && count > 0 ? length / count : maxDist;
+  const periods = Math.max(1, Math.round(channelLength / RIPPLE_WAVELENGTH_TEXELS));
+  const rate = channelLength > 0 ? (2 * Math.PI * periods) / channelLength : 0;
+  const normals = input.polygon.map((_, e) => crossingDirection(input.polygon, e));
+
+  // How far past its edge line (into the face) each edge's seed band reaches: the potential starts there, not on the line.
+  // (measured on the ground: the crossing direction and the offsets are unsquashed first.)
+  const depthOf = (edge: number, x: number, y: number) => {
+    const a = input.polygon[edge]!;
+    const n = normals[edge]!;
+    const gy = 1 / GROUND_SQUASH;
+    const len = Math.hypot(n.x, n.y * gy);
+    return -((x + 0.5 - a.x) * n.x + ((y + 0.5 - a.y) * gy) * (n.y * gy)) / len;
+  };
+  const bandDepth = new Float64Array(input.polygon.length);
+  for (let p = 0; p < cw * ch; p++) {
+    const e = seedEdge[p]!;
+    if (e >= 0) bandDepth[e] = Math.max(bandDepth[e]!, depthOf(e, p % cw, Math.floor(p / cw)));
+  }
+  // Where along the stream a texel is: s = dOut / (dIn + dOut), from the geodesic distances to the out edge and to the
+  // nearest in edge. It is 0 on the out edge's band and 1 on every in edge's band (so both hexes of a seam agree), and it
+  // advances evenly with distance along the stream, so ripples keep about the same spacing on both sides of a seam. (The
+  // potential, 2 pi n phi, ran faster where the channel narrowed and its spacing jumped at seams; a remap of it by mean
+  // distance broke on a confluence, whose two arms reach the same potential at different distances.) Round an island the
+  // fronts fold into a V behind it, a wake. A spring has no in edge: s = dOut over its longest distance.
+  const inFields = hasIn ? input.inEdges.filter((e) => e !== outEdge).map((e) => ({ e, d: geodesic(input, passable, e) })) : [];
+  const inDist = hasIn ? minDistance(inFields.map((f) => f.d)) : null;
+  // The in edge a texel is nearest to (along the water): its band depth is what the phase is shifted by near that edge.
+  const nearestIn = (p: number) => inFields.reduce((best, f) => (f.d[p]! < best.d[p]! ? f : best), inFields[0]!).e;
+  // NaN for water the distance fields do not reach (a pocket cut off from the channel, e.g. in a notch of the bank at a
+  // seam): it gets no flow rather than one made-up phase, which showed as an off-colour blob.
+  const along = (p: number) => {
+    const dOut = dist[p]!;
+    if (!Number.isFinite(dOut)) return NaN;
+    if (!inDist) return maxDist > 0 ? Math.min(1, dOut / maxDist) : 0;
+    const dIn = inDist[p]!;
+    if (!Number.isFinite(dIn)) return NaN;
+    return dOut + dIn > 0 ? dOut / (dOut + dIn) : 0;
+  };
+  const inEdges = input.inEdges.filter((e) => e !== outEdge);
+  const outDepth = bandDepth[outEdge]!;
+
+  const out = new Uint8Array(cw * ch * 4);
+  const psiOut = new Uint8Array(cw * ch * 4);
+  const [psiR, psiG] = encodePsiRange(input.psiRange ?? [0, 1]);
+  const psi = streamFunction(input, passable, (q) => isWater(q % cw, Math.floor(q / cw)), seedEdge, bank, phi);
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      const p = y * cw + x;
+      if (!cover[p] || !isWater(x, y)) continue;
+      if (!inside[p] && !rimShowsWater(x, y)) continue;
+      // The seed bands and the rim past an edge have a constant potential, which would draw a crest as a wide flat strip along
+      // every seam. There the phase runs on past the edge line at the cell's mean rate instead (`2 pi n / L` per texel), so it
+      // is still 0 mod 2 pi on the edge line itself and the two hexes of a seam continue each other's phase through it. The
+      // potential proper starts at the inner side of the bands, so its phase is shifted there by what the bands have used up
+      // (linearly in the potential), which keeps the phase continuous where band and interior meet.
+      const edge = seedEdge[p]! >= 0 ? seedEdge[p]! : inside[p] ? -1 : nearestFlowEdge(input, x + 0.5, y + 0.5);
+      let theta: number;
+          if (edge >= 0) {
+        const sign = edge === outEdge ? 1 : -1;
+        theta = sign * rate * depthOf(edge, x, y);
+      } else {
+        const phase = along(p);
+        if (Number.isNaN(phase)) continue;
+        const inDepth = inEdges.length > 0 ? bandDepth[nearestIn(p)]! : 0;
+        theta = 2 * Math.PI * periods * phase + (1 - phase) * rate * outDepth - phase * rate * inDepth;
+      }
+      const o = p * 4;
+      out[o] = Math.round((Math.cos(theta) * 0.5 + 0.5) * 255);
+      out[o + 1] = Math.round((Math.sin(theta) * 0.5 + 0.5) * 255);
+      out[o + 2] = Math.round(intensityAt(p, RIVER_CENTRE_TEXELS) * 255);
+      out[o + 3] = 255;
+      psiOut[o] = psiR;
+      psiOut[o + 1] = psiG;
+      psiOut[o + 2] = Math.round(Math.min(1, Math.max(0, psi[p]!)) * 255);
+      psiOut[o + 3] = 255;
+    }
+  }
+  return { data: out, psi: psiOut, periods, inside };
+}
+
+/** A water mask cell placed in the world: texel (0, 0) starts at (x, y), and a texel is `texelWorld` world units wide. */
+export interface PlacedMask {
+  mask: Uint8Array;
+  cw: number;
+  ch: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * The bank context of a cell (`RiverFlowInput.context`): its own water mask on a grid `margin` texels larger on every side,
+ * where within `margin` texels of an in or out edge that has a neighbour the neighbouring hex's water at the same world
+ * position is added (a union), on both sides of the edge line. The two hexes of a seam therefore see the same water around the
+ * seam and measure the same distance to the bank.
+ */
+export function buildBankContext(
+  own: PlacedMask,
+  polygon: readonly Point[],
+  neighbours: readonly { edge: number; cell: PlacedMask }[],
+  texelWorld: number,
+  margin: number = RIVER_CENTRE_TEXELS,
+): BankContext {
+  const w = own.cw + 2 * margin;
+  const h = own.ch + 2 * margin;
+  const mask = new Uint8Array(w * h);
+  const neighbour = new Uint8Array(w * h);
+  for (let y = 0; y < own.ch; y++) mask.set(own.mask.subarray(y * own.cw, (y + 1) * own.cw), (y + margin) * w + margin);
+  for (const { edge, cell } of neighbours) {
+    const a = polygon[edge]!;
+    const b = polygon[(edge + 1) % polygon.length]!;
+    for (let j = 0; j < h; j++) {
+      for (let i = 0; i < w; i++) {
+        const cx = i - margin;
+        const cy = j - margin;
+        if (distToSegment(cx + 0.5, cy + 0.5, a, b) > margin) continue;
+        const nx = Math.floor((own.x + (cx + 0.5) * texelWorld - cell.x) / texelWorld);
+        const ny = Math.floor((own.y + (cy + 0.5) * texelWorld - cell.y) / texelWorld);
+        if (nx < 0 || ny < 0 || nx >= cell.cw || ny >= cell.ch) continue;
+        if (cell.mask[ny * cell.cw + nx]! >= WATER_THRESHOLD) {
+          mask[j * w + i] = 255;
+          neighbour[j * w + i] = 255;
+        }
+      }
+    }
+  }
+  return { mask, neighbour, w, h, margin, edges: neighbours.map((n) => n.edge) };
+}

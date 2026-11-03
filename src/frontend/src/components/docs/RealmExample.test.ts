@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // The realm example: the renderer is a WebGL canvas jsdom cannot draw, so the composable is stubbed with a fake renderer that counts
-// redraws. What matters here is that the step picker re-claims the ground on the model the renderer was handed, redraws, and shows
+// redraws. What matters here is that the step slider re-claims the ground on the model the renderer was handed, redraws, and shows
 // that step's caption.
 import { describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
@@ -28,21 +28,21 @@ describe('RealmExample', () => {
     const i18n = createI18n({ legacy: false, locale, messages: { [locale]: { docs: locale === 'en' ? enDocs : deDocs } } });
     const wrapper = mount(RealmExample, { global: { plugins: [i18n] } });
     const claimed = () => realmExampleClaimed(model!).length;
-    const buttons = wrapper.findAll('button.variant-button');
-    expect(buttons).toHaveLength(3);
+    const slider = wrapper.get('input[type="range"]');
+    expect(slider.attributes('max')).toBe('2');
 
     const captions = [0, 1, 2].map(() => '');
     const first = claimed();
     captions[0] = wrapper.get('[data-testid="realm-example-caption"]').text();
     expect(first).toBe(37);
 
-    await buttons[1]!.trigger('click');
+    await slider.setValue(1);
     captions[1] = wrapper.get('[data-testid="realm-example-caption"]').text();
     const second = claimed();
     expect(second).toBeGreaterThan(first);
     expect(forceRebuild).toHaveBeenCalledTimes(1);
 
-    await buttons[2]!.trigger('click');
+    await slider.setValue(2);
     captions[2] = wrapper.get('[data-testid="realm-example-caption"]').text();
     expect(claimed()).toBeGreaterThan(second);
     expect(forceRebuild).toHaveBeenCalledTimes(2);

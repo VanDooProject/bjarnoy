@@ -227,6 +227,7 @@
       "anchor": "Anchor",
       "production": "Production",
       "military": "Military",
+      "defense": "Defence",
       "logistics": "Logistics",
       "religion": "Shrines",
       "water": "Water"
@@ -589,7 +590,8 @@
       "mountain": "Mountain",
       "wasteland": "Wasteland",
       "bog": "Bog",
-      "riverStraight": "River"
+      "riverStraight": "River",
+      "sea": "Open sea"
     },
     "list": {
       "wolfden": {
@@ -644,6 +646,10 @@
       "otterslide": {
         "name": "Otter slide",
         "guards": "One otter swimming, one on the drift log with a fish, one running the bank and one waiting at the holt."
+      },
+      "whaleroad": {
+        "name": "Whale road",
+        "guards": "A humpback cow and her calf surfacing on open sea, with gulls overhead. It lies far off the coast, is met by fleets only, and pays food."
       }
     },
     "beasts": {
@@ -1083,7 +1089,8 @@
     "intro": "The ground you hold is your realm, drawn on the map with a gold border. The longhouse claims the first rings round itself; beyond them your realm only grows through towers at its border.",
     "claim": {
       "heading": "Your longhouse's claim",
-      "body": "The {longhouse} claims every hex up to {level1} hexes away from it at level 1, and up to {level2} hexes from level 2 on. That is as far as it reaches: higher longhouse levels do not move the border any further."
+      "body": "The {longhouse} claims every hex up to {level1} hexes away from it at level 1, and up to {level2} hexes from level 2 on. That is as far as it reaches: higher longhouse levels do not move the border any further.",
+      "destroyed": "Once a settlement's longhouse is destroyed, that settlement claims nothing at all. Its towers keep their claim only if they stand within the claim of another longhouse of yours. Its centre no longer sees anything either: the ground around it is no longer in view. Towers still within the claim of another longhouse of yours keep their view."
     },
     "towers": {
       "heading": "Towers push the border out",
@@ -1109,8 +1116,7 @@
       "heading": "How many towers",
       "body": "Your longhouse level sets how many towers you may have: one from level {level}, then one more for every second level after level 5.",
       "levels": "Longhouse level",
-      "towers": "Towers",
-      "range": "{from}–{to}"
+      "towers": "Towers"
     },
     "where": {
       "heading": "Where a tower stands",
@@ -1126,6 +1132,10 @@
     "giants": {
       "heading": "Giants",
       "body": "A giant fills seven hexes. You only take it into your realm when your claim covers all seven. A claim that reaches just some of them takes none."
+    },
+    "linked": {
+      "heading": "Linked realms",
+      "body": "When the realms of two of your settlements on an island touch, they link into one realm. A linked realm has one name, that of your oldest settlement in it, and one stock: everything you produce goes into it, and everything you build, train or trade there is paid from it. Its storage is that of all its settlements added up, and so are its construction slots, which all its builds share. You run it from your oldest settlement and can build on any of its hexes from there. Your other settlements in it no longer show up in lists, and rivals see the oldest one's name on every longhouse. A raid on any of its longhouses can loot the whole stock. If the link breaks, each settlement keeps its share of the stock, in proportion to its storage."
     }
   },
   "landMovement": {

@@ -96,11 +96,15 @@ public static class WorldEndpoints
     /// the full config for a world it has actually picked.
     /// </summary>
     private static async Task<Ok<IReadOnlyList<WorldSummaryResponse>>> ListWorlds(
+        ClaimsPrincipal user,
         WorldService worlds,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
-        var entities = await worlds.GetWorldsAsync(cancellationToken);
+        var isAdmin = user.IsInRole(nameof(UserRole.Admin));
+        var entities = (await worlds.GetWorldsAsync(cancellationToken))
+            .Where(w => isAdmin || !w.Hidden)
+            .ToList();
         var playerCounts = await worlds.GetPlayerCountsAsync(cancellationToken);
         var now = timeProvider.GetUtcNow();
 
@@ -119,11 +123,15 @@ public static class WorldEndpoints
     /// see <see cref="JoinableWorldResponse"/>.
     /// </summary>
     private static async Task<Ok<IReadOnlyList<JoinableWorldResponse>>> ListJoinableWorlds(
+        ClaimsPrincipal user,
         WorldService worlds,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
-        var entities = await worlds.GetWorldsAsync(cancellationToken);
+        var isAdmin = user.IsInRole(nameof(UserRole.Admin));
+        var entities = (await worlds.GetWorldsAsync(cancellationToken))
+            .Where(w => isAdmin || (!w.Hidden && !w.JoinsClosed))
+            .ToList();
         var playerCounts = await worlds.GetPlayerCountsAsync(cancellationToken);
         var now = timeProvider.GetUtcNow();
 
@@ -501,6 +509,7 @@ public static class WorldEndpoints
         PlotReservationService reservations,
         SettlementService settlements,
         RealmDirectory realms,
+        GameDbContext db,
         CancellationToken cancellationToken)
     {
         var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
@@ -566,11 +575,13 @@ public static class WorldEndpoints
         var callerUserId = Guid.TryParse(callerIdClaim, out var parsedCallerId) ? parsedCallerId : (Guid?)null;
 
         var islandSettlementEntities = await settlements.GetForIslandAsync(suggestion.IslandId, cancellationToken);
+        var labels = await LinkedRealmNames.ForAsync(db, worldId, islandSettlementEntities, cancellationToken);
         IReadOnlyList<SettlementSummary> islandSettlements =
         [
             .. islandSettlementEntities.Select(s => SettlementSummary.From(
                 s,
-                s.OwnerId == realm.OwnerId || (callerUserId is not null && s.UserId == callerUserId))),
+                s.OwnerId == realm.OwnerId || (callerUserId is not null && s.UserId == callerUserId),
+                labels[s.Id])),
         ];
 
         return TypedResults.Ok(new PlotSuggestionResponse(

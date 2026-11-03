@@ -70,6 +70,23 @@ describe('bogEdgesOf', () => {
     expect(eastEdge(riverEast({ inDirections: ['NE'], outDirection: 'SW' }))).toEqual({ edge: 3, neighbour: 'grass' });
   });
 
+  it('borders a river hex on forest terrain as grass, since the river art draws grass banks', () => {
+    // Regression: a river through forest reached the forest ground into the bog instead of pushing moss out.
+    const forestEast = world(tile(0, 0, 'bog', 'bog'), ['forest', 'sea', 'sea', 'sea', 'sea', 'sea']);
+    const edges = bogEdgesOf(forestEast, riverEast({ inDirections: ['E'], outDirection: 'W' }), origin);
+    expect(edges).toEqual([{ edge: 3, neighbour: 'grass', gap: RIVER_EDGE_GAP }]);
+  });
+
+  it('marks no switch corner between a plain grass hex and a river hex on forest terrain', () => {
+    // NE is plain grass, E is a river on forest: both draw grass, so the shared corner keeps its caps.
+    const mixed = world(tile(0, 0, 'bog', 'bog'), ['forest', 'grass', 'sea', 'sea', 'sea', 'sea']);
+    const edges = bogEdgesOf(mixed, riverEast({ inDirections: ['NE'], outDirection: 'SW' }), origin);
+    expect(edges).toEqual([
+      { edge: 3, neighbour: 'grass' },
+      { edge: 2, neighbour: 'grass' },
+    ]);
+  });
+
   it('takes the stream width on the stream arm of a mixed river tile', () => {
     expect(eastEdge(riverEast({ inDirections: ['W'], outDirection: 'E', width: 'widen' }))?.gap).toEqual(STREAM_EDGE_GAP);
     expect(eastEdge(riverEast({ inDirections: ['E'], outDirection: 'W', width: 'widen' }))?.gap).toEqual(RIVER_EDGE_GAP);

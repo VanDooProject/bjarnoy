@@ -68,7 +68,7 @@ test.describe('wildlife camps in the settlement view', () => {
 
     await settlement.clickHex(target);
     await settlement.ring.openBuildCategories();
-    await settlement.ring.openCategory('Military');
+    await settlement.ring.openCategory('Defence');
     const watchtower = settlement.ring.child('Watchtower').first();
     await settlement.ring.hover(watchtower);
 
@@ -87,7 +87,7 @@ test.describe('wildlife camps in the settlement view', () => {
 
     await settlement.clickHex(target);
     await settlement.ring.openBuildCategories();
-    await settlement.ring.openCategory('Military');
+    await settlement.ring.openCategory('Defence');
     const watchtower = settlement.ring.child('Watchtower').first();
     await settlement.ring.hover(watchtower);
 

@@ -13,7 +13,8 @@ public static class DatabaseServiceCollectionExtensions
 
     /// <summary>
     /// Registers <see cref="GameDbContext"/> against the configured provider,
-    /// along with the migrator.
+    /// along with the migrator and the
+    /// <see cref="ConcurrentWriteExecutor"/> that endpoints wrap writes in.
     /// </summary>
     /// <remarks>
     /// EF Core migrations are provider-specific SQL, so each provider gets its
@@ -56,6 +57,7 @@ public static class DatabaseServiceCollectionExtensions
         });
 
         services.AddScoped<DatabaseMigrator>();
+        services.AddScoped<ConcurrentWriteExecutor>();
 
         return services;
     }

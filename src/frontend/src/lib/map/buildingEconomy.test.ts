@@ -10,6 +10,8 @@ import {
   BOOST_TERRAIN,
   buildingStatsAt,
   buildingStatsFor,
+  scaleOutput,
+  upgradeRateGain,
   buildingUpgradeCost,
   isNearAnyOf,
   matchingNeighbourCount,
@@ -352,5 +354,25 @@ describe('bog buildings against the catalogue snapshot', () => {
   it('puts the Clay Brickworks on bog in the snapshot too', () => {
     const clay = (catalogueSnapshot.data as BuildingDefinitionResponse[]).find((d) => d.type === 'claybrickworks' && d.level === 1)!;
     expect(clay.allowedTerrain).toEqual(['bog']);
+  });
+});
+
+describe('speed-corrected upgrade output', () => {
+  const rate = (amount: number) => ({ kind: 'resourceRate', resource: 'stone', amount }) as const;
+
+  it('scales a resource rate by the world speed factor and leaves other outputs alone', () => {
+    expect(scaleOutput(rate(90), 2)).toEqual(rate(180));
+    expect(scaleOutput({ kind: 'storageCapacity', amount: 600 }, 2)).toEqual({ kind: 'storageCapacity', amount: 600 });
+  });
+
+  it('splits an upgrade into the gain and the new total, both at world speed', () => {
+    expect(upgradeRateGain(rate(75), rate(90), 1)).toEqual({ gain: rate(15), total: 90 });
+    expect(upgradeRateGain(rate(75), rate(90), 4)).toEqual({ gain: rate(60), total: 360 });
+  });
+
+  it('has no gain for outputs that are not a resource rate', () => {
+    const storage = (amount: number) => ({ kind: 'storageCapacity', amount }) as const;
+    expect(upgradeRateGain(storage(600), storage(700), 1)).toBeNull();
+    expect(upgradeRateGain(undefined, rate(90), 1)).toBeNull();
   });
 });

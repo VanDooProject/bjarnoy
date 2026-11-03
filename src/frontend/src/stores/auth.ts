@@ -91,14 +91,27 @@ export const useAuthStore = defineStore('auth', {
       const response = await post<AuthResponse>('/auth/login', { userName, password });
       this.applyAuthResponse(response);
     },
-    async logout() {
+    /**
+     * Revokes the session server-side and forgets the stored refresh token,
+     * but keeps the in-memory user and access token: for a caller that
+     * replaces the whole page next (`useLogout`'s full load). Until that load
+     * lands, the page's polls still read the player's realm, and a claimed
+     * realm only answers to this JWT — dropping it first turns each of them
+     * into a 403. The access token itself goes with the page.
+     */
+    async revokeSession() {
       const refreshToken = storedRefreshToken();
-      this.clearSession();
-      this.accountLocked = false;
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
       if (refreshToken) {
-        // Best-effort: the session is already cleared client-side either way.
+        // Best-effort: the stored session is gone client-side either way.
         await post('/auth/logout', { refreshToken }).catch(() => {});
       }
+    },
+    /** Logs out and stays on the page (an in-app navigation follows). */
+    async logout() {
+      await this.revokeSession();
+      this.clearSession();
+      this.accountLocked = false;
     },
     /**
      * Trades the stored refresh token for a fresh access token (and a new,

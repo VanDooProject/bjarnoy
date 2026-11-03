@@ -1,7 +1,6 @@
 {
   "nav": {
     "settlement": "Siedlung",
-    "worldMap": "Weltkarte",
     "leaderboards": "Ranglisten",
     "messages": "Nachrichten",
     "reports": "Meldungen",
@@ -91,7 +90,7 @@
     "towerLevel0": "Eingenommen"
   },
   "ringMenu": {
-    "shrineLimitLock": "Diese Siedlung hat bereits einen Schrein",
+    "shrineLimitLock": "Dein Gebiet hat bereits einen Schrein",
     "storageHouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
     "palisadeLock": {
       "branch": "Eine Mauer verzweigt sich nie: Dieses Feld hätte drei Nachbarn der Mauer",
@@ -140,6 +139,7 @@
       "campOccupied": "Von wilden Tieren belegt",
       "maxLevel": "Höchste Stufe",
       "noLandUnitsAtHome": "Keine Landeinheiten zu Hause",
+      "noShipsAtHome": "Keine Schiffe zu Hause",
       "siege": "Belagern",
       "noRamAtHome": "Braucht einen Rammbock zu Hause"
     },
@@ -153,9 +153,7 @@
       "level": "Stufe {level}",
       "upgradeTitle": "Ausbau auf Stufe {level}",
       "upgradeSub": "{building} · Stufe {from} → {to}",
-      "slots": "Bauplätze",
-      "slotsValue": "{needed} · {free} von {total} frei",
-      "slotsAll": "Alle ({total}) · {free} von {total} frei",
+      "givesTotal": "gesamt {amount}",
       "needResources": "Es fehlen {resources}",
       "needSlots": "Braucht {needed} Bauplatz · {free} von {total} frei | Braucht {needed} Bauplätze · {free} von {total} frei",
       "needSlotsNext": "Braucht {needed} Bauplatz · {free} von {total} frei · nächster frei in {time} | Braucht {needed} Bauplätze · {free} von {total} frei · nächster frei in {time}",

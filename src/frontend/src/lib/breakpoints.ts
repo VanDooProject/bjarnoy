@@ -19,6 +19,11 @@ export const HUD_COMPACT_QUERY = `(max-width: ${HUD_COMPACT_MAX_WIDTH}px), (max-
 // not docked) the HUD becomes a floating column on the left instead — see
 // TopBar.vue's `isRail`. Plain CSS can't read this constant either; the
 // `@media` rules that need it repeat the string by hand.
+// Wide enough for Docs to sit inline in the desktop HUD bar next to
+// Settlement; below it Docs moves back into the avatar menu.
+export const HUD_NAV_ROOMY_MIN_WIDTH = 1280;
+export const HUD_NAV_ROOMY_QUERY = `(min-width: ${HUD_NAV_ROOMY_MIN_WIDTH}px)`;
+
 export const HUD_RAIL_QUERY = '(max-height: 500px) and (orientation: landscape)';
 // Within the rail: tall enough for two lines per resource pill (stock, then
 // rate or cap) rather than one.

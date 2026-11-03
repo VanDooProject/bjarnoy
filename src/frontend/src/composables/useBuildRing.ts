@@ -14,8 +14,10 @@ import { formatBuildingModifier, formatBuildingOutput } from '../lib/map/buildin
 import {
   buildingStatsAt,
   buildingUpgradeCost,
+  scaleOutput,
   type BuildingModifier,
   type BuildingOutput,
+  maxTowers,
   SHRINE_BUILDING_TYPES,
 } from '../lib/map/buildingEconomy';
 import {
@@ -117,6 +119,11 @@ const DEFENSE_CATEGORY: BuildCategory = {
   id: 'defense',
   buildings: [{ type: 'palisade' }, { type: 'palisadegate' }, { type: 'bridge' }],
 };
+// The Tower is a defence building too, and stands on grass, sand and forest; the bog ring keeps the wall-only category.
+const DEFENSE_TOWER_CATEGORY: BuildCategory = {
+  id: 'defense',
+  buildings: [{ type: 'tower' }, ...DEFENSE_CATEGORY.buildings],
+};
 const DEFENSE_SEA_CATEGORY: BuildCategory = { id: 'defense', buildings: [{ type: 'palisade' }] };
 // Bog ground offers what stands on its own bog kind (BuildingDefinition.RequiresBogKind / LakeShoreKinds, mirrored by
 // ringCatalogue.ts's buildingAllowedOnHex): plain moss takes the Clay Brickworks, the bog-ore works and the Tower, a creek the
@@ -153,7 +160,6 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
     {
       id: 'military',
       buildings: [
-        { type: 'tower' },
         { type: 'archeryrange' },
         { type: 'siegeworkshop' },
         { type: 'barracks' },
@@ -170,15 +176,11 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
         { type: 'druidhut' },
       ],
     },
-    DEFENSE_CATEGORY,
+    DEFENSE_TOWER_CATEGORY,
     SHRINE_CATEGORY,
   ],
-  sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }, DEFENSE_CATEGORY],
-  forest: [
-    { id: 'resource', buildings: [{ type: 'lumberjack' }] },
-    { id: 'military', buildings: [{ type: 'tower' }] },
-    DEFENSE_CATEGORY,
-  ],
+  sand: [{ id: 'military', buildings: [{ type: 'smithy' }] }, DEFENSE_TOWER_CATEGORY],
+  forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }, DEFENSE_TOWER_CATEGORY],
   // No new quarries can be built for now (BuildingCatalogue.NewPlacementDisabled); mountains offer nothing to build.
   mountain: [],
 };
@@ -251,42 +253,55 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
     return world.selectedSettlementId ? world.model.soilForSettlement(world.selectedSettlementId) : undefined;
   }
 
-  // Standing towers plus still-queued new-tower orders (live mode only — demo
-  // mode places instantly), counted by distinct hex like Settlement.PlanBuild
-  // does, so a queued tower already uses up its slot. Only connected towers
-  // count (WorldModel.connectedTowerCount): a tower cut off from every
-  // longhouse claims nothing and does not use up the limit.
+  const STORAGE_HOUSE_TYPES: ReadonlySet<string> = new Set(['storagehouse']);
+
+  // Towers counting against the limit. Live mode reads the server's numbers for the whole (linked) realm
+  // (`construction.towersHeld` / `towerLimit`: connected standing plus queued towers, the members' limits added up), the same
+  // ones Settlement.PlanBuild compares; demo mode counts its local model (WorldModel.connectedTowerCount, instant placement,
+  // no queue) against the Longhouse level's limit.
   function towersHeld(): number {
+    if (!DEMO_MODE) return world.hud.construction.towersHeld;
     const id = world.selectedSettlementId;
-    if (!id) return 0;
-    const queued = world.hud.queue.filter((order) => order.building === 'tower').map((order) => ({ q: order.q, r: order.r }));
-    return world.model.connectedTowerCount(id, queued);
+    return id ? world.model.connectedTowerCount(id, []) : 0;
   }
 
-  // Shrines held by the selected settlement (standing plus queued new-shrine
-  // orders, by distinct hex): a settlement raises one shrine in total.
+  function towerLimit(): number {
+    return DEMO_MODE ? maxTowers(world.hud.level) : world.hud.construction.towerLimit;
+  }
+
+  // Standing and queued buildings of the given types, by distinct hex, with the best standing level per hex. Live mode reads the
+  // polled lists, which for a linked realm are the whole realm's (the oldest member's read: the union of the members'
+  // buildings, the merged queue) like Settlement.PlanBuild counts them; demo mode reads the local model.
+  function heldHexes(types: ReadonlySet<string>, standing: { q: number; r: number; level: number }[]): Map<string, number> {
+    const held = new Map<string, number>();
+    for (const b of standing) held.set(`${b.q},${b.r}`, Math.max(held.get(`${b.q},${b.r}`) ?? 0, b.level));
+    for (const order of world.hud.queue) {
+      if (types.has(order.building)) held.set(`${order.q},${order.r}`, held.get(`${order.q},${order.r}`) ?? 0);
+    }
+    return held;
+  }
+
+  // Shrines held (standing plus queued new-shrine orders, by distinct hex): a settlement, or a whole linked realm, raises one
+  // shrine in total.
   function shrinesHeld(): number {
     const id = world.selectedSettlementId;
     if (!id) return 0;
-    const hexes = new Set(world.model.shrineCoords(id).map((c) => `${c.q},${c.r}`));
-    for (const order of world.hud.queue) {
-      if (SHRINE_BUILDING_TYPES.has(order.building)) hexes.add(`${order.q},${order.r}`);
-    }
-    return hexes.size;
+    const standing = DEMO_MODE
+      ? world.model.shrineCoords(id).map((c) => ({ ...c, level: 1 }))
+      : world.hud.buildings.filter((b) => SHRINE_BUILDING_TYPES.has(b.type));
+    return heldHexes(SHRINE_BUILDING_TYPES, standing).size;
   }
 
-  // Storage houses held (standing plus queued, distinct hexes like
-  // Settlement.PlanBuild counts them) and the best standing level, for the
-  // additional-storage-house lock.
+  // Storage houses held (standing plus queued, distinct hexes like Settlement.PlanBuild counts them; a linked realm's
+  // whole set) and the standing levels, for the additional-storage-house lock.
   function storageHouseLockFor(): string | undefined {
     const id = world.selectedSettlementId;
     if (!id) return undefined;
-    const standing = world.model.storageHouses(id);
-    const hexes = new Set(standing.map((h) => `${h.q},${h.r}`));
-    for (const order of world.hud.queue) {
-      if (order.building === 'storagehouse') hexes.add(`${order.q},${order.r}`);
-    }
-    return storageHouseLock(hexes.size, standing.map((h) => h.level));
+    const standing = DEMO_MODE
+      ? world.model.storageHouses(id)
+      : world.hud.buildings.filter((b) => b.type === 'storagehouse');
+    const held = heldHexes(STORAGE_HOUSE_TYPES, standing);
+    return storageHouseLock(held.size, standing.map((h) => h.level));
   }
 
   // Wall orders still in the queue (live mode only; demo places instantly): the server counts them as wall hexes when it judges the next one.
@@ -358,7 +373,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
     const cost = definition?.cost ?? buildingUpgradeCost(type, 1);
     const locks = [
       longhouseLock(definition?.requiredLonghouseLevel, world.hud.level),
-      type === 'tower' ? towerLimitLock(towersHeld(), world.hud.level) : undefined,
+      type === 'tower' ? towerLimitLock(towersHeld(), towerLimit()) : undefined,
       SHRINE_BUILDING_TYPES.has(type) ? shrineLimitLock(shrinesHeld()) : undefined,
       type === 'storagehouse' ? storageHouseLockFor() : undefined,
       isWallBuilding(type) ? palisadeLock(world.model.palisadePlacement(coord, type === 'palisadegate', queuedWalls())) : undefined,
@@ -372,7 +387,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
       cost,
       // Odin's Wisdom shortens every build in the settlement (`wisdomFactor`).
       time: definition ? formatBuildTime(definition.buildSeconds * wisdomFactor()) : undefined,
-      gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
+      gives: stats.output ? formatOutput(scaleOutput(stats.output, world.worldSpeedFactor)) : stats.modifier ? formatModifier(stats.modifier) : undefined,
       locks,
       warning: type === 'tower' ? towerCampWarning(coord) : undefined,
       art: buildingArt(type, 1),

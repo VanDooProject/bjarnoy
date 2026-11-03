@@ -15,7 +15,6 @@ function testRouter() {
     routes: [
       { path: '/', name: 'landing', component: stub },
       { path: '/settlement', name: 'settlement', component: stub },
-      { path: '/world', name: 'world', component: stub },
       { path: '/leaderboards', name: 'leaderboards', component: stub },
       { path: '/messages', name: 'messages', component: stub },
       { path: '/reports', name: 'reports', component: stub },
@@ -71,9 +70,33 @@ describe('useHudNavEntries', () => {
     const { api } = await setup('/settlement');
     usePlayerStore().hasFoundedSettlement = true;
     login();
-    expect(api.entries.value.map((e) => e.id)).toEqual(['settlement', 'world', 'leaderboards', 'messages', 'reports', 'guild', 'docs']);
-    expect(api.primary.value.map((e) => e.id)).toEqual(['settlement', 'world']);
+    expect(api.entries.value.map((e) => e.id)).toEqual(['settlement', 'leaderboards', 'messages', 'reports', 'guild', 'docs']);
+    expect(api.primary.value.map((e) => e.id)).toEqual(['settlement']);
     expect(api.secondary.value.map((e) => e.id)).toEqual(['leaderboards', 'messages', 'reports', 'guild', 'docs']);
+  });
+
+  it('exposes the real URL of every entry as href', async () => {
+    const { api } = await setup('/settlement');
+    usePlayerStore().hasFoundedSettlement = true;
+    login();
+    const hrefs = Object.fromEntries(api.entries.value.map((e) => [e.id, e.href]));
+    expect(hrefs).toEqual({
+      settlement: '/settlement',
+      leaderboards: '/leaderboards',
+      messages: '/messages',
+      reports: '/reports',
+      guild: '/guild',
+      docs: '/docs',
+    });
+  });
+
+  it('keeps Settlement active in world mode (/settlement#world) too', async () => {
+    const { api, router } = await setup('/settlement');
+    usePlayerStore().hasFoundedSettlement = true;
+    login();
+    expect(api.entries.value.find((e) => e.id === 'settlement')?.active).toBe(true);
+    await router.push('/settlement#world');
+    expect(api.entries.value.find((e) => e.id === 'settlement')?.active).toBe(true);
   });
 
   it('marks the entry of the current route active', async () => {

@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Bjarnoy.Migrations.PostgreSql.Migrations
 {
     [DbContext(typeof(GameDbContext))]
-    [Migration("20261102150402_AddTrainingOrderBuilding")]
+    [Migration("20261103010839_AddTrainingOrderBuilding")]
     partial class AddTrainingOrderBuilding
     {
         /// <inheritdoc />
@@ -1230,6 +1230,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("WorldId")
                         .HasColumnType("uuid");
 
@@ -1336,6 +1340,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<int>("State")
                         .HasColumnType("integer");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("WorldId")
                         .HasColumnType("uuid");
@@ -1663,6 +1671,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasColumnType("double precision");
 
                     b.Property<bool>("FrozenIslesEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("Hidden")
                         .HasColumnType("boolean");
 
                     b.Property<int>("IslandCellSize")

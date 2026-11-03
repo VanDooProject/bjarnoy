@@ -6,7 +6,7 @@
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
-import { useHexMapRenderer } from '../../composables/useHexMapRenderer';
+import { useDocsMapRenderer } from '../../composables/useDocsMapRenderer';
 import { StaticWorldModel } from '../../lib/map/StaticWorldModel';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import { coordKey } from '../../lib/hex/coords';
@@ -41,15 +41,9 @@ const hovered = ref<HoverInfo | null>(null);
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-const { renderer } = useHexMapRenderer(canvas, container, {
-  mode: 'settlement',
+const { renderer } = useDocsMapRenderer(canvas, container, {
   worldModel: world,
-  playerId: 'docs',
   previewCenter: { q: 2, r: 0 },
-  lockCamera: true,
-  // Inline in a scrolling article: a wheel/touch gesture over the map scrolls the page (see WastedIsland.vue).
-  allowPageScroll: true,
-  hideSettlementBadge: true,
   onHoverChange: (info: HoverInfo | null) => {
     hovered.value = info;
   },
@@ -91,7 +85,7 @@ const total = computed(() => (speed.value ? formatMinutes(minutesPerHex(route.to
 <template>
   <div class="land-example" data-testid="land-example">
     <div ref="container" class="map-host" role="img" :aria-label="$t('docs.landMovement.example.alt')">
-      <canvas ref="canvas" />
+      <canvas ref="canvas" class="docs-map-canvas" />
     </div>
     <p class="caption" data-testid="land-example-caption">{{ hoverText }}</p>
     <ol class="steps" data-testid="land-example-steps">
@@ -120,13 +114,6 @@ const total = computed(() => (speed.value ? formatMinutes(minutesPerHex(route.to
   border-radius: 10px;
   background: radial-gradient(ellipse at 50% 40%, #1a2a33 0%, #0b1116 75%);
   border: 1px solid var(--panel-border);
-}
-.map-host canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  touch-action: pan-y;
-  cursor: default;
 }
 .caption {
   margin: 0;

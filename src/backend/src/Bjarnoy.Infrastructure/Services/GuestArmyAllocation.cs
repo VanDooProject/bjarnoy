@@ -61,4 +61,25 @@ internal static class GuestArmyAllocation
             army.Stacks.RemoveAll(s => s.Count <= 0);
         }
     }
+
+    /// <summary>
+    /// <see cref="ApplyLosses"/>, then removes every guest army the losses left with no stacks from <paramref name="dbContext"/>
+    /// (the row deletion <see cref="ApplyLosses"/> leaves to its caller).
+    /// </summary>
+    public static void ApplyLossesAndRemoveEmpty(
+        Bjarnoy.Infrastructure.Persistence.GameDbContext dbContext,
+        IReadOnlyList<ArmyEntity> guestArmies,
+        IReadOnlyList<UnitStack> pooledLosses)
+    {
+        if (pooledLosses.Count == 0)
+        {
+            return;
+        }
+
+        ApplyLosses(guestArmies, pooledLosses);
+        foreach (var army in guestArmies.Where(a => a.Stacks.Count == 0))
+        {
+            dbContext.Armies.Remove(army);
+        }
+    }
 }

@@ -18,12 +18,12 @@ import type { PalisadeWalls } from './palisadeMovement';
 import type { StandingBridges } from './bridgeMovement';
 import { giantCoverage, type GiantPart } from './giantTiles';
 import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
-import { guardRange, isStrongCampFamily, placeCamps, StartPositionMargin, type CampStrength } from './campPlacement';
+import { campGuardRange, isStrongCampFamily, placeCamps, placeWhaleRoads, StartPositionMargin } from './campPlacement';
 import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
 import type { PalisadePiece } from './palisadeTiles';
 import { campHexBuildable } from './campRules';
 import type { CampStateResponse } from '../../api/types';
-import { claimRadiusForLevel, type ClaimDisc } from './shoreline';
+import { longhouseDiscs, type ClaimDisc } from './shoreline';
 import { claimsWithGiants } from './territory';
 import { realmFromDiscs, resolveRealm, type ConnectedRealm } from './realmChain';
 import { validateTradeRatio } from '../trade/tradeRatio';
@@ -314,6 +314,12 @@ export class WorldModel {
   /** Trade carts in transit — see `CartShipment`'s own doc comment. */
   private cartShipments = new Map<string, CartShipment>();
   private explored = new Set<string>();
+  /**
+   * The vision discs each settlement has ever explored from (centre key -> largest radius), the discs behind `explored`.
+   * Like `explored` itself nothing leaves it, so losing sight (a destroyed Longhouse, a cut-off tower) does not shrink the
+   * reach the renderer's terrain cull and fog ramp measure the remembered ground against. Written only by `exploredHexesFor`.
+   */
+  private exploredDiscs = new Map<string, Map<string, ClaimDisc>>();
   private lastTick = performance.now();
   /** Islands known from the backend (live mode only) — id, name, and centre, for world-map labels. */
   private islands: IslandLabel[] = [];
@@ -621,7 +627,7 @@ export class WorldModel {
    */
   private isNearAnyStrongCamp(coord: AxialCoord): boolean {
     for (const camp of this.campByHex.values()) {
-      if (camp.strong && hexDistance(coord, camp) <= camp.guardRange + StartPositionMargin) return true;
+      if (camp.strong && camp.guardRange > 0 && hexDistance(coord, camp) <= camp.guardRange + StartPositionMargin) return true;
     }
     return false;
   }
@@ -1314,10 +1320,10 @@ export class WorldModel {
    * `HexMapRenderer.rebuildSettlementLabels`). Fog radius
    * (`visibleHexes`/`exploredRadius`) is tower-aware via `visionDiscsFor`
    * instead. HUD territory-size readouts use `claimedHexCount` instead,
-   * which also accounts for towers.
+   * which also accounts for towers. 0 when the Longhouse is destroyed (`longhouseDiscs` has no disc then).
    */
   borderRadius(settlement: Settlement): number {
-    return claimRadiusForLevel(settlement.level);
+    return longhouseDiscs(settlement, settlement.level)[0]?.radius ?? 0;
   }
 
   /**
@@ -1381,7 +1387,9 @@ export class WorldModel {
    * `ToTowerVisionSource` pair: kept as its own formula rather than reusing
    * `claimDiscsFor`'s tower radius, even though both currently compute the
    * same number, for the same "fog vision and building-claim radius aren't
-   * guaranteed to move together" reason that backend class documents.
+   * guaranteed to move together" reason that backend class documents. A settlement whose Longhouse is destroyed has no
+   * centre disc (`longhouseDiscs`, the same decision the claim makes) and so sees nothing around its centre; its towers
+   * still see while chained to another Longhouse of the player's.
    */
   visionDiscsFor(settlement: Settlement): ClaimDisc[] {
     // Odin's Ravens widen the claim's own disc and every tower's alike
@@ -1390,7 +1398,7 @@ export class WorldModel {
     // A tower cut off from every longhouse of the player's realm sees nothing (and gets no Ravens rings either).
     const realm = this.realmOf(settlement);
     return [
-      { q: settlement.q, r: settlement.r, radius: this.borderRadius(settlement) + ravens },
+      ...longhouseDiscs(settlement, settlement.level).map((d) => ({ ...d, radius: d.radius + ravens })),
       ...(this.settlementTowers.get(settlement.id) ?? []).filter((t) => realm.isTowerConnected(settlement.id, t)).map((t) => ({
         q: t.q,
         r: t.r,
@@ -1419,10 +1427,34 @@ export class WorldModel {
    * discs, each grown by `FOG_SCOUT_RING`) — the tower-aware replacement for
    * looping `hexesInRadius` around the settlement's own centre alone.
    */
+  private rememberExploredDisc(settlementId: string, disc: ClaimDisc): void {
+    const discs = this.exploredDiscs.get(settlementId) ?? new Map<string, ClaimDisc>();
+    this.exploredDiscs.set(settlementId, discs);
+    const key = coordKey(disc);
+    const known = discs.get(key);
+    if (!known || known.radius < disc.radius) discs.set(key, { q: disc.q, r: disc.r, radius: disc.radius });
+  }
+
+  /**
+   * Every disc this settlement explores from or ever explored from: its current vision discs plus the remembered ones
+   * (`exploredDiscs`). The one source the fog reach (`exploredRadius`) and the ramp (`distanceBeyondExplored`) read, so
+   * ground explored earlier stays inside both after the settlement loses its sight.
+   */
+  private exploredReachDiscs(settlement: Settlement): ClaimDisc[] {
+    const merged = new Map<string, ClaimDisc>(this.exploredDiscs.get(settlement.id));
+    for (const disc of this.visionDiscsFor(settlement)) {
+      const key = coordKey(disc);
+      const known = merged.get(key);
+      if (!known || known.radius < disc.radius) merged.set(key, disc);
+    }
+    return [...merged.values()];
+  }
+
   private exploredHexesFor(settlement: Settlement): AxialCoord[] {
     const seen = new Set<string>();
     const hexes: AxialCoord[] = [];
     for (const disc of this.visionDiscsFor(settlement)) {
+      this.rememberExploredDisc(settlement.id, disc);
       for (const c of hexesInRadius({ q: disc.q, r: disc.r }, disc.radius + FOG_SCOUT_RING)) {
         const key = coordKey(c);
         if (seen.has(key)) continue;
@@ -1556,7 +1588,7 @@ export class WorldModel {
 
   /**
    * A single, generous radius around the settlement's own centre that
-   * safely bounds every vision disc's own explored ring (`visionDiscsFor`,
+   * safely bounds every explored ring (`exploredReachDiscs`: current vision discs and every disc ever explored from,
    * each grown by `FOG_SCOUT_RING`) — for callers that only want one circle
    * centred on the settlement itself rather than the disc union
    * `visibleHexes`/`exploredHexesFor` use for the actual fog shape: initial
@@ -1568,7 +1600,7 @@ export class WorldModel {
    */
   exploredRadius(settlement: Settlement): number {
     let max = 0;
-    for (const disc of this.visionDiscsFor(settlement)) {
+    for (const disc of this.exploredReachDiscs(settlement)) {
       const reach =
         hexDistance({ q: settlement.q, r: settlement.r }, { q: disc.q, r: disc.r }) + disc.radius + FOG_SCOUT_RING;
       if (reach > max) max = reach;
@@ -1592,7 +1624,7 @@ export class WorldModel {
   distanceBeyondExplored(q: number, r: number): number {
     let min = Infinity;
     for (const settlement of this.settlements.values()) {
-      for (const disc of this.visionDiscsFor(settlement)) {
+      for (const disc of this.exploredReachDiscs(settlement)) {
         const d = hexDistance({ q: disc.q, r: disc.r }, { q, r }) - (disc.radius + FOG_SCOUT_RING);
         if (d < min) min = d;
       }
@@ -2263,6 +2295,24 @@ export class WorldModel {
       })),
     );
 
+    // The water camps (whale roads) come after the land ones, from their own sea pass over the whole world's
+    // land (wasted islands included): green islands only, like the backend's `CampGenerator.GenerateWhaleRoads`.
+    if (!wasted) {
+      const whales = placeWhaleRoads(
+        islandTiles,
+        (c) => terrainAt(c.q, c.r, world) !== 'sea' || wastedTerrainAt(c.q, c.r, world) !== 'sea',
+        worldSeed,
+        islandIndex,
+      );
+      this.setCamps(
+        whales.map((p) => ({
+          family: p.family,
+          coord: p.coord,
+          level: p.level,
+          orientation: p.orientation ?? this.getTile(p.coord.q, p.coord.r).orientation ?? 'SE',
+        })),
+      );
+    }
     // Utgard's wall rings and the Jötun watchtowers (a wasted island with Utgard only), after giants and camps — the backend's
     // own order (`WorldGenerator.Generate`).
     if (wasted) {
@@ -2331,13 +2381,12 @@ export class WorldModel {
       if (tile.camp) continue;
       added = true;
       const strong = isStrongCampFamily(camp.family);
-      const strength: CampStrength = strong ? 'strong' : 'weak';
       tile.camp = {
         family: camp.family,
         level: camp.level,
         orientation: camp.orientation,
         strong,
-        guardRange: guardRange(camp.level, strength),
+        guardRange: campGuardRange(camp.family, camp.level),
       };
       this.campByHex.set(coordKey(camp.coord), { ...tile.camp, q: camp.coord.q, r: camp.coord.r });
     }

@@ -37,7 +37,8 @@ public static class SettlementEndpoints
             // body), so there is nothing to own yet at this point — see
             // QueueBuild/TrainUnits below for where that filter applies.
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         worlds.MapGet("/{worldId:guid}/settlements", ListForWorld)
             .WithName("ListWorldSettlements")
@@ -54,61 +55,70 @@ public static class SettlementEndpoints
             // Full read (stock/rates/queues/garrison/runes) — owner only. A
             // rival is offered GetView below instead, fog-gated and without
             // any of that.
-            .RequireSettlementOwner();
+            .RequireSettlementOwner()
+            .WithConcurrencyRetry();
 
         settlements.MapGet("/{settlementId:guid}/view", GetView)
             .WithName("GetSettlementView")
             .WithSummary("A fog-gated read of any settlement whose ground the caller has explored.")
-            .RequireCallerRealm();
+            .RequireCallerRealm()
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/builds", QueueBuild)
             .WithName("QueueBuild")
             .WithSummary("Queues a building, charging its cost immediately.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/builds/{orderId:guid}/cancel", CancelBuild)
             .WithName("CancelBuild")
             .WithSummary("Cancels a still-queued build order, refunding its cost.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/units", TrainUnits)
             .WithName("TrainUnits")
             .WithSummary("Queues training a batch of units, charging their cost immediately.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/feast", HoldFeast)
             .WithName("HoldFeast")
             .WithSummary("Starts a Town Square feast, charging its cost immediately; it grants renown when it ends.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/quests/{questId}/claim", ClaimQuest)
             .WithName("ClaimQuest")
             .WithSummary("Claims a completed onboarding quest's resource reward, once per settlement.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/runes/{runeId:guid}/slot", SlotRune)
             .WithName("SlotRune")
             .WithSummary("Slots an unslotted rune into the shrine standing on a hex.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         settlements.MapPost("/{settlementId:guid}/runes/{runeId:guid}/unslot", UnslotRune)
             .WithName("UnslotRune")
             .WithSummary("Returns a slotted rune to storage.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
-            .AddEndpointFilter<UserActivityEndpointFilter>();
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
 
         app.MapGet("/api/v1/buildings", Catalogue)
             .WithApiVersionSet(versionSet)
@@ -189,15 +199,13 @@ public static class SettlementEndpoints
         TimeProvider time,
         CancellationToken cancellationToken)
     {
-        var found = await settlements.GetAsync(settlementId, cancellationToken);
-        if (found is null)
+        var session = await settlements.GetGroupAsync(settlementId, cancellationToken);
+        if (session is null)
         {
             return TypedResults.NotFound(SettlementNotFoundProblem());
         }
 
-        var (entity, clock) = found.Value;
-        return TypedResults.Ok(
-            await SettlementResponse.ForOwnerAsync(db, entity, clock, clock.ToGameTime(time.GetUtcNow()), cancellationToken));
+        return TypedResults.Ok(SettlementResponse.Build(session, settlementId, session.Clock, session.Clock.ToGameTime(time.GetUtcNow())));
     }
 
     /// <summary>
@@ -217,6 +225,7 @@ public static class SettlementEndpoints
         SettlementService settlements,
         ExploredAreaService exploredArea,
         RealmDirectory realms,
+        GameDbContext db,
         CancellationToken cancellationToken)
     {
         var found = await settlements.GetAsync(settlementId, cancellationToken);
@@ -266,9 +275,11 @@ public static class SettlementEndpoints
                 .Select(b => PlacedBuildingResponse.From(b.ToPlacedBuilding())),
         ];
 
+        var realmLabel = await LinkedRealmNames.ForSettlementAsync(db, entity, cancellationToken);
+
         return TypedResults.Ok(new SettlementViewResponse(
             entity.Id,
-            entity.Name,
+            realmLabel.Name,
             entity.OwnerName,
             entity.CentreQ,
             entity.CentreR,
@@ -296,6 +307,7 @@ public static class SettlementEndpoints
         SettlementService settlements,
         ExploredAreaService exploredArea,
         RealmDirectory realms,
+        GameDbContext db,
         CancellationToken cancellationToken)
     {
         var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
@@ -330,11 +342,14 @@ public static class SettlementEndpoints
                 .Select(s => new HexCoord(s.CentreQ, s.CentreR)),
             cancellationToken);
 
+        // Every longhouse stays (the map draws them), each under its linked realm's name.
+        var labels = await LinkedRealmNames.ForAsync(db, worldId, entities, cancellationToken);
+
         IReadOnlyList<SettlementSummary> response =
         [
             .. entities
                 .Where(s => IsMine(s) || explored.Contains(new HexCoord(s.CentreQ, s.CentreR)))
-                .Select(s => SettlementSummary.From(s, IsMine(s))),
+                .Select(s => SettlementSummary.From(s, IsMine(s), labels[s.Id])),
         ];
 
         return TypedResults.Ok(response);

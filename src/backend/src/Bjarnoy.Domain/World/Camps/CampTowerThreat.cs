@@ -46,7 +46,8 @@ public static class CampTowerThreat
 
         foreach (var (camp, state) in camps.OrderBy(c => c.Camp.Coord.Q).ThenBy(c => c.Camp.Coord.R))
         {
-            if (!state.IsAggressiveAt(camp, now, insideRealm(camp.Coord)))
+            // A water camp holds no land and locks no towers.
+            if (camp.IsWater || !state.IsAggressiveAt(camp, now, insideRealm(camp.Coord)))
             {
                 continue;
             }

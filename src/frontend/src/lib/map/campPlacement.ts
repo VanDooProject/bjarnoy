@@ -9,15 +9,18 @@
 //
 // The shared family table (`CAMP_FAMILIES`), the guard-range formula and every
 // tuning default below are mirrored one to one by `Camp.cs` / `CampGenerator.cs`.
-import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
+import { coordKey, hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
 import { hash2 } from './worldGenerator';
 import { TILE_ORIENTATIONS } from './types';
 import type { RiverTile, Terrain, TileOrientation } from './types';
 
 export type CampStrength = 'weak' | 'strong';
 
-/** Which ground a camp family is placed on. `bog` is plain bog moss only (not a lake, shore, mouth or creek). */
-export type CampGround = 'grass' | 'forest' | 'sand' | 'mountain' | 'riverStraight' | 'wasteland' | 'bog';
+/**
+ * Which ground a camp family is placed on. `bog` is plain bog moss only (not a lake, shore, mouth or creek);
+ * `sea` is open sea far from any shore (a water camp, placed by `placeWhaleRoads`).
+ */
+export type CampGround = 'grass' | 'forest' | 'sand' | 'mountain' | 'riverStraight' | 'wasteland' | 'bog' | 'sea';
 
 export type CampFamily =
   | 'wolfden'
@@ -32,7 +35,8 @@ export type CampFamily =
   | 'cranedance'
   | 'harewarren'
   | 'deerglade'
-  | 'otterslide';
+  | 'otterslide'
+  | 'whaleroad';
 
 export interface CampFamilyInfo {
   family: CampFamily;
@@ -59,6 +63,9 @@ export const CAMP_FAMILIES: readonly CampFamilyInfo[] = [
   { family: 'harewarren', ground: 'grass', strength: 'weak', levelSkew: 'quadratic' },
   { family: 'deerglade', ground: 'forest', strength: 'weak', levelSkew: 'quadratic' },
   { family: 'otterslide', ground: 'riverStraight', strength: 'weak', levelSkew: 'quadratic' },
+  // The first water camp (3D_assets hextile134), last so no land family's candidate hash moves; it is placed
+  // by its own sea pass (`placeWhaleRoads`), never by `placeCamps`.
+  { family: 'whaleroad', ground: 'sea', strength: 'strong', levelSkew: 'cubic' },
 ];
 
 export function campFamilyInfo(family: string): CampFamilyInfo | undefined {
@@ -67,6 +74,11 @@ export function campFamilyInfo(family: string): CampFamilyInfo | undefined {
 
 export function isStrongCampFamily(family: string): boolean {
   return campFamilyInfo(family)?.strength === 'strong';
+}
+
+/** True for a water camp (a family on open sea) — mirrors `CampFamilies.IsWater`. */
+export function isWaterCampFamily(family: string): boolean {
+  return campFamilyInfo(family)?.ground === 'sea';
 }
 
 /** One strong camp per this many land tiles (rounded) — mirrors `CampGenerator.StrongCampTilesPer`. */
@@ -102,6 +114,15 @@ export const StartPositionMargin = 2;
  */
 export function guardRange(level: number, strength: CampStrength): number {
   return strength === 'strong' ? 2 + level : 1 + Math.floor(level / 2);
+}
+
+/**
+ * A camp's guard range by family — mirrors `Camp.GuardRange`: a water camp holds no land and locks no towers, so
+ * its range is 0 (for a fleet's route that means "the camp's own hex").
+ */
+export function campGuardRange(family: string, level: number): number {
+  if (isWaterCampFamily(family)) return 0;
+  return guardRange(level, isStrongCampFamily(family) ? 'strong' : 'weak');
 }
 
 /** Land tiles per sand camp (seal or walrus) — mirrors `CampGenerator.SandTilesPerSealCamp` (the sand rim would otherwise win most farthest-point picks). */
@@ -345,4 +366,148 @@ export function placeCamps(
     level: rollLevel(c, seed),
     orientation: c.orientation,
   }));
+}
+
+/** One whale road per this many land tiles (rounded, at least 1) — mirrors `CampGenerator.WhaleTilesPer`. */
+export const WhaleTilesPer = 3000;
+
+/** No island gets more whale roads than this — mirrors `CampGenerator.MaxWhaleCampsPerIsland`. */
+export const MaxWhaleCampsPerIsland = 3;
+
+/** A whale road lies at least this many hexes from its island's nearest land tile — mirrors `CampGenerator.WhaleMinShoreDistance`. */
+export const WhaleMinShoreDistance = 6;
+
+/** A whale road lies at most this many hexes from its island's nearest land tile — mirrors `CampGenerator.WhaleMaxShoreDistance`. */
+export const WhaleMaxShoreDistance = 10;
+
+/** No land of any island lies within this many hexes of a whale road — mirrors `CampGenerator.WhaleClearRadius`. */
+export const WhaleClearRadius = 5;
+
+/** Two whale roads of one island are never closer than this many hex steps — mirrors `CampGenerator.MinWhaleSpacing`. */
+export const MinWhaleSpacing = 12;
+
+/** Hash salts of the sea pass — mirror `CampGenerator.WhaleHashSalt` / `WhaleLevelSalt`. */
+const WhaleHashSalt = 4_093;
+const WhaleLevelSalt = 5_419;
+
+/** The whale-road budget of an island — mirrors `CampGenerator.WhaleCountFor`: `clamp(round(land / WhaleTilesPer), 1, 3)`. */
+export function whaleCountFor(landTileCount: number): number {
+  return Math.min(Math.max(Math.floor((2 * landTileCount + WhaleTilesPer) / (2 * WhaleTilesPer)), 1), MaxWhaleCampsPerIsland);
+}
+
+interface WhaleCandidate {
+  coord: AxialCoord;
+  shore: number;
+  hash: number;
+}
+
+/**
+ * The pure sea pass (the first water camp, `whaleroad`) — bit-exact mirror of `CampGenerator.PlaceWhaleRoads`
+ * (backend). For an island of at least `MinCampIslandTiles` land tiles: candidates are the hexes whose distance to
+ * the island's nearest land tile is `WhaleMinShoreDistance..WhaleMaxShoreDistance` and whose nearest land of any
+ * island is that island's (no land of another island at the same or a shorter distance, so none within
+ * `WhaleClearRadius`). `whaleCountFor` roads are picked by farthest-point sampling at least `MinWhaleSpacing` apart
+ * (first pick: best hash; ties: hash, then q, r). `isLand` answers for the whole world, wasted land included.
+ */
+export function placeWhaleRoads(
+  islandTiles: readonly AxialCoord[],
+  isLand: (c: AxialCoord) => boolean,
+  worldSeed: number,
+  islandIndex: number,
+): CampPlacement[] {
+  if (islandTiles.length < MinCampIslandTiles) return [];
+
+  const seed = worldSeed + islandIndex * 300_007;
+  const count = whaleCountFor(islandTiles.length);
+  const own = new Set<string>(islandTiles.map(coordKey));
+
+  // Distance to the nearest island tile of every hex out to WhaleMaxShoreDistance, by expanding rings from the
+  // coast (a tile with a neighbour outside the island): no scan of the world.
+  const shore = new Map<string, { coord: AxialCoord; d: number }>();
+  let frontier: AxialCoord[] = [];
+  for (const tile of islandTiles) {
+    for (const n of neighbors(tile)) {
+      const k = coordKey(n);
+      if (!own.has(k) && !shore.has(k)) {
+        shore.set(k, { coord: n, d: 1 });
+        frontier.push(n);
+      }
+    }
+  }
+  for (let d = 2; d <= WhaleMaxShoreDistance; d++) {
+    const next: AxialCoord[] = [];
+    for (const hex of frontier) {
+      for (const n of neighbors(hex)) {
+        const k = coordKey(n);
+        if (!own.has(k) && !shore.has(k)) {
+          shore.set(k, { coord: n, d });
+          next.push(n);
+        }
+      }
+    }
+    frontier = next;
+  }
+
+  const candidates: WhaleCandidate[] = [...shore.values()]
+    .filter((e) => e.d >= WhaleMinShoreDistance)
+    .sort((a, b) => a.coord.q - b.coord.q || a.coord.r - b.coord.r)
+    .map((e) => ({ coord: e.coord, shore: e.d, hash: hash2(e.coord.q, e.coord.r, seed + WhaleHashSalt) }));
+  if (candidates.length === 0) return [];
+
+  // Open-sea validity is checked lazily, only for candidates that would win a pick (rejecting a winner is the same
+  // as never having offered it): no land of another island within the candidate's own shore distance.
+  const validity = new Int8Array(candidates.length);
+  const isOpenSea = (i: number): boolean => {
+    if (validity[i] === 0) {
+      const candidate = candidates[i]!;
+      validity[i] = 1;
+      for (const hex of hexesInRadius(candidate.coord, candidate.shore)) {
+        if (!own.has(coordKey(hex)) && isLand(hex)) {
+          validity[i] = 2;
+          break;
+        }
+      }
+    }
+    return validity[i] === 1;
+  };
+
+  const minDistance: number[] = new Array<number>(candidates.length).fill(Number.MAX_SAFE_INTEGER);
+  const picked: boolean[] = new Array<boolean>(candidates.length).fill(false);
+  const chosen: WhaleCandidate[] = [];
+
+  while (chosen.length < count) {
+    // Farthest from every road so far, at least MinWhaleSpacing from all; ties by hash, then (q, r).
+    const order: number[] = [];
+    for (let i = 0; i < candidates.length; i++) {
+      if (!picked[i] && minDistance[i]! >= MinWhaleSpacing && validity[i] !== 2) order.push(i);
+    }
+    order.sort((a, b) => minDistance[b]! - minDistance[a]! || candidates[b]!.hash - candidates[a]!.hash || a - b);
+
+    let index = -1;
+    for (const i of order) {
+      if (isOpenSea(i)) {
+        index = i;
+        break;
+      }
+    }
+    if (index < 0) break;
+
+    picked[index] = true;
+    chosen.push(candidates[index]!);
+    for (let i = 0; i < candidates.length; i++) {
+      const distance = hexDistance(candidates[i]!.coord, candidates[index]!.coord);
+      if (distance < minDistance[i]!) minDistance[i] = distance;
+    }
+  }
+
+  return chosen.map((c) => {
+    // Cubic level roll, `1 + floor(u^3 * 5)`, on the sea pass's own salt.
+    const u = hash2(c.coord.q, c.coord.r, seed + WhaleLevelSalt);
+    return {
+      coord: c.coord,
+      family: 'whaleroad' as const,
+      level: 1 + Math.min(MaxCampLevel - 1, Math.floor(u * u * u * MaxCampLevel)),
+      orientation: null,
+    };
+  });
 }

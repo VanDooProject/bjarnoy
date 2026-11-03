@@ -13,7 +13,7 @@ import { BOG_REACH } from './bogGenerator';
 import { placeLakeProps } from './lakeProps';
 import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
 import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } from './worldGenerator';
-import type { BogTile, RiverTile } from './types';
+import type { BogTile, RiverTile, Settlement } from './types';
 import { JOTNAR_OWNER_KEY } from './endgamePlacement';
 
 function foundLandedSettlement(model: WorldModel) {
@@ -1543,6 +1543,25 @@ describe('placeGiantsForIsland (demo giant placement v2)', () => {
     for (const anchor of anchors) expect(hexDistance(at!, anchor)).toBeGreaterThanOrEqual(5);
   });
 
+  it('places the island’s whale roads on open sea 6 to 10 hexes off its coast, with no guard range', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const near = model.findLandfall({ q: 0, r: 0 })!;
+    model.placeGiantsForIsland(near, DEMO_SEED);
+    const roads = hexesInRadius(near, 80).flatMap((c) => {
+      const camp = model.campAt(c);
+      return camp?.family === 'whaleroad' ? [{ coord: c, camp }] : [];
+    });
+    expect(roads.length).toBeGreaterThan(0);
+    const land = hexesInRadius(near, 120).filter((c) => model.isLand(c.q, c.r));
+    for (const { coord, camp } of roads) {
+      expect(camp.guardRange).toBe(0);
+      expect(model.terrainOf(coord.q, coord.r)).toBe('sea');
+      const shore = Math.min(...land.map((l) => hexDistance(l, coord)));
+      expect(shore).toBeGreaterThanOrEqual(6);
+      expect(shore).toBeLessThanOrEqual(10);
+    }
+  });
+
   it('places an island’s giants once, however many times it is visited', () => {
     const model = new WorldModel(DEMO_SEED);
     const near = model.findLandfall({ q: 0, r: 0 })!;
@@ -1571,6 +1590,12 @@ describe('WorldModel wildlife camps', () => {
     // A second call for a hex that already has a camp leaves it alone.
     model.setCamps([{ family: 'boarwallow', coord, level: 1, orientation: 'W' }]);
     expect(model.getTile(3, 4).camp?.family).toBe('wolfden');
+  });
+
+  it('setCamps gives a whale road (a water camp) no guard range and no start-position exclusion', () => {
+    const model = new WorldModel(1);
+    model.setCamps([{ family: 'whaleroad', coord: { q: 3, r: 4 }, level: 5, orientation: 'SE' }]);
+    expect(model.getTile(3, 4).camp).toEqual({ family: 'whaleroad', level: 5, orientation: 'SE', strong: true, guardRange: 0 });
   });
 
   it('a camp hex is not buildable', () => {
@@ -2820,5 +2845,49 @@ describe('WorldModel server-resolved realm', () => {
     snap(a, [], [{ settlementId: a.id, discs: [aDisc] }]);
     expect(owner(probe)).toBeUndefined();
     expect(model.claimDiscsOf(b.id)).toEqual([{ ...bHome }]);
+  });
+});
+
+// A settlement whose Longhouse is destroyed (level 0) sees nothing around its centre (docs/design/skirmish/realm-takeover.md);
+// the same decision as its claim (`longhouseDiscs`). Its towers keep their sight only while chained to another Longhouse.
+describe('WorldModel destroyed Longhouse vision', () => {
+  type Hex = { q: number; r: number };
+  const snapTowers = (
+    model: WorldModel,
+    s: { id: string; level: number; resources: Settlement["resources"]; rates: Settlement["rates"] },
+    towers: Hex[],
+  ) =>
+    model.applyServerSnapshot(s.id, {
+      level: s.level,
+      resources: s.resources,
+      rates: s.rates,
+      capacity: { wood: 0, stone: 0, food: 0, iron: 0 },
+      buildings: towers.map((t) => ({ q: t.q, r: t.r, type: 'tower', level: 2 })),
+    });
+
+  it('has no centre vision disc, no visible and no border hexes', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    expect(model.visionDiscsFor(settlement)).toHaveLength(1);
+    expect(model.visibleHexes(settlement).size).toBeGreaterThan(0);
+
+    settlement.level = 0;
+
+    expect(model.borderRadius(settlement)).toBe(0);
+    expect(model.visionDiscsFor(settlement)).toEqual([]);
+    expect(model.visibleHexes(settlement).size).toBe(0);
+  });
+
+  it('a tower chained to another Longhouse of the player keeps its sight, an unchained one sees nothing', () => {
+    const model = new WorldModel(20260825);
+    const { settlement: razed, at } = foundLandedSettlement(model);
+    const other = model.registerSettlement({ ...razed, id: 'other', q: at.q + 20, r: at.r, level: 2 });
+    razed.level = 0;
+    const chained = { q: other.q - 2, r: other.r };
+    const lone = { q: at.q + 1, r: at.r };
+
+    snapTowers(model, razed, [chained, lone]);
+
+    expect(model.visionDiscsFor(razed).map((d) => `${d.q},${d.r}`)).toEqual([`${chained.q},${chained.r}`]);
   });
 });

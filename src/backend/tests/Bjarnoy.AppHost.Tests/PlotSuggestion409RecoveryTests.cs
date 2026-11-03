@@ -90,7 +90,7 @@ public class PlotSuggestion409RecoveryTests(AppHostFixture fixture)
         // symptom: no island, no redirect, an unhandled rejection in the
         // console every reload).
         await Assertions.Expect(page).ToHaveURLAsync(
-            new Regex(@"/settlement$"), new PageAssertionsToHaveURLOptions { Timeout = 20_000 });
+            new Regex(@"/settlement(#q=[^#]*)?$"), new PageAssertionsToHaveURLOptions { Timeout = 20_000 });
 
         // Recovered onto the *same* settlement, not a second one founded
         // fresh — the distinction an uncaught 409 loop (the original bug)

@@ -3,6 +3,7 @@ import type { AxialCoord } from '../hex/coords';
 import { giantCoverage } from './giantTiles';
 import {
   claimDiscs,
+  longhouseDiscs,
   claimRadiusForLevel,
   hasShoreline,
   hasShorelineInTerritory,
@@ -96,6 +97,12 @@ describe('towerClaimRadiusForLevel', () => {
 });
 
 describe('claimDiscs / hasShorelineInTerritory', () => {
+  it('has no centre disc when the Longhouse is destroyed (level 0): the settlement claims nothing', () => {
+    expect(claimDiscs({ q: 0, r: 0 }, 0, [])).toEqual([]);
+    expect(longhouseDiscs({ q: 0, r: 0 }, 0)).toEqual([]);
+    expect(longhouseDiscs({ q: 0, r: 0 }, 1)).toEqual([{ q: 0, r: 0, radius: 2 }]);
+  });
+
   it('includes the centre disc plus one disc per tower, centred on the tower itself', () => {
     const discs = claimDiscs(
       { q: 0, r: 0 },

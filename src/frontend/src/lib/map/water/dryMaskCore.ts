@@ -74,6 +74,19 @@ export const WATER_MATCH_MIN_RATIO = 0.4;
 /** Reference (plain water) base frames: the art a sea hex is compared against. */
 export const REFERENCE_FRAME_RE = /^(coastalwatertile|watertile|taintedwater|blacksandcoast|icecoast)_(E|NE|NW|SE|SW|W)_base$/;
 
+/**
+ * Reference frames of the bog lake: the plain lake tile of each orientation. Every other `boglake*` frame (inlet, shore,
+ * half, mouth, art variants) is compared against the one of its own orientation to find the lake water in it
+ * (docs/design/water-shader.md, "Bog lakes").
+ */
+export const LAKE_REFERENCE_FRAME_RE = /^boglake_(E|NE|NW|SE|SW|W)_base$/;
+
+/** Every bog lake `_base` frame: the plain lake, `inlet`, `shore`, `half` and `mouth` families, with or without art variants. */
+export const LAKE_FRAME_RE = /^boglake(_(inlet|shore|half|mouth))?_(E|NE|NW|SE|SW|W)(_variant\d+)?_base$/;
+
+/** A bog lake frame's top layer (lily pads, reed islands, reeds): the `_base` frame's name without `_base`. */
+export const LAKE_TOP_FRAME_RE = /^boglake(_(inlet|shore|half|mouth))?_(E|NE|NW|SE|SW|W)(_variant\d+)?$/;
+
 /** The orientation token of a frame name, or null. */
 export function orientationOf(frameName: string): string | null {
   return /_(E|NE|NW|SE|SW|W)_/.exec(frameName)?.[1] ?? null;
@@ -177,6 +190,40 @@ export function dryMaskHalf(art: Canvas, reference: Canvas, width = SOURCE_W, he
   return downsampleHalf(dilated, width, height);
 }
 
+/**
+ * Whether the reference pixel at byte offset `i` is lake water: opaque and blue-dominant. The blue test is what keeps the
+ * tile prism's side faces (which repeat the reference as well, but are earth, not water) out of the lake mask.
+ */
+export function isLakeWaterPixel(reference: Canvas, i: number): boolean {
+  return reference[i + 3] >= OPAQUE_ALPHA && reference[i + 2] > reference[i] + 15 && reference[i + 2] > reference[i + 1] + 5;
+}
+
+/**
+ * The lake wet mask of `art` against `reference` (the plain lake tile of the same orientation), at half resolution.
+ *
+ * Wet = the reference pixel is lake water (`isLakeWaterPixel`) AND the art repeats it within `DRY_PIXEL_EPS`, so the
+ * bank, the rocks, a creek's brighter water and the prism's sides are all not wet. The 0/1 map is eroded by one source
+ * pixel (the opposite of `dryMaskHalf`'s growth: the effect stays off the bank outline) and box-downsampled 2x2, which
+ * makes the edge soft. Output is `(SOURCE_W / 2) * (SOURCE_H / 2)` bytes, 255 = wet.
+ *
+ * `top` is the frame's top layer (lily pads, reed islands, reeds), drawn over the water in the game: its opaque pixels, grown by one
+ * source pixel, are not wet either, so nothing on the lake (a blop) is placed under them and peeks out around them.
+ */
+export function lakeWetMaskHalf(art: Canvas, reference: Canvas, top?: Canvas, width = SOURCE_W, height = SOURCE_H): Uint8Array {
+  const wet = new Uint8Array(width * height);
+  for (let p = 0; p < wet.length; p++) {
+    const i = p * 4;
+    if (isLakeWaterPixel(reference, i) && isSame(art, reference, i, DRY_PIXEL_EPS)) wet[p] = 1;
+  }
+  if (top) {
+    const covered = new Uint8Array(width * height);
+    for (let p = 0; p < covered.length; p++) covered[p] = top[p * 4 + 3] >= OPAQUE_ALPHA ? 1 : 0;
+    const grown = morph(covered, width, height, 1, true);
+    for (let p = 0; p < wet.length; p++) if (grown[p]) wet[p] = 0;
+  }
+  return downsampleHalf(morph(wet, width, height, 1, false), width, height);
+}
+
 /** Where a frame's mask cell sits in the packed atlas, and which part of the source canvas it covers. */
 export interface DryMaskFrame {
   /** Cell origin in the mask atlas (texels). */
@@ -189,14 +236,22 @@ export interface DryMaskFrame {
   sh: number;
 }
 
-/** What the `virtual:water-dry-masks` module exports. */
-export interface WaterDryMasksData {
-  /** `data:image/png;base64,...` — a grey+alpha PNG; alpha is the dry mask. */
+/** One packed mask atlas and where each frame's cell sits in it. */
+export interface MaskAtlasData {
+  /** `data:image/png;base64,...` — a grey+alpha PNG; alpha is the mask (dry for the sea, wet for the lakes). */
   url: string;
   /** Atlas size in texels. */
   width: number;
   height: number;
   frames: Record<string, DryMaskFrame>;
+}
+
+/**
+ * What the `virtual:water-dry-masks` module exports: the sea hexes' dry masks, plus under `lake` the bog lakes' wet masks
+ * (`lakeWetMaskHalf`, a grey+alpha PNG whose alpha is the mask) in an atlas of their own.
+ */
+export interface WaterDryMasksData extends MaskAtlasData {
+  lake: MaskAtlasData;
 }
 
 /** A frame's trim rect on the source canvas (the atlas's `spriteSourceSize`). */

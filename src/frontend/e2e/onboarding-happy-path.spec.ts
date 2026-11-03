@@ -201,7 +201,7 @@ for (const size of SCREEN_SIZES) {
         // Verified by running this spec for real: an earlier version of this
         // test asserted '/' here from reading RegisterView.vue alone and failed
         // against the router guard's own redirect.
-        await expect(page).toHaveURL(/\/settlement$/);
+        await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
         expect(getRegisterRequestBody()).toEqual({ userName: username, password, existingOwnerId: playerIdAtRegistration });
         await expect
           .poll(() => page.evaluate(() => localStorage.getItem('bjarnoy.refreshToken')))
@@ -342,7 +342,7 @@ for (const size of SCREEN_SIZES) {
       await page.getByLabel('Confirm password').fill(password);
       await page.getByRole('button', { name: 'Create account' }).click();
 
-      await expect(page).toHaveURL(/\/settlement$/);
+      await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
       expect(getRegisterRequestBody()).toEqual({ userName: username, password, existingOwnerId: playerIdAtRegistration });
       await hud.expectLoggedIn();
       await expect(page.getByTestId('returning-player-trigger')).toHaveCount(0);

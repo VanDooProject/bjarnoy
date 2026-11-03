@@ -492,6 +492,8 @@ describe('useWorldStore founding a settlement (live mode)', () => {
     });
     foundSettlement.mockReset().mockResolvedValue({
       id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
       ownerName: 'Astrid',
       name: "Astrid's realm",
       q: FAR_ISLAND.at.q,
@@ -527,6 +529,8 @@ describe('useWorldStore founding a settlement (live mode)', () => {
     });
     foundSettlement.mockReset().mockResolvedValue({
       id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
       ownerName: 'Astrid',
       name: "Astrid's realm",
       q: NEAR_ISLAND.at.q,
@@ -595,6 +599,8 @@ describe('useWorldStore founding a settlement (L6b: persist before reconciling)'
     });
     foundSettlement.mockReset().mockResolvedValue({
       id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
       ownerName: 'Astrid',
       name: "Astrid's realm",
       q: ISLAND.at.q,
@@ -817,6 +823,8 @@ describe('useWorldStore refreshWorldSettlements (rival walls)', () => {
   it('leaves the own longhouse at the level the settlement poll reported', async () => {
     getSettlement.mockReset().mockResolvedValue({
       id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
       longhouseLevel: 15,
       resources: {
         stock: { wood: 0, stone: 0, food: 0, iron: 0 },
@@ -916,6 +924,8 @@ describe('useWorldStore refreshLiveSettlement (storage capacity)', () => {
   it('uses the backend capacity for hud.storageCap, not the synthetic longhouse-level guess', async () => {
     getSettlement.mockReset().mockResolvedValue({
       id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
       longhouseLevel: 1,
       resources: {
         stock: { wood: 750, stone: 0, food: 0, iron: 0 },
@@ -1712,6 +1722,8 @@ describe('useWorldStore joinWorld', () => {
     });
     getSettlement.mockReset().mockResolvedValue({
       id: 'settlement-42',
+      realmId: 'settlement-42',
+      linkedMemberIds: ['settlement-42'],
       ownerName: 'Astrid',
       name: "Astrid's realm",
       q: 3,
@@ -1811,6 +1823,8 @@ describe('construction slots/reservations degrade gracefully in demo mode', () =
       maxWaitingOrders: 0,
       waitingOrders: 0,
       maxOrdersPerHex: 1,
+      towerLimit: 0,
+      towersHeld: 0,
     });
 
     store.selectedSettlementId = 'settlement-1';
@@ -1890,6 +1904,8 @@ describe('useWorldStore claimQuest (onboarding quests)', () => {
   function settlementResponse(quests: unknown[], wood: number) {
     return {
       id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
       longhouseLevel: 2,
       resources: {
         stock: { wood, stone: 0, food: 0, iron: 0 },
@@ -2074,6 +2090,8 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
   function settlementResponse(overrides: { wood?: number; queue?: unknown[] } = {}) {
     return {
       id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
       longhouseLevel: 1,
       resources: {
         stock: { wood: overrides.wood ?? 500, stone: 300, food: 200, iron: 0 },
@@ -2081,7 +2099,7 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
         capacity: { wood: 750, stone: 750, food: 900, iron: 375 },
         reserved: { wood: 0, stone: 0, food: 0, iron: 0 },
       },
-      construction: { slots: 2, slotsUsed: 1, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1 },
+      construction: { slots: 2, slotsUsed: 1, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 },
       buildings: [],
       queue: overrides.queue ?? [],
       garrison: [],
@@ -2218,8 +2236,8 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
 });
 
 describe('useWorldStore live realm membership', () => {
-  const summary = (id: string, mine: boolean) => ({
-    id, name: id, ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-1', mine,
+  const summary = (id: string, mine: boolean, realmId = id) => ({
+    id, realmId, name: id, ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-1', mine,
   });
 
   it("registers the player's own settlements under the player id and everyone else as rivals", async () => {
@@ -2236,6 +2254,8 @@ describe('useWorldStore live realm membership', () => {
     const realm = [{ settlementId: 'settlement-1', discs: [{ q: 0, r: 0, radius: 1 }] }];
     getSettlement.mockReset().mockResolvedValue({
       id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
       longhouseLevel: 1,
       resources: {
         stock: { wood: 0, stone: 0, food: 0, iron: 0 },
@@ -2259,5 +2279,102 @@ describe('useWorldStore live realm membership', () => {
     await store.refreshLiveSettlement();
 
     expect(spy).toHaveBeenCalledWith('settlement-1', expect.objectContaining({ realm }));
+  });
+});
+
+describe('useWorldStore linked realms', () => {
+  const emptyRes = { wood: 0, stone: 0, food: 0, iron: 0 };
+  function response(id: string, realmId: string, linkedMemberIds: string[]) {
+    return {
+      id, realmId, linkedMemberIds, name: 'Realm', ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-1',
+      resources: { stock: { ...emptyRes }, ratePerHour: { ...emptyRes }, capacity: { ...emptyRes }, reserved: { ...emptyRes } },
+      construction: { slots: 2, slotsUsed: 0, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 },
+      buildings: [], queue: [], garrison: [], trainingQueue: [], runes: [], feast: null, nextFeast: null, quests: [],
+    };
+  }
+  const settlement = (id: string, realmId?: string) => ({
+    id, ownerId: 'player-1', ownerName: 'Astrid', name: id, q: 0, r: 0, level: 1,
+    resources: { ...emptyRes }, rates: { ...emptyRes }, foundedAt: Date.now(), realmId,
+  });
+
+  it('isRealmSettlement is true for the selected settlement and its linked members, false for others and empty ids', async () => {
+    const store = await loadStoreModule(false);
+    store.selectedSettlementId = 'old';
+    store.linkedMemberIds = ['old', 'new'];
+
+    expect(store.isRealmSettlement('old')).toBe(true);
+    expect(store.isRealmSettlement('new')).toBe(true);
+    expect(store.isRealmSettlement('rival')).toBe(false);
+    expect(store.isRealmSettlement(undefined)).toBe(false);
+    expect(store.isRealmSettlement(null)).toBe(false);
+  });
+
+  it('refreshLiveSettlement keeps the linked members of the selected realm', async () => {
+    const store = await loadStoreModule(false);
+    store.model.registerSettlement(settlement('old'));
+    store.selectedSettlementId = 'old';
+    getSettlement.mockReset().mockResolvedValue(response('old', 'old', ['old', 'new']));
+
+    await store.refreshLiveSettlement();
+
+    expect(store.linkedMemberIds).toEqual(['old', 'new']);
+    expect(store.isRealmSettlement('new')).toBe(true);
+  });
+
+  it('refreshLiveSettlement redirects a newer member to the realm id through the settlement switch', async () => {
+    const store = await loadStoreModule(false);
+    store.liveReady = true;
+    store.worldId = 'world-1';
+    store.model.registerSettlement(settlement('new'));
+    store.selectedSettlementId = 'new';
+    getSettlement.mockReset().mockImplementation(async (id: string) =>
+      id === 'new' ? response('new', 'old', ['old', 'new']) : response('old', 'old', ['old', 'new']));
+    const { usePlayerStore } = await import('./player');
+    const player = usePlayerStore();
+
+    await store.refreshLiveSettlement();
+
+    expect(store.selectedSettlementId).toBe('old');
+    expect(player.settlementId).toBe('old');
+    expect(store.linkedMemberIds).toEqual(['old', 'new']);
+  });
+
+  it('restoreLiveSettlement of a newer member lands on the realm id', async () => {
+    const store = await loadStoreModule(false);
+    store.liveReady = true;
+    store.worldId = 'world-1';
+    getSettlement.mockReset().mockImplementation(async (id: string) =>
+      id === 'new' ? response('new', 'old', ['old', 'new']) : response('old', 'old', ['old', 'new']));
+    const { usePlayerStore } = await import('./player');
+    const player = usePlayerStore();
+
+    await store.restoreLiveSettlement(player.id, 'new');
+
+    expect(store.selectedSettlementId).toBe('old');
+    expect(player.settlementId).toBe('old');
+  });
+
+  it('registerSettlementSummaries stores the realmId', async () => {
+    const store = await loadStoreModule(false);
+    store.registerSettlementSummaries([
+      { id: 'r2', realmId: 'r1', name: 'Rival', ownerName: 'Bo', q: 5, r: 5, longhouseLevel: 1, islandId: 'i', mine: false },
+    ]);
+
+    expect(store.model.getSettlement('r2')?.realmId).toBe('r1');
+  });
+
+  it('listAttackableSettlements excludes the own realm and lists one entry per realmId, oldest member first', async () => {
+    const store = await loadStoreModule(false);
+    store.selectedSettlementId = 'old';
+    store.linkedMemberIds = ['old', 'new'];
+    store.model.registerSettlement(settlement('old', 'old'));
+    store.model.registerSettlement(settlement('new', 'old'));
+    store.model.registerSettlement({ ...settlement('rival-new', 'rival-old'), ownerId: 'rival-new', ownerName: 'Bo', name: 'Rivals' });
+    store.model.registerSettlement({ ...settlement('rival-old', 'rival-old'), ownerId: 'rival-old', ownerName: 'Bo', name: 'Rivals' });
+    store.model.registerSettlement({ ...settlement('solo', 'solo'), ownerId: 'solo', ownerName: 'Cy', name: 'Solo' });
+
+    const ids = store.listAttackableSettlements().map((s) => s.id).sort();
+
+    expect(ids).toEqual(['rival-old', 'solo']);
   });
 });

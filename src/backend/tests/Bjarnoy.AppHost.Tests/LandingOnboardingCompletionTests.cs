@@ -171,7 +171,7 @@ public class LandingOnboardingCompletionTests(AppHostFixture fixture)
         await page.GetByTestId("onboarding-continue").ClickAsync();
 
         await Assertions.Expect(page).ToHaveURLAsync(
-            new Regex(@"/settlement$"), new PageAssertionsToHaveURLOptions { Timeout = 10_000 });
+            new Regex(@"/settlement(#q=[^#]*)?$"), new PageAssertionsToHaveURLOptions { Timeout = 10_000 });
 
         Assert.Empty(consoleErrors);
     }

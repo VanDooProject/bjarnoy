@@ -65,6 +65,11 @@ describe('useBuildRing', () => {
     expect(ids).toEqual(['resource', 'military', 'logistics', 'defense', 'religion']);
     const resource = ring.categories.value.find((c) => c.id === 'resource')!;
     expect(resource.buildings.map((b) => b.id)).toContain('reindeerherder');
+    // The tower is a defence building, not a military one.
+    const military = ring.categories.value.find((c) => c.id === 'military')!;
+    const defense = ring.categories.value.find((c) => c.id === 'defense')!;
+    expect(military.buildings.map((b) => b.id)).not.toContain('tower');
+    expect(defense.buildings.map((b) => b.id)).toContain('tower');
     for (const building of ring.categories.value.flatMap((c) => c.buildings)) {
       expect(building.cost).toBeDefined();
       expect(building.availability).toBeDefined();

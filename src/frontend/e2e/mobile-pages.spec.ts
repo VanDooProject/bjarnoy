@@ -75,10 +75,10 @@ test.describe('ring menu labels on a phone', { tag: '@g2' }, () => {
   // `de`: the long compound names ("Waffenschmiede") wrap at hyphenation points of their own language at a readable
   // size instead of shrinking to a few pixels.
   const LANGUAGES = [
-    { lang: 'en', chip: 'Open Build', build: 'Build', military: 'Military', longWord: 'Watchtower' },
-    { lang: 'de', chip: 'Öffne Bauen', build: 'Bauen', military: 'Militär', longWord: 'Waffenschmiede' },
+    { lang: 'en', chip: 'Open Build', build: 'Build', category: 'Defence', longWord: 'Watchtower' },
+    { lang: 'de', chip: 'Öffne Bauen', build: 'Bauen', category: 'Militär', longWord: 'Waffenschmiede' },
   ];
-  for (const { lang, chip, build, military, longWord } of LANGUAGES)
+  for (const { lang, chip, build, category, longWord } of LANGUAGES)
   for (const wideFont of [false, true]) {
   test(`no bubble splits a word across lines or runs past its own edge (${lang})${wideFont ? ' (with a much wider font)' : ''}`, async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
@@ -101,7 +101,7 @@ test.describe('ring menu labels on a phone', { tag: '@g2' }, () => {
     await settlement.ring.action(build).first().tap();
     await settlement.ring.settledLayer();
     broken.push(...(await brokenLabels(page)));
-    await settlement.ring.category(military).first().tap();
+    await settlement.ring.category(category).first().tap();
     await settlement.ring.settledLayer();
     // a long single word must be on screen, or the check proves nothing
     await expect(settlement.ring.child(longWord)).toBeVisible();

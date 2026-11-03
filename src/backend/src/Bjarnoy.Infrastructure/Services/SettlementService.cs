@@ -190,6 +190,8 @@ public sealed class SettlementService(
     TimeProvider timeProvider,
     IPlotReservationStore reservations,
     CampService campService,
+    ConcurrentWriteExecutor concurrentWriteExecutor,
+    LinkedGroupLoader groups,
     ILogger<SettlementService> logger)
 {
     /// <summary>
@@ -238,6 +240,8 @@ public sealed class SettlementService(
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly IPlotReservationStore _reservations = reservations;
     private readonly CampService _campService = campService;
+    private readonly ConcurrentWriteExecutor _concurrentWriteExecutor = concurrentWriteExecutor;
+    private readonly LinkedGroupLoader _groups = groups;
     private readonly ILogger<SettlementService> _logger = logger;
 
     /// <summary>
@@ -430,7 +434,7 @@ public sealed class SettlementService(
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (!ConcurrentWriteExecutor.IsRetryable(ex))
         {
             // Two requests raced (same plot, or the same player founding
             // twice). The unique indexes are what actually decided it, so
@@ -451,6 +455,9 @@ public sealed class SettlementService(
         }
 
         _reservations.Release(worldId, ownerId);
+
+        // A settlement founded against the player's others may link with them: it joins their shared stock.
+        await ReconcileRealmAsync(settlement.Id, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Settlement {Name} ({Id}) founded at {Coord} on island {IslandId}.",
@@ -526,7 +533,8 @@ public sealed class SettlementService(
         _dbContext.Settlements.Add(settlement);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        // The new longhouse may reach buildings of the player's other settlements on the island that stood outside the realm.
+        // The new longhouse may reach buildings of the player's other settlements on the island that stood outside the realm,
+        // and its realm may touch theirs: it joins their shared stock.
         await ReconcileRealmAsync(settlement.Id, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -586,29 +594,34 @@ public sealed class SettlementService(
         Guid settlementId,
         CancellationToken cancellationToken = default)
     {
-        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        var session = await GetGroupAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        return session is null ? null : (session.Anchor, session.Clock);
+    }
+
+    /// <summary>
+    /// <see cref="GetAsync"/> for a caller that builds the linked realm's owner view: the settled group session itself
+    /// (written back when something was due), so the response needs no second load.
+    /// </summary>
+    public async Task<LinkedGroupSession?> GetGroupAsync(
+        Guid settlementId,
+        CancellationToken cancellationToken = default)
+    {
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return null;
         }
 
-        var clock = settlement.World.ToClock();
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
-
-        var (_, result, guestArmies) = await SettleWithGuestsAsync(
-            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
-        if (result.Changed)
+        if (session.WriteBack())
         {
-            settlement.ApplyDomain(result.Settlement);
-            ApplyGuestDeaths(guestArmies, result.GuestDeaths);
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
             _logger.LogInformation(
-                "Settlement {Id} completed {Count} queued build(s) on read.",
-                settlementId, result.Completed.Count);
+                "Settlement {Id} (and its linked realm) settled {Count} member(s) on read.",
+                settlementId, session.ChangedMembers.Count);
         }
 
-        return (settlement, clock);
+        return session;
     }
 
     /// <summary>Admin search: settlements by world and/or owner name, paged.</summary>
@@ -654,27 +667,22 @@ public sealed class SettlementService(
         ResourceAmounts delta,
         CancellationToken cancellationToken = default)
     {
-        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new GrantResourcesResult(GrantResourcesOutcome.SettlementNotFound);
         }
 
-        var clock = settlement.World.ToClock();
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
-
-        var (settled, result, guestArmies) = await SettleWithGuestsAsync(
-            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
-        var granted = settled with { Resources = settled.Resources.Adjust(delta, now) };
-
-        settlement.ApplyDomain(granted);
-        ApplyGuestDeaths(guestArmies, result.GuestDeaths);
+        // The grant goes into the linked realm's shared stock.
+        var settled = session.View(settlementId);
+        session.Apply(settlementId, settled with { Resources = settled.Resources.Adjust(delta, session.Now) });
+        session.WriteBack();
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Admin granted {Delta} to settlement {Id}.", delta, settlementId);
 
-        return new GrantResourcesResult(GrantResourcesOutcome.Applied, settlement, clock);
+        return new GrantResourcesResult(GrantResourcesOutcome.Applied, session.Anchor, session.Clock);
     }
 
     /// <summary>
@@ -688,20 +696,14 @@ public sealed class SettlementService(
         int level,
         CancellationToken cancellationToken = default)
     {
-        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new AdminSetBuildingLevelResult(SetBuildingLevelOutcome.SettlementNotFound);
         }
 
-        var clock = settlement.World.ToClock();
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
-
-        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
-            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
-        var guestStacks = AggregateStacks(guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
-        var result = settled.SetBuildingLevel(
-            coord, level, now, settlement.World.SpeedFactor, guestStacks, await TerrainAtAsync(settlement.World, cancellationToken).ConfigureAwait(false));
+        var result = session.View(settlementId).SetBuildingLevel(
+            coord, level, session.Now, session.SpeedFactor, session.GuestStacksOf(settlementId), session.TerrainAt);
 
         if (!result.Accepted)
         {
@@ -714,12 +716,12 @@ public sealed class SettlementService(
 
             // A rejected set may still have completed due builds while
             // settling, which is a real change worth keeping.
-            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken).ConfigureAwait(false);
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
             return new AdminSetBuildingLevelResult(outcome);
         }
 
-        settlement.ApplyDomain(result.Settlement!);
-        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        session.Apply(settlementId, result.Settlement!);
+        session.WriteBack();
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
@@ -727,7 +729,7 @@ public sealed class SettlementService(
         _logger.LogInformation(
             "Admin set building at {Coord} in settlement {Id} to level {Level}.", coord, settlementId, level);
 
-        return new AdminSetBuildingLevelResult(SetBuildingLevelOutcome.Applied, settlement, clock);
+        return new AdminSetBuildingLevelResult(SetBuildingLevelOutcome.Applied, session.Anchor, session.Clock);
     }
 
     /// <summary>
@@ -739,47 +741,35 @@ public sealed class SettlementService(
     public async Task<RuneResult> GrantRuneAsync(
         Guid settlementId, RuneType type, RuneRarity rarity, CancellationToken cancellationToken = default)
     {
-        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new RuneResult(RuneOutcome.SettlementNotFound);
         }
 
-        var clock = settlement.World.ToClock();
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
-
-        var (settled, result, guestArmies) = await SettleWithGuestsAsync(
-            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
-        var granted = settled.GrantRune(new RuneInstance { Id = Guid.CreateVersion7(), Type = type, Rarity = rarity });
-
-        settlement.ApplyDomain(granted);
-        ApplyGuestDeaths(guestArmies, result.GuestDeaths);
+        var granted = session.View(settlementId).GrantRune(new RuneInstance { Id = Guid.CreateVersion7(), Type = type, Rarity = rarity });
+        session.Apply(settlementId, granted);
+        session.WriteBack();
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Granted a {Rarity} {Type} rune to settlement {Id}.", rarity, type, settlementId);
 
-        return new RuneResult(RuneOutcome.Applied, settlement, clock);
+        return new RuneResult(RuneOutcome.Applied, session.Anchor, session.Clock);
     }
 
     /// <summary>Slots an unslotted rune into the shrine standing on <paramref name="shrineCoord"/>.</summary>
     public async Task<RuneResult> SlotRuneAsync(
         Guid settlementId, Guid runeId, HexCoord shrineCoord, CancellationToken cancellationToken = default)
     {
-        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new RuneResult(RuneOutcome.SettlementNotFound);
         }
 
-        var clock = settlement.World.ToClock();
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
-
-        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
-            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
-        var guestStacks = AggregateStacks(guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
-        var result = settled.SlotRune(
-            runeId, shrineCoord, now, settlement.World.SpeedFactor, guestStacks, await TerrainAtAsync(settlement.World, cancellationToken).ConfigureAwait(false));
+        var result = session.View(settlementId).SlotRune(
+            runeId, shrineCoord, session.Now, session.SpeedFactor, session.GuestStacksOf(settlementId), session.TerrainAt);
 
         if (!result.Accepted)
         {
@@ -794,35 +784,29 @@ public sealed class SettlementService(
 
             // A rejected slot may still have completed due builds while
             // settling, which is a real change worth keeping.
-            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken).ConfigureAwait(false);
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
             return new RuneResult(outcome);
         }
 
-        settlement.ApplyDomain(result.Settlement!);
-        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        session.Apply(settlementId, result.Settlement!);
+        session.WriteBack();
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        return new RuneResult(RuneOutcome.Applied, settlement, clock);
+        return new RuneResult(RuneOutcome.Applied, session.Anchor, session.Clock);
     }
 
     /// <summary>Returns a slotted rune to storage.</summary>
     public async Task<RuneResult> UnslotRuneAsync(
         Guid settlementId, Guid runeId, CancellationToken cancellationToken = default)
     {
-        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new RuneResult(RuneOutcome.SettlementNotFound);
         }
 
-        var clock = settlement.World.ToClock();
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
-
-        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
-            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
-        var guestStacks = AggregateStacks(guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
-        var result = settled.UnslotRune(
-            runeId, now, settlement.World.SpeedFactor, guestStacks, await TerrainAtAsync(settlement.World, cancellationToken).ConfigureAwait(false));
+        var result = session.View(settlementId).UnslotRune(
+            runeId, session.Now, session.SpeedFactor, session.GuestStacksOf(settlementId), session.TerrainAt);
 
         if (!result.Accepted)
         {
@@ -833,15 +817,15 @@ public sealed class SettlementService(
                 _ => RuneOutcome.RuneNotFound,
             };
 
-            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken).ConfigureAwait(false);
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
             return new RuneResult(outcome);
         }
 
-        settlement.ApplyDomain(result.Settlement!);
-        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        session.Apply(settlementId, result.Settlement!);
+        session.WriteBack();
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        return new RuneResult(RuneOutcome.Applied, settlement, clock);
+        return new RuneResult(RuneOutcome.Applied, session.Anchor, session.Clock);
     }
 
     /// <summary>
@@ -857,44 +841,39 @@ public sealed class SettlementService(
         bool training = true,
         CancellationToken cancellationToken = default)
     {
-        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new CompleteQueuesResult();
         }
 
-        var clock = settlement.World.ToClock();
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
-
-        var guestArmies = await _dbContext.Armies
-            .Include(a => a.Stacks)
-            .Where(a => a.IsSupporting && a.TargetSettlementId == settlement.Id)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-
-        var guestStacks = AggregateStacks(
-            guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
-
-        var result = settlement.ToDomain()
-            .WithQueuesDueAt(now, builds, training)
-            .SettleTo(now, settlement.World.SpeedFactor, guestStacks, await TerrainAtAsync(settlement.World, cancellationToken).ConfigureAwait(false));
-
-        if (result.Changed)
+        // A linked realm has one queue: every member of the component has its orders marked due, then the group settles as one.
+        foreach (var id in session.Store.ComponentOf(settlementId))
         {
-            settlement.ApplyDomain(result.Settlement);
-            ApplyGuestDeaths(guestArmies, result.GuestDeaths);
+            session.Apply(id, session.View(id).WithQueuesDueAt(session.Now, builds, training));
+        }
+
+        session.Store.SettleTo(session.Now);
+
+        if (session.WriteBack())
+        {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        if (result.Completed.Any(o => o.Type is BuildingType.Tower or BuildingType.Longhouse))
+        var outcomes = session.Members.Select(m => session.Store.Outcome(m.Id)).ToList();
+        var completedBuilds = outcomes.SelectMany(o => o.Completed).ToList();
+        var completedTraining = outcomes.Sum(o => o.CompletedTraining.Count);
+
+        if (completedBuilds.Any(o => o.Type is BuildingType.Tower or BuildingType.Longhouse))
         {
             await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
         }
 
         _logger.LogInformation(
             "Admin insta-completed {Builds} build(s) and {Training} training batch(es) in settlement {Id}.",
-            result.Completed.Count, result.TrainingCompleted.Count, settlementId);
+            completedBuilds.Count, completedTraining, settlementId);
 
-        return new CompleteQueuesResult(settlement, clock, result.Completed.Count, result.TrainingCompleted.Count);
+        return new CompleteQueuesResult(session.Anchor, session.Clock, completedBuilds.Count, completedTraining);
     }
 
     /// <summary>
@@ -909,30 +888,29 @@ public sealed class SettlementService(
         int level,
         CancellationToken cancellationToken = default)
     {
-        var loaded = await LoadForEditAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (loaded is null)
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new AdminBuildingEditServiceResult(AdminEditOutcome.SettlementNotFound);
         }
 
-        var (settlement, clock, now, settled, settleResult, guestArmies, guestStacks) = loaded.Value;
-        var sampler = await WorldTerrain.SamplerAsync(_dbContext, settlement.World!, cancellationToken).ConfigureAwait(false);
-        var placeGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var sampler = session.Sampler;
+        var placeGiants = await session.GiantsAsync(cancellationToken).ConfigureAwait(false);
 
-        var bogKind = await WorldTerrain.BogKindAtAsync(_dbContext, settlement.WorldId, coord, cancellationToken).ConfigureAwait(false);
-        var result = settled.PlaceBuilding(
+        var bogKind = await WorldTerrain.BogKindAtAsync(_dbContext, session.Anchor.WorldId, coord, cancellationToken).ConfigureAwait(false);
+        var result = session.View(settlementId).PlaceBuilding(
             coord, type, level, sampler.TerrainAt(coord), sampler.IsCoastalWater(coord),
-            now, settlement.World!.SpeedFactor, guestStacks, sampler.TerrainAt, placeGiants, bogKind,
-            realm: await PlayerRealms.ForSettlementAsync(_dbContext, settlement, settled, cancellationToken).ConfigureAwait(false));
+            session.Now, session.SpeedFactor, session.GuestStacksOf(settlementId), sampler.TerrainAt, placeGiants, bogKind,
+            realm: session.Store.Realm);
 
         if (!result.Accepted)
         {
-            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken).ConfigureAwait(false);
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
             return new AdminBuildingEditServiceResult(AdminEditOutcome.Rejected, result.Rejection);
         }
 
-        settlement.ApplyDomain(result.Settlement!);
-        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        session.Apply(settlementId, result.Settlement!);
+        session.WriteBack();
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
@@ -941,7 +919,7 @@ public sealed class SettlementService(
             "Admin placed {Type} level {Level} at {Coord} in settlement {Id}.", type, level, coord, settlementId);
 
         return new AdminBuildingEditServiceResult(
-            AdminEditOutcome.Applied, AdminBuildingEditRejection.None, settlement, clock);
+            AdminEditOutcome.Applied, AdminBuildingEditRejection.None, session.Anchor, session.Clock);
     }
 
     /// <summary>Admin god-mode: razes whatever stands on a hex — <see cref="PlaceBuildingAsync"/>'s counterpart.</summary>
@@ -950,25 +928,23 @@ public sealed class SettlementService(
         HexCoord coord,
         CancellationToken cancellationToken = default)
     {
-        var loaded = await LoadForEditAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (loaded is null)
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new AdminBuildingEditServiceResult(AdminEditOutcome.SettlementNotFound);
         }
 
-        var (settlement, clock, now, settled, settleResult, guestArmies, guestStacks) = loaded.Value;
-
-        var result = settled.RazeBuilding(
-            coord, now, settlement.World!.SpeedFactor, guestStacks, await TerrainAtAsync(settlement.World, cancellationToken).ConfigureAwait(false));
+        var result = session.View(settlementId).RazeBuilding(
+            coord, session.Now, session.SpeedFactor, session.GuestStacksOf(settlementId), session.TerrainAt);
 
         if (!result.Accepted)
         {
-            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken).ConfigureAwait(false);
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
             return new AdminBuildingEditServiceResult(AdminEditOutcome.Rejected, result.Rejection);
         }
 
-        settlement.ApplyDomain(result.Settlement!);
-        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        session.Apply(settlementId, result.Settlement!);
+        session.WriteBack();
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
@@ -976,7 +952,7 @@ public sealed class SettlementService(
         _logger.LogInformation("Admin razed the building at {Coord} in settlement {Id}.", coord, settlementId);
 
         return new AdminBuildingEditServiceResult(
-            AdminEditOutcome.Applied, AdminBuildingEditRejection.None, settlement, clock);
+            AdminEditOutcome.Applied, AdminBuildingEditRejection.None, session.Anchor, session.Clock);
     }
 
     /// <summary>
@@ -991,65 +967,30 @@ public sealed class SettlementService(
         int delta,
         CancellationToken cancellationToken = default)
     {
-        var loaded = await LoadForEditAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (loaded is null)
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new AdminGarrisonEditServiceResult(AdminEditOutcome.SettlementNotFound);
         }
 
-        var (settlement, clock, now, settled, settleResult, guestArmies, guestStacks) = loaded.Value;
-
-        var result = settled.AdjustGarrison(
-            unitType, delta, now, settlement.World!.SpeedFactor, guestStacks, await TerrainAtAsync(settlement.World, cancellationToken).ConfigureAwait(false));
+        var result = session.View(settlementId).AdjustGarrison(
+            unitType, delta, session.Now, session.SpeedFactor, session.GuestStacksOf(settlementId), session.TerrainAt);
 
         if (!result.Accepted)
         {
-            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken).ConfigureAwait(false);
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
             return new AdminGarrisonEditServiceResult(AdminEditOutcome.Rejected, result.Rejection);
         }
 
-        settlement.ApplyDomain(result.Settlement!);
-        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        session.Apply(settlementId, result.Settlement!);
+        session.WriteBack();
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Admin adjusted settlement {Id}'s garrison by {Delta}x {Unit}.", settlementId, delta, unitType);
 
         return new AdminGarrisonEditServiceResult(
-            AdminEditOutcome.Applied, AdminGarrisonEditRejection.None, settlement, clock);
-    }
-
-    /// <summary>
-    /// The shared prologue of every admin god-mode edit: load the settlement
-    /// with its world, convert wall time to game time, and settle it (with its
-    /// guests) to now, so the edit itself is decided against the settlement as
-    /// it stands this instant. Null when there is no such settlement.
-    /// </summary>
-    private async Task<(SettlementEntity Settlement,
-        GameClock Clock,
-        DateTimeOffset Now,
-        Settlement Settled,
-        SettleResult SettleResult,
-        List<ArmyEntity> GuestArmies,
-        List<UnitStack> GuestStacks)?> LoadForEditAsync(
-        Guid settlementId, CancellationToken cancellationToken)
-    {
-        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
-        {
-            return null;
-        }
-
-        var clock = settlement.World.ToClock();
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
-
-        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
-            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
-
-        var guestStacks = AggregateStacks(
-            guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
-
-        return (settlement, clock, now, settled, settleResult, guestArmies, guestStacks);
+            AdminEditOutcome.Applied, AdminGarrisonEditRejection.None, session.Anchor, session.Clock);
     }
 
     public Task<List<SettlementEntity>> GetForWorldAsync(
@@ -1092,41 +1033,41 @@ public sealed class SettlementService(
         HexCoord coord,
         CancellationToken cancellationToken = default)
     {
-        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        // Settling first so the decision sees the queue and stock as of now: a build that finished a minute ago must free its
+        // slot and count towards production. A linked realm settles as one, so the stock the build draws on is the pooled one.
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new BuildResult(BuildRejection.UnknownBuildingLevel);
         }
 
-        var clock = settlement.World.ToClock();
-        if (!clock.AllowsCommands)
+        if (!session.Clock.AllowsCommands)
         {
             return new BuildResult(BuildRejection.None, null, WorldPaused: true);
         }
 
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+        var now = session.Now;
+        var sampler = session.Sampler;
 
-        var sampler = await WorldTerrain.SamplerAsync(_dbContext, settlement.World, cancellationToken).ConfigureAwait(false);
-
-        // Settle first so the decision sees the queue and stock as of now: a
-        // build that finished a minute ago must free its slot and count towards
-        // production.
-        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
-            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
+        // The build is booked on the linked-realm member that already has something on the hex, else the oldest member whose own
+        // realm claims it, else the requested one; everything about the hex is read through that member.
+        var bookingId = session.Store.BookingMemberFor(settlementId, coord);
+        var booking = session.EntityOf(bookingId);
+        var booked = session.View(bookingId);
 
         // The premium waiting queue is gated server-side, from the
-        // settlement's owning user (LoadAsync includes Owner) — Anonymous
+        // settlement's owning user (the anchor load includes Owner) — Anonymous
         // settlements are owned by SystemUserIds.Abandoned and are simply not
         // premium (issue #158).
-        var maxWaitingOrders = (settlement.Owner?.IsPremium ?? false) ? Settlement.MaxWaitingOrders : 0;
+        var maxWaitingOrders = (session.Anchor.Owner?.IsPremium ?? false) ? Settlement.MaxWaitingOrders : 0;
 
         var terrain = sampler.TerrainAt(coord);
-        var riverShapeAt = await RiverShapeAtAsync(settlement.WorldId, coord, cancellationToken)
+        var riverShapeAt = await RiverShapeAtAsync(booking.WorldId, coord, cancellationToken)
             .ConfigureAwait(false);
         // A bridge is the one building that stands on a wide river: it needs the raw tile (a stream's shape too, so PlanBuild can name
         // the stream), whether the tile is wide, and whether its island is a wasted one.
         var bridgeSite = type == BuildingType.Bridge
-            ? await BridgeSiteAsync(settlement.WorldId, coord, cancellationToken).ConfigureAwait(false)
+            ? await BridgeSiteAsync(booking.WorldId, coord, cancellationToken).ConfigureAwait(false)
             : default;
         riverShapeAt = bridgeSite.Shape ?? riverShapeAt;
         // Only meaningful when there's a river shape to begin with — see
@@ -1137,53 +1078,52 @@ public sealed class SettlementService(
         // type has no god, so PlanBuild's check is a no-op for it regardless
         // of what set we hand it.
         var shrineGodsElsewhereOnIsland = BuildingCatalogue.GodOf(type) is not null
-            ? await ShrineGodsElsewhereOnIslandAsync(settlement.IslandId, settlement.Id, coord, cancellationToken)
+            ? await ShrineGodsElsewhereOnIslandAsync(booking.IslandId, booking.Id, coord, cancellationToken)
                 .ConfigureAwait(false)
             : null;
 
         // Likewise, only PumpkinFarm cares which crop this island grows —
         // Farm stays buildable everywhere.
         var islandSoil = type == BuildingType.PumpkinFarm
-            ? await IslandSoilAsync(settlement.IslandId, sampler, cancellationToken).ConfigureAwait(false)
+            ? await IslandSoilAsync(booking.IslandId, sampler, cancellationToken).ConfigureAwait(false)
             : null;
 
-        var buildGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var decision = settled.PlanBuild(
+        var buildGiants = await session.GiantsAsync(cancellationToken).ConfigureAwait(false);
+        var decision = booked.PlanBuild(
             type, coord, terrain, now, Guid.CreateVersion7(),
-            settlement.World.SpeedFactor, sampler.IsCoastalWater(coord),
+            session.SpeedFactor, sampler.IsCoastalWater(coord),
             maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex,
             riverShapeAt: riverShapeAt,
             riverVariantAt: riverVariantAt,
             shrineGodsElsewhereOnIsland: shrineGodsElsewhereOnIsland,
             islandSoil: islandSoil,
             giants: buildGiants,
-            camps: await LoadCampIndexAsync(settlement.WorldId, now, cancellationToken).ConfigureAwait(false),
-            endgameSites: await LoadEndgameSiteIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false),
-            bogKindAt: await WorldTerrain.BogKindAtAsync(_dbContext, settlement.WorldId, coord, cancellationToken).ConfigureAwait(false),
+            camps: await LoadCampIndexAsync(booking.WorldId, now, cancellationToken).ConfigureAwait(false),
+            endgameSites: await LoadEndgameSiteIndexAsync(booking.WorldId, cancellationToken).ConfigureAwait(false),
+            bogKindAt: await WorldTerrain.BogKindAtAsync(_dbContext, booking.WorldId, coord, cancellationToken).ConfigureAwait(false),
             palisades: type is BuildingType.Palisade or BuildingType.PalisadeGate
-                ? await WorldPalisades.NearAsync(_dbContext, settlement.WorldId, coord, sampler.TerrainAt, cancellationToken).ConfigureAwait(false)
+                ? await WorldPalisades.NearAsync(_dbContext, booking.WorldId, coord, sampler.TerrainAt, cancellationToken).ConfigureAwait(false)
                 : null,
             isWideRiverAt: bridgeSite.IsWide,
             onWastedIsland: bridgeSite.OnWastedIsland,
-            realm: await PlayerRealms.ForSettlementAsync(_dbContext, settlement, settled, cancellationToken).ConfigureAwait(false));
+            realm: session.Store.Realm);
 
         if (!decision.Accepted)
         {
             // Even a refused build may have completed work while settling, and
             // that is a real change worth keeping.
-            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken)
-                .ConfigureAwait(false);
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
             return new BuildResult(
                 decision.Rejection, MissingPrerequisite: decision.MissingPrerequisite);
         }
 
-        settlement.ApplyDomain(settled.Enqueue(decision.Order!, now));
-        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        session.Apply(bookingId, booked.Enqueue(decision.Order!, now));
+        session.WriteBack();
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
-            "Settlement {Id} queued {Type} level {Level} at {Coord}, completing {CompletesAt}.",
-            settlementId, type, decision.Order!.TargetLevel, coord, decision.Order.CompletesAt);
+            "Settlement {Id} queued {Type} level {Level} at {Coord} (booked on {BookingId}), completing {CompletesAt}.",
+            settlementId, type, decision.Order!.TargetLevel, coord, bookingId, decision.Order.CompletesAt);
 
         return new BuildResult(BuildRejection.None, decision.Order);
     }
@@ -1194,36 +1134,34 @@ public sealed class SettlementService(
         Guid orderId,
         CancellationToken cancellationToken = default)
     {
-        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        // Settle first so the cancel sees the queue and stock as of now: an
+        // order that finished a minute ago is no longer cancellable — same
+        // reasoning as QueueBuildAsync.
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new CancelBuildResult(CancelBuildRejection.OrderNotFound);
         }
 
-        var clock = settlement.World.ToClock();
-        if (!clock.AllowsCommands)
+        if (!session.Clock.AllowsCommands)
         {
             return new CancelBuildResult(CancelBuildRejection.None, WorldPaused: true);
         }
 
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+        // The order sits in the queue of the member it was booked on; its refund goes into the shared stock.
+        var owner = session.Store.MemberOwningOrder(orderId) is { } found && session.Store.ComponentOf(settlementId).Contains(found)
+            ? found
+            : settlementId;
 
-        // Settle first so the cancel sees the queue and stock as of now: an
-        // order that finished a minute ago is no longer cancellable — same
-        // reasoning as QueueBuildAsync.
-        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
-            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
-
-        var decision = settled.CancelBuild(orderId, now, settlement.World.SpeedFactor);
+        var decision = session.View(owner).CancelBuild(orderId, session.Now, session.SpeedFactor);
         if (!decision.Accepted)
         {
-            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken)
-                .ConfigureAwait(false);
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
             return new CancelBuildResult(decision.Rejection);
         }
 
-        settlement.ApplyDomain(decision.Settlement!);
-        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        session.Apply(owner, decision.Settlement!);
+        session.WriteBack();
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Settlement {Id} cancelled build order {OrderId}.", settlementId, orderId);
@@ -1241,32 +1179,21 @@ public sealed class SettlementService(
     public async Task<bool> BurnTowerAsync(
         Guid settlementId, HexCoord coord, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
-        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        var session = await _groups.LoadAsync(settlementId, settleTo: now, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return false;
         }
 
-        var speedFactor = settlement.World.SpeedFactor;
-        var (settled, result, guestArmies) = await SettleWithGuestsAsync(
-            settlement, now, speedFactor, cancellationToken).ConfigureAwait(false);
-        ApplyGuestDeaths(guestArmies, result.GuestDeaths);
-
+        var settled = session.View(settlementId);
         if (!settled.Buildings.Any(b => b.Coord == coord && b.Type == BuildingType.Tower))
         {
-            if (result.Changed)
-            {
-                settlement.ApplyDomain(settled);
-            }
-
+            session.WriteBack();
             return false;
         }
 
-        var guestStacks = AggregateStacks(
-            guestArmies.Where(a => a.Stacks.Count > 0).SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
-        var terrainAt = await TerrainAtAsync(settlement.World, cancellationToken).ConfigureAwait(false);
-
-        settlement.ApplyDomain(settled.BurnTower(coord, now, speedFactor, guestStacks, terrainAt));
+        session.Apply(settlementId, settled.BurnTower(coord, now, session.SpeedFactor, session.GuestStacksOf(settlementId), session.TerrainAt));
+        session.WriteBack();
         return true;
     }
 
@@ -1282,26 +1209,23 @@ public sealed class SettlementService(
         TrainingSplit split = TrainingSplit.Here,
         CancellationToken cancellationToken = default)
     {
-        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        // Settle first so the decision sees the queue and stock as of now —
+        // same reasoning as QueueBuildAsync. The batch is paid from the linked realm's shared stock.
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new TrainResult(TrainRejection.InvalidCount);
         }
 
-        var clock = settlement.World.ToClock();
-        if (!clock.AllowsCommands)
+        if (!session.Clock.AllowsCommands)
         {
             return new TrainResult(TrainRejection.None, null, WorldPaused: true);
         }
 
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
-
-        // Settle first so the decision sees the queue and stock as of now —
-        // same reasoning as QueueBuildAsync.
-        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
-            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
-
-        var sampler = await WorldTerrain.SamplerAsync(_dbContext, settlement.World, cancellationToken).ConfigureAwait(false);
+        var now = session.Now;
+        var settlement = session.Anchor;
+        var settled = session.View(settlementId);
+        var sampler = session.Sampler;
 
         // Ship training needs the settlement's *full* claimed territory to
         // reach the sea, not just its centre disc — a settlement inland at
@@ -1311,9 +1235,8 @@ public sealed class SettlementService(
         // union: a giant hex that only geometrically overlaps a disc but
         // isn't actually claimed (its footprint isn't fully covered) must
         // not count as this settlement's shoreline either.
-        var trainGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var discs = (await PlayerRealms.ForSettlementAsync(_dbContext, settlement, settled, cancellationToken).ConfigureAwait(false))
-            .DiscsOf(settled.Id).ToList();
+        var trainGiants = await session.GiantsAsync(cancellationToken).ConfigureAwait(false);
+        var discs = session.Store.Realm.DiscsOf(settled.Id).ToList();
         var hasShoreline = discs
             .SelectMany(disc => disc.Centre.WithinRadius(disc.Radius))
             .Distinct()
@@ -1333,61 +1256,56 @@ public sealed class SettlementService(
 
         var decision = settled.PlanTrain(
             unitType, count, now, Guid.CreateVersion7, buildingCoord, split, settlement.Owner?.IsPremium ?? false,
-            hasShoreline, costMultiplier, settlement.World.SpeedFactor);
+            hasShoreline, costMultiplier, session.SpeedFactor);
 
         if (!decision.Accepted)
         {
             // Even a refused request may have completed work while settling
             // (a build, a training batch, or a starvation death), and that is
             // a real change worth keeping.
-            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken)
-                .ConfigureAwait(false);
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
             return new TrainResult(decision.Rejection);
         }
 
-        settlement.ApplyDomain(settled.EnqueueTraining(decision.Orders, now));
-        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        session.Apply(settlementId, settled.EnqueueTraining(decision.Orders, now));
+        session.WriteBack();
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Settlement {Id} queued training {Count}x {Type} in {Parts} part(s), completing {CompletesAt}.",
             settlementId, count, unitType, decision.Orders.Count, decision.Orders.Max(o => o.CompletesAt));
 
-        return new TrainResult(TrainRejection.None, decision.Orders, Clock: clock, Now: now);
+        return new TrainResult(TrainRejection.None, decision.Orders, Clock: session.Clock, Now: now);
     }
 
     /// <summary>Starts a Town Square feast, charging its cost up front (economy.md section 6).</summary>
     public async Task<FeastResult> StartFeastAsync(Guid settlementId, CancellationToken cancellationToken = default)
     {
-        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        // Settle first so the decision sees the stock as of now, and a feast
+        // that just ended is already off the settlement. The feast is paid from the linked realm's shared stock.
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new FeastResult(FeastRejection.NoTownSquare);
         }
 
-        var clock = settlement.World.ToClock();
-        if (!clock.AllowsCommands)
+        if (!session.Clock.AllowsCommands)
         {
             return new FeastResult(FeastRejection.None, null, WorldPaused: true);
         }
 
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+        var now = session.Now;
+        var settled = session.View(settlementId);
 
-        // Settle first so the decision sees the stock as of now, and a feast
-        // that just ended is already off the settlement.
-        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
-            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
-
-        var decision = settled.PlanFeast(now, settlement.World.SpeedFactor);
+        var decision = settled.PlanFeast(now, session.SpeedFactor);
         if (!decision.Accepted)
         {
-            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken)
-                .ConfigureAwait(false);
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
             return new FeastResult(decision.Rejection);
         }
 
-        settlement.ApplyDomain(settled.StartFeast(decision.Feast!, now));
-        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        session.Apply(settlementId, settled.StartFeast(decision.Feast!, now));
+        session.WriteBack();
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -1405,40 +1323,36 @@ public sealed class SettlementService(
     public async Task<ClaimQuestResult> ClaimQuestAsync(
         Guid settlementId, string questId, CancellationToken cancellationToken = default)
     {
-        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        // Settle first so a building that just finished counts, and the reward
+        // lands on the stock as of now (the linked realm's shared stock).
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new ClaimQuestResult(QuestRejection.None, SettlementNotFound: true);
         }
 
-        var clock = settlement.World.ToClock();
-        if (!clock.AllowsCommands)
+        if (!session.Clock.AllowsCommands)
         {
             return new ClaimQuestResult(QuestRejection.None, WorldPaused: true);
         }
 
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
-
-        // Settle first so a building that just finished counts, and the reward
-        // lands on the stock as of now.
-        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
-            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
+        var now = session.Now;
+        var settled = session.View(settlementId);
 
         var decision = settled.PlanClaimQuest(questId);
         if (!decision.Accepted)
         {
-            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken)
-                .ConfigureAwait(false);
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
             return new ClaimQuestResult(decision.Rejection);
         }
 
-        settlement.ApplyDomain(settled.ClaimQuest(decision.Quest!, now));
-        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        session.Apply(settlementId, settled.ClaimQuest(decision.Quest!, now));
+        session.WriteBack();
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Settlement {Id} claimed quest {Quest}.", settlementId, decision.Quest!.Id);
 
-        return new ClaimQuestResult(QuestRejection.None, Settlement: settlement, Clock: clock);
+        return new ClaimQuestResult(QuestRejection.None, Settlement: session.Anchor, Clock: session.Clock);
     }
 
     /// <summary>
@@ -1471,46 +1385,45 @@ public sealed class SettlementService(
         var clock = world.ToClock();
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
-        var settlements = await _dbContext.Settlements
-            .Include(s => s.Buildings)
-            .Include(s => s.Queue)
-            .Include(s => s.Garrison)
-            .Include(s => s.TrainingQueue)
-            .Include(s => s.Runes)
+        // Ordered client-side: SQLite cannot order by a DateTimeOffset.
+        var ids = (await _dbContext.Settlements
+            .AsNoTracking()
             .Where(s => s.WorldId == worldId)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
+            .Select(s => new { s.Id, s.FoundedAt })
+            .ToListAsync(cancellationToken).ConfigureAwait(false))
+            .OrderBy(s => s.FoundedAt).ThenBy(s => s.Id)
+            .Select(s => s.Id)
+            .ToList();
 
-        var terrainAt = await TerrainAtAsync(world, cancellationToken).ConfigureAwait(false);
-
-        var settlementIds = settlements.Select(s => s.Id).ToHashSet();
-        var guestArmies = await _dbContext.Armies
-            .Include(a => a.Stacks)
-            .Where(a => a.IsSupporting && settlementIds.Contains(a.TargetSettlementId!.Value))
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-        var guestArmiesByHost = guestArmies.ToLookup(a => a.TargetSettlementId!.Value);
-
-        foreach (var entity in settlements)
+        // Each player-and-island set (the linked realms of one player) is settled together under the old factor, then re-rated.
+        // The world still carries the old factor here, which is what the group is loaded with.
+        var handled = new HashSet<Guid>();
+        foreach (var id in ids)
         {
-            var hostGuestArmies = guestArmiesByHost[entity.Id].ToList();
-            var guestStacks = AggregateStacks(
-                hostGuestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
+            if (handled.Contains(id))
+            {
+                continue;
+            }
 
-            var result = entity.ToDomain().SettleTo(now, oldFactor, guestStacks, terrainAt);
-            var settled = result.Settlement;
-            ApplyGuestDeaths(hostGuestArmies, result.GuestDeaths);
+            var session = await _groups.LoadAsync(id, settleTo: now, ct: cancellationToken).ConfigureAwait(false);
+            if (session is null)
+            {
+                continue;
+            }
 
-            var (production, capacity) = settled.CurrentTotals(newFactor, guestStacks, terrainAt);
-            entity.ApplyDomain(settled with { Resources = settled.Resources.WithRate(production, capacity, now) });
+            session.Store.Rerate(newFactor);
+            session.WriteBack();
+            handled.UnionWith(session.Members.Select(m => m.Id));
         }
 
-        if (settlements.Count > 0)
+        if (handled.Count > 0)
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
 
         _logger.LogInformation(
             "World {WorldId} retuned from speed {Old} to {New} across {Count} settlement(s).",
-            worldId, oldFactor, newFactor, settlements.Count);
+            worldId, oldFactor, newFactor, handled.Count);
     }
 
     /// <summary>Moves a world between run states, optionally crediting grace.</summary>
@@ -1657,21 +1570,8 @@ public sealed class SettlementService(
     /// <see cref="RiverShapeAtAsync"/>'s own whole-world scan, and
     /// <c>ArmyService.LoadGiantIndexAsync</c> for the same reason.
     /// </summary>
-    public async Task<IGiantIndex> LoadGiantIndexAsync(Guid worldId, CancellationToken cancellationToken = default)
-    {
-        var islands = await _dbContext.Islands
-            .AsNoTracking()
-            .Where(i => i.WorldId == worldId)
-            .Select(i => i.Giants)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-
-        var giants = islands
-            .SelectMany(g => g)
-            .Select(g => new Giant(new HexCoord(g.Q, g.R), g.Family, (TileOrientation)g.Orientation))
-            .ToList();
-
-        return new GiantIndex(giants);
-    }
+    public Task<IGiantIndex> LoadGiantIndexAsync(Guid worldId, CancellationToken cancellationToken = default) =>
+        WorldGiants.IndexAsync(_dbContext, worldId, cancellationToken);
 
     /// <summary>
     /// The world's <em>blocking</em> wildlife camps as of <paramref name="now"/>, built into one lookup for the build rule:
@@ -1694,103 +1594,47 @@ public sealed class SettlementService(
             i.UtgardWalls.Select(w => new HexCoord(w.Q, w.R)).Concat(i.JotunTowers.Select(t => new HexCoord(t.Q, t.R)))));
     }
 
-    private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>
-        _dbContext.Settlements
-            .Include(s => s.World)
-            .Include(s => s.Buildings)
-            .Include(s => s.Queue)
-            .Include(s => s.Garrison)
-            .Include(s => s.TrainingQueue)
-            .Include(s => s.Runes)
-            // Needed to gate the premium waiting queue (issue #158) from the
-            // owning user's IsPremium — a single extra join on the row this
-            // already loads, cheaper than a second round trip everywhere the
-            // response needs to know.
-            .Include(s => s.Owner)
-            .FirstOrDefaultAsync(s => s.Id == settlementId, cancellationToken);
-
     /// <summary>
-    /// Loads every guest (<see cref="Bjarnoy.Domain.Armies.ArmyMission.Support"/>)
-    /// army currently hosted at <paramref name="settlementId"/> (issue #40
-    /// phase 4 §2) and settles the settlement against their pooled upkeep and
-    /// its terrain-bound producers' adjacency boost in one step —
-    /// <see cref="Settlement.SettleTo"/>'s <c>guestStacks</c> and
-    /// <c>terrainAt</c> parameters. Tracked (not <c>AsNoTracking</c>): a
-    /// starvation pass may need to write guest deaths back onto these same
-    /// entities — see <see cref="ApplyGuestDeaths"/>. Requires
-    /// <paramref name="entity"/>.World to already be loaded (every caller
-    /// checks this before calling in).
+    /// Loads the player's settlements on <paramref name="settlementId"/>'s island as one group, tracked and settled together
+    /// (<see cref="LinkedGroupLoader.LoadAsync"/>), for a caller that saves itself: <see cref="LinkedGroupSession.Apply"/> its
+    /// changes, <see cref="LinkedGroupSession.WriteBack"/> and save in its own unit of work.
     /// </summary>
-    /// <remarks>
-    /// The settled state also gets its realm state brought up to <paramref name="now"/> (<see cref="Settlement.ApplyRealmState"/>) when
-    /// that can have something to do: <paramref name="forceRealm"/>, a building still marked as outside the realm (levels to lose, or
-    /// the realm may have reached it again), or a tower or longhouse that just completed (the realm moved).
-    /// </remarks>
-    private async Task<(Settlement Settled, SettleResult Result, List<ArmyEntity> GuestArmies)> SettleWithGuestsAsync(
-        SettlementEntity entity, DateTimeOffset now, double speedFactor, CancellationToken cancellationToken,
-        bool forceRealm = false)
+    public Task<LinkedGroupSession?> LoadGroupAsync(
+        Guid settlementId, DateTimeOffset? settleTo = null, bool forceRealm = false, CancellationToken cancellationToken = default) =>
+        _groups.LoadAsync(settlementId, settleTo, forceRealm, cancellationToken);
+
+    /// <summary>Writes the session back and saves when settling (or a refused request) changed anything: a real change worth keeping.</summary>
+    private async Task SaveIfChangedAsync(LinkedGroupSession session, CancellationToken cancellationToken)
     {
-        var guestArmies = await _dbContext.Armies
-            .Include(a => a.Stacks)
-            .Where(a => a.IsSupporting && a.TargetSettlementId == entity.Id)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-
-        var guestStacks = AggregateStacks(
-            guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
-
-        var terrainAt = await TerrainAtAsync(entity.World!, cancellationToken).ConfigureAwait(false);
-        var result = entity.ToDomain().SettleTo(now, speedFactor, guestStacks, terrainAt);
-
-        if (forceRealm
-            || result.Settlement.Buildings.Any(b => b.OutsideRealmSince is not null)
-            || result.Completed.Any(o => o.Type is BuildingType.Tower or BuildingType.Longhouse))
+        if (session.WriteBack())
         {
-            var realm = await PlayerRealms.ForSettlementAsync(_dbContext, entity, result.Settlement, cancellationToken).ConfigureAwait(false);
-            var giants = await LoadGiantIndexAsync(entity.WorldId, cancellationToken).ConfigureAwait(false);
-            var (applied, realmChanged) = result.Settlement.ApplyRealmState(realm, now, speedFactor, guestStacks, terrainAt, giants);
-            if (realmChanged)
-            {
-                result = result with { Settlement = applied, Changed = true };
-            }
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-
-        return (result.Settlement, result, guestArmies);
     }
 
     /// <summary>
     /// Brings the realm state (<see cref="Settlement.ApplyRealmState"/>) of every settlement of the player that owns
     /// <paramref name="settlementId"/> on its island up to the game clock now, and saves: the hook for a change that moved the
     /// realm (a tower burnt or sieged, a building placed or razed, a level set, a founding), so buildings that just fell outside
-    /// stop working at once in every settlement of the player, not only the one that changed. Call it after the change is saved.
+    /// stop working at once in every settlement of the player, not only the one that changed, and a newly founded settlement joins
+    /// its linked realm's shared stock. One group load and one save. Call it after the change is saved.
     /// </summary>
     /// <returns>How many settlements changed.</returns>
-    public async Task<int> ReconcileRealmAsync(Guid settlementId, CancellationToken cancellationToken = default)
-    {
-        var anchor = await _dbContext.Settlements.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == settlementId, cancellationToken).ConfigureAwait(false);
-        if (anchor is null)
-        {
-            return 0;
-        }
-
-        var ids = await PlayerRealms.GroupOf(_dbContext, anchor).Select(x => x.Id).ToListAsync(cancellationToken).ConfigureAwait(false);
-        var changed = 0;
-        foreach (var id in ids)
-        {
-            if (await ApplyRealmStateAsync(id, cancellationToken).ConfigureAwait(false))
-            {
-                changed++;
-            }
-        }
-
-        return changed;
-    }
+    public async Task<int> ReconcileRealmAsync(Guid settlementId, CancellationToken cancellationToken = default) =>
+        (await ApplyRealmStateAsync(settlementId, cancellationToken).ConfigureAwait(false))?.ChangedMembers.Count ?? 0;
 
     /// <summary>
     /// The periodic sweep: for every world that accepts commands, applies the realm state to the settlements that have a step due
     /// (<see cref="PlayerRealms.DueForRealmStepAsync"/>), so decay happens (and a reconnected building starts working) even when
-    /// nobody looks at the settlement. One world failing never stops the others.
+    /// nobody looks at the settlement. One world failing never stops the others, and one group losing a write race never stops
+    /// the rest of its world: each player's island set is its own unit of work through <see cref="ConcurrentWriteExecutor"/> (retried
+    /// against fresh state), and one that still conflicts is skipped until the next sweep.
     /// </summary>
+    /// <remarks>
+    /// Only the hosted service and tests call this, never a request already running inside the executor, so the executor (which is
+    /// not re-entrant) is safe to use here. <see cref="ReconcileRealmAsync"/> shares <see cref="ApplyRealmStateAsync"/> but is
+    /// called from inside such requests, so the executor wraps the call here, not <see cref="ApplyRealmStateAsync"/> itself.
+    /// </remarks>
     /// <returns>How many settlements changed.</returns>
     public async Task<int> SweepRealmStateAsync(CancellationToken cancellationToken = default)
     {
@@ -1811,11 +1655,36 @@ public sealed class SettlementService(
                 var giants = await LoadGiantIndexAsync(world.Id, cancellationToken).ConfigureAwait(false);
                 var due = await PlayerRealms.DueForRealmStepAsync(
                     _dbContext, world.Id, giants, clock.ToGameTime(wall), world.SpeedFactor, cancellationToken).ConfigureAwait(false);
+                var handled = new HashSet<Guid>();
                 foreach (var id in due)
                 {
-                    if (await ApplyRealmStateAsync(id, cancellationToken).ConfigureAwait(false))
+                    // Several due settlements of one player's island set are all handled by the first one's group.
+                    if (handled.Contains(id))
                     {
-                        changed++;
+                        continue;
+                    }
+
+                    try
+                    {
+                        var (count, members) = await _concurrentWriteExecutor.ExecuteAsync(
+                            async ct =>
+                            {
+                                var session = await ApplyRealmStateAsync(id, ct).ConfigureAwait(false);
+                                return session is null
+                                    ? (0, [])
+                                    : (session.ChangedMembers.Count, session.Members.Select(m => m.Id).ToList());
+                            },
+                            cancellationToken).ConfigureAwait(false);
+                        changed += count;
+                        handled.UnionWith(members);
+                    }
+                    catch (ConcurrentUpdateException ex)
+                    {
+                        _logger.LogInformation(ex, "Realm sweep of settlement {SettlementId} lost a write race; will retry next sweep.", id);
+                    }
+                    finally
+                    {
+                        _dbContext.ChangeTracker.Clear();
                     }
                 }
             }
@@ -1834,62 +1703,16 @@ public sealed class SettlementService(
         return changed;
     }
 
-    /// <summary>Settles one settlement to the game clock now with its realm state applied, and saves when that changed anything.</summary>
-    private async Task<bool> ApplyRealmStateAsync(Guid settlementId, CancellationToken cancellationToken)
+    /// <summary>Settles the group of one settlement to the game clock now with its realm state applied, and saves when that changed anything.</summary>
+    private async Task<LinkedGroupSession?> ApplyRealmStateAsync(Guid settlementId, CancellationToken cancellationToken)
     {
-        var entity = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (entity?.World is null)
+        var session = await _groups.LoadAsync(settlementId, forceRealm: true, ct: cancellationToken).ConfigureAwait(false);
+        if (session is not null)
         {
-            return false;
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
         }
 
-        var now = entity.World.ToClock().ToGameTime(_timeProvider.GetUtcNow());
-        var (_, result, guestArmies) = await SettleWithGuestsAsync(
-            entity, now, entity.World.SpeedFactor, cancellationToken, forceRealm: true).ConfigureAwait(false);
-        await PersistIfSettledAsync(entity, result, guestArmies, cancellationToken).ConfigureAwait(false);
-        return result.Changed;
-    }
-
-    private static List<UnitStack> AggregateStacks(IEnumerable<UnitStack> stacks) =>
-        [.. stacks.GroupBy(s => s.Type).Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))];
-
-    /// <summary>
-    /// Splits <paramref name="guestDeaths"/> (pooled by type, from
-    /// <see cref="SettleResult.GuestDeaths"/>) across the actual guest
-    /// <paramref name="guestArmies"/> present and removes any left with no
-    /// stacks — <see cref="GuestArmyAllocation"/> does the split; this just
-    /// also deletes the now-empty rows, which that helper deliberately leaves
-    /// to the caller (its own remarks explain why).
-    /// </summary>
-    private void ApplyGuestDeaths(IReadOnlyList<ArmyEntity> guestArmies, IReadOnlyList<UnitStack> guestDeaths)
-    {
-        if (guestDeaths.Count == 0)
-        {
-            return;
-        }
-
-        GuestArmyAllocation.ApplyLosses(guestArmies, guestDeaths);
-
-        foreach (var army in guestArmies.Where(a => a.Stacks.Count == 0))
-        {
-            _dbContext.Armies.Remove(army);
-        }
-    }
-
-    private async Task PersistIfSettledAsync(
-        SettlementEntity entity,
-        SettleResult result,
-        List<ArmyEntity> guestArmies,
-        CancellationToken cancellationToken)
-    {
-        if (!result.Changed)
-        {
-            return;
-        }
-
-        entity.ApplyDomain(result.Settlement);
-        ApplyGuestDeaths(guestArmies, result.GuestDeaths);
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return session;
     }
 
     private Task<bool> PlotTakenAsync(Guid worldId, HexCoord coord, CancellationToken cancellationToken) =>

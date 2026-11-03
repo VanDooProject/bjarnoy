@@ -175,7 +175,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
 
     await expect(settlement.ring.categoryBubbles.first()).toBeVisible();
     const categoryLabels = await settlement.ring.categoryBubbles.allTextContents();
-    // Tower and the Weaponsmith (military), and the wall (Defence: grass, forest and sand take a palisade and a gate).
+    // The Weaponsmith (military), and the Tower and the wall (Defence: grass, forest and sand take a palisade and a gate).
     expect(new Set(categoryLabels)).toEqual(new Set(['Military', 'Defence']));
 
     for (const label of categoryLabels) {
@@ -185,7 +185,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
       for (const forbidden of ['Reindeer Herder', 'Farm', 'Pumpkin Farm', 'Lumberjack', 'Quarry', 'Hut', 'Magic Tower']) {
         expect(buildingLabels).not.toContain(forbidden);
       }
-      if (label === 'Defence') expect(new Set(buildingLabels)).toEqual(new Set(['Palisade', 'Palisade Gate']));
+      if (label === 'Defence') expect(new Set(buildingLabels.map((l) => l.replace(/\u00AD/g, '')))).toEqual(new Set(['Watchtower', 'Palisade', 'Palisade Gate']));
     }
   });
 

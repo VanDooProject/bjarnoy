@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { ApiError } from '../api/client';
 import { useAuthStore } from '../stores/auth';
 import { usePlayerStore } from '../stores/player';
+import { useUnsavedInput } from '../composables/useUnsavedInput';
 import type { MessageSchema } from '../i18n/schema';
 import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
@@ -17,6 +18,7 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const userName = ref('');
 const password = ref('');
 const confirmPassword = ref('');
+useUnsavedInput(() => userName.value !== '' || password.value !== '' || confirmPassword.value !== '');
 const submitting = ref(false);
 const error = ref<string | null>(null);
 

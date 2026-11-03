@@ -149,8 +149,12 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             var ravens = domain.VisionBonusRings;
             ravensBySettlement[settlement.Id] = ravens;
             var centre = new HexCoord(settlement.CentreQ, settlement.CentreR);
-            sources.Add(FogVisionRadii.ToVisionSource(centre, level, ravens));
-            discs.Add(new ExploredDisc(centre, FogVisionRadii.ExploredRadius(level) + ravens));
+            // A settlement whose Longhouse is destroyed sees nothing around its centre (no source, no explored disc).
+            if (FogVisionRadii.ToVisionSource(centre, level, ravens) is { } centreSource)
+            {
+                sources.Add(centreSource);
+                discs.Add(new ExploredDisc(centre, centreSource.ExploredRadius));
+            }
 
             foreach (var tower in settlement.Buildings.Where(b => b.Type == BuildingType.Tower))
             {
@@ -386,7 +390,7 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException) when (inserting)
+        catch (DbUpdateException ex) when (inserting && !ConcurrentWriteExecutor.IsRetryable(ex))
         {
             // Two concurrent fog requests for a new player both saw no row
             // for a chunk and both inserted; the primary key let one win.
