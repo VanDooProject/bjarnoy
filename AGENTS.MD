@@ -41,6 +41,12 @@
   prefer reading the code over stacking up subagent theories — an
   unverified theory that sounds plausible is worse than no theory)
 - if running as sonnet and being stuck as a stronger model like opus on how to fix or debug
+- Sonnet implements from a settled spec: it ports a finished design and
+  wires up code. Creating new visual or motion design (scene composition,
+  silhouettes, animation look, judging whether it reads) stays on Opus or
+  higher
+- when a Sonnet subagent writes new visuals anyway, expect heavy
+  refinement and review every render
 
 # my gameplay wishes and requirements
 - collect the game wishes, requirements and mechanics I state (e.g. "a realm is taken by destroying its Longhouse", "ships can hit
@@ -275,6 +281,10 @@
   its own page or section in the same artifact and link the rounds to each
   other — never overwrite or delete an earlier round's content when
   publishing the next one, I still compare against it
+- artifacts with motion (animations, motion demos, story beats, ...) get a
+  toggle that switches reduced motion on and off inside the page, next to
+  following `prefers-reduced-motion` — I can't change that setting on my
+  machine (it's off), so the reduced-motion path has to be viewable there
 - don't report that you followed one of these rules (e.g. "renamed the
   branch because of the naming rule") — that's expected. Only tell me when
   you did **not** follow a rule, and why

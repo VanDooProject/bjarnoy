@@ -1933,7 +1933,12 @@ export class HexMapRenderer {
   private waterDryEntries: DryEntry[] = [];
   private waterDryLoadStarted = false;
   // The river flow field (§4.4e), drawn into its own render texture next to the dry mask: where the river and bog-creek art flows.
-  private riverFlow = new RiverFlowLayer();
+  // Its cells solve on a worker, so a first draw leaves hexes without flow; this redraws once they have all landed.
+  private riverFlow = new RiverFlowLayer({
+    onCellsReady: () => {
+      if (!this.destroyed) this.refreshWaterDry();
+    },
+  });
   private riverFlowEntries: RiverFlowEntry[] = [];
   // Bog lakes' gust (settlement mode only): the lake wet masks drawn over the lakes' bounding rect, and the mesh that shades them.
   private bogLakeLayer: BogLakeLayer;
@@ -5784,6 +5789,11 @@ export class HexMapRenderer {
     this.cameraAnim = null;
     this.applyCameraTransform();
     this.rebuildAll();
+  }
+
+  /** Whether river hexes are still waiting for their flow cell, so the water draws them without flow for now. */
+  get riverFlowPending(): boolean {
+    return this.riverFlow.pending;
   }
 
   /**

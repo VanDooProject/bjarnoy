@@ -12,7 +12,8 @@ import type { RiverTile, BogTile, TileOrientation } from '../types';
 import { topFaceEdgeIndex } from '../riverPath';
 import { SOURCE_W, type DryMaskFrame, type WaterDryMasksData } from './dryMaskCore';
 import { dryCellWorldRect, MaskRenderTarget, type MaskPlacement } from './waterDryMask';
-import { buildBankContext, computeRiverRipple, confluenceArmRanges, topFacePolygonTexels, type PlacedMask } from './riverFlow';
+import { RiverRippleSolver, type RiverRippleResult } from './riverRippleSolver';
+import { buildBankContext, confluenceArmRanges, topFacePolygonTexels, type PlacedMask } from './riverFlow';
 
 /** One river or bog-creek hex's base art, as drawn, and where its water goes. */
 export interface RiverFlowEntry {
@@ -120,6 +121,13 @@ export function boundsOf(rects: readonly { x: number; y: number; w: number; h: n
   };
 }
 
+interface FlowCell {
+  face: Texture;
+  rim: Texture;
+  psiFace: Texture;
+  psiRim: Texture;
+}
+
 /**
  * Owns the river flow render texture, the flow cells computed for it and the sprites drawn into it.
  *
@@ -132,7 +140,28 @@ export class RiverFlowLayer {
   /** The same cells' stream function (`computeRiverRipple`'s `psi`, in the blue channel), over the same rect, so it is read with the same UVs. */
   private readonly psiTarget = new MaskRenderTarget(RIVER_RT_MAX_SIDE);
   private masks: LoadedRiverMasks | null = null;
-  private readonly cells = new Map<string, { face: Texture; rim: Texture; psiFace: Texture; psiRim: Texture }>();
+  private readonly cells = new Map<string, FlowCell>();
+  /** The cell size of every request still out, which the texture build needs once its result lands. */
+  private readonly requested = new Map<string, { cw: number; ch: number }>();
+  /** Solves the cells off the main thread; a cell that is still out is drawn without flow. */
+  private readonly solver = new RiverRippleSolver(
+    (key, result) => this.install(key, result),
+    () => {
+      this.requested.clear();
+      this.onCellsReady?.();
+    },
+  );
+  private onCellsReady: (() => void) | null;
+
+  /** `onCellsReady` runs once the last outstanding cell has landed, so the owner can `draw` again with them all. */
+  constructor(options: { onCellsReady?: () => void } = {}) {
+    this.onCellsReady = options.onCellsReady ?? null;
+  }
+
+  /** Whether cells are still being solved, i.e. some river hex is drawn without its flow yet. */
+  get pending(): boolean {
+    return this.solver.busy;
+  }
   private drawnRect: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
 
   /** The masks are lazily decoded; resolves when `draw` can use them. */
@@ -161,7 +190,7 @@ export class RiverFlowLayer {
    * version of it. Drawn in one pass, whichever hex came later overwrote up to `FACE_PAD_TEXELS` of the other's face: a
    * second, shifted seam inside the neighbour.
    */
-  private cellTextures(masks: LoadedRiverMasks, name: string, frame: DryMaskFrame, entry: RiverFlowEntry, tileWidth: number, psiRange: readonly [number, number]): { face: Texture; rim: Texture; psiFace: Texture; psiRim: Texture } {
+  private cellTextures(masks: LoadedRiverMasks, name: string, frame: DryMaskFrame, entry: RiverFlowEntry, tileWidth: number, psiRange: readonly [number, number]): FlowCell | null {
     const outEdge = topFaceEdgeIndex(entry.outDirection);
     const inEdges = entry.inDirections.map(topFaceEdgeIndex).sort((a, b) => a - b);
     const fadeEdge = entry.fadeDirection ? topFaceEdgeIndex(entry.fadeDirection) : undefined;
@@ -172,7 +201,7 @@ export class RiverFlowLayer {
       .filter(({ n }) => masks.data.frames[n.name])
       .sort((a, b) => a.edge - b.edge);
     const key = `${name}|${outEdge}|${inEdges.join(',')}|${fadeEdge ?? ''}|${neighbours.map(({ edge, n }) => `${edge}:${n.name}`).join(',')}|${psiRange[0]},${psiRange[1]}`;
-    let pair = this.cells.get(key);
+    const pair = this.cells.get(key);
     if (!pair) {
       const { mask, cw, ch } = cropAtlasCell(masks.alpha, masks.data.width, frame);
       const polygon = topFacePolygonTexels(frame.sx, frame.sy);
@@ -187,15 +216,28 @@ export class RiverFlowLayer {
         }),
         2 * k,
       );
-      const flow = computeRiverRipple({ mask, cw, ch, polygon, inEdges, outEdge, fadeEdge, context, psiRange });
-      const { face, rim } = splitFaceAndRim(flow.data, flow.inside);
-      const psiParts = splitFaceAndRim(flow.psi, flow.inside);
-      const texture = (data: Uint8Array) =>
-        new Texture({ source: new BufferImageSource({ resource: data, width: cw, height: ch, scaleMode: 'linear', addressMode: 'clamp-to-edge' }) });
-      pair = { face: texture(face), rim: texture(rim), psiFace: texture(psiParts.face), psiRim: texture(psiParts.rim) };
-      this.cells.set(key, pair);
+      this.requested.set(key, { cw, ch });
+      const flow = this.solver.solve(key, { mask, cw, ch, polygon, inEdges, outEdge, fadeEdge, context, psiRange });
+      return flow ? this.install(key, flow, false) : null;
     }
     return pair;
+  }
+
+  /** Turns a solved cell into its textures and caches it; tells the owner when that was the last cell out. */
+  private install(key: string, flow: RiverRippleResult, notify = true): FlowCell | null {
+    const size = this.requested.get(key);
+    this.requested.delete(key);
+    if (!size) return null;
+    const { cw, ch } = size;
+    const { face, rim } = splitFaceAndRim(flow.data, flow.inside);
+    const psiParts = splitFaceAndRim(flow.psi, flow.inside);
+    const texture = (data: Uint8Array) =>
+      new Texture({ source: new BufferImageSource({ resource: data, width: cw, height: ch, scaleMode: 'linear', addressMode: 'clamp-to-edge' }) });
+    const cell = { face: texture(face), rim: texture(rim), psiFace: texture(psiParts.face), psiRim: texture(psiParts.rim) };
+    this.cells.set(key, cell);
+    // One redraw for the whole batch rather than one per cell: each draw re-renders every river cell.
+    if (notify && !this.solver.busy) this.onCellsReady?.();
+    return cell;
   }
 
   /** The world rect the texture covers (the river hexes' cells), for the shader's own UVs; null before the first `draw`. */
@@ -240,7 +282,10 @@ export class RiverFlowLayer {
       const name = entry.texture.label ?? '';
       const frame = masks.data.frames[name];
       if (!frame) continue;
-      const { face, rim, psiFace, psiRim } = this.cellTextures(masks, name, frame, entry, tileWidth, rangeOf(entry));
+      // Not solved yet: this hex is drawn without flow until its cell lands and `onCellsReady` asks for another draw.
+      const cell = this.cellTextures(masks, name, frame, entry, tileWidth, rangeOf(entry));
+      if (!cell) continue;
+      const { face, rim, psiFace, psiRim } = cell;
       const rect = dryCellWorldRect(entry, frame, tileWidth);
       rims.push({ texture: rim, rect, tint: 0xffffff });
       faces.push({ texture: face, rect, tint: 0xffffff });
@@ -253,6 +298,9 @@ export class RiverFlowLayer {
   }
 
   destroy(): void {
+    this.onCellsReady = null;
+    this.solver.destroy();
+    this.requested.clear();
     this.target.destroy();
     this.psiTarget.destroy();
     for (const { face, rim, psiFace, psiRim } of this.cells.values()) {
