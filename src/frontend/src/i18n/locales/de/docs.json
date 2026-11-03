@@ -1060,7 +1060,7 @@
       "rules": {
         "inside": "Ein Wachturm muss innerhalb deines Gebiets stehen. Baust du ihn an der Grenze, rückt die Grenze rund um ihn nach außen.",
         "chain": "Er darf auch auf Boden stehen, den erst ein anderer Wachturm beansprucht. Seine Ringe reichen dann noch weiter, und dein Gebiet wächst Turm für Turm über die Insel.",
-      "cut": "Ein Wachturm beansprucht nur Land, solange er über eine Kette von Türmen mit einem deiner Langhäuser verbunden ist. Fällt ein Turm in der Kette, beanspruchen und sehen die Türme dahinter nichts mehr, bis du die Lücke schließt – es sei denn, ein anderes deiner Langhäuser auf der Insel erreicht sie noch. Ein abgeschnittener Turm zählt nicht zu deinem Turmlimit.",
+        "cut": "Ein Wachturm beansprucht nur Land, solange er über eine Kette von Türmen mit einem deiner Langhäuser verbunden ist. Fällt ein Turm in der Kette, beanspruchen und sehen die Türme dahinter nichts mehr, bis du die Lücke schließt – es sei denn, ein anderes deiner Langhäuser auf der Insel erreicht sie noch. Ein abgeschnittener Turm zählt nicht zu deinem Turmlimit.",
         "built": "Land beansprucht ein Wachturm erst, wenn er steht. Eine Baustelle bringt noch nichts."
       }
     },
@@ -1305,5 +1305,11 @@
       },
       "cap": "Schreine und Runen addieren sich, aber jede Art von Bonus endet bei +{percent} %."
     }
+  },
+  "mapZoom": {
+    "zoomIn": "Hineinzoomen",
+    "zoomOut": "Herauszoomen",
+    "hintCtrl": "Strg + Mausrad zum Zoomen",
+    "hintCmd": "⌘ + Mausrad zum Zoomen"
   }
 }

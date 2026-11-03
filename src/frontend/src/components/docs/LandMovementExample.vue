@@ -7,6 +7,7 @@ import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { useDocsMapRenderer } from '../../composables/useDocsMapRenderer';
+import DocsMapControls from './DocsMapControls.vue';
 import { StaticWorldModel } from '../../lib/map/StaticWorldModel';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import { coordKey } from '../../lib/hex/coords';
@@ -41,7 +42,7 @@ const hovered = ref<HoverInfo | null>(null);
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-const { renderer } = useDocsMapRenderer(canvas, container, {
+const { renderer, zoomIn, zoomOut, wheelHint } = useDocsMapRenderer(canvas, container, {
   worldModel: world,
   previewCenter: { q: 2, r: 0 },
   onHoverChange: (info: HoverInfo | null) => {
@@ -84,8 +85,9 @@ const total = computed(() => (speed.value ? formatMinutes(minutesPerHex(route.to
 
 <template>
   <div class="land-example" data-testid="land-example">
-    <div ref="container" class="map-host" role="img" :aria-label="$t('docs.landMovement.example.alt')">
-      <canvas ref="canvas" class="docs-map-canvas" />
+    <div ref="container" class="map-host">
+      <canvas ref="canvas" class="docs-map-canvas" role="img" :aria-label="$t('docs.landMovement.example.alt')" />
+      <DocsMapControls :zoom-in="zoomIn" :zoom-out="zoomOut" :wheel-hint="wheelHint" />
     </div>
     <p class="caption" data-testid="land-example-caption">{{ hoverText }}</p>
     <ol class="steps" data-testid="land-example-steps">

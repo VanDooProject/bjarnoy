@@ -6,6 +6,7 @@ import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { useDocsMapRenderer } from '../../composables/useDocsMapRenderer';
+import DocsMapControls from './DocsMapControls.vue';
 import { StaticWorldModel } from '../../lib/map/StaticWorldModel';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import { BOG_ISLAND_RIVERS, bogIslandTileNameKey, buildBogIslandTiles } from '../../lib/docs/bogIsland';
@@ -19,7 +20,7 @@ const hovered = ref<HoverInfo | null>(null);
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-useDocsMapRenderer(canvas, container, {
+const { zoomIn, zoomOut, wheelHint } = useDocsMapRenderer(canvas, container, {
   worldModel: world,
   previewCenter: { q: 0, r: 0 },
   onHoverChange: (info: HoverInfo | null) => {
@@ -40,6 +41,7 @@ const captionText = computed(() => {
   <div class="bog-island">
     <div ref="container" class="map-host">
       <canvas ref="canvas" class="docs-map-canvas" />
+      <DocsMapControls :zoom-in="zoomIn" :zoom-out="zoomOut" :wheel-hint="wheelHint" />
     </div>
     <p class="caption" data-testid="bog-island-caption">{{ captionText }}</p>
   </div>

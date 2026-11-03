@@ -7,6 +7,7 @@ import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { useDocsMapRenderer } from '../../composables/useDocsMapRenderer';
+import DocsMapControls from './DocsMapControls.vue';
 import { StaticWorldModel } from '../../lib/map/StaticWorldModel';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import {
@@ -36,7 +37,7 @@ const hovered = ref<HoverInfo | null>(null);
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-useDocsMapRenderer(canvas, container, {
+const { zoomIn, zoomOut, wheelHint } = useDocsMapRenderer(canvas, container, {
   worldModel: world,
   previewCenter: UTGARD_CENTRE,
   onHoverChange: (info: HoverInfo | null) => {
@@ -53,8 +54,9 @@ const captionText = computed(() => {
 
 <template>
   <div class="utgard-example" data-testid="utgard-example">
-    <div ref="container" class="map-host" role="img" :aria-label="$t('docs.wastedLands.defences.example.alt')">
-      <canvas ref="canvas" class="docs-map-canvas" />
+    <div ref="container" class="map-host">
+      <canvas ref="canvas" class="docs-map-canvas" role="img" :aria-label="$t('docs.wastedLands.defences.example.alt')" />
+      <DocsMapControls :zoom-in="zoomIn" :zoom-out="zoomOut" :wheel-hint="wheelHint" />
     </div>
     <p class="caption" data-testid="utgard-example-caption">{{ captionText }}</p>
     <p class="note">{{ $t('docs.wastedLands.defences.example.caption') }}</p>

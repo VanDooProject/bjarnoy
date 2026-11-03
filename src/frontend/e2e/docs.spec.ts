@@ -1057,3 +1057,28 @@ test.describe(
     }
   },
 );
+
+test.describe("docs map zoom controls", { tag: "@g2" }, () => {
+  test("the zoom button redraws the realm map and a plain wheel shows the ctrl hint", async ({
+    page,
+  }) => {
+    await page.goto("/docs/realm");
+    const mapHost = page.locator(
+      '.realm-example .map-host[data-map-ready="true"]',
+    );
+    await mapHost.waitFor();
+    await mapHost.scrollIntoViewIfNeeded();
+
+    const canvas = mapHost.locator("canvas");
+    const before = await canvas.screenshot();
+    await mapHost.getByTestId("docs-map-zoom-in").click();
+    await expect
+      .poll(async () => (await canvas.screenshot()).equals(before))
+      .toBe(false);
+
+    const box = (await mapHost.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, 100);
+    await expect(mapHost.getByTestId("docs-map-wheel-hint")).toBeVisible();
+  });
+});
