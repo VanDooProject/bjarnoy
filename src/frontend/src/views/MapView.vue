@@ -6,6 +6,7 @@ import { buildingName, campName, giantName, terrainName } from '../i18n/catalogu
 import { useRoute, useRouter } from 'vue-router';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
+import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
 import { useLoadFlow } from '../composables/useLoadFlow';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
@@ -219,6 +220,7 @@ function onArmySelect(armyId: string) {
 const {
   step: loadStep,
   error: loadError,
+  settled: loadSettled,
   run: loadSettlement,
 } = useLoadFlow(async (setStep) => {
   if (!DEMO_MODE && player.hasFoundedSettlement && player.settlementId) {
@@ -246,6 +248,12 @@ const overlayStep = computed(() => loadStep.value ?? (revealingMap.value ? t('hu
 const overlayError = computed(
   () => loadError.value ?? (world.selectedSettlementId && world.fogMaskBitmap === null ? world.fogMaskError : null),
 );
+useIntroTilesSignal({
+  settled: loadSettled,
+  error: overlayError,
+  canvasShown: computed(() => !!world.selectedSettlementId),
+  loadState: computed(() => canvasRef.value?.loadState),
+});
 function retryLoad() {
   if (loadError.value) {
     void loadSettlement().then(() => {

@@ -638,7 +638,7 @@ test.describe('desktop dropdowns and nav alignment', () => {
 
   test('ReturningPlayerMenu opens and its panel is actually hit-testable at its own centre', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await page.goto('/');
+    await page.goto('/#no-intro');
     await page.locator('[data-testid="returning-player-trigger"]').click();
 
     const menu = page.locator('[data-testid="returning-player-menu"]');
@@ -747,7 +747,7 @@ test.describe('mobile HUD drawer on non-map pages', () => {
   // mount outside the HUD drawer hides itself at phone width.
   test('no page shows the language switcher outside the drawer', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    for (const path of ['/', '/login', '/register', '/worlds', '/reports', '/impressum', '/docs', '/docs/tech-tree']) {
+    for (const path of ['/#no-intro', '/login', '/register', '/worlds', '/reports', '/impressum', '/docs', '/docs/tech-tree']) {
       await page.goto(path);
       // The page has rendered (its HUD bar, or a standalone page's own
       // switcher), so this can't pass just because nothing is there yet. HUD
@@ -770,7 +770,7 @@ test.describe('mobile HUD drawer on non-map pages', () => {
 
   test('the pre-founding landing page gets no grip at all', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await page.goto('/');
+    await page.goto('/#no-intro');
     await expect(page.locator('.hud-grip')).toHaveCount(0);
     await expect(page.locator('.hud-drawer')).toHaveCount(0);
   });

@@ -61,24 +61,11 @@ import enSettlementLayoutEditor from './locales/en/settlementLayoutEditor.json';
 import { datetimeFormats, numberFormats } from './formats';
 import {
   DEFAULT_LOCALE,
-  detectInitialLocale,
+  detectDeviceLocale,
   persistLocale,
-  readStoredLocale,
   type SupportedLocale,
 } from './locale';
-function queryLocale(): string | null {
-  try {
-    return new URLSearchParams(window.location.search).get('lang');
-  } catch {
-    return null;
-  }
-}
-
-const initialLocale = detectInitialLocale({
-  queryLocale: queryLocale(),
-  storedLocale: readStoredLocale(),
-  navigatorLanguage: typeof navigator !== 'undefined' ? navigator.language : null,
-});
+const initialLocale = detectDeviceLocale();
 
 // Not type-parameterized against MessageSchema: vue-i18n's generics for
 // createI18n require every message/format bag to satisfy an index-signature
