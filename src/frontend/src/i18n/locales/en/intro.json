@@ -1,0 +1,15 @@
+{
+  "region": "Intro",
+  "skip": "Skip",
+  "play": "Play the saga",
+  "backToDocs": "Back to docs",
+  "enterGame": "Enter the game",
+  "beats": {
+    "fire": "Skald's fire",
+    "prophecy": "The prophecy",
+    "ravens": "The ravens",
+    "sending": "The sending",
+    "hold": "Longship in fog",
+    "landfall": "Land!"
+  }
+}

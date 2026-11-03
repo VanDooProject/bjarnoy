@@ -5,6 +5,7 @@
  */
 
 import { hasUnsavedInput } from '../composables/useUnsavedInput';
+import { getOwnBuildId } from './buildId';
 
 const RELOAD_KEY = 'bjarnoy.updateReload';
 /** The same target is not hard-loaded twice within this window (reload loop guard). */
@@ -95,20 +96,9 @@ export function installChunkErrorHandling(router: {
 
 // --- Build id and the moments a pending update is applied ---
 
-let ownBuildId: string | null = null;
-
-/** The entry chunk's file name (`assets/index-<hash>.js`), taken from the entry module's own URL. */
-export function buildIdFromEntryUrl(entryUrl: string): string {
-  return new URL(entryUrl).pathname.replace(/^\//, '');
-}
-
-export function setOwnBuildId(id: string): void {
-  ownBuildId = id;
-}
-
 /** A response's `X-App-Build` differing from this bundle's id means a newer build was deployed. */
 export function checkBuildHeader(headerValue: string | null): void {
-  if (headerValue !== null && headerValue !== ownBuildId) markUpdatePending();
+  if (headerValue !== null && headerValue !== getOwnBuildId()) markUpdatePending();
 }
 
 /**

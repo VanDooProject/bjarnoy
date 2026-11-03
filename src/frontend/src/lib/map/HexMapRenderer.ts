@@ -142,13 +142,6 @@ const RANGE_TINT_COLOR = 0x5ab0e0;
 const RANGE_TINT_ALPHA = 0.16;
 const RANGE_OUTLINE_ALPHA = 0.55;
 const FOG_SCOUTED = 0x0b1116;
-// zip 9: "unexplored hexes are hidden" — a dense white mist, distinct from
-// the darker grey used for the scouted-but-not-visible ring (FOG_SCOUTED).
-// Drawn as a per-hex fill rather than a fixed CSS backdrop so it keeps
-// covering new hexes as the camera pans past the settlement's explored
-// radius, instead of a static gradient behind the terrain that peters out
-// and makes the map read as a bounded box.
-const FOG_UNEXPLORED = 0xe9f0f4;
 const HOVER_FILL = 0xffffff;
 const HOVER_STROKE = 0xffe9c2;
 
@@ -369,6 +362,7 @@ export const fogDebugFlags: FogDebugFlags = {
 };
 
 import { fogPerfStats } from './fog/fogPerfStats';
+import { FOG_UNEXPLORED } from './fogColours';
 // Re-exported so existing importers (main.ts, FogPerfPanel.vue) keep working.
 export { fogPerfStats, type FogPerfStats } from './fog/fogPerfStats';
 

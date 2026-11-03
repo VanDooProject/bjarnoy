@@ -55,3 +55,20 @@ export function readStoredLocale(): string | null {
     return null;
   }
 }
+
+function readQueryLocale(): string | null {
+  try {
+    return new URLSearchParams(window.location.search).get('lang');
+  } catch {
+    return null;
+  }
+}
+
+/** The locale this device starts in: `?lang=`, the stored choice, then the browser language. */
+export function detectDeviceLocale(): SupportedLocale {
+  return detectInitialLocale({
+    queryLocale: readQueryLocale(),
+    storedLocale: readStoredLocale(),
+    navigatorLanguage: typeof navigator !== 'undefined' ? navigator.language : null,
+  });
+}

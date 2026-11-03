@@ -1,0 +1,15 @@
+{
+  "region": "Intro",
+  "skip": "Überspringen",
+  "play": "Saga abspielen",
+  "backToDocs": "Zurück zur Doku",
+  "enterGame": "Zum Spiel",
+  "beats": {
+    "fire": "Am Feuer des Skalden",
+    "prophecy": "Die Prophezeiung",
+    "ravens": "Die Raben",
+    "sending": "Die Aussendung",
+    "hold": "Langschiff im Nebel",
+    "landfall": "Land!"
+  }
+}

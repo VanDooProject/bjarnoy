@@ -4,11 +4,11 @@ import { expect, test } from './fixtures';
 // other spec; this one is the sole place that exercises `de` and the
 // `?lang` boot override.
 test('applies the locale requested via ?lang and reflects it on <html lang>', async ({ page }) => {
-  await page.goto('/?lang=de');
+  await page.goto('/?lang=de#no-intro');
   await expect(page.locator('html')).toHaveAttribute('lang', 'de');
 });
 
 test('defaults to English when no locale is requested', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/#no-intro');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 });

@@ -82,6 +82,11 @@
         "wildlifeCamps": "Auch das Ödland hat eigene Lager.",
         "walls": "Deine eigenen Mauern, aus Holz gebaut.",
         "landMovement": "Wie Armeen das Land bis dorthin durchqueren."
+      },
+      "saga": {
+        "founding": "Wie deine erste Landung im Spiel abläuft.",
+        "realm": "Was das Reich ausmacht, das du für den Sohn des Jarls aufbaust.",
+        "ships": "Die Langschiffe, die dich hergebracht haben."
       }
     }
   },
@@ -91,6 +96,10 @@
     "intro": "Wie Inseln, Gebäude, Bestien und das Endspiel funktionieren. Alles hier sind die Regeln und die Grafiken des Spiels selbst.",
     "artAlt": "Utgard, die Riesenfestung der Ödlande",
     "groups": {
+      "story": {
+        "title": "Die Geschichte",
+        "description": "Wo deine Saga beginnt."
+      },
       "island": {
         "title": "Deine Insel",
         "description": "Das Land und was es dir gibt."
@@ -109,6 +118,10 @@
       }
     },
     "pages": {
+      "saga": {
+        "title": "Die Saga",
+        "description": "Die Geschichte hinter deiner ersten Landung – und das Intro zum Nochmal-Ansehen."
+      },
       "tiles": {
         "title": "Kacheln",
         "description": "Der Boden deiner Insel und was du darauf bauen kannst."
@@ -1367,5 +1380,18 @@
     "zoomOut": "Herauszoomen",
     "hintCtrl": "Strg + Mausrad zum Zoomen",
     "hintCmd": "⌘ + Mausrad zum Zoomen"
+  },
+  "saga": {
+    "title": "Die Saga",
+    "intro": "Die Geschichte hinter deiner ersten Landung in sechs Schritten.",
+    "steps": [
+      "Am Feuer beginnt ein Skalde die Saga.",
+      "Eine Prophezeiung verkündet: Die Heimat ist verloren.",
+      "Die Raben kehren zurück. Bjarnøy ist nicht leer – unter dem Meer schlafen die Riesen.",
+      "Der Jarl setzt sein ganzes Geschlecht auf seinen einzigen Sohn, noch ein Kind. Du hast geschworen, ihn zu leiten und sein Reich aufzubauen.",
+      "Das Langschiff rudert durch den Nebel, vorbei am Rauch und an den Lichtern anderer Siedlungen.",
+      "„Land!“ Der Nebel hebt sich, und dein Reich beginnt."
+    ],
+    "watch": "Intro ansehen"
   }
 }
