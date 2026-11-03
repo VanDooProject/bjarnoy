@@ -356,9 +356,9 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
     position: a.position,
     selected: a.id === world.selectedArmyId,
     returning: !!a.movement?.isReturning,
-    // docs/design/ship-movement.md §4: ship marker for a fleet, flag for a
-    // land army — reuses the same classification dispatch already relies on
-    // to keep the two unit-class families from mixing in one army.
+    // docs/design/ship-movement.md §4: ship marker for a fleet (any ship in
+    // the army, its land units are passengers), flag for a land army — the
+    // same classification dispatch relies on.
     isFleet:
       classifyUnitSelection(
         Object.fromEntries(a.stacks.map((s) => [s.unit, s.count])),

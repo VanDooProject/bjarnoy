@@ -19,12 +19,10 @@ import { useAuthStore } from '../../stores/auth';
 import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
 import HuntTargetSummary from './HuntTargetSummary.vue';
-import { isWaterCampFamily } from '../../lib/map/campPlacement';
+import DispatchSlots from './DispatchSlots.vue';
+import { useDispatchUnitPicker } from '../../composables/useDispatchUnitPicker';
 import { campName, missionName, unitName } from '../../i18n/catalogueNames';
 import {
-  classifyUnitSelection,
-  isHuntUnit,
-  isUnitSelectableFor,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
 import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
@@ -57,26 +55,9 @@ const garrisonRows = computed(() =>
     .filter((g) => g.count > 0)
     .map((g) => ({ unit: g.unit, label: unitName(g.unit), available: g.count })),
 );
-// The hunt target is a camp on the sea (the whale road): fleets only.
-const huntAtSea = computed(() => {
-  void world.campStatesVersion;
-  const target = draft.value?.targetCamp;
-  const camp = target ? world.model.campAt(target) : undefined;
-  return !!camp && isWaterCampFamily(camp.family);
-});
-const selectionKind = computed(() => classifyUnitSelection(draft.value?.unitCounts ?? {}, catalogue.byType));
-function isRowSelectable(unit: string): boolean {
-  // A hunt takes land units against a land camp and ships against a water camp, so the other class is locked out from the start.
-  if (draft.value?.mission === 'hunt' && !isHuntUnit(unit, catalogue.byType, huntAtSea.value)) return false;
-  return isUnitSelectableFor(unit, selectionKind.value, catalogue.byType);
-}
-const hasLockedOutUnits = computed(() =>
-  draft.value?.mission === 'hunt'
-    ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
-    : selectionKind.value !== 'none' && selectionKind.value !== 'mixed'
-    ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
-    : false,
-);
+const picker = useDispatchUnitPicker(garrisonRows);
+const { isRowSelectable, hasLockedOutUnits } = picker;
+
 function quantityFor(unit: string): number {
   return draft.value?.unitCounts[unit] ?? 0;
 }
@@ -121,7 +102,7 @@ const hasDestination = computed(() =>
       : routeLength.value > 0,
 );
 const canConfirm = computed(
-  () => !DEMO_MODE && hasUnitsSelected.value && hasDestination.value && !buildingPicker.isMissingRequiredPick.value && !draft.value?.submitting,
+  () => !DEMO_MODE && hasUnitsSelected.value && hasDestination.value && picker.selectionSendable.value && !buildingPicker.isMissingRequiredPick.value && !draft.value?.submitting,
 );
 
 function setMission(mission: 'move' | 'attack' | 'support' | 'hunt') {
@@ -321,9 +302,7 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
           </div>
         </div>
 
-        <p v-if="hasLockedOutUnits" class="status-subtext fleet-note">
-          {{ t('hud.armyPanel.fleetNote', { kind: selectionKind === 'fleet' ? t('hud.armyPanel.shipsOnly') : t('hud.armyPanel.landUnitsOnly') }) }}
-        </p>
+        <p v-if="hasLockedOutUnits" class="status-subtext fleet-note">{{ t('hud.armyPanel.huntLandOnlyNote') }}</p>
         <div class="unit-steppers">
           <div v-for="row in garrisonRows" :key="row.unit" class="unit-stepper-row" :class="{ 'is-locked-out': !isRowSelectable(row.unit) }">
             <span class="unit-stepper-name">{{ row.label }}</span>
@@ -336,6 +315,8 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
           </div>
           <div v-if="!garrisonRows.length" class="status-subtext">{{ t('hud.armyPanel.noUnitsAvailable') }}</div>
         </div>
+
+        <DispatchSlots :unit-counts="draft.unitCounts" />
 
         <label class="provisions-field">
           <span>{{ t('hud.armyPanel.provisions') }}</span>

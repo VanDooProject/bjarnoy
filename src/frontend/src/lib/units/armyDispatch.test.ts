@@ -18,11 +18,13 @@ import {
   selectedSiegeTargets,
   siegeTargetKindOf,
   isFieldOrderMidMarch,
-  isUnitSelectableFor,
+  exceedsShipCapacity,
   maxAffordableProvisions,
+  shipSlotUsage,
   routeToWaypointsAndDestination,
   shoreBuildings,
   targetBuildingPickerMode,
+  totalSpeed,
   totalUpkeepPerHour,
   trainingSite,
 } from './armyDispatch';
@@ -35,6 +37,8 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     speed: 1,
     carryCapacity: 0,
     foodCarryCapacity: 10,
+    cargoSlots: 0,
+    shipSlots: 0,
     upkeepPerHour: 1,
     trainingCost: { wood: 0, stone: 0, food: 0, iron: 0 },
     trainingSeconds: 0,
@@ -327,8 +331,8 @@ describe('classifyUnitSelection', () => {
     expect(classifyUnitSelection({ karve: 2, longship: 1 }, byType)).toBe('fleet');
   });
 
-  it('reports "mixed" once both families are selected', () => {
-    expect(classifyUnitSelection({ spearman: 1, karve: 1 }, byType)).toBe('mixed');
+  it('reports "fleet" once any ship is selected: the land units become its passengers', () => {
+    expect(classifyUnitSelection({ spearman: 1, karve: 1 }, byType)).toBe('fleet');
   });
 
   it('ignores unit types missing from the catalogue', () => {
@@ -336,30 +340,38 @@ describe('classifyUnitSelection', () => {
   });
 });
 
-describe('isUnitSelectableFor', () => {
+describe('ship slots', () => {
   const byType = {
-    spearman: unit({ type: 'spearman', class: 'infantry' }),
-    karve: unit({ type: 'karve', class: 'ship' }),
+    spearman: unit({ type: 'spearman', class: 'infantry', cargoSlots: 1 }),
+    bowman: unit({ type: 'bowman', class: 'infantry', cargoSlots: 2 }),
+    ram: unit({ type: 'ram', class: 'siege', cargoSlots: 10 }),
+    karve: unit({ type: 'karve', class: 'ship', shipSlots: 10, speed: 8 }),
+    longship: unit({ type: 'longship', class: 'ship', shipSlots: 20, speed: 10 }),
   };
 
-  it('leaves every class pickable when nothing is selected yet', () => {
-    expect(isUnitSelectableFor('spearman', 'none', byType)).toBe(true);
-    expect(isUnitSelectableFor('karve', 'none', byType)).toBe(true);
+  it('has no slot usage for a land army', () => {
+    expect(shipSlotUsage({ spearman: 5, ram: 1 }, byType)).toBeNull();
+    expect(exceedsShipCapacity({ spearman: 50 }, byType)).toBe(false);
   });
 
-  it('locks out ships once a land selection is committed', () => {
-    expect(isUnitSelectableFor('spearman', 'land', byType)).toBe(true);
-    expect(isUnitSelectableFor('karve', 'land', byType)).toBe(false);
+  it('counts the slots the passengers need against the slots the ships offer', () => {
+    expect(shipSlotUsage({ karve: 1, longship: 1, spearman: 4, bowman: 3 }, byType)).toEqual({ needed: 10, offered: 30 });
+    expect(shipSlotUsage({ karve: 1 }, byType)).toEqual({ needed: 0, offered: 10 });
   });
 
-  it('locks out land units once a fleet selection is committed', () => {
-    expect(isUnitSelectableFor('karve', 'fleet', byType)).toBe(true);
-    expect(isUnitSelectableFor('spearman', 'fleet', byType)).toBe(false);
+  it('is over capacity only when the passengers need more than the ships offer', () => {
+    expect(exceedsShipCapacity({ karve: 1, spearman: 10 }, byType)).toBe(false);
+    expect(exceedsShipCapacity({ karve: 1, spearman: 11 }, byType)).toBe(true);
+    expect(exceedsShipCapacity({ karve: 1, ram: 1 }, byType)).toBe(false);
+    expect(exceedsShipCapacity({ karve: 1, ram: 2 }, byType)).toBe(true);
+    expect(exceedsShipCapacity({ longship: 1, ram: 2 }, byType)).toBe(false);
   });
 
-  it('locks out nothing further for an (unreachable in practice) mixed selection', () => {
-    expect(isUnitSelectableFor('spearman', 'mixed', byType)).toBe(true);
-    expect(isUnitSelectableFor('karve', 'mixed', byType)).toBe(true);
+  it('moves a fleet at its slowest ship; passengers do not slow it', () => {
+    const slow = { ...byType, ram: unit({ type: 'ram', class: 'siege', cargoSlots: 10, speed: 1 }) };
+    expect(totalSpeed({ karve: 1, longship: 1, ram: 1 }, slow)).toBe(8);
+    expect(totalSpeed({ spearman: 2, ram: 1 }, { ...slow, spearman: unit({ type: 'spearman', speed: 4 }) })).toBe(1);
+    expect(totalSpeed({}, slow)).toBe(0);
   });
 });
 
@@ -471,14 +483,14 @@ describe('buildHuntDispatchRequest', () => {
     expect(isHuntUnit('unknown', byType)).toBe(false);
   });
 
-  it('a camp at sea (the whale road) is hunted by ships only, never by land units', () => {
+  it('a camp at sea (the whale road) is hunted by a fleet: ships, with land units as passengers', () => {
     const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
     expect(isHuntUnit('longship', byType, true)).toBe(true);
-    expect(isHuntUnit('spearman', byType, true)).toBe(false);
+    expect(isHuntUnit('spearman', byType, true)).toBe(true);
     expect(isHuntUnit('unknown', byType, true)).toBe(false);
   });
 
-  it('the hunt ring action needs land units at home for a land camp and ships for a camp at sea', () => {
+  it('the hunt ring action needs land units at home for a land camp and a ship for a camp at sea', () => {
     const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
     const landOnly = [{ unit: 'spearman', count: 4 }, { unit: 'longship', count: 0 }];
     const shipsOnly = [{ unit: 'spearman', count: 0 }, { unit: 'longship', count: 2 }];

@@ -116,22 +116,25 @@ export function buildHuntDispatchRequest(
 }
 
 /**
- * Whether a unit type may join a hunt: land units against a land camp, ships only against a water camp (`atSea`,
- * the whale road).
+ * Whether a unit type may join a hunt: land units against a land camp; against a water camp (`atSea`, the whale road) the
+ * ships, and any land unit as their passenger.
  */
 export function isHuntUnit(type: string, byType: Record<string, UnitDefinitionResponse>, atSea = false): boolean {
   const definition = byType[type];
   if (!definition) return false;
-  return atSea ? definition.class === 'ship' : definition.class !== 'ship';
+  return atSea ? true : definition.class !== 'ship';
 }
 
-/** Whether a garrison holds any unit that may hunt the camp (`atSea`: ships for a water camp, land units otherwise). */
+/** Whether a garrison holds any unit that may lead the hunt (`atSea`: a ship for a water camp, a land unit otherwise). */
 export function garrisonCanHunt(
   garrison: ReadonlyArray<{ unit: string; count: number }>,
   byType: Record<string, UnitDefinitionResponse>,
   atSea: boolean,
 ): boolean {
-  return garrison.some((g) => g.count > 0 && isHuntUnit(g.unit, byType, atSea));
+  return garrison.some((g) => {
+    if (g.count <= 0 || !isHuntUnit(g.unit, byType, atSea)) return false;
+    return !atSea || byType[g.unit]?.class === 'ship';
+  });
 }
 
 /**
@@ -188,20 +191,11 @@ export function isFieldOrderMidMarch(
 }
 
 /**
- * Issue #40 phase 6 §1: which unit-class family a garrison selection is
- * drawing from, so `ArmyPanel.vue` can grey out the class the player hasn't
- * picked yet — cheaply catching the backend's `MixedFleetAndLandUnits`
- * rejection (`Army.PlanDispatch`) before a request is even built, rather than
- * only learning about it from a 409 after clicking dispatch.
- *
- * `'none'` when nothing is selected yet (either class still pickable),
- * `'fleet'`/`'land'` once every selected unit agrees on a class, `'mixed'`
- * when both are present at once — which the UI should never actually let the
- * player reach (see `isUnitSelectableFor`), but is reported honestly rather
- * than silently picked one way, in case a stale draft ever gets here (e.g.
- * a unit's class changing between catalogue reloads).
+ * Whether a dispatch selection is a fleet: any ship among the selected units makes it one, and the land units selected
+ * with it are its passengers (`ShipCargo` in the backend). `'land'` when only land units are selected, `'none'` when
+ * nothing is selected yet.
  */
-export type FleetSelectionKind = 'none' | 'fleet' | 'land' | 'mixed';
+export type FleetSelectionKind = 'none' | 'fleet' | 'land';
 
 export function classifyUnitSelection(
   unitCounts: Record<string, number>,
@@ -216,29 +210,40 @@ export function classifyUnitSelection(
     if (definition.class === 'ship') hasShip = true;
     else hasNonShip = true;
   }
-  if (hasShip && hasNonShip) return 'mixed';
   if (hasShip) return 'fleet';
   if (hasNonShip) return 'land';
   return 'none';
 }
 
 /**
- * Whether a garrison row for `type` should accept more units given the
- * dispatch's current `selection` kind — the other class family is locked out
- * once one is committed to, so the player can't build a mixed request in the
- * first place (see `classifyUnitSelection`). Both families stay open while
- * nothing is selected (`'none'`); a `'mixed'` selection (shouldn't happen,
- * see `classifyUnitSelection`'s own comment) locks out nothing further, since
- * there is no single class left to prefer.
+ * The troop slots of a selection that includes ships: `needed` by the land units aboard against `offered` by the ships
+ * (`ShipCargo.SlotsNeeded`/`SlotsOffered` in the backend). `null` when no ship is selected (a land army needs no slots).
  */
-export function isUnitSelectableFor(
-  type: string,
-  selection: FleetSelectionKind,
+export function shipSlotUsage(
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+): { needed: number; offered: number } | null {
+  let needed = 0;
+  let offered = 0;
+  let hasShip = false;
+  for (const [type, count] of Object.entries(unitCounts)) {
+    if (count <= 0) continue;
+    const definition = byType[type];
+    if (!definition) continue;
+    if (definition.class === 'ship') hasShip = true;
+    needed += definition.cargoSlots * count;
+    offered += definition.shipSlots * count;
+  }
+  return hasShip ? { needed, offered } : null;
+}
+
+/** Whether the land units selected need more slots than the selected ships offer — the backend refuses it (`InsufficientShipCapacity`). */
+export function exceedsShipCapacity(
+  unitCounts: Record<string, number>,
   byType: Record<string, UnitDefinitionResponse>,
 ): boolean {
-  if (selection === 'none' || selection === 'mixed') return true;
-  const isShip = byType[type]?.class === 'ship';
-  return selection === 'fleet' ? isShip : !isShip;
+  const usage = shipSlotUsage(unitCounts, byType);
+  return usage !== null && usage.needed > usage.offered;
 }
 
 /** The kinds of building a siege engine can damage — mirrors `SiegeTargets` (`UnitDefinition.SiegeTargets`) in the backend. */
@@ -372,23 +377,20 @@ export function maxAffordableProvisions(
 }
 
 /**
- * Hexes/hour a dispatch would travel at — mirrors `Army.TotalSpeed`: the
- * slowest selected unit type sets the pace (a catapult army crawls at
- * catapult speed). `0` for an empty selection, same as the backend's own
- * `Stacks.Count == 0` case.
+ * Hexes/hour a dispatch would travel at — mirrors `ShipCargo.Pace` (`Army.TotalSpeed`): the slowest selected unit type sets
+ * the pace (a catapult army crawls at catapult speed); a fleet moves at its slowest ship and its passengers do not slow it.
+ * `0` for an empty selection.
  */
 export function totalSpeed(
   unitCounts: Record<string, number>,
   byType: Record<string, UnitDefinitionResponse>,
 ): number {
-  let slowest: number | null = null;
-  for (const [type, count] of Object.entries(unitCounts)) {
-    if (count <= 0) continue;
-    const definition = byType[type];
-    if (!definition) continue;
-    if (slowest === null || definition.speed < slowest) slowest = definition.speed;
-  }
-  return slowest ?? 0;
+  const selected = Object.entries(unitCounts)
+    .filter(([type, count]) => count > 0 && byType[type])
+    .map(([type]) => byType[type]);
+  const ships = selected.filter((d) => d.class === 'ship');
+  const pacing = ships.length > 0 ? ships : selected;
+  return pacing.length === 0 ? 0 : Math.min(...pacing.map((d) => d.speed));
 }
 
 /** Total upkeep/hour for a chosen unit-count map, for an at-a-glance "this costs N food/h" line. */
