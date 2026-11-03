@@ -7,9 +7,9 @@ then hands over to the real map.
 
 1. **Skald's fire** (intro): a skald by a hearth begins the saga.
 2. **Prophecy** (intro): a prophecy says the homeland is lost.
-3. **Ravens** (intro, optional): the ravens return. Bjarnøy is not empty: the giants sleep under the sea. Only hinted.
-4. **The sending** (intro): the jarl stakes his whole line on his only son, a child, shown as a silhouette. You are
+3. **The sending** (intro): the jarl stakes his whole line on his only son, a child, shown as a silhouette. You are
    sworn to guide him and build his realm.
+4. **Ravens** (intro, optional): the ravens return. Bjarnøy is not empty: the giants sleep under the sea. Only hinted.
 5. **Longship in fog** (hold, loops): the ship rows through fog. Other settlements show faintly in the background
    (smoke, lights, sails). The ravens fly past now and then.
 6. **Landfall** (exit): "Land!" The intro's fog fades while the map's own fog lifts, and the landfall onboarding
@@ -20,7 +20,7 @@ then hands over to the real map.
 - The intro plays once, then the hold runs until the map tiles are loaded, then the exit plays. The hold lasts at least
   as long as its narration takes to read (1 s plus its words at 230 words per minute); tiles that load earlier wait for
   that.
-- Optional beats (3) are dropped when the tiles are already loaded before the beat starts.
+- Optional beats (4) are dropped when the tiles are already loaded before the beat starts.
 - Once the tiles are loaded and the sequence is still playing, a skip button shows. Pressing it starts the exit
   (fog lifts) right away.
 - Narration text (en + de) is written once the beat timings are settled.
@@ -34,7 +34,7 @@ then hands over to the real map.
 ## Replay
 
 - The player docs page "The saga" tells the story and links to a replay of the intro.
-- The replay plays every beat (3 included), with no load gating: the hold runs for its minimum, and the skip button shows
+- The replay plays every beat (4 included), with no load gating: the hold runs for its minimum, and the skip button shows
   from the start.
 - The replay ends on a white screen with "Back to docs" and "Enter the game".
 
