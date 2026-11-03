@@ -396,11 +396,26 @@ function cdpSessionFor(page: Page): Promise<CDPSession> {
  * skips the waiting (there is nothing to wait for: the canvas is a
  * fixed, viewport-filling element that never moves) and captures exactly
  * the same pixels.
+ *
+ * It does wait for one thing: the next frame the map renderer draws (see the
+ * comment in the body), which is what makes a shot taken right after an
+ * input or a state change show that change.
  */
 export async function captureCanvas(
   page: Page,
   box: { x: number; y: number; width: number; height: number },
 ): Promise<Buffer> {
+  // Wait for the renderer to draw a frame that started after this call. The
+  // render loop is paced (framePacing.ts) and runs at a frame a second or
+  // less on a busy software-rendered runner, while CDP captures whatever the
+  // canvas last drew: a shot taken right after a pan or a model change can
+  // still show the frame from before it, so a before/after compare came out
+  // identical although the camera had moved.
+  await page.evaluate(() =>
+    (window as unknown as { __settlementRenderer: () => { whenFrameRendered: () => Promise<void> } })
+      .__settlementRenderer()
+      .whenFrameRendered(),
+  );
   const { data } = await (await cdpSessionFor(page)).send('Page.captureScreenshot', {
     format: 'png',
     clip: { ...box, scale: 1 },

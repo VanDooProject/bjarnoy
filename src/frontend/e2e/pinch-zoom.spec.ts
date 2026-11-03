@@ -18,6 +18,13 @@ async function cameraZoom(page: Page): Promise<number> {
   });
 }
 
+async function cameraView(page: Page): Promise<{ coord: { q: number; r: number }; zoom: number }> {
+  return page.evaluate(() => {
+    const win = window as unknown as { __settlementRenderer?: () => { cameraView: { coord: { q: number; r: number }; zoom: number } } };
+    return win.__settlementRenderer!().cameraView;
+  });
+}
+
 test.describe('pinch-to-zoom on touch', { tag: '@g3' }, () => {
   test.use({ hasTouch: true });
 
@@ -88,8 +95,13 @@ test.describe('pinch-to-zoom on touch', { tag: '@g3' }, () => {
     const before = await world.screenshot();
 
     const centre = await world.centre();
+    const viewBefore = await cameraView(page);
     await touchDrag(page, centre, { x: centre.x - 150, y: centre.y - 80 });
 
+    // The drag reached the renderer and moved the camera — checked apart from
+    // the pixels so a failure says whether the input was dropped or the move
+    // was never drawn (`screenshot()` waits for a rendered frame).
+    expect(await cameraView(page)).not.toEqual(viewBefore);
     const after = await world.screenshot();
     expect(Buffer.compare(before, after)).not.toBe(0);
   });
