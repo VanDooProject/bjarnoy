@@ -11,9 +11,9 @@ const beats: BeatMeta[] = [
   { id: 'landfall', role: 'exit', durationMs: 500 },
 ];
 
-function make(mode: 'landing' | 'replay', reducedMotion = false) {
+function make(mode: 'landing' | 'replay', reducedMotion = false, holdMinMs?: number) {
   const changes: IntroState[] = [];
-  const seq = new IntroSequencer({ beats, mode, reducedMotion, onChange: (s) => changes.push(s) });
+  const seq = new IntroSequencer({ beats, mode, reducedMotion, holdMinMs, onChange: (s) => changes.push(s) });
   return { seq, changes };
 }
 
@@ -66,17 +66,43 @@ describe('IntroSequencer landing', () => {
     expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall' });
   });
 
-  it('exits at the next loop boundary once loaded during the hold, then is done', () => {
-    const { seq } = make('landing');
+  // The hold has no loop seam: once its narration has had time to be read, loading ends it at once.
+  it('exits as soon as loaded when the hold has run its minimum, then is done', () => {
+    const { seq } = make('landing', false, 1500);
     seq.start();
     vi.advanceTimersByTime(4000);
-    vi.advanceTimersByTime(700);
+    vi.advanceTimersByTime(1600);
+    expect(seq.state).toMatchObject({ beat: 'hold', phase: 'playing', cycle: 2 });
     seq.notifyLoaded();
-    expect(seq.state).toMatchObject({ beat: 'hold', phase: 'playing' });
-    vi.advanceTimersByTime(500);
     expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall' });
     vi.advanceTimersByTime(500);
     expect(seq.state.phase).toBe('done');
+  });
+
+  it('keeps the hold until its minimum when loaded earlier, then exits', () => {
+    const { seq } = make('landing', false, 1500);
+    seq.start();
+    vi.advanceTimersByTime(4300);
+    seq.notifyLoaded();
+    expect(seq.state).toMatchObject({ beat: 'hold', phase: 'playing', skipVisible: true });
+    vi.advanceTimersByTime(1199);
+    expect(seq.state).toMatchObject({ beat: 'hold', phase: 'playing' });
+    vi.advanceTimersByTime(1);
+    expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall' });
+  });
+
+  it('skip ends the hold before its minimum, and the minimum does not fire a second exit', () => {
+    const { seq, changes } = make('landing', false, 1500);
+    seq.start();
+    vi.advanceTimersByTime(4300);
+    seq.notifyLoaded();
+    seq.skip();
+    expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall' });
+    vi.advanceTimersByTime(500);
+    expect(seq.state.phase).toBe('done');
+    const n = changes.length;
+    vi.advanceTimersByTime(5000);
+    expect(changes.length).toBe(n);
   });
 
   it('shows skip only after loading and skip jumps to the exit', () => {
@@ -134,7 +160,7 @@ describe('IntroSequencer reduced motion', () => {
 });
 
 describe('IntroSequencer replay', () => {
-  it('plays all beats, one hold cycle, then ends', () => {
+  it('plays all beats, the hold for its minimum, then ends', () => {
     const { seq } = make('replay');
     seq.start();
     seq.notifyLoaded();

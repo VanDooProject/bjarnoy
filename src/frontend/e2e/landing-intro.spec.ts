@@ -77,7 +77,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
   test.describe('with motion', () => {
     test.use({ mapMotion: { hud: 'on' } });
 
-    test('skip shows only once the tiles are loaded, then the exit hands over to the map', async ({ page }) => {
+    test('skip shows only once the tiles are loaded, and pressing it starts the exit', async ({ page }) => {
       test.setTimeout(MAP_SPEC_TIMEOUT_MS);
       await freezeClock(page);
       const release = await holdAtlases(page);
@@ -85,16 +85,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
 
       await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
       await expect(skip(page)).toBeHidden();
-
       await advanceTo(page, 'prophecy');
-      await expect(skip(page)).toBeHidden();
-
-      await advanceTo(page, 'ravens');
-      await advanceTo(page, 'sending');
-      await advanceTo(page, 'hold');
-      // The hold loops while the tiles are still loading.
-      await runFake(page, 20_000);
-      await expect(intro(page)).toHaveAttribute('data-beat', 'hold');
       await expect(skip(page)).toBeHidden();
 
       release();
@@ -104,6 +95,25 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await expect(intro(page)).toHaveAttribute('data-beat', 'landfall');
       await advanceTo(page, null);
       await expect(intro(page)).toHaveCount(0);
+      await expect(page.locator('canvas')).toBeVisible();
+    });
+
+    test('the hold loops while the tiles load, then the exit hands over to the map', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const release = await holdAtlases(page);
+      await page.goto('/#intro');
+
+      await advanceTo(page, 'hold');
+      await runFake(page, 30_000);
+      await expect(intro(page)).toHaveAttribute('data-beat', 'hold');
+      await expect(skip(page)).toBeHidden();
+
+      // Past the hold line's reading time, loaded tiles start the exit on their own.
+      release();
+      await expect(intro(page)).toHaveAttribute('data-phase', 'exiting', TILES_LOADED);
+      await expect(intro(page)).toHaveAttribute('data-beat', 'landfall');
+      await advanceTo(page, null);
       await expect(page.locator('canvas')).toBeVisible();
     });
 

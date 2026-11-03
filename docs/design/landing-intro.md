@@ -17,7 +17,9 @@ then hands over to the real map.
 
 ## Timing
 
-- The intro plays once, then the hold loops until the map tiles are loaded, then the exit plays.
+- The intro plays once, then the hold, then the exit.
+- The hold plays at least as long as its narration takes to read (1 s plus the words at 230 words per minute). After
+  that it ends as soon as the tiles are loaded. Skip ends it at once.
 - Optional beats (3) are dropped when the tiles are already loaded before the beat starts.
 - Once the tiles are loaded and the sequence is still playing, a skip button shows. Pressing it starts the exit
   (fog lifts) right away.
@@ -32,7 +34,7 @@ then hands over to the real map.
 ## Replay
 
 - The player docs page "The saga" tells the story and links to a replay of the intro.
-- The replay plays every beat (3 included), with no load gating: the hold runs one cycle, and the skip button shows
+- The replay plays every beat (3 included), with no load gating: the hold runs for its minimum, and the skip button shows
   from the start.
 - The replay ends on a white screen with "Back to docs" and "Enter the game".
 
