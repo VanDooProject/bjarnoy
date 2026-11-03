@@ -54,7 +54,7 @@ class FakeWorker {
 }
 
 function entry(name: string, x: number): RiverFlowEntry {
-  return { texture: { label: name } as Texture, x, y: 0, outDirection: 'S', inDirections: ['N'] };
+  return { texture: { label: name } as Texture, x, y: 0, outDirection: 'E', inDirections: ['W'] };
 }
 
 function layerWithMasks(onCellsReady: () => void) {
