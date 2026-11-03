@@ -1,14 +1,15 @@
-/* Shared by every intro beat: the fog/smoke texture (one generated pattern, see fogTexture.ts) and drift helpers. */
+/* Drift distance = the fog pattern tile (1024 beat units, LandingIntro.vue), so a loop ends where it began.
+   Shared by every intro beat: the fog/smoke texture (one generated pattern, see fogTexture.ts) and drift helpers. */
 .intro-fog {
   fill: url(#intro-fog);
 }
 @keyframes intro-drift-left {
   from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(-256px, 0, 0); }
+  to { transform: translate3d(-1024px, 0, 0); }
 }
 @keyframes intro-drift-right {
   from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(256px, 0, 0); }
+  to { transform: translate3d(1024px, 0, 0); }
 }
 .intro-drift-slow { animation: intro-drift-left 24s linear infinite; }
 .intro-drift-mid { animation: intro-drift-left 14s linear infinite; }

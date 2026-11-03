@@ -71,8 +71,10 @@ onBeforeUnmount(() => sequencer.dispose());
   >
     <svg class="fog-defs" width="0" height="0" aria-hidden="true">
       <defs>
-        <pattern id="intro-fog" patternUnits="userSpaceOnUse" width="256" height="256">
-          <image :href="fogUrl" width="256" height="256" />
+        <!-- One 256 px texture stretched over 1024 beat units (a beat is 1600 wide): big soft banks, few visible repeats.
+             introFog.css' drift keyframes move by the same 1024 so the loop is seamless. -->
+        <pattern id="intro-fog" patternUnits="userSpaceOnUse" width="1024" height="1024">
+          <image :href="fogUrl" width="1024" height="1024" preserveAspectRatio="none" />
         </pattern>
       </defs>
     </svg>
