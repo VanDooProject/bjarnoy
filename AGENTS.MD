@@ -143,6 +143,17 @@
   in the bjarnoy section, not as loose sessions
 - prefix the title of every session you create with `[AI] ` (e.g.
   `[AI] fix flaky WorldEndpointsTests`)
+- before starting a new session for side work (a fix, a flake, a
+  follow-up), or offering to start one, check the open sessions
+  (`list_sessions`, and `list_events` on the ones that look related) and
+  the open PRs and branches for one that already covers it. If one does,
+  send it what you know instead of starting a second one
+- if you already know from your own session that another session or PR
+  covers it, don't offer a new session for it at all; say which session
+  or PR has it
+- a session started for side work runs the same check itself before it
+  changes anything, and reports back instead of duplicating the work when
+  something already covers it
 
 # scheduled check-ins / send_later
 - don't poll on a fixed timer for something only I can unblock. A recurring
