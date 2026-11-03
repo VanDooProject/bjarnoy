@@ -422,6 +422,26 @@ public class EndgameGenerationTests
         Assert.Contains(sites.Towers, t => t.DistanceTo(Origin) < nearestOuterWall);
     }
 
+    [Fact]
+    public void The_first_tower_stands_between_the_lines_when_there_is_room_and_outside_when_there_is_none()
+    {
+        var withRoom = Place(Disc(24), seed: 5, islandIndex: 8);
+        // On open ground the outer line is all wall, so its wall hexes alone fence in the ground between the lines.
+        var outerWalls = withRoom.Walls.Where(w => w.Ring == UtgardRing.Outer).Select(w => w.Coord).ToList();
+        Assert.Contains(withRoom.Towers[0], EndgameGenerator.InsideLoop(Origin, outerWalls));
+
+        // Sand carries no tower: with the band between the lines made of it, the first tower goes by the plain rule.
+        var land = Disc(24);
+        foreach (var hex in land.Keys.Where(h => h.DistanceTo(Origin) <= EndgameRules.RingBand(UtgardRing.Outer).Max).ToList())
+        {
+            land[hex] = Terrain.Sand;
+        }
+
+        var noRoom = Place(land, seed: 5, islandIndex: 8);
+        Assert.NotEmpty(noRoom.Towers);
+        Assert.All(noRoom.Towers, t => Assert.True(t.DistanceTo(Origin) > EndgameRules.RingBand(UtgardRing.Outer).Max));
+    }
+
     private static HexCoord H(int q, int r) => new(q, r);
 
     [Fact]

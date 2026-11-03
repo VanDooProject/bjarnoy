@@ -69,9 +69,10 @@ internal static class EndgameGenerator
             giantHexes.UnionWith(Giant.Footprint(giant.Anchor));
         }
 
-        var walls = PlaceWalls(anchor, land, riverTiles, giantHexes, campHexes, seed);
+        var (walls, outerLoop) = PlaceWalls(anchor, land, riverTiles, giantHexes, campHexes, seed);
         var wallHexes = walls.Select(w => w.Coord).ToHashSet();
-        var towers = PlaceTowers(islandTiles, anchor, land, riverTiles, giantHexes, campHexes, wallHexes, seed);
+        var insideOuter = outerLoop is null ? [] : InsideLoop(anchor, outerLoop);
+        var towers = PlaceTowers(islandTiles, anchor, land, riverTiles, giantHexes, campHexes, wallHexes, insideOuter, seed);
         return new Sites(walls, towers);
     }
 
@@ -95,7 +96,7 @@ internal static class EndgameGenerator
         return hexes;
     }
 
-    private static List<UtgardWall> PlaceWalls(
+    private static (List<UtgardWall> Walls, List<HexCoord>? OuterLoop) PlaceWalls(
         HexCoord anchor,
         IReadOnlyDictionary<HexCoord, Terrain> land,
         IReadOnlySet<HexCoord> riverTiles,
@@ -105,6 +106,7 @@ internal static class EndgameGenerator
     {
         var ctx = new PalisadePlacementContext(c => TerrainOf(land, c), riverTiles.Contains);
         var result = new List<UtgardWall>();
+        List<HexCoord>? outerLoop = null;
 
         // The outer line keeps one clear hex from the inner one, so the two rings never touch.
         var nearInner = new HashSet<HexCoord>();
@@ -142,9 +144,41 @@ internal static class EndgameGenerator
             }
 
             result.AddRange(ResolveRing(ring, eligible, land, seed, ringKind));
+            if (ringKind == UtgardRing.Outer)
+            {
+                outerLoop = ring;
+            }
         }
 
-        return result;
+        return (result, outerLoop);
+    }
+
+    /// <summary>
+    /// The hexes a closed loop round the anchor encloses (the loop itself excluded): a flood from the anchor that the loop's hexes stop.
+    /// Only set membership, so its order cannot differ from <c>insideLoop</c> in endgamePlacement.ts.
+    /// </summary>
+    internal static HashSet<HexCoord> InsideLoop(HexCoord anchor, IReadOnlyList<HexCoord> loop)
+    {
+        var wall = loop.ToHashSet();
+        var limit = EndgameRules.RingBand(UtgardRing.Outer).Max + 1;
+        var inside = new HashSet<HexCoord> { anchor };
+        var queue = new Stack<HexCoord>();
+        queue.Push(anchor);
+        while (queue.Count > 0)
+        {
+            foreach (var n in queue.Pop().Neighbours())
+            {
+                if (inside.Contains(n) || wall.Contains(n) || n.DistanceTo(anchor) > limit)
+                {
+                    continue;
+                }
+
+                inside.Add(n);
+                queue.Push(n);
+            }
+        }
+
+        return inside;
     }
 
     /// <summary>Control points of the ring's wobble round the full circle (more on the longer outer ring).</summary>
@@ -595,6 +629,7 @@ internal static class EndgameGenerator
         IReadOnlySet<HexCoord> giantHexes,
         IReadOnlySet<HexCoord> campHexes,
         IReadOnlySet<HexCoord> wallHexes,
+        IReadOnlySet<HexCoord> insideOuter,
         int seed)
     {
         var count = EndgameRules.TowerCountFor(islandTiles.Count);
@@ -631,19 +666,22 @@ internal static class EndgameGenerator
         var footprint = Giant.Footprint(anchor);
         candidates.RemoveAll(c => footprint.Any(f => f.DistanceTo(c.Coord) < EndgameRules.MinTowerSpacing));
 
+        // If there is room between the two wall lines (inside the outer line's loop), the first tower stands there.
+        var between = candidates.Where(c => insideOuter.Contains(c.Coord)).ToList();
+
         var towers = new List<HexCoord>();
         while (towers.Count < count)
         {
             (HexCoord Coord, double Hash)? best = null;
             var bestSpread = -1;
-            foreach (var candidate in candidates)
+            foreach (var candidate in towers.Count == 0 && between.Count > 0 ? between : candidates)
             {
                 if (towers.Any(t => t.DistanceTo(candidate.Coord) < EndgameRules.MinTowerSpacing))
                 {
                     continue;
                 }
 
-                // The first tower is the highest hash; every later one the farthest from Utgard and the towers so far.
+                // The first tower is the highest hash (of those between the lines, if any); every later one the farthest from Utgard and the towers so far.
                 var spread = towers.Count == 0 ? 0 : MinDistance(candidate.Coord, anchor, towers);
                 if (best is null
                     || spread > bestSpread

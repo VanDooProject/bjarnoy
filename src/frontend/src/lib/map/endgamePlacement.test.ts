@@ -11,6 +11,7 @@ import {
   placeEndgame,
   ring,
   towerCountFor,
+  insideLoop,
 } from './endgamePlacement';
 import { tileOfWallHex } from './palisadeTiles';
 import type { Terrain } from './types';
@@ -289,6 +290,21 @@ describe('placeEndgame', () => {
 
     expect(walls.some((w) => w.ring === 'outer')).toBe(true);
     expect(towers.some((t) => hexDistance(t, ORIGIN) < nearestOuterWall)).toBe(true);
+  });
+
+  it('puts the first tower between the two lines when there is room there, and keeps the old order when there is none', () => {
+    const wide = disc(24);
+    const withRoom = placeEndgame(wide.tiles, wide.terrainOf, none, UTGARD, new Set(), 5, 8);
+    // On open ground the outer line is all wall, so its wall hexes alone fence in the ground between the lines.
+    const outerWalls = withRoom.walls.filter((w) => w.ring === 'outer').map((w) => w.coord);
+    expect(insideLoop(ORIGIN, outerWalls).has(coordKey(withRoom.towers[0]!))).toBe(true);
+
+    // Sand carries no tower: with the band between the lines made of it, the first tower goes by the plain rule (highest hash).
+    const sandBand = Object.fromEntries(wide.tiles.filter((t) => hexDistance(t, ORIGIN) <= RingBands.outer[1]).map((t) => [coordKey(t), 'sand' as Terrain]));
+    const noRoom = disc(24, sandBand);
+    const sites = placeEndgame(noRoom.tiles, noRoom.terrainOf, none, UTGARD, new Set(), 5, 8);
+    expect(sites.towers.length).toBeGreaterThan(0);
+    for (const t of sites.towers) expect(hexDistance(t, ORIGIN)).toBeGreaterThan(RingBands.outer[1]);
   });
 
   it('places no tower when the island ends inside the tower distance', () => {

@@ -1,5 +1,5 @@
 {
-  "_comment": "Cross-language parity fixture for the endgame map (EndgameGenerator.PlaceCore backend / placeEndgame frontend): given a real wasted island's tiles (with terrain), its river (lava) tiles, its giants (anchor and family), its camp hexes, a world seed and an island index, both sides must place the same Utgard wall hexes (the natural wall loops through each ring band: ring, piece, camera file, gate flag, level) and the same Jotun watchtowers, in the same order. Covers: the island the docs Utgard example shows (docs_utgard_example: both wall lines, three or more towers, a lava stream), an island with two rings, shore ends and two gates per ring, one with a single ring, a big island with the maximum six towers (the two-ring island with the fewest open ends), and the island whose rings are cut into the most runs (land ends and shore ends). Every scenario is a real wasted island of a real WorldGenerator.Generate() run at radius 1000 (the smallest of seeds 1-40 with the wanted feature). Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). EndgamePlacementGoldenTests.cs (backend) and endgamePlacement.golden.test.ts (frontend) each compute against this fixture with their own production implementation, then assert the frozen `walls` and `towers` lists (order matters: walls by ring then ring order, towers in placement order).",
+  "_comment": "Cross-language parity fixture for the endgame map (EndgameGenerator.PlaceCore backend / placeEndgame frontend): given a real wasted island's tiles (with terrain), its river (lava) tiles, its giants (anchor and family), its camp hexes, a world seed and an island index, both sides must place the same Utgard wall hexes (the natural wall loops through each ring band: ring, piece, camera file, gate flag, level) and the same Jotun watchtowers, in the same order. Covers: the island the docs Utgard example shows (docs_utgard_example: both wall lines, a tower between them, a lava stream), an island with two rings, shore ends and two gates per ring, one with a single ring, a big island with the maximum six towers (the two-ring island with the fewest open ends), and the island whose rings are cut into the most runs (land ends and shore ends). Every scenario is a real wasted island of a real WorldGenerator.Generate() run at radius 1000 (the smallest of seeds 1-40 with the wanted feature). Regenerate with GoldenRegenerationTests (BJARNOY_REGEN_GOLDENS=1). EndgamePlacementGoldenTests.cs (backend) and endgamePlacement.golden.test.ts (frontend) each compute against this fixture with their own production implementation, then assert the frozen `walls` and `towers` lists (order matters: walls by ring then ring order, towers in placement order).",
   "scenarios": [
     {
       "name": "wasted_island_two_rings_with_gates",
@@ -4934,12 +4934,12 @@
         {"q": -689, "r": -3, "ring": "outer", "piece": "straight180", "dir": "NW", "gate": false, "level": 1}
       ],
       "towers": [
-        [-678, -55],
+        [-685, -4],
         [-762, 1],
-        [-729, 44],
-        [-720, -15],
-        [-745, 21],
-        [-712, 11]
+        [-712, -29],
+        [-733, 20],
+        [-671, -53],
+        [-725, 43]
       ]
     },
     {
@@ -10779,12 +10779,12 @@
         {"q": -721, "r": 141, "ring": "outer", "piece": "end", "dir": "SE", "gate": false, "level": 1}
       ],
       "towers": [
-        [-646, 91],
+        [-715, 127],
+        [-635, 76],
         [-693, 75],
+        [-661, 127],
         [-722, 183],
-        [-675, 140],
-        [-733, 114],
-        [-679, 104]
+        [-674, 103]
       ]
     },
     {
@@ -11176,8 +11176,8 @@
         {"q": -176, "r": -395, "ring": "outer", "piece": "bend120", "dir": "SE", "gate": false, "level": 1}
       ],
       "towers": [
-        [-169, -391],
         [-177, -398],
+        [-171, -390],
         [-161, -399]
       ]
     }

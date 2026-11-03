@@ -386,7 +386,7 @@
       "example": {
         "alt": "Ein Beispiel-Utgard: der Riese in der Mitte, zwei Mauerlinien mit Toren darum und Jötun-Wachtürme außerhalb der inneren Linie.",
         "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
-        "caption": "Utgard steht hinter zwei Mauerlinien. Die innere hat Stufe 2, die äußere Stufe 1, und Wachtürme sichern das Land außerhalb der inneren Linie, einige davon zwischen den beiden Linien, wenn dort Platz ist. Die Linien folgen dem Gelände und schließen sich an Bergen und an der Küste von selbst, es sind also keine glatten Kreise."
+        "caption": "Utgard steht hinter zwei Mauerlinien. Die innere hat Stufe 2, die äußere Stufe 1, und Wachtürme sichern das Land außerhalb der inneren Linie, einer davon zwischen den beiden Linien, wenn dort Platz ist. Die Linien folgen dem Gelände und schließen sich an Bergen und an der Küste von selbst, es sind also keine glatten Kreise."
       },
       "wallsTechNote": "Jede Mauerlinie ist die günstigste geschlossene Schleife durch ein Entfernungsband um Utgards Anker (innen 3 bis 6 Felder, außen 7 bis 11), gezogen zu einer schwankenden Zielentfernung. Berge, Flüsse und Riesenfelder kosten weit weniger als ein Feld, das eine Mauer braucht, die Linie läuft also durch sie hindurch. Meer kostet weit mehr, die Linie bleibt daher an Land. Die äußere Linie hält ein Feld Abstand zur inneren. Wachtürme stehen mehr als 7 Felder von Utgard entfernt, nie auf und nie neben einem Mauerfeld.",
       "level": "Stufe",

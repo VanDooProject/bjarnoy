@@ -115,9 +115,10 @@ export function placeEndgame(
   const giantHexes = new Set<string>();
   for (const giant of giants) for (const hex of footprint(giant.anchor)) giantHexes.add(coordKey(hex));
 
-  const walls = placeWalls(anchor, terrainOf, isRiver, giantHexes, campHexes, seed);
+  const { walls, outerLoop } = placeWalls(anchor, terrainOf, isRiver, giantHexes, campHexes, seed);
   const wallHexes = new Set(walls.map((w) => coordKey(w.coord)));
-  const towers = placeTowers(islandTiles, anchor, terrainOf, isRiver, giantHexes, campHexes, wallHexes, seed);
+  const insideOuter = outerLoop ? insideLoop(anchor, outerLoop) : new Set<string>();
+  const towers = placeTowers(islandTiles, anchor, terrainOf, isRiver, giantHexes, campHexes, wallHexes, insideOuter, seed);
   return { walls, towers };
 }
 
@@ -128,9 +129,10 @@ function placeWalls(
   giantHexes: ReadonlySet<string>,
   campHexes: ReadonlySet<string>,
   seed: number,
-): UtgardWallPlacement[] {
+): { walls: UtgardWallPlacement[]; outerLoop: AxialCoord[] | null } {
   const ctx = { terrainAt: terrainOf, isRiver };
   const result: UtgardWallPlacement[] = [];
+  let outerLoop: AxialCoord[] | null = null;
   const emptyWalls: WallSet = { walls: new Set(), gates: new Set() };
 
   // The outer line keeps one clear hex from the inner one, so the two rings never touch.
@@ -152,8 +154,30 @@ function placeWalls(
     if (hexes.length === 0 || eligibleCount < MinRingLandShare * hexes.length) continue;
 
     result.push(...resolveRing(hexes, eligible, terrainOf, seed, kind));
+    if (kind === 'outer') outerLoop = hexes;
   }
-  return result;
+  return { walls: result, outerLoop };
+}
+
+/**
+ * The hexes a closed loop round the anchor encloses (the loop itself excluded): a flood from the anchor that the loop's hexes stop.
+ * Only set membership, so its order cannot differ between the two sides.
+ */
+export function insideLoop(anchor: AxialCoord, loop: readonly AxialCoord[]): Set<string> {
+  const wall = new Set(loop.map(coordKey));
+  const limit = RingBands.outer[1] + 1;
+  const inside = new Set<string>([coordKey(anchor)]);
+  const queue: AxialCoord[] = [anchor];
+  while (queue.length > 0) {
+    const c = queue.pop()!;
+    for (const n of neighbors(c)) {
+      const key = coordKey(n);
+      if (inside.has(key) || wall.has(key) || hexDistance(n, anchor) > limit) continue;
+      inside.add(key);
+      queue.push(n);
+    }
+  }
+  return inside;
 }
 
 /** Hex-distance band each ring's line may wander in: [min, max] from Utgard's anchor. One clear hex always separates the two bands. */
@@ -442,6 +466,7 @@ function placeTowers(
   giantHexes: ReadonlySet<string>,
   campHexes: ReadonlySet<string>,
   wallHexes: ReadonlySet<string>,
+  insideOuter: ReadonlySet<string>,
   seed: number,
 ): AxialCoord[] {
   const count = towerCountFor(islandTiles.length);
@@ -462,14 +487,17 @@ function placeTowers(
     candidates.push({ coord: hex, hash: hash2(hex.q, hex.r, seed + 401) });
   }
 
+  // If there is room between the two wall lines (inside the outer line's loop), the first tower stands there.
+  const between = candidates.filter((c) => insideOuter.has(coordKey(c.coord)));
+
   const towers: AxialCoord[] = [];
   while (towers.length < count) {
     let best: { coord: AxialCoord; hash: number } | null = null;
     let bestSpread = -1;
-    for (const candidate of candidates) {
+    for (const candidate of towers.length === 0 && between.length > 0 ? between : candidates) {
       if (towers.some((t) => hexDistance(t, candidate.coord) < MinTowerSpacing)) continue;
 
-      // The first tower is the highest hash; every later one the farthest from Utgard and the towers so far.
+      // The first tower is the highest hash (of those between the lines, if any); every later one the farthest from Utgard and the towers so far.
       let spread = 0;
       if (towers.length > 0) {
         spread = hexDistance(candidate.coord, anchor);
