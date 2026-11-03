@@ -1,8 +1,13 @@
+using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
+using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -104,5 +109,83 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture postgres)
         // Terrain is a pure function of the seed, so the database it was stored
         // in must make no difference.
         Assert.Equal(tiles[0], tiles[1]);
+    }
+
+    /// <summary>
+    /// Two reads of one settlement both find a training batch due. The winner settles it (deletes the order, inserts
+    /// the unit stack); the loser's batch updates 0 rows on the Version check and then hits the unique
+    /// (SettlementId, UnitType) index. PostgreSQL aborts the batch there, so EF never sees the 0-row update and the
+    /// request used to fail with a 500 instead of re-reading the settled state.
+    /// </summary>
+    [Fact]
+    public async Task A_plain_read_that_loses_the_race_to_settle_a_due_training_batch_is_retried()
+    {
+        await using var factory = CreateFactory();
+        await factory.MigrateAsync(Ct);
+        using var client = factory.CreateClient();
+
+        var world = await factory.CreateWorldAsync($"pg-{Guid.CreateVersion7():N}"[..20], seed: 21, radius: 60, cancellationToken: Ct);
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var island = islands!.First(i => i.StartPositions.Count > 0);
+        var plot = island.StartPositions[0];
+
+        const string ownerId = "Ulf-player";
+        var founded = await (await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Bjornstad", "Ulf", ownerId), Ct))
+            .ReadStrictAsync<SettlementResponse>(Ct);
+        client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
+
+        // God mode: an admin token, stock for the batch and a Barracks (where a thrall trains).
+        var adminName = $"admin-{Guid.CreateVersion7():N}"[..20];
+        var registered = await (await client.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(adminName, "correct-horse-battery"), Ct))
+            .ReadStrictAsync<AuthResponse>(Ct);
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var user = await db.Users.SingleAsync(u => u.Id == registered.User.Id, Ct);
+            user.Role = UserRole.Admin;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var login = await (await client.PostJsonAsync(
+            "/api/v1/auth/login", new LoginRequest(adminName, "correct-horse-battery"), Ct))
+            .ReadStrictAsync<AuthResponse>(Ct);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
+
+        Assert.Equal(HttpStatusCode.OK, (await client.PostJsonAsync(
+            $"/api/v1/admin/settlements/{founded.Id}/resources",
+            new GrantResourcesRequest(Wood: 100_000, Stone: 100_000, Food: 100_000, Iron: 100_000), Ct)).StatusCode);
+        var layout = await client.GetFromJsonAsync<AdminSettlementLayoutResponse>(
+            $"/api/v1/admin/settlements/{founded.Id}/layout", SqliteApiFixture.StrictJson, Ct);
+        var barracksHex = layout!.Hexes.First(h =>
+            !h.IsCentre && h.Building is null && (h.Terrain == "grass" || h.Terrain == "sand"));
+        Assert.True((await client.PutJsonAsync(
+            $"/api/v1/admin/settlements/{founded.Id}/buildings/{barracksHex.Q}/{barracksHex.R}",
+            new PlaceBuildingRequest("barracks", 1), Ct)).IsSuccessStatusCode);
+
+        var queued = await client.PostJsonAsync(
+            $"/api/v1/settlements/{founded.Id}/units", new TrainUnitsRequest("thrall", 1, barracksHex.Q, barracksHex.R), Ct);
+        Assert.Equal(HttpStatusCode.Accepted, queued.StatusCode);
+        factory.Time.Advance(TimeSpan.FromDays(1));
+
+        // The competing read settles the due batch right after the outer read loaded the stale settlement.
+        factory.Race.Arm(
+            founded.Id,
+            async () => Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/v1/settlements/{founded.Id}", Ct)).StatusCode),
+            repeat: false,
+            afterGroupLoad: true);
+        var outer = await client.GetAsync($"/api/v1/settlements/{founded.Id}", Ct);
+        factory.Race.Disarm();
+
+        Assert.True(outer.StatusCode == HttpStatusCode.OK, await outer.Content.ReadAsStringAsync(Ct));
+        Assert.Equal(1, factory.Race.Fired);
+
+        var after = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{founded.Id}", SqliteApiFixture.StrictJson, Ct);
+        Assert.Empty(after!.TrainingQueue);
+        Assert.Equal(1, after.Garrison.Single(g => g.Unit == "thrall").Count);
     }
 }

@@ -10,6 +10,7 @@ import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
+import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
 import { useLoadFlow } from '../composables/useLoadFlow';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
@@ -199,6 +200,7 @@ function stopPreviewPoll() {
 const {
   step: loadStep,
   error: loadError,
+  settled: loadSettled,
   run: loadLanding,
 } = useLoadFlow(async (setStep) => {
   stopPreviewPoll();
@@ -283,6 +285,15 @@ const overlayStep = computed(() => loadStep.value ?? (revealingMap.value ? t('hu
 const overlayError = computed(
   () => loadError.value ?? (world.fogMaskBitmap === null && player.hasFoundedSettlement ? world.fogMaskError : null),
 );
+const landingCanvasShown = computed(
+  () => !!(player.hasFoundedSettlement ? world.selectedSettlementId : previewCoord.value),
+);
+useIntroTilesSignal({
+  settled: loadSettled,
+  error: overlayError,
+  canvasShown: landingCanvasShown,
+  loadState: computed(() => canvasRef.value?.loadState),
+});
 function retryLoad() {
   if (loadError.value) void loadLanding();
   else void world.fetchFogMask();
@@ -917,7 +928,7 @@ watch(
          before the canvas exists (world/settlement/plot still loading). -->
     <MapStatusOverlay :step="overlayStep" :error="overlayError" @retry="retryLoad" />
     <SettlementCanvas
-      v-if="player.hasFoundedSettlement ? world.selectedSettlementId : previewCoord"
+      v-if="landingCanvasShown"
       ref="canvasRef"
       :world-model="world.model"
       :player-id="player.id"

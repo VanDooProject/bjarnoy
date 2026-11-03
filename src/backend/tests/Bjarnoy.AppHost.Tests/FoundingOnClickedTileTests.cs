@@ -136,7 +136,7 @@ public class FoundingOnClickedTileTests(AppHostFixture fixture)
         var page = await browser.NewPageAsync();
         var consoleErrors = page.CollectConsoleErrors();
 
-        await page.GotoAsync(frontendUrl, new PageGotoOptions { Timeout = 120_000 });
+        await page.GotoAsync($"{frontendUrl}#no-intro", new PageGotoOptions { Timeout = 120_000 });
         await Assertions.Expect(page.GetByText("Demo mode")).Not.ToBeVisibleAsync(new() { Timeout = 15_000 });
 
         var canvas = page.Locator("canvas");

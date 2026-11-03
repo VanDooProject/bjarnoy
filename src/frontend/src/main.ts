@@ -7,14 +7,12 @@ import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './lib/map/wat
 import { fogDebugFlags, fogDebugTuning, fogPerfStats } from './lib/map/HexMapRenderer';
 import { installHudMotionAttribute } from './lib/perf/hudMotionAttribute';
 import { zoomTransitionTuning } from './lib/map/zoomTransition';
-import { buildIdFromEntryUrl, installChunkErrorHandling, installFocusReload, setOwnBuildId } from './lib/appUpdate';
+import { installChunkErrorHandling, installFocusReload } from './lib/appUpdate';
 import { router } from './router';
 import { useWorldStore } from './stores/world';
 import './style.css';
 
 initLocale();
-// In production the entry module's URL is `/assets/index-<hash>.js`, the build id the API sends as X-App-Build.
-setOwnBuildId(buildIdFromEntryUrl(import.meta.url));
 installChunkErrorHandling(router);
 installFocusReload();
 installHudMotionAttribute();

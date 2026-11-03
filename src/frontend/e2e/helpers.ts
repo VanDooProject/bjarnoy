@@ -246,7 +246,7 @@ export async function foundSettlement(page: Page): Promise<void> {
   // has been observed crossing the global 45s default on a loaded CI
   // runner. See settlement-interactions.spec.ts's matching comments for the
   // other tests that share this same root cause.
-  await page.goto('/');
+  await page.goto('/#no-intro');
 
   // Wait on the renderer's own mount-complete signal rather than guessing
   // how long that takes — a fixed sleep here either wastes time on a fast

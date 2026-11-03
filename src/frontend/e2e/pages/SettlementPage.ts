@@ -140,7 +140,7 @@ export class SettlementPage {
 
   /** Opens the landing page (the same renderer, pre-founding) and waits for it to mount. */
   static async openLanding(page: Page): Promise<SettlementPage> {
-    await page.goto('/');
+    await page.goto('/#no-intro');
     await waitForMapReady(page);
     return new SettlementPage(page);
   }

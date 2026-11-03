@@ -57,15 +57,15 @@ describe('DocsBreadcrumb', () => {
     expect(items[2]!.attributes('aria-current')).toBe('page');
   });
 
-  it('opens the four groups from the group crumb, each linking to its hub section', async () => {
+  it('opens the five groups from the group crumb, each linking to its hub section', async () => {
     await mountCrumb();
     await groupTrigger().trigger('click');
 
     expect(groupTrigger().attributes('aria-expanded')).toBe('true');
     const items = wrapper!.findAll('[data-menu=group] [role=menuitem]');
-    expect(items.map((i) => i.text())).toEqual(['Your island', 'Building up', 'On the move', 'Beyond your shores']);
+    expect(items.map((i) => i.text())).toEqual(['The story', 'Your island', 'Building up', 'On the move', 'Beyond your shores']);
     expect(items.map((i) => i.attributes('href'))).toEqual([
-      '/docs#group-island', '/docs#group-building', '/docs#group-move', '/docs#group-beyond',
+      '/docs#group-story', '/docs#group-island', '/docs#group-building', '/docs#group-move', '/docs#group-beyond',
     ]);
     expect(items.filter((i) => i.classes('current')).map((i) => i.attributes('data-group'))).toEqual(['building']);
   });

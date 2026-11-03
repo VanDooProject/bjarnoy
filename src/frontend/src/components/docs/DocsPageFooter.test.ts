@@ -36,9 +36,9 @@ describe('DocsPageFooter', () => {
   });
 
   it('has no previous link on the first page', () => {
-    const w = mountFooter('tiles');
+    const w = mountFooter('saga');
     expect(w.find('[data-testid=docs-prev]').exists()).toBe(false);
-    expect(w.get('[data-testid=docs-next]').attributes('href')).toBe('/docs/bog-lands');
+    expect(w.get('[data-testid=docs-next]').attributes('href')).toBe('/docs/tiles');
   });
 
   it('has no next link on the last page', () => {
