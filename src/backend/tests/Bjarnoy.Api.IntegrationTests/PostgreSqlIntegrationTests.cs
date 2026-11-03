@@ -167,7 +167,7 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture postgres)
             new PlaceBuildingRequest("barracks", 1), Ct)).IsSuccessStatusCode);
 
         var queued = await client.PostJsonAsync(
-            $"/api/v1/settlements/{founded.Id}/units", new TrainUnitsRequest("thrall", 1), Ct);
+            $"/api/v1/settlements/{founded.Id}/units", new TrainUnitsRequest("thrall", 1, barracksHex.Q, barracksHex.R), Ct);
         Assert.Equal(HttpStatusCode.Accepted, queued.StatusCode);
         factory.Time.Advance(TimeSpan.FromDays(1));
 
