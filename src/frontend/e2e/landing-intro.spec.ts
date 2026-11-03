@@ -2,14 +2,11 @@ import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 
-// Beat lengths (src/intro/beats/*Beat.vue meta); the sequencer is setTimeout-based, so a
-// Playwright clock steps through them without waiting real seconds.
-const FIRE = 4000;
-const PROPHECY = 4000;
-const RAVENS = 3000;
-const SENDING = 5000;
-const HOLD_LOOP = 6000;
-const LANDFALL = 2500;
+// Beat lengths live in the beats (src/intro/beats/*Beat.vue meta) and change with the art, so the spec doesn't copy
+// them: it runs the frozen clock in 1 s steps until the intro shows what it waits for. The sequencer is
+// setTimeout-based, and `fastForward` fires at most one due timer per call, hence the steps.
+const STEP_MS = 1000;
+const MAX_FAKE_MS = 60_000;
 
 // Same wait as helpers.ts's waitForMapReady: the terrain/building atlases are a real download and decode.
 const TILES_LOADED = { timeout: 15_000 };
@@ -28,6 +25,23 @@ async function holdAtlases(page: Page): Promise<() => void> {
   await page.route(/\/terrain-\d+[^/]*\.webp/, hold);
   await page.route(/\/buildings-[a-z0-9-]*\d+[^/]*\.webp/, hold);
   return release;
+}
+
+/** Runs the fake clock for `ms` in steps (the intro must not move on its own in that time). */
+async function runFake(page: Page, ms: number): Promise<void> {
+  for (let t = 0; t < ms; t += STEP_MS) await page.clock.fastForward(STEP_MS);
+}
+
+/** Runs the fake clock until the intro shows `beat`, or until it is gone when `beat` is null. */
+async function advanceTo(page: Page, beat: string | null): Promise<void> {
+  for (let t = 0; t <= MAX_FAKE_MS; t += STEP_MS) {
+    const shown = await page.evaluate(
+      () => document.querySelector('[data-testid="landing-intro"]')?.getAttribute('data-beat') ?? null,
+    );
+    if (shown === beat) return;
+    await page.clock.fastForward(STEP_MS);
+  }
+  throw new Error(`intro never reached ${beat ?? 'its end'} within ${MAX_FAKE_MS} ms of fake time`);
 }
 
 /**
@@ -72,17 +86,14 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
       await expect(skip(page)).toBeHidden();
 
-      await page.clock.fastForward(FIRE);
-      await expect(intro(page)).toHaveAttribute('data-beat', 'prophecy');
+      await advanceTo(page, 'prophecy');
       await expect(skip(page)).toBeHidden();
 
-      await page.clock.fastForward(PROPHECY);
-      await expect(intro(page)).toHaveAttribute('data-beat', 'ravens');
-      await page.clock.fastForward(RAVENS);
-      await expect(intro(page)).toHaveAttribute('data-beat', 'sending');
-      await page.clock.fastForward(SENDING);
-      await expect(intro(page)).toHaveAttribute('data-beat', 'hold');
-      await page.clock.fastForward(HOLD_LOOP);
+      await advanceTo(page, 'ravens');
+      await advanceTo(page, 'sending');
+      await advanceTo(page, 'hold');
+      // The hold loops while the tiles are still loading.
+      await runFake(page, 20_000);
       await expect(intro(page)).toHaveAttribute('data-beat', 'hold');
       await expect(skip(page)).toBeHidden();
 
@@ -91,7 +102,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await skip(page).click();
       await expect(intro(page)).toHaveAttribute('data-phase', 'exiting');
       await expect(intro(page)).toHaveAttribute('data-beat', 'landfall');
-      await page.clock.fastForward(LANDFALL);
+      await advanceTo(page, null);
       await expect(intro(page)).toHaveCount(0);
       await expect(page.locator('canvas')).toBeVisible();
     });
@@ -105,14 +116,8 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       // Tiles finish while the fire plays; the clock only moves when the test moves it.
       await expect(skip(page)).toBeVisible(TILES_LOADED);
 
-      await page.clock.fastForward(FIRE);
-      await expect(intro(page)).toHaveAttribute('data-beat', 'prophecy');
-      await page.clock.fastForward(PROPHECY);
-      await expect(intro(page)).toHaveAttribute('data-beat', 'sending');
-      await page.clock.fastForward(SENDING);
-      await expect(intro(page)).toHaveAttribute('data-beat', 'landfall');
-      await page.clock.fastForward(LANDFALL);
-      await expect(intro(page)).toHaveCount(0);
+      await advanceTo(page, 'landfall');
+      await advanceTo(page, null);
 
       expect((await log()).beats).toEqual(['fire', 'prophecy', 'sending', 'landfall']);
     });
@@ -128,15 +133,14 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await expect(intro(page)).toHaveAttribute('data-phase', 'waitingForPlay');
       await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
       await expect(page.getByTestId('intro-play')).toBeVisible();
-      await page.clock.fastForward(FIRE + PROPHECY);
+      await runFake(page, 20_000);
       await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
 
       await page.getByTestId('intro-play').click();
       await expect(intro(page)).toHaveAttribute('data-phase', 'playing');
       await page.clock.runFor(700); // lets the play button's leave transition finish
       await expect(page.getByTestId('intro-play')).toHaveCount(0);
-      await page.clock.fastForward(FIRE);
-      await expect(intro(page)).toHaveAttribute('data-beat', 'prophecy');
+      await advanceTo(page, 'prophecy');
       release();
     });
 
@@ -164,10 +168,9 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await expect(skip(page)).toBeVisible();
 
       // Play through every beat (ravens included, one hold cycle), no load gating.
-      for (const [beat, ms] of [['fire', FIRE], ['prophecy', PROPHECY], ['ravens', RAVENS], ['sending', SENDING], ['hold', HOLD_LOOP], ['landfall', LANDFALL]] as const) {
-        await expect(intro(page)).toHaveAttribute('data-beat', beat);
-        await page.clock.fastForward(ms);
-      }
+      await advanceTo(page, 'landfall');
+      // The replay keeps the intro mounted for its white end screen.
+      await runFake(page, 10_000);
       await expect(page.getByTestId('intro-end')).toBeVisible();
       expect((await log()).beats).toEqual(['fire', 'prophecy', 'ravens', 'sending', 'hold', 'landfall']);
       await expect(page.getByTestId('intro-back-to-docs')).toBeVisible();
@@ -178,7 +181,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       // Second run, via skip, into the game.
       await page.goto('/docs/saga/replay');
       await skip(page).click();
-      await page.clock.fastForward(LANDFALL);
+      await runFake(page, 10_000);
       await expect(page.getByTestId('intro-end')).toBeVisible();
       await page.getByTestId('intro-enter-game').click();
       await expect(page).toHaveURL(/\/(#.*)?$/);
