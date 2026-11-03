@@ -52,11 +52,29 @@ describe('ShipsView', () => {
     expect(row('speed')).toEqual(['8', '10']);
     expect(row('perHex')).toEqual(['7.5 min', '6 min']);
     expect(row('loot')).toEqual(['200', '80']);
+    expect(row('slots')).toEqual(['10', '20']);
     expect(row('food')).toEqual(['100', '60']);
     expect(row('upkeep')).toEqual(['2', '3']);
     expect(row('cost')).toEqual(['250 / 100 / 40 / 100', '400 / 200 / 60 / 220']);
     expect(row('time')).toEqual(['45 min', '90 min']);
     expect(row('needs')).toEqual(['Longhouse 8', 'Longhouse 20 · Karve']);
+    wrapper.unmount();
+  });
+
+  it('lists the slots every land unit takes aboard from the unit catalogue and states the troop rules', async () => {
+    const wrapper = await mountPage();
+
+    const slots = Object.fromEntries(
+      wrapper.findAll('[data-testid=slots-table] tbody tr').map((tr) => [tr.attributes('data-unit'), tr.get('td').text()]),
+    );
+    expect(slots).toEqual({
+      thrall: '1', spearman: '1', settler: '1', bowman: '2', axeman: '2', provisioner: '2', berserker: '4', catapult: '10', ram: '10',
+    });
+    const text = wrapper.get('#troops').text();
+    expect(text).toContain('slowest ship');
+    expect(text).toContain('do not fight');
+    expect(text).toContain('drown');
+    expect(wrapper.get('#battles').text()).toContain('Only ships fight');
     wrapper.unmount();
   });
 
@@ -106,6 +124,7 @@ describe('ShipsView', () => {
     const wrapper = await mountPage();
 
     expect(wrapper.get('[data-testid=admin-note]').text()).toContain('Founding by sea');
+    expect(wrapper.get('[data-testid=admin-note]').text()).toContain('5 settlers');
     wrapper.unmount();
   });
 });
