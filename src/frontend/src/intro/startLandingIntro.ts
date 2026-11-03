@@ -1,4 +1,4 @@
-import { createApp, h } from 'vue';
+import { createApp, h, nextTick } from 'vue';
 import { detectDeviceLocale } from '../i18n/locale';
 import { readPersistedSettlementId } from '../lib/persistedPlayer';
 import { motionPreferences } from '../lib/perf/motionPreferences';
@@ -34,10 +34,13 @@ export function startLandingIntro(): void {
         locale: detectDeviceLocale(),
         reducedMotion: !motionPreferences.hudEnabled,
         loaded: introSignal.tilesLoaded,
-        onDone: () => {
-          app.unmount();
-          host.remove();
-        },
+        // After the flush that emitted `done`: unmounting the app from inside its own render/watch flush
+        // re-runs the root's render effect on a torn-down tree.
+        onDone: () =>
+          void nextTick(() => {
+            app.unmount();
+            host.remove();
+          }),
       }),
   });
   app.mount(host);
