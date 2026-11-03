@@ -40,15 +40,6 @@ public class FoundingTests
         Assert.Equal(300, cost.Iron);
     }
 
-    [Theory]
-    [InlineData(UnitType.Karve, 5)]
-    [InlineData(UnitType.Longship, 5)]
-    [InlineData(UnitType.Spearman, 0)]
-    public void ShipCapacity_matches_the_documented_figures(UnitType type, int expected)
-    {
-        Assert.Equal(expected, Founding.ShipCapacity(type));
-    }
-
     [Fact]
     public void IsHexFoundable_is_true_when_no_settlement_is_claimed_nearby()
     {

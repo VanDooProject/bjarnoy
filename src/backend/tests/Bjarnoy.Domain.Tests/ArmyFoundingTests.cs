@@ -177,25 +177,47 @@ public class ArmyFoundingTests
     }
 
     [Fact]
-    public void Founding_dispatch_still_rejects_a_settler_mixed_with_ordinary_land_units()
+    public void Sea_founding_convoy_carries_escort_units_as_passengers()
     {
-        var settlement = Found(garrison:
-        [
+        var requested = new[]
+        {
             new UnitStack(UnitType.Settler, 5),
             new UnitStack(UnitType.Karve, 3),
             new UnitStack(UnitType.Spearman, 5),
-        ]);
+        };
+        var settlement = Found(garrison: requested);
 
-        var decision = DispatchFound(
-            settlement, new HexCoord(5, 0),
-            requested:
-            [
-                new UnitStack(UnitType.Settler, 5),
-                new UnitStack(UnitType.Karve, 3),
-                new UnitStack(UnitType.Spearman, 5),
-            ]);
+        var decision = DispatchFound(settlement, new HexCoord(5, 0), requested: requested, terrainAt: _ => Terrain.Sea);
 
-        Assert.Equal(DispatchRejection.MixedFleetAndLandUnits, decision.Rejection);
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void Sea_founding_convoy_is_rejected_when_the_passengers_need_more_slots_than_the_ships_offer()
+    {
+        // 5 settlers (5 slots) + 3 berserkers (12 slots) = 17 slots on one Karve (10).
+        var requested = new[]
+        {
+            new UnitStack(UnitType.Settler, 5),
+            new UnitStack(UnitType.Berserker, 3),
+            new UnitStack(UnitType.Karve, 1),
+        };
+        var settlement = Found(garrison: requested);
+
+        var decision = DispatchFound(settlement, new HexCoord(5, 0), requested: requested, terrainAt: _ => Terrain.Sea);
+
+        Assert.Equal(DispatchRejection.InsufficientShipCapacity, decision.Rejection);
+    }
+
+    [Fact]
+    public void Sea_founding_convoy_needs_exactly_five_settlers_even_with_free_slots()
+    {
+        var requested = new[] { new UnitStack(UnitType.Settler, 4), new UnitStack(UnitType.Longship, 1) };
+        var settlement = Found(garrison: requested);
+
+        var decision = DispatchFound(settlement, new HexCoord(5, 0), requested: requested, terrainAt: _ => Terrain.Sea);
+
+        Assert.Equal(DispatchRejection.WrongSettlerCount, decision.Rejection);
     }
 
     [Fact]

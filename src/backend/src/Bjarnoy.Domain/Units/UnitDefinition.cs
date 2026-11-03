@@ -57,6 +57,15 @@ public sealed record UnitDefinition
     /// <summary>Food specifically this unit can carry — provisioners run higher than their loot cap.</summary>
     public required int FoodCarryCapacity { get; init; }
 
+    /// <summary>
+    /// Slots this unit takes aboard a ship (<c>docs/design/economy.md</c>, "Troops on ships"). Zero for ships, which are never cargo.
+    /// See <see cref="ShipCargo"/>.
+    /// </summary>
+    public int CargoSlots { get; init; }
+
+    /// <summary>Slots this ship offers to land troops; zero for every unit that is not a ship. See <see cref="ShipCargo"/>.</summary>
+    public int ShipSlots { get; init; }
+
     /// <summary>Food consumed per hour just for this unit standing in a garrison.</summary>
     public required double UpkeepPerHour { get; init; }
 

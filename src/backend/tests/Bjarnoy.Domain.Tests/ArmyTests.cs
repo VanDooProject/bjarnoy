@@ -529,18 +529,89 @@ public class ArmyTests
     }
 
     [Fact]
-    public void Dispatch_is_rejected_when_mixing_ships_and_land_units()
+    public void Fleet_dispatch_carries_land_units_as_passengers_within_the_ship_slots()
     {
-        var settlement = Found(garrison:
-        [
-            new UnitStack(UnitType.Karve, 5),
-            new UnitStack(UnitType.Spearman, 5),
-        ]);
+        // 5 spearmen (5 slots) on 1 Karve (10 slots).
+        var settlement = Found(garrison: [new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Spearman, 5)]);
 
         var decision = Dispatch(settlement, new HexCoord(4, 0), provisions: 40,
-            requested: [new UnitStack(UnitType.Karve, 5), new UnitStack(UnitType.Spearman, 5)]);
+            requested: [new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Spearman, 5)],
+            terrainAt: c => c == new HexCoord(0, 0) ? Terrain.Grass : Terrain.Sea);
 
-        Assert.Equal(DispatchRejection.MixedFleetAndLandUnits, decision.Rejection);
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        Assert.True(decision.Army!.IsFleet);
+    }
+
+    [Theory]
+    [InlineData(10, 0, true)]
+    [InlineData(11, 0, false)]
+    [InlineData(5, 1, true)]
+    [InlineData(6, 1, false)]
+    public void Fleet_dispatch_is_refused_when_the_passengers_need_more_slots_than_one_karve_offers(
+        int spearmen, int bowmen, bool accepted)
+    {
+        // Spearman 1 slot, Bowman 2 slots; one Karve offers 10.
+        var requested = new List<UnitStack> { new(UnitType.Karve, 1), new(UnitType.Spearman, spearmen) };
+        if (bowmen > 0)
+        {
+            requested.Add(new UnitStack(UnitType.Bowman, bowmen));
+        }
+
+        var settlement = Found(garrison: requested);
+
+        var decision = Dispatch(settlement, new HexCoord(4, 0), provisions: 40, requested: requested,
+            terrainAt: c => c == new HexCoord(0, 0) ? Terrain.Grass : Terrain.Sea);
+
+        Assert.Equal(accepted, decision.Accepted);
+        if (!accepted)
+        {
+            Assert.Equal(DispatchRejection.InsufficientShipCapacity, decision.Rejection);
+        }
+    }
+
+    [Theory]
+    [InlineData(UnitType.Karve, 1, 1, true)]
+    [InlineData(UnitType.Karve, 1, 2, false)]
+    [InlineData(UnitType.Longship, 1, 2, true)]
+    [InlineData(UnitType.Longship, 1, 3, false)]
+    [InlineData(UnitType.Karve, 2, 2, true)]
+    public void Siege_engines_ride_aboard_at_ten_slots_each(UnitType ship, int ships, int rams, bool accepted)
+    {
+        var requested = new[] { new UnitStack(ship, ships), new UnitStack(UnitType.Ram, rams) };
+        var settlement = Found(garrison: requested);
+
+        var decision = Dispatch(settlement, new HexCoord(4, 0), provisions: 40, requested: requested,
+            terrainAt: c => c == new HexCoord(0, 0) ? Terrain.Grass : Terrain.Sea);
+
+        Assert.Equal(accepted, decision.Accepted);
+    }
+
+    [Fact]
+    public void Fleet_moves_at_the_speed_of_its_slowest_ship_not_of_its_passengers()
+    {
+        var karveOnly = Found(garrison: [new UnitStack(UnitType.Karve, 1)]);
+        var withRam = Found(garrison: [new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Ram, 1)]);
+        Func<HexCoord, Terrain> terrain = c => c == new HexCoord(0, 0) ? Terrain.Grass : Terrain.Sea;
+
+        var plain = Dispatch(karveOnly, new HexCoord(4, 0), provisions: 40, requested: [new UnitStack(UnitType.Karve, 1)], terrainAt: terrain);
+        var loaded = Dispatch(withRam, new HexCoord(4, 0), provisions: 40,
+            requested: [new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Ram, 1)], terrainAt: terrain);
+
+        Assert.True(loaded.Accepted, $"expected accept, got {loaded.Rejection}");
+        Assert.Equal(UnitCatalogue.Get(UnitType.Karve).Speed, loaded.Army!.TotalSpeed);
+        Assert.Equal(
+            ((ArmyLocation.InTransit)plain.Army!.Location).Movement.ArrivesAt,
+            ((ArmyLocation.InTransit)loaded.Army.Location).Movement.ArrivesAt);
+    }
+
+    [Fact]
+    public void Land_army_still_moves_at_its_slowest_unit()
+    {
+        var army = Dispatch(Found(garrison: [new UnitStack(UnitType.Spearman, 2), new UnitStack(UnitType.Ram, 1)]),
+            new HexCoord(4, 0), provisions: 40,
+            requested: [new UnitStack(UnitType.Spearman, 2), new UnitStack(UnitType.Ram, 1)]).Army!;
+
+        Assert.Equal(UnitCatalogue.Get(UnitType.Ram).Speed, army.TotalSpeed);
     }
 
     [Fact]

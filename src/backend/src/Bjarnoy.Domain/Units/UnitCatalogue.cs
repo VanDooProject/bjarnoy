@@ -43,6 +43,7 @@ public static class UnitCatalogue
             Speed = 5,
             CarryCapacity = 60,
             FoodCarryCapacity = 20,
+            CargoSlots = 1,
             UpkeepPerHour = 1,
             TrainingCost = new ResourceAmounts(Wood: 60, Stone: 30, Food: 25, Iron: 0),
             TrainingDuration = TimeSpan.FromMinutes(10),
@@ -58,6 +59,7 @@ public static class UnitCatalogue
             Speed = 4,
             CarryCapacity = 20,
             FoodCarryCapacity = 10,
+            CargoSlots = 1,
             UpkeepPerHour = 1,
             TrainingCost = new ResourceAmounts(Wood: 80, Stone: 40, Food: 20, Iron: 40),
             TrainingDuration = TimeSpan.FromMinutes(15),
@@ -73,6 +75,7 @@ public static class UnitCatalogue
             Speed = 4,
             CarryCapacity = 30,
             FoodCarryCapacity = 10,
+            CargoSlots = 2,
             UpkeepPerHour = 1,
             TrainingCost = new ResourceAmounts(Wood: 100, Stone: 30, Food: 20, Iron: 60),
             TrainingDuration = TimeSpan.FromMinutes(20),
@@ -88,6 +91,7 @@ public static class UnitCatalogue
             Speed = 4,
             CarryCapacity = 15,
             FoodCarryCapacity = 10,
+            CargoSlots = 2,
             UpkeepPerHour = 1,
             TrainingCost = new ResourceAmounts(Wood: 90, Stone: 60, Food: 20, Iron: 50),
             TrainingDuration = TimeSpan.FromMinutes(20),
@@ -103,6 +107,7 @@ public static class UnitCatalogue
             Speed = 5,
             CarryCapacity = 25,
             FoodCarryCapacity = 10,
+            CargoSlots = 4,
             UpkeepPerHour = 2,
             TrainingCost = new ResourceAmounts(Wood: 150, Stone: 60, Food: 30, Iron: 120),
             TrainingDuration = TimeSpan.FromMinutes(35),
@@ -119,6 +124,7 @@ public static class UnitCatalogue
             Speed = 4,
             CarryCapacity = 20,
             FoodCarryCapacity = 150,
+            CargoSlots = 2,
             UpkeepPerHour = 1,
             TrainingCost = new ResourceAmounts(Wood: 90, Stone: 40, Food: 30, Iron: 20),
             TrainingDuration = TimeSpan.FromMinutes(20),
@@ -138,6 +144,7 @@ public static class UnitCatalogue
             Speed = 4,
             CarryCapacity = 0,
             FoodCarryCapacity = 40,
+            CargoSlots = 1,
             UpkeepPerHour = 1,
             // Base cost before Bjarnoy.Domain.Settlers.SettlerCostScaling's
             // per-existing-settlement multiplier (issue #55 §4) — deliberately
@@ -157,6 +164,7 @@ public static class UnitCatalogue
             Speed = 1.5,
             CarryCapacity = 0,
             FoodCarryCapacity = 0,
+            CargoSlots = 10,
             UpkeepPerHour = 3,
             // Placeholder balance figure (issue #40 phase 5): with the design
             // doc's levelsDestroyed = floor(sqrt(survivingSiegePower/2))
@@ -181,6 +189,7 @@ public static class UnitCatalogue
             Speed = 1.0,
             CarryCapacity = 0,
             FoodCarryCapacity = 0,
+            CargoSlots = 10,
             UpkeepPerHour = 3,
             // Same siege power as the catapult (the same SiegeResolver.LevelsDestroyed), more staying power, slower. It
             // is the wall breaker: walls and towers, nothing else; the catapult covers the rest.
@@ -201,6 +210,7 @@ public static class UnitCatalogue
             Speed = 8,
             CarryCapacity = 200,
             FoodCarryCapacity = 100,
+            ShipSlots = 10,
             UpkeepPerHour = 2,
             // Starting value, to be tuned: a won fleet attack damages the building it was sent at by
             // SiegeResolver.LevelsDestroyed over the surviving ships' summed SiegePower (catapult: 40).
@@ -220,6 +230,7 @@ public static class UnitCatalogue
             Speed = 10,
             CarryCapacity = 80,
             FoodCarryCapacity = 60,
+            ShipSlots = 20,
             UpkeepPerHour = 3,
             // Starting value, to be tuned (see Karve).
             SiegePower = 20,
