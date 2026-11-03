@@ -21,6 +21,8 @@ export interface IntroSequencerOptions {
   reducedMotion: boolean;
   onChange: (state: IntroState) => void;
   clock?: IntroClock;
+  /** Shortest hold: the time to read its narration. Defaults to the hold beat's durationMs. */
+  holdMinMs?: number;
 }
 
 const defaultClock: IntroClock = {
@@ -37,6 +39,8 @@ export class IntroSequencer {
   private loaded = false;
   private started = false;
   private timer: unknown = null;
+  private minTimer: unknown = null;
+  private holdMinReached = false;
   private phase: IntroPhase = 'waitingForPlay';
   private beat: BeatId;
   private cycle = 0;
@@ -90,6 +94,7 @@ export class IntroSequencer {
     this.loaded = true;
     if (this.opts.mode !== 'landing') return;
     if (this.phase === 'waitingForPlay' && this.started) this.finish();
+    else if (this.phase === 'playing' && this.beat === this.hold.id && this.holdMinReached) this.enterExit();
     else this.emit();
   }
 
@@ -112,19 +117,23 @@ export class IntroSequencer {
     this.schedule(meta.durationMs, () => this.enterIntro(i + 1));
   }
 
+  // The hold has no loop seam to wait for: it ends as soon as the tiles are loaded
+  // and its narration has had time to be read (replay: once that time has passed).
   private enterHold(): void {
     this.beat = this.hold.id;
     this.cycle = 0;
+    this.holdMinReached = false;
     this.emit();
     this.scheduleLoop();
+    this.minTimer = this.clock.setTimeout(() => {
+      this.minTimer = null;
+      this.holdMinReached = true;
+      if (this.opts.mode === 'replay' || this.loaded) this.enterExit();
+    }, this.opts.holdMinMs ?? this.hold.durationMs);
   }
 
   private scheduleLoop(): void {
     this.schedule(this.hold.loopMs ?? this.hold.durationMs, () => {
-      if (this.opts.mode === 'replay' || this.loaded) {
-        this.enterExit();
-        return;
-      }
       this.cycle++;
       this.emit();
       this.scheduleLoop();
@@ -132,6 +141,7 @@ export class IntroSequencer {
   }
 
   private enterExit(): void {
+    this.clear();
     this.phase = 'exiting';
     this.beat = this.exitBeat.id;
     this.emit();
@@ -145,13 +155,15 @@ export class IntroSequencer {
   }
 
   private schedule(ms: number, fn: () => void): void {
-    this.clear();
+    if (this.timer !== null) this.clock.clearTimeout(this.timer);
     this.timer = this.clock.setTimeout(fn, ms);
   }
 
   private clear(): void {
     if (this.timer !== null) this.clock.clearTimeout(this.timer);
     this.timer = null;
+    if (this.minTimer !== null) this.clock.clearTimeout(this.minTimer);
+    this.minTimer = null;
   }
 
   private emit(): void {
