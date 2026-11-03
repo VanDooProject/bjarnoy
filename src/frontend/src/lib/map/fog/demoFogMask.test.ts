@@ -67,9 +67,9 @@ describe('buildDemoFogMask', () => {
     const model = new WorldModel();
     model.foundSettlement('player-1', 'Player', 'Realm', { q: 0, r: 0 });
 
-    const bitmap = await buildDemoFogMask(model);
+    const result = await buildDemoFogMask(model);
 
-    expect(bitmap).not.toBeNull();
+    expect(result).not.toBeNull();
     expect(createImageBitmap).toHaveBeenCalledTimes(1);
     const passed = createImageBitmap.mock.calls[0][0] as FakeImageData;
     // A plain pixel buffer, not a Blob (which is what the old
@@ -81,6 +81,10 @@ describe('buildDemoFogMask', () => {
     expect(passed.height).toBe(bounds.height);
     expect(passed.data).toBeInstanceOf(Uint8ClampedArray);
     expect(passed.data.length).toBe(bounds.width * bounds.height * 4);
+    // The coverage is read off the very pixels the bitmap was made from.
+    expect(result!.bitmap).toEqual({ __source: passed });
+    expect(result!.coverage.isExplored(0, 0)).toBe(true);
+    expect(result!.coverage.isExplored(5000, 0)).toBe(false);
     vi.unstubAllGlobals();
   });
 

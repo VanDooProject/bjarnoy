@@ -5,7 +5,8 @@
 // on how this replaces v1's per-hex blob/pattern-sprite fog entirely.
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, UniformGroup } from 'pixi.js';
 import { noiseLatticeTexture } from '../shaderNoise';
-import { EDGE_NOISE_FADE_RAMP, FOG_FRAGMENT, FOG_VERTEX, MAX_ARMY_VISION_SOURCES } from './fogShader';
+import { FOG_FRAGMENT, FOG_VERTEX, MAX_ARMY_VISION_SOURCES } from './fogShader';
+import { FOG_MIST_OPAQUE_AT_RAMP, NOISE_REACH } from './fogRamp';
 
 export type FogTier = 'outOfSight' | 'unknown';
 
@@ -42,27 +43,8 @@ const UNKNOWN_EDGE: [number, number] = [0.04, 0.42];
  * rather than washing over the mist beyond it.
  */
 const OUT_OF_SIGHT_EDGE: [number, number] = [0.15, 0.85];
-/**
- * Where each tier's edge noise starts tapering off, reaching zero at the end
- * of the ramp — [unknown, outOfSight], and independent of where the tier's
- * opacity saturates (see fogShader.ts's edgeBand). 0.55 of the mist's ramp
- * is 7.7 hexes, so wisps keep thinning otherwise-solid mist for nearly two
- * hexes past the point it has gone opaque, shut off entirely by 11.2 — that
- * outer stretch is where the faintest, roundest part of the fluff lives,
- * and it is the reason the ramp is fourteen hexes wide rather than the ten
- * it used to be. Where it shuts also sets how far terrain has to be drawn,
- * so pushing it further out is not free.
- */
-const NOISE_REACH: [number, number] = [0.55, 0.7];
-
-/**
- * The ramp value past which the mist's edge noise is fully shut off, and so
- * the mist is provably opaque — NOISE_REACH plus the taper that closes it.
- * HexMapRenderer derives its terrain cull radius from this: ground past it
- * cannot show through, so drawing it is pure waste, and on a software
- * renderer that waste measured about 30ms a frame.
- */
-export const FOG_MIST_OPAQUE_AT_RAMP = NOISE_REACH[0] + EDGE_NOISE_FADE_RAMP;
+// NOISE_REACH and FOG_MIST_OPAQUE_AT_RAMP live in fogRamp.ts (no pixi there, so FogCoverage and the store can read them).
+export { FOG_MIST_OPAQUE_AT_RAMP };
 /**
  * Peak-to-peak displacement of each tier's edge by the drifting cloud field
  * — [unknown, outOfSight]. 0.46 of the unknown ramp is ±3.2 hexes, several

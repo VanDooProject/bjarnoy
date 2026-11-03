@@ -13,7 +13,7 @@
 // this checks the geometry directly — `coveredRowSpans` must agree, hex for
 // hex, with asking `hexDistance` about every hex in a box around the sources.
 import { describe, expect, it } from 'vitest';
-import { coveredRowSpans } from './HexMapRenderer';
+import { coveredRowSpans, unionRowSpans } from './HexMapRenderer';
 import { hexDistance } from '../hex/coords';
 
 interface Source {
@@ -126,5 +126,29 @@ describe('coveredRowSpans', () => {
       expect(countB, `q=${q}`).toBe(countA);
       expect(b.slice(0, countB * 2), `q=${q}`).toEqual(a.slice(0, countA * 2));
     }
+  });
+});
+
+describe('unionRowSpans', () => {
+  const union = (disc: number[], extra: number[]) => {
+    const out = [...disc];
+    const count = unionRowSpans(out, disc.length / 2, extra);
+    return out.slice(0, count * 2);
+  };
+
+  it('adds disjoint coverage spans before, between and after the disc spans, sorted', () => {
+    expect(union([10, 20], [0, 2, 30, 31])).toEqual([0, 2, 10, 20, 30, 31]);
+    expect(union([0, 4, 20, 24], [10, 12])).toEqual([0, 4, 10, 12, 20, 24]);
+  });
+
+  it('merges overlapping and adjacent spans', () => {
+    expect(union([10, 20], [15, 25])).toEqual([10, 25]);
+    expect(union([10, 20], [21, 30])).toEqual([10, 30]);
+    expect(union([10, 20], [2, 9, 12, 14])).toEqual([2, 20]);
+  });
+
+  it('is the disc spans alone for no coverage, and the coverage alone for no discs', () => {
+    expect(union([3, 5], [])).toEqual([3, 5]);
+    expect(union([], [3, 5, 8, 9])).toEqual([3, 5, 8, 9]);
   });
 });
