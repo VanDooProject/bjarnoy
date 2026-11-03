@@ -85,8 +85,8 @@ public sealed class EndpointAccessPolicyTests
         // AllowAnonymous") — a guild's roster/board/treaties are a public
         // profile, same idea as a player's own profile page above. ---
         ["GET /api/v1/worlds/{worldId:guid}/guilds"] = "Public guild directory for a world — GuildEndpoints' own doc comment: read routes are deliberately AllowAnonymous.",
-        ["GET /api/v1/guilds/{guildId:guid}"] = "Public guild profile (roster, perks tier) — same reasoning as the world guild directory above.",
-        ["GET /api/v1/guilds/{guildId:guid}/perks"] = "Public — a guild's perk tier is part of its public profile, same as Get above.",
+        ["GET /api/v1/guilds/{guildId:guid}"] = "Public guild profile (roster) — same reasoning as the world guild directory above.",
+        ["GET /api/v1/guilds/{guildId:guid}/caps"] = "Public — a guild's member and treaty caps are part of its public profile, same as Get above.",
         ["GET /api/v1/guilds/{guildId:guid}/board/topics"] = "Public guild board listing — visible to anyone deciding whether to join, per GuildEndpoints' own AllowAnonymous design.",
         ["GET /api/v1/guilds/{guildId:guid}/board/topics/{topicId:guid}"] = "Public guild board topic detail — same reasoning as the topic listing above.",
         ["GET /api/v1/guilds/{guildId:guid}/treaties"] = "Public guild treaty listing — diplomatic state between guilds is public information, not a member secret.",

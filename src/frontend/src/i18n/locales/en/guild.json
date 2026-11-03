@@ -10,11 +10,6 @@
     "view": "View",
     "join": "Join"
   },
-  "feeTier": {
-    "copper": "Copper",
-    "silver": "Silver",
-    "gold": "Gold"
-  },
   "role": {
     "leader": "Leader",
     "officer": "Officer",
@@ -36,25 +31,13 @@
     "leave": "Leave",
     "join": "Join"
   },
-  "perks": {
-    "title": "Perks & caps",
+  "caps": {
+    "title": "Caps",
     "memberCap": "Member cap",
-    "peaceTreatyCap": "Peace treaty cap",
-    "tradeBonus": "Trade bonus",
-    "unitSupport": "Unit support",
-    "yes": "Yes",
-    "no": "No",
-    "feeTierLabel": "Fee tier:"
-  },
-  "fee": {
-    "overdue": "overdue",
-    "paidUp": "paid up",
-    "status": "Your fee is {status}.",
-    "payFee": "Pay fee"
+    "peaceTreatyCap": "Peace treaty cap"
   },
   "roster": {
     "title": "Roster ({count})",
-    "overdue": "overdue",
     "makeLeader": "Make leader",
     "makeOfficer": "Make officer",
     "demote": "Demote",

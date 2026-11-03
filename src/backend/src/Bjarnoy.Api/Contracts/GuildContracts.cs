@@ -10,8 +10,6 @@ public sealed record CreateGuildRequest(
     [property: Required, MinLength(2), MaxLength(5)] string Tag,
     [property: MaxLength(500)] string? Description);
 
-public sealed record SetGuildFeeTierRequest([property: Required] string FeeTier);
-
 public sealed record SetGuildMemberRoleRequest([property: Required] string Role);
 
 public sealed record CreateGuildTopicRequest(
@@ -24,31 +22,26 @@ public sealed record CreateGuildPostRequest(
 
 public sealed record ProposeTreatyRequest([property: Required] Guid TargetGuildId);
 
-public sealed record GuildMemberResponse(Guid UserId, string Role, DateTimeOffset JoinedAt, bool FeeOverdue)
+public sealed record GuildMemberResponse(Guid UserId, string Role, DateTimeOffset JoinedAt)
 {
-    public static GuildMemberResponse From(GuildMembershipEntity membership, DateTimeOffset now)
+    public static GuildMemberResponse From(GuildMembershipEntity membership)
     {
         ArgumentNullException.ThrowIfNull(membership);
 
         return new GuildMemberResponse(
             membership.UserId,
             membership.Role.ToWireName(),
-            membership.JoinedAt,
-            membership.FeePaidThroughAt is null || membership.FeePaidThroughAt < now);
+            membership.JoinedAt);
     }
 }
 
-public sealed record GuildPerksResponse(double TradeCapacityBonus, bool AllowUnitSupport, int MemberCap, int MaxActivePeaceTreaties)
+public sealed record GuildCapsResponse(int MemberCap, int MaxActivePeaceTreaties)
 {
-    public static GuildPerksResponse From(GuildPerksSummary summary)
+    public static GuildCapsResponse From(GuildCapsSummary summary)
     {
         ArgumentNullException.ThrowIfNull(summary);
 
-        return new GuildPerksResponse(
-            summary.Perks.TradeCapacityBonus,
-            summary.Perks.AllowUnitSupport,
-            summary.MemberCap,
-            summary.MaxActivePeaceTreaties);
+        return new GuildCapsResponse(summary.MemberCap, summary.MaxActivePeaceTreaties);
     }
 }
 
@@ -58,12 +51,11 @@ public sealed record GuildResponse(
     string Name,
     string Tag,
     string? Description,
-    string FeeTier,
     int MemberCount,
     DateTimeOffset CreatedAt,
     IReadOnlyList<GuildMemberResponse> Members)
 {
-    public static GuildResponse From(GuildEntity guild, DateTimeOffset now)
+    public static GuildResponse From(GuildEntity guild)
     {
         ArgumentNullException.ThrowIfNull(guild);
 
@@ -73,10 +65,9 @@ public sealed record GuildResponse(
             guild.Name,
             guild.Tag,
             guild.Description,
-            guild.FeeTier.ToWireName(),
             guild.Memberships.Count,
             guild.CreatedAt,
-            [.. guild.Memberships.Select(m => GuildMemberResponse.From(m, now))]);
+            [.. guild.Memberships.Select(m => GuildMemberResponse.From(m))]);
     }
 }
 

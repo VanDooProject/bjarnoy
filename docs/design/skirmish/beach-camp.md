@@ -12,3 +12,15 @@ Part of [Skirmish](README.md). The base for landing from the sea (see [Conquest 
 - The fleet stays at the camp and defends it. You can move it away.
 - The camp can be attacked from land and from sea. If no troops defend it, it can be plundered. If no troops are in it, it can be
   destroyed without catapults or rams.
+
+## Numbers
+Starting values, to be tuned.
+- Camp builders are trained at the Cart Workshop: 80 wood, 40 stone, 40 food, 20 iron, 12 min each. Their price does not grow
+  with the number of settlements.
+- A camp needs 2 camp builders, costs 200 wood and 100 stone (paid when the fleet sets out) and takes 10 min to build.
+- A camp holds up to 2,000 food. When the fleet arrives, the food it does not need for the way home goes into the camp. A fleet
+  sent to the camp with Support unloads its spare food there.
+- When the camp's food runs out or the camp is destroyed, the troops that landed from it starve the same way troops do in a
+  settlement without food.
+- A camp has no levels and cannot be upgraded.
+- Plundering a camp takes its food.
