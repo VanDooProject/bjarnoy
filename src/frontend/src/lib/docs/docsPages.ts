@@ -5,6 +5,7 @@
 // The routes guard the showcase manifests (router/index.ts), so the `art` below resolves synchronously.
 
 export type DocsPageId =
+  | 'saga'
   | 'tiles'
   | 'bogLands'
   | 'techTree'
@@ -19,7 +20,7 @@ export type DocsPageId =
   | 'wildlifeCamps'
   | 'wastedLands';
 
-export type DocsGroupId = 'island' | 'building' | 'move' | 'beyond';
+export type DocsGroupId = 'story' | 'island' | 'building' | 'move' | 'beyond';
 
 /**
  * How a page's art sits in its header: `icon` beside the title (a page about one tile or building family),
@@ -79,6 +80,10 @@ function group(id: DocsGroupId, pages: DocsPageEntry[]): DocsGroupEntry {
 
 // Hub order: the groups, and the pages inside each. Previous/next walk it across groups.
 export const DOCS_GROUPS: DocsGroupEntry[] = [
+  group('story', [
+    // The longhouse's art family is `greathall` (buildingArt.ts).
+    page('saga', '/docs/saga', 'greathall_SE_level004', 'backdrop', ['founding', 'realm', 'ships']),
+  ]),
   group('island', [
     page('tiles', '/docs/tiles', 'foresttile_SE_variant001', 'icon', ['bogLands', 'production', 'landMovement']),
     page('bogLands', '/docs/bog-lands', 'bog_SE_variant004', 'icon', ['tiles', 'production', 'wildlifeCamps']),

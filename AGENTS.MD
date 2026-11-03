@@ -149,6 +149,17 @@
   in the bjarnoy section, not as loose sessions
 - prefix the title of every session you create with `[AI] ` (e.g.
   `[AI] fix flaky WorldEndpointsTests`)
+- before starting a new session for side work (a fix, a flake, a
+  follow-up), or offering to start one, check the open sessions
+  (`list_sessions`, and `list_events` on the ones that look related) and
+  the open PRs and branches for one that already covers it. If one does,
+  send it what you know instead of starting a second one
+- if you already know from your own session that another session or PR
+  covers it, don't offer a new session for it at all; say which session
+  or PR has it
+- a session started for side work runs the same check itself before it
+  changes anything, and reports back instead of duplicating the work when
+  something already covers it
 
 # scheduled check-ins / send_later
 - don't poll on a fixed timer for something only I can unblock. A recurring
@@ -281,10 +292,11 @@
   its own page or section in the same artifact and link the rounds to each
   other — never overwrite or delete an earlier round's content when
   publishing the next one, I still compare against it
-- artifacts with motion (animations, motion demos, story beats, ...) get a
-  toggle that switches reduced motion on and off inside the page, next to
-  following `prefers-reduced-motion` — I can't change that setting on my
-  machine (it's off), so the reduced-motion path has to be viewable there
+- artifacts with motion (animations, motion demos, story beats, ...) loop by
+  default and ignore `prefers-reduced-motion` by default (full motion); a
+  toggle inside the page switches to the reduced-motion version — I can't
+  change that setting on my machine, so the reduced-motion path has to be
+  viewable there
 - don't report that you followed one of these rules (e.g. "renamed the
   branch because of the naming rule") — that's expected. Only tell me when
   you did **not** follow a rule, and why

@@ -28,17 +28,17 @@ describe('docsPages', () => {
     const routes = router
       .getRoutes()
       .map((r) => r.path)
-      .filter((p) => p.startsWith('/docs/'))
+      .filter((p) => p.startsWith('/docs/') && p !== '/docs/saga/replay')
       .sort();
     expect(DOCS_PAGES.map((p) => p.to).sort()).toEqual(routes);
     expect(new Set(DOCS_PAGES.map((p) => p.id)).size).toBe(DOCS_PAGES.length);
     expect(new Set(DOCS_PAGES.map((p) => p.to)).size).toBe(DOCS_PAGES.length);
   });
 
-  it('keeps the hub order: island, building, move, beyond', () => {
-    expect(DOCS_GROUPS.map((g) => g.id)).toEqual(['island', 'building', 'move', 'beyond']);
+  it('keeps the hub order: story, island, building, move, beyond', () => {
+    expect(DOCS_GROUPS.map((g) => g.id)).toEqual(['story', 'island', 'building', 'move', 'beyond']);
     expect(DOCS_PAGES.map((p) => p.id)).toEqual([
-      'tiles', 'bogLands', 'techTree', 'production', 'shrines', 'walls', 'training', 'founding', 'realm', 'landMovement', 'ships', 'wildlifeCamps', 'wastedLands',
+      'saga', 'tiles', 'bogLands', 'techTree', 'production', 'shrines', 'walls', 'training', 'founding', 'realm', 'landMovement', 'ships', 'wildlifeCamps', 'wastedLands',
     ]);
   });
 
@@ -72,7 +72,7 @@ describe('docsPages', () => {
   it('has a header art mode per page: icon for single-family pages, backdrop for the rest', () => {
     const modes = Object.fromEntries(DOCS_PAGES.map((p) => [p.id, p.headerArt]));
     expect(modes).toEqual({
-      tiles: 'icon', bogLands: 'icon', walls: 'icon', shrines: 'icon', production: 'icon', wildlifeCamps: 'icon',
+      saga: 'backdrop', tiles: 'icon', bogLands: 'icon', walls: 'icon', shrines: 'icon', production: 'icon', wildlifeCamps: 'icon',
       techTree: 'backdrop', training: 'backdrop', founding: 'backdrop', realm: 'backdrop', landMovement: 'backdrop', ships: 'backdrop', wastedLands: 'backdrop',
     });
   });
@@ -84,7 +84,9 @@ describe('docsPages', () => {
     expect(docsNeighbours('shrines')).toMatchObject({ previous: { id: 'production' }, next: { id: 'walls' } });
     expect(docsNeighbours('walls').next?.id).toBe('training');
     expect(docsNeighbours('training')).toMatchObject({ previous: { id: 'walls' }, next: { id: 'founding' } });
-    expect(docsNeighbours('tiles').previous).toBeUndefined();
+    expect(docsNeighbours('saga').previous).toBeUndefined();
+    expect(docsNeighbours('saga').next?.id).toBe('tiles');
+    expect(docsNeighbours('tiles').previous?.id).toBe('saga');
     expect(docsNeighbours('wastedLands').next).toBeUndefined();
     expect(docsPageById('ships').to).toBe('/docs/ships');
   });

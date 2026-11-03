@@ -4,7 +4,8 @@
 // failure) the same way it behaves for every other client method.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError, authHooks } from './client';
-import { isUpdatePending, resetAppUpdate, setOwnBuildId } from '../lib/appUpdate';
+import { isUpdatePending, resetAppUpdate } from '../lib/appUpdate';
+import { setOwnBuildId } from '../lib/buildId';
 import type {
   ActivitySummaryResponse,
   AdminUserActivityDetailResponse,

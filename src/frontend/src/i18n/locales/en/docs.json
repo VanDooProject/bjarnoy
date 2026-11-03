@@ -82,6 +82,11 @@
         "wildlifeCamps": "The wastelands have camps of their own.",
         "walls": "Your own walls, built in wood.",
         "landMovement": "How armies cross the land to get there."
+      },
+      "saga": {
+        "founding": "How your first landfall works in the game.",
+        "realm": "What the realm you build for the jarl's son is made of.",
+        "ships": "The longships that carried you here."
       }
     }
   },
@@ -91,6 +96,10 @@
     "intro": "How the islands, buildings, beasts and the endgame work. Everything here is the game's own rules and art.",
     "artAlt": "Utgard, the giant fortress of the wasted lands",
     "groups": {
+      "story": {
+        "title": "The story",
+        "description": "Where your saga begins."
+      },
       "island": {
         "title": "Your island",
         "description": "The land and what it gives you."
@@ -109,6 +118,10 @@
       }
     },
     "pages": {
+      "saga": {
+        "title": "The saga",
+        "description": "The story behind your first landfall, and a replay of the intro."
+      },
       "tiles": {
         "title": "Tiles",
         "description": "The ground your island is made of and what you can build on it."
@@ -1367,5 +1380,18 @@
     "zoomOut": "Zoom out",
     "hintCtrl": "Ctrl + scroll to zoom",
     "hintCmd": "⌘ + scroll to zoom"
+  },
+  "saga": {
+    "title": "The saga",
+    "intro": "The story behind your first landfall, in six steps.",
+    "steps": [
+      "A skald by the fire begins the saga.",
+      "A prophecy: the homeland is lost.",
+      "The ravens return. Bjarnøy is not empty: giants sleep beneath the sea.",
+      "The jarl stakes his whole line on his only son, still a child. You are sworn to guide him and build his realm.",
+      "The longship rows through the fog, past the smoke and lights of other settlements.",
+      "“Land!” The fog lifts, and your realm begins."
+    ],
+    "watch": "Watch the intro"
   }
 }

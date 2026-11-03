@@ -1,6 +1,6 @@
 // Vite plugin: emits `build-id.txt`, the file name of the entry chunk (e.g. `assets/index-BhkDhqzG.js`).
 // The name is content-hashed, so the id only changes when the frontend does. The API reads the file at
-// startup and sends it as `X-App-Build`; the app knows its own id from its entry module's URL (appUpdate.ts).
+// startup and sends it as `X-App-Build`; the app knows its own id from its entry module's URL (lib/buildId.ts, set by boot.ts).
 import type { Plugin } from 'vite';
 
 export function buildIdPlugin(): Plugin {
