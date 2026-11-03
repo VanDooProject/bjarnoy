@@ -116,11 +116,6 @@
       "officer": "Officer",
       "member": "Member"
     },
-    "feeTiers": {
-      "copper": "Copper",
-      "silver": "Silver",
-      "gold": "Gold"
-    },
     "boardTopics": {
       "discussion": "Discussion",
       "announcement": "Announcement",

@@ -4,8 +4,7 @@ import type {
   CreateGuildRequest,
   CreateGuildTopicRequest,
   GuildBoardTopicResponse,
-  GuildFeeTier,
-  GuildPerksResponse,
+  GuildCapsResponse,
   GuildResponse,
   GuildRole,
   GuildTreatyResponse,
@@ -22,7 +21,7 @@ export const useGuildStore = defineStore('guild', {
     current: null as GuildResponse | null,
     currentLoading: false,
     currentError: null as string | null,
-    perks: null as GuildPerksResponse | null,
+    caps: null as GuildCapsResponse | null,
 
     topics: [] as GuildBoardTopicResponse[],
     topicsLoading: false,
@@ -89,16 +88,16 @@ export const useGuildStore = defineStore('guild', {
         this.guildsLoading = false;
       }
     },
-    /** Loads a guild's detail and its current perks/caps together. */
+    /** Loads a guild's detail and its current caps together. */
     async loadGuild(guildId: string) {
       this.currentLoading = true;
       this.currentError = null;
       this.current = null;
-      this.perks = null;
+      this.caps = null;
       try {
-        const [guild, perks] = await Promise.all([api.getGuild(guildId), api.getGuildPerks(guildId)]);
+        const [guild, caps] = await Promise.all([api.getGuild(guildId), api.getGuildCaps(guildId)]);
         this.current = guild;
-        this.perks = perks;
+        this.caps = caps;
       } catch (err) {
         this.currentError = err instanceof ApiError ? err.message : 'Could not load this guild.';
       } finally {
@@ -174,34 +173,6 @@ export const useGuildStore = defineStore('guild', {
         return true;
       } catch (err) {
         this.actionError = err instanceof ApiError ? err.message : 'Could not change that role.';
-        return false;
-      } finally {
-        this.actionPending = false;
-      }
-    },
-    async setFeeTier(guildId: string, feeTier: GuildFeeTier): Promise<boolean> {
-      this.actionPending = true;
-      this.actionError = null;
-      try {
-        this.current = await api.setGuildFeeTier(guildId, { feeTier });
-        this.perks = await api.getGuildPerks(guildId);
-        return true;
-      } catch (err) {
-        this.actionError = err instanceof ApiError ? err.message : 'Could not change the fee tier.';
-        return false;
-      } finally {
-        this.actionPending = false;
-      }
-    },
-    async payFee(guildId: string): Promise<boolean> {
-      this.actionPending = true;
-      this.actionError = null;
-      try {
-        await api.payGuildFee(guildId);
-        await this.loadGuild(guildId);
-        return true;
-      } catch (err) {
-        this.actionError = err instanceof ApiError ? err.message : 'Could not pay the fee.';
         return false;
       } finally {
         this.actionPending = false;

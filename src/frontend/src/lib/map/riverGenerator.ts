@@ -1463,6 +1463,15 @@ export function generateRiversWithBogs(
   return { rivers: assignWidths(nodes, seed, stats, bp.requireRiver), bogs: bogTiles };
 }
 
+/**
+ * River tiles for hand-laid `paths` (each from its spring to its mouth, or to the tile where it joins another path), with the
+ * shapes and widths the generator gives a traced network: the same `buildNodes` + `assignWidths` pass, so a stream widens
+ * where the generator would widen it. For fixed example maps (the docs pages), not for worlds.
+ */
+export function riverTilesFromPaths(paths: AxialCoord[][], seed: number): RiverTile[] {
+  return assignWidths(buildNodes(paths), seed, undefined);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Valley streams: a stream out of every mountain-enclosed valley of at least VALLEY_MIN_HEXES.
 // ---------------------------------------------------------------------------------------------

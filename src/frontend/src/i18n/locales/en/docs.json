@@ -1118,6 +1118,11 @@
       "alt": "An example island with the route of an army from its settlement to the far side of a wall.",
       "hoverHint": "Point at a hex to see what it is.",
       "total": "A {unit} army needs {time} for the whole route.",
+      "columns": {
+        "step": "#",
+        "hex": "Hex",
+        "time": "Time"
+      },
       "names": {
         "settlement": "Settlement",
         "bridge": "Bridge",
