@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import LandingIntro from './LandingIntro.vue';
+import { BEATS } from './beats/registry';
 
 // jsdom has no canvas 2D context; the texture is irrelevant to the host's behaviour.
 vi.mock('./fogTexture', () => ({ introFogUrl: () => 'data:image/png;base64,' }));
@@ -26,7 +27,7 @@ describe('LandingIntro', () => {
     await w.get('[data-testid="intro-play"]').trigger('click');
     expect(phase(w)).toBe('playing');
     expect(w.find('[data-testid="intro-play"]').exists()).toBe(false);
-    await vi.advanceTimersByTimeAsync(4000);
+    await vi.advanceTimersByTimeAsync(BEATS[0].durationMs);
     expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe('prophecy');
   });
 
@@ -51,7 +52,7 @@ describe('LandingIntro', () => {
 
   it('narrates the current beat in the chosen locale', async () => {
     const w = await mountIntro({ locale: 'de' });
-    expect(w.get('[data-testid="intro-narration"]').text()).toBe('Am Feuer des Skalden');
+    expect(w.get('[data-testid="intro-narration"]').text()).toBe('Hör zu! Rück näher ans Feuer und erfahre, wie die Jarle ihre Heimat verloren.');
   });
 
   it('replay: skip from the start leads to the white end screen whose buttons emit', async () => {
