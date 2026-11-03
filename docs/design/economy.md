@@ -367,10 +367,30 @@ engines can damage; if there are none, no siege happens. Rams and catapults are 
 **Fleets.** A fleet Attack or Raid is always sent at one building on the target's shore: a building inside the target's
 claim on a shoreline land hex or on a sea hex (Dockyard, Fishing Hut, Shrine of Njörd, a wall's sea end). Without one the
 dispatch is refused (`FleetTargetBuildingRequired`, `FleetTargetBuildingNotOnShore`). The fleet's route ends at that
-building's hex, the battle against the settlement's garrison is fought there, and the target's Longhouse may be inland.
+building's hex and the target's Longhouse may be inland. The battle there is fought by ships only: the defender's ships
+at home (and guest fleets supporting it) against the attacking ships; land troops on either side stay out of it. Without
+ships at home there is no battle and the fleet's siege hits the building.
 A won fight damages only that building, by `LevelsDestroyed` of the surviving ships' siege power (Karve 10, Longship 20,
 starting values to be tuned; catapult 40), walls and bridges one level as above. A fleet has no random fallback: if the
-building is gone when it arrives, the battle still happens and nothing is damaged.
+building is gone when it arrives, nothing is damaged.
+
+**Troops on ships.** Ships carry land units in slots (`ShipCargo`); every mission a fleet can take can carry them, and a
+dispatch whose passengers need more slots than its ships have is refused (`InsufficientShipCapacity`). A fleet moves at the
+speed of its slowest ship; passengers do not slow it. Passengers eat from the fleet's provisions. They stay on board during a
+fleet battle and do not fight; they only go ashore at a beach camp (`skirmish/beach-camp.md`). When ships are lost, the
+passengers beyond what the surviving ships can carry drown. Starting values, to be tuned:
+
+| Ship | Slots |
+|---|---|
+| Karve | 10 |
+| Longship | 20 |
+
+| Unit | Slots |
+|---|---|
+| Thrall, Spearman, Settler, Camp Builder | 1 |
+| Bowman, Axeman, Provisioner | 2 |
+| Berserker | 4 |
+| Catapult, Ram | 10 |
 
 **Not built yet.** Fire takes a level off a wall hex at a time until it is gone; nothing
 burns walls yet (`TODO(economy.md section 5)` in `BuildingCatalogue.PalisadeHex`).
