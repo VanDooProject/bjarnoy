@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// The Wasted Lands docs page's Utgard example: a small hand-placed wasted island (lib/docs/utgardExample.ts) with Utgard in the middle,
-// a ring of Utgard wall round it with a gate, and Jötun watchtowers outside, drawn by the game's own HexMapRenderer through a
+// The Wasted Lands docs page's Utgard example: a real wasted island from the world generator (lib/docs/utgardExample.ts) with Utgard on it,
+// two lines of Utgard wall round it with gates, and Jötun watchtowers outside the inner one, drawn by the game's own HexMapRenderer through a
 // StaticWorldModel like WallExample.vue. The renderer picks every wall hex's piece and rotation from its neighbours. Hovering a hex
 // names it.
 import { computed, ref } from 'vue';
@@ -23,6 +23,8 @@ world.setRivers(buildUtgardExampleStreams());
 
 const NAME_KEY = {
   utgard: 'docs.wastedLands.island.giantWasted',
+  volcano: 'docs.wastedLands.island.giantVolcano',
+  camp: 'docs.wildlifeCamps.title',
   wall: 'docs.wastedLands.defences.walls.heading',
   gate: 'docs.wastedLands.defences.pieces.gate',
   tower: 'docs.wastedLands.defences.watchtower.heading',

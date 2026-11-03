@@ -1,22 +1,64 @@
-// The Utgard example is the endgame generator's own output (`placeEndgame`, golden-tested in endgamePlacement.golden.test.ts) tagged on
-// a hand-built island the way the world model tags it. These tests check the island shows what the Wasted Lands page says about it:
-// two rings round the anchor (radius 3 at wall level 2, radius 6 at level 1), a shore end where a run reaches the sea, up to two gates
-// per ring on straights, and clamp(floor(land / 120 + 0.5), 3, 6) watchtowers outside the outer ring, at least 5 hexes from each other
-// and from Utgard. The rules themselves are not re-tested here.
+// The Utgard example is a real wasted island (the `docs_utgard_example` scenario of the endgame golden fixture) with the endgame
+// generator's own output (`placeEndgame`, golden-tested in endgamePlacement.golden.test.ts) tagged on it the way the world model tags
+// it. These tests check the copy of the island still equals the fixture and that the map shows what the Wasted Lands page says about it:
+// two wall lines round the anchor (wandering in the distance band 3 to 6 at wall level 2, and 7 to 11 at level 1), gates on straights,
+// and clamp(floor(land / 120 + 0.5), 3, 6) watchtowers outside the inner band and off the walls, at least 5 hexes from each other and
+// from Utgard. The rules themselves are not re-tested here.
+import { isWideRiverTile } from '../map/riverGenerator';
 import { describe, expect, it } from 'vitest';
+import goldenFixtureJson from '../../../../shared/endgame-placement-golden.json';
 import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
 import { MinTowerSpacing, towerCountFor } from '../map/endgamePlacement';
 import { giantCoverage } from '../map/giantTiles';
 import { findPath, type PathContext } from '../map/hexPath';
 import { palisadeRestrictions } from '../map/palisadeMovement';
 import { wastedVariantAt } from '../map/worldGenerator';
+import example from './utgardIslandExample.json';
 import { UTGARD_CENTRE, UTGARD_EXAMPLE_WORLD, UTGARD_RINGS, buildUtgardExampleStreams, buildUtgardExampleTiles, utgardExampleKindOf, utgardLandHexes } from './utgardExample';
+
+const golden = (goldenFixtureJson as unknown as { scenarios: { name: string }[] }).scenarios.find((s) => s.name === 'docs_utgard_example');
 
 const tiles = buildUtgardExampleTiles();
 const byKey = new Map(tiles.map((t) => [coordKey(t), t]));
 const dist = (c: AxialCoord) => hexDistance(c, UTGARD_CENTRE);
 const walls = tiles.filter((t) => t.utgardWall);
 const towers = tiles.filter((t) => t.jotunTower);
+
+describe('the Utgard example island is a real generated one', () => {
+  it('is still the generator-frozen scenario it was copied from', () => {
+    expect(golden).toBeDefined();
+    const { worldSeed, islandIndex, tiles: t, rivers, giants, camps } = golden as unknown as typeof example;
+    expect(example).toEqual({ worldSeed, islandIndex, tiles: t, rivers, giants, camps });
+  });
+
+  it('places the same walls and towers as the fixture froze', () => {
+    const frozen = golden as unknown as { walls: { q: number; r: number; ring: string; gate: boolean }[]; towers: [number, number][] };
+    expect(walls.map((t) => [t.q, t.r, t.utgardWall!.ring, t.utgardWall!.isGate]).sort()).toEqual(
+      frozen.walls.map((w) => [w.q, w.r, w.ring, w.gate]).sort(),
+    );
+    expect(towers.map((t) => coordKey(t)).sort()).toEqual(frozen.towers.map(([q, r]) => coordKey({ q, r })).sort());
+  });
+
+  it('traces the same lava streams and camps as the fixture froze, with the game generators', () => {
+    const key = ([q, r]: [number, number]) => coordKey({ q, r });
+    expect(buildUtgardExampleStreams().map(coordKey).sort()).toEqual(example.rivers.map((r) => key(r as [number, number])).sort());
+    expect(tiles.filter((t) => t.camp).map(coordKey).sort()).toEqual(example.camps.map((c) => key(c as [number, number])).sort());
+  });
+
+  it('draws every giant of the island, all seven hexes of each', () => {
+    expect(example.giants.some((g) => g.family === 'giantutgard')).toBe(true);
+    for (const g of example.giants) {
+      for (const { coord } of giantCoverage({ q: g.q, r: g.r })) {
+        expect(byKey.get(coordKey(coord))!.giant, `(${coord.q},${coord.r})`).toMatchObject({ family: g.family, anchor: { q: g.q, r: g.r } });
+      }
+    }
+  });
+
+  it('has sea round the land, the first ring as coastal water', () => {
+    expect(tiles.some((t) => t.terrain === 'sea' && t.isCoastalWater)).toBe(true);
+    expect(tiles.some((t) => t.terrain === 'sea' && !t.isCoastalWater)).toBe(true);
+  });
+});
 
 describe('the Utgard example island', () => {
   it('stands Utgard, all seven hexes of it, on the anchor', () => {
@@ -26,30 +68,32 @@ describe('the Utgard example island', () => {
     expect(utgardExampleKindOf(byKey.get(coordKey(UTGARD_CENTRE))!)).toBe('utgard');
   });
 
-  it('has the inner ring at radius 3 as level 2 and the outer one at radius 6 as level 1', () => {
-    expect(UTGARD_RINGS.map((r) => [r.radius, r.level])).toEqual([
-      [3, 2],
-      [6, 1],
+  it('keeps the inner wall in its band as level 2 and the outer one in its band as level 1', () => {
+    expect(UTGARD_RINGS.map((r) => [...r.band, r.level])).toEqual([
+      [3, 6, 2],
+      [7, 11, 1],
     ]);
     for (const ring of UTGARD_RINGS) {
       const hexes = walls.filter((t) => t.utgardWall!.ring === ring.id);
       expect(hexes.length).toBeGreaterThan(0);
       for (const t of hexes) {
-        expect(dist(t)).toBe(ring.radius);
+        // A shore end is a sea hex, the rest stand inside the band.
+        expect(dist(t)).toBeGreaterThanOrEqual(ring.band[0]);
+        expect(dist(t)).toBeLessThanOrEqual(ring.band[1]);
         expect(t.utgardWall!.level).toBe(ring.level);
       }
     }
     expect(walls.every((t) => t.wasted)).toBe(true);
   });
 
-  it('closes the inner ring and lets the outer one reach the coast with a shore end on each side', () => {
-    expect(walls.filter((t) => t.utgardWall!.ring === 'inner')).toHaveLength(18);
+  it('keeps the two walls apart and ends a run in a shore piece wherever it reaches the sea', () => {
+    const inner = walls.filter((t) => t.utgardWall!.ring === 'inner');
     const outer = walls.filter((t) => t.utgardWall!.ring === 'outer');
-    expect(outer.length).toBeLessThan(36);
-    const ends = outer.filter((t) => t.utgardWall!.piece === 'end_coast');
-    expect(ends).toHaveLength(2);
+    for (const o of outer) for (const i of inner) expect(hexDistance(o, i)).toBeGreaterThan(1);
+    const ends = walls.filter((t) => t.utgardWall!.piece === 'end_coast');
+    expect(ends.length).toBeGreaterThan(0);
     for (const t of ends) expect(t).toMatchObject({ terrain: 'sea', isCoastalWater: true });
-    expect(outer.filter((t) => t.terrain === 'sea')).toHaveLength(2);
+    expect(walls.filter((t) => t.terrain === 'sea')).toHaveLength(ends.length);
   });
 
   it('has two gates in each ring, on hexes the walls resolve to gate pieces', () => {
@@ -65,30 +109,40 @@ describe('the Utgard example island', () => {
   });
 
   it('stays shut to players: no army walks through a gate, the way the endgame has it', () => {
+    const streamAt = new Map(buildUtgardExampleStreams().map((t) => [coordKey(t), t]));
     const wallMap = new Map(walls.map((t) => [coordKey(t), { gate: t.utgardWall!.isGate, owner: 'utgard' }]));
     const terrainAt = (c: AxialCoord) => byKey.get(coordKey(c))?.terrain ?? 'sea';
     const ctx: PathContext = {
       terrainAt,
-      isRiver: () => false,
-      isWideRiver: () => false,
-      rules: { land: { grass: 1 }, riverCrossingCost: 8 },
+      isRiver: (c) => streamAt.has(coordKey(c)),
+      isWideRiver: (c) => {
+        const tile = streamAt.get(coordKey(c));
+        return tile !== undefined && isWideRiverTile(tile, (n) => streamAt.get(coordKey(n)));
+      },
+      rules: { land: { grass: 1, forest: 1, sand: 1, mountain: 1 }, riverCrossingCost: 8 },
       hexesPerHour: 1,
       restrictions: palisadeRestrictions(wallMap, terrainAt, () => false, 'a player'),
     };
-    expect(findPath(towers[0]!, { q: 0, r: 2 }, ctx)).toBeNull();
+    // Hexes inside the inner line that a tower's army could reach if the walls were not there; with them, none of those is reachable.
+    const open = { ...ctx, restrictions: undefined };
+    const inside = tiles.filter((t) => dist(t) >= 2 && dist(t) < UTGARD_RINGS[0].band[0] && t.terrain !== 'sea' && !t.giant && !streamAt.has(coordKey(t)));
+    const reachable = inside.filter((t) => findPath(towers[0]!, t, open) !== null);
+    expect(reachable.length, 'something inside is reachable without the walls').toBeGreaterThan(0);
+    for (const t of reachable) expect(findPath(towers[0]!, t, ctx), `(${t.q},${t.r})`).toBeNull();
   });
 
-  it('has clamp(floor(land / 120 + 0.5), 3, 6) watchtowers, all outside the outer ring, 5 or more apart and from Utgard', () => {
+  it('has clamp(floor(land / 120 + 0.5), 3, 6) watchtowers outside the inner band, off the walls, 5 or more apart and from Utgard', () => {
     expect(towers.length).toBeGreaterThanOrEqual(3);
     expect(towers).toHaveLength(towerCountFor(utgardLandHexes(tiles)));
     const flower = new Set(giantCoverage(UTGARD_CENTRE).map((g) => coordKey(g.coord)));
     for (const tile of towers) {
-      expect(tile).toMatchObject({ terrain: 'grass', wasted: true });
+      expect(tile).toMatchObject({ wasted: true });
+      expect(['grass', 'forest']).toContain(tile.terrain);
       expect(utgardExampleKindOf(tile)).toBe('tower');
-      expect(dist(tile)).toBeGreaterThan(UTGARD_RINGS[1].radius);
-      expect(dist(tile)).toBeGreaterThanOrEqual(MinTowerSpacing);
+      expect(dist(tile)).toBeGreaterThan(UTGARD_RINGS[0].band[1] + 1);
       expect(flower.has(coordKey(tile))).toBe(false);
       expect(tile.utgardWall).toBeUndefined();
+      for (const n of neighbors(tile)) expect(byKey.get(coordKey(n))!.utgardWall, `next to a wall (${tile.q},${tile.r})`).toBeUndefined();
     }
     for (let i = 0; i < towers.length; i++) {
       for (let j = i + 1; j < towers.length; j++) expect(hexDistance(towers[i]!, towers[j]!)).toBeGreaterThanOrEqual(MinTowerSpacing);
