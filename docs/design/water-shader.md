@@ -1168,7 +1168,11 @@ by `MaskRenderTarget` with the cells placed like the dry mask cells (`dryCellWor
   never overwrites the neighbour's face. A cell's pixels are transparent where it is dry, so its dry strip does not cover the
   neighbour's rim. Past an edge the water does not cross there is no rim: a river's skirt water is never drawn onto a land hex.
 - Cells are cached per `frame|out edge|in edges|fade edge|neighbour frame per edge|psi range`.
-- A river flow texture is rebuilt when the water mask is applied or the base entries change, never per frame.
+- A cell is solved (`computeRiverRipple`) on a module worker (`riverRipple.worker.ts`, owned by `RiverRippleSolver`), never on the
+  main thread: a freshly founded settlement asks for every visible river cell at once, which solved inline was a multi-second
+  frozen page. Until its cell lands a hex is drawn without flow; once the last outstanding cell has landed the layer asks for one
+  redraw (`onCellsReady`). Without a worker (jsdom, a refused construction, a worker that died) cells solve inline.
+- A river flow texture is rebuilt when the water mask is applied, the base entries change or outstanding cells land, never per frame.
 
 **Lakes stay still.** A bog `boglake_mouth` hex joins a creek to a lake: its intensity is multiplied by
 `1 - smoothstep(0, half a hex width, geodesic distance from the creek edge)` (the creek edge is the one of in/out that is not a lake
