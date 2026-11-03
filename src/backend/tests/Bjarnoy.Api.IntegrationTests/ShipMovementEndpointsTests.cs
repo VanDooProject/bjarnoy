@@ -387,6 +387,76 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_unit_catalogue_tells_the_slots_ships_offer_and_units_take()
+    {
+        using var client = Client();
+
+        var catalogue = await client.GetFromJsonAsync<List<UnitDefinitionResponse>>(
+            "/api/v1/units", SqliteApiFixture.StrictJson, Ct);
+
+        var byType = catalogue!.ToDictionary(u => u.Type);
+        Assert.Equal(10, byType["karve"].ShipSlots);
+        Assert.Equal(20, byType["longship"].ShipSlots);
+        Assert.Equal(0, byType["karve"].CargoSlots);
+        Assert.Equal(2, byType["axeman"].CargoSlots);
+        Assert.Equal(10, byType["ram"].CargoSlots);
+        Assert.Equal(0, byType["ram"].ShipSlots);
+    }
+
+    [Fact]
+    public async Task A_fleet_carries_land_troops_up_to_its_slots_and_is_refused_beyond_them()
+    {
+        // One Karve offers 10 slots; a spearman takes 1. Same coast as the fleet attack below.
+        using var client = Client();
+        var attackerOwner = $"owner-{Guid.CreateVersion7():N}";
+        var targetOwner = $"rival-{Guid.CreateVersion7():N}";
+        var attackerCentre = new HexCoord(-58, -35);
+        var dock = new HexCoord(-59, -41);
+        var targetCentre = new HexCoord(-60, -38);
+        var shoreBuilding = new HexCoord(-60, -40);
+        Guid attackerId, targetId;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var (worldId, islandId) = await AddWorldAsync(db, SmallIslandOptions);
+            var attacker = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, attackerOwner, attackerCentre.Q, attackerCentre.R);
+            attacker.Buildings.Add(new PlacedBuildingEntity { SettlementId = attacker.Id, Q = dock.Q, R = dock.R, Type = BuildingType.Dockyard, Level = 1 });
+            attacker.Garrison.Add(new UnitStackEntity { SettlementId = attacker.Id, UnitType = UnitType.Karve, Count = 1 });
+            attacker.Garrison.Add(new UnitStackEntity { SettlementId = attacker.Id, UnitType = UnitType.Spearman, Count = 20 });
+            attacker.StockFood = 100_000;
+            attacker.CapacityFood = 100_000;
+
+            var target = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, targetOwner, targetCentre.Q, targetCentre.R);
+            target.Buildings.Add(new PlacedBuildingEntity { SettlementId = target.Id, Q = targetCentre.Q, R = targetCentre.R, Type = BuildingType.Longhouse, Level = 1 });
+            target.Buildings.Add(new PlacedBuildingEntity { SettlementId = target.Id, Q = shoreBuilding.Q, R = shoreBuilding.R, Type = BuildingType.Farm, Level = 5 });
+            db.Settlements.AddRange(attacker, target);
+            await db.SaveChangesAsync(Ct);
+            attackerId = attacker.Id;
+            targetId = target.Id;
+        }
+
+        client.DefaultRequestHeaders.Add("X-Owner-Id", attackerOwner);
+        var centre = new HexPointRequest(targetCentre.Q, targetCentre.R);
+        var building = new HexPointRequest(shoreBuilding.Q, shoreBuilding.R);
+
+        var tooMany = await client.PostJsonAsync(
+            $"/api/v1/settlements/{attackerId}/armies",
+            new DispatchArmyRequest([new UnitCountRequest("karve", 1), new UnitCountRequest("spearman", 11)], null, centre, 30, "attack", targetId, building), Ct);
+        Assert.Equal(HttpStatusCode.Conflict, tooMany.StatusCode);
+        Assert.Equal("InsufficientShipCapacity", await tooMany.RejectionAsync(Ct));
+
+        var fits = await client.PostJsonAsync(
+            $"/api/v1/settlements/{attackerId}/armies",
+            new DispatchArmyRequest([new UnitCountRequest("karve", 1), new UnitCountRequest("spearman", 10)], null, centre, 30, "attack", targetId, building), Ct);
+        Assert.Equal(HttpStatusCode.Created, fits.StatusCode);
+        var army = await fits.ReadStrictAsync<ArmyResponse>(Ct);
+        Assert.Contains(army.Stacks, s => s.Unit == "spearman" && s.Count == 10);
+        // The fleet moves at the Karve's speed, not the spearmen's.
+        Assert.Equal(UnitCatalogue.Get(UnitType.Karve).Speed, army.TotalSpeed);
+    }
+
+    [Fact]
     public async Task A_fleet_attack_is_sent_at_a_shore_building_of_an_inland_centred_target_and_damages_only_it()
     {
         // Issue #450, target half. The target's centre (-60,-38) has no sea within two hexes, but its claim (radius 2)
