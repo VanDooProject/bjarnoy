@@ -31,4 +31,8 @@
   width: 100%;
   height: 100%;
   display: block;
+  /* Its own compositor layer: painted into the page's layer, Chrome on Android (GPU raster, Pixel 7 Pro)
+     re-rasters only the parts the animations touch and leaves thin seam lines along the shapes'
+     bounds (limbs, head, smoke), which jump with the fire. */
+  will-change: transform;
 }
