@@ -357,6 +357,15 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       release();
     });
 
+    test('the Play intro button plays the intro at once, with the tiles already loaded', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await page.goto('/#no-intro');
+      await expect(page.locator('canvas')).toBeVisible();
+      await page.getByTestId('play-intro').click();
+      await expect(intro(page)).toHaveAttribute('data-phase', 'playing');
+      await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
+    });
+
     test('goes straight to the map when the tiles load before play is pressed', async ({ page }) => {
       test.setTimeout(MAP_SPEC_TIMEOUT_MS);
       const release = await holdAtlases(page);

@@ -9,7 +9,7 @@ const { t } = useI18n({ useScope: 'global' });
 
 <template>
   <Transition name="play-intro-fade">
-    <button v-if="!introMounted" type="button" class="intro-btn play-intro" data-testid="play-intro" @click="mountLandingIntro()">
+    <button v-if="!introMounted" type="button" class="intro-btn play-intro" data-testid="play-intro" @click="mountLandingIntro({ playNow: true })">
       {{ t('intro.playIntro') }}
     </button>
   </Transition>

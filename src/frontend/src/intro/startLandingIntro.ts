@@ -32,7 +32,7 @@ export function startLandingIntro(): void {
 }
 
 /** Mounts the intro on its own root next to `#app` and unmounts it again on `done` or Esc. */
-export function mountLandingIntro(options: { loopBeats?: BeatId[] | null } = {}): void {
+export function mountLandingIntro(options: { loopBeats?: BeatId[] | null; playNow?: boolean } = {}): void {
   if (introMounted.value) return;
   const loopBeats = options.loopBeats ?? null;
   const host = document.createElement('div');
@@ -53,6 +53,7 @@ export function mountLandingIntro(options: { loopBeats?: BeatId[] | null } = {})
         loopBeats: loopBeats ?? undefined,
         locale: detectDeviceLocale(),
         reducedMotion: !motionPreferences.hudEnabled,
+        playNow: options.playNow ?? false,
         loaded: introSignal.tilesLoaded,
         // browsers only allow sound after a click: the landing page (and its loop) starts muted
         soundOn: false,

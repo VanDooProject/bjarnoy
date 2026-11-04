@@ -17,6 +17,8 @@ const props = defineProps<{
   loopBeats?: BeatId[];
   locale: IntroLocale;
   reducedMotion: boolean;
+  /** the player asked for the intro: it plays at once, also with reduced motion */
+  playNow?: boolean;
   loaded: boolean;
   /** initial sound state; the clips play either way, muted while it is off */
   soundOn: boolean;
@@ -35,6 +37,7 @@ const sequencer = new IntroSequencer({
   mode: props.mode,
   loopBeats: props.loopBeats,
   reducedMotion: props.reducedMotion,
+  playNow: props.playNow,
   // the hold lasts at least as long as its voice clip (plus the tail)
   holdMinMs: holdMinMs(props.locale),
   onChange: (s) => (state.value = s),
