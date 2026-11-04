@@ -7,7 +7,7 @@ export interface IntroState {
   beat: BeatId;
   /** Completed hold loops so far (0 during the first hold cycle). */
   cycle: number;
-  /** Loop mode: completed passes through the selected beats (0 on the first pass, 0 outside loop mode). */
+  /** Passes through the beats: a loop pass or a restart starts a new one (0 on the first pass). */
   round: number;
   skipVisible: boolean;
   paused: boolean;
@@ -57,6 +57,7 @@ export class IntroSequencer {
   private pausedMinTimer: { ms: number; fn: () => void } | null = null;
   private loaded = false;
   private started = false;
+  private closed = false;
   private timer: unknown = null;
   private minTimer: unknown = null;
   private holdMinReached = false;
@@ -158,6 +159,25 @@ export class IntroSequencer {
     else this.emit();
   }
 
+  /** Back to the first beat (landing/replay: the first intro beat; loop: the first selected beat), unpaused. */
+  restart(): void {
+    if (this.closed || (this.phase !== 'playing' && this.phase !== 'exiting')) return;
+    this.clear();
+    this.cycle = 0;
+    this.holdMinReached = false;
+    this.phase = 'playing';
+    // a new pass, so the first beat's clip and scene start over even when it is the beat that was showing
+    this.round++;
+    if (this.opts.mode === 'loop') this.enterLoop(0);
+    else this.enterIntro(0);
+  }
+
+  /** Stops for good, at once: no timer fires and no state is emitted afterwards. */
+  close(): void {
+    this.closed = true;
+    this.clear();
+  }
+
   dispose(): void {
     this.clear();
   }
@@ -234,6 +254,7 @@ export class IntroSequencer {
   }
 
   private schedule(ms: number, fn: () => void): void {
+    if (this.closed) return;
     if (this.timer !== null) this.clock.clearTimeout(this.timer);
     this.timerInfo = { fn, dueAt: this.now() + ms };
     this.timer = this.clock.setTimeout(() => {
@@ -243,6 +264,7 @@ export class IntroSequencer {
   }
 
   private scheduleMin(ms: number, fn: () => void): void {
+    if (this.closed) return;
     if (this.minTimer !== null) this.clock.clearTimeout(this.minTimer);
     this.minTimerInfo = { fn, dueAt: this.now() + ms };
     this.minTimer = this.clock.setTimeout(() => {
@@ -264,6 +286,7 @@ export class IntroSequencer {
   }
 
   private emit(): void {
+    if (this.closed) return;
     this.opts.onChange({ ...this.state });
   }
 }

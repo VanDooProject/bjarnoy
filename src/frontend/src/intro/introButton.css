@@ -1,0 +1,11 @@
+/* The intro's button look: shared by the intro host and the landing page's "Play intro" button. */
+.intro-btn {
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid rgba(244, 241, 234, 0.6);
+  border-radius: 8px;
+  background: rgba(11, 17, 22, 0.55);
+  color: #f4f1ea;
+  font: inherit;
+  cursor: pointer;
+}

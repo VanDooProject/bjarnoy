@@ -26,6 +26,8 @@ then hands over to the real map.
 - Once the tiles are loaded and the sequence is still playing, a skip button shows. Pressing it starts the exit
   (fog lifts) right away.
 - A pause button shows while the intro plays. Paused, the scene and its timing stop; tiles that finish loading wait for play to continue.
+- Between skip and pause, a restart button (⟲) starts the intro again at its first beat. Clicking the scene pauses or resumes it, like the pause button.
+- Esc closes the intro at once, without the landfall: the landing page shows the map, the replay and the loop go back to the docs.
 
 ## Voice
 
@@ -56,6 +58,10 @@ then hands over to the real map.
 ## Looping
 
 Opening the landing page or the replay with `#loop` plays the intro without end: every beat, no load gating, starting again after landfall. `#loop(1-2,5)` loops only the listed beats, numbered as in the story list.
+
+## Play again
+
+On desktop the landing page always shows a "Play intro" button at the bottom right, styled like skip, for every visitor. It plays the intro again over the landing page. Phones don't show it for now.
 
 ## Technique
 

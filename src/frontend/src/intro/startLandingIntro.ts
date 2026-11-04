@@ -4,8 +4,9 @@ import { readPersistedSettlementId } from '../lib/persistedPlayer';
 import { motionPreferences } from '../lib/perf/motionPreferences';
 import LandingIntro from './LandingIntro.vue';
 import { BEATS } from './beats/registry';
-import { introSignal } from './introSignal';
+import { introMounted, introSignal } from './introSignal';
 import { parseLoopAnchor } from './loopAnchor';
+import type { BeatId } from './beats/types';
 
 /**
  * Whether the landing intro plays: only on the landing page, `#no-intro` never (specs and players opt out),
@@ -27,9 +28,24 @@ export function startLandingIntro(): void {
   if (hash === '#intro' || hash === '#no-intro' || loopBeats !== null) history.replaceState(history.state, '', pathname + search);
   if (!start) return;
 
+  mountLandingIntro({ loopBeats });
+}
+
+/** Mounts the intro on its own root next to `#app` and unmounts it again on `done` or Esc. */
+export function mountLandingIntro(options: { loopBeats?: BeatId[] | null } = {}): void {
+  if (introMounted.value) return;
+  const loopBeats = options.loopBeats ?? null;
   const host = document.createElement('div');
   host.id = 'landing-intro';
   document.body.appendChild(host);
+  // After the flush that emitted `done`/`close`: unmounting the app from inside its own render/watch flush
+  // re-runs the root's render effect on a torn-down tree.
+  const unmount = () =>
+    void nextTick(() => {
+      app.unmount();
+      host.remove();
+      introMounted.value = false;
+    });
   const app = createApp({
     render: () =>
       h(LandingIntro, {
@@ -40,14 +56,10 @@ export function startLandingIntro(): void {
         loaded: introSignal.tilesLoaded,
         // browsers only allow sound after a click: the landing page (and its loop) starts muted
         soundOn: false,
-        // After the flush that emitted `done`: unmounting the app from inside its own render/watch flush
-        // re-runs the root's render effect on a torn-down tree.
-        onDone: () =>
-          void nextTick(() => {
-            app.unmount();
-            host.remove();
-          }),
+        onDone: unmount,
+        onClose: unmount,
       }),
   });
   app.mount(host);
+  introMounted.value = true;
 }

@@ -8,6 +8,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
+import PlayIntroButton from '../intro/PlayIntroButton.vue';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
 import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
@@ -1098,6 +1099,7 @@ watch(
       @bubbles="ringBubbles = $event"
     />
     </RingMenuHost>
+    <PlayIntroButton />
   </div>
 </template>
 

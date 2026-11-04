@@ -120,6 +120,102 @@ describe('LandingIntro', () => {
     expect(w.find('.longship').exists()).toBe(true);
   });
 
+  describe('restart', () => {
+    it('is shown between skip and pause exactly when pause is shown, icon-only with a label', async () => {
+      const w = await mountIntro({ reducedMotion: true });
+      expect(w.find('[data-testid="intro-restart"]').exists()).toBe(false);
+      await w.get('[data-testid="intro-play"]').trigger('click');
+      const btn = w.get('[data-testid="intro-restart"]');
+      expect(btn.attributes('aria-label')).toBe('Restart');
+      expect(btn.text()).toBe('⟲');
+      // skip only shows once the tiles are loaded
+      const order = w.findAll('.actions button').map((b) => b.attributes('data-testid'));
+      expect(order).toEqual(['intro-restart', 'intro-pause', 'intro-sound']);
+    });
+
+    it('click goes back to the first beat and unpauses', async () => {
+      const w = await mountIntro();
+      await vi.advanceTimersByTimeAsync(CLIP_MS.en.fire + VOICE_TAIL_MS + 100);
+      expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe(BEATS[1].id);
+      await w.get('[data-testid="intro-pause"]').trigger('click');
+      await w.get('[data-testid="intro-restart"]').trigger('click');
+      expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe(BEATS[0].id);
+      expect(w.get('[data-testid="intro-pause"]').attributes('aria-pressed')).toBe('false');
+    });
+  });
+
+  describe('click on the scene', () => {
+    const paused = (w: VueWrapper) => w.get('.landing-intro').classes().includes('is-paused');
+
+    it('toggles pause, but not when it lands on a button', async () => {
+      const w = await mountIntro();
+      await w.get('.beat-layer').trigger('click');
+      expect(paused(w)).toBe(true);
+      await w.get('.beat-layer').trigger('click');
+      expect(paused(w)).toBe(false);
+      // the pause button toggles exactly once, not twice
+      await w.get('[data-testid="intro-pause"]').trigger('click');
+      expect(paused(w)).toBe(true);
+      // restart unpauses and does not toggle again
+      await w.get('[data-testid="intro-restart"]').trigger('click');
+      expect(paused(w)).toBe(false);
+    });
+
+    it('does nothing where pause is not shown (play screen, end screen)', async () => {
+      const w = await mountIntro({ reducedMotion: true });
+      await w.get('.beat-layer').trigger('click');
+      expect(paused(w)).toBe(false);
+      expect(phase(w)).toBe('waitingForPlay');
+      const r = await mountIntro({ mode: 'replay' });
+      await r.get('[data-testid="intro-skip"]').trigger('click');
+      await vi.advanceTimersByTimeAsync(EXIT_MS);
+      await r.get('[data-testid="intro-back-to-docs"]').trigger('click');
+      await r.get('[data-testid="intro-enter-game"]').trigger('click');
+      expect(r.get('.landing-intro').classes()).not.toContain('is-paused');
+    });
+
+    it('skip does not also toggle pause', async () => {
+      const w = await mountIntro({ mode: 'replay' });
+      await w.get('[data-testid="intro-skip"]').trigger('click');
+      expect(paused(w)).toBe(false);
+    });
+  });
+
+  describe('Esc', () => {
+    const esc = (init: KeyboardEventInit = {}) => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, ...init }));
+
+    it('emits close at once, with no exit beat, and nothing fires afterwards', async () => {
+      const w = await mountIntro();
+      await vi.advanceTimersByTimeAsync(500);
+      esc();
+      await flushPromises();
+      expect(w.emitted('close')).toHaveLength(1);
+      expect(phase(w)).toBe('playing');
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(phase(w)).toBe('playing');
+      expect(w.emitted()).not.toHaveProperty('done');
+    });
+
+    it('works while waiting for play and in the exit beat, ignores key repeat', async () => {
+      const w = await mountIntro({ reducedMotion: true });
+      esc({ repeat: true });
+      expect(w.emitted('close')).toBeUndefined();
+      esc();
+      expect(w.emitted('close')).toHaveLength(1);
+      const x = await mountIntro({ mode: 'replay' });
+      await x.get('[data-testid="intro-skip"]').trigger('click');
+      expect(phase(x)).toBe('exiting');
+      esc();
+      expect(x.emitted('close')).toHaveLength(1);
+    });
+
+    it('works in loop mode', async () => {
+      const w = await mountIntro({ mode: 'loop' });
+      esc();
+      expect(w.emitted('close')).toHaveLength(1);
+    });
+  });
+
   it('loop: a single beat re-enters its clip and remounts its scene layer on every pass', async () => {
     const w = await mountIntro({ mode: 'loop', loopBeats: ['fire'] });
     const root = w.get('[data-testid="landing-intro"]');
@@ -187,11 +283,11 @@ describe('LandingIntro', () => {
       w.unmount();
     });
 
-    it('starts with the sound on when asked to (replay), and the order is skip, pause, sound', async () => {
+    it('starts with the sound on when asked to (replay), and the order is skip, restart, pause, sound', async () => {
       const w = await mountIntro({ mode: 'replay', soundOn: true });
       expect(w.get('[data-testid="intro-sound"]').attributes('data-sound')).toBe('on');
       const order = w.findAll('.actions button').map((b) => b.attributes('data-testid'));
-      expect(order).toEqual(['intro-skip', 'intro-pause', 'intro-sound']);
+      expect(order).toEqual(['intro-skip', 'intro-restart', 'intro-pause', 'intro-sound']);
     });
 
     it('stops the clip when the intro ends', async () => {

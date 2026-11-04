@@ -175,6 +175,58 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       release();
     });
 
+    test('Esc closes the intro at once, with no exit beat, and the map is there', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const release = await holdAtlases(page);
+      const log = await recordIntro(page);
+      await page.goto('/#intro');
+      await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
+
+      await page.keyboard.press('Escape');
+      await expect(intro(page)).toHaveCount(0);
+      await expect(page.locator('#landing-intro')).toHaveCount(0);
+      release();
+      await expect(page.locator('canvas')).toBeVisible();
+      expect((await log()).phases).not.toContain('exiting');
+    });
+
+    test('#loop: Esc closes the loop and shows the map', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      await page.goto('/#loop');
+      await expect(intro(page)).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(intro(page)).toHaveCount(0);
+      await expect(page.locator('canvas')).toBeVisible();
+    });
+
+    test('the Play intro button shows once the intro is gone, hides while it plays, and plays it again', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      await page.goto('/#intro');
+      const playIntro = page.getByTestId('play-intro');
+      await expect(intro(page)).toBeVisible();
+      await expect(playIntro).toHaveCount(0);
+
+      await page.keyboard.press('Escape');
+      await expect(intro(page)).toHaveCount(0);
+      await expect(playIntro).toBeVisible();
+
+      await playIntro.click();
+      await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
+      // the button fades out (600 ms) on the frozen clock: pause the intro and let the clock run for the fade
+      await page.getByTestId('intro-pause').click();
+      await runFake(page, 3000);
+      await expect(playIntro).toHaveCount(0);
+      await page.getByTestId('intro-pause').click();
+      // the tiles are loaded already: skip is there at once and hands back to the landing page
+      await expect(skip(page)).toBeVisible();
+      await skip(page).click();
+      await advanceTo(page, null);
+      await expect(playIntro).toBeVisible();
+    });
+
     for (const viewport of [
       { width: 360, height: 740 },
       { width: 390, height: 844 },
@@ -383,5 +435,14 @@ test.describe('landing intro', { tag: '@g3' }, () => {
     await page.goto('/#no-intro');
     await expect(page.locator('canvas')).toBeVisible();
     await expect(intro(page)).toHaveCount(0);
+    await expect(page.getByTestId('play-intro')).toBeVisible();
+  });
+
+  test('phones leave the play intro button out', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/#no-intro');
+    await expect(page.locator('canvas')).toBeVisible();
+    await expect(page.getByTestId('play-intro')).toBeHidden();
   });
 });

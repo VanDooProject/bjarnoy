@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch } from 'vue';
 import './introFog.css';
+import './introButton.css';
 import { BEATS, BEAT_COMPONENTS } from './beats/registry';
 import { introFogUrl } from './fogTexture';
 import { introText, type IntroLocale } from './introText';
@@ -20,7 +21,7 @@ const props = defineProps<{
   /** initial sound state; the clips play either way, muted while it is off */
   soundOn: boolean;
 }>();
-const emit = defineEmits<{ done: []; 'back-to-docs': []; 'enter-game': [] }>();
+const emit = defineEmits<{ done: []; close: []; 'back-to-docs': []; 'enter-game': [] }>();
 
 const FADE_OUT_MS = 1000;
 const fogUrl = introFogUrl();
@@ -112,12 +113,27 @@ function togglePause(): void {
   if (state.value.paused) sequencer.resume();
   else sequencer.pause();
 }
+// Esc closes the intro at once: no exit beat, no fade.
+function close(): void {
+  sequencer.close();
+  emit('close');
+}
 // Space toggles pause; a focused button (or field) already handles space itself.
 function onKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    if (!event.repeat && state.value.phase !== 'done') close();
+    return;
+  }
   if (event.code !== 'Space' || event.repeat || !pauseVisible.value) return;
   const target = event.target;
   if (target instanceof Element && target.closest('button, input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
   event.preventDefault();
+  togglePause();
+}
+// A click or tap on the scene toggles pause like the button and space do; buttons keep their own action.
+function onSceneClick(event: MouseEvent): void {
+  if (!pauseVisible.value) return;
+  if (event.target instanceof Element && event.target.closest('button')) return;
   togglePause();
 }
 onMounted(() => {
@@ -140,6 +156,7 @@ onBeforeUnmount(() => {
     role="region"
     :aria-label="introText(locale, 'region')"
     data-testid="landing-intro"
+    @click="onSceneClick"
     :data-beat="state.beat"
     :data-phase="state.phase"
     :data-voice-beat="voiceBeat ?? undefined"
@@ -196,6 +213,19 @@ onBeforeUnmount(() => {
           @click="sequencer.skip()"
         >
           {{ introText(locale, 'skip') }}
+        </button>
+      </Transition>
+
+      <Transition name="intro-fade">
+        <button
+          v-if="pauseVisible"
+          type="button"
+          class="intro-btn icon restart"
+          :aria-label="introText(locale, 'restart')"
+          data-testid="intro-restart"
+          @click="sequencer.restart()"
+        >
+          <span aria-hidden="true">⟲</span>
         </button>
       </Transition>
 
@@ -291,14 +321,6 @@ onBeforeUnmount(() => {
 }
 .intro-btn {
   position: absolute;
-  min-height: 44px;
-  padding: 0 20px;
-  border: 1px solid rgba(244, 241, 234, 0.6);
-  border-radius: 8px;
-  background: rgba(11, 17, 22, 0.55);
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
 }
 .landing-intro.is-paused.is-fading {
   animation-play-state: paused;
@@ -310,6 +332,12 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 8px;
   pointer-events: none;
+}
+.intro-btn.icon {
+  width: 44px;
+  padding: 0;
+  font-size: 1.4rem;
+  line-height: 1;
 }
 .actions .intro-btn {
   position: static;
