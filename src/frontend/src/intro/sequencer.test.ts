@@ -142,6 +142,13 @@ describe('IntroSequencer reduced motion', () => {
     expect(seq.state.beat).toBe('prophecy');
   });
 
+  it('plays at once when the player asked for it, also with the tiles already loaded', () => {
+    const seq = new IntroSequencer({ beats, mode: 'landing', reducedMotion: true, playNow: true, onChange: () => {} });
+    seq.notifyLoaded();
+    seq.start();
+    expect(seq.state).toMatchObject({ phase: 'playing', beat: 'fire' });
+  });
+
   it('goes straight to done when loaded before play', () => {
     const { seq } = make('landing', true);
     seq.start();
