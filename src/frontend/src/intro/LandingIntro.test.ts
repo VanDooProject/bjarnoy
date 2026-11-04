@@ -131,6 +131,43 @@ describe('LandingIntro', () => {
     });
   });
 
+  describe('click on the scene', () => {
+    const paused = (w: VueWrapper) => w.get('.landing-intro').classes().includes('is-paused');
+
+    it('toggles pause, but not when it lands on a button', async () => {
+      const w = await mountIntro();
+      await w.get('.beat-layer').trigger('click');
+      expect(paused(w)).toBe(true);
+      await w.get('.beat-layer').trigger('click');
+      expect(paused(w)).toBe(false);
+      // the pause button toggles exactly once, not twice
+      await w.get('[data-testid="intro-pause"]').trigger('click');
+      expect(paused(w)).toBe(true);
+      // restart unpauses and does not toggle again
+      await w.get('[data-testid="intro-restart"]').trigger('click');
+      expect(paused(w)).toBe(false);
+    });
+
+    it('does nothing where pause is not shown (play screen, end screen)', async () => {
+      const w = await mountIntro({ reducedMotion: true });
+      await w.get('.beat-layer').trigger('click');
+      expect(paused(w)).toBe(false);
+      expect(phase(w)).toBe('waitingForPlay');
+      const r = await mountIntro({ mode: 'replay' });
+      await r.get('[data-testid="intro-skip"]').trigger('click');
+      await vi.advanceTimersByTimeAsync(EXIT_MS);
+      await r.get('[data-testid="intro-back-to-docs"]').trigger('click');
+      await r.get('[data-testid="intro-enter-game"]').trigger('click');
+      expect(r.get('.landing-intro').classes()).not.toContain('is-paused');
+    });
+
+    it('skip does not also toggle pause', async () => {
+      const w = await mountIntro({ mode: 'replay' });
+      await w.get('[data-testid="intro-skip"]').trigger('click');
+      expect(paused(w)).toBe(false);
+    });
+  });
+
   describe('pause', () => {
     const pauseBtn = (w: VueWrapper) => w.get('[data-testid="intro-pause"]');
     const beatPaused = (w: VueWrapper) => w.get('.beat-layer > *').classes().includes('is-paused');

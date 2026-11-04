@@ -75,6 +75,12 @@ function onKeydown(event: KeyboardEvent): void {
   event.preventDefault();
   togglePause();
 }
+// A click or tap on the scene toggles pause like the button and space do; buttons keep their own action.
+function onSceneClick(event: MouseEvent): void {
+  if (!pauseVisible.value) return;
+  if (event.target instanceof Element && event.target.closest('button')) return;
+  togglePause();
+}
 onMounted(() => {
   window.addEventListener('keydown', onKeydown);
   sequencer.start();
@@ -94,6 +100,7 @@ onBeforeUnmount(() => {
     role="region"
     :aria-label="introText(locale, 'region')"
     data-testid="landing-intro"
+    @click="onSceneClick"
     :data-beat="state.beat"
     :data-phase="state.phase"
   >
