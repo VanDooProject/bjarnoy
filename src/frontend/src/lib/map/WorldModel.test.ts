@@ -1195,7 +1195,7 @@ describe('WorldModel.previewCropTiles', () => {
 });
 
 
-// The app's demo seed until the island-density change (stores/world.ts's DEMO_SEED is now 20260831).
+// The app's demo seed until the island-density change (stores/world.ts's DEMO_SEED is now 20260905).
 const DEMO_SEED = 20260824;
 
 function foundLandedSettlementAt(model: WorldModel, seedHex: AxialCoord) {

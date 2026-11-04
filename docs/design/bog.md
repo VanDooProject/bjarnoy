@@ -80,7 +80,7 @@ grass at a hex edge, like the wasteland does.
    foreign river tiles beside them, the shore ring takes no foreign river, and a spawned river is traced with the creeks' and the
    lake ring's neighbours blocked. A pocket's two inner rings must be free of mountains and open sea (not only the first), else the
    pocket stays sea.
-5. **Holes** (`FillHoles`) once all sites, sinks, spawns, pockets, the guarantee and the gap fill are done: any group of non-bog island tiles with no
+5. **Holes** (`FillHoles`) once all sites, sinks, spawns, pockets, and the guarantee are done: any group of non-bog island tiles with no
    path out that does not cross bog or lake turns its grass and forest (river tiles stay) into plain moss. Mountains inside stay
    mountains. The noisy region outline used to leave such patches, which made one bog look like two.
 6. **The bog guarantee** (bog buildings PR), after step 4 for the normal sites (its attempts pad too, and holes are filled after it). An island of at least `BogGuaranteeMinTiles` (150) land tiles that has a
@@ -103,15 +103,7 @@ grass at a hex edge, like the wasteland does.
       sea, on grass or forest, and a lake with its shore ring needs about 6 hexes of such ground across.
    Islands without mountains (no river candidates at all) take path b too. The guarantee rolls no sinks or spawns of its own.
 
-7. **The gap fill** (green-island terrain PR), after the guarantee at both call sites (`PlaceSites` and `PlaceGuaranteeOnly`), before the holes
-   are filled. The guarantee only asks for one candidate with a bog in `BogReach`; on a big island that leaves whole regions a landing spot
-   would be refused in. While at least `BogGapMinCandidates` (40) landing candidates lie further than `BogGapReach` (18) from every plain
-   bog tile, one more bog is placed for them: first a through-river site, else a spawn bog, both with the guarantee's relaxed criteria and
-   anchors scored by how many of the *uncovered* candidates they would reach. At most `land / BogGapTilesPerRound` (1000) rounds per island;
-   it stops at the first round that finds no site. It runs only where the guarantee applies (`BogGuaranteeMinTiles`, `BogReach` > 0). Its
-   bogs are counted apart (`gapThrough`, `gapSpawns`).
-
-8. **Valley streams** (after the width pass, once the bogland is final): a stream out of every mountain-enclosed valley of 100+ hexes (see
+7. **Valley streams** (after the width pass, once the bogland is final): a stream out of every mountain-enclosed valley of 100+ hexes (see
    `river-generation.md`, "Valley streams"). The bogland is a wall to it: a new stream never touches a bog tile or a neighbour of
    a water feature, and `BogRules` may not get worse.
 
@@ -157,7 +149,7 @@ only rescue attempts that used to fail, so islands the guarantee already helped 
 
 The guarantee's spawn bogs push the spawn share further over the owner's 20% (30.1% of all bogs with the rolled ones); see "The 20% rule".
 
-*On the chain-mountain terrain with spread sites and the gap fill* (green-island terrain PR, measured 2026-11-02 over seeds 1-8 at radius 1000, 482
+*On the chain-mountain terrain with spread sites and the gap fill* (green-island terrain PR; the gap fill was removed afterwards because it roughly doubled the generation time, so a landing candidate with no bog in reach is simply no landing spot; the "head" column is historical, measured 2026-11-02 over seeds 1-8 at radius 1000, 482
 green islands with 1 604 078 land tiles; `bog-stats.ts`, the Domain tests and a throwaway console harness for the generation time; three states:
 `origin/main` at the start of the PR, the terrain change alone with the old bog knobs (`7139cf2`), and the branch head):
 
@@ -205,7 +197,7 @@ Knobs (`WorldGenerationOptions`, defaults): `BogTilesPerSite` 1500, `BogMaxSites
 `BogLargeIslandTiles` 15000, `BogLakeMax` 12, `BogLakeMaxLarge` 18, `BogMinFromSpring` 4, `BogMinFromMouth` 6,
 `BogSinkChance` 0.15, `BogSpawnChance` 0.05, `BogPocketMinTiles` 3, `BogPocketMaxTiles` 400,
 `BogPocketRadius` 4, `BogMaxSinkReroute` 12, `BogGuaranteeMinTiles` 150 (0 = off; the compact test preset has it off),
-`BogGuaranteeRadius` 5, `BogGapReach` 18, `BogGapTilesPerRound` 1000, `BogGapMinCandidates` 40 (the gap fill, step 7). The client mirrors are the
+`BogGuaranteeRadius` 5. The client mirrors are the
 `BOG_*` constants in `bogGenerator.ts`.
 
 Measured over seeds 1-8 at radius 1000 (273 green islands), before and after the guarantee (`scripts/worldgen-preview/bog-stats.ts`
@@ -240,7 +232,7 @@ construction, so with them the spawn share is 23.3% of all bogs. Ways to bring i
 of 52 bogs; on the rest no river passes the site's disc in a way that satisfies the single-path and R11 checks, and loosening the
 river-tile margins and the disc test moved it by one island). The owner decided more bogs; whether 23.3% is acceptable is theirs to confirm.
 
-*Superseded (owner decision):* the 20% rule is lifted for the planned gap-fill bogs, so about a third of all bogs may start a river; see
+*Superseded (owner decision):* the 20% rule was lifted for the gap-fill bogs; the gap fill has since been removed, see
 [`world-generation-rules.md`](./world-generation-rules.md#bog-and-lakes).
 
 ## Art pack orientation convention

@@ -316,7 +316,7 @@ Measured over seeds 1-8 (`RiverStreamTests`, spring walks down the finished tile
 | spring walks re-entering mountains after leaving them | 29% | 11.3% | 9.5% (241 of 2 550) | < 15% |
 | truncated + dropped rivers | 2.4% | 2.4% | 4.4% | < 5% |
 
-The last column is the green-island terrain PR (chain mountains and grove forests, 1 500 land tiles per bog site, the bog gap fill), measured on
+The last column is the green-island terrain PR (chain mountains and grove forests, 1 500 land tiles per bog site, and the bog gap fill that was removed later), measured on
 2026-11-02 with `river-stats.ts --seeds 1-8 --radius 1000` against `origin/main` before it (482 islands in both):
 
 | | main | head |
