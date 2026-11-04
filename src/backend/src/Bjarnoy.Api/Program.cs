@@ -203,6 +203,10 @@ if (migrationCommand == MigrationCommandKind.None)
     // running this. See EndbossTriggerHostedService.
     builder.Services.AddHostedService<EndbossTriggerHostedService>();
 
+    // Generates the worlds the admin endpoint stores as "creating" and answers 202 for; see WorldCreationHostedService.
+    builder.Services.AddSingleton<WorldCreationQueue>();
+    builder.Services.AddHostedService<WorldCreationHostedService>();
+
     // Strong wildlife camps attacking towers inside their guard range — same reasoning as above; the scan is
     // CampAggressionService.ProcessDueWorldsAsync. Tests that drive it by hand switch the timer off with
     // CampAggression:Enabled=false so a tick cannot race them.

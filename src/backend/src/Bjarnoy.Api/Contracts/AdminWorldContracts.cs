@@ -25,7 +25,8 @@ public sealed record AdminWorldResponse(
     DateTimeOffset RunStateSince,
     DateTimeOffset CreatedAt,
     int Seed,
-    WorldGenerationSettingsResponse Generation)
+    WorldGenerationSettingsResponse Generation,
+    string? CreationError)
 {
     public static AdminWorldResponse From(WorldEntity world, int playerCount, SpawnCapacity spawns)
     {
@@ -50,7 +51,8 @@ public sealed record AdminWorldResponse(
             world.RunStateSince,
             world.CreatedAt,
             world.Seed,
-            WorldGenerationSettingsResponse.From(world.ToGenerationOptions()));
+            WorldGenerationSettingsResponse.From(world.ToGenerationOptions()),
+            world.CreationError);
     }
 }
 

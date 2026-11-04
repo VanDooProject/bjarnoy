@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import DateTimeField from '../../components/admin/DateTimeField.vue';
@@ -131,6 +131,55 @@ async function load() {
 }
 
 onMounted(load);
+
+// A world is generated in the background after the create request returns (status "creating"): poll the list
+// while one is, and pick up its new status and seed when it turns "active" or "failed".
+const CREATING_POLL_MS = 3000;
+let creatingPoll: ReturnType<typeof setInterval> | null = null;
+
+const anyCreating = computed(() => worlds.value.some((w) => w.status === 'creating'));
+
+async function refreshCreating() {
+  try {
+    const fresh = await api.adminListWorlds();
+    const previous = new Map(worlds.value.map((w) => [w.id, w]));
+    worlds.value = fresh;
+    for (const world of fresh) {
+      // Only a world that just left "creating" (or is new) takes the server's values; every other draft may hold unsaved edits.
+      if (!drafts[world.id] || previous.get(world.id)?.status !== world.status) drafts[world.id] = draftFor(world);
+    }
+  } catch {
+    // The next tick tries again; the list on screen stays as it was.
+  }
+}
+
+watch(
+  anyCreating,
+  (creating) => {
+    if (creating && creatingPoll === null) {
+      creatingPoll = setInterval(() => void refreshCreating(), CREATING_POLL_MS);
+    } else if (!creating && creatingPoll !== null) {
+      clearInterval(creatingPoll);
+      creatingPoll = null;
+    }
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  if (creatingPoll !== null) clearInterval(creatingPoll);
+});
+
+const STATUSES = ['active', 'inactive', 'full', 'creating', 'failed'] as const;
+
+function statusName(status: string): string {
+  return (STATUSES as readonly string[]).includes(status) ? t(`adminWorlds.statuses.${status}`) : status;
+}
+
+/** A world still being generated or whose generation failed has no map to configure: its panel only says so. */
+function hasMap(world: AdminWorldResponse): boolean {
+  return world.status !== 'creating' && world.status !== 'failed';
+}
 
 function applyUpdated(updated: AdminWorldResponse) {
   const index = worlds.value.findIndex((w) => w.id === updated.id);
@@ -294,7 +343,7 @@ async function applyRunState(world: AdminWorldResponse) {
       <tbody>
         <tr v-for="world in worlds" :key="world.id">
           <td>{{ world.name }}</td>
-          <td>{{ world.status }}</td>
+          <td>{{ statusName(world.status) }}</td>
           <td>{{ runStateName(world.runState) }}</td>
           <td>{{ world.playerCount }} / {{ world.maxPlayers }}</td>
           <td>{{ world.freeSpawnCount }} / {{ world.spawnCount }}</td>
@@ -310,7 +359,12 @@ async function applyRunState(world: AdminWorldResponse) {
     <section v-for="world in worlds" :key="`panel-${world.id}`" class="panel">
       <h2>{{ world.name }}</h2>
 
-      <div class="fields">
+      <p v-if="world.status === 'creating'" class="creating-note">{{ $t('adminWorlds.creatingNote') }}</p>
+      <p v-else-if="world.status === 'failed'" class="error">
+        {{ $t('adminWorlds.failedNote', { reason: world.creationError ?? '' }) }}
+      </p>
+
+      <div v-if="hasMap(world)" class="fields">
         <label :for="`name-${world.id}`">{{ $t('adminWorlds.fields.name') }}</label>
         <input :id="`name-${world.id}`" v-model="drafts[world.id].name" type="text" />
 
@@ -340,9 +394,9 @@ async function applyRunState(world: AdminWorldResponse) {
         <DateTimeField :id="`endboss-${world.id}`" v-model="drafts[world.id].endbossAt" />
       </div>
 
-      <p v-if="drafts[world.id]?.error" class="error">{{ drafts[world.id].error }}</p>
+      <p v-if="hasMap(world) && drafts[world.id]?.error" class="error">{{ drafts[world.id].error }}</p>
 
-      <div class="actions">
+      <div v-if="hasMap(world)" class="actions">
         <button :disabled="drafts[world.id]?.saving" @click="saveSettings(world)">
           {{ drafts[world.id]?.saving ? $t('adminWorlds.saving') : $t('adminWorlds.saveSettings') }}
         </button>

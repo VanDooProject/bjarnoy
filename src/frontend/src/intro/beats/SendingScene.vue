@@ -21,6 +21,17 @@ const url = (name: string) => `url(#${id(name)})`;
 
 // smoke columns over the burning homeland: [x, y, strength]
 const SMOKE_COLS: [number, number, number][] = [[330, 606, 1], [520, 598, 0.85]];
+// the box the smoke texture rises through: both columns, 340 to each side, tall enough for one 512 tile of rise
+const SMOKE_XS = SMOKE_COLS.map(([x]) => x);
+const SMOKE_BOX = {
+  x: Math.min(...SMOKE_XS) - 340,
+  y: 0,
+  width: Math.max(...SMOKE_XS) - Math.min(...SMOKE_XS) + 680,
+  height: Math.max(...SMOKE_COLS.map(([, y]) => y)) + 600,
+};
+// the puffs' mask region: the box's width, down to just below the lowest puff (they sway sideways only).
+// A mask region is rastered whole, so it stays this tight.
+const PUFF_REGION = { x: SMOKE_BOX.x, y: 0, width: SMOKE_BOX.width, height: Math.max(...SMOKE_COLS.map(([, y]) => y)) + 60 };
 const FIRES: [number, number, number][] = [[330, 612, 1.25], [520, 602, 1.1], [472, 692, 0.75]];
 
 const fix = (n: number) => Math.round(n * 100) / 100;
@@ -100,27 +111,28 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
       <pattern :id="id('wsp')" href="#intro-fog" patternTransform="translate(170 90) scale(2)" />
       <pattern :id="id('fog')" href="#intro-fog" patternTransform="scale(4)" />
       <pattern :id="id('fog2')" href="#intro-fog" patternTransform="rotate(180) scale(3)" />
-      <template v-for="([bx, by], c) in SMOKE_COLS" :key="c">
-        <mask :id="id(`col${c}`)" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600">
+      <!-- both smoke columns' puffs, each column at its strength -->
+      <mask :id="id('cols')" maskUnits="userSpaceOnUse" v-bind="PUFF_REGION">
+        <g v-for="([, , o], c) in SMOKE_COLS" :key="c" :opacity="o">
           <g v-for="(p, i) in PUFFS[c]" :key="i" class="sd-sway" :style="p.style">
             <ellipse :cx="p.cx" :cy="p.cy" :rx="p.rx" :ry="p.ry" :fill="url('puff')"/>
           </g>
-        </mask>
-        <mask :id="id(`smk${c}a`)"><rect :x="bx - 340" y="0" width="680" :height="by + 600" :fill="url('smk')"/></mask>
-        <mask :id="id(`smk${c}b`)"><rect :x="bx - 340" y="0" width="680" :height="by + 600" :fill="url('wsp')"/></mask>
-      </template>
-      <mask :id="id('hz')" maskUnits="userSpaceOnUse" x="-1200" y="0" width="4000" height="1600">
-        <rect x="-1200" y="660" width="4000" height="260" :fill="url('band')"/>
+        </g>
       </mask>
-      <mask :id="id('shore')" maskUnits="userSpaceOnUse" x="-1200" y="0" width="4000" height="1600">
-        <rect x="-1200" y="860" width="4000" height="220" :fill="url('band')"/>
+      <mask :id="id('smkA')"><rect v-bind="SMOKE_BOX" :fill="url('smk')"/></mask>
+      <mask :id="id('smkB')"><rect v-bind="SMOKE_BOX" :fill="url('wsp')"/></mask>
+      <mask :id="id('hz')" maskUnits="userSpaceOnUse" x="-40" y="660" width="1680" height="260">
+        <rect x="-40" y="660" width="1680" height="260" :fill="url('band')"/>
       </mask>
-      <mask :id="id('right')" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600">
-        <rect x="0" y="0" width="1600" height="1600" :fill="url('ramp')"/>
+      <mask :id="id('shore')" maskUnits="userSpaceOnUse" x="0" y="860" width="1600" height="220">
+        <rect x="0" y="860" width="1600" height="220" :fill="url('band')"/>
       </mask>
-      <mask :id="id('hzTex')"><rect x="-1100" y="640" width="3800" height="300" :fill="url('fog')"/></mask>
-      <mask :id="id('shoreTex')"><rect x="-1100" y="840" width="3800" height="260" :fill="url('fog2')"/></mask>
-      <mask :id="id('veilTex')"><rect x="-1100" y="0" width="3800" height="1600" :fill="url('fog')"/></mask>
+      <mask :id="id('right')" maskUnits="userSpaceOnUse" x="0" y="860" width="1600" height="220">
+        <rect x="0" y="860" width="1600" height="220" :fill="url('ramp')"/>
+      </mask>
+      <mask :id="id('hzTex')"><rect x="-40" y="640" width="2700" height="300" :fill="url('fog')"/></mask>
+      <mask :id="id('shoreTex')"><rect x="-808" y="840" width="2448" height="260" :fill="url('fog2')"/></mask>
+      <mask :id="id('veilTex')"><rect x="0" y="0" width="2624" height="1600" :fill="url('fog')"/></mask>
       <clipPath :id="id('sailclip')"><path :d="SAIL"/></clipPath>
     </defs>
 
@@ -131,13 +143,12 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
     <ellipse cx="1110" cy="790" rx="190" ry="30" fill="#d39d78" opacity=".6"/>
 
     <g class="sd-a sd-cam-far">
-      <template v-for="([bx, by, o], c) in SMOKE_COLS" :key="c">
-        <ellipse class="sd-ember" :style="{ '--i': c }" :cx="bx" :cy="by - 70" rx="140" ry="120" :fill="url('ember')"/>
-        <g :mask="url(`col${c}`)" :opacity="o">
-          <g class="sd-rise sd-rise-a" :style="{ '--c': c }"><rect :x="bx - 340" y="0" width="680" :height="by + 600" fill="#5c6068" opacity=".72" :mask="url(`smk${c}a`)"/></g>
-          <g class="sd-rise sd-rise-b" :style="{ '--c': c }"><rect :x="bx - 340" y="0" width="680" :height="by + 600" fill="#74767c" opacity=".3" :mask="url(`smk${c}b`)"/></g>
-        </g>
-      </template>
+      <ellipse v-for="([bx, by], c) in SMOKE_COLS" :key="c" class="sd-ember" :style="{ '--i': c }" :cx="bx" :cy="by - 70" rx="140" ry="120" :fill="url('ember')"/>
+      <!-- one rising texture pair for both columns: the columns overlap, and two pairs cost twice the layers -->
+      <g :mask="url('cols')">
+        <g class="sd-rise sd-rise-a"><rect v-bind="SMOKE_BOX" fill="#5c6068" opacity=".72" :mask="url('smkA')"/></g>
+        <g class="sd-rise sd-rise-b"><rect v-bind="SMOKE_BOX" fill="#74767c" opacity=".3" :mask="url('smkB')"/></g>
+      </g>
       <SendingFire v-for="([x, y, sc], c) in FIRES.slice(0, 2)" :key="c" :x="x" :y="y" :scale="sc" :index="c" :glow="url('fireglow')" />
       <path d="M0 790 L0 600 L90 560 L170 610 L250 540 L330 600 L430 520 L520 590 L610 560 L700 640 L800 650 L880 720 L940 790 Z" fill="#2d343e"/>
       <path d="M0 790 L0 680 L120 650 L230 690 L360 640 L470 690 L590 670 L700 720 L820 760 L880 790 Z" fill="#252b34"/>
@@ -146,7 +157,7 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
       <g>
         <rect v-for="([x, y, w, h, o], i) in GLINTS" :key="i" class="sd-glint" :style="sineLoop(0.4, i * 1.3)" :x="x" :y="y" :width="w" :height="h" fill="#8c6a5c" :opacity="o"/>
       </g>
-      <g :mask="url('hz')" opacity=".42"><g class="sd-fog sd-fog-hz"><rect x="-1100" y="640" width="3800" height="300" fill="#808891" :mask="url('hzTex')"/></g></g>
+      <g :mask="url('hz')" opacity=".42"><g class="sd-fog sd-fog-hz"><rect x="-40" y="640" width="2700" height="300" fill="#808891" :mask="url('hzTex')"/></g></g>
     </g>
 
     <g class="sd-a sd-cam-mid">
@@ -235,7 +246,7 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
       </g>
     </g>
 
-    <g :mask="url('right')"><g :mask="url('shore')" opacity=".26"><g class="sd-fog sd-fog-shore"><rect x="-1100" y="840" width="3800" height="260" fill="#808891" :mask="url('shoreTex')"/></g></g></g>
+    <g :mask="url('right')"><g :mask="url('shore')" opacity=".26"><g class="sd-fog sd-fog-shore"><rect x="-808" y="840" width="2448" height="260" fill="#808891" :mask="url('shoreTex')"/></g></g></g>
 
     <g class="sd-a sd-cam-near">
       <path d="M-40 1600 L-40 1330 C40 1290 120 1300 190 1340 C260 1320 330 1350 380 1420 C420 1460 460 1520 470 1600 Z" fill="#090b0e"/>
@@ -245,7 +256,7 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
     <!-- the closing fog -->
     <g class="sd-a sd-veil">
       <rect width="1600" height="1600" fill="#4d545c"/>
-      <g class="sd-fog sd-fog-veil"><rect x="-1100" y="0" width="3800" height="1600" fill="#808891" :mask="url('veilTex')"/></g>
+      <g class="sd-fog sd-fog-veil"><rect x="0" y="0" width="2624" height="1600" fill="#808891" :mask="url('veilTex')"/></g>
     </g>
     <!-- the beat starts from the prophecy's dark -->
     <rect class="sd-a sd-dark" width="1600" height="1600" fill="#06080b"/>
@@ -307,10 +318,11 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
 .b3 .sd-ember { animation: sd-ember 700ms ease-in-out calc(var(--i) * -230ms) infinite alternate; }
 @keyframes sd-ember { from { opacity: 0.5; } to { opacity: 0.9; } }
 /* smoke: the texture scrolls exactly one 512 tile up per loop, the second layer faster */
-.b3 .sd-rise-a { animation: sd-rise 9000ms linear calc(var(--c) * -2100ms) infinite; }
-.b3 .sd-rise-b { animation: sd-rise 6500ms linear calc(var(--c) * -2100ms) infinite; }
+.b3 .sd-rise-a { animation: sd-rise 9000ms linear infinite; }
+.b3 .sd-rise-b { animation: sd-rise 6500ms linear infinite; }
 @keyframes sd-rise { from { transform: translateY(0); } to { transform: translateY(-512px); } }
-/* fog bands drift one whole texture tile per loop: 14 units/s (horizon), 22 (shore, 768 tile), 40 (closing fog) */
+/* fog bands drift one whole texture tile per loop: 14 units/s (horizon), 22 (shore, 768 tile), 40 (closing fog).
+   Each band is the view plus one tile wide, no more: every unit of it is rastered, on screen or not. */
 .b3 .sd-fog-hz { animation: sd-fog-left 73143ms linear infinite; }
 .b3 .sd-fog-shore { animation: sd-fog-right 34909ms linear infinite; }
 .b3 .sd-fog-veil { animation: sd-fog-left 25600ms linear infinite; }
@@ -1324,12 +1336,11 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
   100% { transform: rotate(1.70deg); }
 }
 @keyframes sd-veil {
-  0%, 92% { opacity: 0; }
-  96% { opacity: 0.45; }
-  100% { opacity: 1; }
+  0% { opacity: 0; visibility: hidden; } 91.5% { opacity: 0; visibility: hidden; }
+  92% { opacity: 0; visibility: visible; } 96% { opacity: 0.45; } 100% { opacity: 1; visibility: visible; }
 }
 @keyframes sd-dark {
-  0% { opacity: 1; } 9%, 100% { opacity: 0; }
+  0% { opacity: 1; } 9%, 100% { opacity: 0; visibility: hidden; }
 }
 @keyframes sd-boy-rim {
   0%, 10.71%, 74.23% { opacity: 1; }
