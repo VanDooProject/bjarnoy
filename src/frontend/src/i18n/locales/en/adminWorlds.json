@@ -28,6 +28,13 @@
     "hidden": "Hidden",
     "seed": "Seed"
   },
+  "statuses": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "full": "Full",
+    "creating": "Being created…",
+    "failed": "Failed"
+  },
   "joins": {
     "closed": "Closed",
     "open": "Open"
@@ -74,5 +81,7 @@
     "locked": "Locked"
   },
   "runStateSince": "{state} since {date} ({relative})",
-  "applyRunState": "Apply"
+  "applyRunState": "Apply",
+  "creatingNote": "The map is being generated. This page updates when it is done; the world can be set up then.",
+  "failedNote": "Creating the world failed: {reason} Create it again with the same name."
 }

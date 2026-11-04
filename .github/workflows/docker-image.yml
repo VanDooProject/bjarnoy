@@ -205,6 +205,16 @@ jobs:
             -d '{"name":"smoke-test-world","seed":7,"radius":400,"maxPlayers":10}' \
             -o /tmp/created.json
           world_id=$(python3 -c 'import json; print(json.load(open("/tmp/created.json"))["id"])')
+          # The endpoint answers 202 with the world "creating"; the map is generated in the background.
+          status=creating
+          for _ in $(seq 1 120); do
+            status=$(curl -fsS http://localhost:8080/api/v1/admin/worlds -H "Authorization: Bearer $token" \
+              | python3 -c 'import json,sys; print(next(w["status"] for w in json.load(sys.stdin) if w["id"] == sys.argv[1]))' "$world_id")
+            [ "$status" = creating ] || break
+            sleep 1
+          done
+          echo "world status: $status"
+          [ "$status" = active ]
           # The public game-client config for that world carries islandCount.
           curl -fsS "http://localhost:8080/api/v1/worlds/$world_id" -o /tmp/world.json
           cat /tmp/world.json

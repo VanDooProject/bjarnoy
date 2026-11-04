@@ -297,6 +297,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             world.Property(w => w.Name).HasMaxLength(100).IsRequired();
             world.HasIndex(w => w.Name).IsUnique();
             world.Property(w => w.Status).HasConversion<int>();
+            world.Property(w => w.CreationError).HasMaxLength(500);
             world.Property(w => w.RunState).HasConversion<int>();
             // The C# property initializer only applies to rows created through
             // EF; existing rows picked up by this migration need the same

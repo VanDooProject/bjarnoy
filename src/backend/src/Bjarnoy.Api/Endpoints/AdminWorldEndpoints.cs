@@ -4,6 +4,7 @@ using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Contracts;
+using Bjarnoy.Api.Hosting;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Domain.World.Review;
@@ -40,7 +41,9 @@ public static class AdminWorldEndpoints
 
         worlds.MapPost("/", CreateWorld)
             .WithName("AdminCreateWorld")
-            .WithSummary("Generates and stores a new world, returning it with its admin-only fields.");
+            .WithSummary(
+                "Stores a new world as 'creating' and answers 202 at once; the map is generated in the background and the world " +
+                "becomes 'active' (or 'failed', with creationError) when that is done. A failed world of the same name is replaced.");
 
         worlds.MapPatch("/{worldId:guid}/settings", UpdateSettings)
             .WithName("AdminUpdateWorldSettings")
@@ -89,10 +92,11 @@ public static class AdminWorldEndpoints
     /// <see cref="AdminWorldResponse"/>, so the admin list a caller already
     /// holds can be updated from the response without a follow-up round trip.
     /// </summary>
-    private static async Task<Results<Created<AdminWorldResponse>, ValidationProblem, Conflict<ProblemDetails>>>
+    private static async Task<Results<Accepted<AdminWorldResponse>, ValidationProblem, Conflict<ProblemDetails>>>
         CreateWorld(
             CreateWorldRequest request,
             WorldService worlds,
+            WorldCreationQueue queue,
             CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -123,12 +127,11 @@ public static class AdminWorldEndpoints
 
         try
         {
-            var world = await worlds.CreateWorldAsync(
-                request.Name.Trim(), options, request.MaxPlayers, autoSeed: request.Seed is null, cancellationToken);
-            var spawns = await worlds.GetSpawnCapacityAsync(world.Id, cancellationToken);
+            var world = await worlds.BeginWorldCreationAsync(request.Name.Trim(), options, request.MaxPlayers, cancellationToken);
+            queue.Enqueue(world.Id, autoSeed: request.Seed is null);
 
-            return TypedResults.Created(
-                $"/api/v1/admin/worlds/{world.Id}", AdminWorldResponse.From(world, playerCount: 0, spawns.GetValueOrDefault(world.Id)));
+            return TypedResults.Accepted(
+                $"/api/v1/admin/worlds/{world.Id}", AdminWorldResponse.From(world, playerCount: 0, default));
         }
         catch (WorldCreationException ex)
         {
@@ -353,6 +356,16 @@ public static class AdminWorldEndpoints
         if (world is null)
         {
             return TypedResults.NotFound();
+        }
+
+        if (world.Status == WorldStatus.Creating)
+        {
+            return TypedResults.Conflict(new ProblemDetails
+            {
+                Title = "The world is still being created.",
+                Detail = "Wait until its map is generated before reseeding it.",
+                Status = StatusCodes.Status409Conflict,
+            });
         }
 
         if (!string.Equals(request.ConfirmWorldName?.Trim(), world.Name, StringComparison.Ordinal))

@@ -1,4 +1,5 @@
 using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.Data.Sqlite;
@@ -21,6 +22,9 @@ public class WorldServiceTests : IDisposable
     // coincidence of the seed choice.
     private const int KnownBadSeed = 169;
     private const int WastedOnlySeed = 55;
+
+    // A seed that draws a green island on the same small world (checked by the first async-creation test).
+    private const int GoodSeed = 1;
 
     private static WorldGenerationOptions SmallWorld(int seed) =>
         WorldGenerationOptions.Compact(seed, 200) with { IslandChance = 0.3 };
@@ -98,6 +102,80 @@ public class WorldServiceTests : IDisposable
             () => service.CreateWorldAsync("wasted-only-world", options, maxPlayers: 10, autoSeed: false, Ct));
 
         Assert.Contains("no islands", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Beginning_a_world_stores_it_as_creating_without_islands_and_completing_it_activates_it()
+    {
+        var service = CreateService();
+        var options = SmallWorld(GoodSeed);
+
+        var begun = await service.BeginWorldCreationAsync("async-world", options, maxPlayers: 10, Ct);
+
+        Assert.Equal(WorldStatus.Creating, begun.Status);
+        Assert.Empty(await _dbContext.Islands.Where(i => i.WorldId == begun.Id).ToListAsync(Ct));
+
+        await service.CompleteWorldCreationAsync(begun.Id, autoSeed: false, Ct);
+
+        var world = await _dbContext.Worlds.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(WorldStatus.Active, world.Status);
+        Assert.Null(world.CreationError);
+        Assert.NotEmpty(await _dbContext.Islands.Where(i => i.WorldId == world.Id).ToListAsync(Ct));
+    }
+
+    [Fact]
+    public async Task Completing_a_world_whose_explicit_seed_has_no_islands_fails_it_with_the_reason()
+    {
+        var service = CreateService();
+        var begun = await service.BeginWorldCreationAsync("bad-seed-async", SmallWorld(KnownBadSeed), maxPlayers: 10, Ct);
+
+        await service.CompleteWorldCreationAsync(begun.Id, autoSeed: false, Ct);
+
+        var world = await _dbContext.Worlds.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(WorldStatus.Failed, world.Status);
+        Assert.Contains("no islands", world.CreationError, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await _dbContext.Islands.Where(i => i.WorldId == world.Id).ToListAsync(Ct));
+    }
+
+    [Fact]
+    public async Task A_failed_world_is_replaced_by_a_new_one_of_the_same_name_but_a_live_one_is_not()
+    {
+        var service = CreateService();
+        var first = await service.BeginWorldCreationAsync("same-name", SmallWorld(KnownBadSeed), maxPlayers: 10, Ct);
+        await service.CompleteWorldCreationAsync(first.Id, autoSeed: false, Ct);
+
+        var second = await service.BeginWorldCreationAsync("same-name", SmallWorld(GoodSeed), maxPlayers: 10, Ct);
+
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.Equal(second.Id, (await _dbContext.Worlds.AsNoTracking().SingleAsync(Ct)).Id);
+
+        await Assert.ThrowsAsync<WorldCreationException>(
+            () => service.BeginWorldCreationAsync("same-name", SmallWorld(GoodSeed), maxPlayers: 10, Ct));
+    }
+
+    [Fact]
+    public async Task Worlds_still_creating_at_startup_are_failed_as_interrupted()
+    {
+        var service = CreateService();
+        var begun = await service.BeginWorldCreationAsync("interrupted", SmallWorld(GoodSeed), maxPlayers: 10, Ct);
+
+        await service.FailInterruptedWorldCreationsAsync(_time.GetUtcNow().AddMinutes(1), Ct);
+
+        var world = await _dbContext.Worlds.AsNoTracking().SingleAsync(w => w.Id == begun.Id, Ct);
+        Assert.Equal(WorldStatus.Failed, world.Status);
+        Assert.Contains("interrupted", world.CreationError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task A_world_created_after_the_process_started_is_not_failed_as_interrupted()
+    {
+        var service = CreateService();
+        var startedAt = _time.GetUtcNow().AddMinutes(-1);
+        var begun = await service.BeginWorldCreationAsync("just-created", SmallWorld(GoodSeed), maxPlayers: 10, Ct);
+
+        await service.FailInterruptedWorldCreationsAsync(startedAt, Ct);
+
+        Assert.Equal(WorldStatus.Creating, (await _dbContext.Worlds.AsNoTracking().SingleAsync(w => w.Id == begun.Id, Ct)).Status);
     }
 
     [Fact]
