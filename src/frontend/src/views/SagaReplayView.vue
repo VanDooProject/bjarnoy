@@ -23,6 +23,7 @@ const introLocale = computed<'en' | 'de'>(() => (locale.value === 'de' ? 'de' : 
     :locale="introLocale"
     :reduced-motion="!motionPreferences.hudEnabled"
     :loaded="false"
+    :sound-on="!loopBeats"
     @back-to-docs="router.push('/docs/saga')"
     @enter-game="router.push('/')"
   />

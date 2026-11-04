@@ -38,6 +38,8 @@ export function startLandingIntro(): void {
         locale: detectDeviceLocale(),
         reducedMotion: !motionPreferences.hudEnabled,
         loaded: introSignal.tilesLoaded,
+        // browsers only allow sound after a click: the landing page (and its loop) starts muted
+        soundOn: false,
         // After the flush that emitted `done`: unmounting the app from inside its own render/watch flush
         // re-runs the root's render effect on a torn-down tree.
         onDone: () =>
