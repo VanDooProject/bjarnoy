@@ -1,6 +1,8 @@
 {
   "region": "Intro",
   "skip": "Überspringen",
+  "pause": "Pause",
+  "resume": "Weiter",
   "play": "Saga abspielen",
   "backToDocs": "Zurück zur Doku",
   "enterGame": "Zum Spiel",
