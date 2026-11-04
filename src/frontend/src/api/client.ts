@@ -12,6 +12,11 @@ import type {
   AdminUserDetailResponse,
   AdminUserResponse,
   AdminWorldResponse,
+  ApiKeyFeatureInfo,
+  ApiKeyRequestResponse,
+  ApiKeyResponse,
+  ApiKeyTokenResponse,
+  ApproveApiKeyRequestBody,
   ArmyResponse,
   ArmySummary,
   BattleReportResponse,
@@ -92,6 +97,7 @@ import type {
   TrainUnitsRequest,
   TrainUnitsResponse,
   UnitDefinitionResponse,
+  SaveApiKeyRequest,
   UpdateAdminUserRequest,
   UpdateBioRequest,
   UpdateLocaleRequest,
@@ -589,6 +595,27 @@ export const api = {
     const query = new URLSearchParams({ from: params.from, to: params.to });
     return request<AdminUserActivityDetailResponse>(`/admin/activity/users/${userId}?${query.toString()}`);
   },
+  // Debug API keys (docs/tech/api-keys.md). The feature catalogue is public;
+  // everything else is admin-only and never callable with a key itself.
+  getApiKeyFeatures: () => request<ApiKeyFeatureInfo[]>('/api-keys/features'),
+  adminListApiKeys: (includeInactive = false) =>
+    request<ApiKeyResponse[]>(`/admin/api-keys?includeInactive=${includeInactive}`),
+  adminCreateApiKey: (body: SaveApiKeyRequest) =>
+    request<ApiKeyTokenResponse>('/admin/api-keys', { method: 'POST', body: JSON.stringify(body) }),
+  adminUpdateApiKey: (id: string, body: SaveApiKeyRequest) =>
+    request<ApiKeyResponse>(`/admin/api-keys/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  adminRecreateApiKey: (id: string) =>
+    request<ApiKeyTokenResponse>(`/admin/api-keys/${id}/recreate`, { method: 'POST' }),
+  adminRevokeApiKey: (id: string) => request<void>(`/admin/api-keys/${id}/revoke`, { method: 'POST' }),
+  adminListApiKeyRequests: (status?: string) =>
+    request<ApiKeyRequestResponse[]>(`/admin/api-key-requests${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  adminApproveApiKeyRequest: (id: string, body: ApproveApiKeyRequestBody) =>
+    request<ApiKeyRequestResponse>(`/admin/api-key-requests/${id}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminDenyApiKeyRequest: (id: string) =>
+    request<ApiKeyRequestResponse>(`/admin/api-key-requests/${id}/deny`, { method: 'POST' }),
   // Plain authenticated user action, not admin-only — see useActivityHeartbeat.
   heartbeat: () => request<void>('/activity/heartbeat', { method: 'POST' }),
   getLeaderboardDirectory: (worldId: string) =>

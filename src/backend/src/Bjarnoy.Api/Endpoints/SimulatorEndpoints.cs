@@ -1,4 +1,5 @@
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Armies;
@@ -53,7 +54,8 @@ public static class SimulatorEndpoints
             .WithTags("Simulator")
             .WithName("SimulateBattle")
             .WithSummary("Premium-only: resolves a hypothetical battle with no persistence.")
-            .RequirePremiumUser();
+            .RequirePremiumUser()
+            .WithApiKeyFeature(ApiKeyFeature.Simulator);
 
         return app;
     }

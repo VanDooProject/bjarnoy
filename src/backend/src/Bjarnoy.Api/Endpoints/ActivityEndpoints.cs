@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Auth;
 
 namespace Bjarnoy.Api.Endpoints;
@@ -24,7 +25,8 @@ public static class ActivityEndpoints
         var activity = app.MapGroup("/api/v1/activity")
             .WithApiVersionSet(versionSet)
             .HasApiVersion(new ApiVersion(1, 0))
-            .WithTags("Activity");
+            .WithTags("Activity")
+            .ApiKeyForbidden();
 
         activity.MapPost("/heartbeat", Heartbeat)
             .WithName("ActivityHeartbeat")

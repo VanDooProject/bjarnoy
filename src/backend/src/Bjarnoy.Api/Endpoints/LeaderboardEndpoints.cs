@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Services;
@@ -27,7 +28,8 @@ public static class LeaderboardEndpoints
 
         var group = app.MapGroup("/api/v1/worlds/{worldId:guid}/leaderboards")
             .WithApiVersionSet(versionSet)
-            .WithTags("Leaderboards");
+            .WithTags("Leaderboards")
+            .WithApiKeyFeature(ApiKeyFeature.Leaderboards);
 
         group.MapGet("/", GetDirectory)
             .WithName("GetLeaderboardDirectory")
@@ -46,7 +48,8 @@ public static class LeaderboardEndpoints
             .WithApiVersionSet(versionSet)
             .WithTags("Leaderboards")
             .WithName("GetWeeklyStats")
-            .WithSummary("A user's weekly stat cards, newest window first.");
+            .WithSummary("A user's weekly stat cards, newest window first.")
+            .WithApiKeyFeature(ApiKeyFeature.Leaderboards);
 
         return app;
     }

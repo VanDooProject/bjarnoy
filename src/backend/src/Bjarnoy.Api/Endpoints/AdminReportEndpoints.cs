@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Asp.Versioning;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Services;
@@ -29,7 +30,8 @@ public static class AdminReportEndpoints
             .WithApiVersionSet(versionSet)
             .HasApiVersion(new ApiVersion(1, 0))
             .WithTags("Admin", "Chat", "Profiles")
-            .RequireAuthorization("Admin");
+            .RequireAuthorization("Admin")
+            .WithApiKeyFeature(ApiKeyFeature.AdminReports);
 
         reports.MapGet("/", ListReports)
             .WithName("AdminListReports")
