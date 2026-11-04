@@ -344,7 +344,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
             var worlds = scope.ServiceProvider.GetRequiredService<WorldService>();
             var options = TestWorlds.For(4242, 30);
             failedId = (await worlds.BeginWorldCreationAsync(UniqueName("failed"), options, 10, Ct)).Id;
-            await worlds.FailInterruptedWorldCreationsAsync(Ct);
+            await worlds.FailInterruptedWorldCreationsAsync(DateTimeOffset.UtcNow.AddMinutes(1), Ct);
             creatingId = (await worlds.BeginWorldCreationAsync(UniqueName("creating"), options, 10, Ct)).Id;
         }
 

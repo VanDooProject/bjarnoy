@@ -159,11 +159,23 @@ public class WorldServiceTests : IDisposable
         var service = CreateService();
         var begun = await service.BeginWorldCreationAsync("interrupted", SmallWorld(GoodSeed), maxPlayers: 10, Ct);
 
-        await service.FailInterruptedWorldCreationsAsync(Ct);
+        await service.FailInterruptedWorldCreationsAsync(_time.GetUtcNow().AddMinutes(1), Ct);
 
         var world = await _dbContext.Worlds.AsNoTracking().SingleAsync(w => w.Id == begun.Id, Ct);
         Assert.Equal(WorldStatus.Failed, world.Status);
         Assert.Contains("interrupted", world.CreationError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task A_world_created_after_the_process_started_is_not_failed_as_interrupted()
+    {
+        var service = CreateService();
+        var startedAt = _time.GetUtcNow().AddMinutes(-1);
+        var begun = await service.BeginWorldCreationAsync("just-created", SmallWorld(GoodSeed), maxPlayers: 10, Ct);
+
+        await service.FailInterruptedWorldCreationsAsync(startedAt, Ct);
+
+        Assert.Equal(WorldStatus.Creating, (await _dbContext.Worlds.AsNoTracking().SingleAsync(w => w.Id == begun.Id, Ct)).Status);
     }
 
     [Fact]

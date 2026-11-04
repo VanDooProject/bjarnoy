@@ -13,11 +13,16 @@ namespace Bjarnoy.Api.Hosting;
 public sealed class WorldCreationHostedService(
     WorldCreationQueue queue,
     IServiceScopeFactory scopeFactory,
+    TimeProvider timeProvider,
     ILogger<WorldCreationHostedService> logger) : BackgroundService
 {
+    /// <summary>How long after the host starts the check for creations interrupted by a restart runs.</summary>
+    public static readonly TimeSpan InterruptedCheckDelay = TimeSpan.FromSeconds(30);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await FailInterruptedAsync(stoppingToken).ConfigureAwait(false);
+        var startedAt = timeProvider.GetUtcNow();
+        var interruptedCheck = FailInterruptedAsync(startedAt, stoppingToken);
 
         await foreach (var request in queue.Reader.ReadAllAsync(stoppingToken).ConfigureAwait(false))
         {
@@ -34,21 +39,28 @@ public sealed class WorldCreationHostedService(
                 logger.LogError(ex, "World creation {WorldId} ended with an error.", request.WorldId);
             }
         }
+
+        await interruptedCheck.ConfigureAwait(false);
     }
 
-    private async Task FailInterruptedAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Waits before touching the database, like <see cref="EndbossTriggerHostedService"/>: a hosted service starts as soon as
+    /// the host does, in tests before the schema exists (and a SQLite connection would create the file). Worlds created
+    /// after <paramref name="startedAt"/> are in the queue, so only older ones count as interrupted.
+    /// </summary>
+    private async Task FailInterruptedAsync(DateTimeOffset startedAt, CancellationToken cancellationToken)
     {
         try
         {
+            await Task.Delay(InterruptedCheckDelay, cancellationToken).ConfigureAwait(false);
             await using var scope = scopeFactory.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<WorldService>()
-                .FailInterruptedWorldCreationsAsync(cancellationToken)
+                .FailInterruptedWorldCreationsAsync(startedAt, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // The schema may not exist yet when the host starts (tests migrate after startup); nothing can be interrupted then.
-            logger.LogWarning(ex, "Could not check for interrupted world creations at startup.");
+            logger.LogWarning(ex, "Could not check for interrupted world creations after startup.");
         }
     }
 }

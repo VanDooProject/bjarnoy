@@ -261,18 +261,19 @@ public sealed class WorldService(
     }
 
     /// <summary>
-    /// Marks every world still <see cref="WorldStatus.Creating"/> as failed: only called when the process starts,
-    /// when no generation can be running, so these were interrupted by a restart.
+    /// Marks every world still <see cref="WorldStatus.Creating"/> that was created before <paramref name="startedAt"/> as
+    /// failed: the process started at that instant, so no generation of those can be running — a restart interrupted them.
     /// </summary>
-    public async Task FailInterruptedWorldCreationsAsync(CancellationToken cancellationToken = default)
+    public async Task FailInterruptedWorldCreationsAsync(DateTimeOffset startedAt, CancellationToken cancellationToken = default)
     {
-        var ids = await _dbContext.Worlds.AsNoTracking()
+        // Filtered in memory: SQLite cannot compare DateTimeOffset columns in a query.
+        var creating = await _dbContext.Worlds.AsNoTracking()
             .Where(w => w.Status == WorldStatus.Creating)
-            .Select(w => w.Id)
+            .Select(w => new { w.Id, w.CreatedAt })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        foreach (var id in ids)
+        foreach (var id in creating.Where(w => w.CreatedAt < startedAt).Select(w => w.Id))
         {
             await FailWorldCreationAsync(id, "Creation was interrupted by a restart. Create the world again.", cancellationToken)
                 .ConfigureAwait(false);
