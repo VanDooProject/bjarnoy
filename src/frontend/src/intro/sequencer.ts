@@ -55,6 +55,7 @@ export class IntroSequencer {
   private pausedMinTimer: { ms: number; fn: () => void } | null = null;
   private loaded = false;
   private started = false;
+  private closed = false;
   private timer: unknown = null;
   private minTimer: unknown = null;
   private holdMinReached = false;
@@ -157,13 +158,19 @@ export class IntroSequencer {
 
   /** Back to the first beat (landing/replay: the first intro beat; loop: the first selected beat), unpaused. */
   restart(): void {
-    if (this.phase !== 'playing' && this.phase !== 'exiting') return;
+    if (this.closed || (this.phase !== 'playing' && this.phase !== 'exiting')) return;
     this.clear();
     this.cycle = 0;
     this.holdMinReached = false;
     this.phase = 'playing';
     if (this.opts.mode === 'loop') this.enterLoop(0);
     else this.enterIntro(0);
+  }
+
+  /** Stops for good, at once: no timer fires and no state is emitted afterwards. */
+  close(): void {
+    this.closed = true;
+    this.clear();
   }
 
   dispose(): void {
@@ -241,6 +248,7 @@ export class IntroSequencer {
   }
 
   private schedule(ms: number, fn: () => void): void {
+    if (this.closed) return;
     if (this.timer !== null) this.clock.clearTimeout(this.timer);
     this.timerInfo = { fn, dueAt: this.now() + ms };
     this.timer = this.clock.setTimeout(() => {
@@ -250,6 +258,7 @@ export class IntroSequencer {
   }
 
   private scheduleMin(ms: number, fn: () => void): void {
+    if (this.closed) return;
     if (this.minTimer !== null) this.clock.clearTimeout(this.minTimer);
     this.minTimerInfo = { fn, dueAt: this.now() + ms };
     this.minTimer = this.clock.setTimeout(() => {
@@ -271,6 +280,7 @@ export class IntroSequencer {
   }
 
   private emit(): void {
+    if (this.closed) return;
     this.opts.onChange({ ...this.state });
   }
 }

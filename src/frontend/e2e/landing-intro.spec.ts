@@ -154,6 +154,32 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       release();
     });
 
+    test('Esc closes the intro at once, with no exit beat, and the map is there', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const release = await holdAtlases(page);
+      const log = await recordIntro(page);
+      await page.goto('/#intro');
+      await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
+
+      await page.keyboard.press('Escape');
+      await expect(intro(page)).toHaveCount(0);
+      await expect(page.locator('#landing-intro')).toHaveCount(0);
+      release();
+      await expect(page.locator('canvas')).toBeVisible();
+      expect((await log()).phases).toEqual(['playing']);
+    });
+
+    test('#loop: Esc closes the loop and shows the map', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      await page.goto('/#loop');
+      await expect(intro(page)).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(intro(page)).toHaveCount(0);
+      await expect(page.locator('canvas')).toBeVisible();
+    });
+
     test('#loop(1,6) plays the first and the last beat again and again, and the intro never goes away', async ({ page }) => {
       test.setTimeout(MAP_SPEC_TIMEOUT_MS);
       await freezeClock(page);

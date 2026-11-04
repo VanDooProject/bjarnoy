@@ -6,6 +6,7 @@ import LandingIntro from './LandingIntro.vue';
 import { BEATS } from './beats/registry';
 import { introSignal } from './introSignal';
 import { parseLoopAnchor } from './loopAnchor';
+import type { BeatId } from './beats/types';
 
 /**
  * Whether the landing intro plays: only on the landing page, `#no-intro` never (specs and players opt out),
@@ -27,9 +28,22 @@ export function startLandingIntro(): void {
   if (hash === '#intro' || hash === '#no-intro' || loopBeats !== null) history.replaceState(history.state, '', pathname + search);
   if (!start) return;
 
+  mountLandingIntro({ loopBeats });
+}
+
+/** Mounts the intro on its own root next to `#app` and unmounts it again on `done` or Esc. */
+export function mountLandingIntro(options: { loopBeats?: BeatId[] | null } = {}): void {
+  const loopBeats = options.loopBeats ?? null;
   const host = document.createElement('div');
   host.id = 'landing-intro';
   document.body.appendChild(host);
+  // After the flush that emitted `done`/`close`: unmounting the app from inside its own render/watch flush
+  // re-runs the root's render effect on a torn-down tree.
+  const unmount = () =>
+    void nextTick(() => {
+      app.unmount();
+      host.remove();
+    });
   const app = createApp({
     render: () =>
       h(LandingIntro, {
@@ -38,13 +52,8 @@ export function startLandingIntro(): void {
         locale: detectDeviceLocale(),
         reducedMotion: !motionPreferences.hudEnabled,
         loaded: introSignal.tilesLoaded,
-        // After the flush that emitted `done`: unmounting the app from inside its own render/watch flush
-        // re-runs the root's render effect on a torn-down tree.
-        onDone: () =>
-          void nextTick(() => {
-            app.unmount();
-            host.remove();
-          }),
+        onDone: unmount,
+        onClose: unmount,
       }),
   });
   app.mount(host);

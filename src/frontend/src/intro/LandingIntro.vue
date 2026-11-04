@@ -17,7 +17,7 @@ const props = defineProps<{
   reducedMotion: boolean;
   loaded: boolean;
 }>();
-const emit = defineEmits<{ done: []; 'back-to-docs': []; 'enter-game': [] }>();
+const emit = defineEmits<{ done: []; close: []; 'back-to-docs': []; 'enter-game': [] }>();
 
 const FADE_OUT_MS = 1000;
 const fogUrl = introFogUrl();
@@ -67,8 +67,17 @@ function togglePause(): void {
   if (state.value.paused) sequencer.resume();
   else sequencer.pause();
 }
+// Esc closes the intro at once: no exit beat, no fade.
+function close(): void {
+  sequencer.close();
+  emit('close');
+}
 // Space toggles pause; a focused button (or field) already handles space itself.
 function onKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    if (!event.repeat && state.value.phase !== 'done') close();
+    return;
+  }
   if (event.code !== 'Space' || event.repeat || !pauseVisible.value) return;
   const target = event.target;
   if (target instanceof Element && target.closest('button, input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;

@@ -13,6 +13,7 @@ const { locale } = useI18n({ useScope: 'global' });
 const router = useRouter();
 // `#loop` / `#loop(1-2,5)` plays the intro without end instead of the replay (read once, like the intro's other inputs)
 const loopBeats = parseLoopAnchor(useRoute().hash, BEATS);
+const toDocs = () => router.push('/docs/saga');
 const introLocale = computed<'en' | 'de'>(() => (locale.value === 'de' ? 'de' : 'en'));
 </script>
 
@@ -23,7 +24,8 @@ const introLocale = computed<'en' | 'de'>(() => (locale.value === 'de' ? 'de' : 
     :locale="introLocale"
     :reduced-motion="!motionPreferences.hudEnabled"
     :loaded="false"
-    @back-to-docs="router.push('/docs/saga')"
+    @back-to-docs="toDocs"
+    @close="toDocs"
     @enter-game="router.push('/')"
   />
 </template>

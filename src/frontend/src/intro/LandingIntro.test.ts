@@ -168,6 +168,41 @@ describe('LandingIntro', () => {
     });
   });
 
+  describe('Esc', () => {
+    const esc = (init: KeyboardEventInit = {}) => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, ...init }));
+
+    it('emits close at once, with no exit beat, and nothing fires afterwards', async () => {
+      const w = await mountIntro();
+      await vi.advanceTimersByTimeAsync(500);
+      esc();
+      await flushPromises();
+      expect(w.emitted('close')).toHaveLength(1);
+      expect(phase(w)).toBe('playing');
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(phase(w)).toBe('playing');
+      expect(w.emitted()).not.toHaveProperty('done');
+    });
+
+    it('works while waiting for play and in the exit beat, ignores key repeat', async () => {
+      const w = await mountIntro({ reducedMotion: true });
+      esc({ repeat: true });
+      expect(w.emitted('close')).toBeUndefined();
+      esc();
+      expect(w.emitted('close')).toHaveLength(1);
+      const x = await mountIntro({ mode: 'replay' });
+      await x.get('[data-testid="intro-skip"]').trigger('click');
+      expect(phase(x)).toBe('exiting');
+      esc();
+      expect(x.emitted('close')).toHaveLength(1);
+    });
+
+    it('works in loop mode', async () => {
+      const w = await mountIntro({ mode: 'loop' });
+      esc();
+      expect(w.emitted('close')).toHaveLength(1);
+    });
+  });
+
   describe('pause', () => {
     const pauseBtn = (w: VueWrapper) => w.get('[data-testid="intro-pause"]');
     const beatPaused = (w: VueWrapper) => w.get('.beat-layer > *').classes().includes('is-paused');

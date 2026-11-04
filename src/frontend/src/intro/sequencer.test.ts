@@ -456,3 +456,17 @@ describe('IntroSequencer restart', () => {
     expect(seq.state.phase).toBe('waitingForPlay');
   });
 });
+
+describe('IntroSequencer close', () => {
+  it('stops every timer and emits nothing afterwards', () => {
+    const { seq, changes } = make('landing');
+    seq.start();
+    vi.advanceTimersByTime(500);
+    const n = changes.length;
+    seq.close();
+    seq.notifyLoaded();
+    vi.advanceTimersByTime(20000);
+    expect(changes).toHaveLength(n);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
