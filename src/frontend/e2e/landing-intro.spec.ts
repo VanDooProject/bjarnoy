@@ -87,9 +87,12 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await expect(skip(page)).toBeHidden();
       await advanceTo(page, 'prophecy');
       await expect(skip(page)).toBeHidden();
+      const pauseBefore = await page.getByTestId('intro-pause').boundingBox();
 
       release();
       await expect(skip(page)).toBeVisible(TILES_LOADED);
+      // skip appears left of pause, so pause stays where it was
+      expect(await page.getByTestId('intro-pause').boundingBox()).toEqual(pauseBefore);
       await skip(page).click();
       await expect(intro(page)).toHaveAttribute('data-phase', 'exiting');
       await expect(intro(page)).toHaveAttribute('data-beat', 'landfall');
