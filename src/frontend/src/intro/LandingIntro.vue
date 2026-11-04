@@ -62,15 +62,34 @@ watch(
     if (phase === 'done') emit('done');
   },
 );
-onMounted(() => sequencer.start());
-onBeforeUnmount(() => sequencer.dispose());
+const pauseVisible = computed(() => state.value.phase === 'playing' || state.value.phase === 'exiting');
+function togglePause(): void {
+  if (state.value.paused) sequencer.resume();
+  else sequencer.pause();
+}
+// Space toggles pause; a focused button (or field) already handles space itself.
+function onKeydown(event: KeyboardEvent): void {
+  if (event.code !== 'Space' || event.repeat || !pauseVisible.value) return;
+  const target = event.target;
+  if (target instanceof Element && target.closest('button, input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+  event.preventDefault();
+  togglePause();
+}
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown);
+  sequencer.start();
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown);
+  sequencer.dispose();
+});
 </script>
 
 <template>
   <div
     v-if="state.phase !== 'done'"
     class="landing-intro"
-    :class="{ 'is-fading': fadesOut }"
+    :class="{ 'is-fading': fadesOut, 'is-paused': state.paused }"
     :style="rootStyle"
     role="region"
     :aria-label="introText(locale, 'region')"
@@ -89,7 +108,7 @@ onBeforeUnmount(() => sequencer.dispose());
     <Transition name="intro-fade">
       <!-- beats sharing a scene keep one mounted component; the beat switches on it -->
       <div :key="meta.scene ?? state.beat" class="beat-layer" :style="beatStyle">
-        <component :is="BEAT_COMPONENTS[state.beat]" :paused="state.phase === 'waitingForPlay'" />
+        <component :is="BEAT_COMPONENTS[state.beat]" :paused="state.phase === 'waitingForPlay' || state.paused" />
       </div>
     </Transition>
 
@@ -118,17 +137,32 @@ onBeforeUnmount(() => sequencer.dispose());
       </button>
     </Transition>
 
-    <Transition name="intro-fade">
-      <button
-        v-if="state.skipVisible"
-        type="button"
-        class="intro-btn skip"
-        data-testid="intro-skip"
-        @click="sequencer.skip()"
-      >
-        {{ introText(locale, 'skip') }}
-      </button>
-    </Transition>
+    <div class="actions">
+      <Transition name="intro-fade">
+        <button
+          v-if="pauseVisible"
+          type="button"
+          class="intro-btn pause"
+          :aria-pressed="state.paused"
+          data-testid="intro-pause"
+          @click="togglePause()"
+        >
+          {{ introText(locale, state.paused ? 'resume' : 'pause') }}
+        </button>
+      </Transition>
+
+      <Transition name="intro-fade">
+        <button
+          v-if="state.skipVisible"
+          type="button"
+          class="intro-btn skip"
+          data-testid="intro-skip"
+          @click="sequencer.skip()"
+        >
+          {{ introText(locale, 'skip') }}
+        </button>
+      </Transition>
+    </div>
 
     <Transition name="intro-fade">
       <div v-if="state.phase === 'ended'" class="end" data-testid="intro-end">
@@ -194,9 +228,20 @@ onBeforeUnmount(() => sequencer.dispose());
   font: inherit;
   cursor: pointer;
 }
-.skip {
-  right: 16px;
-  bottom: 16px;
+.landing-intro.is-paused.is-fading {
+  animation-play-state: paused;
+}
+.actions {
+  position: absolute;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+}
+.actions .intro-btn {
+  position: static;
+  pointer-events: auto;
 }
 .play {
   left: 50%;

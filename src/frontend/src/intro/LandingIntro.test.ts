@@ -106,4 +106,59 @@ describe('LandingIntro', () => {
     expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe(landfall);
     expect(w.find('.longship').exists()).toBe(true);
   });
+
+  describe('pause', () => {
+    const pauseBtn = (w: VueWrapper) => w.get('[data-testid="intro-pause"]');
+    const beatPaused = (w: VueWrapper) => w.get('.beat-layer > *').classes().includes('is-paused');
+
+    it('toggles on click: label, aria-pressed and the beat scene stop and resume, and nothing is emitted', async () => {
+      const w = await mountIntro();
+      expect(pauseBtn(w).text()).toBe('Pause');
+      expect(pauseBtn(w).attributes('aria-pressed')).toBe('false');
+      expect(beatPaused(w)).toBe(false);
+      await pauseBtn(w).trigger('click');
+      expect(pauseBtn(w).text()).toBe('Resume');
+      expect(pauseBtn(w).attributes('aria-pressed')).toBe('true');
+      expect(beatPaused(w)).toBe(true);
+      await vi.advanceTimersByTimeAsync(BEATS[0].durationMs * 3);
+      expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe(BEATS[0].id);
+      await pauseBtn(w).trigger('click');
+      expect(pauseBtn(w).text()).toBe('Pause');
+      expect(beatPaused(w)).toBe(false);
+      expect(w.emitted()).not.toHaveProperty('done');
+      expect(w.emitted()).not.toHaveProperty('back-to-docs');
+      expect(w.emitted()).not.toHaveProperty('enter-game');
+    });
+
+    it('is not shown while waiting for play', async () => {
+      const w = await mountIntro({ reducedMotion: true });
+      expect(w.find('[data-testid="intro-pause"]').exists()).toBe(false);
+    });
+
+    it('space toggles it, but not from a focused button or when held down', async () => {
+      const w = await mountIntro();
+      const press = (init: KeyboardEventInit, target: EventTarget = window) => {
+        const e = new KeyboardEvent('keydown', { code: 'Space', bubbles: true, cancelable: true, ...init });
+        target.dispatchEvent(e);
+        return e;
+      };
+      const e = press({});
+      await flushPromises();
+      expect(e.defaultPrevented).toBe(true);
+      expect(pauseBtn(w).attributes('aria-pressed')).toBe('true');
+      press({ repeat: true });
+      await flushPromises();
+      expect(pauseBtn(w).attributes('aria-pressed')).toBe('true');
+      press({}, pauseBtn(w).element);
+      await flushPromises();
+      expect(pauseBtn(w).attributes('aria-pressed')).toBe('true');
+      press({});
+      await flushPromises();
+      expect(pauseBtn(w).attributes('aria-pressed')).toBe('false');
+      const remove = vi.spyOn(window, 'removeEventListener');
+      w.unmount();
+      expect(remove).toHaveBeenCalledWith('keydown', expect.any(Function));
+      remove.mockRestore();
+    });
+  });
 });

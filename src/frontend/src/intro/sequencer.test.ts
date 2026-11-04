@@ -274,3 +274,120 @@ describe('IntroSequencer loop', () => {
     expect(seq.state.beat).toBe('prophecy');
   });
 });
+
+describe('IntroSequencer pause', () => {
+  it('keeps the remaining time of a beat: nothing moves while paused, the beat ends after the remainder', () => {
+    const { seq } = make('landing');
+    seq.start();
+    vi.advanceTimersByTime(400);
+    seq.pause();
+    expect(seq.state).toMatchObject({ paused: true, beat: 'fire' });
+    vi.advanceTimersByTime(60_000);
+    expect(seq.state).toMatchObject({ paused: true, beat: 'fire' });
+    seq.resume();
+    expect(seq.state.paused).toBe(false);
+    vi.advanceTimersByTime(599);
+    expect(seq.state.beat).toBe('fire');
+    vi.advanceTimersByTime(1);
+    expect(seq.state.beat).toBe('prophecy');
+  });
+
+  it('only pauses while playing or exiting', () => {
+    const { seq } = make('landing', true);
+    seq.start();
+    seq.pause();
+    expect(seq.state.paused).toBe(false);
+    seq.play();
+    seq.pause();
+    expect(seq.state.paused).toBe(true);
+    seq.pause();
+    seq.resume();
+    seq.resume();
+    expect(seq.state.paused).toBe(false);
+  });
+
+  it('keeps the exit beat running time too, and is cleared when the sequence is done', () => {
+    const { seq } = make('landing');
+    seq.start();
+    seq.notifyLoaded();
+    seq.skip();
+    vi.advanceTimersByTime(200);
+    seq.pause();
+    vi.advanceTimersByTime(10_000);
+    expect(seq.state).toMatchObject({ phase: 'exiting', paused: true });
+    seq.resume();
+    vi.advanceTimersByTime(300);
+    expect(seq.state).toMatchObject({ phase: 'done', paused: false });
+  });
+
+  it('keeps the remainder of the hold minimum and of its loop cycle', () => {
+    const { seq } = make('landing', false, 1500);
+    seq.start();
+    vi.advanceTimersByTime(4000 + 1000);
+    expect(seq.state).toMatchObject({ beat: 'hold', cycle: 1 });
+    seq.notifyLoaded();
+    seq.pause();
+    vi.advanceTimersByTime(10_000);
+    expect(seq.state).toMatchObject({ beat: 'hold', cycle: 1, phase: 'playing' });
+    seq.resume();
+    vi.advanceTimersByTime(199);
+    expect(seq.state).toMatchObject({ beat: 'hold', cycle: 1 });
+    vi.advanceTimersByTime(1);
+    expect(seq.state).toMatchObject({ beat: 'hold', cycle: 2 });
+    vi.advanceTimersByTime(300);
+    expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall' });
+  });
+
+  it('tiles that finish loading while paused wait: the exit starts on resume', () => {
+    const { seq } = make('landing', false, 1500);
+    seq.start();
+    vi.advanceTimersByTime(4000 + 1500);
+    expect(seq.state).toMatchObject({ beat: 'hold', phase: 'playing' });
+    seq.pause();
+    seq.notifyLoaded();
+    expect(seq.state).toMatchObject({ beat: 'hold', phase: 'playing', paused: true });
+    vi.advanceTimersByTime(5000);
+    expect(seq.state.beat).toBe('hold');
+    seq.resume();
+    expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall', paused: false });
+  });
+
+  it('a hold minimum that runs out after resume exits when already loaded', () => {
+    const { seq } = make('landing', false, 1500);
+    seq.start();
+    vi.advanceTimersByTime(4000 + 500);
+    seq.pause();
+    seq.notifyLoaded();
+    seq.resume();
+    vi.advanceTimersByTime(999);
+    expect(seq.state.phase).toBe('playing');
+    vi.advanceTimersByTime(1);
+    expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall' });
+  });
+
+  it('skip while paused plays the exit unpaused', () => {
+    const { seq } = make('landing');
+    seq.start();
+    seq.notifyLoaded();
+    seq.pause();
+    seq.skip();
+    expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall', paused: false });
+    vi.advanceTimersByTime(500);
+    expect(seq.state.phase).toBe('done');
+  });
+
+  it('works in loop mode too, across the restart', () => {
+    const { seq } = make('loop', false, 600);
+    seq.start();
+    vi.advanceTimersByTime(4600 + 100);
+    expect(seq.state.beat).toBe('landfall');
+    seq.pause();
+    vi.advanceTimersByTime(60_000);
+    expect(seq.state).toMatchObject({ beat: 'landfall', paused: true });
+    seq.resume();
+    vi.advanceTimersByTime(399);
+    expect(seq.state.beat).toBe('landfall');
+    vi.advanceTimersByTime(1);
+    expect(seq.state).toMatchObject({ beat: 'fire', phase: 'playing', paused: false });
+  });
+});

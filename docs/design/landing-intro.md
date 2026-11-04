@@ -23,6 +23,7 @@ then hands over to the real map.
 - Optional beats (3) are dropped when the tiles are already loaded before the beat starts.
 - Once the tiles are loaded and the sequence is still playing, a skip button shows. Pressing it starts the exit
   (fog lifts) right away.
+- A pause button shows while the intro plays. Paused, the scene and its timing stop; tiles that finish loading wait for play to continue.
 - Narration text (en + de) is written once the beat timings are settled.
 
 ## Reduced motion
