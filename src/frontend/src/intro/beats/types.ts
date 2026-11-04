@@ -6,7 +6,6 @@ export interface BeatMeta {
   id: BeatId;
   role: BeatRole;
   durationMs: number;
-  optional?: boolean;
   /** hold only: one loop period */
   loopMs?: number;
   /** Beats with the same scene share one mounted component: the host switches beats on it instead of crossfading. */

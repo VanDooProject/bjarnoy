@@ -120,7 +120,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await expect(page.locator('canvas')).toBeVisible();
     });
 
-    test('the optional ravens beat is dropped once the tiles are loaded, and the hold still plays before the exit', async ({ page }) => {
+    test('with the tiles loaded early, every beat still plays: the ravens and the hold before the exit', async ({ page }) => {
       test.setTimeout(MAP_SPEC_TIMEOUT_MS);
       await freezeClock(page);
       const log = await recordIntro(page);
@@ -132,7 +132,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await advanceTo(page, 'landfall');
       await advanceTo(page, null);
 
-      expect((await log()).beats).toEqual(['fire', 'prophecy', 'sending', 'hold', 'landfall']);
+      expect((await log()).beats).toEqual(['fire', 'prophecy', 'sending', 'ravens', 'hold', 'landfall']);
     });
 
     test('pause freezes the intro, resume lets it go on', async ({ page }) => {
