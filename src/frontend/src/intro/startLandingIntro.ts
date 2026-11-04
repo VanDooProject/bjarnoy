@@ -3,16 +3,18 @@ import { detectDeviceLocale } from '../i18n/locale';
 import { readPersistedSettlementId } from '../lib/persistedPlayer';
 import { motionPreferences } from '../lib/perf/motionPreferences';
 import LandingIntro from './LandingIntro.vue';
+import { BEATS } from './beats/registry';
 import { introSignal } from './introSignal';
+import { parseLoopAnchor } from './loopAnchor';
 
 /**
  * Whether the landing intro plays: only on the landing page, `#no-intro` never (specs and players opt out),
- * `#intro` always, otherwise only on a device that has not founded a settlement yet.
+ * `#intro` and `#loop` (see loopAnchor.ts) always, otherwise only on a device that has not founded a settlement yet.
  */
 export function shouldStartLandingIntro(pathname: string, hash: string, persistedSettlementId: string | null): boolean {
   if (pathname !== '/') return false;
   if (hash === '#no-intro') return false;
-  if (hash === '#intro') return true;
+  if (hash === '#intro' || parseLoopAnchor(hash, BEATS) !== null) return true;
   return persistedSettlementId === null;
 }
 
@@ -21,7 +23,8 @@ export function startLandingIntro(): void {
   const { pathname, hash, search } = window.location;
   const start = shouldStartLandingIntro(pathname, hash, readPersistedSettlementId());
   // The flags are for this entry only; the router must not see them.
-  if (hash === '#intro' || hash === '#no-intro') history.replaceState(history.state, '', pathname + search);
+  const loopBeats = parseLoopAnchor(hash, BEATS);
+  if (hash === '#intro' || hash === '#no-intro' || loopBeats !== null) history.replaceState(history.state, '', pathname + search);
   if (!start) return;
 
   const host = document.createElement('div');
@@ -30,7 +33,8 @@ export function startLandingIntro(): void {
   const app = createApp({
     render: () =>
       h(LandingIntro, {
-        mode: 'landing',
+        mode: loopBeats ? 'loop' : 'landing',
+        loopBeats: loopBeats ?? undefined,
         locale: detectDeviceLocale(),
         reducedMotion: !motionPreferences.hudEnabled,
         loaded: introSignal.tilesLoaded,

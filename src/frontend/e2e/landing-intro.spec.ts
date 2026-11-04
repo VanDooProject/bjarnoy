@@ -131,6 +131,41 @@ test.describe('landing intro', { tag: '@g3' }, () => {
 
       expect((await log()).beats).toEqual(['fire', 'prophecy', 'sending', 'landfall']);
     });
+
+    test('pause freezes the intro, resume lets it go on', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const release = await holdAtlases(page);
+      await page.goto('/#intro');
+      await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
+
+      const pause = page.getByTestId('intro-pause');
+      await pause.click();
+      await expect(pause).toHaveAttribute('aria-pressed', 'true');
+      await runFake(page, 20_000);
+      await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
+
+      await pause.click();
+      await expect(pause).toHaveAttribute('aria-pressed', 'false');
+      await advanceTo(page, 'prophecy');
+      release();
+    });
+
+    test('#loop(1,6) plays the first and the last beat again and again, and the intro never goes away', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const log = await recordIntro(page);
+      await page.goto('/#loop(1,6)');
+      await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
+
+      await advanceTo(page, 'landfall');
+      await advanceTo(page, 'fire');
+      await advanceTo(page, 'landfall');
+      await advanceTo(page, 'fire');
+
+      expect((await log()).beats).toEqual(['fire', 'landfall', 'fire', 'landfall', 'fire']);
+      await expect(intro(page)).toHaveAttribute('data-phase', 'playing');
+    });
   });
 
   test.describe('with reduced motion', () => {

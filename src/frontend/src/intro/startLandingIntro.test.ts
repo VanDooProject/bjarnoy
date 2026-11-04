@@ -14,6 +14,12 @@ describe('shouldStartLandingIntro', () => {
     expect(shouldStartLandingIntro('/', '#intro', 'settlement-1')).toBe(true);
   });
 
+  it('#loop and #loop(...) play it for a founded device too', () => {
+    expect(shouldStartLandingIntro('/', '#loop', 'settlement-1')).toBe(true);
+    expect(shouldStartLandingIntro('/', '#loop(1-2,5)', 'settlement-1')).toBe(true);
+    expect(shouldStartLandingIntro('/docs', '#loop', null)).toBe(false);
+  });
+
   it('#no-intro never plays it', () => {
     expect(shouldStartLandingIntro('/', '#no-intro', null)).toBe(false);
   });

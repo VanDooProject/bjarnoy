@@ -1,6 +1,8 @@
 {
   "region": "Intro",
   "skip": "Skip",
+  "pause": "Pause",
+  "resume": "Resume",
   "play": "Play the saga",
   "backToDocs": "Back to docs",
   "enterGame": "Enter the game",
