@@ -50,7 +50,7 @@ describe('IntroSequencer landing', () => {
     expect(seq.state.beat).toBe('sending');
   });
 
-  // Fast loads are the common case: the hold's narration must still get its reading time before landfall.
+  // Fast loads are the common case: the hold's voice clip must still play out before landfall.
   it('plays the hold for its minimum even when loaded before it, then exits', () => {
     const { seq } = make('landing', false, 1500);
     seq.start();

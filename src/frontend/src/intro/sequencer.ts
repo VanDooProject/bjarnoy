@@ -162,7 +162,7 @@ export class IntroSequencer {
   private enterIntro(from: number): void {
     // Every intro beat plays, even when the tiles are already loaded.
     const i = from;
-    // The hold always plays, at least for its narration's reading time, even when the tiles are already loaded.
+    // The hold always plays, at least as long as its voice clip, even when the tiles are already loaded.
     if (i >= this.intros.length) {
       this.enterHold();
       return;

@@ -3,6 +3,8 @@
   "skip": "Skip",
   "pause": "Pause",
   "resume": "Resume",
+  "soundOn": "Turn sound on",
+  "soundOff": "Turn sound off",
   "play": "Play the saga",
   "backToDocs": "Back to docs",
   "enterGame": "Enter the game",

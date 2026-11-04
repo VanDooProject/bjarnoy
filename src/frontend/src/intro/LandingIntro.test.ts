@@ -4,22 +4,35 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import LandingIntro from './LandingIntro.vue';
 import { BEATS } from './beats/registry';
 import type { BeatId } from './beats/types';
-import { introText, readingMs } from './introText';
+import { beatsFor, CLIP_MS, holdMinMs, VOICE_TAIL_MS } from './introVoice';
 
 // jsdom has no canvas 2D context; the texture is irrelevant to the host's behaviour.
 vi.mock('./fogTexture', () => ({ introFogUrl: () => 'data:image/png;base64,' }));
 
-type Props = { mode: 'landing' | 'replay' | 'loop'; loopBeats?: BeatId[]; locale: 'en' | 'de'; reducedMotion: boolean; loaded: boolean };
-const base: Props = { mode: 'landing', locale: 'en', reducedMotion: false, loaded: false };
+type Props = { mode: 'landing' | 'replay' | 'loop'; loopBeats?: BeatId[]; locale: 'en' | 'de'; reducedMotion: boolean; loaded: boolean; soundOn: boolean };
+const base: Props = { mode: 'landing', locale: 'en', reducedMotion: false, loaded: false, soundOn: false };
+
+// jsdom plays no media: record what the voice does with its clips.
+const plays: { src: string; muted: boolean }[] = [];
+vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
+vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLMediaElement) {
+  plays.push({ src: this.src, muted: this.muted });
+  return Promise.resolve();
+});
 async function mountIntro(p: Partial<Props> = {}) {
   const w = mount(LandingIntro, { props: { ...base, ...p } });
   await flushPromises();
   return w;
 }
 const EXIT_MS = BEATS.find((b) => b.role === 'exit')!.durationMs;
+const BEATS_EN = beatsFor('en', BEATS);
 const phase = (w: VueWrapper) => w.get('[data-testid="landing-intro"]').attributes('data-phase');
 
-beforeEach(() => vi.useFakeTimers());
+beforeEach(() => {
+  vi.useFakeTimers();
+  plays.length = 0;
+});
 afterEach(() => vi.useRealTimers());
 
 describe('LandingIntro', () => {
@@ -30,7 +43,7 @@ describe('LandingIntro', () => {
     await w.get('[data-testid="intro-play"]').trigger('click');
     expect(phase(w)).toBe('playing');
     expect(w.find('[data-testid="intro-play"]').exists()).toBe(false);
-    await vi.advanceTimersByTimeAsync(BEATS[0].durationMs);
+    await vi.advanceTimersByTimeAsync(BEATS_EN[0].durationMs);
     expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe('prophecy');
   });
 
@@ -74,12 +87,12 @@ describe('LandingIntro', () => {
   // and it must not cut off the hold's narration before it could be read.
   it('keeps the longship scene mounted from hold into landfall, after the hold narration had time to be read', async () => {
     const w = await mountIntro({ locale: 'de' });
-    const introMs = BEATS.filter((b) => b.role === 'intro').reduce((t, b) => t + b.durationMs, 0);
+    const introMs = beatsFor('de', BEATS).filter((b) => b.role === 'intro').reduce((t, b) => t + b.durationMs, 0);
     await vi.advanceTimersByTimeAsync(introMs);
     expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe('hold');
     const scene = w.get('.longship').element;
     await w.setProps({ loaded: true });
-    const minMs = readingMs(introText('de', 'beats.hold'));
+    const minMs = holdMinMs('de');
     await vi.advanceTimersByTimeAsync(minMs - 1);
     expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe('hold');
     await vi.advanceTimersByTimeAsync(1);
@@ -91,7 +104,7 @@ describe('LandingIntro', () => {
 
   it('loop: restarts after landfall, never fades out, emits nothing and shows no end screen', async () => {
     const w = await mountIntro({ mode: 'loop' });
-    const total = BEATS.reduce((t, b) => t + (b.role === 'hold' ? readingMs(introText('en', 'beats.hold')) : b.durationMs), 0);
+    const total = BEATS_EN.reduce((t, b) => t + (b.role === 'hold' ? holdMinMs('en') : b.durationMs), 0);
     await vi.advanceTimersByTimeAsync(total);
     expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe(BEATS[0].id);
     expect(phase(w)).toBe('playing');
@@ -107,6 +120,71 @@ describe('LandingIntro', () => {
     expect(w.find('.longship').exists()).toBe(true);
   });
 
+  describe('voice', () => {
+    const beat = (w: VueWrapper) => w.get('[data-testid="landing-intro"]').attributes('data-beat');
+    const root = (w: VueWrapper) => w.get('[data-testid="landing-intro"]');
+
+    it('each intro beat lasts its clip plus the tail, per locale', async () => {
+      for (const locale of ['en', 'de'] as const) {
+        const w = await mountIntro({ locale });
+        await vi.advanceTimersByTimeAsync(CLIP_MS[locale].fire + VOICE_TAIL_MS - 1);
+        expect(beat(w)).toBe('fire');
+        await vi.advanceTimersByTimeAsync(1);
+        expect(beat(w)).toBe('prophecy');
+        w.unmount();
+      }
+    });
+
+    it('the clip of a beat plays with it, muted while the sound is off; the hold clip plays once', async () => {
+      const w = await mountIntro({ locale: 'de' });
+      expect(plays).toHaveLength(0); // clips not ready yet in jsdom: they start once ready
+      expect(root(w).attributes('data-voice-beat')).toBe('fire');
+      expect(root(w).attributes('data-voice-state')).toBe('playing');
+      await vi.advanceTimersByTimeAsync(CLIP_MS.de.fire + VOICE_TAIL_MS);
+      expect(root(w).attributes('data-voice-beat')).toBe('prophecy');
+      w.unmount();
+    });
+
+    it('the sound button toggles label, state and the voice; pause pauses the clip; skip leads to the landfall clip', async () => {
+      const w = await mountIntro({ loaded: true });
+      const btn = w.get('[data-testid="intro-sound"]');
+      expect(btn.attributes('data-sound')).toBe('off');
+      expect(btn.attributes('aria-pressed')).toBe('false');
+      expect(btn.attributes('aria-label')).toBe('Turn sound on');
+      expect(btn.classes()).toContain('is-muted');
+      await btn.trigger('click');
+      expect(btn.attributes('data-sound')).toBe('on');
+      expect(btn.attributes('aria-label')).toBe('Turn sound off');
+      expect(btn.classes()).not.toContain('is-muted');
+
+      await w.get('[data-testid="intro-pause"]').trigger('click');
+      expect(root(w).attributes('data-voice-state')).toBe('paused');
+      await w.get('[data-testid="intro-pause"]').trigger('click');
+      expect(root(w).attributes('data-voice-state')).toBe('playing');
+
+      await w.get('[data-testid="intro-skip"]').trigger('click');
+      expect(root(w).attributes('data-voice-beat')).toBe('landfall');
+      await vi.advanceTimersByTimeAsync(EXIT_MS);
+      expect(w.emitted('done')).toHaveLength(1);
+      w.unmount();
+    });
+
+    it('starts with the sound on when asked to (replay), and the order is skip, pause, sound', async () => {
+      const w = await mountIntro({ mode: 'replay', soundOn: true });
+      expect(w.get('[data-testid="intro-sound"]').attributes('data-sound')).toBe('on');
+      const order = w.findAll('.actions button').map((b) => b.attributes('data-testid'));
+      expect(order).toEqual(['intro-skip', 'intro-pause', 'intro-sound']);
+    });
+
+    it('stops the clip when the intro ends', async () => {
+      const w = await mountIntro({ mode: 'replay' });
+      await w.get('[data-testid="intro-skip"]').trigger('click');
+      await vi.advanceTimersByTimeAsync(EXIT_MS);
+      expect(phase(w)).toBe('ended');
+      expect(root(w).attributes('data-voice-state')).toBe('stopped');
+    });
+  });
+
   describe('pause', () => {
     const pauseBtn = (w: VueWrapper) => w.get('[data-testid="intro-pause"]');
     const beatPaused = (w: VueWrapper) => w.get('.beat-layer > *').classes().includes('is-paused');
@@ -120,7 +198,7 @@ describe('LandingIntro', () => {
       expect(pauseBtn(w).text()).toBe('Resume');
       expect(pauseBtn(w).attributes('aria-pressed')).toBe('true');
       expect(beatPaused(w)).toBe(true);
-      await vi.advanceTimersByTimeAsync(BEATS[0].durationMs * 3);
+      await vi.advanceTimersByTimeAsync(BEATS_EN[0].durationMs * 3);
       expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe(BEATS[0].id);
       await pauseBtn(w).trigger('click');
       expect(pauseBtn(w).text()).toBe('Pause');

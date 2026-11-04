@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, provide, shallowRef, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch } from 'vue';
 import './introFog.css';
 import { BEATS, BEAT_COMPONENTS } from './beats/registry';
 import { introFogUrl } from './fogTexture';
-import { introText, readingMs, type IntroLocale } from './introText';
-import { INTRO_BEAT, type BeatId } from './beats/types';
+import { introText, type IntroLocale } from './introText';
+import { beatsFor, holdMinMs, IntroVoice, type VoiceState } from './introVoice';
+import { INTRO_BEAT, INTRO_BEAT_MS, type BeatId } from './beats/types';
 import { IntroSequencer, type IntroState } from './sequencer';
 
 // Mode, locale and reducedMotion are read once at mount: the sequencer is built
@@ -16,27 +17,70 @@ const props = defineProps<{
   locale: IntroLocale;
   reducedMotion: boolean;
   loaded: boolean;
+  /** initial sound state; the clips play either way, muted while it is off */
+  soundOn: boolean;
 }>();
 const emit = defineEmits<{ done: []; 'back-to-docs': []; 'enter-game': [] }>();
 
 const FADE_OUT_MS = 1000;
 const fogUrl = introFogUrl();
-const exitMeta = BEATS.find((b) => b.role === 'exit')!;
+// Each intro beat lasts as long as its voice clip in the player's language (plus a tail).
+const beats = beatsFor(props.locale, BEATS);
+const exitMeta = beats.find((b) => b.role === 'exit')!;
 
-const state = shallowRef<IntroState>({ phase: 'waitingForPlay', beat: BEATS[0].id, cycle: 0, skipVisible: false, paused: false });
+const state = shallowRef<IntroState>({ phase: 'waitingForPlay', beat: beats[0].id, cycle: 0, skipVisible: false, paused: false });
 const sequencer = new IntroSequencer({
-  beats: BEATS,
+  beats,
   mode: props.mode,
   loopBeats: props.loopBeats,
   reducedMotion: props.reducedMotion,
-  // the hold lasts at least as long as its narration takes to read
-  holdMinMs: readingMs(introText(props.locale, 'beats.hold')),
+  // the hold lasts at least as long as its voice clip (plus the tail)
+  holdMinMs: holdMinMs(props.locale),
   onChange: (s) => (state.value = s),
 });
 state.value = sequencer.state;
 
-const meta = computed(() => BEATS.find((b) => b.id === state.value.beat)!);
+const meta = computed(() => beats.find((b) => b.id === state.value.beat)!);
 provide(INTRO_BEAT, computed(() => state.value.beat));
+provide(INTRO_BEAT_MS, (id: BeatId) => beats.find((b) => b.id === id)!.durationMs);
+
+// The voice loads its clips now, before the map tiles; each clip starts with its beat (muted while the sound is off).
+const sound = ref(props.soundOn);
+const voiceBeat = ref<BeatId | null>(null);
+const voiceState = ref<VoiceState>('stopped');
+const voice = new IntroVoice({
+  locale: props.locale,
+  sound: props.soundOn,
+  // the browser only allows sound after a click
+  onSoundBlocked: () => (sound.value = false),
+  onStateChange: (beat, st) => {
+    voiceBeat.value = beat;
+    voiceState.value = st;
+  },
+});
+let voicedBeat: BeatId | null = null;
+watch(
+  () => [state.value.phase, state.value.beat, state.value.paused] as const,
+  ([phase, beat, paused]) => {
+    if (phase === 'done' || phase === 'ended') {
+      voice.stop();
+      voicedBeat = null;
+      return;
+    }
+    if (phase === 'waitingForPlay') return;
+    if (beat !== voicedBeat) {
+      voicedBeat = beat;
+      voice.enterBeat(beat);
+    }
+    if (paused) voice.pause();
+    else voice.resume();
+  },
+  { immediate: true },
+);
+function toggleSound(): void {
+  sound.value = !sound.value;
+  voice.setSound(sound.value);
+}
 // "Land!" cuts in at once instead of waiting for the narration's out-in crossfade
 const isCall = computed(() => state.value.beat === 'landfall');
 const beatStyle = computed(() => ({
@@ -82,6 +126,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
   sequencer.dispose();
+  voice.dispose();
 });
 </script>
 
@@ -96,6 +141,8 @@ onBeforeUnmount(() => {
     data-testid="landing-intro"
     :data-beat="state.beat"
     :data-phase="state.phase"
+    :data-voice-beat="voiceBeat ?? undefined"
+    :data-voice-state="voiceState"
   >
     <svg class="fog-defs" width="0" height="0" aria-hidden="true">
       <defs>
@@ -138,7 +185,7 @@ onBeforeUnmount(() => {
     </Transition>
 
     <div class="actions">
-      <!-- pause is the right-most button, so skip appearing to its left does not move it -->
+      <!-- sound is the right-most button, so skip and pause appearing to its left do not move it -->
       <Transition name="intro-fade">
         <button
           v-if="state.skipVisible"
@@ -161,6 +208,29 @@ onBeforeUnmount(() => {
           @click="togglePause()"
         >
           {{ introText(locale, state.paused ? 'resume' : 'pause') }}
+        </button>
+      </Transition>
+
+      <Transition name="intro-fade">
+        <button
+          v-if="pauseVisible"
+          type="button"
+          class="intro-btn sound"
+          :class="{ 'is-muted': !sound, 'is-still': reducedMotion }"
+          :aria-label="introText(locale, sound ? 'soundOff' : 'soundOn')"
+          :aria-pressed="sound"
+          data-testid="intro-sound"
+          :data-sound="sound ? 'on' : 'off'"
+          @click="toggleSound()"
+        >
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z" fill="currentColor" />
+            <template v-if="sound">
+              <path d="M15.5 9.5a3.5 3.5 0 0 1 0 5" />
+              <path d="M18 7a7 7 0 0 1 0 10" />
+            </template>
+            <path v-else d="M16 9.5l5 5M21 9.5l-5 5" />
+          </svg>
         </button>
       </Transition>
     </div>
@@ -244,6 +314,20 @@ onBeforeUnmount(() => {
   position: static;
   pointer-events: auto;
 }
+.intro-btn.sound {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  padding: 0;
+}
+/* the sound is off (the browser starts it so): the button draws the eye until it is turned on */
+.intro-btn.sound.is-muted {
+  border-color: #f4f1ea;
+  box-shadow: 0 0 0 2px rgba(244, 241, 234, 0.45);
+}
+.intro-btn.sound.is-muted:not(.is-still) {
+  animation: intro-sound-blink 1200ms ease-in-out infinite;
+}
 .play {
   left: 50%;
   top: 50%;
@@ -292,6 +376,17 @@ onBeforeUnmount(() => {
 }
 .intro-call-leave-to {
   opacity: 0;
+}
+@keyframes intro-sound-blink {
+  0%,
+  100% {
+    border-color: rgba(244, 241, 234, 0.6);
+    box-shadow: 0 0 0 0 rgba(244, 241, 234, 0);
+  }
+  50% {
+    border-color: #f4f1ea;
+    box-shadow: 0 0 10px 3px rgba(244, 241, 234, 0.6);
+  }
 }
 @keyframes intro-out {
   to {
