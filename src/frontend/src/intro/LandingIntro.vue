@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, provide, shallowRef, watch } from 'vue';
 import './introFog.css';
+import './introButton.css';
 import { BEATS, BEAT_COMPONENTS } from './beats/registry';
 import { introFogUrl } from './fogTexture';
 import { introText, readingMs, type IntroLocale } from './introText';
@@ -249,14 +250,6 @@ onBeforeUnmount(() => {
 }
 .intro-btn {
   position: absolute;
-  min-height: 44px;
-  padding: 0 20px;
-  border: 1px solid rgba(244, 241, 234, 0.6);
-  border-radius: 8px;
-  background: rgba(11, 17, 22, 0.55);
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
 }
 .landing-intro.is-paused.is-fading {
   animation-play-state: paused;

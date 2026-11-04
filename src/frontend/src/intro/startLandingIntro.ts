@@ -4,7 +4,7 @@ import { readPersistedSettlementId } from '../lib/persistedPlayer';
 import { motionPreferences } from '../lib/perf/motionPreferences';
 import LandingIntro from './LandingIntro.vue';
 import { BEATS } from './beats/registry';
-import { introSignal } from './introSignal';
+import { introMounted, introSignal } from './introSignal';
 import { parseLoopAnchor } from './loopAnchor';
 import type { BeatId } from './beats/types';
 
@@ -33,6 +33,7 @@ export function startLandingIntro(): void {
 
 /** Mounts the intro on its own root next to `#app` and unmounts it again on `done` or Esc. */
 export function mountLandingIntro(options: { loopBeats?: BeatId[] | null } = {}): void {
+  if (introMounted.value) return;
   const loopBeats = options.loopBeats ?? null;
   const host = document.createElement('div');
   host.id = 'landing-intro';
@@ -43,6 +44,7 @@ export function mountLandingIntro(options: { loopBeats?: BeatId[] | null } = {})
     void nextTick(() => {
       app.unmount();
       host.remove();
+      introMounted.value = false;
     });
   const app = createApp({
     render: () =>
@@ -57,4 +59,5 @@ export function mountLandingIntro(options: { loopBeats?: BeatId[] | null } = {})
       }),
   });
   app.mount(host);
+  introMounted.value = true;
 }

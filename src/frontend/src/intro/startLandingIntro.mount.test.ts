@@ -5,6 +5,7 @@ import { flushPromises } from '@vue/test-utils';
 vi.mock('./fogTexture', () => ({ introFogUrl: () => 'data:image/png;base64,' }));
 
 import { mountLandingIntro } from './startLandingIntro';
+import { introMounted } from './introSignal';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -25,5 +26,19 @@ describe('mountLandingIntro', () => {
     expect(root()).toBeNull();
     expect(document.getElementById('landing-intro')).toBeNull();
     expect(phases).not.toContain('exiting');
+  });
+
+  it('tracks the mounted state, ignores a second mount and mounts again after closing', async () => {
+    mountLandingIntro();
+    expect(introMounted.value).toBe(true);
+    mountLandingIntro();
+    expect(document.querySelectorAll('#landing-intro')).toHaveLength(1);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+    expect(introMounted.value).toBe(false);
+    mountLandingIntro();
+    expect(document.querySelectorAll('#landing-intro')).toHaveLength(1);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
   });
 });
