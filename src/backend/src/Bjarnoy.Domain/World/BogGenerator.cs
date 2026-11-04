@@ -948,7 +948,6 @@ internal sealed class BogGenerator
         }
 
         PlaceGuarantee(bp, widthTrial, traceRiver);
-        FillGaps(bp, widthTrial, traceRiver);
         FillHoles(bp);
     }
 
@@ -2132,94 +2131,7 @@ internal sealed class BogGenerator
         Func<HexCoord, int, BogPaths, HashSet<HexCoord>, List<HexCoord>?> traceRiver)
     {
         PlaceGuarantee(bp, widthTrial, traceRiver);
-        FillGaps(bp, widthTrial, traceRiver);
         FillHoles(bp);
-    }
-
-    /// <summary>
-    /// The gap fill, after the guarantee: while at least <see cref="WorldGenerationOptions.BogGapMinCandidates"/> landing candidates lie further
-    /// than <see cref="WorldGenerationOptions.BogGapReach"/> from every plain bog tile, one more bog is placed for them: through-river first,
-    /// else a spawn bog. At most <c>land / BogGapTilesPerRound</c> rounds.
-    /// </summary>
-    private void FillGaps(
-        BogPaths bp,
-        Func<BogPaths, List<RiverTile>> widthTrial,
-        Func<HexCoord, int, BogPaths, HashSet<HexCoord>, List<HexCoord>?> traceRiver)
-    {
-        if (!GuaranteeApplies)
-        {
-            return;
-        }
-
-        var rounds = _islandTiles.Count / _options.BogGapTilesPerRound;
-        for (var round = 0; round < rounds; round++)
-        {
-            var covered = PlainBogReach(_options.BogGapReach);
-            var uncovered = GuaranteeCandidates().Where(c => !covered.Contains(c)).ToList();
-            if (uncovered.Count < _options.BogGapMinCandidates)
-            {
-                return;
-            }
-
-            var coverage = CoverageMap(uncovered, _options.BogReach);
-            if (GuaranteeThrough(bp, uncovered, coverage, widthTrial))
-            {
-                if (_stats is not null)
-                {
-                    _stats.BogGapThrough++;
-                }
-            }
-            else if (GuaranteeSpawn(bp, uncovered, coverage, widthTrial, traceRiver))
-            {
-                if (_stats is not null)
-                {
-                    _stats.BogGapSpawns++;
-                }
-            }
-            else
-            {
-                return;
-            }
-        }
-    }
-
-    /// <summary>Every hex (land or sea) within <paramref name="reach"/> of a plain bog tile, by a multi-source breadth-first search.</summary>
-    private HashSet<HexCoord> PlainBogReach(int reach)
-    {
-        var seen = new HashSet<HexCoord>();
-        var frontier = new List<HexCoord>();
-        foreach (var t in _bog)
-        {
-            if (_lake.Contains(t) || _creek.ContainsKey(t) || _mouth.ContainsKey(t) || _spring.ContainsKey(t) || LakeMask(t, _lake) != 0)
-            {
-                continue;
-            }
-
-            if (seen.Add(t))
-            {
-                frontier.Add(t);
-            }
-        }
-
-        for (var depth = 0; depth < reach && frontier.Count > 0; depth++)
-        {
-            var next = new List<HexCoord>();
-            foreach (var c in frontier)
-            {
-                for (var d = 0; d < 6; d++)
-                {
-                    var n = Nb(c, d);
-                    if (seen.Add(n))
-                    {
-                        next.Add(n);
-                    }
-                }
-            }
-
-            frontier = next;
-        }
-
-        return seen;
     }
 
     private void PlaceGuarantee(

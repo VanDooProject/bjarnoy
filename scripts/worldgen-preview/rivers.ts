@@ -30,9 +30,6 @@ export interface BogIsland {
   /** Bogs the guarantee placed: on a relaxed through river, and spawn bogs (a spring feeds the lake). */
   guaranteeThrough: number;
   guaranteeSpawns: number;
-  /** Bogs the gap fill placed (through river / spawn). */
-  gapThrough: number;
-  gapSpawns: number;
   violations: BogRuleViolations;
 }
 
@@ -128,8 +125,6 @@ function computeRiversUncached(world: WorldSeed, window?: Window): RiverField {
         pocketSinks: islandStats.pocketSinks,
         guaranteeThrough: islandStats.guaranteeThrough,
         guaranteeSpawns: islandStats.guaranteeSpawns,
-        gapThrough: islandStats.gapThrough,
-        gapSpawns: islandStats.gapSpawns,
         violations,
       });
     }
