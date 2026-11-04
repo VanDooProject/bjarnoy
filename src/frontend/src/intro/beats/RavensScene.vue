@@ -7,7 +7,8 @@ import { useId } from 'vue';
  * rises as bubbles that break the surface. Then the scene pushes into the moon while the second raven
  * crosses it and flies out of the frame; the beat ends on even pale moonlight.
  * The story is timed on `--beat-duration` (set by the host from the voice clip: 8.8 s in English, 9.5 s in
- * German); the giant wakes on "under the sea" at about 60 %. Wing beats, kelp, glints, bubble rises,
+ * German); the eye flickers once on "not empty", the giant wakes on "under the sea" at about 60 %, and
+ * the push into the moon starts at 88 %, after the voice. Wing beats, kelp, glints, bubble rises,
  * rings and the first raven's flight run on fixed times, so a longer beat does not slow them down.
  */
 defineProps<{ paused?: boolean }>();
@@ -188,18 +189,18 @@ const url = (name: string) => `url(#${id(name)})`;
    (1017, 490: its place plus the sky's parallax offset) while that spot moves to the frame centre. */
 .b4 .b4-zoom { animation-name: b4-zoom; transform-origin: 1017px 490px; }
 @keyframes b4-zoom {
-  0%, 84% { transform: translate(0, 0) scale(1); animation-timing-function: cubic-bezier(.5, 0, .8, .5) }
-  97%, 100% { transform: translate(-217px, 310px) scale(9) }
+  0%, 88% { transform: translate(0, 0) scale(1); animation-timing-function: cubic-bezier(.5, 0, .8, .5) }
+  99%, 100% { transform: translate(-217px, 310px) scale(9) }
 }
 /* the craters fade while the moon fills the frame, so the beat ends on even pale moonlight */
 .b4 .b4-craterout { animation-name: b4-crater-out; }
-@keyframes b4-crater-out { 0%, 92% { opacity: 1 } 97%, 100% { opacity: 0 } }
+@keyframes b4-crater-out { 0%, 95% { opacity: 1 } 99%, 100% { opacity: 0 } }
 
 /* fog along the waterline: drifts one 512-unit tile, fades out before the zoom would blow it up */
 .b4 .b4-fog { animation-name: b4-fog; }
 @keyframes b4-fog { 0% { transform: translateX(0); opacity: .3 } 50% { opacity: .4 } 100% { transform: translateX(-512px); opacity: .28 } }
 .b4 .b4-fogout { animation-name: b4-fog-out; }
-@keyframes b4-fog-out { 0%, 84% { opacity: 1 } 91%, 100% { opacity: 0 } }
+@keyframes b4-fog-out { 0%, 87% { opacity: 1 } 93%, 100% { opacity: 0 } }
 
 /* moon glints on the surface */
 .b4 .b4-glint { animation: b4-glint 2000ms linear infinite alternate; }
@@ -235,11 +236,11 @@ const url = (name: string) => `url(#${id(name)})`;
 .b4 .b4-flap.b4-far { animation-delay: calc(var(--flap-off, 0s) - 67ms); }
 @keyframes b4-flap { from { transform: scaleY(1) } to { transform: scaleY(-.5) } }
 
-/* the giant: eye glow and runes breathe, the body heaves once */
+/* the giant: the eye opens and closes once on "not empty", then eye glow and runes breathe and the body heaves once */
 .b4 .b4-eye { animation-name: b4-eye; }
 .b4 .b4-rune { animation-name: b4-rune; }
 .b4 .b4-heave { animation-name: b4-heave; animation-timing-function: ease-in-out; }
-@keyframes b4-eye { 0%, 52% { opacity: 0 } 61% { opacity: .85 } 69% { opacity: .4 } 77% { opacity: 1 } 86% { opacity: .35 } 93% { opacity: .7 } 100% { opacity: .5 } }
+@keyframes b4-eye { 0%, 34% { opacity: 0 } 37% { opacity: .7 } 40% { opacity: .12 } 42%, 52% { opacity: 0 } 61% { opacity: .85 } 69% { opacity: .4 } 77% { opacity: 1 } 86% { opacity: .35 } 93% { opacity: .7 } 100% { opacity: .5 } }
 @keyframes b4-rune { 0%, 56% { opacity: 0 } 65% { opacity: .7 } 73% { opacity: .2 } 81% { opacity: .9 } 90% { opacity: .25 } 100% { opacity: .55 } }
 @keyframes b4-heave { 0%, 58% { transform: translateY(0) } 76% { transform: translateY(-14px) } 93% { transform: translateY(1px) } 100% { transform: translateY(0) } }
 
