@@ -106,9 +106,9 @@ export class IntroSequencer {
     let i = from;
     const dropOptional = this.opts.mode === 'landing' && this.loaded;
     while (i < this.intros.length && this.intros[i].optional && dropOptional) i++;
+    // The hold always plays, at least for its narration's reading time, even when the tiles are already loaded.
     if (i >= this.intros.length) {
-      if (this.opts.mode === 'landing' && this.loaded) this.enterExit();
-      else this.enterHold();
+      this.enterHold();
       return;
     }
     const meta = this.intros[i];
