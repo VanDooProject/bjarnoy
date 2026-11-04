@@ -191,11 +191,11 @@ describe('IntroVoice', () => {
     expect(byBeat('fire').plays).toHaveLength(2);
   });
 
-  it('skip: landfall stops the previous clip and plays its own; a dropped beat is never played', () => {
+  it('skip: landfall stops the previous clip and plays its own; a beat that is not entered is never played', () => {
     const v = make(true);
     for (const a of made) a.ready();
     v.enterBeat('sending');
-    v.enterBeat('hold'); // ravens dropped
+    v.enterBeat('hold'); // ravens never entered
     v.enterBeat('landfall');
     expect(byBeat('hold').paused).toBe(true);
     expect(byBeat('landfall').paused).toBe(false);

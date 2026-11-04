@@ -1,8 +1,7 @@
 <script lang="ts">
 import type { BeatMeta } from './types';
-// Optional: the sequencer drops it when the tiles are already loaded. It ends on pale moonlight,
-// which the host crossfades into the hold's pale fog.
-export const meta: BeatMeta = { id: 'ravens', role: 'intro', durationMs: 6000, optional: true };
+// It ends on pale moonlight, which the host crossfades into the hold's pale fog.
+export const meta: BeatMeta = { id: 'ravens', role: 'intro', durationMs: 6000 };
 </script>
 
 <script setup lang="ts">

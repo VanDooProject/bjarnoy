@@ -9,7 +9,7 @@ then hands over to the real map.
 2. **Prophecy** (intro): a prophecy says the homeland is lost.
 3. **The sending** (intro): the jarl stakes his whole line on his only son, a child, shown as a silhouette. You are
    sworn to guide him and build his realm.
-4. **Ravens** (intro, optional): the ravens return. Bjarnøy is not empty: the giants sleep under the sea. Only hinted.
+4. **Ravens** (intro): the ravens return. Bjarnøy is not empty: the giants sleep under the sea. Only hinted.
 5. **Longship in fog** (hold, loops): the ship rows through fog. Other settlements show faintly in the background
    (smoke, lights, sails). The ravens fly past now and then.
 6. **Landfall** (exit): "Land!" The intro's fog fades while the map's own fog lifts, and the landfall onboarding
@@ -23,7 +23,6 @@ then hands over to the real map.
 - The hold plays at least as long as its voice clip (plus 0.8 s). After that it ends as soon as the tiles are
   loaded. Skip ends it at once.
 - Landfall lasts 3.8 s; the lookout's call plays as it starts.
-- Optional beats (4) are dropped when the tiles are already loaded before the beat starts.
 - Once the tiles are loaded and the sequence is still playing, a skip button shows. Pressing it starts the exit
   (fog lifts) right away.
 - A pause button shows while the intro plays. Paused, the scene and its timing stop; tiles that finish loading wait for play to continue.
@@ -39,7 +38,7 @@ then hands over to the real map.
   (browsers only allow sound after a click); the button blinks while the sound is off. With reduced motion it
   shows the off state without blinking.
 - The replay starts with the sound on.
-- Pause pauses the clip, skip stops it. A dropped beat (4) never plays its clip.
+- Pause pauses the clip, skip stops it.
 
 ## Reduced motion
 
@@ -50,7 +49,7 @@ then hands over to the real map.
 ## Replay
 
 - The player docs page "The saga" tells the story and links to a replay of the intro.
-- The replay plays every beat (4 included), with no load gating: the hold runs for its minimum, and the skip button shows
+- The replay plays every beat, with no load gating: the hold runs for its minimum, and the skip button shows
   from the start.
 - The replay ends on a white screen with "Back to docs" and "Enter the game".
 

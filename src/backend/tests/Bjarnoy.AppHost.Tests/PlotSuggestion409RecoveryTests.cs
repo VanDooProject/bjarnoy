@@ -75,6 +75,10 @@ public class PlotSuggestion409RecoveryTests(AppHostFixture fixture)
         // A hard reload — not client-side navigation — since
         // `persistedSettlementId` (stores/player.ts) is only ever read once,
         // at module load, from `localStorage`.
+        // With no settlement id left, `/` counts as a first visit and would play the landing intro over the page
+        // (the clicks below would land on it); like every other spec here, opt out with `#no-intro`. The intro strips
+        // that hash on load, so put it back on the current entry right before reloading.
+        await page.EvaluateAsync("() => history.replaceState(history.state, '', location.pathname + location.search + '#no-intro')");
         await page.ReloadAsync(new PageReloadOptions { Timeout = 120_000 });
 
         var playerIdAfter = await page.EvaluateAsync<string>("() => localStorage.getItem('bjarnoy.playerId')");

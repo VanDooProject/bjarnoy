@@ -5,7 +5,7 @@ import type { BeatId, BeatMeta } from './beats/types';
 const beats: BeatMeta[] = [
   { id: 'fire', role: 'intro', durationMs: 1000 },
   { id: 'prophecy', role: 'intro', durationMs: 1000 },
-  { id: 'ravens', role: 'intro', durationMs: 1000, optional: true },
+  { id: 'ravens', role: 'intro', durationMs: 1000 },
   { id: 'sending', role: 'intro', durationMs: 1000 },
   { id: 'hold', role: 'hold', durationMs: 600, loopMs: 600 },
   { id: 'landfall', role: 'exit', durationMs: 500 },
@@ -39,25 +39,18 @@ describe('IntroSequencer landing', () => {
     expect(seq.state).toMatchObject({ beat: 'hold', cycle: 3 });
   });
 
-  it('drops the optional beat when already loaded', () => {
+  // A fast load must not cut the story short: the ravens play like every other beat.
+  it('plays the ravens even when the tiles are loaded from the start', () => {
     const { seq } = make('landing');
     seq.start();
     seq.notifyLoaded();
-    vi.advanceTimersByTime(2000);
-    expect(seq.state.beat).toBe('sending');
-  });
-
-  it('keeps the optional beat when loading finishes after it started', () => {
-    const { seq } = make('landing');
-    seq.start();
     vi.advanceTimersByTime(2000);
     expect(seq.state.beat).toBe('ravens');
-    seq.notifyLoaded();
     vi.advanceTimersByTime(1000);
     expect(seq.state.beat).toBe('sending');
   });
 
-  // Fast loads are the common case: the hold's narration must still get its reading time before landfall.
+  // Fast loads are the common case: the hold's voice clip must still play out before landfall.
   it('plays the hold for its minimum even when loaded before it, then exits', () => {
     const { seq } = make('landing', false, 1500);
     seq.start();
@@ -224,7 +217,7 @@ describe('IntroSequencer loop', () => {
     expect(seq.state.phase).not.toBe('done');
   });
 
-  it('keeps optional beats and ignores loading', () => {
+  it('plays every beat and ignores loading', () => {
     const { seq } = make('loop');
     seq.start();
     seq.notifyLoaded();

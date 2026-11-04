@@ -211,7 +211,7 @@ public class BogGuaranteeTests
 
         Assert.True(bogsOn > bogsOff, $"{bogsOn} islands with a bog with the guarantee, {bogsOff} without");
 
-        // The guarantee (with the gap fill that follows it) only adds: an island that already had a bog keeps every bog tile it had.
+        // The guarantee only adds: an island that already had a bog keeps every bog tile it had.
         foreach (var island in off.Islands.Where(i => !i.IsWasted && i.BogTiles.Count > 0))
         {
             var same = on.Islands.Single(i => i.Index == island.Index);

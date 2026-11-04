@@ -305,16 +305,6 @@ public sealed record WorldGenerationOptions
     /// <summary>A bog's moss reaches this many hexes beyond the site's disc radius.</summary>
     public int BogRegionReachExtra { get; init; } = 2;
 
-    /// <summary>
-    /// The gap fill after the guarantee: landing candidates further than this many hexes from every plain bog tile get one more bog per
-    /// round (through-river site, else spawn bog), up to <c>land / BogGapTilesPerRound</c> rounds, stopping below <see cref="BogGapMinCandidates"/>.
-    /// </summary>
-    public int BogGapReach { get; init; } = 18;
-
-    public int BogGapTilesPerRound { get; init; } = 1000;
-
-    public int BogGapMinCandidates { get; init; } = 40;
-
     public static WorldGenerationOptions ForSeed(int seed) => new() { Seed = seed };
 
     /// <summary>
@@ -385,9 +375,6 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfLessThan(BogSiteAttempts, 1);
         ArgumentOutOfRangeException.ThrowIfNegative(BogCoastSlack);
         ArgumentOutOfRangeException.ThrowIfNegative(BogRegionReachExtra);
-        ArgumentOutOfRangeException.ThrowIfLessThan(BogGapReach, 1);
-        ArgumentOutOfRangeException.ThrowIfLessThan(BogGapTilesPerRound, 1);
-        ArgumentOutOfRangeException.ThrowIfNegative(BogGapMinCandidates);
         ArgumentOutOfRangeException.ThrowIfLessThan(BogSiteRadius, 5);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(BogSiteRadius, 20);
         ArgumentOutOfRangeException.ThrowIfLessThan(BogLargeIslandTiles, 1);
