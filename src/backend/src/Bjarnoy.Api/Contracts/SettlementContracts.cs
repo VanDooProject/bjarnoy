@@ -6,6 +6,8 @@ using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
 
 namespace Bjarnoy.Api.Contracts;
 
@@ -33,9 +35,18 @@ public sealed record QueueBuildRequest(
 /// <param name="Q">The hex a shrine stands on, to slot this rune into.</param>
 public sealed record SlotRuneRequest(int Q, int R);
 
+/// <param name="Q">The building the order is placed from (the one whose window the player is in).</param>
+/// <param name="R">See <paramref name="Q"/>.</param>
+/// <param name="Split">"here" (default), "evenly" or "fastest" (premium).</param>
 public sealed record TrainUnitsRequest(
     [property: Required] string Unit,
-    [property: Range(1, int.MaxValue)] int Count);
+    [property: Range(1, int.MaxValue)] int Count,
+    int Q,
+    int R,
+    string Split = "here");
+
+/// <summary>The parts one train request was split into, one per building that got units.</summary>
+public sealed record TrainUnitsResponse(IReadOnlyList<TrainingOrderResponse> Orders);
 
 /// <param name="Stock">Whole units, as a player sees them.</param>
 /// <param name="RatePerHour">
@@ -82,7 +93,29 @@ public sealed record ResourceLine(double Wood, double Stone, double Food, double
 /// for anything else; the tile's own <c>orientation</c> from
 /// <c>GET /worlds/{id}/tiles</c> covers it.
 /// </param>
-public sealed record PlacedBuildingResponse(int Q, int R, string Type, int Level, string? Orientation = null);
+/// <param name="OutsideRealmSince">
+/// Game instant the building's hex stopped being inside the player's realm (<c>docs/design/economy.md</c> section 5,
+/// "Buildings outside the realm decay"): from then on it has no function and loses levels. Null while it is inside.
+/// </param>
+/// <param name="NextLevelLossInSeconds">
+/// Seconds until the building loses its next level while it stays outside the realm
+/// (<see cref="OutsideRealmSince"/> plus <see cref="BuildingCatalogue.DecayInterval(BuildingType, double)"/> at the world speed, which the server advances by
+/// every level lost). Null while the building is inside, while the world's clock is frozen, and in a rival's fog-gated view.
+/// </param>
+public sealed record PlacedBuildingResponse(
+    int Q, int R, string Type, int Level, string? Orientation = null,
+    DateTimeOffset? OutsideRealmSince = null, double? NextLevelLossInSeconds = null)
+{
+    /// <summary>The response for a stored building, with the realm decay fields filled from it.</summary>
+    /// <param name="gameNow">The settlement's game time now, for <see cref="NextLevelLossInSeconds"/>; null leaves that out.</param>
+    public static PlacedBuildingResponse From(
+        PlacedBuilding b, string? orientation = null, DateTimeOffset? gameNow = null, bool freezesTime = false,
+        double speedFactor = 1.0) => new(
+        b.Coord.Q, b.Coord.R, b.Type.ToWireName(), b.Level, orientation, b.OutsideRealmSince,
+        b.OutsideRealmSince is { } since && gameNow is { } now && !freezesTime
+            ? Math.Max(0, (since + BuildingCatalogue.DecayInterval(b.Type, speedFactor) - now).TotalSeconds)
+            : null);
+}
 
 /// <param name="State">
 /// <c>"building"</c> while under construction, <c>"waiting"</c> while queued
@@ -149,6 +182,10 @@ public sealed record RuneInstanceResponse(
 /// The batch's full duration (<c>PerUnitDuration * Count</c>), for the same
 /// absolute-progress reason as <see cref="BuildOrderResponse.TotalSeconds"/>.
 /// </param>
+/// <param name="Q">The building that trains this part (hex Q).</param>
+/// <param name="R">The building that trains this part (hex R).</param>
+/// <param name="StartsAtGameTime">When the first unit starts; later than now while the building trains earlier parts.</param>
+/// <param name="StartsInSeconds">Game time until the part starts: 0 once started, null while the world is frozen.</param>
 public sealed record TrainingOrderResponse(
     Guid Id,
     string Unit,
@@ -156,7 +193,25 @@ public sealed record TrainingOrderResponse(
     int CompletedCount,
     DateTimeOffset CompletesAtGameTime,
     double? CompletesInSeconds,
-    double TotalSeconds);
+    double TotalSeconds,
+    int Q,
+    int R,
+    DateTimeOffset StartsAtGameTime,
+    double? StartsInSeconds)
+{
+    public static TrainingOrderResponse From(TrainingOrder o, GameClock clock, DateTimeOffset gameNow) => new(
+        o.Id,
+        o.UnitType.ToWireName(),
+        o.Count,
+        o.CompletedCount(gameNow),
+        o.CompletesAt,
+        clock.FreezesTime ? null : o.RemainingAt(gameNow).TotalSeconds,
+        o.PerUnitDuration.TotalSeconds * o.Count,
+        o.BuildingCoord.Q,
+        o.BuildingCoord.R,
+        o.StartedAt,
+        clock.FreezesTime ? null : Math.Max(0, (o.StartedAt - gameNow).TotalSeconds));
+}
 
 /// <param name="MaxWaitingOrders">
 /// Zero means the waiting queue is premium-locked for this settlement — the
@@ -169,7 +224,16 @@ public sealed record TrainingOrderResponse(
 /// "read the cap off the response" trick as <see cref="MaxWaitingOrders"/>,
 /// this time for the stage 1d per-hex stacking tier once it exists.
 /// </param>
-public sealed record ConstructionResponse(int Slots, int SlotsUsed, int MaxWaitingOrders, int WaitingOrders, int MaxOrdersPerHex);
+/// <param name="TowerLimit">
+/// How many towers the realm may hold: the settlement's own limit, or for a linked realm the members' limits added up. The same for
+/// every member.
+/// </param>
+/// <param name="TowersHeld">
+/// The towers counting against <paramref name="TowerLimit"/> (connected standing plus queued, the whole linked realm's): the number a
+/// new tower is checked against.
+/// </param>
+public sealed record ConstructionResponse(
+    int Slots, int SlotsUsed, int MaxWaitingOrders, int WaitingOrders, int MaxOrdersPerHex, int TowerLimit, int TowersHeld);
 
 /// <summary>A Town Square feast in progress (economy.md section 6).</summary>
 /// <param name="EndsAtGameTime">When the feast ends and grants its renown.</param>
@@ -202,6 +266,20 @@ public sealed record FeastOfferResponse(
 /// <param name="Reward">Wood, stone and food paid on claim (clamped to storage).</param>
 public sealed record QuestResponse(string Id, bool Completed, bool Claimed, ResourceLine Reward);
 
+/// <param name="Name">The linked realm's name: the oldest member's (<c>docs/design/economy.md</c> section 5, "A linked group is one realm").</param>
+/// <param name="Resources">
+/// The linked realm's pooled stock, rates and capacity; <see cref="Construction"/> its slots added up. Both are the same for every member.
+/// </param>
+/// <param name="Buildings">
+/// The oldest member's read: every building of every member of the linked realm. A newer member's read: its own.
+/// </param>
+/// <param name="Queue">The oldest member's read: the members' build orders in one FIFO order. A newer member's read: its own.</param>
+/// <param name="Realm">
+/// The owner's read only: every settlement of the realm this settlement belongs to (itself first), each with its
+/// connected claim discs. Lists only the caller's own settlements, never another player's.
+/// </param>
+/// <param name="RealmId">The oldest member of the linked realm this settlement belongs to (itself when it is the oldest or stands alone). A client showing a newer member redirects to it.</param>
+/// <param name="LinkedMemberIds">Every settlement of the linked realm, this one included, oldest first. Just this settlement when it stands alone.</param>
 public sealed record SettlementResponse(
     Guid Id,
     Guid WorldId,
@@ -222,40 +300,63 @@ public sealed record SettlementResponse(
     FeastResponse? Feast,
     FeastOfferResponse? NextFeast,
     IReadOnlyList<QuestResponse> Quests,
-    WorldClockResponse World)
+    WorldClockResponse World,
+    IReadOnlyList<RealmMemberResponse> Realm,
+    Guid RealmId,
+    IReadOnlyList<Guid> LinkedMemberIds)
 {
-    public static SettlementResponse From(
-        SettlementEntity entity, GameClock clock, DateTimeOffset gameNow)
+    /// <summary>
+    /// The owner's read for a settlement that was just changed (<paramref name="entity"/>, tracked in <paramref name="db"/>): loads its
+    /// linked group settled to <paramref name="gameNow"/> and builds the response. Every owner-facing settlement response goes through
+    /// <see cref="Build"/>.
+    /// </summary>
+    public static async Task<SettlementResponse> ForOwnerAsync(
+        GameDbContext db, SettlementEntity entity, GameClock clock, DateTimeOffset gameNow, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(entity);
 
-        var domain = entity.ToDomain();
-        var centre = new HexCoord(entity.CentreQ, entity.CentreR);
+        var session = await new LinkedGroupLoader(db, TimeProvider.System).LoadAsync(entity.Id, gameNow, ct: ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"Settlement {entity.Id} no longer exists.");
+        return Build(session, entity.Id, clock, gameNow);
+    }
 
-        // Only a fishing hut needs its own orientation (see PlacedBuildingResponse),
-        // so the sampler this requires is built lazily rather than for every
-        // settlement read.
-        TerrainSampler? sampler = null;
-        string? OrientationFor(BuildingType type, HexCoord coord)
-        {
-            if (type != BuildingType.FishingHut || entity.World is null)
-            {
-                return null;
-            }
+    /// <summary>
+    /// The owner's read of <paramref name="id"/> from its already settled linked group: the realm's pooled stock and slots, the oldest
+    /// member's view of the whole group (its name, the union of the buildings, the merged queue), a newer member's own buildings and queue.
+    /// </summary>
+    public static SettlementResponse Build(
+        LinkedGroupSession session, Guid id, GameClock clock, DateTimeOffset gameNow)
+    {
+        ArgumentNullException.ThrowIfNull(session);
 
-            sampler ??= new TerrainSampler(entity.World.ToGenerationOptions());
-            return sampler.FishingHutOrientation(coord, centre).ToWireName();
-        }
+        var store = session.Store;
+        var entity = session.EntityOf(id);
+        var realmId = store.RealmIdOf(id);
+        var component = store.ComponentOf(id);
+        var domain = session.View(id);
 
-        var speedFactor = entity.World?.SpeedFactor ?? 1.0;
-        var isPremium = entity.Owner?.IsPremium ?? false;
-        var maxWaitingOrders = isPremium ? Settlement.MaxWaitingOrders : 0;
+        // Garrison, training, feast, quests and runes stay the member's own; the group view only widens buildings and queue.
+        var shown = realmId == id ? component : [id];
+        var members = shown.Select(m => (Entity: session.EntityOf(m), Domain: store.Outcome(m).Settlement)).ToList();
+
+        var speedFactor = session.SpeedFactor;
+        var maxWaitingOrders = session.Anchor.Owner?.IsPremium ?? false ? Settlement.MaxWaitingOrders : 0;
+
+        // Only a fishing hut needs its own orientation (see PlacedBuildingResponse), read off its own member's shore.
+        string? OrientationFor(SettlementEntity member, BuildingType type, HexCoord coord) =>
+            type == BuildingType.FishingHut
+                ? session.Sampler.FishingHutOrientation(coord, new HexCoord(member.CentreQ, member.CentreR)).ToWireName()
+                : null;
+
+        // Component order is oldest first and the sort is stable, so equal queue times keep the older member first.
+        var queue = members.SelectMany(m => m.Domain.Queue).OrderBy(o => o.QueuedAt).ToList();
 
         return new SettlementResponse(
             entity.Id,
             entity.WorldId,
             entity.IslandId,
-            entity.Name,
+            session.EntityOf(realmId).Name,
             entity.OwnerName,
             entity.CentreQ,
             entity.CentreR,
@@ -271,12 +372,13 @@ public sealed record SettlementResponse(
                 domain.ConstructionSlots,
                 domain.UsedSlots,
                 maxWaitingOrders,
-                domain.WaitingOrders.Count(),
-                Settlement.DefaultMaxOrdersPerHex),
-            [.. domain.Buildings.Select(b =>
-                new PlacedBuildingResponse(
-                    b.Coord.Q, b.Coord.R, b.Type.ToWireName(), b.Level, OrientationFor(b.Type, b.Coord)))],
-            [.. domain.Queue.Select(o => new BuildOrderResponse(
+                domain.GroupWaitingOrders.Count(),
+                Settlement.DefaultMaxOrdersPerHex,
+                domain.TowerLimit,
+                domain.TowersHeld(store.Realm)),
+            [.. members.SelectMany(m => m.Domain.Buildings.Select(b =>
+                PlacedBuildingResponse.From(b, OrientationFor(m.Entity, b.Type, b.Coord), gameNow, clock.FreezesTime, speedFactor)))],
+            [.. queue.Select(o => new BuildOrderResponse(
                 o.Id,
                 o.Coord.Q,
                 o.Coord.R,
@@ -292,14 +394,7 @@ public sealed record SettlementResponse(
                     ? o.BaseDuration.TotalSeconds * domain.BuildTimeFactor / speedFactor
                     : (o.CompletesAt!.Value - o.StartedAt!.Value).TotalSeconds))],
             [.. domain.Garrison.Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
-            [.. domain.TrainingQueue.Select(o => new TrainingOrderResponse(
-                o.Id,
-                o.UnitType.ToWireName(),
-                o.Count,
-                o.CompletedCount(gameNow),
-                o.CompletesAt,
-                clock.FreezesTime ? null : o.RemainingAt(gameNow).TotalSeconds,
-                o.PerUnitDuration.TotalSeconds * o.Count))],
+            [.. domain.TrainingQueue.Select(o => TrainingOrderResponse.From(o, clock, gameNow))],
             [.. domain.Runes.Select(r => new RuneInstanceResponse(
                 r.Id, r.Type.ToWireName(), r.Rarity.ToWireName(), r.SlottedAt?.Q, r.SlottedAt?.R))],
             domain.Feast is { } feast && !feast.IsComplete(gameNow) ? FeastResponse.From(feast, clock, gameNow) : null,
@@ -312,9 +407,21 @@ public sealed record SettlementResponse(
                 : null,
             [.. Bjarnoy.Domain.Settlers.Quests.All.Select(q => new QuestResponse(
                 q.Id, q.IsCompleted(domain), domain.HasClaimed(q), ResourceLine.From(q.Reward)))],
-            WorldClockResponse.From(clock, gameNow));
+            WorldClockResponse.From(clock, gameNow),
+            [.. store.Realm.SettlementIds
+                .OrderBy(other => other == entity.Id ? 0 : 1)
+                .Select(other => new RealmMemberResponse(
+                    other, [.. store.Realm.DiscsOf(other).Select(d => new ClaimDiscResponse(d.Centre.Q, d.Centre.R, d.Radius))]))],
+            realmId,
+            [.. component]);
     }
 }
+
+/// <summary>One connected claim disc: a longhouse's or a connected tower's centre and claim radius.</summary>
+public sealed record ClaimDiscResponse(int Q, int R, int Radius);
+
+/// <summary>One settlement of the owner's realm and the connected claim discs it contributes (longhouse disc first).</summary>
+public sealed record RealmMemberResponse(Guid SettlementId, IReadOnlyList<ClaimDiscResponse> Discs);
 
 /// <param name="Running">Whether game time is advancing.</param>
 /// <param name="AcceptsCommands">Whether new actions are being taken.</param>
@@ -392,8 +499,22 @@ public sealed record BuildingDefinitionResponse(
 }
 
 /// <summary>A settlement as it appears on the world map: enough to draw a marker.</summary>
+/// <param name="Name">The linked realm's name (the oldest member's), the same on every longhouse of the realm.</param>
+/// <param name="Mine">Whether the settlement belongs to the caller (never the owner or user id itself).</param>
+/// <param name="RealmId">The oldest member of the linked realm this settlement belongs to (itself when it stands alone).</param>
 public sealed record SettlementSummary(
-    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId);
+    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine, Guid RealmId)
+{
+    public static SettlementSummary From(SettlementEntity s, bool mine, RealmLabel realm)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+
+        return new SettlementSummary(
+            s.Id, realm.Name, s.OwnerName, s.CentreQ, s.CentreR,
+            s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
+            s.IslandId, mine, realm.RealmId);
+    }
+}
 
 /// <summary>
 /// <c>GET /settlements/{id}/view</c>'s fog-gated read: what a rival's
@@ -447,12 +568,15 @@ public sealed record UnitDefinitionResponse(
     double Speed,
     int CarryCapacity,
     int FoodCarryCapacity,
+    int CargoSlots,
+    int ShipSlots,
     double UpkeepPerHour,
     ResourceLine TrainingCost,
     double TrainingSeconds,
     int RequiredLonghouseLevel,
     string? RequiredUnitType,
-    string RequiredBuildingType)
+    string RequiredBuildingType,
+    IReadOnlyList<string> SiegeTargets)
 {
     public static UnitDefinitionResponse From(UnitDefinition definition)
     {
@@ -466,11 +590,21 @@ public sealed record UnitDefinitionResponse(
             definition.Speed,
             definition.CarryCapacity,
             definition.FoodCarryCapacity,
+            definition.CargoSlots,
+            definition.ShipSlots,
             definition.UpkeepPerHour,
             ResourceLine.From(definition.TrainingCost),
             definition.TrainingDuration.TotalSeconds,
             definition.RequiredLonghouseLevel,
             definition.RequiredUnitType?.ToWireName(),
-            definition.RequiredBuildingType.ToWireName());
+            definition.RequiredBuildingType.ToWireName(),
+            SiegeTargetNames(definition.SiegeTargets));
     }
+
+    /// <summary>The lowercase wire names of the kinds of building a siege engine can damage: <c>walls</c>, <c>towers</c>, <c>buildings</c>.</summary>
+    private static string[] SiegeTargetNames(Domain.Units.SiegeTargets targets) =>
+        Enum.GetValues<Domain.Units.SiegeTargets>()
+            .Where(t => t != Domain.Units.SiegeTargets.None && targets.HasFlag(t))
+            .Select(t => t.ToString().ToLowerInvariant())
+            .ToArray();
 }

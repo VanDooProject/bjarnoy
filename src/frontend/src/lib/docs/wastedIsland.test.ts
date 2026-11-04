@@ -22,8 +22,15 @@ import {
   giantClipBoxes,
   giantTopPartBox,
   GIANT_PART_NATIVE_CANVAS_H,
+  WASTED_ISLAND_WORLD,
+  buildIslandStreams,
+  rotateOrientation,
 } from './wastedIsland';
-import { coordKey, hexDistance } from '../hex/coords';
+import { wastedVariantAt } from '../map/worldGenerator';
+import type { Terrain } from '../map/types';
+import { coordKey, hexDistance, neighbors } from '../hex/coords';
+import { TILE_ORIENTATIONS } from '../map/types';
+import { giantCoverage } from '../map/giantTiles';
 import { GIANT_NEIGHBOR_PARTS, type GiantPart } from '../map/giantTiles';
 
 const ORIGIN = { q: 0, r: 0 };
@@ -419,3 +426,80 @@ function domGiantKindOf(
   );
   return anchorPlacement?.kind as 'utgard' | 'volcano' | undefined;
 }
+
+describe('the wasted looks', () => {
+  it('draw what the game would roll for the same hex (wastedVariantAt)', () => {
+    const land = islandHexRecordsForTests().filter((r) => r.kind === 'grass' || r.kind === 'forest' || r.kind === 'sand');
+    expect(land.length).toBeGreaterThan(10);
+    for (const r of land) {
+      expect(r.wastedVariantIndex, `${r.kind} (${r.q},${r.r})`).toBe(wastedVariantAt(r.q, r.r, WASTED_ISLAND_WORLD, r.kind as Terrain));
+    }
+  });
+
+  it('reach the renderer tiles unchanged at every rotation', () => {
+    for (const rotation of ROTATIONS) {
+      const byKey = new Map(buildIslandTiles(rotation, 4).map((t) => [coordKey(t), t]));
+      for (const r of islandHexRecordsForTests()) {
+        if (r.kind !== 'grass') continue;
+        const tile = byKey.get(coordKey(rotateAxial(r, rotation)))!;
+        expect(tile.variant).toBe(wastedVariantAt(r.q, r.r, WASTED_ISLAND_WORLD, 'grass'));
+      }
+    }
+  });
+});
+
+describe('the lava streams', () => {
+  const step = (c: { q: number; r: number }, o: (typeof TILE_ORIENTATIONS)[number]) => neighbors(c)[TILE_ORIENTATIONS.indexOf(o)]!;
+  const giantKeys = new Set([ORIGIN, { q: -3, r: 1 }].flatMap((c) => giantCoverage(c).map((g) => coordKey(g.coord))));
+
+  it('trace at least one stream from a mountain to the sea, none through a giant', () => {
+    const streams = buildIslandStreams(0, 4);
+    const hexes = new Map(islandHexRecordsForTests().map((r) => [coordKey(r), r]));
+    const springs = streams.filter((s) => s.shape === 'spring');
+    expect(springs.length).toBeGreaterThanOrEqual(1);
+    for (const s of springs) expect(hexes.get(coordKey(s))!.kind).toBe('mountain');
+    const mouths = streams.filter((s) => s.shape === 'mouth');
+    expect(mouths.length).toBeGreaterThanOrEqual(1);
+    for (const m of mouths) expect(neighbors(m).some((n) => !hexes.has(coordKey(n)) ? !giantKeys.has(coordKey(n)) : ['coast', 'sea'].includes(hexes.get(coordKey(n))!.kind))).toBe(true);
+    for (const s of streams) expect(giantKeys.has(coordKey(s)), `(${s.q},${s.r})`).toBe(false);
+  });
+
+  it('show only once the land has turned (stage 2)', () => {
+    expect(buildIslandStreams(0, 0)).toHaveLength(0);
+    expect(buildIslandStreams(3, 1)).toHaveLength(0);
+    expect(buildIslandStreams(0, 2).length).toBeGreaterThan(0);
+    expect(buildIslandStreams(0, 2)).toHaveLength(buildIslandStreams(0, 4).length);
+  });
+
+  for (const rotation of ROTATIONS) {
+    it(`keep every flow pointing at the next tile of its stream at rotation ${rotation}`, () => {
+      const streams = buildIslandStreams(rotation, 4);
+      expect(streams.length).toBe(buildIslandStreams(0, 4).length);
+      const byKey = new Map(streams.map((s) => [coordKey(s), s]));
+      for (const s of streams) {
+        if (s.outDirection) {
+          const next = byKey.get(coordKey(step(s, s.outDirection)));
+          expect(next, `(${s.q},${s.r}) out ${s.outDirection}`).toBeDefined();
+          // The next tile takes the flow in from this one.
+          expect(step(next!, next!.inDirections.find((d) => coordKey(step(next!, d)) === coordKey(s))!)).toEqual({ q: s.q, r: s.r });
+        } else {
+          expect(s.shape).toBe('mouth');
+        }
+        for (const d of s.inDirections) expect(byKey.get(coordKey(step(s, d)))).toBeDefined();
+        // Every stream hex sits on a hex of the rotated island (the renderer draws it over that ground).
+        const tile = buildIslandTiles(rotation, 4).find((t) => coordKey(t) === coordKey(s))!;
+        expect(tile.terrain).not.toBe('sea');
+      }
+    });
+  }
+
+  it('rotates a direction like the island rotates a neighbour', () => {
+    expect(rotateOrientation('E', 0)).toBe('E');
+    for (const o of TILE_ORIENTATIONS) {
+      for (const steps of ROTATIONS) {
+        const from = step(ORIGIN, o);
+        expect(coordKey(step(ORIGIN, rotateOrientation(o, steps)))).toBe(coordKey(rotateAxial(from, steps)));
+      }
+    }
+  });
+});

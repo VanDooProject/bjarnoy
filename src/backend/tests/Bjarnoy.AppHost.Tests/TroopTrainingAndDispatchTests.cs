@@ -136,10 +136,38 @@ public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
         // was opened from (see MapView.vue's own comment on that). This
         // still opens the Longhouse's ring below, same as before — it just
         // needs a Barracks to exist somewhere first.
+        //
+        // The Barracks hex and the later Move destination are picked as a
+        // pair: a land army leaves from the building that trained it
+        // (Army.TrainingSite), so the dispatch route starts at the Barracks,
+        // not at the centre. The world seed is random per run, so a
+        // destination chosen relative to the centre could sit behind a
+        // mountain or a wide river from the Barracks and get refused as
+        // UnreachableLeg. A destination one step from the Barracks, with
+        // neither hex a river nor a mountain, is a route that cannot cross
+        // anything.
         var layout = await adminHttpClient.GetFromJsonAsync<AdminSettlementLayoutResponse>(
             $"/api/v1/admin/settlements/{settlementId}/layout", cancellationToken);
-        var barracksHex = layout!.Hexes.First(
-            h => !h.IsCentre && h.Building is null && (h.Terrain == "grass" || h.Terrain == "sand"));
+        var islands = await apiClient.GetFromJsonAsync<IslandResponse[]>(
+            $"/api/v1/worlds/{world.Id}/islands", cancellationToken);
+        var riverHexes = islands!.SelectMany(i => i.RiverTiles).Select(t => (t.Q, t.R)).ToHashSet();
+        var plainLand = layout!.Hexes
+            .Where(h => !h.IsCentre
+                && h.Terrain is "grass" or "sand" or "forest" or "bog"
+                && !riverHexes.Contains((h.Q, h.R)))
+            .ToList();
+        // Nearest to the centre first: the camera centres on the Longhouse,
+        // so the destination stays well inside the canvas for the click below.
+        var centreHex = layout.Hexes.Single(h => h.IsCentre);
+        var dispatchPair = plainLand
+            .Where(h => h.Building is null && h.Terrain is "grass" or "sand")
+            .OrderBy(h => HexDistance(h.Q, h.R, centreHex.Q, centreHex.R))
+            .SelectMany(barracks => plainLand
+                .Where(h => h != barracks && HexDistance(h.Q, h.R, barracks.Q, barracks.R) == 1)
+                .Select(destination => (Barracks: barracks, Destination: destination)))
+            .FirstOrDefault();
+        Assert.True(dispatchPair != default, "No free building hex with a plain land neighbour to dispatch to.");
+        var (barracksHex, destinationHex) = dispatchPair;
         var placeBarracksResponse = await adminHttpClient.PutAsJsonAsync(
             $"/api/v1/admin/settlements/{settlementId}/buildings/{barracksHex.Q}/{barracksHex.R}",
             new PlaceBuildingRequest("barracks", 1),
@@ -159,19 +187,15 @@ public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
         var canvas = page.Locator("canvas");
         await canvas.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 60_000 });
 
-        // --- Open the Longhouse's ring menu and queue one Thrall ---
-        // SettlementView centres the camera on the settlement itself here
-        // (no screenBiasX, unlike the landing page's preview) — the
-        // Longhouse sits at dead centre of the canvas.
+        // --- Open the Barracks' ring menu (training belongs to the building) and queue one Thrall ---
         var trainUnitsBubble = page.GetByRole(AriaRole.Button, new() { Name = "Train units" });
         var ringOpened = false;
         for (var attempt = 0; attempt < 10 && !ringOpened; attempt++)
         {
-            var box = await canvas.BoundingBoxAsync()
-                ?? throw new InvalidOperationException("Settlement canvas never rendered a bounding box.");
-            await page.Mouse.ClickAsync(box.X + box.Width / 2, box.Y + box.Height / 2);
             try
             {
+                // The renderer is null until the canvas has mounted it, which throws a PlaywrightException: retry.
+                await LiveFrontendTestHelpers.ClickHexAsync(page, barracksHex.Q, barracksHex.R);
                 await Assertions.Expect(trainUnitsBubble).ToBeVisibleAsync(new() { Timeout = 2_000 });
                 ringOpened = true;
             }
@@ -180,7 +204,7 @@ public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
                 await page.WaitForTimeoutAsync(1_000);
             }
         }
-        Assert.True(ringOpened, "Clicking the Longhouse never opened its ring menu with a 'Train units' action.");
+        Assert.True(ringOpened, "Clicking the Barracks never opened its ring menu with a 'Train units' action.");
 
         await trainUnitsBubble.ClickAsync();
 
@@ -195,8 +219,8 @@ public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
         // straight to closeTrainModal — the modal disappearing is itself proof
         // world.trainUnitsLive's POST succeeded (an ApiError would instead
         // leave the modal open with errorText set).
-        await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Train units" }))
-            .Not.ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await Assertions.Expect(page.Locator(".unit-row"))
+            .ToHaveCountAsync(0, new() { Timeout = 15_000 });
 
         // --- Verify the queued order, via the UI ... ---
         var trainingQueuePanel = page.Locator(".training-queue-panel");
@@ -243,26 +267,13 @@ public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
         await Assertions.Expect(unitPickerRow).ToBeVisibleAsync(new() { Timeout = 10_000 });
         await unitPickerRow.Locator("input.qty").FillAsync("1");
 
-        // Click one exact, known-good hex instead of guessing pixel offsets:
-        // the world seed is random per run, so blind offsets can land on sea,
-        // a lake, a mountain or a wide river, which the server refuses
-        // (Army.PlanDispatch) and which leaves the draft open forever. The
-        // pick is adjacent to the centre (a one-step route that cannot cross
-        // anything) and on land that is neither a river hex nor a mountain.
-        var islands = await apiClient.GetFromJsonAsync<IslandResponse[]>(
-            $"/api/v1/worlds/{world.Id}/islands", cancellationToken);
-        var riverHexes = islands!.SelectMany(i => i.RiverTiles).Select(t => (t.Q, t.R)).ToHashSet();
-        var centreHex = layout.Hexes.Single(h => h.IsCentre);
-        var destinationHex = layout.Hexes.FirstOrDefault(h =>
-            !h.IsCentre
-            && Math.Max(Math.Abs(h.Q - centreHex.Q), Math.Max(Math.Abs(h.R - centreHex.R), Math.Abs(h.Q + h.R - centreHex.Q - centreHex.R))) == 1
-            && h.Terrain is "grass" or "sand" or "forest" or "bog"
-            && !riverHexes.Contains((h.Q, h.R)));
-        Assert.True(destinationHex is not null, "No plain land hex next to the Longhouse to dispatch to.");
-
+        // Click the exact hex picked next to the Barracks (see above) instead
+        // of guessing pixel offsets: blind offsets can land on sea, a lake, a
+        // mountain or a wide river, which the server refuses
+        // (Army.PlanDispatch) and which leaves the draft open forever.
         var clickPoint = await page.EvaluateAsync<double[]?>(
             "([q, r]) => { const p = window.__settlementRenderer?.()?.hexCenterScreen({ q, r }); return p ? [p.x, p.y] : null; }",
-            new[] { destinationHex!.Q, destinationHex.R });
+            new[] { destinationHex.Q, destinationHex.R });
         Assert.True(clickPoint is not null, "The settlement renderer hook was not available to resolve the click point.");
         var canvasBox = await canvas.BoundingBoxAsync()
             ?? throw new InvalidOperationException("Settlement canvas never rendered a bounding box.");
@@ -305,4 +316,7 @@ public class TroopTrainingAndDispatchTests(AppHostFixture fixture)
 
         Assert.Empty(consoleErrors);
     }
+
+    private static int HexDistance(int q1, int r1, int q2, int r2) =>
+        Math.Max(Math.Abs(q1 - q2), Math.Max(Math.Abs(r1 - r2), Math.Abs(q1 + r1 - q2 - r2)));
 }

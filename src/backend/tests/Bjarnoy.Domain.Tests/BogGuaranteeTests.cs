@@ -68,9 +68,10 @@ public class BogGuaranteeTests
 
         // The rest are narrow or mountainous islands: a lake needs a shore ring of grass or forest more than two hexes from the coast
         // (rule R7) and, now that every water feature is padded with bog (R12), no mountain beside its shore or creeks, which islands
-        // of a few hundred tiles rarely have. Nothing of 500 tiles or more may be left without.
-        var large = missing.Where(m => int.Parse(m[(m.IndexOf('(') + 1)..m.IndexOf(' ', m.IndexOf('('))]) >= 500).ToList();
-        Assert.True(large.Count == 0, "islands of 500+ tiles without a bog: " + string.Join("; ", large));
+        // of a few hundred tiles rarely have, and on a thin island the mountain chain can take the rest (owner decision: very small
+        // islands may stay without a bog). Nothing of 1500 tiles or more may be left without.
+        var large = missing.Where(m => int.Parse(m[(m.IndexOf('(') + 1)..m.IndexOf(' ', m.IndexOf('('))]) >= 1500).ToList();
+        Assert.True(large.Count == 0, "islands of 1500+ tiles without a bog: " + string.Join("; ", large));
         Assert.True(missing.Count <= qualifying / 4, $"{missing.Count} of {qualifying} islands with a landing candidate have no bog: " + string.Join("; ", missing));
     }
 
@@ -210,11 +211,13 @@ public class BogGuaranteeTests
 
         Assert.True(bogsOn > bogsOff, $"{bogsOn} islands with a bog with the guarantee, {bogsOff} without");
 
-        // The guarantee only adds: an island that already had a bog keeps exactly the bog it had.
+        // The guarantee (with the gap fill that follows it) only adds: an island that already had a bog keeps every bog tile it had.
         foreach (var island in off.Islands.Where(i => !i.IsWasted && i.BogTiles.Count > 0))
         {
             var same = on.Islands.Single(i => i.Index == island.Index);
-            Assert.Equal(island.BogTiles.Count, same.BogTiles.Count);
+            var kept = same.BogTiles.ToDictionary(t => t.Coord, t => t.Kind);
+            var lost = island.BogTiles.Where(t => !kept.TryGetValue(t.Coord, out var kind) || kind != t.Kind).Select(t => t.Coord).ToList();
+            Assert.True(lost.Count == 0, $"island {island.Index} lost or changed {lost.Count} bog tiles, e.g. {lost.FirstOrDefault()}");
         }
     }
 }

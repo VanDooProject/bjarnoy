@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import deCatalogue from './locales/de/catalogue.json';
 import buildingCatalogue from '../data/building-catalogue.json';
 import unitCatalogue from '../data/unit-catalogue.json';
 import {
   buildingName,
   guildBoardTopicName,
-  guildFeeTierName,
   guildRoleName,
   leaderboardCategoryName,
   leaderboardScopeName,
@@ -29,6 +29,13 @@ describe('catalogueNames', () => {
     for (const type of buildingTypes) {
       expect(buildingName(type), type).not.toBe(type);
     }
+  });
+
+  it('names the Siege Workshop and the battering ram', () => {
+    expect(buildingName('siegeworkshop')).toBe('Siege workshop');
+    expect(unitName('ram')).toBe('Battering ram');
+    expect(deCatalogue.buildings.siegeworkshop).toBe('Belagerungswerkstatt');
+    expect(deCatalogue.units.ram).toBe('Rammbock');
   });
 
   it('has a translated name for every real unit type', () => {
@@ -64,12 +71,9 @@ describe('catalogueNames', () => {
     }
   });
 
-  it('has a translated name for every guild role, fee tier and board topic', () => {
+  it('has a translated name for every guild role and board topic', () => {
     for (const role of ['leader', 'officer', 'member']) {
       expect(guildRoleName(role), role).not.toBe(role);
-    }
-    for (const tier of ['copper', 'silver', 'gold']) {
-      expect(guildFeeTierName(tier), tier).not.toBe(tier);
     }
     for (const kind of ['discussion', 'announcement', 'report']) {
       expect(guildBoardTopicName(kind), kind).not.toBe(kind);

@@ -70,15 +70,54 @@ test.describe('ring menu labels on a phone', { tag: '@g2' }, () => {
   // A long single word used to split mid-word inside its bubble
   // ("Watchtowe" / "r"), and the hub's "GRASSLAND"/"LONGHOUSE" ran past the
   // round edge; the label size now shrinks to fit the longest word.
-  test('no bubble splits a word across lines or runs past its own edge', async ({ page }) => {
+  // `wideFont`: a face much wider than the UI font (as a fallback or a late-loading web font can be) - the labels are
+  // sized against what the browser really lays out, so no word may split whichever font it is.
+  // `de`: the long compound names ("Waffenschmiede") wrap at hyphenation points of their own language at a readable
+  // size instead of shrinking to a few pixels.
+  const LANGUAGES = [
+    { lang: 'en', chip: 'Open Build', build: 'Build', category: 'Defence', longWord: 'Watchtower' },
+    { lang: 'de', chip: 'Öffne Bauen', build: 'Bauen', category: 'Militär', longWord: 'Waffenschmiede' },
+  ];
+  for (const { lang, chip, build, category, longWord } of LANGUAGES)
+  for (const wideFont of [false, true]) {
+  test(`no bubble splits a word across lines or runs past its own edge (${lang})${wideFont ? ' (with a much wider font)' : ''}`, async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    if (lang !== 'en') await page.addInitScript((value) => window.localStorage.setItem('bjarnoy.locale', value), lang);
+    if (wideFont) {
+      await page.addInitScript(() => {
+        document.addEventListener('DOMContentLoaded', () => {
+          const style = document.createElement('style');
+          style.textContent = '.ring-backdrop * { font-family: "DejaVu Sans Mono", monospace !important; }';
+          document.head.appendChild(style);
+        });
+      });
+    }
     const settlement = await SettlementPage.openLanding(page);
     await settlement.claimLandfall();
-    await openRingOnGuidedHex(settlement);
-    // the long single word the bug was found on must be on screen, or the check below proves nothing
-    await expect(settlement.ring.bubbles.filter({ hasText: 'Watchtower' })).toBeVisible();
+    await openRingOnGuidedHex(settlement, chip);
+    // The onboarding ring is the map's: Build, then a category, then its buildings. Check every layer.
+    const broken: string[] = [];
+    broken.push(...(await brokenLabels(page)));
+    await settlement.ring.action(build).first().tap();
+    await settlement.ring.settledLayer();
+    broken.push(...(await brokenLabels(page)));
+    await settlement.ring.category(category).first().tap();
+    await settlement.ring.settledLayer();
+    // a long single word must be on screen, or the check proves nothing
+    await expect(settlement.ring.child(longWord)).toBeVisible();
+    broken.push(...(await brokenLabels(page)));
+    expect(broken).toEqual([]);
+  });
+  }
+});
 
-    const broken = await page.locator('.ring-hub, .ring-bubble').evaluateAll((els) =>
+/**
+ * Problems with the labels of every bubble on screen: a word that breaks anywhere but at a hyphen (a soft hyphen the
+ * hyphenation put in, or one the name has, "Raseneisenerz-Grube"), or text that runs past its own bubble. A break at
+ * a hyphen is the intended way for a long word to wrap; each piece between two hyphens must stay on one line.
+ */
+async function brokenLabels(page: Page): Promise<string[]> {
+    return page.locator('.ring-hub, .ring-bubble').evaluateAll((els) =>
       els.flatMap((el) => {
         const box = el.getBoundingClientRect();
         const problems: string[] = [];
@@ -86,22 +125,48 @@ test.describe('ring menu labels on a phone', { tag: '@g2' }, () => {
         for (let node = walker.nextNode(); node; node = walker.nextNode()) {
           const text = node.textContent ?? '';
           for (const match of text.matchAll(/\S+/g)) {
+            const start = match.index!;
+            const word = match[0].replaceAll('\u00AD', '');
+            // the pieces between hyphens (a real hyphen stays on its piece, a soft one is left out): a line may
+            // only break between two of them
+            let from = 0;
+            const pieces: [number, number][] = [];
+            for (let i = 0; i < match[0].length; i++) {
+              if (match[0][i] === '\u00AD') {
+                pieces.push([from, i]);
+                from = i + 1;
+              } else if (match[0][i] === '-') {
+                pieces.push([from, i + 1]);
+                from = i + 1;
+              }
+            }
+            pieces.push([from, match[0].length]);
+            for (const [pieceStart, pieceEnd] of pieces) {
+              // the line of each letter on its own (the first letter after a soft-hyphen break also reports a rect at
+              // the end of the line before, where the hyphen is drawn: the letter itself is the last rect)
+              const tops = new Set<number>();
+              for (let i = pieceStart; i < pieceEnd; i++) {
+                if (match[0][i] === '-') continue;
+                const range = document.createRange();
+                range.setStart(node, start + i);
+                range.setEnd(node, start + i + 1);
+                const rect = [...range.getClientRects()].at(-1);
+                if (rect) tops.add(Math.round(rect.top / 4));
+              }
+              if (tops.size > 1) problems.push(`"${word}" split across lines inside "${match[0].slice(pieceStart, pieceEnd)}"`);
+            }
             const range = document.createRange();
-            range.setStart(node, match.index!);
-            range.setEnd(node, match.index! + match[0].length);
-            const rects = [...range.getClientRects()];
-            if (rects.length > 1) problems.push(`"${match[0]}" split across lines`);
-            for (const r of rects) {
-              if (r.left < box.left - 1 || r.right > box.right + 1) problems.push(`"${match[0]}" runs past its bubble`);
+            range.setStart(node, start);
+            range.setEnd(node, start + match[0].length);
+            for (const r of range.getClientRects()) {
+              if (r.left < box.left - 1 || r.right > box.right + 1) problems.push(`"${word}" runs past its bubble`);
             }
           }
         }
         return problems;
       }),
     );
-    expect(broken).toEqual([]);
-  });
-});
+}
 
 test.describe('touch wording on a phone', { tag: '@g2' }, () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
@@ -109,7 +174,6 @@ test.describe('touch wording on a phone', { tag: '@g2' }, () => {
   // The onboarding told a phone player to "Click this plot" / "Click an
   // empty hex"; a touch screen gets "Tap" instead.
   test('the onboarding says tap, not click, on a touch screen', async ({ page }) => {
-    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
     await expect(settlement.guidancePointer).toContainText('Tap this plot');
     await expect(settlement.checklist).toContainText('Tap your plot to place it');
@@ -305,8 +369,8 @@ test.describe('landscape rail HUD', { tag: '@g2' }, () => {
     await expectFullyInViewport(page, settlement.continueButton, 'enter-settlement button');
   });
 
-  // The landfall banner was a full-width card and the slim checklist floated
-  // 44px above the bottom edge (room for a footer that is hidden here).
+  // The landfall banner was a full-width card and the slim checklist docks
+  // near the bottom edge.
   test('the landfall banner is a compact pill and the checklist sits in the corner', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
@@ -332,8 +396,20 @@ test.describe('landscape rail HUD', { tag: '@g2' }, () => {
       await expect(banner).toBeVisible();
       const chip = settlement.guidancePointer.locator('.chip');
       await expect(chip).toBeVisible();
+      // One in-page read of both boxes per poll attempt. The map's render loop keeps the
+      // main thread busy, so every Playwright box lookup waits for a frame; four of them in
+      // one poll callback (chip, banner, banner, banner) could outlast the whole 5s poll
+      // timeout on a loaded runner without ever returning a value, even though the chip
+      // was already well clear of the banner. A single evaluate is one round trip and
+      // measures both from the same frame.
       await expect
-        .poll(async () => (await box(chip, 'chip')).y - ((await box(banner, 'banner')).y + (await box(banner, 'banner')).height))
+        .poll(() =>
+          page.evaluate(() => {
+            const chipBox = document.querySelector('[data-testid="guidance-pointer"] .chip')!.getBoundingClientRect();
+            const bannerBox = document.querySelector('[data-testid="onboarding-banner"]')!.getBoundingClientRect();
+            return chipBox.top - bannerBox.bottom;
+          }),
+        )
         .toBeGreaterThanOrEqual(0);
     });
   });
@@ -369,9 +445,8 @@ test.describe('demo tag on a phone', { tag: '@g2' }, () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
 
   // Demo mode is local development only; on a phone it is a small "Demo"
-  // tag in the bottom-left corner, not a pill competing with the HUD rows —
-  // and it must not sit on the landing page's own footer line either.
-  test('is a short tag in the bottom-left corner, clear of the landing footer', async ({ page }) => {
+  // tag in the bottom-left corner, not a pill competing with the HUD rows.
+  test('is a short tag in the bottom-left corner', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.openLanding(page);
     const tag = page.locator('.demo-badge');
@@ -379,8 +454,5 @@ test.describe('demo tag on a phone', { tag: '@g2' }, () => {
     const box = (await tag.boundingBox())!;
     expect(box.x).toBeLessThan(8);
     expect(box.y + box.height).toBeGreaterThan(PHONE.height - 8);
-    const footerText = page.locator('.footer > span').first();
-    const footerBox = (await footerText.boundingBox())!;
-    expect(box.y, 'demo tag overlaps the footer text').toBeGreaterThanOrEqual(footerBox.y + footerBox.height);
   });
 });

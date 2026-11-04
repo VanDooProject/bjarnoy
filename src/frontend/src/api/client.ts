@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '../config';
 import { clientFingerprint } from '../lib/clientFingerprint';
+import { checkBuildHeader } from '../lib/appUpdate';
 import type {
   AcceptTradeOfferRequest,
   ActivitySummaryResponse,
@@ -37,7 +38,7 @@ import type {
   GuestArmySummary,
   GuildBoardTopicResponse,
   GuildMemberResponse,
-  GuildPerksResponse,
+  GuildCapsResponse,
   GuildResponse,
   GuildTreatyResponse,
   IslandResponse,
@@ -78,7 +79,6 @@ import type {
   RetargetFoundingRequest,
   SendMessageRequest,
   SetBuildingLevelRequest,
-  SetGuildFeeTierRequest,
   SetGuildMemberRoleRequest,
   SetUserPremiumRequest,
   SetUserStatusRequest,
@@ -87,14 +87,15 @@ import type {
   SettlementViewResponse,
   SlotRuneRequest,
   SettlementSummary,
+  WorldWall,
   ShipmentResponse,
   SimulatorRequest,
   SimulatorResponse,
   TradeAcceptResponse,
   TradeOfferResponse,
   TradeReportResponse,
-  TrainingOrderResponse,
   TrainUnitsRequest,
+  TrainUnitsResponse,
   UnitDefinitionResponse,
   SaveApiKeyRequest,
   UpdateAdminUserRequest,
@@ -134,7 +135,9 @@ export class ApiError extends Error {
  */
 async function fetchOrThrow(method: string, path: string, init: RequestInit): Promise<Response> {
   try {
-    return await fetch(`${API_BASE_URL}${path}`, init);
+    const response = await fetch(`${API_BASE_URL}${path}`, init);
+    checkBuildHeader(response.headers.get('X-App-Build'));
+    return response;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const wrapped = new ApiError(0, undefined, method, path);
@@ -291,6 +294,10 @@ export const api = {
   // anonymous caller with no realm at all) just gets an empty list back.
   listSettlements: (worldId: string, ownerId?: string) =>
     request<SettlementSummary[]>(`/worlds/${worldId}/settlements`, { headers: ownerHeader(ownerId) }),
+  // Every standing palisade/gate hex of the rival settlements the caller has explored (their own walls excluded) — same fog rule
+  // and X-Owner-Id handling as `listSettlements`, so the live client can draw, hit-test and route around other players' walls.
+  listWalls: (worldId: string, ownerId?: string) =>
+    request<WorldWall[]>(`/worlds/${worldId}/walls`, { headers: ownerHeader(ownerId) }),
   // `ownerId` becomes the `X-Owner-Id` header the backend's ownership
   // filter reads for an anonymous (unclaimed) settlement — see
   // SettlementOwnershipEndpointFilter. Harmless to omit or send stale for a
@@ -377,7 +384,7 @@ export const api = {
       headers: ownerHeader(ownerId),
     }),
   trainUnits: (settlementId: string, body: TrainUnitsRequest, ownerId?: string) =>
-    request<TrainingOrderResponse>(`/settlements/${settlementId}/units`, {
+    request<TrainUnitsResponse>(`/settlements/${settlementId}/units`, {
       method: 'POST',
       body: JSON.stringify(body),
       headers: ownerHeader(ownerId),
@@ -417,7 +424,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  // Settlement expansion (issue #55): settler-crew founding convoys ride the
+  // Settlement expansion (issue #55): settler founding convoys ride the
   // same generic army-dispatch endpoints the troop system's backend exposes
   // (dispatchArmy/getSettlementArmies/getArmy/recallArmy below); only the
   // founding-specific retarget and renown reads are new here.
@@ -652,6 +659,15 @@ export const api = {
     request<ArmyResponse>(`/armies/${armyId}`, { headers: ownerHeader(ownerId) }),
   recallArmy: (armyId: string, ownerId?: string) =>
     request<ArmyResponse>(`/armies/${armyId}/recall`, { method: 'POST', headers: ownerHeader(ownerId) }),
+  // The host's recall of a guest army stationed at its settlement. Mirrors
+  // ArmyEndpoints.cs's `/settlements/{id}/guests/{armyId}/send-home`: 204, no
+  // body — the guest's full ArmyResponse is owner-only. `ownerId` proves the
+  // *host* settlement's ownership.
+  sendGuestHome: (settlementId: string, armyId: string, ownerId?: string) =>
+    request<void>(`/settlements/${settlementId}/guests/${armyId}/send-home`, {
+      method: 'POST',
+      headers: ownerHeader(ownerId),
+    }),
   // Issue #156 phase 1: sends an army already out in the field onward to a
   // new hex — 'move on' if it's standing, 'append goal' if it's still
   // travelling. Mirrors ArmyEndpoints.cs's `/armies/{id}/orders`.
@@ -712,7 +728,7 @@ export const api = {
   createGuild: (worldId: string, body: CreateGuildRequest) =>
     request<GuildResponse>(`/worlds/${worldId}/guilds`, { method: 'POST', body: JSON.stringify(body) }),
   getGuild: (guildId: string) => request<GuildResponse>(`/guilds/${guildId}`),
-  getGuildPerks: (guildId: string) => request<GuildPerksResponse>(`/guilds/${guildId}/perks`),
+  getGuildCaps: (guildId: string) => request<GuildCapsResponse>(`/guilds/${guildId}/caps`),
   joinGuild: (guildId: string) =>
     request<GuildMemberResponse>(`/guilds/${guildId}/join`, { method: 'POST' }),
   leaveGuild: (guildId: string) => request<unknown>(`/guilds/${guildId}/leave`, { method: 'POST' }),
@@ -723,10 +739,6 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
-  setGuildFeeTier: (guildId: string, body: SetGuildFeeTierRequest) =>
-    request<GuildResponse>(`/guilds/${guildId}/fee-tier`, { method: 'PUT', body: JSON.stringify(body) }),
-  payGuildFee: (guildId: string) =>
-    request<GuildMemberResponse>(`/guilds/${guildId}/fee-payment`, { method: 'POST' }),
   listGuildTopics: (guildId: string) => request<GuildBoardTopicResponse[]>(`/guilds/${guildId}/board/topics`),
   createGuildTopic: (guildId: string, body: CreateGuildTopicRequest) =>
     request<GuildBoardTopicResponse>(`/guilds/${guildId}/board/topics`, {

@@ -22,6 +22,7 @@ import type {
   WorldMovementResponse,
 } from '../api/types';
 import { DEMO_MODE } from '../config';
+import type { TrainingSplit } from '../lib/units/trainingEconomy';
 import { useAuthStore } from './auth';
 import { usePlayerStore } from './player';
 import type { AxialCoord } from '../lib/hex/coords';
@@ -37,6 +38,7 @@ import { evaluateDemoQuests, questBit } from '../lib/quests';
 import { useConnectionStatusStore } from './connectionStatus';
 import { fogPerfStats } from '../lib/map/fog/fogPerfStats';
 import { buildDemoFogMask, demoMaskBounds } from '../lib/map/fog/demoFogMask';
+import { FogCoverage, type FogCoverageLookup } from '../lib/map/fog/fogCoverage';
 import {
   FOG_CHUNK_SIZE,
   FogChunkCache,
@@ -52,8 +54,10 @@ import {
 import { decodeChunkPng, pixelsToBitmap } from '../lib/map/fog/fogChunkCodec';
 import { toTexel, type MaskBounds } from '../lib/map/fog/fogMaskLayout';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
-import type { CartShipment, ResourceKind, Resources, Tile, TileOrientation } from '../lib/map/types';
+import type { PalisadePiece } from '../lib/map/palisadeTiles';
+import type { CartShipment, ResourceKind, Resources, Settlement, Tile, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
+import { isPendingOrder, makePendingOrder } from '../lib/hud/pendingBuild';
 
 // How often live mode re-polls a settlement to pick up build-queue
 // completions and rate changes it didn't cause itself (see
@@ -153,6 +157,8 @@ export const useWorldStore = defineStore('world', {
   state: () => ({
     model: markRaw(buildDemoModel()),
     selectedSettlementId: null as string | null,
+    /** Live mode: every member of the selected settlement's linked realm (oldest first, incl. itself); empty until the first read. */
+    linkedMemberIds: [] as string[],
     /** Demo mode only: bitmask of the onboarding quests already claimed (the server keeps this in live mode). */
     demoClaimedQuests: 0,
     // Set by WorldMapView (`setWorldMapActive`) so `refreshWorldSettlements`
@@ -190,9 +196,11 @@ export const useWorldStore = defineStore('world', {
       // and BuildingModal's affordability/queue-state copy.
       // `maxWaitingOrders === 0` doubles as "not premium" — no separate
       // premium flag needed. Demo mode reports a fixed 2-slot, no-waiting
+      // `towerLimit`/`towersHeld` are the server's realm numbers for the tower
+      // lock; demo mode reads its local model instead.
       // settlement (longhouse level 1, non-premium) since the local
       // WorldModel places buildings instantly and has no queue at all.
-      construction: { slots: 2, slotsUsed: 0, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1 },
+      construction: { slots: 2, slotsUsed: 0, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 },
       settlementName: '',
       level: 1,
       // Issue #16: population, wired the same way as the other resources —
@@ -233,10 +241,15 @@ export const useWorldStore = defineStore('world', {
       // WorldModel places buildings instantly and has no queue to show.
       queue: [] as BuildOrderResponse[],
       queueFetchedAt: 0,
+      // X8: the last *confirmed* spend (a build that was accepted / placed),
+      // as an explicit event for the resource bar's tick-down — never derived
+      // from watching `resources`, which also moves with every production
+      // tick. `cost` holds only the resources that really dropped.
+      lastSpend: null as { cost: Partial<Resources>; at: number } | null,
       // Trade system (PR 2): live-mode-only snapshots of the trade board,
       // this settlement's own offers, and its shipments — see
-      // `refreshTradeAsync`. Always empty in demo mode; TradePanel.vue reads
-      // `WorldModel`'s own demo trade offers directly there instead (there
+      // `refreshTradeAsync`. Always empty in demo mode; the trade UI (removed until
+      // trade is redesigned) read `WorldModel`'s own demo trade offers directly there instead (there
       // are no shipments to show in demo mode at all — see
       // `WorldModel.acceptTradeOffer`'s doc comment).
       tradeBoard: [] as TradeOfferResponse[],
@@ -317,7 +330,8 @@ export const useWorldStore = defineStore('world', {
       // Issue #40 phase 5: the coordinate of a building within the target
       // settlement a Catapult-carrying Attack would prefer to hit — a
       // *preference*, not a guarantee (see `buildAttackDispatchRequest`'s own
-      // comment). `null` means "no preference", the same as never having
+      // comment). A fleet Attack must always name one (a building on the
+      // target's shore): the fleet sails to it and only it can be damaged. `null` means "no preference", the same as never having
       // picked one. Always `null` outside `mission: 'attack'` — a Move/Support
       // dispatch has no battle to apply it in (see `setDispatchMission`).
       targetBuildingCoord: { q: number; r: number } | null;
@@ -389,6 +403,8 @@ export const useWorldStore = defineStore('world', {
     // `ImageBitmap` is a plain, non-reactive resource, not app state Vue
     // needs to proxy.
     fogMaskBitmap: null as ImageBitmap | null,
+    /** The same mask as per-hex lookups (explored / opaque), set and cleared together with `fogMaskBitmap`. */
+    fogCoverage: null as FogCoverageLookup | null,
     // Error of the most recent failed fog mask fetch, cleared by the next
     // success. Lets a view tell "mask still loading" from "mask can't be
     // loaded" while no bitmap exists yet (the map would otherwise stay fogged
@@ -438,6 +454,14 @@ export const useWorldStore = defineStore('world', {
       riverCrossingCost: 8.0,
     } as WorldMovementResponse,
   }),
+  getters: {
+    /**
+     * Whether `settlementId` is the selected settlement or a member of its linked realm. The one ownership check for "is this
+     * ground mine": the ring/build menu works on every hex of the linked realm and those hexes never count as rival ground.
+     */
+    isRealmSettlement: (state) => (settlementId: string | null | undefined): boolean =>
+      !!settlementId && (settlementId === state.selectedSettlementId || state.linkedMemberIds.includes(settlementId)),
+  },
   actions: {
     /**
      * Demo mode's `window.__demoWorld().revealWastedIslands()` debug hook
@@ -579,6 +603,29 @@ export const useWorldStore = defineStore('world', {
             coord: { q: camp.q, r: camp.r },
             level: camp.level,
             orientation: camp.orientation as TileOrientation,
+          })),
+        ),
+      );
+      // Server-generated Utgard walls and Jötun watchtowers of the wasted islands (see `IslandResponse.utgardWalls`): tagged for
+      // rendering and the client's route preview; the server is authoritative on pieces, rotations and levels.
+      this.model.setUtgardWalls(
+        this.islands.flatMap((island) =>
+          (island.utgardWalls ?? []).map((wall) => ({
+            coord: { q: wall.q, r: wall.r },
+            ring: wall.ring,
+            piece: wall.piece as PalisadePiece,
+            dir: wall.orientation as TileOrientation,
+            isGate: wall.isGate,
+            level: wall.level,
+          })),
+        ),
+      );
+      this.model.setJotunTowers(
+        this.islands.flatMap((island) =>
+          (island.jotunTowers ?? []).map((tower) => ({
+            coord: { q: tower.q, r: tower.r },
+            orientation: tower.orientation as TileOrientation,
+            level: 2,
           })),
         ),
       );
@@ -742,10 +789,12 @@ export const useWorldStore = defineStore('world', {
           resources: { ...response.resources.stock },
           rates: { ...response.resources.ratePerHour },
           foundedAt: Date.now(),
+          realmId: response.realmId,
           islandId: response.islandId,
         });
         this.model.claimTerritory(settlement.id);
         this.selectedSettlementId = settlement.id;
+        this.linkedMemberIds = [...response.linkedMemberIds];
         this.plotSuggestion = null;
         this.syncHud();
         void this.refreshTradeAsync();
@@ -766,7 +815,10 @@ export const useWorldStore = defineStore('world', {
         // it was this call, above, that set it) so that recovery's own
         // `restoreLiveSettlement` doesn't see it already matching and skip
         // the resync it exists to do.
-        if (this.selectedSettlementId === response.id) this.selectedSettlementId = null;
+        if (this.selectedSettlementId === response.id) {
+          this.selectedSettlementId = null;
+          this.linkedMemberIds = [];
+        }
         console.error('Founding succeeded server-side but local reconciliation failed', err);
         throw new AlreadyFoundedError(response.id);
       }
@@ -789,6 +841,53 @@ export const useWorldStore = defineStore('world', {
       await this.refreshLiveSettlement();
     },
     /**
+     * W3: `queueBuildLive` with an optimistic client-only order. A pending
+     * entry goes into `hud.queue` first, so the construction dial on `at`
+     * shows "…" at once, then the request runs and a refresh replaces the
+     * pending entry with the real order (or, on a refusal, the entry is
+     * removed again and the error rethrown; the stock never changed). A poll
+     * refresh in the meantime keeps the pending entry (see
+     * `refreshLiveSettlement`). With `cost`, a confirmed build also records
+     * `hud.lastSpend` for the resource bar's tick-down, limited to the
+     * resources whose stock really dropped (a reserved, waiting order does
+     * not spend yet).
+     */
+    async queueBuildOptimistic(building: string, at: AxialCoord, cost?: Partial<Resources>) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      const pending = makePendingOrder(building, at);
+      const before = { ...this.hud.resources };
+      this.hud.queue = [...this.hud.queue, pending];
+      try {
+        await api.queueBuild(
+          this.selectedSettlementId, { building, q: at.q, r: at.r }, this.ownerId ?? undefined,
+        );
+      } catch (err) {
+        this.hud.queue = this.hud.queue.filter((o) => o.id !== pending.id);
+        throw err;
+      }
+      // Confirmed. The refresh swaps the pending entry for the real order; a
+      // failed refresh must not read as a refused build, the poll catches up.
+      try {
+        await this.refreshLiveSettlement();
+      } catch (err) {
+        console.warn('Refresh after a confirmed build failed; the next poll will catch up', err);
+      } finally {
+        this.hud.queue = this.hud.queue.filter((o) => o.id !== pending.id);
+      }
+      if (cost) {
+        const spent: Partial<Resources> = {};
+        for (const kind of Object.keys(cost) as (keyof Resources)[]) {
+          if ((cost[kind] ?? 0) > 0 && this.hud.resources[kind] < before[kind]) spent[kind] = cost[kind];
+        }
+        this.recordSpend(spent);
+      }
+    },
+    /** X8: announces a confirmed spend; the resource bar counts the affected pills down. Empty costs are ignored. */
+    recordSpend(cost: Partial<Resources>) {
+      if (!Object.values(cost).some((v) => (v ?? 0) > 0)) return;
+      this.hud.lastSpend = { cost: { ...cost }, at: Date.now() };
+    },
+    /**
      * Live mode: cancels a still-queued build order, refunding its cost. For
      * a brand-new building this also clears the level-0 foundation stub the
      * backend placed on `Enqueue` — `refreshLiveSettlement`'s reconciliation
@@ -803,13 +902,14 @@ export const useWorldStore = defineStore('world', {
     /**
      * Live mode: queues a training batch against the backend, charging its
      * cost immediately — mirrors `queueBuildLive` above, including the
-     * ownership header. Throws `ApiError` on rejection (e.g. not enough
-     * resources, longhouse too low, training queue full); callers decide how
-     * to surface that.
+     * ownership header. The building at `at` trains it (`split: 'here'`) or the
+     * order is spread over every building of its type. Throws `ApiError` on
+     * rejection (e.g. not enough resources, that building's parts full,
+     * `fastest` without premium); callers decide how to surface that.
      */
-    async trainUnitsLive(unit: string, count: number) {
+    async trainUnitsLive(unit: string, count: number, at: { q: number; r: number }, split: TrainingSplit) {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
-      await api.trainUnits(this.selectedSettlementId, { unit, count }, this.ownerId ?? undefined);
+      await api.trainUnits(this.selectedSettlementId, { unit, count, q: at.q, r: at.r, split }, this.ownerId ?? undefined);
       await this.refreshLiveSettlement();
     },
     /**
@@ -888,15 +988,24 @@ export const useWorldStore = defineStore('world', {
         }
         throw err;
       }
+      if (response.realmId !== response.id) {
+        // A newer member of a linked realm: the realm is run from its oldest member.
+        await this.switchToSettlement(response.realmId);
+        return;
+      }
+      this.linkedMemberIds = [...response.linkedMemberIds];
       this.model.applyServerSnapshot(response.id, {
         level: response.longhouseLevel,
         resources: { ...response.resources.stock },
         rates: { ...response.resources.ratePerHour },
         capacity: { ...response.resources.capacity },
         buildings: response.buildings,
+        realm: response.realm,
       });
       this.hud.buildings = response.buildings;
-      this.hud.queue = response.queue;
+      // An optimistic build still waiting for its answer (W3) must outlive a
+      // poll that was in flight when it was added; its own refresh clears it.
+      this.hud.queue = [...response.queue, ...this.hud.queue.filter(isPendingOrder)];
       this.hud.queueFetchedAt = Date.now();
       // `available` is not set here directly — `syncHud()` below (and every
       // subsequent tick) derives it live from `hud.resources`/`hud.reserved`,
@@ -936,8 +1045,8 @@ export const useWorldStore = defineStore('world', {
     /**
      * Live mode: posts a trade offer at this settlement's longhouse.
      * Throws `ApiError` on rejection (e.g. `RatioExceeded`,
-     * `NotEnoughResources`) — TradePanel.vue surfaces `err.problem?.rejection`.
-     * A no-op in demo mode; TradePanel.vue calls `world.model.postTradeOffer`
+     * `NotEnoughResources`) — the trade UI (removed until trade is redesigned) surfaced `err.problem?.rejection`.
+     * A no-op in demo mode; the trade UI called `world.model.postTradeOffer`
      * directly there instead (see the file's other DEMO_MODE branches).
      */
     async postTradeOfferLive(
@@ -980,9 +1089,9 @@ export const useWorldStore = defineStore('world', {
     },
     /**
      * Live mode: pulls the trade board, this settlement's own offers, and
-     * its shipments in one go, for TradePanel.vue. No-op in demo mode
+     * its shipments in one go, for the trade UI (removed until trade is redesigned). No-op in demo mode
      * (`hud.tradeBoard`/`myTradeOffers`/`shipments` stay empty there —
-     * TradePanel.vue reads `WorldModel`'s demo trade offers directly).
+     * the trade UI read `WorldModel`'s demo trade offers directly).
      */
     async refreshTradeAsync() {
       if (DEMO_MODE || !this.selectedSettlementId) return;
@@ -1021,6 +1130,16 @@ export const useWorldStore = defineStore('world', {
       );
     },
     /**
+     * The one settlement switch: the switcher in `ExpansionPanel.vue` and the redirect from a newer member of a linked realm to
+     * its oldest member both go through it. Points the persisted "current settlement" at `settlementId` and reloads the model.
+     */
+    async switchToSettlement(settlementId: string) {
+      if (settlementId === this.selectedSettlementId) return;
+      const player = usePlayerStore();
+      player.switchSettlement(settlementId);
+      await this.restoreLiveSettlement(player.id, settlementId);
+    },
+    /**
      * Live mode: rehydrates `selectedSettlementId`/`WorldModel` after a page
      * reload, using the settlement id `stores/player.ts` persisted. Without
      * this, `hasFoundedSettlement` (and thus the router's `/settlement`
@@ -1047,6 +1166,11 @@ export const useWorldStore = defineStore('world', {
         }
         throw err;
       }
+      if (response.realmId !== response.id) {
+        // A newer member of a linked realm: the realm is run from its oldest member.
+        await this.switchToSettlement(response.realmId);
+        return;
+      }
       this.model.registerSettlement({
         id: response.id,
         ownerId,
@@ -1058,10 +1182,12 @@ export const useWorldStore = defineStore('world', {
         resources: { ...response.resources.stock },
         rates: { ...response.resources.ratePerHour },
         foundedAt: Date.now(),
+        realmId: response.realmId,
         islandId: response.islandId,
       });
       this.model.claimTerritory(response.id);
       this.selectedSettlementId = response.id;
+      this.linkedMemberIds = [...response.linkedMemberIds];
       this.syncHud();
       void this.refreshTradeAsync();
     },
@@ -1111,6 +1237,7 @@ export const useWorldStore = defineStore('world', {
     resetPerWorldCaches() {
       this.liveReady = false;
       this.selectedSettlementId = null;
+      this.linkedMemberIds = [];
       this.plotSuggestion = null;
       this.islands = [];
       this.armies = [];
@@ -1138,6 +1265,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.shipments = [];
       this.fogMaskBitmap?.close();
       this.fogMaskBitmap = null;
+      this.fogCoverage = null;
       this.fogMaskBounds = null;
       this.fogWindow = null;
       this.fogEtag = null;
@@ -1177,21 +1305,18 @@ export const useWorldStore = defineStore('world', {
     recoverFromMissingSettlement() {
       if (DEMO_MODE) return;
       this.selectedSettlementId = null;
+      this.linkedMemberIds = [];
       if (this.worldId) usePlayerStore().enterWorld(this.worldId, null);
     },
     /**
-     * Live mode: pulls every settlement in the world (not just this
-     * player's) into the model, data-only — no tile is painted here.
-     * Registered with the settlement's own id as its `ownerId`, which can
-     * never equal the local player's id, so it always renders as a rival
-     * once a caller claims its territory (`WorldModel.claimTerritory` /
-     * `claimTerritoryOnIsland` / `claimAllTerritory`) — the world map claims
-     * everyone (matching `prototypes/worldmap`'s `marks`), while the
-     * landing/settlement preview only claims the island it's showing.
-     */
-    /**
      * Registers a batch of `SettlementSummary` rows into the local
-     * `WorldModel`, data-only — shared by `refreshWorldSettlements` (the
+     * `WorldModel`, data-only — no tile is painted here (a caller claims
+     * territory afterwards: `claimTerritory` / `claimTerritoryOnIsland` /
+     * `claimAllTerritory`). The player's own settlements (`mine`) are
+     * registered with the local player's id as `ownerId`, so they group with
+     * the selected settlement's realm and render as the player's own; every
+     * other settlement keeps its own id as `ownerId`, which can never equal
+     * the player's id, so it renders as a rival. Shared by `refreshWorldSettlements` (the
      * fog-gated world list) and `refreshPlotSuggestion` (a suggestion's own
      * `islandSettlements`), so the two don't duplicate this loop.
      */
@@ -1200,7 +1325,7 @@ export const useWorldStore = defineStore('world', {
         if (summary.id === this.selectedSettlementId) continue;
         this.model.registerSettlement({
           id: summary.id,
-          ownerId: summary.id,
+          ownerId: summary.mine ? (this.ownerId ?? summary.id) : summary.id,
           ownerName: summary.ownerName,
           name: summary.name,
           q: summary.q,
@@ -1209,14 +1334,21 @@ export const useWorldStore = defineStore('world', {
           resources: emptyResources(),
           rates: emptyResources(),
           foundedAt: Date.now(),
+          realmId: summary.realmId,
           islandId: summary.islandId,
         });
       }
     },
     async refreshWorldSettlements() {
       if (DEMO_MODE || !this.worldId) return;
-      const summaries = await api.listSettlements(this.worldId, this.ownerId ?? undefined);
+      // Rival walls ride the same cadence: the settlement list is data-only, so this is the only way the client learns where another
+      // player's palisades stand (to draw them, offer Siege on them and route around them). A failed walls read keeps the last set.
+      const [summaries, walls] = await Promise.all([
+        api.listSettlements(this.worldId, this.ownerId ?? undefined),
+        api.listWalls(this.worldId, this.ownerId ?? undefined).catch(() => null),
+      ]);
       this.registerSettlementSummaries(summaries);
+      if (walls) this.model.applyRivalWalls(walls);
       if (this.worldMapActive) {
         this.model.claimAllTerritory();
       } else {
@@ -1313,7 +1445,9 @@ export const useWorldStore = defineStore('world', {
      */
     /**
      * Live mode: fetches every camp's live state (`GET /worlds/{id}/camps`) and merges it onto the
-     * model's camps (`WorldModel.setCampStates`); bumps `campStatesVersion` only on a real change so
+     * model's camps (`WorldModel.setCampStates`) after adding the camps the model does not know yet — the
+     * server sends states only for islands the player has seen, so a newly seen island's camps first arrive
+     * here (`WorldModel.setCamps` is additive); bumps `campStatesVersion` only on a real change so
      * the map redraws (a cleared camp swaps its art) without a rebuild per poll. Never throws: a
      * failed fetch leaves the previous state. A no-op in demo mode, where every camp stays guarded.
      */
@@ -1321,7 +1455,16 @@ export const useWorldStore = defineStore('world', {
       if (DEMO_MODE || !this.worldId) return;
       try {
         const states = await api.getWorldCamps(this.worldId);
-        if (this.model.setCampStates(states)) this.campStatesVersion += 1;
+        const added = this.model.setCamps(
+          states.map((state) => ({
+            family: state.family,
+            coord: { q: state.q, r: state.r },
+            level: state.level,
+            orientation: state.orientation as TileOrientation,
+          })),
+        );
+        const updated = this.model.setCampStates(states);
+        if (added || updated) this.campStatesVersion += 1;
       } catch (err) {
         console.warn('camp states refresh failed', err);
       }
@@ -1360,6 +1503,12 @@ export const useWorldStore = defineStore('world', {
     /** Live mode: recalls an in-transit army, then refreshes so its turned-around state shows immediately. Throws `ApiError` on rejection (e.g. it's already heading home). */
     async recallArmyLive(armyId: string) {
       await api.recallArmy(armyId, this.ownerId ?? undefined);
+      await this.refreshArmies();
+    },
+    /** Live mode: the host sends a guest army stationed at the selected settlement home, then refreshes so the row disappears. Throws `ApiError` on rejection (e.g. no route home). */
+    async sendGuestHomeLive(armyId: string) {
+      if (!this.selectedSettlementId) return;
+      await api.sendGuestHome(this.selectedSettlementId, armyId, this.ownerId ?? undefined);
       await this.refreshArmies();
     },
     /**
@@ -1468,7 +1617,10 @@ export const useWorldStore = defineStore('world', {
      * to fill in. Units are still picked manually (no default selection);
      * this only sets the mission and destination the tap already implied.
      */
-    startDispatchAt(coord: AxialCoord, opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string } = {}) {
+    startDispatchAt(
+      coord: AxialCoord,
+      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string; targetBuildingCoord?: AxialCoord } = {},
+    ) {
       this.startDispatch();
       if (!this.dispatchDraft) return;
       if (opts.mission === 'hunt') {
@@ -1477,6 +1629,9 @@ export const useWorldStore = defineStore('world', {
       } else if (opts.mission && opts.targetSettlementId) {
         this.dispatchDraft.mission = opts.mission;
         this.setDispatchTarget(opts.targetSettlementId);
+        // The "Siege" ring action on a rival wall: an Attack on the wall's settlement that prefers the wall hex, the same
+        // draft state the target-building picker sets (setDispatchTarget cleared it, so it is set after).
+        if (opts.targetBuildingCoord) this.setDispatchTargetBuilding({ q: opts.targetBuildingCoord.q, r: opts.targetBuildingCoord.r });
       } else {
         this.addWaypoint(coord);
       }
@@ -1552,10 +1707,14 @@ export const useWorldStore = defineStore('world', {
      * accepts for reading the model directly.
      */
     listAttackableSettlements() {
-      return this.model
-        .listSettlements()
-        .filter((s) => s.id !== this.selectedSettlementId)
-        .map((s) => ({ id: s.id, name: s.name, ownerName: s.ownerName, q: s.q, r: s.r }));
+      // One entry per linked realm (keyed by `realmId`): the oldest member, whose name is the realm's, wins over a newer one.
+      const byRealm = new Map<string, Settlement>();
+      for (const s of this.model.listSettlements()) {
+        if (this.isRealmSettlement(s.id) || this.isRealmSettlement(s.realmId)) continue;
+        const key = s.realmId ?? s.id;
+        if (!byRealm.has(key) || s.id === key) byRealm.set(key, s);
+      }
+      return [...byRealm.values()].map((s) => ({ id: s.id, name: s.name, ownerName: s.ownerName, q: s.q, r: s.r }));
     },
     setDispatchUnitCount(unit: string, count: number) {
       if (!this.dispatchDraft) return;
@@ -1818,17 +1977,16 @@ export const useWorldStore = defineStore('world', {
 
           if (stale.length > 0 || !sameWindow) {
             const bounds = windowBounds(window);
-            const bitmap = await pixelsToBitmap(
-              stitchWindow(window, fogChunkCache.pixelsByKey()),
-              bounds.width,
-              bounds.height,
-            );
+            const pixels = stitchWindow(window, fogChunkCache.pixelsByKey());
+            const coverage = new FogCoverage(bounds, pixels);
+            const bitmap = await pixelsToBitmap(pixels, bounds.width, bounds.height);
             // Close the previous bitmap only once the new one is actually in
             // hand — closing it eagerly before the fetch settles would leave
             // a failed request having discarded the one usable bitmap this
             // store had.
             this.fogMaskBitmap?.close();
             this.fogMaskBitmap = markRaw(bitmap);
+            this.fogCoverage = markRaw(coverage);
             this.fogMaskBounds = bounds;
           }
 
@@ -1915,13 +2073,14 @@ export const useWorldStore = defineStore('world', {
       const startedAt = performance.now();
       try {
         const bounds = demoMaskBounds(this.model);
-        const bitmap = await buildDemoFogMask(this.model, bounds);
-        if (!bitmap) return;
+        const baked = await buildDemoFogMask(this.model, bounds);
+        if (!baked) return;
         // Recorded only once a bake actually produced a mask, so a bail-out
         // (no settlement yet) doesn't suppress the first real bake.
         this.demoFogSignature = signature;
         this.fogMaskBitmap?.close();
-        this.fogMaskBitmap = markRaw(bitmap);
+        this.fogMaskBitmap = markRaw(baked.bitmap);
+        this.fogCoverage = markRaw(baked.coverage);
         this.fogMaskBounds = bounds;
         this.worldRadius = DEFAULT_GENERATION.worldRadius;
         fogPerfStats.maskVersion = 'demo';

@@ -22,7 +22,8 @@ public static class WorldPalisades
     /// <summary>
     /// Every standing wall hex (level 1 or more; a foundation does not block) of <paramref name="worldId"/> as a <see cref="PalisadeIndex"/>
     /// — one query per request at each call site that builds a land route, like <see cref="WorldRivers.IndexAsync"/>. A world with no
-    /// wall costs one empty query.
+    /// wall costs two small queries. The standing Utgard wall hexes of the world's wasted islands (<c>islands.UtgardWalls</c>, level 1 or
+    /// more) are in it too, owned by <see cref="EndgameRules.JotnarOwnerKey"/>.
     /// </summary>
     public static async Task<PalisadeIndex> IndexAsync(
         GameDbContext db, Guid worldId, Func<HexCoord, Terrain> terrainAt, Func<HexCoord, bool> isWideRiver,
@@ -34,7 +35,7 @@ public static class WorldPalisades
             .Where(b => b.Settlement!.WorldId == worldId
                 && (b.Type == BuildingType.Palisade || b.Type == BuildingType.PalisadeGate)
                 && b.Level >= 1)
-            .Select(b => new { b.Q, b.R, b.Type, b.SettlementId, b.Settlement!.UserId })
+            .Select(b => new { b.Q, b.R, b.Type, b.SettlementId, b.Settlement!.UserId, OutsideRealm = b.OutsideRealmSince != null })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         // Only a gate cares who the friends are, so a world without one skips the guild queries.
@@ -42,19 +43,52 @@ public static class WorldPalisades
             ? await FriendsAsync(db, worldId, cancellationToken).ConfigureAwait(false)
             : null;
 
+        // The jötnar's Utgard walls (wasted islands, level 1 or more; a breached level-0 hex is passable) block like any wall. Their key
+        // belongs to no account or guild, so a jötnar gate is never friendly to a player.
+        var utgardWalls = await db.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId && i.IsWasted)
+            .Select(i => i.UtgardWalls)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
         return new PalisadeIndex(
             rows.Select(r => new StandingWall(
-                new HexCoord(r.Q, r.R), r.Type == BuildingType.PalisadeGate, OwnerKeyOf(r.UserId, r.SettlementId))),
+                new HexCoord(r.Q, r.R), r.Type == BuildingType.PalisadeGate, OwnerKeyOf(r.UserId, r.SettlementId), r.OutsideRealm))
+            .Concat(utgardWalls.SelectMany(walls => walls)
+                .Where(w => w.Level >= 1)
+                .Select(w => new StandingWall(new HexCoord(w.Q, w.R), w.IsGate, EndgameRules.JotnarOwnerKey))),
             terrainAt,
             isWideRiver,
             areFriends);
     }
 
+    /// <summary>One standing wall hex with its settlement's identity and centre, for <see cref="ListStandingAsync"/>.</summary>
+    public sealed record StandingWallRow(
+        int Q, int R, BuildingType Type, int Level, Guid SettlementId, Guid UserId, string OwnerId, int CentreQ, int CentreR,
+        bool OutsideRealm = false);
+
+    /// <summary>Every standing wall hex (level 1 or more) of <paramref name="worldId"/> with who owns it, for the world-wide walls read.</summary>
+    public static async Task<IReadOnlyList<StandingWallRow>> ListStandingAsync(
+        GameDbContext db, Guid worldId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return await db.PlacedBuildings
+            .AsNoTracking()
+            .Where(b => b.Settlement!.WorldId == worldId
+                && (b.Type == BuildingType.Palisade || b.Type == BuildingType.PalisadeGate)
+                && b.Level >= 1)
+            .OrderBy(b => b.SettlementId).ThenBy(b => b.Q).ThenBy(b => b.R)
+            .Select(b => new StandingWallRow(
+                b.Q, b.R, b.Type, b.Level, b.SettlementId, b.Settlement!.UserId, b.Settlement.OwnerId,
+                b.Settlement.CentreQ, b.Settlement.CentreR, b.OutsideRealmSince != null))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>
-    /// Who a gate also opens for besides its owner: two accounts are friends when they are in the same guild or in guilds with an active
+    /// Who a gate (or a guarded bridge) also opens for besides its owner: two accounts are friends when they are in the same guild or in guilds with an active
     /// peace treaty. An anonymous settlement's key (the settlement itself) is in no guild and so nobody's friend.
     /// </summary>
-    private static async Task<Func<Guid, Guid, bool>> FriendsAsync(GameDbContext db, Guid worldId, CancellationToken cancellationToken)
+    internal static async Task<Func<Guid, Guid, bool>> FriendsAsync(GameDbContext db, Guid worldId, CancellationToken cancellationToken)
     {
         var memberships = await db.GuildMemberships
             .AsNoTracking()

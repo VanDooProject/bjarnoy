@@ -20,6 +20,9 @@
 import { describe, expect, it } from 'vitest';
 import { WorldModel } from './WorldModel';
 import { hexDistance, parseKey } from '../hex/coords';
+import { FogCoverage } from './fog/fogCoverage';
+import { maskBounds, toTexel } from './fog/fogMaskLayout';
+import { isPastTerrainCullOf } from './HexMapRenderer';
 
 const SWEEP = 80;
 
@@ -92,6 +95,47 @@ describe('explored hexes stay within exploredRadius of their settlement', () => 
       const covered = radii.some(({ s, radius }) => hexDistance(hex, { q: s.q, r: s.r }) <= radius);
       expect(covered, `${hex.q},${hex.r} outside every settlement's explored radius`).toBe(true);
     }
+  });
+
+  it('after a reload, ground explored by a settlement that lost its sight comes from the server mask, not the vision discs', () => {
+    // Before the reload: the page that saw the settlement found it explores this ground.
+    const before = new WorldModel(20260824);
+    const at = before.findLandfall({ q: 0, r: 0 })!;
+    const home = before.foundSettlement('p1', 'You', 'Home', at);
+    const explored = exploredHexes(before, at);
+    expect(explored.length).toBeGreaterThan(0);
+
+    // After the reload: a fresh model with the Longhouse already destroyed — no vision disc to explore from.
+    const fresh = new WorldModel(20260824);
+    const freshRazed = fresh.registerSettlement({ ...home, level: 0 });
+    fresh.claimTerritory(freshRazed.id);
+    expect(fresh.visionDiscsFor(freshRazed)).toEqual([]);
+    expect(exploredHexes(fresh, at)).toEqual([]);
+    for (const hex of explored) expect(fresh.isExplored(hex.q, hex.r), `${hex.q},${hex.r}`).toBe(false);
+
+    // The server's mask knows the ground: R is 0 on every explored hex, 255 elsewhere.
+    const texels = explored.map(toTexel);
+    const bounds = maskBounds(
+      Math.min(...texels.map((t) => t.u)) - 4,
+      Math.min(...texels.map((t) => t.v)) - 4,
+      Math.max(...texels.map((t) => t.u)) + 5,
+      Math.max(...texels.map((t) => t.v)) + 5,
+    );
+    const pixels = new Uint8ClampedArray(bounds.width * bounds.height * 4).fill(255);
+    for (const t of texels) pixels[((t.v - bounds.minV) * bounds.width + (t.u - bounds.minU)) * 4] = 0;
+    const coverage = new FogCoverage(bounds, pixels);
+    fresh.setFogCoverage(coverage);
+
+    for (const hex of explored) expect(fresh.isExplored(hex.q, hex.r), `${hex.q},${hex.r}`).toBe(true);
+    expect(fresh.isExplored(at.q + SWEEP, at.r)).toBe(false);
+
+    // The terrain cull keeps that ground even where no current vision source reaches it, and still culls the rest.
+    const sources = [{ q: freshRazed.q, r: freshRazed.r, radius: fresh.exploredRadius(freshRazed) }];
+    const far = explored[0];
+    const farSources = [{ q: far.q + 100, r: far.r, radius: 0 }];
+    expect(isPastTerrainCullOf(far.q, far.r, farSources, null)).toBe(true);
+    for (const hex of explored) expect(isPastTerrainCullOf(hex.q, hex.r, farSources, coverage), `${hex.q},${hex.r}`).toBe(false);
+    expect(isPastTerrainCullOf(at.q + 60, at.r, sources, coverage)).toBe(true);
   });
 
   it('keeps every stored explored key inside the swept box, so the sweep above is not missing any', () => {

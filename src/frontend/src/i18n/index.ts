@@ -39,7 +39,10 @@ import enDocs from './locales/en/docs.json';
 import deDocs from './locales/de/docs.json';
 import enShowcase from './locales/en/showcase.json';
 import deShowcase from './locales/de/showcase.json';
+import enIntro from './locales/en/intro.json';
+import deIntro from './locales/de/intro.json';
 import deAdminWorldReview from './locales/de/adminWorldReview.json';
+import deAdminWorlds from './locales/de/adminWorlds.json';
 import enAdminActivityChart from './locales/en/adminActivityChart.json';
 import enAdminActivity from './locales/en/adminActivity.json';
 import enAdminEconomy from './locales/en/adminEconomy.json';
@@ -59,24 +62,11 @@ import enSettlementLayoutEditor from './locales/en/settlementLayoutEditor.json';
 import { datetimeFormats, numberFormats } from './formats';
 import {
   DEFAULT_LOCALE,
-  detectInitialLocale,
+  detectDeviceLocale,
   persistLocale,
-  readStoredLocale,
   type SupportedLocale,
 } from './locale';
-function queryLocale(): string | null {
-  try {
-    return new URLSearchParams(window.location.search).get('lang');
-  } catch {
-    return null;
-  }
-}
-
-const initialLocale = detectInitialLocale({
-  queryLocale: queryLocale(),
-  storedLocale: readStoredLocale(),
-  navigatorLanguage: typeof navigator !== 'undefined' ? navigator.language : null,
-});
+const initialLocale = detectDeviceLocale();
 
 // Not type-parameterized against MessageSchema: vue-i18n's generics for
 // createI18n require every message/format bag to satisfy an index-signature
@@ -115,6 +105,7 @@ export const i18n = createI18n({
       simulator: enSimulator,
       docs: enDocs,
       showcase: enShowcase,
+      intro: enIntro,
       // Admin surface (en-only — German deliberately deferred; fallbackLocale
       // below covers these, and src/test/i18n.ts skips the parity check for
       // namespaces with no de/ file).
@@ -157,6 +148,8 @@ export const i18n = createI18n({
       simulator: deSimulator,
       docs: deDocs,
       showcase: deShowcase,
+      intro: deIntro,
+      adminWorlds: deAdminWorlds,
       adminWorldReview: deAdminWorldReview,
     },
   },

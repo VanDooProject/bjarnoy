@@ -5,18 +5,28 @@ import {
   buildAttackDispatchRequest,
   buildFieldOrderRequest,
   buildHuntDispatchRequest,
+  garrisonCanHunt,
   isHuntUnit,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
   canFieldOrderArmy,
   classifyUnitSelection,
   formatEta,
-  hasCatapultSelected,
+  breachesWalls,
+  canSiegeDamage,
+  hasSiegeEngineSelected,
+  selectedSiegeTargets,
+  siegeTargetKindOf,
   isFieldOrderMidMarch,
-  isUnitSelectableFor,
+  exceedsShipCapacity,
   maxAffordableProvisions,
+  shipSlotUsage,
   routeToWaypointsAndDestination,
+  shoreBuildings,
+  targetBuildingPickerMode,
+  totalSpeed,
   totalUpkeepPerHour,
+  trainingSite,
 } from './armyDispatch';
 
 function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): UnitDefinitionResponse {
@@ -27,12 +37,15 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     speed: 1,
     carryCapacity: 0,
     foodCarryCapacity: 10,
+    cargoSlots: 0,
+    shipSlots: 0,
     upkeepPerHour: 1,
     trainingCost: { wood: 0, stone: 0, food: 0, iron: 0 },
     trainingSeconds: 0,
     requiredLonghouseLevel: 1,
     requiredUnitType: null,
     requiredBuildingType: 'longhouse',
+    siegeTargets: [],
     ...overrides,
   };
 }
@@ -129,18 +142,57 @@ describe('buildAttackDispatchRequest', () => {
   });
 });
 
-describe('hasCatapultSelected', () => {
-  it('is false when no catapults are in the selection', () => {
-    expect(hasCatapultSelected({ spearman: 5 })).toBe(false);
-    expect(hasCatapultSelected({})).toBe(false);
+describe('siege engines by target', () => {
+  const byType = {
+    spearman: unit({ type: 'spearman' }),
+    catapult: unit({ type: 'catapult', class: 'siege', siegeTargets: ['towers', 'buildings'] }),
+    ram: unit({ type: 'ram', class: 'siege', siegeTargets: ['walls', 'towers'] }),
+  };
+
+  it('sorts building types into walls, towers and the rest, like SiegeResolver.KindOf', () => {
+    expect(siegeTargetKindOf('palisade')).toBe('walls');
+    expect(siegeTargetKindOf('palisadegate')).toBe('walls');
+    expect(siegeTargetKindOf('tower')).toBe('towers');
+    expect(siegeTargetKindOf('bridge')).toBe('buildings');
+    expect(siegeTargetKindOf('longhouse')).toBe('buildings');
   });
 
-  it('is false when catapult count is zero', () => {
-    expect(hasCatapultSelected({ spearman: 5, catapult: 0 })).toBe(false);
+  it('has no siege engine when only ordinary units, or zero engines, are selected', () => {
+    expect(hasSiegeEngineSelected({ spearman: 5 }, byType)).toBe(false);
+    expect(hasSiegeEngineSelected({}, byType)).toBe(false);
+    expect(hasSiegeEngineSelected({ spearman: 5, catapult: 0, ram: 0 }, byType)).toBe(false);
   });
 
-  it('is true when at least one catapult is selected', () => {
-    expect(hasCatapultSelected({ spearman: 5, catapult: 2 })).toBe(true);
+  it('has one as soon as a catapult or a ram is selected', () => {
+    expect(hasSiegeEngineSelected({ spearman: 5, catapult: 2 }, byType)).toBe(true);
+    expect(hasSiegeEngineSelected({ ram: 1 }, byType)).toBe(true);
+  });
+
+  it('collects what the selected engines can damage', () => {
+    expect([...selectedSiegeTargets({ ram: 1 }, byType)].sort()).toEqual(['towers', 'walls']);
+    expect([...selectedSiegeTargets({ catapult: 1 }, byType)].sort()).toEqual(['buildings', 'towers']);
+    expect([...selectedSiegeTargets({ catapult: 1, ram: 1 }, byType)].sort()).toEqual(['buildings', 'towers', 'walls']);
+    expect(selectedSiegeTargets({ spearman: 9 }, byType).size).toBe(0);
+  });
+
+  it('lets rams damage walls and towers only, catapults everything but walls', () => {
+    expect(canSiegeDamage({ ram: 1 }, byType, 'palisade')).toBe(true);
+    expect(canSiegeDamage({ ram: 1 }, byType, 'palisadegate')).toBe(true);
+    expect(canSiegeDamage({ ram: 1 }, byType, 'tower')).toBe(true);
+    expect(canSiegeDamage({ ram: 1 }, byType, 'bridge')).toBe(false);
+    expect(canSiegeDamage({ ram: 1 }, byType, 'longhouse')).toBe(false);
+    expect(canSiegeDamage({ catapult: 1 }, byType, 'palisade')).toBe(false);
+    expect(canSiegeDamage({ catapult: 1 }, byType, 'tower')).toBe(true);
+    expect(canSiegeDamage({ catapult: 1 }, byType, 'bridge')).toBe(true);
+    expect(canSiegeDamage({ catapult: 1 }, byType, 'longhouse')).toBe(true);
+    expect(canSiegeDamage({ spearman: 3 }, byType, 'longhouse')).toBe(false);
+  });
+
+  it('says which unit types breach walls', () => {
+    expect(breachesWalls('ram', byType)).toBe(true);
+    expect(breachesWalls('catapult', byType)).toBe(false);
+    expect(breachesWalls('spearman', byType)).toBe(false);
+    expect(breachesWalls('nope', byType)).toBe(false);
   });
 });
 
@@ -279,8 +331,8 @@ describe('classifyUnitSelection', () => {
     expect(classifyUnitSelection({ karve: 2, longship: 1 }, byType)).toBe('fleet');
   });
 
-  it('reports "mixed" once both families are selected', () => {
-    expect(classifyUnitSelection({ spearman: 1, karve: 1 }, byType)).toBe('mixed');
+  it('reports "fleet" once any ship is selected: the land units become its passengers', () => {
+    expect(classifyUnitSelection({ spearman: 1, karve: 1 }, byType)).toBe('fleet');
   });
 
   it('ignores unit types missing from the catalogue', () => {
@@ -288,30 +340,38 @@ describe('classifyUnitSelection', () => {
   });
 });
 
-describe('isUnitSelectableFor', () => {
+describe('ship slots', () => {
   const byType = {
-    spearman: unit({ type: 'spearman', class: 'infantry' }),
-    karve: unit({ type: 'karve', class: 'ship' }),
+    spearman: unit({ type: 'spearman', class: 'infantry', cargoSlots: 1 }),
+    bowman: unit({ type: 'bowman', class: 'infantry', cargoSlots: 2 }),
+    ram: unit({ type: 'ram', class: 'siege', cargoSlots: 10 }),
+    karve: unit({ type: 'karve', class: 'ship', shipSlots: 10, speed: 8 }),
+    longship: unit({ type: 'longship', class: 'ship', shipSlots: 20, speed: 10 }),
   };
 
-  it('leaves every class pickable when nothing is selected yet', () => {
-    expect(isUnitSelectableFor('spearman', 'none', byType)).toBe(true);
-    expect(isUnitSelectableFor('karve', 'none', byType)).toBe(true);
+  it('has no slot usage for a land army', () => {
+    expect(shipSlotUsage({ spearman: 5, ram: 1 }, byType)).toBeNull();
+    expect(exceedsShipCapacity({ spearman: 50 }, byType)).toBe(false);
   });
 
-  it('locks out ships once a land selection is committed', () => {
-    expect(isUnitSelectableFor('spearman', 'land', byType)).toBe(true);
-    expect(isUnitSelectableFor('karve', 'land', byType)).toBe(false);
+  it('counts the slots the passengers need against the slots the ships offer', () => {
+    expect(shipSlotUsage({ karve: 1, longship: 1, spearman: 4, bowman: 3 }, byType)).toEqual({ needed: 10, offered: 30 });
+    expect(shipSlotUsage({ karve: 1 }, byType)).toEqual({ needed: 0, offered: 10 });
   });
 
-  it('locks out land units once a fleet selection is committed', () => {
-    expect(isUnitSelectableFor('karve', 'fleet', byType)).toBe(true);
-    expect(isUnitSelectableFor('spearman', 'fleet', byType)).toBe(false);
+  it('is over capacity only when the passengers need more than the ships offer', () => {
+    expect(exceedsShipCapacity({ karve: 1, spearman: 10 }, byType)).toBe(false);
+    expect(exceedsShipCapacity({ karve: 1, spearman: 11 }, byType)).toBe(true);
+    expect(exceedsShipCapacity({ karve: 1, ram: 1 }, byType)).toBe(false);
+    expect(exceedsShipCapacity({ karve: 1, ram: 2 }, byType)).toBe(true);
+    expect(exceedsShipCapacity({ longship: 1, ram: 2 }, byType)).toBe(false);
   });
 
-  it('locks out nothing further for an (unreachable in practice) mixed selection', () => {
-    expect(isUnitSelectableFor('spearman', 'mixed', byType)).toBe(true);
-    expect(isUnitSelectableFor('karve', 'mixed', byType)).toBe(true);
+  it('moves a fleet at its slowest ship; passengers do not slow it', () => {
+    const slow = { ...byType, ram: unit({ type: 'ram', class: 'siege', cargoSlots: 10, speed: 1 }) };
+    expect(totalSpeed({ karve: 1, longship: 1, ram: 1 }, slow)).toBe(8);
+    expect(totalSpeed({ spearman: 2, ram: 1 }, { ...slow, spearman: unit({ type: 'spearman', speed: 4 }) })).toBe(1);
+    expect(totalSpeed({}, slow)).toBe(0);
   });
 });
 
@@ -421,5 +481,105 @@ describe('buildHuntDispatchRequest', () => {
     expect(isHuntUnit('spearman', byType)).toBe(true);
     expect(isHuntUnit('longship', byType)).toBe(false);
     expect(isHuntUnit('unknown', byType)).toBe(false);
+  });
+
+  it('a camp at sea (the whale road) is hunted by a fleet: ships, with land units as passengers', () => {
+    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
+    expect(isHuntUnit('longship', byType, true)).toBe(true);
+    expect(isHuntUnit('spearman', byType, true)).toBe(true);
+    expect(isHuntUnit('unknown', byType, true)).toBe(false);
+  });
+
+  it('the hunt ring action needs land units at home for a land camp and a ship for a camp at sea', () => {
+    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
+    const landOnly = [{ unit: 'spearman', count: 4 }, { unit: 'longship', count: 0 }];
+    const shipsOnly = [{ unit: 'spearman', count: 0 }, { unit: 'longship', count: 2 }];
+    expect(garrisonCanHunt(landOnly, byType, false)).toBe(true);
+    expect(garrisonCanHunt(landOnly, byType, true)).toBe(false);
+    expect(garrisonCanHunt(shipsOnly, byType, false)).toBe(false);
+    expect(garrisonCanHunt(shipsOnly, byType, true)).toBe(true);
+  });
+});
+
+describe('targetBuildingPickerMode', () => {
+  const byType = {
+    karve: unit({ type: 'karve', class: 'ship', siegeTargets: ['walls', 'towers', 'buildings'] }),
+    catapult: unit({ type: 'catapult', class: 'siege', siegeTargets: ['towers', 'buildings'] }),
+    ram: unit({ type: 'ram', class: 'siege', siegeTargets: ['walls', 'towers'] }),
+    spearman: unit({ type: 'spearman', class: 'infantry' }),
+  };
+
+  it('requires a building for a fleet attack once a target settlement is chosen', () => {
+    expect(targetBuildingPickerMode('attack', true, { karve: 3 }, byType, 'fleet')).toBe('required');
+  });
+
+  it('offers an optional building for a land attack with siege engines, none without', () => {
+    expect(targetBuildingPickerMode('attack', true, { catapult: 2 }, byType, 'land')).toBe('optional');
+    expect(targetBuildingPickerMode('attack', true, { ram: 2 }, byType, 'land')).toBe('optional');
+    expect(targetBuildingPickerMode('attack', true, { spearman: 5 }, byType, 'land')).toBe('none');
+  });
+
+  it('names no building without a target settlement or for other missions', () => {
+    expect(targetBuildingPickerMode('attack', false, { karve: 3 }, byType, 'fleet')).toBe('none');
+    expect(targetBuildingPickerMode('support', true, { karve: 3 }, byType, 'fleet')).toBe('none');
+    expect(targetBuildingPickerMode('move', true, { karve: 3 }, byType, 'fleet')).toBe('none');
+  });
+});
+
+describe('shoreBuildings', () => {
+  // Land at q >= 0, sea at q < 0.
+  const coast = { isLand: (q: number) => q >= 0 };
+
+  it('keeps only buildings on a shoreline hex or a sea hex', () => {
+    const farm = { q: 3, r: 0, type: 'farm' };
+    const hut = { q: 0, r: 0, type: 'fishing_hut' };
+    const dock = { q: -1, r: 0, type: 'dockyard' };
+    expect(shoreBuildings([farm, hut, dock], coast)).toEqual([hut, dock]);
+  });
+});
+
+describe('a fleet attack request', () => {
+  it('carries the chosen shore building as the target building', () => {
+    const request = buildAttackDispatchRequest({ karve: 3 }, [], 30, 'target-1', { q: 9, r: 0 });
+    expect(request?.targetBuildingCoord).toEqual({ q: 9, r: 0 });
+  });
+});
+
+describe('trainingSite', () => {
+  const centre = { q: 0, r: 0 };
+  const byType = {
+    thrall: unit({ type: 'thrall', speed: 5, requiredBuildingType: 'barracks' }),
+    spearman: unit({ type: 'spearman', speed: 4, requiredBuildingType: 'barracks' }),
+    bowman: unit({ type: 'bowman', speed: 4, requiredBuildingType: 'archeryrange' }),
+    settler: unit({ type: 'settler', speed: 4, requiredBuildingType: 'cartworkshop' }),
+  };
+  const barracks = { q: 2, r: 0, type: 'barracks' };
+  const range = { q: -2, r: 0, type: 'archeryrange' };
+
+  it('is the building that trained the units', () => {
+    expect(trainingSite(centre, [barracks, range], { spearman: 3 }, byType)).toEqual({ q: 2, r: 0 });
+    expect(trainingSite(centre, [barracks, range], { bowman: 3 }, byType)).toEqual({ q: -2, r: 0 });
+  });
+
+  it('uses the building of the slowest unit type in a mixed army', () => {
+    expect(trainingSite(centre, [barracks, range], { thrall: 2, bowman: 2 }, byType)).toEqual({ q: -2, r: 0 });
+  });
+
+  it('breaks equal speeds by the lowest unit type', () => {
+    expect(trainingSite(centre, [barracks, range], { bowman: 1, spearman: 1 }, byType)).toEqual({ q: 2, r: 0 });
+  });
+
+  it('takes the nearest of several, ties by q then r', () => {
+    const far = { q: 4, r: 0, type: 'barracks' };
+    expect(trainingSite(centre, [far, barracks], { spearman: 1 }, byType)).toEqual({ q: 2, r: 0 });
+    const a = { q: 3, r: 0, type: 'barracks' };
+    const b = { q: 2, r: 1, type: 'barracks' };
+    expect(trainingSite(centre, [a, b], { spearman: 1 }, byType)).toEqual({ q: 2, r: 1 });
+  });
+
+  it('falls back to the centre without the building or without units', () => {
+    expect(trainingSite(centre, [range], { spearman: 1 }, byType)).toEqual(centre);
+    expect(trainingSite(centre, [barracks], {}, byType)).toEqual(centre);
+    expect(trainingSite(centre, [barracks], { spearman: 0 }, byType)).toEqual(centre);
   });
 });

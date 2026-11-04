@@ -610,6 +610,7 @@ export function renderScenario(scn: Scenario): { png: Buffer; lines: string[]; r
   const result = renderPreview({
     seed: scn.seed,
     radius: scn.radius,
+    generation: scn.generation,
     window: scn.window,
     hexPixels: scn.px ?? 22,
     layers: ['pathing'],

@@ -42,8 +42,12 @@ function trainingOrder(overrides: Partial<TrainingOrderResponse> = {}): Training
   return {
     id: 'training-1',
     unit: 'spearman',
+    q: 3,
+    r: -2,
     count: 5,
     completedCount: 0,
+    startsAtGameTime: '2026-01-01T00:00:00Z',
+    startsInSeconds: 0,
     completesAtGameTime: '2026-01-01T00:00:00Z',
     completesInSeconds: 100,
     totalSeconds: 100,
@@ -128,6 +132,27 @@ describe('QueueDrawer', () => {
     expect(buildRow.get('.queue-drawer-handle-time').text()).toBe('—');
     expect(buildRow.get('.queue-drawer-handle-time').classes()).toContain('is-muted');
     expect(buildRow.find('.queue-drawer-handle-progress').exists()).toBe(false);
+  });
+
+  it('names the building that trains each part, and shows a part still queued behind another as waiting', () => {
+    const world = useWorldStore();
+    world.hud.buildings = [{ type: 'barracks', q: 3, r: -2, level: 7 }];
+    world.hud.trainingQueueFetchedAt = Date.now();
+    world.hud.trainingQueue = [
+      trainingOrder({ id: 'running', completesInSeconds: 20, totalSeconds: 100 }),
+      trainingOrder({ id: 'queued', startsInSeconds: 20, completesInSeconds: 80, totalSeconds: 60 }),
+    ];
+
+    const wrapper = mountDrawer({ open: true });
+    const rows = wrapper.findAll('.status-row').filter((r) => r.text().includes('trained'));
+    expect(rows).toHaveLength(2);
+    expect(rows[0].text()).toContain('Barracks, level 7 · hex 3, -2');
+    expect(rows[0].find('.status-progress').exists()).toBe(true);
+
+    expect(rows[1].classes()).toContain('is-waiting');
+    expect(rows[1].find('.status-progress').exists()).toBe(false);
+    expect(rows[1].get('.status-row-time').text()).toBe('Starts in 0:20');
+    expect(rows[1].text()).toContain('Barracks, level 7');
   });
 
   it('renders no rows (just the chevron) when only the garrison has entries', () => {
@@ -220,7 +245,11 @@ describe('QueueDrawer', () => {
     expect(wrapper.emitted('update:open')).toBeUndefined();
   });
 
-  it('a small, quick pointer tap toggles the drawer, same as a click', async () => {
+  // Bug: on a phone a tap on the handle opened the drawer on pointerup, the
+  // panel slid in under the finger, and the touch's click then landed on a
+  // drawer row, which selected it and closed the drawer again. The tap now
+  // toggles on its click, which still hits the handle.
+  it('a pointer tap toggles on its click, not on pointerup', async () => {
     const world = useWorldStore();
     world.hud.trainingQueueFetchedAt = Date.now();
     world.hud.trainingQueue = [trainingOrder()];
@@ -231,8 +260,27 @@ describe('QueueDrawer', () => {
 
     handle.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
     handle.dispatchEvent(new PointerEvent('pointerup', { clientX: 2, clientY: 1, pointerId: 1 }));
+    expect(wrapper.emitted('update:open')).toBeUndefined();
 
-    expect(wrapper.emitted('update:open')?.at(-1)).toEqual([true]);
+    handle.dispatchEvent(new MouseEvent('click', { detail: 1 }));
+    expect(wrapper.emitted('update:open')).toEqual([[true]]);
+  });
+
+  it('the click a browser fires after a drag does not toggle the drawer a second time', async () => {
+    const world = useWorldStore();
+    world.hud.trainingQueueFetchedAt = Date.now();
+    world.hud.trainingQueue = [trainingOrder()];
+
+    const wrapper = mountDrawer();
+    const handle = wrapper.get('.queue-drawer-handle').element as HTMLElement;
+    stubPointerCapture(handle);
+
+    handle.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
+    handle.dispatchEvent(new PointerEvent('pointermove', { clientX: 150, clientY: 0, pointerId: 1 }));
+    handle.dispatchEvent(new PointerEvent('pointerup', { clientX: 150, clientY: 0, pointerId: 1 }));
+    handle.dispatchEvent(new MouseEvent('click', { detail: 1 }));
+
+    expect(wrapper.emitted('update:open')).toEqual([[true]]);
   });
 
   it('bails out of the drawer drag when the gesture is more vertical than horizontal', async () => {

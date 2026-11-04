@@ -11,7 +11,7 @@ test('clicking an island founds a settlement and opens the village view', async 
   // comments for the other tests that share this same root cause.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await SettlementPage.found(page);
-  await expect(page).toHaveURL(/\/settlement$/);
+  await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
 
   // resource bar: the settlement is real state, not a placeholder screen —
   // four resources plus the population pill, each a positive, growing
@@ -20,12 +20,12 @@ test('clicking an island founds a settlement and opens the village view', async 
   // zoom drives settlement<->world switching and the manual override was
   // redundant (see docs/design/zoom-transition.md) — this check alone
   // already covers "real state, not a placeholder".
-  const values = page.locator('.resource-bar .resource .value');
+  const values = page.locator('.resource-bar:not([data-measure]) .resource .value');
   await expect(values).toHaveCount(5);
   for (const text of await values.allTextContents()) {
     expect(Number(text.replace(/[^\d]/g, ''))).toBeGreaterThan(0);
   }
-  const rates = page.locator('.resource-bar .resource .rate');
+  const rates = page.locator('.resource-bar:not([data-measure]) .resource .rate');
   for (const text of await rates.allTextContents()) {
     expect(text).toMatch(/^\+\d+\/h$/);
   }

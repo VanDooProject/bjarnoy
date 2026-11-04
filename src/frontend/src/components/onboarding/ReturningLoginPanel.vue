@@ -13,6 +13,7 @@ import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { usePlayerStore } from '../../stores/player';
 import { useLoginForm } from '../../composables/useLoginForm';
+import { useUnsavedInput } from '../../composables/useUnsavedInput';
 import type { MessageSchema } from '../../i18n/schema';
 
 const player = usePlayerStore();
@@ -25,6 +26,8 @@ const { userName, password, submitting, error, login, restoreRealmIfAny } = useL
 // shared, or the visitor might actually want a different account's login
 // form rather than the one this browser last remembered.
 userName.value = player.lastAccount ?? '';
+// The prefilled account name alone is not input worth keeping.
+useUnsavedInput(() => password.value !== '' || userName.value !== (player.lastAccount ?? ''));
 
 async function onSubmit() {
   if (!(await login(userName.value, password.value))) return;

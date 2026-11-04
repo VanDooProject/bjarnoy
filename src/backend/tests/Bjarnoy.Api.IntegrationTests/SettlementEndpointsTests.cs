@@ -92,6 +92,30 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_settlement_whose_longhouse_is_destroyed_claims_nothing()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        var before = (await GetAsync(client, settlement.Id))!;
+        Assert.Equal(2, before.ClaimRadius);
+        Assert.NotEmpty(Assert.Single(before.Realm).Discs);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            db.PlacedBuildings.RemoveRange(
+                db.PlacedBuildings.Where(b => b.SettlementId == settlement.Id && b.Type == BuildingType.Longhouse));
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var after = (await GetAsync(client, settlement.Id))!;
+
+        Assert.Equal(0, after.LonghouseLevel);
+        Assert.Equal(0, after.ClaimRadius);
+        Assert.Empty(Assert.Single(after.Realm).Discs);
+    }
+
+    [Fact]
     public async Task A_plot_that_is_not_a_start_position_is_refused()
     {
         using var client = Client();
@@ -388,9 +412,12 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             var domain = entity.ToDomain();
 
             var line = HexLine(centre, candidateCoord);
-            var towerCoords = new[] { 0.4, 0.7, 0.95 }
-                .Select(fraction => line[(int)Math.Round(fraction * (line.Length - 1))])
-                .Distinct()
+            // Each tower stands inside the previous one's disc (the first within the founding longhouse's own radius of 2), so the
+            // whole chain is connected and claims (the chain rule).
+            var towerCoords = Enumerable.Range(0, line.Length)
+                .Select(step => 2 + (step * 9))
+                .TakeWhile(index => index < line.Length - 1)
+                .Select(index => line[index])
                 .ToList();
 
             domain = domain with
@@ -1296,7 +1323,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/units",
-            new TrainUnitsRequest("thrall", 1),
+            new TrainUnitsRequest("thrall", 1, 0, 0),
             Ct);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -1315,7 +1342,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/units",
-            new TrainUnitsRequest("axeman", 1),
+            new TrainUnitsRequest("axeman", 1, 0, 0),
             Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);

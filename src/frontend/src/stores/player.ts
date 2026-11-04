@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { DEMO_MODE } from '../config';
+import { readPersistedSettlementId } from '../lib/persistedPlayer';
 import { randomUuid } from '../lib/uuid';
 
 // Now also sent as the `X-Owner-Id` header proving ownership of an
@@ -26,14 +27,7 @@ function stablePlayerId(): string {
   return id;
 }
 
-// "Already founded a settlement" only survives a reload in live mode, where
-// the backend is the actual source of truth and can restore it (see
-// `stores/world.ts`'s `restoreLiveSettlement`). Demo mode's `WorldModel` is
-// pure in-memory simulation with nothing to restore, so every reload there
-// intentionally starts a fresh session — persisting the flag would just
-// strand the router's `/settlement` guard on a settlement that no longer
-// exists anywhere.
-const persistedSettlementId = DEMO_MODE ? null : localStorage.getItem('bjarnoy.settlementId');
+const persistedSettlementId = readPersistedSettlementId();
 
 // "Join another world": worldId -> settlementId for every world this player
 // has already founded a realm in, so `enterWorld` can restore the right

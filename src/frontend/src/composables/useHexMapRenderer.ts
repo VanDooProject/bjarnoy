@@ -1,6 +1,8 @@
 import { onBeforeUnmount, onMounted, shallowRef, watch, type Ref } from 'vue';
 import { HexMapRenderer, READY_LOAD_STATE, type HexMapRendererOptions, type MapLoadState } from '../lib/map/HexMapRenderer';
+import { mapCovered } from './useMapCover';
 import { animationPreference } from '../lib/perf/animationPreference';
+import { motionPreferences } from '../lib/perf/motionPreferences';
 
 /**
  * Mounts a HexMapRenderer on a <canvas> ref. Deliberately exposes almost
@@ -47,6 +49,10 @@ export function useHexMapRenderer(
   const mountError = shallowRef<unknown>(null);
   let resizeObserver: ResizeObserver | null = null;
   let stopAnimationWatch: (() => void) | null = null;
+  let stopWaterMotionWatch: (() => void) | null = null;
+  let stopLakeMotionWatch: (() => void) | null = null;
+  let stopFogMotionWatch: (() => void) | null = null;
+  let stopCoverWatch: (() => void) | null = null;
   // Bumped on every (re)mount attempt and on unmount, so a mount that
   // resolves after being superseded (retry, or the component going away)
   // tears itself down instead of wiring up a second renderer.
@@ -57,6 +63,14 @@ export function useHexMapRenderer(
     resizeObserver = null;
     stopAnimationWatch?.();
     stopAnimationWatch = null;
+    stopWaterMotionWatch?.();
+    stopWaterMotionWatch = null;
+    stopLakeMotionWatch?.();
+    stopLakeMotionWatch = null;
+    stopFogMotionWatch?.();
+    stopFogMotionWatch = null;
+    stopCoverWatch?.();
+    stopCoverWatch = null;
     r?.destroy();
     renderer.value = null;
     delete containerRef.value?.dataset.mapReady;
@@ -97,6 +111,20 @@ export function useHexMapRenderer(
     stopAnimationWatch = watch(() => animationPreference.effective, (enabled) => r.setAnimationsEnabled(enabled), {
       immediate: true,
     });
+    // Water / fog freeze per the player's own motion settings (auto follows
+    // the device's reduced-motion preference). Applied immediately for the
+    // same reason as the animation watch above.
+    stopWaterMotionWatch = watch(() => motionPreferences.waterEnabled, (enabled) => r.setWaterMotion(enabled), {
+      immediate: true,
+    });
+    stopLakeMotionWatch = watch(() => motionPreferences.lakesEnabled, (enabled) => r.setLakeMotion(enabled), {
+      immediate: true,
+    });
+    stopFogMotionWatch = watch(() => motionPreferences.fogEnabled, (enabled) => r.setFogMotion(enabled), {
+      immediate: true,
+    });
+    // Stop the ticker while an opaque surface (phone route modal) hides the map.
+    stopCoverWatch = watch(mapCovered, (covered) => r.setCovered(covered), { immediate: true });
     // Real lifecycle signal for "the renderer is mounted and has drawn its
     // first frame" — e.g. e2e tests wait on this instead of a guessed
     // timeout, since there's otherwise nothing in the DOM to observe. Not a

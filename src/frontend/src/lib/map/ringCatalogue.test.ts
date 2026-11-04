@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildingAllowedOnHex, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, isWallBuilding, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
+import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
 
 describe('formatBuildTime', () => {
   it('renders the level-1 catalogue durations the way the design card shows them', () => {
@@ -66,18 +66,18 @@ describe('storageHouseLock', () => {
 });
 
 describe('towerLimitLock', () => {
-  it('explains the limit once the settlement holds as many towers as its longhouse level allows', () => {
-    expect(towerLimitLock(1, 3)).toBe('Tower limit reached (1/1) — level up the longhouse for more');
-    expect(towerLimitLock(2, 8)).toBe('Tower limit reached (2/2) — level up the longhouse for more');
+  it('explains the limit once the realm holds as many towers as the limit allows', () => {
+    expect(towerLimitLock(1, 1)).toBe('Tower limit reached (1/1) — level up the longhouse for more');
+    expect(towerLimitLock(2, 2)).toBe('Tower limit reached (2/2) — level up the longhouse for more');
   });
 
   it('stays open while there is room', () => {
-    expect(towerLimitLock(0, 3)).toBeUndefined();
-    expect(towerLimitLock(1, 7)).toBeUndefined();
+    expect(towerLimitLock(0, 1)).toBeUndefined();
+    expect(towerLimitLock(1, 2)).toBeUndefined();
   });
 
   it('leaves the "longhouse too low" case to longhouseLock', () => {
-    expect(towerLimitLock(0, 2)).toBeUndefined();
+    expect(towerLimitLock(0, 0)).toBeUndefined();
   });
 });
 
@@ -211,8 +211,8 @@ describe('tileIsBuildable on a wildlife camp hex', () => {
 
 describe('shrineLimitLock', () => {
   it('locks every shrine once the settlement holds one, whichever god', () => {
-    expect(shrineLimitLock(1)).toBe('This settlement already has a shrine');
-    expect(shrineLimitLock(2)).toBe('This settlement already has a shrine');
+    expect(shrineLimitLock(1)).toBe('Your realm already has a shrine');
+    expect(shrineLimitLock(2)).toBe('Your realm already has a shrine');
   });
 
   it('never locks the first shrine', () => {
@@ -232,6 +232,17 @@ describe('buildingAllowedOnHex', () => {
     }
     expect(buildingAllowedOnHex(type, { terrain: 'grass' })).toBe(false);
     expect(buildingAllowedOnHex(type, { terrain: 'bog' })).toBe(false); // bog kind unknown
+  });
+
+  it('the Tower stands on grass, sand, forest and plain moss, like the wall but never on water', () => {
+    for (const terrain of ['grass', 'sand', 'forest']) expect(buildingAllowedOnHex('tower', { terrain }), terrain).toBe(true);
+    expect(buildingAllowedOnHex('tower', bogHex('bog'))).toBe(true);
+    for (const kind of ALL_KINDS.filter((k) => k !== 'bog')) {
+      expect(buildingAllowedOnHex('tower', bogHex(kind)), `on ${kind}`).toBe(false);
+    }
+    expect(buildingAllowedOnHex('tower', { terrain: 'bog' })).toBe(false); // bog kind unknown
+    expect(buildingAllowedOnHex('tower', { terrain: 'mountain' })).toBe(false);
+    expect(buildingAllowedOnHex('tower', { terrain: 'sea', isCoastalWater: true })).toBe(false);
   });
 
   it('the Hammer Forge stands on a creek and nothing else', () => {
@@ -265,7 +276,7 @@ describe('buildingAllowedOnHex', () => {
     for (const type of ['farm', 'tower', 'storagehouse', 'lumberjack', 'quarry', 'townsquare', 'sawmill', 'fishinghut', 'bogoreworks', 'claybrickworks']) {
       expect(buildingAllowedOnHex(type, bogHex('lake')), `${type} on a lake`).toBe(false);
     }
-    for (const type of ['farm', 'tower', 'storagehouse', 'lumberjack', 'quarry', 'townsquare', 'smithy', 'barracks', 'meadery', 'longhouse']) {
+    for (const type of ['farm', 'storagehouse', 'lumberjack', 'quarry', 'townsquare', 'smithy', 'barracks', 'meadery', 'longhouse']) {
       for (const kind of ALL_KINDS) expect(buildingAllowedOnHex(type, bogHex(kind)), `${type} on ${kind}`).toBe(false);
     }
   });
@@ -321,5 +332,40 @@ describe('the wall in the ring menu', () => {
     expect(palisadeLock({ ok: false, reason: 'river' })).toBe('No wall on a river');
     expect(palisadeLock({ ok: false, reason: 'seaEnd' })).toBe('The sea end needs exactly one land wall beside it');
     expect(palisadeLock({ ok: false, reason: 'notAllowedOnTerrain' })).toBe("A wall can't stand on this terrain");
+  });
+});
+
+describe('the bridge in the ring menu', () => {
+  it('is offered on a straight, bend or bend60 river of river width, and on no other river or dry hex', () => {
+    for (const shape of ['straight', 'bend', 'bend60']) expect(riverBuildingAllowedHere('bridge', shape, 'plain', 'river')).toBe(true);
+    for (const shape of ['spring', 'confluence', 'mouth']) expect(riverBuildingAllowedHere('bridge', shape, 'plain', 'river')).toBe(false);
+    expect(riverBuildingAllowedHere('bridge', undefined)).toBe(false);
+    expect(riverBuildingAllowedHere('bridge', 'straight', 'plain', 'stream')).toBe(false);
+  });
+
+  it('takes every river art variant (the bridge swaps it for the plain channel), unlike the Sawmill on a loop', () => {
+    for (const variant of ['plain', 'meander', 'island', 'loop'] as const) {
+      expect(riverBuildingAllowedHere('bridge', 'bend60', variant, 'river')).toBe(true);
+    }
+    expect(riverBuildingAllowedHere('sawmill', 'bend60', 'loop', 'river')).toBe(false);
+  });
+
+  it('stands on grass, forest and sand, never on mountain, bog or water', () => {
+    for (const terrain of ['grass', 'forest', 'sand']) expect(buildingAllowedOnHex('bridge', { terrain })).toBe(true);
+    for (const terrain of ['mountain', 'bog', 'lake', 'sea']) expect(buildingAllowedOnHex('bridge', { terrain })).toBe(false);
+  });
+
+  it('words the refusals a bridge can get as locks, and nothing when the hex is fine', () => {
+    expect(bridgeLock({ ok: true })).toBeUndefined();
+    expect(bridgeLock({ ok: false, reason: 'notWide' })).toBe('This river is no wide river: armies already wade across it');
+    expect(bridgeLock({ ok: false, reason: 'wasted' })).toBe('No bridge on a wasted island');
+  });
+});
+
+describe('newPlacementDisabled', () => {
+  it('switches off new quarries only (BuildingCatalogue.NewPlacementDisabled), the terrain rule stays for the ones standing', () => {
+    expect(newPlacementDisabled('quarry')).toBe(true);
+    for (const type of ['lumberjack', 'claybrickworks', 'bogoreworks', 'farm', 'tower']) expect(newPlacementDisabled(type), type).toBe(false);
+    expect(buildingAllowedOnHex('quarry', { terrain: 'mountain' })).toBe(true);
   });
 });

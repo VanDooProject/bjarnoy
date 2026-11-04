@@ -25,8 +25,6 @@ public enum GuildRejection
     AlreadyInAGuild,
     NotAMember,
     GuildFull,
-    NotEnoughResources,
-    NoSettlement,
     Forbidden,
     TargetIsSelf,
     TreatyCapReached,
@@ -63,11 +61,11 @@ public sealed record GuildTreatyResult(GuildRejection Rejection, GuildPeaceTreat
     public bool Accepted => Rejection == GuildRejection.None && Treaty is not null;
 }
 
-/// <summary>The perks and caps a guild's current fee tier and roster imply — see <see cref="GuildRules"/>.</summary>
-public sealed record GuildPerksSummary(GuildPerks Perks, int MemberCap, int MaxActivePeaceTreaties);
+/// <summary>The caps a guild's current roster implies — see <see cref="GuildRules"/>.</summary>
+public sealed record GuildCapsSummary(int MemberCap, int MaxActivePeaceTreaties);
 
 /// <summary>
-/// Guilds: founding, membership, the recurring fee, the message board, and
+/// Guilds: founding, membership, the message board, and
 /// peace treaties between guilds. See docs/design/guild-alliance-system.md for
 /// the full design and what v1 deliberately defers (invites/applications,
 /// audit log, a shared guild bank, and more).
@@ -111,7 +109,6 @@ public sealed class GuildService(
             Name = name,
             Tag = tag,
             Description = description,
-            FeeTier = GuildFeeTier.Copper,
             CreatedAt = now,
         };
 
@@ -129,7 +126,7 @@ public sealed class GuildService(
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (!ConcurrentWriteExecutor.IsRetryable(ex))
         {
             // Two founders raced on the same name/tag, or the same player
             // founded twice from two requests. The unique indexes are what
@@ -177,11 +174,10 @@ public sealed class GuildService(
             .ToListAsync(cancellationToken);
 
     /// <summary>
-    /// The perks and caps a guild's fee tier currently unlocks — the single
-    /// surface a future trade/army system reads instead of reaching into the
-    /// guild module (see <see cref="GuildPerks"/>).
+    /// The caps a guild currently has: its member cap (base plus its highest
+    /// longhouse level) and its peace treaty cap.
     /// </summary>
-    public async Task<GuildPerksSummary?> GetPerksAsync(Guid guildId, CancellationToken cancellationToken = default)
+    public async Task<GuildCapsSummary?> GetCapsAsync(Guid guildId, CancellationToken cancellationToken = default)
     {
         var guild = await _dbContext.Guilds
             .Include(g => g.Memberships)
@@ -195,13 +191,12 @@ public sealed class GuildService(
         var highestLonghouse = await HighestLonghouseLevelAsync(
             guild.WorldId, guild.Memberships.Select(m => m.UserId), cancellationToken).ConfigureAwait(false);
 
-        return new GuildPerksSummary(
-            GuildRules.Perks(guild.FeeTier),
-            GuildRules.MemberCap(guild.FeeTier, highestLonghouse),
-            GuildRules.MaxActivePeaceTreaties(guild.FeeTier));
+        return new GuildCapsSummary(
+            GuildRules.MemberCap(highestLonghouse),
+            GuildRules.MaxActivePeaceTreaties);
     }
 
-    /// <summary>Joins a guild, refusing once its member cap (fee tier + highest longhouse level) is reached.</summary>
+    /// <summary>Joins a guild, refusing once its member cap (base + highest longhouse level) is reached.</summary>
     public async Task<GuildMembershipResult> JoinAsync(
         Guid guildId, Guid userId, CancellationToken cancellationToken = default)
     {
@@ -222,7 +217,7 @@ public sealed class GuildService(
 
         var highestLonghouse = await HighestLonghouseLevelAsync(
             guild.WorldId, guild.Memberships.Select(m => m.UserId), cancellationToken).ConfigureAwait(false);
-        var cap = GuildRules.MemberCap(guild.FeeTier, highestLonghouse);
+        var cap = GuildRules.MemberCap(highestLonghouse);
 
         if (guild.Memberships.Count >= cap)
         {
@@ -243,7 +238,7 @@ public sealed class GuildService(
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (!ConcurrentWriteExecutor.IsRetryable(ex))
         {
             _dbContext.Entry(membership).State = EntityState.Detached;
             return new GuildMembershipResult(GuildRejection.AlreadyInAGuild);
@@ -366,102 +361,6 @@ public sealed class GuildService(
             guildId, targetUserId, role, actingUserId);
 
         return new GuildMembershipResult(GuildRejection.None, target);
-    }
-
-    /// <summary>Changes a guild's fee tier. Only the Leader may call this.</summary>
-    /// <remarks>
-    /// Lowering a tier below what the current roster or treaty count needs is
-    /// allowed: nothing is auto-kicked and no treaty is auto-broken. The guild
-    /// simply cannot accept new members or propose new treaties until it is
-    /// back under the new, lower caps on its own — the "frozen state" from the
-    /// design doc, which falls out of <see cref="JoinAsync"/> and
-    /// <see cref="ProposeTreatyAsync"/> checking live caps rather than needing
-    /// a separate mechanism.
-    /// </remarks>
-    public async Task<GuildResult> SetFeeTierAsync(
-        Guid guildId, Guid actingUserId, GuildFeeTier tier, CancellationToken cancellationToken = default)
-    {
-        if (!await IsLeaderAsync(guildId, actingUserId, cancellationToken).ConfigureAwait(false))
-        {
-            return new GuildResult(GuildRejection.Forbidden);
-        }
-
-        var guild = await _dbContext.Guilds
-            .FirstOrDefaultAsync(g => g.Id == guildId, cancellationToken).ConfigureAwait(false);
-        if (guild is null)
-        {
-            return new GuildResult(GuildRejection.GuildNotFound);
-        }
-
-        guild.FeeTier = tier;
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
-        _logger.LogInformation("Guild {GuildId} fee tier set to {Tier} by {ActingUserId}.", guildId, tier, actingUserId);
-        return new GuildResult(GuildRejection.None, guild);
-    }
-
-    /// <summary>
-    /// Pays the guild's current fee from the member's settlement in the
-    /// guild's world, extending <see cref="GuildMembershipEntity.FeePaidThroughAt"/>
-    /// by <see cref="GuildRules.FeePeriod"/>.
-    /// </summary>
-    public async Task<GuildMembershipResult> PayFeeAsync(
-        Guid guildId, Guid userId, CancellationToken cancellationToken = default)
-    {
-        var membership = await _dbContext.GuildMemberships
-            .Include(m => m.Guild)
-            .FirstOrDefaultAsync(m => m.GuildId == guildId && m.UserId == userId, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (membership?.Guild is null)
-        {
-            return new GuildMembershipResult(GuildRejection.NotAMember);
-        }
-
-        var settlement = await _dbContext.Settlements
-            .Include(s => s.World)
-            .Include(s => s.Buildings)
-            .Include(s => s.Queue)
-            .Include(s => s.Runes)
-            .FirstOrDefaultAsync(
-                s => s.UserId == userId && s.WorldId == membership.Guild.WorldId, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (settlement?.World is null)
-        {
-            return new GuildMembershipResult(GuildRejection.NoSettlement);
-        }
-
-        var clock = settlement.World.ToClock();
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
-
-        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
-        var cost = GuildRules.FeeCost(membership.Guild.FeeTier);
-
-        // Issue #158 stage 1c: a reservation earmarked for the waiting build
-        // queue must be unspendable on a guild fee too.
-        if (!settled.TrySpendAvailable(cost, now, out var paid))
-        {
-            settlement.ApplyDomain(settled);
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            return new GuildMembershipResult(GuildRejection.NotEnoughResources);
-        }
-
-        settlement.ApplyDomain(settled with { Resources = paid });
-
-        // A fee paid early stacks onto whatever time is left rather than being
-        // wasted, but a very overdue member does not need to pay for the
-        // missed days to catch up — the new period starts from now either way.
-        var periodStart = membership.FeePaidThroughAt is { } paidThrough && paidThrough > now ? paidThrough : now;
-        membership.FeePaidThroughAt = periodStart + GuildRules.FeePeriod;
-
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
-        _logger.LogInformation(
-            "User {UserId} paid the {Tier} guild fee for {GuildId}, covering through {Until}.",
-            userId, membership.Guild.FeeTier, guildId, membership.FeePaidThroughAt);
-
-        return new GuildMembershipResult(GuildRejection.None, membership);
     }
 
     /// <summary>Creates a board topic with its opening post.</summary>
@@ -599,7 +498,7 @@ public sealed class GuildService(
         }
 
         var proposerActive = await ActiveTreatyCountAsync(proposerGuildId, cancellationToken).ConfigureAwait(false);
-        if (proposerActive >= GuildRules.MaxActivePeaceTreaties(proposer.FeeTier))
+        if (proposerActive >= GuildRules.MaxActivePeaceTreaties)
         {
             return new GuildTreatyResult(GuildRejection.TreatyCapReached);
         }
@@ -659,7 +558,7 @@ public sealed class GuildService(
             // inclusively rather than needing +1.
             var targetActive = await ActiveTreatyCountAsync(treaty.TargetGuildId, cancellationToken)
                 .ConfigureAwait(false);
-            if (targetActive > GuildRules.MaxActivePeaceTreaties(target.FeeTier))
+            if (targetActive > GuildRules.MaxActivePeaceTreaties)
             {
                 return new GuildTreatyResult(GuildRejection.TreatyCapReached);
             }

@@ -1,11 +1,13 @@
 import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { RING_TIP_GAP_PX } from '../src/lib/map/guidanceArrowGeometry';
+import { bubbleNearestPointerTip, waitForMapReady } from './helpers';
 import { SettlementPage } from './pages';
 
 test('landing page is the village view, not a marketing page in front of it', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-  await page.goto('/');
+  await page.goto('/#no-intro');
 
   // zip 6a: a real plot of terrain is on screen immediately — no world map,
   // no click-through, no separate marketing page.
@@ -17,7 +19,7 @@ test('landing page is the village view, not a marketing page in front of it', { 
   // banner's explicit hand-off, then the full game — all without ever
   // visiting a world map.
   await SettlementPage.found(page);
-  await expect(page).toHaveURL(/\/settlement$/);
+  await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
 });
 
 // While the terrain art is still loading there is no plot on screen yet, so
@@ -31,13 +33,17 @@ test('landing page holds the guided pointer back until the map has loaded', { ta
     await terrainHeld;
     await route.continue();
   });
-  await page.goto('/');
+  await page.goto('/#no-intro');
 
   const settlement = new SettlementPage(page);
   await expect(page.getByRole('status').filter({ hasText: 'Loading map' })).toBeVisible();
   await expect(settlement.guidancePointer).toHaveCount(0);
 
   releaseTerrain();
+  // The pointer follows the map's own "loaded" state, so wait for that the
+  // way every other landing spec does (openLanding) rather than giving the
+  // whole terrain atlas download and decode a bare expect timeout.
+  await waitForMapReady(page);
   await expect(settlement.guidancePointer).toBeVisible();
   await expect(settlement.guidancePointer).toContainText('Click this plot');
 });
@@ -56,67 +62,131 @@ test('landing page shows the guided pointer and a step-1 checklist before foundi
   await expect(page.locator('.tray-item.current')).toContainText('Longhouse & yard');
 });
 
-test('onboarding build step offers a ring menu with the tile-appropriate guided building enabled and everything else disabled', { tag: '@g3' }, async ({ page }) => {
-  // Regression coverage: the onboarding build step used to pop a
-  // BuildingModal with a single "Build here" button hardcoded to a type
-  // ('farm') that fails outside grass terrain — "can't actually select the
-  // correct building". It now opens the same kind of RingMenu the full
-  // settlement view uses, simplified to one flat ring (no build-category
-  // drill-down): only the guided type matching the *clicked tile's own
-  // terrain* is enabled (Reindeer Herder needs grass, Lumberjack needs forest) —
-  // enabling both regardless of terrain would just reintroduce the same
-  // silent-failure bug for whichever one doesn't fit.
+/** The bubble nearest the arrow's tip is the intended one, the tip just outside its rim, and no bubble under the tip. */
+async function expectPointerAtRimOf(page: import('@playwright/test').Page, name: string): Promise<void> {
+  await expect
+    .poll(async () => {
+      const at = await bubbleNearestPointerTip(page);
+      return at && at.nearest === name && at.rimDistance >= -1 && at.rimDistance <= RING_TIP_GAP_PX + 2 && at.under === null;
+    })
+    .toBe(true);
+}
+
+/** The guide chip (the arrow's label) is on screen and covers no ring bubble: not the one it names, not a neighbour. */
+async function expectChipClearOfBubbles(page: import('@playwright/test').Page): Promise<void> {
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const chip = document.querySelector('[data-testid="guidance-pointer"] .chip')?.getBoundingClientRect();
+        if (!chip) return 'no chip';
+        if (chip.left < 0 || chip.top < 0 || chip.right > window.innerWidth || chip.bottom > window.innerHeight) return 'chip off screen';
+        for (const el of document.querySelectorAll('.ring-bubble, .ring-hub')) {
+          const b = el.getBoundingClientRect();
+          const cx = b.x + b.width / 2;
+          const cy = b.y + b.height / 2;
+          const nx = Math.min(Math.max(cx, chip.left), chip.right);
+          const ny = Math.min(Math.max(cy, chip.top), chip.bottom);
+          if (Math.hypot(cx - nx, cy - ny) < b.width / 2 - 1) return `chip covers ${el.textContent?.trim() || el.className}`;
+        }
+        return 'clear';
+      }),
+    )
+    .toBe('clear');
+}
+
+for (const screen of [
+  { name: 'desktop 1280x800', viewport: { width: 1280, height: 800 }, phone: false },
+  { name: 'phone 390x844', viewport: { width: 390, height: 844 }, phone: true },
+  { name: 'phone 320x568', viewport: { width: 320, height: 568 }, phone: true },
+]) {
+test.describe(`onboarding ring pointer, ${screen.name}`, () => {
+test.use(screen.phone ? { viewport: screen.viewport, hasTouch: true, isMobile: true } : { viewport: screen.viewport });
+test('onboarding build step uses the map\'s two-lane ring, and the pointer walks the player through it to the guided building', { tag: '@g3' }, async ({ page }) => {
+  // The onboarding no longer has a ring of its own: it offers what the map's placement filter offers on the clicked
+  // hex (Build -> categories -> buildings) and only highlights the next guided building with the pointer. Nothing is
+  // dimmed or explained away; a building that can't stand on the hex is simply not there.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.openLanding(page);
   await settlement.claimLandfall();
 
-  // Frame 2: the landfall banner and a re-targeted pointer, right after
-  // founding and before the ring has ever opened.
+  // Frame 2: the landfall banner and the map pointer, right after founding and before the ring has ever opened.
   await expect(settlement.banner).toBeVisible();
   await expect(settlement.banner).toContainText('Landfall made.');
   await expect(settlement.guidancePointer).toContainText('Now build here');
   await expect(settlement.checklist).toContainText('Step 2 of 3');
 
-  // A guessed pixel offset only happens to land on a real hex at one
-  // particular zoom/camera framing — ask the model for a real empty *grass*
-  // hex inside the just-founded realm (deterministically exercising the Reindeer Herder's
-  // own terrain requirement), then the renderer's own camera math
-  // (__settlementRenderer's hexCenterScreen) for that hex's exact screen
-  // position. Same technique settlement-interactions.spec.ts uses for the
-  // full settlement view's own ring menu.
   const target = await settlement.findHex({ terrain: 'grass' });
-
   await settlement.clickHex(target);
 
-  // The landfall banner is gone the moment the ring opens (frame 3 has no
-  // such banner — the ring/note/pointer take over telling the story).
+  // The landfall banner is gone the moment the ring opens.
   await expect(settlement.banner).toHaveCount(0);
+  await settlement.ring.waitForOpen();
 
-  const farm = settlement.ring.action('Reindeer Herder');
-  const lumberjack = settlement.ring.action('Lumberjack');
-  const quarry = settlement.ring.action('Quarry');
-  await expect(farm).toBeVisible();
-  await expect(lumberjack).toBeVisible();
-  await expect(quarry).toBeVisible();
-  await expect(farm).toBeEnabled();
-  await expect(lumberjack).toBeDisabled();
-  await expect(quarry).toBeDisabled();
+  // Root: just Build (the map's rule), and the pointer on it.
+  expect(await settlement.ring.labels()).toEqual(['Build']);
+  await expect(settlement.guidancePointer).toContainText('Open Build');
+  // The arrow's tip rests at the rim of the bubble it names, not at a neighbour's, and covers no bubble.
+  await expectPointerAtRimOf(page, 'Build');
+  await expectChipClearOfBubbles(page);
 
-  // Frame 3: a persistent "why it's dim" note explaining the hex, not the
-  // click, plus the pointer aimed at whichever bubble actually fits.
-  await expect(settlement.ringNote).toBeVisible();
-  await expect(settlement.ringNote).toContainText("Why it's dim");
-  await expect(settlement.ringNote).toContainText('Lumberjack needs');
-  await expect(settlement.guidancePointer).toContainText('This one fits');
+  // Categories of a grass hex, the same ones the map's ring shows there; the pointer moves to the right one.
+  if (screen.phone) {
+    await settlement.ring.action('Build').first().tap();
+    await settlement.ring.settledLayer();
+  } else {
+    await settlement.ring.openBuildCategories();
+  }
+  expect(await settlement.ring.labels()).toEqual(expect.arrayContaining(['Resource', 'Military', 'Logistics', 'Defence', 'Shrines']));
+  await expect(settlement.guidancePointer).toContainText('Open Resource');
+  await expectPointerAtRimOf(page, 'Resource');
+  await expectChipClearOfBubbles(page);
+
+  // Buildings: the herder is there, nothing is dimmed, and the pointer is on the herder.
+  if (screen.phone) {
+    await settlement.ring.category('Resource').first().tap();
+    await settlement.ring.settledLayer();
+  } else {
+    await settlement.ring.openCategory('Resource');
+  }
+  const herder = settlement.ring.child('Reindeer Herder').first();
+  await expect(herder).toBeVisible();
+  await expect(herder).toBeEnabled();
+  await expect(settlement.ring.child('Lumberjack')).toHaveCount(0);
+  await expect(settlement.guidancePointer).toContainText('Build the Reindeer Herder');
+  await expectPointerAtRimOf(page, 'Reindeer Herder');
+  await expectChipClearOfBubbles(page);
+  await expect(page.getByTestId('ring-note')).toHaveCount(0);
 
   const before = await settlement.countBuildings();
-  await farm.click();
+  if (screen.phone) {
+    // The first tap arms the building, the second builds it.
+    await herder.tap();
+    await herder.tap();
+  } else {
+    await settlement.ring.click(herder);
+  }
   await expect.poll(() => settlement.countBuildings(), { timeout: 5_000 }).toBeGreaterThan(before);
   await expect(page.locator('.tray-item .sub').nth(1)).toHaveText('Placed');
 
   // Frame 4: one guided building down, the pointer moves on to the other.
   await expect(settlement.checklist).toContainText('Step 3 of 3');
   await expect(settlement.guidancePointer).toContainText('One more');
+});
+});
+}
+
+test('onboarding ring on a forest hex offers the lumberjack, and the map pointer still says where the herder goes', { tag: '@g3' }, async ({ page }) => {
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+  const settlement = await SettlementPage.openLanding(page);
+  await settlement.claimLandfall();
+
+  await settlement.clickHex(await settlement.findHex({ terrain: 'forest' }));
+  await settlement.ring.openBuildCategories();
+  await settlement.ring.openCategory('Resource');
+  await expect(settlement.ring.child('Lumberjack').first()).toBeVisible();
+  await expect(settlement.ring.child('Reindeer Herder')).toHaveCount(0);
+  // The herder is next but not offered here: no pointer at a ring bubble, the map pointer says where to go.
+  await expect(settlement.guidancePointer).toContainText('Now build here');
 });
 
 // Design handoff "2a" frame 5: completion drops the checklist for a banner
@@ -244,9 +314,8 @@ test('the pre-founding header has no dead in-game nav, only the returning-player
 
   await SettlementPage.openLanding(page);
 
-  await expect(page.getByRole('button', { name: 'World map', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Reports', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Alliance', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Reports', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Alliance', exact: true })).toHaveCount(0);
 
   const trigger = page.getByTestId('returning-player-trigger');
   await expect(trigger).toBeVisible();
@@ -267,23 +336,26 @@ test('the pre-founding header has no dead in-game nav, only the returning-player
   await expect(page).toHaveURL(/\/login$/);
 });
 
-// Returning-player nav work: World map and Leaderboards now additionally
-// require `auth.isAuthenticated` (previously World map only needed a founded
-// settlement, and Leaderboards had no condition at all — see HudNav.vue), so
-// an anonymous founder still doesn't get them; Reports/Alliance stay
+// Returning-player nav work: Leaderboards requires `auth.isAuthenticated`
+// (useHudNavEntries.ts), so an anonymous founder still doesn't get it; Reports/Alliance stay
 // unconditioned, and the returning-player menu doesn't disappear once
 // founded — it just moves from being the pre-founding header's only content
 // into HudNav's own anonymous-state slot (HudNav.vue's `v-else`).
-test('founding a settlement swaps the pre-founding header for the real in-game nav, but world map and leaderboards stay hidden until login', { tag: '@g3' }, async ({ page }) => {
+test('founding a settlement swaps the pre-founding header for the real in-game nav, but leaderboards stay hidden until login', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.openLanding(page);
   await settlement.claimLandfall();
 
-  await expect(page.getByRole('button', { name: 'Reports', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Alliance', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'World map', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Leaderboards', exact: true })).toHaveCount(0);
+  // Reports/Alliance live in the returning-player menu, not inline.
+  await expect(page.getByRole('link', { name: 'Reports', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('returning-player-trigger')).toBeVisible();
+  await page.getByTestId('returning-player-trigger').click();
+  const menu = page.getByTestId('returning-player-menu');
+  await expect(menu.getByRole('menuitem', { name: 'Reports', exact: true })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Alliance', exact: true })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Leaderboards', exact: true })).toHaveCount(0);
+  // Founded: the landing page is no destination any more.
+  await expect(menu.getByRole('menuitem', { name: 'Landing', exact: true })).toHaveCount(0);
 });
 
 // Mobile tutorial focus (owner decision): the header-hiding and

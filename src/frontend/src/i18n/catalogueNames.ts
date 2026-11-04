@@ -12,13 +12,14 @@ export const terrainName = (terrain: string) => lookup(`terrain.${terrain}`, ter
 export const wastedTerrainName = (family: string) => lookup(`wastedTerrain.${family}`, family);
 export const giantName = (family: string) => lookup(`giants.${family}`, family);
 export const campName = (family: string) => lookup(`camps.${family}`, family);
+/** An endgame site's name: `utgardwall`, `utgardgate` or `jotunwatchtower`. */
+export const endgameName = (site: string) => lookup(`endgame.${site}`, site);
 export const beastName = (family: string, tier: string) => lookup(`beasts.${family}.${tier}`, tier);
 export const resourceName = (resource: string) => lookup(`resources.${resource}`, resource);
 export const missionName = (mission: string) => lookup(`missions.${mission}`, mission);
 export const runeTypeName = (type: string) => lookup(`runes.types.${type}`, type);
 export const runeRarityName = (rarity: string) => lookup(`runes.rarities.${rarity}`, rarity);
 export const guildRoleName = (role: string) => lookup(`guild.roles.${role}`, role);
-export const guildFeeTierName = (tier: string) => lookup(`guild.feeTiers.${tier}`, tier);
 export const guildBoardTopicName = (kind: string) => lookup(`guild.boardTopics.${kind}`, kind);
 export const leaderboardScopeName = (scope: string) => lookup(`leaderboard.scopes.${scope}`, scope);
 export const leaderboardCategoryName = (category: string) => lookup(`leaderboard.categories.${category}`, category);

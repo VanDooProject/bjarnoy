@@ -3,14 +3,11 @@
   "hero": {
     "eyebrow": "A real-time viking island game",
     "title": "Bjarnoy",
-    "tagline": "One island. One sea. Never at rest.",
     "pitch": "Sail out, claim a plot, and build a realm that keeps growing while you're offline — build queues run, fleets sail, and raids land on a wall clock, not a turn counter.",
     "playCta": "Play now",
     "docsCta": "Read the docs",
     "seed": "World seed {seed}",
-    "reroll": "New world",
-    "explore": "Explore the map",
-    "exploreDone": "Done exploring"
+    "reroll": "New world"
   },
   "oneView": {
     "title": "One view — map and village",
@@ -38,7 +35,7 @@
       },
       "expansion": {
         "title": "Expansion by sea",
-        "body": "Load a settler crew onto a longship, sail it to an unclaimed coastal hex on any island, and found a second settlement."
+        "body": "Load settlers onto a ship, sail it to an unclaimed coastal hex on any island, and found a second settlement."
       },
       "trade": {
         "title": "Trade between players",

@@ -35,12 +35,12 @@
 // to BOTH anchor modes identically: the centre-vs-tip mismatch is a
 // property of the arrow's own geometry, not of what supplies the anchor
 // point, so the hex-anchored and screen-anchored cases need the same fix.
-import { computed, onUnmounted, ref, watchEffect } from 'vue';
+import { computed, onUnmounted, ref, watch, watchEffect } from 'vue';
 import type { AxialCoord } from '../../lib/hex/coords';
 import { useMapAnchor, type MapAnchorRenderer } from '../../composables/useMapAnchor';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
-import { arrowTipOffset, HEX_TARGET_RADIUS_PX } from '../../lib/map/guidanceArrowGeometry';
+import { ARROW_TIP_GAP_PX, arrowTipOffset, HEX_TARGET_RADIUS_PX } from '../../lib/map/guidanceArrowGeometry';
 import { placeChip, type ChipSide } from '../../lib/map/guidanceChipPlacement';
 import {
   isSettlementBubbleShown,
@@ -64,6 +64,10 @@ const props = withDefaults(
      * one flat value for both was wrong.
      */
     targetRadius?: number;
+    /** Gap, in px, between the tip and the target's edge; the hex default unless a ring bubble sets its own. */
+    tipGap?: number;
+    /** Arrow size factor (1 = full size); a cramped ring point at its bubble with a smaller arrow. */
+    scale?: number;
     /** Which side of the arrow the label chip sits on. */
     chipSide?: 'left' | 'right';
     /**
@@ -72,11 +76,37 @@ const props = withDefaults(
      * of the HUD. Every visible match counts.
      */
     clearBelowSelector?: string;
+    /**
+     * Screen discs the chip must never cover: the ring menu's bubbles (RingMenu's `bubbles` emit, the
+     * same circles the arrow keeps clear of), so the label does not hide what it points at or its neighbours.
+     */
+    avoid?: readonly { x: number; y: number; r: number }[];
+    /**
+     * Bumped each time the player taps the checklist's current step: every change plays one "poke" (the arrow thrusts
+     * at its target a few times) so the eye finds where to tap.
+     */
+    nudge?: number;
   }>(),
-  { angle: 38, targetRadius: HEX_TARGET_RADIUS_PX, chipSide: 'left' },
+  { angle: 38, targetRadius: HEX_TARGET_RADIUS_PX, tipGap: ARROW_TIP_GAP_PX, scale: 1, chipSide: 'left', avoid: () => [] },
 );
 
 const anchorEl = ref<HTMLElement | null>(null);
+
+// Restarting a CSS animation needs the class off for one frame: a tap during a running poke starts it over.
+const poking = ref(false);
+let pokeFrame = 0;
+watch(
+  () => props.nudge,
+  () => {
+    poking.value = false;
+    cancelAnimationFrame(pokeFrame);
+    pokeFrame = requestAnimationFrame(() => {
+      poking.value = true;
+    });
+  },
+);
+onUnmounted(() => cancelAnimationFrame(pokeFrame));
+
 useMapAnchor(
   anchorEl,
   () => (props.coord ? props.renderer : null),
@@ -94,7 +124,7 @@ watchEffect(() => {
 // guidance step changes, not every frame the way the anchor position does),
 // so a plain computed — recalculated on prop change, not per animation
 // frame — is the right cost here.
-const tipOffset = computed(() => arrowTipOffset(props.angle, props.targetRadius));
+const tipOffset = computed(() => arrowTipOffset(props.angle, props.targetRadius, props.tipGap, props.scale));
 
 // Keeps the label chip fully on screen, clear of the HUD bar, instead of the
 // old CSS-only placement (side of the arrow on desktop, centred above it on
@@ -165,6 +195,8 @@ function tick() {
     { width, height },
     safe,
     prefer,
+    undefined,
+    props.avoid,
   );
 
   // `.chip` is `position: absolute` inside `.shift`, which carries a
@@ -197,7 +229,7 @@ onUnmounted(() => cancelAnimationFrame(frame));
     ref="anchorEl"
     class="anchor"
     data-testid="guidance-pointer"
-    :style="{ '--rotate': `${angle}deg`, '--tip-dx': `${tipOffset.x}px`, '--tip-dy': `${tipOffset.y}px` }"
+    :style="{ '--rotate': `${angle}deg`, '--scale': scale, '--tip-dx': `${tipOffset.x}px`, '--tip-dy': `${tipOffset.y}px` }"
   >
     <!-- `.shift` carries the tip-offset translate for BOTH the arrow and the
          chip, so the chip stays visually attached to the (now correctly
@@ -208,10 +240,14 @@ onUnmounted(() => cancelAnimationFrame(frame));
     <div ref="shiftEl" class="shift">
       <div ref="rotateEl" class="rotate">
         <div class="bob">
-          <svg width="110" height="110" viewBox="0 0 150 150" class="arrow-svg">
-            <rect x="60" y="14" width="30" height="66" rx="9" fill="#ffc55c" stroke="#20160a" stroke-width="4" />
-            <polygon points="75,136 32,72 118,72" fill="#ffc55c" stroke="#20160a" stroke-width="4" />
-          </svg>
+          <!-- `.poke` nests inside `.bob` (and so inside `.rotate`) for the same reason the bob does: its
+               plain-vertical keyframes then run along the shaft at any angle, and the two motions add up. -->
+          <div class="poke" :class="{ poking }" data-testid="guidance-poke" @animationend="poking = false">
+            <svg width="110" height="110" viewBox="0 0 150 150" class="arrow-svg">
+              <rect x="60" y="14" width="30" height="66" rx="9" fill="#ffc55c" stroke="#20160a" stroke-width="4" />
+              <polygon points="75,136 32,72 118,72" fill="#ffc55c" stroke="#20160a" stroke-width="4" />
+            </svg>
+          </div>
         </div>
       </div>
       <div ref="chipEl" class="chip" :class="chipSide">{{ label }}</div>
@@ -253,15 +289,40 @@ onUnmounted(() => cancelAnimationFrame(frame));
   transform: translate(var(--tip-dx, 0px), var(--tip-dy, 0px));
 }
 .rotate {
-  transform: rotate(var(--rotate));
+  transform: rotate(var(--rotate)) scale(var(--scale, 1));
 }
 .bob {
   animation: pointer-bob 1.15s ease-in-out infinite;
 }
-@media (prefers-reduced-motion: reduce) {
-  .bob {
-    animation: none;
+html[data-hud-motion='reduced'] .bob {
+  animation: none;
+}
+/* The tip points down the local +Y axis: pull back, then thrust past the rest spot toward the target, three times,
+   with a scale pulse on each thrust. */
+@keyframes pointer-poke {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
   }
+  12%,
+  42%,
+  72% {
+    transform: translateY(-22px) scale(1.08);
+  }
+  27%,
+  57%,
+  87% {
+    transform: translateY(10px) scale(1.18);
+  }
+}
+.poke {
+  transform-origin: 50% 90%;
+}
+.poke.poking {
+  animation: pointer-poke 1.2s ease-in-out;
+}
+html[data-hud-motion='reduced'] .poke.poking {
+  animation: none;
 }
 .arrow-svg {
   display: block;

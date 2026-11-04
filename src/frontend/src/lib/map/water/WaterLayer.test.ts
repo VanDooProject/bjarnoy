@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { WaterLayer } from './WaterLayer';
-import { WATER_FRAGMENT } from './waterShader';
+import { BufferImageSource, Texture } from 'pixi.js';
+import { RIVER_NOISE_PER_TILE, RIVER_SPEED_TURNS_PER_SECOND, WaterLayer } from './WaterLayer';
+import { RIPPLE_WAVELENGTH_TEXELS } from './riverFlow';
+import { RIVER_DRIFT, WATER_FRAGMENT } from './waterShader';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
 import { FOAM_REACH_TILES, type WaterMask } from './waterMask';
 import { waterMaskRegion } from './waterMaskLayout';
@@ -31,6 +33,7 @@ function maskOver(minX: number, minY: number, maxX: number, maxY: number): Water
     height: region.height,
     region,
     taint: new Uint8Array(region.width * region.height),
+    noFoam: new Uint8Array(region.width * region.height),
   };
 }
 
@@ -47,23 +50,11 @@ describe('WaterLayer', () => {
     Object.assign(waterDebugTuning, DEFAULT_TUNING);
   });
 
-  it('carries the prop-tile mute flag onto its uniform', () => {
-    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
-    layer.tick(0);
-    expect(uniformsOf(layer).uPropMute).toBe(1);
-
-    waterDebugFlags.propTileMute = false;
-    layer.tick(16);
-    expect(uniformsOf(layer).uPropMute).toBe(0);
-  });
-
-  it('never mutes on the world map, which draws no coastal art to protect', () => {
-    // World mode skips sea tiles entirely, so there is no boat or rock on
-    // screen there — muting would only thin the foam on a fifth of every
-    // coastline for nothing.
-    const layer = new WaterLayer('world', TILE_W, TILE_H);
-    layer.tick(0);
-    expect(uniformsOf(layer).uPropMute).toBe(0);
+  it('ends the caustics inside the foam band', () => {
+    // The ribbons end inside the foam band, never short of it: the keep-off
+    // plus the per-ribbon spread (0.1) stays inside the foam width (0.3).
+    expect(waterDebugTuning.causticCullHexes + 0.1).toBeLessThanOrEqual(waterDebugTuning.foamWidthHexes * 0.7);
+    expect(waterDebugTuning.causticCullHexes).toBeLessThan(waterDebugTuning.foamWidthHexes);
   });
 
   it("clamps the caustics' keep-off distance to the range the mask can express", () => {
@@ -281,20 +272,109 @@ describe('WaterLayer', () => {
     expect(u.uCausticBlobs).toBe(1);
   });
 
-  it('shrinks the foam band and its ragged edge by the same factor over a prop tile', () => {
+  it('keeps caustics and foam off the art dry mask', () => {
     // A regression guard on GLSL, which is the honest place for it: there is no
-    // CPU-side copy of this arithmetic to test, and the bug it guards was
-    // invisible to every uniform-level assertion.
-    //
-    // uFoamNoise is an *absolute* displacement in tile widths, so when the band
-    // narrows over a boat or rock the displacement has to narrow with it. It
-    // did not, and at a quarter width the 0.09-tile edge noise was over a third
-    // of the band's whole reach: measured on screen the foam swung back onto
-    // the rock on every positive excursion of the noise, which is exactly the
-    // artifact the narrowing exists to remove.
-    const reach = WATER_FRAGMENT.split('\n').find((line) => line.includes('float reach ='));
-    expect(reach).toBeDefined();
-    expect(reach).toContain('uFoamNoise * shrink * edge');
+    // CPU-side copy of this arithmetic to test. The shader samples the dry mask
+    // texture, and both the caustic layers (via `quiet`) and the foam multiply
+    // by what is left of it.
+    expect(WATER_FRAGMENT).toContain('uniform sampler2D uWaterDry;');
+    expect(WATER_FRAGMENT).toContain('float quiet = (1.0 - dry)');
+    const foam = WATER_FRAGMENT.split('\n').find((line) => line.includes('float foam ='));
+    expect(foam).toContain('(1.0 - dry)');
+  });
+
+  it('binds the "nothing is dry" placeholder until a dry mask is set, and the given texture after', () => {
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+    const resources = layer.mesh.shader!.resources as Record<string, unknown>;
+    const placeholder = resources.uWaterDry;
+    expect(placeholder).toBeDefined();
+
+    const texture = new Texture({ source: new BufferImageSource({ resource: new Uint8Array([255, 255, 255, 255]), width: 1, height: 1 }) });
+    layer.setDryTexture(texture);
+    expect(resources.uWaterDry).toBe(texture.source);
+
+    layer.setDryTexture(null);
+    expect(resources.uWaterDry).toBe(placeholder);
+  });
+
+  it('binds the "no river" placeholder until a river flow texture is set, and the given texture after', () => {
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+    const resources = layer.mesh.shader!.resources as Record<string, unknown>;
+    const placeholder = resources.uRiverFlow;
+    expect(placeholder).toBeDefined();
+    expect(WATER_FRAGMENT).toContain('uniform sampler2D uRiverFlow;');
+
+    const texture = new Texture({ source: new BufferImageSource({ resource: new Uint8Array([128, 128, 255, 255]), width: 1, height: 1 }) });
+    layer.setRiverFlowTexture(texture);
+    expect(resources.uRiverFlow).toBe(texture.source);
+
+    layer.setRiverFlowTexture(null);
+    expect(resources.uRiverFlow).toBe(placeholder);
+
+    // (f) The shader reads the texture with its own UVs: the river cells' box, as an origin and 1 / size.
+    layer.setRiverFlowTexture(texture, { minX: 100, minY: 20, maxX: 160, maxY: 80 });
+    const rect = Array.from(uniformsOf(layer).uRiverRect as Float32Array);
+    expect(rect.slice(0, 2)).toEqual([100, 20]);
+    expect(rect[2]).toBeCloseTo(1 / 60, 6);
+    expect(rect[3]).toBeCloseTo(1 / 60, 6);
+    layer.setRiverFlowTexture(null);
+    expect(Array.from(uniformsOf(layer).uRiverRect as Float32Array)).toEqual([0, 0, 1, 1]);
+
+    // The stream function texture is bound with the texture, and falls back to the placeholder without it.
+    const psiTexture = new Texture({ source: new BufferImageSource({ resource: new Uint8Array([128, 128, 255, 255]), width: 1, height: 1 }) });
+    layer.setRiverFlowTexture(texture, { minX: 0, minY: 0, maxX: 2, maxY: 2 }, psiTexture);
+    expect(resources.uRiverPsi).toBe(psiTexture.source);
+    layer.setRiverFlowTexture(texture, { minX: 0, minY: 0, maxX: 2, maxY: 2 });
+    expect(resources.uRiverPsi).toBe(placeholder);
+  });
+
+  it('carries the specks and patches at the ripples\' speed times the gain measured on the clips (within 10 %)', () => {
+    const k = RIVER_NOISE_PER_TILE / TILE_W; // the river noise scale, per world unit (uRiverScale)
+    const texelWorld = (2 * TILE_W) / 200; // a flow cell texel: 2 source px of the 200 px art
+    // Ripples: periods per second times the wavelength in world units. Drifts: shift * rate / (grid * k) world units per second.
+    // `gain` is what scripts/motion measurements on recorded clips needed on top of that so the visible marks match the crests
+    // (cross-fading features shows less motion than the nominal speed).
+    const ripples = RIVER_SPEED_TURNS_PER_SECOND * RIPPLE_WAVELENGTH_TEXELS * texelWorld;
+    for (const [name, d] of Object.entries(RIVER_DRIFT)) {
+      const speed = (d.shift * d.rate) / (d.grid * k);
+      expect(Math.abs(speed / d.gain / ripples - 1), `${name}: ${speed.toFixed(1)} against ${ripples.toFixed(1)} world units per second`).toBeLessThan(0.1);
+    }
+  });
+
+  it('maps the river flow flags and knobs onto their uniforms', () => {
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+    const u = uniformsOf(layer);
+    layer.tick(0);
+    expect(u.uRiverFlowOn).toBe(1);
+    expect(u.uShowRiverFlow).toBe(0);
+    const alpha = u.uRiverAlpha as number;
+    const speed = u.uRiverSpeed as number;
+    const arc = u.uRiverArc as number;
+
+    waterDebugFlags.riverFlow = false;
+    waterDebugFlags.showRiverFlow = true;
+    waterDebugTuning.riverBrightness = 2;
+    waterDebugTuning.riverSpeed = 0.5;
+    waterDebugTuning.riverArc = 2;
+    layer.tick(16);
+    expect(u.uRiverFlowOn).toBe(0);
+    expect(u.uShowRiverFlow).toBe(1);
+    // The default look is the cartoon bands with the flow streaks over them at a quarter of their alpha.
+    expect(u.uRiverStyle).toBe(4);
+    expect(u.uRiverStreakMix).toBeCloseTo(0.25, 9);
+    waterDebugFlags.riverStyle = 2;
+    waterDebugTuning.riverStreakMix = 0.4;
+    layer.tick(32);
+    expect(u.uRiverStyle).toBe(2);
+    expect(u.uRiverStreakMix).toBeCloseTo(0.4, 9);
+    waterDebugFlags.riverStyle = 3;
+    layer.tick(48);
+    expect(u.uRiverStyle).toBe(3);
+    waterDebugFlags.riverStyle = 4;
+    waterDebugTuning.riverStreakMix = 0.25;
+    expect(u.uRiverAlpha).toBeCloseTo(alpha * 2, 9);
+    expect(u.uRiverSpeed).toBeCloseTo(speed * 0.5, 9);
+    expect(u.uRiverArc).toBeCloseTo(arc * 2, 9);
   });
 
   it('never draws a sea body in settlement mode — the painted water tiles are it', () => {
@@ -313,6 +393,24 @@ describe('WaterLayer', () => {
     // 2s elapsed on the second tick (the first establishes the baseline).
     expect(u.uTime).toBeCloseTo(2, 6);
     expect(u.uWaveTime).toBeCloseTo(4, 6);
+  });
+
+  it('holds both clocks while frozen and resumes without a jump when thawed', () => {
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
+    const u = uniformsOf(layer);
+    layer.tick(1000);
+    layer.tick(2000);
+    expect(u.uTime).toBeCloseTo(1, 6);
+
+    layer.setFrozen(true);
+    layer.tick(5000);
+    layer.tick(9000);
+    expect(u.uTime).toBeCloseTo(1, 6);
+    expect(u.uWaveTime).toBeCloseTo(waterDebugTuning.waveSpeed, 6);
+
+    layer.setFrozen(false);
+    layer.tick(9500);
+    expect(u.uTime).toBeCloseTo(1.5, 6);
   });
 
   it('places the quad on exactly the world rect its mask was baked over', () => {
@@ -410,19 +508,16 @@ describe('WaterLayer', () => {
       expect(uniformsOf(layer)).toEqual(before);
     });
 
-    it('flips uPropMute and uSeaBody on the next tick after switching', () => {
+    it('flips uSeaBody on the next tick after switching', () => {
       // Sanity check that setMode changes real rendered behaviour, not just
-      // the three foam uniforms it directly writes — the mode-dependent
-      // branches in tick() key off the same private field.
+      // the three foam uniforms it directly writes.
       const layer = new WaterLayer('world', TILE_W, TILE_H);
       layer.tick(0);
       expect(uniformsOf(layer).uSeaBody).toBe(1);
-      expect(uniformsOf(layer).uPropMute).toBe(0);
 
       layer.setMode('settlement');
       layer.tick(16);
       expect(uniformsOf(layer).uSeaBody).toBe(0);
-      expect(uniformsOf(layer).uPropMute).toBe(1);
     });
   });
 });

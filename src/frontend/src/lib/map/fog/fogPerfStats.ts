@@ -21,6 +21,8 @@ export interface FogPerfStats {
   terrainCulledCount: number;
   /** rebuildBorders' per-hex loop. Affected by realmBorders. */
   bordersMs: number;
+  /** rebuildBogEdges: the bog/grass edge border's geometry (bogEdge.ts), settlement mode only. */
+  bogEdgesMs: number;
   /** True when this rebuild took the deepFogOnly shortcut — the whole viewport is certainly unexplored, so terrain/borders/waves were skipped entirely. */
   deepFogOnly: boolean;
   /** Owned hexes that drew a realm-border wash/stroke — gated by realmBorders. */
@@ -90,6 +92,7 @@ export const fogPerfStats: FogPerfStats = {
   terrainDrawnCount: 0,
   terrainCulledCount: 0,
   bordersMs: 0,
+  bogEdgesMs: 0,
   deepFogOnly: false,
   borderedHexCount: 0,
   markersMs: 0,

@@ -14,6 +14,26 @@ public enum UnitClass
 }
 
 /// <summary>
+/// What kinds of building a siege engine can damage (<c>docs/design/economy.md</c> section 5). The catapult burns towers and every ordinary
+/// building (bridges included) but cannot touch a wall; the ram breaches walls and towers but nothing else.
+/// <see cref="Bjarnoy.Domain.Combat.SiegeResolver.KindOf"/> maps a <see cref="BuildingType"/> to one kind.
+/// </summary>
+[Flags]
+public enum SiegeTargets
+{
+    None = 0,
+
+    /// <summary>Palisade and palisade gate hexes.</summary>
+    Walls = 1,
+
+    /// <summary>The tower.</summary>
+    Towers = 2,
+
+    /// <summary>Every other building, bridges included.</summary>
+    Buildings = 4,
+}
+
+/// <summary>
 /// What one unit type costs, takes and gives. Movement (<see cref="Speed"/>)
 /// is carried here so the catalogue is complete, but nothing reads it yet —
 /// that is phase 2 (issue #40).
@@ -37,13 +57,22 @@ public sealed record UnitDefinition
     /// <summary>Food specifically this unit can carry — provisioners run higher than their loot cap.</summary>
     public required int FoodCarryCapacity { get; init; }
 
+    /// <summary>
+    /// Slots this unit takes aboard a ship (<c>docs/design/economy.md</c>, "Troops on ships"). Zero for ships, which are never cargo.
+    /// See <see cref="ShipCargo"/>.
+    /// </summary>
+    public int CargoSlots { get; init; }
+
+    /// <summary>Slots this ship offers to land troops; zero for every unit that is not a ship. See <see cref="ShipCargo"/>.</summary>
+    public int ShipSlots { get; init; }
+
     /// <summary>Food consumed per hour just for this unit standing in a garrison.</summary>
     public required double UpkeepPerHour { get; init; }
 
     /// <summary>
     /// Siege power this unit contributes toward building destruction (issue
     /// #40 phase 5) — zero for every unit except <see cref="UnitClass.Siege"/>
-    /// (the Catapult). Kept separate from <see cref="Attack"/>/<see cref="Defense"/>
+    /// (the Catapult) and the <see cref="UnitClass.Ship"/>s (starting values). Kept separate from <see cref="Attack"/>/<see cref="Defense"/>
     /// since it only matters for <see cref="SiegeResolver"/>'s
     /// levels-destroyed formula, never for ordinary battle power. A
     /// placeholder balance figure, not a tuned number — see
@@ -51,6 +80,12 @@ public sealed record UnitDefinition
     /// <see cref="Bjarnoy.Domain.Combat.SiegeResolver"/> for how it is spent.
     /// </summary>
     public int SiegePower { get; init; }
+
+    /// <summary>
+    /// Which kinds of building this unit's <see cref="SiegePower"/> counts against: <see cref="SiegeTargets.None"/> for a unit without
+    /// siege power. Data, not branches — the resolver asks <see cref="Bjarnoy.Domain.Combat.SiegeResolver.CanDamage"/>.
+    /// </summary>
+    public SiegeTargets SiegeTargets { get; init; }
 
     public required ResourceAmounts TrainingCost { get; init; }
 
@@ -70,8 +105,9 @@ public sealed record UnitDefinition
     /// Which building type this unit trains at — the Longhouse for every
     /// civilian, <see cref="BuildingType.Barracks"/> for the basic melee
     /// land roster (Spearman, Axeman, Berserker),
-    /// <see cref="BuildingType.ArcheryRange"/> for the archer/siege land
-    /// roster (Bowman, Catapult), <see cref="BuildingType.Dockyard"/> for
+    /// <see cref="BuildingType.ArcheryRange"/> for the archer
+    /// (Bowman), <see cref="BuildingType.SiegeWorkshop"/> for the siege
+    /// engines (Catapult, Ram), <see cref="BuildingType.Dockyard"/> for
     /// ships. Defaults to the Longhouse.
     /// </summary>
     public BuildingType RequiredBuildingType { get; init; } = BuildingType.Longhouse;

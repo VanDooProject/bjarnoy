@@ -2,10 +2,11 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
-import { buildingName, resourceName, terrainName } from '../i18n/catalogueNames';
+import { buildingName, campName, giantName, terrainName } from '../i18n/catalogueNames';
 import { useRoute, useRouter } from 'vue-router';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
+import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
 import { useLoadFlow } from '../composables/useLoadFlow';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
@@ -13,7 +14,6 @@ import ResourceBar from '../components/hud/ResourceBar.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
-import TradePanel from '../components/hud/TradePanel.vue';
 import QuestTray from '../components/onboarding/QuestTray.vue';
 import TrainingQueuePanel from '../components/hud/TrainingQueuePanel.vue';
 import QueueDrawer from '../components/hud/QueueDrawer.vue';
@@ -21,7 +21,10 @@ import ArmyPanel from '../components/hud/ArmyPanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
 import TrainingModal from '../components/hud/TrainingModal.vue';
-import RingMenu, { type RingAction, type RingBuilding, type RingCategory } from '../components/hud/RingMenu.vue';
+import BuildRefusalChip from '../components/hud/BuildRefusalChip.vue';
+import { announceConfirmedBuild, holdBuildRow, releaseBuildRow } from '../composables/buildFeedback';
+import RingMenuHost from '../components/hud/RingMenuHost.vue';
+import RingMenu, { type RingAction, type RingCategory, type RingInfo } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
 import FpsMeter from '../components/hud/FpsMeter.vue';
@@ -29,11 +32,15 @@ import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
+import { WORLD_HASH } from '../lib/mapModeRoute';
+import { parseCameraHash, serializeCameraHash } from '../lib/mapCameraHash';
+import { useAuthStore } from '../stores/auth';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
 import { useGuildStore } from '../stores/guild';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
+import { useBuildRing, type BuildableType } from '../composables/useBuildRing';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
 import { useMediaQuery } from '../composables/useMediaQuery';
@@ -46,30 +53,24 @@ import { useIsMobile } from '../composables/useIsMobile';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { buildingArt } from '../lib/map/buildingArt';
-import {
-  buildingStatsAt,
-  buildingUpgradeCost,
-  type BuildingModifier,
-  type BuildingOutput,
-  SHRINE_BUILDING_TYPES,
-} from '../lib/map/buildingEconomy';
-import {
-  cropAllowedHere,
-  formatBuildTime,
-  formatMissingResources,
-  isWallBuilding,
-  longhouseLock,
-  palisadeLock,
-  riverBuildingAllowedHere,
-  shrineLimitLock,
-  storageHouseLock,
-  towerLimitLock,
-} from '../lib/map/ringCatalogue';
+import { buildingStatsAt, buildingUpgradeCost, scaleOutput, upgradeRateGain } from '../lib/map/buildingEconomy';
+import { formatBuildTime, formatMissingResources, longhouseLock } from '../lib/map/ringCatalogue';
+import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
+import { ringShapes } from '../lib/map/ringLayout';
+import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
 import type { Tile } from '../lib/map/types';
-import type { RiverVariant } from '../lib/map/worldGenerator';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
-import { campHexBuildable, towerThreatAt } from '../lib/map/campRules';
-import { classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
+import { campHexBuildable } from '../lib/map/campRules';
+import { isWaterCampFamily } from '../lib/map/campPlacement';
+import { isHostileWallTile, siegeAttackOptions } from '../lib/map/siegeRules';
+import {
+  breachesWalls,
+  classifyUnitSelection,
+  garrisonCanHunt,
+  totalSpeed,
+  totalUpkeepPerHour,
+  trainingSite,
+} from '../lib/units/armyDispatch';
 import { reachableRange } from '../lib/map/hexPath';
 import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
@@ -79,6 +80,7 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const world = useWorldStore();
 const player = usePlayerStore();
+const auth = useAuthStore();
 const hudPrefs = useHudPrefsStore();
 
 // Mobile-only HUD bar: whether the collapsed bar (and its pull-down drawer)
@@ -102,15 +104,16 @@ const buildingCatalogue = useBuildingCatalogueStore();
 const route = useRoute();
 const router = useRouter();
 
-// One view/one persistent renderer serves both /world and /settlement now
-// (docs/design/zoom-transition.md §5, option (a)) — the zoom-driven
+// One view/one persistent renderer serves both the settlement and the world
+// map on one route (`/settlement`, world mode marked by `#world` — see
+// lib/mapModeRoute.ts; docs/design/zoom-transition.md §5, option (a)) — the zoom-driven
 // transition needs the same HexMapRenderer instance to survive the switch
 // (no teardown/flash, fog persists uninterrupted), which two independently-
 // mounted views/renderers per route could never give it. `mode` is derived
-// from the route rather than tracked as separate local state, so a nav-button
-// click, browser back/forward, or a direct URL load all agree with the
+// from the route rather than tracked as separate local state, so a zoom
+// crossing, a nav click, browser back/forward, or a direct URL load all agree with the
 // renderer on what to show.
-const mode = computed<RenderMode>(() => (route.name === 'world' ? 'world' : 'settlement'));
+const mode = computed<RenderMode>(() => (route.hash === WORLD_HASH ? 'world' : 'settlement'));
 // World map's own sea backdrop (must match WorldMapCanvas.vue's — that
 // component is still used standalone by AdminWorldReseedView's world
 // preview, which has no settlement/ring-menu UI to merge and so keeps its
@@ -125,7 +128,7 @@ const WORLD_SEA_BACKGROUND = 'radial-gradient(115% 100% at 45% 40%, #2a92ae 0%, 
 let zoomDrivenTransition = false;
 function onZoomModeChange(next: RenderMode) {
   zoomDrivenTransition = true;
-  router.push(next === 'settlement' ? '/settlement' : '/world');
+  router.push({ path: '/settlement', hash: next === 'world' ? WORLD_HASH : '' });
 }
 
 // ?debug=1 surfaces FogDebugPanel — same idea as window.__fogDebug (main.ts)
@@ -136,6 +139,36 @@ const showFogDebug = useFogDebug();
 const isMobile = useIsMobile();
 const queueDrawerOpen = ref(false);
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
+
+// Settlement mode keeps its camera in the URL hash (lib/mapCameraHash.ts), so a reload or a shared link
+// lands on the same spot. Read once, before the first camera change rewrites the hash; a missing or
+// invalid hash leaves the default framing.
+const initialCameraView = mode.value === 'settlement' ? parseCameraHash(route.hash) : null;
+const CAMERA_HASH_DEBOUNCE_MS = 300;
+let cameraHashTimer: ReturnType<typeof setTimeout> | undefined;
+function onCameraChange() {
+  clearTimeout(cameraHashTimer);
+  cameraHashTimer = setTimeout(writeCameraHash, CAMERA_HASH_DEBOUNCE_MS);
+}
+function writeCameraHash() {
+  const renderer = canvasRef.value?.renderer;
+  if (!renderer || mode.value !== 'settlement' || route.path !== '/settlement') return;
+  // Not router.replace: that would run the route watchers; vue-router keeps its own state in history.state.
+  const hash = serializeCameraHash(renderer.cameraView);
+  history.replaceState(history.state, '', `${location.pathname}${location.search}${hash}`);
+}
+onUnmounted(() => clearTimeout(cameraHashTimer));
+// Once the renderer has mounted and framed the settlement itself, the hash's view wins over that default.
+if (initialCameraView) {
+  const stopRestore = watch(
+    () => canvasRef.value?.renderer,
+    (renderer) => {
+      if (!renderer) return;
+      renderer.restoreCameraView(initialCameraView.coord, initialCameraView.zoom);
+      stopRestore();
+    },
+  );
+}
 function onFogDebugChange() {
   canvasRef.value?.renderer?.forceRebuild();
 }
@@ -187,6 +220,7 @@ function onArmySelect(armyId: string) {
 const {
   step: loadStep,
   error: loadError,
+  settled: loadSettled,
   run: loadSettlement,
 } = useLoadFlow(async (setStep) => {
   if (!DEMO_MODE && player.hasFoundedSettlement && player.settlementId) {
@@ -214,6 +248,12 @@ const overlayStep = computed(() => loadStep.value ?? (revealingMap.value ? t('hu
 const overlayError = computed(
   () => loadError.value ?? (world.selectedSettlementId && world.fogMaskBitmap === null ? world.fogMaskError : null),
 );
+useIntroTilesSignal({
+  settled: loadSettled,
+  error: overlayError,
+  canvasShown: computed(() => !!world.selectedSettlementId),
+  loadState: computed(() => canvasRef.value?.loadState),
+});
 function retryLoad() {
   if (loadError.value) {
     void loadSettlement().then(() => {
@@ -289,10 +329,18 @@ watch(mode, (m) => {
 // below uses, since the renderer may not exist yet on the tick a fetch
 // resolves.
 watch(
-  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.fogMaskBounds],
-  ([renderer, bitmap, bounds]) => {
-    if (renderer && bitmap && bounds) renderer.setFogMask(bounds, bitmap);
+  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.fogMaskBounds, () => world.fogCoverage],
+  ([renderer, bitmap, bounds, coverage]) => {
+    if (renderer && bitmap && bounds && coverage) renderer.setFogMask(bounds, bitmap, coverage);
   },
+);
+
+// Premium players see every standing camp as a paw symbol on the world map; the renderer never reads the auth store
+// itself, so the host hands it the flag (and updates it when the player's premium status changes).
+watch(
+  [() => canvasRef.value?.renderer, () => auth.isPremium],
+  ([renderer, premium]) => renderer?.setShowCampMarkers(premium),
+  { immediate: true },
 );
 
 // Fog chunks are fetched for the ground the camera actually sees (§3): the
@@ -316,9 +364,9 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
     position: a.position,
     selected: a.id === world.selectedArmyId,
     returning: !!a.movement?.isReturning,
-    // docs/design/ship-movement.md §4: ship marker for a fleet, flag for a
-    // land army — reuses the same classification dispatch already relies on
-    // to keep the two unit-class families from mixing in one army.
+    // docs/design/ship-movement.md §4: ship marker for a fleet (any ship in
+    // the army, its land units are passengers), flag for a land army — the
+    // same classification dispatch relies on.
     isFleet:
       classifyUnitSelection(
         Object.fromEntries(a.stacks.map((s) => [s.unit, s.count])),
@@ -396,8 +444,9 @@ watch(
 );
 
 // Issue #159 part B: the reachable-range tint while composing a dispatch.
-// Origin and home are both the settlement's own hex — a field order from a
-// standing army (where they'd differ) is #156 phase 1, not built yet.
+// Origin and home are both the hex a land army leaves from (the building that
+// trained its slowest unit, see trainingSite) — a fleet keeps the settlement's
+// hex. A field order from a standing army is #156 phase 1, not built yet.
 // Rounded to the nearest tenth of an hour so a sub-pixel provisions-slider
 // twitch doesn't force a fresh flood-fill every frame.
 const rangeOverlayHexes = computed<AxialCoord[] | null>(() => {
@@ -423,7 +472,10 @@ const rangeOverlayHexes = computed<AxialCoord[] | null>(() => {
     home.ownerId,
     guild.friendlyUserIds,
   );
-  const origin = { q: home.q, r: home.r };
+  const origin =
+    classifyUnitSelection(draft.unitCounts, unitCatalogue.byType) === 'fleet'
+      ? { q: home.q, r: home.r }
+      : trainingSite({ q: home.q, r: home.r }, world.hud.buildings, draft.unitCounts, unitCatalogue.byType);
   const range = reachableRange(origin, origin, hoursOfFood, ctx);
   return [...range.keys()].map(parseKey);
 });
@@ -506,14 +558,15 @@ const modalBusy = ref(false);
 // `console.error`'d, and cleared whenever a fresh attempt starts, the modal
 // closes, or a different tile is selected.
 const actionError = ref<string | null>(null);
-// Issue #40 phase 1: a separate modal from BuildingModal (train has no
-// per-hex build/upgrade action, it lists the whole unit roster at once) —
-// see the ring's 'train' action below.
+// A building's training window, separate from BuildingModal (it lists the units that building
+// trains with a quantity picker each, not a single build/upgrade action) — see the ring's
+// 'train' action below.
 const trainModalOpen = ref(false);
 
 const modalMine = computed(
-  () => !!selectedTile.value && selectedTile.value.ownerId === world.selectedSettlementId,
+  () => !!selectedTile.value && world.isRealmSettlement(selectedTile.value.ownerId),
 );
+const isUnclaimedTile = computed(() => !!selectedTile.value && !selectedTile.value.ownerId);
 const modalOwnerLabel = computed(() => {
   const tile = selectedTile.value;
   if (!tile?.ownerId) return null;
@@ -528,7 +581,7 @@ const modalOwnerLabel = computed(() => {
 // categories -> a category's buildings), so this only tracks *where* it is
 // open — the concentric ringStack/radius/angle-stagger machinery the
 // previous ring needed is gone with it.
-const ringScreen = ref<{ x: number; y: number } | null>(null);
+const ringScreen = ref<RingPlacement | null>(null);
 
 // The ring must stay clear of the HUD panels, which means knowing how big the
 // stage actually is. A ResizeObserver on the stage element rather than
@@ -553,22 +606,45 @@ onUnmounted(() => stageObserver?.disconnect());
 // treats a panel as an edge rather than opening underneath it:
 //   BuildQueuePanel .status-card  left:16  top:76    width:240  -> left 268
 //   ExpansionPanel  .status-card  left:16  top:340   width:240  (same column)
-//   TradePanel                    right:16 top:118   width:320  -> right -348
 //   TrainingQueuePanel            right:16 top:76    width:240
 //   ArmyPanel       .status-card  right:16 bottom:16 width:260
 //   TopBar .hud-bar height 64, plus a 12px gap                  -> top 76
+// The right edge is set by the widest panel actually in the ring's way: ArmyPanel
+// (260 wide, runs down to the bottom bound) beats TrainingQueuePanel (240, top only)
+// -> right = stage width - (16 + 260 + 16), floored at 420.
 // These are worst-case constants: every panel is treated as present. On
 // mobile, BuildQueuePanel/TrainingQueuePanel are replaced by QueueDrawer's
 // collapsed handle (.queue-drawer-handle, a 48px-wide tab) pinned to the left
 // edge, and the HUD bar can be docked at the bottom instead of the top (see
 // ArmyPanel.vue's `--hud-inset-bottom`) — `hudInsetTopPx`/`hudInsetBottomPx`
 // above mirror the bar's real height into whichever edge it occupies now.
-const ringBounds = computed(() => ({
-  left: isMobile.value ? 64 : 268, // 48px handle + 16px gap
-  top: hudInsetTopPx.value + 12,
-  right: isMobile.value ? stage.value.w - 16 : Math.max(420, stage.value.w - 348),
-  bottom: stage.value.h - (hudInsetBottomPx.value + 16),
-}));
+// Phone layout: the ring's detail card docks to a screen edge instead of
+// floating beside the ring — a bottom strip in portrait, a side panel away
+// from the tapped hex in landscape (lib/map/ringDock.ts).
+function ringDockAt(x: number) {
+  return ringDockFor({
+    compact: isMobile.value,
+    width: stage.value.w,
+    height: stage.value.h,
+    x,
+    insetLeft: hudInsetLeftPx.value,
+  });
+}
+/** The ring's area with the tile at screen x (the landscape dock goes on the side away from it). */
+function ringBoundsAt(x: number) {
+  return boundsClearOfDock(
+    {
+      left: isMobile.value ? 64 : 268, // 48px handle + 16px gap
+      top: hudInsetTopPx.value + 12,
+      right: isMobile.value ? stage.value.w - 16 : Math.max(420, stage.value.w - 292),
+      bottom: stage.value.h - (hudInsetBottomPx.value + 16),
+    },
+    ringDockAt(x),
+    { width: stage.value.w, height: stage.value.h, insetLeft: hudInsetLeftPx.value, insetBottom: hudInsetBottomPx.value },
+  );
+}
+const ringDock = computed(() => (ringScreen.value ? ringDockAt(ringScreen.value.x) : null));
+const ringBounds = computed(() => ringBoundsAt(ringScreen.value?.x ?? stage.value.w / 2));
 // The card gets its own, roomier area on purpose. What `ringBounds` leaves
 // over once every panel is reserved is about 308x404 at 1280x720 — too small
 // to hold the 200x222 card anywhere clear of the ring, so the card would end
@@ -620,6 +696,9 @@ watch(isHudDrawerOpen, (open) => {
   if (open) queueDrawerOpen.value = false;
 });
 
+// X3: closing the ring does not unmount it at once; RingMenuHost holds the DOM
+// for the retract animation and tells us when it is done (`retracted`).
+
 // A mousedown on the ring's own backdrop (not a bubble) closes the ring and
 // hands back the same PointerEvent so the map can start dragging from it
 // immediately — otherwise the player would need a second, separate
@@ -633,162 +712,30 @@ function onRingOutsidePointerDown(e: PointerEvent) {
   canvasRef.value?.renderer?.beginDragFrom(e, { suppressClick: true });
 }
 
-type BuildableType =
-  | 'hut'
-  | 'reindeerherder'
-  | 'farm'
-  | 'tower'
-  | 'fishinghut'
-  | 'pumpkinfarm'
-  | 'shrineofthor'
-  | 'shrineoffreyja'
-  | 'shrineofullr'
-  | 'shrineofnjord'
-  | 'odinstatue'
-  | 'lumberjack'
-  | 'quarry'
-  | 'storagehouse'
-  | 'archeryrange'
-  | 'dockyard'
-  | 'greatstorehouse'
-  | 'fishinghut'
-  | 'barracks'
-  | 'sawmill'
-  | 'meadery'
-  | 'townsquare'
-  | 'cropmill'
-  | 'smithy'
-  | 'druidhut'
-  | 'cartworkshop'
-  | 'claybrickworks'
-  | 'bogoreworks'
-  | 'hammerschmiede'
-  | 'palisade'
-  | 'palisadegate';
 
-interface BuildCategory {
-  id: string;
-  buildings: { type: BuildableType }[];
-}
-// Mirrors BuildingCatalogue.cs's per-type AllowedTerrain: Farm/PumpkinFarm/
-// Shrine is Grass-only, Lumberjack is Forest-only, Quarry is
-// Mountain-only, and Tower/ArcheryRange are SandOrGrass. Offering a building
-// the backend's own AllowedTerrain would reject is what "messed up
-// categories" on a shore (sand) tile meant — sand used to fall into the same
-// flat bucket as forest/mountain and offer Farm/Lumberjack/Quarry, none of
-// which the backend would ever accept there.
-// FishingHut, Dockyard and ShrineOfNjord aren't land-terrain buildings at all
-// (RequiresCoastalWater, on a Sea hex) — WATER_CATEGORY below is the ring
-// path to them, offered only on a coastal-water sea tile (see
-// categoriesFor), not through this land-terrain table.
-const SHRINE_CATEGORY: BuildCategory = {
-  id: 'religion',
-  buildings: [
-    { type: 'shrineofthor' },
-    { type: 'shrineoffreyja' },
-    { type: 'shrineofullr' },
-    { type: 'odinstatue' },
-  ],
-};
-// The Shrine of Njörd (a shrine on a skerry) is built
-// directly on a coastal-water hex, exactly like Fishing Hut/Dockyard
-// (BuildingDefinition.RequiresCoastalWater) — not on Grass, so they live in
-// the water category rather than the grass one below.
-const WATER_CATEGORY: BuildCategory = {
-  id: 'water',
-  buildings: [{ type: 'fishinghut' }, { type: 'dockyard' }, { type: 'shrineofnjord' }],
-};
-// The wall (docs/design/economy.md section 5): a palisade hex, or a gate on a hex that is a straight, on grass, forest, sand or plain bog moss. A wall
-// also ends on a coastal-water hex (BuildingDefinition.AlsoOnCoastalWater), the sea end, which is never a gate. Whether this particular hex
-// takes one is the wall rules' (WorldModel.palisadePlacement), shown as a lock on the bubble.
-const DEFENSE_CATEGORY: BuildCategory = {
-  id: 'defense',
-  buildings: [{ type: 'palisade' }, { type: 'palisadegate' }],
-};
-const DEFENSE_SEA_CATEGORY: BuildCategory = { id: 'defense', buildings: [{ type: 'palisade' }] };
-// Bog ground offers what stands on its own bog kind (BuildingDefinition.RequiresBogKind / LakeShoreKinds, mirrored by
-// ringCatalogue.ts's buildingAllowedOnHex): plain moss takes the Clay Brickworks and the bog-ore works, a creek the
-// Hammer Forge (with the river hammer-mill art for now: TODO(art) bog-creek Hammer Forge) and a lake's half shore the
-// Fishing Hut with its lake art. Shores, mouths and springs take nothing.
-const BOG_CATEGORIES: Record<string, BuildCategory[]> = {
-  bog: [{ id: 'resource', buildings: [{ type: 'claybrickworks' }, { type: 'bogoreworks' }] }, DEFENSE_CATEGORY],
-  creek: [{ id: 'resource', buildings: [{ type: 'hammerschmiede' }] }],
-  half: [{ id: 'water', buildings: [{ type: 'fishinghut' }] }],
-};
-const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
-  grass: [
-    { id: 'housing', buildings: [{ type: 'hut' }] },
-    {
-      id: 'resource',
-      buildings: [
-        { type: 'reindeerherder' },
-        { type: 'farm' },
-        { type: 'pumpkinfarm' },
-        // Sawmill and Crop Mill are only actually buildable on a Grass hex
-        // that is itself a river tile of the right shape
-        // (BuildingDefinition.RequiresRiverShape) — still listed here (this
-        // bucket is terrain-keyed, not hex-specific) but filtered back out
-        // per-hex when that isn't the case, rather than offered locked (see
-        // ringCategories' riverBuildingAllowedHere filter).
-        { type: 'sawmill' },
-        { type: 'cropmill' },
-        { type: 'meadery' },
-      ],
-    },
-    {
-      id: 'military',
-      buildings: [
-        { type: 'tower' },
-        { type: 'archeryrange' },
-        { type: 'barracks' },
-        { type: 'smithy' },
-      ],
-    },
-    {
-      id: 'logistics',
-      buildings: [
-        { type: 'storagehouse' },
-        { type: 'greatstorehouse' },
-        { type: 'townsquare' },
-        { type: 'cartworkshop' },
-        { type: 'druidhut' },
-      ],
-    },
-    DEFENSE_CATEGORY,
-    SHRINE_CATEGORY,
-  ],
-  sand: [{ id: 'military', buildings: [{ type: 'tower' }, { type: 'smithy' }] }, DEFENSE_CATEGORY],
-  forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }, DEFENSE_CATEGORY],
-  mountain: [{ id: 'resource', buildings: [{ type: 'quarry' }] }],
-};
-
-function categoriesFor(tile: Tile): BuildCategory[] {
-  if (tile.terrain === 'sea') return tile.isCoastalWater ? [WATER_CATEGORY, DEFENSE_SEA_CATEGORY] : [];
-  // A bog lake is water nothing is built on (the lake Fishing Hut stands on its half shore, a bog hex).
-  if (tile.terrain === 'lake') return [];
-  if (tile.terrain === 'bog') return (tile.bog && BOG_CATEGORIES[tile.bog.kind]) || [];
-  return BUILD_CATEGORIES[tile.terrain];
-}
+// The build ring's model (placement filter, locks, costs, art) is shared with the onboarding ring (LandingView).
+const {
+  categories: buildCategories,
+  canBuildHere,
+  offersBuilding,
+  placeBuildingDemo,
+  builtLevels,
+  prerequisiteLocks,
+  availabilityFor,
+  wisdomFactor,
+  formatOutput,
+  formatModifier,
+  tileAt,
+} = useBuildRing(selectedTile, selectedCoord);
+// World zoom only offers the army action, so it has no build ring at all.
+const ringCategories = computed<RingCategory[]>(() => (mode.value === 'world' ? [] : buildCategories.value));
 
 const isEnemyTile = computed(
-  () => !!selectedTile.value?.ownerId && selectedTile.value.ownerId !== world.selectedSettlementId,
+  () => !!selectedTile.value?.ownerId && !world.isRealmSettlement(selectedTile.value.ownerId),
 );
 const isMineTile = computed(
-  () => !!selectedTile.value && selectedTile.value.ownerId === world.selectedSettlementId,
+  () => !!selectedTile.value && world.isRealmSettlement(selectedTile.value.ownerId),
 );
-const isUnclaimedTile = computed(() => !!selectedTile.value && !selectedTile.value.ownerId);
-
-// Category tints, carried into each category's own buildings so a building
-// bubble reads as belonging to the category it fanned out of.
-const CATEGORY_COLORS: Record<string, string> = {
-  housing: 'var(--gold)',
-  resource: 'var(--food)',
-  military: 'var(--iron)',
-  defense: 'var(--stone)',
-  religion: 'var(--shrine)',
-  logistics: 'var(--stone)',
-  water: 'var(--water)',
-};
 
 // Issue: mobile army dispatch. Every tile's ring gets a "send army" bubble —
 // what it's called and what it starts depends on who (if anyone) owns the
@@ -809,7 +756,7 @@ function sendArmyAction(tile: Tile): RingAction {
   if (ownerSettlementId && !ownerIsSelf) {
     id = 'attack';
     label = t('hud.ringMenu.actions.attack');
-  } else if (ownerSettlementId && ownerSettlementId !== world.selectedSettlementId) {
+  } else if (ownerSettlementId && !world.isRealmSettlement(ownerSettlementId)) {
     id = 'support';
     label = t('hud.ringMenu.actions.support');
   }
@@ -822,21 +769,148 @@ function sendArmyAction(tile: Tile): RingAction {
 }
 
 // Hunt a wildlife camp: offered on a camp tile that is still on the map, live mode only
-// (the demo has no army simulation, so no camp fights). Needs land units at home — ships cannot hunt.
+// (the demo has no army simulation, so no camp fights). A land camp needs land units at home, a camp at sea (the
+// whale road) ships — the other class cannot hunt it.
 function huntActions(tile: Tile): RingAction[] {
   if (DEMO_MODE || !tile.camp || tile.camp.removed || tile.buildingType) return [];
-  const hasLandUnits = world.hud.garrison.some(
-    (g) => g.count > 0 && classifyUnitSelection({ [g.unit]: g.count }, unitCatalogue.byType) === 'land',
-  );
+  const atSea = isWaterCampFamily(tile.camp.family);
+  const hasLandUnits = garrisonCanHunt(world.hud.garrison, unitCatalogue.byType, atSea);
   return [
     {
       id: 'hunt',
       label: t('hud.ringMenu.actions.hunt'),
       color: 'var(--rival)',
       disabled: !hasLandUnits,
-      hint: hasLandUnits ? undefined : t('hud.ringMenu.actions.noLandUnitsAtHome'),
+      hint: hasLandUnits ? undefined : t(atSea ? 'hud.ringMenu.actions.noShipsAtHome' : 'hud.ringMenu.actions.noLandUnitsAtHome'),
     },
   ];
+}
+
+// Siege another player's palisade or gate (endgame "Breaching walls"): offered on a standing wall hex of a settlement that is
+// neither the player's own nor a friend's (same guild, or a guild at peace), live mode only. It opens an Attack on the wall owner's
+// settlement with the wall hex as the preferred target building. Walls fall to battering rams only, so one must be at home; without
+// one the bubble stays but is disabled with a hint, like the other army actions.
+function siegeActions(tile: Tile): RingAction[] {
+  if (
+    DEMO_MODE
+    || !tile.ownerId
+    || !isHostileWallTile(tile, world.model.rivalWallOwner(tile.q, tile.r), player.id, guild.friendlyUserIds)
+  ) {
+    return [];
+  }
+  const hasRam = world.hud.garrison.some((g) => g.count > 0 && breachesWalls(g.unit, unitCatalogue.byType));
+  return [
+    {
+      id: 'siege',
+      label: t('hud.ringMenu.actions.siege'),
+      color: 'var(--rival)',
+      disabled: !hasRam,
+      hint: hasRam ? undefined : t('hud.ringMenu.actions.noRamAtHome'),
+    },
+  ];
+}
+
+// The root Upgrade bubble. It states up front whether the upgrade is possible
+// and, on hover, shows the same card a building does — for the NEXT level:
+// its cost, time, output, slots and what (if anything) still blocks it.
+function upgradeActionFor(tile: Tile): RingAction {
+  const type = tile.buildingType!;
+  const label = t('hud.ringMenu.actions.upgrade');
+  const level = tile.buildingLevel ?? 1;
+  const nextLevel = level + 1;
+  const definitions = buildingCatalogue.byType[type];
+  const upgradeDefinition = definitions?.find((d) => d.level === nextLevel);
+  // A catalogue that lists the building but has no further level: nothing left to upgrade to.
+  if (definitions?.length && !upgradeDefinition) {
+    return { id: 'upgrade', label, color: 'var(--gold)', disabled: true, hint: t('hud.ringMenu.actions.maxLevel') };
+  }
+  const cost = upgradeDefinition?.cost ?? buildingUpgradeCost(type, nextLevel);
+  const locks = [
+    longhouseLock(upgradeDefinition?.requiredLonghouseLevel, world.hud.level),
+    ...prerequisiteLocks(upgradeDefinition?.prerequisites, builtLevels()),
+  ].filter((lock): lock is string => !!lock);
+  const hexBusy = world.hud.queue.some((o) => o.q === tile.q && o.r === tile.r);
+  const availability = availabilityFor(cost, upgradeDefinition, locks.length > 0, hexBusy);
+  const stats = buildingStatsAt(type, nextLevel, tile, tileAt);
+  // Production is per hour at the world's speed: the card shows the gain, and the new total next to it.
+  const rate = upgradeRateGain(buildingStatsAt(type, level, tile, tileAt).output, stats.output, world.worldSpeedFactor);
+  const missing = formatMissingResources(cost, world.hud.available);
+  const blocked = availability.state === 'locked' || availability.state === 'waiting';
+  return {
+    id: 'upgrade',
+    label,
+    color: 'var(--gold)',
+    disabled: blocked,
+    state: blocked ? availability.state : undefined,
+    // Read out by screen readers; sighted players get the card on hover.
+    hint: !blocked
+      ? undefined
+      : locks.length
+        ? locks[0]
+        : missing
+          ? t('hud.ringMenu.actions.notEnough', { resources: missing })
+          : t('hud.ringMenu.card.badgeNoSlot'),
+    card: {
+      title: t('hud.ringMenu.card.upgradeTitle', { level: nextLevel }),
+      sub: t('hud.ringMenu.card.upgradeSub', { building: buildingName(type), from: level, to: nextLevel }),
+      cost,
+      time: upgradeDefinition ? formatBuildTime(upgradeDefinition.buildSeconds * wisdomFactor()) : undefined,
+      gives: rate
+        ? formatOutput(rate.gain)
+        : stats.output
+          ? formatOutput(scaleOutput(stats.output, world.worldSpeedFactor))
+          : stats.modifier
+            ? formatModifier(stats.modifier)
+            : undefined,
+      givesTotal: rate ? t('hud.ringMenu.card.givesTotal', { amount: rate.total }) : undefined,
+      locks,
+      art: buildingArt(type, nextLevel),
+      availability,
+    },
+  };
+}
+
+// The Details bubble (opens BuildingModal on click) also previews the tile on
+// hover: for a building its name, level and what it gives, for ground the
+// terrain and who holds it — the same facts HexTooltip shows on the map.
+function detailsAction(tile: Tile): RingAction {
+  return { id: 'details', label: t('hud.ringMenu.actions.details'), info: tileInfo(tile) };
+}
+
+function tileInfo(tile: Tile): RingInfo {
+  const owner = tile.ownerId ? world.model.getSettlement(tile.ownerId) : undefined;
+  const mine = !!owner && owner.ownerId === player.id;
+  const ownerLine = !owner
+    ? t('hud.hoverTooltip.unclaimed')
+    : mine
+      ? owner.name
+      : t('hud.hoverTooltip.ownedByOther', { owner: owner.ownerName, name: owner.name });
+  const rows: RingInfo['rows'] = [];
+  if (tile.giant) return { title: giantName(tile.giant.family), sub: ownerLine, rows };
+  if (tile.camp && !tile.camp.removed) {
+    return {
+      title: campName(tile.camp.family),
+      sub: tile.camp.strong ? t('hud.hoverTooltip.campStrong') : t('hud.hoverTooltip.campWeak'),
+      rows,
+    };
+  }
+  if (tile.buildingType) {
+    const level = tile.buildingLevel ?? 1;
+    const title = buildingName(tile.buildingType);
+    // Like the hover tooltip, stats are for the player's own buildings only.
+    if (mine) {
+      const stats = buildingStatsAt(tile.buildingType, level, tile, tileAt);
+      if (stats.output) rows.push({ label: t('hud.hoverTooltip.output'), value: formatOutput(scaleOutput(stats.output, world.worldSpeedFactor)) });
+      if (stats.modifier) rows.push({ label: t('hud.hoverTooltip.modifier'), value: formatModifier(stats.modifier) });
+    }
+    return {
+      title,
+      sub: `${t('hud.hoverTooltip.level', { level })} · ${ownerLine}`,
+      art: buildingArt(tile.buildingType, level),
+      rows,
+    };
+  }
+  return { title: ringTerrainLabel.value, sub: ownerLine, rows };
 }
 
 const rootActions = computed<RingAction[]>(() => {
@@ -845,18 +919,18 @@ const rootActions = computed<RingAction[]>(() => {
   // World zoom only offers the army action: BuildingModal/TrainingModal and
   // the build fan only exist in the settlement template, so Build/Upgrade/
   // Info bubbles here would open nothing.
-  if (mode.value === 'world') return [...huntActions(tile), sendArmyAction(tile)];
+  if (mode.value === 'world') return [...huntActions(tile), ...siegeActions(tile), sendArmyAction(tile)];
 
   if (isEnemyTile.value) {
     // Replaces the old permanently-disabled "Attack / Raid" bubble — combat
     // is implemented now, via the same dispatch draft/sheet every other
     // "send army" entry point uses.
-    return [{ id: 'info', label: t('hud.ringMenu.actions.info') }, sendArmyAction(tile)];
+    return [{ id: 'info', label: t('hud.ringMenu.actions.info'), info: tileInfo(tile) }, ...siegeActions(tile), sendArmyAction(tile)];
   }
   if (isUnclaimedTile.value) {
     const onCoast = tile.terrain === 'sand';
     return [
-      { id: 'info', label: t('hud.ringMenu.actions.info') },
+      { id: 'info', label: t('hud.ringMenu.actions.info'), info: tileInfo(tile) },
       {
         id: onCoast ? 'land-here' : 'send-settlers',
         label: onCoast ? t('hud.ringMenu.actions.landHere') : t('hud.ringMenu.actions.sendSettlers'),
@@ -878,20 +952,10 @@ const rootActions = computed<RingAction[]>(() => {
     // hovered — root actions carry no cost/card), Upgrade needs to say up
     // front whether it's even possible: same disabled+hint pattern already
     // used for Raze/Train/Attack above, not a new affordance.
-    const nextLevel = (tile.buildingLevel ?? 1) + 1;
-    const upgradeDefinition = buildingCatalogue.byType[tile.buildingType]?.find((d) => d.level === nextLevel);
-    const upgradeCost = upgradeDefinition?.cost ?? buildingUpgradeCost(tile.buildingType, nextLevel);
-    const stock = world.hud.resources;
-    const missing = formatMissingResources(upgradeCost, stock);
+    const upgrade = upgradeActionFor(tile);
     const actions: RingAction[] = [
-      {
-        id: 'upgrade',
-        label: t('hud.ringMenu.actions.upgrade'),
-        color: 'var(--gold)',
-        disabled: missing.length > 0,
-        hint: missing.length ? t('hud.ringMenu.actions.notEnough', { resources: missing }) : undefined,
-      },
-      { id: 'details', label: t('hud.ringMenu.actions.details') },
+      upgrade,
+      detailsAction(tile),
       {
         id: 'raze',
         label: t('hud.ringMenu.actions.raze'),
@@ -902,18 +966,13 @@ const rootActions = computed<RingAction[]>(() => {
             : t('hud.ringMenu.actions.notWiredYet'),
       },
     ];
-    // Training is queued against the settlement, not a specific hex, so the
-    // action itself is the same TrainingModal regardless of which building
-    // opens it (see onRingSelect's 'train' case) — only which tiles offer the
-    // action changes. Originally longhouse-only (issue #40 phase 1); every
-    // building any UnitDefinition.RequiredBuildingType now points at
-    // (archery range and dockyard for land troops/ships, then barracks and
-    // cart workshop once Thrall/Provisioner/SettlerCrew moved off the
-    // longhouse) gets the same action. The backend enforces the real gate
-    // either way — this is just where the UI surfaces the button.
+    // Training belongs to a building: every building any UnitDefinition.RequiredBuildingType
+    // points at (barracks, archery range, siege workshop, dockyard, cart workshop) offers the
+    // action, which opens that building's own TrainingModal. The longhouse trains no unit.
+    // The backend enforces the real gate either way — this is just where the UI surfaces the button.
     if (
-      tile.buildingType === 'longhouse'
-      || tile.buildingType === 'archeryrange'
+      tile.buildingType === 'archeryrange'
+      || tile.buildingType === 'siegeworkshop'
       || tile.buildingType === 'dockyard'
       || tile.buildingType === 'barracks'
       || tile.buildingType === 'cartworkshop'
@@ -924,239 +983,38 @@ const rootActions = computed<RingAction[]>(() => {
     return actions;
   }
   if (isMineTile.value) {
-    const buildableSea = (tile.terrain !== 'sea' && tile.terrain !== 'lake') || tile.isCoastalWater;
     // A giant hex is never buildable, claimed or not — its own art fully
     // occupies the ground there (mirrors WorldModel.placeBuilding's own
-    // `tile.giant` refusal). Checked ahead of the open-water hint since a
-    // giant is always land, so `buildableSea` alone would otherwise show
-    // "Build" as available on it.
+    // `tile.giant` refusal).
     const blockedByGiant = !!tile.giant;
     // A wildlife camp hex is buildable only once the camp is cleared (never Fenrir's brood) —
     // mirrors WorldModel.placeBuilding / the server's HexOccupiedByCamp rule.
     const blockedByCamp = !!tile.camp && !tile.buildingType && !campHexBuildable(tile.camp);
-    // A bog shore, mouth or spring takes no building at all (only plain moss, a creek and a half shore do).
-    const bareBog = tile.terrain === 'bog' && categoriesFor(tile).length === 0;
-    return [
-      { id: 'details', label: t('hud.ringMenu.actions.details') },
-      {
-        id: 'build',
-        label: t('hud.ringMenu.actions.build'),
-        disabled: !buildableSea || blockedByGiant || blockedByCamp || bareBog,
-        hint: blockedByGiant
-          ? t('hud.ringMenu.actions.giantOccupied')
-          : blockedByCamp
-            ? t('hud.ringMenu.actions.campOccupied')
-            : bareBog
-              ? t('hud.ringMenu.actions.bogNothingHere')
-              : buildableSea
-                ? undefined
-                : t('hud.ringMenu.actions.openWater'),
-      },
+    // A hex that offers no category at all (bog shore, mouth or spring, a mountain while quarries are off, a lake, open water)
+    // has no Build action — nothing in the ring that could only fail (docs/design/ui-guidelines.md, rule 1).
+        return [
+      detailsAction(tile),
+      ...(canBuildHere.value
+        ? [
+            {
+              id: 'build',
+              label: t('hud.ringMenu.actions.build'),
+              disabled: blockedByGiant || blockedByCamp,
+              hint: blockedByGiant
+                ? t('hud.ringMenu.actions.giantOccupied')
+                : blockedByCamp
+                  ? t('hud.ringMenu.actions.campOccupied')
+                  : undefined,
+            },
+          ]
+        : []),
       ...huntActions(tile),
       sendArmyAction(tile),
     ];
   }
-  return [{ id: 'details', label: t('hud.ringMenu.actions.details') }, ...huntActions(tile), sendArmyAction(tile)];
+  return [detailsAction(tile), ...huntActions(tile), sendArmyAction(tile)];
 });
 
-function tileAt(q: number, r: number): Tile {
-  return world.model.getTile(q, r);
-}
-
-// Cost, build time and the longhouse gate all come from the building
-// catalogue store, which serves the backend's own numbers (GET
-// /api/v1/buildings, or its bundled snapshot in demo mode) — so the card
-// can't drift from BuildingCatalogue.cs. "hut" is demo-only and has no
-// catalogue entry, hence the client-side cost fallback and no time/lock.
-// Mirrors HexTooltip.vue's formatOutput/formatModifier: the same structured
-// BuildingOutput/BuildingModifier data, translated the same way, since the
-// ring's building-preview card and the hover tooltip describe identical
-// semantics.
-function formatOutput(output: BuildingOutput): string {
-  switch (output.kind) {
-    case 'resourceRate':
-      return t('hud.hoverTooltip.outputResourceRate', { amount: output.amount, resource: resourceName(output.resource) });
-    case 'populationCapacity':
-      return t('hud.hoverTooltip.outputPopulationCapacity', { amount: output.amount });
-    case 'storageCapacity':
-      return t('hud.hoverTooltip.outputStorageCapacity', { amount: output.amount });
-    case 'visionRing':
-      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount });
-  }
-}
-function formatModifier(modifier: BuildingModifier): string {
-  switch (modifier.kind) {
-    case 'borderAnchor':
-      return t('hud.hoverTooltip.modifierBorderAnchor');
-    case 'trainsLandTroops':
-      return t('hud.hoverTooltip.modifierTrainsLandTroops');
-    case 'trainsShips':
-      return t('hud.hoverTooltip.modifierTrainsShips');
-    case 'trainsCivilianCrews':
-      return t('hud.hoverTooltip.modifierTrainsCivilianCrews');
-    case 'terrainBoost':
-      return t('hud.hoverTooltip.modifierTerrainBoost', { terrain: terrainName(modifier.terrain), percent: modifier.percent });
-    case 'coastal':
-      return modifier.percent
-        ? t('hud.hoverTooltip.modifierCoastalBoost', { percent: modifier.percent })
-        : t('hud.hoverTooltip.modifierCoastal');
-    case 'shrineFavour':
-      if (modifier.domain === 'shipAttack') {
-        return t('hud.hoverTooltip.modifierShrineFavourShipAttack', { percent: modifier.percent });
-      }
-      if (modifier.domain === 'landAttack') {
-        return t('hud.hoverTooltip.modifierShrineFavourLandAttack', { percent: modifier.percent });
-      }
-      return t('hud.hoverTooltip.modifierShrineFavour', {
-        percent: modifier.percent,
-        domain: t(modifier.domain === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
-      });
-    case 'odinFavour':
-      return t('hud.hoverTooltip.modifierOdinFavour', {
-        percent: modifier.buildTimePercent,
-        rings: modifier.visionRings,
-      });
-    case 'radiusBoost':
-      return t('hud.hoverTooltip.modifierRadiusBoost', {
-        percent: modifier.percent,
-        range: modifier.range,
-        resource: t(
-          modifier.resource === 'wood'
-            ? 'hud.hoverTooltip.domainWood'
-            : modifier.resource === 'iron'
-              ? 'hud.hoverTooltip.domainIron'
-              : 'hud.hoverTooltip.domainFood',
-        ),
-      });
-    case 'palisadeWall':
-      return t('hud.hoverTooltip.modifierPalisadeWall');
-    case 'palisadeGate':
-      return t('hud.hoverTooltip.modifierPalisadeGate');
-  }
-}
-
-// Sawmill and Crop Mill are built directly on a river tile, and only some
-// shapes have matching art — mirrors WorldModel.placeBuilding's own check.
-// This is a fixed property of the hex (see riverBuildingAllowedHere), so
-// ringCategories below filters the bubble out entirely on a hex that will
-// never qualify, rather than rendering it locked.
-function riverShapeAt(coord: AxialCoord): string | undefined {
-  return world.model.getRiverTile(coord.q, coord.r)?.shape;
-}
-
-function riverWidthAt(coord: AxialCoord): string | undefined {
-  return world.model.getRiverTile(coord.q, coord.r)?.width;
-}
-
-// Only meaningful once riverShapeAt(coord) has a shape at all — see
-// riverBuildingAllowedHere's own riverVariant parameter.
-function riverVariantAt(coord: AxialCoord): RiverVariant | undefined {
-  const river = world.model.getRiverTile(coord.q, coord.r);
-  return river ? world.model.riverVariantAt(coord, river.shape) : undefined;
-}
-
-// PumpkinFarm is only offered on a Pumpkin-soil island — mirrors
-// WorldModel.placeBuilding's own check, same "filter out of the category
-// rather than render locked" reasoning riverShapeAt above uses, since this
-// too is a fixed property of the settlement rather than a progression gate.
-function currentIslandSoil(): 'wheat' | 'pumpkin' | undefined {
-  return world.selectedSettlementId ? world.model.soilForSettlement(world.selectedSettlementId) : undefined;
-}
-
-// Standing towers plus still-queued new-tower orders (live mode only — demo
-// mode places instantly), counted by distinct hex like Settlement.PlanBuild
-// does, so a queued tower already uses up its slot.
-function towersHeld(): number {
-  const id = world.selectedSettlementId;
-  if (!id) return 0;
-  const hexes = new Set(world.model.towerCoords(id).map((c) => `${c.q},${c.r}`));
-  for (const order of world.hud.queue) {
-    if (order.building === 'tower') hexes.add(`${order.q},${order.r}`);
-  }
-  return hexes.size;
-}
-
-// Shrines held by the selected settlement (standing plus queued new-shrine
-// orders, by distinct hex): a settlement raises one shrine in total.
-function shrinesHeld(): number {
-  const id = world.selectedSettlementId;
-  if (!id) return 0;
-  const hexes = new Set(world.model.shrineCoords(id).map((c) => `${c.q},${c.r}`));
-  for (const order of world.hud.queue) {
-    if (SHRINE_BUILDING_TYPES.has(order.building)) hexes.add(`${order.q},${order.r}`);
-  }
-  return hexes.size;
-}
-
-// Storage houses held (standing plus queued, distinct hexes like
-// Settlement.PlanBuild counts them) and the best standing level, for the
-// additional-storage-house lock.
-function storageHouseLockFor(): string | undefined {
-  const id = world.selectedSettlementId;
-  if (!id) return undefined;
-  const standing = world.model.storageHouses(id);
-  const hexes = new Set(standing.map((h) => `${h.q},${h.r}`));
-  for (const order of world.hud.queue) {
-    if (order.building === 'storagehouse') hexes.add(`${order.q},${order.r}`);
-  }
-  return storageHouseLock(hexes.size, standing.map((h) => h.level));
-}
-
-// Wall orders still in the queue (live mode only; demo places instantly): the server counts them as wall hexes when it judges the next one.
-function queuedWalls(): { q: number; r: number; gate: boolean }[] {
-  return world.hud.queue
-    .filter((order) => isWallBuilding(order.building))
-    .map((order) => ({ q: order.q, r: order.r, gate: order.building === 'palisadegate' }));
-}
-
-// Odin's Wisdom for the selected settlement: the multiplier on build times shown on the ring cards.
-function wisdomFactor(): number {
-  const id = world.selectedSettlementId;
-  return id ? world.model.wisdomFactor(id) : 1;
-}
-
-// Building a tower inside a strong, aggressive camp's guard range is allowed but the beasts will
-// burn it unless an army stands guard on it — a warning, not a lock (docs/design/wildlife-camps.md).
-// Live: the camp's server-side `aggressive` flag; demo (no camp state): any strong camp.
-function towerCampWarning(coord: AxialCoord): string | undefined {
-  return towerThreatAt(world.model.camps(), coord) ? t('hud.ringMenu.towerCampWarning') : undefined;
-}
-
-function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
-  const definition = buildingCatalogue.byType[type]?.find((d) => d.level === 1);
-  const stats = buildingStatsAt(type, 1, tileAt(coord.q, coord.r), tileAt);
-  return {
-    id: type,
-    label: buildingName(type),
-    cost: definition?.cost ?? buildingUpgradeCost(type, 1),
-    // Odin's Wisdom shortens every build in the settlement (`wisdomFactor`).
-    time: definition ? formatBuildTime(definition.buildSeconds * wisdomFactor()) : undefined,
-    gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
-    lock:
-      longhouseLock(definition?.requiredLonghouseLevel, world.hud.level)
-      ?? (type === 'tower' ? towerLimitLock(towersHeld(), world.hud.level) : undefined)
-      ?? (SHRINE_BUILDING_TYPES.has(type) ? shrineLimitLock(shrinesHeld()) : undefined)
-      ?? (type === 'storagehouse' ? storageHouseLockFor() : undefined)
-      ?? (isWallBuilding(type) ? palisadeLock(world.model.palisadePlacement(coord, type === 'palisadegate', queuedWalls())) : undefined),
-    warning: type === 'tower' ? towerCampWarning(coord) : undefined,
-    art: buildingArt(type, 1),
-  };
-}
-
-const ringCategories = computed<RingCategory[]>(() => {
-  const tile = selectedTile.value;
-  const coord = selectedCoord.value;
-  if (!tile || !coord || mode.value === 'world') return [];
-  return categoriesFor(tile).map((category) => ({
-    id: category.id,
-    label: t(`hud.ringMenu.categories.${category.id}`),
-    color: CATEGORY_COLORS[category.id] ?? 'var(--gold)',
-    buildings: category.buildings
-      .filter((b) => riverBuildingAllowedHere(b.type, riverShapeAt(coord), riverVariantAt(coord), riverWidthAt(coord)))
-      .filter((b) => cropAllowedHere(b.type, currentIslandSoil()))
-      .map((b) => ringBuildingFor(b.type, coord)),
-  }));
-});
 
 // The hub names what was clicked: the building standing on the hex if there
 // is one, otherwise the bare terrain — a river tile's art fully overrides
@@ -1212,8 +1070,17 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   hoverInfo.value = null;
   selectedCoord.value = coord;
   selectedTile.value = tile;
-  ringScreen.value = screen;
+  ringScreen.value = roomForRing(screen);
   actionError.value = null;
+}
+
+/** Pans the map so the tapped tile's ring opens as a circle (lib/map/ringPlacement.ts); returns where it opens. */
+function roomForRing(screen: { x: number; y: number }): RingPlacement {
+  const shapes = ringShapes(
+    rootActions.value.length,
+    ringCategories.value.map((c) => c.buildings.length),
+  );
+  return placeRing(canvasRef.value?.renderer, screen, ringBoundsAt, shapes);
 }
 
 // Issue #93 "drag to move a placed waypoint": the renderer resolved the hex
@@ -1238,6 +1105,16 @@ function onWaypointTap(index: number) {
   world.removeWaypoint(index);
 }
 
+// While the ring is open the renderer fades out the canvas markers (dials, the
+// realm badge) beneath its footprint; lifted again as soon as the ring unmounts.
+function onRingFootprint(circle: { x: number; y: number; r: number }) {
+  canvasRef.value?.renderer?.setMarkerOcclusion(circle);
+}
+function clearRingFootprint() {
+  // A ring reopened during the retract animation has already re-set it.
+  if (!ringOpen.value) canvasRef.value?.renderer?.setMarkerOcclusion(null);
+}
+
 function closeRing() {
   selectedCoord.value = null;
   selectedTile.value = null;
@@ -1250,20 +1127,8 @@ function closeRing() {
 // the outer lane, or one of the root actions.
 async function onRingSelect(id: string) {
   const tile = selectedTile.value;
-  if (tile && categoriesFor(tile).some((c) => c.buildings.some((b) => b.type === id))) {
-    const placed = await buildType(id as BuildableType);
-    // Unlike 'upgrade' below, a rejection here must NOT fall through to
-    // BuildingModal: that modal's empty-tile view always defaults to a hut
-    // (see its own upgradeType computed) regardless of which building was
-    // actually attempted, so it used to show a mismatched cost/afford
-    // message for whatever the ring tried to build, with a "Build here"
-    // button that would then build a hut instead of retrying the real
-    // pick. Closing the ring on a rejection is its own wrong signal too —
-    // it reads as "something happened" — so a rejected build now just
-    // leaves the ring exactly as it was, the same as a click the ring
-    // already refuses (a locked or terrain-inappropriate bubble).
-    if (placed) closeRing();
-    else actionError.value = null;
+  if (tile && offersBuilding(id)) {
+    await buildFromRing(id as BuildableType);
     return;
   }
   switch (id) {
@@ -1275,14 +1140,9 @@ async function onRingSelect(id: string) {
       return;
     case 'upgrade':
       // upgrade() already closes on success (both branches); on failure it
-      // deliberately leaves selectedTile/ringScreen alone so this can drop
-      // through to BuildingModal instead, where the error renders.
+      // leaves selectedTile/ringScreen alone, so the ring stays open and
+      // shows the rejection's message (`actionError`, passed as `error`).
       await upgrade();
-      if (actionError.value) {
-        ringScreen.value = null;
-      } else {
-        closeRing();
-      }
       return;
     case 'train':
       // Same hand-off pattern as 'details'/'info', to TrainingModal.
@@ -1304,6 +1164,14 @@ async function onRingSelect(id: string) {
       if (selectedCoord.value) world.startDispatchAt(selectedCoord.value, { mission: 'hunt' });
       closeRing();
       return;
+    case 'siege':
+      // The wall's own settlement is the Attack's target (the walls read stamps it on the tile) and the wall hex its preferred building.
+      if (selectedCoord.value && tile) {
+        const options = siegeAttackOptions(tile, selectedCoord.value);
+        if (options) world.startDispatchAt(selectedCoord.value, options);
+      }
+      closeRing();
+      return;
     case 'attack':
     case 'support':
       if (selectedCoord.value && tile?.ownerId) {
@@ -1315,6 +1183,69 @@ async function onRingSelect(id: string) {
       return;
   }
 }
+
+// W3 optimistic build + X2 drop. Choosing a building in the ring closes the
+// ring at once (the chosen bubble drops onto the hex, the rest retract, see
+// RingMenu's `data-dropping` and `RingMenuHost`) instead of waiting for the
+// server: the hex gets a "…" construction dial through a pending queue entry
+// (`world.queueBuildOptimistic`), and only a refusal undoes it — the dial
+// shakes and fades and a chip under the hex carries the server's message. The
+// stock never changed, so nothing else needs rolling back. Demo mode places
+// instantly, so it only gets the drop.
+async function buildFromRing(type: BuildableType) {
+  const coord = selectedCoord.value;
+  if (!world.selectedSettlementId || !coord) return;
+  actionError.value = null;
+  // What the ring promised this building costs (read before the ring closes: the categories follow the selected tile).
+  const entry = ringCategories.value.flatMap((c) => c.buildings).find((b) => b.id === type);
+  const cost = entry?.cost;
+  if (DEMO_MODE) {
+    if (!placeBuildingDemo(type, coord)) {
+      // Unlike live mode there is no optimistic phase: the ring stays open with the reason in it.
+      actionError.value = t('hud.ringMenu.errors.couldNotQueueBuild');
+      return;
+    }
+    canvasRef.value?.renderer?.forceRebuild();
+    closeRing();
+    return;
+  }
+  const renderer = canvasRef.value?.renderer;
+  closeRing();
+  // Hold the new queue row back until the confirmation animation reveals it (Q1/Q5, BuildQueuePanel).
+  holdBuildRow(coord);
+  try {
+    await world.queueBuildOptimistic(type, coord, cost);
+  } catch (err) {
+    releaseBuildRow(coord);
+    console.error('Failed to queue building against the backend', err);
+    // Surface the rejection's detail (NoFreeSlot's premium hint included, issue #158).
+    renderer?.rejectConstructionDial(coord);
+    showBuildRefusal(coord, describeActionError(err, t('hud.ringMenu.errors.couldNotQueueBuild')));
+    return;
+  }
+  announceConfirmedBuild({
+    coord,
+    name: entry?.label ?? buildingName(type),
+    level: 1,
+    time: entry?.time ?? null,
+    from: renderer?.dialScreenPoint(coord) ?? null,
+  });
+}
+
+const BUILD_REFUSAL_MS = 2500;
+const buildRefusal = ref<{ coord: AxialCoord; message: string } | null>(null);
+let buildRefusalTimer: ReturnType<typeof setTimeout> | null = null;
+function showBuildRefusal(coord: AxialCoord, message: string) {
+  buildRefusal.value = { coord, message };
+  if (buildRefusalTimer) clearTimeout(buildRefusalTimer);
+  buildRefusalTimer = setTimeout(() => {
+    buildRefusal.value = null;
+    buildRefusalTimer = null;
+  }, BUILD_REFUSAL_MS);
+}
+onUnmounted(() => {
+  if (buildRefusalTimer) clearTimeout(buildRefusalTimer);
+});
 
 function closeModal() {
   closeRing();
@@ -1329,50 +1260,6 @@ function closeTrainModal() {
 
 function describeActionError(err: unknown, fallback: string): string {
   return apiErrorMessage(err, fallback);
-}
-
-// Demo mode places the chosen building instantly; live mode queues that
-// same type against the backend's real catalogue (BuildingCatalogue.cs) —
-// "hut" is demo-only (BuildingModal's default when there's no picker; the
-// backend has no matching catalogue entry) and is expected to be rejected
-// server-side if ever picked in live mode, same as any other invalid
-// placement (wrong terrain, insufficient longhouse level, ...).
-/** Whether the placement/queue attempt actually went through. */
-async function buildType(type: BuildableType): Promise<boolean> {
-  if (!world.selectedSettlementId || !selectedCoord.value) return false;
-  actionError.value = null;
-  if (DEMO_MODE) {
-    const placed = world.model.placeBuilding(world.selectedSettlementId, selectedCoord.value, type);
-    if (placed) canvasRef.value?.renderer?.forceRebuild();
-    return placed;
-  }
-  modalBusy.value = true;
-  actionError.value = null;
-  try {
-    await world.queueBuildLive(type, selectedCoord.value);
-    return true;
-  } catch (err) {
-    console.error('Failed to queue building against the backend', err);
-    // Surface the rejection's detail — NoFreeSlot's premium hint included
-    // (issue #158) — rather than leaving the player to guess why nothing
-    // happened.
-    actionError.value = describeActionError(err, t('hud.ringMenu.errors.couldNotQueueBuild'));
-    return false;
-  } finally {
-    modalBusy.value = false;
-  }
-}
-
-// BuildingModal's own "Build here" button (opened via the ring's
-// Details/Info action on an empty tile) has no category/type picker of its
-// own, so it keeps the previous default of a hut.
-async function build() {
-  await buildType('hut');
-  // Only dismiss the modal on success — a rejection (e.g. NoFreeSlot) needs
-  // to stay visible via actionError rather than being closed out from under
-  // the player before they can read it.
-  if (actionError.value) return;
-  closeModal();
 }
 
 async function upgrade() {
@@ -1422,6 +1309,7 @@ async function upgrade() {
       @waypoint-move="onWaypointMove"
       @waypoint-tap="onWaypointTap"
       @zoom-mode-change="onZoomModeChange"
+      @camera-change="onCameraChange"
     />
     <div v-if="showFogDebug" class="fog-debug-stack">
       <!-- First in the stack on purpose: it is the one panel that answers
@@ -1457,25 +1345,30 @@ async function upgrade() {
         <TrainingQueuePanel />
       </template>
       <ExpansionPanel />
-      <TradePanel />
       <QuestTray v-if="!hasActiveDraft" />
       <ArmyPanel v-if="!isMobile" />
-      <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
-      <RingMenu
-        v-if="selectedTile && ringScreen"
-        :x="ringScreen.x"
-        :y="ringScreen.y"
-        :actions="rootActions"
-        :categories="ringCategories"
-        :terrain-label="ringTerrainLabel"
-        :coord-label="ringCoordLabel"
-        :bounds="ringBounds"
-        :card-bounds="ringCardBounds"
-        :stock="world.hud.resources"
-        @select="onRingSelect"
-        @close="closeRing"
-        @outside-pointer-down="onRingOutsidePointerDown"
-      />
+      <HexTooltip v-if="hoverInfo" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
+      <RingMenuHost @retracted="clearRingFootprint">
+        <RingMenu
+          v-if="selectedTile && ringScreen"
+          :x="ringScreen.x"
+          :y="ringScreen.y"
+          :scale="ringScreen.scale"
+          :actions="rootActions"
+          :categories="ringCategories"
+          :terrain-label="ringTerrainLabel"
+          :coord-label="ringCoordLabel"
+          :bounds="ringBounds"
+          :card-bounds="ringCardBounds"
+          :stock="world.hud.available"
+          :error="actionError"
+          :dock="ringDock"
+          @select="onRingSelect"
+          @close="closeRing"
+          @outside-pointer-down="onRingOutsidePointerDown"
+          @footprint="onRingFootprint"
+        />
+      </RingMenuHost>
       <BuildingModal
         v-if="selectedTile && !ringScreen && !trainModalOpen"
         :tile="selectedTile"
@@ -1484,11 +1377,11 @@ async function upgrade() {
         :busy="modalBusy"
         :error="actionError"
         @close="closeModal"
-        @build="build"
         @upgrade="upgrade"
       />
       <TrainingModal
-        v-if="selectedTile && trainModalOpen"
+        v-if="selectedTile?.buildingType && trainModalOpen"
+        :building="{ type: selectedTile.buildingType, q: selectedTile.q, r: selectedTile.r, level: selectedTile.buildingLevel ?? 0 }"
         @close="closeTrainModal"
         @trained="closeTrainModal"
       />
@@ -1505,22 +1398,34 @@ async function upgrade() {
            mode-agnostic. -->
       <QueueDrawer v-if="isMobile && !hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
       <ArmyPanel v-if="!isMobile" />
-      <RingMenu
-        v-if="selectedTile && ringScreen"
-        :x="ringScreen.x"
-        :y="ringScreen.y"
-        :actions="rootActions"
-        :categories="ringCategories"
-        :terrain-label="ringTerrainLabel"
-        :coord-label="ringCoordLabel"
-        :bounds="ringBounds"
-        :card-bounds="ringCardBounds"
-        :stock="world.hud.resources"
-        @select="onRingSelect"
-        @close="closeRing"
-        @outside-pointer-down="onRingOutsidePointerDown"
-      />
+      <RingMenuHost @retracted="clearRingFootprint">
+        <RingMenu
+          v-if="selectedTile && ringScreen"
+          :x="ringScreen.x"
+          :y="ringScreen.y"
+          :scale="ringScreen.scale"
+          :actions="rootActions"
+          :categories="ringCategories"
+          :terrain-label="ringTerrainLabel"
+          :coord-label="ringCoordLabel"
+          :bounds="ringBounds"
+          :card-bounds="ringCardBounds"
+          :stock="world.hud.available"
+          :error="actionError"
+          :dock="ringDock"
+          @select="onRingSelect"
+          @close="closeRing"
+          @outside-pointer-down="onRingOutsidePointerDown"
+          @footprint="onRingFootprint"
+        />
+      </RingMenuHost>
     </template>
+    <BuildRefusalChip
+      v-if="buildRefusal"
+      :renderer="canvasRef?.renderer"
+      :coord="buildRefusal.coord"
+      :message="buildRefusal.message"
+    />
     <MobileDispatchSheet v-if="isMobile && hasActiveDraft" />
   </div>
 </template>

@@ -1,0 +1,34 @@
+/* Shared by every intro beat: the fog/smoke texture (one generated pattern, see fogTexture.ts) and drift helpers. */
+.intro-fog {
+  fill: url(#intro-fog);
+}
+@keyframes intro-drift-left {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-256px, 0, 0); }
+}
+@keyframes intro-drift-right {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(256px, 0, 0); }
+}
+.intro-drift-slow { animation: intro-drift-left 24s linear infinite; }
+.intro-drift-mid { animation: intro-drift-left 14s linear infinite; }
+.intro-drift-back { animation: intro-drift-right 36s linear infinite; }
+/* Placeholder outline of the central safe frame (x/y 350-1250). */
+.intro-safe {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.25);
+  stroke-width: 4;
+  stroke-dasharray: 24 16;
+}
+/* Reduced motion first frame: the host passes `paused`. */
+.intro-beat.is-paused,
+.intro-beat.is-paused * {
+  animation-play-state: paused !important;
+}
+.intro-beat {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}

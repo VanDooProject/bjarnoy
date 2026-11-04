@@ -23,8 +23,9 @@ namespace Bjarnoy.Domain.Combat;
 /// <param name="SettlementRazed">
 /// True when the target was the Longhouse and <paramref name="LevelAfter"/>
 /// is 0 — per the design doc, a settlement with no Longhouse is "razed": its
-/// <see cref="Settlement.ClaimRadius"/> falls to its level-0 floor for free
-/// (see <see cref="Settlement.ClaimRadius"/>'s remarks); a sieged Tower's own
+/// settlement then has no claim at all (<see cref="Settlement.LonghouseDisc"/>
+/// yields no disc for level 0), and its towers stay connected only through another Longhouse of the same player
+/// (<see cref="ConnectedRealm"/>); a sieged Tower's own
 /// satellite disc collapses the same way, for the same reason — a
 /// destroyed/removed Tower is simply gone from <c>UpdatedBuildings</c>, and
 /// <see cref="Settlement.Claims"/> only ever reads the discs of buildings
@@ -64,8 +65,8 @@ public sealed record SiegeOutcome(
 /// <remarks>
 /// <para>
 /// Settlement conquest/capture is explicitly out of scope for issue #40
-/// phase 5 — razing (reducing the Longhouse to 0, which shrinks
-/// <see cref="Settlement.ClaimRadius"/> to its floor for free) is as far as
+/// phase 5 — razing (reducing the Longhouse to 0, which ends the
+/// settlement's own claim — <see cref="Settlement.LonghouseDisc"/>) is as far as
 /// this goes. Forcibly recalling guest (<see cref="Armies.ArmyMission.Support"/>)
 /// armies from a settlement razed out from under them is reasonable future
 /// polish, deliberately not implemented here — a razed settlement with no
@@ -86,12 +87,52 @@ public static class SiegeResolver
         survivingSiegePower <= 0 ? 0 : Math.Max(1, (int)Math.Floor(Math.Sqrt(survivingSiegePower / 2.0)));
 
     /// <summary>
-    /// Applies catapult damage from <paramref name="attackerSurvivors"/>
+    /// How many levels a won siege takes off a <paramref name="type"/> building: <paramref name="levelsDestroyed"/> for most, but exactly
+    /// one for a wall hex (palisade or gate) and a bridge, whatever the siege engines bring (<c>docs/design/economy.md</c> section 5).
+    /// A wall is breached a level at a time; a guarded bridge falls to the king's bridge, open to everyone, before it can be burnt away.
+    /// </summary>
+    public static int LevelsTakenFrom(BuildingType type, int levelsDestroyed) =>
+        type is BuildingType.Palisade or BuildingType.PalisadeGate or BuildingType.Bridge ? Math.Min(1, levelsDestroyed) : levelsDestroyed;
+
+    /// <summary>
+    /// The kind of target a <paramref name="type"/> building is for siege purposes: a wall hex (palisade or gate), a tower, or any
+    /// other building (the Longhouse and bridges included).
+    /// </summary>
+    public static SiegeTargets KindOf(BuildingType type) => type switch
+    {
+        BuildingType.Palisade or BuildingType.PalisadeGate => SiegeTargets.Walls,
+        BuildingType.Tower => SiegeTargets.Towers,
+        _ => SiegeTargets.Buildings,
+    };
+
+    /// <summary>
+    /// Whether <paramref name="unit"/>'s siege power counts against a <paramref name="type"/> building: rams breach walls and towers,
+    /// catapults burn towers and every other building, ships hit whatever shore building they are sent at (<c>docs/design/economy.md</c> section 5). The one place the split lives, as
+    /// <see cref="UnitDefinition.SiegeTargets"/> data.
+    /// </summary>
+    public static bool CanDamage(UnitDefinition unit, BuildingType type)
+    {
+        ArgumentNullException.ThrowIfNull(unit);
+        return unit.SiegePower > 0 && (unit.SiegeTargets & KindOf(type)) != 0;
+    }
+
+    /// <summary>The siege power of the <paramref name="stacks"/> that can damage a <paramref name="type"/> building.</summary>
+    public static long SiegePowerAgainst(IEnumerable<UnitStack> stacks, BuildingType type)
+    {
+        ArgumentNullException.ThrowIfNull(stacks);
+        return stacks
+            .Select(s => (Definition: UnitCatalogue.Get(s.Type), s.Count))
+            .Where(x => CanDamage(x.Definition, type))
+            .Sum(x => (long)x.Definition.SiegePower * x.Count);
+    }
+
+    /// <summary>
+    /// Applies siege damage from <paramref name="attackerSurvivors"/>
     /// against one of <paramref name="defenderBuildings"/>.
     /// </summary>
     /// <param name="attackerSurvivors">
     /// The attacking army's stacks that survived the battle (<see cref="BattlePlan.AttackerSurvivors"/>).
-    /// Only <see cref="UnitType.Catapult"/> stacks contribute; call this only
+    /// Only siege engines and ships that can damage the target contribute (<see cref="CanDamage"/>); call this only
     /// when the attacker actually won — an attacker that lost contributes no
     /// siege damage regardless of what it brought, and this method does not
     /// check the battle's winner itself (the caller already knows).
@@ -104,18 +145,23 @@ public static class SiegeResolver
     /// between dispatch and arrival, and re-validating "does this building
     /// exist" is this method's job, not dispatch's (see
     /// <see cref="Armies.Army.PlanDispatch"/>'s remarks). Falls back to a
-    /// uniformly random pick (seeded by <paramref name="seed"/>, so
+    /// uniformly random pick among the buildings the surviving engines can damage (seeded by <paramref name="seed"/>, so
     /// deterministic and replayable) when it no longer exists or none was
     /// requested. The Longhouse is a valid target either way — including as a
     /// random pick — the design doc explicitly calls out Longhouse
     /// destruction as a real, intended consequence.
     /// </param>
     /// <param name="seed">Seeds the random-target fallback only; the same seed always picks the same target.</param>
+    /// <param name="randomFallback">
+    /// Whether to pick a random building when the requested one no longer stands (or none was requested). A fleet is
+    /// sent at exactly one shore building, so it passes <see langword="false"/>: if that building is gone, nothing is hit.
+    /// </param>
     public static SiegeOutcome Resolve(
         IReadOnlyList<UnitStack> attackerSurvivors,
         IReadOnlyList<PlacedBuilding> defenderBuildings,
         HexCoord? requestedTargetCoord,
-        int seed)
+        int seed,
+        bool randomFallback = true)
     {
         ArgumentNullException.ThrowIfNull(attackerSurvivors);
         ArgumentNullException.ThrowIfNull(defenderBuildings);
@@ -126,32 +172,42 @@ public static class SiegeResolver
             return SiegeOutcome.None;
         }
 
-        var survivingSiegePower = attackerSurvivors
-            .Where(s => s.Type == UnitType.Catapult)
-            .Sum(s => (long)UnitCatalogue.Get(s.Type).SiegePower * s.Count);
-
-        var levelsDestroyed = LevelsDestroyed(survivingSiegePower);
-        if (levelsDestroyed <= 0)
-        {
-            // No catapults survived to fire (none were sent, or a
-            // 100%-catapult army that won by a hair still lost every one of
-            // them) — no damage happens.
-            return SiegeOutcome.None;
-        }
-
         var buildings = defenderBuildings.ToList();
+
+        // A named target that still stands is hit by the engines that can damage it, or not at all (the engines that
+        // cannot are not redirected at something else). Without one, the pick is random among the buildings the
+        // surviving engines can damage; none means no siege.
         var index = requestedTargetCoord is { } coord
             ? buildings.FindIndex(b => b.Coord == coord)
             : -1;
 
+        if (index < 0 && !randomFallback)
+        {
+            return SiegeOutcome.None;
+        }
+
         if (index < 0)
         {
-            var rng = new Random(seed);
-            index = rng.Next(buildings.Count);
+            var damageable = Enumerable.Range(0, buildings.Count)
+                .Where(i => SiegePowerAgainst(attackerSurvivors, buildings[i].Type) > 0)
+                .ToList();
+            if (damageable.Count == 0)
+            {
+                return SiegeOutcome.None;
+            }
+
+            index = damageable[new Random(seed).Next(damageable.Count)];
+        }
+
+        var levelsDestroyed = LevelsDestroyed(SiegePowerAgainst(attackerSurvivors, buildings[index].Type));
+        if (levelsDestroyed <= 0)
+        {
+            // No engine that can damage the named target survived (or none was sent): no damage happens.
+            return SiegeOutcome.None;
         }
 
         var target = buildings[index];
-        var levelAfter = Math.Max(0, target.Level - levelsDestroyed);
+        var levelAfter = Math.Max(0, target.Level - LevelsTakenFrom(target.Type, levelsDestroyed));
 
         if (levelAfter <= 0)
         {

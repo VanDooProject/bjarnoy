@@ -19,14 +19,12 @@ import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
 import { missionName, unitName } from '../../i18n/catalogueNames';
 import {
-  classifyUnitSelection,
-  hasCatapultSelected,
-  isHuntUnit,
-  isUnitSelectableFor,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
-import { buildingLabel } from '../../lib/units/battleReports';
+import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
 import HuntTargetSummary from './HuntTargetSummary.vue';
+import DispatchSlots from './DispatchSlots.vue';
+import { useDispatchUnitPicker } from '../../composables/useDispatchUnitPicker';
 import { useArmyRows } from '../../composables/useArmyRows';
 
 const world = useWorldStore();
@@ -48,28 +46,8 @@ const garrisonRows = computed(() =>
     .map((g) => ({ unit: g.unit, label: unitName(g.unit), available: g.count })),
 );
 
-// Issue #40 phase 6 §1: which class family the current selection has
-// committed to (if any) — drives greying out the other class's rows below,
-// so the player can't build a `MixedFleetAndLandUnits`-rejected request in
-// the first place. See `classifyUnitSelection`'s own comment for why
-// `'mixed'` is handled defensively rather than assumed unreachable.
-const selectionKind = computed(() => classifyUnitSelection(draft.value?.unitCounts ?? {}, catalogue.byType));
-function isRowSelectable(unit: string): boolean {
-  // A hunt takes land units only, so ships are locked out from the start.
-  if (draft.value?.mission === 'hunt' && !isHuntUnit(unit, catalogue.byType)) return false;
-  return isUnitSelectableFor(unit, selectionKind.value, catalogue.byType);
-}
-// Whether the garrison actually holds units of the class the current
-// selection has locked out — only worth telling the player "ships and land
-// units can't mix" when there's something of the other class sitting right
-// there, greyed out, for them to wonder about.
-const hasLockedOutUnits = computed(() =>
-  draft.value?.mission === 'hunt'
-    ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
-    : selectionKind.value !== 'none' && selectionKind.value !== 'mixed'
-    ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
-    : false,
-);
+const picker = useDispatchUnitPicker(garrisonRows);
+const { isRowSelectable, hasLockedOutUnits } = picker;
 
 function quantityFor(unit: string): number {
   return draft.value?.unitCounts[unit] ?? 0;
@@ -117,7 +95,7 @@ const hasDestination = computed(() =>
       : routeLength.value > 0,
 );
 const canConfirm = computed(
-  () => hasUnitsSelected.value && hasDestination.value && !draft.value?.submitting,
+  () => hasUnitsSelected.value && hasDestination.value && picker.selectionSendable.value && !buildingPicker.isMissingRequiredPick.value && !draft.value?.submitting,
 );
 
 function beginDispatch() {
@@ -161,36 +139,12 @@ function clearTarget() {
 // Catapult target-building picker (issue #40 phase 5): only worth showing
 // once a target settlement is chosen *and* the selection actually includes a
 // Catapult — a catapult-free attack does no siege damage regardless of what's
-// requested (see `hasCatapultSelected`'s own comment), so there is nothing
+// requested (see `hasSiegeEngineSelected`'s own comment), so there is nothing
 // for a preference to apply to. `GET /api/v1/settlements/{id}` carries no
 // ownership check (confirmed from SettlementEndpoints.cs — see the PR notes),
 // so the enemy's real layout can be fetched and offered as specific hexes to
 // pick from, rather than falling back to a mere building-type preference.
-const showBuildingPicker = computed(
-  () => draft.value?.mission === 'attack' && !!selectedTarget.value && hasCatapultSelected(draft.value.unitCounts),
-);
-const targetBuildingRows = computed(() => {
-  if (!draft.value?.targetSettlementId) return [];
-  if (world.dispatchTargetBuildingsFor !== draft.value.targetSettlementId) return [];
-  return (world.dispatchTargetBuildings ?? []).map((b) => ({
-    q: b.q,
-    r: b.r,
-    label: buildingLabel(b.type),
-    level: b.level,
-  }));
-});
-const selectedBuildingLabel = computed(() => {
-  const coord = draft.value?.targetBuildingCoord;
-  if (!coord) return null;
-  const row = targetBuildingRows.value.find((b) => b.q === coord.q && b.r === coord.r);
-  return row ? `${row.label} (${t('hud.armyPanel.buildingLevelCoord', { level: row.level, q: coord.q, r: coord.r })})` : `(${coord.q}, ${coord.r})`;
-});
-function pickBuildingTarget(q: number, r: number) {
-  world.setDispatchTargetBuilding({ q, r });
-}
-function clearBuildingTarget() {
-  world.setDispatchTargetBuilding(null);
-}
+const buildingPicker = useDispatchTargetBuilding(computed(() => !!selectedTarget.value));
 
 async function confirm() {
   await world.confirmDispatch();
@@ -454,32 +408,38 @@ async function confirmFieldOrderClick() {
             {{ t('hud.armyPanel.supportNote') }}
           </p>
 
-          <div v-if="showBuildingPicker" class="building-picker">
+          <div v-if="buildingPicker.showPicker.value" class="building-picker">
             <p class="status-subtext building-picker-hint">
-              {{ t('hud.armyPanel.buildingPickerHint') }}
+              {{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetBuildingPickerHint' : 'hud.armyPanel.buildingPickerHint') }}
             </p>
-            <div v-if="selectedBuildingLabel" class="target-selected">
-              <span>{{ t('hud.armyPanel.target') }} <strong>{{ selectedBuildingLabel }}</strong></span>
-              <button type="button" class="secondary change-target" @click="clearBuildingTarget">{{ t('hud.armyPanel.clear') }}</button>
+            <p v-if="!buildingPicker.isRequired.value" class="status-subtext" data-testid="engine-reach">{{ t('hud.armyPanel.engineReach') }}</p>
+            <div v-if="buildingPicker.selectedLabel.value" class="target-selected">
+              <span>{{ t('hud.armyPanel.target') }} <strong>{{ buildingPicker.selectedLabel.value }}</strong></span>
+              <button type="button" class="secondary change-target" @click="buildingPicker.clear">{{ t('hud.armyPanel.clear') }}</button>
             </div>
+            <p v-if="buildingPicker.selectedUnreachable.value" class="status-subtext" data-testid="target-unreachable">{{ t('hud.armyPanel.cannotDamage') }}</p>
             <template v-else>
               <p v-if="world.dispatchTargetBuildingsLoading" class="status-subtext">{{ t('hud.armyPanel.loadingEnemyLayout') }}</p>
               <p v-else-if="world.dispatchTargetBuildingsError" class="status-subtext">
-                {{ t('hud.armyPanel.layoutLoadError') }}
+                {{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetLayoutLoadError' : 'hud.armyPanel.layoutLoadError') }}
               </p>
-              <div v-else-if="targetBuildingRows.length" class="target-list building-list">
+              <div v-else-if="buildingPicker.rows.value.length" class="target-list building-list">
                 <button
-                  v-for="b in targetBuildingRows"
+                  v-for="b in buildingPicker.rows.value"
                   :key="`${b.q},${b.r}`"
                   type="button"
                   class="target-row"
-                  @click="pickBuildingTarget(b.q, b.r)"
+                  :class="{ 'out-of-reach': !b.damageable }"
+                  :disabled="!b.damageable"
+                  :title="b.damageable ? undefined : t('hud.armyPanel.cannotDamage')"
+                  data-testid="building-target"
+                  @click="buildingPicker.pick(b.q, b.r)"
                 >
                   <span class="target-name">{{ b.label }}</span>
-                  <span class="target-owner">{{ t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) }}</span>
+                  <span class="target-owner">{{ b.damageable ? t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) : t('hud.armyPanel.cannotDamage') }}</span>
                 </button>
               </div>
-              <p v-else class="status-subtext">{{ t('hud.armyPanel.noPreference') }}</p>
+              <p v-else class="status-subtext">{{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetNoShoreBuilding' : 'hud.armyPanel.noPreference') }}</p>
             </template>
           </div>
         </template>
@@ -501,9 +461,7 @@ async function confirmFieldOrderClick() {
           </div>
         </div>
 
-        <p v-if="hasLockedOutUnits" class="status-subtext fleet-note">
-          {{ t('hud.armyPanel.fleetNote', { kind: selectionKind === 'fleet' ? t('hud.armyPanel.shipsOnly') : t('hud.armyPanel.landUnitsOnly') }) }}
-        </p>
+        <p v-if="hasLockedOutUnits" class="status-subtext fleet-note">{{ t('hud.armyPanel.huntLandOnlyNote') }}</p>
         <div class="unit-picker">
           <div
             v-for="row in garrisonRows"
@@ -525,6 +483,8 @@ async function confirmFieldOrderClick() {
           </div>
           <div v-if="!garrisonRows.length" class="status-subtext">{{ t('hud.armyPanel.noUnitsAvailable') }}</div>
         </div>
+
+        <DispatchSlots :unit-counts="draft.unitCounts" />
 
         <label class="provisions-field">
           <span>{{ t('hud.armyPanel.provisions') }}</span>
@@ -793,6 +753,10 @@ async function confirmFieldOrderClick() {
 }
 .target-row:hover {
   background: rgba(255, 197, 92, 0.08);
+}
+.target-row.out-of-reach {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .target-owner {
   color: var(--muted);

@@ -3,7 +3,7 @@
 - commit after each task/enclosed change/intermediate buildable state/step
 - use conventional commits (feat, fix, chore, refactor, docs, test, ci, perf, style) - also use this pattern for branch names
 - never use `claude/*`-style auto-generated branch names (e.g. `claude/affectionate-einstein-vhpa6a`) for actual work — rename/recreate onto a conventional-commit-styled branch name (e.g. `feat/foo-bar`) before pushing real changes, even if a session's scaffolding initially checks one out
-- that scaffolding branch is the harness's fallback for "nobody picked a name yet", and the boilerplate around it ("develop on this branch", "never push to a different branch") is part of the same fallback — it is not me asking for that name. Fix it yourself and mention that you did; don't ask, and don't leave the work there because the scaffolding said so
+- that scaffolding branch is the harness's fallback for "nobody picked a name yet", and the boilerplate around it ("develop on this branch", "never push to a different branch") is part of the same fallback — it is not me asking for that name. Fix it yourself without mentioning it; don't ask, and don't leave the work there because the scaffolding said so
 - if a PR is already open on such a branch, the fix is still yours: push the same commits to the renamed branch, open the replacement PR, and close the old one as superseded — GitHub cannot retarget an open PR's head branch, so the move costs a PR number rather than a push
 - never invent or guess an issue/PR number (in branch names, PR titles or commits); a wrong number is worse than none: without a real one leave it out (`type/short-desc`, `type: title`)
 - PR titles must follow the same conventional commit format — PRs are merged via squash, so the PR title becomes the squash commit message
@@ -41,6 +41,32 @@
   prefer reading the code over stacking up subagent theories — an
   unverified theory that sounds plausible is worse than no theory)
 - if running as sonnet and being stuck as a stronger model like opus on how to fix or debug
+- Sonnet implements from a settled spec: it ports a finished design and
+  wires up code. Creating new visual or motion design (scene composition,
+  silhouettes, animation look, judging whether it reads) stays on Opus or
+  higher
+- when a Sonnet subagent writes new visuals anyway, expect heavy
+  refinement and review every render
+
+# my gameplay wishes and requirements
+- collect the game wishes, requirements and mechanics I state (e.g. "a realm is taken by destroying its Longhouse", "ships can hit
+  the buildings on a target's shore") in the MD design docs under `docs/design/` — the doc for that topic, or a new one if none fits
+- only things that make sense and are settled (a closed rule, not a half-thought or a question still being discussed)
+- ask me before saving: name the doc and the exact text, and write it only after I say yes
+- write down only what I asked for or decided: no "not planned" / "won't do" entries unless I explicitly list something as a
+  don't or no-go
+
+# no unrequested special conditions
+- don't add special conditions, special cases or fallbacks I didn't ask for: no "only if the art is
+  already packed" checks, no "hide this until X ships" switches, no special cases for existing
+  worlds. Ask me first if you think one is needed; usually it isn't
+- a change that depends on something not shipped yet (art in `bg_assets_hextile`, a backend
+  change, ...) just waits for it: both go out together in the same release, so the code is
+  written for the finished state, not for the gap in between
+- a running world stays pinned to the release tag it was started on. Whatever it should get after
+  that (a bug fix, a security fix, a feature) is backported to a branch made from that tag and
+  shipped as a hotfix release from there, never added to `main` as a special case for that world
+  (there are no releases yet, so this doesn't come up today)
 
 # bugs
 - when fixing a bug add tests so we can make sure they don't come back; these tests can also be used to reproduce the bug first
@@ -101,6 +127,40 @@
   ask-first + dedupe-check + own-PR flow above), it does not stand down
   just because a rerun happened to pass
 
+# orchestrating other sessions
+- when I ask you to orchestrate work (fan out, hand off, drive several
+  PRs), use the session tools (`create_session`, `send_message`,
+  `list_sessions`, `get_session`, `list_events`, ...) rather than doing
+  everything inside this one session
+- if another open PR collides with or blocks the current work (overlapping
+  files, a fix we depend on, a paused/stalled PR), offer to send its
+  session a message so it continues (rebase, finish, unblock). Ask first;
+  don't message it on your own
+- for test failures, CI/CD problems, flakes and similar side work, offer to
+  start a new session for it instead of fixing it here, so the main PR
+  stays scoped to its own change. This is the same ask-first + dedupe-check
+  flow as "unrelated/pre-existing CI failures" above, just run in its own
+  session
+- when you find new details about a bug another session is already working
+  on (repro steps, failing test names, logs, root cause), send them to that
+  session as an informational message
+- create new sessions with the bjarnoy repo as source
+  (`source_url: https://github.com/VanDooProject/bjarnoy`) so they show up
+  in the bjarnoy section, not as loose sessions
+- prefix the title of every session you create with `[AI] ` (e.g.
+  `[AI] fix flaky WorldEndpointsTests`)
+- before starting a new session for side work (a fix, a flake, a
+  follow-up), or offering to start one, check the open sessions
+  (`list_sessions`, and `list_events` on the ones that look related) and
+  the open PRs and branches for one that already covers it. If one does,
+  send it what you know instead of starting a second one
+- if you already know from your own session that another session or PR
+  covers it, don't offer a new session for it at all; say which session
+  or PR has it
+- a session started for side work runs the same check itself before it
+  changes anything, and reports back instead of duplicating the work when
+  something already covers it
+
 # scheduled check-ins / send_later
 - don't poll on a fixed timer for something only I can unblock. A recurring
   `send_later`/check-in that re-reads a PR every hour is expensive: each
@@ -137,6 +197,82 @@
   work, lower default cost) so the *same* code is fast everywhere, rather
   than detecting the test/CI environment and skipping expensive work only
   there.
+- the one allowed exception is an **explicit, per-spec** opt-out that flips a
+  switch a real user or developer can flip too, set from the spec's side, with
+  no app code knowing it is under test: `test.use({ mapLayers: { water: false, fog: false } })`
+  (the water/fog debug switches) and the suite's `antialias: 'off'` (the player's
+  "Smooth edges" setting), both in `src/frontend/e2e/fixtures.ts`. Water/fog
+  opt-out only for specs whose assertions are DOM/game state; never for
+  water/fog/shore specs or anything that judges map pixels as an image
+  (`src/frontend/src/test/e2eWaterOptOut.test.ts` enforces this; a spec that plays
+  real motion needs a recorded user approval there). It doesn't
+  replace fixing real perf problems for slow devices.
+
+# dev docs and player docs
+- the **dev docs** (also called MD docs) are the Markdown files under `docs/design/`: the full rules, numbers, formulas and
+  technical detail. The **player docs** are the in-game `/docs` pages (https://bjarnoy.velarix.space/docs, below): the same
+  rules, much shallower, with almost no technical detail
+- a change to a rule, a number or what can be built where updates the dev docs in the same PR (the gameplay-wishes rule above
+  still applies to new wishes: ask before writing them down)
+- keep the two in sync: when one changes, check the other says the same (at the player docs' depth) and update it in the same PR
+- when they don't match (one says something the other contradicts, or a player page states a rule the dev docs don't have),
+  tell me and let me decide which is right. Don't pick one silently. Only stop the work for it when the answer decides the
+  implementation; otherwise report it and carry on
+
+# in-game docs (/docs)
+- `/docs` and its pages are **player docs**: what a player needs to play — rules, numbers, what can be built where, what things look like.
+  write from the player's side ("you can build ... on ..."), not from the code's
+- technical/admin content is hidden from players: how the map generator lays things out (e.g. how bogs are created),
+  generation thresholds, art-pipeline notes ("drawn with the X art until its own is ready", "cut into seven pieces so ..."),
+  dev status notes. Put it in `DocsAdminNote` (`src/frontend/src/components/docs/DocsAdminNote.vue`); only admins see it,
+  behind the docs header toggle (`useDocsAdminNotes`). Never mix such a sentence into a player paragraph — give it its own
+  i18n key (e.g. `...artNote`, `...techNote`) and render it in a `DocsAdminNote` next to the player text
+- building links: the first mention in prose links (with icon and preview); the building in a table's first column always links
+- a docs page shows what the game actually draws: looks the generator never picks (e.g. the plain bog moss, retired in
+  `RETIRED_BOG_VARIANTS`) don't appear in pickers either
+- example maps (`BogIsland`, `WastedIsland`, `WallExample`) go above the per-tile entries they illustrate: the whole
+  first, then the pieces
+- a new page joins the shared page list `src/frontend/src/lib/docs/docsPages.ts` (hub group and order, art, header art
+  style, related pages with a reason each; hub, breadcrumb, previous/next and the Related footer all read it) and the
+  routes in `src/frontend/src/router/index.ts`, and gets en + de text in `src/frontend/src/i18n/locales/{en,de}/docs.json`
+- page art: no big picture on top of a page; the header shows the page's art as a small icon beside the title (pages
+  about one tile or building) or a faded backdrop (the others; phones always use the icon)
+
+# German text (de locale)
+- write German the way a native speaker writes a game's help pages — not a translation of the English sentence. Restructure
+  freely; keep the meaning (rules, numbers, conditions) exact
+- address the player with "du", active voice, short sentences. Avoid "Das Spiel ..." as a subject and passive chains
+  where a "du" sentence works: "Das Spiel warnt dich, wenn du einen setzt." → "Willst du dort trotzdem einen Turm bauen,
+  warnt dich das Spiel vorher."
+- avoid English calques and colon/semicolon chains: "hält das Land" → "beansprucht das Land", "Looks" → "Varianten",
+  "Zeig auf ein Hexfeld" → "Fahr mit der Maus über ein Feld"
+- keep terms consistent with the in-game names in `src/frontend/src/i18n/locales/de/catalogue.json` (e.g. Ziegelei, not
+  Lehmziegelei); "Feld" in rules text, "Kachel" only where the UI already uses it; "Armee", not "Heer" (lore text aside);
+  "Techbaum"
+- typography: „…" quotes, – as dash, correct spelling ("platzieren")
+- new or changed English text gets its German counterpart in the same commit, written to these rules, not machine-literal
+
+# code reuse
+- never implement the same behaviour twice or differently in two places
+  (e.g. a component's mount + open/close animation wired one way in
+  `MapView.vue` and another way in `LandingView.vue`). Put it in one
+  shared place (the component itself, a wrapper component or a
+  composable) that every caller uses
+- a fix for something that's used in more than one place goes into that
+  shared place, not into each caller; if you find two diverging copies
+  while working, unify them in your change or open a task for it
+
+# UI changes
+- every UI change follows `docs/design/ui-guidelines.md` (no leftover
+  actions, no links back into finished flows, no chrome without
+  information on phones, safe areas, every enter has a leave, one
+  implementation per behaviour, real-touch gestures)
+- apply it in the same PR as the change: when a flow changes, check the
+  surfaces around it for what the change made stale (old buttons, links,
+  reserved space, copy) and remove it right away — don't leave it for a
+  later cleanup pass
+- when a change reveals a new kind of recurring UI leftover, add the rule
+  to `docs/design/ui-guidelines.md`
 
 # interaction between u (AI) and user (me)
 
@@ -145,8 +281,25 @@
 
 ## CLAUDE
 - ask questions if anything is unclear or you need more context
+- a decision with a few clear options (pick a rule variant, yes/no on a proposal, which of two fixes) goes through the
+  `AskUserQuestion` tool, several questions in one call, recommended option first — not as a numbered prose list I have to
+  answer by retyping it. Context the question needs goes into the question itself or into the chat text right before it.
+  Open questions that need my own words (what something should be called, a new rule) stay in the chat
 - if u take screenshots always show the in chat to me too
 - for planning u can use a opus or fable subtask/subagent
+- artifacts that go through rounds (UX reviews, design options, motion
+  demos, ...) keep every earlier round viewable: publish the new round as
+  its own page or section in the same artifact and link the rounds to each
+  other — never overwrite or delete an earlier round's content when
+  publishing the next one, I still compare against it
+- artifacts with motion (animations, motion demos, story beats, ...) loop by
+  default and ignore `prefers-reduced-motion` by default (full motion); a
+  toggle inside the page switches to the reduced-motion version — I can't
+  change that setting on my machine, so the reduced-motion path has to be
+  viewable there
+- don't report that you followed one of these rules (e.g. "renamed the
+  branch because of the naming rule") — that's expected. Only tell me when
+  you did **not** follow a rule, and why
 
 # sandbox tooling (Claude Code cloud sessions)
 - the cloud sandbox does **not** come with the .NET SDK preinstalled, and
@@ -226,10 +379,23 @@
     API + Vite dev server + .NET Playwright Chromium) also passes, but needs
     the same prep as CI's `aspire-e2e.yml`, otherwise it just hangs until
     timeout waiting for the `frontend` resource: `npm ci` in `src/frontend`
-    and the vendored `bg_assets_hextile` art (see above). No
-    `playwright.ps1 install` needed — `Microsoft.Playwright` 1.56 finds the
-    pre-installed `/opt/pw-browsers/chromium-1194` via
-    `PLAYWRIGHT_BROWSERS_PATH`. Run it from
+    and the vendored `bg_assets_hextile` art (see above).
+    `playwright.ps1 install` is blocked by the egress proxy, and
+    `Microsoft.Playwright` 1.56 launches
+    `$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-1194/chrome-linux/headless_shell`,
+    while the sandbox image now ships a newer revision with another layout
+    (`/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell`
+    as of 2026-11-02). Without a fix every test fails within seconds with
+    "Executable doesn't exist at .../chromium_headless_shell-1194/...".
+    Link the present binary to the path it asks for (sandbox-only, nothing
+    to commit; check the revision numbers in the error and under
+    `/opt/pw-browsers` first):
+    ```bash
+    sudo mkdir -p /opt/pw-browsers/chromium_headless_shell-1194/chrome-linux
+    sudo ln -sf /opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell \
+      /opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell
+    ```
+    Run it from
     `src/backend/tests/Bjarnoy.AppHost.Tests` with **`CI=true dotnet test`**;
     a single class can be targeted with
     `CI=true dotnet test -- --filter-class "*ChatFlowTests"`. The suite
@@ -253,14 +419,14 @@
   `chromium-browser` binary via apt/snap. A working Chromium is
   pre-installed at `/opt/pw-browsers` (`PLAYWRIGHT_BROWSERS_PATH` is
   already set to it) — the catch is that its bundled revision
-  (`chromium-1194`) often doesn't match the exact browser revision the
+  (`chromium-1243` as of 2026-11-02) often doesn't match the exact browser revision the
   project's pinned `@playwright/test` version expects, so the default
   project config's `chrome-headless-shell` launch fails with "Executable
   doesn't exist at .../chromium_headless_shell-<other number>". Point the
   launch at the real, present binary instead of the mismatched shell one:
   add `launchOptions: { executablePath:
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' }` (check the exact
-  folder name under `/opt/pw-browsers` first, it can differ) to the
+  '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome' }` (check the exact
+  folder names under `/opt/pw-browsers` first, they change with the image) to the
   `chromium` project's `use` block in `playwright.config.ts` **locally,
   uncommitted, for the duration of your own verification run only** —
   revert it before committing, it's a sandbox-path hack, not a real repo
@@ -281,6 +447,10 @@
   action of mine, or the session ends), give me a minimal state table so I can see at a glance what is still open
 - that is the table's place: the end of a turn that waits. Not on an event or notification that needs no action, not mid-turn status
   messages, and not when nothing changed since the last table
+- unchanged means unchanged for the table **and** its questions: don't repeat either while nothing in them changed. A turn that
+  only answers a nudge (a stop hook that sees uncommitted changes while a subagent is still editing, a notification that needs
+  nothing) gets one line saying what is still running, no table, no questions
+- proposals and questions stay in the chat; written once and not repeated, they don't get buried
 - one row per piece of work (PR, task, test run, subagent, ...), with just these columns: what, state, waiting on
   - state: `done`, `open work` (something is still for u to do), or `waiting`
   - waiting on: `tests`, `CI`, `subagents`, `user decision` (a choice to make), `user action` (something only I can do, e.g. a
@@ -289,6 +459,7 @@
 - keep it to the rows that matter: no prose recap, no finished work that needs nothing further, and
   say `nothing open` instead of an empty table
 - for every row waiting on `user decision` or `user action`, add a short line after the table with the question (or the exact steps) and the options (recommended one first), so I can answer without scrolling back
+  — when the question is new or has changed; a question already asked and still unchanged is not written again
 - example:
 
   | what | state | waiting on |

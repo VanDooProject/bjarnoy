@@ -63,13 +63,11 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
   pointer-events: none;
   animation: resource-rise 2.4s ease-out forwards;
 }
-@media (prefers-reduced-motion: reduce) {
-  /* Not `animation: none` — this animation is also what schedules the
-     tick's own removal (@animationend below). Collapsing the duration
-     keeps the cleanup firing (no permanently-stuck label) while skipping
-     the visible rise. */
-  .tick {
-    animation-duration: 0.01s;
-  }
+/* Not `animation: none` — this animation is also what schedules the
+   tick's own removal (@animationend below). Collapsing the duration
+   keeps the cleanup firing (no permanently-stuck label) while skipping
+   the visible rise. */
+html[data-hud-motion='reduced'] .tick {
+  animation-duration: 0.01s;
 }
 </style>

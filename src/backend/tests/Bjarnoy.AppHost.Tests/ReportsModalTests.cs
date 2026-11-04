@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.RegularExpressions;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
@@ -72,6 +73,9 @@ namespace Bjarnoy.AppHost.Tests;
 /// </remarks>
 public class ReportsModalTests(AppHostFixture fixture)
 {
+    // The map writes its camera into the hash (#q=..&r=..&z=..) once the view settles.
+    private static readonly Regex SettlementUrl = new(@"/settlement(#q=[^#]*)?$");
+
     /// <summary>
     /// How many candidate seeds to try before giving up — see this class's
     /// own remarks. Each attempt is a single in-memory map generation
@@ -252,7 +256,7 @@ public class ReportsModalTests(AppHostFixture fixture)
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
 
-        // --- Desktop: HudNav's "Reports" button opens the modal over the settlement view ---
+        // --- Desktop: the Reports row in the avatar menu opens the modal over the settlement view ---
         var desktopContext = await browser.NewContextAsync();
         var desktopPage = await desktopContext.NewPageAsync();
         var desktopConsoleErrors = desktopPage.CollectConsoleErrors();
@@ -263,7 +267,15 @@ public class ReportsModalTests(AppHostFixture fixture)
         var canvas = desktopPage.Locator("canvas");
         await canvas.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 60_000 });
 
-        var reportsLink = desktopPage.Locator(".hud-nav button.reports-link");
+        // Reports sits in the avatar menu (HudNav), not inline in the bar. This
+        // player is a local, account-less one (BuildLoginInitScript), so the
+        // avatar spot is the returning-player trigger; an account would show
+        // the account-menu trigger instead. Same rule as e2e's clickHudMenuEntry.
+        var accountMenuTrigger = desktopPage.Locator(
+            "[data-testid=\"account-menu-trigger\"], [data-testid=\"returning-player-trigger\"]");
+        await Assertions.Expect(accountMenuTrigger).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await accountMenuTrigger.ClickAsync();
+        var reportsLink = desktopPage.Locator("[data-testid=\"menu-entry-reports\"]");
         await Assertions.Expect(reportsLink).ToBeVisibleAsync(new() { Timeout = 15_000 });
         await reportsLink.ClickAsync();
 
@@ -292,7 +304,7 @@ public class ReportsModalTests(AppHostFixture fixture)
 
         await reportsModal.Locator(".close-button").ClickAsync();
         await Assertions.Expect(reportsModal).Not.ToBeVisibleAsync(new() { Timeout = 15_000 });
-        await desktopPage.WaitForURLAsync(url => url.EndsWith("/settlement"), new PageWaitForURLOptions { Timeout = 10_000 });
+        await desktopPage.WaitForURLAsync(url => SettlementUrl.IsMatch(url), new PageWaitForURLOptions { Timeout = 10_000 });
         await Assertions.Expect(canvas).ToBeVisibleAsync();
 
         Assert.Empty(desktopConsoleErrors);
@@ -343,7 +355,7 @@ public class ReportsModalTests(AppHostFixture fixture)
 
         await phoneModal.Locator(".back-button").TapAsync();
         await Assertions.Expect(phoneModal).Not.ToBeVisibleAsync(new() { Timeout = 15_000 });
-        await phonePage.WaitForURLAsync(url => url.EndsWith("/settlement"), new PageWaitForURLOptions { Timeout = 10_000 });
+        await phonePage.WaitForURLAsync(url => SettlementUrl.IsMatch(url), new PageWaitForURLOptions { Timeout = 10_000 });
 
         Assert.Empty(phoneConsoleErrors);
     }

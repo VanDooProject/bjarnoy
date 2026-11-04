@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Economy;
@@ -39,7 +40,8 @@ public static class AdminArmyEndpoints
 
         armies.MapPatch("/{armyId:guid}", Edit)
             .WithName("AdminEditArmy")
-            .WithSummary("Edits an army's units, provisions, arrival time, or position.");
+            .WithSummary("Edits an army's units, provisions, arrival time, or position.")
+            .WithConcurrencyRetry();
 
         return app;
     }

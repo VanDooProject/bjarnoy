@@ -13,6 +13,7 @@ const getArmy = vi.fn();
 const getSettlementGuests = vi.fn();
 const recallArmy = vi.fn();
 const listSettlements = vi.fn();
+const listWalls = vi.fn();
 const foundSettlement = vi.fn();
 const getTradeBoard = vi.fn();
 const getMyTradeOffers = vi.fn();
@@ -32,6 +33,7 @@ const listWorlds = vi.fn();
 const getWorldMembership = vi.fn();
 const dispatchArmy = vi.fn();
 const getWorldCamps = vi.fn();
+const queueBuild = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
 // reads `localStorage.getItem('bjarnoy.worldId')` at module-level state-init
@@ -69,6 +71,8 @@ async function loadStoreModule(demoMode: boolean) {
       getSettlementGuests: (...args: unknown[]) => getSettlementGuests(...args),
       recallArmy: (...args: unknown[]) => recallArmy(...args),
       listSettlements: (...args: unknown[]) => listSettlements(...args),
+      // Unconfigured, the rival walls read is an empty world.
+      listWalls: async (...args: unknown[]) => (await listWalls(...args)) ?? [],
       foundSettlement: (...args: unknown[]) => foundSettlement(...args),
       getTradeBoard: (...args: unknown[]) => getTradeBoard(...args),
       getMyTradeOffers: (...args: unknown[]) => getMyTradeOffers(...args),
@@ -85,6 +89,7 @@ async function loadStoreModule(demoMode: boolean) {
       getWorldMembership: (...args: unknown[]) => getWorldMembership(...args),
       dispatchArmy: (...args: unknown[]) => dispatchArmy(...args),
       getWorldCamps: (...args: unknown[]) => getWorldCamps(...args),
+      queueBuild: (...args: unknown[]) => queueBuild(...args),
     },
     ApiError: MockApiError,
     // Real implementations check `err instanceof ApiError && err.problem?.error
@@ -332,6 +337,28 @@ describe('useWorldStore startDispatchAt', () => {
     expect(store.dispatchDraft?.targetCamp).toBeNull();
   });
 
+  it('starts an Attack draft on the wall owner with the wall hex as the preferred target building', async () => {
+    getSettlementView.mockReset().mockResolvedValue({ buildings: [] });
+    const store = await loadStoreModule(true);
+
+    store.startDispatchAt({ q: 2, r: 5 }, { mission: 'attack', targetSettlementId: 'rival-1', targetBuildingCoord: { q: 2, r: 5 } });
+
+    expect(store.dispatchDraft?.mission).toBe('attack');
+    expect(store.dispatchDraft?.targetSettlementId).toBe('rival-1');
+    expect(store.dispatchDraft?.targetBuildingCoord).toEqual({ q: 2, r: 5 });
+    expect(store.dispatchDraft?.route).toEqual([]);
+  });
+
+  it('switching the target settlement drops the preferred building again', async () => {
+    getSettlementView.mockReset().mockResolvedValue({ buildings: [] });
+    const store = await loadStoreModule(true);
+    store.startDispatchAt({ q: 2, r: 5 }, { mission: 'attack', targetSettlementId: 'rival-1', targetBuildingCoord: { q: 2, r: 5 } });
+
+    store.setDispatchTarget('rival-2');
+
+    expect(store.dispatchDraft?.targetBuildingCoord).toBeNull();
+  });
+
   it('cancels an in-progress field order draft, mutually exclusive with dispatch', async () => {
     const store = await loadStoreModule(true);
     store.startFieldOrder('army-1');
@@ -465,6 +492,8 @@ describe('useWorldStore founding a settlement (live mode)', () => {
     });
     foundSettlement.mockReset().mockResolvedValue({
       id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
       ownerName: 'Astrid',
       name: "Astrid's realm",
       q: FAR_ISLAND.at.q,
@@ -500,6 +529,8 @@ describe('useWorldStore founding a settlement (live mode)', () => {
     });
     foundSettlement.mockReset().mockResolvedValue({
       id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
       ownerName: 'Astrid',
       name: "Astrid's realm",
       q: NEAR_ISLAND.at.q,
@@ -568,6 +599,8 @@ describe('useWorldStore founding a settlement (L6b: persist before reconciling)'
     });
     foundSettlement.mockReset().mockResolvedValue({
       id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
       ownerName: 'Astrid',
       name: "Astrid's realm",
       q: ISLAND.at.q,
@@ -762,6 +795,95 @@ describe('useWorldStore refreshWorldSettlements (island-scoped painting)', () =>
   });
 });
 
+describe('useWorldStore refreshWorldSettlements (rival walls)', () => {
+  const wall = (q: number, r: number, ownerUserId: string | null = 'user-rival') => ({
+    q, r, type: 'palisade' as const, level: 2, settlementId: 'rival-near', ownerUserId,
+  });
+
+  it('hands the fetched rival walls to the model on every refresh, replacing the previous set', async () => {
+    listSettlements.mockReset().mockResolvedValue([]);
+    listWalls.mockReset().mockResolvedValueOnce([wall(3, 1), wall(4, 1)]).mockResolvedValueOnce([wall(4, 1)]);
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+
+    await store.refreshWorldSettlements();
+    expect(store.model.getTile(3, 1).buildingType).toBe('palisade');
+    expect(store.model.rivalWallOwner(4, 1)).toBe('user-rival');
+    expect(listWalls).toHaveBeenCalledWith('world-1', undefined);
+
+    await store.refreshWorldSettlements();
+    expect(store.model.getTile(3, 1).buildingType).toBeUndefined();
+    expect(store.model.getTile(4, 1).buildingType).toBe('palisade');
+  });
+
+  // Regression: startHudSync runs this poll next to refreshLiveSettlement; its
+  // re-claim of the island used to reset the own longhouse tile to level 1, so
+  // after onboarding the hall flipped between level-1 art and its real level.
+  it('leaves the own longhouse at the level the settlement poll reported', async () => {
+    getSettlement.mockReset().mockResolvedValue({
+      id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
+      longhouseLevel: 15,
+      resources: {
+        stock: { wood: 0, stone: 0, food: 0, iron: 0 },
+        ratePerHour: { wood: 0, stone: 0, food: 0, iron: 0 },
+        capacity: { wood: 750, stone: 750, food: 900, iron: 375 },
+        reserved: { wood: 0, stone: 0, food: 0, iron: 0 },
+      },
+      buildings: [{ q: 0, r: 0, type: 'longhouse', level: 15 }],
+      queue: [],
+      garrison: [],
+      trainingQueue: [],
+    });
+    listSettlements.mockReset().mockResolvedValue([
+      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 6, r: 0, longhouseLevel: 7, islandId: 'island-home' },
+    ]);
+    listWalls.mockReset().mockResolvedValue([]);
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.model.registerSettlement({
+      id: 'settlement-1',
+      ownerId: 'player-1',
+      ownerName: 'Ulf',
+      name: "Ulf's realm",
+      q: 0,
+      r: 0,
+      level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: Date.now(),
+      islandId: 'island-home',
+    });
+    store.model.claimTerritory('settlement-1');
+    store.selectedSettlementId = 'settlement-1';
+
+    await store.refreshLiveSettlement();
+    expect(store.model.getTile(0, 0).buildingLevel).toBe(15);
+
+    await store.refreshWorldSettlements();
+    expect(store.model.getTile(0, 0).buildingLevel).toBe(15);
+    expect(store.model.getTile(6, 0).buildingLevel).toBe(7);
+  });
+
+  it('keeps the settlements refresh and the last wall set when the walls read fails', async () => {
+    listSettlements.mockReset().mockResolvedValue([
+      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-near' },
+    ]);
+    listWalls.mockReset().mockResolvedValueOnce([wall(3, 1)]).mockRejectedValueOnce(new Error('boom'));
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    await store.refreshWorldSettlements();
+    await store.refreshWorldSettlements();
+
+    expect(store.model.getSettlement('rival-near')).toBeDefined();
+    expect(store.model.getTile(3, 1).buildingType).toBe('palisade');
+  });
+});
+
 // Backend fix: GET .../settlements became fog-gated, so an anonymous
 // landing-page visitor (no realm of their own yet) legitimately gets nothing
 // back from it any more — `PlotSuggestionResponse.islandSettlements` is what
@@ -802,6 +924,8 @@ describe('useWorldStore refreshLiveSettlement (storage capacity)', () => {
   it('uses the backend capacity for hud.storageCap, not the synthetic longhouse-level guess', async () => {
     getSettlement.mockReset().mockResolvedValue({
       id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
       longhouseLevel: 1,
       resources: {
         stock: { wood: 750, stone: 0, food: 0, iron: 0 },
@@ -1182,6 +1306,8 @@ describe('useWorldStore fetchFogMask', () => {
     expect(pixelsToBitmap).toHaveBeenCalledWith(expect.any(Uint8ClampedArray), 192, 192);
     expect(store.fogMaskBounds).toEqual({ minU: -64, minV: -64, maxU: 128, maxV: 128, width: 192, height: 192 });
     expect(store.fogMaskBitmap).not.toBeNull();
+    // The coverage is built from the same stitched window.
+    expect(store.fogCoverage).not.toBeNull();
   });
 
   it('decodes only the chunks whose version changed and closes the bitmap it replaces', async () => {
@@ -1494,7 +1620,7 @@ describe('useWorldStore refreshDemoFogMask', () => {
     const secondRefresh = store.refreshDemoFogMask(); // fired before the first resolves
     expect(buildDemoFogMask).toHaveBeenCalledTimes(1);
 
-    resolveFirst!({ close: vi.fn() });
+    resolveFirst!({ bitmap: { close: vi.fn() }, coverage: {} });
     await Promise.all([firstRefresh, secondRefresh]);
     expect(buildDemoFogMask).toHaveBeenCalledTimes(1);
 
@@ -1502,7 +1628,7 @@ describe('useWorldStore refreshDemoFogMask', () => {
     // — this isn't a one-shot latch. The fog has to actually move for that,
     // since an unchanged fog is now skipped (see the test below); founding a
     // settlement claims territory, which is exactly what moves it.
-    buildDemoFogMask.mockResolvedValueOnce({ close: vi.fn() });
+    buildDemoFogMask.mockResolvedValueOnce({ bitmap: { close: vi.fn() }, coverage: {} });
     store.model.foundSettlement('player-1', 'You', 'Second', { q: 20, r: 20 });
     await store.refreshDemoFogMask();
     expect(buildDemoFogMask).toHaveBeenCalledTimes(2);
@@ -1516,7 +1642,7 @@ describe('useWorldStore refreshDemoFogMask', () => {
   // timer, so the poll now compares WorldModel.fogSignature() first.
   it('skips the bake when nothing the fog is drawn from has changed', async () => {
     buildDemoFogMask.mockReset();
-    buildDemoFogMask.mockResolvedValue({ close: vi.fn() });
+    buildDemoFogMask.mockResolvedValue({ bitmap: { close: vi.fn() }, coverage: {} });
     const store = await loadStoreModule(true);
 
     await store.refreshDemoFogMask();
@@ -1548,10 +1674,11 @@ describe('useWorldStore refreshDemoFogMask', () => {
     expect(buildDemoFogMask).toHaveBeenCalledTimes(1);
     expect(store.fogMaskBitmap).toBeNull();
 
-    buildDemoFogMask.mockResolvedValueOnce({ close: vi.fn() });
+    buildDemoFogMask.mockResolvedValueOnce({ bitmap: { close: vi.fn() }, coverage: {} });
     await store.refreshDemoFogMask();
     expect(buildDemoFogMask).toHaveBeenCalledTimes(2);
     expect(store.fogMaskBitmap).not.toBeNull();
+    expect(store.fogCoverage).not.toBeNull();
   });
 });
 
@@ -1598,6 +1725,8 @@ describe('useWorldStore joinWorld', () => {
     });
     getSettlement.mockReset().mockResolvedValue({
       id: 'settlement-42',
+      realmId: 'settlement-42',
+      linkedMemberIds: ['settlement-42'],
       ownerName: 'Astrid',
       name: "Astrid's realm",
       q: 3,
@@ -1697,6 +1826,8 @@ describe('construction slots/reservations degrade gracefully in demo mode', () =
       maxWaitingOrders: 0,
       waitingOrders: 0,
       maxOrdersPerHex: 1,
+      towerLimit: 0,
+      towersHeld: 0,
     });
 
     store.selectedSettlementId = 'settlement-1';
@@ -1776,6 +1907,8 @@ describe('useWorldStore claimQuest (onboarding quests)', () => {
   function settlementResponse(quests: unknown[], wood: number) {
     return {
       id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
       longhouseLevel: 2,
       resources: {
         stock: { wood, stone: 0, food: 0, iron: 0 },
@@ -1889,6 +2022,7 @@ describe('useWorldStore refreshCampStates', () => {
     q: 2,
     r: 1,
     family: 'wolfden',
+    orientation: 'SE',
     level: 2,
     effectiveLevel: 2,
     strong: true,
@@ -1919,6 +2053,27 @@ describe('useWorldStore refreshCampStates', () => {
     expect(store.campStatesVersion).toBe(1);
   });
 
+  it('adds a camp it first learns about from the poll (a newly seen island) with its state', async () => {
+    getWorldCamps.mockReset().mockResolvedValue([{ ...campState, family: 'bearrapids', orientation: 'NE', strong: true }]);
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    expect(store.model.campAt({ q: 2, r: 1 })).toBeUndefined();
+
+    await store.refreshCampStates();
+
+    expect(store.model.campAt({ q: 2, r: 1 })).toMatchObject({
+      family: 'bearrapids',
+      orientation: 'NE',
+      level: 2,
+      empty: true,
+      clears: 1,
+    });
+    expect(store.campStatesVersion).toBe(1);
+
+    await store.refreshCampStates();
+    expect(store.campStatesVersion).toBe(1);
+  });
+
   it('survives a failed fetch and never calls the endpoint in demo mode', async () => {
     getWorldCamps.mockReset().mockRejectedValue(new Error('down'));
     const store = await loadStoreModule(false);
@@ -1931,5 +2086,298 @@ describe('useWorldStore refreshCampStates', () => {
     demo.worldId = 'world-1';
     await demo.refreshCampStates();
     expect(getWorldCamps).not.toHaveBeenCalled();
+  });
+});
+
+describe('useWorldStore queueBuildOptimistic (W3)', () => {
+  function settlementResponse(overrides: { wood?: number; queue?: unknown[] } = {}) {
+    return {
+      id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
+      longhouseLevel: 1,
+      resources: {
+        stock: { wood: overrides.wood ?? 500, stone: 300, food: 200, iron: 0 },
+        ratePerHour: { wood: 0, stone: 0, food: 0, iron: 0 },
+        capacity: { wood: 750, stone: 750, food: 900, iron: 375 },
+        reserved: { wood: 0, stone: 0, food: 0, iron: 0 },
+      },
+      construction: { slots: 2, slotsUsed: 1, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 },
+      buildings: [],
+      queue: overrides.queue ?? [],
+      garrison: [],
+      trainingQueue: [],
+    };
+  }
+  const realOrder = {
+    id: 'order-1', q: 3, r: -2, building: 'lumberjack', targetLevel: 1, state: 'building', slotCost: 1,
+    completesAtGameTime: 'x', completesInSeconds: 120, totalSeconds: 120,
+  };
+
+  async function setup() {
+    const store = await loadStoreModule(false);
+    store.model.registerSettlement({
+      id: 'settlement-1', ownerId: 'player-1', ownerName: 'Astrid', name: 'Realm', q: 0, r: 0, level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 }, rates: { wood: 0, stone: 0, food: 0, iron: 0 }, foundedAt: Date.now(),
+    });
+    store.selectedSettlementId = 'settlement-1';
+    getSettlement.mockReset().mockResolvedValue(settlementResponse());
+    await store.refreshLiveSettlement(); // stock: wood 500
+    queueBuild.mockReset();
+    return store;
+  }
+  const at = { q: 3, r: -2 };
+
+  it('puts a pending "…" order on the hex before the request resolves', async () => {
+    const store = await setup();
+    let release!: () => void;
+    queueBuild.mockReturnValue(new Promise<void>((resolve) => (release = resolve)));
+    const { constructionDialsFromQueue } = await import('../lib/map/constructionDial');
+
+    const done = store.queueBuildOptimistic('lumberjack', at);
+    expect(store.hud.queue).toHaveLength(1);
+    expect(store.hud.queue[0]).toMatchObject({ q: 3, r: -2, building: 'lumberjack', state: 'waiting', completesInSeconds: null });
+    // The dial for it has no timing, which the renderer draws as "…".
+    expect(constructionDialsFromQueue(store.hud.queue, Date.now())).toEqual([{ coord: at, startMs: null, endMs: null }]);
+
+    getSettlement.mockResolvedValue(settlementResponse({ queue: [realOrder] }));
+    release();
+    await done;
+  });
+
+  it('replaces the pending entry with the real order once confirmed', async () => {
+    const store = await setup();
+    queueBuild.mockResolvedValue(undefined);
+    getSettlement.mockResolvedValue(settlementResponse({ wood: 400, queue: [realOrder] }));
+
+    await store.queueBuildOptimistic('lumberjack', at, { wood: 100 });
+
+    expect(queueBuild).toHaveBeenCalledWith('settlement-1', { building: 'lumberjack', q: 3, r: -2 }, undefined);
+    expect(store.hud.queue.map((o) => o.id)).toEqual(['order-1']);
+  });
+
+  it('records the confirmed spend, only for resources whose stock really dropped', async () => {
+    const store = await setup();
+    queueBuild.mockResolvedValue(undefined);
+    getSettlement.mockResolvedValue(settlementResponse({ wood: 400, queue: [realOrder] }));
+
+    await store.queueBuildOptimistic('lumberjack', at, { wood: 100, stone: 50 });
+
+    // Stone stayed at 300 (a reserved waiting order spends nothing yet).
+    expect(store.hud.lastSpend?.cost).toEqual({ wood: 100 });
+  });
+
+  it('does not record a spend without a cost, or when nothing dropped', async () => {
+    const store = await setup();
+    queueBuild.mockResolvedValue(undefined);
+    getSettlement.mockResolvedValue(settlementResponse({ queue: [realOrder] }));
+    await store.queueBuildOptimistic('lumberjack', at);
+    await store.queueBuildOptimistic('lumberjack', at, { wood: 100 });
+    expect(store.hud.lastSpend).toBeNull();
+  });
+
+  it('removes the pending entry and rethrows on a refusal, without a spend or a refresh', async () => {
+    const store = await setup();
+    const refusal = new Error('No free construction slot.');
+    queueBuild.mockRejectedValue(refusal);
+    getSettlement.mockClear();
+
+    await expect(store.queueBuildOptimistic('lumberjack', at, { wood: 100 })).rejects.toBe(refusal);
+
+    expect(store.hud.queue).toEqual([]);
+    expect(store.hud.lastSpend).toBeNull();
+    expect(store.hud.resources.wood).toBe(500);
+    expect(getSettlement).not.toHaveBeenCalled();
+  });
+
+  it('keeps the pending entry when a poll refresh lands while the request is still in flight', async () => {
+    const store = await setup();
+    let release!: () => void;
+    queueBuild.mockReturnValue(new Promise<void>((resolve) => (release = resolve)));
+
+    const done = store.queueBuildOptimistic('lumberjack', at);
+    await store.refreshLiveSettlement(); // the poll, answering before the build was accepted
+    expect(store.hud.queue.map((o) => o.building)).toEqual(['lumberjack']);
+    expect(store.hud.queue[0].id.startsWith('pending:')).toBe(true);
+
+    getSettlement.mockResolvedValue(settlementResponse({ wood: 400, queue: [realOrder] }));
+    release();
+    await done;
+    expect(store.hud.queue.map((o) => o.id)).toEqual(['order-1']);
+  });
+
+  it('removes the pending entry on a refusal even if a poll happened meanwhile', async () => {
+    const store = await setup();
+    let reject!: (e: Error) => void;
+    queueBuild.mockReturnValue(new Promise<void>((_, r) => (reject = r)));
+    const done = store.queueBuildOptimistic('lumberjack', at);
+    await store.refreshLiveSettlement();
+    reject(new Error('nope'));
+    await expect(done).rejects.toThrow('nope');
+    expect(store.hud.queue).toEqual([]);
+  });
+
+  it('treats the build as confirmed when only the follow-up refresh fails', async () => {
+    const store = await setup();
+    queueBuild.mockResolvedValue(undefined);
+    getSettlement.mockRejectedValue(new Error('network error'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await expect(store.queueBuildOptimistic('lumberjack', at)).resolves.toBeUndefined();
+    expect(store.hud.queue).toEqual([]);
+    warn.mockRestore();
+  });
+
+  it('recordSpend ignores an empty cost', async () => {
+    const store = await setup();
+    store.recordSpend({});
+    store.recordSpend({ wood: 0 });
+    expect(store.hud.lastSpend).toBeNull();
+    store.recordSpend({ wood: 30 });
+    expect(store.hud.lastSpend?.cost).toEqual({ wood: 30 });
+  });
+});
+
+describe('useWorldStore live realm membership', () => {
+  const summary = (id: string, mine: boolean, realmId = id) => ({
+    id, realmId, name: id, ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-1', mine,
+  });
+
+  it("registers the player's own settlements under the player id and everyone else as rivals", async () => {
+    const store = await loadStoreModule(false);
+    store.ownerId = 'player-1';
+
+    store.registerSettlementSummaries([summary('own-other', true), summary('rival', false)]);
+
+    expect(store.model.getSettlement('own-other')?.ownerId).toBe('player-1');
+    expect(store.model.getSettlement('rival')?.ownerId).toBe('rival');
+  });
+
+  it("forwards the response's realm to the model", async () => {
+    const realm = [{ settlementId: 'settlement-1', discs: [{ q: 0, r: 0, radius: 1 }] }];
+    getSettlement.mockReset().mockResolvedValue({
+      id: 'settlement-1',
+      realmId: 'settlement-1',
+      linkedMemberIds: ['settlement-1'],
+      longhouseLevel: 1,
+      resources: {
+        stock: { wood: 0, stone: 0, food: 0, iron: 0 },
+        ratePerHour: { wood: 0, stone: 0, food: 0, iron: 0 },
+        capacity: { wood: 750, stone: 750, food: 900, iron: 375 },
+      },
+      buildings: [],
+      queue: [],
+      garrison: [],
+      trainingQueue: [],
+      realm,
+    });
+    const store = await loadStoreModule(false);
+    store.model.registerSettlement({
+      id: 'settlement-1', ownerId: 'player-1', ownerName: 'Astrid', name: 'Astrid', q: 0, r: 0, level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 }, rates: { wood: 0, stone: 0, food: 0, iron: 0 }, foundedAt: Date.now(),
+    });
+    store.selectedSettlementId = 'settlement-1';
+    const spy = vi.spyOn(store.model, 'applyServerSnapshot');
+
+    await store.refreshLiveSettlement();
+
+    expect(spy).toHaveBeenCalledWith('settlement-1', expect.objectContaining({ realm }));
+  });
+});
+
+describe('useWorldStore linked realms', () => {
+  const emptyRes = { wood: 0, stone: 0, food: 0, iron: 0 };
+  function response(id: string, realmId: string, linkedMemberIds: string[]) {
+    return {
+      id, realmId, linkedMemberIds, name: 'Realm', ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-1',
+      resources: { stock: { ...emptyRes }, ratePerHour: { ...emptyRes }, capacity: { ...emptyRes }, reserved: { ...emptyRes } },
+      construction: { slots: 2, slotsUsed: 0, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 },
+      buildings: [], queue: [], garrison: [], trainingQueue: [], runes: [], feast: null, nextFeast: null, quests: [],
+    };
+  }
+  const settlement = (id: string, realmId?: string) => ({
+    id, ownerId: 'player-1', ownerName: 'Astrid', name: id, q: 0, r: 0, level: 1,
+    resources: { ...emptyRes }, rates: { ...emptyRes }, foundedAt: Date.now(), realmId,
+  });
+
+  it('isRealmSettlement is true for the selected settlement and its linked members, false for others and empty ids', async () => {
+    const store = await loadStoreModule(false);
+    store.selectedSettlementId = 'old';
+    store.linkedMemberIds = ['old', 'new'];
+
+    expect(store.isRealmSettlement('old')).toBe(true);
+    expect(store.isRealmSettlement('new')).toBe(true);
+    expect(store.isRealmSettlement('rival')).toBe(false);
+    expect(store.isRealmSettlement(undefined)).toBe(false);
+    expect(store.isRealmSettlement(null)).toBe(false);
+  });
+
+  it('refreshLiveSettlement keeps the linked members of the selected realm', async () => {
+    const store = await loadStoreModule(false);
+    store.model.registerSettlement(settlement('old'));
+    store.selectedSettlementId = 'old';
+    getSettlement.mockReset().mockResolvedValue(response('old', 'old', ['old', 'new']));
+
+    await store.refreshLiveSettlement();
+
+    expect(store.linkedMemberIds).toEqual(['old', 'new']);
+    expect(store.isRealmSettlement('new')).toBe(true);
+  });
+
+  it('refreshLiveSettlement redirects a newer member to the realm id through the settlement switch', async () => {
+    const store = await loadStoreModule(false);
+    store.liveReady = true;
+    store.worldId = 'world-1';
+    store.model.registerSettlement(settlement('new'));
+    store.selectedSettlementId = 'new';
+    getSettlement.mockReset().mockImplementation(async (id: string) =>
+      id === 'new' ? response('new', 'old', ['old', 'new']) : response('old', 'old', ['old', 'new']));
+    const { usePlayerStore } = await import('./player');
+    const player = usePlayerStore();
+
+    await store.refreshLiveSettlement();
+
+    expect(store.selectedSettlementId).toBe('old');
+    expect(player.settlementId).toBe('old');
+    expect(store.linkedMemberIds).toEqual(['old', 'new']);
+  });
+
+  it('restoreLiveSettlement of a newer member lands on the realm id', async () => {
+    const store = await loadStoreModule(false);
+    store.liveReady = true;
+    store.worldId = 'world-1';
+    getSettlement.mockReset().mockImplementation(async (id: string) =>
+      id === 'new' ? response('new', 'old', ['old', 'new']) : response('old', 'old', ['old', 'new']));
+    const { usePlayerStore } = await import('./player');
+    const player = usePlayerStore();
+
+    await store.restoreLiveSettlement(player.id, 'new');
+
+    expect(store.selectedSettlementId).toBe('old');
+    expect(player.settlementId).toBe('old');
+  });
+
+  it('registerSettlementSummaries stores the realmId', async () => {
+    const store = await loadStoreModule(false);
+    store.registerSettlementSummaries([
+      { id: 'r2', realmId: 'r1', name: 'Rival', ownerName: 'Bo', q: 5, r: 5, longhouseLevel: 1, islandId: 'i', mine: false },
+    ]);
+
+    expect(store.model.getSettlement('r2')?.realmId).toBe('r1');
+  });
+
+  it('listAttackableSettlements excludes the own realm and lists one entry per realmId, oldest member first', async () => {
+    const store = await loadStoreModule(false);
+    store.selectedSettlementId = 'old';
+    store.linkedMemberIds = ['old', 'new'];
+    store.model.registerSettlement(settlement('old', 'old'));
+    store.model.registerSettlement(settlement('new', 'old'));
+    store.model.registerSettlement({ ...settlement('rival-new', 'rival-old'), ownerId: 'rival-new', ownerName: 'Bo', name: 'Rivals' });
+    store.model.registerSettlement({ ...settlement('rival-old', 'rival-old'), ownerId: 'rival-old', ownerName: 'Bo', name: 'Rivals' });
+    store.model.registerSettlement({ ...settlement('solo', 'solo'), ownerId: 'solo', ownerName: 'Cy', name: 'Solo' });
+
+    const ids = store.listAttackableSettlements().map((s) => s.id).sort();
+
+    expect(ids).toEqual(['rival-old', 'solo']);
   });
 });

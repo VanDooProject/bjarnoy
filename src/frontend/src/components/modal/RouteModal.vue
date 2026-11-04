@@ -12,6 +12,7 @@ import { computed, nextTick, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useMediaQuery } from '../../composables/useMediaQuery';
+import { useCoversMap } from '../../composables/useMapCover';
 import { MOBILE_MODAL_QUERY } from '../../lib/breakpoints';
 import type { MessageSchema } from '../../i18n/schema';
 
@@ -32,6 +33,9 @@ const router = useRouter();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const isMobile = useMediaQuery(MOBILE_MODAL_QUERY);
+// The mobile panel fills the screen opaque, so the map behind it is hidden;
+// the desktop panel floats over a translucent backdrop with the map visible.
+useCoversMap(isMobile);
 
 const panelEl = ref<HTMLElement | null>(null);
 

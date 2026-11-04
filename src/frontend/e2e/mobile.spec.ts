@@ -2,7 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
-import { claimLandfall, layoutOverflow, loginTestUser, openRingOnGuidedHex, waitForMapReady } from './helpers';
+import { claimLandfall, layoutOverflow, loginTestUser, openHudDrawer, openRingOnGuidedHex, waitForMapReady } from './helpers';
 
 // Mobile-readiness audit: every one of these was a real defect at phone width
 // — the onboarding checklist's third card and the guidance chip clipped past
@@ -171,7 +171,7 @@ test.describe('phone layout, landscape', { tag: '@g1' }, () => {
 
   test('the onboarding checklist leaves the landing plot tappable', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await page.goto('/');
+    await page.goto('/#no-intro');
     await waitForMapReady(page);
 
     // The plot's own screen point must hit the canvas, not an overlay sitting
@@ -226,7 +226,7 @@ test.describe('phone layout, landscape (667x375)', { tag: '@g1' }, () => {
   // screen point must reach the canvas, and a tap there must found.
   test('the slim checklist leaves the landing plot tappable', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await page.goto('/');
+    await page.goto('/#no-intro');
     await waitForMapReady(page);
     expect(await plotHitsCanvas(page)).toBe(true);
 
@@ -318,14 +318,60 @@ test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
 test.describe('phone overlay layering', { tag: '@g1' }, () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
 
-  test('the profile nudge paints above the settlement bubble', async ({ page }) => {
+  // The founded landing's phone header used to be a full-width band holding
+  // only the "Name your jarl" trigger, flush against the top edge (its glow
+  // clipped there), with the nudge hanging over the settlement bubble below
+  // it. The band is gone (TopBar's `floating`): the trigger is a chip clear
+  // of the top edge, and the nudge hangs from it, wholly on screen with the
+  // usual 16px gutters and clear of the settlement bubble.
+  test('the floating header: trigger clear of the top edge, nudge on screen and off the settlement bubble', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
     await settlement.claimLandfall();
     await settlement.placeGuidedBuildings();
     await expect(settlement.profileNudge).toBeVisible();
 
-    await expectPaintsAbove(settlement.profileNudge, page.locator('.settlement-bubble'), 'settlement bubble paints over the profile nudge');
+    await expect(page.locator('header.hud-bar')).toHaveClass(/hud-bar--floating/);
+    const trigger = (await page.getByTestId('returning-player-trigger').boundingBox())!;
+    expect(trigger.y, 'trigger hugs the top edge').toBeGreaterThanOrEqual(8);
+    const nudge = (await settlement.profileNudge.boundingBox())!;
+    expect(nudge.y, 'nudge hangs below its trigger').toBeGreaterThan(trigger.y + trigger.height);
+    expect(nudge.x).toBeGreaterThanOrEqual(16);
+    expect(nudge.x + nudge.width).toBeLessThanOrEqual(PHONE.width - 16);
+    await expectNoOverlap(settlement.profileNudge, page.locator('.settlement-bubble'), 'profile nudge covers the settlement bubble');
+  });
+
+  // Owner request: "Name your jarl" stays an on-screen button after the nudge
+  // is dismissed with "Later", on the landing page and in the settlement view
+  // alike (where it floats as a chip in the top-right corner,
+  // on the settlement bubble's row, instead of hiding in the drawer).
+  test('the "Name your jarl" chip stays after Later, on landing and on /settlement', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.openLanding(page);
+    await settlement.claimLandfall();
+    await settlement.placeGuidedBuildings();
+    await settlement.profileNudge.getByTestId('profile-nudge-later').click();
+    await expect(settlement.profileNudge).toHaveCount(0);
+
+    const trigger = page.getByTestId('returning-player-trigger');
+    await expect(trigger).toBeVisible();
+    await expect(trigger).toContainText('Name your jarl');
+
+    await page.getByTestId('onboarding-continue').click();
+    await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
+    await waitForMapReady(page);
+    await expect(trigger).toBeVisible();
+    await expect(trigger).toContainText('Name your jarl');
+    await expectInsideViewport(page, trigger);
+    await expectNoOverlap(trigger, page.locator('.settlement-bubble'), 'the chip covers the settlement bubble');
+
+    // Top right, on the settlement bubble's row: 16px from the right edge and
+    // vertically centred on the bubble.
+    const chip = (await trigger.boundingBox())!;
+    const bubble = (await page.locator('.settlement-bubble').boundingBox())!;
+    expect(PHONE.width - (chip.x + chip.width), 'the chip keeps the 16px right gutter').toBeCloseTo(16, 0);
+    expect(chip.y + chip.height / 2, 'the chip is vertically centred on the bubble').toBeCloseTo(bubble.y + bubble.height / 2, 0);
+    expect(chip.x, 'the chip sits right of the bubble').toBeGreaterThan(bubble.x + bubble.width);
   });
 
   test('the open queue drawer paints above the settlement bubble', async ({ page }) => {
@@ -359,8 +405,8 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
     await loginTestUser(page);
     await SettlementPage.found(page);
 
-    await page.locator('.hud-grip').click();
-    await page.getByRole('button', { name: 'Leaderboards' }).click();
+    await openHudDrawer(page);
+    await page.getByRole('link', { name: 'Leaderboards' }).click();
     await expect(page).toHaveURL(/\/leaderboards$/);
 
     const dialog = page.getByRole('dialog');
@@ -370,7 +416,7 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
     await expect(page.locator('canvas')).toBeVisible();
 
     await page.locator('.back-button').click();
-    await expect(page).toHaveURL(/\/settlement$/);
+    await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
@@ -378,8 +424,8 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.found(page);
 
-    await page.locator('.hud-grip').click();
-    await page.getByRole('button', { name: 'Alliance' }).click();
+    await openHudDrawer(page);
+    await page.getByRole('link', { name: 'Alliance' }).click();
     await expect(page).toHaveURL(/\/guild$/);
 
     const dialog = page.getByRole('dialog');
@@ -388,7 +434,7 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
     await expect(page.locator('canvas')).toBeVisible();
 
     await page.locator('.back-button').click();
-    await expect(page).toHaveURL(/\/settlement$/);
+    await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 

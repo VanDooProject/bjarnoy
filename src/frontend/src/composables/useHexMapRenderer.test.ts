@@ -10,6 +10,10 @@ const mountResults: Array<Error | null> = [];
 const instances: Array<{
   mount: ReturnType<typeof vi.fn>;
   destroy: ReturnType<typeof vi.fn>;
+  setWaterMotion: ReturnType<typeof vi.fn>;
+  setFogMotion: ReturnType<typeof vi.fn>;
+  setLakeMotion: ReturnType<typeof vi.fn>;
+  setCovered: ReturnType<typeof vi.fn>;
 }> = [];
 
 vi.mock("../lib/map/HexMapRenderer", () => ({
@@ -22,6 +26,10 @@ vi.mock("../lib/map/HexMapRenderer", () => ({
     destroy = vi.fn();
     resize = vi.fn();
     setAnimationsEnabled = vi.fn();
+    setWaterMotion = vi.fn();
+    setFogMotion = vi.fn();
+    setLakeMotion = vi.fn();
+    setCovered = vi.fn();
     constructor() {
       instances.push(this);
     }
@@ -29,6 +37,9 @@ vi.mock("../lib/map/HexMapRenderer", () => ({
 }));
 
 import { useHexMapRenderer } from "./useHexMapRenderer";
+import { motionPreferences } from "../lib/perf/motionPreferences";
+import { effectScope } from "vue";
+import { useCoversMap } from "./useMapCover";
 
 function mountHost(mode: "settlement" | "world" = "settlement") {
   let api!: ReturnType<typeof useHexMapRenderer>;
@@ -103,6 +114,47 @@ describe("useHexMapRenderer mount failure + retry", () => {
     await flush();
     await api.retry();
     expect(api.mountError.value).toBe(second);
+    wrapper.unmount();
+  });
+
+  it("wires the water, lake wind and fog motion settings onto the renderer and follows later changes", async () => {
+    motionPreferences.water = "on";
+    motionPreferences.lakes = "off";
+    motionPreferences.fog = "off";
+    const { wrapper } = mountHost();
+    await flush();
+
+    expect(instances[0]!.setWaterMotion).toHaveBeenLastCalledWith(true);
+    expect(instances[0]!.setLakeMotion).toHaveBeenLastCalledWith(false);
+    expect(instances[0]!.setFogMotion).toHaveBeenLastCalledWith(false);
+
+    motionPreferences.water = "off";
+    motionPreferences.lakes = "on";
+    motionPreferences.fog = "on";
+    await flush();
+    expect(instances[0]!.setWaterMotion).toHaveBeenLastCalledWith(false);
+    expect(instances[0]!.setLakeMotion).toHaveBeenLastCalledWith(true);
+    expect(instances[0]!.setFogMotion).toHaveBeenLastCalledWith(true);
+
+    motionPreferences.water = "auto";
+    motionPreferences.lakes = "auto";
+    motionPreferences.fog = "auto";
+    wrapper.unmount();
+  });
+
+  it("forwards map coverage changes to the renderer", async () => {
+    const { wrapper } = mountHost();
+    await flush();
+    expect(instances[0]!.setCovered).toHaveBeenLastCalledWith(false);
+
+    const scope = effectScope();
+    scope.run(() => useCoversMap(true));
+    await flush();
+    expect(instances[0]!.setCovered).toHaveBeenLastCalledWith(true);
+
+    scope.stop();
+    await flush();
+    expect(instances[0]!.setCovered).toHaveBeenLastCalledWith(false);
     wrapper.unmount();
   });
 });

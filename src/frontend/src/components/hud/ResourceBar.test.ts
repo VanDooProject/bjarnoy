@@ -362,3 +362,92 @@ describe('ResourceBar (landscape rail)', () => {
     wrapper.unmount();
   });
 });
+
+// Desktop: the bar takes the room beside the nav; when the full desktop row
+// (judged against its hidden full-notation clone, never the visible row)
+// doesn't fit, the same collapsed pills the phone uses take over.
+describe('ResourceBar (desktop fit)', () => {
+  let barWidth = 1000;
+  const FULL_ROW = 700;
+  const COLLAPSED_ROW = 400;
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    stubCompactMediaQuery(false);
+    barWidth = 1000;
+    // jsdom has no layout: widths come from what the element is.
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      if (this.getAttribute('data-measure') === 'desktop') return FULL_ROW;
+      if (this.hasAttribute('data-measure')) return COLLAPSED_ROW;
+      return 0;
+    });
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('resource-bar') && !this.hasAttribute('data-measure') ? barWidth : 0;
+    });
+    const world = useWorldStore();
+    world.hud.resources = { wood: 4965, stone: 2310, food: 6120, iron: 780 };
+    world.hud.storageCap = { wood: 12000, stone: 8000, food: 10000, iron: 4000 };
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  async function refit(wrapper: ReturnType<typeof mountResourceBar>) {
+    // Any change to the numbers re-runs the fit check, like a resize does.
+    useWorldStore().hud.resources = { ...useWorldStore().hud.resources, wood: useWorldStore().hud.resources.wood + 1 };
+    await flushPromises();
+    return wrapper;
+  }
+
+  it('keeps the roomy desktop pills while the full row fits', async () => {
+    const wrapper = mountResourceBar();
+    await flushPromises();
+    expect(wrapper.find('.resource--compact').exists()).toBe(false);
+    expect(wrapper.find('.resource-bar:not(.resource-bar--measure) .fill-track').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('switches to the collapsed phone pills when the full row does not fit, and tapping cycles them', async () => {
+    barWidth = 600;
+    const wrapper = mountResourceBar();
+    await flushPromises();
+    const pills = wrapper.findAll('.resource--compact');
+    expect(pills.length).toBeGreaterThan(0);
+    expect(pills[0].get('.value-compact').text()).toContain('4,965');
+    await pills[0].trigger('click');
+    expect(pills[0].get('.value-compact').text()).toContain('/h');
+    wrapper.unmount();
+  });
+
+  it('goes back to the desktop pills once there is room again, judged against the full row not the collapsed one', async () => {
+    barWidth = 600;
+    const wrapper = mountResourceBar();
+    await flushPromises();
+    expect(wrapper.find('.resource--compact').exists()).toBe(true);
+
+    // Wider than the collapsed row but still narrower than the full one: stays collapsed.
+    barWidth = 650;
+    await refit(wrapper);
+    expect(wrapper.find('.resource--compact').exists()).toBe(true);
+
+    barWidth = 800;
+    await refit(wrapper);
+    expect(wrapper.find('.resource--compact').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('applies the short k/M notation when even the collapsed row does not fit', async () => {
+    barWidth = 300;
+    const wrapper = mountResourceBar();
+    await flushPromises();
+    expect(wrapper.find('.resource--compact').exists()).toBe(true);
+    expect(wrapper.findAll('.resource--compact')[0].get('.value-compact').text()).toContain('4.9k');
+
+    barWidth = 500;
+    await refit(wrapper);
+    expect(wrapper.findAll('.resource--compact')[0].get('.value-compact').text()).toContain('4,966');
+    wrapper.unmount();
+  });
+});

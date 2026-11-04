@@ -68,7 +68,7 @@ test.describe('wildlife camps in the settlement view', () => {
 
     await settlement.clickHex(target);
     await settlement.ring.openBuildCategories();
-    await settlement.ring.openCategory('Military');
+    await settlement.ring.openCategory('Defence');
     const watchtower = settlement.ring.child('Watchtower').first();
     await settlement.ring.hover(watchtower);
 
@@ -87,7 +87,7 @@ test.describe('wildlife camps in the settlement view', () => {
 
     await settlement.clickHex(target);
     await settlement.ring.openBuildCategories();
-    await settlement.ring.openCategory('Military');
+    await settlement.ring.openCategory('Defence');
     const watchtower = settlement.ring.child('Watchtower').first();
     await settlement.ring.hover(watchtower);
 
@@ -105,8 +105,10 @@ test.describe('wildlife camps in the settlement view', () => {
     const build = settlement.ring.action('Build').first();
     await expect(build).toBeVisible();
     await expect(build).toHaveClass(/disabled|locked/);
-    // A disabled ring action explains itself in its tooltip (RingMenu.vue's `title`).
-    await expect(build).toHaveAttribute('title', 'Occupied by wild beasts');
+    // A disabled ring action explains itself in a chip beside it on hover (and to screen readers).
+    await expect(build).toHaveAttribute('aria-description', 'Occupied by wild beasts');
+    await settlement.ring.hover(build);
+    await expect(page.getByTestId('ring-hint')).toHaveText('Occupied by wild beasts');
 
     // Close the ring, empty the camp (what a won hunt does server-side) and try again.
     await page.keyboard.press('Escape');

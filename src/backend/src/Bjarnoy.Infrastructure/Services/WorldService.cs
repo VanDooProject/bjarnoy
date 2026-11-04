@@ -427,10 +427,14 @@ public sealed class WorldService(
         CentreR = island.Centre.R,
         TileCount = island.TileCount,
         StartPositions = [.. island.StartPositions.Select(p => new HexPoint(p.Q, p.R))],
+        FogChunks = FogChunkLayout.ChunksOf(island.Tiles),
         RiverTiles = [.. island.RiverTiles.Select(ToRiverTileRecord)],
         BogTiles = [.. island.BogTiles.Select(ToBogTileRecord)],
         Giants = [.. island.Giants.Select(ToGiantRecord)],
         Camps = [.. island.Camps.Select(ToCampRecord)],
+        UtgardWalls = [.. island.UtgardWalls.Select(w => new UtgardWallRecord(
+            w.Coord.Q, w.Coord.R, (int)w.Ring, (int)w.Piece, (int)w.Dir, w.IsGate, w.Level))],
+        JotunTowers = [.. island.JotunTowers.Select(t => new JotunTowerRecord(t.Coord.Q, t.Coord.R, (int)t.Orientation))],
         IsWasted = island.IsWasted,
     };
 
@@ -560,6 +564,10 @@ public sealed class WorldService(
             .Where(s => worldId == null || s.WorldId == worldId)
             .Select(s => new
             {
+                s.Id,
+                s.UserId,
+                s.OwnerId,
+                s.WorldId,
                 s.IslandId,
                 s.CentreQ,
                 s.CentreR,
@@ -568,14 +576,18 @@ public sealed class WorldService(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var neighboursByIsland = settlements
+        var settlementRows = settlements
+            .Select(s => new PlayerRealms.Row(
+                s.Id, s.UserId, s.OwnerId, s.IslandId, new HexCoord(s.CentreQ, s.CentreR),
+                [.. s.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level))]))
+            .ToList();
+        var realms = PlayerRealms.Resolve(settlementRows);
+
+        var neighboursByIsland = settlementRows
             .GroupBy(s => s.IslandId)
             .ToDictionary(
                 g => g.Key,
-                g => g.Select(s => new Founding.NeighbourSnapshot(
-                    new HexCoord(s.CentreQ, s.CentreR),
-                    s.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level)).ToList()))
-                    .ToList());
+                g => g.Select(s => new Founding.NeighbourSnapshot(s.Centre, s.Buildings, realms[s.Id].DiscsOf(s.Id))).ToList());
 
         return islands
             .GroupBy(i => i.WorldId)
@@ -686,7 +698,7 @@ public sealed class WorldService(
     private static int SpacingReach(Founding.NeighbourSnapshot snapshot)
     {
         var reach = SettlementService.MinimumSpacing - 1;
-        foreach (var (centre, radius) in Settlement.ClaimDiscsFor(snapshot.Centre, snapshot.Buildings))
+        foreach (var (centre, radius) in snapshot.ClaimDiscs)
         {
             reach = Math.Max(reach, snapshot.Centre.DistanceTo(centre) + radius + SettlementService.FoundingSafetyMargin);
         }
@@ -740,6 +752,8 @@ public sealed class WorldService(
         bool? frozenIslesEnabled,
         bool hasEndbossAt,
         DateTimeOffset? endbossAt,
+        string? name = null,
+        bool? hidden = null,
         CancellationToken cancellationToken = default)
     {
         var world = await _dbContext.Worlds
@@ -748,6 +762,22 @@ public sealed class WorldService(
         if (world is null)
         {
             return null;
+        }
+
+        if (name is not null && name != world.Name)
+        {
+            if (await _dbContext.Worlds.AnyAsync(w => w.Name == name && w.Id != worldId, cancellationToken)
+                .ConfigureAwait(false))
+            {
+                throw new WorldCreationException($"A world named '{name}' already exists.");
+            }
+
+            world.Name = name;
+        }
+
+        if (hidden is { } isHidden)
+        {
+            world.Hidden = isHidden;
         }
 
         if (speedFactor is { } factor)
@@ -775,7 +805,15 @@ public sealed class WorldService(
             world.EndbossAt = endbossAt;
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException) when (name is not null)
+        {
+            // The AnyAsync check above is a courtesy; the unique index on Name decides a race.
+            throw new WorldCreationException($"A world named '{name}' already exists.");
+        }
 
         _logger.LogInformation("World {WorldId} admin settings updated.", worldId);
 

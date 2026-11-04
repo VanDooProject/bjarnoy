@@ -73,8 +73,6 @@ public sealed class EndpointAccessPolicyTests
         ["GET /api/v1/worlds/"] = "Public world listing (WorldSummaryResponse) — name, joinability and seat counts only, no seed/radius/generation/movement and no per-player data. World creation itself is admin-only (POST /api/v1/admin/worlds).",
         ["GET /api/v1/worlds/joinable"] = "The public 'join another world' picker — deliberately narrower than ListWorlds still (JoinableWorldResponse), still no per-player data.",
         ["GET /api/v1/worlds/{worldId:guid}"] = "The game client's own world config (seed/radius/generation/movement), deliberately still public: bootstrapLiveWorld builds the local map straight from this seed, including anonymously — the landing page previews terrain before anyone has founded anything — and GET .../tiles already serves the same terrain to any caller anyway, so nothing is gated by hiding this too.",
-        ["GET /api/v1/worlds/{worldId:guid}/islands"] = "Public island layout/start positions — generated from the world's own public seed, not per-player.",
-        ["GET /api/v1/worlds/{worldId:guid}/camps"] = "Public wildlife camp state — the camps themselves already ship in the public island listing, and their garrison/calm/clears is world state read from the world clock, not per-player data.",
         ["GET /api/v1/worlds/{worldId:guid}/tiles"] = "Public terrain — derived from the world's public seed on every call (WorldService), not per-player.",
         ["GET /api/v1/worlds/{worldId:guid}/leaderboards/"] = "Public leaderboard directory — which boards exist, not per-player data.",
         ["GET /api/v1/worlds/{worldId:guid}/leaderboards/{scope}/{category}"] = "A ranked, public leaderboard board — public by design, like any competitive leaderboard.",
@@ -87,8 +85,8 @@ public sealed class EndpointAccessPolicyTests
         // AllowAnonymous") — a guild's roster/board/treaties are a public
         // profile, same idea as a player's own profile page above. ---
         ["GET /api/v1/worlds/{worldId:guid}/guilds"] = "Public guild directory for a world — GuildEndpoints' own doc comment: read routes are deliberately AllowAnonymous.",
-        ["GET /api/v1/guilds/{guildId:guid}"] = "Public guild profile (roster, perks tier) — same reasoning as the world guild directory above.",
-        ["GET /api/v1/guilds/{guildId:guid}/perks"] = "Public — a guild's perk tier is part of its public profile, same as Get above.",
+        ["GET /api/v1/guilds/{guildId:guid}"] = "Public guild profile (roster) — same reasoning as the world guild directory above.",
+        ["GET /api/v1/guilds/{guildId:guid}/caps"] = "Public — a guild's member and treaty caps are part of its public profile, same as Get above.",
         ["GET /api/v1/guilds/{guildId:guid}/board/topics"] = "Public guild board listing — visible to anyone deciding whether to join, per GuildEndpoints' own AllowAnonymous design.",
         ["GET /api/v1/guilds/{guildId:guid}/board/topics/{topicId:guid}"] = "Public guild board topic detail — same reasoning as the topic listing above.",
         ["GET /api/v1/guilds/{guildId:guid}/treaties"] = "Public guild treaty listing — diplomatic state between guilds is public information, not a member secret.",

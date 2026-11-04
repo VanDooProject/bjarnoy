@@ -195,10 +195,13 @@ public class FogChunkServiceTests : IDisposable
     {
         // The end-to-end seam proof: service output (DB -> sources -> halo ->
         // per-chunk bake -> PNG -> decode) against the reference whole-world
-        // Generate over the same inputs.
+        // Generate over the same inputs. The tower on (0, 3) stands inside the
+        // level-3 longhouse's claim (radius 3), so it is chained and sees; the
+        // one on (-1, 31) is cut off from every longhouse and sees nothing
+        // (economy.md section 5), so the reference leaves it out.
         const int radius = 40;
         var worldId = AddWorld(radius);
-        AddSettlement(worldId, "player-1", 0, 0, level: 3, towers: (-1, 31, 2));
+        AddSettlement(worldId, "player-1", 0, 0, level: 3, towers: [(0, 3, 2), (-1, 31, 2)]);
         AddSettlement(worldId, "player-1", -30, 5, level: 1);
         AddSettlement(worldId, "player-1", 33, -3, level: 2);
         await _dbContext.SaveChangesAsync(Ct);
@@ -207,10 +210,10 @@ public class FogChunkServiceTests : IDisposable
 
         var sources = new List<FogVisionSource>
         {
-            FogVisionRadii.ToVisionSource(new HexCoord(0, 0), 3),
-            FogVisionRadii.ToTowerVisionSource(new HexCoord(-1, 31), 2),
-            FogVisionRadii.ToVisionSource(new HexCoord(-30, 5), 1),
-            FogVisionRadii.ToVisionSource(new HexCoord(33, -3), 2),
+            FogVisionRadii.ToVisionSource(new HexCoord(0, 0), 3)!.Value,
+            FogVisionRadii.ToTowerVisionSource(new HexCoord(0, 3), 2),
+            FogVisionRadii.ToVisionSource(new HexCoord(-30, 5), 1)!.Value,
+            FogVisionRadii.ToVisionSource(new HexCoord(33, -3), 2)!.Value,
         };
         var explored = sources
             .SelectMany(s => s.Coord.WithinRadius(s.ExploredRadius))
@@ -560,5 +563,34 @@ public class FogChunkServiceTests : IDisposable
 
         // The fog-gated reads must not write: nothing persisted for the ring.
         Assert.Equal(2, await _dbContext.PlayerExploredChunks.CountAsync(Ct));
+    }
+
+    [Fact]
+    public async Task A_settlement_whose_longhouse_is_destroyed_sees_nothing_around_its_centre()
+    {
+        var worldId = AddWorld(60);
+        AddSettlement(worldId, "player-1", 0, 0, level: 0);
+        await _dbContext.SaveChangesAsync(Ct);
+
+        var area = await new ExploredAreaService(_dbContext, TimeProvider.System).GetAsync(worldId, "player-1", persist: false, Ct);
+
+        Assert.Empty(area!.VisionSources);
+        Assert.Empty(area.Discs);
+    }
+
+    [Fact]
+    public async Task A_tower_of_a_razed_settlement_still_sees_when_it_is_chained_to_another_longhouse_and_nothing_when_it_is_not()
+    {
+        var worldId = AddWorld(60);
+        AddSettlement(worldId, "player-1", 0, 0, level: 1); // claims radius 2 around (0, 0)
+        AddSettlement(worldId, "player-1", 10, 0, level: 0, towers: [(2, 0, 1), (12, 0, 1)]);
+        await _dbContext.SaveChangesAsync(Ct);
+
+        var area = await new ExploredAreaService(_dbContext, TimeProvider.System).GetAsync(worldId, "player-1", persist: false, Ct);
+
+        Assert.Equal(
+            [new HexCoord(0, 0), new HexCoord(2, 0)],
+            area!.VisionSources.Select(s => s.Coord).OrderBy(c => c.Q).ToArray());
+        Assert.DoesNotContain(area.VisionSources, s => s.Coord == new HexCoord(10, 0) || s.Coord == new HexCoord(12, 0));
     }
 }

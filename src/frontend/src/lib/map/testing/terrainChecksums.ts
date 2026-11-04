@@ -7,7 +7,7 @@
 // game imports this.
 import { hexDistance } from '../../hex/coords';
 import { TILE_ORIENTATIONS } from '../types';
-import { DEFAULT_GENERATION, orientationAt, terrainAt, variantAt } from '../worldGenerator';
+import { DEFAULT_GENERATION, forestKindAt, orientationAt, terrainAt, variantAt } from '../worldGenerator';
 
 /** Hexes with |q|, |r| <= extent inside the default world disc (radius 4000), every `stride`-th q and r, q-major. */
 export const CHECKSUM_SCAN = { extent: 4000, stride: 20 } as const;
@@ -16,6 +16,8 @@ export interface TerrainChecksums {
   terrain: string;
   orientation: string;
   variant: string;
+  /** Biome letter (t/b/m) of every living forest hex, `-` for any other terrain. */
+  forestKind: string;
 }
 
 async function sha256(text: string): Promise<string> {
@@ -30,6 +32,7 @@ export async function terrainChecksums(seed: number): Promise<TerrainChecksums> 
   const terrain: string[] = [];
   const orientation: string[] = [];
   const variant: string[] = [];
+  const forestKind: string[] = [];
   for (let q = -extent; q <= extent; q += stride) {
     for (let r = -extent; r <= extent; r += stride) {
       if (hexDistance(origin, { q, r }) > DEFAULT_GENERATION.worldRadius) continue;
@@ -39,11 +42,13 @@ export async function terrainChecksums(seed: number): Promise<TerrainChecksums> 
       // The backend's VariantAt has no coastal-water weighting (sea is always variant 0);
       // the frontend's variantAt does, so compare land only and pin sea to 0.
       variant.push(String(t === 'sea' ? 0 : variantAt(q, r, world)));
+      forestKind.push(t === 'forest' ? forestKindAt(q, r, seed)[0] : '-');
     }
   }
   return {
     terrain: await sha256(terrain.join('')),
     orientation: await sha256(orientation.join('')),
     variant: await sha256(variant.join('')),
+    forestKind: await sha256(forestKind.join('')),
   };
 }

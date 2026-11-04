@@ -144,7 +144,7 @@ describe('scenario files', () => {
   it('d: a land end at the coast is half open, the sea end still seals', { timeout: 60_000 }, () => {
     const touching = runScenario(load('d-land-end-at-coast'));
     // The end by the sea is half open; the end at the river is sealed.
-    expect([...touching.halfOpen]).toEqual([coordKey({ q: 209, r: -651 })]);
+    expect([...touching.halfOpen]).toEqual([coordKey({ q: 372, r: -832 })]);
     const path = touching.routes[0]!.path!;
     expect(path).not.toBeNull();
     expect(path.some((c) => touching.halfOpen.has(coordKey(c)))).toBe(true);
@@ -185,6 +185,17 @@ describe('scenario files', () => {
     const { png, lines } = renderScenario(load('e-mountain-to-river-seals'));
     expect(png.subarray(1, 4).toString('ascii')).toBe('PNG');
     expect(lines.some((l) => l.startsWith('ROUTE A ENEMY') && l.includes('NO ROUTE'))).toBe(true);
+  });
+
+  it('renders on the scenario\'s own generation overrides, not the defaults', { timeout: 60_000 }, () => {
+    // Regression: renderScenario dropped scn.generation, so the PNG used the default island density
+    // and every route read "DESTINATION IS SEA" although runScenario (which the other tests use) was fine.
+    const scn = load('e-mountain-to-river-seals');
+    expect(scn.generation).toBeDefined();
+    const { lines } = renderScenario(scn);
+    expect(lines.some((l) => l.includes('DESTINATION IS SEA'))).toBe(false);
+    const withDefaults = renderScenario({ ...scn, generation: undefined });
+    expect(withDefaults.png.equals(renderScenario(scn).png)).toBe(false);
   });
 });
 

@@ -36,8 +36,9 @@ public class FieldBattleResolverTests
     public void ClaimAt_uses_the_specific_towers_own_halved_bonus_inside_its_disc()
     {
         var centre = new HexCoord(0, 0);
-        var tower = new PlacedBuilding(new HexCoord(10, 0), BuildingType.Tower, Level: 4);
-        var buildings = new[] { tower };
+        // Inside the longhouse's reach, so the tower is connected and claims (the chain rule).
+        var tower = new PlacedBuilding(new HexCoord(2, 0), BuildingType.Tower, Level: 4);
+        var buildings = new[] { new PlacedBuilding(centre, BuildingType.Longhouse, Level: 3), tower };
 
         var claim = FieldBattleResolver.ClaimAt(tower.Coord, centre, buildings);
 
@@ -64,6 +65,32 @@ public class FieldBattleResolverTests
         Assert.True(claim.Claims);
         // Highest tower level 6 -> TowerDefenseBonusPercent(6) = 30, halved = 15.
         Assert.Equal(15.0, claim.DefenseBonusPercent);
+    }
+
+    [Fact]
+    public void ClaimAt_central_disc_bonus_ignores_a_cut_off_tower_and_counts_it_once_connected()
+    {
+        var centre = new HexCoord(0, 0);
+        var longhouse = new PlacedBuilding(centre, BuildingType.Longhouse, Level: 3);
+        var hex = new HexCoord(0, 2);
+
+        var cutOff = FieldBattleResolver.ClaimAt(
+            hex, centre, [longhouse, new PlacedBuilding(new HexCoord(40, 0), BuildingType.Tower, Level: 5)]);
+        var connected = FieldBattleResolver.ClaimAt(
+            hex, centre, [longhouse, new PlacedBuilding(new HexCoord(-1, 0), BuildingType.Tower, Level: 5)]);
+
+        Assert.True(cutOff.Claims);
+        Assert.Equal(0.0, cutOff.DefenseBonusPercent);
+        Assert.Equal(BuildingCatalogue.TowerDefenseBonusPercent(5) * 0.5, connected.DefenseBonusPercent);
+    }
+
+    [Fact]
+    public void ClaimAt_returns_none_for_a_settlement_whose_longhouse_is_destroyed()
+    {
+        var centre = new HexCoord(0, 0);
+
+        Assert.Equal(FieldBattleClaim.None, FieldBattleResolver.ClaimAt(centre, centre, []));
+        Assert.Equal(FieldBattleClaim.None, FieldBattleResolver.ClaimAt(new HexCoord(1, 0), centre, []));
     }
 
     [Fact]
@@ -209,5 +236,35 @@ public class FieldBattleResolverTests
 
         Assert.Equal(FieldBattleWinner.SideA, plan.Winner);
         Assert.Equal(5, plan.LootTakenByWinner.Wood);
+    }
+
+    private static int Count(IEnumerable<UnitStack> stacks, UnitType type) => stacks.Where(s => s.Type == type).Sum(s => s.Count);
+
+    [Fact]
+    public void A_fleets_passengers_do_not_fight_and_drown_beyond_the_slots_of_the_ships_left()
+    {
+        // Side A: 4 Longships (attack 240, 80 slots) carrying 80 spearmen, who would add 1200 attack on land.
+        var sideA = new[] { new UnitStack(UnitType.Longship, 4), new UnitStack(UnitType.Spearman, 80) };
+        var sideB = new[] { new UnitStack(UnitType.Longship, 3) };
+
+        var plan = FieldBattleResolver.Resolve(sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, NoLoot, seed: 1);
+
+        Assert.Equal(240, plan.SideAPower);
+        Assert.Equal(FieldBattleWinner.SideA, plan.Winner);
+        // The winner loses at most half of its ships (the raid cap): 2 of 4 left, 40 slots for 80 spearmen.
+        Assert.Equal(2, Count(plan.SideASurvivors, UnitType.Longship));
+        Assert.Equal(40, Count(plan.SideASurvivors, UnitType.Spearman));
+        Assert.Equal(40, Count(plan.SideALosses, UnitType.Spearman));
+    }
+
+    [Fact]
+    public void A_land_army_in_a_field_battle_has_no_passengers_and_fights_whole()
+    {
+        var sideA = new[] { new UnitStack(UnitType.Axeman, 10), new UnitStack(UnitType.Spearman, 10) };
+        var sideB = new[] { new UnitStack(UnitType.Spearman, 10) };
+
+        var plan = FieldBattleResolver.Resolve(sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, NoLoot, seed: 1);
+
+        Assert.Equal(550, plan.SideAPower);
     }
 }

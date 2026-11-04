@@ -7,13 +7,14 @@ import DocsPageLayout from '../components/docs/DocsPageLayout.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import AnimatedCamp from '../components/docs/AnimatedCamp.vue';
 import AnimationPausedNote from '../components/docs/AnimationPausedNote.vue';
+import DocsAdminNote from '../components/docs/DocsAdminNote.vue';
 import { findAtlasClip, findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
 import { KEY_FAMILY, type TextureKey } from '../lib/map/textures';
 import { TILE_ORIENTATIONS, type TileOrientation } from '../lib/map/types';
 import { lootKindsOf, lootPoolByKind, type LootShare } from '../lib/map/campRules';
 import { CAMP_FAMILIES, MaxCampLevel, guardRange, type CampGround, type CampStrength } from '../lib/map/campPlacement';
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, te } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // The wildlife camps (3D_assets hextile120-128, see that repo's
 // docs/wildlife-camps.md): two states per camp, `level000` cleared and
@@ -148,6 +149,7 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
         <li>{{ $t('docs.wildlifeCamps.rules.building') }}</li>
         <li>{{ $t('docs.wildlifeCamps.rules.respawn') }}</li>
         <li>{{ $t('docs.wildlifeCamps.rules.neverBuilt') }}</li>
+        <li>{{ $t('docs.wildlifeCamps.rules.atSea') }}</li>
         <li>{{ $t('docs.wildlifeCamps.rules.hunting') }}</li>
         <li>{{ $t('docs.wildlifeCamps.rules.regrowth') }}</li>
         <li>{{ $t('docs.wildlifeCamps.rules.calm') }}</li>
@@ -234,6 +236,9 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
             />
           </div>
           <p>{{ t(`docs.wildlifeCamps.list.${camp.id}.guards`) }}</p>
+          <DocsAdminNote v-if="te(`docs.wildlifeCamps.list.${camp.id}.artNote`)">{{
+            t(`docs.wildlifeCamps.list.${camp.id}.artNote`)
+          }}</DocsAdminNote>
           <p class="beasts" data-testid="beasts">
             <span class="pills-label">{{ $t('docs.wildlifeCamps.beasts.label') }}</span>
             {{
@@ -268,7 +273,7 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
               {{ lootPoolByKind(camp.id, level)[share.kind] }} {{ t(`docs.wildlifeCamps.loot.${share.kind}`) }}
             </span>
           </p>
-          <p class="range" data-testid="guard-range">{{ t('docs.wildlifeCamps.range', rangeOf(camp.strength)) }}</p>
+          <p v-if="camp.ground !== 'sea'" class="range" data-testid="guard-range">{{ t('docs.wildlifeCamps.range', rangeOf(camp.strength)) }}</p>
           <div class="pills">
             <span class="pills-label">{{ $t('docs.wildlifeCamps.state.label') }}</span>
             <button
@@ -306,9 +311,11 @@ function cameraAvailable(id: CampId, camera: TileOrientation): boolean {
           </div>
         </div>
       </div>
-      <p class="caption-note">
-        {{ $t('docs.wildlifeCamps.camps.rotations') }}
-      </p>
+      <DocsAdminNote>
+        <p class="caption-note">
+          {{ $t('docs.wildlifeCamps.camps.rotations') }}
+        </p>
+      </DocsAdminNote>
     </section>
   </DocsPageLayout>
 </template>

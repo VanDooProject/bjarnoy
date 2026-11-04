@@ -4,6 +4,7 @@ using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -34,7 +35,8 @@ public static class SettlerEndpoints
         worlds.MapGet("/{worldId:guid}/renown", GetOwnRenown)
             .WithName("GetOwnRenown")
             .WithSummary("The caller's own renown in this world, accrued as of now (issue #55).")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .WithConcurrencyRetry();
 
         worlds.MapGet("/{worldId:guid}/settlements/mine", ListOwnSettlements)
             .WithName("ListOwnSettlementsInWorld")
@@ -65,20 +67,21 @@ public static class SettlerEndpoints
     private static async Task<Ok<IReadOnlyList<SettlementSummary>>> ListOwnSettlements(
         Guid worldId,
         SettlementService settlements,
+        GameDbContext db,
         ClaimsPrincipal principal,
         CancellationToken cancellationToken)
     {
         var userId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
         var entities = await settlements.GetForWorldAsync(worldId, cancellationToken);
+        var labels = await LinkedRealmNames.ForAsync(db, worldId, entities, cancellationToken);
 
         IReadOnlyList<SettlementSummary> response =
         [
             .. entities
-                .Where(s => s.UserId == userId)
-                .Select(s => new SettlementSummary(
-                    s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
-                    s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0, s.IslandId)),
+                // One entry per linked realm: the switcher lists the oldest member only.
+                .Where(s => s.UserId == userId && labels[s.Id].RealmId == s.Id)
+                .Select(s => SettlementSummary.From(s, mine: true, labels[s.Id])),
         ];
 
         return TypedResults.Ok(response);

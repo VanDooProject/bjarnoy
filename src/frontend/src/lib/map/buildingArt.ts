@@ -31,7 +31,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   // which stays legacy for now.
   farm: 'farm',
   reindeerherder: 'reindeerherder',
-  tower: 'towerbuilding',
+  tower: 'stavetower',
   // The docs preview always shows the corrie landform, one of the two the
   // pack carves a quarry into — see the docs page's own variant picker for
   // the saddleback alternative (`quarry_saddleback`, resolved directly by
@@ -41,6 +41,7 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   lumberjack: 'lumberjack',
   storagehouse: 'storagebuilding',
   archeryrange: 'archeryrange',
+  siegeworkshop: 'siegeworkshop',
   dockyard: 'dockyard',
   greatstorehouse: 'bigstoragehouse',
   barracks: 'barracks',
@@ -69,12 +70,13 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   // The wall set (3D_assets docs/wall-tiles.md): the preview shows the straight and the straight with its gate.
   palisade: 'palisade_straight180',
   palisadegate: 'palisade_gate180',
+  // The river bridge (3D_assets hextile135_riverbridge): the preview shows the straight crossing (undefined until the atlas has it).
+  bridge: 'riverbridge',
 };
-
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin,freyjashrine,storagebuilding,archeryrange,dockyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,stavetower,farm_pumpkin,freyjashrine,storagebuilding,archeryrange,dockyard,bigstoragehouse,barracks,fisherhut,sawmillriver,sawmillbend}_SE_level*.png',
   { eager: true, import: 'default' },
 ) as Record<string, string>;
 
@@ -172,13 +174,16 @@ export function buildingArt(type: string, level = 1): ArtRef | undefined {
 /**
  * `buildingArt` for a building standing on `tile`: a Fishing Hut on a bog lake's half shore is the lake hut
  * (`fisherhut_lake`), a Hammer Forge on a creek bend the bend mill (`hammerschmiede_bend`; the river mill is the
- * placeholder art for now). Everything else is `buildingArt`.
+ * placeholder art for now), a tower on sand, forest or plain bog moss the stave tower made for that ground. Everything else is `buildingArt`.
  */
 export function buildingArtOnTile(
   type: string,
   level: number,
-  tile: { bog?: { kind: string; inDirections: readonly TileOrientation[]; outDirection: TileOrientation | null } },
+  tile: { terrain?: string; bog?: { kind: string; inDirections: readonly TileOrientation[]; outDirection: TileOrientation | null } },
 ): ArtRef | undefined {
+  if (type === 'tower' && tile.bog?.kind === 'bog') return buildingArtByFamily('stavetower_bog', level);
+  if (type === 'tower' && tile.terrain === 'forest') return buildingArtByFamily('stavetower_forest', level);
+  if (type === 'tower' && tile.terrain === 'sand') return buildingArtByFamily('stavetower_sand', level);
   if (type === 'fishinghut' && tile.bog?.kind === 'half') return buildingArtByFamily('fisherhut_lake', level);
   if (type === 'hammerschmiede' && tile.bog?.kind === 'creek') {
     const straight =
@@ -292,6 +297,21 @@ export function terrainArt(terrain: string): ArtRef {
  */
 export function terrainArtByFamily(family: string, decorated = false): ArtRef {
   return terrainFamilyArt(family, decorated);
+}
+
+/**
+ * One decorated look of a terrain family — the flattened `_variantNNN`
+ * showcase frame (or loose PNG) — for a caller like the docs tiles page's
+ * sand look picker. Throws when the pack has no such look, the same as
+ * `terrainFamilyArt`.
+ */
+export function terrainVariantArt(family: string, variant: number): ArtRef {
+  const name = `${family}_SE_variant${String(variant).padStart(3, '0')}`;
+  const frame = findAtlasFrame('showcase', name);
+  if (frame) return { kind: 'atlas', frame };
+  const pngUrl = terrainPngByName[name];
+  if (!pngUrl) throw new Error(`buildingArt.ts: no terrain art for "${name}"`);
+  return { kind: 'png', url: pngUrl };
 }
 
 /** Art for coastal (shallow) water — a rendering variant of `sea`, not a `Terrain` of its own (see `Tile.isCoastalWater`), so it isn't reachable through `terrainArt`. */

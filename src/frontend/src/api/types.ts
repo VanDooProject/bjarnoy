@@ -140,6 +140,8 @@ export interface CampStateResponse {
   q: number;
   r: number;
   family: string;
+  /** The camp tile's own orientation, so a camp first learned about from this poll can be added to the model. */
+  orientation: string;
   level: number;
   effectiveLevel: number;
   strong: boolean;
@@ -193,6 +195,28 @@ export interface CampReportResponse {
   towerBurned: boolean;
 }
 
+/**
+ * Mirrors `UtgardWallResponse` — one hex of an Utgard wall ring (see `lib/map/endgamePlacement.ts` and `docs/design/endgame.md`).
+ * `piece` is the wall piece (`straight180`, `bend60`, `bend120`, `gate180`, `end` or `end_coast` on a sea hex); the atlas family is
+ * `utgardwall_<piece>`. `level` is 2 full, 1 damaged, 0 breached rubble.
+ */
+export interface UtgardWallResponse {
+  q: number;
+  r: number;
+  ring: 'inner' | 'outer';
+  piece: string;
+  orientation: string;
+  isGate: boolean;
+  level: number;
+}
+
+/** Mirrors `JotunTowerResponse` — a Jötun watchtower; `orientation` is the tile's own rotation wire name. */
+export interface JotunTowerResponse {
+  q: number;
+  r: number;
+  orientation: string;
+}
+
 export interface IslandResponse {
   id: string;
   index: number;
@@ -206,6 +230,10 @@ export interface IslandResponse {
   camps: CampResponse[];
   /** This island's bogland (empty when it has none). */
   bogTiles: BogTileResponse[];
+  /** The Utgard wall rings of a wasted island with Utgard (empty otherwise). */
+  utgardWalls?: UtgardWallResponse[];
+  /** The Jötun watchtowers of a wasted island with Utgard (empty otherwise). */
+  jotunTowers?: JotunTowerResponse[];
   /** True for a wasted island — only ever present once the world's endboss has triggered (hidden before that). */
   wasted: boolean;
 }
@@ -272,6 +300,10 @@ export interface ConstructionResponse {
   maxWaitingOrders: number;
   waitingOrders: number;
   maxOrdersPerHex: number;
+  /** How many towers the realm may hold: the settlement's limit, or a linked realm's members' limits added up. */
+  towerLimit: number;
+  /** The towers counting against `towerLimit` (connected standing plus queued, the whole linked realm's) — what a new tower is checked against. */
+  towersHeld: number;
 }
 
 export interface PlacedBuildingResponse {
@@ -281,6 +313,14 @@ export interface PlacedBuildingResponse {
   level: number;
   /** Which art-pack rotation to render with — set only for a building whose art has a fixed connection to something around it (e.g. the fishing hut's dock). */
   orientation?: string | null;
+  /**
+   * Game instant the building's hex stopped being inside the player's realm — from then on it has no function and loses levels
+   * (docs/design/economy.md section 5, "Buildings outside the realm decay"). Null/absent while it is inside. The server owns the
+   * rule; the client only shows it (`lib/map/realmDecay.ts`).
+   */
+  outsideRealmSince?: string | null;
+  /** Seconds until the next level is lost while outside the realm; null while inside, with a frozen world clock, or in a rival's view. */
+  nextLevelLossInSeconds?: number | null;
 }
 
 export interface BuildOrderResponse {
@@ -315,8 +355,15 @@ export interface UnitStackResponse {
 export interface TrainingOrderResponse {
   id: string;
   unit: string;
+  /** The building hex that trains this part; one building trains one part at a time, the rest wait behind it. */
+  q: number;
+  r: number;
   count: number;
   completedCount: number;
+  /** Game instant the part starts training — in the past (and `startsInSeconds` 0) once it runs. */
+  startsAtGameTime: string;
+  /** Seconds until the part starts: 0 once started, null while the world clock is frozen. */
+  startsInSeconds: number | null;
   completesAtGameTime: string;
   completesInSeconds: number | null;
   /** The batch's full duration, poll-invariant — see issue #99. */
@@ -369,8 +416,25 @@ export interface QuestResponse {
   reward: ResourceLine;
 }
 
+/** One connected claim disc of a realm, exactly as the server resolves it. */
+export interface ClaimDiscResponse {
+  q: number;
+  r: number;
+  radius: number;
+}
+
+/** One settlement of the caller's realm with its connected claim discs (longhouse disc first, then each connected tower's disc). */
+export interface RealmMemberResponse {
+  settlementId: string;
+  discs: ClaimDiscResponse[];
+}
+
 export interface SettlementResponse {
   id: string;
+  /** The oldest member of the linked realm this settlement belongs to; equals `id` when it is the oldest or unlinked. */
+  realmId: string;
+  /** Every member of the linked realm, oldest first, including this settlement. */
+  linkedMemberIds: string[];
   worldId: string;
   islandId: string;
   name: string;
@@ -383,7 +447,7 @@ export interface SettlementResponse {
   construction: ConstructionResponse;
   buildings: PlacedBuildingResponse[];
   queue: BuildOrderResponse[];
-  /** Units standing at this settlement (issue #55: includes trained `settlercrew`). */
+  /** Units standing at this settlement (issue #55: includes trained `settler`). */
   garrison: UnitStackResponse[];
   trainingQueue: TrainingOrderResponse[];
   runes: RuneInstanceResponse[];
@@ -394,16 +458,37 @@ export interface SettlementResponse {
   /** The onboarding quests, in presentation order. */
   quests: QuestResponse[];
   world: WorldClockResponse;
+  /** Every settlement of the selected settlement's realm (itself first) with its connected claim discs; only the caller's own. */
+  realm: RealmMemberResponse[];
 }
 
 export interface SettlementSummary {
   id: string;
+  /** The oldest member of the linked realm; `name` is that member's (the realm's) name. */
+  realmId: string;
   name: string;
   ownerName: string;
   q: number;
   r: number;
   longhouseLevel: number;
   islandId: string;
+  /** Whether the settlement belongs to the caller. */
+  mine: boolean;
+}
+
+/**
+ * Mirrors `WallResponse` (`GET /worlds/{id}/walls`): one standing wall hex of another player's settlement, fog-gated like
+ * the settlement list. `ownerUserId` is null for an anonymous settlement.
+ */
+export interface WorldWall {
+  q: number;
+  r: number;
+  type: 'palisade' | 'palisadegate';
+  level: number;
+  settlementId: string;
+  ownerUserId: string | null;
+  /** The wall's hex lies outside its owner's realm: a gate there has no function and is open to every army. */
+  outsideRealm?: boolean;
 }
 
 /**
@@ -424,7 +509,7 @@ export interface SettlementViewResponse {
   buildings: PlacedBuildingResponse[];
 }
 
-// Settlement expansion (issue #55) — mirrors the settler-crew additions to
+// Settlement expansion (issue #55) — mirrors the settler additions to
 // SettlementContracts.cs and ArmyContracts.cs. `UnitStackResponse`,
 // `TrainingOrderResponse`, `TrainUnitsRequest`, `UnitDefinitionResponse`,
 // `DispatchArmyRequest`, `MovementResponse`, `ArmyResponse` and `ArmySummary`
@@ -433,7 +518,7 @@ export interface SettlementViewResponse {
 // mission, so it rides those same shapes rather than duplicating them; see
 // `HexPoint` there too (used in place of what used to be `HexPointRequest`).
 // `mission` on `DispatchArmyRequest` is `"move" | "attack" | "support" |
-// "raid" | "found"` — `found` requires exactly 3 `settlercrew` in `units`
+// "raid" | "found"` — `found` requires exactly 5 `settler` in `units`
 // (plus, for a sea convoy, enough Karve/Longship capacity to carry them) and
 // no `targetSettlementId`; `destination` is the target hex to colonise.
 
@@ -562,6 +647,15 @@ export interface GrantRuneRequest {
 export interface TrainUnitsRequest {
   unit: string;
   count: number;
+  /** The building hex that trains (or the one the split starts from). */
+  q: number;
+  r: number;
+  /** `here`: all in this building; `evenly`/`fastest`: spread over every building of its type ('fastest' is premium-only). */
+  split: 'here' | 'evenly' | 'fastest';
+}
+
+export interface TrainUnitsResponse {
+  orders: TrainingOrderResponse[];
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/AuthContracts.cs.
@@ -610,6 +704,8 @@ export interface AdminWorldResponse {
   startsAt: string | null;
   joinsClosed: boolean;
   frozenIslesEnabled: boolean;
+  /** Left out of every public world list for non-admins. */
+  hidden: boolean;
   endbossAt: string | null;
   endbossTriggeredAt: string | null;
   runState: string;
@@ -690,10 +786,12 @@ export interface WorldGenerationSettingsOverrides {
  * `Optional<T>` PATCH semantics (see `Bjarnoy.Api.Json.Optional`).
  */
 export interface UpdateWorldSettingsRequest {
+  name?: string;
   speedFactor?: number;
   startsAt?: string | null;
   joinsClosed?: boolean;
   frozenIslesEnabled?: boolean;
+  hidden?: boolean;
   endbossAt?: string | null;
 }
 
@@ -725,6 +823,8 @@ export interface PreviewIslandResponse {
   giants: GiantResponse[];
   camps: CampResponse[];
   bogTiles: BogTileResponse[];
+  utgardWalls?: UtgardWallResponse[];
+  jotunTowers?: JotunTowerResponse[];
   /** True for an island generated from the wasted-island terrain layer (its river tiles are lava streams). */
   wasted: boolean;
 }
@@ -1304,8 +1404,6 @@ export interface BuildingDefinitionResponse {
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/GuildContracts.cs.
 
-export type GuildFeeTier = 'copper' | 'silver' | 'gold';
-
 export type GuildRole = 'leader' | 'officer' | 'member';
 
 export type GuildBoardTopicKind = 'discussion' | 'announcement' | 'report';
@@ -1316,10 +1414,6 @@ export interface CreateGuildRequest {
   name: string;
   tag: string;
   description?: string | null;
-}
-
-export interface SetGuildFeeTierRequest {
-  feeTier: GuildFeeTier;
 }
 
 export interface SetGuildMemberRoleRequest {
@@ -1344,13 +1438,10 @@ export interface GuildMemberResponse {
   userId: string;
   role: GuildRole;
   joinedAt: string;
-  feeOverdue: boolean;
 }
 
-/** The member cap, treaty cap and perks a guild's current fee tier unlocks — see `GuildRules` on the backend. */
-export interface GuildPerksResponse {
-  tradeCapacityBonus: number;
-  allowUnitSupport: boolean;
+/** The member cap and treaty cap a guild currently has — see `GuildRules` on the backend. */
+export interface GuildCapsResponse {
   memberCap: number;
   maxActivePeaceTreaties: number;
 }
@@ -1361,7 +1452,6 @@ export interface GuildResponse {
   name: string;
   tag: string;
   description: string | null;
-  feeTier: GuildFeeTier;
   memberCount: number;
   createdAt: string;
   members: GuildMemberResponse[];
@@ -1416,8 +1506,8 @@ export interface UnitCountRequest {
 /**
  * `waypoints`: ordered intermediate hexes, empty/omitted for a direct route.
  * `destination`: required for `mission: 'move'` (the default); ignored for
- * attack/support/raid, whose destination is always the target settlement's
- * own hex. `provisions`: food loaded onto the army, capped by carry capacity
+ * attack/support/raid, whose destination is the target settlement's own hex
+ * (a fleet attack/raid sails to `targetBuildingCoord` instead). `provisions`: food loaded onto the army, capped by carry capacity
  * and what the settlement can afford.
  */
 export interface DispatchArmyRequest {
@@ -1504,9 +1594,9 @@ export interface ArmySummary {
 
 /**
  * Mirrors `GuestArmySummary` (issue #40 phase 4) — a Support army as its
- * *host* settlement sees it: counts only, since the host cannot command a
- * guest garrison (no recall/action buttons on this view — only the owner,
- * reading their own settlement's `armies`, can recall it). `ownerSettlementId`
+ * *host* settlement sees it: counts only, with no route or provisions (the host can only send a
+ * guest home, via `sendGuestHome`; its owner recalls it from their own
+ * settlement's `armies`). `ownerSettlementId`
  * is the guest's home, not its current location (which is always the
  * settlement `getSettlementGuests` was asked about).
  */
@@ -1667,6 +1757,10 @@ export interface UnitDefinitionResponse {
   speed: number;
   carryCapacity: number;
   foodCarryCapacity: number;
+  /** Slots this unit takes aboard a ship (0 for ships). */
+  cargoSlots: number;
+  /** Slots this ship offers to land troops (0 for every other unit). */
+  shipSlots: number;
   upkeepPerHour: number;
   trainingCost: ResourceLine;
   trainingSeconds: number;
@@ -1675,6 +1769,8 @@ export interface UnitDefinitionResponse {
   requiredUnitType: string | null;
   /** The building type whose ring trains this unit (`UnitDefinition.RequiredBuildingType`, e.g. `"longhouse"`, `"barracks"`, `"cartworkshop"`) — at least one must stand for the unit to be trainable. */
   requiredBuildingType: string;
+  /** What this siege engine can damage (`UnitDefinition.SiegeTargets`): `"walls"`, `"towers"`, `"buildings"`; empty for a unit without siege power. */
+  siegeTargets: string[];
 }
 
 /** Mirrors `FogChunkResponse` — one 64 x 64-texel chunk of the fog mask (map-fog-v2.md §3). `png` is base64, or null for an empty (fully unknown) chunk. */

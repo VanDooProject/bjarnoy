@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MASK_MARGIN_TILES,
   MASK_MAX_TEXELS,
+  MASK_ROW_ALIGN,
   MASK_TEXELS_PER_TILE,
   waterMaskCovers,
   waterMaskPlacement,
@@ -36,6 +37,18 @@ describe('waterMaskRegion', () => {
   it('resolves a tile into MASK_TEXELS_PER_TILE texels while the budget allows', () => {
     const region = waterMaskRegion(viewport(0, 0, 400, 300), TILE_W);
     expect(region.texelWorldSize).toBeCloseTo(TILE_W / MASK_TEXELS_PER_TILE, 6);
+  });
+
+  it('keeps every row of the one-byte fields 4-byte aligned, so WebGL accepts their r8 upload', () => {
+    // A 110-texel-wide mask was rejected by texImage2D (default UNPACK_ALIGNMENT 4),
+    // and the taint and no-foam fields then sampled as zero everywhere.
+    for (let w = 100; w < 2_000; w += 37) {
+      for (let x = -500; x < 500; x += 113) {
+        const region = waterMaskRegion(viewport(x, 0, x + w, 300), TILE_W);
+        expect(region.width % MASK_ROW_ALIGN).toBe(0);
+        expect(region.rect.maxX - region.rect.minX).toBeCloseTo(region.width * region.texelWorldSize, 6);
+      }
+    }
   });
 
   it('clamps the long edge at MASK_MAX_TEXELS when zoomed far out', () => {

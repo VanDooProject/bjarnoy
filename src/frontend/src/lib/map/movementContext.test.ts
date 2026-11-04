@@ -54,7 +54,7 @@ describe('gamePathContext range tint behind a wall', () => {
     }
   });
 
-  it('tints a half-open end for every army at the flat cost of 3', () => {
+  it('tints a half-open end for every army at the ground cost plus 3', () => {
     const walls = column();
     walls.delete('3,3'); // the tip is now (3,2) with sea below it (not in the strip)
     const world: MovementWorldView = {
@@ -64,7 +64,7 @@ describe('gamePathContext range tint behind a wall', () => {
 
     for (const owner of ['ulf', 'egil']) {
       const range = reachableRange(origin, origin, 100, gamePathContext(world, RULES, 1, owner));
-      expect(range.get(coordKey({ q: 3, r: 2 }))).toBe(2 * (3 + 3)); // 3 grass steps, then the tip at 3, out and back
+      expect(range.get(coordKey({ q: 3, r: 2 }))).toBe(2 * (3 + 1 + 3)); // 3 grass steps, then the tip at grass 1 + 3, out and back
       expect(range.has(behind)).toBe(true);
     }
   });

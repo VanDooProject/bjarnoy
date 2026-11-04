@@ -34,6 +34,15 @@ export function hasShoreline(center: AxialCoord, claimRadius: number, terrain: T
 }
 
 /**
+ * Mirrors the backend's rule for where a fleet may be sent (`Army.PlanDispatch`'s fleet Attack/Raid gate): a building
+ * hex is on the shore when it is a sea hex (the coastal-water buildings: Dockyard, Fishing Hut, Shrine of Njörd) or a
+ * shoreline land hex. The claim check is not mirrored: the buildings a caller offers already belong to the target.
+ */
+export function isShoreBuildingHex(coord: AxialCoord, terrain: TerrainLookup): boolean {
+  return !terrain.isLand(coord.q, coord.r) || hasShoreline(coord, 0, terrain);
+}
+
+/**
  * Mirrors `Settlement.cs`'s `ClaimRadius` (backed by
  * `BuildingCatalogue`'s Longhouse `ClaimRadius = level == 1 ? 2 : 3`, the same
  * number `building-catalogue.json`'s `longhouse` entries carry in their own
@@ -49,6 +58,15 @@ export function claimRadiusForLevel(longhouseLevel: number): number {
   // level 1, 3 from level 2 on, and it stops there — territory then grows
   // through towers (docs/design/economy.md section 5).
   return longhouseLevel <= 1 ? 2 : 3;
+}
+
+/**
+ * Mirrors `Settlement.LonghouseDisc`: the settlement's Longhouse (centre) claim disc — as a list so callers spread it —
+ * or no disc at all when its Longhouse is destroyed (level 0): such a settlement has no claim, not even its centre hex.
+ * The one place the client decides this (`claimDiscs` and `resolveRealm` both read it).
+ */
+export function longhouseDiscs(center: AxialCoord, longhouseLevel: number): ClaimDisc[] {
+  return longhouseLevel <= 0 ? [] : [{ q: center.q, r: center.r, radius: claimRadiusForLevel(longhouseLevel) }];
 }
 
 /**
@@ -85,7 +103,7 @@ export function claimDiscs(
   towers: Array<{ q: number; r: number; level: number }>,
 ): ClaimDisc[] {
   return [
-    { q: center.q, r: center.r, radius: claimRadiusForLevel(longhouseLevel) },
+    ...longhouseDiscs(center, longhouseLevel),
     ...towers.map((t) => ({ q: t.q, r: t.r, radius: towerClaimRadiusForLevel(t.level) })),
   ];
 }

@@ -134,6 +134,7 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.PumpkinFarm, Terrain.Mountain, false)]
     [InlineData(BuildingType.Tower, Terrain.Sand, true)]
     [InlineData(BuildingType.Tower, Terrain.Grass, true)]
+    [InlineData(BuildingType.Tower, Terrain.Forest, true)]
     [InlineData(BuildingType.Tower, Terrain.Mountain, false)]
     [InlineData(BuildingType.Sawmill, Terrain.Grass, true)]
     [InlineData(BuildingType.Sawmill, Terrain.Forest, false)]
@@ -155,6 +156,7 @@ public class BuildingCatalogueTests
     [Theory]
     [InlineData(BuildingType.Longhouse)]
     [InlineData(BuildingType.StorageHouse)]
+    [InlineData(BuildingType.SiegeWorkshop)]
     public void Anchor_and_support_buildings_are_gated_to_grass(BuildingType type)
     {
         var definition = BuildingCatalogue.Get(type, 1);
@@ -167,10 +169,9 @@ public class BuildingCatalogueTests
     }
 
     [Theory]
-    [InlineData(BuildingType.Tower)]
     [InlineData(BuildingType.ArcheryRange)]
     [InlineData(BuildingType.Barracks)]
-    public void The_tower_and_archery_range_are_gated_to_grass_or_sand(BuildingType type)
+    public void The_archery_range_siege_workshop_and_barracks_are_gated_to_grass_or_sand(BuildingType type)
     {
         var definition = BuildingCatalogue.Get(type, 1);
 
@@ -230,6 +231,7 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Barracks, BuildingType.Tower, 3)]
     [InlineData(BuildingType.Dockyard, BuildingType.FishingHut, 5)]
     [InlineData(BuildingType.ArcheryRange, BuildingType.Barracks, 5)]
+    [InlineData(BuildingType.SiegeWorkshop, BuildingType.ArcheryRange, 3)]
     [InlineData(BuildingType.CartWorkshop, BuildingType.TownSquare, 3)]
     [InlineData(BuildingType.Meadery, BuildingType.Farm, 5)]
     [InlineData(BuildingType.DruidHut, BuildingType.TownSquare, 5)]
@@ -914,28 +916,28 @@ public class SettlementTests
     [Fact]
     public void A_towers_satellite_disc_can_complete_a_giant_enclosure_but_the_hex_stays_unbuildable()
     {
-        // Longhouse at level 1 (ClaimRadius 2, centred on (0,0)) covers 4 of
-        // the giant-at-(2,0)'s 7 footprint hexes: (2,0), (2,-1), (1,0),
-        // (1,1). A level-1 Tower at (3,0) (TowerClaimRadius(1) == 1) covers
-        // the other 3: (3,0), (3,-1), (2,1) — completing the enclosure.
-        // Territory.Claims should read the giant as claimed once both discs
-        // are unioned, but PlanBuild still refuses to build directly on the
-        // giant hex itself: HexOccupiedByGiant is unconditional, not
-        // claim-dependent.
-        var giantAnchor = new HexCoord(2, 0);
+        // Longhouse at level 1 (ClaimRadius 2, centred on (0,0)) covers only
+        // (2,0) and (2,-1)... of the giant-at-(3,0)'s 7 footprint hexes, not
+        // (4,0) or (4,-1). A level-3 Tower at (1,1) - inside the longhouse's
+        // reach, so connected - has radius 3 and covers every footprint hex,
+        // completing the enclosure. Territory.Claims should read the giant as
+        // claimed once both discs are unioned, but PlanBuild still refuses to
+        // build directly on the giant hex itself: HexOccupiedByGiant is
+        // unconditional, not claim-dependent.
+        var giantAnchor = new HexCoord(3, 0);
         var giants = new GiantIndex([new Giant(giantAnchor, "giantmountain", TileOrientation.E)]);
-        var towerCoord = new HexCoord(3, 0);
+        var towerCoord = new HexCoord(1, 1);
         var settlement = Found() with
         {
             Buildings =
             [
                 new PlacedBuilding(Centre, BuildingType.Longhouse, 1),
-                new PlacedBuilding(towerCoord, BuildingType.Tower, 1),
+                new PlacedBuilding(towerCoord, BuildingType.Tower, 3),
             ],
         };
 
         // Sanity: the longhouse disc alone does not fully cover the giant's
-        // footprint (only the tower's disc adds the missing 3 hexes).
+        // footprint (only the tower's disc adds the missing hexes).
         var longhouseOnlyDiscs = new[] { (Centre, Settlement.ClaimRadiusForLonghouseLevel(1)) };
         Assert.False(Territory.IsFullyCovered(longhouseOnlyDiscs, giants.TryGetGiant(giantAnchor, out var g) ? g : default));
 
@@ -946,6 +948,32 @@ public class SettlementTests
             giants: giants);
 
         Assert.Equal(BuildRejection.HexOccupiedByGiant, decision.Rejection);
+    }
+
+    [Fact]
+    public void Building_on_an_endgame_site_hex_is_refused_even_when_claimed()
+    {
+        var wallHex = new HexCoord(1, 0);
+        var towerHex = new HexCoord(0, 1);
+        var sites = new EndgameSiteIndex([wallHex, towerHex]);
+        var settlement = Found();
+
+        Assert.True(settlement.Claims(wallHex) && settlement.Claims(towerHex), "sanity: the claim reaches both site hexes");
+
+        foreach (var hex in new[] { wallHex, towerHex })
+        {
+            var refused = settlement.PlanBuild(
+                BuildingType.ReindeerHerder, hex, Terrain.Grass, T0, Guid.CreateVersion7(), endgameSites: sites);
+            Assert.Equal(BuildRejection.HexOccupiedByEndgameSite, refused.Rejection);
+        }
+
+        var elsewhere = settlement.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(-1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), endgameSites: sites);
+        Assert.NotEqual(BuildRejection.HexOccupiedByEndgameSite, elsewhere.Rejection);
+
+        var noIndex = settlement.PlanBuild(
+            BuildingType.ReindeerHerder, wallHex, Terrain.Grass, T0, Guid.CreateVersion7());
+        Assert.NotEqual(BuildRejection.HexOccupiedByEndgameSite, noIndex.Rejection);
     }
 
     [Fact]

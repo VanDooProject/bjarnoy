@@ -284,9 +284,11 @@ development.
 | `GET /api/v1/worlds/{id}/islands` | its islands and their start positions |
 | `GET /api/v1/worlds/{id}/tiles?qMin=&qMax=&rMin=&rMax=` | terrain for a window |
 | `POST /api/v1/worlds/{id}/settlements` | found a settlement on a start position |
-| `GET /api/v1/worlds/{id}/settlements` | settlements in a world |
+| `GET /api/v1/worlds/{id}/settlements` | settlements in a world the caller can see (their own plus explored rivals'); `mine` marks the caller's own. Every longhouse is listed (the map draws them), each with `realmId` (the oldest member of its linked realm) and the realm's name |
+| `GET /api/v1/worlds/{id}/settlements/mine` | the caller's settlements for the switcher: one entry per linked realm (the oldest member) |
+| `GET /api/v1/settlements/{id}/view` | a rival's fog-gated read; `name` is the linked realm's (oldest member's) |
 | `POST /api/v1/worlds/{id}/state` | pause, lock, maintain or resume a world |
-| `GET /api/v1/settlements/{id}` | a settlement as of now, completing what its queue owed |
+| `GET /api/v1/settlements/{id}` | a settlement as of now, completing what its queue owed; owner only. `realm` lists every settlement of its realm (the owner's settlements on that island, itself first) with the connected claim discs the chain rule gives each (`ConnectedRealm`, economy.md section 5); the live client draws the realm's border from it. For the oldest member of a linked realm the read is the whole realm: pooled stock, summed construction slots, every member's buildings, the merged queue; a newer member's read has its own buildings and garrison, the pooled stock and `realmId` of the oldest (the client redirects to it). `linkedMemberIds` lists the group |
 | `POST /api/v1/settlements/{id}/builds` | queue a building |
 | `GET /api/v1/buildings` | the catalogue: costs, durations, allowed terrain |
 | `POST /api/v1/messages` | send a direct message to another player |
@@ -309,7 +311,7 @@ npx openapi-typescript http://localhost:5180/openapi/v1.json \
 ```
 
 `GET /api/v1/buildings` also has a frontend-only fallback: the tech-tree page
-(`/tech-tree`) needs to render without a backend in demo mode, so
+(`/docs/tech-tree`) needs to render without a backend in demo mode, so
 `src/frontend/src/data/building-catalogue.json` is a committed snapshot of
 that endpoint's response, regenerated the same way against a running backend:
 

@@ -10,7 +10,7 @@
 
 import type { AxialCoord } from '../hex/coords';
 import { isoGridPosition, isoTopPoints, type Point } from '../hex/geometry';
-import { TILE_ORIENTATIONS, type RiverTile, type TileOrientation } from './types';
+import { TILE_ORIENTATIONS, type BogTile, type RiverTile, type TileOrientation } from './types';
 
 /** One flow leg: a curve from an inflow edge (or the spring's own centre) to the tile's outflow point. */
 export interface RiverSegment {
@@ -26,10 +26,13 @@ export interface RiverDrawing {
   springDot?: Point;
 }
 
-/** Direction `d`'s shared edge is polygon edge `(3 - d) mod 6` — see types.ts's derivation comment. */
+/** Direction `d`'s shared edge is polygon edge `(3 - d) mod 6` (edge i runs `top[i]..top[i+1]`) — see types.ts's derivation comment. */
+export function topFaceEdgeIndex(direction: TileOrientation): number {
+  return (3 - TILE_ORIENTATIONS.indexOf(direction) + 6) % 6;
+}
+
 function edgeMidpoint(top: Point[], direction: TileOrientation): Point {
-  const dirIndex = TILE_ORIENTATIONS.indexOf(direction);
-  const edgeIndex = (3 - dirIndex + 6) % 6;
+  const edgeIndex = topFaceEdgeIndex(direction);
   const a = top[edgeIndex]!;
   const b = top[(edgeIndex + 1) % 6]!;
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
@@ -75,4 +78,25 @@ export function riverPathFor(
       to: exitPoint,
     })),
   };
+}
+
+/**
+ * The stroke path for the water running through one bog hex: a creek, a lake mouth (the creek's end at the lake
+ * edge) or a creek spring. A river ends where its bog begins and the bog carries its water on as these bog tiles, so
+ * without them the world map would show the river stop at the bog's edge. They are drawn at river width (rule R11:
+ * creeks are river-wide) with the same edge-midpoint geometry as a river tile, so a creek meets the river tile next
+ * to it and the lake edge exactly. Every other bog kind (moss, lake, shores) carries no flow: `null`.
+ */
+export function bogCreekPathFor(coord: AxialCoord, bog: BogTile, w: number, h: number): RiverDrawing | null {
+  if (bog.kind !== 'creek' && bog.kind !== 'mouth' && bog.kind !== 'creekspring') return null;
+  const tile: RiverTile = {
+    q: bog.q,
+    r: bog.r,
+    // riverPathFor reads the shape only to find a sea mouth; a bog's flow always has its own outDirection.
+    shape: bog.kind === 'creekspring' ? 'spring' : 'straight',
+    inDirections: bog.inDirections,
+    outDirection: bog.outDirection,
+    width: 'river',
+  };
+  return riverPathFor(coord, tile, null, w, h);
 }

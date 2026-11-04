@@ -119,20 +119,22 @@ public sealed record WorldGenerationOptions
 
     /// <summary>
     /// Fraction of an island's radius, measured from its centre, beyond which
-    /// land becomes beach. The coastal ring the settlers land on.
+    /// land becomes beach, as long as open sea is within <see cref="TerrainSampler.BeachSeaRadius"/>
+    /// hexes. The coastal ring the settlers land on.
     /// </summary>
     public double BeachThreshold { get; init; } = 0.9;
 
     /// <summary>
-    /// Fraction of an island's radius within which terrain is allowed to rise to
-    /// mountain, so ridges form inland rather than on the coast.
+    /// Wasted islands only: fraction of an island's radius within which terrain is allowed to rise to
+    /// mountain, so ridges form inland rather than on the coast. Green islands use the chain rule
+    /// (<see cref="TerrainSampler.ChainMountainAt"/>).
     /// </summary>
     public double MountainThreshold { get; init; } = 0.4;
 
-    /// <summary>Rockiness above which an inland hex becomes mountain.</summary>
+    /// <summary>Wasted islands only: rockiness above which an inland hex becomes mountain.</summary>
     public double MountainRockiness { get; init; } = 0.72;
 
-    /// <summary>Rockiness above which a lowland hex is forest rather than grass.</summary>
+    /// <summary>Wasted islands only: rockiness above which a lowland hex is forest rather than grass (green islands use the grove rule).</summary>
     public double ForestRockiness { get; init; } = 0.52;
 
     /// <summary>
@@ -198,6 +200,18 @@ public sealed record WorldGenerationOptions
     /// <summary>Drainage cost of a 120 degree turn (a Bend60 tile).</summary>
     public double SharpBendCost { get; init; } = 1.0;
 
+    /// <summary>Extra drainage cost of stepping from a non-mountain tile onto a mountain tile (leaving a range is free): rivers rarely climb back into a second range.</summary>
+    public double MountainEntryCost { get; init; } = 15.0;
+
+    /// <summary>Drainage cost a river's step pays for not heading where its current meander stretch wants (half that when 60 degrees off): larger arcs wider; 0 turns meandering off.</summary>
+    public double MeanderSteer { get; init; } = 16.0;
+
+    /// <summary>Fewest steps of one meander stretch, which bends one way before the river swings to the other side.</summary>
+    public int MeanderMinStretch { get; init; } = 8;
+
+    /// <summary>Most steps of one meander stretch.</summary>
+    public int MeanderMaxStretch { get; init; } = 16;
+
     /// <summary>
     /// How much longer (in drainage cost) a tributary's way via a drawable junction with an earlier river may be than
     /// running to an outlet on its own and still be taken: larger merges more eagerly.
@@ -225,10 +239,10 @@ public sealed record WorldGenerationOptions
     /// Land tiles an island needs per bog site (a lake with a river through it): <c>floor(land / BogTilesPerSite)</c>
     /// sites, at least 1 and at most <see cref="BogMaxSites"/>. See <c>docs/design/bog.md</c>.
     /// </summary>
-    public int BogTilesPerSite { get; init; } = 6000;
+    public int BogTilesPerSite { get; init; } = 1500;
 
     /// <summary>Most bog sites (lakes with a through river) one island gets. Enclosed sea pockets come on top.</summary>
-    public int BogMaxSites { get; init; } = 3;
+    public int BogMaxSites { get; init; } = 16;
 
     /// <summary>Radius of a site's disc: only grass and forest, none of it near the coast. Islands of <see cref="BogLargeIslandTiles"/> or more get 2 more.</summary>
     public int BogSiteRadius { get; init; } = 7;
@@ -281,6 +295,25 @@ public sealed record WorldGenerationOptions
 
     /// <summary>Radius of the disc of a guaranteed bog (its lake, shores and creeks lie inside it); smaller than <see cref="BogSiteRadius"/>.</summary>
     public int BogGuaranteeRadius { get; init; } = 5;
+
+    /// <summary>Attempt cap of the normal site pass (the guarantee's attempts are capped at 60 apart).</summary>
+    public int BogSiteAttempts { get; init; } = 200;
+
+    /// <summary>A site's anchor may lie this many hexes closer to the coast than the disc needs (<c>coast distance &gt;= radius + 1 - slack</c>).</summary>
+    public int BogCoastSlack { get; init; } = 3;
+
+    /// <summary>A bog's moss reaches this many hexes beyond the site's disc radius.</summary>
+    public int BogRegionReachExtra { get; init; } = 2;
+
+    /// <summary>
+    /// The gap fill after the guarantee: landing candidates further than this many hexes from every plain bog tile get one more bog per
+    /// round (through-river site, else spawn bog), up to <c>land / BogGapTilesPerRound</c> rounds, stopping below <see cref="BogGapMinCandidates"/>.
+    /// </summary>
+    public int BogGapReach { get; init; } = 18;
+
+    public int BogGapTilesPerRound { get; init; } = 1000;
+
+    public int BogGapMinCandidates { get; init; } = 40;
 
     public static WorldGenerationOptions ForSeed(int seed) => new() { Seed = seed };
 
@@ -339,12 +372,22 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfNegative(MountainCost);
         ArgumentOutOfRangeException.ThrowIfNegative(BendCost);
         ArgumentOutOfRangeException.ThrowIfNegative(SharpBendCost);
+        ArgumentOutOfRangeException.ThrowIfNegative(MountainEntryCost);
+        ArgumentOutOfRangeException.ThrowIfNegative(MeanderSteer);
+        ArgumentOutOfRangeException.ThrowIfLessThan(MeanderMinStretch, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(MeanderMaxStretch, MeanderMinStretch);
         ArgumentOutOfRangeException.ThrowIfNegative(MergeSlack);
         ArgumentOutOfRangeException.ThrowIfNegative(MergeReach);
         ArgumentOutOfRangeException.ThrowIfNegative(RiverStreamBonus);
         ArgumentOutOfRangeException.ThrowIfNegative(SharpBendPenalty);
         ArgumentOutOfRangeException.ThrowIfLessThan(BogTilesPerSite, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(BogMaxSites, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogSiteAttempts, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogCoastSlack);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogRegionReachExtra);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogGapReach, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(BogGapTilesPerRound, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(BogGapMinCandidates);
         ArgumentOutOfRangeException.ThrowIfLessThan(BogSiteRadius, 5);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(BogSiteRadius, 20);
         ArgumentOutOfRangeException.ThrowIfLessThan(BogLargeIslandTiles, 1);

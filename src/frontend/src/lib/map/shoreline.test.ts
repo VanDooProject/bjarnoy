@@ -3,9 +3,11 @@ import type { AxialCoord } from '../hex/coords';
 import { giantCoverage } from './giantTiles';
 import {
   claimDiscs,
+  longhouseDiscs,
   claimRadiusForLevel,
   hasShoreline,
   hasShorelineInTerritory,
+  isShoreBuildingHex,
   towerClaimRadiusForLevel,
   type ClaimDisc,
   type TerrainLookup,
@@ -95,6 +97,12 @@ describe('towerClaimRadiusForLevel', () => {
 });
 
 describe('claimDiscs / hasShorelineInTerritory', () => {
+  it('has no centre disc when the Longhouse is destroyed (level 0): the settlement claims nothing', () => {
+    expect(claimDiscs({ q: 0, r: 0 }, 0, [])).toEqual([]);
+    expect(longhouseDiscs({ q: 0, r: 0 }, 0)).toEqual([]);
+    expect(longhouseDiscs({ q: 0, r: 0 }, 1)).toEqual([{ q: 0, r: 0, radius: 2 }]);
+  });
+
   it('includes the centre disc plus one disc per tower, centred on the tower itself', () => {
     const discs = claimDiscs(
       { q: 0, r: 0 },
@@ -173,3 +181,20 @@ function neighborsOf(c: { q: number; r: number }) {
   ];
   return dirs.map((d) => ({ q: c.q + d.q, r: c.r + d.r }));
 }
+
+describe('isShoreBuildingHex', () => {
+  // Land at q >= 0, sea at q < 0: (0,0) touches the sea, (1,0) is inland, (-1,0) is a sea hex.
+  const coast: TerrainLookup = { isLand: (q) => q >= 0 };
+
+  it('is true for a shoreline land hex', () => {
+    expect(isShoreBuildingHex({ q: 0, r: 0 }, coast)).toBe(true);
+  });
+
+  it('is true for a sea hex (coastal-water buildings such as the Dockyard)', () => {
+    expect(isShoreBuildingHex({ q: -1, r: 0 }, coast)).toBe(true);
+  });
+
+  it('is false for an inland land hex', () => {
+    expect(isShoreBuildingHex({ q: 2, r: 0 }, coast)).toBe(false);
+  });
+});

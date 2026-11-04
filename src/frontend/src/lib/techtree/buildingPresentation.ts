@@ -47,6 +47,7 @@ const TYPE_LABELS: Record<string, string> = {
   odinstatue: 'Odin Statue',
   reindeerherder: 'Reindeer herder',
   archeryrange: 'Archery range',
+  siegeworkshop: 'Siege workshop',
   dockyard: 'Dockyard',
   greatstorehouse: 'Great storehouse',
   townsquare: 'Town square',
@@ -59,6 +60,7 @@ const TYPE_LABELS: Record<string, string> = {
   // Display name only; the internal type stays `smithy`.
   smithy: 'Weaponsmith',
   palisadegate: 'Palisade gate',
+  bridge: 'Bridge',
 };
 
 export function typeLabel(type: string): string {
@@ -84,6 +86,7 @@ const SHORT_LABELS: Record<string, string> = {
   shrineofullr: 'Ullr',
   shrineofnjord: 'Njörd',
   archeryrange: 'Archery',
+  siegeworkshop: 'Siege',
 };
 
 export function shortLabel(type: string): string {
@@ -107,6 +110,7 @@ export const GRAPH_CATEGORY_ORDER = [
   'anchor',
   'production',
   'military',
+  'defense',
   'logistics',
   'religion',
   'water',
@@ -126,16 +130,18 @@ const GRAPH_CATEGORY_OF: Record<string, GraphCategory> = {
   claybrickworks: 'production',
   bogoreworks: 'production',
   hammerschmiede: 'production',
-  tower: 'military',
+  tower: 'defense',
   archeryrange: 'military',
+  siegeworkshop: 'military',
   barracks: 'military',
   smithy: 'military',
-  palisade: 'military',
-  palisadegate: 'military',
+  palisade: 'defense',
+  palisadegate: 'defense',
   storagehouse: 'logistics',
   greatstorehouse: 'logistics',
   cartworkshop: 'logistics',
   townsquare: 'logistics',
+  bridge: 'logistics',
   druidhut: 'logistics',
   shrineofthor: 'religion',
   shrineoffreyja: 'religion',
@@ -155,6 +161,7 @@ export const GRAPH_CATEGORY_COLOR: Record<GraphCategory, string> = {
   anchor: 'var(--gold)',
   production: 'var(--food)',
   military: 'var(--iron)',
+  defense: 'var(--wood)',
   logistics: 'var(--stone)',
   religion: 'var(--shrine)',
   water: 'var(--water)',
@@ -167,6 +174,7 @@ export const GRAPH_CATEGORY_COLOR: Record<GraphCategory, string> = {
 export const GRAPH_LEGEND: ReadonlyArray<{ id: GraphCategory; label: string }> = [
   { id: 'production', label: 'Production' },
   { id: 'military', label: 'Military' },
+  { id: 'defense', label: 'Defence' },
   { id: 'logistics', label: 'Logistics' },
   { id: 'religion', label: 'Shrines' },
   { id: 'water', label: 'Water' },

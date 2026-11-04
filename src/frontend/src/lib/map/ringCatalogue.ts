@@ -6,7 +6,7 @@
 import type { ResourceLine } from '../../api/types';
 import { resourceName } from '../../i18n/catalogueNames';
 import { i18n } from '../../i18n';
-import { additionalStorageHouseRequirement, maxTowers } from './buildingEconomy';
+import { additionalStorageHouseRequirement } from './buildingEconomy';
 import { campHexBuildable } from './campRules';
 import type { BogTileKind } from './types';
 import type { RiverVariant } from './worldGenerator';
@@ -40,15 +40,15 @@ export function longhouseLock(requiredLevel: number | undefined, currentLevel: n
 
 /**
  * The reason a *new* tower can't be placed: the settlement already holds
- * (standing plus queued) as many as its Longhouse level allows — mirrors
- * `Settlement.PlanBuild`'s `BuildRejection.TowerLimitReached` and
- * `buildingEconomy.maxTowers`. Undefined while there is room (or while the
+ * (standing plus queued) as many as `allowed` — mirrors
+ * `Settlement.PlanBuild`'s `BuildRejection.TowerLimitReached`. `allowed` is the
+ * server's `construction.towerLimit` (a linked realm: the members' limits added
+ * up) in live mode, `buildingEconomy.maxTowers` in demo mode. Undefined while there is room (or while the
  * longhouse itself is still too low, which `longhouseLock` already explains).
  * Like `longhouseLock` this is a progression gate the player can work
  * towards, so it is shown as an explained, disabled bubble.
  */
-export function towerLimitLock(towersHeld: number, longhouseLevel: number): string | undefined {
-  const allowed = maxTowers(longhouseLevel);
+export function towerLimitLock(towersHeld: number, allowed: number): string | undefined {
   if (allowed === 0 || towersHeld < allowed) return undefined;
   return `Tower limit reached (${towersHeld}/${allowed}) — level up the longhouse for more`;
 }
@@ -99,6 +99,9 @@ export function storageHouseLock(storageHousesHeld: number, standingLevels: read
 const RIVER_SHAPES_BY_TYPE: Partial<Record<string, ReadonlySet<string>>> = {
   sawmill: new Set(['straight', 'bend', 'bend60']),
   cropmill: new Set(['straight']),
+  // The bridge's three tiles (3D_assets hextile135-137) are the straight, the 120 degree bend and the 60 degree bend; whether the
+  // hex is also a *wide* river is the bridge rules' (`WorldModel.bridgePlacement`, shown as a lock), not a shape question.
+  bridge: new Set(['straight', 'bend', 'bend60']),
 };
 
 /**
@@ -155,6 +158,16 @@ export function cropAllowedHere(type: string, soil: 'wheat' | 'pumpkin' | undefi
 }
 
 /**
+ * Buildings that can no longer be placed anew (the Quarry, for now); ones already standing keep producing and upgrading.
+ * Mirrors `BuildingCatalogue.NewPlacementDisabled` / `BuildRejection.NewPlacementDisabled`; `WorldModel.placeBuilding` (new
+ * placements only) refuses them, and the build ring simply does not list them.
+ */
+const NEW_PLACEMENT_DISABLED: ReadonlySet<string> = new Set(['quarry']);
+export function newPlacementDisabled(type: string): boolean {
+  return NEW_PLACEMENT_DISABLED.has(type);
+}
+
+/**
  * The exact shortfall against `cost`, e.g. "40 Wood, 15 Stone" — omits any
  * resource `stock` already covers. Mirrors `trainingEconomy.ts`'s
  * `formatCostLine` (which shows the whole price), but for what's still
@@ -193,6 +206,12 @@ export function isLakeShoreHut(tile: { buildingType?: string; bog?: { kind: BogT
   return tile.buildingType !== undefined && LAKE_SHORE_KINDS_BY_TYPE[tile.buildingType]?.has(tile.bog?.kind ?? 'bog') === true;
 }
 
+/** Grass, forest, sand or plain bog moss (not a shore, mouth, creek or lake): the ground a wall hex and a tower stand on. */
+function wallOrTowerGround(tile: { terrain: string; bog?: { kind: BogTileKind } }): boolean {
+  if (tile.terrain === 'bog') return tile.bog?.kind === 'bog';
+  return tile.terrain === 'grass' || tile.terrain === 'forest' || tile.terrain === 'sand';
+}
+
 /**
  * Whether `type` may stand on this one hex, from its terrain, coastal-water flag and bog kind — the client mirror of
  * `BuildingDefinition.AllowsHex` (river shape and soil rules are separate, see `riverBuildingAllowedHere`/`cropAllowedHere`).
@@ -205,13 +224,14 @@ export function buildingAllowedOnHex(
 ): boolean {
   if (tile.terrain === 'lake') return false;
   // A wall stands on grass, forest, sand or plain bog moss; the palisade (not the gate) also on coastal water, as the wall's sea end. Whether the
-  // hex then takes one is the wall rules' (`WorldModel.palisadePlacement`).
+  // hex then takes one is the wall rules' (`WorldModel.palisadePlacement`). The tower stands on the same ground, but never on water.
   if (type === 'palisade' || type === 'palisadegate') {
     if (tile.terrain === 'sea') return type === 'palisade' && tile.isCoastalWater === true;
-    // Plain bog moss only (not a shore, mouth, creek or lake), like the bog buildings' kind check.
-    if (tile.terrain === 'bog') return tile.bog?.kind === 'bog';
-    return tile.terrain === 'grass' || tile.terrain === 'forest' || tile.terrain === 'sand';
+    return wallOrTowerGround(tile);
   }
+  if (type === 'tower') return wallOrTowerGround(tile);
+  // A bridge stands on the river tile's own ground: grass, forest or sand (never mountain; BuildingCatalogue.BridgeHex).
+  if (type === 'bridge') return tile.terrain === 'grass' || tile.terrain === 'forest' || tile.terrain === 'sand';
   const bogKinds = BOG_KINDS_BY_TYPE[type];
   if (bogKinds) return tile.terrain === 'bog' && tile.bog !== undefined && bogKinds.has(tile.bog.kind);
   if (isWaterOnlyBuilding(type)) {
@@ -264,4 +284,14 @@ export function palisadeLock(placement: { ok: true } | { ok: false; reason: stri
   if (placement.ok) return undefined;
   const key = ['branch', 'gateNotStraight', 'river', 'seaEnd', 'occupied'].includes(placement.reason) ? placement.reason : 'terrain';
   return i18n.global.t(`hud.ringMenu.palisadeLock.${key}`) as string;
+}
+
+/**
+ * The reason a bridge can't be placed on a river hex that otherwise takes one (a Straight, Bend or Bend60 tile; `riverBuildingAllowedHere`
+ * hides the bubble on every other hex), in the player's words, or `undefined` when it can: the river there is not a wide one, which a
+ * land army already crosses (`BuildRejection.BridgeNeedsWideRiver`), or the island is wasted.
+ */
+export function bridgeLock(placement: { ok: true } | { ok: false; reason: 'notWide' | 'wasted' }): string | undefined {
+  if (placement.ok) return undefined;
+  return i18n.global.t(`hud.ringMenu.bridgeLock.${placement.reason}`) as string;
 }

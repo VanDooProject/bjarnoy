@@ -170,28 +170,33 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
     [Fact]
     public async Task Camps_survive_the_round_trip_through_the_text_encoded_column()
     {
-        using var client = _fixture.CreateClient();
         var world = await CreateWorldAsync(seed: 9, radius: 300);
 
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        // Read back from the database, not through the API: GET /islands only ships the camps of islands the caller
+        // has seen (WorldCampVisibilityEndpointsTests), and an anonymous caller has seen none.
+        List<IslandEntity> stored;
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            stored = await db.Islands.AsNoTracking().Where(i => i.WorldId == world.Id).ToListAsync(Ct);
+        }
 
-        Assert.NotNull(islands);
-        var camps = islands.SelectMany(i => i.Camps).ToList();
+        var camps = stored.SelectMany(i => i.Camps.Select(CampResponse.From)).ToList();
         Assert.NotEmpty(camps);
         Assert.All(camps, c => Assert.Contains(c.Orientation, new[] { "E", "NE", "NW", "W", "SW", "SE" }));
         Assert.All(camps, c => Assert.InRange(c.Level, 1, 5));
 
-        // What the API serves is exactly what the generator placed: family, hex, level, rotation,
+        // What the column returns is exactly what the generator placed: family, hex, level, rotation,
         // and the strength / guard range derived from the shared family table.
-        var expected = world.Islands.Where(i => !i.IsWasted)
+        var expected = world.Islands
             .SelectMany(i => i.Camps.Select(c => (i.Index, Response: CampResponse.From(c))))
             .ToList();
-        var actual = islands.SelectMany(i => i.Camps.Select(c => (i.Index, Response: c))).ToList();
-        Assert.Equal(expected, actual);
+        var actual = stored.SelectMany(i => i.Camps.Select(c => (i.Index, Response: CampResponse.From(c)))).ToList();
+        Assert.Equal(expected.OrderBy(e => e.Index).ThenBy(e => e.Response.Q).ThenBy(e => e.Response.R),
+            actual.OrderBy(e => e.Index).ThenBy(e => e.Response.Q).ThenBy(e => e.Response.R));
         Assert.All(camps, c => Assert.Equal(
             c.Strong,
-            c.Family is "wolfden" or "boarwallow" or "bearrapids" or "fenrirbrood" or "walrushaulout" or "eagleeyrie" or "moosemire"));
+            c.Family is "wolfden" or "boarwallow" or "bearrapids" or "fenrirbrood" or "walrushaulout" or "eagleeyrie" or "moosemire" or "whaleroad"));
     }
 
     [Fact]
@@ -254,6 +259,45 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         Assert.Contains(
             afterReveal.SelectMany(i => i.Giants),
             g => g.Family is "giantvolcano" or "giantutgard");
+    }
+
+    [Fact]
+    public async Task Wasted_islands_carry_their_utgard_walls_and_towers_once_revealed()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(seed: 2, radius: 300);
+        var stored = world.Islands.Where(i => i.IsWasted && i.UtgardWalls.Count > 0).ToList();
+        Assert.True(stored.Count > 0, "expected the fixture seed to place a wasted island with Utgard walls");
+
+        var hidden = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        Assert.NotNull(hidden);
+        Assert.All(hidden, i => Assert.Empty(i.UtgardWalls));
+        Assert.All(hidden, i => Assert.Empty(i.JotunTowers));
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var worldEntity = await db.Worlds.SingleAsync(w => w.Id == world.Id, Ct);
+            worldEntity.EndbossTriggeredAt = _fixture.Factory.Time.GetUtcNow();
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var revealed = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        Assert.NotNull(revealed);
+
+        foreach (var island in stored)
+        {
+            var served = revealed.Single(i => i.Index == island.Index);
+            Assert.Equal(island.UtgardWalls.Select(w => UtgardWallResponse.From(w)), served.UtgardWalls);
+            Assert.Equal(island.JotunTowers.Select(t => JotunTowerResponse.From(t)), served.JotunTowers);
+            Assert.NotEmpty(served.JotunTowers);
+            Assert.All(served.UtgardWalls, w => Assert.Contains(w.Ring, new[] { "inner", "outer" }));
+        }
+
+        // Green islands never carry any.
+        Assert.All(revealed.Where(i => !i.Wasted), i => Assert.Empty(i.UtgardWalls));
     }
 
     [Fact]

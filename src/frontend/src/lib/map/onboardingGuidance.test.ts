@@ -4,8 +4,8 @@ import type { Terrain } from './types';
 import {
   deriveOnboardingGuidance,
   findGuidedTarget,
+  guidedRingStep,
   nextGuidedType,
-  ringNoteReason,
   snapToOfferedPlot,
 } from './onboardingGuidance';
 
@@ -108,21 +108,6 @@ describe('findGuidedTarget', () => {
   });
 });
 
-describe('ringNoteReason', () => {
-  it('grass fits reindeer herder; lumberjack is the dim one', () => {
-    expect(ringNoteReason('grass')).toEqual({ kind: 'oneFits', fit: 'reindeerherder', dim: 'lumberjack' });
-  });
-
-  it('forest fits lumberjack; reindeer herder is the dim one', () => {
-    expect(ringNoteReason('forest')).toEqual({ kind: 'oneFits', fit: 'lumberjack', dim: 'reindeerherder' });
-  });
-
-  it('neither guided building fits sand or mountain', () => {
-    expect(ringNoteReason('sand')).toEqual({ kind: 'neitherFits' });
-    expect(ringNoteReason('mountain')).toEqual({ kind: 'neitherFits' });
-  });
-});
-
 // landing-page-defects.md L6a: near-miss founding, so a click one hex off an
 // offered plot succeeds instead of refusing the click outright.
 describe('snapToOfferedPlot', () => {
@@ -148,5 +133,36 @@ describe('snapToOfferedPlot', () => {
 
   it('refuses when nothing is offered', () => {
     expect(snapToOfferedPlot({ q: 1, r: 0 }, [])).toBeNull();
+  });
+});
+
+describe('guidedRingStep', () => {
+  const categories = [
+    { id: 'resource', buildings: [{ id: 'reindeerherder' }, { id: 'farm' }] },
+    { id: 'military', buildings: [{ id: 'tower' }] },
+  ];
+  const at = (x: number) => ({ x, y: 0 });
+
+  it('points at the Build hub while the ring is at its root', () => {
+    expect(guidedRingStep('reindeerherder', categories, { build: at(1) })).toEqual({ kind: 'build', spot: at(1) });
+  });
+
+  it('points at the category holding the building once the categories are showing', () => {
+    const spots = { resource: at(2), military: at(3) };
+    expect(guidedRingStep('reindeerherder', categories, spots)).toEqual({ kind: 'category', id: 'resource', spot: at(2) });
+  });
+
+  it('points at the building once its category is open', () => {
+    const spots = { resource: at(2), military: at(3), reindeerherder: at(4), farm: at(5) };
+    expect(guidedRingStep('reindeerherder', categories, spots)).toEqual({ kind: 'building', id: 'reindeerherder', spot: at(4) });
+  });
+
+  it('keeps pointing at the right category when another one is open', () => {
+    const spots = { resource: at(2), military: at(3), tower: at(6) };
+    expect(guidedRingStep('reindeerherder', categories, spots)?.kind).toBe('category');
+  });
+
+  it('is null when the building is not offered on this hex (no dimmed bubble, the map pointer takes over)', () => {
+    expect(guidedRingStep('lumberjack', categories, { build: at(1) })).toBeNull();
   });
 });

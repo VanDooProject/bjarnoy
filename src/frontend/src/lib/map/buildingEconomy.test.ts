@@ -10,11 +10,16 @@ import {
   BOOST_TERRAIN,
   buildingStatsAt,
   buildingStatsFor,
+  scaleOutput,
+  upgradeRateGain,
   buildingUpgradeCost,
   isNearAnyOf,
   matchingNeighbourCount,
   maxLevelFor,
   maxTowers,
+  RADIUS_BOOST_TARGETS,
+  towerExploredRadius,
+  towerVisibleRadius,
   radiusBoostPercent,
   radiusBoostRange,
 } from './buildingEconomy';
@@ -97,17 +102,27 @@ describe('buildingStatsFor terrain-adjacency boost (mirrors BuildingCatalogue.cs
     });
   });
 
+  it('radius-boost targets mirror BuildingCatalogue.RadiusBoostTargets: the crop mill boosts Farm only, never Pumpkin Farm', () => {
+    expect(RADIUS_BOOST_TARGETS.cropmill).toEqual(['farm']);
+    expect(RADIUS_BOOST_TARGETS.sawmill).toEqual(['lumberjack']);
+    expect(RADIUS_BOOST_TARGETS.hammerschmiede).toEqual(['bogoreworks']);
+  });
+
   it('farm and pumpkinfarm ignore terrain adjacency entirely, matching Boosts excluding them', () => {
     // BuildingCatalogue.cs: Farm 40/h at level 1, PumpkinFarm 44/h (the bonus,
     // Pumpkin-soil-only crop yields more), both x1.20 per level, neither in Boosts.
     expect(buildingStatsFor('farm', 1, 6)).toEqual({
       output: { kind: 'resourceRate', resource: 'food', amount: 40 },
-      workers: { cap: 4 },
     });
     expect(buildingStatsFor('pumpkinfarm', 2, 6)).toEqual({
       output: { kind: 'resourceRate', resource: 'food', amount: 53 },
-      workers: { cap: 8 },
     });
+  });
+
+  it('invents no worker count: the backend has no workers, so no building reports one', () => {
+    for (const type of ['reindeerherder', 'farm', 'pumpkinfarm', 'lumberjack', 'quarry'] as const) {
+      expect(buildingStatsFor(type, 5)).not.toHaveProperty('workers');
+    }
   });
 
   it('sawmill has no production of its own — it boosts Lumberjack within range instead', () => {
@@ -133,7 +148,7 @@ describe('buildingStatsFor terrain-adjacency boost (mirrors BuildingCatalogue.cs
     });
   });
 
-  it('barracks trains the land army in place of the Longhouse, same as Archery Range', () => {
+  it('barracks trains the land army, same as Archery Range', () => {
     expect(buildingStatsFor('barracks', 1, 0)).toEqual({ modifier: { kind: 'trainsLandTroops' } });
   });
 
@@ -189,6 +204,21 @@ describe('economy curves (mirror BuildingCatalogue.cs, docs/design/economy.md)',
     expect(radiusBoostPercent(11)).toBe(55);
     expect(radiusBoostPercent(20)).toBe(100);
     expect([1, 4, 5, 9, 17, 20].map(radiusBoostRange)).toEqual([1, 1, 2, 3, 5, 5]);
+  });
+});
+
+describe('tower vision (mirrors FogVisionRadii.TowerVisibleRadius/TowerExploredRadius)', () => {
+  it('shows the visible radius level + 1 and the explored radius level + 3, not the bare level', () => {
+    // FogVisionRadii.cs: TowerBorderRadius = level; visible = +1; explored = + ScoutRingHexes (3).
+    for (const level of [1, 5, 10]) {
+      expect(buildingStatsFor('tower', level).output).toEqual({
+        kind: 'visionRing',
+        amount: level + 1,
+        explored: level + 3,
+      });
+    }
+    expect(towerVisibleRadius(0)).toBe(1);
+    expect(towerExploredRadius(0)).toBe(3);
   });
 });
 
@@ -314,9 +344,9 @@ describe('bog buildings against the catalogue snapshot', () => {
     }
   });
 
-  it('gates the bog-ore works at longhouse 6 with no feeder and the Hammer Forge at 20 behind bog-ore works 10', () => {
-    expect(of('bogoreworks')[0]!.requiredLonghouseLevel).toBe(6);
-    expect(of('bogoreworks')[0]!.prerequisites).toEqual([]);
+  it('gates the bog-ore works at longhouse 3 behind clay brickworks 3 and the Hammer Forge at 20 behind bog-ore works 10', () => {
+    expect(of('bogoreworks')[0]!.requiredLonghouseLevel).toBe(3);
+    expect(of('bogoreworks')[0]!.prerequisites).toEqual([{ type: 'claybrickworks', level: 3 }]);
     expect(of('hammerschmiede')[0]!.requiredLonghouseLevel).toBe(20);
     expect(of('hammerschmiede')[0]!.prerequisites).toEqual([{ type: 'bogoreworks', level: 10 }]);
   });
@@ -324,5 +354,25 @@ describe('bog buildings against the catalogue snapshot', () => {
   it('puts the Clay Brickworks on bog in the snapshot too', () => {
     const clay = (catalogueSnapshot.data as BuildingDefinitionResponse[]).find((d) => d.type === 'claybrickworks' && d.level === 1)!;
     expect(clay.allowedTerrain).toEqual(['bog']);
+  });
+});
+
+describe('speed-corrected upgrade output', () => {
+  const rate = (amount: number) => ({ kind: 'resourceRate', resource: 'stone', amount }) as const;
+
+  it('scales a resource rate by the world speed factor and leaves other outputs alone', () => {
+    expect(scaleOutput(rate(90), 2)).toEqual(rate(180));
+    expect(scaleOutput({ kind: 'storageCapacity', amount: 600 }, 2)).toEqual({ kind: 'storageCapacity', amount: 600 });
+  });
+
+  it('splits an upgrade into the gain and the new total, both at world speed', () => {
+    expect(upgradeRateGain(rate(75), rate(90), 1)).toEqual({ gain: rate(15), total: 90 });
+    expect(upgradeRateGain(rate(75), rate(90), 4)).toEqual({ gain: rate(60), total: 360 });
+  });
+
+  it('has no gain for outputs that are not a resource rate', () => {
+    const storage = (amount: number) => ({ kind: 'storageCapacity', amount }) as const;
+    expect(upgradeRateGain(storage(600), storage(700), 1)).toBeNull();
+    expect(upgradeRateGain(undefined, rate(90), 1)).toBeNull();
   });
 });

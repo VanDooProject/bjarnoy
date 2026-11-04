@@ -114,21 +114,31 @@ public static class FieldBattleResolver
     /// every hex of that footprint is covered by its discs — a claim that
     /// merely reaches this one hex of it does not grant the bonus.
     /// </param>
+    /// <param name="realm">
+    /// The chain-rule realm (<see cref="ConnectedRealm"/>) <paramref name="settlementId"/> belongs to, or
+    /// <see langword="null"/> to resolve the settlement alone. Only a connected tower claims ground, so only a connected
+    /// tower's disc grants its own bonus.
+    /// </param>
+    /// <param name="settlementId">This settlement's id inside <paramref name="realm"/>; ignored when the realm is null.</param>
     public static FieldBattleClaim ClaimAt(
-        HexCoord hex, HexCoord settlementCentre, IReadOnlyList<PlacedBuilding> buildings, IGiantIndex? giants = null)
+        HexCoord hex, HexCoord settlementCentre, IReadOnlyList<PlacedBuilding> buildings, IGiantIndex? giants = null,
+        ConnectedRealm? realm = null, Guid settlementId = default)
     {
         ArgumentNullException.ThrowIfNull(buildings);
 
+        var connected = realm ?? ConnectedRealm.Resolve([new RealmSettlement(Guid.Empty, settlementCentre, buildings)]);
+        var id = realm is null ? Guid.Empty : settlementId;
+
         var giantIndex = giants ?? GiantIndex.Empty;
         if (giantIndex.TryGetGiant(hex, out var giant)
-            && !Territory.IsFullyCovered([.. Settlement.ClaimDiscsFor(settlementCentre, buildings)], giant))
+            && !Territory.IsFullyCovered([.. connected.DiscsOf(id)], giant))
         {
             return FieldBattleClaim.None;
         }
 
         foreach (var building in buildings)
         {
-            if (building.Type != BuildingType.Tower)
+            if (building.Type != BuildingType.Tower || !connected.IsTowerConnected(id, building.Coord))
             {
                 continue;
             }
@@ -141,17 +151,13 @@ public static class FieldBattleResolver
         }
 
         var longhouseLevel = buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
-        var centreRadius = Settlement.ClaimRadiusForLonghouseLevel(longhouseLevel);
-        if (settlementCentre.DistanceTo(hex) > centreRadius)
+        if (Settlement.LonghouseDisc(settlementCentre, longhouseLevel) is not { } centreDisc
+            || centreDisc.Centre.DistanceTo(hex) > centreDisc.Radius)
         {
             return FieldBattleClaim.None;
         }
 
-        var highestTowerLevel = buildings
-            .Where(b => b.Type == BuildingType.Tower)
-            .Select(b => b.Level)
-            .DefaultIfEmpty(0)
-            .Max();
+        var highestTowerLevel = connected.HighestConnectedTowerLevel(id, buildings);
         return new FieldBattleClaim(true, BuildingCatalogue.TowerDefenseBonusPercent(highestTowerLevel) * 0.5);
     }
 
@@ -212,6 +218,26 @@ public static class FieldBattleResolver
     {
         ArgumentNullException.ThrowIfNull(sideAStacks);
         ArgumentNullException.ThrowIfNull(sideBStacks);
+
+        // A fleet's passengers do not fight: only its ships do, and the passengers the surviving ships cannot carry drown
+        // (ShipCargo.Rejoin). A land army has no passengers and fights as before.
+        var (fightersA, passengersA) = ShipCargo.SplitForFight(sideAStacks);
+        var (fightersB, passengersB) = ShipCargo.SplitForFight(sideBStacks);
+        var plan = ResolveFight(fightersA, sideAClaim, fightersB, sideBClaim, sideALootCarried, sideBLootCarried, seed);
+        var (lossesA, survivorsA) = ShipCargo.Rejoin(plan.SideALosses, plan.SideASurvivors, passengersA);
+        var (lossesB, survivorsB) = ShipCargo.Rejoin(plan.SideBLosses, plan.SideBSurvivors, passengersB);
+        return plan with { SideALosses = lossesA, SideASurvivors = survivorsA, SideBLosses = lossesB, SideBSurvivors = survivorsB };
+    }
+
+    private static FieldBattlePlan ResolveFight(
+        IReadOnlyList<UnitStack> sideAStacks,
+        FieldBattleClaim sideAClaim,
+        IReadOnlyList<UnitStack> sideBStacks,
+        FieldBattleClaim sideBClaim,
+        ResourceAmounts sideALootCarried,
+        ResourceAmounts sideBLootCarried,
+        int seed)
+    {
 
         // Exactly one side defending is the only case that gets asymmetric
         // treatment — see the remarks above.

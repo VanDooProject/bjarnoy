@@ -74,10 +74,12 @@ public sealed record TradeCancelResult(TradeCancelOutcome Outcome, TradeOfferEnt
 public sealed class TradeService(
     GameDbContext dbContext,
     TimeProvider timeProvider,
+    LinkedGroupLoader groups,
     ILogger<TradeService> logger)
 {
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
+    private readonly LinkedGroupLoader _groups = groups;
     private readonly ILogger<TradeService> _logger = logger;
 
     /// <summary>Posts an offer, escrowing the offered goods up front.</summary>
@@ -90,20 +92,21 @@ public sealed class TradeService(
         bool guildOnly,
         CancellationToken cancellationToken = default)
     {
-        var settlement = await LoadSettlementAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        // A linked realm trades from its shared stock (docs/design/economy.md section 5): the escrow is drawn from the pool.
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new TradePostResult(TradePostOutcome.SettlementNotFound);
         }
 
-        var clock = settlement.World.ToClock();
-        if (!clock.AllowsCommands)
+        var settlement = session.Anchor;
+        if (!session.Clock.AllowsCommands)
         {
             return new TradePostResult(TradePostOutcome.WorldPaused);
         }
 
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
-        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
+        var now = session.Now;
+        var settled = session.View(settlementId);
 
         var decision = TradeOffer.Plan(
             Guid.CreateVersion7(), settled, offeredResource, offeredAmount, requestedResource, requestedAmount,
@@ -111,12 +114,13 @@ public sealed class TradeService(
 
         if (!decision.Accepted)
         {
-            await PersistSettlementIfChangedAsync(settlement, settled, cancellationToken).ConfigureAwait(false);
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
             return new TradePostResult(TradePostOutcome.Rejected, Rejection: decision.Rejection);
         }
 
         var paid = TradeOffer.Post(settled, decision.Offer!, now);
-        settlement.ApplyDomain(paid);
+        session.Apply(settlementId, paid);
+        session.WriteBack();
 
         var entity = new TradeOfferEntity
         {
@@ -155,13 +159,13 @@ public sealed class TradeService(
             return new TradeCancelResult(TradeCancelOutcome.OfferNotFound);
         }
 
-        var settlement = await LoadSettlementAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return new TradeCancelResult(TradeCancelOutcome.OfferNotFound);
         }
 
-        var now = settlement.World.ToClock().ToGameTime(_timeProvider.GetUtcNow());
+        var now = session.Now;
         var domainOffer = offerEntity.ToDomain();
         if (!domainOffer.IsOpen(now))
         {
@@ -170,12 +174,13 @@ public sealed class TradeService(
 
         offerEntity.State = domainOffer.Cancel(now).State;
 
-        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
+        var settled = session.View(settlementId);
         var refunded = settled with
         {
             Resources = settled.Resources.Deposit(offerEntity.OfferedResource.Only(offerEntity.OfferedAmount), now),
         };
-        settlement.ApplyDomain(refunded);
+        session.Apply(settlementId, refunded);
+        session.WriteBack();
 
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -195,22 +200,30 @@ public sealed class TradeService(
             return new TradeAcceptResult(TradeAcceptOutcome.OfferNotFound);
         }
 
-        var poster = await LoadSettlementAsync(offerEntity.PosterSettlementId, cancellationToken).ConfigureAwait(false);
-        var acceptor = await LoadSettlementAsync(acceptorSettlementId, cancellationToken).ConfigureAwait(false);
-        if (poster?.World is null || acceptor?.World is null)
+        // Both sides trade from their linked realm's shared stock. The acceptor decides the clock; the poster's group is settled
+        // to the same instant, and when both settlements belong to one group the session is shared so it is written back once.
+        var acceptorSession = await _groups.LoadAsync(acceptorSettlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (acceptorSession is null)
         {
             return new TradeAcceptResult(TradeAcceptOutcome.SettlementNotFound);
         }
 
-        var clock = acceptor.World.ToClock();
-        if (!clock.AllowsCommands)
+        var posterSession = acceptorSession.Members.Any(m => m.Id == offerEntity.PosterSettlementId)
+            ? acceptorSession
+            : await _groups.LoadAsync(offerEntity.PosterSettlementId, acceptorSession.Now, ct: cancellationToken).ConfigureAwait(false);
+        if (posterSession is null)
+        {
+            return new TradeAcceptResult(TradeAcceptOutcome.SettlementNotFound);
+        }
+
+        if (!acceptorSession.Clock.AllowsCommands)
         {
             return new TradeAcceptResult(TradeAcceptOutcome.WorldPaused);
         }
 
-        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
-        var settledPoster = poster.ToDomain().SettleTo(now, poster.World.SpeedFactor).Settlement;
-        var settledAcceptor = acceptor.ToDomain().SettleTo(now, acceptor.World.SpeedFactor).Settlement;
+        var now = acceptorSession.Now;
+        var settledPoster = posterSession.View(offerEntity.PosterSettlementId);
+        var settledAcceptor = acceptorSession.View(acceptorSettlementId);
 
         // No Guild domain exists yet — see the remarks on this class. A
         // GuildOnly offer is therefore always rejected here with
@@ -222,15 +235,30 @@ public sealed class TradeService(
 
         if (!decision.Accepted)
         {
-            await PersistSettlementIfChangedAsync(poster, settledPoster, cancellationToken).ConfigureAwait(false);
-            await PersistSettlementIfChangedAsync(acceptor, settledAcceptor, cancellationToken).ConfigureAwait(false);
+            var changed = posterSession.WriteBack();
+            if (!ReferenceEquals(posterSession, acceptorSession))
+            {
+                changed |= acceptorSession.WriteBack();
+            }
+
+            if (changed)
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             return new TradeAcceptResult(TradeAcceptOutcome.Rejected, Rejection: decision.Rejection);
         }
 
         var paidAcceptor = TradeOffer.Accept(settledAcceptor, decision, now);
 
-        poster.ApplyDomain(settledPoster);
-        acceptor.ApplyDomain(paidAcceptor);
+        posterSession.Apply(offerEntity.PosterSettlementId, settledPoster);
+        acceptorSession.Apply(acceptorSettlementId, paidAcceptor);
+        posterSession.WriteBack();
+        if (!ReferenceEquals(posterSession, acceptorSession))
+        {
+            acceptorSession.WriteBack();
+        }
+
         offerEntity.State = TradeOfferState.Accepted;
 
         var toAcceptorEntity = ToEntity(decision.ToAcceptor!);
@@ -343,27 +371,32 @@ public sealed class TradeService(
     /// </summary>
     public async Task SettleDeliveriesAsync(Guid settlementId, CancellationToken cancellationToken = default)
     {
-        var settlement = await LoadSettlementAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        // Nothing in transit to this settlement: nothing to load or settle.
+        var inbound = await _dbContext.Shipments
+            .Where(s => s.ToSettlementId == settlementId && s.DeliveredAt == null)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        if (inbound.Count == 0)
         {
             return;
         }
 
-        var now = settlement.World.ToClock().ToGameTime(_timeProvider.GetUtcNow());
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
+        {
+            return;
+        }
+
+        var now = session.Now;
 
         // ArrivesAt is filtered client-side — see the same note in ListBoardAsync.
-        var due = (await _dbContext.Shipments
-            .Where(s => s.ToSettlementId == settlementId && s.DeliveredAt == null)
-            .ToListAsync(cancellationToken).ConfigureAwait(false))
-            .Where(s => s.ArrivesAt <= now)
-            .ToList();
-
+        var due = inbound.Where(s => s.ArrivesAt <= now).ToList();
         if (due.Count == 0)
         {
             return;
         }
 
-        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
+        // The cargo goes into the linked realm's shared stock.
+        var settled = session.View(settlementId);
         foreach (var shipment in due)
         {
             settled = settled with
@@ -374,12 +407,32 @@ public sealed class TradeService(
             shipment.DeliveredAt = now;
         }
 
-        settlement.ApplyDomain(settled);
+        session.Apply(settlementId, settled);
+        session.WriteBack();
+
+        // Touch every offer whose shipment lands here, in the same save. The
+        // poster's and the acceptor's settlements deliver in separate requests;
+        // without a shared row each would mark only its own shipment (in its
+        // own uncommitted transaction under READ COMMITTED), see the other one
+        // still undelivered in TryCompleteOfferAsync, and neither would
+        // complete the offer, leaving it Accepted forever. Both writing the
+        // offer row makes the second writer wait on the row lock, fail its
+        // version check and be retried by ConcurrentWriteExecutor, this time
+        // seeing both deliveries.
+        var offerIds = due.Select(s => s.OfferId).Distinct().ToList();
+        var offers = await _dbContext.TradeOffers
+            .Where(o => offerIds.Contains(o.Id))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var offer in offers)
+        {
+            offer.Version = Guid.NewGuid();
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Settlement {Id} received {Count} shipment(s).", settlementId, due.Count);
 
-        foreach (var offerId in due.Select(s => s.OfferId).Distinct())
+        foreach (var offerId in offerIds)
         {
             await TryCompleteOfferAsync(offerId, cancellationToken).ConfigureAwait(false);
         }
@@ -445,27 +498,31 @@ public sealed class TradeService(
     /// <summary>Flips this settlement's overdue open offers to Expired and refunds their escrow.</summary>
     private async Task SettleExpiriesAsync(Guid settlementId, CancellationToken cancellationToken)
     {
-        var settlement = await LoadSettlementAsync(settlementId, cancellationToken).ConfigureAwait(false);
-        if (settlement?.World is null)
+        var open = await _dbContext.TradeOffers
+            .Where(o => o.PosterSettlementId == settlementId && o.State == TradeOfferState.Open)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        if (open.Count == 0)
         {
             return;
         }
 
-        var now = settlement.World.ToClock().ToGameTime(_timeProvider.GetUtcNow());
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
+        {
+            return;
+        }
+
+        var now = session.Now;
 
         // ExpiresAt is filtered client-side — see the same note in ListBoardAsync.
-        var overdue = (await _dbContext.TradeOffers
-            .Where(o => o.PosterSettlementId == settlementId && o.State == TradeOfferState.Open)
-            .ToListAsync(cancellationToken).ConfigureAwait(false))
-            .Where(o => o.ExpiresAt <= now)
-            .ToList();
-
+        var overdue = open.Where(o => o.ExpiresAt <= now).ToList();
         if (overdue.Count == 0)
         {
             return;
         }
 
-        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
+        // The escrow goes back into the linked realm's shared stock.
+        var settled = session.View(settlementId);
         foreach (var offer in overdue)
         {
             settled = settled with
@@ -475,7 +532,8 @@ public sealed class TradeService(
             offer.State = TradeOfferState.Expired;
         }
 
-        settlement.ApplyDomain(settled);
+        session.Apply(settlementId, settled);
+        session.WriteBack();
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -505,15 +563,12 @@ public sealed class TradeService(
             .Include(s => s.Runes)
             .FirstOrDefaultAsync(s => s.Id == settlementId, cancellationToken);
 
-    private async Task PersistSettlementIfChangedAsync(
-        SettlementEntity entity, Settlement settled, CancellationToken cancellationToken)
+    /// <summary>Writes the session back and saves when settling changed anything: a real change worth keeping even if the request was refused.</summary>
+    private async Task SaveIfChangedAsync(LinkedGroupSession session, CancellationToken cancellationToken)
     {
-        if (settled.Resources.SettledAt == entity.SettledAt && settled.Queue.Count == entity.Queue.Count)
+        if (session.WriteBack())
         {
-            return;
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-
-        entity.ApplyDomain(settled);
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }

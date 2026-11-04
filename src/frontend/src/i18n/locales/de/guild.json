@@ -10,11 +10,6 @@
     "view": "Ansehen",
     "join": "Beitreten"
   },
-  "feeTier": {
-    "copper": "Kupfer",
-    "silver": "Silber",
-    "gold": "Gold"
-  },
   "role": {
     "leader": "Anführer",
     "officer": "Offizier",
@@ -36,25 +31,13 @@
     "leave": "Verlassen",
     "join": "Beitreten"
   },
-  "perks": {
-    "title": "Vorteile & Grenzwerte",
+  "caps": {
+    "title": "Obergrenzen",
     "memberCap": "Mitgliederhöchstzahl",
-    "peaceTreatyCap": "Höchstzahl Friedensverträge",
-    "tradeBonus": "Handelsbonus",
-    "unitSupport": "Einheitenunterstützung",
-    "yes": "Ja",
-    "no": "Nein",
-    "feeTierLabel": "Beitragsstufe:"
-  },
-  "fee": {
-    "overdue": "überfällig",
-    "paidUp": "bezahlt",
-    "status": "Dein Beitrag ist {status}.",
-    "payFee": "Beitrag zahlen"
+    "peaceTreatyCap": "Höchstzahl Friedensverträge"
   },
   "roster": {
     "title": "Mitgliederliste ({count})",
-    "overdue": "überfällig",
     "makeLeader": "Zum Anführer machen",
     "makeOfficer": "Zum Offizier machen",
     "demote": "Degradieren",

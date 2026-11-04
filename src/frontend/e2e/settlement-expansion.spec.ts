@@ -2,7 +2,7 @@ import { test, expect } from './fixtures';
 import { SettlementPage } from './pages';
 
 /**
- * Settlement expansion (issue #55) — settler crews, renown, and founding a
+ * Settlement expansion (issue #55) — settlers, renown, and founding a
  * second settlement.
  *
  * IMPORTANT SCOPE NOTE, read before extending this file: this repo's e2e
@@ -12,7 +12,7 @@ import { SettlementPage } from './pages';
  * `window.__demoWorld` directly rather than a real API call) exercises
  * `DEMO_MODE`'s client-only `WorldModel` simulation, never the real ASP.NET
  * backend. `ExpansionPanel.vue` (this issue's HUD panel) deliberately only
- * renders in live mode with a logged-in account — training settler crews,
+ * renders in live mode with a logged-in account — training settlers,
  * accruing renown, and dispatching/resolving a founding convoy are all real
  * backend concerns (a training queue that drips over game time, a renown
  * accrual that needs a world clock, a founding mission that needs A*
@@ -21,7 +21,7 @@ import { SettlementPage } from './pages';
  * army/movement system for the rest of the (also frontend-less, see
  * `ExpansionPanel.vue`'s own remarks) troop system either.
  *
- * A genuine golden-path run — train 3 settler crews, dispatch a founding
+ * A genuine golden-path run — train 5 settlers, dispatch a founding
  * mission, fast-forward past arrival, see the second settlement and switch
  * to it — needs an e2e harness that boots the real backend (a `webServer`
  * entry for `Bjarnoy.Api`, a throwaway database, a registered/logged-in

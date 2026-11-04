@@ -6,6 +6,7 @@ import { api, ApiError } from '../api/client';
 import type { ProfileResponse } from '../api/types';
 import type { MessageSchema } from '../i18n/schema';
 import { useAuthStore } from '../stores/auth';
+import { useUnsavedInput } from '../composables/useUnsavedInput';
 import HudPreferences from '../components/settings/HudPreferences.vue';
 import AnimationPreferences from '../components/settings/AnimationPreferences.vue';
 
@@ -97,6 +98,12 @@ async function saveBio() {
 const reportOpen = ref(false);
 const reportReason = ref('');
 const reportNote = ref('');
+useUnsavedInput(
+  () =>
+    (editingBio.value && bioDraft.value !== (profile.value?.bio ?? '')) ||
+    reportReason.value.trim() !== '' ||
+    reportNote.value.trim() !== '',
+);
 const reportSending = ref(false);
 const reportError = ref<string | null>(null);
 const reportDone = ref(false);

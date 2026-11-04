@@ -170,7 +170,7 @@ public enum BuildingType
     DruidHut = 23,
 
     /// <summary>
-    /// Trains the civilian Provisioner/SettlerCrew half of the roster in
+    /// Trains the civilian Provisioner/Settler half of the roster in
     /// place of the Longhouse (see
     /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>), plus a
     /// modest storage bonus. Behind a level-3 <see cref="StorageHouse"/> and
@@ -187,7 +187,7 @@ public enum BuildingType
     /// <summary>
     /// Iron, on plain bog moss (<see cref="World.BogTileKind.Bog"/>: not a shore, mouth, creek or lake) — the game's iron
     /// producer (<c>docs/design/economy.md</c> section 8, <c>docs/design/bog.md</c>). Boosted by the bog, creek and
-    /// lake hexes around it and, later, by the <see cref="Hammerschmiede"/>. Unlocks at Longhouse level 6 with no feeder.
+    /// lake hexes around it and, later, by the <see cref="Hammerschmiede"/>. Unlocks at Longhouse level 3 with no feeder.
     /// </summary>
     BogOreWorks = 26,
 
@@ -230,6 +230,21 @@ public enum BuildingType
     /// Palisade's unlock, prerequisite, costs and levels (one tech-tree card). Appended at the end so persisted integers do not shift.
     /// </summary>
     PalisadeGate = 31,
+
+    /// <summary>
+    /// A bridge on a wide river hex (<c>docs/design/economy.md</c> section 5): wide rivers are impassable to land armies until one
+    /// stands there. Four levels (causeway, footbridge, king's bridge, guarded bridge) that make the crossing slower, then quicker, then
+    /// free, then free for the owner and their friends only. Unlocks at Longhouse 7 behind a level-1 <see cref="TownSquare"/>. Appended at
+    /// the end so persisted integers do not shift.
+    /// </summary>
+    Bridge = 32,
+
+    /// <summary>
+    /// The Siege Workshop (<c>docs/design/economy.md</c> section 5): trains the battering ram, in place of the Longhouse
+    /// (<see cref="Units.UnitDefinition.RequiredBuildingType"/>). Five levels on grass or sand; unlocks at Longhouse 18 behind a
+    /// level-3 <see cref="ArcheryRange"/>. Appended at the end so persisted integers do not shift.
+    /// </summary>
+    SiegeWorkshop = 33,
 }
 
 public static class BuildingTypeExtensions
@@ -268,6 +283,8 @@ public static class BuildingTypeExtensions
         BuildingType.OdinStatue => "odinstatue",
         BuildingType.Palisade => "palisade",
         BuildingType.PalisadeGate => "palisadegate",
+        BuildingType.Bridge => "bridge",
+        BuildingType.SiegeWorkshop => "siegeworkshop",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

@@ -123,15 +123,11 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
 
         // --- Guided build 1: Reindeer Herder on the grass hex, via the REAL ring menu -----
         await LiveFrontendTestHelpers.ClickHexAsync(page, grassTile.Q, grassTile.R);
-        var farmBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Reindeer Herder" });
-        await Assertions.Expect(farmBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
-        await farmBubble.ClickAsync();
+        await LiveFrontendTestHelpers.BuildThroughRingAsync(page, "Resource", "Reindeer Herder");
 
         // --- Guided build 2: Lumberjack on the forest hex, via the ring menu ---
         await LiveFrontendTestHelpers.ClickHexAsync(page, forestTile.Q, forestTile.R);
-        var lumberjackBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Lumberjack" });
-        await Assertions.Expect(lumberjackBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
-        await lumberjackBubble.ClickAsync();
+        await LiveFrontendTestHelpers.BuildThroughRingAsync(page, "Resource", "Lumberjack");
 
         // Both queued against the real backend; startHudSync()'s poll picks
         // them up with no reload/click once the sped-up world resolves them
@@ -175,7 +171,7 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
         // asserted '/' from reading RegisterView.vue alone and failed
         // against this guard).
         await Assertions.Expect(page).ToHaveURLAsync(
-            new Regex(@"/settlement$"), new PageAssertionsToHaveURLOptions { Timeout = 10_000 });
+            new Regex(@"/settlement(#q=[^#]*)?$"), new PageAssertionsToHaveURLOptions { Timeout = 10_000 });
 
         var accountMenuTrigger = page.GetByTestId("account-menu-trigger");
         await Assertions.Expect(accountMenuTrigger).ToBeVisibleAsync(new() { Timeout = 10_000 });
@@ -200,6 +196,20 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
         Assert.Equal(settlement.Id.ToString(), membershipAfterClaim!.SettlementId);
 
         // --- Log out via the account menu ---------------------------------------
+        // Hold POST /auth/logout longer than the live polls' intervals
+        // (world.ts's ARMY_POLL_MS 2 s / LIVE_POLL_MS 4 s), so the polls that
+        // fire while logging out always run, not only when the round trip
+        // happens to be slow. They still read a claimed realm, which only
+        // answers to the account's JWT: logging out must not drop that token
+        // from the running page before the full reload replaces it, or each
+        // of them comes back 403 and shows up as a "Failed to load resource"
+        // console error below — the race this test used to hit only now and
+        // then.
+        await page.RouteAsync("**/api/v1/auth/logout", async route =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5));
+            await route.ContinueAsync();
+        });
         await accountMenuTrigger.ClickAsync();
         await Assertions.Expect(page.GetByTestId("account-menu")).ToBeVisibleAsync(new() { Timeout = 5_000 });
         await page.GetByTestId("account-menu-logout").ClickAsync();
@@ -228,7 +238,7 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
         // version, which cannot get past this step (no backend to restore
         // a realm from — see that spec's own comment).
         await Assertions.Expect(page).ToHaveURLAsync(
-            new Regex(@"/settlement$"), new PageAssertionsToHaveURLOptions { Timeout = 15_000 });
+            new Regex(@"/settlement(#q=[^#]*)?$"), new PageAssertionsToHaveURLOptions { Timeout = 15_000 });
         await Assertions.Expect(returningLoginPanel).Not.ToBeVisibleAsync();
         await Assertions.Expect(accountMenuTrigger).ToBeVisibleAsync(new() { Timeout = 10_000 });
 
@@ -236,6 +246,6 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
             $"/api/v1/worlds/{world.Id}/membership", cancellationToken);
         Assert.Equal(settlement.Id.ToString(), membershipAfterRelogin!.SettlementId);
 
-        Assert.Empty(consoleErrors);
+        Assert.True(consoleErrors.Count == 0, $"Unexpected console errors:\n{string.Join("\n", consoleErrors)}");
     }
 }

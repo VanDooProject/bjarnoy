@@ -629,7 +629,7 @@ internal static partial class RiverGenerator
             var trial = bp.Clone();
             trial.Paths.Add(path);
             trial.Merged.Add(merged);
-            var trialTiles = AssignWidths(BuildRiverTiles(trial), riverLand, seed, null, trial.RequireRiver);
+            var trialTiles = AssignWidths(BuildRiverTiles(trial), seed, null, trial.RequireRiver);
             var expected = new HashSet<HexCoord>(tiles.Select(t => t.Coord));
             for (var i = 0; i <= lastNew; i++)
             {

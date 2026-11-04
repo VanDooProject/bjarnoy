@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Settlers;
@@ -138,6 +139,18 @@ public class SettlementEntity
     /// <summary>Whether the garrison ever held the quest troops (<see cref="Settlement.TroopsTrained"/>).</summary>
     public bool TroopsTrained { get; set; }
 
+    /// <summary>
+    /// Optimistic-concurrency token (issue #341). Every request loads the
+    /// whole settlement, acts on a domain snapshot and writes it all back, so
+    /// without a token two overlapping requests silently overwrite each
+    /// other's stock, queue and garrison. <c>GameDbContext</c> replaces it with
+    /// a fresh value whenever the settlement <em>or any of its child rows</em>
+    /// changes, so a save from a stale read fails with
+    /// <c>DbUpdateConcurrencyException</c> and <c>ConcurrentWriteExecutor</c>
+    /// re-runs the request against fresh state.
+    /// </summary>
+    public Guid Version { get; set; }
+
     public ResourceAmounts Stock => new(StockWood, StockStone, StockFood, StockIron);
 
     public ResourceAmounts Rate => new(RateWood, RateStone, RateFood, RateIron);
@@ -148,6 +161,16 @@ public class SettlementEntity
     /// <summary>Maps a removed type that was merged into another onto its successor.</summary>
     private static BuildingType Merged(BuildingType type) =>
         type == BuildingType.FisherHut ? BuildingType.FishingHut : type;
+
+    /// <summary>
+    /// The hex <paramref name="army"/> departs from and returns to: <see cref="Army.HomeHex"/> over this settlement's centre
+    /// and (loaded) <see cref="Buildings"/>. The one place that maps stored settlement columns to an army's home hex.
+    /// </summary>
+    public HexCoord HomeHexFor(Army army, Func<HexCoord, Terrain> terrainAt)
+    {
+        ArgumentNullException.ThrowIfNull(army);
+        return army.HomeHex(new HexCoord(CentreQ, CentreR), Buildings.Select(b => b.ToPlacedBuilding()), terrainAt);
+    }
 
     /// <summary>Rebuilds the domain aggregate from the stored columns.</summary>
     public Settlement ToDomain() => new()
@@ -174,7 +197,8 @@ public class SettlementEntity
             .. Buildings
                 .Where(b => BuildingCatalogue.MaxLevelFor(Merged(b.Type)) > 0)
                 .OrderBy(b => b.Q).ThenBy(b => b.R)
-                .Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), Merged(b.Type), Math.Min(b.Level, BuildingCatalogue.MaxLevelFor(Merged(b.Type))))),
+                .Select(b => new PlacedBuilding(
+                    new HexCoord(b.Q, b.R), Merged(b.Type), Math.Min(b.Level, BuildingCatalogue.MaxLevelFor(Merged(b.Type))), b.OutsideRealmSince)),
         ],
         Queue =
         [
@@ -206,6 +230,7 @@ public class SettlementEntity
             .. TrainingQueue.OrderBy(o => o.StartedAt).Select(o => new TrainingOrder
             {
                 Id = o.Id,
+                BuildingCoord = new HexCoord(o.BuildingQ, o.BuildingR),
                 UnitType = o.UnitType,
                 Count = o.Count,
                 StartedAt = o.StartedAt,
@@ -299,12 +324,14 @@ public class SettlementEntity
                     R = placed.Coord.R,
                     Type = placed.Type,
                     Level = placed.Level,
+                    OutsideRealmSince = placed.OutsideRealmSince,
                 });
             }
             else
             {
                 existing.Type = placed.Type;
                 existing.Level = placed.Level;
+                existing.OutsideRealmSince = placed.OutsideRealmSince;
             }
         }
     }
@@ -395,6 +422,8 @@ public class SettlementEntity
             {
                 Id = order.Id,
                 SettlementId = Id,
+                BuildingQ = order.BuildingCoord.Q,
+                BuildingR = order.BuildingCoord.R,
                 UnitType = order.UnitType,
                 Count = order.Count,
                 StartedAt = order.StartedAt,
@@ -452,6 +481,15 @@ public class PlacedBuildingEntity
     public BuildingType Type { get; set; }
 
     public int Level { get; set; }
+
+    /// <summary>
+    /// Game instant the building's hex stopped being inside the player's realm (<see cref="PlacedBuilding.OutsideRealmSince"/>);
+    /// null while it is inside.
+    /// </summary>
+    public DateTimeOffset? OutsideRealmSince { get; set; }
+
+    /// <summary>The domain value of this building (stored columns as they are, no catalogue clamp).</summary>
+    public PlacedBuilding ToPlacedBuilding() => new(new HexCoord(Q, R), Type, Level, OutsideRealmSince);
 }
 
 /// <summary>A build in progress. Completes by clock; nothing advances it.</summary>
@@ -507,11 +545,16 @@ public class TrainingOrderEntity
 
     public SettlementEntity? Settlement { get; set; }
 
+    /// <summary>The hex of the building that trains this part.</summary>
+    public int BuildingQ { get; set; }
+
+    public int BuildingR { get; set; }
+
     public UnitType UnitType { get; set; }
 
     public int Count { get; set; }
 
-    /// <summary>Game instant, not wall time.</summary>
+    /// <summary>Game instant, not wall time. In the future while the building still trains earlier parts.</summary>
     public DateTimeOffset StartedAt { get; set; }
 
     /// <summary>Time to train a single unit; the batch trains one after another.</summary>

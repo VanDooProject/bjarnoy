@@ -5,7 +5,7 @@
 // SettlementCanvas components against a standalone, backend-free WorldModel
 // (same trick stores/world.ts's own DEMO_MODE model uses), so this page can
 // never go stale relative to what the live renderer actually looks like.
-import { computed, markRaw, ref, watch } from 'vue';
+import { computed, markRaw, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
@@ -17,6 +17,12 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import { hexDistance } from '../lib/hex/coords';
 import { WorldModel } from '../lib/map/WorldModel';
+import {
+  buildShowcaseVillage,
+  SHOWCASE_PREVIEW_RADIUS,
+  SHOWCASE_RENDER_RADIUS,
+  showcaseWorldFrame,
+} from '../lib/showcase/showcaseVillage';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
 import { buildingArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
 import type { AtlasFrameRect } from '../lib/map/atlas';
@@ -24,28 +30,51 @@ import type { AtlasFrameRect } from '../lib/map/atlas';
 const router = useRouter();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-// A familiar, known-good archipelago rather than a fresh roll on every page
-// load (stores/world.ts's demo seed until the island-density change moved it).
-const DEFAULT_SEED = 20260824;
+// A fixed, known-good archipelago rather than a fresh roll on every page load.
+// Picked by scoring 3000 seeds (20260000..20262999) on the "one view" frame, then
+// moved one seed on by hand when the river generator started meandering: its
+// island frames a big bog lake and moss land, a village between the rivers and
+// the coast (with a dockyard), a giant mountain and a sand coast.
+const DEFAULT_SEED = 20261824;
 // The whole default world: islands are ~150 hexes across and ~100+ apart, so a
 // small disc around the origin is usually open sea. Listing the labels costs
 // nothing like DEMO_MASK_RADIUS's fog mask (this page never fogs — see
-// `heroModel` below, no settlement is ever owned by the "showcase" player id).
+// `buildShowcase` below, the village belongs to its own owner id, never the "showcase" player id).
 const SHOWCASE_RADIUS = DEFAULT_GENERATION.worldRadius;
 const PLAYER_ID = 'showcase';
 
 const seed = ref(DEFAULT_SEED);
 
-function buildHeroModel(worldSeed: number): WorldModel {
+/**
+ * One model per seed, shared by both map frames: the whole archipelago (its
+ * labels cost nothing like DEMO_MASK_RADIUS's fog mask) plus a built-up village
+ * on the island nearest the origin (where the world-mode camera starts), so the
+ * hero map and the "one view" frame show the same place at two zooms. Building
+ * the world once also halves the (whole-world) island enumeration.
+ */
+function buildShowcase(worldSeed: number) {
   const model = new WorldModel(worldSeed);
-  model.setIslands(enumerateIslands({ seed: worldSeed, generation: DEFAULT_GENERATION }, SHOWCASE_RADIUS));
-  return model;
+  const islands = enumerateIslands({ seed: worldSeed, generation: DEFAULT_GENERATION }, SHOWCASE_RADIUS);
+  model.setIslands(islands);
+  const nearest = islands.reduce<(typeof islands)[number] | undefined>(
+    (best, island) =>
+      !best || hexDistance({ q: 0, r: 0 }, island) < hexDistance({ q: 0, r: 0 }, best) ? island : best,
+    undefined,
+  );
+  const { frameCenter: center } = buildShowcaseVillage(model, nearest ?? { q: 0, r: 0 }, worldSeed);
+  // `markRaw`: same reasoning as stores/world.ts's own model — a plain class
+  // meant to be read directly by the renderer, not walked by Vue's reactivity
+  // proxy on every tile access.
+  return { model: markRaw(model), center };
 }
 
-// `markRaw`: same reasoning as stores/world.ts's own model — a plain class
-// meant to be read directly by the renderer, not walked by Vue's reactivity
-// proxy on every tile access.
-const heroModel = ref(markRaw(buildHeroModel(seed.value)));
+const showcase = ref(buildShowcase(seed.value));
+const heroModel = computed(() => showcase.value.model);
+// The village site on the generated island: the "one view" frame previews it.
+const islandCenter = computed(() => showcase.value.center);
+// The hero map is capped to the village island and a margin of sea (see showcaseWorldFrame): the camera starts
+// fitted to that disc and can neither leave nor zoom out of it.
+const worldFrame = computed(() => showcaseWorldFrame(heroModel.value, islandCenter.value));
 
 // useHexMapRenderer captures its options once at mount (see
 // SettlementCanvas.vue's own comment on `mode`) — a `:key="seed"` on the
@@ -53,39 +82,23 @@ const heroModel = ref(markRaw(buildHeroModel(seed.value)));
 // the model out from under it.
 function reroll() {
   seed.value = Math.floor(Math.random() * 2 ** 31);
-  heroModel.value = markRaw(buildHeroModel(seed.value));
+  showcase.value = buildShowcase(seed.value);
 }
 
-// "One view" section: a second, independent standalone model (same seed,
-// so it's the same archipelago the hero frame shows) previewing its first
-// island — same pattern LandingView.vue uses pre-founding. The hero map pans
-// to that same island, so the two frames read as one island at two zooms.
-const villageModel = computed(() => markRaw(buildHeroModel(seed.value)));
-const islandCenter = computed(() => {
-  const islands = enumerateIslands({ seed: seed.value, generation: DEFAULT_GENERATION }, SHOWCASE_RADIUS);
-  // The island nearest the origin, which is where the world-mode camera starts.
-  const nearest = islands.reduce<(typeof islands)[number] | undefined>(
-    (best, island) =>
-      !best || hexDistance({ q: 0, r: 0 }, island) < hexDistance({ q: 0, r: 0 }, best) ? island : best,
-    undefined,
-  );
-  return nearest ? { q: nearest.q, r: nearest.r } : { q: 0, r: 0 };
+// e2e (showcase.spec.ts): a read-only accessor for the hero renderer's camera math and the cap it was given,
+// the same kind of hook LandingView/MapView install as `__settlementRenderer`.
+const heroCanvas = ref<InstanceType<typeof WorldMapCanvas> | null>(null);
+type HeroHookWindow = { __showcaseHero?: () => unknown };
+onMounted(() => {
+  (window as HeroHookWindow).__showcaseHero = () => ({ renderer: heroCanvas.value?.renderer, frame: worldFrame.value });
+});
+onUnmounted(() => {
+  delete (window as HeroHookWindow).__showcaseHero;
 });
 
-// The world-mode camera always starts at (0, 0), which for most seeds is open
-// sea — recentre on the showcased island once the renderer has mounted (it's
-// only set after the async Pixi init, hence a watch rather than onMounted).
-const heroCanvas = ref<InstanceType<typeof WorldMapCanvas> | null>(null);
-watch(
-  () => heroCanvas.value?.renderer,
-  (renderer) => renderer?.panTo(islandCenter.value),
-);
-
-// The map frames sit in a scrolling page, but the renderer claims every
-// wheel/touch gesture over its canvas (zoom, pan, pinch). Until the visitor
-// opts in, the frames are pointer-transparent so scrolling past them works —
-// the usual "click to interact" pattern for maps embedded in a page.
-const exploring = ref(false);
+// Both map frames are interactive from the start and confined to their area (`confine-camera`), so the
+// visitor can pan and zoom freely without leaving it. The hero map sits in the scrolling page and passes
+// `allow-page-scroll`: a plain wheel or a vertical swipe over it scrolls the page, a drag pans.
 
 function goPlay() {
   router.push('/');
@@ -158,7 +171,6 @@ const ENGINEERING: EngineeringCard[] = [
         <div class="hero-copy">
           <div class="eyebrow">{{ t('showcase.hero.eyebrow') }}</div>
           <h1>{{ t('showcase.hero.title') }}</h1>
-          <p class="tagline">{{ t('showcase.hero.tagline') }}</p>
           <p class="pitch">{{ t('showcase.hero.pitch') }}</p>
           <div class="cta-row">
             <button type="button" class="cta primary" @click="goPlay">{{ t('showcase.hero.playCta') }}</button>
@@ -166,11 +178,17 @@ const ENGINEERING: EngineeringCard[] = [
           </div>
         </div>
         <div class="hero-map">
-          <div class="map-frame" :class="{ exploring }">
-            <WorldMapCanvas ref="heroCanvas" :key="seed" :world-model="heroModel" :player-id="PLAYER_ID" />
-            <button type="button" class="explore" @click="exploring = !exploring">
-              {{ exploring ? t('showcase.hero.exploreDone') : t('showcase.hero.explore') }}
-            </button>
+          <div class="map-frame frame">
+            <WorldMapCanvas
+              ref="heroCanvas"
+              :key="seed"
+              :world-model="heroModel"
+              :player-id="PLAYER_ID"
+              :preview-center="worldFrame.center"
+              :preview-radius="worldFrame.radius"
+              confine-camera
+              allow-page-scroll
+            />
           </div>
           <div class="map-meta">
             <span class="seed">{{ t('showcase.hero.seed', { seed }) }}</span>
@@ -181,13 +199,16 @@ const ENGINEERING: EngineeringCard[] = [
 
       <!-- One view -->
       <section id="one-view" class="one-view">
-        <div class="one-view-frame">
+        <div class="one-view-frame frame">
           <SettlementCanvas
             :key="seed"
-            :world-model="villageModel"
+            :world-model="heroModel"
             :player-id="PLAYER_ID"
             :preview-center="islandCenter"
-            lock-camera
+            :preview-radius="SHOWCASE_PREVIEW_RADIUS"
+            :preview-render-radius="SHOWCASE_RENDER_RADIUS"
+            preview-sea
+            confine-camera
             hide-settlement-badge
             background="radial-gradient(120% 100% at 68% 42%, #16414f 0%, #0d2530 55%, #0b1116 100%)"
           />
@@ -227,7 +248,7 @@ const ENGINEERING: EngineeringCard[] = [
           </div>
         </div>
         <div class="doc-links">
-          <RouterLink to="/tech-tree" class="doc-link">{{ t('showcase.engineering.techTreeLink') }}</RouterLink>
+          <RouterLink to="/docs/tech-tree" class="doc-link">{{ t('showcase.engineering.techTreeLink') }}</RouterLink>
           <RouterLink to="/docs/tiles" class="doc-link">{{ t('showcase.engineering.tileDocsLink') }}</RouterLink>
         </div>
       </section>
@@ -287,12 +308,7 @@ section {
 }
 .hero-copy h1 {
   font-size: clamp(32px, 5vw, 52px);
-  margin: 8px 0 4px;
-}
-.tagline {
-  font-size: 18px;
-  color: var(--gold);
-  margin: 0 0 12px;
+  margin: 8px 0 16px;
 }
 .pitch {
   color: var(--muted);
@@ -331,37 +347,15 @@ section {
   flex-direction: column;
   gap: 8px;
 }
-.map-frame {
+/* Both map frames (hero world map, "one view" settlement) share one size and look. */
+.frame {
   position: relative;
-  height: 60vh;
-  min-height: 320px;
+  height: 48vh;
+  min-height: 280px;
   border-radius: 16px;
   overflow: hidden;
   border: 1px solid var(--panel-border);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
-}
-/* See `exploring` in the script: the canvas ignores the pointer until opted in. */
-.map-frame:not(.exploring) :deep(.map-container),
-.one-view-frame :deep(.map-container) {
-  pointer-events: none;
-}
-.explore {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  border-radius: 999px;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  font-family: inherit;
-  background: rgba(11, 17, 22, 0.8);
-  color: var(--text);
-  border: 1px solid var(--panel-border);
-}
-.explore:hover {
-  border-color: var(--gold);
-  color: var(--gold);
 }
 .map-meta {
   display: flex;
@@ -401,15 +395,6 @@ section {
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
     align-items: center;
   }
-}
-.one-view-frame {
-  position: relative;
-  height: 48vh;
-  min-height: 280px;
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid var(--panel-border);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
 }
 .one-view-copy h2 {
   margin: 0 0 10px;

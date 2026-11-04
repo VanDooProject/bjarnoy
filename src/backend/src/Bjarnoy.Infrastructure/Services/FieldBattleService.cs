@@ -74,8 +74,9 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
             return false;
         }
 
-        var homeA = new HexCoord(army.Settlement!.CentreQ, army.Settlement.CentreR);
-        var worldId = army.Settlement.WorldId;
+        var worldId = army.Settlement!.WorldId;
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World!, cancellationToken).ConfigureAwait(false);
+        var homeA = army.Settlement.HomeHexFor(domain, sampler.TerrainAt);
 
         var candidates = await _dbContext.Armies
             .Include(a => a.Stacks)
@@ -106,7 +107,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
                 continue;
             }
 
-            var homeB = new HexCoord(other.Settlement.CentreQ, other.Settlement.CentreR);
+            var homeB = other.Settlement.HomeHexFor(otherDomain, sampler.TerrainAt);
             var meeting = MovementOccupancy.EarliestMeeting(movement, otherMovement, homeA, homeB);
             if (meeting is not { } found || found.At > now)
             {
@@ -134,12 +135,13 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         }
 
         var giants = await LoadGiantIndexAsync(worldId, cancellationToken).ConfigureAwait(false);
+        var realms = await PlayerRealms.ForWorldAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
         var bog = await WorldTerrain.OverlayAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
         var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
-        var walls = await WorldPalisades.IndexAsync(
+        var walls = await WorldBridges.RouteIndexAsync(
             _dbContext, worldId, new TerrainSampler(army.Settlement!.World!.ToGenerationOptions()).WithBogOverlay(bog).TerrainAt,
             rivers.IsWide, cancellationToken).ConfigureAwait(false);
-        Resolve(army, domain, movement, chosen.Other, chosen.OtherDomain, chosen.OtherMovement, chosen.Hex, chosen.At, giants, bog, rivers, walls);
+        Resolve(army, domain, movement, chosen.Other, chosen.OtherDomain, chosen.OtherMovement, chosen.Hex, chosen.At, giants, bog, rivers, walls, realms);
         return true;
     }
 
@@ -181,7 +183,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (!ConcurrentWriteExecutor.IsRetryable(ex))
         {
             _dbContext.Entry(claim).State = EntityState.Detached;
             return false;
@@ -217,12 +219,14 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         ArmyEntity armyA, Army domainA, Movement movementA,
         ArmyEntity armyB, Army domainB, Movement movementB,
         HexCoord hex, DateTimeOffset at, IGiantIndex giants, IReadOnlyDictionary<HexCoord, Terrain> bog,
-        RiverIndex rivers, PalisadeIndex walls)
+        RiverIndex rivers, LandRouteIndex walls, IReadOnlyDictionary<Guid, ConnectedRealm> realms)
     {
         var claimA = FieldBattleResolver.ClaimAt(
-            hex, new HexCoord(armyA.Settlement!.CentreQ, armyA.Settlement.CentreR), ToPlacedBuildings(armyA.Settlement.Buildings), giants);
+            hex, new HexCoord(armyA.Settlement!.CentreQ, armyA.Settlement.CentreR), armyA.Settlement.Buildings.Select(b => b.ToPlacedBuilding()).ToList(), giants,
+            realms.GetValueOrDefault(armyA.Settlement.Id), armyA.Settlement.Id);
         var claimB = FieldBattleResolver.ClaimAt(
-            hex, new HexCoord(armyB.Settlement!.CentreQ, armyB.Settlement.CentreR), ToPlacedBuildings(armyB.Settlement.Buildings), giants);
+            hex, new HexCoord(armyB.Settlement!.CentreQ, armyB.Settlement.CentreR), armyB.Settlement.Buildings.Select(b => b.ToPlacedBuilding()).ToList(), giants,
+            realms.GetValueOrDefault(armyB.Settlement.Id), armyB.Settlement.Id);
 
         var seed = BitConverter.ToInt32(ClaimId(armyA.Id, armyB.Id, at).ToByteArray(), 0);
 
@@ -278,10 +282,10 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         SettlementEntity? loserSettlement,
         Army domain, HexCoord hex, DateTimeOffset at,
         IReadOnlyList<UnitStack> survivors, ResourceAmounts lootTakenFromThisSide,
-        IReadOnlyDictionary<HexCoord, Terrain> bog, RiverIndex rivers, PalisadeIndex walls)
+        IReadOnlyDictionary<HexCoord, Terrain> bog, RiverIndex rivers, LandRouteIndex walls)
     {
         var loserSampler = new TerrainSampler(loserSettlement!.World!.ToGenerationOptions()).WithBogOverlay(bog);
-        var home = new HexCoord(loserSettlement.CentreQ, loserSettlement.CentreR);
+        var home = loserSettlement.HomeHexFor(domain, loserSampler.TerrainAt);
 
         var afterLosses = domain with
         {
@@ -292,7 +296,4 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         return afterLosses.ForceFieldRetreat(at, hex, home, loserSampler.TerrainAt, loserSettlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide,
             walls.ForOwner(WorldPalisades.OwnerKeyOf(loserSettlement.UserId, loserSettlement.Id)));
     }
-
-    private static IReadOnlyList<PlacedBuilding> ToPlacedBuildings(IEnumerable<PlacedBuildingEntity> buildings) =>
-        [.. buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level))];
 }

@@ -847,9 +847,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<DateTimeOffset?>("DisbandedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("FeeTier")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -878,9 +875,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("FeePaidThroughAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("GuildId")
                         .HasColumnType("uuid");
@@ -958,6 +952,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("CentreR")
                         .HasColumnType("integer");
 
+                    b.Property<string>("FogChunks")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("Giants")
                         .IsRequired()
                         .HasColumnType("text");
@@ -967,6 +965,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<bool>("IsWasted")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("JotunTowers")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -983,6 +985,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<int>("TileCount")
                         .HasColumnType("integer");
+
+                    b.Property<string>("UtgardWalls")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<Guid>("WorldId")
                         .HasColumnType("uuid");
@@ -1147,6 +1153,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<int>("Level")
                         .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("OutsideRealmSince")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Q")
                         .HasColumnType("integer");
@@ -1411,6 +1420,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("WorldId")
                         .HasColumnType("uuid");
 
@@ -1518,6 +1531,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("State")
                         .HasColumnType("integer");
 
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("WorldId")
                         .HasColumnType("uuid");
 
@@ -1581,6 +1598,12 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
+
+                    b.Property<int>("BuildingQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BuildingR")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Count")
                         .HasColumnType("integer");
@@ -1838,6 +1861,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasColumnType("double precision");
 
                     b.Property<bool>("FrozenIslesEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("Hidden")
                         .HasColumnType("boolean");
 
                     b.Property<int>("IslandCellSize")

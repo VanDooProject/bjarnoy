@@ -6,6 +6,15 @@
     "cta": "Jarl benennen",
     "later": "Später"
   },
+  "motionPrompt": {
+    "eyebrow": "Animationen reduziert",
+    "title": "Mit Animationen spielen?",
+    "body": "Dein Gerät wünscht weniger Bewegung, deshalb stehen Menüs und Karte still.",
+    "turnOn": "Einschalten",
+    "keep": "Reduziert lassen",
+    "close": "Schließen",
+    "footer": "Jederzeit änderbar: Profil → Grafik"
+  },
   "returningLogin": {
     "eyebrow": "Dein Reich wartet",
     "title": "Willkommen zurück, {name}",

@@ -83,7 +83,7 @@ public static class LiveFrontendTestHelpers
     /// </summary>
     public static async Task FoundStartingSettlementAsync(IPage page, string frontendUrl)
     {
-        await page.GotoAsync(frontendUrl, new PageGotoOptions { Timeout = 120_000 });
+        await page.GotoAsync($"{frontendUrl}#no-intro", new PageGotoOptions { Timeout = 120_000 });
 
         // This is the bug FoundingSettlementPersistenceTests exists for:
         // DemoModeBadge.vue only renders while config.ts's DEMO_MODE is true,
@@ -204,7 +204,30 @@ public static class LiveFrontendTestHelpers
                 + $"Hero status: [{string.Join(" | ", heroStatus)}]. "
                 + $"Recent console messages: [{string.Join(" | ", recentConsole)}]");
         }
+
+        // Founding starts the renderer's founding ease (animateCameraTo):
+        // until it lands every hex's hexCenterScreen is still sliding toward
+        // the settlement framing, so a caller that reads a hex's screen point
+        // right after this returns (ClickHexAsync) and clicks it hits
+        // whatever hex has moved under that point by then — the ring opens on
+        // the wrong hex or not at all. Same wait as the demo suite's
+        // e2e/helpers.ts claimLandfall: no preview and not animating is the
+        // settled camera.
+        await page.WaitForFunctionAsync(SettledCameraScript, null, new() { Timeout = 15_000 });
     }
+
+    /// <summary>
+    /// Whether the founding hand-off has finished on the canvas:
+    /// <c>previewCenter</c> is cleared by the same <c>updateOptions</c> call
+    /// that starts the camera ease, so no preview and not animating means the
+    /// camera has settled on the new settlement.
+    /// </summary>
+    private const string SettledCameraScript = """
+        () => {
+          const renderer = window.__settlementRenderer?.();
+          return !!renderer && !renderer.previewCenter && !renderer.cameraAnimating;
+        }
+        """;
 
     /// <summary>
     /// Clicks the hex at axial <paramref name="q"/>/<paramref name="r"/> —
@@ -231,6 +254,28 @@ public static class LiveFrontendTestHelpers
             """,
             new { q, r });
         await page.Mouse.ClickAsync(box.X + (float)point[0], box.Y + (float)point[1]);
+    }
+
+    /// <summary>
+    /// Builds <paramref name="building"/> through the open ring menu the way a player does: the Build hub, then
+    /// <paramref name="category"/>, then the building bubble. The onboarding ring is the map's own two-lane ring
+    /// (<c>useBuildRing</c>), so a building is never on the first layer. Waits for each layer swap to land, as
+    /// RingMenu ignores navigation clicks until it has.
+    /// </summary>
+    public static async Task BuildThroughRingAsync(IPage page, string category, string building)
+    {
+        var swapped = page.Locator(".ring-backdrop:not([data-swapping])");
+        var build = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Build" }).First;
+        await Assertions.Expect(build).ToBeVisibleAsync(new() { Timeout = 10_000 });
+        await build.ClickAsync();
+        await Assertions.Expect(swapped).ToHaveCountAsync(1);
+        var categoryBubble = page.Locator(".ring-bubble:not(.back):not(.child)", new PageLocatorOptions { HasText = category }).First;
+        await Assertions.Expect(categoryBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
+        await categoryBubble.ClickAsync();
+        await Assertions.Expect(swapped).ToHaveCountAsync(1);
+        var buildingBubble = page.Locator(".ring-bubble.child", new PageLocatorOptions { HasText = building }).First;
+        await Assertions.Expect(buildingBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
+        await buildingBubble.ClickAsync();
     }
 
     /// <summary>

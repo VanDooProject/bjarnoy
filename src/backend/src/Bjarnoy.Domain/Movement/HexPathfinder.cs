@@ -99,24 +99,36 @@ public static class HexPathfinder
     public const double RiverCrossingCost = 8.0;
 
     /// <summary>
-    /// What a land army pays to enter a palisade hex that is half open (a land end of a wall that touches no mountain or wide river), in
-    /// place of its terrain cost: passable for every army at this flat cost (<c>docs/design/economy.md</c> section 5). Above every
-    /// terrain cost but the stream's, so an open way round is preferred over wading through the gap.
+    /// What a land army pays on top of the ground's own cost to enter a palisade hex that is half open (a land end of a wall that
+    /// touches no mountain or wide river): passable for every army at ground + this (grass 1.0 -> 4.0, forest 1.3 -> 4.3, bog 2.0 -> 5.0;
+    /// a stream under the end 9.0 -> 12.0) (<c>docs/design/economy.md</c> section 5). The surcharge alone is above every terrain cost
+    /// but the stream's, so an open way round is preferred over wading through the gap.
     /// </summary>
     public const double HalfOpenEndCost = 3.0;
+
+    /// <summary>Extra cost, on top of the base 1.0 step, of crossing a wide river over a level-1 bridge (the causeway): slower than any terrain, quicker than wading a stream.</summary>
+    public const double CausewayCrossingCost = 5.0;
+
+    /// <summary>Extra cost, on top of the base 1.0 step, of crossing a wide river over a level-2 bridge (the footbridge).</summary>
+    public const double FootbridgeCrossingCost = 3.0;
+
+    /// <summary>The cost of entering a land terrain, or <see langword="null"/> for one a land army cannot enter (sea, lakes).</summary>
+    internal static double? LandTerrainCostOf(Terrain terrain) =>
+        LandTerrainCost.TryGetValue(terrain, out var cost) ? cost : null;
 
     /// <summary>
     /// What a land army pays to enter a hex, or <see langword="null"/> if it cannot: the single
     /// rule both <see cref="FindPath"/> and <see cref="CumulativeHours"/> price a step with, in the same precedence as the frontend's
     /// <c>stepCost</c> (hexPath.ts): sea and lakes are not in the cost table; a wide river is impassable; a stream is a flat
     /// <c>1.0 + <see cref="RiverCrossingCost"/></c> over any land terrain (mountain included); a plain mountain is impassable; a
-    /// <paramref name="halfOpen"/> palisade end costs <see cref="HalfOpenEndCost"/>; a <paramref name="blocked"/> hex (a palisade) is
+    /// <paramref name="halfOpen"/> palisade end costs its ground (a stream's flat price included) plus <see cref="HalfOpenEndCost"/>; a <paramref name="blocked"/> hex (a palisade) is
     /// impassable unless <paramref name="friendlyGate"/> holds for it; anything else costs its terrain.
     /// </summary>
     private static double? LandStepCost(
         HexCoord hex, Func<HexCoord, Terrain> terrainAt, Func<HexCoord, bool>? isRiver,
         Func<HexCoord, bool>? isWideRiver, Func<HexCoord, bool>? blocked,
-        Func<HexCoord, bool>? friendlyGate = null, Func<HexCoord, bool>? halfOpen = null)
+        Func<HexCoord, bool>? friendlyGate = null, Func<HexCoord, bool>? halfOpen = null,
+        Func<HexCoord, double?>? bridgeCost = null)
     {
         var terrain = terrainAt(hex);
         if (!LandTerrainCost.TryGetValue(terrain, out var cost))
@@ -129,10 +141,11 @@ public static class HexPathfinder
         {
             if (isWideRiver is not null && isWideRiver(hex))
             {
-                return null;
+                // A wide river is shut unless a bridge stands on it that this army may cross (the bridge's own price).
+                return bridgeCost?.Invoke(hex);
             }
 
-            return 1.0 + RiverCrossingCost;
+            return 1.0 + RiverCrossingCost + (halfOpen is not null && halfOpen(hex) ? HalfOpenEndCost : 0.0);
         }
 
         if (terrain == Terrain.Mountain)
@@ -142,7 +155,7 @@ public static class HexPathfinder
 
         if (halfOpen is not null && halfOpen(hex))
         {
-            return HalfOpenEndCost;
+            return cost + HalfOpenEndCost;
         }
 
         if (blocked is not null && blocked(hex) && !(friendlyGate is not null && friendlyGate(hex)))
@@ -185,13 +198,14 @@ public static class HexPathfinder
     /// <em>except</em> at the two endpoints: a settlement's own hex is always
     /// land, even a coastal one's, so a fleet's <paramref name="from"/>
     /// (its home harbor) and <paramref name="to"/> (an
-    /// <see cref="Armies.ArmyMission.Attack"/>/<see cref="Armies.ArmyMission.Support"/>
-    /// target's centre) are exempt from the sea-only rule — the search still
-    /// requires every hex in between to be real open sea, so a fleet with no
-    /// adjacent sea at all (impossible in practice — issue #40 phase 6 §4
-    /// requires a coastal settlement to train ships in the first place) or a
-    /// target with no shoreline hex to beach on (see
-    /// <see cref="World.Shoreline"/>) still fails to find a route.
+    /// <see cref="Armies.ArmyMission.Support"/> target's centre, or the shore building an
+    /// <see cref="Armies.ArmyMission.Attack"/>/<see cref="Armies.ArmyMission.Raid"/> is sent at) are exempt from the sea-only rule — the search still
+    /// requires every hex in between to be real open sea, so a start with no
+    /// adjacent sea at all or a target with no shoreline hex to beach on (see
+    /// <see cref="World.Shoreline"/>) still fails to find a route. Training
+    /// ships only checks that the settlement's claim touches the shore, so a
+    /// fleet does not necessarily start from the settlement's centre: it starts
+    /// from the settlement's harbour hex (<see cref="Armies.Army.FleetAnchor(HexCoord, IEnumerable{Buildings.PlacedBuilding}, Func{HexCoord, Terrain})"/>).
     /// </param>
     /// <param name="isRiver">
     /// Optional river-tile lookup (issue #159 part A) — a land unit's step
@@ -219,6 +233,11 @@ public static class HexPathfinder
     /// Optional: hexes any army may enter at <see cref="HalfOpenEndCost"/> instead of their terrain cost (a palisade's half-open land
     /// end); <paramref name="blocked"/> is not consulted for them. <see langword="null"/> (the default) means none.
     /// </param>
+    /// <param name="bridgeCost">
+    /// Optional: the price of entering a wide-river hex over a bridge this army may cross (<see cref="BridgeIndex.ForOwner"/>), or
+    /// <see langword="null"/> for a hex it may not (no bridge, or a guarded one of strangers). Only consulted for wide-river hexes, which stay
+    /// impassable without it; streams are unaffected. <see langword="null"/> (the default) opens no wide river. Every price is &gt;= 1.0.
+    /// </param>
     /// <returns>
     /// The route, or <see langword="null"/> when there is none — which, for a land army, now
     /// includes a target walled in by mountains or wide rivers.
@@ -227,7 +246,7 @@ public static class HexPathfinder
         HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt, bool isLandUnit,
         Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null,
         Func<HexCoord, bool>? blocked = null, Func<HexCoord, bool>? friendlyGate = null,
-        Func<HexCoord, bool>? halfOpen = null)
+        Func<HexCoord, bool>? halfOpen = null, Func<HexCoord, double?>? bridgeCost = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
@@ -298,7 +317,7 @@ public static class HexPathfinder
                 double stepCost;
                 if (isLandUnit)
                 {
-                    if (LandStepCost(neighbour, terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen) is not { } landCost)
+                    if (LandStepCost(neighbour, terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost) is not { } landCost)
                     {
                         continue;
                     }
@@ -389,10 +408,12 @@ public static class HexPathfinder
     /// <param name="blocked">Same palisade lookups <see cref="FindPath"/> takes (<paramref name="blocked"/>, <paramref name="friendlyGate"/>, <paramref name="halfOpen"/>): a half-open end is charged <see cref="HalfOpenEndCost"/>, so the hours match the route that was chosen.</param>
     /// <param name="friendlyGate">See <paramref name="blocked"/>.</param>
     /// <param name="halfOpen">See <paramref name="blocked"/>.</param>
+    /// <param name="bridgeCost">See <see cref="FindPath"/>'s: a bridged wide-river hex is charged the bridge's price.</param>
     public static IReadOnlyList<double> CumulativeHours(
         IReadOnlyList<HexCoord> path, Func<HexCoord, Terrain> terrainAt, double hexesPerHour, bool isLandUnit = true,
         double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null,
-        Func<HexCoord, bool>? blocked = null, Func<HexCoord, bool>? friendlyGate = null, Func<HexCoord, bool>? halfOpen = null)
+        Func<HexCoord, bool>? blocked = null, Func<HexCoord, bool>? friendlyGate = null, Func<HexCoord, bool>? halfOpen = null,
+        Func<HexCoord, double?>? bridgeCost = null)
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(terrainAt);
@@ -425,7 +446,7 @@ public static class HexPathfinder
             double stepCost;
             if (isLandUnit)
             {
-                stepCost = LandStepCost(path[i], terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen) ?? double.PositiveInfinity;
+                stepCost = LandStepCost(path[i], terrainAt, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost) ?? double.PositiveInfinity;
             }
             else
             {

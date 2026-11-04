@@ -69,8 +69,11 @@ Showcase renders are docs art and never load in the game.
 The setting is **per device** (localStorage `bjarnoy.animations`), not per
 account: the same player may want animations on a desktop and not on a
 phone. It is in the Settings dialog on the player's own profile (Graphics →
-Map animations), next to a line saying what it currently resolves to and
-why.
+Building animations), next to a line saying what it currently resolves to and
+why. Water motion, fog drift and menu animations sit beside it (localStorage
+`bjarnoy.motion.water|fog|hud`): each is Auto/On/Off, where Auto follows the
+device's own "reduce motion" setting (shown at the top of the section) and Off
+freezes water/fog in place rather than hiding them.
 
 | Setting | Result |
 | --- | --- |
@@ -113,13 +116,18 @@ Docs pages (the tile docs, the wasted lands page) play their own clips with
 `useAnimationClock`: frozen under Off, and under reduced motion unless the
 setting is On. They don't run the fps governor.
 
-## Hidden tabs
+## Hidden tabs and covered maps
 
 The Pixi ticker stops when the tab is hidden (`document.hidden`) and starts
 again when it is visible, so a background tab doesn't render, advance clips
 or rebuild. A tab that is visible but not focused (another window in front,
 a second monitor) keeps rendering and animating: that is a player watching
 the map.
+
+The ticker also stops while a phone-size route modal (profile, reports,
+leaderboards, ...) covers the whole screen with an opaque panel, and starts
+again when it closes (`useMapCover` -> `HexMapRenderer.setCovered`). A desktop
+modal leaves the map visible behind its backdrop and keeps it running.
 
 The fps governor ignores frames while hidden and restarts its current
 window when the tab comes back, so neither the throttled frames a browser
@@ -134,6 +142,17 @@ gzipped), and the API serves the built frontend through `MapStaticAssets`,
 which precompresses static assets with gzip and brotli at publish time
 (`deploy/Dockerfile` copies `dist/` into `wwwroot` before `dotnet publish`
 for exactly this reason).
+
+## World generation
+
+In a live world the client computes only the per-hex terrain itself (`terrainAt`/`generateTile`: sea, sand, grass,
+forest, mountain, plus each hex's look) from the world seed and its generation constants. Everything built per island
+(rivers, bogs, giants, camps, endgame sites) is generated once by the server when the world is created, stored, and
+sent with `GET /worlds/{id}/islands`. The cost of those passes lands on world creation, not on the player's device.
+Per-hex terrain costs about 1 µs per hex on a desktop CPU (spine chains and groves, measured 2026-11-01; 0.6 µs before).
+
+Demo mode is a dev tool, not a target for performance work. It has no server, so it runs the per-island passes on the
+client when you land; a large island can take seconds there, and that is accepted.
 
 ## Possible next steps
 

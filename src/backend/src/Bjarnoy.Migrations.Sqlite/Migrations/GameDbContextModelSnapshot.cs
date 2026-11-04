@@ -842,9 +842,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset?>("DisbandedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("FeeTier")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -872,9 +869,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GuildMembershipEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset?>("FeePaidThroughAt")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("GuildId")
@@ -953,6 +947,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("CentreR")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("FogChunks")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Giants")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -962,6 +960,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<bool>("IsWasted")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("JotunTowers")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -978,6 +980,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<int>("TileCount")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("UtgardWalls")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("WorldId")
                         .HasColumnType("TEXT");
@@ -1142,6 +1148,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<int>("Level")
                         .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset?>("OutsideRealmSince")
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Q")
                         .HasColumnType("INTEGER");
@@ -1406,6 +1415,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("WorldId")
                         .HasColumnType("TEXT");
 
@@ -1513,6 +1526,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("State")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("WorldId")
                         .HasColumnType("TEXT");
 
@@ -1576,6 +1593,12 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("BuildingQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BuildingR")
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("Count")
                         .HasColumnType("INTEGER");
@@ -1833,6 +1856,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("REAL");
 
                     b.Property<bool>("FrozenIslesEnabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Hidden")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("IslandCellSize")

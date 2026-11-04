@@ -4,18 +4,21 @@
 // failure) the same way it behaves for every other client method.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError, authHooks } from './client';
+import { isUpdatePending, resetAppUpdate } from '../lib/appUpdate';
+import { setOwnBuildId } from '../lib/buildId';
 import type {
   ActivitySummaryResponse,
   AdminUserActivityDetailResponse,
   PagedAdminActivityUsersResponse,
 } from './types';
 
-function jsonResponse(body: unknown, status = 200): Response {
+function jsonResponse(body: unknown, status = 200, appBuild: string | null = null): Response {
   return {
     ok: status >= 200 && status < 300,
     status,
     json: async () => body,
-  } as Response;
+    headers: { get: (name: string) => (name.toLowerCase() === 'x-app-build' ? appBuild : null) },
+  } as unknown as Response;
 }
 
 beforeEach(() => {
@@ -218,5 +221,25 @@ describe('api.getFogChunks', () => {
       problem: { error: 'world_not_found' },
     });
     await expect(api.getFogChunks('world-1', 'player-1', rect)).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe('X-App-Build detection', () => {
+  afterEach(() => resetAppUpdate());
+
+  it('marks an update pending when a response carries a build other than this bundle', async () => {
+    setOwnBuildId('assets/index-OLD.js');
+    vi.mocked(fetch).mockResolvedValue(jsonResponse([], 200, 'assets/index-NEW.js'));
+    await api.listWorlds();
+    expect(isUpdatePending()).toBe(true);
+  });
+
+  it('stays quiet for the same build or no header', async () => {
+    setOwnBuildId('assets/index-OLD.js');
+    vi.mocked(fetch).mockResolvedValue(jsonResponse([], 200, 'assets/index-OLD.js'));
+    await api.listWorlds();
+    vi.mocked(fetch).mockResolvedValue(jsonResponse([], 200));
+    await api.listWorlds();
+    expect(isUpdatePending()).toBe(false);
   });
 });

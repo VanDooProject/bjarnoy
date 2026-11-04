@@ -4,7 +4,8 @@ import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../stores/auth';
 import { useGuildStore } from '../stores/guild';
 import { useWorldStore } from '../stores/world';
-import type { GuildBoardTopicKind, GuildFeeTier, GuildRole } from '../api/types';
+import { useUnsavedInput } from '../composables/useUnsavedInput';
+import type { GuildBoardTopicKind, GuildRole } from '../api/types';
 import type { MessageSchema } from '../i18n/schema';
 
 const world = useWorldStore();
@@ -12,12 +13,6 @@ const auth = useAuthStore();
 const guild = useGuildStore();
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-const feeTierLabels: Record<GuildFeeTier, string> = {
-  copper: t('guild.feeTier.copper'),
-  silver: t('guild.feeTier.silver'),
-  gold: t('guild.feeTier.gold'),
-};
-const feeTierOrder: GuildFeeTier[] = ['copper', 'silver', 'gold'];
 const roleLabels: Record<GuildRole, string> = {
   leader: t('guild.role.leader'),
   officer: t('guild.role.officer'),
@@ -30,7 +25,7 @@ const roleLabels: Record<GuildRole, string> = {
 // reads through these instead of the store directly wherever narrowing
 // across a v-else boundary matters.
 const current = computed(() => guild.current);
-const perks = computed(() => guild.perks);
+const caps = computed(() => guild.caps);
 const activeTopic = computed(() => guild.activeTopic);
 
 async function selectGuild(id: string) {
@@ -108,16 +103,6 @@ async function promote(userId: string, role: GuildRole) {
   await guild.setRole(current.value.id, userId, role);
 }
 
-async function changeFeeTier(tier: GuildFeeTier) {
-  if (!current.value) return;
-  await guild.setFeeTier(current.value.id, tier);
-}
-
-async function payFee() {
-  if (!current.value) return;
-  await guild.payFee(current.value.id);
-}
-
 // --- board ---
 
 const activeTopicId = ref<string | null>(null);
@@ -125,6 +110,9 @@ const newTopicTitle = ref('');
 const newTopicKind = ref<GuildBoardTopicKind>('discussion');
 const newTopicBody = ref('');
 const replyBody = ref('');
+useUnsavedInput(() =>
+  [foundName, foundTag, foundDescription, newTopicTitle, newTopicBody, replyBody].some((field) => field.value.trim() !== ''),
+);
 
 async function openTopic(topicId: string) {
   if (!current.value) return;
@@ -203,7 +191,7 @@ function formattedDate(iso: string): string {
             <div>
               <strong>[{{ g.tag }}] {{ g.name }}</strong>
               <span class="muted">
-                · {{ feeTierLabels[g.feeTier] }} · {{ $t('guild.directory.memberCount', { count: g.memberCount }) }}
+                · {{ $t('guild.directory.memberCount', { count: g.memberCount }) }}
               </span>
               <p v-if="g.description" class="muted description">{{ g.description }}</p>
             </div>
@@ -256,7 +244,6 @@ function formattedDate(iso: string): string {
               <p v-if="current.description" class="muted">{{ current.description }}</p>
             </div>
             <div class="row">
-              <span class="badge">{{ feeTierLabels[current.feeTier] }}</span>
               <button
                 v-if="guild.myMembership"
                 class="secondary"
@@ -273,51 +260,18 @@ function formattedDate(iso: string): string {
 
           <p v-if="guild.actionError" class="error">{{ guild.actionError }}</p>
 
-          <section v-if="perks" class="perks">
-            <h3>{{ $t('guild.perks.title') }}</h3>
+          <section v-if="caps" class="caps">
+            <h3>{{ $t('guild.caps.title') }}</h3>
             <dl class="facts">
               <div>
-                <dt>{{ $t('guild.perks.memberCap') }}</dt>
-                <dd>{{ current.memberCount }} / {{ perks.memberCap }}</dd>
+                <dt>{{ $t('guild.caps.memberCap') }}</dt>
+                <dd>{{ current.memberCount }} / {{ caps.memberCap }}</dd>
               </div>
               <div>
-                <dt>{{ $t('guild.perks.peaceTreatyCap') }}</dt>
-                <dd>{{ perks.maxActivePeaceTreaties }}</dd>
-              </div>
-              <div>
-                <dt>{{ $t('guild.perks.tradeBonus') }}</dt>
-                <dd>{{ `+${Math.round(perks.tradeCapacityBonus * 100)}%` }}</dd>
-              </div>
-              <div>
-                <dt>{{ $t('guild.perks.unitSupport') }}</dt>
-                <dd>{{ perks.allowUnitSupport ? $t('guild.perks.yes') : $t('guild.perks.no') }}</dd>
+                <dt>{{ $t('guild.caps.peaceTreatyCap') }}</dt>
+                <dd>{{ caps.maxActivePeaceTreaties }}</dd>
               </div>
             </dl>
-            <div v-if="guild.isLeader" class="row">
-              <span class="muted">{{ $t('guild.perks.feeTierLabel') }}</span>
-              <button
-                v-for="tier in feeTierOrder"
-                :key="tier"
-                type="button"
-                class="tab"
-                :class="{ active: current.feeTier === tier }"
-                :disabled="guild.actionPending"
-                @click="changeFeeTier(tier)"
-              >
-                {{ feeTierLabels[tier] }}
-              </button>
-            </div>
-          </section>
-
-          <section v-if="guild.myMembership" class="fee">
-            <span :class="{ overdue: guild.myMembership.feeOverdue }">
-              {{
-                $t('guild.fee.status', {
-                  status: guild.myMembership.feeOverdue ? $t('guild.fee.overdue') : $t('guild.fee.paidUp'),
-                })
-              }}
-            </span>
-            <button :disabled="guild.actionPending" @click="payFee">{{ $t('guild.fee.payFee') }}</button>
           </section>
 
           <section class="roster">
@@ -326,7 +280,6 @@ function formattedDate(iso: string): string {
               <li v-for="m in current.members" :key="m.userId" class="member-row">
                 <span class="member-id">{{ m.userId.slice(0, 8) }}</span>
                 <span class="badge">{{ roleLabels[m.role] }}</span>
-                <span v-if="m.feeOverdue" class="badge overdue">{{ $t('guild.roster.overdue') }}</span>
                 <span v-if="guild.isLeader && m.role !== 'leader'" class="row member-actions">
                   <button class="secondary small" :disabled="guild.actionPending" @click="promote(m.userId, 'leader')">
                     {{ $t('guild.roster.makeLeader') }}
@@ -561,8 +514,7 @@ h4 {
 .back {
   margin-bottom: 12px;
 }
-section.perks,
-section.fee,
+section.caps,
 section.roster,
 section.board,
 section.treaties {
@@ -572,7 +524,7 @@ section.treaties {
   display: flex;
   flex-wrap: wrap;
   gap: 24px;
-  margin: 0 0 12px;
+  margin: 0;
 }
 .facts dt {
   font-size: 12px;
@@ -583,14 +535,6 @@ section.treaties {
 .facts dd {
   margin: 2px 0 0;
   font-weight: 600;
-}
-.fee {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.overdue {
-  color: var(--rival);
 }
 .new-topic,
 .reply-form,
@@ -618,23 +562,6 @@ section.treaties {
   border-radius: 4px;
   padding: 2px 6px;
   color: var(--muted);
-}
-.badge.overdue {
-  color: var(--rival);
-  border-color: var(--rival);
-}
-.tab {
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 13px;
-  color: var(--text);
-  cursor: pointer;
-}
-.tab.active {
-  border-color: var(--gold);
-  color: var(--gold);
 }
 .backdrop {
   position: fixed;

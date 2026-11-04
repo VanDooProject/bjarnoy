@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { updateNavigationGuard } from '../lib/appUpdate';
 import { resolveAuthGuard } from './authGuard';
 import { awaitShowcaseManifests, startAtlasManifestLoad } from './atlasGuard';
 import { useAuthStore } from '../stores/auth';
@@ -49,19 +50,10 @@ export const router = createRouter({
       component: () => import('../views/RegisterView.vue'),
     },
     {
-      // /world and /settlement share one component (docs/design/
-      // zoom-transition.md §5) so the zoom-driven transition's persistent
-      // HexMapRenderer survives navigating between them — Vue Router only
-      // reuses a route's component instance (no remount) when both routes
-      // resolve to the exact same component, which a shared dynamic import
-      // guarantees (the module is cached, so both resolve to the same
-      // object). See MapView.vue's own `mode` computed for how it tells the
-      // two apart.
-      path: '/world',
-      name: 'world',
-      component: () => import('../views/MapView.vue'),
-    },
-    {
+      // Settlement and world map are one view (MapView.vue) on one route:
+      // the player switches between them by zooming (docs/design/
+      // zoom-transition.md), and world mode is marked by a `#world` hash so
+      // the URL (and the e2e suite) can still tell the two apart.
       path: '/settlement',
       name: 'settlement',
       component: () => import('../views/MapView.vue'),
@@ -138,6 +130,8 @@ export const router = createRouter({
       path: '/docs',
       name: 'docs',
       component: () => import('../views/DocsView.vue'),
+      // Draws showcase art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
     },
     {
       // Public marketing/portfolio page — lives inside the game app (not a
@@ -151,11 +145,23 @@ export const router = createRouter({
       beforeEnter: () => startAtlasManifestLoad(),
     },
     {
-      path: '/tech-tree',
+      path: '/docs/tech-tree',
       name: 'tech-tree',
       component: () => import('../views/TechTreeView.vue'),
       // Computes its art synchronously at setup — see atlasGuard.ts.
       beforeEnter: () => startAtlasManifestLoad(),
+    },
+    {
+      path: '/docs/saga',
+      name: 'saga-docs',
+      component: () => import('../views/SagaView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/saga/replay',
+      name: 'saga-replay',
+      component: () => import('../views/SagaReplayView.vue'),
     },
     {
       path: '/docs/tiles',
@@ -182,6 +188,55 @@ export const router = createRouter({
       path: '/docs/bog-lands',
       name: 'bog-lands-docs',
       component: () => import('../views/BogLandsView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/production',
+      name: 'production-docs',
+      component: () => import('../views/ResourceProductionView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/shrines',
+      name: 'shrines-docs',
+      component: () => import('../views/ShrinesView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/training',
+      name: 'training-docs',
+      component: () => import('../views/TrainingView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/founding',
+      name: 'founding-docs',
+      component: () => import('../views/FoundingView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/realm',
+      name: 'realm-docs',
+      component: () => import('../views/RealmView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/land-movement',
+      name: 'land-movement-docs',
+      component: () => import('../views/LandMovementView.vue'),
+      // Computes its art synchronously at setup — see atlasGuard.ts.
+      beforeEnter: () => awaitShowcaseManifests(),
+    },
+    {
+      path: '/docs/ships',
+      name: 'ships-docs',
+      component: () => import('../views/ShipsView.vue'),
       // Computes its art synchronously at setup — see atlasGuard.ts.
       beforeEnter: () => awaitShowcaseManifests(),
     },
@@ -259,6 +314,9 @@ export const router = createRouter({
   ],
 });
 
+// First guard: with a newer build deployed, navigating loads it instead of running old code.
+router.beforeEach(updateNavigationGuard);
+
 router.beforeEach(async (to) => {
   // Awaited once (see `ensureInitialized`) so a page reload restores a
   // logged-in user from the stored refresh token before this guard has to
@@ -273,13 +331,13 @@ router.beforeEach(async (to) => {
   const player = usePlayerStore();
   // zip 6a: founding (and the guided build-2-more-buildings onboarding that
   // follows it) only ever happens on the landing page now — the world map
-  // never founds a settlement. So `/world` and `/settlement` both require an
+  // never founds a settlement. So `/settlement` (world mode included) requires an
   // already-founded settlement, and `/` itself is done being the founding
   // surface once onboarding is complete.
   if (to.name === 'landing' && player.hasFoundedSettlement && player.onboardingComplete) {
     return { name: 'settlement' };
   }
-  if ((to.name === 'settlement' || to.name === 'world') && !player.hasFoundedSettlement) {
+  if (to.name === 'settlement' && !player.hasFoundedSettlement) {
     return { name: 'landing' };
   }
   return true;

@@ -3,6 +3,7 @@
 // container rather than on the stage the way fog's two quads do (waterShader.ts
 // explains why at length).
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, UniformGroup } from 'pixi.js';
+import { noiseLatticeTexture } from '../shaderNoise';
 import { FOAM_REACH_TILES, NEAR_SPAN_TILES, groundSquash, type WaterMask } from './waterMask';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
 import { WATER_FRAGMENT, WATER_VERTEX } from './waterShader';
@@ -213,13 +214,12 @@ const CAUSTIC_CULL_SOFTEN_TILES = 0.03;
  * it is one line; a per-ribbon distance means there is no line at all, and loops
  * that fall entirely inside their own keep-off are gone rather than clipped.
  *
- * 0.5 tiles is wide relative to the 0.35 default keep-off on purpose: the range
- * has to be several ribbon spacings across before neighbouring ribbons stop
- * ending at visibly similar distances. Not wider, though — the mask's far field
- * saturates at 1.5 tiles, and a keep-off anywhere near that means the ribbon is
- * missing from the whole of the water the eye takes in around an island.
+ * 0.1 tiles, the same as the default keep-off: the
+ * ribbons end 0.1 to 0.2 tiles out, inside the foam band (default width 0.3 tiles), not a
+ * visible gap before it, and the spread is only what breaks up a shared cut
+ * line. Not wider, though — the mask's far field saturates at 1.5 tiles.
  */
-const CAUSTIC_CULL_SPREAD_TILES = 0.5;
+const CAUSTIC_CULL_SPREAD_TILES = 0.1;
 
 /**
  * The second, finer caustic net (§4.2c) — same idiom as the one above, at a
@@ -266,23 +266,16 @@ const CAUSTIC_BLOB_ALPHA = 0.42;
 const CAUSTIC_BLOB_COLOR = 0x0d1728;
 
 /**
- * What fraction of its width the foam keeps over a prop tile (§4.4b).
- *
- * Not zero. Taking the foam off the tile entirely was the first attempt and it
- * was worse than the artifact: foam is the coastline's outline as much as it is
- * water, so a bare stretch of shore is found by the eye immediately — much
- * faster than a ribbon crossing a rock. Half width still leaves the boat or rock
- * its own patch of still water while keeping the outline closed.
- *
- * A quarter, and the shader scales the band's ragged edge by the same factor
- * (see `shrink` in waterShader.ts). Half was tried in between and read as no
- * narrowing at all next to a rock: the edge noise is an absolute 0.09 tiles, so
- * left unscaled it swung a nominally 0.15-tile band out past 0.23 and back into
- * the stone. With the edge scaled too, a quarter is a quarter everywhere along
- * the band rather than only at its mean, which is what the earlier "too thin to
- * survive the art" reading was actually measuring.
+ * River ripples (docs/design/water-shader.md §4.4e). The crests slide `RIVER_SPEED_TURNS_PER_SECOND` whole ripple periods per
+ * second towards the out edge (a period is about `RIPPLE_WAVELENGTH_TEXELS` texels, an eighth of a tile). The noise that breaks
+ * the crests into pieces has `RIVER_NOISE_PER_TILE` cells per tile.
  */
-const PROP_FOAM_SCALE = 0.25;
+export const RIVER_COLOR = 0xcce9ff;
+export const RIVER_ALPHA = 0.5;
+export const RIVER_NOISE_PER_TILE = 6;
+export const RIVER_SPEED_TURNS_PER_SECOND = 0.8;
+/** How many periods the crests lag at the banks (at 1x of the debug knob), so a crest bows downstream in the middle. */
+const RIVER_ARC_PERIODS = 0.35;
 
 function hexToRgb01(hex: number): [number, number, number] {
   return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
@@ -317,6 +310,36 @@ function placeholderTaintTexture(): Texture {
   return sharedPlaceholderTaintTexture;
 }
 
+let sharedPlaceholderDryTexture: Texture | null = null;
+/**
+ * A 1x1 fully clear texture (alpha 0): "nothing is dry" for the water shader, "no lake water" for the bog lake shader. Bound in world mode
+ * and before the art masks are ready.
+ */
+export function placeholderDryTexture(): Texture {
+  sharedPlaceholderDryTexture ??= new Texture({
+    source: new BufferImageSource({ resource: new Uint8Array([0, 0, 0, 0]), width: 1, height: 1 }),
+  });
+  return sharedPlaceholderDryTexture;
+}
+
+let sharedPlaceholderRiverFlowTexture: Texture | null = null;
+/** A 1x1 "no river here" flow texture (alpha 0, which is what the shader reads), bound in world mode and before the flow cells are ready. */
+function placeholderRiverFlowTexture(): Texture {
+  sharedPlaceholderRiverFlowTexture ??= new Texture({
+    source: new BufferImageSource({ resource: new Uint8Array([0, 0, 0, 0]), width: 1, height: 1 }),
+  });
+  return sharedPlaceholderRiverFlowTexture;
+}
+
+let sharedPlaceholderNoFoamTexture: Texture | null = null;
+/** A 1x1 "foam everywhere" (field = 0) texture, for the same reason `placeholderTexture` exists — a frame drawn before the first bake gets ordinary foam. */
+function placeholderNoFoamTexture(): Texture {
+  sharedPlaceholderNoFoamTexture ??= new Texture({
+    source: new BufferImageSource({ resource: new Uint8Array([0]), width: 1, height: 1, format: 'r8unorm' }),
+  });
+  return sharedPlaceholderNoFoamTexture;
+}
+
 export class WaterLayer {
   readonly mesh: Mesh<MeshGeometry, Shader>;
   private readonly uniforms: UniformGroup;
@@ -331,6 +354,9 @@ export class WaterLayer {
   // Same pair, for the taint field — see setMask's taint half.
   private taintTexture: Texture | null = null;
   private retiredTaintTexture: Texture | null = null;
+  // ...and for the river-mouth no-foam field (WaterMask.noFoam).
+  private noFoamTexture: Texture | null = null;
+  private retiredNoFoamTexture: Texture | null = null;
   private hasMask = false;
   // The shader's own clock, accumulated rather than read off performance.now()
   // — same rationale as FogMaskLayer.tick's: the wave-speed slider changes the
@@ -340,6 +366,10 @@ export class WaterLayer {
   private clock = 0;
   // The waves' own clock, advanced at `waveSpeed` times the rate of `clock`.
   private waveClock = 0;
+  // Frozen: the clocks stop advancing, so the surface holds its last frame
+  // in place (still drawn, still reacting to camera/debug flags) instead of
+  // being hidden. See `setFrozen`.
+  private frozen = false;
   private suppressed = false;
 
   constructor(mode: WaterMode, tileWidth: number, tileHeight: number) {
@@ -355,6 +385,7 @@ export class WaterLayer {
     const [taintDeepR, taintDeepG, taintDeepB] = hexToRgb01(TAINT_DEEP_COLOR);
     const [taintFoamR, taintFoamG, taintFoamB] = hexToRgb01(TAINT_FOAM_COLOR);
     const [blobR, blobG, blobB] = hexToRgb01(CAUSTIC_BLOB_COLOR);
+    const [riverR, riverG, riverB] = hexToRgb01(RIVER_COLOR);
 
     this.uniforms = new UniformGroup({
       uTime: { value: 0, type: 'f32' },
@@ -407,8 +438,17 @@ export class WaterLayer {
       uCausticBlobSoft: { value: CAUSTIC_BLOB_SOFT, type: 'f32' },
       uCausticBlobAlpha: { value: CAUSTIC_BLOB_ALPHA, type: 'f32' },
       uCausticBlobColor: { value: new Float32Array([blobR, blobG, blobB]), type: 'vec3<f32>' },
-      uPropMute: { value: 0, type: 'f32' },
-      uPropFoamScale: { value: PROP_FOAM_SCALE, type: 'f32' },
+      uRiverFlowOn: { value: 0, type: 'f32' },
+      uShowRiverFlow: { value: 0, type: 'f32' },
+      uRiverStyle: { value: 0, type: 'f32' },
+      // The river flow texture's own world rect: (minX, minY, 1 / width, 1 / height).
+      uRiverRect: { value: new Float32Array([0, 0, 1, 1]), type: 'vec4<f32>' },
+      uRiverSpeed: { value: RIVER_SPEED_TURNS_PER_SECOND * 2 * Math.PI, type: 'f32' },
+      uRiverArc: { value: RIVER_ARC_PERIODS, type: 'f32' },
+      uRiverStreakMix: { value: 0.4, type: 'f32' },
+      uRiverAlpha: { value: RIVER_ALPHA, type: 'f32' },
+      uRiverColor: { value: new Float32Array([riverR, riverG, riverB]), type: 'vec3<f32>' },
+      uRiverScale: { value: RIVER_NOISE_PER_TILE / tileWidth, type: 'f32' },
       // What the mask's far channel is normalised over, so the shader can decode
       // G back into tile widths the same way uNearSpan decodes R.
       uFarReach: { value: FOAM_REACH_TILES, type: 'f32' },
@@ -436,6 +476,11 @@ export class WaterLayer {
           waterUniforms: this.uniforms,
           uWaterMask: placeholderTexture().source,
           uWaterTaint: placeholderTaintTexture().source,
+          uWaterNoFoam: placeholderNoFoamTexture().source,
+          uWaterDry: placeholderDryTexture().source,
+          uRiverFlow: placeholderRiverFlowTexture().source,
+          uRiverPsi: placeholderRiverFlowTexture().source,
+          uNoiseLattice: noiseLatticeTexture().source,
         },
       }),
     });
@@ -520,11 +565,54 @@ export class WaterLayer {
       this.mesh.shader!.resources.uWaterTaint = this.taintTexture.source;
     }
 
+    if (this.noFoamTexture && this.noFoamTexture.width === mask.width && this.noFoamTexture.height === mask.height) {
+      const source = this.noFoamTexture.source as BufferImageSource;
+      source.resource = mask.noFoam;
+      source.update();
+    } else {
+      this.retiredNoFoamTexture?.destroy(true);
+      this.retiredNoFoamTexture = this.noFoamTexture;
+      this.noFoamTexture = new Texture({
+        source: new BufferImageSource({
+          resource: mask.noFoam,
+          width: mask.width,
+          height: mask.height,
+          // Same treatment as the taint field: a continuous ramp sampled with
+          // the main mask's UVs, single channel, nothing to premultiply.
+          scaleMode: 'linear',
+          addressMode: 'clamp-to-edge',
+          format: 'r8unorm',
+        }),
+      });
+      this.mesh.shader!.resources.uWaterNoFoam = this.noFoamTexture.source;
+    }
+
     const { minX, minY, maxX, maxY } = mask.region.rect;
     const positions = this.geometry.getBuffer('aPosition');
     positions.data.set([minX, minY, maxX, minY, maxX, maxY, minX, maxY]);
     positions.update();
     this.hasMask = true;
+  }
+
+  /**
+   * Binds the art dry mask (`WaterDryLayer.texture`), a texture over the same
+   * world rect as the water mask. `null` goes back to the 1x1 "nothing is dry"
+   * texture. The texture is owned by the caller, not destroyed here.
+   */
+  setDryTexture(texture: Texture | null): void {
+    this.mesh.shader!.resources.uWaterDry = (texture ?? placeholderDryTexture()).source;
+  }
+
+  /**
+   * Binds the river flow texture (`RiverFlowLayer.texture`) and the world rect it covers (`RiverFlowLayer.rect`, its own,
+   * not the water mask's). `null` goes back to the 1x1 "no river" texture. The texture is owned by the caller, not
+   * destroyed here.
+   */
+  setRiverFlowTexture(texture: Texture | null, rect: { minX: number; minY: number; maxX: number; maxY: number } | null = null, psi: Texture | null = null): void {
+    this.mesh.shader!.resources.uRiverFlow = (texture ?? placeholderRiverFlowTexture()).source;
+    this.mesh.shader!.resources.uRiverPsi = (texture && psi ? psi : placeholderRiverFlowTexture()).source;
+    const r = texture && rect ? rect : { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+    this.uniforms.uniforms.uRiverRect = new Float32Array([r.minX, r.minY, 1 / (r.maxX - r.minX), 1 / (r.maxY - r.minY)]);
   }
 
   /**
@@ -537,11 +625,18 @@ export class WaterLayer {
     this.suppressed = suppressed;
   }
 
-  /** Syncs the debug flags onto uniforms and advances the animation clock. Once a frame. */
+  /** Freezes (or resumes) the water's motion: the layer keeps drawing, its animation clocks just stop. */
+  setFrozen(frozen: boolean): void {
+    this.frozen = frozen;
+  }
+
+  /** Syncs the debug flags onto uniforms and advances the animation clock (unless frozen). Once a frame. */
   tick(nowMs: number): void {
     const sinceLast = this.lastTickAtMs === null ? 0 : nowMs - this.lastTickAtMs;
     this.lastTickAtMs = nowMs;
-    const elapsed = sinceLast / 1000;
+    // lastTickAtMs keeps tracking while frozen so thawing resumes smoothly
+    // instead of jumping by the whole frozen interval.
+    const elapsed = this.frozen ? 0 : sinceLast / 1000;
     this.clock += elapsed;
     this.waveClock += elapsed * waterDebugTuning.waveSpeed;
 
@@ -569,12 +664,6 @@ export class WaterLayer {
     u.uCausticFine = waterDebugFlags.fineCaustics ? 1 : 0;
     u.uCausticBlobs = waterDebugFlags.causticShadows ? 1 : 0;
     u.uShorelineFoam = waterDebugFlags.shorelineFoam ? 1 : 0;
-    // Settlement mode only. The mute protects the boat and rock painted on the
-    // coastal water art, and world mode does not draw sea tiles at all
-    // (HexMapRenderer's rebuildTerrainFlat skips them; the sea there is this
-    // shader's own body). Honouring it there would thin the foam on a fifth of
-    // every coastline to protect art that isn't on screen.
-    u.uPropMute = this.mode === 'settlement' && waterDebugFlags.propTileMute ? 1 : 0;
     // Clamped to the far channel's own range: past it G is saturated, so a
     // larger value would silently mean "never fade in" rather than "start
     // further out".
@@ -598,6 +687,14 @@ export class WaterLayer {
     u.uFoamWidth = waterDebugTuning.foamWidthHexes * (this.mode === 'world' ? FOAM_WIDTH_WORLD_SCALE : 1);
     u.uFoamSurge = waterDebugTuning.foamSurge;
     u.uShowMask = waterDebugFlags.showWaterMask ? 1 : 0;
+    // River flow is a settlement-view effect: the world map draws no tile art, so there is no flow texture to read there.
+    u.uRiverFlowOn = waterDebugFlags.riverFlow ? 1 : 0;
+    u.uShowRiverFlow = waterDebugFlags.showRiverFlow ? 1 : 0;
+    u.uRiverStyle = waterDebugFlags.riverStyle;
+    u.uRiverAlpha = RIVER_ALPHA * waterDebugTuning.riverBrightness;
+    u.uRiverSpeed = RIVER_SPEED_TURNS_PER_SECOND * 2 * Math.PI * waterDebugTuning.riverSpeed;
+    u.uRiverArc = RIVER_ARC_PERIODS * waterDebugTuning.riverArc;
+    u.uRiverStreakMix = waterDebugTuning.riverStreakMix;
 
     this.mesh.visible = waterDebugFlags.water && this.hasMask && !this.suppressed;
   }
@@ -625,6 +722,8 @@ export class WaterLayer {
     this.texture?.destroy(true);
     this.retiredTaintTexture?.destroy(true);
     this.taintTexture?.destroy(true);
+    this.retiredNoFoamTexture?.destroy(true);
+    this.noFoamTexture?.destroy(true);
     this.mesh.destroy();
   }
 }

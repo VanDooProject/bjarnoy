@@ -24,6 +24,10 @@ const props = defineProps<{
   // no-settlement fog bypass.
   settlementId?: string;
   previewCenter?: AxialCoord;
+  // Wider (or narrower) preview crop than the landing page's default — see HexMapRendererOptions.previewRadius.
+  previewRadius?: number;
+  // Drawn radius when it should exceed the camera-fit `previewRadius` — see HexMapRendererOptions.previewRenderRadius.
+  previewRenderRadius?: number;
   highlightCoord?: AxialCoord;
   highlightCoords?: AxialCoord[];
   screenBiasX?: number;
@@ -46,6 +50,11 @@ const props = defineProps<{
   // screen and disables drag/wheel zoom, while clicks still work (founding
   // must keep working) — see HexMapRendererOptions.lockCamera.
   lockCamera?: boolean;
+  // Settlement-mode preview: draw the sea tiles (the whole drawn disc), and keep
+  // pan/zoom enabled but confined to the fitted island — see
+  // HexMapRendererOptions.previewSea / confineCamera.
+  previewSea?: boolean;
+  confineCamera?: boolean;
 }>();
 const emit = defineEmits<{
   'hex-click': [coord: AxialCoord, tile: Tile, screen: { x: number; y: number }];
@@ -59,6 +68,8 @@ const emit = defineEmits<{
   // Docs/design/zoom-transition.md: a wheel/pinch zoom crossed the enter- or
   // exit-threshold — see HexMapRendererOptions.onZoomModeChange.
   'zoom-mode-change': [mode: RenderMode];
+  // The camera moved — see HexMapRendererOptions.onCameraChange. Only wired for hosts that listen.
+  'camera-change': [];
 }>();
 
 const container = ref<HTMLElement | null>(null);
@@ -70,16 +81,21 @@ const { renderer, loadState, mountError, retry: retryMount } = useHexMapRenderer
   playerId: props.playerId,
   settlementId: props.settlementId,
   previewCenter: props.previewCenter,
+  previewRadius: props.previewRadius,
+  previewRenderRadius: props.previewRenderRadius,
   highlightCoord: props.highlightCoord,
   highlightCoords: props.highlightCoords,
   screenBiasX: props.screenBiasX,
   hideSettlementBadge: props.hideSettlementBadge,
   lockCamera: props.lockCamera,
+  previewSea: props.previewSea,
+  confineCamera: props.confineCamera,
   onHexClick: (coord, tile, screen) => emit('hex-click', coord, tile, screen),
   onHoverChange: (info) => emit('hover', info),
   onWaypointMove: (index, coord) => emit('waypoint-move', index, coord),
   onWaypointTap: (index) => emit('waypoint-tap', index),
   onZoomModeChange: (mode) => emit('zoom-mode-change', mode),
+  onCameraChange: () => emit('camera-change'),
 });
 
 // FogDebugPanel (SettlementView.vue, ?debug=1) needs to force a rebuild

@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Bjarnoy.Api.Endpoints;
 
 /// <summary>
-/// Guilds: founding, membership, the fee, the message board, and peace
+/// Guilds: founding, membership, the message board, and peace
 /// treaties. Every mutating action needs a real account (unlike settlement
 /// founding, which still allows anonymous play), so every route here requires
 /// authentication; read routes are opened back up with <c>AllowAnonymous</c>.
@@ -33,7 +33,8 @@ public static class GuildEndpoints
         worlds.MapPost("/{worldId:guid}/guilds", Create)
             .WithName("CreateGuild")
             .WithSummary("Founds a guild in a world. The founder becomes its Leader.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         worlds.MapGet("/{worldId:guid}/guilds", ListForWorld)
             .WithName("ListWorldGuilds")
@@ -51,40 +52,34 @@ public static class GuildEndpoints
             .WithSummary("Fetches a guild and its roster.")
             .AllowAnonymous();
 
-        guilds.MapGet("/{guildId:guid}/perks", GetPerks)
-            .WithName("GetGuildPerks")
-            .WithSummary("The member cap, treaty cap and perks the guild's current fee tier unlocks.")
+        guilds.MapGet("/{guildId:guid}/caps", GetCaps)
+            .WithName("GetGuildCaps")
+            .WithSummary("The member cap and peace treaty cap the guild currently has.")
             .AllowAnonymous();
 
         guilds.MapPost("/{guildId:guid}/join", Join)
             .WithName("JoinGuild")
             .WithSummary("Joins a guild, refused once its member cap is reached.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         guilds.MapPost("/{guildId:guid}/leave", Leave)
             .WithName("LeaveGuild")
             .WithSummary("Leaves a guild. The Leader may only leave alone, which disbands the guild.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         guilds.MapPost("/{guildId:guid}/members/{userId:guid}/kick", Kick)
             .WithName("KickGuildMember")
             .WithSummary("Removes another member. Leader kicks anyone; Officer kicks Members only.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         guilds.MapPut("/{guildId:guid}/members/{userId:guid}/role", SetRole)
             .WithName("SetGuildMemberRole")
             .WithSummary("Sets a member's role. Leader-only; promoting to Leader transfers leadership.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
-
-        guilds.MapPut("/{guildId:guid}/fee-tier", SetFeeTier)
-            .WithName("SetGuildFeeTier")
-            .WithSummary("Changes the guild's fee tier. Leader-only.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
-
-        guilds.MapPost("/{guildId:guid}/fee-payment", PayFee)
-            .WithName("PayGuildFee")
-            .WithSummary("Pays the guild's current fee from the caller's settlement in that world.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         guilds.MapGet("/{guildId:guid}/board/topics", ListTopics)
             .WithName("ListGuildTopics")
@@ -95,7 +90,8 @@ public static class GuildEndpoints
             .WithName("CreateGuildTopic")
             .WithSummary(
                 "Starts a board topic with its opening post. Kind 'report' flags it for a future game-event-report feature.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         guilds.MapGet("/{guildId:guid}/board/topics/{topicId:guid}", GetTopic)
             .WithName("GetGuildTopic")
@@ -105,7 +101,8 @@ public static class GuildEndpoints
         guilds.MapPost("/{guildId:guid}/board/topics/{topicId:guid}/posts", Reply)
             .WithName("ReplyToGuildTopic")
             .WithSummary("Replies to a board topic.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         guilds.MapGet("/{guildId:guid}/treaties", ListTreaties)
             .WithName("ListGuildTreaties")
@@ -115,7 +112,8 @@ public static class GuildEndpoints
         guilds.MapPost("/{guildId:guid}/treaties", ProposeTreaty)
             .WithName("ProposeGuildTreaty")
             .WithSummary("Proposes a peace treaty to another guild. Leader/Officer only.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         var treaties = app.MapGroup("/api/v1/treaties")
             .WithApiVersionSet(versionSet)
@@ -126,17 +124,20 @@ public static class GuildEndpoints
         treaties.MapPost("/{treatyId:guid}/accept", AcceptTreaty)
             .WithName("AcceptGuildTreaty")
             .WithSummary("Accepts a pending peace treaty proposal. Leader/Officer of the target guild only.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         treaties.MapPost("/{treatyId:guid}/reject", RejectTreaty)
             .WithName("RejectGuildTreaty")
             .WithSummary("Rejects a pending peace treaty proposal. Leader/Officer of the target guild only.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         treaties.MapPost("/{treatyId:guid}/break", BreakTreaty)
             .WithName("BreakGuildTreaty")
             .WithSummary("Breaks an active peace treaty. Leader of either guild only.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .WithConcurrencyRetry();
 
         return app;
     }
@@ -146,7 +147,6 @@ public static class GuildEndpoints
         CreateGuildRequest request,
         ClaimsPrincipal principal,
         GuildService guilds,
-        TimeProvider time,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -160,41 +160,39 @@ public static class GuildEndpoints
         }
 
         var guild = result.Guild!;
-        return TypedResults.Created($"/api/v1/guilds/{guild.Id}", GuildResponse.From(guild, time.GetUtcNow()));
+        return TypedResults.Created($"/api/v1/guilds/{guild.Id}", GuildResponse.From(guild));
     }
 
     private static async Task<Results<Ok<GuildResponse>, NotFound>> Get(
-        Guid guildId, GuildService guilds, TimeProvider time, CancellationToken cancellationToken)
+        Guid guildId, GuildService guilds, CancellationToken cancellationToken)
     {
         var guild = await guilds.GetAsync(guildId, cancellationToken);
         return guild is null
             ? TypedResults.NotFound()
-            : TypedResults.Ok(GuildResponse.From(guild, time.GetUtcNow()));
+            : TypedResults.Ok(GuildResponse.From(guild));
     }
 
     private static async Task<Ok<IReadOnlyList<GuildResponse>>> ListForWorld(
-        Guid worldId, GuildService guilds, TimeProvider time, CancellationToken cancellationToken)
+        Guid worldId, GuildService guilds, CancellationToken cancellationToken)
     {
         var list = await guilds.ListAsync(worldId, cancellationToken);
-        var now = time.GetUtcNow();
-
-        IReadOnlyList<GuildResponse> response = [.. list.Select(g => GuildResponse.From(g, now))];
+        IReadOnlyList<GuildResponse> response = [.. list.Select(GuildResponse.From)];
         return TypedResults.Ok(response);
     }
 
-    private static async Task<Results<Ok<GuildPerksResponse>, NotFound>> GetPerks(
+    private static async Task<Results<Ok<GuildCapsResponse>, NotFound>> GetCaps(
         Guid guildId, GuildService guilds, CancellationToken cancellationToken)
     {
-        var perks = await guilds.GetPerksAsync(guildId, cancellationToken);
-        return perks is null ? TypedResults.NotFound() : TypedResults.Ok(GuildPerksResponse.From(perks));
+        var caps = await guilds.GetCapsAsync(guildId, cancellationToken);
+        return caps is null ? TypedResults.NotFound() : TypedResults.Ok(GuildCapsResponse.From(caps));
     }
 
     private static async Task<Results<Ok<GuildMemberResponse>, ProblemHttpResult>> Join(
-        Guid guildId, ClaimsPrincipal principal, GuildService guilds, TimeProvider time, CancellationToken cancellationToken)
+        Guid guildId, ClaimsPrincipal principal, GuildService guilds, CancellationToken cancellationToken)
     {
         var result = await guilds.JoinAsync(guildId, CurrentUserId(principal), cancellationToken);
         return result.Accepted
-            ? TypedResults.Ok(GuildMemberResponse.From(result.Membership!, time.GetUtcNow()))
+            ? TypedResults.Ok(GuildMemberResponse.From(result.Membership!))
             : Problem(result.Rejection);
     }
 
@@ -218,7 +216,6 @@ public static class GuildEndpoints
         SetGuildMemberRoleRequest request,
         ClaimsPrincipal principal,
         GuildService guilds,
-        TimeProvider time,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -235,42 +232,7 @@ public static class GuildEndpoints
 
         var result = await guilds.SetRoleAsync(guildId, CurrentUserId(principal), userId, role, cancellationToken);
         return result.Accepted
-            ? TypedResults.Ok(GuildMemberResponse.From(result.Membership!, time.GetUtcNow()))
-            : Problem(result.Rejection);
-    }
-
-    private static async Task<Results<Ok<GuildResponse>, BadRequest<ProblemDetails>, ProblemHttpResult>> SetFeeTier(
-        Guid guildId,
-        SetGuildFeeTierRequest request,
-        ClaimsPrincipal principal,
-        GuildService guilds,
-        TimeProvider time,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        if (!TryParseFeeTier(request.FeeTier, out var tier))
-        {
-            return TypedResults.BadRequest(new ProblemDetails
-            {
-                Title = "Unknown fee tier.",
-                Detail = $"Valid: {string.Join(", ", Enum.GetValues<GuildFeeTier>().Select(t => t.ToWireName()))}.",
-                Status = StatusCodes.Status400BadRequest,
-            });
-        }
-
-        var result = await guilds.SetFeeTierAsync(guildId, CurrentUserId(principal), tier, cancellationToken);
-        return result.Accepted
-            ? TypedResults.Ok(GuildResponse.From(result.Guild!, time.GetUtcNow()))
-            : Problem(result.Rejection);
-    }
-
-    private static async Task<Results<Ok<GuildMemberResponse>, ProblemHttpResult>> PayFee(
-        Guid guildId, ClaimsPrincipal principal, GuildService guilds, TimeProvider time, CancellationToken cancellationToken)
-    {
-        var result = await guilds.PayFeeAsync(guildId, CurrentUserId(principal), cancellationToken);
-        return result.Accepted
-            ? TypedResults.Ok(GuildMemberResponse.From(result.Membership!, time.GetUtcNow()))
+            ? TypedResults.Ok(GuildMemberResponse.From(result.Membership!))
             : Problem(result.Rejection);
     }
 
@@ -419,21 +381,6 @@ public static class GuildEndpoints
         return false;
     }
 
-    private static bool TryParseFeeTier(string value, out GuildFeeTier tier)
-    {
-        foreach (var candidate in Enum.GetValues<GuildFeeTier>())
-        {
-            if (string.Equals(candidate.ToWireName(), value, StringComparison.OrdinalIgnoreCase))
-            {
-                tier = candidate;
-                return true;
-            }
-        }
-
-        tier = default;
-        return false;
-    }
-
     private static bool TryParseTopicKind(string value, out GuildBoardTopicKind kind)
     {
         foreach (var candidate in Enum.GetValues<GuildBoardTopicKind>())
@@ -477,8 +424,6 @@ public static class GuildEndpoints
         GuildRejection.AlreadyInAGuild => "You are already a member of a guild.",
         GuildRejection.NotAMember => "Not a member of this guild.",
         GuildRejection.GuildFull => "The guild is at its member cap.",
-        GuildRejection.NotEnoughResources => "Not enough resources to pay the fee (some may be reserved for queued construction).",
-        GuildRejection.NoSettlement => "You have no settlement in this guild's world.",
         GuildRejection.Forbidden => "You are not allowed to do that.",
         GuildRejection.TargetIsSelf => "A guild cannot propose peace with itself.",
         GuildRejection.TreatyCapReached => "The guild's peace treaty cap is reached.",
