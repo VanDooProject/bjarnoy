@@ -73,6 +73,16 @@ public sealed class WorldGenerator
     }
 
     /// <summary>
+    /// How many threads a generation may use: every core but one (at least one). A radius-4000 world takes about a minute
+    /// of full load, and a generation that takes all cores starves the web requests of the same process for that long.
+    /// The result does not depend on it: every island and every box is computed independently and stored by index.
+    /// </summary>
+    public static int MaxParallelism => Math.Max(1, Environment.ProcessorCount - 1);
+
+    private static ParallelOptions ParallelOptionsFor(CancellationToken cancellationToken) =>
+        new() { CancellationToken = cancellationToken, MaxDegreeOfParallelism = MaxParallelism };
+
+    /// <summary>
     /// Turns landmasses (already in index order) into islands, dropping specks below
     /// <see cref="WorldGenerationOptions.MinimumIslandTiles"/>. The per-island work
     /// (rivers, giants, start positions) is independent between islands, so it runs in
@@ -88,7 +98,7 @@ public sealed class WorldGenerator
         Parallel.For(
             0,
             kept.Count,
-            new ParallelOptions { CancellationToken = cancellationToken },
+            ParallelOptionsFor(cancellationToken),
             i =>
             {
                 var index = firstIndex + i;
@@ -205,7 +215,7 @@ public sealed class WorldGenerator
         Parallel.For(
             0,
             shapes.Count,
-            new ParallelOptions { CancellationToken = cancellationToken },
+            ParallelOptionsFor(cancellationToken),
             i =>
             {
                 var shape = shapes[i];
