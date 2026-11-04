@@ -169,13 +169,19 @@ public sealed class WorldService(
 
         options.Validate();
 
-        var sameName = await _dbContext.Worlds.Where(w => w.Name == name).ToListAsync(cancellationToken).ConfigureAwait(false);
-        if (sameName.Any(w => w.Status != WorldStatus.Failed))
+        var sameName = await _dbContext.Worlds.AsNoTracking()
+            .Where(w => w.Name == name)
+            .Select(w => w.Status)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (sameName.Any(status => status != WorldStatus.Failed))
         {
             throw new WorldCreationException($"A world named '{name}' already exists.");
         }
 
-        _dbContext.Worlds.RemoveRange(sameName);
+        await _dbContext.Worlds.Where(w => w.Name == name && w.Status == WorldStatus.Failed)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         var world = new WorldEntity
         {

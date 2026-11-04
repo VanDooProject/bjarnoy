@@ -331,6 +331,63 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
     }
 
     [Fact]
+    public async Task A_world_that_is_creating_or_failed_is_missing_from_both_public_lists_for_players_but_not_for_admins()
+    {
+        using var client = _fixture.CreateClient();
+        var ready = await CreateWorldAsync(client);
+
+        // Begun without being queued, so it stays "creating"; the failed one is made by failing everything still creating first.
+        Guid failedId;
+        Guid creatingId;
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var worlds = scope.ServiceProvider.GetRequiredService<WorldService>();
+            var options = TestWorlds.For(4242, 30);
+            failedId = (await worlds.BeginWorldCreationAsync(UniqueName("failed"), options, 10, Ct)).Id;
+            await worlds.FailInterruptedWorldCreationsAsync(Ct);
+            creatingId = (await worlds.BeginWorldCreationAsync(UniqueName("creating"), options, 10, Ct)).Id;
+        }
+
+        Authorize(client, await CreateAdminTokenAsync(client));
+        var adminList = (await client.GetFromJsonAsync<List<AdminWorldResponse>>(
+            "/api/v1/admin/worlds", SqliteApiFixture.StrictJson, Ct))!;
+        Assert.Equal("creating", adminList.Single(w => w.Id == creatingId).Status);
+        var failed = adminList.Single(w => w.Id == failedId);
+        Assert.Equal("failed", failed.Status);
+        Assert.False(string.IsNullOrEmpty(failed.CreationError));
+        Assert.Contains(await ListWorldsAsync(client), w => w.Id == creatingId);
+        Assert.Contains(await ListJoinableAsync(client), w => w.Id == failedId);
+
+        client.DefaultRequestHeaders.Authorization = null;
+        foreach (var id in new[] { creatingId, failedId })
+        {
+            Assert.DoesNotContain(await ListWorldsAsync(client), w => w.Id == id);
+            Assert.DoesNotContain(await ListJoinableAsync(client), w => w.Id == id);
+        }
+
+        Assert.Contains(await ListWorldsAsync(client), w => w.Id == ready.Id);
+    }
+
+    [Fact]
+    public async Task A_world_that_is_still_being_created_cannot_be_reseeded()
+    {
+        using var client = _fixture.CreateClient();
+        Guid creatingId;
+        string name = UniqueName("creating");
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            creatingId = (await scope.ServiceProvider.GetRequiredService<WorldService>()
+                .BeginWorldCreationAsync(name, TestWorlds.For(4242, 30), 10, Ct)).Id;
+        }
+
+        Authorize(client, await CreateAdminTokenAsync(client));
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{creatingId}/reseed", new ReseedWorldRequest(name, Seed: 9001), Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
     public async Task A_world_closed_to_new_players_is_missing_only_from_the_joinable_list_for_players()
     {
         using var client = _fixture.CreateClient();
