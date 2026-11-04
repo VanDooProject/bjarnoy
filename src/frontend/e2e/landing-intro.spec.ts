@@ -182,7 +182,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       // The replay keeps the intro mounted for its white end screen.
       await runFake(page, 10_000);
       await expect(page.getByTestId('intro-end')).toBeVisible();
-      expect((await log()).beats).toEqual(['fire', 'prophecy', 'ravens', 'sending', 'hold', 'landfall']);
+      expect((await log()).beats).toEqual(['fire', 'prophecy', 'sending', 'ravens', 'hold', 'landfall']);
       await expect(page.getByTestId('intro-back-to-docs')).toBeVisible();
       await expect(page.getByTestId('intro-enter-game')).toBeVisible();
       await page.getByTestId('intro-back-to-docs').click();
