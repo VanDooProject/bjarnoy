@@ -138,6 +138,19 @@ onBeforeUnmount(() => {
     </Transition>
 
     <div class="actions">
+      <!-- pause is the right-most button, so skip appearing to its left does not move it -->
+      <Transition name="intro-fade">
+        <button
+          v-if="state.skipVisible"
+          type="button"
+          class="intro-btn skip"
+          data-testid="intro-skip"
+          @click="sequencer.skip()"
+        >
+          {{ introText(locale, 'skip') }}
+        </button>
+      </Transition>
+
       <Transition name="intro-fade">
         <button
           v-if="pauseVisible"
@@ -148,18 +161,6 @@ onBeforeUnmount(() => {
           @click="togglePause()"
         >
           {{ introText(locale, state.paused ? 'resume' : 'pause') }}
-        </button>
-      </Transition>
-
-      <Transition name="intro-fade">
-        <button
-          v-if="state.skipVisible"
-          type="button"
-          class="intro-btn skip"
-          data-testid="intro-skip"
-          @click="sequencer.skip()"
-        >
-          {{ introText(locale, 'skip') }}
         </button>
       </Transition>
     </div>
