@@ -4,6 +4,8 @@
   "pause": "Pause",
   "resume": "Resume",
   "restart": "Restart",
+  "soundOn": "Turn sound on",
+  "soundOff": "Turn sound off",
   "play": "Play the saga",
   "playIntro": "Play intro",
   "backToDocs": "Back to docs",

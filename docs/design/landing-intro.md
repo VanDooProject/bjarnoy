@@ -18,14 +18,29 @@ then hands over to the real map.
 ## Timing
 
 - The intro plays once, then the hold, then the exit.
-- The hold plays at least as long as its narration takes to read (1 s plus the words at 230 words per minute). After
-  that it ends as soon as the tiles are loaded. Skip ends it at once.
+- Each intro beat lasts as long as its voice clip in the player's language plus 0.8 s. The scenes are timed
+  to fit both languages' lengths; motion follows the spoken lines where it can, without slowing into slow motion.
+- The hold plays at least as long as its voice clip (plus 0.8 s). After that it ends as soon as the tiles are
+  loaded. Skip ends it at once.
+- Landfall lasts 3.8 s; the lookout's call plays as it starts.
 - Once the tiles are loaded and the sequence is still playing, a skip button shows. Pressing it starts the exit
   (fog lifts) right away.
 - A pause button shows while the intro plays. Paused, the scene and its timing stop; tiles that finish loading wait for play to continue.
 - Between skip and pause, a restart button (⟲) starts the intro again at its first beat. Clicking the scene pauses or resumes it, like the pause button.
 - Esc closes the intro at once, without the landfall: the landing page shows the map, the replay and the loop go back to the docs.
-- Narration text (en + de) is written once the beat timings are settled.
+
+## Voice
+
+- Every beat has a spoken clip in English and German. Beats 1–5 are the skald's voice; the call "Land!" is a
+  second voice, the lookout.
+- The clips of the player's language load before the map tiles, in beat order, also while the sound is off.
+- Each clip starts with its beat, also while the sound is off, so turning the sound on joins the clip at the
+  point the beat has reached.
+- A sound button sits right of the pause button. On the landing page the intro starts with the sound off
+  (browsers only allow sound after a click); the button blinks while the sound is off. With reduced motion it
+  shows the off state without blinking.
+- The replay starts with the sound on.
+- Pause pauses the clip, skip stops it.
 
 ## Reduced motion
 
@@ -50,8 +65,9 @@ On desktop the landing page always shows a "Play intro" button at the bottom rig
 
 ## Technique
 
-- All code, no loaded assets: scenes are inline SVG in the components, animated with CSS (transform and opacity
-  only, so it stays smooth while the map loads).
+- All code, no loaded assets except the voice clips (`src/frontend/src/intro/audio/{en,de}/<n>-<beat>.mp3`):
+  scenes are inline SVG in the components, animated with CSS (transform and opacity only, so it stays smooth
+  while the map loads).
 - Fog and smoke: a small tileable noise texture generated once at runtime from a fixed seed (canvas 2D), then only
   moved and faded.
 - Works in landscape and portrait: each scene fills the screen and crops at the edges; story-critical elements stay

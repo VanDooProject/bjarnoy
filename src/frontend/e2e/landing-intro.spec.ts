@@ -72,6 +72,27 @@ async function recordIntro(page: Page): Promise<() => Promise<{ beats: string[];
   return () => page.evaluate(() => (window as unknown as { __introLog: { beats: string[]; phases: string[] } }).__introLog);
 }
 
+/** Keeps every media element the page plays, so a spec can read a clip's muted / paused / currentTime. */
+async function recordAudio(page: Page): Promise<(name: string) => Promise<{ muted: boolean; paused: boolean; currentTime: number } | null>> {
+  await page.addInitScript(() => {
+    const seen: HTMLMediaElement[] = [];
+    (window as unknown as { __clips: HTMLMediaElement[] }).__clips = seen;
+    const play = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+      if (!seen.includes(this)) seen.push(this);
+      return play.call(this);
+    };
+  });
+  return (name) =>
+    page.evaluate((n) => {
+      const el = (window as unknown as { __clips: HTMLMediaElement[] }).__clips.find((a) => a.src.includes(n));
+      return el ? { muted: el.muted, paused: el.paused, currentTime: el.currentTime } : null;
+    }, name);
+}
+
+const sound = (page: Page) => page.getByTestId('intro-sound');
+const animationName = (page: Page) => sound(page).evaluate((el) => getComputedStyle(el).animationName);
+
 test.describe('landing intro', { tag: '@g3' }, () => {
   // Motion on: the suite emulates the OS reduced-motion preference, which the 'auto' menu-animations setting follows.
   test.describe('with motion', () => {
@@ -112,7 +133,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await expect(intro(page)).toHaveAttribute('data-beat', 'hold');
       await expect(skip(page)).toBeHidden();
 
-      // Past the hold line's reading time, loaded tiles start the exit on their own.
+      // Past the hold clip's length, loaded tiles start the exit on their own.
       release();
       await expect(intro(page)).toHaveAttribute('data-phase', 'exiting', TILES_LOADED);
       await expect(intro(page)).toHaveAttribute('data-beat', 'landfall');
@@ -206,6 +227,85 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await expect(playIntro).toBeVisible();
     });
 
+    for (const viewport of [
+      { width: 360, height: 740 },
+      { width: 390, height: 844 },
+    ]) {
+      test(`${viewport.width}x${viewport.height}: the sound button is right of pause, 16px inside the corner`, async ({ page }) => {
+        await page.setViewportSize(viewport);
+        await freezeClock(page);
+        const release = await holdAtlases(page);
+        await page.goto('/#intro');
+        await expect(sound(page)).toBeVisible();
+        const [pause, snd] = await Promise.all([page.getByTestId('intro-pause').boundingBox(), sound(page).boundingBox()]);
+        expect(snd!.x).toBeGreaterThanOrEqual(pause!.x + pause!.width);
+        expect(snd!.width).toBeGreaterThanOrEqual(44);
+        expect(snd!.height).toBeGreaterThanOrEqual(44);
+        expect(viewport.width - (snd!.x + snd!.width)).toBeGreaterThanOrEqual(16);
+        expect(viewport.height - (snd!.y + snd!.height)).toBeGreaterThanOrEqual(16);
+        release();
+      });
+    }
+
+    test('the sound starts off and blinks; clicking it unmutes the running clip, which then pauses with the intro', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const clip = await recordAudio(page);
+      const release = await holdAtlases(page);
+      await page.goto('/#intro');
+      await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
+      await expect(sound(page)).toHaveAttribute('data-sound', 'off');
+      await expect(sound(page)).toHaveAttribute('aria-pressed', 'false');
+      expect(await animationName(page)).not.toBe('none');
+
+      // the clip already plays with its beat, muted
+      await expect.poll(() => clip('1-fire').then((c) => c !== null && c.muted && c.currentTime > 0), { timeout: 15_000 }).toBe(true);
+      await sound(page).click();
+      await expect(sound(page)).toHaveAttribute('data-sound', 'on');
+      expect(await animationName(page)).toBe('none');
+      const playing = await clip('1-fire');
+      expect(playing).toMatchObject({ muted: false, paused: false });
+      expect(playing!.currentTime).toBeGreaterThan(0);
+
+      await page.getByTestId('intro-pause').click();
+      await expect(intro(page)).toHaveAttribute('data-voice-state', 'paused');
+      expect((await clip('1-fire'))!.paused).toBe(true);
+      await page.getByTestId('intro-pause').click();
+      await expect(intro(page)).toHaveAttribute('data-voice-state', 'playing');
+      expect((await clip('1-fire'))!.paused).toBe(false);
+      release();
+    });
+
+    test('a beat lasts as long as its clip plus 0.8 s', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const release = await holdAtlases(page);
+      await page.goto('/#intro');
+      await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
+      // the English fire clip is 6113 ms long: 6913 ms with the tail
+      await page.clock.runFor(6900);
+      await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
+      await page.clock.runFor(30);
+      await expect(intro(page)).toHaveAttribute('data-beat', 'prophecy');
+      await expect(intro(page)).toHaveAttribute('data-voice-beat', 'prophecy');
+      release();
+    });
+
+    test('skip stops the running clip and plays the landfall call', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const clip = await recordAudio(page);
+      await page.goto('/#intro');
+      await expect(skip(page)).toBeVisible(TILES_LOADED);
+      await expect.poll(() => clip('1-fire').then((c) => c !== null)).toBe(true);
+      await skip(page).click();
+      await expect(intro(page)).toHaveAttribute('data-beat', 'landfall');
+      await expect(intro(page)).toHaveAttribute('data-voice-beat', 'landfall');
+      await expect(intro(page)).toHaveAttribute('data-voice-state', 'playing');
+      expect((await clip('1-fire'))!.paused).toBe(true);
+      await expect.poll(() => clip('6-landfall').then((c) => c !== null)).toBe(true);
+    });
+
     test('#loop(1,6) plays the first and the last beat again and again, and the intro never goes away', async ({ page }) => {
       test.setTimeout(MAP_SPEC_TIMEOUT_MS);
       await freezeClock(page);
@@ -241,6 +341,19 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await page.clock.runFor(700); // lets the play button's leave transition finish
       await expect(page.getByTestId('intro-play')).toHaveCount(0);
       await advanceTo(page, 'prophecy');
+      release();
+    });
+
+    test('the sound button shows the off state without blinking', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const release = await holdAtlases(page);
+      await page.goto('/#intro');
+      await page.getByTestId('intro-play').click();
+      await expect(sound(page)).toBeVisible();
+      await expect(sound(page)).toHaveAttribute('data-sound', 'off');
+      expect(await animationName(page)).toBe('none');
+      await expect(sound(page)).toHaveClass(/is-muted/);
       release();
     });
 

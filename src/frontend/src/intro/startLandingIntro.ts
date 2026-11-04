@@ -54,6 +54,8 @@ export function mountLandingIntro(options: { loopBeats?: BeatId[] | null } = {})
         locale: detectDeviceLocale(),
         reducedMotion: !motionPreferences.hudEnabled,
         loaded: introSignal.tilesLoaded,
+        // browsers only allow sound after a click: the landing page (and its loop) starts muted
+        soundOn: false,
         onDone: unmount,
         onClose: unmount,
       }),

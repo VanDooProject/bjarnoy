@@ -8,6 +8,12 @@ public enum WorldStatus
     Active = 0,
     Inactive = 1,
     Full = 2,
+
+    /// <summary>Created through the admin endpoint and still being generated: no islands yet, nobody can join.</summary>
+    Creating = 3,
+
+    /// <summary>Generation ended without a usable map; <see cref="WorldEntity.CreationError"/> says why.</summary>
+    Failed = 4,
 }
 
 /// <summary>Why <see cref="WorldEntity.DetermineJoinability"/> refused a join.</summary>
@@ -106,6 +112,12 @@ public class WorldEntity
     public WorldStatus Status { get; set; } = WorldStatus.Active;
 
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>Why generation failed, set together with <see cref="WorldStatus.Failed"/>; null otherwise.</summary>
+    public string? CreationError { get; set; }
+
+    /// <summary>False while the world is still being generated or when its generation failed: it has no map to play on.</summary>
+    public bool IsProvisioned => Status is not (WorldStatus.Creating or WorldStatus.Failed);
 
     /// <summary>What the world is doing: running, paused, locked, maintenance.</summary>
     public WorldRunState RunState { get; set; } = WorldRunState.Running;

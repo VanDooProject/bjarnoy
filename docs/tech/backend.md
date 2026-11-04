@@ -168,6 +168,22 @@ Generation is pure and takes its seed as a parameter, so two worlds can be
 generated at once. The legacy generator could not: it set a static
 `Noise.Seed`, which two concurrent calls would corrupt.
 
+### Creating a world takes about a minute
+
+A radius-4000 world takes roughly a minute to generate, longer than a reverse proxy such as Cloudflare waits for a
+response (it answers 524 at 100 s). `POST /api/v1/admin/worlds` therefore only stores the world as `creating`
+(`WorldService.BeginWorldCreationAsync`: name, seed and parameters, no islands) and answers `202`. It queues the world on
+`WorldCreationQueue`, and `WorldCreationHostedService` generates the maps one at a time
+(`WorldService.CompleteWorldCreationAsync`), then sets the world `active`. If the seed gives no usable island, or
+generation throws, the world becomes `failed` and `creationError` says why. The admin worlds page polls while a world is
+creating.
+
+- `creating` and `failed` worlds are left out of `GET /worlds` and `GET /worlds/joinable` for non-admins, and nobody can
+  join them. A `creating` world cannot be reseeded.
+- A new create with the name of a `failed` world replaces it, so a failed attempt never blocks its name.
+- The queue is in memory. A restart loses it: on startup every world still `creating` is marked `failed`
+  ("interrupted by a restart") and has to be created again. This assumes one API instance generates at a time.
+
 ## Everything is lazy
 
 Nothing in this backend ticks. There is no background worker advancing
@@ -279,7 +295,7 @@ development.
 
 | Route | Description |
 |---|---|
-| `GET /api/v1/worlds` | list worlds (minimal: name, status, joinability, player count, free slots; creating one is admin-only via `POST /api/v1/admin/worlds`) |
+| `GET /api/v1/worlds` | list worlds (minimal: name, status, joinability, player count, free slots; creating one is admin-only via `POST /api/v1/admin/worlds`; worlds still being created or failed are left out for non-admins) |
 | `GET /api/v1/worlds/{id}` | one world |
 | `GET /api/v1/worlds/{id}/islands` | its islands and their start positions |
 | `GET /api/v1/worlds/{id}/tiles?qMin=&qMax=&rMin=&rMax=` | terrain for a window |

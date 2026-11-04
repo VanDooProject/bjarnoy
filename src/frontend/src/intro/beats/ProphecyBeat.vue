@@ -4,10 +4,15 @@ export const meta: BeatMeta = { id: 'prophecy', role: 'intro', durationMs: 7000 
 </script>
 
 <script setup lang="ts">
+import { inject } from 'vue';
 import HallScene from './HallScene.vue';
 import { meta as fireMeta } from './FireBeat.vue';
+import { INTRO_BEAT_MS } from './types';
 
 defineProps<{ paused?: boolean }>();
+// the fire beat lasts as long as its clip in the player's language; the prophecy continues from its end
+const beatMs = inject(INTRO_BEAT_MS, () => fireMeta.durationMs);
+const fireMs = beatMs('fire');
 
 // One flame, reused on each burning hall: [outer, inner].
 const FLAME = [
@@ -49,7 +54,7 @@ wave += ' v4 q-20 8 -40 0 Z';
 
 <template>
   <!-- the skald's fire flares and the prophecy shows in its smoke: the halls burn, the island sinks -->
-  <HallScene beat="prophecy" :paused="paused" :elapsed-ms="fireMeta.durationMs">
+  <HallScene beat="prophecy" :paused="paused" :elapsed-ms="fireMs">
     <template #defs="{ id }">
       <radialGradient :id="id('vis-g')" cx="50%" cy="50%" r="50%">
         <stop offset="0" stop-color="#fff" />

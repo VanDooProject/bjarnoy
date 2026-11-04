@@ -6,8 +6,10 @@ import { useId } from 'vue';
  * seabed turns out to be a sleeping giant: a closed eye glows, runes light up on the brow, and its breath
  * rises as bubbles that break the surface. Then the scene pushes into the moon while the second raven
  * crosses it and flies out of the frame; the beat ends on even pale moonlight.
- * Everything is timed on `--beat-duration` (set by the host from the beat meta); wing beats, kelp and
- * glints loop at fractions of it.
+ * The story is timed on `--beat-duration` (set by the host from the voice clip: 8.8 s in English, 9.5 s in
+ * German); the eye flickers once on "not empty", the giant wakes on "under the sea" at about 60 %, and
+ * the push into the moon starts at 88 %, after the voice. Wing beats, kelp, glints, bubble rises,
+ * rings and the first raven's flight run on fixed times, so a longer beat does not slow them down.
  */
 defineProps<{ paused?: boolean }>();
 
@@ -85,10 +87,10 @@ const url = (name: string) => `url(#${id(name)})`;
         </g>
         <ellipse class="b4-sglow b4-a" cx="858" cy="748" rx="190" ry="38" :fill="url('surfGlow')"/>
         <g transform="translate(858 746)" fill="none" stroke="#bfe6e2" stroke-width="3">
-          <ellipse class="b4-ring b4-a" style="--t:.55" rx="80" ry="10"/>
-          <ellipse class="b4-ring b4-a" style="--t:.63" rx="80" ry="10"/>
-          <ellipse class="b4-ring b4-a" style="--t:.67" rx="110" ry="13"/>
-          <ellipse class="b4-ring b4-a" style="--t:.72" rx="80" ry="10"/>
+          <ellipse class="b4-ring b4-a" style="--t:.64" rx="80" ry="10"/>
+          <ellipse class="b4-ring b4-a" style="--t:.71" rx="80" ry="10"/>
+          <ellipse class="b4-ring b4-a" style="--t:.77" rx="110" ry="13"/>
+          <ellipse class="b4-ring b4-a" style="--t:.80" rx="80" ry="10"/>
         </g>
       </g>
 
@@ -117,21 +119,21 @@ const url = (name: string) => `url(#${id(name)})`;
 
         <!-- breath: bubbles from the lips (858,1028) to the surface (~746) -->
         <g transform="translate(858 1028)" fill="#bfe6e2">
-          <circle class="b4-bub b4-a" style="--t:.30;--dx:-14px" r="9"/>
-          <circle class="b4-bub b4-a" style="--t:.34;--dx:10px"  r="6"/>
-          <circle class="b4-bub b4-a" style="--t:.37;--dx:-4px"  r="12"/>
-          <circle class="b4-bub b4-a" style="--t:.41;--dx:16px"  r="5"/>
-          <circle class="b4-bub b4-a" style="--t:.44;--dx:-10px" r="8"/>
-          <circle class="b4-bub b4-a" style="--t:.48;--dx:6px"   r="10"/>
-          <circle class="b4-bub b4-a" style="--t:.52;--dx:-18px" r="5"/>
-          <circle class="b4-bub b4-a" style="--t:.56;--dx:12px"  r="7"/>
+          <circle class="b4-bub b4-a" style="--t:.46;--dx:-14px" r="9"/>
+          <circle class="b4-bub b4-a" style="--t:.49;--dx:10px"  r="6"/>
+          <circle class="b4-bub b4-a" style="--t:.52;--dx:-4px"  r="12"/>
+          <circle class="b4-bub b4-a" style="--t:.55;--dx:16px"  r="5"/>
+          <circle class="b4-bub b4-a" style="--t:.58;--dx:-10px" r="8"/>
+          <circle class="b4-bub b4-a" style="--t:.61;--dx:6px"   r="10"/>
+          <circle class="b4-bub b4-a" style="--t:.64;--dx:-18px" r="5"/>
+          <circle class="b4-bub b4-a" style="--t:.67;--dx:12px"  r="7"/>
           <!-- the big breath: one fast burst -->
-          <circle class="b4-bub b4-a" style="--t:.500;--d:.17;--dx:-8px"  r="15"/>
-          <circle class="b4-bub b4-a" style="--t:.510;--d:.17;--dx:16px"  r="10"/>
-          <circle class="b4-bub b4-a" style="--t:.520;--d:.16;--dx:-2px"  r="19"/>
-          <circle class="b4-bub b4-a" style="--t:.530;--d:.17;--dx:22px"  r="8"/>
-          <circle class="b4-bub b4-a" style="--t:.540;--d:.16;--dx:-18px" r="12"/>
-          <circle class="b4-bub b4-a" style="--t:.555;--d:.17;--dx:6px"   r="9"/>
+          <circle class="b4-bub b4-a" style="--t:.660;--d:.17;--dx:-8px"  r="15"/>
+          <circle class="b4-bub b4-a" style="--t:.668;--d:.17;--dx:16px"  r="10"/>
+          <circle class="b4-bub b4-a" style="--t:.676;--d:.16;--dx:-2px"  r="19"/>
+          <circle class="b4-bub b4-a" style="--t:.684;--d:.17;--dx:22px"  r="8"/>
+          <circle class="b4-bub b4-a" style="--t:.692;--d:.16;--dx:-18px" r="12"/>
+          <circle class="b4-bub b4-a" style="--t:.704;--d:.17;--dx:6px"   r="9"/>
         </g>
       </g>
 
@@ -187,27 +189,27 @@ const url = (name: string) => `url(#${id(name)})`;
    (1017, 490: its place plus the sky's parallax offset) while that spot moves to the frame centre. */
 .b4 .b4-zoom { animation-name: b4-zoom; transform-origin: 1017px 490px; }
 @keyframes b4-zoom {
-  0%, 80% { transform: translate(0, 0) scale(1); animation-timing-function: cubic-bezier(.5, 0, .8, .5) }
-  96%, 100% { transform: translate(-217px, 310px) scale(9) }
+  0%, 88% { transform: translate(0, 0) scale(1); animation-timing-function: cubic-bezier(.5, 0, .8, .5) }
+  99%, 100% { transform: translate(-217px, 310px) scale(9) }
 }
 /* the craters fade while the moon fills the frame, so the beat ends on even pale moonlight */
 .b4 .b4-craterout { animation-name: b4-crater-out; }
-@keyframes b4-crater-out { 0%, 90% { opacity: 1 } 96%, 100% { opacity: 0 } }
+@keyframes b4-crater-out { 0%, 95% { opacity: 1 } 99%, 100% { opacity: 0 } }
 
 /* fog along the waterline: drifts one 512-unit tile, fades out before the zoom would blow it up */
 .b4 .b4-fog { animation-name: b4-fog; }
 @keyframes b4-fog { 0% { transform: translateX(0); opacity: .3 } 50% { opacity: .4 } 100% { transform: translateX(-512px); opacity: .28 } }
 .b4 .b4-fogout { animation-name: b4-fog-out; }
-@keyframes b4-fog-out { 0%, 80% { opacity: 1 } 88%, 100% { opacity: 0 } }
+@keyframes b4-fog-out { 0%, 87% { opacity: 1 } 93%, 100% { opacity: 0 } }
 
 /* moon glints on the surface */
-.b4 .b4-glint { animation: b4-glint calc(var(--beat-duration) / 3) linear infinite alternate; }
-.b4 .b4-glint:nth-child(2) { animation-delay: calc(var(--beat-duration) / -5); }
-.b4 .b4-glint:nth-child(3) { animation-delay: calc(var(--beat-duration) / -9); }
+.b4 .b4-glint { animation: b4-glint 2000ms linear infinite alternate; }
+.b4 .b4-glint:nth-child(2) { animation-delay: -1200ms; }
+.b4 .b4-glint:nth-child(3) { animation-delay: -667ms; }
 @keyframes b4-glint { from { opacity: .25 } to { opacity: .85 } }
 
 /* ravens: they rise off the island and grow as they fly toward the camera (scale = distance) */
-.b4 .b4-r1 { animation-name: b4-raven1; animation-timing-function: cubic-bezier(.35, .05, .6, 1); }
+.b4 .b4-r1 { animation-name: b4-raven1; animation-duration: 6000ms; animation-timing-function: cubic-bezier(.35, .05, .6, 1); }
 @keyframes b4-raven1 {
   0%   { transform: translate(600px, 690px) scale(.10) rotate(-6deg); opacity: 0 }
   6%   { opacity: 1 }
@@ -217,35 +219,35 @@ const url = (name: string) => `url(#${id(name)})`;
   100% { transform: translate(1900px, 120px) scale(1.8) rotate(-18deg); opacity: 1 }
 }
 /* raven 2 skims the rings, keeps flying, crosses the full moon and leaves the frame on the right */
-.b4 .b4-r2 { animation-name: b4-raven2; --flaps: 16; --flap-off: calc(var(--beat-duration) / -40); }
+.b4 .b4-r2 { animation-name: b4-raven2; --flaps: 16; --flap-off: -150ms; }
 @keyframes b4-raven2 {
   0%, 9% { transform: translate(560px, 700px) scale(.10) rotate(-2deg); opacity: 0 }
   15%  { opacity: 1 }
-  38%  { transform: translate(720px, 640px) scale(.34) rotate(6deg) }
-  56%  { transform: translate(860px, 688px) scale(.6) rotate(2deg) }
-  66%  { transform: translate(960px, 660px) scale(.72) rotate(-8deg) }
-  78%  { transform: translate(1060px, 655px) scale(.85) rotate(-5deg) }
-  90%  { transform: translate(1180px, 635px) scale(1) rotate(-6deg) }
-  96%  { transform: translate(1420px, 600px) scale(1.1) rotate(-8deg); opacity: 1 }
+  44%  { transform: translate(720px, 640px) scale(.34) rotate(6deg) }
+  64%  { transform: translate(860px, 688px) scale(.6) rotate(2deg) }
+  72%  { transform: translate(960px, 660px) scale(.72) rotate(-8deg) }
+  82%  { transform: translate(1060px, 655px) scale(.85) rotate(-5deg) }
+  91%  { transform: translate(1180px, 635px) scale(1) rotate(-6deg) }
+  97%  { transform: translate(1420px, 600px) scale(1.1) rotate(-8deg); opacity: 1 }
   100% { transform: translate(1730px, 560px) scale(1.15) rotate(-9deg); opacity: 1 }
 }
 /* wing beats; each wing pivots at the shoulder (its group's origin) */
-.b4 .b4-flap { animation: b4-flap calc(var(--beat-duration) / var(--flaps, 18)) ease-in-out infinite alternate; animation-delay: var(--flap-off, 0s); transform-origin: 0 0; }
-.b4 .b4-flap.b4-far { animation-delay: calc(var(--flap-off, 0s) - var(--beat-duration) / 90); }
+.b4 .b4-flap { animation: b4-flap calc(6000ms / var(--flaps, 18)) ease-in-out infinite alternate; animation-delay: var(--flap-off, 0s); transform-origin: 0 0; }
+.b4 .b4-flap.b4-far { animation-delay: calc(var(--flap-off, 0s) - 67ms); }
 @keyframes b4-flap { from { transform: scaleY(1) } to { transform: scaleY(-.5) } }
 
-/* the giant: eye glow and runes breathe, the body heaves once */
+/* the giant: the eye opens and closes once on "not empty", then eye glow and runes breathe and the body heaves once */
 .b4 .b4-eye { animation-name: b4-eye; }
 .b4 .b4-rune { animation-name: b4-rune; }
 .b4 .b4-heave { animation-name: b4-heave; animation-timing-function: ease-in-out; }
-@keyframes b4-eye { 0%, 20% { opacity: 0 } 32% { opacity: .85 } 46% { opacity: .4 } 58% { opacity: 1 } 74% { opacity: .35 } 88% { opacity: .7 } 100% { opacity: .5 } }
-@keyframes b4-rune { 0%, 26% { opacity: 0 } 38% { opacity: .7 } 52% { opacity: .2 } 64% { opacity: .9 } 80% { opacity: .25 } 100% { opacity: .55 } }
-@keyframes b4-heave { 0%, 30% { transform: translateY(0) } 58% { transform: translateY(-14px) } 86% { transform: translateY(1px) } 100% { transform: translateY(0) } }
+@keyframes b4-eye { 0%, 34% { opacity: 0 } 37% { opacity: .7 } 40% { opacity: .12 } 42%, 52% { opacity: 0 } 61% { opacity: .85 } 69% { opacity: .4 } 77% { opacity: 1 } 86% { opacity: .35 } 93% { opacity: .7 } 100% { opacity: .5 } }
+@keyframes b4-rune { 0%, 56% { opacity: 0 } 65% { opacity: .7 } 73% { opacity: .2 } 81% { opacity: .9 } 90% { opacity: .25 } 100% { opacity: .55 } }
+@keyframes b4-heave { 0%, 58% { transform: translateY(0) } 76% { transform: translateY(-14px) } 93% { transform: translateY(1px) } 100% { transform: translateY(0) } }
 
 /* breath: a trickle of bubbles from the lips, then one fast burst; --t start, --d length, --dx drift */
 .b4 .b4-bub {
   animation-name: b4-bub;
-  animation-duration: calc(var(--beat-duration) * var(--d, .27));
+  animation-duration: calc(6000ms * var(--d, .27));
   animation-delay: calc(var(--beat-duration) * var(--t));
   animation-timing-function: cubic-bezier(.3, .1, .7, 1);
 }
@@ -259,16 +261,16 @@ const url = (name: string) => `url(#${id(name)})`;
 /* rings on the surface, and a glow where the burst breaks */
 .b4 .b4-ring {
   animation-name: b4-ring;
-  animation-duration: calc(var(--beat-duration) * .3);
+  animation-duration: 1800ms;
   animation-delay: calc(var(--beat-duration) * var(--t));
   animation-timing-function: cubic-bezier(.2, .6, .4, 1);
 }
 @keyframes b4-ring { 0% { transform: scale(.1); opacity: 0 } 12% { opacity: .9 } 100% { transform: scale(1.7); opacity: 0 } }
 .b4 .b4-sglow { animation-name: b4-surface-glow; transform-box: fill-box; transform-origin: center; }
-@keyframes b4-surface-glow { 0%, 66% { opacity: 0; transform: scale(.6) } 71% { opacity: .9; transform: scale(1) } 100% { opacity: 0; transform: scale(1.35) } }
+@keyframes b4-surface-glow { 0%, 75% { opacity: 0; transform: scale(.6) } 79% { opacity: .9; transform: scale(1) } 100% { opacity: 0; transform: scale(1.35) } }
 
 /* kelp sways */
-.b4 .b4-kelp { animation: b4-kelp calc(var(--beat-duration) * .6) ease-in-out infinite alternate; transform-origin: 0 0; }
-.b4 .b4-kelp:nth-of-type(2n) { animation-delay: calc(var(--beat-duration) * -.25); }
+.b4 .b4-kelp { animation: b4-kelp 3600ms ease-in-out infinite alternate; transform-origin: 0 0; }
+.b4 .b4-kelp:nth-of-type(2n) { animation-delay: -1500ms; }
 @keyframes b4-kelp { from { transform: rotate(-4deg) } to { transform: rotate(5deg) } }
 </style>

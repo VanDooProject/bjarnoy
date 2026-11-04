@@ -28,6 +28,13 @@
     "hidden": "Ausgeblendet",
     "seed": "Seed"
   },
+  "statuses": {
+    "active": "Aktiv",
+    "inactive": "Inaktiv",
+    "full": "Voll",
+    "creating": "Wird erstellt …",
+    "failed": "Fehlgeschlagen"
+  },
   "joins": {
     "closed": "Geschlossen",
     "open": "Offen"
@@ -74,5 +81,7 @@
     "locked": "Gesperrt"
   },
   "runStateSince": "{state} seit {date} ({relative})",
-  "applyRunState": "Übernehmen"
+  "applyRunState": "Übernehmen",
+  "creatingNote": "Die Karte wird gerade erzeugt. Diese Seite aktualisiert sich, sobald sie fertig ist; danach kannst du die Welt einrichten.",
+  "failedNote": "Die Welt konnte nicht erstellt werden: {reason} Erstelle sie noch einmal unter demselben Namen."
 }

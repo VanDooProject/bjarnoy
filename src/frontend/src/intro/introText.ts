@@ -16,12 +16,3 @@ export function introText(locale: IntroLocale, key: string): string {
   }
   return typeof node === 'string' ? node : key;
 }
-
-/** Reading speed assumed for narration (words per minute). */
-export const READING_WPM = 230;
-
-/** Time to read a narration line: 1 s to find it, then its words at READING_WPM. */
-export function readingMs(text: string): number {
-  const words = text.trim().split(/\s+/).filter(Boolean).length;
-  return Math.round(1000 + (words * 60000) / READING_WPM);
-}

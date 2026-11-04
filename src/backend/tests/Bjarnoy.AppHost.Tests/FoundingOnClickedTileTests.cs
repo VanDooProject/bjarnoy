@@ -125,6 +125,22 @@ public class FoundingOnClickedTileTests(AppHostFixture fixture)
         var world = (await createWorld.Content.ReadFromJsonAsync<AdminWorldResponse>(cancellationToken))!;
         Assert.Equal(PinnedWorldSeed, world.Seed);
 
+        // The map is generated in the background (the endpoint answers 202 with the world still "creating"); the
+        // browser below needs the finished world.
+        var deadline = DateTime.UtcNow.AddMinutes(3);
+        while (true)
+        {
+            var listed = (await apiClient.GetFromJsonAsync<List<AdminWorldResponse>>("/api/v1/admin/worlds", cancellationToken))!;
+            var status = listed.Single(w => w.Id == world.Id).Status;
+            if (status == "active")
+            {
+                break;
+            }
+
+            Assert.True(status == "creating" && DateTime.UtcNow < deadline, $"The world did not become active (status '{status}').");
+            await Task.Delay(500, cancellationToken);
+        }
+
         // The rest of this test drives the anonymous player flow (the
         // founding browser's own X-Owner-Id, not the admin's), so the admin
         // token that just created the world must not ride along on the reads

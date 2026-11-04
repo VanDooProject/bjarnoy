@@ -713,6 +713,8 @@ export interface AdminWorldResponse {
   createdAt: string;
   seed: number;
   generation: WorldGenerationSettings;
+  /** Why generation failed; set only when `status` is `failed`. */
+  creationError: string | null;
 }
 
 /**

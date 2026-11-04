@@ -35,6 +35,24 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
 
     private HttpClient Client() => _factory.CreateClient();
 
+    /// <summary>Polls the admin listing until the world has left "creating"; the worker generates it in the background.</summary>
+    private async Task<AdminWorldResponse> WaitForWorldAsync(HttpClient adminClient, Guid worldId)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while (true)
+        {
+            var listed = await adminClient.GetFromJsonAsync<List<AdminWorldResponse>>(
+                "/api/v1/admin/worlds", SqliteApiFixture.StrictJson, Ct);
+            var world = listed!.Single(w => w.Id == worldId);
+            if (world.Status != "creating" || DateTime.UtcNow > deadline)
+            {
+                return world;
+            }
+
+            await Task.Delay(100, Ct);
+        }
+    }
+
     private static string Unique(string prefix) => $"{prefix}-{Guid.CreateVersion7():N}"[..20];
 
     private static void Authorize(HttpClient client, string accessToken) =>
@@ -582,10 +600,13 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         var created = await client.PostJsonAsync(
             "/api/v1/admin/worlds", TestWorlds.CreateRequest(name, seed: 21, radius: 40, maxPlayers: 42), Ct);
 
-        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        // Answered at once, before the map exists; the background worker then activates it.
+        Assert.Equal(HttpStatusCode.Accepted, created.StatusCode);
         var world = await created.ReadStrictAsync<AdminWorldResponse>(Ct);
         Assert.Equal(name, world.Name);
         Assert.Equal(42, world.MaxPlayers);
+        Assert.Equal("creating", world.Status);
+        Assert.Equal("active", (await WaitForWorldAsync(client, world.Id)).Status);
 
         var listed = await client.GetFromJsonAsync<List<AdminWorldResponse>>(
             "/api/v1/admin/worlds", SqliteApiFixture.StrictJson, Ct);
@@ -604,14 +625,15 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             "/api/v1/admin/worlds", TestWorlds.CreateRequest(Unique("seedless"), seed: null, radius: 30), Ct);
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
 
-        // Whatever seed was drawn must be persisted, or the map is not reproducible.
+        // Whatever seed was drawn must be persisted, or the map is not reproducible. The drawn seed may still be
+        // redrawn by the worker when it has no islands, so the stored seed is read once the world is active.
         var world = await response.ReadStrictAsync<AdminWorldResponse>(Ct);
-        var listed = await client.GetFromJsonAsync<List<AdminWorldResponse>>(
-            "/api/v1/admin/worlds", SqliteApiFixture.StrictJson, Ct);
+        var active = await WaitForWorldAsync(client, world.Id);
 
-        Assert.Equal(world.Seed, listed!.Single(w => w.Id == world.Id).Seed);
+        Assert.Equal("active", active.Status);
+        Assert.NotEqual(0, active.Seed);
     }
 
     [Theory]

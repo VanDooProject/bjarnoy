@@ -4,6 +4,8 @@
   "pause": "Pause",
   "resume": "Weiter",
   "restart": "Von vorn",
+  "soundOn": "Ton einschalten",
+  "soundOff": "Ton ausschalten",
   "play": "Saga abspielen",
   "playIntro": "Intro abspielen",
   "backToDocs": "Zurück zur Doku",

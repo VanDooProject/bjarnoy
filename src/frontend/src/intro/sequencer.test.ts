@@ -50,7 +50,7 @@ describe('IntroSequencer landing', () => {
     expect(seq.state.beat).toBe('sending');
   });
 
-  // Fast loads are the common case: the hold's narration must still get its reading time before landfall.
+  // Fast loads are the common case: the hold's voice clip must still play out before landfall.
   it('plays the hold for its minimum even when loaded before it, then exits', () => {
     const { seq } = make('landing', false, 1500);
     seq.start();
@@ -260,6 +260,54 @@ describe('IntroSequencer loop', () => {
     expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall' });
     vi.advanceTimersByTime(last.durationMs * 3);
     expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall' });
+  });
+
+  it('restart starts a new round, also when the first beat is showing', () => {
+    const { seq } = make('landing');
+    seq.start();
+    expect(seq.state).toMatchObject({ beat: beats[0].id, round: 0 });
+    seq.restart();
+    expect(seq.state).toMatchObject({ beat: beats[0].id, round: 1 });
+  });
+
+  it('counts a round per pass: a single loop beat bumps it on every restart while the beat stays', () => {
+    const { seq } = make('loop', false, undefined, [first.id]);
+    seq.start();
+    expect(seq.state).toMatchObject({ beat: first.id, round: 0 });
+    vi.advanceTimersByTime(first.durationMs);
+    expect(seq.state).toMatchObject({ beat: first.id, round: 1 });
+    vi.advanceTimersByTime(first.durationMs);
+    expect(seq.state).toMatchObject({ beat: first.id, round: 2 });
+  });
+
+  it('bumps the round only on the wrap with several beats, also when the exit beat is last', () => {
+    const { seq } = make('loop', false, undefined, [first.id, last.id]);
+    seq.start();
+    expect(seq.state.round).toBe(0);
+    vi.advanceTimersByTime(first.durationMs);
+    expect(seq.state).toMatchObject({ beat: last.id, round: 0 });
+    vi.advanceTimersByTime(last.durationMs);
+    expect(seq.state).toMatchObject({ beat: first.id, round: 1 });
+  });
+
+  it('bumps the round once when skip leads back to the first beat', () => {
+    const { seq } = make('loop', false, undefined, ['prophecy', 'sending']);
+    seq.start();
+    seq.skip();
+    expect(seq.state.round).toBe(0);
+    vi.advanceTimersByTime(last.durationMs);
+    expect(seq.state).toMatchObject({ beat: 'prophecy', round: 1 });
+  });
+
+  it('keeps the round at 0 in landing and replay mode', () => {
+    for (const mode of ['landing', 'replay'] as const) {
+      const { seq, changes } = make(mode);
+      seq.start();
+      vi.advanceTimersByTime(4000 + 600 + last.durationMs);
+      seq.notifyLoaded();
+      vi.advanceTimersByTime(last.durationMs);
+      expect(changes.every((c) => c.round === 0)).toBe(true);
+    }
   });
 
   it('reduced motion waits for play, which starts the loop', () => {
