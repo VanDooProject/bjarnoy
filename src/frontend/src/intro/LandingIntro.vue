@@ -28,7 +28,7 @@ const fogUrl = introFogUrl();
 const beats = beatsFor(props.locale, BEATS);
 const exitMeta = beats.find((b) => b.role === 'exit')!;
 
-const state = shallowRef<IntroState>({ phase: 'waitingForPlay', beat: beats[0].id, cycle: 0, skipVisible: false, paused: false });
+const state = shallowRef<IntroState>({ phase: 'waitingForPlay', beat: beats[0].id, cycle: 0, round: 0, skipVisible: false, paused: false });
 const sequencer = new IntroSequencer({
   beats,
   mode: props.mode,
@@ -58,18 +58,19 @@ const voice = new IntroVoice({
     voiceState.value = st;
   },
 });
-let voicedBeat: BeatId | null = null;
+let voicedKey: string | null = null;
 watch(
-  () => [state.value.phase, state.value.beat, state.value.paused] as const,
-  ([phase, beat, paused]) => {
+  () => [state.value.phase, state.value.beat, state.value.round, state.value.paused] as const,
+  ([phase, beat, round, paused]) => {
     if (phase === 'done' || phase === 'ended') {
       voice.stop();
-      voicedBeat = null;
+      voicedKey = null;
       return;
     }
     if (phase === 'waitingForPlay') return;
-    if (beat !== voicedBeat) {
-      voicedBeat = beat;
+    const key = `${beat}:${round}`;
+    if (key !== voicedKey) {
+      voicedKey = key;
       voice.enterBeat(beat);
     }
     if (paused) voice.pause();
@@ -154,7 +155,7 @@ onBeforeUnmount(() => {
 
     <Transition name="intro-fade">
       <!-- beats sharing a scene keep one mounted component; the beat switches on it -->
-      <div :key="meta.scene ?? state.beat" class="beat-layer" :style="beatStyle">
+      <div :key="`${meta.scene ?? state.beat}:${state.round}`" class="beat-layer" :style="beatStyle">
         <component :is="BEAT_COMPONENTS[state.beat]" :paused="state.phase === 'waitingForPlay' || state.paused" />
       </div>
     </Transition>

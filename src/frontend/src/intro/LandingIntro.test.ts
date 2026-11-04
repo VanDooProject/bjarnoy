@@ -120,6 +120,24 @@ describe('LandingIntro', () => {
     expect(w.find('.longship').exists()).toBe(true);
   });
 
+  it('loop: a single beat re-enters its clip and remounts its scene layer on every pass', async () => {
+    const w = await mountIntro({ mode: 'loop', loopBeats: ['fire'] });
+    const root = w.get('[data-testid="landing-intro"]');
+    const layer = w.get('.beat-layer').element;
+    // re-entering a beat halts (pauses and rewinds) the clip that was playing
+    const halts = vi.spyOn(HTMLMediaElement.prototype, 'pause');
+    const before = halts.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(CLIP_MS.en.fire + VOICE_TAIL_MS);
+    expect(root.attributes('data-beat')).toBe('fire');
+    expect(root.attributes('data-voice-beat')).toBe('fire');
+    expect(w.get('.beat-layer').element).not.toBe(layer);
+    expect(halts.mock.calls.length).toBeGreaterThan(before);
+    const second = w.get('.beat-layer').element;
+    await vi.advanceTimersByTimeAsync(CLIP_MS.en.fire + VOICE_TAIL_MS);
+    expect(w.get('.beat-layer').element).not.toBe(second);
+    w.unmount();
+  });
+
   describe('voice', () => {
     const beat = (w: VueWrapper) => w.get('[data-testid="landing-intro"]').attributes('data-beat');
     const root = (w: VueWrapper) => w.get('[data-testid="landing-intro"]');
