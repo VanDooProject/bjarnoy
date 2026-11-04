@@ -157,9 +157,7 @@ async function patchDeepInside(settlement: SettlementPage, want: 'sea' | 'land',
 
       // Spiral out from the settlement so the hex found is the closest one that
       // qualifies, which is the one most likely to be comfortably on screen.
-      // 24 rings, not fewer: the demo landfall can sit well inland (15 hexes from the sea on seed 20260831),
-      // and the on-screen check below is what rejects a patch the camera does not show.
-      for (let ring = 0; ring <= 24; ring++) {
+      for (let ring = 0; ring <= 12; ring++) {
         for (let dq = -ring; dq <= ring; dq++) {
           for (let dr = -ring; dr <= ring; dr++) {
             if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 !== ring) continue;

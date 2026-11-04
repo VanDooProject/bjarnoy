@@ -92,8 +92,9 @@ let fogViewportTimer: ReturnType<typeof setTimeout> | null = null;
 // the settlement (water-shader.spec). 20260824 lost all three when the
 // island-density change moved its landfall inland, and 20260830 when the bog
 // guarantee did (demo founding re-runs findLandfall after placing the island's
-// giants, which pushed it to 58,244); 20260831 founds on the coast at 51,48.
-const DEMO_SEED = 20260831;
+// giants, which pushed it to 58,244); 20260831 founded on the coast at 51,48 until removing the bog gap fill
+// moved its landfall 15 hexes inland (39,87); 20260905 founds on the coast at 56,-3.
+const DEMO_SEED = 20260905;
 
 /**
  * Discriminated result of `refreshPlotSuggestion`, replacing the bare
