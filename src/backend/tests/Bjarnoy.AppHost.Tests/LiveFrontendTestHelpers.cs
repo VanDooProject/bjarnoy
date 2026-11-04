@@ -264,19 +264,84 @@ public static class LiveFrontendTestHelpers
     /// </summary>
     public static async Task BuildThroughRingAsync(IPage page, string category, string building)
     {
+        await page.EvaluateAsync(RingTimelineScript);
         var swapped = page.Locator(".ring-backdrop:not([data-swapping])");
         var build = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Build" }).First;
         await Assertions.Expect(build).ToBeVisibleAsync(new() { Timeout = 10_000 });
         await build.ClickAsync();
-        await Assertions.Expect(swapped).ToHaveCountAsync(1);
+        await ExpectSwapLandedAsync(page, swapped, "Build");
         var categoryBubble = page.Locator(".ring-bubble:not(.back):not(.child)", new PageLocatorOptions { HasText = category }).First;
         await Assertions.Expect(categoryBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
         await categoryBubble.ClickAsync();
-        await Assertions.Expect(swapped).ToHaveCountAsync(1);
+        await ExpectSwapLandedAsync(page, swapped, category);
         var buildingBubble = page.Locator(".ring-bubble.child", new PageLocatorOptions { HasText = building }).First;
         await Assertions.Expect(buildingBubble).ToBeVisibleAsync(new() { Timeout = 10_000 });
         await buildingBubble.ClickAsync();
     }
+
+    /// <summary>
+    /// Waits for the layer swap after clicking <paramref name="clicked"/> to land. On a timeout the exception carries what
+    /// the page showed: a count of 0 means either the ring is gone or it is stuck mid-swap (<c>data-swapping</c> never
+    /// cleared), and only the DOM state plus the timeline from <see cref="RingTimelineScript"/> can tell those apart —
+    /// this flake (the ring "closing" right after Build) could not be reproduced locally, only on CI.
+    /// </summary>
+    private static async Task ExpectSwapLandedAsync(IPage page, ILocator swapped, string clicked)
+    {
+        try
+        {
+            await Assertions.Expect(swapped).ToHaveCountAsync(1);
+        }
+        catch (PlaywrightException ex)
+        {
+            string state;
+            try
+            {
+                state = await page.EvaluateAsync<string>(RingStateScript);
+            }
+            catch (PlaywrightException diagnosticsFailed)
+            {
+                state = $"(ring state unavailable: {diagnosticsFailed.Message})";
+            }
+            throw new InvalidOperationException($"The ring's layer swap after clicking \"{clicked}\" never landed. Ring state: {state}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Records, from now until the next navigation, the pointer events the page receives (with their target) and every
+    /// ring backdrop mount, unmount and <c>data-swapping</c> change, timestamped, into <c>window.__ringTimeline</c>.
+    /// Read only by <see cref="RingStateScript"/> when a swap wait fails. Re-running it keeps the existing recorder.
+    /// </summary>
+    private const string RingTimelineScript = """
+        () => {
+          if (window.__ringTimeline) return;
+          const log = (window.__ringTimeline = []);
+          const at = () => Math.round(performance.now());
+          const describe = (el) => (el && el.nodeType === 1 ? `${el.tagName.toLowerCase()}.${[...el.classList].join('.')} "${(el.textContent || '').trim().slice(0, 24)}"` : String(el));
+          for (const type of ['pointerdown', 'pointerup', 'click', 'keydown', 'contextmenu']) {
+            window.addEventListener(type, (e) => log.push(`${at()} ${type} ${Math.round(e.clientX ?? -1)},${Math.round(e.clientY ?? -1)} ${describe(e.target)}`), true);
+          }
+          const isRing = (n) => n.nodeType === 1 && (n.matches('.ring-backdrop') || n.querySelector('.ring-backdrop'));
+          new MutationObserver((records) => {
+            for (const r of records) {
+              if (r.type === 'attributes') log.push(`${at()} data-swapping=${r.target.getAttribute('data-swapping')}`);
+              for (const n of r.addedNodes) if (isRing(n)) log.push(`${at()} ring mounted`);
+              for (const n of r.removedNodes) if (isRing(n)) log.push(`${at()} ring removed`);
+            }
+          }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-swapping'] });
+        }
+        """;
+
+    /// <summary>The ring's DOM at the moment a swap wait failed, its running animations, and the recorded timeline.</summary>
+    private const string RingStateScript = """
+        () => {
+          const backdrops = [...document.querySelectorAll('.ring-backdrop')].map((b) => ({
+            swapping: b.getAttribute('data-swapping'),
+            bubbles: [...b.querySelectorAll('.ring-bubble')].map((x) => `${[...x.classList].join('.')} "${(x.textContent || '').trim()}"`),
+            animations: b.getAnimations({ subtree: true }).map((a) => `${a.playState}@${Math.round(a.currentTime ?? -1)}`),
+          }));
+          return JSON.stringify({ now: Math.round(performance.now()), backdrops, timeline: (window.__ringTimeline || []).slice(-60) });
+        }
+        """;
 
     /// <summary>
     /// Logs in as the seeded admin account and returns an <see cref="HttpClient"/>
