@@ -4,13 +4,15 @@ import './introFog.css';
 import { BEATS, BEAT_COMPONENTS } from './beats/registry';
 import { introFogUrl } from './fogTexture';
 import { introText, readingMs, type IntroLocale } from './introText';
-import { INTRO_BEAT } from './beats/types';
+import { INTRO_BEAT, type BeatId } from './beats/types';
 import { IntroSequencer, type IntroState } from './sequencer';
 
 // Mode, locale and reducedMotion are read once at mount: the sequencer is built
 // for them and a change mid-play must not restart anything.
 const props = defineProps<{
-  mode: 'landing' | 'replay';
+  mode: 'landing' | 'replay' | 'loop';
+  /** loop mode: the beats to loop, defaults to all */
+  loopBeats?: BeatId[];
   locale: IntroLocale;
   reducedMotion: boolean;
   loaded: boolean;
@@ -21,10 +23,11 @@ const FADE_OUT_MS = 1000;
 const fogUrl = introFogUrl();
 const exitMeta = BEATS.find((b) => b.role === 'exit')!;
 
-const state = shallowRef<IntroState>({ phase: 'waitingForPlay', beat: BEATS[0].id, cycle: 0, skipVisible: false });
+const state = shallowRef<IntroState>({ phase: 'waitingForPlay', beat: BEATS[0].id, cycle: 0, skipVisible: false, paused: false });
 const sequencer = new IntroSequencer({
   beats: BEATS,
   mode: props.mode,
+  loopBeats: props.loopBeats,
   reducedMotion: props.reducedMotion,
   // the hold lasts at least as long as its narration takes to read
   holdMinMs: readingMs(introText(props.locale, 'beats.hold')),

@@ -38,6 +38,10 @@ then hands over to the real map.
   from the start.
 - The replay ends on a white screen with "Back to docs" and "Enter the game".
 
+## Looping
+
+Opening the landing page or the replay with `#loop` plays the intro without end: every beat, no load gating, starting again after landfall. `#loop(1-2,5)` loops only the listed beats, numbered as in the story list.
+
 ## Technique
 
 - All code, no loaded assets: scenes are inline SVG in the components, animated with CSS (transform and opacity
