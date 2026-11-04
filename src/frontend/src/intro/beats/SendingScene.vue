@@ -29,6 +29,9 @@ const SMOKE_BOX = {
   width: Math.max(...SMOKE_XS) - Math.min(...SMOKE_XS) + 680,
   height: Math.max(...SMOKE_COLS.map(([, y]) => y)) + 600,
 };
+// the puffs' mask region: the box's width, down to just below the lowest puff (they sway sideways only).
+// A mask region is rastered whole, so it stays this tight.
+const PUFF_REGION = { x: SMOKE_BOX.x, y: 0, width: SMOKE_BOX.width, height: Math.max(...SMOKE_COLS.map(([, y]) => y)) + 60 };
 const FIRES: [number, number, number][] = [[330, 612, 1.25], [520, 602, 1.1], [472, 692, 0.75]];
 
 const fix = (n: number) => Math.round(n * 100) / 100;
@@ -109,7 +112,7 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
       <pattern :id="id('fog')" href="#intro-fog" patternTransform="scale(4)" />
       <pattern :id="id('fog2')" href="#intro-fog" patternTransform="rotate(180) scale(3)" />
       <!-- both smoke columns' puffs, each column at its strength -->
-      <mask :id="id('cols')" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600">
+      <mask :id="id('cols')" maskUnits="userSpaceOnUse" v-bind="PUFF_REGION">
         <g v-for="([, , o], c) in SMOKE_COLS" :key="c" :opacity="o">
           <g v-for="(p, i) in PUFFS[c]" :key="i" class="sd-sway" :style="p.style">
             <ellipse :cx="p.cx" :cy="p.cy" :rx="p.rx" :ry="p.ry" :fill="url('puff')"/>
@@ -118,14 +121,14 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
       </mask>
       <mask :id="id('smkA')"><rect v-bind="SMOKE_BOX" :fill="url('smk')"/></mask>
       <mask :id="id('smkB')"><rect v-bind="SMOKE_BOX" :fill="url('wsp')"/></mask>
-      <mask :id="id('hz')" maskUnits="userSpaceOnUse" x="-40" y="0" width="1680" height="1600">
+      <mask :id="id('hz')" maskUnits="userSpaceOnUse" x="-40" y="660" width="1680" height="260">
         <rect x="-40" y="660" width="1680" height="260" :fill="url('band')"/>
       </mask>
-      <mask :id="id('shore')" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600">
+      <mask :id="id('shore')" maskUnits="userSpaceOnUse" x="0" y="860" width="1600" height="220">
         <rect x="0" y="860" width="1600" height="220" :fill="url('band')"/>
       </mask>
-      <mask :id="id('right')" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600">
-        <rect x="0" y="0" width="1600" height="1600" :fill="url('ramp')"/>
+      <mask :id="id('right')" maskUnits="userSpaceOnUse" x="0" y="860" width="1600" height="220">
+        <rect x="0" y="860" width="1600" height="220" :fill="url('ramp')"/>
       </mask>
       <mask :id="id('hzTex')"><rect x="-40" y="640" width="2700" height="300" :fill="url('fog')"/></mask>
       <mask :id="id('shoreTex')"><rect x="-808" y="840" width="2448" height="260" :fill="url('fog2')"/></mask>
