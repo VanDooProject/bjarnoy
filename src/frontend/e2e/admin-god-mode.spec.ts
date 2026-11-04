@@ -349,7 +349,7 @@ test.describe('admin god mode', { tag: '@g2' }, () => {
       if (route.request().method() === 'POST') {
         const body = route.request().postDataJSON() as { name: string; maxPlayers: number };
         return route.fulfill({
-          status: 201,
+          status: 202,
           json: { ...existing, id: 'world-2', name: body.name, maxPlayers: body.maxPlayers, playerCount: 0 },
         });
       }

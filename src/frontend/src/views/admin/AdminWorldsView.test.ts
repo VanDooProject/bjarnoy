@@ -46,6 +46,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     createdAt: '2026-01-01T00:00:00Z',
     seed: 1234,
     generation: generationSettings(),
+    creationError: null,
     ...overrides,
   };
 }
@@ -66,6 +67,47 @@ beforeEach(() => {
 });
 
 describe('AdminWorldsView', () => {
+  it('shows a world that is being created without its settings and polls until it is active', async () => {
+    vi.useFakeTimers();
+    try {
+      adminListWorlds.mockResolvedValue([world({ id: 'new', name: 'Alfheim', status: 'creating' })]);
+      const wrapper = mount(AdminWorldsView, {
+        global: { stubs: { RouterLink: RouterLinkStub }, plugins: [createTestI18n({ adminWorlds })] },
+      });
+      await flushPromises();
+
+      expect(wrapper.text()).toContain(adminWorlds.statuses.creating);
+      expect(wrapper.text()).toContain(adminWorlds.creatingNote);
+      expect(wrapper.find('.panel .fields').exists()).toBe(false);
+      expect(wrapper.find('.panel .actions').exists()).toBe(false);
+
+      adminListWorlds.mockResolvedValue([world({ id: 'new', name: 'Alfheim', status: 'active', seed: 99 })]);
+      await vi.advanceTimersByTimeAsync(3000);
+      await flushPromises();
+
+      expect(wrapper.text()).toContain(adminWorlds.statuses.active);
+      expect(wrapper.text()).not.toContain(adminWorlds.creatingNote);
+      expect(wrapper.find('.panel .fields').exists()).toBe(true);
+
+      // Nothing is being created any more, so the poll has stopped.
+      const calls = adminListWorlds.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(adminListWorlds.mock.calls.length).toBe(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows why a world failed to be created', async () => {
+    const wrapper = await mountView([
+      world({ id: 'bad', name: 'Niflheim', status: 'failed', creationError: 'Seed 7 at radius 30 produced no islands.' }),
+    ]);
+
+    expect(wrapper.text()).toContain(adminWorlds.statuses.failed);
+    expect(wrapper.text()).toContain('Seed 7 at radius 30 produced no islands.');
+    expect(wrapper.find('.panel .fields').exists()).toBe(false);
+  });
+
   it('lists every world with its admin-only fields', async () => {
     const wrapper = await mountView([
       world(),
