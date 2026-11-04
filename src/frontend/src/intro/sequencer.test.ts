@@ -57,12 +57,17 @@ describe('IntroSequencer landing', () => {
     expect(seq.state.beat).toBe('sending');
   });
 
-  it('skips the hold and exits right after the last intro beat when loaded early', () => {
-    const { seq } = make('landing');
+  // Fast loads are the common case: the hold's narration must still get its reading time before landfall.
+  it('plays the hold for its minimum even when loaded before it, then exits', () => {
+    const { seq } = make('landing', false, 1500);
     seq.start();
     vi.advanceTimersByTime(3500);
     seq.notifyLoaded();
     vi.advanceTimersByTime(500);
+    expect(seq.state).toMatchObject({ phase: 'playing', beat: 'hold' });
+    vi.advanceTimersByTime(1499);
+    expect(seq.state).toMatchObject({ phase: 'playing', beat: 'hold' });
+    vi.advanceTimersByTime(1);
     expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall' });
   });
 
