@@ -107,6 +107,30 @@ describe('LandingIntro', () => {
     expect(w.find('.longship').exists()).toBe(true);
   });
 
+  describe('restart', () => {
+    it('is shown between skip and pause exactly when pause is shown, icon-only with a label', async () => {
+      const w = await mountIntro({ reducedMotion: true });
+      expect(w.find('[data-testid="intro-restart"]').exists()).toBe(false);
+      await w.get('[data-testid="intro-play"]').trigger('click');
+      const btn = w.get('[data-testid="intro-restart"]');
+      expect(btn.attributes('aria-label')).toBe('Restart');
+      expect(btn.text()).toBe('⟲');
+      const order = w.findAll('.actions button').map((b) => b.attributes('data-testid'));
+      expect(order.indexOf('intro-restart')).toBe(order.length - 2);
+      expect(order[order.length - 1]).toBe('intro-pause');
+    });
+
+    it('click goes back to the first beat and unpauses', async () => {
+      const w = await mountIntro();
+      await vi.advanceTimersByTimeAsync(BEATS[0].durationMs + 100);
+      expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe(BEATS[1].id);
+      await w.get('[data-testid="intro-pause"]').trigger('click');
+      await w.get('[data-testid="intro-restart"]').trigger('click');
+      expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe(BEATS[0].id);
+      expect(w.get('[data-testid="intro-pause"]').attributes('aria-pressed')).toBe('false');
+    });
+  });
+
   describe('pause', () => {
     const pauseBtn = (w: VueWrapper) => w.get('[data-testid="intro-pause"]');
     const beatPaused = (w: VueWrapper) => w.get('.beat-layer > *').classes().includes('is-paused');

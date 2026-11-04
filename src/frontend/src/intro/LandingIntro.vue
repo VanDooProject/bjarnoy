@@ -155,6 +155,19 @@ onBeforeUnmount(() => {
         <button
           v-if="pauseVisible"
           type="button"
+          class="intro-btn icon restart"
+          :aria-label="introText(locale, 'restart')"
+          data-testid="intro-restart"
+          @click="sequencer.restart()"
+        >
+          <span aria-hidden="true">⟲</span>
+        </button>
+      </Transition>
+
+      <Transition name="intro-fade">
+        <button
+          v-if="pauseVisible"
+          type="button"
           class="intro-btn pause"
           :aria-pressed="state.paused"
           data-testid="intro-pause"
@@ -239,6 +252,12 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 8px;
   pointer-events: none;
+}
+.intro-btn.icon {
+  width: 44px;
+  padding: 0;
+  font-size: 1.4rem;
+  line-height: 1;
 }
 .actions .intro-btn {
   position: static;

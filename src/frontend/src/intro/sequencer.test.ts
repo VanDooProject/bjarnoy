@@ -389,3 +389,70 @@ describe('IntroSequencer pause', () => {
     expect(seq.state).toMatchObject({ beat: 'fire', phase: 'playing', paused: false });
   });
 });
+
+describe('IntroSequencer restart', () => {
+  it('goes back to the first beat from the middle of a beat', () => {
+    const { seq } = make('landing');
+    seq.start();
+    vi.advanceTimersByTime(2500);
+    expect(seq.state.beat).toBe('ravens');
+    seq.restart();
+    expect(seq.state).toMatchObject({ phase: 'playing', beat: 'fire', cycle: 0, paused: false });
+    vi.advanceTimersByTime(999);
+    expect(seq.state.beat).toBe('fire');
+    vi.advanceTimersByTime(1);
+    expect(seq.state.beat).toBe('prophecy');
+  });
+
+  it('restarts from the exit beat and does not finish from the old exit timer', () => {
+    const { seq } = make('landing');
+    seq.start();
+    seq.notifyLoaded();
+    seq.skip();
+    expect(seq.state.phase).toBe('exiting');
+    vi.advanceTimersByTime(400);
+    seq.restart();
+    expect(seq.state).toMatchObject({ phase: 'playing', beat: 'fire' });
+    vi.advanceTimersByTime(200);
+    expect(seq.state).toMatchObject({ phase: 'playing', beat: 'fire' });
+  });
+
+  it('restarts from paused and runs again', () => {
+    const { seq } = make('replay');
+    seq.start();
+    vi.advanceTimersByTime(1500);
+    seq.pause();
+    expect(seq.state.paused).toBe(true);
+    seq.restart();
+    expect(seq.state).toMatchObject({ beat: 'fire', paused: false });
+    vi.advanceTimersByTime(1000);
+    expect(seq.state.beat).toBe('prophecy');
+  });
+
+  it('forgets the hold progress: the hold has to be reached and read again', () => {
+    const { seq } = make('landing', false, 100);
+    seq.start();
+    vi.advanceTimersByTime(4200);
+    expect(seq.state.beat).toBe('hold');
+    seq.restart();
+    seq.notifyLoaded();
+    vi.advanceTimersByTime(3000);
+    expect(seq.state).toMatchObject({ phase: 'playing', beat: 'sending' });
+  });
+
+  it('loop: goes back to the first selected beat', () => {
+    const { seq } = make('loop', false, undefined, ['prophecy', 'ravens']);
+    seq.start();
+    expect(seq.state.beat).toBe('prophecy');
+    vi.advanceTimersByTime(1000);
+    expect(seq.state.beat).toBe('ravens');
+    seq.restart();
+    expect(seq.state).toMatchObject({ phase: 'playing', beat: 'prophecy' });
+  });
+
+  it('does nothing before play or after the end', () => {
+    const { seq } = make('replay');
+    seq.restart();
+    expect(seq.state.phase).toBe('waitingForPlay');
+  });
+});

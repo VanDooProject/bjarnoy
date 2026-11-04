@@ -155,6 +155,17 @@ export class IntroSequencer {
     else this.emit();
   }
 
+  /** Back to the first beat (landing/replay: the first intro beat; loop: the first selected beat), unpaused. */
+  restart(): void {
+    if (this.phase !== 'playing' && this.phase !== 'exiting') return;
+    this.clear();
+    this.cycle = 0;
+    this.holdMinReached = false;
+    this.phase = 'playing';
+    if (this.opts.mode === 'loop') this.enterLoop(0);
+    else this.enterIntro(0);
+  }
+
   dispose(): void {
     this.clear();
   }

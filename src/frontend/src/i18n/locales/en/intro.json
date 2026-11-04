@@ -3,6 +3,7 @@
   "skip": "Skip",
   "pause": "Pause",
   "resume": "Resume",
+  "restart": "Restart",
   "play": "Play the saga",
   "backToDocs": "Back to docs",
   "enterGame": "Enter the game",
