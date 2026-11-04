@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildIdFromEntryUrl, setOwnBuildId } from './buildId';
 import { registerUnsavedInput } from '../composables/useUnsavedInput';
 import {
-  buildIdFromEntryUrl,
   checkBuildHeader,
   handleChunkLoadError,
   hardLoad,
@@ -11,7 +11,6 @@ import {
   markUpdatePending as markPending,
   reloadWhenIdle,
   resetAppUpdate,
-  setOwnBuildId,
   updateNavigationGuard,
 } from './appUpdate';
 

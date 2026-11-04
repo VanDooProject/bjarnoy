@@ -74,10 +74,28 @@ public sealed class ConcurrentWriteExecutor(GameDbContext dbContext, ILogger<Con
     }
 
     /// <summary>
+    /// Unique indexes on rows that belong to one settlement and are only ever
+    /// written together with its Version-guarded row. A stale read that
+    /// re-inserts such a row shows up as a unique violation instead of a
+    /// concurrency exception: PostgreSQL aborts the whole batch at the INSERT,
+    /// so EF never inspects the 0-row <c>UPDATE ... WHERE Version = N</c> that
+    /// precedes it. Re-running the request re-reads the settled state.
+    /// Other unique violations are domain outcomes and must not be retried.
+    /// </summary>
+    internal static readonly IReadOnlySet<string> SettlementChildUniqueIndexes = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "IX_unit_stacks_SettlementId_UnitType",
+        "IX_placed_buildings_SettlementId_Q_R",
+        "IX_build_orders_SettlementId_Q_R_TargetLevel",
+    };
+
+    /// <summary>
     /// A lost optimistic-concurrency race, or the database refusing a
     /// transaction that a concurrent one made impossible: SQLite
     /// BUSY/LOCKED, PostgreSQL serialization failure or deadlock. Provider
-    /// errors usually arrive wrapped in <see cref="DbUpdateException"/>.
+    /// errors usually arrive wrapped in <see cref="DbUpdateException"/>. Also
+    /// a unique violation on one of <see cref="SettlementChildUniqueIndexes"/>,
+    /// which is the same lost race seen through a different error.
     /// </summary>
     internal static bool IsRetryable(Exception exception)
     {
@@ -90,6 +108,9 @@ public sealed class ConcurrentWriteExecutor(GameDbContext dbContext, ILogger<Con
                 case SqliteException { SqliteErrorCode: 5 or 6 }:
                     return true;
                 case PostgresException { SqlState: "40001" or "40P01" }:
+                    return true;
+                case PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: { } constraint }
+                    when SettlementChildUniqueIndexes.Contains(constraint):
                     return true;
             }
         }

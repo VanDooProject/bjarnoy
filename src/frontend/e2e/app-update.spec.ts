@@ -11,7 +11,7 @@ test.describe('lazy chunk gone after a deploy', () => {
 
   test('"Enter your settlement" reloads the page instead of silently failing', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await page.goto('/');
+    await page.goto('/#no-intro');
     await waitForMapReady(page);
     await claimLandfall(page);
     await placeGuidedBuildings(page);

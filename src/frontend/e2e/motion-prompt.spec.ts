@@ -11,7 +11,7 @@ test.use({ motionPrompt: 'unset' });
 const KEYS = ['bjarnoy.animations', 'bjarnoy.motion.water', 'bjarnoy.motion.lakes', 'bjarnoy.motion.fog', 'bjarnoy.motion.hud'];
 
 async function openLanding(page: import('@playwright/test').Page) {
-  await page.goto('/');
+  await page.goto('/#no-intro');
   await waitForMapReady(page);
 }
 

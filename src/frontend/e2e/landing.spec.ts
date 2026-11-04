@@ -7,7 +7,7 @@ import { SettlementPage } from './pages';
 
 test('landing page is the village view, not a marketing page in front of it', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-  await page.goto('/');
+  await page.goto('/#no-intro');
 
   // zip 6a: a real plot of terrain is on screen immediately — no world map,
   // no click-through, no separate marketing page.
@@ -33,7 +33,7 @@ test('landing page holds the guided pointer back until the map has loaded', { ta
     await terrainHeld;
     await route.continue();
   });
-  await page.goto('/');
+  await page.goto('/#no-intro');
 
   const settlement = new SettlementPage(page);
   await expect(page.getByRole('status').filter({ hasText: 'Loading map' })).toBeVisible();
