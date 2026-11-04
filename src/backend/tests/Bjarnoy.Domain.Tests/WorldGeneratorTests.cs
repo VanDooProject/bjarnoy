@@ -11,6 +11,12 @@ public class WorldGeneratorTests
             .Generate(TestContext.Current.CancellationToken);
 
     [Fact]
+    public void Generation_leaves_one_core_for_the_rest_of_the_process()
+    {
+        Assert.InRange(WorldGenerator.MaxParallelism, 1, Math.Max(1, Environment.ProcessorCount - 1));
+    }
+
+    [Fact]
     public void The_same_seed_produces_the_same_world()
     {
         var first = Generate(2024);
