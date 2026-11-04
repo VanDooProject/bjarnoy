@@ -82,6 +82,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     createdAt: '2026-01-01T00:00:00Z',
     seed: 1234,
     generation: DEFAULT_SETTINGS,
+    creationError: null,
     ...overrides,
   };
 }
