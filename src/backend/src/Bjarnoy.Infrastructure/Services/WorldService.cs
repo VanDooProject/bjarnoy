@@ -124,12 +124,7 @@ public sealed class WorldService(
             MaxPlayers = maxPlayers,
             CreatedAt = _timeProvider.GetUtcNow(),
         };
-        world.ApplyGenerationOptions(usedOptions);
-
-        foreach (var island in generated.Islands)
-        {
-            world.Islands.Add(ToIslandEntity(world.Id, island));
-        }
+        FillWorld(world, generated, usedOptions);
 
         _dbContext.Worlds.Add(world);
 
@@ -155,6 +150,148 @@ public sealed class WorldService(
             name, world.Id, generated.Islands.Count, generated.LandTileCount);
 
         return world;
+    }
+
+    /// <summary>
+    /// First half of the admin creation flow: stores the world as <see cref="WorldStatus.Creating"/> with its generation
+    /// parameters and no islands, so the request can answer at once. <see cref="CompleteWorldCreationAsync"/> generates the map.
+    /// A <see cref="WorldStatus.Failed"/> world of the same name is replaced, so a failed attempt never blocks its name.
+    /// </summary>
+    public async Task<WorldEntity> BeginWorldCreationAsync(
+        string name,
+        WorldGenerationOptions options,
+        int maxPlayers,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxPlayers);
+
+        options.Validate();
+
+        var sameName = await _dbContext.Worlds.Where(w => w.Name == name).ToListAsync(cancellationToken).ConfigureAwait(false);
+        if (sameName.Any(w => w.Status != WorldStatus.Failed))
+        {
+            throw new WorldCreationException($"A world named '{name}' already exists.");
+        }
+
+        _dbContext.Worlds.RemoveRange(sameName);
+
+        var world = new WorldEntity
+        {
+            Name = name,
+            MaxPlayers = maxPlayers,
+            Status = WorldStatus.Creating,
+            CreatedAt = _timeProvider.GetUtcNow(),
+        };
+        world.ApplyGenerationOptions(options);
+        _dbContext.Worlds.Add(world);
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            // Same name race as in CreateWorldAsync: the unique index decides.
+            _dbContext.Entry(world).State = EntityState.Detached;
+            throw new WorldCreationException($"A world named '{name}' already exists.");
+        }
+
+        return world;
+    }
+
+    /// <summary>
+    /// Second half: generates the map of a <see cref="WorldStatus.Creating"/> world and stores its islands, then
+    /// activates it. A map that cannot be used, or an error, leaves the world <see cref="WorldStatus.Failed"/> with the reason.
+    /// </summary>
+    /// <param name="autoSeed">See <see cref="CreateWorldAsync"/>: the seed was drawn at random, so an island-less draw is redrawn.</param>
+    public async Task CompleteWorldCreationAsync(Guid worldId, bool autoSeed, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var stored = await _dbContext.Worlds.AsNoTracking().FirstOrDefaultAsync(w => w.Id == worldId, cancellationToken)
+                .ConfigureAwait(false);
+            if (stored is null || stored.Status != WorldStatus.Creating)
+            {
+                return;
+            }
+
+            var (generated, usedOptions) = await GenerateWithRetryAsync(stored.ToGenerationOptions(), autoSeed, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!HasFoundableIslands(generated))
+            {
+                await FailWorldCreationAsync(
+                    worldId,
+                    $"Seed {usedOptions.Seed} at radius {usedOptions.Radius} produced no islands. Try another seed or a larger radius.",
+                    cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            // Loaded only now, after the minute of generation, so a settings change made meanwhile is not overwritten.
+            var world = await _dbContext.Worlds.FirstOrDefaultAsync(w => w.Id == worldId, cancellationToken).ConfigureAwait(false);
+            if (world is null || world.Status != WorldStatus.Creating)
+            {
+                return;
+            }
+
+            FillWorld(world, generated, usedOptions);
+            world.Status = WorldStatus.Active;
+            world.CreationError = null;
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            _logger.LogInformation(
+                "World {World} ({WorldId}) created with {Islands} islands and {Land} land hexes.",
+                world.Name, world.Id, generated.Islands.Count, generated.LandTileCount);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Creating world {WorldId} failed.", worldId);
+            _dbContext.ChangeTracker.Clear();
+            await FailWorldCreationAsync(worldId, "Generating the map failed; see the server log.", CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Marks every world still <see cref="WorldStatus.Creating"/> as failed: only called when the process starts,
+    /// when no generation can be running, so these were interrupted by a restart.
+    /// </summary>
+    public async Task FailInterruptedWorldCreationsAsync(CancellationToken cancellationToken = default)
+    {
+        var ids = await _dbContext.Worlds.AsNoTracking()
+            .Where(w => w.Status == WorldStatus.Creating)
+            .Select(w => w.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var id in ids)
+        {
+            await FailWorldCreationAsync(id, "Creation was interrupted by a restart. Create the world again.", cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private async Task FailWorldCreationAsync(Guid worldId, string reason, CancellationToken cancellationToken)
+    {
+        await _dbContext.Worlds
+            .Where(w => w.Id == worldId && w.Status == WorldStatus.Creating)
+            .ExecuteUpdateAsync(
+                w => w.SetProperty(x => x.Status, WorldStatus.Failed).SetProperty(x => x.CreationError, reason),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>Puts a generated map into a world: its parameters (the seed may have been redrawn) and its islands.</summary>
+    private static void FillWorld(WorldEntity world, GeneratedWorld generated, WorldGenerationOptions usedOptions)
+    {
+        world.ApplyGenerationOptions(usedOptions);
+
+        foreach (var island in generated.Islands)
+        {
+            world.Islands.Add(ToIslandEntity(world.Id, island));
+        }
     }
 
     /// <summary>
