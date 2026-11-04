@@ -262,6 +262,46 @@ describe('IntroSequencer loop', () => {
     expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall' });
   });
 
+  it('counts a round per pass: a single loop beat bumps it on every restart while the beat stays', () => {
+    const { seq } = make('loop', false, undefined, [first.id]);
+    seq.start();
+    expect(seq.state).toMatchObject({ beat: first.id, round: 0 });
+    vi.advanceTimersByTime(first.durationMs);
+    expect(seq.state).toMatchObject({ beat: first.id, round: 1 });
+    vi.advanceTimersByTime(first.durationMs);
+    expect(seq.state).toMatchObject({ beat: first.id, round: 2 });
+  });
+
+  it('bumps the round only on the wrap with several beats, also when the exit beat is last', () => {
+    const { seq } = make('loop', false, undefined, [first.id, last.id]);
+    seq.start();
+    expect(seq.state.round).toBe(0);
+    vi.advanceTimersByTime(first.durationMs);
+    expect(seq.state).toMatchObject({ beat: last.id, round: 0 });
+    vi.advanceTimersByTime(last.durationMs);
+    expect(seq.state).toMatchObject({ beat: first.id, round: 1 });
+  });
+
+  it('bumps the round once when skip leads back to the first beat', () => {
+    const { seq } = make('loop', false, undefined, ['prophecy', 'sending']);
+    seq.start();
+    seq.skip();
+    expect(seq.state.round).toBe(0);
+    vi.advanceTimersByTime(last.durationMs);
+    expect(seq.state).toMatchObject({ beat: 'prophecy', round: 1 });
+  });
+
+  it('keeps the round at 0 in landing and replay mode', () => {
+    for (const mode of ['landing', 'replay'] as const) {
+      const { seq, changes } = make(mode);
+      seq.start();
+      vi.advanceTimersByTime(4000 + 600 + last.durationMs);
+      seq.notifyLoaded();
+      vi.advanceTimersByTime(last.durationMs);
+      expect(changes.every((c) => c.round === 0)).toBe(true);
+    }
+  });
+
   it('reduced motion waits for play, which starts the loop', () => {
     const { seq } = make('loop', true);
     seq.start();

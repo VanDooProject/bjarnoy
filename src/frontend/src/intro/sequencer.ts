@@ -7,6 +7,8 @@ export interface IntroState {
   beat: BeatId;
   /** Completed hold loops so far (0 during the first hold cycle). */
   cycle: number;
+  /** Loop mode: completed passes through the selected beats (0 on the first pass, 0 outside loop mode). */
+  round: number;
   skipVisible: boolean;
   paused: boolean;
 }
@@ -60,6 +62,7 @@ export class IntroSequencer {
   private holdMinReached = false;
   private phase: IntroPhase = 'waitingForPlay';
   private beat: BeatId;
+  private round = 0;
   private cycle = 0;
 
   private readonly opts: IntroSequencerOptions;
@@ -90,7 +93,7 @@ export class IntroSequencer {
         : this.opts.mode === 'loop'
           ? phase === 'playing'
           : this.loaded && phase === 'playing';
-    return { phase, beat: this.beat, cycle: this.cycle, skipVisible, paused: this.paused };
+    return { phase, beat: this.beat, cycle: this.cycle, round: this.round, skipVisible, paused: this.paused };
   }
 
   start(): void {
@@ -191,6 +194,7 @@ export class IntroSequencer {
   // after the last one it starts again at the first.
   private enterLoop(i: number): void {
     this.clear();
+    if (i >= this.loopList.length) this.round++;
     const index = i % this.loopList.length;
     const meta = this.loopList[index];
     const next = () => this.enterLoop(index + 1);
@@ -220,7 +224,7 @@ export class IntroSequencer {
     this.phase = 'exiting';
     this.beat = this.exitBeat.id;
     this.emit();
-    this.schedule(this.exitBeat.durationMs, () => (this.opts.mode === 'loop' ? this.enterLoop(0) : this.finish()));
+    this.schedule(this.exitBeat.durationMs, () => (this.opts.mode === 'loop' ? this.enterLoop(this.loopList.length) : this.finish()));
   }
 
   private finish(): void {
