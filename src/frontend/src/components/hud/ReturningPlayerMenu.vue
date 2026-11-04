@@ -23,6 +23,7 @@ import WorldList from './WorldList.vue';
 import { useWorldStore } from '../../stores/world';
 import type { MessageSchema } from '../../i18n/schema';
 import HudMenuLocaleRow from './HudMenuLocaleRow.vue';
+import { usePreloadRoute } from '../../composables/usePreloadRoute';
 
 // `unclaimedRealm`: the player already founded a realm but hasn't named a
 // jarl (registered) yet — for them "I already have a realm" as the headline
@@ -36,7 +37,7 @@ import HudMenuLocaleRow from './HudMenuLocaleRow.vue';
 // sitting on a dark bar (the founded landing's floating header, and the
 // in-game bar's top-right chip — see HudNav.vue), so it gets a
 // background of its own, the same chip look as the settlement bubble.
-withDefaults(defineProps<{ nudging?: boolean; unclaimedRealm?: boolean; chip?: boolean }>(), {
+const props = withDefaults(defineProps<{ nudging?: boolean; unclaimedRealm?: boolean; chip?: boolean }>(), {
   nudging: false,
   unclaimedRealm: false,
   chip: false,
@@ -48,6 +49,9 @@ const router = useRouter();
 const world = useWorldStore();
 
 const open = ref(false);
+// The "Name your jarl" row (and the trigger's label) lead to /register for an unclaimed realm:
+// loaded ahead so that row opens the form at once.
+usePreloadRoute('/register', () => props.unclaimedRealm);
 const rootEl = ref<HTMLDivElement | null>(null);
 
 // "Log in" carries the currently-joined world along as context (login↔world

@@ -9,6 +9,7 @@
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { usePlayerStore } from '../../stores/player';
+import { usePreloadRoute } from '../../composables/usePreloadRoute';
 import type { MessageSchema } from '../../i18n/schema';
 
 // Mobile HUD bar rework, phase 2: on an in-game phone bar the anonymous
@@ -22,6 +23,9 @@ defineProps<{ inDrawer?: boolean }>();
 const player = usePlayerStore();
 const router = useRouter();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+
+// Loaded while the nudge is up, so "Name your jarl" opens the form at once.
+usePreloadRoute('/register');
 
 function nameYourJarl() {
   router.push('/register');
