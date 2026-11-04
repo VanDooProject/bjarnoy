@@ -46,7 +46,7 @@ Opening the landing page or the replay with `#loop` plays the intro without end:
 
 ## Play again
 
-The landing page always shows a "Play intro" button at the bottom right, styled like skip, for every visitor. It plays the intro again over the landing page.
+On desktop the landing page always shows a "Play intro" button at the bottom right, styled like skip, for every visitor. It plays the intro again over the landing page. Phones don't show it for now.
 
 ## Technique
 

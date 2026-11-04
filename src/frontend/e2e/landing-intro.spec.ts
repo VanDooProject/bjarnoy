@@ -322,5 +322,14 @@ test.describe('landing intro', { tag: '@g3' }, () => {
     await page.goto('/#no-intro');
     await expect(page.locator('canvas')).toBeVisible();
     await expect(intro(page)).toHaveCount(0);
+    await expect(page.getByTestId('play-intro')).toBeVisible();
+  });
+
+  test('phones leave the play intro button out', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/#no-intro');
+    await expect(page.locator('canvas')).toBeVisible();
+    await expect(page.getByTestId('play-intro')).toBeHidden();
   });
 });

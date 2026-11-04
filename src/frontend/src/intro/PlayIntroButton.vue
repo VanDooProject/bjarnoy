@@ -22,6 +22,12 @@ const { t } = useI18n({ useScope: 'global' });
   right: max(16px, env(safe-area-inset-right));
   bottom: max(16px, env(safe-area-inset-bottom));
 }
+/* left out on phones for now: the onboarding checklist covers the bottom right there (same breakpoint as its tray) */
+@media (max-width: 768px), (max-height: 500px) {
+  .play-intro {
+    display: none;
+  }
+}
 .play-intro-fade-enter-active,
 .play-intro-fade-leave-active {
   transition: opacity 600ms ease;
