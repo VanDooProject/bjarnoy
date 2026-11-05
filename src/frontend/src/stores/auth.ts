@@ -4,12 +4,7 @@ import type { AuthResponse, UserResponse } from '../api/types';
 import { API_BASE_URL } from '../config';
 import { setLocale } from '../i18n';
 import { isSupportedLocale } from '../i18n/locale';
-
-const REFRESH_TOKEN_KEY = 'bjarnoy.refreshToken';
-
-function storedRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_TOKEN_KEY);
-}
+import { clearStoredRefreshToken, readStoredRefreshToken, storeRefreshToken } from '../lib/storedLogin';
 
 // Auth endpoints are called directly with fetch, not through `api` in
 // api/client.ts: that module's `request()` attaches the access token and
@@ -66,7 +61,7 @@ export const useAuthStore = defineStore('auth', {
     applyAuthResponse(response: AuthResponse) {
       this.user = response.user;
       this.accessToken = response.accessToken;
-      localStorage.setItem(REFRESH_TOKEN_KEY, response.refreshToken);
+      storeRefreshToken(response.refreshToken);
       this.applyUserLocale(response.user);
     },
     // The account's saved locale (if any) wins over whatever was already
@@ -81,7 +76,7 @@ export const useAuthStore = defineStore('auth', {
     clearSession() {
       this.user = null;
       this.accessToken = null;
-      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      clearStoredRefreshToken();
     },
     async register(userName: string, password: string, existingOwnerId?: string | null) {
       const response = await post<AuthResponse>('/auth/register', { userName, password, existingOwnerId });
@@ -100,8 +95,8 @@ export const useAuthStore = defineStore('auth', {
      * into a 403. The access token itself goes with the page.
      */
     async revokeSession() {
-      const refreshToken = storedRefreshToken();
-      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      const refreshToken = readStoredRefreshToken();
+      clearStoredRefreshToken();
       if (refreshToken) {
         // Best-effort: the stored session is gone client-side either way.
         await post('/auth/logout', { refreshToken }).catch(() => {});
@@ -119,7 +114,7 @@ export const useAuthStore = defineStore('auth', {
      * by the API client's one-shot retry-after-401 (see `authHooks` below).
      */
     async tryRefresh(): Promise<boolean> {
-      const refreshToken = storedRefreshToken();
+      const refreshToken = readStoredRefreshToken();
       if (!refreshToken) return false;
 
       try {
