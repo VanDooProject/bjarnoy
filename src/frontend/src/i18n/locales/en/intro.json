@@ -6,6 +6,8 @@
   "restart": "Restart",
   "soundOn": "Turn sound on",
   "soundOff": "Turn sound off",
+  "login": "Log in",
+  "enterWorld": "Enter world",
   "play": "Play the saga",
   "playIntro": "Play intro",
   "backToDocs": "Back to docs",

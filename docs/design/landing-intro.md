@@ -17,6 +17,8 @@ then hands over to the real map.
 
 ## Timing
 
+- On the landing page the intro plays on its own only on a device that has neither founded a settlement nor stored a
+  login. `#intro`, `#loop` and "Play intro" play it anyway.
 - The intro plays once, then the hold, then the exit.
 - Each intro beat lasts as long as its voice clip in the player's language plus 0.8 s. The scenes are timed
   to fit both languages' lengths; motion follows the spoken lines where it can, without slowing into slow motion.
@@ -27,6 +29,9 @@ then hands over to the real map.
   (fog lifts) right away.
 - A pause button shows while the intro plays. Paused, the scene and its timing stop; tiles that finish loading wait for play to continue.
 - Between skip and pause, a restart button (⟲) starts the intro again at its first beat. Clicking the scene pauses or resumes it, like the pause button.
+- Without mouse movement, a tap or a key press for 2.5 s, the buttons fade to 35 % and come back with the next input.
+  While paused they stay at full strength.
+- The skip button shows at full strength for 3 s when it appears, then fades like the others.
 - Esc closes the intro at once, without the landfall: the landing page shows the map, the replay and the loop go back to the docs.
 
 ## Voice
@@ -41,6 +46,12 @@ then hands over to the real map.
   shows the off state without blinking.
 - The replay starts with the sound on.
 - Pause pauses the clip, skip stops it.
+
+## Login
+
+- On the landing page (and its loop) a button sits at the top right. Without a login it reads "Log in": it closes
+  the intro and opens the login page. With a stored login it reads "Enter world": it closes the intro at once, like
+  Esc. It fades like the other buttons.
 
 ## Reduced motion
 
