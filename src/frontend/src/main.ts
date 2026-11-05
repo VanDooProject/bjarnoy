@@ -1,4 +1,4 @@
-import { createApp } from 'vue';
+import { createApp, watch } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import { DEMO_MODE } from './config';
@@ -9,6 +9,7 @@ import { installHudMotionAttribute } from './lib/perf/hudMotionAttribute';
 import { zoomTransitionTuning } from './lib/map/zoomTransition';
 import { installChunkErrorHandling, installFocusReload } from './lib/appUpdate';
 import { router } from './router';
+import { introSignal } from './intro/introSignal';
 import { useWorldStore } from './stores/world';
 import './style.css';
 
@@ -23,6 +24,17 @@ app.use(router);
 app.use(i18n);
 
 app.mount('#app');
+
+// The intro's "Log in" button closes the intro and asks for the login page.
+watch(
+  () => introSignal.loginRequested,
+  (requested) => {
+    if (!requested) return;
+    introSignal.loginRequested = false;
+    void router.push('/login');
+  },
+  { immediate: true },
+);
 
 // Once the map's own art is in, warm the network for the rest of the atlas
 // (see atlas.ts). Imported lazily so Pixi stays out of the entry chunk.

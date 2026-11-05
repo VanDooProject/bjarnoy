@@ -4,12 +4,14 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import LandingIntro from './LandingIntro.vue';
 import { BEATS } from './beats/registry';
 import type { BeatId } from './beats/types';
+import { introSignal } from './introSignal';
+import { IDLE_DIM_MS } from './useIdleDim';
 import { beatsFor, CLIP_MS, holdMinMs, VOICE_TAIL_MS } from './introVoice';
 
 // jsdom has no canvas 2D context; the texture is irrelevant to the host's behaviour.
 vi.mock('./fogTexture', () => ({ introFogUrl: () => 'data:image/png;base64,' }));
 
-type Props = { mode: 'landing' | 'replay' | 'loop'; loopBeats?: BeatId[]; locale: 'en' | 'de'; reducedMotion: boolean; loaded: boolean; soundOn: boolean };
+type Props = { mode: 'landing' | 'replay' | 'loop'; loopBeats?: BeatId[]; locale: 'en' | 'de'; reducedMotion: boolean; loaded: boolean; loggedIn?: boolean; soundOn: boolean };
 const base: Props = { mode: 'landing', locale: 'en', reducedMotion: false, loaded: false, soundOn: false };
 
 // jsdom plays no media: record what the voice does with its clips.
@@ -351,6 +353,86 @@ describe('LandingIntro', () => {
       w.unmount();
       expect(remove).toHaveBeenCalledWith('keydown', expect.any(Function));
       remove.mockRestore();
+    });
+  });
+
+  describe('idle dimming', () => {
+    const root = (w: VueWrapper) => w.get('[data-testid="landing-intro"]');
+
+    it('dims after the idle time, wakes on input and never dims while paused', async () => {
+      const w = await mountIntro();
+      expect(root(w).classes()).not.toContain('is-idle');
+      await vi.advanceTimersByTimeAsync(IDLE_DIM_MS);
+      expect(root(w).classes()).toContain('is-idle');
+      window.dispatchEvent(new Event('pointermove'));
+      await flushPromises();
+      expect(root(w).classes()).not.toContain('is-idle');
+      await vi.advanceTimersByTimeAsync(IDLE_DIM_MS - 100);
+      expect(root(w).classes()).not.toContain('is-idle');
+      await vi.advanceTimersByTimeAsync(100);
+      expect(root(w).classes()).toContain('is-idle');
+      await w.get('[data-testid="intro-pause"]').trigger('click');
+      expect(root(w).classes()).not.toContain('is-idle');
+      await vi.advanceTimersByTimeAsync(IDLE_DIM_MS * 2);
+      expect(root(w).classes()).not.toContain('is-idle');
+      w.unmount();
+    });
+
+    it('keeps the skip button undimmed for 3 s after it appears, then lets it dim', async () => {
+      const w = await mountIntro();
+      await w.setProps({ loaded: true });
+      const skip = () => w.get('[data-testid="intro-skip"]');
+      expect(skip().classes()).toContain('is-fresh');
+      await vi.advanceTimersByTimeAsync(2999);
+      expect(skip().classes()).toContain('is-fresh');
+      await vi.advanceTimersByTimeAsync(1);
+      expect(skip().classes()).not.toContain('is-fresh');
+      w.unmount();
+    });
+  });
+
+  describe('login button', () => {
+    it('is absent in replay', async () => {
+      const w = await mountIntro({ mode: 'replay' });
+      expect(w.find('[data-testid="intro-login"]').exists()).toBe(false);
+    });
+
+    it('is there in landing and loop mode, also while waiting for play', async () => {
+      const landing = await mountIntro({ reducedMotion: true });
+      expect(phase(landing)).toBe('waitingForPlay');
+      expect(landing.find('[data-testid="intro-login"]').exists()).toBe(true);
+      const loop = await mountIntro({ mode: 'loop' });
+      expect(loop.find('[data-testid="intro-login"]').exists()).toBe(true);
+    });
+
+    it('reads "Log in" / "Anmelden" when logged out and "Enter world" / "Zur Welt" when logged in', async () => {
+      const out = await mountIntro();
+      expect(out.get('[data-testid="intro-login"]').attributes('data-login-state')).toBe('login');
+      expect(out.get('[data-testid="intro-login"]').text()).toBe('Log in');
+      const outDe = await mountIntro({ locale: 'de' });
+      expect(outDe.get('[data-testid="intro-login"]').text()).toBe('Anmelden');
+      const inn = await mountIntro({ loggedIn: true });
+      expect(inn.get('[data-testid="intro-login"]').attributes('data-login-state')).toBe('enter');
+      expect(inn.get('[data-testid="intro-login"]').text()).toBe('Enter world');
+      const inDe = await mountIntro({ loggedIn: true, locale: 'de' });
+      expect(inDe.get('[data-testid="intro-login"]').text()).toBe('Zur Welt');
+    });
+
+    it('"Log in" closes the intro and requests the login page', async () => {
+      introSignal.loginRequested = false;
+      const w = await mountIntro();
+      await w.get('[data-testid="intro-login"]').trigger('click');
+      expect(w.emitted('close')).toHaveLength(1);
+      expect(introSignal.loginRequested).toBe(true);
+      introSignal.loginRequested = false;
+    });
+
+    it('"Enter world" only closes the intro', async () => {
+      introSignal.loginRequested = false;
+      const w = await mountIntro({ loggedIn: true });
+      await w.get('[data-testid="intro-login"]').trigger('click');
+      expect(w.emitted('close')).toHaveLength(1);
+      expect(introSignal.loginRequested).toBe(false);
     });
   });
 });

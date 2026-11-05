@@ -8,6 +8,8 @@ import { introText, type IntroLocale } from './introText';
 import { beatsFor, holdMinMs, IntroVoice, type VoiceState } from './introVoice';
 import { INTRO_BEAT, INTRO_BEAT_MS, type BeatId } from './beats/types';
 import { IntroSequencer, type IntroState } from './sequencer';
+import { introSignal } from './introSignal';
+import { useIdleDim } from './useIdleDim';
 
 // Mode, locale and reducedMotion are read once at mount: the sequencer is built
 // for them and a change mid-play must not restart anything.
@@ -20,12 +22,16 @@ const props = defineProps<{
   /** the player asked for the intro: it plays at once, also with reduced motion */
   playNow?: boolean;
   loaded: boolean;
+  /** read once at mount: a stored login turns the top-right "Log in" into "Enter world" */
+  loggedIn?: boolean;
   /** initial sound state; the clips play either way, muted while it is off */
   soundOn: boolean;
 }>();
 const emit = defineEmits<{ done: []; close: []; 'back-to-docs': []; 'enter-game': [] }>();
 
 const FADE_OUT_MS = 1000;
+// The skip button stays at full strength this long after it appears, so it is noticed before it dims.
+const SKIP_FRESH_MS = 3000;
 const fogUrl = introFogUrl();
 // Each intro beat lasts as long as its voice clip in the player's language (plus a tail).
 const beats = beatsFor(props.locale, BEATS);
@@ -111,6 +117,21 @@ watch(
     if (phase === 'done') emit('done');
   },
 );
+const loggedIn = props.loggedIn ?? false;
+const loginVisible = computed(() => (props.mode === 'landing' || props.mode === 'loop') && state.value.phase !== 'ended');
+const idle = useIdleDim();
+const dimmed = computed(() => idle.value && !state.value.paused);
+const skipFresh = ref(false);
+let skipFreshTimer: ReturnType<typeof setTimeout> | undefined;
+watch(
+  () => state.value.skipVisible,
+  (visible) => {
+    clearTimeout(skipFreshTimer);
+    skipFresh.value = visible;
+    if (visible) skipFreshTimer = setTimeout(() => (skipFresh.value = false), SKIP_FRESH_MS);
+  },
+  { immediate: true },
+);
 const pauseVisible = computed(() => state.value.phase === 'playing' || state.value.phase === 'exiting');
 function togglePause(): void {
   if (state.value.paused) sequencer.resume();
@@ -120,6 +141,10 @@ function togglePause(): void {
 function close(): void {
   sequencer.close();
   emit('close');
+}
+function onLogin(): void {
+  close();
+  if (!loggedIn) introSignal.loginRequested = true;
 }
 // Space toggles pause; a focused button (or field) already handles space itself.
 function onKeydown(event: KeyboardEvent): void {
@@ -145,6 +170,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
+  clearTimeout(skipFreshTimer);
   sequencer.dispose();
   voice.dispose();
 });
@@ -154,7 +180,7 @@ onBeforeUnmount(() => {
   <div
     v-if="state.phase !== 'done'"
     class="landing-intro"
-    :class="{ 'is-fading': fadesOut, 'is-paused': state.paused }"
+    :class="{ 'is-fading': fadesOut, 'is-paused': state.paused, 'is-idle': dimmed }"
     :style="rootStyle"
     role="region"
     :aria-label="introText(locale, 'region')"
@@ -205,6 +231,19 @@ onBeforeUnmount(() => {
       </button>
     </Transition>
 
+    <Transition name="intro-fade">
+      <button
+        v-if="loginVisible"
+        type="button"
+        class="intro-btn login"
+        data-testid="intro-login"
+        :data-login-state="loggedIn ? 'enter' : 'login'"
+        @click="onLogin()"
+      >
+        {{ introText(locale, loggedIn ? 'enterWorld' : 'login') }}
+      </button>
+    </Transition>
+
     <div class="actions">
       <!-- sound is the right-most button, so skip and pause appearing to its left do not move it -->
       <Transition name="intro-fade">
@@ -212,6 +251,7 @@ onBeforeUnmount(() => {
           v-if="state.skipVisible"
           type="button"
           class="intro-btn skip"
+          :class="{ 'is-fresh': skipFresh }"
           data-testid="intro-skip"
           @click="sequencer.skip()"
         >
@@ -335,6 +375,25 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 8px;
   pointer-events: none;
+}
+.intro-btn.login {
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+}
+/*
+ * Idle: the controls fade back. Opacity only. The enter/leave states of the intro-fade transition (also opacity)
+ * are excluded so they keep animating from/to 0; the skip button is exempt while it is fresh.
+ */
+.landing-intro.is-idle .actions .intro-btn:not(.is-fresh):not(.intro-fade-enter-from):not(.intro-fade-leave-to),
+.landing-intro.is-idle .intro-btn.login:not(.intro-fade-enter-from):not(.intro-fade-leave-to) {
+  opacity: 0.35;
+  transition: opacity 600ms ease;
+}
+.landing-intro.is-idle .actions .intro-btn:not(.intro-fade-enter-from):not(.intro-fade-leave-to):hover,
+.landing-intro.is-idle .actions .intro-btn:not(.intro-fade-enter-from):not(.intro-fade-leave-to):focus-visible,
+.landing-intro.is-idle .intro-btn.login:not(.intro-fade-enter-from):not(.intro-fade-leave-to):hover,
+.landing-intro.is-idle .intro-btn.login:not(.intro-fade-enter-from):not(.intro-fade-leave-to):focus-visible {
+  opacity: 1;
 }
 .intro-btn.icon {
   width: 44px;

@@ -191,6 +191,19 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       expect((await log()).phases).not.toContain('exiting');
     });
 
+    test('the Log in button closes the intro and opens the login page', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const release = await holdAtlases(page);
+      await page.goto('/#intro');
+      await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
+
+      await page.getByTestId('intro-login').click();
+      await expect(intro(page)).toHaveCount(0);
+      await expect(page).toHaveURL(/\/login$/);
+      release();
+    });
+
     test('#loop: Esc closes the loop and shows the map', async ({ page }) => {
       test.setTimeout(MAP_SPEC_TIMEOUT_MS);
       await freezeClock(page);
