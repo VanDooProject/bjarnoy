@@ -24,7 +24,8 @@ then hands over to the real map.
 - On the landing page the intro plays on its own only on a device that has neither founded a settlement nor stored a
   login. `#intro`, `#loop` and "Play intro" play it anyway.
 - The intro plays once, then the hold, then the exit.
-- Each intro beat lasts as long as its voice clip in the player's language plus 0.8 s. The scenes are timed
+- Each intro beat lasts as long as its voice clip in the player's language plus 0.8 s; the sending ends with its
+  voice, and the ravens take over in a 1.8 s crossfade while its camera turn and ship are still moving. The scenes are timed
   to fit both languages' lengths; motion follows the spoken lines where it can, without slowing into slow motion.
 - The hold plays at least as long as its voice clip (plus 0.8 s). After that it ends as soon as the tiles are
   loaded. Skip ends it at once.
