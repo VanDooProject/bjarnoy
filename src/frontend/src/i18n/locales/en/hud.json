@@ -11,6 +11,7 @@
     "createAccountTitle": "{nickname} — create an account"
   },
   "returningPlayer": {
+    "settings": "Settings",
     "trigger": "I already have a realm",
     "triggerSub": "or want to join another world",
     "logIn": "Log in",
@@ -19,6 +20,7 @@
   },
   "accountMenu": {
     "profile": "Profile",
+    "settings": "Settings",
     "logout": "Log out"
   },
   "resourceBar": {

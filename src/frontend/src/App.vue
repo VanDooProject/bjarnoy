@@ -8,6 +8,7 @@ import ProfileModal from './components/profile/ProfileModal.vue';
 import LeaderboardModal from './components/leaderboard/LeaderboardModal.vue';
 import GuildModal from './components/guild/GuildModal.vue';
 import ReportsModal from './components/reports/ReportsModal.vue';
+import SettingsModal from './components/settings/SettingsModal.vue';
 import { useActivityHeartbeat } from './composables/useActivityHeartbeat';
 import { isModalRouteName } from './lib/modalRoute';
 
@@ -21,7 +22,7 @@ const route = useRoute();
 const router = useRouter();
 
 // The modal routes (own-profile/profile/leaderboards/guild/reports/
-// report-detail) render as a modal over whatever page was showing before —
+// report-detail/settings) render as a modal over whatever page was showing before —
 // see lib/modalRoute.ts and each modal component (ProfileModal.vue/
 // LeaderboardModal.vue/GuildModal.vue/ReportsModal.vue). Every other route renders through <router-view> exactly
 // as before.
@@ -40,6 +41,8 @@ const ModalComponent = computed(() => {
     case 'reports':
     case 'report-detail':
       return ReportsModal;
+    case 'settings':
+      return SettingsModal;
     default:
       return null;
   }

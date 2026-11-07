@@ -17,6 +17,7 @@ import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
 import { useIsMobile } from '../../composables/useIsMobile';
 import { fadeChip } from '../../lib/hud/chipMotion';
 import { profileLocation } from '../../lib/profileRoute';
+import { settingsLocation } from '../../lib/modalRoute';
 import { DEMO_MODE } from '../../config';
 import HudMenuLocaleRow from './HudMenuLocaleRow.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
@@ -158,6 +159,11 @@ function goToProfile() {
   closeAccountMenu();
   router.push(profileLocation(router));
 }
+const settingsHref = computed(() => router.resolve('/settings').href);
+function goToSettings() {
+  closeAccountMenu();
+  router.push(settingsLocation(router));
+}
 async function onLogoutClick() {
   closeAccountMenu();
   await logout();
@@ -245,6 +251,9 @@ watch(() => route.fullPath, closeAccountMenu);
         <HudMenuLocaleRow />
         <HudNavLink :href="profileHref" role="menuitem" class="row" data-testid="account-menu-profile" @navigate="goToProfile">
           {{ t('hud.accountMenu.profile') }}
+        </HudNavLink>
+        <HudNavLink :href="settingsHref" role="menuitem" class="row" data-testid="account-menu-settings" @navigate="goToSettings">
+          {{ t('hud.accountMenu.settings') }}
         </HudNavLink>
         <button type="button" role="menuitem" class="row" data-testid="account-menu-logout" @click="onLogoutClick">
           {{ t('hud.accountMenu.logout') }}

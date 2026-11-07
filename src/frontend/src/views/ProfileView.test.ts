@@ -1,15 +1,10 @@
 // @vitest-environment jsdom
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProfileView from './ProfileView.vue';
 import type { ProfileResponse } from '../api/types';
-import { animationPreference } from '../lib/perf/animationPreference';
-import { motionPreferences } from '../lib/perf/motionPreferences';
-import { antialiasPreference } from '../lib/perf/antialiasPreference';
-import { ringSizePreference } from '../lib/map/ringSize';
 import { useAuthStore } from '../stores/auth';
-import { useHudPrefsStore } from '../stores/hudPrefs';
 import { createTestI18n } from '../test/i18n';
 import enProfile from '../i18n/locales/en/profile.json';
 
@@ -46,11 +41,6 @@ vi.mock('vue-router', async (importOriginal) => {
 
 const ASCII_ART = '  /\\_/\\\n ( o.o )\n  > ^ <';
 
-/** Switches to the own-profile's Settings tab. */
-async function openSettings(wrapper: ReturnType<typeof mountProfileView>) {
-  await wrapper.findAll('[role="tab"]').find((b) => b.text() === 'Settings')!.trigger('click');
-}
-
 function profile(overrides: Partial<ProfileResponse> = {}): ProfileResponse {
   return {
     id: 'user-1',
@@ -67,8 +57,6 @@ beforeEach(() => {
   setActivePinia(createPinia());
   vi.clearAllMocks();
   routeParams.userName = 'ragnar';
-  localStorage.removeItem('bjarnoy.animations');
-  animationPreference.setting = 'auto';
 });
 
 function ownProfileAuth() {
@@ -189,338 +177,16 @@ describe('ProfileView', () => {
     expect(wrapper.findAll('button').some((b) => b.text() === 'Report')).toBe(false);
   });
 
-  describe('HUD bar preferences', () => {
-    it('shows the HUD bar section on the player\'s own profile', async () => {
-      getProfileByName.mockResolvedValue(profile());
-      const auth = useAuthStore();
-      auth.user = {
-        id: 'user-1',
-        userName: 'ragnar',
-        role: 'player',
-        status: 'active',
-        displayName: null,
-        isPremium: false,
-        preferredLocale: null,
-      };
+  it('shows no tabs and no device settings on the own profile (they live in the Settings modal)', async () => {
+    getProfileByName.mockResolvedValue(profile());
+    ownProfileAuth();
 
-      const wrapper = mountProfileView();
-      await flushPromises();
-      await openSettings(wrapper);
+    const wrapper = mountProfileView();
+    await flushPromises();
 
-      expect(wrapper.text()).toContain('HUD bar');
-    });
-
-    it('hides the HUD bar section on someone else\'s profile', async () => {
-      getProfileByName.mockResolvedValue(profile());
-      const auth = useAuthStore();
-      auth.user = {
-        id: 'user-2',
-        userName: 'floki',
-        role: 'player',
-        status: 'active',
-        displayName: null,
-        isPremium: false,
-        preferredLocale: null,
-      };
-
-      const wrapper = mountProfileView();
-      await flushPromises();
-
-      expect(wrapper.text()).not.toContain('HUD bar');
-    });
-
-    it('hides the HUD bar section from an anonymous visitor', async () => {
-      getProfileByName.mockResolvedValue(profile());
-
-      const wrapper = mountProfileView();
-      await flushPromises();
-
-      expect(wrapper.text()).not.toContain('HUD bar');
-    });
-
-    it('choosing Bottom writes the hudPrefs store', async () => {
-      getProfileByName.mockResolvedValue(profile());
-      const auth = useAuthStore();
-      auth.user = {
-        id: 'user-1',
-        userName: 'ragnar',
-        role: 'player',
-        status: 'active',
-        displayName: null,
-        isPremium: false,
-        preferredLocale: null,
-      };
-
-      const wrapper = mountProfileView();
-      await flushPromises();
-      await openSettings(wrapper);
-
-      const bottomButton = wrapper.findAll('button').find((b) => b.text() === 'Bottom')!;
-      await bottomButton.trigger('click');
-
-      const hudPrefs = useHudPrefsStore();
-      expect(hudPrefs.barPosition).toBe('bottom');
-      expect(bottomButton.attributes('aria-pressed')).toBe('true');
-    });
-  });
-
-  describe('settings tab', () => {
-    it('keeps the settings off the Profile tab until the Settings tab is selected', async () => {
-      getProfileByName.mockResolvedValue(profile());
-      ownProfileAuth();
-
-      const wrapper = mountProfileView();
-      await flushPromises();
-
-      expect(wrapper.find('[role="tablist"]').exists()).toBe(true);
-      expect(wrapper.text()).not.toContain('Building animations');
-
-      await openSettings(wrapper);
-
-      const panel = wrapper.find('[role="tabpanel"]');
-      expect(panel.exists()).toBe(true);
-      expect(panel.text()).toContain('Building animations');
-      expect(panel.text()).toContain('Bar position');
-    });
-
-    it('labels each button group with what it sets', async () => {
-      getProfileByName.mockResolvedValue(profile());
-      ownProfileAuth();
-
-      const wrapper = mountProfileView({ attachTo: document.body });
-      await flushPromises();
-      await openSettings(wrapper);
-
-      const names = wrapper
-        .findAll('[role="group"]')
-        .map((group) => document.getElementById(group.attributes('aria-labelledby')!)?.textContent);
-      expect(names).toEqual([
-        'Bar position',
-        'Menu size',
-        'Building animations',
-        'Water motion',
-        'Lake motion',
-        'Fog drift',
-        'Menu animations',
-        'Smooth edges',
-      ]);
-      wrapper.unmount();
-    });
-
-    it('switches back to the Profile tab (bio, no settings) when reselected', async () => {
-      getProfileByName.mockResolvedValue(profile());
-      ownProfileAuth();
-
-      const wrapper = mountProfileView();
-      await flushPromises();
-
-      await openSettings(wrapper);
-      expect(wrapper.text()).toContain('Building animations');
-
-      await wrapper.findAll('[role="tab"]').find((b) => b.text() === 'Profile')!.trigger('click');
-      expect(wrapper.text()).not.toContain('Building animations');
-      expect(wrapper.find('pre.bio').exists()).toBe(true);
-    });
-
-    it("has no Settings tab, or any tabs at all, on someone else's profile", async () => {
-      getProfileByName.mockResolvedValue(profile());
-      const auth = useAuthStore();
-      auth.user = {
-        id: 'user-2',
-        userName: 'floki',
-        role: 'player',
-        status: 'active',
-        displayName: null,
-        isPremium: false,
-        preferredLocale: null,
-      };
-
-      const wrapper = mountProfileView();
-      await flushPromises();
-
-      expect(wrapper.find('[role="tablist"]').exists()).toBe(false);
-      expect(wrapper.findAll('button').some((b) => b.text() === 'Settings')).toBe(false);
-    });
-  });
-
-  describe('graphics (animation) preferences', () => {
-    afterEach(() => {
-      // Restore the plain getter this suite overrides for the
-      // reduced-motion case below — see its own comment.
-      Object.defineProperty(animationPreference, 'reducedMotion', {
-        get() {
-          return false;
-        },
-        configurable: true,
-      });
-    });
-
-    it("shows the Graphics section on the player's own profile", async () => {
-      getProfileByName.mockResolvedValue(profile());
-      ownProfileAuth();
-
-      const wrapper = mountProfileView();
-      await flushPromises();
-      await openSettings(wrapper);
-
-      expect(wrapper.text()).toContain('Graphics');
-    });
-
-    it("hides the Graphics section on someone else's profile", async () => {
-      getProfileByName.mockResolvedValue(profile());
-      const auth = useAuthStore();
-      auth.user = {
-        id: 'user-2',
-        userName: 'floki',
-        role: 'player',
-        status: 'active',
-        displayName: null,
-        isPremium: false,
-        preferredLocale: null,
-      };
-
-      const wrapper = mountProfileView();
-      await flushPromises();
-
-      expect(wrapper.text()).not.toContain('Graphics');
-    });
-
-    it('choosing an option persists the setting to localStorage', async () => {
-      getProfileByName.mockResolvedValue(profile());
-      ownProfileAuth();
-
-      const wrapper = mountProfileView();
-      await flushPromises();
-      await openSettings(wrapper);
-
-      const onButton = wrapper
-        .findAll('.animation-preferences button')
-        .find((button) => button.text() === 'On')!;
-      await onButton.trigger('click');
-
-      expect(animationPreference.setting).toBe('on');
-      expect(localStorage.getItem('bjarnoy.animations')).toBe('on');
-      expect(wrapper.text()).toContain('On (this device)');
-    });
-
-    it('the smooth-edges toggle persists the antialias setting to localStorage', async () => {
-      getProfileByName.mockResolvedValue(profile());
-      ownProfileAuth();
-
-      const wrapper = mountProfileView();
-      await flushPromises();
-      await openSettings(wrapper);
-
-      const offButton = wrapper
-        .findAll('.antialias-toggle button')
-        .find((button) => button.text() === 'Off')!;
-      await offButton.trigger('click');
-
-      expect(antialiasPreference.enabled).toBe(false);
-      expect(localStorage.getItem('bjarnoy.antialias')).toBe('off');
-      expect(offButton.attributes('aria-pressed')).toBe('true');
-      antialiasPreference.setting = 'on';
-    });
-
-    it('the menu-size control persists the radial menu size to localStorage', async () => {
-      getProfileByName.mockResolvedValue(profile());
-      ownProfileAuth();
-
-      const wrapper = mountProfileView();
-      await flushPromises();
-      await openSettings(wrapper);
-
-      const largeButton = wrapper.findAll('[data-testid="ring-size"] button').find((button) => button.text() === 'Large')!;
-      await largeButton.trigger('click');
-
-      expect(ringSizePreference.setting).toBe('large');
-      expect(localStorage.getItem('bjarnoy.ringSize')).toBe('large');
-      expect(largeButton.attributes('aria-pressed')).toBe('true');
-      ringSizePreference.setting = 'normal';
-    });
-
-    it.each([
-      ['water', 'Water motion', 'bjarnoy.motion.water'],
-      ['lakes', 'Lake motion', 'bjarnoy.motion.lakes'],
-      ['fog', 'Fog drift', 'bjarnoy.motion.fog'],
-      ['menus', 'Menu animations', 'bjarnoy.motion.hud'],
-    ] as const)('the %s row persists its own setting and leaves the others alone', async (row, _label, key) => {
-      getProfileByName.mockResolvedValue(profile());
-      ownProfileAuth();
-      localStorage.clear();
-      motionPreferences.water = 'auto';
-      motionPreferences.lakes = 'auto';
-      motionPreferences.fog = 'auto';
-      motionPreferences.hud = 'auto';
-
-      const wrapper = mountProfileView();
-      await flushPromises();
-      await openSettings(wrapper);
-
-      const offButton = wrapper.findAll(`[data-testid="motion-${row}"] button`).find((b) => b.text() === 'Off')!;
-      await offButton.trigger('click');
-
-      expect(localStorage.getItem(key)).toBe('off');
-      expect(offButton.attributes('aria-pressed')).toBe('true');
-      expect(animationPreference.setting).toBe('auto');
-      const others = ['bjarnoy.motion.water', 'bjarnoy.motion.lakes', 'bjarnoy.motion.fog', 'bjarnoy.motion.hud'].filter((k) => k !== key);
-      expect(others.map((k) => localStorage.getItem(k))).toEqual(['auto', 'auto', 'auto']);
-      motionPreferences.water = 'auto';
-      motionPreferences.fog = 'auto';
-      motionPreferences.hud = 'auto';
-    });
-
-    it("shows the device's reduce-motion state and an OS hint", async () => {
-      getProfileByName.mockResolvedValue(profile());
-      ownProfileAuth();
-
-      const wrapper = mountProfileView();
-      await flushPromises();
-      await openSettings(wrapper);
-
-      expect(wrapper.get('[data-testid="device-motion-state"]').text()).toBe('OFF');
-      expect(wrapper.get('[data-testid="device-motion"]').text()).toContain('“Auto” below follows this.');
-
-      Object.defineProperty(animationPreference, 'reducedMotion', { get: () => true, configurable: true });
-      await flushPromises();
-      const again = mountProfileView();
-      await flushPromises();
-      await openSettings(again);
-      expect(again.get('[data-testid="device-motion-state"]').text()).toBe('ON');
-    });
-
-    it("shows the 'measuring' status for auto before the fps governor has decided", async () => {
-      getProfileByName.mockResolvedValue(profile());
-      ownProfileAuth();
-
-      const wrapper = mountProfileView();
-      await flushPromises();
-      await openSettings(wrapper);
-
-      expect(wrapper.text()).toContain('measuring frame rate');
-    });
-
-    it('shows the reduced-motion status when auto and the system asks for reduced motion', async () => {
-      // animationPreference.reducedMotion is normally seeded once from
-      // matchMedia at module load and updated only by its own 'change'
-      // listener (see animationPreference.ts) — overriding the getter
-      // directly is the simplest way to exercise the resolution table's
-      // reduced-motion branch from a component test without needing the
-      // real matchMedia wiring to have fired in this test's favour.
-      Object.defineProperty(animationPreference, 'reducedMotion', {
-        get() {
-          return true;
-        },
-        configurable: true,
-      });
-      getProfileByName.mockResolvedValue(profile());
-      ownProfileAuth();
-
-      const wrapper = mountProfileView();
-      await flushPromises();
-      await openSettings(wrapper);
-
-      expect(wrapper.text()).toContain('reduced motion');
-    });
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Building animations');
+    expect(wrapper.text()).not.toContain('HUD bar');
+    expect(wrapper.find('pre.bio').exists()).toBe(true);
   });
 });

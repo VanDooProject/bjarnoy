@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The mobile-only HUD bar's top/bottom docking preference (stores/hudPrefs.ts)
 // — a debug/UX-research flag, not an everyday setting, so it lives in the
-// player's own profile rather than a HUD-adjacent quick menu. Segmented
+// Settings modal (SettingsModal.vue) rather than a HUD-adjacent quick menu. Segmented
 // control styled after LocaleSwitcher.vue's .option/.option.active pattern
 // (that component itself is untouched — out of scope for this feature).
 import { useI18n } from 'vue-i18n';

@@ -151,7 +151,7 @@ describe('MobileHudDrawer account section', () => {
     expect(wrapper.findAll('[data-testid^="drawer-account-"]')).toHaveLength(0);
   });
 
-  it('keeps Profile and Log out for a registered player', async () => {
+  it('keeps Profile, Settings and Log out for a registered player', async () => {
     foundAndOnboard();
     useAuthStore().user = {
       id: 'user-1',
@@ -164,6 +164,7 @@ describe('MobileHudDrawer account section', () => {
     };
     const wrapper = await mountDrawer('/settlement', { hasResourceBar: true });
     expect(wrapper.find('[data-testid="drawer-account-profile"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="drawer-account-settings"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="drawer-account-logout"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="profile-nudge"]').exists()).toBe(false);
   });

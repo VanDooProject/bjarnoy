@@ -5,10 +5,10 @@ import type { Router, RouteLocationRaw } from 'vue-router';
  * — see App.vue's background-route pattern and RouteModal.vue's dialog
  * chrome. `own-profile`/`profile` were the first (ProfileModal.vue);
  * `leaderboards`/`guild` and the battle-reports inbox (`reports`/
- * `report-detail`) reuse the exact same pattern instead of rendering as
+ * `report-detail`) and the per-device settings (`settings`, no account needed) reuse the exact same pattern instead of rendering as
  * full pages through `<router-view>`.
  */
-export const MODAL_ROUTE_NAMES = ['own-profile', 'profile', 'leaderboards', 'guild', 'reports', 'report-detail'] as const;
+export const MODAL_ROUTE_NAMES = ['own-profile', 'profile', 'leaderboards', 'guild', 'reports', 'report-detail', 'settings'] as const;
 
 export type ModalRouteName = (typeof MODAL_ROUTE_NAMES)[number];
 
@@ -56,4 +56,9 @@ export function modalLocation(router: Router, path: string): RouteLocationRaw {
  */
 export function reportsLocation(router: Router, reportId?: string): RouteLocationRaw {
   return modalLocation(router, reportId ? `/reports/${reportId}` : '/reports');
+}
+
+/** The per-device settings (HUD, ring size, graphics) as a modal location — see `modalLocation`. */
+export function settingsLocation(router: Router): RouteLocationRaw {
+  return modalLocation(router, '/settings');
 }
