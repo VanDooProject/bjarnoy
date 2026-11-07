@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useId } from 'vue';
+import IntroLongship from './IntroLongship.vue';
 import SendingFire from './SendingFire.vue';
 import { sineLoop } from './sineLoop';
 
@@ -75,10 +76,6 @@ const SIDES = [
   { cls: 'sd-boy-r', flip: undefined },
 ];
 
-// longship (local coordinates, placed at 772,499 scale .36)
-const OAR_X = [584, 680, 776, 872, 968, 1064];
-const SHIELDS = Array.from({ length: 11 }, (_, i) => ({ x: 560 + i * 48, a: i % 2 === 1 }));
-const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 590 604 503Z';
 </script>
 
 <template>
@@ -133,7 +130,6 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
       <mask :id="id('hzTex')"><rect x="-40" y="640" width="2700" height="300" :fill="url('fog')"/></mask>
       <mask :id="id('shoreTex')"><rect x="-808" y="840" width="2448" height="260" :fill="url('fog2')"/></mask>
       <mask :id="id('veilTex')"><rect x="0" y="0" width="2624" height="1600" :fill="url('fog')"/></mask>
-      <clipPath :id="id('sailclip')"><path :d="SAIL"/></clipPath>
     </defs>
 
     <rect width="1600" height="1600" :fill="url('sky')"/>
@@ -162,30 +158,7 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
 
     <g class="sd-a sd-cam-mid">
       <g class="sd-a sd-ship-depart"><g class="sd-heave"><g class="sd-pitch">
-        <g transform="translate(772,499) scale(0.36)">
-          <path d="M486 838 L452 1004" stroke="#0e1318" stroke-width="8" stroke-linecap="round"/>
-          <ellipse cx="455" cy="990" rx="10" ry="24" fill="#0e1318" transform="rotate(12 455 990)"/>
-          <path d="M780 474 L1176 790 M780 474 L436 800" stroke="#0e1318" stroke-width="4" fill="none"/>
-          <rect x="775" y="470" width="10" height="420" fill="#0e1318"/>
-          <g transform="translate(780,503)"><g class="sd-a sd-sail"><g transform="translate(-780,-503)">
-            <path :d="SAIL" fill="#6b4a41"/>
-            <g :clip-path="url('sailclip')" fill="#4a3530"><rect x="652" y="500" width="54" height="300"/><rect x="753" y="500" width="54" height="300"/><rect x="854" y="500" width="54" height="300"/></g>
-          </g></g></g>
-          <rect x="588" y="494" width="384" height="10" rx="3" fill="#0e1318"/>
-          <g fill="#0b1015">
-            <path d="M452 882 L456 814 C460 805 482 805 488 814 L492 882Z"/><circle cx="471" cy="794" r="13"/>
-            <template v-for="x in OAR_X" :key="x">
-              <path :d="`M${x - 17} 892 L${x - 14} 856 C${x - 10} 847 ${x + 10} 847 ${x + 14} 856 L${x + 17} 892Z`"/><circle :cx="x" cy="836" r="12"/>
-            </template>
-          </g>
-          <path d="M426 800 C440 852 470 880 520 888 L1080 888 C1130 880 1160 852 1170 800 L1198 800 C1198 882 1162 966 1060 992 L540 992 C438 966 396 882 396 800Z" fill="#0e1318"/>
-          <path d="M396 806 C390 752 394 706 420 686 C442 670 470 678 470 700 C470 718 452 726 442 716 C452 712 456 702 448 694 C436 686 422 696 420 716 C418 744 422 776 426 806Z" fill="#0e1318"/>
-          <path d="M1170 806 C1176 760 1182 720 1196 696 C1208 680 1232 676 1246 686 L1236 692 L1250 700 L1232 704 C1218 706 1208 716 1204 734 C1200 756 1198 780 1198 806Z" fill="#0e1318"/>
-          <g v-for="(s, i) in SHIELDS" :key="i"><circle :cx="s.x" cy="890" r="21" :fill="s.a ? '#27313b' : '#1e262e'"/><circle :cx="s.x" cy="890" r="5" fill="#0e1318"/></g>
-          <g v-for="x in OAR_X" :key="`o${x}`" :transform="`translate(${x} 910)`">
-            <g class="sd-a sd-oar"><rect x="-3" y="0" width="6" height="170" rx="2" fill="#0e1318"/><ellipse cx="0" cy="156" rx="8" ry="20" fill="#0e1318"/></g>
-          </g>
-        </g>
+        <g class="sd-longship" transform="translate(772,499) scale(0.36)"><IntroLongship bold /></g>
       </g></g></g>
       <rect x="0" y="851" width="1600" height="40" fill="#1d252e"/>
       <rect x="860" y="852" width="520" height="2" fill="#8c6a5c" opacity=".4"/>
@@ -295,14 +268,14 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
 .b3 .sd-boy-arm { animation-name: sd-boy-arm; }
 .b3 .sd-look { animation-name: sd-boy-look; }
 .b3 .sd-ship-depart { animation-name: sd-ship-depart; }
-.b3 .sd-sail { animation-name: sd-sail; }
-.b3 .sd-oar { animation-name: sd-oar; }
+.b3 :deep(.ship-sail) { animation: sd-sail var(--ship-ms) linear both; }
+.b3 :deep(.ship-oar) { animation: sd-oar var(--ship-ms) linear both; }
 .b3 .sd-veil { animation-name: sd-veil; }
 .b3 .sd-dark { animation-name: sd-dark; }
 /* the figures and the ship run on fixed times (see the keyframes below); the ship's run outlasts any beat */
 .b3 { --story-ms: 11200ms; --ship-ms: 14000ms; }
 .b3 .sd-j-thigh, .b3 .sd-j-shin, .b3 .sd-j-bthigh, .b3 .sd-j-bshin, .b3 .sd-j-cloak, .b3 .sd-j-torso, .b3 .sd-j-head, .b3 .sd-j-arm, .b3 .sd-j-fore, .b3 .sd-j-farm, .b3 .sd-j-ffore, .b3 .sd-boy-bob, .b3 .sd-boy-l, .b3 .sd-boy-r, .b3 .sd-legf, .b3 .sd-legb, .b3 .sd-boy-arm, .b3 .sd-look { animation-duration: var(--story-ms); }
-.b3 .sd-ship-depart, .b3 .sd-sail, .b3 .sd-oar { animation-duration: var(--ship-ms); }
+.b3 .sd-ship-depart { animation-duration: var(--ship-ms); }
 
 /* ---- ambient loops ---- */
 /* sines as alternating ease-in-outs (see sineLoop.ts) */
@@ -310,6 +283,11 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
 @keyframes sd-sway { from { transform: translateX(calc(var(--a) * -1)); } to { transform: translateX(var(--a)); } }
 .b3 .sd-glint { animation: sd-glint var(--p) cubic-bezier(0.37, 0, 0.63, 1) var(--o) infinite alternate; }
 @keyframes sd-glint { from { transform: translateX(-26px); } to { transform: translateX(26px); } }
+/* the longship in the sending's dusk: a dark silhouette with a fire-lit sail */
+.b3 .sd-longship {
+  --ship-steer: #0e1318; --ship-rig: #0e1318; --ship-mast: #0e1318; --ship-hull: #0e1318; --ship-boss: #0e1318; --ship-oar: #0e1318;
+  --ship-sail: #6b4a41; --ship-stripe: #4a3530; --ship-crew: #0b1015; --ship-rower: #0b1015; --ship-shield-a: #27313b; --ship-shield-b: #1e262e;
+}
 /* the ship's swell: heave and a slow pitch around the stern */
 .b3 .sd-heave { animation: sd-heave 1963ms cubic-bezier(0.37, 0, 0.63, 1) -982ms infinite alternate; }
 @keyframes sd-heave { from { transform: translateY(-2.2px); } to { transform: translateY(2.2px); } }

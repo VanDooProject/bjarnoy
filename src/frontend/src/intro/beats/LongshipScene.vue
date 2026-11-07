@@ -9,6 +9,7 @@ export const ISLES_STRIP_WIDTH = 1600;
 <script setup lang="ts">
 import { useId } from 'vue';
 import { FOG_UNEXPLORED_CSS } from '../../lib/map/fogColours';
+import IntroLongship from './IntroLongship.vue';
 
 /**
  * Beat 5, the longship in fog: a rowing longship with a boy at the prow, far settlements, ravens and
@@ -46,11 +47,7 @@ const SEA = {
   fg2: wave(-fg2, 2560, 1320, 16, fg2, 1600),
 };
 
-const SHIELDS = Array.from({ length: 11 }, (_, i) => ({ x: 560 + i * 48, fill: i % 2 ? '#3b4b56' : '#2c3b45' }));
-const OARS = [584, 680, 776, 872, 968, 1064].map((x) => ({
-  x,
-  body: `M${x - 17} 892 L${x - 14} 856 C${x - 10} 847 ${x + 10} 847 ${x + 14} 856 L${x + 17} 892Z`,
-}));
+const OAR_X = [584, 680, 776, 872, 968, 1064];
 </script>
 
 <template>
@@ -79,8 +76,7 @@ const OARS = [584, 680, 776, 872, 968, 1064].map((x) => ({
         <mask :id="id('m-low')"  maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600"><rect x="0" y="880"  width="1600" height="300" :fill="url('g-band')"/></mask>
         <mask :id="id('m-bank')" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600"><rect x="0" y="520"  width="1600" height="560" :fill="url('g-band')"/></mask>
         <mask :id="id('m-fg')"   maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600"><rect x="0" y="1120" width="1600" height="480" :fill="url('g-fg')"/></mask>
-        <clipPath :id="id('sailclip')"><path d="M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 590 604 503Z"/></clipPath>
-        <!-- one settlement strip, 1600 wide -->
+                <!-- one settlement strip, 1600 wide -->
         <g :id="id('isles-strip')">
           <!-- island 1 -->
           <path d="M40 842 C90 820 120 790 170 784 C210 778 240 800 270 796 C320 790 350 816 400 842Z" fill="#aebcc5"/>
@@ -127,46 +123,7 @@ const OARS = [584, 680, 776, 872, 968, 1064].map((x) => ({
       </g></g>
       <!-- 6 ship -->
       <g class="ship-frame"><g class="lf-ship"><g class="heave"><g class="pitch">
-        <!-- steering oar (far side) -->
-        <path d="M486 838 L452 1004" stroke="#1b252c" stroke-width="7" stroke-linecap="round"/>
-        <ellipse cx="455" cy="990" rx="9" ry="24" fill="#1b252c" transform="rotate(12 455 990)"/>
-        <!-- mast, rigging, sail -->
-        <path d="M780 474 L1176 790 M780 474 L436 800" stroke="#2f3d47" stroke-width="2.2" fill="none"/>
-        <rect x="776" y="470" width="8" height="420" fill="#1e2a32"/>
-        <g class="sail">
-          <path d="M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 590 604 503Z" fill="#3b4a55"/>
-          <g :clip-path="url('sailclip')" fill="#52636f"><rect x="652" y="500" width="54" height="300"/><rect x="753" y="500" width="54" height="300"/><rect x="854" y="500" width="54" height="300"/></g>
-        </g>
-        <rect x="588" y="495" width="384" height="8" rx="3" fill="#1e2a32"/>
-        <!-- steersman -->
-        <path d="M452 882 L456 814 C460 805 482 805 488 814 L492 882Z" fill="#222f38"/>
-        <circle cx="471" cy="794" r="13" fill="#222f38"/>
-        <!-- the boy at the prow -->
-        <g class="cloak"><path d="M1124 842 C1114 846 1104 854 1096 864 L1109 862 L1104 872 L1121 864Z" fill="#2a3842"/></g>
-        <path d="M1119 876 L1121 844 C1123 838 1135 838 1137 844 L1140 876Z" fill="#222f38"/>
-        <circle cx="1130" cy="830" r="8.5" fill="#222f38"/>
-        <path d="M1122 826 C1124 818 1135 817 1139 825 L1135 823 L1132 827 L1128 822Z" fill="#222f38"/>
-        <!-- rowers (behind shields) -->
-        <g v-for="o in OARS" :key="o.x" class="rower">
-          <path :d="o.body" fill="#1e2a33" />
-          <circle :cx="o.x" cy="836" r="12" fill="#1e2a33" />
-        </g>
-        <!-- hull -->
-        <path d="M426 800 C440 852 470 880 520 888 L1080 888 C1130 880 1160 852 1170 800 L1198 800 C1198 882 1162 966 1060 992 L540 992 C438 966 396 882 396 800Z" fill="#222f38"/>
-        <path d="M440 860 C470 885 500 896 540 901 L1060 901 C1100 896 1140 882 1168 852 M452 884 C484 904 512 916 552 922 L1050 922 C1092 916 1128 902 1156 882" stroke="#34444f" stroke-width="3" fill="none"/>
-        <path d="M396 806 C390 752 394 706 420 686 C442 670 470 678 470 700 C470 718 452 726 442 716 C452 712 456 702 448 694 C436 686 422 696 420 716 C418 744 422 776 426 806Z" fill="#222f38"/>
-        <path d="M1170 806 C1176 760 1182 720 1196 696 C1208 680 1232 676 1246 686 L1236 692 L1250 700 L1232 704 C1218 706 1208 716 1204 734 C1200 756 1198 780 1198 806Z" fill="#222f38"/>
-        <circle cx="1224" cy="689" r="2.2" fill="#6b7c88"/>
-        <g v-for="s in SHIELDS" :key="s.x">
-          <circle :cx="s.x" cy="890" r="21" :fill="s.fill" />
-          <circle :cx="s.x" cy="890" r="5" fill="#1c262d" />
-        </g>
-        <g v-for="o in OARS" :key="o.x" :transform="`translate(${o.x} 910)`">
-          <g class="oar">
-            <rect x="-2.5" y="0" width="5" height="170" rx="2" fill="#182229" />
-            <ellipse cx="0" cy="156" rx="7" ry="20" fill="#182229" />
-          </g>
-        </g>
+        <IntroLongship boy strakes />
       </g></g></g></g>
       <!-- 7 near sea (covers keel and blades) -->
       <g class="drift sea-near">
@@ -176,7 +133,7 @@ const OARS = [584, 680, 776, 872, 968, 1064].map((x) => ({
       </g>
       <!-- 7b oar splashes, on the ship's plane but in front of the near sea -->
       <g class="ship-frame"><g class="lf-ship">
-        <g v-for="o in OARS" :key="o.x" :transform="`translate(${o.x + 40} 986)`">
+        <g v-for="x in OAR_X" :key="x" :transform="`translate(${x + 40} 986)`">
           <ellipse class="splash" cx="0" cy="0" rx="16" ry="5" fill="#eef3f6" />
         </g>
       </g></g>
@@ -208,8 +165,8 @@ const OARS = [584, 680, 776, 872, 968, 1064].map((x) => ({
 .b5 .drift { will-change: transform; }
 
 /* rowing: 5 strokes per loop */
-.b5 .oar    { transform-origin: 0 0; animation: b5-oar    calc(var(--b5-loop) / 5) linear infinite; }
-.b5 .rower  { animation: b5-rower  calc(var(--b5-loop) / 5) ease-in-out infinite; }
+.b5 :deep(.ship-oar) { transform-origin: 0 0; animation: b5-oar    calc(var(--b5-loop) / 5) linear infinite; }
+.b5 :deep(.ship-rower) { animation: b5-rower  calc(var(--b5-loop) / 5) ease-in-out infinite; }
 .b5 .splash { opacity: 0; transform-origin: 0 0; animation: b5-splash calc(var(--b5-loop) / 5) ease-out infinite; }
 @keyframes b5-oar {
   0%   { transform: rotate(-26deg) scaleY(1);   animation-timing-function: cubic-bezier(.3,0,.6,1); }  /* catch */
@@ -224,8 +181,8 @@ const OARS = [584, 680, 776, 872, 968, 1064].map((x) => ({
 /* ship motion */
 .b5 .heave { animation: b5-heave calc(var(--b5-loop) / 3) ease-in-out infinite; }
 .b5 .pitch { transform-origin: 800px 900px; animation: b5-pitch var(--b5-loop) ease-in-out infinite; }
-.b5 .sail  { transform-origin: 780px 503px; animation: b5-sail var(--b5-loop) ease-in-out infinite; }
-.b5 .cloak { transform-origin: 1124px 842px; animation: b5-cloak calc(var(--b5-loop) / 10) ease-in-out infinite; }
+.b5 :deep(.ship-sail) { animation: b5-sail var(--b5-loop) ease-in-out infinite; }
+.b5 :deep(.ship-cloak) { animation: b5-cloak calc(var(--b5-loop) / 10) ease-in-out infinite; }
 @keyframes b5-heave { 0%,100% { transform: translateY(-4px); } 50% { transform: translateY(5px); } }
 @keyframes b5-pitch { 0%,100% { transform: rotate(-.9deg); } 50% { transform: rotate(1.1deg); } }
 @keyframes b5-sail  { 0%,100% { transform: skewX(1deg) scaleX(1); } 18% { transform: skewX(4deg) scaleX(.965); } 30% { transform: skewX(2.5deg) scaleX(.985); } 52% { transform: skewX(5.5deg) scaleX(.95); } 68% { transform: skewX(1.5deg) scaleX(.99); } 84% { transform: skewX(3.5deg) scaleX(.97); } }
