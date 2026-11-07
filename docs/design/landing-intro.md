@@ -8,8 +8,12 @@ then hands over to the real map.
 1. **Skald's fire** (intro): a skald by a hearth begins the saga.
 2. **Prophecy** (intro): a prophecy says the homeland is lost.
 3. **The sending** (intro): the jarl stakes his whole line on his only son, a child, shown as a silhouette. You are
-   sworn to guide him and build his realm.
-4. **Ravens** (intro): the ravens return. Bjarnøy is not empty: the giants sleep under the sea. Only hinted.
+   sworn to guide him and build his realm. The boy boards, the longship leaves, and the camera turns with it out to
+   sea while the homeland and the last light fall behind.
+4. **Ravens** (intro): the camera turn goes on: an island comes into view, the ravens return, a moon rises on the
+   right and grows behind the ship, and the seabed comes up as a sleeping giant. Bjarnøy is not empty: the giants
+   sleep under the sea. Only hinted. Night lifts toward dawn; the camera pushes in on the ship and the scene turns
+   into the fog.
 5. **Longship in fog** (hold, loops): the ship rows through fog. Other settlements show faintly in the background
    (smoke, lights, sails). The ravens fly past now and then.
 6. **Landfall** (exit): "Land!" The intro's fog fades while the map's own fog lifts, and the landfall onboarding
