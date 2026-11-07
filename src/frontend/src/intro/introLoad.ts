@@ -26,9 +26,13 @@ export function reportIntroLoad(group: MapLoadGroup, count: LoadCount): void {
   introLoad[group] = { loaded: count.loaded, total: count.total };
 }
 
+const MAX_UNLOADED = 0.99;
+
 /**
  * How far the map has loaded, 0..1: the loaded pages over the total pages of the groups that have reported (terrain,
- * buildings, animations); 0 while none has; 1 once the main app says the tiles are loaded.
+ * buildings, animations); 0 while none has; 1 only once the main app says the tiles are loaded. Until then it stays
+ * below 1: the groups report one after another, so the ones that have reported can all be done while the next has not
+ * started yet.
  */
 export function mapLoadFraction(load: Record<MapLoadGroup, LoadCount | null> = introLoad, tilesLoaded: boolean = introSignal.tilesLoaded): number {
   if (tilesLoaded) return 1;
@@ -39,5 +43,5 @@ export function mapLoadFraction(load: Record<MapLoadGroup, LoadCount | null> = i
     loaded += count.loaded;
     total += count.total;
   }
-  return total > 0 ? Math.min(1, loaded / total) : 0;
+  return total > 0 ? Math.min(MAX_UNLOADED, loaded / total) : 0;
 }

@@ -12,6 +12,11 @@ describe('mapLoadFraction', () => {
   it('ignores a group that reported a zero total', () => {
     expect(mapLoadFraction({ terrain: { loaded: 0, total: 0 }, buildings: null, animations: null }, false)).toBe(0);
   });
+  it('stays below 1 while the groups that reported are done but the tiles are not loaded', () => {
+    const f = mapLoadFraction({ terrain: { loaded: 4, total: 4 }, buildings: null, animations: null }, false);
+    expect(f).toBeLessThan(1);
+    expect(Math.floor(f * 100)).toBe(99);
+  });
   it('is 1 once the tiles are loaded, whatever the groups say', () => {
     expect(mapLoadFraction({ terrain: { loaded: 1, total: 4 }, buildings: null, animations: null }, true)).toBe(1);
     expect(mapLoadFraction({ terrain: null, buildings: null, animations: null }, true)).toBe(1);
