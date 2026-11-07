@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { inject, useId } from 'vue';
+import { computed, inject, onMounted, ref, useId, useTemplateRef } from 'vue';
 import IntroLongship from './IntroLongship.vue';
-import { sendingShipAtEnd } from './SendingScene.vue';
+import { SENDING_SHIP_TRACK, sendingShipAt } from './SendingScene.vue';
 import { meta as sendingMeta } from './SendingBeat.vue';
+import { meta as ravensMeta } from './RavensBeat.vue';
 import { INTRO_BEAT_MS } from './types';
 
 /**
@@ -20,10 +21,30 @@ import { INTRO_BEAT_MS } from './types';
  */
 defineProps<{ paused?: boolean }>();
 
-// the ship starts exactly where the sending leaves it, which depends on how long the sending ran (its voice clip)
-const beatMs = inject(INTRO_BEAT_MS, () => sendingMeta.durationMs);
-const shipStart = sendingShipAtEnd(beatMs('sending'));
-const rootStyle = { '--ship-x0': `${shipStart.x}px`, '--ship-y0': `${shipStart.y}px` };
+// The ship starts exactly where the sending's ship is and follows its path through the crossfade (to 20 % of this
+// beat), so the cut shows one ship. Where that is follows from how long the sending ran (its voice clip), but its
+// animations can start a little behind the beat's clock (the time its first frame takes), so once this scene's ship
+// has started, while the sending is still crossfading out, the path is taken from the sending ship's run as it
+// actually stands, less the time this scene's own ship has already run.
+const beatMs = inject(INTRO_BEAT_MS, (id) => (id === 'sending' ? sendingMeta.durationMs : ravensMeta.durationMs));
+const handoverMs = 0.2 * beatMs('ravens');
+const shipFrom = ref(beatMs('sending'));
+const rootStyle = computed(() => {
+  const a = sendingShipAt(shipFrom.value);
+  const b = sendingShipAt(shipFrom.value + handoverMs);
+  return { '--ship-x0': `${a.x}px`, '--ship-y0': `${a.y}px`, '--ship-x1': `${b.x}px`, '--ship-y1': `${b.y}px` };
+});
+const root = useTemplateRef<HTMLElement>('root');
+const runOf = (el: Element | null | undefined) => (el && typeof el.getAnimations === 'function' ? el.getAnimations()[0] : undefined);
+onMounted(() => {
+  const own = runOf(root.value?.querySelector('.b4-ship'));
+  // a new animation has no time until it has started
+  void own?.ready?.then(() => {
+    const track = runOf(document.querySelector(SENDING_SHIP_TRACK));
+    if (track?.currentTime == null || own.currentTime == null) return;
+    shipFrom.value = Number(track.currentTime) - Number(own.currentTime);
+  });
+});
 
 const uid = useId().replace(/[^a-zA-Z0-9]/g, '-');
 const id = (name: string) => `${uid}-${name}`;
@@ -48,7 +69,7 @@ const C = {
 </script>
 
 <template>
-  <div class="ravens" :style="rootStyle">
+  <div ref="root" class="ravens" :style="rootStyle">
   <svg class="intro-beat b4" :class="{ 'is-paused': paused }" viewBox="0 0 1600 1600" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
     <defs>
       <radialGradient :id="id('eyeGlow')" cx="0.5" cy="0.5" r="0.5">
@@ -229,16 +250,16 @@ const C = {
 @keyframes b4-cam-deep { 0% { transform: translate(0, 520px); animation-timing-function: cubic-bezier(.25, .6, .4, 1) } 32% { transform: translate(-20px, -10px) } 100% { transform: translate(-64px, -42px) } }
 @keyframes b4-cam-front { 0% { transform: translate(0, 640px); animation-timing-function: cubic-bezier(.25, .6, .4, 1) } 32% { transform: translate(-30px, -20px) } 100% { transform: translate(-100px, -70px) } }
 
-/* the longship: it starts where and as fast as the sending leaves it (--ship-x0/--ship-y0 from sendingShipAtEnd,
-   scale .3744, about 59 units/s to the right) and keeps that speed through the long crossfade (fadeInMs 1800, about
-   20 % of the beat), so the two scenes show one ship; then it slows and drifts toward the middle as the camera
-   overtakes it, keeping its size, so the push (.68 / .3744) lands it on the hold's ship. Its colours go from the
-   sending's dusk silhouette to the hold's. */
+/* the longship: it starts where the sending leaves it and follows the sending ship's path through the long crossfade
+   (--ship-x0/y0 to --ship-x1/y1 from sendingShipAt, over 20 % of the beat, about the crossfade's 1.8 s), so the two
+   scenes show one ship; then it slows and drifts toward the middle as the camera overtakes it, keeping its size
+   (.3744), so the push (.68 / .3744) lands it on the hold's ship. Its colours go from the sending's dusk silhouette
+   to the hold's. */
 .b4 .b4-ship { animation-name: b4-ship; transform-box: view-box; transform-origin: 0 0; }
 @keyframes b4-ship {
   0% { transform: translate(var(--ship-x0, 945px), var(--ship-y0, 471px)) scale(.3744); animation-timing-function: linear }
-  20% { transform: translate(calc(var(--ship-x0, 945px) + 106px), calc(var(--ship-y0, 471px) - 7px)) scale(.3744); animation-timing-function: cubic-bezier(.2, .7, .5, 1) }
-  30% { transform: translate(calc(var(--ship-x0, 945px) + 121px), calc(var(--ship-y0, 471px) - 8px)) scale(.3744); animation-timing-function: ease-in-out }
+  20% { transform: translate(var(--ship-x1, 1051px), var(--ship-y1, 464px)) scale(.3744); animation-timing-function: cubic-bezier(.2, .7, .5, 1) }
+  30% { transform: translate(calc(var(--ship-x1, 1051px) + 15px), calc(var(--ship-y1, 464px) - 1px)) scale(.3744); animation-timing-function: ease-in-out }
   88%, 100% { transform: translate(741.869px, 458.6px) scale(.3744) }
 }
 .b4 .b4-ship :deep(.s-steer), .b4 .b4-ship :deep(.s-rig), .b4 .b4-ship :deep(.s-strake) { animation: b4-ship-stroke var(--beat-duration) linear both; }

@@ -1,22 +1,49 @@
 <script lang="ts">
-// The ship's run (sd-ship-depart, on --ship-ms) is a straight line from 80 % to its end, and the camera
-// (sd-cam-mid) holds still at its end frame from 100 % of the beat. So where the ship is when the beat ends follows
-// from the beat's length; the ravens scene starts its ship there, so the cut has one ship (both values are checked
-// against the keyframes in SendingScene.test.ts).
+// The ship's run (sd-ship-depart, on --ship-ms, linear between its keyframes) leaves at 62.86 %, speeds up to 80 % and
+// goes on straight to its end (its keyframes are copied here); the camera (sd-cam-mid) holds still at its end frame from 100 % of the beat. So where
+// the ship is around the end of the beat follows from how long its run has played; the ravens scene starts its ship
+// there and follows this path through the crossfade, so the cut has one ship (checked against the keyframes in
+// SendingScene.test.ts).
 export const SHIP_MS = 14000;
-export const SHIP_TRACK = { from: 0.8, at80: [90, -6], at100: [249.6, -16.64] } as const;
+/** [fraction of the run, translate x, translate y] from the ship's departure on: sd-ship-depart's keyframes */
+export const SHIP_TRACK: readonly (readonly [number, number, number])[] = [
+  [0.6286, 0, 0],
+  [0.6357, 0.56, -0.04],
+  [0.6439, 1.9, -0.13],
+  [0.6525, 3.85, -0.26],
+  [0.6618, 6.51, -0.43],
+  [0.6714, 9.79, -0.65],
+  [0.6911, 17.91, -1.19],
+  [0.7118, 28.32, -1.89],
+  [0.7332, 40.85, -2.72],
+  [0.755, 55.29, -3.69],
+  [0.7771, 71.58, -4.77],
+  [0.8, 90, -6],
+  [1.0, 249.6, -16.64],
+];
+/** After its run the ship keeps its last speed (sd-ship-on, from the run's end): this far over this long. */
+export const SHIP_ON = { ms: 4000, x: 228, y: -15.2 } as const;
 export const SHIP_PLACE = { x: 772, y: 499, scale: 0.36 } as const;
 export const CAM_MID_END = { x: -32, y: -36, scale: 1.04 } as const;
 
-/** The ship's transform in viewBox units (translate x, y and scale of its local drawing) when the sending ends. */
-export function sendingShipAtEnd(beatMs: number): { x: number; y: number; scale: number } {
-  const t = Math.min(1, Math.max(SHIP_TRACK.from, beatMs / SHIP_MS));
-  const f = (t - SHIP_TRACK.from) / (1 - SHIP_TRACK.from);
-  const dx = SHIP_TRACK.at80[0] + (SHIP_TRACK.at100[0] - SHIP_TRACK.at80[0]) * f;
-  const dy = SHIP_TRACK.at80[1] + (SHIP_TRACK.at100[1] - SHIP_TRACK.at80[1]) * f;
+/** The element whose animation is the ship's run, for a scene that picks the ship up while the sending fades out. */
+export const SENDING_SHIP_TRACK = '[data-sending-ship-track]';
+
+/**
+ * The ship's transform in viewBox units (translate x, y and scale of its local drawing) once its run has played
+ * `shipMs`, with the camera at its end frame: at the sending's end that is the beat's length.
+ */
+export function sendingShipAt(shipMs: number): { x: number; y: number; scale: number } {
+  const t = Math.min(1, Math.max(SHIP_TRACK[0][0], shipMs / SHIP_MS));
+  let i = 0;
+  while (i < SHIP_TRACK.length - 2 && t > SHIP_TRACK[i + 1][0]) i++;
+  const [t0, x0, y0] = SHIP_TRACK[i];
+  const [t1, x1, y1] = SHIP_TRACK[i + 1];
+  const f = (t - t0) / (t1 - t0);
+  const on = Math.min(SHIP_ON.ms, Math.max(0, shipMs - SHIP_MS)) / SHIP_ON.ms;
   return {
-    x: CAM_MID_END.x + CAM_MID_END.scale * (SHIP_PLACE.x + dx),
-    y: CAM_MID_END.y + CAM_MID_END.scale * (SHIP_PLACE.y + dy),
+    x: CAM_MID_END.x + CAM_MID_END.scale * (SHIP_PLACE.x + x0 + (x1 - x0) * f + SHIP_ON.x * on),
+    y: CAM_MID_END.y + CAM_MID_END.scale * (SHIP_PLACE.y + y0 + (y1 - y0) * f + SHIP_ON.y * on),
     scale: CAM_MID_END.scale * SHIP_PLACE.scale,
   };
 }
@@ -186,9 +213,9 @@ const SIDES = [
     </g>
 
     <g class="sd-a sd-cam-mid">
-      <g class="sd-a sd-ship-depart"><g class="sd-heave"><g class="sd-pitch">
+      <g class="sd-a sd-ship-depart" data-sending-ship-track><g class="sd-ship-on"><g class="sd-heave"><g class="sd-pitch">
         <g class="sd-longship" transform="translate(772,499) scale(0.36)"><IntroLongship bold boy /></g>
-      </g></g></g>
+      </g></g></g></g>
       <rect x="0" y="851" width="1600" height="40" fill="#1d252e"/>
       <rect x="860" y="852" width="520" height="2" fill="#8c6a5c" opacity=".4"/>
       <g class="sd-a sd-pan-shore">
@@ -325,6 +352,10 @@ const SIDES = [
 .b3 { --story-ms: 11200ms; --ship-ms: 14000ms; }
 .b3 .sd-j-thigh, .b3 .sd-j-shin, .b3 .sd-j-bthigh, .b3 .sd-j-bshin, .b3 .sd-j-cloak, .b3 .sd-j-torso, .b3 .sd-j-head, .b3 .sd-j-arm, .b3 .sd-j-fore, .b3 .sd-j-farm, .b3 .sd-j-ffore, .b3 .sd-boy-bob, .b3 .sd-boy-l, .b3 .sd-boy-r, .b3 .sd-legf, .b3 .sd-legb, .b3 .sd-boy-arm, .b3 .sd-look { animation-duration: var(--story-ms); }
 .b3 .sd-ship-depart { animation-duration: var(--ship-ms); }
+/* after its run the ship keeps its last speed (57 units/s right, 3.8 up), so it never stops while the sending is
+   still on screen or crossfading out (SHIP_ON) */
+.b3 .sd-ship-on { animation: sd-ship-on 4000ms linear var(--ship-ms) both; }
+@keyframes sd-ship-on { from { transform: translate(0, 0); } to { transform: translate(228px, -15.2px); } }
 
 /* ---- ambient loops ---- */
 /* sines as alternating ease-in-outs (see sineLoop.ts) */
