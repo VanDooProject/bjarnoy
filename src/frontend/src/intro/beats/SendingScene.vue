@@ -8,7 +8,8 @@ import { sineLoop } from './sineLoop';
  * Beat 3, the sending: dusk on the burning shore. The jarl, spear planted, goes down on one knee to his
  * son, takes him by the shoulder and pats it, then lets go. The boy turns and walks down to the water
  * and is lost in the shore mist; the jarl raises his arm and waves while the longship drops its sail and
- * pulls out toward the light. Fog closes over the shore at the end. The beat starts from the dark of
+ * pulls out toward the light. Fog closes over the shore at the end, half way: the ravens scene opens on the same
+ * horizon and ship under the same veil and thins it. The beat starts from the dark of
  * the prophecy's last frame.
  * The story (figures, camera push, sail, oars, ship's departure, fog closing) is baked from the design's
  * pose function into the keyframes at the bottom: figures and ship on fixed times, camera and fog on
@@ -226,7 +227,7 @@ const SIDES = [
       <path d="M120 1310 L132 1250 L142 1312 M170 1330 L190 1262 L196 1336 M230 1330 L236 1280 L250 1334" stroke="#090b0e" stroke-width="5" fill="none"/>
     </g>
     <rect width="1600" height="1600" :fill="url('vig')"/>
-    <!-- the closing fog -->
+    <!-- the closing fog: half closed at the end, the ravens scene picks it up -->
     <g class="sd-a sd-veil">
       <rect width="1600" height="1600" fill="#4d545c"/>
       <g class="sd-fog sd-fog-veil"><rect x="0" y="0" width="2624" height="1600" fill="#808891" :mask="url('veilTex')"/></g>
@@ -1315,7 +1316,7 @@ const SIDES = [
 }
 @keyframes sd-veil {
   0% { opacity: 0; visibility: hidden; } 91.5% { opacity: 0; visibility: hidden; }
-  92% { opacity: 0; visibility: visible; } 96% { opacity: 0.45; } 100% { opacity: 1; visibility: visible; }
+  92% { opacity: 0; visibility: visible; } 96% { opacity: 0.3; } 100% { opacity: 0.5; visibility: visible; }
 }
 @keyframes sd-dark {
   0% { opacity: 1; } 9%, 100% { opacity: 0; visibility: hidden; }
