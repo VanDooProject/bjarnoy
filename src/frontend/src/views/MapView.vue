@@ -253,6 +253,7 @@ useIntroTilesSignal({
   error: overlayError,
   canvasShown: computed(() => !!world.selectedSettlementId),
   loadState: computed(() => canvasRef.value?.loadState),
+  animLoad: computed(() => canvasRef.value?.animLoad),
 });
 function retryLoad() {
   if (loadError.value) {

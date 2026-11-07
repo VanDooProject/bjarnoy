@@ -54,6 +54,17 @@ describe('progressive building art', () => {
     expect(partials.every((p) => finalBase.every(([key, value]) => p.base[key] === value))).toBe(true);
   });
 
+  it('loadAnimAtlases reports the animation pages loaded so far through onPage', async () => {
+    unloadAnimAtlases();
+    const pages: [number, number][] = [];
+    await loadAnimAtlases(undefined, (loaded, total) => pages.push([loaded, total]));
+    expect(pages.length).toBeGreaterThan(0);
+    const total = pages[0][1];
+    expect(pages.map(([loaded]) => loaded)).toEqual(pages.map((_, i) => i + 1));
+    expect(pages.every(([, t]) => t === total)).toBe(true);
+    expect(pages.at(-1)![0]).toBe(total);
+  });
+
   it('hands out every anim partial before the full result', async () => {
     // Each partial waits on the static atlases asynchronously; a partial
     // landing after the full result would overwrite it with fewer clips, so

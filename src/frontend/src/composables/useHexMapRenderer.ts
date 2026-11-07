@@ -42,6 +42,9 @@ export function useHexMapRenderer(
   // 'settlement'-mode mount says otherwise, since a 'world'-mode mount never
   // narrates a loading state at all (see HexMapRenderer's `startTextureLoad`).
   const loadState = shallowRef<MapLoadState>(options.mode === 'settlement' ? { phase: 'terrain' } : READY_LOAD_STATE);
+  // Page count of the core building-animation atlas, fed by the renderer's `onAnimationLoad` — null until the first
+  // page lands (animations load lazily, and not at all while they are off).
+  const animLoad = shallowRef<{ loaded: number; total: number } | null>(null);
   // Set when building/mounting the renderer throws (most commonly the
   // terrain atlas failing to load) — SettlementCanvas shows it through
   // MapStatusOverlay, whose Retry calls `retry()`. Without this the failure
@@ -87,6 +90,10 @@ export function useHexMapRenderer(
       onLoadState: (state) => {
         loadState.value = state;
         options.onLoadState?.(state);
+      },
+      onAnimationLoad: (pages) => {
+        animLoad.value = pages;
+        options.onAnimationLoad?.(pages);
       },
     });
     try {
@@ -145,6 +152,7 @@ export function useHexMapRenderer(
   async function retry() {
     teardown(renderer.value);
     loadState.value = options.mode === 'settlement' ? { phase: 'terrain' } : READY_LOAD_STATE;
+    animLoad.value = null;
     await mountRenderer();
   }
 
@@ -155,5 +163,5 @@ export function useHexMapRenderer(
     teardown(renderer.value);
   });
 
-  return { renderer, loadState, mountError, retry };
+  return { renderer, loadState, animLoad, mountError, retry };
 }
