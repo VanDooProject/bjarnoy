@@ -12,6 +12,8 @@ beforehand, so the frustration was doing the work and getting blocked, not being
 
 ## The rule
 
+Premium supports the game and only adds quality-of-life features.
+
 **Every premium-gated action must be visually distinguished and non-actionable for a non-premium account
 before the click, not after.** Concretely:
 
