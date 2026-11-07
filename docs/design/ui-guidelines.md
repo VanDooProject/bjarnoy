@@ -73,6 +73,12 @@ the change made stale. Don't defer it to a later cleanup.
   shorter name, not a smaller font.
 - Never rely on `hyphens: auto` for this: whether a browser has a dictionary depends on the platform.
 
+## 9. Ring menu: Build and Upgrade at 12 o'clock
+
+- Build (empty tile) and Upgrade (built tile) always sit straight above the tile (12 o'clock, 0°) on the ring's inner
+  lane, on every tile. All other actions follow clockwise at even spacing and never take that spot. The map moves so
+  the full circle fits around the tile.
+
 ## Checklist for a UI PR
 
 - [ ] No button left that can only fail; moved actions removed from their old place (handler, i18n, tests).

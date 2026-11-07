@@ -147,12 +147,13 @@ the tile:
 
 | Tile state | Actions |
 |---|---|
-| Own empty tile | Details, Build (→ outer ring of categories → outer ring of buildings) |
-| Own building | Upgrade, Raze (tear down), Details |
-| Enemy-owned tile | Info, Attack/Raid (**disabled** — no combat system exists) |
-| Unclaimed hex | Info, Send settlers / Land here (**disabled** — no settler mechanic exists yet) |
+| Own empty tile | Build (→ outer ring of categories → outer ring of buildings) |
+| Own building | Upgrade, Raze (tear down) |
+| Enemy-owned tile | Attack/Raid (**disabled** — no combat system exists) |
+| Unclaimed hex | Send settlers / Land here (**disabled** — no settler mechanic exists yet) |
 
-"Details"/"Info" hands off to the existing `BuildingModal`, unchanged. "Build" opens a second-level ring of
+The ring has no Details/Info entry any more (the hover tooltip shows the tile's facts); buildings that need their own
+modal get a dedicated entry, like Train. "Build" opens a second-level ring of
 categories, then a third-level ring of concrete buildings — grass gets three categories (Housing/Resource/
 Defense) each with one real building (Hut/Farm/Watchtower), matching "on grass it should have multiple build
 categories/entries"; other buildable terrain gets a single "Build" category listing the same three buildings,
