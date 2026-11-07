@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, shallowRef, useTemplateRef, watch } from 'vue';
 import './introFog.css';
 import './introButton.css';
 import { BEATS, BEAT_COMPONENTS } from './beats/registry';
@@ -7,6 +7,9 @@ import { introFogUrl } from './fogTexture';
 import { introText, type IntroLocale } from './introText';
 import { beatsFor, holdMinMs, IntroVoice, type VoiceState } from './introVoice';
 import { INTRO_BEAT, INTRO_BEAT_MS, type BeatId } from './beats/types';
+import IntroTimeline from './IntroTimeline.vue';
+import { introLoad } from './introLoad';
+import { allLoaded, gatedLoadFraction, type LoadRow } from './timeline';
 import { IntroSequencer, type IntroState } from './sequencer';
 import { introSignal } from './introSignal';
 import { useIdleDim } from './useIdleDim';
@@ -37,7 +40,32 @@ const fogUrl = introFogUrl();
 const beats = beatsFor(props.locale, BEATS);
 const exitMeta = beats.find((b) => b.role === 'exit')!;
 
-const state = shallowRef<IntroState>({ phase: 'waitingForPlay', beat: beats[0].id, cycle: 0, round: 0, skipVisible: false, paused: false });
+const state = shallowRef<IntroState>({
+  phase: 'waitingForPlay',
+  beat: beats[0].id,
+  cycle: 0,
+  round: 0,
+  skipVisible: false,
+  paused: false,
+  offsetMs: 0,
+  seq: 0,
+  waiting: false,
+});
+// A seek switches scene and narration at once (no crossfade); a beat change on the timers fades again.
+const instant = ref(false);
+// While set, the scene is shown as this beat: a seek into a later beat of a shared scene mounts the scene as its first beat.
+const sceneStage = ref<BeatId | null>(null);
+let pendingSync: { lead: number; offset: number; twoStep: boolean } | null = null;
+function onChange(next: IntroState): void {
+  const prev = state.value;
+  if (next.seq !== prev.seq) {
+    instant.value = true;
+    const start = sceneStart(next.beat);
+    sceneStage.value = start ? start.first : null;
+    pendingSync = { lead: start?.lead ?? 0, offset: next.offsetMs, twoStep: start !== null };
+  } else if (next.beat !== prev.beat || next.round !== prev.round) instant.value = false;
+  state.value = next;
+}
 const sequencer = new IntroSequencer({
   beats,
   mode: props.mode,
@@ -46,21 +74,27 @@ const sequencer = new IntroSequencer({
   playNow: props.playNow,
   // the hold lasts at least as long as its voice clip (plus the tail)
   holdMinMs: holdMinMs(props.locale),
-  onChange: (s) => (state.value = s),
+  onChange,
 });
+const timeline = sequencer.timeline;
 state.value = sequencer.state;
 
-const meta = computed(() => beats.find((b) => b.id === state.value.beat)!);
-provide(INTRO_BEAT, computed(() => state.value.beat));
+const metaOf = (id: BeatId) => beats.find((b) => b.id === id)!;
+const meta = computed(() => metaOf(state.value.beat));
+const shownBeat = computed(() => sceneStage.value ?? state.value.beat);
+const shownMeta = computed(() => metaOf(shownBeat.value));
+provide(INTRO_BEAT, shownBeat);
 provide(INTRO_BEAT_MS, (id: BeatId) => beats.find((b) => b.id === id)!.durationMs);
 
 // The voice loads its clips now, before the map tiles; each clip starts with its beat (muted while the sound is off).
 const sound = ref(props.soundOn);
 const voiceBeat = ref<BeatId | null>(null);
 const voiceState = ref<VoiceState>('stopped');
+const voiceProgress = ref({ loaded: 0, total: 0 });
 const voice = new IntroVoice({
   locale: props.locale,
   sound: props.soundOn,
+  onLoadProgress: (loaded, total) => (voiceProgress.value = { loaded, total }),
   // the browser only allows sound after a click
   onSoundBlocked: () => (sound.value = false),
   onStateChange: (beat, st) => {
@@ -69,37 +103,59 @@ const voice = new IntroVoice({
   },
 });
 let voicedKey: string | null = null;
+// Set while the playhead is dragged (see the timeline section below).
+const scrubbing = ref(false);
 watch(
-  () => [state.value.phase, state.value.beat, state.value.round, state.value.paused] as const,
-  ([phase, beat, round, paused]) => {
+  () => [state.value.phase, state.value.beat, state.value.round, state.value.seq, state.value.paused, scrubbing.value] as const,
+  ([phase, beat, round, seq, paused, scrub]) => {
     if (phase === 'done' || phase === 'ended') {
       voice.stop();
       voicedKey = null;
       return;
     }
     if (phase === 'waitingForPlay') return;
-    const key = `${beat}:${round}`;
+    // a drag seeks on every move: the clip stays paused and joins once, where the drag lets go
+    if (scrub) {
+      voice.pause();
+      return;
+    }
+    const key = `${beat}:${round}:${seq}`;
     if (key !== voicedKey) {
       voicedKey = key;
-      voice.enterBeat(beat);
+      voice.enterBeat(beat, state.value.offsetMs);
     }
     if (paused) voice.pause();
     else voice.resume();
   },
   { immediate: true },
 );
-function toggleSound(): void {
-  sound.value = !sound.value;
+// 0..100. Muting keeps it, so unmuting brings the level back.
+const volume = ref(100);
+// Both run in a user gesture, which is when the voice may start its audio context.
+function applyVoiceLevel(): void {
+  voice.setVolume(volume.value / 100);
   voice.setSound(sound.value);
+}
+function toggleSound(): void {
+  if (!sound.value && volume.value === 0) volume.value = 50;
+  sound.value = !sound.value;
+  applyVoiceLevel();
+}
+// Dragging the range above 0 unmutes, to 0 mutes.
+function setVolume(value: number): void {
+  volume.value = value;
+  sound.value = value > 0;
+  applyVoiceLevel();
 }
 // "Land!" cuts in at once instead of waiting for the narration's out-in crossfade
 const isCall = computed(() => state.value.beat === 'landfall');
 const beatStyle = computed(() => ({
-  '--beat-duration': `${meta.value.durationMs}ms`,
-  '--loop-period': `${meta.value.loopMs ?? meta.value.durationMs}ms`,
+  '--beat-duration': `${shownMeta.value.durationMs}ms`,
+  '--loop-period': `${shownMeta.value.loopMs ?? shownMeta.value.durationMs}ms`,
 }));
 const rootStyle = computed(() => ({
   '--exit-ms': `${exitMeta.durationMs}ms`,
+  '--exit-offset': `${state.value.phase === 'exiting' ? state.value.offsetMs : 0}ms`,
   '--fade-ms': `${FADE_OUT_MS}ms`,
 }));
 const fadesOut = computed(() => props.mode === 'landing' && state.value.phase === 'exiting');
@@ -137,6 +193,77 @@ function togglePause(): void {
   if (state.value.paused) sequencer.resume();
   else sequencer.pause();
 }
+
+// ---- timeline
+// Dragging the playhead pauses the run (and its voice); letting go resumes it if it was playing.
+// A drag that starts paused stays paused after it, but its moves still must not re-enter the clip each time.
+let pausedBeforeDrag = false;
+function onDragStart(): void {
+  pausedBeforeDrag = state.value.paused;
+  scrubbing.value = true;
+  sequencer.pause();
+}
+function onDragEnd(): void {
+  if (!scrubbing.value) return;
+  scrubbing.value = false;
+  if (!pausedBeforeDrag) sequencer.resume();
+}
+/** What the player paused, not the pause a drag puts on the run. */
+const pausedByPlayer = computed(() => state.value.paused && !(scrubbing.value && !pausedBeforeDrag));
+const landing = props.mode === 'landing';
+const gated = computed(() => landing && !props.loaded);
+const barLocked = computed(() => landing && state.value.phase === 'exiting');
+const loadRows = computed<LoadRow[]>(() => {
+  if (!landing) return [];
+  const rows: LoadRow[] = [{ id: 'voices', ...voiceProgress.value, gating: true }];
+  for (const id of ['terrain', 'buildings'] as const) {
+    const count = introLoad[id];
+    if (count) rows.push({ id, loaded: count.loaded, total: count.total, gating: true });
+  }
+  if (introLoad.animations) rows.push({ id: 'animations', ...introLoad.animations, gating: false });
+  return rows;
+});
+const loadFraction = computed(() => gatedLoadFraction(loadRows.value));
+// the rows to list while the bar is open: none once everything has loaded
+const detailRows = computed(() => (allLoaded(loadRows.value) ? [] : loadRows.value));
+const detailOpen = ref(false);
+
+// A seek puts every CSS animation of the new scene where a straight play would have it: "the time since it would
+// have started". Only `currentTime` is set (never play()/pause(), which would override the CSS play-state a pause
+// relies on). A beat that shares a scene with earlier beats is mounted as the scene's first beat and timed to
+// the scene's time, then switched to the target beat; only the animations that switch adds start at the offset.
+function sceneStart(beat: BeatId): { first: BeatId; lead: number } | null {
+  const { chapters } = timeline;
+  const index = chapters.findIndex((c) => c.id === beat);
+  const scene = metaOf(beat).scene;
+  if (index < 1 || !scene) return null;
+  let first = index;
+  while (first > 0 && metaOf(chapters[first - 1].id).scene === scene) first--;
+  return first === index ? null : { first: chapters[first].id, lead: chapters[index].startMs - chapters[first].startMs };
+}
+const rootEl = useTemplateRef<HTMLElement>('root');
+function layerAnimations(layer: Element): Animation[] {
+  return typeof layer.getAnimations === 'function' ? layer.getAnimations({ subtree: true }) : [];
+}
+watch(
+  () => state.value.seq,
+  async () => {
+    const sync = pendingSync;
+    pendingSync = null;
+    if (!sync) return;
+    const layers = rootEl.value?.querySelectorAll('.beat-layer');
+    const layer = layers?.[layers.length - 1];
+    const finish = () => (sceneStage.value = null);
+    if (!layer) return finish();
+    for (const anim of layerAnimations(layer)) anim.currentTime = sync.lead + sync.offset;
+    if (!sync.twoStep) return;
+    const before = new Set(layerAnimations(layer));
+    finish();
+    await nextTick();
+    for (const anim of layerAnimations(layer)) if (!before.has(anim)) anim.currentTime = sync.offset;
+  },
+  { flush: 'post' },
+);
 // Esc closes the intro at once: no exit beat, no fade.
 function close(): void {
   sequencer.close();
@@ -158,10 +285,11 @@ function onKeydown(event: KeyboardEvent): void {
   event.preventDefault();
   togglePause();
 }
-// A click or tap on the scene toggles pause like the button and space do; buttons keep their own action.
+// A click or tap on the scene toggles pause like the button and space do; buttons and the control row keep their own action.
 function onSceneClick(event: MouseEvent): void {
   if (!pauseVisible.value) return;
-  if (event.target instanceof Element && event.target.closest('button')) return;
+  // the path, not the target: a button that re-renders its icon on this very click has already replaced the target
+  if (event.composedPath().some((node) => node instanceof Element && node.matches('button, .ctrl'))) return;
   togglePause();
 }
 onMounted(() => {
@@ -180,7 +308,8 @@ onBeforeUnmount(() => {
   <div
     v-if="state.phase !== 'done'"
     class="landing-intro"
-    :class="{ 'is-fading': fadesOut, 'is-paused': state.paused, 'is-idle': dimmed }"
+    ref="root"
+    :class="{ 'is-fading': fadesOut, 'is-paused': state.paused, 'is-idle': dimmed, 'detail-open': detailOpen && pauseVisible, 'is-still': reducedMotion }"
     :style="rootStyle"
     role="region"
     :aria-label="introText(locale, 'region')"
@@ -199,14 +328,17 @@ onBeforeUnmount(() => {
       </defs>
     </svg>
 
-    <Transition name="intro-fade">
-      <!-- beats sharing a scene keep one mounted component; the beat switches on it -->
+    <!-- a seek swaps scene and narration at once instead of crossfading -->
+    <Transition name="intro-fade" :css="!instant">
+      <!-- beats sharing a scene keep one mounted component; the beat switches on it. A seek within the mounted
+           scene does not remount it: the seek sync below moves its animations instead -->
       <div :key="`${meta.scene ?? state.beat}:${state.round}`" class="beat-layer" :style="beatStyle">
-        <component :is="BEAT_COMPONENTS[state.beat]" :paused="state.phase === 'waitingForPlay' || state.paused" />
+        <component :is="BEAT_COMPONENTS[shownBeat]" :paused="state.phase === 'waitingForPlay' || state.paused" />
       </div>
     </Transition>
 
-    <Transition :name="isCall ? 'intro-call' : 'intro-fade'" :mode="isCall ? undefined : 'out-in'">
+    <!-- (not css=false: an out-in leave that ends synchronously updates this component in the middle of its own patch) -->
+    <Transition :name="instant ? 'intro-instant' : isCall ? 'intro-call' : 'intro-fade'" :mode="isCall ? undefined : 'out-in'">
       <p
         v-if="state.phase !== 'ended'"
         :key="state.beat"
@@ -245,7 +377,6 @@ onBeforeUnmount(() => {
     </Transition>
 
     <div class="actions">
-      <!-- sound is the right-most button, so skip and pause appearing to its left do not move it -->
       <Transition name="intro-fade">
         <button
           v-if="state.skipVisible"
@@ -258,56 +389,47 @@ onBeforeUnmount(() => {
           {{ introText(locale, 'skip') }}
         </button>
       </Transition>
-
-      <Transition name="intro-fade">
-        <button
-          v-if="pauseVisible"
-          type="button"
-          class="intro-btn icon restart"
-          :aria-label="introText(locale, 'restart')"
-          data-testid="intro-restart"
-          @click="sequencer.restart()"
-        >
-          <span aria-hidden="true">⟲</span>
-        </button>
-      </Transition>
-
-      <Transition name="intro-fade">
-        <button
-          v-if="pauseVisible"
-          type="button"
-          class="intro-btn pause"
-          :aria-pressed="state.paused"
-          data-testid="intro-pause"
-          @click="togglePause()"
-        >
-          {{ introText(locale, state.paused ? 'resume' : 'pause') }}
-        </button>
-      </Transition>
-
-      <Transition name="intro-fade">
-        <button
-          v-if="pauseVisible"
-          type="button"
-          class="intro-btn sound"
-          :class="{ 'is-muted': !sound, 'is-still': reducedMotion }"
-          :aria-label="introText(locale, sound ? 'soundOff' : 'soundOn')"
-          :aria-pressed="sound"
-          data-testid="intro-sound"
-          :data-sound="sound ? 'on' : 'off'"
-          @click="toggleSound()"
-        >
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z" fill="currentColor" />
-            <template v-if="sound">
-              <path d="M15.5 9.5a3.5 3.5 0 0 1 0 5" />
-              <path d="M18 7a7 7 0 0 1 0 10" />
-            </template>
-            <path v-else d="M16 9.5l5 5M21 9.5l-5 5" />
-          </svg>
-        </button>
-      </Transition>
     </div>
+
+    <Transition name="intro-cplay">
+      <button
+        v-if="pauseVisible && pausedByPlayer"
+        type="button"
+        class="cplay"
+        :aria-label="introText(locale, 'resume')"
+        data-testid="intro-center-play"
+        @click="togglePause()"
+      >
+        <svg viewBox="0 0 24 24" width="72" height="72" aria-hidden="true">
+          <path d="M8 5.6v12.8a1.2 1.2 0 0 0 1.8 1l10.2-6.4a1.2 1.2 0 0 0 0-2L9.8 4.6A1.2 1.2 0 0 0 8 5.6z" fill="currentColor" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" />
+        </svg>
+      </button>
+    </Transition>
+
+    <Transition name="intro-fade">
+      <IntroTimeline
+        v-if="pauseVisible"
+        :timeline="timeline"
+        :state="state"
+        :get-position="() => sequencer.positionMs()"
+        :locale="locale"
+        :paused="pausedByPlayer"
+        :gated="gated"
+        :locked="barLocked"
+        :load-fraction="loadFraction"
+        :load-rows="detailRows"
+        :sound="sound"
+        :volume="volume"
+        :reduced-motion="reducedMotion"
+        @seek="sequencer.seek($event)"
+        @drag-start="onDragStart"
+        @drag-end="onDragEnd"
+        @toggle-pause="togglePause()"
+        @sound="toggleSound()"
+        @volume="setVolume($event)"
+        @detail-open="detailOpen = $event"
+      />
+    </Transition>
 
     <Transition name="intro-fade">
       <div v-if="state.phase === 'ended'" class="end" data-testid="intro-end">
@@ -333,7 +455,8 @@ onBeforeUnmount(() => {
 }
 .landing-intro.is-fading {
   animation: intro-out var(--fade-ms) linear forwards;
-  animation-delay: calc(var(--exit-ms) - var(--fade-ms));
+  /* a seek into the landfall joins the exit --exit-offset in */
+  animation-delay: calc(var(--exit-ms) - var(--fade-ms) - var(--exit-offset, 0ms));
 }
 .fog-defs {
   position: absolute;
@@ -348,13 +471,22 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 16px;
   right: 16px;
-  bottom: 72px;
+  /* above skip, which sits above the control row */
+  bottom: calc(max(16px, env(safe-area-inset-bottom)) + 108px);
   margin: 0;
   text-align: center;
   font-size: 1.25rem;
   line-height: 1.3;
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
   pointer-events: none;
+  transition: transform 200ms ease;
+}
+/* the load list opens over the control row and needs the room */
+.landing-intro.detail-open .narration {
+  transform: translateY(-56px);
+}
+.landing-intro.is-still .narration {
+  transition: none;
 }
 .narration.is-call {
   font-size: clamp(2rem, 7vw, 4rem);
@@ -371,7 +503,8 @@ onBeforeUnmount(() => {
 .actions {
   position: absolute;
   right: max(16px, env(safe-area-inset-right));
-  bottom: max(16px, env(safe-area-inset-bottom));
+  /* above the control row (44px) */
+  bottom: calc(max(16px, env(safe-area-inset-bottom)) + 52px);
   display: flex;
   gap: 8px;
   pointer-events: none;
@@ -385,39 +518,71 @@ onBeforeUnmount(() => {
  * are excluded so they keep animating from/to 0; the skip button is exempt while it is fresh.
  */
 .landing-intro.is-idle .actions .intro-btn:not(.is-fresh):not(.intro-fade-enter-from):not(.intro-fade-leave-to),
+.landing-intro.is-idle .ctrl:not(.intro-fade-enter-from):not(.intro-fade-leave-to),
 .landing-intro.is-idle .intro-btn.login:not(.intro-fade-enter-from):not(.intro-fade-leave-to) {
   opacity: 0.35;
   transition: opacity 600ms ease;
 }
 .landing-intro.is-idle .actions .intro-btn:not(.intro-fade-enter-from):not(.intro-fade-leave-to):hover,
 .landing-intro.is-idle .actions .intro-btn:not(.intro-fade-enter-from):not(.intro-fade-leave-to):focus-visible,
+.landing-intro.is-idle .ctrl:not(.intro-fade-enter-from):not(.intro-fade-leave-to):hover,
+.landing-intro.is-idle .ctrl:not(.intro-fade-enter-from):not(.intro-fade-leave-to):focus-within,
 .landing-intro.is-idle .intro-btn.login:not(.intro-fade-enter-from):not(.intro-fade-leave-to):hover,
 .landing-intro.is-idle .intro-btn.login:not(.intro-fade-enter-from):not(.intro-fade-leave-to):focus-visible {
   opacity: 1;
-}
-.intro-btn.icon {
-  width: 44px;
-  padding: 0;
-  font-size: 1.4rem;
-  line-height: 1;
 }
 .actions .intro-btn {
   position: static;
   pointer-events: auto;
 }
-.intro-btn.sound {
+/* the centre play symbol shows while paused: a soft triangle, no ring or disc */
+.cplay {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 112px;
+  height: 112px;
+  translate: -50% -50%;
   display: grid;
   place-items: center;
-  min-width: 44px;
   padding: 0;
+  border: 0;
+  background: transparent;
+  color: #f4f1ea;
+  cursor: pointer;
+  filter: drop-shadow(0 2px 14px rgba(0, 0, 0, 0.55));
+  z-index: 2;
 }
-/* the sound is off (the browser starts it so): the button draws the eye until it is turned on */
-.intro-btn.sound.is-muted {
-  border-color: #f4f1ea;
-  box-shadow: 0 0 0 2px rgba(244, 241, 234, 0.45);
+/* opacity on the whole symbol, so fill and rounded stroke do not overlap into a lighter rim */
+.cplay svg {
+  opacity: 0.82;
+  transition: opacity 150ms ease, transform 180ms ease;
 }
-.intro-btn.sound.is-muted:not(.is-still) {
-  animation: intro-sound-blink 1200ms ease-in-out infinite;
+.cplay:hover svg,
+.cplay:focus-visible svg {
+  opacity: 0.95;
+  transform: scale(1.18);
+}
+.cplay:focus-visible {
+  outline: 2px solid #f4f1ea;
+  outline-offset: -8px;
+  border-radius: 50%;
+}
+.landing-intro.is-still .cplay svg {
+  transition: none;
+}
+.intro-cplay-enter-active,
+.intro-cplay-leave-active {
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+.intro-cplay-enter-from,
+.intro-cplay-leave-to {
+  opacity: 0;
+  transform: scale(0.85);
+}
+.landing-intro.is-still .intro-cplay-enter-active,
+.landing-intro.is-still .intro-cplay-leave-active {
+  transition: none;
 }
 .play {
   left: 50%;
@@ -467,17 +632,6 @@ onBeforeUnmount(() => {
 }
 .intro-call-leave-to {
   opacity: 0;
-}
-@keyframes intro-sound-blink {
-  0%,
-  100% {
-    border-color: rgba(244, 241, 234, 0.6);
-    box-shadow: 0 0 0 0 rgba(244, 241, 234, 0);
-  }
-  50% {
-    border-color: #f4f1ea;
-    box-shadow: 0 0 10px 3px rgba(244, 241, 234, 0.6);
-  }
 }
 @keyframes intro-out {
   to {

@@ -7,6 +7,7 @@ import type { BeatId } from './beats/types';
 import { introSignal } from './introSignal';
 import { IDLE_DIM_MS } from './useIdleDim';
 import { beatsFor, CLIP_MS, holdMinMs, VOICE_TAIL_MS } from './introVoice';
+import { buildTimeline, fmtTime, selectBeats } from './timeline';
 
 // jsdom has no canvas 2D context; the texture is irrelevant to the host's behaviour.
 vi.mock('./fogTexture', () => ({ introFogUrl: () => 'data:image/png;base64,' }));
@@ -22,13 +23,16 @@ vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: 
   plays.push({ src: this.src, muted: this.muted });
   return Promise.resolve();
 });
-async function mountIntro(p: Partial<Props> = {}) {
-  const w = mount(LandingIntro, { props: { ...base, ...p } });
+async function mountIntro(p: Partial<Props> & { attachTo?: HTMLElement } = {}) {
+  const { attachTo, ...props } = p;
+  const w = mount(LandingIntro, { props: { ...base, ...props }, attachTo });
   await flushPromises();
   return w;
 }
 const EXIT_MS = BEATS.find((b) => b.role === 'exit')!.durationMs;
 const BEATS_EN = beatsFor('en', BEATS);
+const TOTAL_EN = buildTimeline(selectBeats(BEATS_EN, 'landing'), holdMinMs('en')).totalMs;
+const fmt = fmtTime;
 const phase = (w: VueWrapper) => w.get('[data-testid="landing-intro"]').attributes('data-phase');
 
 beforeEach(() => {
@@ -122,27 +126,23 @@ describe('LandingIntro', () => {
     expect(w.find('.longship').exists()).toBe(true);
   });
 
-  describe('restart', () => {
-    it('is shown between skip and pause exactly when pause is shown, icon-only with a label', async () => {
+  describe('control row', () => {
+    it('has the play/pause button, the timeline, the time and the speaker, and neither restart nor a text pause button', async () => {
       const w = await mountIntro({ reducedMotion: true });
-      expect(w.find('[data-testid="intro-restart"]').exists()).toBe(false);
+      expect(w.find('[data-testid="intro-controls"]').exists()).toBe(false);
       await w.get('[data-testid="intro-play"]').trigger('click');
-      const btn = w.get('[data-testid="intro-restart"]');
-      expect(btn.attributes('aria-label')).toBe('Restart');
-      expect(btn.text()).toBe('⟲');
-      // skip only shows once the tiles are loaded
-      const order = w.findAll('.actions button').map((b) => b.attributes('data-testid'));
-      expect(order).toEqual(['intro-restart', 'intro-pause', 'intro-sound']);
-    });
-
-    it('click goes back to the first beat and unpauses', async () => {
-      const w = await mountIntro();
-      await vi.advanceTimersByTimeAsync(CLIP_MS.en.fire + VOICE_TAIL_MS + 100);
-      expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe(BEATS[1].id);
-      await w.get('[data-testid="intro-pause"]').trigger('click');
-      await w.get('[data-testid="intro-restart"]').trigger('click');
-      expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe(BEATS[0].id);
-      expect(w.get('[data-testid="intro-pause"]').attributes('aria-pressed')).toBe('false');
+      expect(w.find('[data-testid="intro-restart"]').exists()).toBe(false);
+      const pause = w.get('[data-testid="intro-pause"]');
+      expect(pause.attributes('aria-label')).toBe('Pause');
+      expect(pause.text()).toBe('');
+      const row = w.get('[data-testid="intro-controls"]');
+      expect(row.find('[data-testid="intro-timeline"]').exists()).toBe(true);
+      expect(row.get('[data-testid="intro-time"]').text()).toBe(`0:00 / ${fmt(TOTAL_EN)}`);
+      expect(row.find('[data-testid="intro-sound"]').exists()).toBe(true);
+      // skip only shows once the tiles are loaded, and sits in the actions row above the bar
+      expect(w.findAll('.actions button')).toHaveLength(0);
+      await w.setProps({ loaded: true });
+      expect(w.findAll('.actions button').map((b) => b.attributes('data-testid'))).toEqual(['intro-skip']);
     });
   });
 
@@ -158,9 +158,21 @@ describe('LandingIntro', () => {
       // the pause button toggles exactly once, not twice
       await w.get('[data-testid="intro-pause"]').trigger('click');
       expect(paused(w)).toBe(true);
-      // restart unpauses and does not toggle again
-      await w.get('[data-testid="intro-restart"]').trigger('click');
+      // the centre play button resumes and does not toggle again
+      await w.get('[data-testid="intro-center-play"]').trigger('click');
       expect(paused(w)).toBe(false);
+      // nor does a click on the control row
+      await w.get('[data-testid="intro-time"]').trigger('click');
+      expect(paused(w)).toBe(false);
+    });
+
+    it('a button that swaps its own icon on the click does not let the click reach the scene as well', async () => {
+      const w = await mountIntro({ attachTo: document.body });
+      const btn = w.get('[data-testid="intro-pause"]');
+      // the icon the click landed on is no longer inside the button by the time the click bubbles to the scene
+      btn.element.addEventListener('click', (e) => document.body.appendChild(e.target as Element));
+      await btn.get('svg').trigger('click');
+      expect(paused(w)).toBe(true);
     });
 
     it('does nothing where pause is not shown (play screen, end screen)', async () => {
@@ -285,11 +297,18 @@ describe('LandingIntro', () => {
       w.unmount();
     });
 
-    it('starts with the sound on when asked to (replay), and the order is skip, restart, pause, sound', async () => {
+    it('starts with the sound on when asked to (replay); the row reads pause, timeline, time, speaker', async () => {
       const w = await mountIntro({ mode: 'replay', soundOn: true });
       expect(w.get('[data-testid="intro-sound"]').attributes('data-sound')).toBe('on');
-      const order = w.findAll('.actions button').map((b) => b.attributes('data-testid'));
-      expect(order).toEqual(['intro-skip', 'intro-restart', 'intro-pause', 'intro-sound']);
+      const order = w.findAll('.ctrl [data-testid]').map((b) => b.attributes('data-testid'));
+      expect(order.filter((id) => ['intro-pause', 'intro-timeline', 'intro-time', 'intro-volume', 'intro-sound'].includes(id!))).toEqual([
+        'intro-pause',
+        'intro-timeline',
+        'intro-time',
+        'intro-volume',
+        'intro-sound',
+      ]);
+      expect(w.findAll('.actions button').map((b) => b.attributes('data-testid'))).toEqual(['intro-skip']);
     });
 
     it('stops the clip when the intro ends', async () => {
@@ -307,17 +326,17 @@ describe('LandingIntro', () => {
 
     it('toggles on click: label, aria-pressed and the beat scene stop and resume, and nothing is emitted', async () => {
       const w = await mountIntro();
-      expect(pauseBtn(w).text()).toBe('Pause');
+      expect(pauseBtn(w).attributes('aria-label')).toBe('Pause');
       expect(pauseBtn(w).attributes('aria-pressed')).toBe('false');
       expect(beatPaused(w)).toBe(false);
       await pauseBtn(w).trigger('click');
-      expect(pauseBtn(w).text()).toBe('Resume');
+      expect(pauseBtn(w).attributes('aria-label')).toBe('Resume');
       expect(pauseBtn(w).attributes('aria-pressed')).toBe('true');
       expect(beatPaused(w)).toBe(true);
       await vi.advanceTimersByTimeAsync(BEATS_EN[0].durationMs * 3);
       expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe(BEATS[0].id);
       await pauseBtn(w).trigger('click');
-      expect(pauseBtn(w).text()).toBe('Pause');
+      expect(pauseBtn(w).attributes('aria-label')).toBe('Pause');
       expect(beatPaused(w)).toBe(false);
       expect(w.emitted()).not.toHaveProperty('done');
       expect(w.emitted()).not.toHaveProperty('back-to-docs');

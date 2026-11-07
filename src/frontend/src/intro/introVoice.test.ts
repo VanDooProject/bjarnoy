@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BEATS } from './beats/registry';
 import type { BeatId } from './beats/types';
-import { beatsFor, CLIP_MS, holdMinMs, IntroVoice, VOICE_TAIL_MS, type VoiceAudio } from './introVoice';
+import { beatsFor, CLIP_MS, holdMinMs, IntroVoice, VOICE_TAIL_MS, type VoiceAudio, type VoiceAudioContext } from './introVoice';
 
 const AUDIO_DIR = join(__dirname, 'audio');
 const BEAT_IDS: BeatId[] = ['fire', 'prophecy', 'sending', 'ravens', 'hold', 'landfall'];
@@ -262,5 +262,188 @@ describe('IntroVoice', () => {
     expect(v.soundOn).toBe(false);
     expect(byBeat('fire').muted).toBe(true);
     expect(byBeat('fire').paused).toBe(false);
+  });
+
+  it('joins a ready clip at the offset of a seek', () => {
+    const v = make(true);
+    byBeat('prophecy').ready();
+    v.enterBeat('prophecy', 2500);
+    expect(byBeat('prophecy').plays).toEqual([2.5]);
+  });
+
+  it('a clip still loading joins at the elapsed time plus the offset once it is ready', () => {
+    const v = make(true);
+    v.enterBeat('prophecy', 2000);
+    vi.advanceTimersByTime(500);
+    byBeat('prophecy').fire('canplay');
+    expect(byBeat('prophecy').plays).toEqual([2.5]);
+  });
+
+  it('an offset past the end of the clip plays nothing, also when it becomes ready later', () => {
+    const v = make(true);
+    byBeat('landfall').ready();
+    v.enterBeat('landfall', CLIP_MS.en.landfall);
+    expect(byBeat('landfall').plays).toEqual([]);
+    v.enterBeat('fire', CLIP_MS.en.fire + 1);
+    byBeat('fire').fire('canplay');
+    expect(byBeat('fire').plays).toEqual([]);
+  });
+
+  it('entering a beat with an offset stops the clip that was playing', () => {
+    const v = make(true);
+    byBeat('fire').ready();
+    byBeat('prophecy').ready();
+    v.enterBeat('fire');
+    v.enterBeat('prophecy', 1000);
+    expect(byBeat('fire').paused).toBe(true);
+    expect(byBeat('prophecy').paused).toBe(false);
+  });
+
+  describe('load progress', () => {
+    it('reports 0 of 6 at the start, then one more as each clip finishes loading or fails', () => {
+      const seen: string[] = [];
+      make(false, { onLoadProgress: (loaded, total) => seen.push(`${loaded}/${total}`) });
+      expect(seen).toEqual(['0/6']);
+      byBeat('fire').fire('canplaythrough');
+      byBeat('prophecy').fire('error');
+      expect(seen).toEqual(['0/6', '1/6', '2/6']);
+    });
+
+    it('counts a clip once, also when it is loaded ahead of the chain by its beat', () => {
+      const seen: string[] = [];
+      const v = make(false, { onLoadProgress: (loaded, total) => seen.push(`${loaded}/${total}`) });
+      v.enterBeat('hold'); // starts the hold clip's load before the chain gets there
+      byBeat('hold').fire('canplaythrough');
+      byBeat('hold').fire('canplaythrough');
+      expect(seen).toEqual(['0/6', '1/6']);
+    });
+  });
+
+  describe('volume', () => {
+    class FakeContext implements VoiceAudioContext {
+      destination = { destination: true };
+      state = 'running';
+      resumed = 0;
+      gain = { gain: { value: 1 }, connect: vi.fn() };
+      sources: unknown[] = [];
+      closed = false;
+      createGain() {
+        return this.gain;
+      }
+      createMediaElementSource(audio: unknown) {
+        this.sources.push(audio);
+        return { connect: vi.fn() };
+      }
+      resume() {
+        this.resumed++;
+        return Promise.resolve();
+      }
+      close() {
+        this.closed = true;
+        return Promise.resolve();
+      }
+    }
+    let contexts: FakeContext[];
+    const withContext = (sound: boolean, extra: Partial<ConstructorParameters<typeof IntroVoice>[0]> = {}) => {
+      return make(sound, {
+        ...extra,
+        createAudioContext: () => {
+          const c = new FakeContext();
+          contexts.push(c);
+          return c;
+        },
+      });
+    };
+    beforeEach(() => (contexts = []));
+
+    it('creates no audio context before the first setSound(true) or setVolume: the clips just use muted', () => {
+      const v = withContext(false);
+      v.setSound(false);
+      expect(contexts).toHaveLength(0);
+      expect(byBeat('fire').muted).toBe(true);
+    });
+
+    it('routes every clip through one gain node on the first gesture; muting then goes through the gain', () => {
+      const v = withContext(false);
+      v.setSound(true);
+      expect(contexts).toHaveLength(1);
+      expect(contexts[0].sources).toHaveLength(6);
+      expect(contexts[0].gain.connect).toHaveBeenCalledWith(contexts[0].destination);
+      expect(made.every((a) => !a.muted)).toBe(true); // a muted element would feed the context silence
+      expect(contexts[0].gain.gain.value).toBe(1);
+      v.setSound(false);
+      expect(contexts[0].gain.gain.value).toBe(0);
+      expect(made.every((a) => !a.muted)).toBe(true);
+      v.setSound(true);
+      expect(contexts[0].gain.gain.value).toBe(1);
+      expect(contexts).toHaveLength(1);
+    });
+
+    it('setVolume sets the gain while the sound is on, and keeps it for when the sound comes on', () => {
+      const v = withContext(true);
+      v.setVolume(0.4);
+      expect(contexts[0].gain.gain.value).toBe(0.4);
+      v.setSound(false);
+      expect(contexts[0].gain.gain.value).toBe(0);
+      v.setSound(true);
+      expect(contexts[0].gain.gain.value).toBe(0.4);
+      v.setVolume(3);
+      expect(contexts[0].gain.gain.value).toBe(1);
+      v.setVolume(-1);
+      expect(contexts[0].gain.gain.value).toBe(0);
+    });
+
+    it('a volume set while the sound is off stays silent', () => {
+      const v = withContext(false);
+      v.setVolume(0.7);
+      expect(contexts[0].gain.gain.value).toBe(0);
+    });
+
+    it('resumes a suspended context in the gesture', () => {
+      const v = make(false, {
+        createAudioContext: () => {
+          const c = new FakeContext();
+          c.state = 'suspended';
+          contexts.push(c);
+          return c;
+        },
+      });
+      v.setVolume(0.5);
+      expect(contexts[0].resumed).toBe(1);
+    });
+
+    it('a browser without Web Audio keeps the muted switch', () => {
+      const v = make(false, {
+        createAudioContext: () => {
+          throw new Error('no Web Audio');
+        },
+      });
+      v.setVolume(0.5);
+      v.setSound(true);
+      expect(made.every((a) => !a.muted)).toBe(true);
+      v.setSound(false);
+      expect(made.every((a) => a.muted)).toBe(true);
+    });
+
+    it('sound blocked before any click: the gain goes to 0 and the host is told', async () => {
+      const onSoundBlocked = vi.fn();
+      const v = withContext(true, { onSoundBlocked });
+      v.setVolume(0.5);
+      byBeat('fire').ready();
+      byBeat('fire').rejectWith = 'NotAllowedError';
+      // with the context the element itself is never muted, so the fake rejects its play
+      v.enterBeat('fire');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(onSoundBlocked).toHaveBeenCalledTimes(1);
+      expect(v.soundOn).toBe(false);
+      expect(contexts[0].gain.gain.value).toBe(0);
+    });
+
+    it('dispose closes the context', () => {
+      const v = withContext(true);
+      v.setVolume(0.5);
+      v.dispose();
+      expect(contexts[0].closed).toBe(true);
+    });
   });
 });

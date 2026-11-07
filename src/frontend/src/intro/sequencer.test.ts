@@ -269,15 +269,7 @@ describe('IntroSequencer loop', () => {
     expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall' });
   });
 
-  it('restart starts a new round, also when the first beat is showing', () => {
-    const { seq } = make('landing');
-    seq.start();
-    expect(seq.state).toMatchObject({ beat: beats[0].id, round: 0 });
-    seq.restart();
-    expect(seq.state).toMatchObject({ beat: beats[0].id, round: 1 });
-  });
-
-  it('counts a round per pass: a single loop beat bumps it on every restart while the beat stays', () => {
+  it('counts a round per pass: a single loop beat bumps it on every pass while the beat stays', () => {
     const { seq } = make('loop', false, undefined, [first.id]);
     seq.start();
     expect(seq.state).toMatchObject({ beat: first.id, round: 0 });
@@ -429,7 +421,7 @@ describe('IntroSequencer pause', () => {
     expect(seq.state.phase).toBe('done');
   });
 
-  it('works in loop mode too, across the restart', () => {
+  it('works in loop mode too, across the wrap', () => {
     const { seq } = make('loop', false, 600);
     seq.start();
     vi.advanceTimersByTime(4600 + 100);
@@ -445,43 +437,66 @@ describe('IntroSequencer pause', () => {
   });
 });
 
-describe('IntroSequencer restart', () => {
-  it('goes back to the first beat from the middle of a beat', () => {
+describe('IntroSequencer seek', () => {
+  // 4 intro beats of 1000, hold of 600 (its minimum), landfall of 500: chapters start at 0, 1000, 2000, 3000, 4000, 4600; total 5100
+  const hold = 4000;
+  const landfall = 4600;
+  const total = 5100;
+
+  it('enters the beat at the position and schedules only what is left of it', () => {
+    const { seq } = make('landing', false, 600);
+    seq.start();
+    seq.seek(2250);
+    expect(seq.state).toMatchObject({ phase: 'playing', beat: 'ravens', offsetMs: 250, seq: 1, paused: false });
+    vi.advanceTimersByTime(749);
+    expect(seq.state.beat).toBe('ravens');
+    vi.advanceTimersByTime(1);
+    expect(seq.state.beat).toBe('sending');
+  });
+
+  it('seek(0) goes back to the first beat from the middle of the story, and the old timers are gone', () => {
     const { seq } = make('landing');
     seq.start();
     vi.advanceTimersByTime(2500);
     expect(seq.state.beat).toBe('ravens');
-    seq.restart();
-    expect(seq.state).toMatchObject({ phase: 'playing', beat: 'fire', cycle: 0, paused: false });
+    seq.seek(0);
+    expect(seq.state).toMatchObject({ phase: 'playing', beat: 'fire', cycle: 0, paused: false, offsetMs: 0 });
     vi.advanceTimersByTime(999);
     expect(seq.state.beat).toBe('fire');
     vi.advanceTimersByTime(1);
     expect(seq.state.beat).toBe('prophecy');
   });
 
-  it('restarts from the exit beat and does not finish from the old exit timer', () => {
+  it('counts every seek, also within the same beat', () => {
     const { seq } = make('landing');
     seq.start();
-    seq.notifyLoaded();
+    seq.seek(100);
+    seq.seek(200);
+    expect(seq.state).toMatchObject({ beat: 'fire', seq: 2, offsetMs: 200 });
+  });
+
+  it('replay: leaves the exit beat for an earlier one and does not finish from the old exit timer', () => {
+    const { seq } = make('replay');
+    seq.start();
     seq.skip();
     expect(seq.state.phase).toBe('exiting');
     vi.advanceTimersByTime(400);
-    seq.restart();
+    seq.seek(0);
     expect(seq.state).toMatchObject({ phase: 'playing', beat: 'fire' });
     vi.advanceTimersByTime(200);
     expect(seq.state).toMatchObject({ phase: 'playing', beat: 'fire' });
   });
 
-  it('restarts from paused and runs again', () => {
-    const { seq } = make('replay');
+  it('seeking into the hold keeps what is left of its minimum', () => {
+    const { seq } = make('landing', false, 600);
     seq.start();
-    vi.advanceTimersByTime(1500);
-    seq.pause();
-    expect(seq.state.paused).toBe(true);
-    seq.restart();
-    expect(seq.state).toMatchObject({ beat: 'fire', paused: false });
-    vi.advanceTimersByTime(1000);
-    expect(seq.state.beat).toBe('prophecy');
+    seq.seek(hold + 400);
+    expect(seq.state).toMatchObject({ beat: 'hold', offsetMs: 400, waiting: false });
+    seq.notifyLoaded();
+    vi.advanceTimersByTime(199);
+    expect(seq.state.beat).toBe('hold');
+    vi.advanceTimersByTime(1);
+    expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall' });
   });
 
   it('forgets the hold progress: the hold has to be reached and read again', () => {
@@ -489,26 +504,150 @@ describe('IntroSequencer restart', () => {
     seq.start();
     vi.advanceTimersByTime(4200);
     expect(seq.state.beat).toBe('hold');
-    seq.restart();
+    seq.seek(0);
     seq.notifyLoaded();
     vi.advanceTimersByTime(3000);
     expect(seq.state).toMatchObject({ phase: 'playing', beat: 'sending' });
   });
 
-  it('loop: goes back to the first selected beat', () => {
-    const { seq } = make('loop', false, undefined, ['prophecy', 'ravens']);
-    seq.start();
-    expect(seq.state.beat).toBe('prophecy');
-    vi.advanceTimersByTime(1000);
-    expect(seq.state.beat).toBe('ravens');
-    seq.restart();
-    expect(seq.state).toMatchObject({ phase: 'playing', beat: 'prophecy' });
+  describe('landing, tiles not loaded', () => {
+    it('clamps to the hold end and parks there, waiting', () => {
+      const { seq } = make('landing', false, 600);
+      seq.start();
+      seq.seek(total);
+      expect(seq.state).toMatchObject({ phase: 'playing', beat: 'hold', waiting: true, offsetMs: 600 });
+      expect(seq.positionMs()).toBe(hold + 600);
+      vi.advanceTimersByTime(60_000);
+      expect(seq.state).toMatchObject({ phase: 'playing', beat: 'hold', waiting: true });
+    });
+
+    it('the hold keeps looping while it waits, and loading then starts the exit', () => {
+      const { seq } = make('landing', false, 600);
+      seq.start();
+      seq.seek(landfall);
+      expect(seq.state.cycle).toBe(1); // 600 ms in: one loop of 600 ms is behind it
+      vi.advanceTimersByTime(1250);
+      expect(seq.state).toMatchObject({ beat: 'hold', cycle: 3 });
+      seq.notifyLoaded();
+      expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall', waiting: false });
+    });
+
+    it('waits when the playhead reaches the hold end by itself', () => {
+      const { seq } = make('landing', false, 600);
+      seq.start();
+      vi.advanceTimersByTime(hold + 599);
+      expect(seq.state.waiting).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(seq.state.waiting).toBe(true);
+      expect(seq.positionMs()).toBe(hold + 600);
+    });
   });
 
-  it('does nothing before play or after the end', () => {
+  describe('landing, tiles loaded', () => {
+    it('seeking into the landfall is a skip at that offset', () => {
+      const { seq } = make('landing', false, 600);
+      seq.start();
+      seq.notifyLoaded();
+      seq.seek(landfall + 200);
+      expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall', offsetMs: 200 });
+      vi.advanceTimersByTime(299);
+      expect(seq.state.phase).toBe('exiting');
+      vi.advanceTimersByTime(1);
+      expect(seq.state.phase).toBe('done');
+    });
+
+    it('is locked while the exit runs', () => {
+      const { seq } = make('landing', false, 600);
+      seq.start();
+      seq.notifyLoaded();
+      seq.skip();
+      const before = seq.state;
+      seq.seek(0);
+      expect(seq.state).toEqual(before);
+    });
+  });
+
+  it('is ignored before play and after the end', () => {
     const { seq } = make('replay');
-    seq.restart();
-    expect(seq.state.phase).toBe('waitingForPlay');
+    seq.seek(2000);
+    expect(seq.state).toMatchObject({ phase: 'waitingForPlay', seq: 0 });
+    seq.start();
+    seq.skip();
+    vi.advanceTimersByTime(500);
+    expect(seq.state.phase).toBe('ended');
+    seq.seek(0);
+    expect(seq.state.phase).toBe('ended');
+  });
+
+  it('clamps to [0, total]', () => {
+    const { seq } = make('replay', false, 600);
+    seq.start();
+    seq.seek(-50);
+    expect(seq.state).toMatchObject({ beat: 'fire', offsetMs: 0 });
+    seq.seek(total + 1000);
+    expect(seq.state).toMatchObject({ beat: 'landfall', offsetMs: 500 });
+    vi.advanceTimersByTime(0);
+    expect(seq.state.phase).toBe('ended');
+  });
+
+  it('a paused run stays paused: the timers are set up for the new position and frozen', () => {
+    const { seq } = make('replay', false, 600);
+    seq.start();
+    seq.pause();
+    seq.seek(2500);
+    expect(seq.state).toMatchObject({ beat: 'ravens', paused: true, offsetMs: 500 });
+    expect(seq.positionMs()).toBe(2500);
+    vi.advanceTimersByTime(10_000);
+    expect(seq.state.beat).toBe('ravens');
+    expect(seq.positionMs()).toBe(2500);
+    seq.resume();
+    vi.advanceTimersByTime(499);
+    expect(seq.state.beat).toBe('ravens');
+    vi.advanceTimersByTime(1);
+    expect(seq.state.beat).toBe('sending');
+  });
+
+  it('loop: goes back to the first selected beat and works over the loop list only', () => {
+    const { seq } = make('loop', false, undefined, ['prophecy', 'ravens']);
+    seq.start();
+    vi.advanceTimersByTime(1000);
+    expect(seq.state.beat).toBe('ravens');
+    seq.seek(0);
+    expect(seq.state).toMatchObject({ phase: 'playing', beat: 'prophecy' });
+    expect(seq.timeline.totalMs).toBe(2000);
+    seq.seek(1500);
+    expect(seq.state).toMatchObject({ beat: 'ravens', offsetMs: 500 });
+    vi.advanceTimersByTime(500);
+    expect(seq.state).toMatchObject({ beat: 'prophecy', round: 1 });
+  });
+
+  it('loop: seeking into the exit beat sets the exiting phase, and the loop wraps after it', () => {
+    const { seq } = make('loop', false, 600, ['fire', 'landfall']);
+    seq.start();
+    seq.seek(1100);
+    expect(seq.state).toMatchObject({ phase: 'exiting', beat: 'landfall', offsetMs: 100 });
+    vi.advanceTimersByTime(400);
+    expect(seq.state).toMatchObject({ phase: 'playing', beat: 'fire', round: 1 });
+  });
+
+  describe('positionMs', () => {
+    it('is 0 before play, counts the clock into the beats, freezes while paused and ends at the total', () => {
+      const { seq } = make('replay', false, 600);
+      expect(seq.positionMs()).toBe(0);
+      seq.start();
+      vi.advanceTimersByTime(1250);
+      expect(seq.positionMs()).toBe(1250);
+      seq.pause();
+      vi.advanceTimersByTime(5000);
+      expect(seq.positionMs()).toBe(1250);
+      seq.resume();
+      vi.advanceTimersByTime(250);
+      expect(seq.positionMs()).toBe(1500);
+      seq.skip();
+      vi.advanceTimersByTime(500);
+      expect(seq.state.phase).toBe('ended');
+      expect(seq.positionMs()).toBe(total);
+    });
   });
 });
 
