@@ -317,6 +317,13 @@ describe('LandingIntro timeline', () => {
       await flushPromises();
       expect(row('buildings')).toBe('1/11');
     });
+
+    // Regression: with joining blocked no map renders, so terrain and buildings never report; they stayed 0/? to the
+    // end of the intro although the map had already said it was ready.
+    it('drops terrain and buildings once the map is ready without them reporting (no map renders)', async () => {
+      const w = await mountIntro({ loaded: true });
+      expect(w.findAll('[data-testid="intro-load-detail"] .srow').map((r) => r.attributes('data-group'))).toEqual(['voices']);
+    });
   });
 
   describe('volume', () => {
