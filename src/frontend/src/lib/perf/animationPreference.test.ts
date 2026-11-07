@@ -48,24 +48,43 @@ describe('AnimationGovernor', () => {
     expect(governor.getState()).toBe('measuring');
   });
 
-  it('does not enable before 30s of sustained >= 55fps', () => {
-    feedSteady(100, 29);
+  it('does not enable before 10s of sustained >= 50fps', () => {
+    feedSteady(100, 9);
     expect(governor.getState()).toBe('measuring');
   });
 
-  it('enables after 30s of sustained >= 55fps', () => {
-    feedSteady(100, 30);
+  it('enables after 10s of sustained >= 50fps', () => {
+    feedSteady(100, 10);
     expect(governor.getState()).toBe('on');
+  });
+
+  it('counts a bucket between 50 and 55fps as good', () => {
+    // 64fps -> 15.625ms frames, exact in binary.
+    feedSteady(64, 10);
+    expect(governor.getState()).toBe('on');
+  });
+
+  it('a bucket under 50fps does not count', () => {
+    feedSteady(40, 30);
+    expect(governor.getState()).toBe('measuring');
+  });
+
+  it('reports the last bucket fps and the enable window progress', () => {
+    expect(governor.getProgress()).toEqual({ fps: null, goodMs: 0, requiredMs: 10_000, thresholdFps: 50 });
+    feedSteady(100, 4);
+    expect(governor.getProgress()).toMatchObject({ fps: 100, goodMs: 4000 });
+    feedSteady(40, 1);
+    expect(governor.getProgress()).toMatchObject({ fps: 40, goodMs: 0 });
   });
 
   it('a single hitch within a bucket does not block enabling', () => {
     // 100 frames/sec of 10ms each is a clean 1000ms bucket at fps=100; swap
     // one 10ms frame for a 100ms hitch and the bucket mean (~91.7fps) still
-    // clears the 55fps bar, so a single stutter shouldn't reset the streak.
+    // clears the 50fps bar, so a single stutter shouldn't reset the streak.
     let now = 0;
-    for (let bucket = 0; bucket < 30; bucket++) {
+    for (let bucket = 0; bucket < 10; bucket++) {
       for (let frame = 0; frame < 100; frame++) {
-        const frameMs = bucket === 15 && frame === 0 ? 100 : 10;
+        const frameMs = bucket === 5 && frame === 0 ? 100 : 10;
         now += frameMs;
         governor.sample(now, frameMs);
       }
@@ -74,24 +93,24 @@ describe('AnimationGovernor', () => {
   });
 
   it('a sustained slow bucket resets the enable streak', () => {
-    feedSteady(100, 15);
+    feedSteady(100, 8);
     feedSteady(20, 1);
-    feedSteady(100, 15);
-    // Only 15s of sustained good fps since the slow bucket, short of 30s.
+    feedSteady(100, 8);
+    // Only 8s of sustained good fps since the slow bucket, short of 10s.
     expect(governor.getState()).toBe('measuring');
-    feedSteady(100, 15);
+    feedSteady(100, 2);
     expect(governor.getState()).toBe('on');
   });
 
   it('drops to off-slow and latches after 5s sustained under 30fps once on', () => {
-    feedSteady(100, 30);
+    feedSteady(100, 10);
     expect(governor.getState()).toBe('on');
     feedSteady(20, 5);
     expect(governor.getState()).toBe('off-slow');
   });
 
   it('reset() does not clear the latch', () => {
-    feedSteady(100, 30);
+    feedSteady(100, 10);
     feedSteady(20, 5);
     expect(governor.getState()).toBe('off-slow');
     governor.reset();
@@ -102,13 +121,13 @@ describe('AnimationGovernor', () => {
   });
 
   it('reset() restarts the in-progress measuring window', () => {
-    feedSteady(100, 20);
+    feedSteady(100, 8);
     expect(governor.getState()).toBe('measuring');
     governor.reset();
-    feedSteady(100, 20);
-    // Only 20s since reset, short of the 30s needed.
+    feedSteady(100, 8);
+    // Only 8s since reset, short of the 10s needed.
     expect(governor.getState()).toBe('measuring');
-    feedSteady(100, 10);
+    feedSteady(100, 2);
     expect(governor.getState()).toBe('on');
   });
 
@@ -229,7 +248,7 @@ describe('animationPreference singleton', () => {
     stubLocalStorage();
     const { animationPreference } = await import('./animationPreference');
     Object.defineProperty(document, 'hidden', { value: true, configurable: true });
-    // 30s at 60fps would normally enable the governor.
+    // 30s at 60fps would normally enable the governor (10s is enough).
     let now = 0;
     for (let i = 0; i < 60 * 30; i++) {
       now += 1000 / 60;
