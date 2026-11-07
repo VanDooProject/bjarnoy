@@ -55,14 +55,21 @@ describe('voice clip lengths', () => {
 });
 
 describe('beatsFor / holdMinMs', () => {
-  it('intro beats last clip + tail, hold and landfall keep their meta', () => {
+  it('intro beats last clip + tail (their own tail where they set one), hold and landfall keep their meta', () => {
     for (const locale of ['en', 'de'] as const) {
       for (const b of beatsFor(locale, BEATS)) {
         const orig = BEATS.find((o) => o.id === b.id)!;
-        if (b.role === 'intro') expect(b.durationMs).toBe(CLIP_MS[locale][b.id] + VOICE_TAIL_MS);
+        if (b.role === 'intro') expect(b.durationMs).toBe(CLIP_MS[locale][b.id] + (orig.tailMs ?? VOICE_TAIL_MS));
         else expect(b).toEqual(orig);
       }
       expect(holdMinMs(locale)).toBe(CLIP_MS[locale].hold + VOICE_TAIL_MS);
+    }
+  });
+
+  // the ravens take over as the sending's narration ends, in a long crossfade, instead of after a silence
+  it('ends the sending with its voice', () => {
+    for (const locale of ['en', 'de'] as const) {
+      expect(beatsFor(locale, BEATS).find((b) => b.id === 'sending')!.durationMs).toBe(CLIP_MS[locale].sending);
     }
   });
 });

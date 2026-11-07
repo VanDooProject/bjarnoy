@@ -10,9 +10,10 @@ export const CLIP_MS: Record<IntroLocale, Record<BeatId, number>> = {
 /** Silence after a clip before the next beat starts. */
 export const VOICE_TAIL_MS = 800;
 
-/** The beats with the player's language timing: each intro beat lasts its clip plus the tail. Hold and landfall keep their meta. */
+/** The beats with the player's language timing: each intro beat lasts its clip plus its tail (`tailMs`, else the
+ * default tail). Hold and landfall keep their meta. */
 export function beatsFor(locale: IntroLocale, beats: BeatMeta[]): BeatMeta[] {
-  return beats.map((b) => (b.role === 'intro' ? { ...b, durationMs: CLIP_MS[locale][b.id] + VOICE_TAIL_MS } : b));
+  return beats.map((b) => (b.role === 'intro' ? { ...b, durationMs: CLIP_MS[locale][b.id] + (b.tailMs ?? VOICE_TAIL_MS) } : b));
 }
 
 /** Shortest hold: its clip plus the tail. */

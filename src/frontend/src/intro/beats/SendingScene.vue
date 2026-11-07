@@ -1,15 +1,67 @@
+<script lang="ts">
+// The ship's run (sd-ship-depart, on --ship-ms, linear between its keyframes) leaves at 62.86 %, speeds up to 80 % and
+// goes on straight to its end (its keyframes are copied here); the camera (sd-cam-mid) holds still at its end frame from 100 % of the beat. So where
+// the ship is around the end of the beat follows from how long its run has played; the ravens scene starts its ship
+// there and follows this path through the crossfade, so the cut has one ship (checked against the keyframes in
+// SendingScene.test.ts).
+export const SHIP_MS = 14000;
+/** [fraction of the run, translate x, translate y] from the ship's departure on: sd-ship-depart's keyframes */
+export const SHIP_TRACK: readonly (readonly [number, number, number])[] = [
+  [0.6286, 0, 0],
+  [0.6357, 0.56, -0.04],
+  [0.6439, 1.9, -0.13],
+  [0.6525, 3.85, -0.26],
+  [0.6618, 6.51, -0.43],
+  [0.6714, 9.79, -0.65],
+  [0.6911, 17.91, -1.19],
+  [0.7118, 28.32, -1.89],
+  [0.7332, 40.85, -2.72],
+  [0.755, 55.29, -3.69],
+  [0.7771, 71.58, -4.77],
+  [0.8, 90, -6],
+  [1.0, 249.6, -16.64],
+];
+/** After its run the ship keeps its last speed (sd-ship-on, from the run's end): this far over this long. */
+export const SHIP_ON = { ms: 4000, x: 228, y: -15.2 } as const;
+export const SHIP_PLACE = { x: 772, y: 499, scale: 0.36 } as const;
+export const CAM_MID_END = { x: -32, y: -36, scale: 1.04 } as const;
+
+/** The element whose animation is the ship's run, for a scene that picks the ship up while the sending fades out. */
+export const SENDING_SHIP_TRACK = '[data-sending-ship-track]';
+
+/**
+ * The ship's transform in viewBox units (translate x, y and scale of its local drawing) once its run has played
+ * `shipMs`, with the camera at its end frame: at the sending's end that is the beat's length.
+ */
+export function sendingShipAt(shipMs: number): { x: number; y: number; scale: number } {
+  const t = Math.min(1, Math.max(SHIP_TRACK[0][0], shipMs / SHIP_MS));
+  let i = 0;
+  while (i < SHIP_TRACK.length - 2 && t > SHIP_TRACK[i + 1][0]) i++;
+  const [t0, x0, y0] = SHIP_TRACK[i];
+  const [t1, x1, y1] = SHIP_TRACK[i + 1];
+  const f = (t - t0) / (t1 - t0);
+  const on = Math.min(SHIP_ON.ms, Math.max(0, shipMs - SHIP_MS)) / SHIP_ON.ms;
+  return {
+    x: CAM_MID_END.x + CAM_MID_END.scale * (SHIP_PLACE.x + x0 + (x1 - x0) * f + SHIP_ON.x * on),
+    y: CAM_MID_END.y + CAM_MID_END.scale * (SHIP_PLACE.y + y0 + (y1 - y0) * f + SHIP_ON.y * on),
+    scale: CAM_MID_END.scale * SHIP_PLACE.scale,
+  };
+}
+</script>
+
 <script setup lang="ts">
 import { useId } from 'vue';
+import IntroLongship from './IntroLongship.vue';
 import SendingFire from './SendingFire.vue';
 import { sineLoop } from './sineLoop';
 
 /**
  * Beat 3, the sending: dusk on the burning shore. The jarl, spear planted, goes down on one knee to his
- * son, takes him by the shoulder and pats it, then lets go. The boy turns and walks down to the water
- * and is lost in the shore mist; the jarl raises his arm and waves while the longship drops its sail and
- * pulls out toward the light. Fog closes over the shore at the end. The beat starts from the dark of
- * the prophecy's last frame.
- * The story (figures, camera push, sail, oars, ship's departure, fog closing) is baked from the design's
+ * son, takes him by the shoulder and pats it, then lets go. The boy turns and walks down to the water and is
+ * lost in the shore mist, and a moment later stands at the ship's prow; the jarl raises his arm and waves while
+ * the longship drops its sail and pulls out toward the light. At the end the camera turns with the ship, out to
+ * sea, and the ravens scene goes on with that pan. The beat starts from the dark of the prophecy's last frame.
+ * The story (figures, camera push, sail, oars, ship's departure) is baked from the design's
  * pose function into the keyframes at the bottom: figures and ship on fixed times, camera and fog on
  * `--beat-duration` (see there). Smoke, fire, fog, glints, ash and the ship's swell loop on their own periods.
  */
@@ -75,10 +127,6 @@ const SIDES = [
   { cls: 'sd-boy-r', flip: undefined },
 ];
 
-// longship (local coordinates, placed at 772,499 scale .36)
-const OAR_X = [584, 680, 776, 872, 968, 1064];
-const SHIELDS = Array.from({ length: 11 }, (_, i) => ({ x: 560 + i * 48, a: i % 2 === 1 }));
-const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 590 604 503Z';
 </script>
 
 <template>
@@ -132,17 +180,20 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
       </mask>
       <mask :id="id('hzTex')"><rect x="-40" y="640" width="2700" height="300" :fill="url('fog')"/></mask>
       <mask :id="id('shoreTex')"><rect x="-808" y="840" width="2448" height="260" :fill="url('fog2')"/></mask>
-      <mask :id="id('veilTex')"><rect x="0" y="0" width="2624" height="1600" :fill="url('fog')"/></mask>
-      <clipPath :id="id('sailclip')"><path :d="SAIL"/></clipPath>
     </defs>
 
     <rect width="1600" height="1600" :fill="url('sky')"/>
-    <ellipse cx="1110" cy="790" rx="820" ry="190" fill="#5e5459" opacity=".5"/>
-    <ellipse cx="1110" cy="790" rx="600" ry="120" fill="#80635d" opacity=".5"/>
-    <ellipse cx="1110" cy="790" rx="380" ry="66" fill="#a8775f" opacity=".55"/>
-    <ellipse cx="1110" cy="790" rx="190" ry="30" fill="#d39d78" opacity=".6"/>
+    <!-- the last light on the horizon; it sinks under the sea during the turn (the far water covers it) -->
+    <g class="sd-a sd-glow-set">
+      <ellipse cx="1110" cy="790" rx="820" ry="190" fill="#5e5459" opacity=".5"/>
+      <ellipse cx="1110" cy="790" rx="600" ry="120" fill="#80635d" opacity=".5"/>
+      <ellipse cx="1110" cy="790" rx="380" ry="66" fill="#a8775f" opacity=".55"/>
+      <ellipse cx="1110" cy="790" rx="190" ry="30" fill="#d39d78" opacity=".6"/>
+    </g>
 
     <g class="sd-a sd-cam-far">
+      <!-- the homeland: the camera pans away from it with the ship at the end -->
+      <g class="sd-a sd-pan-far">
       <ellipse v-for="([bx, by], c) in SMOKE_COLS" :key="c" class="sd-ember" :style="{ '--i': c }" :cx="bx" :cy="by - 70" rx="140" ry="120" :fill="url('ember')"/>
       <!-- one rising texture pair for both columns: the columns overlap, and two pairs cost twice the layers -->
       <g :mask="url('cols')">
@@ -153,50 +204,31 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
       <path d="M0 790 L0 600 L90 560 L170 610 L250 540 L330 600 L430 520 L520 590 L610 560 L700 640 L800 650 L880 720 L940 790 Z" fill="#2d343e"/>
       <path d="M0 790 L0 680 L120 650 L230 690 L360 640 L470 690 L590 670 L700 720 L820 760 L880 790 Z" fill="#252b34"/>
       <SendingFire :x="FIRES[2][0]" :y="FIRES[2][1]" :scale="FIRES[2][2]" :index="2" :glow="url('fireglow')" />
+      </g>
       <rect x="0" y="786" width="1600" height="814" fill="#1d252e"/>
       <g>
         <rect v-for="([x, y, w, h, o], i) in GLINTS" :key="i" class="sd-glint" :style="sineLoop(0.4, i * 1.3)" :x="x" :y="y" :width="w" :height="h" fill="#8c6a5c" :opacity="o"/>
       </g>
-      <g :mask="url('hz')" opacity=".42"><g class="sd-fog sd-fog-hz"><rect x="-40" y="640" width="2700" height="300" fill="#808891" :mask="url('hzTex')"/></g></g>
+      <g class="sd-hz-out" :mask="url('hz')" opacity=".42"><g class="sd-fog sd-fog-hz"><rect x="-40" y="640" width="2700" height="300" fill="#808891" :mask="url('hzTex')"/></g></g>
     </g>
 
     <g class="sd-a sd-cam-mid">
-      <g class="sd-a sd-ship-depart"><g class="sd-heave"><g class="sd-pitch">
-        <g transform="translate(772,499) scale(0.36)">
-          <path d="M486 838 L452 1004" stroke="#0e1318" stroke-width="8" stroke-linecap="round"/>
-          <ellipse cx="455" cy="990" rx="10" ry="24" fill="#0e1318" transform="rotate(12 455 990)"/>
-          <path d="M780 474 L1176 790 M780 474 L436 800" stroke="#0e1318" stroke-width="4" fill="none"/>
-          <rect x="775" y="470" width="10" height="420" fill="#0e1318"/>
-          <g transform="translate(780,503)"><g class="sd-a sd-sail"><g transform="translate(-780,-503)">
-            <path :d="SAIL" fill="#6b4a41"/>
-            <g :clip-path="url('sailclip')" fill="#4a3530"><rect x="652" y="500" width="54" height="300"/><rect x="753" y="500" width="54" height="300"/><rect x="854" y="500" width="54" height="300"/></g>
-          </g></g></g>
-          <rect x="588" y="494" width="384" height="10" rx="3" fill="#0e1318"/>
-          <g fill="#0b1015">
-            <path d="M452 882 L456 814 C460 805 482 805 488 814 L492 882Z"/><circle cx="471" cy="794" r="13"/>
-            <template v-for="x in OAR_X" :key="x">
-              <path :d="`M${x - 17} 892 L${x - 14} 856 C${x - 10} 847 ${x + 10} 847 ${x + 14} 856 L${x + 17} 892Z`"/><circle :cx="x" cy="836" r="12"/>
-            </template>
-          </g>
-          <path d="M426 800 C440 852 470 880 520 888 L1080 888 C1130 880 1160 852 1170 800 L1198 800 C1198 882 1162 966 1060 992 L540 992 C438 966 396 882 396 800Z" fill="#0e1318"/>
-          <path d="M396 806 C390 752 394 706 420 686 C442 670 470 678 470 700 C470 718 452 726 442 716 C452 712 456 702 448 694 C436 686 422 696 420 716 C418 744 422 776 426 806Z" fill="#0e1318"/>
-          <path d="M1170 806 C1176 760 1182 720 1196 696 C1208 680 1232 676 1246 686 L1236 692 L1250 700 L1232 704 C1218 706 1208 716 1204 734 C1200 756 1198 780 1198 806Z" fill="#0e1318"/>
-          <g v-for="(s, i) in SHIELDS" :key="i"><circle :cx="s.x" cy="890" r="21" :fill="s.a ? '#27313b' : '#1e262e'"/><circle :cx="s.x" cy="890" r="5" fill="#0e1318"/></g>
-          <g v-for="x in OAR_X" :key="`o${x}`" :transform="`translate(${x} 910)`">
-            <g class="sd-a sd-oar"><rect x="-3" y="0" width="6" height="170" rx="2" fill="#0e1318"/><ellipse cx="0" cy="156" rx="8" ry="20" fill="#0e1318"/></g>
-          </g>
-        </g>
-      </g></g></g>
+      <g class="sd-a sd-ship-depart" data-sending-ship-track><g class="sd-ship-on"><g class="sd-heave"><g class="sd-pitch">
+        <g class="sd-longship" transform="translate(772,499) scale(0.36)"><IntroLongship bold boy /></g>
+      </g></g></g></g>
       <rect x="0" y="851" width="1600" height="40" fill="#1d252e"/>
       <rect x="860" y="852" width="520" height="2" fill="#8c6a5c" opacity=".4"/>
+      <g class="sd-a sd-pan-shore">
       <path d="M0 872 L380 880 C640 892 860 908 1040 952 C1150 980 1260 1050 1600 1110 L1600 1600 L0 1600 Z" fill="#2a2f35"/>
       <path d="M0 884 L380 892 C640 904 860 922 1030 968 C1140 998 1250 1068 1600 1130 L1600 1600 L0 1600 Z" fill="#161b21"/>
+      </g>
     </g>
 
     <g>
       <circle v-for="(a, i) in ASH" :key="i" class="sd-ash" :style="a.style" :r="a.r" fill="#8f969d" opacity=".4"/>
     </g>
     <g class="sd-a sd-cam-fig">
+      <g class="sd-a sd-pan-fig">
       <ellipse cx="610" cy="1164" rx="170" ry="12" fill="#05070a" opacity=".5"/>
       <g v-for="fig in FIGS" :key="fig.fill" :transform="fig.shift" :fill="fig.fill">
         <rect x="495" y="540" width="8" height="626"/><path d="M499,494 L511,546 L487,546 Z"/>
@@ -244,20 +276,18 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
             <g class="sd-a sd-j-fore"><rect x="-5" y="-6" width="46" height="12" rx="6"/><circle cx="43" cy="0" r="7"/></g></g></g>
         </g>
       </g>
+      </g>
     </g>
 
     <g :mask="url('right')"><g :mask="url('shore')" opacity=".26"><g class="sd-fog sd-fog-shore"><rect x="-808" y="840" width="2448" height="260" fill="#808891" :mask="url('shoreTex')"/></g></g></g>
 
     <g class="sd-a sd-cam-near">
+      <g class="sd-a sd-pan-near">
       <path d="M-40 1600 L-40 1330 C40 1290 120 1300 190 1340 C260 1320 330 1350 380 1420 C420 1460 460 1520 470 1600 Z" fill="#090b0e"/>
       <path d="M120 1310 L132 1250 L142 1312 M170 1330 L190 1262 L196 1336 M230 1330 L236 1280 L250 1334" stroke="#090b0e" stroke-width="5" fill="none"/>
+      </g>
     </g>
     <rect width="1600" height="1600" :fill="url('vig')"/>
-    <!-- the closing fog -->
-    <g class="sd-a sd-veil">
-      <rect width="1600" height="1600" fill="#4d545c"/>
-      <g class="sd-fog sd-fog-veil"><rect x="0" y="0" width="2624" height="1600" fill="#808891" :mask="url('veilTex')"/></g>
-    </g>
     <!-- the beat starts from the prophecy's dark -->
     <rect class="sd-a sd-dark" width="1600" height="1600" fill="#06080b"/>
   </svg>
@@ -295,14 +325,37 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
 .b3 .sd-boy-arm { animation-name: sd-boy-arm; }
 .b3 .sd-look { animation-name: sd-boy-look; }
 .b3 .sd-ship-depart { animation-name: sd-ship-depart; }
-.b3 .sd-sail { animation-name: sd-sail; }
-.b3 .sd-oar { animation-name: sd-oar; }
-.b3 .sd-veil { animation-name: sd-veil; }
+.b3 :deep(.ship-sail) { animation: sd-sail var(--ship-ms) linear both; }
+.b3 :deep(.ship-oar) { animation: sd-oar var(--ship-ms) linear both; }
 .b3 .sd-dark { animation-name: sd-dark; }
+/* the end: the camera turns with the ship, out to sea. The shore and the jarl slide away to the bottom left, the
+   burning homeland out to the left (nearer layers faster); the ship and the sea keep their place. The pan is still
+   moving when the beat ends (the homeland, out of the frame by then, at about 280 units/s in English), and the
+   ravens scene goes on with it at that speed. It starts as the ship pulls out (70 %).
+   The horizon fog thins away during the turn; the ravens scene's own fog comes up slowly. */
+.b3 .sd-hz-out { animation: sd-hz-out var(--beat-duration) linear both; }
+@keyframes sd-hz-out { 0%, 70% { opacity: .42; } 100% { opacity: 0; } }
+/* the orange glow sets: down under the sea during the turn, gone before the cut, so none of it crossfades into
+   the ravens' night (its widest ellipse reaches up to y 600; 210 units down puts it under the horizon at 785) */
+.b3 .sd-glow-set { animation-name: sd-glow-set; }
+@keyframes sd-glow-set { 0%, 70% { transform: translateY(0); animation-timing-function: ease-in-out; } 96%, 100% { transform: translateY(210px); } }
+.b3 .sd-pan-far, .b3 .sd-pan-shore, .b3 .sd-pan-fig, .b3 .sd-pan-near { animation-duration: var(--beat-duration); }
+.b3 .sd-pan-far { animation-name: sd-pan-far; }
+.b3 .sd-pan-shore { animation-name: sd-pan-shore; }
+.b3 .sd-pan-fig { animation-name: sd-pan-fig; }
+.b3 .sd-pan-near { animation-name: sd-pan-near; }
+@keyframes sd-pan-far { 0%, 70% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.45, 0, .7, .7); } 100% { transform: translate(-1000px, 0); } }
+@keyframes sd-pan-shore { 0%, 70% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.45, 0, .7, .7); } 100% { transform: translate(-1300px, 400px); } }
+@keyframes sd-pan-fig { 0%, 70% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.45, 0, .7, .7); } 100% { transform: translate(-1500px, 520px); } }
+@keyframes sd-pan-near { 0%, 70% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.45, 0, .7, .7); } 100% { transform: translate(-1800px, 620px); } }
 /* the figures and the ship run on fixed times (see the keyframes below); the ship's run outlasts any beat */
 .b3 { --story-ms: 11200ms; --ship-ms: 14000ms; }
 .b3 .sd-j-thigh, .b3 .sd-j-shin, .b3 .sd-j-bthigh, .b3 .sd-j-bshin, .b3 .sd-j-cloak, .b3 .sd-j-torso, .b3 .sd-j-head, .b3 .sd-j-arm, .b3 .sd-j-fore, .b3 .sd-j-farm, .b3 .sd-j-ffore, .b3 .sd-boy-bob, .b3 .sd-boy-l, .b3 .sd-boy-r, .b3 .sd-legf, .b3 .sd-legb, .b3 .sd-boy-arm, .b3 .sd-look { animation-duration: var(--story-ms); }
-.b3 .sd-ship-depart, .b3 .sd-sail, .b3 .sd-oar { animation-duration: var(--ship-ms); }
+.b3 .sd-ship-depart { animation-duration: var(--ship-ms); }
+/* after its run the ship keeps its last speed (57 units/s right, 3.8 up), so it never stops while the sending is
+   still on screen or crossfading out (SHIP_ON) */
+.b3 .sd-ship-on { animation: sd-ship-on 4000ms linear var(--ship-ms) both; }
+@keyframes sd-ship-on { from { transform: translate(0, 0); } to { transform: translate(228px, -15.2px); } }
 
 /* ---- ambient loops ---- */
 /* sines as alternating ease-in-outs (see sineLoop.ts) */
@@ -310,6 +363,16 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
 @keyframes sd-sway { from { transform: translateX(calc(var(--a) * -1)); } to { transform: translateX(var(--a)); } }
 .b3 .sd-glint { animation: sd-glint var(--p) cubic-bezier(0.37, 0, 0.63, 1) var(--o) infinite alternate; }
 @keyframes sd-glint { from { transform: translateX(-26px); } to { transform: translateX(26px); } }
+/* the longship in the sending's dusk: a dark silhouette with a fire-lit sail */
+.b3 .sd-longship {
+  --ship-steer: #0e1318; --ship-rig: #0e1318; --ship-mast: #0e1318; --ship-hull: #0e1318; --ship-boss: #0e1318; --ship-oar: #0e1318;
+  --ship-sail: #6b4a41; --ship-stripe: #4a3530; --ship-crew: #0b1015; --ship-rower: #0b1015; --ship-shield-a: #27313b; --ship-shield-b: #1e262e;
+  --ship-cloak: #0b1015;
+}
+/* the boy boards: as he fades into the shore mist (sd-boy-fade, 74-79 % of the story) he fades in at the prow, a
+   moment later */
+.b3 :deep(.ship-boy) { animation: sd-boy-board var(--story-ms) linear both; }
+@keyframes sd-boy-board { 0%, 76% { opacity: 0; } 82%, 100% { opacity: 1; } }
 /* the ship's swell: heave and a slow pitch around the stern */
 .b3 .sd-heave { animation: sd-heave 1963ms cubic-bezier(0.37, 0, 0.63, 1) -982ms infinite alternate; }
 @keyframes sd-heave { from { transform: translateY(-2.2px); } to { transform: translateY(2.2px); } }
@@ -321,11 +384,10 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
 .b3 .sd-rise-a { animation: sd-rise 9000ms linear infinite; }
 .b3 .sd-rise-b { animation: sd-rise 6500ms linear infinite; }
 @keyframes sd-rise { from { transform: translateY(0); } to { transform: translateY(-512px); } }
-/* fog bands drift one whole texture tile per loop: 14 units/s (horizon), 22 (shore, 768 tile), 40 (closing fog).
+/* fog bands drift one whole texture tile per loop: 14 units/s (horizon), 22 (shore, 768 tile).
    Each band is the view plus one tile wide, no more: every unit of it is rastered, on screen or not. */
 .b3 .sd-fog-hz { animation: sd-fog-left 73143ms linear infinite; }
 .b3 .sd-fog-shore { animation: sd-fog-right 34909ms linear infinite; }
-.b3 .sd-fog-veil { animation: sd-fog-left 25600ms linear infinite; }
 @keyframes sd-fog-left { from { transform: translateX(0); } to { transform: translateX(-1024px); } }
 @keyframes sd-fog-right { from { transform: translateX(0); } to { transform: translateX(768px); } }
 /* ash falls through the frame (1640 units) and drifts left a third as fast */
@@ -340,8 +402,8 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
    that stay within 0.25 units / 0.25 deg / 0.005 opacity of it. Designed at 10 s; the beat now lasts as long as
    its voice clip (11.8 s English, 13.3 s German), so the story runs on fixed times instead: the jarl stands
    1.2 s longer before he kneels, the figures' tracks are percentages of --story-ms (10 s + 1.2 s), the ship's
-   of --ship-ms (14 s: it keeps sailing, oars stroking, at its last speed however long the beat is). The camera,
-   the fade from dark and the fog veil (closing only after the voice, from 92 %) stay on --beat-duration. ---- */
+   of --ship-ms (14 s: it keeps sailing, oars stroking, at its last speed however long the beat is). The camera and
+   the fade from dark stay on --beat-duration. ---- */
 @keyframes sd-cam-far {
   0% { transform: translate(0, 0) scale(1); } 10.1% { transform: translate(-0.46px, -0.47px) scale(1.0006); }
   21.15% { transform: translate(-1.84px, -1.89px) scale(1.0023); }
@@ -1334,10 +1396,6 @@ const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 5
   98.57% { transform: rotate(-16.88deg); }
   98.93% { transform: rotate(-12.59deg); }
   100% { transform: rotate(1.70deg); }
-}
-@keyframes sd-veil {
-  0% { opacity: 0; visibility: hidden; } 91.5% { opacity: 0; visibility: hidden; }
-  92% { opacity: 0; visibility: visible; } 96% { opacity: 0.45; } 100% { opacity: 1; visibility: visible; }
 }
 @keyframes sd-dark {
   0% { opacity: 1; } 9%, 100% { opacity: 0; visibility: hidden; }

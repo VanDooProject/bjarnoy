@@ -32,8 +32,12 @@ fire lit, nothing moving). The saga starts only on a click.
 1. **Skald's fire** (intro): a skald by a hearth begins the saga.
 2. **Prophecy** (intro): a prophecy says the homeland is lost.
 3. **The sending** (intro): the jarl stakes his whole line on his only son, a child, shown as a silhouette. You are
-   sworn to guide him and build his realm.
-4. **Ravens** (intro): the ravens return. Bjarnøy is not empty: the giants sleep under the sea. Only hinted.
+   sworn to guide him and build his realm. The boy boards, the longship leaves, and the camera turns with it out to
+   sea while the homeland and the last light fall behind.
+4. **Ravens** (intro): the camera turn goes on: an island comes into view, the ravens return, a moon rises on the
+   right and grows behind the ship, and the seabed comes up as a sleeping giant. Bjarnøy is not empty: the giants
+   sleep under the sea. Only hinted. Night lifts toward dawn; the camera pushes in on the ship and the scene turns
+   into the fog.
 5. **Longship in fog** (hold, loops): the ship rows through fog. Other settlements show faintly in the background
    (smoke, lights, sails). The ravens fly past now and then.
 6. **Landfall** (exit): "Land!" The intro's fog fades while the map's own fog lifts, and the landfall onboarding
@@ -44,11 +48,12 @@ fire lit, nothing moving). The saga starts only on a click.
 - The landing page shows only on a device that has neither founded a settlement nor stored a login. `#intro` shows it
   anyway; `#loop` loops the saga without it; "Play intro" plays the saga at once.
 - The saga starts on the click on the landing page, then plays once, then the hold, then the exit.
-- Each intro beat lasts as long as its voice clip in the player's language plus 0.8 s. The scenes are timed
+- Each intro beat lasts as long as its voice clip in the player's language plus 0.8 s; the sending ends with its
+  voice, and the ravens take over in a 1.8 s crossfade while its camera turn and ship are still moving. The scenes are timed
   to fit both languages' lengths; motion follows the spoken lines where it can, without slowing into slow motion.
 - The hold plays at least as long as its voice clip (plus 0.8 s). After that it ends as soon as the tiles are
   loaded. Skip ends it at once.
-- Landfall lasts 3.8 s; the lookout's call plays as it starts.
+- Landfall lasts 6 s; the lookout's call plays as it starts.
 - Once the tiles are loaded and the sequence is still playing, a skip button shows. Pressing it starts the exit
   (fog lifts) right away.
 - A play/pause button sits at the left end of the timeline. Paused, the scene and its timing stop; tiles that finish loading wait for play to continue. Clicking the scene pauses or resumes it, like the pause button.

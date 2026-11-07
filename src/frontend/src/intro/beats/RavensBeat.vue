@@ -1,7 +1,8 @@
 <script lang="ts">
 import type { BeatMeta } from './types';
 // It ends on pale moonlight, which the host crossfades into the hold's pale fog.
-export const meta: BeatMeta = { id: 'ravens', role: 'intro', durationMs: 6000 };
+// It comes in over the sending's last camera turn in a long crossfade (the ship stays one: see RavensScene).
+export const meta: BeatMeta = { id: 'ravens', role: 'intro', durationMs: 6000, fadeInMs: 1800 };
 </script>
 
 <script setup lang="ts">

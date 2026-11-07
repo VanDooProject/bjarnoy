@@ -10,6 +10,10 @@ export interface BeatMeta {
   loopMs?: number;
   /** Beats with the same scene share one mounted component: the host switches beats on it instead of crossfading. */
   scene?: string;
+  /** intro only: silence after the voice clip before the next beat starts; defaults to VOICE_TAIL_MS */
+  tailMs?: number;
+  /** How long the host crossfades into this beat from the one before; defaults to the host's 600 ms. */
+  fadeInMs?: number;
 }
 
 /** The current beat, provided by the host to beats that span more than one beat (see `scene`). */
