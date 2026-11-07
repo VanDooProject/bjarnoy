@@ -12,8 +12,9 @@ import { buildTimeline, fmtTime, selectBeats } from './timeline';
 // jsdom has no canvas 2D context; the texture is irrelevant to the host's behaviour.
 vi.mock('./fogTexture', () => ({ introFogUrl: () => 'data:image/png;base64,' }));
 
-type Props = { mode: 'landing' | 'replay' | 'loop'; loopBeats?: BeatId[]; locale: 'en' | 'de'; reducedMotion: boolean; loaded: boolean; loggedIn?: boolean; soundOn: boolean };
-const base: Props = { mode: 'landing', locale: 'en', reducedMotion: false, loaded: false, soundOn: false };
+type Props = { mode: 'landing' | 'replay' | 'loop'; loopBeats?: BeatId[]; locale: 'en' | 'de'; reducedMotion: boolean; loaded: boolean; loggedIn?: boolean; playNow?: boolean; soundOn: boolean };
+// The landing page waits for the player; these tests are about the run, so they start it at once (the landing page tests pass `playNow: false`).
+const base: Props = { mode: 'landing', locale: 'en', reducedMotion: false, loaded: false, playNow: true, soundOn: false };
 
 // jsdom plays no media: record what the voice does with its clips.
 const plays: { src: string; muted: boolean }[] = [];
@@ -42,10 +43,10 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('LandingIntro', () => {
-  it('shows the play button in reduced motion and runs after pressing it', async () => {
-    const w = await mountIntro({ reducedMotion: true });
+  it('replay with reduced motion shows the play button and runs after pressing it', async () => {
+    const w = await mountIntro({ mode: 'replay', reducedMotion: true, playNow: false });
     expect(phase(w)).toBe('waitingForPlay');
-    expect(w.find('[data-testid="intro-skip"]').exists()).toBe(false);
+    expect(w.find('[data-testid="landing-page"]').exists()).toBe(false);
     await w.get('[data-testid="intro-play"]').trigger('click');
     expect(phase(w)).toBe('playing');
     expect(w.find('[data-testid="intro-play"]').exists()).toBe(false);
@@ -53,10 +54,30 @@ describe('LandingIntro', () => {
     expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe('prophecy');
   });
 
-  it('emits done at once when loaded before play in reduced motion', async () => {
-    const w = await mountIntro({ reducedMotion: true });
-    await w.setProps({ loaded: true });
-    expect(w.emitted('done')).toHaveLength(1);
+  it('stays on the landing page when loaded before play, in every motion setting', async () => {
+    for (const reducedMotion of [false, true]) {
+      const w = await mountIntro({ reducedMotion, playNow: false });
+      await w.setProps({ loaded: true });
+      expect(phase(w)).toBe('waitingForPlay');
+      expect(w.emitted('done')).toBeUndefined();
+      expect(w.find('[data-testid="landing-page"]').exists()).toBe(true);
+    }
+  });
+
+  it('keeps the hall alive behind the landing page: only its turn waits, and it starts on play', async () => {
+    const w = await mountIntro({ playNow: false });
+    const hall = () => w.get('svg.hall');
+    expect(hall().classes()).toContain('is-held');
+    expect(hall().classes()).not.toContain('is-paused');
+    await w.get('[data-testid="landing-hear"]').trigger('click');
+    expect(hall().classes()).not.toContain('is-held');
+    expect(hall().classes()).not.toContain('is-paused');
+  });
+
+  it('shows the replay first frame still: no landing page, the hall is paused, not held', async () => {
+    const w = await mountIntro({ mode: 'replay', reducedMotion: true, playNow: false });
+    expect(w.get('svg.hall').classes()).toContain('is-paused');
+    expect(w.get('svg.hall').classes()).not.toContain('is-held');
   });
 
   it('shows skip only after loading, and emits done after the exit beat', async () => {
@@ -128,9 +149,9 @@ describe('LandingIntro', () => {
 
   describe('control row', () => {
     it('has the play/pause button, the timeline, the time and the speaker, and neither restart nor a text pause button', async () => {
-      const w = await mountIntro({ reducedMotion: true });
+      const w = await mountIntro({ playNow: false });
       expect(w.find('[data-testid="intro-controls"]').exists()).toBe(false);
-      await w.get('[data-testid="intro-play"]').trigger('click');
+      await w.get('[data-testid="landing-hear"]').trigger('click');
       expect(w.find('[data-testid="intro-restart"]').exists()).toBe(false);
       const pause = w.get('[data-testid="intro-pause"]');
       expect(pause.attributes('aria-label')).toBe('Pause');
@@ -175,8 +196,8 @@ describe('LandingIntro', () => {
       expect(paused(w)).toBe(true);
     });
 
-    it('does nothing where pause is not shown (play screen, end screen)', async () => {
-      const w = await mountIntro({ reducedMotion: true });
+    it('does nothing where pause is not shown (landing page, end screen)', async () => {
+      const w = await mountIntro({ playNow: false });
       await w.get('.beat-layer').trigger('click');
       expect(paused(w)).toBe(false);
       expect(phase(w)).toBe('waitingForPlay');
@@ -192,6 +213,78 @@ describe('LandingIntro', () => {
       const w = await mountIntro({ mode: 'replay' });
       await w.get('[data-testid="intro-skip"]').trigger('click');
       expect(paused(w)).toBe(false);
+    });
+  });
+
+  describe('landing page', () => {
+    const page = (w: VueWrapper) => w.find('[data-testid="landing-page"]');
+    const soundBtn = (w: VueWrapper) => w.get('[data-testid="intro-sound"]');
+
+    it('shows over the first scene, without narration, controls, skip or the play button; Log in stays', async () => {
+      const w = await mountIntro({ playNow: false, loaded: true });
+      expect(phase(w)).toBe('waitingForPlay');
+      expect(page(w).exists()).toBe(true);
+      expect(w.get('[data-testid="landing-intro"]').attributes('data-beat')).toBe('fire');
+      expect(w.find('[data-testid="intro-narration"]').exists()).toBe(false);
+      expect(w.find('[data-testid="intro-controls"]').exists()).toBe(false);
+      expect(w.find('[data-testid="intro-skip"]').exists()).toBe(false);
+      expect(w.find('[data-testid="intro-play"]').exists()).toBe(false);
+      expect(w.find('[data-testid="intro-login"]').exists()).toBe(true);
+    });
+
+    it('is not there for the Play intro button, in replay or in loop mode', async () => {
+      expect(page(await mountIntro({ playNow: true })).exists()).toBe(false);
+      expect(page(await mountIntro({ mode: 'replay', playNow: false, reducedMotion: true })).exists()).toBe(false);
+      expect(page(await mountIntro({ mode: 'loop' })).exists()).toBe(false);
+    });
+
+    it('"Hear the saga" starts the saga with the sound on', async () => {
+      const w = await mountIntro({ playNow: false });
+      await w.get('[data-testid="landing-hear"]').trigger('click');
+      expect(phase(w)).toBe('playing');
+      expect(soundBtn(w).attributes('data-sound')).toBe('on');
+      expect(w.find('[data-testid="intro-narration"]').exists()).toBe(true);
+    });
+
+    it('"or play it muted" starts the saga with the sound off', async () => {
+      const w = await mountIntro({ playNow: false });
+      await w.get('[data-testid="landing-muted"]').trigger('click');
+      expect(phase(w)).toBe('playing');
+      expect(soundBtn(w).attributes('data-sound')).toBe('off');
+    });
+
+    it('starts the saga the same way with reduced motion', async () => {
+      const w = await mountIntro({ playNow: false, reducedMotion: true });
+      await w.get('[data-testid="landing-hear"]').trigger('click');
+      expect(phase(w)).toBe('playing');
+    });
+
+    it('fades out (leave transition) once the saga starts', async () => {
+      const w = await mountIntro({ playNow: false });
+      await w.get('[data-testid="landing-hear"]').trigger('click');
+      await vi.advanceTimersByTimeAsync(700);
+      expect(page(w).exists()).toBe(false);
+    });
+
+    it('the map button closes the intro at once when the map is loaded', async () => {
+      const w = await mountIntro({ playNow: false, loaded: true });
+      await w.get('[data-testid="landing-map"]').trigger('click');
+      expect(w.emitted('close')).toHaveLength(1);
+      expect(phase(w)).toBe('waitingForPlay');
+    });
+
+    it('the map button arms while loading and closes the intro as soon as loading completes; a second click disarms', async () => {
+      const w = await mountIntro({ playNow: false });
+      const map = () => w.get('[data-testid="landing-map"]');
+      expect(map().attributes('data-load-state')).toBe('loading');
+      await map().trigger('click');
+      expect(map().attributes('data-load-state')).toBe('armed');
+      await map().trigger('click');
+      expect(map().attributes('data-load-state')).toBe('loading');
+      expect(w.emitted('close')).toBeUndefined();
+      await map().trigger('click');
+      await w.setProps({ loaded: true });
+      expect(w.emitted('close')).toHaveLength(1);
     });
   });
 
@@ -344,7 +437,7 @@ describe('LandingIntro', () => {
     });
 
     it('is not shown while waiting for play', async () => {
-      const w = await mountIntro({ reducedMotion: true });
+      const w = await mountIntro({ playNow: false });
       expect(w.find('[data-testid="intro-pause"]').exists()).toBe(false);
     });
 
@@ -417,7 +510,7 @@ describe('LandingIntro', () => {
     });
 
     it('is there in landing and loop mode, also while waiting for play', async () => {
-      const landing = await mountIntro({ reducedMotion: true });
+      const landing = await mountIntro({ playNow: false });
       expect(phase(landing)).toBe('waitingForPlay');
       expect(landing.find('[data-testid="intro-login"]').exists()).toBe(true);
       const loop = await mountIntro({ mode: 'loop' });

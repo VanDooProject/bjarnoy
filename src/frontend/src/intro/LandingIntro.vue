@@ -8,7 +8,8 @@ import { introText, type IntroLocale } from './introText';
 import { beatsFor, holdMinMs, IntroVoice, type VoiceState } from './introVoice';
 import { INTRO_BEAT, INTRO_BEAT_MS, type BeatId } from './beats/types';
 import IntroTimeline from './IntroTimeline.vue';
-import { introLoad } from './introLoad';
+import { introLoad, mapLoadFraction } from './introLoad';
+import LandingPage from './LandingPage.vue';
 import { allLoaded, gatedLoadFraction, type LoadRow } from './timeline';
 import { IntroSequencer, type IntroState } from './sequencer';
 import { introSignal } from './introSignal';
@@ -229,6 +230,18 @@ const loadFraction = computed(() => gatedLoadFraction(loadRows.value));
 const detailRows = computed(() => (allLoaded(loadRows.value) ? [] : loadRows.value));
 const detailOpen = ref(false);
 
+// ---- landing page: over the first scene until the saga starts (or the player goes to the map)
+const showLanding = computed(() => props.mode === 'landing' && state.value.phase === 'waitingForPlay');
+const mapFraction = computed(() => mapLoadFraction(introLoad, props.loaded));
+// a click is a user gesture, which is when the browser allows sound
+function startSaga(withSound: boolean): void {
+  if (sound.value !== withSound) {
+    sound.value = withSound;
+    applyVoiceLevel();
+  }
+  sequencer.play();
+}
+
 // A seek puts every CSS animation of the new scene where a straight play would have it: "the time since it would
 // have started". Only `currentTime` is set (never play()/pause(), which would override the CSS play-state a pause
 // relies on). A beat that shares a scene with earlier beats is mounted as the scene's first beat and timed to
@@ -334,14 +347,15 @@ onBeforeUnmount(() => {
       <!-- beats sharing a scene keep one mounted component; the beat switches on it. A seek within the mounted
            scene does not remount it: the seek sync below moves its animations instead -->
       <div :key="`${meta.scene ?? state.beat}:${state.round}`" class="beat-layer" :style="beatStyle">
-        <component :is="BEAT_COMPONENTS[shownBeat]" :paused="state.phase === 'waitingForPlay' || state.paused" />
+        <!-- behind the landing page the hall lives (fire, smoke), only its turn into the saga waits for the click -->
+        <component :is="BEAT_COMPONENTS[shownBeat]" :paused="(state.phase === 'waitingForPlay' && !showLanding) || state.paused" v-bind="showLanding ? { held: true } : {}" />
       </div>
     </Transition>
 
     <!-- (not css=false: an out-in leave that ends synchronously updates this component in the middle of its own patch) -->
     <Transition :name="instant ? 'intro-instant' : isCall ? 'intro-call' : 'intro-fade'" :mode="isCall ? undefined : 'out-in'">
       <p
-        v-if="state.phase !== 'ended'"
+        v-if="state.phase !== 'ended' && !showLanding"
         :key="state.beat"
         class="narration"
         :class="{ 'is-call': isCall }"
@@ -353,8 +367,19 @@ onBeforeUnmount(() => {
     </Transition>
 
     <Transition name="intro-fade">
+      <LandingPage
+        v-if="showLanding"
+        :locale="locale"
+        :load-fraction="mapFraction"
+        @hear="startSaga(true)"
+        @muted="startSaga(false)"
+        @map="close()"
+      />
+    </Transition>
+
+    <Transition name="intro-fade">
       <button
-        v-if="state.phase === 'waitingForPlay'"
+        v-if="state.phase === 'waitingForPlay' && !showLanding"
         type="button"
         class="intro-btn play"
         data-testid="intro-play"

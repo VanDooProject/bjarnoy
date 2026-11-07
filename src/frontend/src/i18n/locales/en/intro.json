@@ -28,6 +28,29 @@
   "playIntro": "Play intro",
   "backToDocs": "Back to docs",
   "enterGame": "Enter the game",
+  "landing": {
+    "tagline": "A saga of the north, played together.",
+    "features": {
+      "multiplayer": {
+        "title": "Multiplayer",
+        "text": "Every other realm on the island is a real player. Ally with them or raid them."
+      },
+      "noPayToWin": {
+        "title": "No pay to win",
+        "text": "Premium supports the game and only adds quality-of-life features."
+      },
+      "adFree": {
+        "title": "Ad-free",
+        "text": "An indie game, made with love. No ads."
+      }
+    },
+    "hear": "Hear the saga",
+    "muted": "or play it muted",
+    "map": "Go to the map",
+    "mapLoading": "Go to the map · loading {pct} %",
+    "mapArmed": "Opens when loaded · {pct} %",
+    "ready": "ready"
+  },
   "beats": {
     "fire": "Listen! Come closer to the fire, and hear how the jarls lost their home.",
     "prophecy": "The seers foretold it: their halls would burn, and the sea would take the land.",

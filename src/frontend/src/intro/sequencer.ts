@@ -33,7 +33,7 @@ export interface IntroSequencerOptions {
   /** loop mode only: the beats to loop (any order; played in story order). Defaults to all beats. */
   loopBeats?: BeatId[];
   reducedMotion: boolean;
-  /** The player asked for the intro (the landing page's "Play intro"): it plays at once, as if play was pressed. */
+  /** The player asked for the intro (the "Play intro" button): it plays at once, as if play was pressed. */
   playNow?: boolean;
   onChange: (state: IntroState) => void;
   clock?: IntroClock;
@@ -73,7 +73,6 @@ export class IntroSequencer {
   private pausedTimer: { ms: number; fn: () => void } | null = null;
   private pausedMinTimer: { ms: number; fn: () => void } | null = null;
   private loaded = false;
-  private started = false;
   private closed = false;
   private timer: unknown = null;
   private minTimer: unknown = null;
@@ -138,10 +137,9 @@ export class IntroSequencer {
   }
 
   start(): void {
-    this.started = true;
-    if (this.opts.reducedMotion && !this.opts.playNow) {
-      if (this.opts.mode === 'landing' && this.loaded) this.finish();
-      else this.emit();
+    // The landing page waits for the player in every case; replay and loop wait only with reduced motion.
+    if (!this.opts.playNow && (this.opts.mode === 'landing' || this.opts.reducedMotion)) {
+      this.emit();
       return;
     }
     this.play();
@@ -196,8 +194,7 @@ export class IntroSequencer {
     if (this.loaded) return;
     this.loaded = true;
     if (this.opts.mode !== 'landing') return;
-    if (this.phase === 'waitingForPlay' && this.started) this.finish();
-    else if (this.phase === 'playing' && !this.paused && this.beat === this.hold.id && this.holdMinReached) this.enterExit();
+    if (this.phase === 'playing' && !this.paused && this.beat === this.hold.id && this.holdMinReached) this.enterExit();
     else this.emit();
   }
 
