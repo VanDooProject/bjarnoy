@@ -222,6 +222,12 @@ for (const size of SCREEN_SIZES) {
         await expect(settlement.returningLoginPanel).toBeVisible();
         await expect(page).toHaveURL('/');
 
+        // The reload lands on the landing page (no `#no-intro`), which covers the
+        // gate until the player picks "Go to the map".
+        await page.getByTestId('landing-map').click();
+        // armed while the atlases still load; opens by itself once they are in (same wait as landing-intro.spec.ts)
+        await expect(page.getByTestId('landing-page')).toHaveCount(0, { timeout: 15_000 });
+
         // The founding hero and the guided-onboarding UI must not reappear
         // underneath the gate — a visitor who just logged out of a real account
         // must not be nudged toward starting a throwaway new realm on top of it.
