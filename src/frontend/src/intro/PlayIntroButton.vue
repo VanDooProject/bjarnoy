@@ -18,7 +18,8 @@ const { t } = useI18n({ useScope: 'global' });
 <style scoped>
 .play-intro {
   position: fixed;
-  z-index: 6;
+  /* above MapStatusOverlay (9): the button stays usable while the world loads */
+  z-index: 15;
   right: max(16px, env(safe-area-inset-right));
   bottom: max(16px, env(safe-area-inset-bottom));
 }
