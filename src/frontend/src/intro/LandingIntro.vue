@@ -222,6 +222,8 @@ const loadRows = computed<LoadRow[]>(() => {
   const rows: LoadRow[] = [{ id: 'voices', ...voiceProgress.value, gating: true }];
   // terrain and buildings are listed from the start: a group that has not reported a page yet shows 0 of an unknown total
   for (const id of ['terrain', 'buildings'] as const) {
+    // the map is ready without this group reporting: no map renders (joining is blocked), so nothing to load
+    if (props.loaded && !introLoad[id]) continue;
     const count = introLoad[id] ?? { loaded: 0, total: 0 };
     rows.push({ id, loaded: count.loaded, total: count.total, gating: true });
   }
@@ -230,7 +232,11 @@ const loadRows = computed<LoadRow[]>(() => {
 });
 const loadFraction = computed(() => gatedLoadFraction(loadRows.value));
 // the rows to list while the bar is open: none once everything has loaded
-const detailRows = computed(() => (allLoaded(loadRows.value) ? [] : loadRows.value));
+const detailRows = computed(() => {
+  const rows = loadRows.value;
+  const done = props.loaded ? rows.every((row) => row.total > 0 && row.loaded >= row.total) : allLoaded(rows);
+  return done ? [] : rows;
+});
 const detailOpen = ref(false);
 
 // ---- landing page: over the first scene until the saga starts (or the player goes to the map)

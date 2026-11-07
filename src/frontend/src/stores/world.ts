@@ -493,6 +493,14 @@ export const useWorldStore = defineStore('world', {
       if (DEMO_MODE || this.liveReady) return;
 
       let world = this.worldId ? await api.getWorld(this.worldId).catch(() => null) : null;
+      // `getWorld` also answers for worlds players can no longer pick (hidden by an admin, or not provisioned): a
+      // visitor without a settlement who remembers one of those would be stuck there ("every plot taken") while
+      // another world is open. Without a settlement, the remembered world only counts while it's still listed.
+      if (world && !usePlayerStore().hasFoundedSettlement) {
+        const listedId = world.id;
+        const listed = await api.listWorlds();
+        if (!listed.some((summary) => summary.id === listedId)) world = null;
+      }
       // Worlds are shared and meant to be created by an admin, not by
       // whichever browser tab happens to land here first — so join whatever
       // exists rather than filtering by status. (There used to be a
