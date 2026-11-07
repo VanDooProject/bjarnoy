@@ -1,6 +1,8 @@
 <script lang="ts">
 import type { BeatMeta } from './types';
-export const meta: BeatMeta = { id: 'sending', role: 'intro', durationMs: 10000 };
+// No silence after the voice: the ravens scene starts as the narration ends and takes over in a long crossfade
+// (its fadeInMs), while the sending's camera turn and ship are still moving.
+export const meta: BeatMeta = { id: 'sending', role: 'intro', durationMs: 10000, tailMs: 0 };
 </script>
 
 <script setup lang="ts">

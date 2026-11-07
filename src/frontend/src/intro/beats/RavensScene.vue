@@ -230,14 +230,16 @@ const C = {
 @keyframes b4-cam-front { 0% { transform: translate(0, 640px); animation-timing-function: cubic-bezier(.25, .6, .4, 1) } 32% { transform: translate(-30px, -20px) } 100% { transform: translate(-100px, -70px) } }
 
 /* the longship: it starts where and as fast as the sending leaves it (--ship-x0/--ship-y0 from sendingShipAtEnd,
-   scale .3744, about 57 units/s to the right), slows, and drifts to the middle as the camera overtakes it, keeping
-   its size, so the push (.68 / .3744) lands it on the hold's ship. Its colours go from the sending's dusk silhouette
-   to the hold's. */
+   scale .3744, about 59 units/s to the right) and keeps that speed through the long crossfade (fadeInMs 1800, about
+   20 % of the beat), so the two scenes show one ship; then it slows and drifts toward the middle as the camera
+   overtakes it, keeping its size, so the push (.68 / .3744) lands it on the hold's ship. Its colours go from the
+   sending's dusk silhouette to the hold's. */
 .b4 .b4-ship { animation-name: b4-ship; transform-box: view-box; transform-origin: 0 0; }
 @keyframes b4-ship {
-  0% { transform: translate(var(--ship-x0, 945px), var(--ship-y0, 471px)) scale(.3744); animation-timing-function: cubic-bezier(.33, .66, .66, 1) }
-  12% { transform: translate(calc(var(--ship-x0, 945px) + 30px), calc(var(--ship-y0, 471px) - 2px)) scale(.3744); animation-timing-function: ease-in-out }
-  88%, 100% { transform: translate(691.87px, 458.6px) scale(.3744) }
+  0% { transform: translate(var(--ship-x0, 945px), var(--ship-y0, 471px)) scale(.3744); animation-timing-function: linear }
+  20% { transform: translate(calc(var(--ship-x0, 945px) + 106px), calc(var(--ship-y0, 471px) - 7px)) scale(.3744); animation-timing-function: cubic-bezier(.2, .7, .5, 1) }
+  30% { transform: translate(calc(var(--ship-x0, 945px) + 121px), calc(var(--ship-y0, 471px) - 8px)) scale(.3744); animation-timing-function: ease-in-out }
+  88%, 100% { transform: translate(741.869px, 458.6px) scale(.3744) }
 }
 .b4 .b4-ship :deep(.s-steer), .b4 .b4-ship :deep(.s-rig), .b4 .b4-ship :deep(.s-strake) { animation: b4-ship-stroke var(--beat-duration) linear both; }
 .b4 .b4-ship :deep([class^='s-']:not(.s-steer):not(.s-rig):not(.s-strake)) { animation: b4-ship-fill var(--beat-duration) linear both; }
@@ -259,13 +261,13 @@ const C = {
 .b4 .b4-ship :deep(.s-boss) { --c0: #0e1318; --c1: #1c262d; }
 .b4 .b4-ship :deep(.s-oar) { --c0: #0e1318; --c1: #182229; }
 
-/* exit: the scene (not the ravens) pushes into the moon around the ship's waterline (1000, 780.58), and lands
+/* exit: the scene (not the ravens) pushes in around the ship's waterline (1050, 780.58), and lands
    the ship on the fog hold's: its point (823, 860) goes to where the hold draws it at the hold's first frame
    (705.64, 894.08, after the hold's -110 offset, .68 scale about 800/975, and its heave). */
-.b4 .b4-zoom { animation-name: b4-zoom; transform-origin: 1000px 780.58px; }
+.b4 .b4-zoom { animation-name: b4-zoom; transform-origin: 1050px 780.58px; }
 @keyframes b4-zoom {
   0%, 88% { transform: translate(0, 0) scale(1); animation-timing-function: cubic-bezier(.5, 0, .8, .5) }
-  99%, 100% { transform: translate(-294.36px, 113.5px) scale(1.816239) }
+  99%, 100% { transform: translate(-344.36px, 113.5px) scale(1.816239) }
 }
 /* the moon comes in from the right, low, rises out of the sea and stays on the right, growing until it fills the
    sky behind the ship and, through the push, the whole sky (its centre ends at 1300/787 with the sky's drift; at

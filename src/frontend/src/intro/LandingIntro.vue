@@ -33,6 +33,7 @@ const props = defineProps<{
 const emit = defineEmits<{ done: []; close: []; 'back-to-docs': []; 'enter-game': [] }>();
 
 const FADE_OUT_MS = 1000;
+const SCENE_FADE_MS = 600;
 // The skip button stays at full strength this long after it appears, so it is noticed before it dims.
 const SKIP_FRESH_MS = 3000;
 const fogUrl = introFogUrl();
@@ -157,6 +158,8 @@ const rootStyle = computed(() => ({
   '--exit-ms': `${exitMeta.durationMs}ms`,
   '--exit-offset': `${state.value.phase === 'exiting' ? state.value.offsetMs : 0}ms`,
   '--fade-ms': `${FADE_OUT_MS}ms`,
+  // the crossfade into the current beat's scene (a beat can ask for a longer one)
+  '--scene-fade-ms': `${meta.value.fadeInMs ?? SCENE_FADE_MS}ms`,
 }));
 const fadesOut = computed(() => props.mode === 'landing' && state.value.phase === 'exiting');
 
@@ -644,6 +647,11 @@ onBeforeUnmount(() => {
 .intro-fade-enter-from,
 .intro-fade-leave-to {
   opacity: 0;
+}
+/* the scene crossfade: both layers take the entering beat's length (--scene-fade-ms on the root) */
+.beat-layer.intro-fade-enter-active,
+.beat-layer.intro-fade-leave-active {
+  transition-duration: var(--scene-fade-ms, 600ms);
 }
 .intro-call-enter-active,
 .intro-call-leave-active {
