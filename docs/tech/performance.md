@@ -77,7 +77,7 @@ freezes water/fog in place rather than hiding them.
 
 | Setting | Result |
 | --- | --- |
-| **Auto** (default) | Off at first. Enabled only once the map has run at ≥ 50 fps for 10 s *without* animations. Turned off again if it then drops below 30 fps for 5 s, and stays off for the rest of the page session. Off outright under reduced motion or data saver. |
+| **Auto** (default) | Off at first. Enabled only once the map has run at ≥ 30 fps for 10 s *without* animations. Turned off again if it then drops below 30 fps for 5 s, and stays off for the rest of the page session. Off outright under reduced motion or data saver. |
 | **On** | Always on, on this device, even with reduced motion or data saver: the player chose it explicitly. |
 | **Off** | Always off. |
 
@@ -85,14 +85,14 @@ Why these rules:
 
 - **Measure without animations first.** The question auto answers is "can
   this device afford 304 MiB more and the per-frame clip updates?". A device
-  that barely holds 50 fps on the static map can't, so it never starts
+  that barely holds 30 fps on the static map can't, so it never starts
   loading them.
 - **10 s sustained, averaged over 1 s buckets.** One long frame (a GC, a
   rebuild after a pan) is not the device being slow, so single hitches don't
-  restart the window; a second that averages under 50 fps does. The bar sits
-  well below a 60 Hz screen's 60 fps and the window is short, so a normal
-  desktop gets there instead of losing the streak to an occasional slow
-  second (55 fps for 30 s rarely finished on real hardware).
+  restart the window; a second that averages under 30 fps does. The bar is
+  the same 30 fps that turns animations off again, and the window is short,
+  so a normal desktop gets there instead of losing the streak to an
+  occasional slow second (55 fps for 30 s rarely finished on real hardware).
 - **Shown live.** Under "Building animations" the Graphics settings show the
   last second's fps and how many of the 10 s are collected
   (`animationPreference.progress`).

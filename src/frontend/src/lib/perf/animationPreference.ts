@@ -80,7 +80,7 @@ export interface GovernorProgress {
   thresholdFps: number;
 }
 
-export const ENABLE_FPS_THRESHOLD = 50;
+export const ENABLE_FPS_THRESHOLD = 30;
 export const ENABLE_SUSTAIN_MS = 10_000;
 const DISABLE_FPS_THRESHOLD = 30;
 const DISABLE_SUSTAIN_MS = 5_000;
@@ -100,7 +100,7 @@ const BUCKET_MS = 1000;
  *   the whole point is to measure the device's fps *without* the cost of
  *   the animations first, so turning them on doesn't invalidate the very
  *   measurement that decided to turn them on.
- * - `on`: fps was >= 50 for a sustained 10s of measuring, animations play.
+ * - `on`: fps was >= 30 for a sustained 10s of measuring, animations play.
  * - `off-slow`: once `on`, fps dropped below 30 for a sustained 5s. This
  *   *latches* — it never re-measures back to `on` for the rest of the page
  *   session (a fresh mount/reload starts over). Latching matters because

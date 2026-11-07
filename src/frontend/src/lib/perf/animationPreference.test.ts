@@ -48,39 +48,39 @@ describe('AnimationGovernor', () => {
     expect(governor.getState()).toBe('measuring');
   });
 
-  it('does not enable before 10s of sustained >= 50fps', () => {
+  it('does not enable before 10s of sustained >= 30fps', () => {
     feedSteady(100, 9);
     expect(governor.getState()).toBe('measuring');
   });
 
-  it('enables after 10s of sustained >= 50fps', () => {
+  it('enables after 10s of sustained >= 30fps', () => {
     feedSteady(100, 10);
     expect(governor.getState()).toBe('on');
   });
 
-  it('counts a bucket between 50 and 55fps as good', () => {
-    // 64fps -> 15.625ms frames, exact in binary.
-    feedSteady(64, 10);
+  it('counts a bucket just over 30fps as good', () => {
+    // 32fps -> 31.25ms frames, exact in binary.
+    feedSteady(32, 10);
     expect(governor.getState()).toBe('on');
   });
 
-  it('a bucket under 50fps does not count', () => {
-    feedSteady(40, 30);
+  it('a bucket under 30fps does not count', () => {
+    feedSteady(20, 30);
     expect(governor.getState()).toBe('measuring');
   });
 
   it('reports the last bucket fps and the enable window progress', () => {
-    expect(governor.getProgress()).toEqual({ fps: null, goodMs: 0, requiredMs: 10_000, thresholdFps: 50 });
+    expect(governor.getProgress()).toEqual({ fps: null, goodMs: 0, requiredMs: 10_000, thresholdFps: 30 });
     feedSteady(100, 4);
     expect(governor.getProgress()).toMatchObject({ fps: 100, goodMs: 4000 });
-    feedSteady(40, 1);
-    expect(governor.getProgress()).toMatchObject({ fps: 40, goodMs: 0 });
+    feedSteady(20, 1);
+    expect(governor.getProgress()).toMatchObject({ fps: 20, goodMs: 0 });
   });
 
   it('a single hitch within a bucket does not block enabling', () => {
     // 100 frames/sec of 10ms each is a clean 1000ms bucket at fps=100; swap
     // one 10ms frame for a 100ms hitch and the bucket mean (~91.7fps) still
-    // clears the 50fps bar, so a single stutter shouldn't reset the streak.
+    // clears the 30fps bar, so a single stutter shouldn't reset the streak.
     let now = 0;
     for (let bucket = 0; bucket < 10; bucket++) {
       for (let frame = 0; frame < 100; frame++) {

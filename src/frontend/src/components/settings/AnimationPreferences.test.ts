@@ -21,12 +21,12 @@ afterEach(() => {
 
 describe('AnimationPreferences fps readout', () => {
   it('says nothing was measured before the first second on the map', () => {
-    const wrapper = mountWithProgress({ fps: null, goodMs: 0, requiredMs: 10_000, thresholdFps: 50 });
+    const wrapper = mountWithProgress({ fps: null, goodMs: 0, requiredMs: 10_000, thresholdFps: 30 });
     expect(wrapper.get('[data-testid="animation-measure"]').text()).toBe('No measurement yet. It runs while the map is on screen.');
   });
 
   it('shows the measured fps and the seconds collected toward the enable window', () => {
-    const wrapper = mountWithProgress({ fps: 57.6, goodMs: 4000, requiredMs: 10_000, thresholdFps: 50 });
-    expect(wrapper.get('[data-testid="animation-measure"]').text()).toBe('Measured: 58 fps · 4 of 10 s at 50 fps or more');
+    const wrapper = mountWithProgress({ fps: 57.6, goodMs: 4000, requiredMs: 10_000, thresholdFps: 30 });
+    expect(wrapper.get('[data-testid="animation-measure"]').text()).toBe('Measured: 58 fps · 4 of 10 s at 30 fps or more');
   });
 });
