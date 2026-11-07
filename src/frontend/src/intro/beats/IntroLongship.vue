@@ -11,9 +11,10 @@ import { useId } from 'vue';
  *   .ship-cloak  the boy's cloak, pivoting at his shoulder (1124, 842)
  * Colours come from custom properties (defaults: the fog hold's); a scene can also animate `fill`/`stroke`
  * on the colour classes (.s-hull, .s-sail, ...) directly.
+ * `underway` rows (5 strokes per `--ship-loop`, default 12 s), billows the sail and blows the boy's cloak.
  * `bold` draws the thin parts (mast, yard, oars, rigging) heavier, for a ship that is only seen small.
  */
-withDefaults(defineProps<{ bold?: boolean; boy?: boolean; strakes?: boolean }>(), { bold: false, boy: false, strakes: false });
+withDefaults(defineProps<{ bold?: boolean; boy?: boolean; strakes?: boolean; underway?: boolean }>(), { bold: false, boy: false, strakes: false, underway: false });
 
 const clipId = `${useId().replace(/[^a-zA-Z0-9]/g, '-')}-sailclip`;
 const SAIL = 'M604 503 L956 503 C968 590 968 700 948 792 L612 792 C594 700 594 590 604 503Z';
@@ -25,7 +26,7 @@ const OARS = [584, 680, 776, 872, 968, 1064].map((x) => ({
 </script>
 
 <template>
-  <g class="intro-longship">
+  <g class="intro-longship" :class="{ 'is-underway': underway }">
     <defs><clipPath :id="clipId"><path :d="SAIL"/></clipPath></defs>
     <!-- steering oar (far side) -->
     <path class="s-steer" d="M486 838 L452 1004" :stroke-width="bold ? 8 : 7" stroke-linecap="round" fill="none"/>
@@ -91,4 +92,19 @@ const OARS = [584, 680, 776, 872, 968, 1064].map((x) => ({
 .s-shield-b { fill: var(--ship-shield-b, #2c3b45); }
 .s-boss { fill: var(--ship-boss, #1c262d); }
 .s-oar { fill: var(--ship-oar, #182229); }
+/* underway: 5 strokes per --ship-loop */
+.is-underway .ship-oar { animation: ship-oar calc(var(--ship-loop, 12s) / 5) linear infinite; }
+.is-underway .ship-rower { animation: ship-rower calc(var(--ship-loop, 12s) / 5) ease-in-out infinite; }
+.is-underway .ship-sail { animation: ship-sail var(--ship-loop, 12s) ease-in-out infinite; }
+.is-underway .ship-cloak { animation: ship-cloak calc(var(--ship-loop, 12s) / 10) ease-in-out infinite; }
+@keyframes ship-oar {
+  0%   { transform: rotate(-26deg) scaleY(1);   animation-timing-function: cubic-bezier(.3,0,.6,1); }  /* catch */
+  56%  { transform: rotate(20deg)  scaleY(1); }                                                       /* end of drive */
+  64%  { transform: rotate(22deg)  scaleY(.78); animation-timing-function: ease-in-out; }              /* blade out */
+  94%  { transform: rotate(-28deg) scaleY(.78); }                                                     /* recovery */
+  100% { transform: rotate(-26deg) scaleY(1); }
+}
+@keyframes ship-rower { 0%,100% { transform: translate(9px, 0); } 56% { transform: translate(-9px, 3px); } }
+@keyframes ship-sail { 0%,100% { transform: skewX(1deg) scaleX(1); } 18% { transform: skewX(4deg) scaleX(.965); } 30% { transform: skewX(2.5deg) scaleX(.985); } 52% { transform: skewX(5.5deg) scaleX(.95); } 68% { transform: skewX(1.5deg) scaleX(.99); } 84% { transform: skewX(3.5deg) scaleX(.97); } }
+@keyframes ship-cloak { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(-7deg); } }
 </style>

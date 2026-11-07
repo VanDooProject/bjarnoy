@@ -123,7 +123,7 @@ const OAR_X = [584, 680, 776, 872, 968, 1064];
       </g></g>
       <!-- 6 ship -->
       <g class="ship-frame"><g class="lf-ship"><g class="heave"><g class="pitch">
-        <IntroLongship boy strakes />
+        <IntroLongship boy strakes underway />
       </g></g></g></g>
       <!-- 7 near sea (covers keel and blades) -->
       <g class="drift sea-near">
@@ -160,33 +160,19 @@ const OAR_X = [584, 680, 776, 872, 968, 1064];
 
 <style scoped>
 .longship { position: absolute; inset: 0; container-type: size; }
-.b5 { --b5-loop: var(--loop-period, 12s); }
+.b5 { --b5-loop: var(--loop-period, 12s); --ship-loop: var(--b5-loop); }
 .b5 * { transform-box: view-box; }
 .b5 .drift { will-change: transform; }
 
-/* rowing: 5 strokes per loop */
-.b5 :deep(.ship-oar) { transform-origin: 0 0; animation: b5-oar    calc(var(--b5-loop) / 5) linear infinite; }
-.b5 :deep(.ship-rower) { animation: b5-rower  calc(var(--b5-loop) / 5) ease-in-out infinite; }
+/* rowing: 5 strokes per loop (the oars and rowers row in IntroLongship on --ship-loop); the splashes keep time with them */
 .b5 .splash { opacity: 0; transform-origin: 0 0; animation: b5-splash calc(var(--b5-loop) / 5) ease-out infinite; }
-@keyframes b5-oar {
-  0%   { transform: rotate(-26deg) scaleY(1);   animation-timing-function: cubic-bezier(.3,0,.6,1); }  /* catch */
-  56%  { transform: rotate(20deg)  scaleY(1); }                                                       /* end of drive */
-  64%  { transform: rotate(22deg)  scaleY(.78); animation-timing-function: ease-in-out; }              /* blade out */
-  94%  { transform: rotate(-28deg) scaleY(.78); }                                                     /* recovery */
-  100% { transform: rotate(-26deg) scaleY(1); }
-}
-@keyframes b5-rower { 0%,100% { transform: translate(9px, 0); } 56% { transform: translate(-9px, 3px); } }
 @keyframes b5-splash { 0% { opacity: .9; transform: scale(.4); } 22% { opacity: .55; transform: scale(1.25); } 40%,100% { opacity: 0; transform: scale(1.5); } }
 
 /* ship motion */
 .b5 .heave { animation: b5-heave calc(var(--b5-loop) / 3) ease-in-out infinite; }
 .b5 .pitch { transform-origin: 800px 900px; animation: b5-pitch var(--b5-loop) ease-in-out infinite; }
-.b5 :deep(.ship-sail) { animation: b5-sail var(--b5-loop) ease-in-out infinite; }
-.b5 :deep(.ship-cloak) { animation: b5-cloak calc(var(--b5-loop) / 10) ease-in-out infinite; }
 @keyframes b5-heave { 0%,100% { transform: translateY(-4px); } 50% { transform: translateY(5px); } }
 @keyframes b5-pitch { 0%,100% { transform: rotate(-.9deg); } 50% { transform: rotate(1.1deg); } }
-@keyframes b5-sail  { 0%,100% { transform: skewX(1deg) scaleX(1); } 18% { transform: skewX(4deg) scaleX(.965); } 30% { transform: skewX(2.5deg) scaleX(.985); } 52% { transform: skewX(5.5deg) scaleX(.95); } 68% { transform: skewX(1.5deg) scaleX(.99); } 84% { transform: skewX(3.5deg) scaleX(.97); } }
-@keyframes b5-cloak { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(-7deg); } }
 
 /* sea bands: each moves a whole number of wavelengths per loop */
 .b5 .sea-mid  { animation: b5-x400 var(--b5-loop) linear infinite; }
