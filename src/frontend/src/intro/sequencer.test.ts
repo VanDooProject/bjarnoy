@@ -11,9 +11,10 @@ const beats: BeatMeta[] = [
   { id: 'landfall', role: 'exit', durationMs: 500 },
 ];
 
-function make(mode: 'landing' | 'replay' | 'loop', reducedMotion = false, holdMinMs?: number, loopBeats?: BeatId[]) {
+// The landing waits for the player to start the saga; most tests are about the run itself and start it at once (`playNow`).
+function make(mode: 'landing' | 'replay' | 'loop', reducedMotion = false, holdMinMs?: number, loopBeats?: BeatId[], playNow = mode === 'landing') {
   const changes: IntroState[] = [];
-  const seq = new IntroSequencer({ beats, mode, reducedMotion, holdMinMs, loopBeats, onChange: (s) => changes.push(s) });
+  const seq = new IntroSequencer({ beats, mode, reducedMotion, holdMinMs, loopBeats, playNow, onChange: (s) => changes.push(s) });
   return { seq, changes };
 }
 
@@ -129,9 +130,9 @@ describe('IntroSequencer landing', () => {
   });
 });
 
-describe('IntroSequencer reduced motion', () => {
-  it('waits on the first frame until play, then runs as normal', () => {
-    const { seq } = make('landing', true);
+describe('IntroSequencer landing page', () => {
+  it.each([false, true])('waits on the first frame until play, then runs as normal (reduced motion: %s)', (reducedMotion) => {
+    const { seq } = make('landing', reducedMotion, undefined, undefined, false);
     seq.start();
     expect(seq.state).toMatchObject({ phase: 'waitingForPlay', beat: 'fire' });
     vi.advanceTimersByTime(5000);
@@ -142,25 +143,39 @@ describe('IntroSequencer reduced motion', () => {
     expect(seq.state.beat).toBe('prophecy');
   });
 
-  it('plays at once when the player asked for it, also with the tiles already loaded', () => {
+  it('plays at once when the player asked for it, also with reduced motion and the tiles already loaded', () => {
     const seq = new IntroSequencer({ beats, mode: 'landing', reducedMotion: true, playNow: true, onChange: () => {} });
     seq.notifyLoaded();
     seq.start();
     expect(seq.state).toMatchObject({ phase: 'playing', beat: 'fire' });
   });
 
-  it('goes straight to done when loaded before play', () => {
-    const { seq } = make('landing', true);
+  it.each([false, true])('keeps waiting for the player when the tiles load first (reduced motion: %s)', (reducedMotion) => {
+    const { seq } = make('landing', reducedMotion, undefined, undefined, false);
     seq.start();
     seq.notifyLoaded();
-    expect(seq.state.phase).toBe('done');
+    expect(seq.state.phase).toBe('waitingForPlay');
+    seq.play();
+    vi.advanceTimersByTime(4000);
+    expect(seq.state).toMatchObject({ phase: 'playing', beat: 'hold' });
   });
 
-  it('goes straight to done when already loaded at start', () => {
-    const { seq } = make('landing', true);
+  it('keeps waiting when the tiles are loaded already at start', () => {
+    const { seq } = make('landing', true, undefined, undefined, false);
     seq.notifyLoaded();
     seq.start();
-    expect(seq.state.phase).toBe('done');
+    expect(seq.state.phase).toBe('waitingForPlay');
+  });
+});
+
+describe('IntroSequencer reduced motion', () => {
+  it('replay waits on the first frame until play, then runs as normal', () => {
+    const { seq } = make('replay', true);
+    seq.start();
+    expect(seq.state).toMatchObject({ phase: 'waitingForPlay', beat: 'fire' });
+    seq.play();
+    vi.advanceTimersByTime(1000);
+    expect(seq.state.beat).toBe('prophecy');
   });
 });
 
@@ -338,7 +353,7 @@ describe('IntroSequencer pause', () => {
   });
 
   it('only pauses while playing or exiting', () => {
-    const { seq } = make('landing', true);
+    const { seq } = make('landing', true, undefined, undefined, false);
     seq.start();
     seq.pause();
     expect(seq.state.paused).toBe(false);

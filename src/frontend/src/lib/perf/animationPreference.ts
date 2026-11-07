@@ -71,14 +71,23 @@ function saveDataEnabled(): boolean {
 /** `AnimationGovernor`'s own state machine — see its class doc for the transition rules. */
 export type GovernorState = 'measuring' | 'on' | 'off-slow';
 
-const ENABLE_FPS_THRESHOLD = 55;
-const ENABLE_SUSTAIN_MS = 30_000;
+export interface GovernorProgress {
+  /** Mean fps of the last full 1s bucket; null until one has completed. */
+  fps: number | null;
+  /** Consecutive good time so far in the enable window. */
+  goodMs: number;
+  requiredMs: number;
+  thresholdFps: number;
+}
+
+export const ENABLE_FPS_THRESHOLD = 30;
+export const ENABLE_SUSTAIN_MS = 10_000;
 const DISABLE_FPS_THRESHOLD = 30;
 const DISABLE_SUSTAIN_MS = 5_000;
 /**
  * Buckets fps into ~1s means rather than judging every single frame
  * interval — so one dropped frame (a GC pause, a texture upload) can't
- * reset a 30s enable window or trip the 5s disable one; only a bucket
+ * reset a 10s enable window or trip the 5s disable one; only a bucket
  * whose *average* fps misses the threshold counts.
  */
 const BUCKET_MS = 1000;
@@ -91,7 +100,7 @@ const BUCKET_MS = 1000;
  *   the whole point is to measure the device's fps *without* the cost of
  *   the animations first, so turning them on doesn't invalidate the very
  *   measurement that decided to turn them on.
- * - `on`: fps was >= 55 for a sustained 30s of measuring, animations play.
+ * - `on`: fps was >= 30 for a sustained 10s of measuring, animations play.
  * - `off-slow`: once `on`, fps dropped below 30 for a sustained 5s. This
  *   *latches* — it never re-measures back to `on` for the rest of the page
  *   session (a fresh mount/reload starts over). Latching matters because
@@ -107,8 +116,15 @@ export class AnimationGovernor {
   private goodStreakMs = 0;
   private badStreakMs = 0;
 
+  private lastFps: number | null = null;
+
   getState(): GovernorState {
     return this.latched ? 'off-slow' : this.state;
+  }
+
+  /** The last full bucket's mean fps (null before the first one) and how far the enable window has got — for the settings' status line. */
+  getProgress(): GovernorProgress {
+    return { fps: this.lastFps, goodMs: this.goodStreakMs, requiredMs: ENABLE_SUSTAIN_MS, thresholdFps: ENABLE_FPS_THRESHOLD };
   }
 
   /** Feed one frame's interval. `nowMs` is unused by the bucketing itself (frameMs already carries the interval) but kept in the signature for callers and future use (e.g. detecting a gap larger than frameMs itself, such as a debugger pause). */
@@ -121,6 +137,7 @@ export class AnimationGovernor {
     if (this.bucketMs < BUCKET_MS) return;
 
     const fps = (this.bucketFrames * 1000) / this.bucketMs;
+    this.lastFps = fps;
     this.bucketFrames = 0;
     this.bucketMs = 0;
 
@@ -150,7 +167,7 @@ export class AnimationGovernor {
   }
 
   /**
-   * Restarts whichever window is currently running (the 30s enable window
+   * Restarts whichever window is currently running (the 10s enable window
    * if still `measuring`, the 5s disable window if `on`) by dropping the
    * in-progress bucket and streak — used when the tab becomes visible again
    * (the gap while hidden is not a real frame rate) or the map remounts.
@@ -199,6 +216,7 @@ const state = reactive({
   reducedMotion: prefersReducedMotion(),
   saveData: saveDataEnabled(),
   governorState: governor.getState() as GovernorState,
+  progress: governor.getProgress(),
 });
 
 if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -216,6 +234,9 @@ if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
 
 function refreshGovernorState(): void {
   state.governorState = governor.getState();
+  // Changes once per 1s bucket at most; replacing the object every frame would re-render the settings 60 times a second.
+  const next = governor.getProgress();
+  if (next.fps !== state.progress.fps || next.goodMs !== state.progress.goodMs) state.progress = next;
 }
 
 /**
@@ -243,6 +264,9 @@ export const animationPreference = {
   },
   get governorState(): GovernorState {
     return state.governorState;
+  },
+  get progress(): GovernorProgress {
+    return state.progress;
   },
   // Reads through this object's own getters (`this.reducedMotion`, not
   // `state.reducedMotion` directly) so a test can override one of them with

@@ -219,6 +219,11 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
         // a URL change (the path doesn't change).
         var returningLoginPanel = page.GetByTestId("returning-login-panel");
         await Assertions.Expect(returningLoginPanel).ToBeVisibleAsync(new() { Timeout = 15_000 });
+
+        // The reload lands on the landing page (no `#no-intro`), which covers the
+        // gate until the player picks "Go to the map".
+        await page.GetByTestId("landing-map").ClickAsync();
+        await Assertions.Expect(page.GetByTestId("landing-page")).ToHaveCountAsync(0, new() { Timeout = 60_000 });
         await Assertions.Expect(page.GetByText(new Regex("put your longhouse somewhere", RegexOptions.IgnoreCase)))
             .Not.ToBeVisibleAsync();
 

@@ -2,8 +2,8 @@
 // The profile (own or someone else's) as a modal over whatever page was
 // showing before — see lib/modalRoute.ts and App.vue's own comment on the
 // background-route pattern this sits on top of. ProfileView.vue keeps all of
-// the actual profile logic (data loading, bio editing, the report dialog,
-// and — on the viewer's own profile — the Profile/Settings tabs); the
+// the actual profile logic (data loading, bio editing, and the
+// report dialog); the
 // dialog chrome (backdrop, close/back button, desktop/mobile layout) lives
 // in RouteModal.vue, shared with LeaderboardModal.vue/GuildModal.vue.
 import { computed, ref } from 'vue';

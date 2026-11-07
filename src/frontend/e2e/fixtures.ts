@@ -27,7 +27,7 @@ export interface MapLayers {
   fog?: boolean;
 }
 
-/** The player's per-device motion settings (Profile > Graphics). Omitted is 'auto', i.e. follows the emulated OS reduced-motion preference. */
+/** The player's per-device motion settings (Settings > Graphics). Omitted is 'auto', i.e. follows the emulated OS reduced-motion preference. */
 export interface MapMotion {
   /** "Water motion": waves, shore surge, caustics. */
   water?: 'auto' | 'on' | 'off';
@@ -88,7 +88,7 @@ export const test = base.extend<{
   /**
    * The player's water / fog / HUD motion settings (lib/perf/motionPreferences.ts),
    * seeded through their own localStorage keys before the app loads, the way a
-   * player sets them in Profile > Graphics. The suite emulates the OS's
+   * player sets them in Settings > Graphics. The suite emulates the OS's
    * reduced-motion preference (playwright.config.ts), which 'auto' follows, so
    * water and fog are frozen by default; a spec that asserts they *move*
    * opts in with `test.use({ mapMotion: { water: 'on', fog: 'on' } })`.

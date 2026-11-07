@@ -31,6 +31,7 @@ function testRouter() {
       { path: '/docs', name: 'docs', component: { template: '<div />' } },
       { path: '/register', name: 'register', component: { template: '<div />' } },
       { path: '/profile', name: 'profile', component: { template: '<div />' } },
+      { path: '/settings', name: 'settings', component: { template: '<div />' } },
       { path: '/settlement', name: 'settlement', component: { template: '<div />' } },
     ],
   });
@@ -325,6 +326,20 @@ describe('HudNav account menu', () => {
     // return there on close — see lib/profileRoute.ts.
     expect((router.options.history.state as { backgroundView?: unknown }).backgroundView).toBe('/settlement');
     // Navigating away closes the menu, same as ReturningPlayerMenu's panel.
+    expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
+  });
+
+  it('Settings routes to /settings as a modal over the current page', async () => {
+    const auth = useAuthStore();
+    authenticate(auth);
+    const { wrapper, router } = await mountHudNavWithRouter();
+
+    await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+    await wrapper.find('[data-testid="account-menu-settings"]').trigger('click');
+    await flushPromises();
+
+    expect(router.currentRoute.value.path).toBe('/settings');
+    expect((router.options.history.state as { backgroundView?: unknown }).backgroundView).toBe('/settlement');
     expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
   });
 

@@ -36,6 +36,18 @@ const STATUS_KEY = {
 
 const statusText = computed(() => t(`profile.graphics.status.${STATUS_KEY[animationPreference.reason]}`));
 
+// Live readout of the 'auto' fps measurement (animationPreference's governor).
+const measureText = computed(() => {
+  const { fps, goodMs, requiredMs, thresholdFps } = animationPreference.progress;
+  if (fps === null) return t('profile.graphics.measure.none');
+  return t('profile.graphics.measure.fps', {
+    fps: Math.round(fps),
+    good: Math.floor(goodMs / 1000),
+    required: Math.round(requiredMs / 1000),
+    threshold: thresholdFps,
+  });
+});
+
 const deviceReduced = computed(() => animationPreference.reducedMotion);
 const osHint = computed(() => t(`profile.graphics.device.hint.${currentDeviceOs()}`));
 
@@ -91,7 +103,10 @@ const GROUPS = ['map', 'hud'] as const;
             {{ t(`profile.graphics.${setting}`) }}
           </button>
         </div>
-        <p v-if="row.id === 'buildings'" class="status muted">{{ statusText }}</p>
+        <template v-if="row.id === 'buildings'">
+          <p class="status muted">{{ statusText }}</p>
+          <p class="status muted small" data-testid="animation-measure">{{ measureText }}</p>
+        </template>
       </div>
     </template>
 

@@ -3,6 +3,30 @@
 A short story sequence on the landing page. It covers the time from page open until all map tiles are loaded,
 then hands over to the real map.
 
+## Landing page
+
+Before the saga a landing page shows over the intro's own first scene, the skald's hall at rest (beat 1 with the
+fire lit, nothing moving). The saga starts only on a click.
+
+- Title "BJARNØY" (not translated) and the tagline "A saga of the north, played together."
+- Three feature cards: "Multiplayer" (every other realm on the island is a real player, ally with them or raid them),
+  "No pay to win" (premium supports the game and only adds quality-of-life features) and "Ad-free" (an indie game,
+  made with love, no ads).
+- "Hear the saga" starts the saga with the sound on (the click is the user gesture browsers need). The link "or play it
+  muted" under it starts it with the sound off.
+- The map button reads "Go to the map · loading 62 %" while the map loads, with a thin progress bar along its bottom
+  edge (no fill inside). Pressed while loading it arms: "Opens when loaded · 62 %", and it closes the intro as soon as
+  loading completes; pressed again it disarms. Once the map is loaded it reads "Go to the map" with a "ready" bubble,
+  the bar is gone, and pressing it closes the intro at once, like Esc. The load is one value: the loaded pages over the
+  total pages of the terrain, buildings and animations groups that have reported, 0 until one has, 1 once the tiles are
+  loaded.
+- The top-right "Log in" / "Enter world" button stays. The narration line and the playback controls stay hidden until
+  the saga starts.
+- On phones the cards stack and the buttons are full width, centred.
+- When the saga starts the page fades out (600 ms) while the camera moves into the scene (see Technique).
+- The landing page waits for the player in every case, with or without reduced motion and whether or not the tiles are
+  loaded. The replay and "Play intro" have no landing page.
+
 ## Story
 
 1. **Skald's fire** (intro): a skald by a hearth begins the saga.
@@ -21,9 +45,9 @@ then hands over to the real map.
 
 ## Timing
 
-- On the landing page the intro plays on its own only on a device that has neither founded a settlement nor stored a
-  login. `#intro`, `#loop` and "Play intro" play it anyway.
-- The intro plays once, then the hold, then the exit.
+- The landing page shows only on a device that has neither founded a settlement nor stored a login. `#intro` shows it
+  anyway; `#loop` loops the saga without it; "Play intro" plays the saga at once.
+- The saga starts on the click on the landing page, then plays once, then the hold, then the exit.
 - Each intro beat lasts as long as its voice clip in the player's language plus 0.8 s; the sending ends with its
   voice, and the ravens take over in a 1.8 s crossfade while its camera turn and ship are still moving. The scenes are timed
   to fit both languages' lengths; motion follows the spoken lines where it can, without slowing into slow motion.
@@ -45,9 +69,9 @@ then hands over to the real map.
 - The clips of the player's language load before the map tiles, in beat order, also while the sound is off.
 - Each clip starts with its beat, also while the sound is off, so turning the sound on joins the clip at the
   point the beat has reached.
-- The speaker at the right end of the timeline turns the sound on and off. Hovering or focusing it opens a volume range above it. On the landing page the intro starts with the sound off
+- The speaker at the right end of the timeline turns the sound on and off. Hovering or focusing it opens a volume range above it. The loop starts with the sound off
   (browsers only allow sound after a click); the button blinks while the sound is off. With reduced motion it
-  shows the off state without blinking.
+  shows the off state without blinking. "Hear the saga" on the landing page starts the saga with the sound on, "or play it muted" with the sound off.
 - The replay starts with the sound on.
 - Pause pauses the clip, skip stops it.
 
@@ -69,9 +93,10 @@ then hands over to the real map.
 
 ## Reduced motion
 
-- With reduced motion on, the intro shows its first frame and a play button. Pressed, it runs exactly as without
-  reduced motion.
-- If the tiles finish loading before play is pressed, the page goes straight to the map.
+- With reduced motion on, the landing page shows exactly as without. Once the saga is started (and in the replay, which
+  shows a play button instead), it runs exactly as without reduced motion.
+- The landing page no longer goes straight to the map when the tiles finish loading before the player has pressed
+  anything: it waits for the player in every case.
 
 ## Replay
 
@@ -90,6 +115,24 @@ On desktop the landing page always shows a "Play intro" button at the bottom rig
 
 ## Technique
 
+- The skald's hall (`beats/HallScene.vue`) is shared by the fire and the prophecy beats and is drawn in layers inside
+  one camera group: far (the hall, wider than the view so a turning camera never shows an edge), the fire's light, the
+  hearth, the staff, the skald (bench, body, arm), the smoke and fire, and near (the listeners' backs). The staff has its
+  own layer, behind the bench.
+- Frame 0 of the fire beat is the lit hall at rest. The transition into the saga runs in absolute times from the beat's
+  start as CSS animations (so the timeline's seeking moves them like all others):
+  - Camera, 0 to 2.6 s, `cubic-bezier(.45, 0, .2, 1)`: from no transform to the end state, held through the rest of
+    the fire beat and as the prophecy beat's static start state. Landscape: camera `translateX(150px) scale(1.26)`,
+    far `translateX(170px)`, near `translateX(-420px) scale(1.14)`, skald `translateX(-200px) scale(1.05)`, staff
+    `translateX(-165px) scale(1.04)`. Portrait (aspect ratio at most 1:1): 70px/1.26, 60px, -150px/1.1, -60px/1.03,
+    -50px/1.02.
+  - Fire (scale from the hearth): 1 to 0.12 by 0.3 s, held to 1.4 s, to 0.6 by 1.7 s, held to 2.4 s, to 1 by 3.4 s,
+    easing out, never above 1.
+  - Fire light (hall glow, floor light, rim lights on the skald and the staff): 1 to 0.18 by 0.3 s, to 0.5 by 0.7 s
+    (held to 1.4 s), to 0.85 by 1.7 s (held to 2.4 s), to 1 by 3.4 s. The rim lights keep a quarter of their strength
+    at the lowest (0.25 + 0.75 of the light).
+  - Darkening (a full-scene dark layer): 0 to 0.45 by 0.3 s, held to 0.7 s, to 0.1 by 1 s, to 0 by 3.4 s.
+  - The prophecy beat's own fire flare, light and arm animations are unchanged; it starts from the end state above.
 - All code, no loaded assets except the voice clips (`src/frontend/src/intro/audio/{en,de}/<n>-<beat>.mp3`):
   scenes are inline SVG in the components, animated with CSS (transform and opacity only, so it stays smooth
   while the map loads).

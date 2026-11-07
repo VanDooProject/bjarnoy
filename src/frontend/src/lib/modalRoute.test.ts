@@ -1,6 +1,6 @@
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { describe, expect, it } from 'vitest';
-import { isModalRouteName, modalLocation, reportsLocation } from './modalRoute';
+import { isModalRouteName, modalLocation, reportsLocation, settingsLocation } from './modalRoute';
 
 function testRouter() {
   return createRouter({
@@ -13,6 +13,7 @@ function testRouter() {
       { path: '/guild', name: 'guild', component: { template: '<div />' } },
       { path: '/reports', name: 'reports', component: { template: '<div />' } },
       { path: '/reports/:reportId', name: 'report-detail', component: { template: '<div />' } },
+      { path: '/settings', name: 'settings', component: { template: '<div />' } },
     ],
   });
 }
@@ -25,6 +26,7 @@ describe('isModalRouteName', () => {
     expect(isModalRouteName('guild')).toBe(true);
     expect(isModalRouteName('reports')).toBe(true);
     expect(isModalRouteName('report-detail')).toBe(true);
+    expect(isModalRouteName('settings')).toBe(true);
   });
 
   it('is false for a non-modal route name, undefined, or null', () => {
@@ -109,5 +111,22 @@ describe('reportsLocation', () => {
     await router.push('/reports/report-1');
 
     expect(reportsLocation(router)).toEqual({ path: '/reports', state: undefined });
+  });
+});
+
+describe('settingsLocation', () => {
+  it("stashes the caller's current path as the background view", async () => {
+    const router = testRouter();
+    await router.push('/settlement');
+
+    expect(settingsLocation(router)).toEqual({ path: '/settings', state: { backgroundView: '/settlement' } });
+  });
+
+  it('reuses the existing backgroundView when opened from another modal', async () => {
+    const router = testRouter();
+    await router.push('/settlement');
+    await router.push({ path: '/profile', state: { backgroundView: '/settlement' } });
+
+    expect(settingsLocation(router)).toEqual({ path: '/settings', state: { backgroundView: '/settlement' } });
   });
 });

@@ -6,10 +6,10 @@ export const meta: BeatMeta = { id: 'fire', role: 'intro', durationMs: 6000 };
 <script setup lang="ts">
 import HallScene from './HallScene.vue';
 
-defineProps<{ paused?: boolean }>();
+defineProps<{ paused?: boolean; held?: boolean }>();
 </script>
 
 <template>
-  <!-- black hall, a spark, the longfire catches and the skald appears in its light -->
-  <HallScene beat="fire" :paused="paused" />
+  <!-- the lit hall (behind the landing page); on play the fire sinks, the camera turns towards it and it relights -->
+  <HallScene beat="fire" :paused="paused" :held="held" />
 </template>

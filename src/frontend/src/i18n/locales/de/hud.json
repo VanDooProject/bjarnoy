@@ -11,6 +11,7 @@
     "createAccountTitle": "{nickname} — Konto erstellen"
   },
   "returningPlayer": {
+    "settings": "Einstellungen",
     "trigger": "Ich habe schon ein Reich",
     "triggerSub": "oder möchte einer anderen Welt beitreten",
     "logIn": "Anmelden",
@@ -19,6 +20,7 @@
   },
   "accountMenu": {
     "profile": "Profil",
+    "settings": "Einstellungen",
     "logout": "Abmelden"
   },
   "resourceBar": {

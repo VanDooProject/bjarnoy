@@ -28,6 +28,29 @@
   "playIntro": "Intro abspielen",
   "backToDocs": "Zurück zur Doku",
   "enterGame": "Zum Spiel",
+  "landing": {
+    "tagline": "Eine Saga aus dem Norden – gemeinsam gespielt.",
+    "features": {
+      "multiplayer": {
+        "title": "Mehrspieler",
+        "text": "Jedes andere Reich auf der Insel gehört einem echten Spieler. Verbünde dich mit ihm oder überfalle ihn."
+      },
+      "noPayToWin": {
+        "title": "Kein Pay-to-Win",
+        "text": "Premium unterstützt das Spiel und bringt nur Komfortfunktionen."
+      },
+      "adFree": {
+        "title": "Werbefrei",
+        "text": "Ein Indie-Spiel, mit Liebe gemacht. Ohne Werbung."
+      }
+    },
+    "hear": "Saga anhören",
+    "muted": "oder ohne Ton abspielen",
+    "map": "Zur Karte",
+    "mapLoading": "Zur Karte · lädt {pct} %",
+    "mapArmed": "Öffnet, sobald geladen · {pct} %",
+    "ready": "bereit"
+  },
   "beats": {
     "fire": "Hör zu! Rück näher ans Feuer und erfahre, wie die Jarle ihre Heimat verloren.",
     "prophecy": "Die Seher sahen es voraus: Ihre Hallen würden brennen, und das Meer würde das Land verschlingen.",

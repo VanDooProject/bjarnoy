@@ -7,10 +7,6 @@
   "reportSent": "Meldung gesendet — vielen Dank.",
   "joined": "Beigetreten",
   "settlements": "Siedlungen",
-  "tabs": {
-    "profile": "Profil",
-    "settings": "Einstellungen"
-  },
   "back": "Zurück",
   "backChevron": "‹",
   "close": "Schließen",
@@ -71,6 +67,10 @@
       "measuring": "Automatisch — Bildrate wird gemessen…",
       "autoOn": "Automatisch — an",
       "autoOffSlow": "Automatisch — aus, Bildrate unter 30 fps gefallen"
+    },
+    "measure": {
+      "fps": "Gemessen: {fps} fps · {good} von {required} s mit mindestens {threshold} fps",
+      "none": "Noch keine Messung. Sie läuft, solange du die Karte siehst."
     }
   },
   "bio": {
