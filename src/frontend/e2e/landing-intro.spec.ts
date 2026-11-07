@@ -13,6 +13,15 @@ const TILES_LOADED = { timeout: 15_000 };
 
 const intro = (page: Page) => page.getByTestId('landing-intro');
 const skip = (page: Page) => page.getByTestId('intro-skip');
+const IDENTITY = /^(none|matrix\(1, 0, 0, 1, 0, 0\))$/;
+const landingPage = (page: Page) => page.getByTestId('landing-page');
+const mapButton = (page: Page) => page.getByTestId('landing-map');
+
+/** The landing page waits for the player: this starts the saga, with sound ("Hear the saga") or without ("or play it muted"). */
+async function startSaga(page: Page, how: 'hear' | 'muted' = 'hear'): Promise<void> {
+  await page.getByTestId(how === 'hear' ? 'landing-hear' : 'landing-muted').click();
+  await expect(intro(page)).toHaveAttribute('data-phase', 'playing');
+}
 
 /** Delays (never aborts: an aborted request is a console error) the tile atlas pages until `release()`. */
 async function holdAtlases(page: Page): Promise<() => void> {
@@ -103,6 +112,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await freezeClock(page);
       const release = await holdAtlases(page);
       await page.goto('/#intro');
+      await startSaga(page);
 
       await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
       await expect(skip(page)).toBeHidden();
@@ -127,6 +137,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await freezeClock(page);
       const release = await holdAtlases(page);
       await page.goto('/#intro');
+      await startSaga(page);
 
       await advanceTo(page, 'hold');
       await runFake(page, 30_000);
@@ -146,6 +157,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await freezeClock(page);
       const log = await recordIntro(page);
       await page.goto('/#intro');
+      await startSaga(page);
       await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
       // Tiles finish while the fire plays; the clock only moves when the test moves it.
       await expect(skip(page)).toBeVisible(TILES_LOADED);
@@ -161,6 +173,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await freezeClock(page);
       const release = await holdAtlases(page);
       await page.goto('/#intro');
+      await startSaga(page);
       await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
 
       const pause = page.getByTestId('intro-pause');
@@ -249,6 +262,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
         await freezeClock(page);
         const release = await holdAtlases(page);
         await page.goto('/#intro');
+        await startSaga(page);
         await expect(sound(page)).toBeVisible();
         const [pause, timeline, snd] = await Promise.all([
           page.getByTestId('intro-pause').boundingBox(),
@@ -270,6 +284,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await freezeClock(page);
       const release = await holdAtlases(page);
       await page.goto('/#intro');
+      await startSaga(page);
       await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
 
       const timeline = page.getByTestId('intro-timeline');
@@ -295,14 +310,38 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await expect(intro(page)).toHaveAttribute('data-beat', 'landfall');
     });
 
-    // Skipped: the new landing page starts unmuted, so this spec is reworked or removed with that change.
-    test.skip('the sound starts off and blinks; clicking it unmutes the running clip, which then pauses with the intro', async ({ page }) => {
+    test('"Hear the saga" plays the clip with sound; the speaker mutes it, and it pauses with the intro', async ({ page }) => {
       test.setTimeout(MAP_SPEC_TIMEOUT_MS);
       await freezeClock(page);
       const clip = await recordAudio(page);
       const release = await holdAtlases(page);
       await page.goto('/#intro');
+      await startSaga(page, 'hear');
       await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
+      await expect(sound(page)).toHaveAttribute('data-sound', 'on');
+      await expect(sound(page)).toHaveAttribute('aria-pressed', 'true');
+      expect(await animationName(page)).toBe('none');
+
+      await expect.poll(() => clip('1-fire').then((c) => c !== null && !c.muted && c.currentTime > 0), { timeout: 15_000 }).toBe(true);
+      await sound(page).click();
+      await expect(sound(page)).toHaveAttribute('data-sound', 'off');
+
+      await page.getByTestId('intro-pause').click();
+      await expect(intro(page)).toHaveAttribute('data-voice-state', 'paused');
+      expect((await clip('1-fire'))!.paused).toBe(true);
+      await page.getByTestId('intro-pause').click();
+      await expect(intro(page)).toHaveAttribute('data-voice-state', 'playing');
+      expect((await clip('1-fire'))!.paused).toBe(false);
+      release();
+    });
+
+    test('"or play it muted" plays the clip muted and blinks the speaker; clicking it unmutes the running clip', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const clip = await recordAudio(page);
+      const release = await holdAtlases(page);
+      await page.goto('/#intro');
+      await startSaga(page, 'muted');
       await expect(sound(page)).toHaveAttribute('data-sound', 'off');
       await expect(sound(page)).toHaveAttribute('aria-pressed', 'false');
       expect(await animationName(page)).not.toBe('none');
@@ -314,14 +353,6 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       expect(await animationName(page)).toBe('none');
       const playing = await clip('1-fire');
       expect(playing).toMatchObject({ muted: false, paused: false });
-      expect(playing!.currentTime).toBeGreaterThan(0);
-
-      await page.getByTestId('intro-pause').click();
-      await expect(intro(page)).toHaveAttribute('data-voice-state', 'paused');
-      expect((await clip('1-fire'))!.paused).toBe(true);
-      await page.getByTestId('intro-pause').click();
-      await expect(intro(page)).toHaveAttribute('data-voice-state', 'playing');
-      expect((await clip('1-fire'))!.paused).toBe(false);
       release();
     });
 
@@ -330,6 +361,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await freezeClock(page);
       const release = await holdAtlases(page);
       await page.goto('/#intro');
+      await startSaga(page);
       await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
       // the English fire clip is 6113 ms long: 6913 ms with the tail
       await page.clock.runFor(6900);
@@ -345,6 +377,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await freezeClock(page);
       const clip = await recordAudio(page);
       await page.goto('/#intro');
+      await startSaga(page);
       await expect(skip(page)).toBeVisible(TILES_LOADED);
       await expect.poll(() => clip('1-fire').then((c) => c !== null)).toBe(true);
       await skip(page).click();
@@ -373,7 +406,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
   });
 
   test.describe('with reduced motion', () => {
-    test('shows the first frame and a play button; pressing play runs the sequence', async ({ page }) => {
+    test('shows the first frame under the landing page; pressing "Hear the saga" runs the sequence', async ({ page }) => {
       test.setTimeout(MAP_SPEC_TIMEOUT_MS);
       await freezeClock(page);
       const release = await holdAtlases(page);
@@ -381,14 +414,13 @@ test.describe('landing intro', { tag: '@g3' }, () => {
 
       await expect(intro(page)).toHaveAttribute('data-phase', 'waitingForPlay');
       await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
-      await expect(page.getByTestId('intro-play')).toBeVisible();
+      await expect(landingPage(page)).toBeVisible();
       await runFake(page, 20_000);
       await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
 
-      await page.getByTestId('intro-play').click();
-      await expect(intro(page)).toHaveAttribute('data-phase', 'playing');
-      await page.clock.runFor(700); // lets the play button's leave transition finish
-      await expect(page.getByTestId('intro-play')).toHaveCount(0);
+      await startSaga(page);
+      await page.clock.runFor(700); // lets the landing page's leave transition finish
+      await expect(landingPage(page)).toHaveCount(0);
       await advanceTo(page, 'prophecy');
       release();
     });
@@ -398,7 +430,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await freezeClock(page);
       const release = await holdAtlases(page);
       await page.goto('/#intro');
-      await page.getByTestId('intro-play').click();
+      await startSaga(page, 'muted');
       await expect(sound(page)).toBeVisible();
       await expect(sound(page)).toHaveAttribute('data-sound', 'off');
       expect(await animationName(page)).toBe('none');
@@ -415,17 +447,116 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
     });
 
-    test('goes straight to the map when the tiles load before play is pressed', async ({ page }) => {
+    test('keeps waiting on the landing page when the tiles load before play is pressed', async ({ page }) => {
       test.setTimeout(MAP_SPEC_TIMEOUT_MS);
       const release = await holdAtlases(page);
       const log = await recordIntro(page);
       await page.goto('/#intro');
-      await expect(page.getByTestId('intro-play')).toBeVisible();
+      await expect(mapButton(page)).toHaveAttribute('data-load-state', 'loading');
+
+      release();
+      await expect(mapButton(page)).toHaveAttribute('data-load-state', 'ready', TILES_LOADED);
+      await expect(intro(page)).toHaveAttribute('data-phase', 'waitingForPlay');
+      expect((await log()).phases).toEqual(['waitingForPlay']);
+    });
+  });
+
+  test.describe('landing page', () => {
+    test.use({ mapMotion: { hud: 'on' } });
+
+    test('shows on a first visit over the hall: no narration or controls, Log in stays, nothing plays by itself', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const release = await holdAtlases(page);
+      await page.goto('/');
+
+      await expect(landingPage(page)).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'BJARNØY' })).toBeVisible();
+      await expect(page.getByText('A saga of the north, played together.')).toBeVisible();
+      await expect(page.getByTestId('landing-hear')).toBeVisible();
+      await expect(page.getByTestId('landing-muted')).toBeVisible();
+      await expect(page.getByTestId('intro-login')).toBeVisible();
+      await expect(page.getByTestId('intro-narration')).toHaveCount(0);
+      await expect(page.getByTestId('intro-controls')).toHaveCount(0);
+      await expect(intro(page)).toHaveAttribute('data-phase', 'waitingForPlay');
+      await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
+      await runFake(page, 20_000);
+      await expect(intro(page)).toHaveAttribute('data-phase', 'waitingForPlay');
+      release();
+    });
+
+    test('"Hear the saga" starts the saga and the landing page fades out', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const release = await holdAtlases(page);
+      await page.goto('/');
+      await startSaga(page, 'hear');
+      await expect(page.getByTestId('intro-narration')).toBeVisible();
+      await page.clock.runFor(700); // the fade out (600 ms) runs on the frozen clock
+      await expect(landingPage(page)).toHaveCount(0);
+      release();
+    });
+
+    test('the camera turns into the hall after the click: the scene is at its identity before and turned after', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const release = await holdAtlases(page);
+      await page.goto('/');
+      const cam = () => page.locator('.beat-layer .cam').first().evaluate((el) => getComputedStyle(el).transform);
+      expect(await cam()).toMatch(IDENTITY);
+      await startSaga(page, 'hear');
+      // seeking puts the CSS animations at a time: pause, then jump 5 s in (past the 2.6 s turn) and back to the start
+      await page.getByTestId('intro-pause').click();
+      await page.getByTestId('intro-timeline').focus();
+      await page.keyboard.press('ArrowRight');
+      await expect.poll(cam).toMatch(/^matrix\(1\.26,/);
+      await page.keyboard.press('Home');
+      await expect.poll(cam).toMatch(IDENTITY);
+      release();
+    });
+
+    test('the map button shows the load, arms when pressed while loading, opens the map as soon as it is loaded, and disarms on a second press', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const release = await holdAtlases(page);
+      await page.goto('/');
+
+      await expect(mapButton(page)).toHaveAttribute('data-load-state', 'loading');
+      await expect(mapButton(page)).toContainText(/Go to the map · loading \d+ %/);
+      await mapButton(page).click();
+      await expect(mapButton(page)).toHaveAttribute('data-load-state', 'armed');
+      await expect(mapButton(page)).toContainText(/Opens when loaded · \d+ %/);
+      await mapButton(page).click();
+      await expect(mapButton(page)).toHaveAttribute('data-load-state', 'loading');
+      await mapButton(page).click();
+      await expect(mapButton(page)).toHaveAttribute('data-load-state', 'armed');
 
       release();
       await expect(intro(page)).toHaveCount(0, TILES_LOADED);
       await expect(page.locator('canvas')).toBeVisible();
+    });
+
+    test('the map button closes the intro at once when the map is loaded', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      const log = await recordIntro(page);
+      await page.goto('/');
+      await expect(mapButton(page)).toHaveAttribute('data-load-state', 'ready', TILES_LOADED);
+      await expect(mapButton(page)).toContainText('Go to the map');
+      await expect(mapButton(page)).toContainText('ready');
+      await mapButton(page).click();
+      await expect(intro(page)).toHaveCount(0);
+      await expect(page.locator('canvas')).toBeVisible();
       expect((await log()).phases).toEqual(['waitingForPlay']);
+    });
+
+    test('shows the German text', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      const release = await holdAtlases(page);
+      await page.goto('/?lang=de#intro');
+      await expect(page.getByTestId('landing-hear')).toHaveText('Saga anhören');
+      await expect(page.getByTestId('landing-muted')).toHaveText('oder ohne Ton abspielen');
+      await expect(mapButton(page)).toContainText(/Zur Karte · lädt \d+ %/);
+      release();
     });
   });
 

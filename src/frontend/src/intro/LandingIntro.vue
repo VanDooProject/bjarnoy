@@ -235,8 +235,10 @@ const showLanding = computed(() => props.mode === 'landing' && state.value.phase
 const mapFraction = computed(() => mapLoadFraction(introLoad, props.loaded));
 // a click is a user gesture, which is when the browser allows sound
 function startSaga(withSound: boolean): void {
-  sound.value = withSound;
-  applyVoiceLevel();
+  if (sound.value !== withSound) {
+    sound.value = withSound;
+    applyVoiceLevel();
+  }
   sequencer.play();
 }
 
