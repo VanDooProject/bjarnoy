@@ -1,3 +1,27 @@
+<script lang="ts">
+// The ship's run (sd-ship-depart, on --ship-ms) is a straight line from 80 % to its end, and the camera
+// (sd-cam-mid) holds still at its end frame from 100 % of the beat. So where the ship is when the beat ends follows
+// from the beat's length; the ravens scene starts its ship there, so the cut has one ship (both values are checked
+// against the keyframes in SendingScene.test.ts).
+export const SHIP_MS = 14000;
+export const SHIP_TRACK = { from: 0.8, at80: [90, -6], at100: [249.6, -16.64] } as const;
+export const SHIP_PLACE = { x: 772, y: 499, scale: 0.36 } as const;
+export const CAM_MID_END = { x: -32, y: -36, scale: 1.04 } as const;
+
+/** The ship's transform in viewBox units (translate x, y and scale of its local drawing) when the sending ends. */
+export function sendingShipAtEnd(beatMs: number): { x: number; y: number; scale: number } {
+  const t = Math.min(1, Math.max(SHIP_TRACK.from, beatMs / SHIP_MS));
+  const f = (t - SHIP_TRACK.from) / (1 - SHIP_TRACK.from);
+  const dx = SHIP_TRACK.at80[0] + (SHIP_TRACK.at100[0] - SHIP_TRACK.at80[0]) * f;
+  const dy = SHIP_TRACK.at80[1] + (SHIP_TRACK.at100[1] - SHIP_TRACK.at80[1]) * f;
+  return {
+    x: CAM_MID_END.x + CAM_MID_END.scale * (SHIP_PLACE.x + dx),
+    y: CAM_MID_END.y + CAM_MID_END.scale * (SHIP_PLACE.y + dy),
+    scale: CAM_MID_END.scale * SHIP_PLACE.scale,
+  };
+}
+</script>
+
 <script setup lang="ts">
 import { useId } from 'vue';
 import IntroLongship from './IntroLongship.vue';
@@ -156,7 +180,7 @@ const SIDES = [
       <g>
         <rect v-for="([x, y, w, h, o], i) in GLINTS" :key="i" class="sd-glint" :style="sineLoop(0.4, i * 1.3)" :x="x" :y="y" :width="w" :height="h" fill="#8c6a5c" :opacity="o"/>
       </g>
-      <g :mask="url('hz')" opacity=".42"><g class="sd-fog sd-fog-hz"><rect x="-40" y="640" width="2700" height="300" fill="#808891" :mask="url('hzTex')"/></g></g>
+      <g class="sd-hz-out" :mask="url('hz')" opacity=".42"><g class="sd-fog sd-fog-hz"><rect x="-40" y="640" width="2700" height="300" fill="#808891" :mask="url('hzTex')"/></g></g>
     </g>
 
     <g class="sd-a sd-cam-mid">
@@ -277,16 +301,19 @@ const SIDES = [
 .b3 .sd-dark { animation-name: sd-dark; }
 /* the end: the camera turns with the ship, out to sea. The shore and the jarl slide away to the bottom left, the
    burning homeland to the left (nearer layers faster); the ship and the sea keep their place. The pan is still
-   moving when the beat ends, and the ravens scene goes on with it. */
+   moving when the beat ends (the homeland at about 100 units/s), and the ravens scene goes on with it at that speed.
+   The horizon fog thins away during the turn; the ravens scene's own fog comes up slowly. */
+.b3 .sd-hz-out { animation: sd-hz-out var(--beat-duration) linear both; }
+@keyframes sd-hz-out { 0%, 76% { opacity: .42; } 100% { opacity: 0; } }
 .b3 .sd-pan-far, .b3 .sd-pan-shore, .b3 .sd-pan-fig, .b3 .sd-pan-near { animation-duration: var(--beat-duration); }
 .b3 .sd-pan-far { animation-name: sd-pan-far; }
 .b3 .sd-pan-shore { animation-name: sd-pan-shore; }
 .b3 .sd-pan-fig { animation-name: sd-pan-fig; }
 .b3 .sd-pan-near { animation-name: sd-pan-near; }
-@keyframes sd-pan-far { 0%, 84% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.5, 0, .9, .6); } 100% { transform: translate(-480px, 0); } }
-@keyframes sd-pan-shore { 0%, 84% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.5, 0, .9, .6); } 100% { transform: translate(-520px, 240px); } }
-@keyframes sd-pan-fig { 0%, 84% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.5, 0, .9, .6); } 100% { transform: translate(-720px, 360px); } }
-@keyframes sd-pan-near { 0%, 84% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.5, 0, .9, .6); } 100% { transform: translate(-950px, 480px); } }
+@keyframes sd-pan-far { 0%, 76% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.4, 0, .8, .8); } 100% { transform: translate(-300px, 0); } }
+@keyframes sd-pan-shore { 0%, 76% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.4, 0, .8, .8); } 100% { transform: translate(-520px, 240px); } }
+@keyframes sd-pan-fig { 0%, 76% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.4, 0, .8, .8); } 100% { transform: translate(-720px, 360px); } }
+@keyframes sd-pan-near { 0%, 76% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.4, 0, .8, .8); } 100% { transform: translate(-950px, 480px); } }
 /* the figures and the ship run on fixed times (see the keyframes below); the ship's run outlasts any beat */
 .b3 { --story-ms: 11200ms; --ship-ms: 14000ms; }
 .b3 .sd-j-thigh, .b3 .sd-j-shin, .b3 .sd-j-bthigh, .b3 .sd-j-bshin, .b3 .sd-j-cloak, .b3 .sd-j-torso, .b3 .sd-j-head, .b3 .sd-j-arm, .b3 .sd-j-fore, .b3 .sd-j-farm, .b3 .sd-j-ffore, .b3 .sd-boy-bob, .b3 .sd-boy-l, .b3 .sd-boy-r, .b3 .sd-legf, .b3 .sd-legb, .b3 .sd-boy-arm, .b3 .sd-look { animation-duration: var(--story-ms); }

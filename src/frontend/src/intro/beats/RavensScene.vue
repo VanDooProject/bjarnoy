@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { useId } from 'vue';
+import { inject, useId } from 'vue';
 import IntroLongship from './IntroLongship.vue';
+import { sendingShipAtEnd } from './SendingScene.vue';
+import { meta as sendingMeta } from './SendingBeat.vue';
+import { INTRO_BEAT_MS } from './types';
 
 /**
  * Beat 4, the ravens: the camera goes on turning with the longship, out to sea, from where the sending left
- * it (same horizon at y 785, the ship at the same place and size). Bjarnøy comes in from the right with two
+ * it (same horizon at y 785, the ship at the same place, size and speed). Bjarnøy comes in from the right with two
  * ravens rising off it, the moon comes in from the right, rising and growing, and the seabed comes up from
  * below: a sleeping giant. A closed eye glows, runes light up on the brow, and its breath rises as bubbles that
  * break the surface. Night lifts toward dawn over the beat. Then the scene pushes into the moon, now behind the
@@ -16,6 +19,11 @@ import IntroLongship from './IntroLongship.vue';
  * first raven's flight run on fixed times, so a longer beat does not slow them down.
  */
 defineProps<{ paused?: boolean }>();
+
+// the ship starts exactly where the sending leaves it, which depends on how long the sending ran (its voice clip)
+const beatMs = inject(INTRO_BEAT_MS, () => sendingMeta.durationMs);
+const shipStart = sendingShipAtEnd(beatMs('sending'));
+const rootStyle = { '--ship-x0': `${shipStart.x}px`, '--ship-y0': `${shipStart.y}px` };
 
 const uid = useId().replace(/[^a-zA-Z0-9]/g, '-');
 const id = (name: string) => `${uid}-${name}`;
@@ -40,7 +48,7 @@ const C = {
 </script>
 
 <template>
-  <div class="ravens">
+  <div class="ravens" :style="rootStyle">
   <svg class="intro-beat b4" :class="{ 'is-paused': paused }" viewBox="0 0 1600 1600" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
     <defs>
       <radialGradient :id="id('eyeGlow')" cx="0.5" cy="0.5" r="0.5">
@@ -89,8 +97,8 @@ const C = {
 
       <!-- L2 far: Bjarnøy and a farther skerry on the horizon, the sea out to it, fog band; it comes in from the right -->
       <g class="b4-l-far b4-a">
-        <path class="b4-dawn b4-a" :style="C.skerry" transform="translate(-190 43)" d="M1080,742 C1130,722 1180,716 1230,726 C1260,712 1300,714 1330,730 L1360,742 Z"/>
-        <g class="b4-dawn b4-a" :style="C.isle" transform="translate(0 41)">
+        <path class="b4-dawn b4-a" :style="C.skerry" transform="translate(-640 43)" d="M1080,742 C1130,722 1180,716 1230,726 C1260,712 1300,714 1330,730 L1360,742 Z"/>
+        <g class="b4-dawn b4-a" :style="C.isle" transform="translate(350 41)">
           <path d="M330,744 L380,720 L410,722 L440,700 L470,702 L500,672 L530,668 L556,640 L574,642 L600,620 L620,626 L640,600 L660,606 L690,640 L716,646 L742,676 L770,690 L800,712 L840,728 L880,744 Z"/>
           <!-- pine teeth along the ridge -->
           <path d="M452,704 l8,-26 l8,26 Z M486,676 l7,-24 l7,24 Z M520,672 l9,-30 l9,30 Z M562,644 l7,-26 l7,26 Z M610,626 l8,-28 l8,28 Z M664,610 l7,-22 l7,22 Z M700,644 l8,-26 l8,26 Z M734,674 l7,-22 l7,22 Z"/>
@@ -206,28 +214,30 @@ const C = {
 .b4 .b4-dawn-line { animation-name: b4-dawn-line; }
 @keyframes b4-dawn-line { 0%, 15% { stroke: var(--c0); animation-timing-function: ease-in-out } 95%, 100% { stroke: var(--c1) } }
 
-/* camera: goes on turning right with the ship from the sending's pan (the far layer comes in from the right and
-   keeps moving faster than the ship drifts), tilts down toward the water, and the seabed comes up from below */
-.b4 .b4-l-sky, .b4 .b4-l-far, .b4 .b4-l-surf, .b4 .b4-l-deep, .b4 .b4-l-front { animation-timing-function: cubic-bezier(.4, 0, .6, 1); }
+/* camera: goes on turning right with the ship from the sending's pan, at the speed that pan ends with (the far
+   layer moves 950 units over the beat, about 100 units/s, and Bjarnøy comes in from the right edge; it stays faster
+   than the ship drifts), tilts down toward the water, and the seabed comes up from below */
+.b4 .b4-l-sky, .b4 .b4-l-surf, .b4 .b4-l-deep, .b4 .b4-l-front { animation-timing-function: cubic-bezier(.4, 0, .6, 1); }
 .b4 .b4-l-sky { animation-name: b4-cam-sky; }
 .b4 .b4-l-far { animation-name: b4-cam-far; }
 .b4 .b4-l-surf { animation-name: b4-cam-surf; }
 .b4 .b4-l-deep { animation-name: b4-cam-deep; }
 .b4 .b4-l-front { animation-name: b4-cam-front; }
 @keyframes b4-cam-sky { to { transform: translate(-14px, 22px) } }
-@keyframes b4-cam-far { 0% { transform: translate(620px, 0); animation-timing-function: cubic-bezier(.3, .5, .6, 1) } 100% { transform: translate(-330px, 8px) } }
+@keyframes b4-cam-far { 0% { transform: translate(700px, 0) } 100% { transform: translate(-250px, 8px) } }
 @keyframes b4-cam-surf { to { transform: translate(-44px, -12px) } }
 @keyframes b4-cam-deep { 0% { transform: translate(0, 520px); animation-timing-function: cubic-bezier(.25, .6, .4, 1) } 32% { transform: translate(-20px, -10px) } 100% { transform: translate(-64px, -42px) } }
 @keyframes b4-cam-front { 0% { transform: translate(0, 640px); animation-timing-function: cubic-bezier(.25, .6, .4, 1) } 32% { transform: translate(-30px, -20px) } 100% { transform: translate(-100px, -70px) } }
 
-/* the longship: it starts where the sending leaves it (scale .374; the sending ends at different points of the
-   ship's run in English and German, this is between the two) and keeps that size, drifting to the middle as the
-   camera overtakes it, so the push (.68 / .374) lands it on the hold's ship. Its colours go from the sending's
-   dusk silhouette to the hold's. */
+/* the longship: it starts where and as fast as the sending leaves it (--ship-x0/--ship-y0 from sendingShipAtEnd,
+   scale .3744, about 57 units/s to the right), slows, and drifts to the middle as the camera overtakes it, keeping
+   its size, so the push (.68 / .3744) lands it on the hold's ship. Its colours go from the sending's dusk silhouette
+   to the hold's. */
 .b4 .b4-ship { animation-name: b4-ship; transform-box: view-box; transform-origin: 0 0; }
 @keyframes b4-ship {
-  0% { transform: translate(945px, 471px) scale(.374); animation-timing-function: cubic-bezier(.3, .2, .5, 1) }
-  88%, 100% { transform: translate(692.198px, 458.992px) scale(.374) }
+  0% { transform: translate(var(--ship-x0, 945px), var(--ship-y0, 471px)) scale(.3744); animation-timing-function: cubic-bezier(.33, .66, .66, 1) }
+  12% { transform: translate(calc(var(--ship-x0, 945px) + 30px), calc(var(--ship-y0, 471px) - 2px)) scale(.3744); animation-timing-function: ease-in-out }
+  88%, 100% { transform: translate(691.87px, 458.6px) scale(.3744) }
 }
 .b4 .b4-ship :deep(.s-steer), .b4 .b4-ship :deep(.s-rig), .b4 .b4-ship :deep(.s-strake) { animation: b4-ship-stroke var(--beat-duration) linear both; }
 .b4 .b4-ship :deep([class^='s-']:not(.s-steer):not(.s-rig):not(.s-strake)) { animation: b4-ship-fill var(--beat-duration) linear both; }
@@ -249,13 +259,13 @@ const C = {
 .b4 .b4-ship :deep(.s-boss) { --c0: #0e1318; --c1: #1c262d; }
 .b4 .b4-ship :deep(.s-oar) { --c0: #0e1318; --c1: #182229; }
 
-/* exit: the scene (not the ravens) pushes into the moon around the ship's waterline (1000, 780.632), and lands
+/* exit: the scene (not the ravens) pushes into the moon around the ship's waterline (1000, 780.58), and lands
    the ship on the fog hold's: its point (823, 860) goes to where the hold draws it at the hold's first frame
    (705.64, 894.08, after the hold's -110 offset, .68 scale about 800/975, and its heave). */
-.b4 .b4-zoom { animation-name: b4-zoom; transform-origin: 1000px 780.632px; }
+.b4 .b4-zoom { animation-name: b4-zoom; transform-origin: 1000px 780.58px; }
 @keyframes b4-zoom {
   0%, 88% { transform: translate(0, 0) scale(1); animation-timing-function: cubic-bezier(.5, 0, .8, .5) }
-  99%, 100% { transform: translate(-294.36px, 113.448px) scale(1.818182) }
+  99%, 100% { transform: translate(-294.36px, 113.5px) scale(1.816239) }
 }
 /* the moon comes in from the right, low, rises out of the sea and grows until it fills the sky behind the ship
    (with the sky's drift its centre ends at the ship's waterline point, 1000/780) */
@@ -270,9 +280,10 @@ const C = {
 .b4 .b4-craterout { animation-name: b4-crater-out; }
 @keyframes b4-crater-out { 0%, 95% { opacity: 1 } 99%, 100% { opacity: 0 } }
 
-/* fog along the horizon: drifts one 512-unit tile, fades out before the zoom would blow it up */
+/* fog along the horizon: comes up slowly after the sending's has thinned, drifts one 512-unit tile, fades out
+   before the zoom would blow it up */
 .b4 .b4-fog { animation-name: b4-fog; }
-@keyframes b4-fog { 0% { transform: translateX(0); opacity: .3 } 50% { opacity: .4 } 100% { transform: translateX(-512px); opacity: .28 } }
+@keyframes b4-fog { 0% { transform: translateX(0); opacity: 0 } 30% { opacity: .3 } 50% { opacity: .4 } 100% { transform: translateX(-512px); opacity: .28 } }
 .b4 .b4-fogout { animation-name: b4-fog-out; }
 @keyframes b4-fog-out { 0%, 87% { opacity: 1 } 93%, 100% { opacity: 0 } }
 
@@ -280,7 +291,7 @@ const C = {
 /* ravens: they rise off the island and grow as they fly toward the camera (scale = distance) */
 .b4 .b4-r1 { animation-name: b4-raven1; animation-duration: 6000ms; animation-timing-function: cubic-bezier(.35, .05, .6, 1); }
 @keyframes b4-raven1 {
-  0%   { transform: translate(1180px, 731px) scale(.10) rotate(-6deg); opacity: 0 }
+  0%   { transform: translate(1500px, 731px) scale(.10) rotate(-6deg); opacity: 0 }
   6%   { opacity: 1 }
   40%  { transform: translate(1080px, 540px) scale(.42) rotate(-8deg) }
   66%  { transform: translate(1120px, 400px) scale(.85) rotate(-14deg) }
@@ -290,7 +301,7 @@ const C = {
 /* raven 2 skims the water past the rings, keeps flying, crosses the moon behind the ship and leaves the frame on the right */
 .b4 .b4-r2 { animation-name: b4-raven2; --flaps: 16; --flap-off: -150ms; }
 @keyframes b4-raven2 {
-  0%, 9% { transform: translate(1080px, 741px) scale(.10) rotate(-2deg); opacity: 0 }
+  0%, 9% { transform: translate(1420px, 741px) scale(.10) rotate(-2deg); opacity: 0 }
   15%  { opacity: 1 }
   44%  { transform: translate(840px, 730px) scale(.34) rotate(6deg) }
   64%  { transform: translate(860px, 790px) scale(.6) rotate(2deg) }

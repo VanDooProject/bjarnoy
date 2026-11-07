@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { defineComponent, h } from 'vue';
-import SendingScene from './SendingScene.vue';
+import SendingScene, { CAM_MID_END, SHIP_MS, SHIP_PLACE, SHIP_TRACK, sendingShipAtEnd } from './SendingScene.vue';
+import source from './SendingScene.vue?raw';
 
 describe('SendingScene', () => {
   // The host crossfades beats, so the scene can be in the page twice; shared ids would make one copy's
@@ -45,5 +46,36 @@ describe('SendingScene', () => {
   it('pauses with the host', () => {
     expect(mount(SendingScene, { props: { paused: true } }).find('svg').classes()).toContain('is-paused');
     expect(mount(SendingScene).find('svg').classes()).not.toContain('is-paused');
+  });
+});
+
+// The ravens scene starts its ship where the sending leaves it (one ship across the cut, no double image), using
+// sendingShipAtEnd. That only holds while its constants match the sending's own keyframes and template.
+describe('sendingShipAtEnd', () => {
+  const pair = (s: string) => s.split(/[\s,]+/).filter(Boolean).map((v) => Number(v.replace('px', '')));
+  const depart = source.slice(source.indexOf('@keyframes sd-ship-depart'));
+  const key = (pct: string) => pair(depart.match(new RegExp(`\\n\\s*${pct}% \\{ transform: translate\\(([^)]+)\\)`))![1]);
+  const camMid = source.slice(source.indexOf('@keyframes sd-cam-mid'));
+  const camEnd = camMid.match(/100% \{ transform: translate\(([^)]+)\) scale\(([\d.]+)\); \}/)!;
+
+  it('uses the keyframes, ship time, placement and end camera the sending draws with', () => {
+    expect(key('80')).toEqual([...SHIP_TRACK.at80]);
+    expect(key('100')).toEqual([...SHIP_TRACK.at100]);
+    // straight from 80 % on: no keyframe between 80 % and 100 %
+    expect(depart.slice(0, depart.indexOf('\n}')).match(/\n\s*(8[1-9]|9\d)(\.\d+)?% /)).toBeNull();
+    expect(source).toMatch(new RegExp(`--ship-ms: ${SHIP_MS}ms`));
+    expect(source).toContain(`translate(${SHIP_PLACE.x},${SHIP_PLACE.y}) scale(${SHIP_PLACE.scale})`);
+    expect(pair(camEnd[1])).toEqual([CAM_MID_END.x, CAM_MID_END.y]);
+    expect(Number(camEnd[2])).toBe(CAM_MID_END.scale);
+  });
+
+  it('places the ship along its straight run by the length of the beat', () => {
+    const at = (ms: number) => sendingShipAtEnd(ms);
+    // 11.2 s is 80 % of the run, 14 s its end
+    expect(at(11200).x).toBeCloseTo(-32 + 1.04 * (772 + 90), 6);
+    expect(at(14000).x).toBeCloseTo(-32 + 1.04 * (772 + 249.6), 6);
+    expect(at(12600).x).toBeCloseTo((at(11200).x + at(14000).x) / 2, 6);
+    expect(at(20000)).toEqual(at(14000));
+    expect(at(11800).scale).toBeCloseTo(0.3744, 6);
   });
 });
