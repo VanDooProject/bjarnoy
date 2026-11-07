@@ -12,8 +12,9 @@ import { buildTimeline, fmtTime, selectBeats } from './timeline';
 // jsdom has no canvas 2D context; the texture is irrelevant to the host's behaviour.
 vi.mock('./fogTexture', () => ({ introFogUrl: () => 'data:image/png;base64,' }));
 
-type Props = { mode: 'landing' | 'replay' | 'loop'; loopBeats?: BeatId[]; locale: 'en' | 'de'; reducedMotion: boolean; loaded: boolean; loggedIn?: boolean; soundOn: boolean };
-const base: Props = { mode: 'landing', locale: 'en', reducedMotion: false, loaded: false, soundOn: false };
+type Props = { mode: 'landing' | 'replay' | 'loop'; loopBeats?: BeatId[]; locale: 'en' | 'de'; reducedMotion: boolean; loaded: boolean; loggedIn?: boolean; playNow?: boolean; soundOn: boolean };
+// The landing page waits for the player; these tests are about the run, so they start it at once (the landing page tests pass `playNow: false`).
+const base: Props = { mode: 'landing', locale: 'en', reducedMotion: false, loaded: false, playNow: true, soundOn: false };
 
 // jsdom plays no media: record what the voice does with its clips.
 const plays: { src: string; muted: boolean }[] = [];
