@@ -268,6 +268,18 @@ describe('ring layout on a phone', () => {
     expect(ringRoomFor(230, 360, () => area, SHAPES)).toEqual({ x: 230, y: 360, scale: 1 });
   });
 
+  it('draws the ring at maxScale when it fits there, and shrinks below it only where it has to', () => {
+    const roomy = { left: 0, top: 0, right: 1600, bottom: 900 };
+    expect(ringRoomFor(800, 450, () => roomy, SHAPES, 12, 1.4)).toEqual({ x: 800, y: 450, scale: 1.4 });
+    // No spot of a screen this small has room for the ring at 1.4: it shrinks instead of changing shape.
+    const tiny = { left: 0, top: 0, right: 300, bottom: 420 };
+    const tight = ringRoomFor(150, 210, () => tiny, SHAPES, 12, 1.4);
+    expect(tight.scale).toBeLessThan(1.4);
+    expect(tight.scale).toBeGreaterThanOrEqual(RING_MIN_SCALE);
+    // A smaller maxScale than the default is honoured too.
+    expect(ringRoomFor(800, 450, () => roomy, SHAPES, 12, 0.8).scale).toBe(0.8);
+  });
+
   it('moves the reported tile (low on the screen, above the dock) up to where its ring fits', () => {
     const { area } = PHONES[2];
     expect(layoutRing({ x: 206, y: 640, area, cardArea: area, lane1Count: 7, lane2Count: 0, parentIndex: -1, cardAnchor: null }).fits).toBe(false);

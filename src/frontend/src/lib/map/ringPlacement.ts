@@ -31,15 +31,16 @@ export interface RingPanTarget {
  * ends up and the ring's size. `boundsAt(x)` is the ring's area with the tile at screen x (a
  * landscape phone docks the card on the side away from the tile); `shapes` are the states the
  * ring can take (`ringShapes`). A map that cannot move (no renderer yet, a locked camera) leaves
- * the tile where it is.
+ * the tile where it is. `maxScale` is the ring's size when it fits (`useRingMaxScale`).
  */
 export function placeRing(
   renderer: RingPanTarget | null | undefined,
   screen: { x: number; y: number },
   boundsAt: (x: number) => Rect,
   shapes: RingShape[],
+  maxScale = 1,
 ): RingPlacement {
-  const room = ringRoomFor(screen.x, screen.y, (x) => boundsAt(x), shapes);
+  const room = ringRoomFor(screen.x, screen.y, (x) => boundsAt(x), shapes, undefined, maxScale);
   if (room.x === screen.x && room.y === screen.y) return room;
   const moved = renderer?.panScreenBy(room.x - screen.x, room.y - screen.y, motionEnabled() ? RING_ROOM_PAN_MS : 0);
   return moved ? room : { x: screen.x, y: screen.y, scale: room.scale };

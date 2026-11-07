@@ -21,6 +21,15 @@
     "top": "Top",
     "bottom": "Bottom"
   },
+  "ringMenu": {
+    "title": "Radial menu",
+    "hint": "Applies on this device only. The menu still shrinks where the screen has no room for it.",
+    "size": "Menu size",
+    "small": "Small",
+    "normal": "Default",
+    "large": "Large",
+    "xlarge": "Extra large"
+  },
   "graphics": {
     "title": "Graphics",
     "hint": "Applies on this device only.",

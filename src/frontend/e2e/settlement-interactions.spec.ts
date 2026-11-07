@@ -107,7 +107,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // `.child` is the outer lane, `.back` the reserved back slot, and what is
     // left is the categories.
     await expect(settlement.ring.categoryBubbles.first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Send army here', exact: true })).toHaveCount(0);
     await settlement.ring.openFirstCategory();
 
     const buildingBubble = settlement.ring.child('Reindeer Herder').first();
