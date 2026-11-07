@@ -1514,7 +1514,10 @@ let animLoading: Promise<TileTextures> | null = null;
  * `buildings-anim`'s own pages (`buildings-level1` likewise, via
  * `loadLevel1Atlases`'s own cache).
  */
-export function loadAnimAtlases(onPartial?: (textures: TileTextures) => void): Promise<TileTextures> {
+export function loadAnimAtlases(
+  onPartial?: (textures: TileTextures) => void,
+  onPage?: AtlasPageProgress,
+): Promise<TileTextures> {
   if (!animLoading) {
     // A clip whose frames aren't all on the pages loaded so far is dropped by
     // the classifiers, so a partial only ever carries complete clips.
@@ -1546,7 +1549,7 @@ export function loadAnimAtlases(onPartial?: (textures: TileTextures) => void): P
           .then((pools) => onPartial(buildAnimTextures(pools, partial)))
           .catch(() => {}); // The full load's own rejection is what callers handle.
       });
-    const promise = Promise.all([statics(), loadAtlasCategory('buildings-anim', undefined, onAnimPartial)]).then(
+    const promise = Promise.all([statics(), loadAtlasCategory('buildings-anim', onPage, onAnimPartial)]).then(
       async ([pools, animAtlas]) => {
         await chain;
         return buildAnimTextures(pools, animAtlas);

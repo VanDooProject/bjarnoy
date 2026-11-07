@@ -761,7 +761,11 @@ describe('startTextureLoad', () => {
     const { terrainReady, done } = startTextureLoad(deps);
     // Terrain's own load hasn't resolved yet — 'buildings' must not appear
     // before it does.
-    expect(states).toEqual([{ phase: 'terrain' }, { phase: 'terrain', progress: 0.5 }, { phase: 'terrain', progress: 1 }]);
+    expect(states).toEqual([
+      { phase: 'terrain' },
+      { phase: 'terrain', progress: 0.5, pages: { loaded: 1, total: 2 } },
+      { phase: 'terrain', progress: 1, pages: { loaded: 2, total: 2 } },
+    ]);
 
     terrainGate.resolve(FAKE_TEXTURES);
     await terrainReady;
@@ -770,10 +774,10 @@ describe('startTextureLoad', () => {
     await done;
     expect(states).toEqual([
       { phase: 'terrain' },
-      { phase: 'terrain', progress: 0.5 },
-      { phase: 'terrain', progress: 1 },
+      { phase: 'terrain', progress: 0.5, pages: { loaded: 1, total: 2 } },
+      { phase: 'terrain', progress: 1, pages: { loaded: 2, total: 2 } },
       { phase: 'buildings' },
-      { phase: 'buildings', progress: 1 / 3 },
+      { phase: 'buildings', progress: 1 / 3, pages: { loaded: 1, total: 3 } },
       READY_LOAD_STATE,
     ]);
   });

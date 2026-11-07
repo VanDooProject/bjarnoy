@@ -75,7 +75,7 @@ const emit = defineEmits<{
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-const { renderer, loadState, mountError, retry: retryMount } = useHexMapRenderer(canvas, container, {
+const { renderer, loadState, animLoad, mountError, retry: retryMount } = useHexMapRenderer(canvas, container, {
   mode: props.mode ?? 'settlement',
   worldModel: props.worldModel,
   playerId: props.playerId,
@@ -103,7 +103,7 @@ const { renderer, loadState, mountError, retry: retryMount } = useHexMapRenderer
 // change visible until the next real camera pan/zoom.
 // `mountError`/`retryMount` let a parent view see (and re-trigger) a failed
 // renderer mount, e.g. to gate its own e2e-visible ready state.
-defineExpose({ renderer, loadState, mountError, retryMount });
+defineExpose({ renderer, loadState, animLoad, mountError, retryMount });
 </script>
 
 <template>

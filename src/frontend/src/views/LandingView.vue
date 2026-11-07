@@ -295,6 +295,7 @@ useIntroTilesSignal({
   error: overlayError,
   canvasShown: landingCanvasShown,
   loadState: computed(() => canvasRef.value?.loadState),
+  animLoad: computed(() => canvasRef.value?.animLoad),
 });
 function retryLoad() {
   if (loadError.value) void loadLanding();

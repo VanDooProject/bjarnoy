@@ -562,6 +562,12 @@ export interface HexMapRendererOptions {
    * state, never a stale `undefined`).
    */
   onLoadState?: (state: MapLoadState) => void;
+  /**
+   * Fired after every page of the core building-animation atlas (`buildings-anim`) loads, with the running
+   * loaded/total page count — the landing intro's timeline reads it. Only fires while building animations are on
+   * (they load lazily then); the wasted pack's animation atlas is not counted.
+   */
+  onAnimationLoad?: (pages: { loaded: number; total: number }) => void;
 }
 
 /**
@@ -1703,6 +1709,8 @@ export interface MapLoadState {
    * animation rather than a stalled/empty bar.
    */
   progress?: number;
+  /** The same page counts `progress` is derived from (loaded/total atlas pages of the current phase), when known — the landing intro's timeline shows them as counts. */
+  pages?: { loaded: number; total: number };
 }
 
 /** `MapLoadState` for a mode that never shows a loading indicator (`'ready'`, no `progress`) — shared so every place that needs it (settlement mode's terminal state, world mode's only state, the composable's own initial ref) uses the exact same object shape. */
@@ -1789,7 +1797,7 @@ export function startTextureLoad(deps: TextureLoadDeps): TextureLoadHandles {
   const terrainReady = (async () => {
     const [textures, icons] = await Promise.all([
       deps.loadTerrain((loaded, total) => {
-        if (settlement) deps.emit({ phase: 'terrain', progress: loadProgressFraction(loaded, total) });
+        if (settlement) deps.emit({ phase: 'terrain', progress: loadProgressFraction(loaded, total), pages: { loaded, total } });
       }),
       deps.loadIcons(),
     ]);
@@ -1819,7 +1827,7 @@ export function startTextureLoad(deps: TextureLoadDeps): TextureLoadHandles {
     try {
       const buildings = await deps.loadBuildings(
         (loaded, total) => {
-          if (settlement) deps.emit({ phase: 'buildings', progress: loadProgressFraction(loaded, total) });
+          if (settlement) deps.emit({ phase: 'buildings', progress: loadProgressFraction(loaded, total), pages: { loaded, total } });
         },
         (partial) => {
           const base = deps.getTextures();
@@ -3857,13 +3865,16 @@ export class HexMapRenderer {
       const generation = this.animGeneration;
       if (!this.animCoreReady) {
         this.animCoreReady = true;
-        loadAnimAtlases((partial) => {
-          // Clips arrive page by page; merge each batch as it lands (same
-          // guards as the final result below).
-          if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
-          this.textures = mergeTileTextures(this.textures, partial);
-          this.rebuildAll();
-        })
+        loadAnimAtlases(
+          (partial) => {
+            // Clips arrive page by page; merge each batch as it lands (same
+            // guards as the final result below).
+            if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
+            this.textures = mergeTileTextures(this.textures, partial);
+            this.rebuildAll();
+          },
+          (loaded, total) => this.options.onAnimationLoad?.({ loaded, total }),
+        )
           .then((anim) => {
             if (this.destroyed || !this.textures || !this.animationsEnabled || generation !== this.animGeneration) return;
             this.textures = mergeTileTextures(this.textures, anim);

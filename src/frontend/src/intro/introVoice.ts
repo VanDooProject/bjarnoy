@@ -39,6 +39,20 @@ export type VoiceAudio = Pick<
 
 export type VoiceState = 'playing' | 'paused' | 'stopped';
 
+/** The part of the Web Audio API the volume uses (so tests can inject a fake). */
+export interface VoiceGain {
+  gain: { value: number };
+  connect: (destination: unknown) => unknown;
+}
+export interface VoiceAudioContext {
+  destination: unknown;
+  state?: string;
+  resume?: () => Promise<void>;
+  close?: () => Promise<void>;
+  createGain: () => VoiceGain;
+  createMediaElementSource: (audio: never) => { connect: (node: unknown) => unknown };
+}
+
 export interface IntroVoiceOptions {
   locale: IntroLocale;
   /** initial sound state; off still plays the clips, muted */
@@ -48,6 +62,9 @@ export interface IntroVoiceOptions {
   onSoundBlocked?: () => void;
   /** current clip / state changed (for the host's data attributes) */
   onStateChange?: (beat: BeatId | null, state: VoiceState) => void;
+  /** a clip finished loading (or failed to); called once at the start with 0 loaded */
+  onLoadProgress?: (loaded: number, total: number) => void;
+  createAudioContext?: () => VoiceAudioContext;
 }
 
 interface Clip {
@@ -71,6 +88,10 @@ export class IntroVoice {
   private cancelWait: (() => void) | null = null;
   private loadQueue: BeatId[] = [];
   private disposed = false;
+  private volume = 1;
+  private audioContext: VoiceAudioContext | null = null;
+  private gain: VoiceGain | null = null;
+  private readonly settled = new Set<BeatId>();
   private readonly opts: IntroVoiceOptions;
   private readonly create: (url: string) => VoiceAudio;
 
@@ -90,6 +111,7 @@ export class IntroVoice {
       this.clips.set(beat, { audio, loadStarted: false });
       this.loadQueue.push(beat);
     }
+    opts.onLoadProgress?.(0, this.clips.size);
     this.loadNext();
   }
 
@@ -113,6 +135,10 @@ export class IntroVoice {
     const done = () => {
       audio.removeEventListener('canplaythrough', done);
       audio.removeEventListener('error', done);
+      if (!this.settled.has(beat)) {
+        this.settled.add(beat);
+        this.opts.onLoadProgress?.(this.settled.size, this.clips.size);
+      }
       onDone?.();
     };
     audio.addEventListener('canplaythrough', done);
@@ -126,9 +152,9 @@ export class IntroVoice {
     this.opts.onStateChange?.(this.current, this.state);
   }
 
-  private rewind(audio: VoiceAudio): void {
+  private seekTo(audio: VoiceAudio, ms: number): void {
     try {
-      audio.currentTime = 0;
+      audio.currentTime = ms / 1000;
     } catch {
       // not seekable before its metadata is there; it starts at 0 anyway
     }
@@ -141,25 +167,26 @@ export class IntroVoice {
     const clip = this.clips.get(this.current);
     if (clip) {
       clip.audio.pause();
-      this.rewind(clip.audio);
+      this.seekTo(clip.audio, 0);
     }
   }
 
-  /** The beat started: its clip plays from the start (muted while the sound is off). */
-  enterBeat(beat: BeatId): void {
+  /** The beat started `offsetMs` ago (after a seek): its clip plays from there, muted while the sound is off. */
+  enterBeat(beat: BeatId, offsetMs = 0): void {
     if (this.disposed) return;
     this.halt();
     this.current = beat;
-    this.beatStartedAt = Date.now();
+    this.beatStartedAt = Date.now() - offsetMs;
     this.state = 'playing';
     this.emitState();
     const clip = this.clips.get(beat);
     if (!clip) return;
     const { audio } = clip;
-    audio.muted = !this.sound;
+    if (!this.gain) audio.muted = !this.sound;
     this.startLoad(beat);
+    if (offsetMs >= CLIP_MS[this.opts.locale][beat]) return; // the clip is over by then
     if (audio.readyState >= HAVE_FUTURE_DATA) {
-      this.rewind(audio);
+      this.seekTo(audio, offsetMs);
       this.play(audio);
       return;
     }
@@ -190,7 +217,7 @@ export class IntroVoice {
       if (!this.sound) return;
       // sound before any click: carry on muted
       this.sound = false;
-      for (const c of this.clips.values()) c.audio.muted = true;
+      this.applyLevel();
       this.opts.onSoundBlocked?.();
       if (this.current !== null && this.clips.get(this.current)?.audio === audio && this.state === 'playing') {
         audio.play()?.catch(() => undefined);
@@ -201,7 +228,45 @@ export class IntroVoice {
   /** Sound on/off: the clip is already running in sync, so this only (un)mutes it. */
   setSound(on: boolean): void {
     this.sound = on;
-    for (const c of this.clips.values()) c.audio.muted = !on;
+    if (on) this.ensureGain();
+    this.applyLevel();
+  }
+
+  /** Volume 0..1. Goes through Web Audio, since iOS Safari keeps `audio.volume` read-only. */
+  setVolume(volume: number): void {
+    this.volume = Math.max(0, Math.min(1, volume));
+    this.ensureGain();
+    this.applyLevel();
+  }
+
+  private applyLevel(): void {
+    if (this.gain) this.gain.gain.value = this.sound ? this.volume : 0;
+    else for (const c of this.clips.values()) c.audio.muted = !this.sound;
+  }
+
+  /**
+   * The first call happens in a user gesture, which is when an AudioContext may start: every clip is routed through
+   * one gain node from then on (their own `muted` stays off, since a muted element feeds the context silence).
+   */
+  private ensureGain(): void {
+    if (this.disposed) return;
+    if (!this.gain) {
+      try {
+        const create = this.opts.createAudioContext ?? defaultAudioContext;
+        const ctx = create();
+        const gain = ctx.createGain();
+        gain.connect(ctx.destination);
+        for (const c of this.clips.values()) {
+          ctx.createMediaElementSource(c.audio as never).connect(gain);
+          c.audio.muted = false;
+        }
+        this.audioContext = ctx;
+        this.gain = gain;
+      } catch {
+        return; // no Web Audio: the clips keep the muted switch and the volume has no effect
+      }
+    }
+    if (this.audioContext?.state === 'suspended') this.audioContext.resume?.()?.catch(() => undefined);
   }
 
   pause(): void {
@@ -243,5 +308,14 @@ export class IntroVoice {
       c.audio.src = '';
     }
     this.clips.clear();
+    this.audioContext?.close?.()?.catch(() => undefined);
+    this.audioContext = null;
+    this.gain = null;
   }
+}
+
+function defaultAudioContext(): VoiceAudioContext {
+  const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctor) throw new Error('no Web Audio');
+  return new Ctor() as unknown as VoiceAudioContext;
 }

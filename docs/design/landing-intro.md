@@ -27,8 +27,7 @@ then hands over to the real map.
 - Landfall lasts 3.8 s; the lookout's call plays as it starts.
 - Once the tiles are loaded and the sequence is still playing, a skip button shows. Pressing it starts the exit
   (fog lifts) right away.
-- A pause button shows while the intro plays. Paused, the scene and its timing stop; tiles that finish loading wait for play to continue.
-- Between skip and pause, a restart button (⟲) starts the intro again at its first beat. Clicking the scene pauses or resumes it, like the pause button.
+- A play/pause button sits at the left end of the timeline. Paused, the scene and its timing stop; tiles that finish loading wait for play to continue. Clicking the scene pauses or resumes it, like the pause button.
 - Without mouse movement, a tap or a key press for 2.5 s, the buttons fade to 35 % and come back with the next input.
   While paused they stay at full strength.
 - The skip button shows at full strength for 3 s when it appears, then fades like the others.
@@ -41,7 +40,7 @@ then hands over to the real map.
 - The clips of the player's language load before the map tiles, in beat order, also while the sound is off.
 - Each clip starts with its beat, also while the sound is off, so turning the sound on joins the clip at the
   point the beat has reached.
-- A sound button sits right of the pause button. On the landing page the intro starts with the sound off
+- The speaker at the right end of the timeline turns the sound on and off. Hovering or focusing it opens a volume range above it. On the landing page the intro starts with the sound off
   (browsers only allow sound after a click); the button blinks while the sound is off. With reduced motion it
   shows the off state without blinking.
 - The replay starts with the sound on.
@@ -52,6 +51,16 @@ then hands over to the real map.
 - On the landing page (and its loop) a button sits at the top right. Without a login it reads "Log in": it closes
   the intro and opens the login page. With a stored login it reads "Enter world": it closes the intro at once, like
   Esc. It fades like the other buttons.
+
+## Timeline
+
+- While the intro plays, a timeline runs along the bottom, with play/pause at its left and the time and the speaker at its right. Each beat is a chapter. The chapter lengths follow the voice clips in the player's language, and the hold counts with its shortest length.
+- Clicking or dragging on the timeline jumps to that point. The scene, the narration and the voice clip follow. The arrow keys jump 5 s, Page Up/Down jump to the previous or next chapter, and Home/End jump to the start or end.
+- Hovering, focusing, dragging or pausing makes the timeline thicker and names the chapters. On a timeline narrower than 360 px, only the current chapter is named.
+- While paused, a play symbol shows in the centre of the screen. It grows on hover.
+- On the landing page, landfall is locked until the map tiles are loaded. It shows a moving hatch and fills as voices, terrain and buildings load. Until then you can't seek past the end of the hold. If the playhead gets there first, it waits with a spinner while the hold keeps playing. Once the tiles are loaded, jumping into landfall works like skip. Once landfall runs, the timeline is locked.
+- While the timeline is expanded and assets are still loading, four lines above landfall show the pages loaded for voices, terrain, buildings and building animations. Animations don't hold back landfall; they keep loading in the map.
+- In the replay and the loop the whole timeline is open, with no load display.
 
 ## Reduced motion
 
