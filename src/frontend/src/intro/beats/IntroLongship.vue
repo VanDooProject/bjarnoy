@@ -9,6 +9,7 @@ import { useId } from 'vue';
  *   .ship-oar    each oar, pivoting at its thole (x, 910)
  *   .ship-rower  each rower (body and head)
  *   .ship-cloak  the boy's cloak, pivoting at his shoulder (1124, 842)
+ *   .ship-boy    the boy at the prow (with `boy`)
  * Colours come from custom properties (defaults: the fog hold's); a scene can also animate `fill`/`stroke`
  * on the colour classes (.s-hull, .s-sail, ...) directly.
  * `underway` rows (5 strokes per `--ship-loop`, default 12 s), billows the sail and blows the boy's cloak.
@@ -43,12 +44,12 @@ const OARS = [584, 680, 776, 872, 968, 1064].map((x) => ({
     <path class="s-crew" d="M452 882 L456 814 C460 805 482 805 488 814 L492 882Z"/>
     <circle class="s-crew" cx="471" cy="794" r="13"/>
     <!-- the boy at the prow -->
-    <template v-if="boy">
+    <g v-if="boy" class="ship-boy">
       <g transform="translate(1124 842)"><g class="ship-cloak"><path class="s-cloak" d="M0 0 C-10 4 -20 12 -28 22 L-15 20 L-20 30 L-3 22Z"/></g></g>
       <path class="s-crew" d="M1119 876 L1121 844 C1123 838 1135 838 1137 844 L1140 876Z"/>
       <circle class="s-crew" cx="1130" cy="830" r="8.5"/>
       <path class="s-crew" d="M1122 826 C1124 818 1135 817 1139 825 L1135 823 L1132 827 L1128 822Z"/>
-    </template>
+    </g>
     <!-- rowers (behind the shields) -->
     <g v-for="o in OARS" :key="o.x" class="ship-rower">
       <path class="s-rower" :d="o.body"/>

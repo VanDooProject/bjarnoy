@@ -8,10 +8,10 @@ import { INTRO_BEAT_MS } from './types';
 /**
  * Beat 4, the ravens: the camera goes on turning with the longship, out to sea, from where the sending left
  * it (same horizon at y 785, the ship at the same place, size and speed). Bjarnøy comes in from the right with two
- * ravens rising off it, the moon comes in from the right, rising and growing, and the seabed comes up from
+ * ravens rising off it, the moon comes in from the right and grows there, and the seabed comes up from
  * below: a sleeping giant. A closed eye glows, runes light up on the brow, and its breath rises as bubbles that
- * break the surface. Night lifts toward dawn over the beat. Then the scene pushes into the moon, now behind the
- * ship, while the second raven crosses it: the push ends with the ship exactly where the fog hold draws it,
+ * break the surface. Night lifts toward dawn over the beat. Then the scene pushes in on the ship, the moon filling
+ * the sky behind it, while the second raven crosses it: the push ends with the ship exactly where the fog hold draws it,
  * on moonlight that has turned the colour of the fog.
  * The story is timed on `--beat-duration` (set by the host from the voice clip: 8.8 s in English, 9.5 s in
  * German); the eye flickers once on "not empty", the giant wakes on "under the sea" at about 60 %, and
@@ -215,8 +215,8 @@ const C = {
 @keyframes b4-dawn-line { 0%, 15% { stroke: var(--c0); animation-timing-function: ease-in-out } 95%, 100% { stroke: var(--c1) } }
 
 /* camera: goes on turning right with the ship from the sending's pan, at the speed that pan ends with (the far
-   layer moves 950 units over the beat, about 100 units/s, and Bjarnøy comes in from the right edge; it stays faster
-   than the ship drifts), tilts down toward the water, and the seabed comes up from below */
+   layer starts at about 280 units/s and slows; Bjarnøy comes in from the right edge; it stays faster than the ship
+   drifts), tilts down toward the water, and the seabed comes up from below */
 .b4 .b4-l-sky, .b4 .b4-l-surf, .b4 .b4-l-deep, .b4 .b4-l-front { animation-timing-function: cubic-bezier(.4, 0, .6, 1); }
 .b4 .b4-l-sky { animation-name: b4-cam-sky; }
 .b4 .b4-l-far { animation-name: b4-cam-far; }
@@ -224,7 +224,7 @@ const C = {
 .b4 .b4-l-deep { animation-name: b4-cam-deep; }
 .b4 .b4-l-front { animation-name: b4-cam-front; }
 @keyframes b4-cam-sky { to { transform: translate(-14px, 22px) } }
-@keyframes b4-cam-far { 0% { transform: translate(700px, 0) } 100% { transform: translate(-250px, 8px) } }
+@keyframes b4-cam-far { 0% { transform: translate(700px, 0); animation-timing-function: cubic-bezier(.25, .65, .7, .9) } 100% { transform: translate(-250px, 8px) } }
 @keyframes b4-cam-surf { to { transform: translate(-44px, -12px) } }
 @keyframes b4-cam-deep { 0% { transform: translate(0, 520px); animation-timing-function: cubic-bezier(.25, .6, .4, 1) } 32% { transform: translate(-20px, -10px) } 100% { transform: translate(-64px, -42px) } }
 @keyframes b4-cam-front { 0% { transform: translate(0, 640px); animation-timing-function: cubic-bezier(.25, .6, .4, 1) } 32% { transform: translate(-30px, -20px) } 100% { transform: translate(-100px, -70px) } }
@@ -267,14 +267,15 @@ const C = {
   0%, 88% { transform: translate(0, 0) scale(1); animation-timing-function: cubic-bezier(.5, 0, .8, .5) }
   99%, 100% { transform: translate(-294.36px, 113.5px) scale(1.816239) }
 }
-/* the moon comes in from the right, low, rises out of the sea and grows until it fills the sky behind the ship
-   (with the sky's drift its centre ends at the ship's waterline point, 1000/780) */
+/* the moon comes in from the right, low, rises out of the sea and stays on the right, growing until it fills the
+   sky behind the ship and, through the push, the whole sky (its centre ends at 1300/787 with the sky's drift; at
+   scale 6.5 and the push's 1.82 it covers every corner above the horizon in 16:9 and 9:16) */
 .b4 .b4-moon { animation-name: b4-moon; transform-box: view-box; transform-origin: 0 0; }
 @keyframes b4-moon {
   0% { transform: translate(1760px, 860px) scale(.9); animation-timing-function: cubic-bezier(.3, .5, .5, 1) }
-  40% { transform: translate(1014px, 800px) scale(1.8) }
-  88% { transform: translate(1014px, 762px) scale(3.6) }
-  99%, 100% { transform: translate(1014px, 758px) scale(5) }
+  30% { transform: translate(1314px, 800px) scale(1.5); animation-timing-function: cubic-bezier(.4, 0, .7, 1) }
+  88% { transform: translate(1314px, 770px) scale(4) }
+  99%, 100% { transform: translate(1314px, 765px) scale(6.5) }
 }
 /* the craters fade while the moon fills the frame, so the beat ends on even, fog-pale moonlight */
 .b4 .b4-craterout { animation-name: b4-crater-out; }

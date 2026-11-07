@@ -30,11 +30,10 @@ import { sineLoop } from './sineLoop';
 
 /**
  * Beat 3, the sending: dusk on the burning shore. The jarl, spear planted, goes down on one knee to his
- * son, takes him by the shoulder and pats it, then lets go. The boy turns and walks down to the water
- * and is lost in the shore mist; the jarl raises his arm and waves while the longship drops its sail and
- * pulls out toward the light. At the end the camera turns with the ship, out to sea, and the ravens scene goes on
- * with that pan. The beat starts from the dark of
- * the prophecy's last frame.
+ * son, takes him by the shoulder and pats it, then lets go. The boy turns and walks down to the water and is
+ * lost in the shore mist, and a moment later stands at the ship's prow; the jarl raises his arm and waves while
+ * the longship drops its sail and pulls out toward the light. At the end the camera turns with the ship, out to
+ * sea, and the ravens scene goes on with that pan. The beat starts from the dark of the prophecy's last frame.
  * The story (figures, camera push, sail, oars, ship's departure) is baked from the design's
  * pose function into the keyframes at the bottom: figures and ship on fixed times, camera and fog on
  * `--beat-duration` (see there). Smoke, fire, fog, glints, ash and the ship's swell loop on their own periods.
@@ -185,7 +184,7 @@ const SIDES = [
 
     <g class="sd-a sd-cam-mid">
       <g class="sd-a sd-ship-depart"><g class="sd-heave"><g class="sd-pitch">
-        <g class="sd-longship" transform="translate(772,499) scale(0.36)"><IntroLongship bold /></g>
+        <g class="sd-longship" transform="translate(772,499) scale(0.36)"><IntroLongship bold boy /></g>
       </g></g></g>
       <rect x="0" y="851" width="1600" height="40" fill="#1d252e"/>
       <rect x="860" y="852" width="520" height="2" fill="#8c6a5c" opacity=".4"/>
@@ -300,20 +299,21 @@ const SIDES = [
 .b3 :deep(.ship-oar) { animation: sd-oar var(--ship-ms) linear both; }
 .b3 .sd-dark { animation-name: sd-dark; }
 /* the end: the camera turns with the ship, out to sea. The shore and the jarl slide away to the bottom left, the
-   burning homeland to the left (nearer layers faster); the ship and the sea keep their place. The pan is still
-   moving when the beat ends (the homeland at about 100 units/s), and the ravens scene goes on with it at that speed.
+   burning homeland out to the left (nearer layers faster); the ship and the sea keep their place. The pan is still
+   moving when the beat ends (the homeland, out of the frame by then, at about 280 units/s in English), and the
+   ravens scene goes on with it at that speed. It starts as the ship pulls out (70 %).
    The horizon fog thins away during the turn; the ravens scene's own fog comes up slowly. */
 .b3 .sd-hz-out { animation: sd-hz-out var(--beat-duration) linear both; }
-@keyframes sd-hz-out { 0%, 76% { opacity: .42; } 100% { opacity: 0; } }
+@keyframes sd-hz-out { 0%, 70% { opacity: .42; } 100% { opacity: 0; } }
 .b3 .sd-pan-far, .b3 .sd-pan-shore, .b3 .sd-pan-fig, .b3 .sd-pan-near { animation-duration: var(--beat-duration); }
 .b3 .sd-pan-far { animation-name: sd-pan-far; }
 .b3 .sd-pan-shore { animation-name: sd-pan-shore; }
 .b3 .sd-pan-fig { animation-name: sd-pan-fig; }
 .b3 .sd-pan-near { animation-name: sd-pan-near; }
-@keyframes sd-pan-far { 0%, 76% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.4, 0, .8, .8); } 100% { transform: translate(-300px, 0); } }
-@keyframes sd-pan-shore { 0%, 76% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.4, 0, .8, .8); } 100% { transform: translate(-520px, 240px); } }
-@keyframes sd-pan-fig { 0%, 76% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.4, 0, .8, .8); } 100% { transform: translate(-720px, 360px); } }
-@keyframes sd-pan-near { 0%, 76% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.4, 0, .8, .8); } 100% { transform: translate(-950px, 480px); } }
+@keyframes sd-pan-far { 0%, 70% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.45, 0, .7, .7); } 100% { transform: translate(-1000px, 0); } }
+@keyframes sd-pan-shore { 0%, 70% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.45, 0, .7, .7); } 100% { transform: translate(-1300px, 400px); } }
+@keyframes sd-pan-fig { 0%, 70% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.45, 0, .7, .7); } 100% { transform: translate(-1500px, 520px); } }
+@keyframes sd-pan-near { 0%, 70% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.45, 0, .7, .7); } 100% { transform: translate(-1800px, 620px); } }
 /* the figures and the ship run on fixed times (see the keyframes below); the ship's run outlasts any beat */
 .b3 { --story-ms: 11200ms; --ship-ms: 14000ms; }
 .b3 .sd-j-thigh, .b3 .sd-j-shin, .b3 .sd-j-bthigh, .b3 .sd-j-bshin, .b3 .sd-j-cloak, .b3 .sd-j-torso, .b3 .sd-j-head, .b3 .sd-j-arm, .b3 .sd-j-fore, .b3 .sd-j-farm, .b3 .sd-j-ffore, .b3 .sd-boy-bob, .b3 .sd-boy-l, .b3 .sd-boy-r, .b3 .sd-legf, .b3 .sd-legb, .b3 .sd-boy-arm, .b3 .sd-look { animation-duration: var(--story-ms); }
@@ -329,7 +329,12 @@ const SIDES = [
 .b3 .sd-longship {
   --ship-steer: #0e1318; --ship-rig: #0e1318; --ship-mast: #0e1318; --ship-hull: #0e1318; --ship-boss: #0e1318; --ship-oar: #0e1318;
   --ship-sail: #6b4a41; --ship-stripe: #4a3530; --ship-crew: #0b1015; --ship-rower: #0b1015; --ship-shield-a: #27313b; --ship-shield-b: #1e262e;
+  --ship-cloak: #0b1015;
 }
+/* the boy boards: as he fades into the shore mist (sd-boy-fade, 74-79 % of the story) he fades in at the prow, a
+   moment later */
+.b3 :deep(.ship-boy) { animation: sd-boy-board var(--story-ms) linear both; }
+@keyframes sd-boy-board { 0%, 76% { opacity: 0; } 82%, 100% { opacity: 1; } }
 /* the ship's swell: heave and a slow pitch around the stern */
 .b3 .sd-heave { animation: sd-heave 1963ms cubic-bezier(0.37, 0, 0.63, 1) -982ms infinite alternate; }
 @keyframes sd-heave { from { transform: translateY(-2.2px); } to { transform: translateY(2.2px); } }
