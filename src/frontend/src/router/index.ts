@@ -18,6 +18,7 @@ import ProfileView from '../views/ProfileView.vue';
 import LeaderboardView from '../views/LeaderboardView.vue';
 import GuildView from '../views/GuildView.vue';
 import ReportsView from '../views/ReportsView.vue';
+import DeviceSettings from '../components/settings/DeviceSettings.vue';
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -70,6 +71,12 @@ export const router = createRouter({
       path: '/profile/:userName',
       name: 'profile',
       component: ProfileView,
+    },
+    {
+      // Per-device settings (HUD, ring size, graphics) — no account needed.
+      path: '/settings',
+      name: 'settings',
+      component: DeviceSettings,
     },
     {
       path: '/leaderboards',

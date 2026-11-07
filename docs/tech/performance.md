@@ -68,8 +68,8 @@ Showcase renders are docs art and never load in the game.
 
 The setting is **per device** (localStorage `bjarnoy.animations`), not per
 account: the same player may want animations on a desktop and not on a
-phone. It is in the Settings dialog on the player's own profile (Graphics →
-Building animations), next to a line saying what it currently resolves to and
+phone. It is in the Settings dialog (Graphics →
+Building animations), open to anonymous players too, next to a line saying what it currently resolves to and
 why. Water motion, fog drift and menu animations sit beside it (localStorage
 `bjarnoy.motion.water|fog|hud`): each is Auto/On/Off, where Auto follows the
 device's own "reduce motion" setting (shown at the top of the section) and Off
@@ -77,7 +77,7 @@ freezes water/fog in place rather than hiding them.
 
 | Setting | Result |
 | --- | --- |
-| **Auto** (default) | Off at first. Enabled only once the map has run at ≥ 55 fps for 30 s *without* animations. Turned off again if it then drops below 30 fps for 5 s, and stays off for the rest of the page session. Off outright under reduced motion or data saver. |
+| **Auto** (default) | Off at first. Enabled only once the map has run at ≥ 30 fps for 10 s *without* animations. Turned off again if it then drops below 30 fps for 5 s, and stays off for the rest of the page session. Off outright under reduced motion or data saver. |
 | **On** | Always on, on this device, even with reduced motion or data saver: the player chose it explicitly. |
 | **Off** | Always off. |
 
@@ -85,11 +85,17 @@ Why these rules:
 
 - **Measure without animations first.** The question auto answers is "can
   this device afford 304 MiB more and the per-frame clip updates?". A device
-  that barely holds 55 fps on the static map can't, so it never starts
+  that barely holds 30 fps on the static map can't, so it never starts
   loading them.
-- **30 s sustained, averaged over 1 s buckets.** One long frame (a GC, a
+- **10 s sustained, averaged over 1 s buckets.** One long frame (a GC, a
   rebuild after a pan) is not the device being slow, so single hitches don't
-  restart the window; a second that averages under 55 fps does.
+  restart the window; a second that averages under 30 fps does. The bar is
+  the same 30 fps that turns animations off again, and the window is short,
+  so a normal desktop gets there instead of losing the streak to an
+  occasional slow second (55 fps for 30 s rarely finished on real hardware).
+- **Shown live.** Under "Building animations" the Graphics settings show the
+  last second's fps and how many of the 10 s are collected
+  (`animationPreference.progress`).
 - **Latch off.** Animations themselves cost frames. Without the latch, a
   device on the edge would load them, drop below 30, unload, recover, load
   again, and pay the download and decode each time.
@@ -100,7 +106,7 @@ Why these rules:
   the measurement already under way.
 - **Reduced motion and data saver** (`prefers-reduced-motion: reduce`,
   `navigator.connection.saveData`) mean no animations and no anim download
-  in auto. The Settings tab of the player's own profile shows which one is
+  in auto. The Settings dialog shows which one is
   why.
 
 Turning animations off (by setting, or auto dropping them) releases the
@@ -109,8 +115,8 @@ really comes back rather than just stopping playback. The code is in
 `src/frontend/src/lib/perf/animationPreference.ts` (setting, governor,
 resolution), `HexMapRenderer.setAnimationsEnabled`/`syncAnimationAtlases`
 (load and unload) and `components/settings/AnimationPreferences.vue` (shown
-on the Settings tab of the player's own profile, in
-`components/profile/ProfileModal.vue` → `views/ProfileView.vue`).
+in the Settings dialog, `components/settings/SettingsModal.vue` →
+`components/settings/DeviceSettings.vue`).
 
 Docs pages (the tile docs, the wasted lands page) play their own clips with
 `useAnimationClock`: frozen under Off, and under reduced motion unless the

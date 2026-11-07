@@ -34,6 +34,7 @@ function testRouter(initialPath = '/settlement', { lazySettlement = false } = {}
       { path: '/guild', name: 'guild', component: WorldStub },
       { path: '/reports', name: 'reports', component: WorldStub },
       { path: '/reports/:reportId', name: 'report-detail', component: WorldStub },
+      { path: '/settings', name: 'settings', component: WorldStub },
     ],
   });
   router.push(initialPath);
@@ -52,6 +53,7 @@ function mountApp(router: ReturnType<typeof testRouter>) {
         LeaderboardModal: true,
         GuildModal: true,
         ReportsModal: true,
+        SettingsModal: true,
       },
     },
   });
@@ -189,6 +191,19 @@ describe('App background-route pattern', () => {
     await wrapper.vm.$nextTick();
 
     expect(wrapper.findComponent({ name: 'ReportsModal' }).exists()).toBe(false);
+    expect(settlementMounted).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the settings as a modal over the background view', async () => {
+    const router = testRouter('/settlement');
+    await router.isReady();
+    const wrapper = mountApp(router);
+
+    await router.push({ path: '/settings', state: { backgroundView: '/settlement' } });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.settlement-stub').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'SettingsModal' }).exists()).toBe(true);
     expect(settlementMounted).toHaveBeenCalledTimes(1);
   });
 

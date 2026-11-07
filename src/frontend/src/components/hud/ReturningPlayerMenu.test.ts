@@ -35,6 +35,7 @@ function testRouter() {
       { path: '/', name: 'landing', component: { template: '<div />' } },
       { path: '/login', name: 'login', component: { template: '<div />' } },
       { path: '/register', name: 'register', component: { template: '<div />' } },
+      { path: '/settings', name: 'settings', component: { template: '<div />' } },
     ],
   });
 }
@@ -140,5 +141,35 @@ describe('ReturningPlayerMenu unclaimed realm', () => {
     const { wrapper } = await mountMenu();
     await wrapper.find('[data-testid="returning-player-trigger"]').trigger('click');
     expect(wrapper.find('[data-testid="returning-player-name-jarl"]').exists()).toBe(false);
+  });
+});
+
+describe('ReturningPlayerMenu settings row', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    listJoinableWorlds.mockReset().mockResolvedValue([]);
+    getWorldMembership.mockReset();
+  });
+
+  it('offers the device settings to an anonymous player, opening /settings as a modal', async () => {
+    const world = useWorldStore();
+    world.worldId = null;
+    world.worldName = null;
+
+    const { wrapper, router } = await mountMenu();
+    await wrapper.find('[data-testid="returning-player-trigger"]').trigger('click');
+    await flushPromises();
+
+    const row = wrapper.find('[data-testid="returning-player-settings"]');
+    expect(row.exists()).toBe(true);
+    expect(row.text()).toBe('Settings');
+    expect(row.attributes('href')).toBe('/settings');
+
+    await row.trigger('click');
+    await flushPromises();
+
+    expect(router.currentRoute.value.path).toBe('/settings');
+    expect((router.options.history.state as { backgroundView?: unknown }).backgroundView).toBe('/');
+    expect(wrapper.find('[data-testid="returning-player-menu"]').exists()).toBe(false);
   });
 });

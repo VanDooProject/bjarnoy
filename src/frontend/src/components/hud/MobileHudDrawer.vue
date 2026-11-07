@@ -30,6 +30,7 @@ import { useLogout } from '../../composables/useLogout';
 import { useHudNavEntries, type HudNavEntry } from '../../composables/useHudNavEntries';
 import { isHudDrawerPending } from '../../composables/hudDrawerPendingState';
 import { profileLocation } from '../../lib/profileRoute';
+import { settingsLocation } from '../../lib/modalRoute';
 import type { MessageSchema } from '../../i18n/schema';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
@@ -53,6 +54,11 @@ function onEntryClick(entry: HudNavEntry) {
 const profileHref = computed(() => router.resolve('/profile').href);
 function goToProfile() {
   router.push(profileLocation(router));
+  emit('close');
+}
+const settingsHref = computed(() => router.resolve('/settings').href);
+function goToSettings() {
+  router.push(settingsLocation(router));
   emit('close');
 }
 async function onLogoutClick() {
@@ -107,6 +113,9 @@ onBeforeUnmount(() => { isHudDrawerPending.value = false; });
       <template v-if="auth.isAuthenticated">
         <HudNavLink :href="profileHref" class="link" data-testid="drawer-account-profile" @navigate="goToProfile">
           {{ t('hud.accountMenu.profile') }}
+        </HudNavLink>
+        <HudNavLink :href="settingsHref" class="link" data-testid="drawer-account-settings" @navigate="goToSettings">
+          {{ t('hud.accountMenu.settings') }}
         </HudNavLink>
         <button type="button" class="link" data-testid="drawer-account-logout" @click="onLogoutClick">
           {{ t('hud.accountMenu.logout') }}

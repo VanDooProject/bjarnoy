@@ -7,9 +7,6 @@ import type { ProfileResponse } from '../api/types';
 import type { MessageSchema } from '../i18n/schema';
 import { useAuthStore } from '../stores/auth';
 import { useUnsavedInput } from '../composables/useUnsavedInput';
-import HudPreferences from '../components/settings/HudPreferences.vue';
-import AnimationPreferences from '../components/settings/AnimationPreferences.vue';
-import RingSizePreferences from '../components/settings/RingSizePreferences.vue';
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -56,11 +53,6 @@ watch(targetUserName, load, { immediate: true });
 // ProfileModal.vue reads this to show the profile's name in its mobile
 // header bar, without fetching the profile a second time itself.
 defineExpose({ profile });
-
-// --- Tabs (own profile only): Profile / Settings ---
-
-type ProfileTab = 'profile' | 'settings';
-const activeTab = ref<ProfileTab>('profile');
 
 // --- Own-bio editing ---
 
@@ -174,86 +166,52 @@ function joinedDate(iso: string): string {
         </div>
       </header>
 
-      <!-- Tabs: only the viewer's own profile has a Settings tab (the
-           viewer's own per-device HUD/graphics preferences) — someone
-           else's profile is just what it always was, no tabs at all. -->
-      <div v-if="isOwnProfile" class="tabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          class="tab"
-          :class="{ active: activeTab === 'profile' }"
-          :aria-selected="activeTab === 'profile'"
-          @click="activeTab = 'profile'"
-        >
-          {{ $t('profile.tabs.profile') }}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="tab"
-          :class="{ active: activeTab === 'settings' }"
-          :aria-selected="activeTab === 'settings'"
-          @click="activeTab = 'settings'"
-        >
-          {{ $t('profile.tabs.settings') }}
-        </button>
-      </div>
+      <dl class="facts">
+        <div>
+          <dt>{{ $t('profile.joined') }}</dt>
+          <dd>{{ joinedDate(profile.createdAt) }}</dd>
+        </div>
+        <div>
+          <dt>{{ $t('profile.settlements') }}</dt>
+          <dd>{{ profile.settlementCount }}</dd>
+        </div>
+      </dl>
 
-      <div v-if="!isOwnProfile || activeTab === 'profile'" role="tabpanel">
-        <dl class="facts">
-          <div>
-            <dt>{{ $t('profile.joined') }}</dt>
-            <dd>{{ joinedDate(profile.createdAt) }}</dd>
-          </div>
-          <div>
-            <dt>{{ $t('profile.settlements') }}</dt>
-            <dd>{{ profile.settlementCount }}</dd>
-          </div>
-        </dl>
+      <section class="bio-section">
+        <div class="bio-head">
+          <h2>{{ $t('profile.bio.title') }}</h2>
+          <button v-if="isOwnProfile && !editingBio" class="secondary" @click="startEditBio">
+            {{ profile.bio ? $t('profile.bio.edit') : $t('profile.bio.add') }}
+          </button>
+        </div>
 
-        <section class="bio-section">
-          <div class="bio-head">
-            <h2>{{ $t('profile.bio.title') }}</h2>
-            <button v-if="isOwnProfile && !editingBio" class="secondary" @click="startEditBio">
-              {{ profile.bio ? $t('profile.bio.edit') : $t('profile.bio.add') }}
+        <template v-if="editingBio">
+          <!--
+            The bio is plain text with significant whitespace (ASCII art).
+            It is rendered below through Vue's escaped interpolation only —
+            never v-html — so nothing in it can become markup.
+          -->
+          <textarea
+            v-model="bioDraft"
+            class="bio-editor"
+            rows="10"
+            :maxlength="BIO_MAX"
+            spellcheck="false"
+            :placeholder="$t('profile.bio.placeholder')"
+          ></textarea>
+          <p class="muted counter">{{ bioDraft.length }} / {{ BIO_MAX }}</p>
+          <p v-if="bioError" class="error">{{ bioError }}</p>
+          <div class="row">
+            <button :disabled="bioSaving" @click="saveBio">{{ $t('common.buttons.save') }}</button>
+            <button class="secondary" :disabled="bioSaving" @click="editingBio = false">
+              {{ $t('common.buttons.cancel') }}
             </button>
           </div>
+        </template>
 
-          <template v-if="editingBio">
-            <!--
-              The bio is plain text with significant whitespace (ASCII art).
-              It is rendered below through Vue's escaped interpolation only —
-              never v-html — so nothing in it can become markup.
-            -->
-            <textarea
-              v-model="bioDraft"
-              class="bio-editor"
-              rows="10"
-              :maxlength="BIO_MAX"
-              spellcheck="false"
-              :placeholder="$t('profile.bio.placeholder')"
-            ></textarea>
-            <p class="muted counter">{{ bioDraft.length }} / {{ BIO_MAX }}</p>
-            <p v-if="bioError" class="error">{{ bioError }}</p>
-            <div class="row">
-              <button :disabled="bioSaving" @click="saveBio">{{ $t('common.buttons.save') }}</button>
-              <button class="secondary" :disabled="bioSaving" @click="editingBio = false">
-                {{ $t('common.buttons.cancel') }}
-              </button>
-            </div>
-          </template>
-
-          <pre v-else-if="profile.bio" class="bio">{{ profile.bio }}</pre>
-          <p v-else class="muted">{{ $t('profile.bio.empty') }}</p>
-        </section>
-      </div>
-
-      <div v-else class="settings-tab" role="tabpanel">
-        <HudPreferences />
-        <RingSizePreferences />
-        <AnimationPreferences />
-      </div>
+        <pre v-else-if="profile.bio" class="bio">{{ profile.bio }}</pre>
+        <p v-else class="muted">{{ $t('profile.bio.empty') }}</p>
+      </section>
 
       <div v-if="reportOpen" class="report-backdrop" @click.self="reportOpen = false">
         <div
@@ -315,36 +273,6 @@ function joinedDate(iso: string): string {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-.tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--panel-border);
-  margin-bottom: 16px;
-}
-.tab {
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--muted);
-  padding: 8px 4px;
-  margin-bottom: -1px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 700;
-  font-family: inherit;
-}
-.tab:hover {
-  color: var(--text);
-}
-.tab.active {
-  color: var(--gold);
-  border-bottom-color: var(--gold);
-}
-.settings-tab {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
 }
 .facts {
   display: flex;

@@ -23,6 +23,8 @@ import WorldList from './WorldList.vue';
 import { useWorldStore } from '../../stores/world';
 import type { MessageSchema } from '../../i18n/schema';
 import HudMenuLocaleRow from './HudMenuLocaleRow.vue';
+import HudNavLink from './HudNavLink.vue';
+import { settingsLocation } from '../../lib/modalRoute';
 import { usePreloadRoute } from '../../composables/usePreloadRoute';
 
 // `unclaimedRealm`: the player already founded a realm but hasn't named a
@@ -80,6 +82,12 @@ function close() {
 function go(to: RouteLocationRaw) {
   close();
   router.push(to);
+}
+
+const settingsHref = computed(() => router.resolve('/settings').href);
+function goToSettings() {
+  close();
+  router.push(settingsLocation(router));
 }
 
 function onDocumentPointerDown(event: PointerEvent) {
@@ -167,6 +175,15 @@ watch(() => route.fullPath, close);
            above. `close` lets a row dismiss the panel. The account actions
            stay first: they are what this menu is for. -->
       <slot name="entries" :close="close" />
+      <HudNavLink
+        :href="settingsHref"
+        role="menuitem"
+        class="row settings-row"
+        data-testid="returning-player-settings"
+        @navigate="goToSettings"
+      >
+        {{ t('hud.returningPlayer.settings') }}
+      </HudNavLink>
       <div class="divider" role="separator" />
       <HudMenuLocaleRow />
       <WorldList compact />
@@ -322,6 +339,10 @@ html[data-hud-motion='reduced'] .trigger.is-nudging {
 }
 .name-jarl-row {
   color: var(--gold);
+}
+.settings-row {
+  display: block;
+  text-decoration: none;
 }
 .row:hover {
   background: rgba(255, 255, 255, 0.06);
