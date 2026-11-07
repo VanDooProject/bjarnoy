@@ -156,10 +156,13 @@ const SIDES = [
     </defs>
 
     <rect width="1600" height="1600" :fill="url('sky')"/>
-    <ellipse cx="1110" cy="790" rx="820" ry="190" fill="#5e5459" opacity=".5"/>
-    <ellipse cx="1110" cy="790" rx="600" ry="120" fill="#80635d" opacity=".5"/>
-    <ellipse cx="1110" cy="790" rx="380" ry="66" fill="#a8775f" opacity=".55"/>
-    <ellipse cx="1110" cy="790" rx="190" ry="30" fill="#d39d78" opacity=".6"/>
+    <!-- the last light on the horizon; it sinks under the sea during the turn (the far water covers it) -->
+    <g class="sd-a sd-glow-set">
+      <ellipse cx="1110" cy="790" rx="820" ry="190" fill="#5e5459" opacity=".5"/>
+      <ellipse cx="1110" cy="790" rx="600" ry="120" fill="#80635d" opacity=".5"/>
+      <ellipse cx="1110" cy="790" rx="380" ry="66" fill="#a8775f" opacity=".55"/>
+      <ellipse cx="1110" cy="790" rx="190" ry="30" fill="#d39d78" opacity=".6"/>
+    </g>
 
     <g class="sd-a sd-cam-far">
       <!-- the homeland: the camera pans away from it with the ship at the end -->
@@ -305,6 +308,10 @@ const SIDES = [
    The horizon fog thins away during the turn; the ravens scene's own fog comes up slowly. */
 .b3 .sd-hz-out { animation: sd-hz-out var(--beat-duration) linear both; }
 @keyframes sd-hz-out { 0%, 70% { opacity: .42; } 100% { opacity: 0; } }
+/* the orange glow sets: down under the sea during the turn, gone before the cut, so none of it crossfades into
+   the ravens' night (its widest ellipse reaches up to y 600; 210 units down puts it under the horizon at 785) */
+.b3 .sd-glow-set { animation-name: sd-glow-set; }
+@keyframes sd-glow-set { 0%, 70% { transform: translateY(0); animation-timing-function: ease-in-out; } 96%, 100% { transform: translateY(210px); } }
 .b3 .sd-pan-far, .b3 .sd-pan-shore, .b3 .sd-pan-fig, .b3 .sd-pan-near { animation-duration: var(--beat-duration); }
 .b3 .sd-pan-far { animation-name: sd-pan-far; }
 .b3 .sd-pan-shore { animation-name: sd-pan-shore; }
