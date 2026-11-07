@@ -31,6 +31,7 @@ import { useBuildRing, categoriesFor, type BuildableType } from '../composables/
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
 import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
+import { useRingMaxScale } from '../composables/useRingMaxScale';
 import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount } from '../lib/map/buildingEconomy';
 import {
   deriveOnboardingGuidance,
@@ -294,6 +295,7 @@ useIntroTilesSignal({
   error: overlayError,
   canvasShown: landingCanvasShown,
   loadState: computed(() => canvasRef.value?.loadState),
+  animLoad: computed(() => canvasRef.value?.animLoad),
 });
 function retryLoad() {
   if (loadError.value) void loadLanding();
@@ -384,6 +386,7 @@ function onContinueToSettlement() {
 
 // Ring menu state for the onboarding build step: the same two-lane ring the settlement map shows (Build ->
 // categories -> buildings), fed by the same useBuildRing model, so it offers exactly what the map offers on the hex.
+const ringMaxScale = useRingMaxScale();
 const ringScreen = ref<RingPlacement | null>(null);
 const ringCoord = ref<AxialCoord | null>(null);
 const ringTile = ref<Tile | null>(null);
@@ -696,6 +699,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
       screen,
       ringBoundsAt,
       ringShapes(ringActions.value.length, ringCategories.value.map((c) => c.buildings.length)),
+      ringMaxScale.value,
     );
     return;
   }

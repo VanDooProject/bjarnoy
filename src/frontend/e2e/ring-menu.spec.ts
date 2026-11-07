@@ -74,7 +74,7 @@ test.describe('ring menu drill-down', () => {
       await page.waitForTimeout(250);
       // The labels are read in one round trip per poll attempt (see ring.labels()): a toHaveCount per
       // label cost a canvas-frame wait each, and this test asserted 19 of them.
-      await expect.poll(() => settlement.ring.labels()).toContain('Details');
+      await expect.poll(() => settlement.ring.labels()).toContain('Send army here');
       await expect(settlement.ring.backBubble).toHaveCount(0);
       await settlement.ring.press();
       await page.waitForTimeout(250);
@@ -84,7 +84,7 @@ test.describe('ring menu drill-down', () => {
       // capping the menu at two lanes.
       const backBubble = settlement.ring.backBubble;
       await expect(backBubble).toHaveCount(1);
-      expect(await settlement.ring.labels()).not.toContain('Details');
+      expect(await settlement.ring.labels()).not.toContain('Send army here');
 
       // Lanes are distinguishable by class rather than by excluding labels:
       // `.back` is the reserved back slot, `.child` the outer lane.
@@ -518,24 +518,6 @@ test.describe('ring menu availability', () => {
     await expect(page.getByTestId('ring-error')).toHaveText('Could not queue that build.');
     await expect(settlement.ring.bubbles.first()).toBeVisible();
     expect(await settlement.countBuildings()).toBe(before);
-  });
-
-  test('hovering Details previews the tile, and Details still opens on click', { tag: '@g2' }, async ({ page }) => {
-    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    const settlement = await SettlementPage.found(page);
-    const longhouse = await settlement.centreHex();
-
-    await settlement.clickHex(longhouse);
-    const details = settlement.ring.action('Details').first();
-    await settlement.ring.hover(details);
-    const card = settlement.ring.card;
-    await expect(card).toBeVisible();
-    await expect(card).toContainText('Longhouse');
-    await expect(card).toContainText('LEVEL 1');
-    await expect(card.locator('button')).toHaveCount(0);
-
-    await settlement.ring.press();
-    await expect(settlement.ring.bubbles).toHaveCount(0);
   });
 
   test('a disabled root action shows the ban look and its reason in a chip on hover', { tag: '@g2' }, async ({ page }) => {

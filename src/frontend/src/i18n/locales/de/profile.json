@@ -21,6 +21,15 @@
     "top": "Oben",
     "bottom": "Unten"
   },
+  "ringMenu": {
+    "title": "Radialmenü",
+    "hint": "Gilt nur auf diesem Gerät. Hat der Bildschirm nicht genug Platz, wird das Menü trotzdem kleiner.",
+    "size": "Größe des Menüs",
+    "small": "Klein",
+    "normal": "Standard",
+    "large": "Groß",
+    "xlarge": "Sehr groß"
+  },
   "graphics": {
     "title": "Grafik",
     "hint": "Gilt nur auf diesem Gerät.",

@@ -3,9 +3,25 @@
   "skip": "Skip",
   "pause": "Pause",
   "resume": "Resume",
-  "restart": "Restart",
   "soundOn": "Turn sound on",
   "soundOff": "Turn sound off",
+  "timeline": "Intro timeline",
+  "volume": "Volume",
+  "timelineValue": "{chapter}, {time} of {total}",
+  "chapters": {
+    "fire": "Skald's fire",
+    "prophecy": "Prophecy",
+    "sending": "The sending",
+    "ravens": "Ravens",
+    "hold": "Fog",
+    "landfall": "Landfall"
+  },
+  "loadGroups": {
+    "voices": "Voices",
+    "terrain": "Terrain",
+    "buildings": "Buildings",
+    "animations": "Animations"
+  },
   "login": "Log in",
   "enterWorld": "Enter world",
   "play": "Play the saga",

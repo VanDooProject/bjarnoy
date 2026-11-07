@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
-import { buildingName, campName, giantName, terrainName } from '../i18n/catalogueNames';
+import { buildingName, terrainName } from '../i18n/catalogueNames';
 import { useRoute, useRouter } from 'vue-router';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
@@ -24,7 +24,7 @@ import TrainingModal from '../components/hud/TrainingModal.vue';
 import BuildRefusalChip from '../components/hud/BuildRefusalChip.vue';
 import { announceConfirmedBuild, holdBuildRow, releaseBuildRow } from '../composables/buildFeedback';
 import RingMenuHost from '../components/hud/RingMenuHost.vue';
-import RingMenu, { type RingAction, type RingCategory, type RingInfo } from '../components/hud/RingMenu.vue';
+import RingMenu, { type RingAction, type RingCategory } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
 import FpsMeter from '../components/hud/FpsMeter.vue';
@@ -57,7 +57,9 @@ import { buildingStatsAt, buildingUpgradeCost, scaleOutput, upgradeRateGain } fr
 import { formatBuildTime, formatMissingResources, longhouseLock } from '../lib/map/ringCatalogue';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
+import { buildingEntryId, primaryActionFirst } from '../lib/map/ringActions';
 import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
+import { useRingMaxScale } from '../composables/useRingMaxScale';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { campHexBuildable } from '../lib/map/campRules';
@@ -253,6 +255,7 @@ useIntroTilesSignal({
   error: overlayError,
   canvasShown: computed(() => !!world.selectedSettlementId),
   loadState: computed(() => canvasRef.value?.loadState),
+  animLoad: computed(() => canvasRef.value?.animLoad),
 });
 function retryLoad() {
   if (loadError.value) {
@@ -581,6 +584,7 @@ const modalOwnerLabel = computed(() => {
 // categories -> a category's buildings), so this only tracks *where* it is
 // open — the concentric ringStack/radius/angle-stagger machinery the
 // previous ring needed is gone with it.
+const ringMaxScale = useRingMaxScale();
 const ringScreen = ref<RingPlacement | null>(null);
 
 // The ring must stay clear of the HUD panels, which means knowing how big the
@@ -870,67 +874,24 @@ function upgradeActionFor(tile: Tile): RingAction {
   };
 }
 
-// The Details bubble (opens BuildingModal on click) also previews the tile on
-// hover: for a building its name, level and what it gives, for ground the
-// terrain and who holds it — the same facts HexTooltip shows on the map.
-function detailsAction(tile: Tile): RingAction {
-  return { id: 'details', label: t('hud.ringMenu.actions.details'), info: tileInfo(tile) };
-}
-
-function tileInfo(tile: Tile): RingInfo {
-  const owner = tile.ownerId ? world.model.getSettlement(tile.ownerId) : undefined;
-  const mine = !!owner && owner.ownerId === player.id;
-  const ownerLine = !owner
-    ? t('hud.hoverTooltip.unclaimed')
-    : mine
-      ? owner.name
-      : t('hud.hoverTooltip.ownedByOther', { owner: owner.ownerName, name: owner.name });
-  const rows: RingInfo['rows'] = [];
-  if (tile.giant) return { title: giantName(tile.giant.family), sub: ownerLine, rows };
-  if (tile.camp && !tile.camp.removed) {
-    return {
-      title: campName(tile.camp.family),
-      sub: tile.camp.strong ? t('hud.hoverTooltip.campStrong') : t('hud.hoverTooltip.campWeak'),
-      rows,
-    };
-  }
-  if (tile.buildingType) {
-    const level = tile.buildingLevel ?? 1;
-    const title = buildingName(tile.buildingType);
-    // Like the hover tooltip, stats are for the player's own buildings only.
-    if (mine) {
-      const stats = buildingStatsAt(tile.buildingType, level, tile, tileAt);
-      if (stats.output) rows.push({ label: t('hud.hoverTooltip.output'), value: formatOutput(scaleOutput(stats.output, world.worldSpeedFactor)) });
-      if (stats.modifier) rows.push({ label: t('hud.hoverTooltip.modifier'), value: formatModifier(stats.modifier) });
-    }
-    return {
-      title,
-      sub: `${t('hud.hoverTooltip.level', { level })} · ${ownerLine}`,
-      art: buildingArt(tile.buildingType, level),
-      rows,
-    };
-  }
-  return { title: ringTerrainLabel.value, sub: ownerLine, rows };
-}
-
-const rootActions = computed<RingAction[]>(() => {
+const rootActions = computed<RingAction[]>(() => primaryActionFirst(rootActionList()));
+function rootActionList(): RingAction[] {
   const tile = selectedTile.value;
   if (!tile) return [];
   // World zoom only offers the army action: BuildingModal/TrainingModal and
-  // the build fan only exist in the settlement template, so Build/Upgrade/
-  // Info bubbles here would open nothing.
+  // the build fan only exist in the settlement template, so Build/Upgrade
+  // bubbles here would open nothing.
   if (mode.value === 'world') return [...huntActions(tile), ...siegeActions(tile), sendArmyAction(tile)];
 
   if (isEnemyTile.value) {
     // Replaces the old permanently-disabled "Attack / Raid" bubble — combat
     // is implemented now, via the same dispatch draft/sheet every other
     // "send army" entry point uses.
-    return [{ id: 'info', label: t('hud.ringMenu.actions.info'), info: tileInfo(tile) }, ...siegeActions(tile), sendArmyAction(tile)];
+    return [...siegeActions(tile), sendArmyAction(tile)];
   }
   if (isUnclaimedTile.value) {
     const onCoast = tile.terrain === 'sand';
     return [
-      { id: 'info', label: t('hud.ringMenu.actions.info'), info: tileInfo(tile) },
       {
         id: onCoast ? 'land-here' : 'send-settlers',
         label: onCoast ? t('hud.ringMenu.actions.landHere') : t('hud.ringMenu.actions.sendSettlers'),
@@ -955,7 +916,6 @@ const rootActions = computed<RingAction[]>(() => {
     const upgrade = upgradeActionFor(tile);
     const actions: RingAction[] = [
       upgrade,
-      detailsAction(tile),
       {
         id: 'raze',
         label: t('hud.ringMenu.actions.raze'),
@@ -967,18 +927,12 @@ const rootActions = computed<RingAction[]>(() => {
       },
     ];
     // Training belongs to a building: every building any UnitDefinition.RequiredBuildingType
-    // points at (barracks, archery range, siege workshop, dockyard, cart workshop) offers the
-    // action, which opens that building's own TrainingModal. The longhouse trains no unit.
+    // points at offers the action, which opens that building's own TrainingModal; a finished Town Square
+    // offers Feasts, which opens its BuildingModal (the feast lives there). The longhouse trains no unit.
     // The backend enforces the real gate either way — this is just where the UI surfaces the button.
-    if (
-      tile.buildingType === 'archeryrange'
-      || tile.buildingType === 'siegeworkshop'
-      || tile.buildingType === 'dockyard'
-      || tile.buildingType === 'barracks'
-      || tile.buildingType === 'cartworkshop'
-    ) {
-      actions.push({ id: 'train', label: t('hud.ringMenu.actions.trainUnits') });
-    }
+    const entry = buildingEntryId(tile.buildingType, tile.buildingLevel ?? 0);
+    if (entry === 'train') actions.push({ id: 'train', label: t('hud.ringMenu.actions.trainUnits') });
+    if (entry === 'feasts') actions.push({ id: 'feasts', label: t('hud.ringMenu.actions.feasts') });
     actions.push(sendArmyAction(tile));
     return actions;
   }
@@ -992,8 +946,7 @@ const rootActions = computed<RingAction[]>(() => {
     const blockedByCamp = !!tile.camp && !tile.buildingType && !campHexBuildable(tile.camp);
     // A hex that offers no category at all (bog shore, mouth or spring, a mountain while quarries are off, a lake, open water)
     // has no Build action — nothing in the ring that could only fail (docs/design/ui-guidelines.md, rule 1).
-        return [
-      detailsAction(tile),
+    return [
       ...(canBuildHere.value
         ? [
             {
@@ -1012,8 +965,8 @@ const rootActions = computed<RingAction[]>(() => {
       sendArmyAction(tile),
     ];
   }
-  return [detailsAction(tile), ...huntActions(tile), sendArmyAction(tile)];
-});
+  return [...huntActions(tile), sendArmyAction(tile)];
+}
 
 
 // The hub names what was clicked: the building standing on the hex if there
@@ -1080,7 +1033,7 @@ function roomForRing(screen: { x: number; y: number }): RingPlacement {
     rootActions.value.length,
     ringCategories.value.map((c) => c.buildings.length),
   );
-  return placeRing(canvasRef.value?.renderer, screen, ringBoundsAt, shapes);
+  return placeRing(canvasRef.value?.renderer, screen, ringBoundsAt, shapes, ringMaxScale.value);
 }
 
 // Issue #93 "drag to move a placed waypoint": the renderer resolved the hex
@@ -1132,20 +1085,18 @@ async function onRingSelect(id: string) {
     return;
   }
   switch (id) {
-    case 'details':
-    case 'info':
-      // Falls through to BuildingModal below; the ring stays "open" only long
-      // enough for the modal to take over the same selectedTile.
-      ringScreen.value = null;
-      return;
     case 'upgrade':
       // upgrade() already closes on success (both branches); on failure it
       // leaves selectedTile/ringScreen alone, so the ring stays open and
       // shows the rejection's message (`actionError`, passed as `error`).
       await upgrade();
       return;
+    case 'feasts':
+      // The ring closes and BuildingModal takes over the same selectedTile (its feast section).
+      ringScreen.value = null;
+      return;
     case 'train':
-      // Same hand-off pattern as 'details'/'info', to TrainingModal.
+      // Hand-off to TrainingModal: the ring closes, the modal takes over the same selectedTile.
       ringScreen.value = null;
       trainModalOpen.value = true;
       return;

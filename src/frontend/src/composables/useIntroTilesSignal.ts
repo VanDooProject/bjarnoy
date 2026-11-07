@@ -1,4 +1,5 @@
 import { watch, type Ref } from 'vue';
+import { reportIntroLoad } from '../intro/introLoad';
 import { markIntroTilesLoaded } from '../intro/introSignal';
 import type { MapLoadState } from '../lib/map/HexMapRenderer';
 
@@ -11,6 +12,8 @@ interface IntroTilesSignalSources {
   canvasShown: Readonly<Ref<boolean>>;
   /** The canvas' tile-art loading state (terrain + building atlases), when it is mounted. */
   loadState: Readonly<Ref<MapLoadState | undefined>>;
+  /** Page count of the building-animation atlas, once it starts loading. */
+  animLoad: Readonly<Ref<{ loaded: number; total: number } | null | undefined>>;
 }
 
 /**
@@ -18,7 +21,41 @@ interface IntroTilesSignalSources {
  * settled and either it failed, no canvas will render (join blocked, no plot available: the intro would hold
  * forever), or the canvas finished loading its tile atlases. Shared by LandingView and MapView.
  */
-export function useIntroTilesSignal({ settled, error, canvasShown, loadState }: IntroTilesSignalSources): void {
+export function useIntroTilesSignal({
+  settled,
+  error,
+  canvasShown,
+  loadState,
+  animLoad,
+}: IntroTilesSignalSources): void {
+  // Feeds the intro timeline's per-group page counts. A phase that has moved on counts as fully loaded.
+  const lastTotal = { terrain: 0, buildings: 0 };
+  watch(
+    () => loadState.value,
+    (state) => {
+      if (!state) return;
+      if (state.phase === 'terrain' || state.phase === 'buildings') {
+        if (state.pages) {
+          lastTotal[state.phase] = state.pages.total;
+          reportIntroLoad(state.phase, state.pages);
+        }
+        if (state.phase === 'buildings' && lastTotal.terrain > 0) {
+          reportIntroLoad('terrain', { loaded: lastTotal.terrain, total: lastTotal.terrain });
+        }
+      } else if (lastTotal.buildings > 0) {
+        reportIntroLoad('buildings', { loaded: lastTotal.buildings, total: lastTotal.buildings });
+      }
+    },
+    { immediate: true },
+  );
+  watch(
+    () => animLoad.value,
+    (pages) => {
+      if (pages) reportIntroLoad('animations', pages);
+    },
+    { immediate: true },
+  );
+
   watch(
     () => settled.value && (!!error.value || !canvasShown.value || loadState.value?.phase === 'ready'),
     (tilesLoaded) => {
