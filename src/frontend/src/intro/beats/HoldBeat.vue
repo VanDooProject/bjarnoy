@@ -5,8 +5,8 @@ import type { BeatMeta } from './types';
 // Its shortest run is the time to read its narration (the host passes that to the sequencer);
 // durationMs is only the fallback for that.
 export const meta: BeatMeta = { id: 'hold', role: 'hold', durationMs: 4000, loopMs: 12000, scene: 'longship' };
-// Landfall: the fog is solid at 2.8 s, then the host fades the intro out over 1 s onto the map's fog.
-export const landfallMeta: BeatMeta = { id: 'landfall', role: 'exit', durationMs: 3800, scene: 'longship' };
+// Landfall: the fog is solid at 5 s, then the host fades the intro out over 1 s onto the map's fog.
+export const landfallMeta: BeatMeta = { id: 'landfall', role: 'exit', durationMs: 6000, scene: 'longship' };
 </script>
 
 <script setup lang="ts">

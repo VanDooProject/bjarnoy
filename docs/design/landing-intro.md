@@ -24,7 +24,7 @@ then hands over to the real map.
   to fit both languages' lengths; motion follows the spoken lines where it can, without slowing into slow motion.
 - The hold plays at least as long as its voice clip (plus 0.8 s). After that it ends as soon as the tiles are
   loaded. Skip ends it at once.
-- Landfall lasts 3.8 s; the lookout's call plays as it starts.
+- Landfall lasts 6 s; the lookout's call plays as it starts.
 - Once the tiles are loaded and the sequence is still playing, a skip button shows. Pressing it starts the exit
   (fog lifts) right away.
 - A pause button shows while the intro plays. Paused, the scene and its timing stop; tiles that finish loading wait for play to continue.

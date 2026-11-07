@@ -308,11 +308,11 @@ const OARS = [584, 680, 776, 872, 968, 1064].map((x) => ({
    --lf-fog-at fog starts closing       --lf-fog-time  fog start -> solid (how fast it thickens) */
 .b5 .lf-coast   { opacity: 0; transform: translateX(420px); }
 .b5 .lf-mist, .b5 .lf-curtain { opacity: 0; }
-.b5.b5-landfall .lf-coast   { animation: b5-lf-coast   var(--lf-coast, 2.2s) linear forwards; }
-.b5.b5-landfall .lf-hz      { animation: b5-lf-out     var(--lf-coast, 2.2s) ease-out forwards; }
-.b5.b5-landfall .lf-ship    { animation: b5-lf-ship    var(--lf-ship, 3s) cubic-bezier(.45,0,.4,1) forwards; }
-.b5.b5-landfall .lf-mist    { animation: b5-lf-fade calc(var(--lf-fog-time, 2s) * .65) ease-in-out var(--lf-fog-at, .8s) both; }
-.b5.b5-landfall .lf-curtain { animation: b5-lf-fade calc(var(--lf-fog-time, 2s) * .6) ease-in calc(var(--lf-fog-at, .8s) + var(--lf-fog-time, 2s) * .4) both; }
+.b5.b5-landfall .lf-coast   { animation: b5-lf-coast   var(--lf-coast, 3.6s) linear forwards; }
+.b5.b5-landfall .lf-hz      { animation: b5-lf-out     var(--lf-coast, 3.6s) ease-out forwards; }
+.b5.b5-landfall .lf-ship    { animation: b5-lf-ship    var(--lf-ship, 5s) cubic-bezier(.45,0,.4,1) forwards; }
+.b5.b5-landfall .lf-mist    { animation: b5-lf-fade calc(var(--lf-fog-time, 2.6s) * .65) ease-in-out var(--lf-fog-at, 2.4s) both; }
+.b5.b5-landfall .lf-curtain { animation: b5-lf-fade calc(var(--lf-fog-time, 2.6s) * .6) ease-in calc(var(--lf-fog-at, 2.4s) + var(--lf-fog-time, 2.6s) * .4) both; }
 @keyframes b5-lf-coast    { 0% { opacity: 0; transform: translateX(420px); animation-timing-function: cubic-bezier(.2,.7,.3,1); } 14% { opacity: 1; } 100% { opacity: 1; transform: translateX(0); } }
 @keyframes b5-lf-out      { 0% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes b5-lf-ship     { 0% { transform: translateX(0); } 100% { transform: translateX(170px); } }
