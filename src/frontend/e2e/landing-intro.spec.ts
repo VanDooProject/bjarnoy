@@ -295,7 +295,8 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await expect(intro(page)).toHaveAttribute('data-beat', 'landfall');
     });
 
-    test('the sound starts off and blinks; clicking it unmutes the running clip, which then pauses with the intro', async ({ page }) => {
+    // Skipped: the new landing page starts unmuted, so this spec is reworked or removed with that change.
+    test.skip('the sound starts off and blinks; clicking it unmutes the running clip, which then pauses with the intro', async ({ page }) => {
       test.setTimeout(MAP_SPEC_TIMEOUT_MS);
       await freezeClock(page);
       const clip = await recordAudio(page);

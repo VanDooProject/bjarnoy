@@ -565,8 +565,15 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  height: calc(160px + env(safe-area-inset-bottom));
-  background: linear-gradient(to top, rgba(11, 17, 22, 0.6), rgba(11, 17, 22, 0.32) 45%, rgba(11, 17, 22, 0));
+  height: calc(240px + env(safe-area-inset-bottom));
+  background: linear-gradient(
+    to top,
+    rgba(11, 17, 22, 0.82),
+    rgba(11, 17, 22, 0.72) 22%,
+    rgba(11, 17, 22, 0.45) 50%,
+    rgba(11, 17, 22, 0.15) 78%,
+    rgba(11, 17, 22, 0)
+  );
   pointer-events: none;
 }
 /* opacity on the whole symbol, so fill and rounded stroke do not overlap into a lighter rim */
