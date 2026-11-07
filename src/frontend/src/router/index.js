@@ -1,0 +1,340 @@
+import { createRouter, createWebHistory } from 'vue-router';
+import { updateNavigationGuard } from '../lib/appUpdate';
+import { resolveAuthGuard } from './authGuard';
+import { awaitShowcaseManifests, startAtlasManifestLoad } from './atlasGuard';
+import { useAuthStore } from '../stores/auth';
+import { usePlayerStore } from '../stores/player';
+// Not lazy-loaded like the other views below: App.vue's ProfileModal.vue
+// statically imports this same component (the profile routes render as a
+// modal over the background route now, not through <router-view> — see
+// App.vue's own comment), so it's always in the main bundle regardless of
+// what this router route does. Pointing the route at the same static import
+// avoids Vite's "ineffective dynamic import" warning for no benefit.
+import ProfileView from '../views/ProfileView.vue';
+// Same reasoning as ProfileView above: LeaderboardModal.vue/GuildModal.vue
+// (App.vue's modal-route pattern) statically import these same components,
+// so pointing the routes at the same static imports avoids Vite's
+// "ineffective dynamic import" warning for no benefit.
+import LeaderboardView from '../views/LeaderboardView.vue';
+import GuildView from '../views/GuildView.vue';
+import ReportsView from '../views/ReportsView.vue';
+export const router = createRouter({
+    history: createWebHistory(),
+    routes: [
+        {
+            path: '/',
+            name: 'landing',
+            component: () => import('../views/LandingView.vue'),
+        },
+        {
+            path: '/login',
+            name: 'login',
+            component: () => import('../views/LoginView.vue'),
+        },
+        {
+            // "Join another world" (ReturningPlayerMenu) — deliberately no
+            // `requiresAuth`: an anonymous player already has a local id
+            // (stores/player.ts) they can found a new realm under, or already
+            // hold a realm under, in any world, same as the landing page itself.
+            path: '/worlds',
+            name: 'worlds',
+            component: () => import('../views/WorldPickerView.vue'),
+        },
+        {
+            // Issue #108: converts an anonymous player (local player.id, an
+            // unclaimed settlement) into a permanent account — see
+            // RegisterView.vue and AuthService.RegisterAsync's settlement-claim.
+            path: '/register',
+            name: 'register',
+            component: () => import('../views/RegisterView.vue'),
+        },
+        {
+            // Settlement and world map are one view (MapView.vue) on one route:
+            // the player switches between them by zooming (docs/design/
+            // zoom-transition.md), and world mode is marked by a `#world` hash so
+            // the URL (and the e2e suite) can still tell the two apart.
+            path: '/settlement',
+            name: 'settlement',
+            component: () => import('../views/MapView.vue'),
+        },
+        {
+            // Own profile — needs a logged-in user to know whose it is.
+            path: '/profile',
+            name: 'own-profile',
+            component: ProfileView,
+            meta: { requiresAuth: true },
+        },
+        {
+            // Another player's public profile, by username.
+            path: '/profile/:userName',
+            name: 'profile',
+            component: ProfileView,
+        },
+        {
+            path: '/leaderboards',
+            name: 'leaderboards',
+            component: LeaderboardView,
+        },
+        {
+            path: '/guild',
+            name: 'guild',
+            component: GuildView,
+        },
+        {
+            // Issue #40 phase 3: battle-reports inbox, and the same view's detail
+            // mode when a report id is in the URL (so a report can be deep-linked/
+            // shared, e.g. from a future notification) — see ReportsView.vue.
+            path: '/reports',
+            name: 'reports',
+            component: ReportsView,
+        },
+        {
+            path: '/reports/:reportId',
+            name: 'report-detail',
+            component: ReportsView,
+        },
+        {
+            // Issue #40 phase 7: the premium fight simulator — the one endpoint in
+            // this game that actually requires login (every other troop endpoint
+            // works anonymously), so it needs `requiresAuth` even though most
+            // routes here don't. Being logged in doesn't mean being premium
+            // though — SimulatorView.vue shows a "Premium feature" notice upfront
+            // using `auth.isPremium` (UserResponse now exposes it). It's advisory
+            // only, not a hard gate: the flag is a login-time snapshot and the
+            // backend re-checks live, so an admin grant takes effect on the very
+            // next click with no re-login needed (see PremiumSimulatorTests).
+            path: '/simulator',
+            name: 'simulator',
+            component: () => import('../views/SimulatorView.vue'),
+            meta: { requiresAuth: true },
+        },
+        {
+            path: '/messages',
+            name: 'messages',
+            component: () => import('../views/MessagesView.vue'),
+            meta: { requiresAuth: true },
+        },
+        {
+            path: '/messages/:userId',
+            name: 'conversation',
+            component: () => import('../views/ConversationView.vue'),
+            meta: { requiresAuth: true },
+        },
+        {
+            path: '/impressum',
+            name: 'impressum',
+            component: () => import('../views/ImpressumView.vue'),
+        },
+        {
+            path: '/docs',
+            name: 'docs',
+            component: () => import('../views/DocsView.vue'),
+            // Draws showcase art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => awaitShowcaseManifests(),
+        },
+        {
+            // Public marketing/portfolio page — lives inside the game app (not a
+            // static screenshot page) so it mounts the real WorldMapCanvas/
+            // SettlementCanvas components against a standalone, backend-free
+            // WorldModel and can never drift from what the live renderer shows.
+            path: '/showcase',
+            name: 'showcase',
+            component: () => import('../views/ShowcaseView.vue'),
+            // Computes its art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => startAtlasManifestLoad(),
+        },
+        {
+            path: '/docs/tech-tree',
+            name: 'tech-tree',
+            component: () => import('../views/TechTreeView.vue'),
+            // Computes its art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => startAtlasManifestLoad(),
+        },
+        {
+            path: '/docs/saga',
+            name: 'saga-docs',
+            component: () => import('../views/SagaView.vue'),
+            // Computes its art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => awaitShowcaseManifests(),
+        },
+        {
+            path: '/docs/saga/replay',
+            name: 'saga-replay',
+            component: () => import('../views/SagaReplayView.vue'),
+        },
+        {
+            path: '/docs/tiles',
+            name: 'tile-docs',
+            component: () => import('../views/TileDocsView.vue'),
+            // Computes its art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => startAtlasManifestLoad(),
+        },
+        {
+            path: '/docs/wasted-lands',
+            name: 'wasted-lands-docs',
+            component: () => import('../views/WastedLandsView.vue'),
+            // Computes its art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => startAtlasManifestLoad(),
+        },
+        {
+            path: '/docs/wildlife-camps',
+            name: 'wildlife-camps-docs',
+            component: () => import('../views/WildlifeCampsView.vue'),
+            // Computes its art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => awaitShowcaseManifests(),
+        },
+        {
+            path: '/docs/bog-lands',
+            name: 'bog-lands-docs',
+            component: () => import('../views/BogLandsView.vue'),
+            // Computes its art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => awaitShowcaseManifests(),
+        },
+        {
+            path: '/docs/production',
+            name: 'production-docs',
+            component: () => import('../views/ResourceProductionView.vue'),
+            // Computes its art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => awaitShowcaseManifests(),
+        },
+        {
+            path: '/docs/shrines',
+            name: 'shrines-docs',
+            component: () => import('../views/ShrinesView.vue'),
+            // Computes its art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => awaitShowcaseManifests(),
+        },
+        {
+            path: '/docs/training',
+            name: 'training-docs',
+            component: () => import('../views/TrainingView.vue'),
+            // Computes its art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => awaitShowcaseManifests(),
+        },
+        {
+            path: '/docs/founding',
+            name: 'founding-docs',
+            component: () => import('../views/FoundingView.vue'),
+            // Computes its art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => awaitShowcaseManifests(),
+        },
+        {
+            path: '/docs/realm',
+            name: 'realm-docs',
+            component: () => import('../views/RealmView.vue'),
+            // Computes its art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => awaitShowcaseManifests(),
+        },
+        {
+            path: '/docs/land-movement',
+            name: 'land-movement-docs',
+            component: () => import('../views/LandMovementView.vue'),
+            // Computes its art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => awaitShowcaseManifests(),
+        },
+        {
+            path: '/docs/ships',
+            name: 'ships-docs',
+            component: () => import('../views/ShipsView.vue'),
+            // Computes its art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => awaitShowcaseManifests(),
+        },
+        {
+            path: '/docs/walls',
+            name: 'walls-docs',
+            component: () => import('../views/WallsView.vue'),
+            // Computes its art synchronously at setup — see atlasGuard.ts.
+            beforeEnter: () => startAtlasManifestLoad(),
+        },
+        {
+            path: '/admin',
+            component: () => import('../views/admin/AdminLayout.vue'),
+            meta: { requiresAdmin: true },
+            children: [
+                { path: '', redirect: '/admin/worlds' },
+                {
+                    path: 'worlds',
+                    name: 'admin-worlds',
+                    component: () => import('../views/admin/AdminWorldsView.vue'),
+                },
+                {
+                    // Issue #133: pick a seed, preview the map it generates full-screen,
+                    // then commit it. Its own route rather than a panel in the worlds
+                    // list because the preview wants the whole viewport.
+                    path: 'worlds/:worldId/reseed',
+                    name: 'admin-world-reseed',
+                    component: () => import('../views/admin/AdminWorldReseedView.vue'),
+                },
+                {
+                    path: 'users',
+                    name: 'admin-users',
+                    component: () => import('../views/admin/AdminUsersView.vue'),
+                },
+                {
+                    // Debug API keys and the key requests an agent files; the approval
+                    // link an agent hands out is /admin/api-keys?request=<userCode>.
+                    path: 'api-keys',
+                    name: 'admin-api-keys',
+                    component: () => import('../views/admin/AdminApiKeysView.vue'),
+                },
+                {
+                    path: 'settlements',
+                    name: 'admin-settlements',
+                    component: () => import('../views/admin/AdminSettlementsView.vue'),
+                },
+                {
+                    path: 'reports',
+                    name: 'admin-reports',
+                    component: () => import('../views/admin/AdminReportsView.vue'),
+                },
+                {
+                    path: 'activity',
+                    name: 'admin-activity',
+                    component: () => import('../views/admin/AdminActivityView.vue'),
+                },
+                {
+                    // Design charts over the live building catalogue: cost/time/
+                    // production/payback curves, the unlock ladder and a pacing sim.
+                    path: 'economy',
+                    name: 'admin-economy',
+                    component: () => import('../views/admin/AdminEconomyView.vue'),
+                },
+                {
+                    // A live, backend-free playground for the island-shape generation
+                    // params (worldGenerator.ts mirrors the backend algorithm exactly)
+                    // — lets an admin compare several seed/parameter combos' minimaps
+                    // side by side without touching a real world via reseed.
+                    path: 'island-lab',
+                    name: 'admin-island-lab',
+                    component: () => import('../views/admin/AdminIslandLabView.vue'),
+                },
+            ],
+        },
+    ],
+});
+// First guard: with a newer build deployed, navigating loads it instead of running old code.
+router.beforeEach(updateNavigationGuard);
+router.beforeEach(async (to) => {
+    // Awaited once (see `ensureInitialized`) so a page reload restores a
+    // logged-in user from the stored refresh token before this guard has to
+    // decide anything — otherwise a reload would always look unauthenticated
+    // for one tick and bounce a logged-in user to /login.
+    const auth = useAuthStore();
+    await auth.ensureInitialized();
+    const authRedirect = resolveAuthGuard(to, auth);
+    if (authRedirect !== true)
+        return authRedirect;
+    const player = usePlayerStore();
+    // zip 6a: founding (and the guided build-2-more-buildings onboarding that
+    // follows it) only ever happens on the landing page now — the world map
+    // never founds a settlement. So `/settlement` (world mode included) requires an
+    // already-founded settlement, and `/` itself is done being the founding
+    // surface once onboarding is complete.
+    if (to.name === 'landing' && player.hasFoundedSettlement && player.onboardingComplete) {
+        return { name: 'settlement' };
+    }
+    if (to.name === 'settlement' && !player.hasFoundedSettlement) {
+        return { name: 'landing' };
+    }
+    return true;
+});

@@ -7,6 +7,7 @@ import type { ProfileResponse } from '../api/types';
 import { animationPreference } from '../lib/perf/animationPreference';
 import { motionPreferences } from '../lib/perf/motionPreferences';
 import { antialiasPreference } from '../lib/perf/antialiasPreference';
+import { ringSizePreference } from '../lib/map/ringSize';
 import { useAuthStore } from '../stores/auth';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { createTestI18n } from '../test/i18n';
@@ -295,6 +296,7 @@ describe('ProfileView', () => {
         .map((group) => document.getElementById(group.attributes('aria-labelledby')!)?.textContent);
       expect(names).toEqual([
         'Bar position',
+        'Menu size',
         'Building animations',
         'Water motion',
         'Lake motion',
@@ -418,6 +420,23 @@ describe('ProfileView', () => {
       expect(localStorage.getItem('bjarnoy.antialias')).toBe('off');
       expect(offButton.attributes('aria-pressed')).toBe('true');
       antialiasPreference.setting = 'on';
+    });
+
+    it('the menu-size control persists the radial menu size to localStorage', async () => {
+      getProfileByName.mockResolvedValue(profile());
+      ownProfileAuth();
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+      await openSettings(wrapper);
+
+      const largeButton = wrapper.findAll('[data-testid="ring-size"] button').find((button) => button.text() === 'Large')!;
+      await largeButton.trigger('click');
+
+      expect(ringSizePreference.setting).toBe('large');
+      expect(localStorage.getItem('bjarnoy.ringSize')).toBe('large');
+      expect(largeButton.attributes('aria-pressed')).toBe('true');
+      ringSizePreference.setting = 'normal';
     });
 
     it.each([

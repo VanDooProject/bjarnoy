@@ -58,6 +58,7 @@ import { formatBuildTime, formatMissingResources, longhouseLock } from '../lib/m
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
 import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
+import { useRingMaxScale } from '../composables/useRingMaxScale';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { campHexBuildable } from '../lib/map/campRules';
@@ -581,6 +582,7 @@ const modalOwnerLabel = computed(() => {
 // categories -> a category's buildings), so this only tracks *where* it is
 // open — the concentric ringStack/radius/angle-stagger machinery the
 // previous ring needed is gone with it.
+const ringMaxScale = useRingMaxScale();
 const ringScreen = ref<RingPlacement | null>(null);
 
 // The ring must stay clear of the HUD panels, which means knowing how big the
@@ -1080,7 +1082,7 @@ function roomForRing(screen: { x: number; y: number }): RingPlacement {
     rootActions.value.length,
     ringCategories.value.map((c) => c.buildings.length),
   );
-  return placeRing(canvasRef.value?.renderer, screen, ringBoundsAt, shapes);
+  return placeRing(canvasRef.value?.renderer, screen, ringBoundsAt, shapes, ringMaxScale.value);
 }
 
 // Issue #93 "drag to move a placed waypoint": the renderer resolved the hex

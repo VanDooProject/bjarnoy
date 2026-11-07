@@ -895,7 +895,7 @@ function onBackdropPointerDown(e: PointerEvent) {
 <template>
   <!-- `data-swapping`: a layer change is mid-flight (old layer leaving, new one arriving), so the bubbles on screen
        are not yet the final set. -->
-  <div ref="rootEl" class="ring-backdrop" :data-swapping="swapping || undefined" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
+  <div ref="rootEl" class="ring-backdrop" :style="{ '--ring-scale': scale }" :data-swapping="swapping || undefined" @pointerdown.self="onBackdropPointerDown" @contextmenu.prevent="emit('close')">
     <div
       v-if="layout.showLane1Track"
       class="ring-track"
@@ -1186,7 +1186,7 @@ function onBackdropPointerDown(e: PointerEvent) {
   filter: brightness(1.08);
 }
 .hub-label {
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--ring-scale, 1));
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1197,7 +1197,7 @@ function onBackdropPointerDown(e: PointerEvent) {
   max-width: 84%;
 }
 .hub-sub {
-  font-size: 8px;
+  font-size: calc(8px * var(--ring-scale, 1));
   font-weight: 500;
   letter-spacing: 0.05em;
   opacity: 0.55;
@@ -1263,8 +1263,8 @@ function onBackdropPointerDown(e: PointerEvent) {
   position: absolute;
   top: -3px;
   right: -3px;
-  width: 17px;
-  height: 17px;
+  width: calc(17px * var(--ring-scale, 1));
+  height: calc(17px * var(--ring-scale, 1));
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -1274,8 +1274,8 @@ function onBackdropPointerDown(e: PointerEvent) {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
 }
 .ring-badge svg {
-  width: 11px;
-  height: 11px;
+  width: calc(11px * var(--ring-scale, 1));
+  height: calc(11px * var(--ring-scale, 1));
   fill: none;
   stroke: currentColor;
   stroke-width: 1.4;
@@ -1298,7 +1298,7 @@ function onBackdropPointerDown(e: PointerEvent) {
   background: rgba(8, 18, 26, 0.92);
   border: 1px solid rgba(255, 197, 92, 0.6);
   color: var(--gold);
-  font-size: 8.6px;
+  font-size: calc(8.6px * var(--ring-scale, 1));
   font-weight: 700;
   white-space: nowrap;
 }
@@ -1526,8 +1526,8 @@ html[data-hud-motion='reduced'] .ring-bubble.glow {
   position: absolute;
   bottom: -4px;
   right: -4px;
-  width: 16px;
-  height: 16px;
+  width: calc(16px * var(--ring-scale, 1));
+  height: calc(16px * var(--ring-scale, 1));
   border-radius: 50%;
   background: var(--gold);
   border: 1px solid rgba(0, 0, 0, 0.55);
@@ -1540,7 +1540,7 @@ html[data-hud-motion='reduced'] .ring-bubble.glow {
 /* The digit is drawn by CSS so it never becomes part of the bubble's label text. */
 .arm-badge::before {
   content: '2';
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--ring-scale, 1));
   font-weight: 800;
   line-height: 1;
 }

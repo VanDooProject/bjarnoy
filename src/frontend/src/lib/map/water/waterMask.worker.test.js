@@ -1,0 +1,87 @@
+// isLandFor is the water-mask bake worker's own land check — it has no live
+// connection to WorldModel, so a wasted-island reveal has to reach it
+// through the explicit `wastedRevealed` flag on every BakeRequest (see
+// HexMapRenderer.maybeBakeWaterMask, which re-sends it on every bake and
+// forces a rebake whenever it flips). This mirrors WorldModel.terrainOf's
+// own reveal fall-through, checked directly here since a real Worker needs
+// a browser/worker global this repo's node-environment vitest config
+// doesn't provide.
+import { describe, expect, it } from 'vitest';
+import { isLandFor, isWastedLandFor } from './waterMask.worker';
+import { DEFAULT_GENERATION } from '../worldGenerator';
+import { nearestLand } from '../testing/islandFinders';
+describe('isLandFor (water-mask bake worker)', () => {
+    // Seed 40 — the same seed and hexes as
+    // WorldModel.test.ts's own wasted-island reveal suite. (-81, 256) is a
+    // wasted-forest hex; (-83, 256) is plain open sea bordering wasted land.
+    const WASTED_SEED = 40;
+    const wastedLand = { q: -81, r: 256 };
+    const plainSea = { q: -83, r: 256 };
+    it('treats a wasted hex as sea while not revealed', () => {
+        const isLand = isLandFor(WASTED_SEED, DEFAULT_GENERATION, false);
+        expect(isLand(wastedLand.q, wastedLand.r)).toBe(false);
+    });
+    it('treats a wasted hex as land once revealed', () => {
+        const isLand = isLandFor(WASTED_SEED, DEFAULT_GENERATION, true);
+        expect(isLand(wastedLand.q, wastedLand.r)).toBe(true);
+    });
+    it('never calls a green-sea hex land, revealed or not', () => {
+        const revealed = isLandFor(WASTED_SEED, DEFAULT_GENERATION, true);
+        const hidden = isLandFor(WASTED_SEED, DEFAULT_GENERATION, false);
+        expect(revealed(plainSea.q, plainSea.r)).toBe(false);
+        expect(hidden(plainSea.q, plainSea.r)).toBe(false);
+    });
+    it('does not cache a stale answer across a reveal flip for the same seed', () => {
+        // Same pattern the worker's own module-level cache actually hits: two
+        // calls for the same seed, the first before reveal, the second after.
+        const hidden = isLandFor(WASTED_SEED, DEFAULT_GENERATION, false);
+        expect(hidden(wastedLand.q, wastedLand.r)).toBe(false);
+        const revealed = isLandFor(WASTED_SEED, DEFAULT_GENERATION, true);
+        expect(revealed(wastedLand.q, wastedLand.r)).toBe(true);
+        const hiddenAgain = isLandFor(WASTED_SEED, DEFAULT_GENERATION, false);
+        expect(hiddenAgain(wastedLand.q, wastedLand.r)).toBe(false);
+    });
+});
+describe('isWastedLandFor (water-mask taint field)', () => {
+    // Same seed and hexes as isLandFor's suite above — see its own comment.
+    const WASTED_SEED = 40;
+    const wastedLand = { q: -81, r: 256 };
+    const plainSea = { q: -83, r: 256 };
+    it('answers false for a wasted hex while not revealed', () => {
+        const isWastedLand = isWastedLandFor(WASTED_SEED, DEFAULT_GENERATION, false);
+        expect(isWastedLand(wastedLand.q, wastedLand.r)).toBe(false);
+    });
+    it('answers true for a wasted hex once revealed', () => {
+        const isWastedLand = isWastedLandFor(WASTED_SEED, DEFAULT_GENERATION, true);
+        expect(isWastedLand(wastedLand.q, wastedLand.r)).toBe(true);
+    });
+    it('never calls a plain green-sea hex wasted land, revealed or not', () => {
+        // The whole point of the narrower check: isLandFor would call this hex
+        // land once its own wasted-bordering coastal water kicks in, but it is
+        // not itself wasted land, so the taint field must not seed here.
+        const revealed = isWastedLandFor(WASTED_SEED, DEFAULT_GENERATION, true);
+        const hidden = isWastedLandFor(WASTED_SEED, DEFAULT_GENERATION, false);
+        expect(revealed(plainSea.q, plainSea.r)).toBe(false);
+        expect(hidden(plainSea.q, plainSea.r)).toBe(false);
+    });
+    it('never calls plain green land wasted land', () => {
+        // A hex the green layer already calls land (not sea) must never answer
+        // true here — isWastedLand means "land *only* because of the wasted
+        // layer", not "land at all". Found by scanning outward from the origin
+        // for this seed rather than hardcoded, so the test does not depend on
+        // exactly which nearby hex the generator happens to call land.
+        const world = { seed: WASTED_SEED, generation: DEFAULT_GENERATION };
+        const greenLand = nearestLand(world, { q: 0, r: 0 });
+        expect(greenLand).not.toBeNull();
+        const isWastedLand = isWastedLandFor(WASTED_SEED, DEFAULT_GENERATION, true);
+        expect(isWastedLand(greenLand.q, greenLand.r)).toBe(false);
+    });
+    it('does not cache a stale answer across a reveal flip for the same seed', () => {
+        const hidden = isWastedLandFor(WASTED_SEED, DEFAULT_GENERATION, false);
+        expect(hidden(wastedLand.q, wastedLand.r)).toBe(false);
+        const revealed = isWastedLandFor(WASTED_SEED, DEFAULT_GENERATION, true);
+        expect(revealed(wastedLand.q, wastedLand.r)).toBe(true);
+        const hiddenAgain = isWastedLandFor(WASTED_SEED, DEFAULT_GENERATION, false);
+        expect(hiddenAgain(wastedLand.q, wastedLand.r)).toBe(false);
+    });
+});

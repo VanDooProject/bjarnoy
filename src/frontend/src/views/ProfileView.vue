@@ -9,6 +9,7 @@ import { useAuthStore } from '../stores/auth';
 import { useUnsavedInput } from '../composables/useUnsavedInput';
 import HudPreferences from '../components/settings/HudPreferences.vue';
 import AnimationPreferences from '../components/settings/AnimationPreferences.vue';
+import RingSizePreferences from '../components/settings/RingSizePreferences.vue';
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -250,6 +251,7 @@ function joinedDate(iso: string): string {
 
       <div v-else class="settings-tab" role="tabpanel">
         <HudPreferences />
+        <RingSizePreferences />
         <AnimationPreferences />
       </div>
 

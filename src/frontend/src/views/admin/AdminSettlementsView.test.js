@@ -1,0 +1,303 @@
+// @vitest-environment jsdom
+import { createPinia, setActivePinia } from 'pinia';
+import { flushPromises, mount } from '@vue/test-utils';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import AdminSettlementsView from './AdminSettlementsView.vue';
+import { useAdminWorldStore } from '../../stores/adminWorld';
+import { createTestI18n } from '../../test/i18n';
+import adminSettlements from '../../i18n/locales/en/adminSettlements.json';
+import garrisonForm from '../../i18n/locales/en/garrisonForm.json';
+import grantResourcesForm from '../../i18n/locales/en/grantResourcesForm.json';
+import settlementLayoutEditor from '../../i18n/locales/en/settlementLayoutEditor.json';
+import armyEditor from '../../i18n/locales/en/armyEditor.json';
+const global = {
+    plugins: [
+        createTestI18n({ adminSettlements, garrisonForm, grantResourcesForm, settlementLayoutEditor, armyEditor }),
+    ],
+};
+const { adminSearchSettlements, adminGetSettlement, adminGrantResources, adminGetSettlementLayout, adminPlaceBuilding, adminRazeBuilding, adminCompleteQueues, adminAdjustGarrison, adminListArmies, getUnitCatalogue, } = vi.hoisted(() => ({
+    adminSearchSettlements: vi.fn(),
+    adminGetSettlement: vi.fn(),
+    adminGrantResources: vi.fn(),
+    adminGetSettlementLayout: vi.fn(),
+    adminPlaceBuilding: vi.fn(),
+    adminRazeBuilding: vi.fn(),
+    adminCompleteQueues: vi.fn(),
+    adminAdjustGarrison: vi.fn(),
+    adminListArmies: vi.fn(),
+    getUnitCatalogue: vi.fn(),
+}));
+vi.mock('../../api/client', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        ...actual,
+        api: {
+            adminSearchSettlements,
+            adminGetSettlement,
+            adminGrantResources,
+            adminGetSettlementLayout,
+            adminPlaceBuilding,
+            adminRazeBuilding,
+            adminCompleteQueues,
+            adminAdjustGarrison,
+            adminListArmies,
+            getUnitCatalogue,
+        },
+    };
+});
+function summary(overrides = {}) {
+    return {
+        id: 'settlement-1',
+        worldId: 'world-1',
+        worldName: 'Midgard',
+        name: 'Bjornstad',
+        ownerName: 'Ragnar',
+        q: 0,
+        r: 0,
+        longhouseLevel: 1,
+        ...overrides,
+    };
+}
+function detail(overrides = {}) {
+    return {
+        id: 'settlement-1',
+        realmId: 'settlement-1',
+        linkedMemberIds: ['settlement-1'],
+        worldId: 'world-1',
+        islandId: 'island-1',
+        name: 'Bjornstad',
+        ownerName: 'Ragnar',
+        q: 0,
+        r: 0,
+        longhouseLevel: 1,
+        claimRadius: 1,
+        resources: {
+            stock: { wood: 300, stone: 200, food: 150, iron: 50 },
+            ratePerHour: { wood: 10, stone: 5, food: 8, iron: 2 },
+            capacity: { wood: 1000, stone: 1000, food: 1000, iron: 1000 },
+            reserved: { wood: 0, stone: 0, food: 0, iron: 0 },
+            available: { wood: 300, stone: 200, food: 150, iron: 50 },
+        },
+        construction: { slots: 2, slotsUsed: 0, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 },
+        buildings: [{ q: 0, r: 0, type: 'longhouse', level: 1 }],
+        queue: [],
+        garrison: [],
+        trainingQueue: [],
+        runes: [],
+        feast: null,
+        nextFeast: null,
+        quests: [],
+        world: { state: 'running', running: true, acceptsCommands: true, gameTime: '2026-01-01T00:00:00Z' },
+        realm: [{ settlementId: 'settlement-1', discs: [{ q: 0, r: 0, radius: 1 }] }],
+        ...overrides,
+    };
+}
+function layout(overrides = {}) {
+    return {
+        settlementId: 'settlement-1',
+        claimRadius: 1,
+        hexes: [
+            { q: 0, r: 0, terrain: 'grass', isCoastalWater: false, building: 'longhouse', level: 1, isCentre: true },
+            { q: 1, r: 0, terrain: 'grass', isCoastalWater: false, building: null, level: null, isCentre: false },
+            { q: 0, r: 1, terrain: 'forest', isCoastalWater: false, building: null, level: null, isCentre: false },
+        ],
+        buildingTypes: ['longhouse', 'farm', 'lumberjack'],
+        maxLevel: 10,
+        ...overrides,
+    };
+}
+/** Opens the first row's management panel, with every child panel's fetch stubbed. */
+async function openDetail(detailResponse = detail()) {
+    adminSearchSettlements.mockResolvedValue({ items: [summary()], totalCount: 1, page: 1, pageSize: 25 });
+    adminGetSettlement.mockResolvedValue(detailResponse);
+    adminGetSettlementLayout.mockResolvedValue(layout());
+    adminListArmies.mockResolvedValue([]);
+    getUnitCatalogue.mockResolvedValue([
+        { type: 'spearman' },
+        { type: 'thrall' },
+    ]);
+    const wrapper = mount(AdminSettlementsView, { global });
+    await flushPromises();
+    await wrapper.findAll('button').find((b) => b.text() === 'Manage').trigger('click');
+    await flushPromises();
+    return wrapper;
+}
+beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.clearAllMocks();
+    // AdminSettlementsView only searches once a world is selected — normally
+    // set by AdminLayout's header selector, which this view is mounted without
+    // here. Seed it directly, same as a returning admin's persisted selection.
+    useAdminWorldStore().selectedWorldId = 'world-1';
+});
+describe('AdminSettlementsView', () => {
+    it('lists settlements from a search scoped to the selected world', async () => {
+        adminSearchSettlements.mockResolvedValue({ items: [summary()], totalCount: 1, page: 1, pageSize: 25 });
+        const wrapper = mount(AdminSettlementsView, { global });
+        await flushPromises();
+        expect(adminSearchSettlements).toHaveBeenCalledWith(expect.objectContaining({ worldId: 'world-1' }));
+        expect(wrapper.text()).toContain('Bjornstad');
+        expect(wrapper.text()).toContain('Ragnar');
+        expect(wrapper.text()).toContain('Midgard');
+    });
+    it('shows a hint instead of searching when no world is selected', async () => {
+        useAdminWorldStore().selectedWorldId = null;
+        const wrapper = mount(AdminSettlementsView, { global });
+        await flushPromises();
+        expect(adminSearchSettlements).not.toHaveBeenCalled();
+        expect(wrapper.text()).toContain('Select a world above');
+    });
+    it('re-searches when the selected world changes', async () => {
+        adminSearchSettlements.mockResolvedValue({ items: [summary()], totalCount: 1, page: 1, pageSize: 25 });
+        const adminWorld = useAdminWorldStore();
+        mount(AdminSettlementsView, { global });
+        await flushPromises();
+        expect(adminSearchSettlements).toHaveBeenCalledTimes(1);
+        adminWorld.selectedWorldId = 'world-2';
+        await flushPromises();
+        expect(adminSearchSettlements).toHaveBeenCalledTimes(2);
+        expect(adminSearchSettlements).toHaveBeenLastCalledWith(expect.objectContaining({ worldId: 'world-2' }));
+    });
+    it('expands a row into the full god-mode panel', async () => {
+        const wrapper = await openDetail();
+        expect(adminGetSettlement).toHaveBeenCalledWith('settlement-1');
+        expect(wrapper.text()).toContain('Grant resources');
+        expect(wrapper.text()).toContain('Create troops');
+        expect(wrapper.text()).toContain('Settlement editor');
+        expect(wrapper.text()).toContain('Armies');
+        expect(wrapper.text()).toContain('Wood 300');
+    });
+    it('applies a resource grant and reflects the updated stock in the detail panel', async () => {
+        adminGrantResources.mockResolvedValue(detail({ resources: { ...detail().resources, stock: { wood: 800, stone: 200, food: 150, iron: 50 } } }));
+        const wrapper = await openDetail();
+        const woodInput = wrapper.find('.grant-form').findAll('input[type="number"]')[0];
+        await woodInput.setValue(500);
+        await wrapper.find('.grant-form').trigger('submit');
+        await flushPromises();
+        expect(adminGrantResources).toHaveBeenCalledWith('settlement-1', { wood: 500, stone: 0, food: 0, iron: 0 });
+        expect(wrapper.text()).toContain('Wood 800');
+    });
+    it('creates troops straight into the garrison', async () => {
+        adminAdjustGarrison.mockResolvedValue(detail({ garrison: [{ unit: 'spearman', count: 10 }] }));
+        const wrapper = await openDetail();
+        // The unit roster is fetched asynchronously, so wait for the option to
+        // actually exist rather than assuming a fixed number of ticks — that
+        // assumption held locally and lost the race on CI.
+        await vi.waitFor(() => {
+            expect(wrapper.findAll('.garrison-form option').length).toBeGreaterThan(0);
+        });
+        await wrapper.find('.garrison-form select').setValue('spearman');
+        await wrapper.find('.garrison-form').trigger('submit');
+        await flushPromises();
+        expect(adminAdjustGarrison).toHaveBeenCalledWith('settlement-1', { unit: 'spearman', count: 10 });
+        expect(wrapper.text()).toContain('spearman 10');
+    });
+    it('places a building on a clicked hex and updates the row', async () => {
+        adminPlaceBuilding.mockResolvedValue(detail({ buildings: [...detail().buildings, { q: 1, r: 0, type: 'farm', level: 5 }] }));
+        const wrapper = await openDetail();
+        await wrapper.find('polygon[data-hex="1,0"]').trigger('click');
+        await wrapper.find('.hex-form select').setValue('farm');
+        await wrapper.find('.hex-form input[type="number"]').setValue(5);
+        await wrapper.findAll('.hex-form button').find((b) => b.text() === 'Apply').trigger('click');
+        await flushPromises();
+        expect(adminPlaceBuilding).toHaveBeenCalledWith('settlement-1', 1, 0, { building: 'farm', level: 5 });
+    });
+    it('razes the building standing on a clicked hex', async () => {
+        adminRazeBuilding.mockResolvedValue(detail());
+        const wrapper = await openDetail();
+        await wrapper.find('polygon[data-hex="0,0"]').trigger('click');
+        await wrapper.findAll('.hex-form button').find((b) => b.text() === 'Raze').trigger('click');
+        await flushPromises();
+        expect(adminRazeBuilding).toHaveBeenCalledWith('settlement-1', 0, 0);
+    });
+    it('finishes the queue instantly and reports what it built', async () => {
+        const queued = detail({
+            queue: [{
+                    id: 'order-1',
+                    q: 1,
+                    r: 0,
+                    building: 'farm',
+                    targetLevel: 1,
+                    state: 'building',
+                    slotCost: 1,
+                    completesAtGameTime: '2026-01-01T01:00:00Z',
+                    completesInSeconds: 3600,
+                    totalSeconds: 3600,
+                }],
+        });
+        adminCompleteQueues.mockResolvedValue({
+            completedBuilds: 1,
+            completedTraining: 0,
+            settlement: detail({ buildings: [...detail().buildings, { q: 1, r: 0, type: 'farm', level: 1 }] }),
+        });
+        const wrapper = await openDetail(queued);
+        await wrapper.find('button.insta').trigger('click');
+        await flushPromises();
+        expect(adminCompleteQueues).toHaveBeenCalledWith('settlement-1', { builds: true, training: true });
+        expect(wrapper.text()).toContain('Finished 1 build(s)');
+    });
+    it('leaves the instant-build button disabled when nothing is queued', async () => {
+        const wrapper = await openDetail();
+        const button = wrapper.find('button.insta');
+        expect(button.text()).toContain('Nothing queued');
+        expect(button.attributes('disabled')).toBeDefined();
+    });
+    it('draws the settlement hexes with the same flat-top layout as the real settlement view', async () => {
+        const wrapper = await openDetail();
+        // Regression test for a rotated admin hex grid: this editor used to lay
+        // hexes out pointy-top (redblobgames convention) while the real
+        // settlement view is flat-top, drawing the same settlement's shape
+        // rotated 30° relative to what players see. The centre hex (0,0) sits
+        // at the grid origin either way, but its polygon's very first point
+        // differs — flat-top starts at the left corner (x=0, y=h/2), pointy-top
+        // at a point 30° up from the x-axis — so checking that one point is
+        // enough to catch a regression to the old formula.
+        const centreHex = wrapper.find('polygon[data-hex="0,0"]');
+        const firstPoint = centreHex.attributes('points').trim().split(' ')[0];
+        const [x, y] = firstPoint.split(',').map(Number);
+        expect(x).toBeCloseTo(0, 5);
+        expect(y).toBeGreaterThan(0);
+    });
+    it('refetches the settlement detail when the Refresh button is clicked', async () => {
+        const wrapper = await openDetail();
+        adminGetSettlement.mockClear();
+        const refreshed = detail({
+            resources: { ...detail().resources, stock: { wood: 999, stone: 200, food: 150, iron: 50 } },
+        });
+        adminGetSettlement.mockResolvedValue(refreshed);
+        await wrapper.findAll('button').find((b) => b.text() === 'Refresh').trigger('click');
+        await flushPromises();
+        expect(adminGetSettlement).toHaveBeenCalledWith('settlement-1');
+        expect(wrapper.text()).toContain('Wood 999');
+    });
+    it('auto-refreshes the open settlement detail on a timer', async () => {
+        vi.useFakeTimers();
+        try {
+            const wrapper = await openDetail();
+            adminGetSettlement.mockClear();
+            const refreshed = detail({
+                resources: { ...detail().resources, stock: { wood: 777, stone: 200, food: 150, iron: 50 } },
+            });
+            adminGetSettlement.mockResolvedValue(refreshed);
+            await vi.advanceTimersByTimeAsync(10_000);
+            expect(adminGetSettlement).toHaveBeenCalledWith('settlement-1');
+            expect(wrapper.text()).toContain('Wood 777');
+        }
+        finally {
+            vi.useRealTimers();
+        }
+    });
+    it('stops polling once the detail panel is closed', async () => {
+        vi.useFakeTimers();
+        try {
+            const wrapper = await openDetail();
+            await wrapper.findAll('button').find((b) => b.text() === 'Close').trigger('click');
+            adminGetSettlement.mockClear();
+            await vi.advanceTimersByTimeAsync(30_000);
+            expect(adminGetSettlement).not.toHaveBeenCalled();
+        }
+        finally {
+            vi.useRealTimers();
+        }
+    });
+});

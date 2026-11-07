@@ -530,7 +530,9 @@ export const RING_MIN_SCALE = 0.5;
  * when it already does, otherwise the nearest spot on a `stepPx` grid over the area that does -
  * so the caller can pan the map that far instead of the ring changing shape. Only when no spot
  * of the area has room for the ring at full size does the whole ring shrink (in steps down to
- * `RING_MIN_SCALE`), keeping its shape. `areaAt` gives the ring's area with the tile at a given
+ * `RING_MIN_SCALE`), keeping its shape. `maxScale` is the size the ring is drawn at when it has room
+ * (1 = the shapes' own size; the player's ring size setting and the desktop base size raise or lower
+ * it, `lib/map/ringSize.ts`). `areaAt` gives the ring's area with the tile at a given
  * x (a landscape phone docks the card on the side away from the tile).
  */
 export function ringRoomFor(
@@ -539,10 +541,13 @@ export function ringRoomFor(
   areaAt: (x: number, y: number) => Rect,
   shapes: RingShape[],
   stepPx = 12,
+  maxScale = 1,
 ): { x: number; y: number; scale: number } {
-  for (let scale = 1; scale >= RING_MIN_SCALE - 1e-9; scale -= 0.1) {
-    const room = roomAtScale(x, y, areaAt, shapes, Math.round(scale * 10) / 10, stepPx);
-    if (room) return { ...room, scale: Math.round(scale * 10) / 10 };
+  for (let step = 0; ; step++) {
+    const scale = Math.round((maxScale - step * 0.1) * 100) / 100;
+    if (scale < RING_MIN_SCALE - 1e-9) break;
+    const room = roomAtScale(x, y, areaAt, shapes, scale, stepPx);
+    if (room) return { ...room, scale };
   }
   return { x, y, scale: RING_MIN_SCALE };
 }

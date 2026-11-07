@@ -1,0 +1,2053 @@
+// Hex tile art is packed into a handful of WebP atlas pages (plus a JSON
+// manifest per page) by VanDooProject/3D_assets' `scripts/build_atlas.py`
+// (see that repo's README, "Packing into atlases", and issue #187) and
+// vendored under the VanDooProject/bg_assets_hextile submodule's own
+// `atlas/` directory (alongside its `hextiles/` individual PNGs, which
+// buildingArt.ts still uses) — not one PNG per
+// tile/orientation/level/variant as before. Every tile is still, at the
+// source, a 200x300 flat-top hex "plate" (top face 200x92, starting at
+// y=140) with a thick earthen skirt below it and, for taller assets, props
+// rising above it; the atlas just repacks those same renders into shared
+// pages instead of shipping them as individual files.
+//
+// Where the source has one, we use its base/top split — ground-only under
+// a `layer: "base"` frame, props/building-only under `layer: "top"` —
+// instead of a single composited image, same as before: HexMapRenderer
+// draws base, then the border/hover layers, then top, so a border or hover
+// highlight sits on the ground and tucks *under* a tile's trees/building
+// rather than being sliced across their canopy. A family the source doesn't
+// split (`layer: "composite"`) is treated as that family's base, with no
+// top layer — same effective result as before for e.g. `sand`/`mountain`.
+//
+// Every hex renders with one of the source's six camera rotations
+// (`TileOrientation`) and, where a terrain/building has more than one look,
+// a numbered variant (terrain) or level (building) — see
+// `worldGenerator.ts`'s `orientationAt`/`variantAt` and
+// `Tile.buildingLevel`. Which array index a variant/level lands at is read
+// straight off each frame's own name (`..._variant001`, `..._level004`),
+// same convention the source files used; `classifyFamilyFrames` is the pure
+// function that turns one family's frame names into that array shape (see
+// its own doc comment and `textures.test.ts` — no Pixi/Texture dependency,
+// so it's exercised directly rather than only through a loaded atlas).
+import { Texture } from 'pixi.js';
+import { loadAtlasCategory, loadAtlasPackCategory, loadOptionalAtlasCategory, unloadAtlasCategory, swayFramesPerColumn, swayPeriodFrames, } from './atlas';
+import { classifyGiantClips, classifyGiantFrames, giantTop as giantTopLookup, } from './giantTiles';
+import { PALISADE_FAMILY, isRefusal, palisadeTileFor } from './palisadeTiles';
+import { bend60OrientationOf, bendOrientationOf, confluenceOrientationOf, confluenceWideOrientationOf, deltaOrientationOf, mouthOrientationOf, bogMouthOrientationOf, bogShoreOrientationOf, springOrientationOf, straightOrientationOf, TILE_ORIENTATIONS, tributaryOrientationOf, widenStraightOrientationOf, } from './types';
+export const TILE_ART_NATIVE_W = 200;
+export const TILE_ART_NATIVE_H = 300;
+// Sprites are scaled uniformly from a *width* reference (sprite.width is set
+// to the display tile width; height follows the native H/W aspect ratio),
+// so every pixel measurement taken off the native art — including this
+// vertical offset — has to be expressed as a fraction of the native WIDTH
+// (200), not the native height, or it scales by the wrong factor and the
+// art ends up misaligned with the (width-scaled) hex-top polygons used for
+// borders/fog. Matches the atlas manifest's own `meta.bjarnoy.tile`
+// geometry (200x300, top face 92 tall starting at y=140) — kept as static
+// constants rather than read from a loaded atlas because callers elsewhere
+// (isoGridPosition, border/fog geometry) need them before any atlas load
+// resolves.
+/** Fraction of the tile width down to where the flat top face begins (140 / 200). */
+export const TILE_ART_TOPFACE_Y_FRAC = 140 / 200;
+/** Top-face height as a fraction of the tile width (92 / 200). */
+export const TILE_ART_TOPFACE_H_FRAC = 92 / 200;
+/**
+ * The atlas source-render `family` name backing each `TextureKey` — the
+ * same string the old per-family `import.meta.glob` prefix used. A key with
+ * no rendered family (no art exists, e.g. Quarry) is simply absent here,
+ * and `baseTextureFor` already falls back to bare terrain for that case.
+ * Exported (only) so textures.test.ts can guard that a `TextureKey` maps to
+ * the family its art actually ships under, the same reason `RIVER_FAMILY`
+ * is exported.
+ */
+export const KEY_FAMILY = {
+    sea: 'watertile',
+    sand: 'sandtile',
+    mountain: 'mountaintile',
+    mountain_table: 'mountaintile_table',
+    mountain_saddleback: 'mountaintile_saddleback',
+    mountain_corrie: 'mountaintile_corrie',
+    grass: 'grasstile',
+    forest: 'foresttile',
+    forest_taiga: 'forest_taiga',
+    forest_birch: 'forest_birch',
+    forest_mixed: 'forest_mixed',
+    hut: 'vikinghut',
+    longhouse: 'greathall',
+    // Thor's shrine is animated (a lightning clip in the buildings-anim
+    // atlas, played like any other family's — see `animTop`).
+    shrineofthor: 'torshrine',
+    shrineoffreyja: 'freyjashrine',
+    shrineofullr: 'ullrshrine',
+    // The Odin Statue: a statue on grass, animated like the other shrines.
+    odinstatue: 'odinstatue',
+    // A skerry standing in coastal water — a water-only building.
+    shrineofnjord: 'njordshrine',
+    // Newer, on-palette scripted art — see buildingArt.ts's matching docs-page
+    // choice. Pumpkin Farm stays on the legacy `farm_pumpkin` family for now.
+    // The Reindeer Herder is the starting food building (LH 1), also scripted art.
+    reindeerherder: 'reindeerherder',
+    farm: 'farm',
+    pumpkinfarm: 'farm_pumpkin',
+    lumberjack: 'lumberjack',
+    storagehouse: 'storagebuilding',
+    archeryrange: 'archeryrange',
+    // The Siege Workshop (3D_assets hextile147): hall, mangonel and ram on the grass base.
+    siegeworkshop: 'siegeworkshop',
+    greatstorehouse: 'bigstoragehouse',
+    barracks: 'barracks',
+    // Uses the leveled `fisherhut` art family now — the legacy 'fishinghutbuilding'
+    // composite (still in the pack, no longer referenced) had no per-level
+    // art at all. See buildingArt.ts's matching docs-page choice.
+    fishinghut: 'fisherhut',
+    // The stave tower replaces the tile it stands on, so each ground has its own art, picked by `textureKeyFor`: grass (3D_assets
+    // hextile148), sand (hextile151), forest (hextile150) and plain bog moss (hextile149).
+    tower: 'stavetower',
+    towersand: 'stavetower_sand',
+    towerforest: 'stavetower_forest',
+    towerbog: 'stavetower_bog',
+    dockyard: 'dockyard',
+    // A Sawmill is never actually on grass (the backend requires a river
+    // shape to place one — BuildingCatalogue.SawmillRiverShapes) — there is
+    // deliberately no plain 'sawmill' entry here for the grass/inland family
+    // the pack still ships (still referenced by buildingArt.ts's old preview
+    // fallback before this fix): `textureKeyFor` never resolves to it, and no
+    // other code path should either — see textureKeyFor's own doc comment and
+    // textures.test.ts's "grass sawmill art is never used" guard.
+    sawmillriver: 'sawmillriver',
+    sawmillbend: 'sawmillbend',
+    sawmillbend60: 'sawmillbend60',
+    // hextile135_riverbridge (straight, 180), hextile136_riverbridge_bend (120), hextile137_riverbridge_bend60 (60): level000 the building site, level001-004 the bridges.
+    riverbridge: 'riverbridge',
+    riverbridgebend: 'riverbridge_bend',
+    riverbridgebend60: 'riverbridge_bend60',
+    meadery: 'meadery',
+    townsquare: 'townsquare',
+    cropmill: 'cropmill',
+    smithy: 'smithy',
+    druidhut: 'druidhut',
+    cartworkshop: 'cartworkshop',
+    claybrickworks: 'claybrickworks',
+    wasteland: 'wasteland',
+    deadforest: 'deadforest',
+    blacksand: 'blacksand',
+    wastedmountain: 'mountaintile_jagged',
+    // Wildlife camps (3D_assets hextile120-128): a top on the ground tile's own base, level000
+    // cleared / level001 guarded. Bearrapids also carries its own river base per level.
+    wolfden: 'wolfden',
+    boarwallow: 'boarwallow',
+    bearrapids: 'bearrapids',
+    fenrirbrood: 'fenrirbrood',
+    sealhaulout: 'sealhaulout',
+    walrushaulout: 'walrushaulout',
+    eagleeyrie: 'eagleeyrie',
+    moosemire: 'moosemire',
+    beaverlodge: 'beaverlodge',
+    cranedance: 'cranedance',
+    harewarren: 'harewarren',
+    deerglade: 'deerglade',
+    otterslide: 'otterslide',
+    // The first water camp (3D_assets hextile134): drawn on its open-sea hex, so its base is the plain sea base; level000 gulls (all six rotations), level001 whales (kept SE and NE).
+    whaleroad: 'whaleroad',
+    // Open (non-coastal) water on a wasted island — see `WASTED_TEXTURE_KEY`'s
+    // own doc comment for why this key exists at all despite `WorldModel`
+    // itself never producing a wasted open-sea tile today.
+    taintedwater: 'taintedwater',
+    // The bog set (3D_assets docs/bog-tiles.md): moss ground, open lake, the three shores (1, 2 or 3 water edges), the
+    // mouth (an inlet with the creek on the opposite edge) and the creeks. Every family has a base plus numbered
+    // variants; see `normalizeBogFrames` for how they are lined up.
+    bog: 'bog',
+    lake: 'boglake',
+    bogcreek: 'bogcreek',
+    bogcreekbend: 'bogcreek_bend',
+    bogcreekspring: 'bogcreek_spring',
+    lakeinlet: 'boglake_inlet',
+    lakeshore: 'boglake_shore',
+    lakehalf: 'boglake_half',
+    lakemouth: 'boglake_mouth',
+    lakeweir: 'boglake',
+    lakeoreboat: 'boglake',
+    lakefishboat: 'boglake',
+    // The bog-ore works (7 art levels, level000-006) and its helpers. The lake Fishing Hut stands on the half shore base.
+    bogoreworks: 'bogoreworks',
+    fisherhutlake: 'fisherhut_lake',
+    // The river hammer mill stands in for a bog-creek Hammer Forge for now (TODO(art): bog-creek Hammer Forge).
+    hammerschmiede: 'hammerschmiede',
+    hammerschmiedebend: 'hammerschmiede_bend',
+    // The palisade wall set (3D_assets docs/wall-tiles.md): one family per piece; level000 is the construction site, level001+ the finished stages.
+    palisadestraight: PALISADE_FAMILY.straight180,
+    palisadebend60: PALISADE_FAMILY.bend60,
+    palisadebend120: PALISADE_FAMILY.bend120,
+    palisadegatepiece: PALISADE_FAMILY.gate180,
+    palisadeend: PALISADE_FAMILY.end,
+    palisadeendcoast: PALISADE_FAMILY.end_coast,
+    // The Utgard walls and the Jötun watchtower (wasted pack): level000 breached/taken, level001 damaged, level002 full/garrisoned.
+    utgardwallstraight: 'utgardwall_straight180',
+    utgardwallbend60: 'utgardwall_bend60',
+    utgardwallbend120: 'utgardwall_bend120',
+    utgardwallgate: 'utgardwall_gate180',
+    utgardwallend: 'utgardwall_end',
+    utgardwallendcoast: 'utgardwall_end_coast',
+    jotunwatchtower: 'jotunwatchtower',
+};
+/** The texture key of each Utgard wall piece. */
+export const UTGARD_WALL_TEXTURE_KEY = {
+    straight180: 'utgardwallstraight',
+    bend60: 'utgardwallbend60',
+    bend120: 'utgardwallbend120',
+    gate180: 'utgardwallgate',
+    end: 'utgardwallend',
+    end_coast: 'utgardwallendcoast',
+};
+/** The texture key of each palisade piece. */
+export const PALISADE_TEXTURE_KEY = {
+    straight180: 'palisadestraight',
+    bend60: 'palisadebend60',
+    bend120: 'palisadebend120',
+    gate180: 'palisadegatepiece',
+    end: 'palisadeend',
+    end_coast: 'palisadeendcoast',
+};
+/** The land wall pieces: they stand on their hex's own ground (the sea end brings its own coastal base). */
+const LAND_WALL_KEYS = new Set([
+    'palisadestraight',
+    'palisadebend60',
+    'palisadebend120',
+    'palisadegatepiece',
+    'palisadeend',
+    // The Utgard land pieces and the watchtower stand on their hex's own (wasted) ground the same way.
+    'utgardwallstraight',
+    'utgardwallbend60',
+    'utgardwallbend120',
+    'utgardwallgate',
+    'utgardwallend',
+    'jotunwatchtower',
+]);
+/** Every Utgard wall piece and the watchtower: art that is drawn at the level carried in `Tile.buildingLevel` of the draw tile (`endgameDrawTile`). */
+const ENDGAME_KEYS = new Set([...Object.values(UTGARD_WALL_TEXTURE_KEY), 'jotunwatchtower']);
+/** The art an Utgard wall hex draws: the piece's texture key and the camera file the server resolved through the palisade rules. */
+export function utgardWallArtFor(wall) {
+    return { key: UTGARD_WALL_TEXTURE_KEY[wall.piece], orientation: wall.dir };
+}
+/** The art a Jötun watchtower hex draws, in the tile's own rotation. */
+export function jotunTowerArtFor(tower) {
+    return { key: 'jotunwatchtower', orientation: tower.orientation };
+}
+/**
+ * The tile an endgame site is drawn from: the hex's own tile with the wall's (or tower's) level in `buildingLevel`, which is where
+ * `baseTextureFor`/`topTextureFor` read the art level from. `undefined` for a tile without a site.
+ */
+export function endgameDrawTile(tile) {
+    if (tile.utgardWall)
+        return { tile: { ...tile, buildingLevel: tile.utgardWall.level }, art: utgardWallArtFor(tile.utgardWall) };
+    if (tile.jotunTower)
+        return { tile: { ...tile, buildingLevel: tile.jotunTower.level }, art: jotunTowerArtFor(tile.jotunTower) };
+    return undefined;
+}
+/**
+ * The art a palisade or gate hex draws: the piece and the camera file the wall resolver (`palisadeTiles.ts`) picks from which of the
+ * hex's six neighbours are wall hexes, as the `RiverArt` override `baseTextureFor`/`topTextureFor` take (the same way a river building
+ * brings its own orientation). A hex the resolver cannot draw (no wall neighbour yet, or an admin-built branch) is an `end` (a sea end on
+ * water) facing east: a post that is not joined to anything.
+ */
+export function palisadeArtFor(input) {
+    const resolved = palisadeTileFor(input);
+    if (!isRefusal(resolved))
+        return { key: PALISADE_TEXTURE_KEY[resolved.piece], orientation: resolved.dir };
+    return { key: PALISADE_TEXTURE_KEY[input.coastalWater ? 'end_coast' : 'end'], orientation: 'E' };
+}
+/** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
+const COASTAL_FAMILY = 'coastalwatertile';
+/** Coastal water bordering a wasted island renders with this family instead of `COASTAL_FAMILY` — see `TileTextures.wastedCoastalBase`. */
+const WASTED_COASTAL_FAMILY = 'blacksandcoast';
+/**
+ * `wasteland`/`deadforest`/`blacksand`'s numbered top variants in the
+ * vendored art pack all start at `_variant001` with no `_variant000` at
+ * all — a genuine gap in the source numbering (`blacksandcoast`, by
+ * contrast, numbers its variants from `_variant000` like every green
+ * terrain family does). `classifyFamilyFrames` deliberately treats *any*
+ * numbering gap as a hard error elsewhere (see its own test): for a
+ * building's level sequence a gap really does mean a broken render pass,
+ * so silently tolerating one there would hide a real bug. Here it just
+ * reflects how these three families happened to be numbered, so their top
+ * frames are renumbered contiguously (see `renumberTopVariants`) before
+ * classification instead of being fed through as-is.
+ */
+const GAPPY_VARIANT_FAMILIES = new Set(['wasteland', 'deadforest', 'blacksand']);
+/**
+ * "Giant tile" families — one art object spanning a hex plus its six
+ * neighbours (see `giantTiles.ts`'s own module doc comment for the full
+ * contract). Kept as its own list, looked up by family name across whichever
+ * atlas categories are loaded (`terrain` today; `buildings-static` once a
+ * giant building exists), rather than folded into `KEY_FAMILY`: a giant's
+ * frames don't carry a `TextureKey`-shaped `variantNNN`/`levelNNN` suffix at
+ * the end of their name the way `classifyFamilyFrames` expects (see
+ * `classifyGiantFrames`'s own doc comment), so they need their own
+ * classification path entirely.
+ */
+const GIANT_FAMILIES = [
+    'giantmountain',
+    'giantshrine',
+    'giantvolcano',
+    'giantutgard',
+    'giantvolcano_wasted',
+];
+/**
+ * A giant family's dedicated wasted-tile art variant, if the vendored pack
+ * ships one — today just `giantvolcano` (a mountain-cluster giant on a
+ * wasted island keeps the backend/domain family string `"giantvolcano"`
+ * either way; only the art changes). `giantArtFamilyFor` is what resolves
+ * this at render time, with a plain-family fallback when the wasted variant
+ * has no frames loaded yet.
+ */
+const WASTED_GIANT_FAMILY = {
+    giantvolcano: 'giantvolcano_wasted',
+};
+/**
+ * Which giant art family to actually look up for a placement — `family`
+ * unchanged unless the anchor tile is wasted and `family` has a dedicated
+ * wasted variant (see `WASTED_GIANT_FAMILY`). Callers still need their own
+ * fallback to the plain family when the wasted variant's frames haven't
+ * loaded (same graceful-degradation contract every other giant lookup has).
+ */
+export function giantArtFamilyFor(family, wasted) {
+    return (wasted && WASTED_GIANT_FAMILY[family]) || family;
+}
+// Exported (only) so textures.test.ts can guard the family name a shape
+// resolves to, the same reason riverArtFor below is exported.
+export const RIVER_FAMILY = {
+    straight: 'rivertile',
+    // See RiverArtShape's own doc comment: these three pairs are straight/
+    // bend/bend60's own RiverVariant dressings, not new crossings — bend180
+    // is the straight crossing's art-pack name, bend120 the bend's (see
+    // docs/river-tiles.md's "How the tiles are named").
+    straight_meander: 'rivertile_bend180_meander',
+    straight_island: 'rivertile_bend180_island',
+    bend: 'rivertile_bend',
+    bend_meander: 'rivertile_bend120_meander',
+    bend_island: 'rivertile_bend120_island',
+    bend60: 'rivertile_bend60',
+    bend60_loop: 'rivertile_bend60_loop',
+    // A spring rises out of a mountain cluster (see RiverGenerator's spring
+    // placement), so its art is a spring bursting from a mountain landform —
+    // the flat, undecorated `rivertile_spring` this used to point at was a
+    // placeholder from before the pack had that art (see buildingArt.ts's
+    // matching docs-page fix). Only two of the pack's four mountain shapes
+    // shipped a `_spring` cut (`MountainShape.IsSpringCapable`) — both have
+    // their own base/top split (a rock prop standing above the plate),
+    // unlike the old family's base-only composite.
+    springcorrie: 'mountaintile_corrie_spring',
+    springsaddleback: 'mountaintile_saddleback_spring',
+    // The pack's two confluence junctions — y_narrow's asymmetric opposite-
+    // pair-plus-branch (see `confluenceOrientationOf`) and ywide's later,
+    // fully symmetric three-arms-120°-apart alternative (see
+    // `confluenceWideOrientationOf`) — cover two disjoint sets of real (in1,
+    // in2, out) triples between them, so both get used rather than only ever
+    // reaching for one.
+    confluencenarrow: 'rivertile_y_narrow',
+    confluencewide: 'rivertile_ywide',
+    // The stream set (3D_assets docs/river-tiles.md, "The stream set"): `_small_` is stream width
+    // on every edge, `_smallwide_` mixes stream and river. Names carry the crossing (bend180 is the
+    // straight, bend120 the bend, bend60 the hairpin).
+    small_straight: 'rivertile_small_bend180',
+    small_straight_meander: 'rivertile_small_bend180_meander',
+    small_bend: 'rivertile_small_bend120',
+    small_bend_meander: 'rivertile_small_bend120_meander',
+    small_bend60: 'rivertile_small_bend60',
+    small_bend60_loop: 'rivertile_small_bend60_loop',
+    widen_straight: 'rivertile_smallwide_bend180_island',
+    widen_yn: 'rivertile_smallwide_y_narrow',
+    widen_yw: 'rivertile_smallwide_ywide',
+    riverstream: 'rivertile_smallwide_bend120_tributary',
+    delta: 'rivertile_delta',
+};
+/**
+ * Lava-stream art families, one per `LavaRiverShape`. Both spring shapes
+ * share the one `mountaintile_volcano_lavaspring_flows` family — the pack
+ * has no separate corrie/saddleback lava-spring cut, since a wasted spring
+ * reads as its own volcano landform regardless of which spring-capable
+ * mountain shape (`springcorrie`/`springsaddleback`) picked the tile before
+ * it went wasted. It's the mountain-shape family's own convention (base+top
+ * per orientation, no variants — same shape `mountaintile_saddleback_spring`/
+ * `mountaintile_corrie_spring` already use), not the plain river-family one;
+ * it only ever replaces a Spring tile's own overlay art
+ * (`riverTexturesFor`), never the underlying mountain's base texture, which
+ * stays whatever `MountainShapeAt`/`SpringMountainShapeAt` already picked
+ * either way.
+ */
+const LAVA_RIVER_FAMILY = {
+    straight: 'lavastream',
+    bend: 'lavastream_bend',
+    bend60: 'lavastream_bend60',
+    springcorrie: 'mountaintile_volcano_lavaspring_flows',
+    springsaddleback: 'mountaintile_volcano_lavaspring_flows',
+};
+/** The orientation token embedded in every frame name, e.g. `..._NE_...` or `..._NE`. */
+const ORIENTATION_RE = /_(NE|NW|SW|SE|E|W)(?:_|$)/;
+/** A numbered terrain-variant suffix, e.g. `_variant001`. */
+const VARIANT_RE = /_variant(\d{3})(?:_base)?$/;
+/** A numbered building-level suffix, e.g. `_level004` (a top frame) or `_level004_base` (a leveled base frame — see `classifyFamilyFrames`). */
+const LEVEL_RE = /_level(\d{3})(?:_base)?$/;
+/**
+ * A lettered alternate-pass level frame, e.g. `cropmill_E_level004a` or
+ * `townsquare_E_level000b` (see `ANIM_LEVEL_RE`'s own comment for what
+ * these are — a construction sub-stage some families' vendor art carries
+ * alongside, or instead of, the canonical numbered rung, per that repo's
+ * `docs/level-splitting.md`, "a stage of it is not a level of its own").
+ * `LEVEL_RE` doesn't match these at all (no plain digit run right before
+ * the end/`_base`), so without `collapseLetteredLevels` below,
+ * `explicitIndexOf` would fall through to its `null` default and silently
+ * collide them onto index 0 alongside (or in place of) the real level's
+ * frame in `classifyFamilyFrames`.
+ */
+const LEVEL_LETTER_RE = /^(.+_level\d{3})([a-z])((?:_base)?)$/;
+/** The plain (unlettered) counterpart `LEVEL_LETTER_RE` groups a family's lettered passes against — matches `cropmill_E_level000`/`cropmill_E_level000_base`, not `..._level000a`. */
+const PLAIN_LEVEL_RE = /^(.+_level\d{3})((?:_base)?)$/;
+/**
+ * Collapses a family's lettered alternate-pass level frames down to one
+ * frame per level/orientation/layer, before `classifyFamilyFrames` ever
+ * sees them:
+ *
+ * - A level that also has a plain (unlettered) frame — e.g. cropmill's
+ *   `level000`/`level000a`, `level004`/`level004a` — keeps only the plain
+ *   one; the lettered pass is a genuine alternate (cropmill's `004a` is a
+ *   second-mill composition of the same level) that has no place in the
+ *   single-frame-per-level array `classifyFamilyFrames` builds.
+ * - A level that has *no* plain frame at all, only lettered ones — e.g.
+ *   townsquare's `level000a`/`level000b` (its own build script's level000
+ *   is authored as two construction sub-stages, with no combined
+ *   "level000" render) — keeps the alphabetically last lettered pass
+ *   (`level000b`) standing in for the plain frame: letter order is
+ *   construction order within that level, so the last pass is the closest
+ *   to that level's finished look, the one every other level's plain frame
+ *   represents.
+ *
+ * Frames with no level suffix at all (terrain composites, variant frames)
+ * pass through untouched.
+ */
+export function collapseLetteredLevels(frames) {
+    const untouched = [];
+    const plainKeyed = new Map();
+    const letteredGroups = new Map();
+    for (const f of frames) {
+        const lettered = LEVEL_LETTER_RE.exec(f.name);
+        if (lettered) {
+            const key = lettered[1] + lettered[3];
+            const group = letteredGroups.get(key) ?? [];
+            group.push({ letter: lettered[2], frame: f });
+            letteredGroups.set(key, group);
+            continue;
+        }
+        const plain = PLAIN_LEVEL_RE.exec(f.name);
+        if (plain) {
+            plainKeyed.set(plain[1] + plain[2], f);
+            continue;
+        }
+        untouched.push(f);
+    }
+    const result = [...untouched, ...plainKeyed.values()];
+    for (const [key, group] of letteredGroups) {
+        if (plainKeyed.has(key))
+            continue; // the plain frame already won for this level
+        const last = [...group].sort((a, b) => a.letter.localeCompare(b.letter)).at(-1);
+        result.push({ name: key, layer: last.frame.layer, value: last.frame.value });
+    }
+    return result;
+}
+/**
+ * A clip's plain numbered level, e.g. `cropmill_E_level003` — deliberately
+ * anchored at the end with no trailing letter, unlike `LEVEL_RE` above: some
+ * families carry an alternate lettered pass at the same level (e.g.
+ * `cropmill_E_level004a`, a second-mill variant of level004) alongside the
+ * canonical one, and picking a level's clip is simpler by just ignoring the
+ * lettered extras than by picking a "preferred" one.
+ */
+const ANIM_LEVEL_RE = /_level(\d{3})$/;
+function orientationOf(name) {
+    const match = ORIENTATION_RE.exec(name);
+    if (!match) {
+        throw new Error(`textures.ts: couldn't find an orientation token in frame "${name}"`);
+    }
+    return match[1];
+}
+/**
+ * A terrain-variant family (grass/forest top) has a plain, unsuffixed frame
+ * as well as numbered `variantNNN` ones — the plain frame is index 0 and
+ * `variantNNN` is index `NNN + 1`. A building-level family (tower, hut/
+ * longhouse/farm top) has no plain frame at all — every rung is a numbered
+ * `levelNNN`, which *is* its index directly, `000` included.
+ */
+function explicitIndexOf(name) {
+    const variant = VARIANT_RE.exec(name);
+    if (variant)
+        return Number(variant[1]) + 1;
+    const level = LEVEL_RE.exec(name);
+    if (level)
+        return Number(level[1]);
+    return null;
+}
+function emptyOrientationMap(fill) {
+    const map = {};
+    for (const orientation of TILE_ORIENTATIONS) {
+        map[orientation] = fill();
+    }
+    return map;
+}
+function mapOrientations(map, fn) {
+    const result = {};
+    for (const orientation of TILE_ORIENTATIONS) {
+        result[orientation] = fn(orientation, map[orientation]);
+    }
+    return result;
+}
+/**
+ * Renumbers a family's `top`-layer frames to be contiguous per orientation
+ * (0, 1, 2, ... in original-index order), leaving `base`/`composite` frames
+ * untouched — see `GAPPY_VARIANT_FAMILIES`'s own doc comment for why this
+ * exists. The renamed frame carries no real family/orientation text beyond
+ * what `orientationOf`/`explicitIndexOf` need to re-derive it, since nothing
+ * downstream of `classifyFamilyFrames` looks at a frame's name again.
+ */
+// Exported (only) so textures.test.ts can exercise the gap-renumbering
+// directly, the same reason classifyFamilyFrames itself is exported.
+export function renumberTopVariants(frames) {
+    const byOrientation = emptyOrientationMap(() => []);
+    const untouched = [];
+    for (const frame of frames) {
+        if (frame.layer !== 'top') {
+            untouched.push(frame);
+            continue;
+        }
+        const orientation = orientationOf(frame.name);
+        byOrientation[orientation].push({ layer: frame.layer, value: frame.value, index: explicitIndexOf(frame.name) ?? 0 });
+    }
+    const result = [...untouched];
+    for (const orientation of TILE_ORIENTATIONS) {
+        const sorted = [...byOrientation[orientation]].sort((a, b) => a.index - b.index);
+        sorted.forEach((entry, i) => {
+            const name = i === 0 ? `renumbered_${orientation}` : `renumbered_${orientation}_variant${String(i - 1).padStart(3, '0')}`;
+            result.push({ name, layer: entry.layer, value: entry.value });
+        });
+    }
+    return result;
+}
+/**
+ * The bog set's texture keys, each backed by a family that numbers its variants `variant001`... with no `variant000`
+ * (the plain frame is index 0): `normalizeBogFrames` renames them to the contiguous numbering
+ * `classifyFamilyFrames` needs (`variantNNN` is index `NNN + 1`, so `variant001` becomes `variant000`).
+ */
+export const BOG_TEXTURE_KEYS = new Set([
+    'bog',
+    'lake',
+    'bogcreek',
+    'bogcreekbend',
+    'bogcreekspring',
+    'lakeinlet',
+    'lakeshore',
+    'lakehalf',
+    'lakemouth',
+]);
+/**
+ * How many of a bog family's variants the game shows. The lake's `variant004` (fish weir), `variant005` (ore boat) and
+ * `variant006` (fishing boat) are placed by the buildings that use them (a lake Fisher Hut, the bog-ore works), never
+ * rolled for a plain lake tile, so they are dropped here; every other family shows all it has.
+ */
+const BOG_MAX_VARIANT = { lake: 3 };
+/**
+ * The `boglake` variants that are decorations, not plain tiles: variant004 the fish weir (all six rotations, static),
+ * variant005 the ore boat (animated, kept camera SW only) and variant006 the fishing boat (animated, kept camera W only).
+ */
+export const LAKE_PROP_VARIANT = {
+    lakeweir: 4,
+    lakeoreboat: 5,
+    lakefishboat: 6,
+};
+/** The biome forest keys, by `Tile.forestKind`. Their top is indexed by the tile's variant (plain, full forest, glade, tarn) and each pass has a wind-sway clip. */
+export const BIOME_FOREST_KEY = {
+    taiga: 'forest_taiga',
+    birch: 'forest_birch',
+    mixed: 'forest_mixed',
+};
+/**
+ * The living mountain's art by shape, indexed by `Tile.variant` (the backend's `MountainShape`: cone, table, saddleback, corrie).
+ * Each shape is its own family with a single look per rotation, so the variant picks the family, not a frame inside one.
+ */
+export const MOUNTAIN_SHAPE_KEY = ['mountain', 'mountain_table', 'mountain_saddleback', 'mountain_corrie'];
+const MOUNTAIN_SHAPE_KEYS = new Set(MOUNTAIN_SHAPE_KEY);
+/** `BIOME_FOREST_KEY`'s keys as a list (hoisted so `TERRAIN_TEXTURE_KEYS` can spread it). */
+const BIOME_FOREST_KEYS = Object.values(BIOME_FOREST_KEY);
+/**
+ * Terrain families whose clips are slotted by the tile's top *index* (its variant), not by a building level: a clip's
+ * manifest `variant` (null = plain = 0, `variantNNN` = NNN + 1) is the slot, the same index `explicitIndexOf` gives its static top.
+ */
+const VARIANT_SLOT_CLIP_KEYS = new Set(BIOME_FOREST_KEYS);
+/** The top index a clip of a variant-slotted terrain family animates (see `VARIANT_SLOT_CLIP_KEYS`), or `undefined` for a variant name that isn't `variantNNN`. Exported for the tests. */
+export function clipVariantSlot(clip) {
+    if (clip.variant === null || clip.variant === undefined)
+        return 0;
+    const match = /^variant(\d{3})$/.exec(clip.variant);
+    return match ? Number(match[1]) + 1 : undefined;
+}
+/** The texture key of each lake decoration (`Tile.lakeProp`). */
+export const LAKE_PROP_KEY = {
+    weir: 'lakeweir',
+    oreboat: 'lakeoreboat',
+    fishboat: 'lakefishboat',
+};
+/** The one camera each animated boat is rendered from (3D_assets `docs/bog-tiles.md`): the only rotation its frames exist in. */
+export const LAKE_PROP_KEPT_ORIENTATION = {
+    oreboat: 'SW',
+    fishboat: 'W',
+};
+/** Picks one numbered variant out of the `boglake` frames and renames it to the plain frame names `classifyFamilyFrames` reads (`boglake_SW_variant005_base` becomes `boglake_SW_base`). Exported for the tests. */
+export function selectVariantFrames(frames, variant) {
+    const result = [];
+    for (const frame of frames) {
+        const match = BOG_FRAME_RE.exec(frame.name);
+        if (!match || match[3] === undefined || Number(match[3]) !== variant)
+            continue;
+        result.push({ name: `${match[1]}_${match[2]}${match[4] ?? ''}`, layer: frame.layer, value: frame.value });
+    }
+    return result;
+}
+const BOG_FRAME_RE = /^(.+)_(NE|NW|SW|SE|E|W)(?:_variant(\d{3}))?(_base)?$/;
+/** Lines a bog family's frames up for `classifyFamilyFrames` — see `BOG_TEXTURE_KEYS`. Exported for the tests. */
+export function normalizeBogFrames(frames, maxVariant = Number.POSITIVE_INFINITY) {
+    const result = [];
+    for (const frame of frames) {
+        const match = BOG_FRAME_RE.exec(frame.name);
+        if (!match)
+            continue;
+        const variant = match[3] === undefined ? 0 : Number(match[3]);
+        if (variant > maxVariant)
+            continue;
+        const suffix = variant === 0 ? '' : `_variant${String(variant - 1).padStart(3, '0')}`;
+        result.push({ name: `${match[1]}_${match[2]}${suffix}${match[4] ?? ''}`, layer: frame.layer, value: frame.value });
+    }
+    return result;
+}
+/**
+ * Groups one family's atlas frames into the base/baseIndexed/top shape
+ * `TileTextures` needs, purely from each frame's own name and layer — no
+ * Pixi/Texture dependency. `layer: "composite"` (a family the source
+ * doesn't split into base/top folders) is treated as that family's base,
+ * with no top, same as `"base"`.
+ *
+ * Whether a family's base ends up plain (`base`) or indexed (`baseIndexed`)
+ * is inferred from the data rather than hardcoded per family: most
+ * buildings' base is one level-invariant texture, but a few (fisherhut,
+ * sawmillriver, sawmillbend) render a different base per level too — this
+ * shows up simply as more than one distinct index turning up for some
+ * orientation's base frames, with no family-specific rule needed either way.
+ *
+ * `sparse` (default `false`, the original contract): a genuinely broken
+ * render pass leaves a hole in the middle of a level/variant sequence (e.g.
+ * `level000`+`level002` with no `level001`), and the default, strict mode
+ * throws on exactly that — real production bug, not something to silently
+ * tolerate. Pass `sparse: true` only for a frame set that is *known* to be
+ * an incomplete, in-progress load rather than the final art (see
+ * `buildTileTextures`'s own `sparse` parameter): the `buildings-level1`
+ * atlas alone only ever carries index 1 (nothing at index 0), and the
+ * `buildings-static` atlas alone is missing index 1 by design (that frame
+ * lives in `buildings-level1` instead) — both are real, expected states on
+ * the newer split atlas, not bugs. In `sparse` mode a missing index is left
+ * as `undefined` (the array's length is `maxIndex + 1`, not `entries.size`)
+ * rather than thrown on; callers of `TileTextures.top`/`baseIndexed` walk
+ * across those holes themselves (see `pickIndexed`) rather than assuming
+ * every slot is filled.
+ */
+export function classifyFamilyFrames(frames, opts) {
+    const sparse = opts?.sparse ?? false;
+    const baseByOrientation = emptyOrientationMap(() => new Map());
+    const topByOrientation = emptyOrientationMap(() => new Map());
+    for (const { name, layer, value } of frames) {
+        const orientation = orientationOf(name);
+        const index = explicitIndexOf(name) ?? 0;
+        (layer === 'top' ? topByOrientation : baseByOrientation)[orientation].set(index, value);
+    }
+    const toIndexedMap = (byOrientation) => {
+        const result = {};
+        for (const orientation of TILE_ORIENTATIONS) {
+            const entries = byOrientation[orientation];
+            const length = sparse ? (entries.size === 0 ? 0 : Math.max(...entries.keys()) + 1) : entries.size;
+            result[orientation] = Array.from({ length }, (_, i) => {
+                const value = entries.get(i);
+                if (value === undefined) {
+                    if (sparse)
+                        return undefined;
+                    throw new Error(`textures.ts: frame set is missing index ${i} for orientation ${orientation}`);
+                }
+                return value;
+            });
+        }
+        return result;
+    };
+    const hasAny = (byOrientation) => TILE_ORIENTATIONS.some((o) => byOrientation[o].size > 0);
+    const result = {};
+    if (hasAny(topByOrientation)) {
+        result.top = toIndexedMap(topByOrientation);
+    }
+    if (hasAny(baseByOrientation)) {
+        const isIndexed = TILE_ORIENTATIONS.some((o) => baseByOrientation[o].size > 1);
+        if (isIndexed) {
+            result.baseIndexed = toIndexedMap(baseByOrientation);
+        }
+        else {
+            result.base = mapOrientations(baseByOrientation, (_o, m) => {
+                const [value] = m.values();
+                return value;
+            });
+        }
+    }
+    return result;
+}
+/**
+ * One family's `buildings-anim` clips (already filtered to that family — see
+ * `AtlasClip.family`), grouped by orientation and keyed by level number.
+ * `ANIM_LEVEL_RE` drops any lettered alternate pass (see its own comment).
+ * Generic over the frame's resolved value for the same reason
+ * `classifyFamilyFrames` is — unit-testable with plain strings, no Pixi
+ * dependency (see `textures.test.ts`) — with a real caller supplying a
+ * `Record<string, Texture>` and dropping any clip that doesn't fully resolve
+ * (a page that failed to parse) before it ever reaches this function.
+ */
+export function classifyFamilyClips(clips, resolveFrame, levelOf) {
+    const byOrientation = emptyOrientationMap(() => new Map());
+    for (const clip of clips) {
+        const level = levelOf ? levelOf(clip) : ANIM_LEVEL_RE.exec(clip.name) ? Number(ANIM_LEVEL_RE.exec(clip.name)[1]) : undefined;
+        if (level === undefined)
+            continue;
+        const orientation = clip.orientation;
+        if (!TILE_ORIENTATIONS.includes(orientation))
+            continue;
+        const frameValues = clip.frames.map(resolveFrame);
+        if (frameValues.some((v) => v === undefined))
+            continue;
+        // An overlay clip's frames are parts-only — without its rest image
+        // resolving too, drawing them alone would show a half-built building, so
+        // this drops the whole clip and falls back to the static top texture,
+        // same as any frame failing to resolve above.
+        let rest;
+        if (clip.overlay) {
+            if (!clip.rest)
+                continue;
+            rest = resolveFrame(clip.rest);
+            if (rest === undefined)
+                continue;
+        }
+        byOrientation[orientation].set(level, {
+            textures: frameValues,
+            fps: clip.fps,
+            playback: clip.playback,
+            pause: clip.pause ?? 0,
+            rest,
+            ...(clip.shared_clock === true ? { sharedClock: true, framesPerColumn: swayFramesPerColumn(clip), ...(swayPeriodFrames(clip) > 0 ? { swayPeriod: swayPeriodFrames(clip) } : {}) } : {}),
+        });
+    }
+    return byOrientation;
+}
+/**
+ * Which texture belongs on a clip's own (base/rest) sprite vs. its overlay
+ * sprite (see `HexMapRenderer.ts`'s `TopAnimState.overlay`), for the frame at
+ * `frameIndex` — the pure decision at the heart of that bookkeeping, kept
+ * generic and side-effect-free so it's exercised directly here rather than
+ * only through a Pixi sprite harness (see `textures.test.ts`). An overlay
+ * clip (`clip.rest` set) always shows its rest image on `base` and the
+ * current frame on `overlay`; a legacy clip has no `overlay` at all — its
+ * current frame goes straight on `base`, same as before overlay clips
+ * existed.
+ */
+export function topAnimTextures(clip, frameIndex) {
+    if (clip.rest !== undefined)
+        return { base: clip.rest, overlay: clip.textures[frameIndex] };
+    return { base: clip.textures[frameIndex] };
+}
+/**
+ * Groups an atlas's resolved frames by family once, in the atlas's own frame order. `buildTileTextures` looks
+ * up ~100 families; scanning the whole (tens of thousands of frames) `frameMeta` per family made every build
+ * cost families x frames.
+ */
+function indexFramesByFamily(atlas) {
+    const byFamily = new Map();
+    for (const [name, meta] of Object.entries(atlas.frameMeta)) {
+        const value = atlas.textures[name];
+        if (!value)
+            continue;
+        let list = byFamily.get(meta.family);
+        if (!list)
+            byFamily.set(meta.family, (list = []));
+        list.push({ name, layer: meta.layer, value });
+    }
+    return (family) => byFamily.get(family) ?? [];
+}
+/**
+ * Builds the full `TileTextures` shape from one or more loaded atlas
+ * categories (e.g. `terrain` + `buildings-static`). A family with no
+ * matching frames in any given atlas is simply absent from the result.
+ *
+ * `animAtlas` (the `buildings-anim` category) is kept separate rather than
+ * folded into `atlases` above: its per-frame clip frames (`cropmill_E_
+ * level003_f00`, ...) carry the same family/layer `bjarnoy` metadata as a
+ * plain static frame, so merging them into the same frame pool would feed
+ * `classifyFamilyFrames` a mix of real static frames and individual
+ * animation frames it has no way to tell apart — corrupting the static
+ * `top`/`base` index it builds. Reading `animAtlas.clips` on its own instead
+ * sidesteps that entirely.
+ *
+ * `sparse` (default `false`): passed straight through to
+ * `classifyFamilyFrames` for every *building* key (never a terrain key —
+ * terrain families aren't split across `buildings-level1`/`buildings-static`
+ * at all, so a real gap there is still always a bug). Set this when
+ * `atlases` is known to be an incomplete slice of a building's full frame
+ * set — `loadLevel1Atlases`/`loadBuildingAtlases` each build from exactly
+ * one of the two categories a building's frames are now split across, so
+ * each one alone is missing the other's rungs by design, not by accident.
+ * Every other loader (`loadTileTextures`, `loadPackAtlases`, ...) merges
+ * `buildings-level1` and `buildings-static` into the same `atlases` array
+ * *before* this runs, so their combined frame pool has no real gaps and
+ * strict (`sparse: false`) classification still catches a genuinely broken
+ * render pass.
+ */
+export function buildTileTextures(atlases, animAtlas, opts) {
+    const statics = buildStaticTileTextures(atlases, opts?.sparse ?? false);
+    return animAtlas ? withAnimClips(statics, animAtlas) : statics;
+}
+/**
+ * `buildTileTextures` without an anim atlas: everything classified from the
+ * static frames, `animTop`/`giantAnims` empty. Nothing in it depends on the
+ * anim atlas, so `loadAnimAtlases` builds it once and attaches each partial's
+ * clips with `withAnimClips` instead of reclassifying every static frame per
+ * page.
+ */
+function buildStaticTileTextures(atlases, sparse) {
+    const merged = { textures: {}, frameMeta: {}, clips: {} };
+    for (const atlas of atlases) {
+        Object.assign(merged.textures, atlas.textures);
+        Object.assign(merged.frameMeta, atlas.frameMeta);
+        Object.assign(merged.clips, atlas.clips);
+    }
+    const framesOf = indexFramesByFamily(merged);
+    const base = {};
+    const baseIndexed = {};
+    const top = {};
+    for (const [key, family] of Object.entries(KEY_FAMILY)) {
+        const rawFrames = framesOf(family);
+        const propVariant = LAKE_PROP_VARIANT[key];
+        const frames = propVariant !== undefined
+            ? selectVariantFrames(rawFrames, propVariant)
+            : BOG_TEXTURE_KEYS.has(key)
+                ? normalizeBogFrames(rawFrames, BOG_MAX_VARIANT[key])
+                : collapseLetteredLevels(rawFrames);
+        const keySparse = sparse && !TERRAIN_TEXTURE_KEYS.has(key);
+        const classified = classifyFamilyFrames(GAPPY_VARIANT_FAMILIES.has(family) ? renumberTopVariants(frames) : frames, {
+            sparse: keySparse,
+        });
+        if (classified.base)
+            base[key] = classified.base;
+        if (classified.baseIndexed)
+            baseIndexed[key] = classified.baseIndexed;
+        if (classified.top)
+            top[key] = classified.top;
+    }
+    // Coastal water's variants are split like any other tile: the water (with the submerged part of a prop) in `baseIndexed`,
+    // the prop above the water (the boat, the rock) in `top`, both indexed by variant. An unsplit pack only has one indexed
+    // bucket, which then is the whole picture and is drawn as the base with no top.
+    const coastalClassified = classifyFamilyFrames(framesOf(COASTAL_FAMILY));
+    const { base: coastalBase, top: coastalTop } = coastalBaseAndTop(coastalClassified);
+    // Same base/top ambiguity as plain coastal water above, and the same
+    // "whichever bucket turned out indexed" resolution — blacksandcoast's own
+    // frames happen to carry per-variant base textures too (unlike plain
+    // coastal water's single level-invariant base), but the game still only
+    // ever draws one texture for a coastal-water tile either way.
+    // renumberTopVariants here too: a stale, incomplete leftover copy of
+    // blacksandcoast's frames still lingers in the buildings-static atlas
+    // (from before this family moved into terrain — see the wasted-islands
+    // asset-bump commit), and its lone-frame-per-orientation shape is its own
+    // kind of gap classifyFamilyFrames would otherwise reject outright.
+    const wastedCoastalClassified = classifyFamilyFrames(renumberTopVariants(framesOf(WASTED_COASTAL_FAMILY)));
+    const { base: wastedCoastalBase, top: wastedCoastalTop } = coastalBaseAndTop(wastedCoastalClassified);
+    const riverBase = {};
+    const riverTop = {};
+    for (const [shape, family] of Object.entries(RIVER_FAMILY)) {
+        const classified = classifyFamilyFrames(framesOf(family));
+        riverBase[shape] = classified.base ?? emptyOrientationMap(() => Texture.EMPTY);
+        const topArr = classified.top ?? emptyOrientationMap(() => []);
+        riverTop[shape] = mapOrientations(topArr, (_o, arr) => arr[0] ?? Texture.EMPTY);
+    }
+    const lavaRiverBase = {};
+    const lavaRiverTop = {};
+    for (const [shape, family] of Object.entries(LAVA_RIVER_FAMILY)) {
+        const classified = classifyFamilyFrames(framesOf(family));
+        if (classified.base)
+            lavaRiverBase[shape] = classified.base;
+        if (classified.top)
+            lavaRiverTop[shape] = mapOrientations(classified.top, (_o, arr) => arr[0] ?? Texture.EMPTY);
+    }
+    const giants = {};
+    for (const family of GIANT_FAMILIES) {
+        const frames = framesOf(family);
+        if (frames.length > 0)
+            giants[family] = classifyGiantFrames(frames);
+    }
+    return {
+        base,
+        coastalBase,
+        coastalTop,
+        wastedCoastalBase,
+        wastedCoastalTop,
+        baseIndexed,
+        top,
+        animTop: {},
+        riverBase,
+        riverTop,
+        lavaRiverBase,
+        lavaRiverTop,
+        giants,
+        giantAnims: {},
+    };
+}
+/**
+ * `statics` (a `buildStaticTileTextures` result) with `animAtlas`'s clips
+ * resolved against its `top`: a fresh `animTop`/`giantAnims`, every other
+ * field shared with `statics`.
+ */
+function withAnimClips(statics, animAtlas) {
+    const clips = Object.values(animAtlas.clips);
+    const animTop = {};
+    for (const [key, family] of Object.entries(KEY_FAMILY)) {
+        const topArr = statics.top[key];
+        if (!topArr)
+            continue;
+        const propVariant = LAKE_PROP_VARIANT[key];
+        const familyClips = clips.filter((clip) => clip.family === family);
+        // Neither kind of terrain clip has a `_levelNNN` in its name, so its top slot comes from the manifest instead:
+        // a lake decoration's clip is the one clip of its variant (`boglake_SW_variant005`), slot 0 of its key; a variant-slotted
+        // family's (the biome forests) is its own `variant` as a top index (null = plain = 0, `variantNNN` = NNN + 1).
+        const variantSlotted = VARIANT_SLOT_CLIP_KEYS.has(key);
+        const slotOf = propVariant !== undefined
+            ? (clip) => (clip.variant === `variant${String(propVariant).padStart(3, '0')}` ? 0 : undefined)
+            : variantSlotted
+                ? clipVariantSlot
+                : undefined;
+        const clipsByOrientation = classifyFamilyClips(familyClips, (name) => animAtlas.textures[name], slotOf);
+        const hasClips = TILE_ORIENTATIONS.some((o) => clipsByOrientation[o].size > 0);
+        if (hasClips) {
+            animTop[key] = mapOrientations(topArr, (o, arr) => arr.map((_v, i) => {
+                const clip = clipsByOrientation[o].get(i);
+                return clip && variantSlotted && !clip.sharedClock ? { ...clip, sharedClock: true, framesPerColumn: 0 } : clip;
+            }));
+        }
+    }
+    const giantAnims = {};
+    for (const family of GIANT_FAMILIES) {
+        const familyClips = clips.filter((clip) => clip.family === family);
+        if (familyClips.length === 0)
+            continue;
+        const clipMap = classifyGiantClips(familyClips, (name) => animAtlas.textures[name]);
+        const anims = mapOrientations(clipMap, (_o, parts) => Object.fromEntries(Object.entries(parts).map(([part, clip]) => [
+            part,
+            { textures: clip.textures, fps: clip.fps, playback: clip.playback, pause: clip.pause, rest: clip.rest },
+        ])));
+        const hasAny = TILE_ORIENTATIONS.some((o) => Object.keys(anims[o]).length > 0);
+        if (hasAny)
+            giantAnims[family] = anims;
+    }
+    return { ...statics, animTop, giantAnims };
+}
+/**
+ * Terrain families (green and wasted) belong to the terrain atlas, `a` in
+ * `mergeTileTextures`. A later load may still carry a few frames under the
+ * same names (bg_assets_hextile 24f0644 left stale `wasteland`/`blacksand`
+ * variants in buildings-static), and a plain spread let that partial copy
+ * replace the whole family: every orientation collapsed to its one stale
+ * frame. Terrain keys already in `a` therefore win; everything else merges
+ * as before.
+ */
+const TERRAIN_TEXTURE_KEYS = new Set([
+    'sea',
+    'sand',
+    'grass',
+    'forest',
+    ...BIOME_FOREST_KEYS,
+    ...MOUNTAIN_SHAPE_KEY,
+    'wasteland',
+    'deadforest',
+    'blacksand',
+    'wastedmountain',
+    ...BOG_TEXTURE_KEYS,
+    'lakeweir',
+    'lakeoreboat',
+    'lakefishboat',
+]);
+function mergeKeyed(a, b) {
+    const merged = { ...a, ...b };
+    for (const key of TERRAIN_TEXTURE_KEYS) {
+        if (a[key] !== undefined)
+            merged[key] = a[key];
+    }
+    return merged;
+}
+/**
+ * Merges one orientation's per-level array element-wise, `a`'s entry
+ * winning at every index it has one for — used for `top`/`baseIndexed`
+ * below, whose arrays can now be genuinely sparse (see
+ * `classifyFamilyFrames`'s `sparse` option): `loadLevel1Atlases` (level 1
+ * only) and `loadBuildingAtlases` (everything else) each resolve with holes
+ * at the other's rungs, and a later load merging in must fill those holes
+ * rather than replacing the whole array — a plain `a ?? b` per key would let
+ * `loadBuildingAtlases`'s array (present, but still missing level 1) wipe
+ * out level 1's own entry entirely once it resolves after `loadLevel1Atlases`.
+ */
+function mergeIndexedArray(a, b) {
+    if (!a)
+        return b;
+    if (!b)
+        return a;
+    const length = Math.max(a.length, b.length);
+    const result = new Array(length);
+    for (let i = 0; i < length; i++) {
+        result[i] = a[i] ?? b[i];
+    }
+    return result;
+}
+/** `mergeKeyed`'s per-key merge, but element-wise on each orientation's array via `mergeIndexedArray` — see that function's own doc comment for why `top`/`baseIndexed` need this instead of a whole-array `mergeKeyed`. */
+function mergeKeyedArrays(a, b) {
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    const merged = {};
+    for (const key of keys) {
+        if (TERRAIN_TEXTURE_KEYS.has(key) && a[key] !== undefined) {
+            merged[key] = a[key];
+            continue;
+        }
+        const av = a[key];
+        const bv = b[key];
+        if (!av) {
+            merged[key] = bv;
+        }
+        else if (!bv) {
+            merged[key] = av;
+        }
+        else {
+            merged[key] = mapOrientations(av, (orientation, arr) => mergeIndexedArray(arr, bv[orientation]));
+        }
+    }
+    return merged;
+}
+/**
+ * Fills in a per-orientation array field from `b` wherever `a`'s own
+ * orientation is empty — used for `wastedCoastalBase` below: with atlas
+ * packs, `a` (the core terrain load) has none of it until the wasted pack
+ * (`b`, loaded later — see `loadPackAtlases`) resolves, so `a`'s copy can no
+ * longer be assumed to always already hold it the way it did before packs
+ * existed.
+ */
+function mergeOrientationArrays(a, b) {
+    return mapOrientations(a, (orientation, value) => (value.length > 0 ? value : b[orientation]));
+}
+/** Merges an already-resolved `TileTextures` with one loaded later (e.g. terrain, then buildings once they resolve, or the wasted pack once revealed) — used by `HexMapRenderer` to upgrade in place without a full reload. `coastalBase`/`coastalTop`/`riverBase`/`riverTop` only ever come from the core terrain atlas, so `a`'s copies win unconditionally; the wasted-only fields (`wastedCoastalBase`/`wastedCoastalTop`, `lavaRiverBase`/`lavaRiverTop`) instead keep `a`'s entry where it has one and fall back to `b`'s, since they may not have resolved yet in `a` (the wasted pack loads separately from — and later than — the core terrain atlas). */
+export function mergeTileTextures(a, b) {
+    return {
+        base: mergeKeyed(a.base, b.base),
+        baseIndexed: mergeKeyedArrays(a.baseIndexed, b.baseIndexed),
+        top: mergeKeyedArrays(a.top, b.top),
+        // Not `mergeKeyed`: a terrain key's `a` must not win here. Terrain clips (the biome forests) arrive page by page and a later, fuller batch has to replace the partial one.
+        animTop: { ...a.animTop, ...b.animTop },
+        coastalBase: a.coastalBase,
+        coastalTop: a.coastalTop,
+        riverBase: a.riverBase,
+        riverTop: a.riverTop,
+        wastedCoastalBase: mergeOrientationArrays(a.wastedCoastalBase, b.wastedCoastalBase),
+        wastedCoastalTop: mergeOrientationArrays(a.wastedCoastalTop, b.wastedCoastalTop),
+        lavaRiverBase: { ...b.lavaRiverBase, ...a.lavaRiverBase },
+        lavaRiverTop: { ...b.lavaRiverTop, ...a.lavaRiverTop },
+        giants: { ...a.giants, ...b.giants },
+        giantAnims: { ...a.giantAnims, ...b.giantAnims },
+    };
+}
+/**
+ * Drops a memoised load once it rejects, so a later call (e.g. the map's
+ * "Retry" button) actually re-fetches instead of replaying the same failed
+ * promise forever. `evict` runs only if the slot still holds this promise.
+ */
+function evictOnReject(promise, evict) {
+    promise.catch(evict);
+    return promise;
+}
+let terrainLoading = null;
+/**
+ * The small `terrain` atlas alone — enough for the landing page / world map
+ * background, and for `HexMapRenderer` to draw terrain-only settlement tiles
+ * before building art resolves. `onPage`, like `loadAtlasCategory`'s own, is
+ * only invoked on the first (uncached) call.
+ */
+export function loadTerrainAtlas(onPage) {
+    if (!terrainLoading) {
+        const promise = loadAtlasCategory('terrain', onPage).then((atlas) => buildTileTextures([atlas]));
+        terrainLoading = evictOnReject(promise, () => {
+            if (terrainLoading === promise)
+                terrainLoading = null;
+        });
+    }
+    return terrainLoading;
+}
+let level1Loading = null;
+/**
+ * The `buildings-level1` atlas alone — every levelless building frame
+ * (shared bases, levelless tops) plus every `_level001*` frame (see
+ * `atlas.ts`'s `withBuildingLevel1`'s own doc comment). Loaded via
+ * `loadOptionalAtlasCategory` rather than `loadAtlasCategory`: the older,
+ * currently vendored atlas has no `buildings-level1` pages at all (every
+ * building frame still lives in `buildings-static`), which must resolve to
+ * "nothing yet" rather than fail the whole map load the way a genuinely
+ * missing *core* category would.
+ *
+ * Built with `sparse: true` — this atlas alone only ever has index 1 for a
+ * family's `top`/`baseIndexed` arrays (nothing at index 0, or at 2/3+
+ * either), which is by design here, not a broken render pass (see
+ * `buildTileTextures`'s own `sparse` parameter). `HexMapRenderer` merges
+ * this in *first*, so buildings render with their level-1 art immediately —
+ * whatever their real level — while the larger `buildings-static` atlas is
+ * still loading (see `pickIndexedEntry`'s walk).
+ */
+export function loadLevel1Atlases() {
+    if (!level1Loading) {
+        const promise = loadOptionalAtlasCategory('buildings-level1').then((atlas) => buildTileTextures([atlas], undefined, { sparse: true }));
+        level1Loading = evictOnReject(promise, () => {
+            if (level1Loading === promise)
+                level1Loading = null;
+        });
+    }
+    return level1Loading;
+}
+let buildingLoading = null;
+/**
+ * The (much larger) `buildings-static` atlas alone — no `buildings-anim`.
+ * Its `TileTextures` has empty `coastalBase`/`coastalTop`/`riverBase`/`riverTop` (those
+ * only ever come from `loadTerrainAtlas`) — merge with `mergeTileTextures`
+ * rather than using this result standalone.
+ *
+ * `buildings-anim` used to load unconditionally alongside this (see
+ * `loadAnimAtlases` below for why it's now separate and conditional): every
+ * `buildings-anim`/`wasted-buildings-anim-*` clip also has a static frame
+ * in this atlas, so the map renders correctly — `topAnimFor` just returns
+ * undefined and the static texture draws instead — without ever loading
+ * animation art at all. That's the ~319 MB of decoded GPU/RAM the split
+ * exists to make optional (see `animationPreference.ts`).
+ *
+ * Built with `sparse: true` for the same reason `loadLevel1Atlases` is: on
+ * the newer split atlas, `buildings-static` alone is missing every family's
+ * index 1 by design (that frame lives in `buildings-level1` instead, loaded
+ * separately and merged in via `mergeTileTextures` — see `HexMapRenderer`).
+ * On the older, currently vendored atlas (no split at all) this atlas
+ * already has every index, so `sparse: true` is a no-op there — nothing to
+ * leave a hole for.
+ *
+ * `onPartial` (first, uncached call only — like `onPage`) receives a
+ * `TileTextures` built from each page-so-far snapshot (pages arrive in
+ * priority order), also `sparse`, so the caller can merge and draw the early
+ * art before the later pages have downloaded. Later partials are supersets
+ * of earlier ones, which `mergeTileTextures` handles monotonically.
+ */
+export function loadBuildingAtlases(onPage, onPartial) {
+    if (!buildingLoading) {
+        const promise = loadAtlasCategory('buildings-static', onPage, onPartial && ((partial) => onPartial(buildTileTextures([partial], undefined, { sparse: true })))).then((atlas) => buildTileTextures([atlas], undefined, { sparse: true }));
+        buildingLoading = evictOnReject(promise, () => {
+            if (buildingLoading === promise)
+                buildingLoading = null;
+        });
+    }
+    return buildingLoading;
+}
+/**
+ * The clips of `animAtlas` resolved against their static art: the buildings' clips against `buildings-static`/`buildings-level1`,
+ * and the terrain families' (the biome forests' wind sway) against the `terrain` atlas, which the static frames of those live in while
+ * their frames and rest images live in `buildings-anim`. Built per pool rather than from one merged frame pool, so the terrain families
+ * keep exactly the classification `loadTerrainAtlas` gave them (no stale building-atlas copy of a terrain frame can leak in).
+ */
+function buildAnimTextures(statics, animAtlas) {
+    return mergeTileTextures(withAnimClips(statics.terrain, animAtlas), withAnimClips(statics.buildings, animAtlas));
+}
+let animLoading = null;
+/**
+ * `buildings-anim`'s clips, as a `TileTextures` carrying `animTop` (plus the
+ * `base`/`top`/`baseIndexed` `buildTileTextures` derives from
+ * `buildings-static`/`buildings-level1` along the way — harmless, already-
+ * loaded duplicates of what `loadBuildingAtlases`/`loadLevel1Atlases`
+ * produced, and simplest to just re-merge via `mergeTileTextures` rather
+ * than hand-building a sparser shape). Loaded only while
+ * `animationPreference.effective` is true (see
+ * `HexMapRenderer.setAnimationsEnabled`) — this is the ~319 MB piece that
+ * staying off entirely means never paying for.
+ *
+ * `buildings-level1` is merged into the same `buildTileTextures` call as
+ * `buildings-static` here (rather than loaded and merged separately, the
+ * way `HexMapRenderer` stages the plain static load) — both are folded into
+ * one frame pool *before* classification runs, so it has no real gaps and
+ * can use strict (non-`sparse`) classification, same as `loadTileTextures`.
+ *
+ * `loadAtlasCategory('buildings-static')` here reuses atlas.ts's own
+ * per-category cache — by the time animations turn on, `loadBuildingAtlases`
+ * has almost always already resolved it, so this only actually loads
+ * `buildings-anim`'s own pages (`buildings-level1` likewise, via
+ * `loadLevel1Atlases`'s own cache).
+ */
+export function loadAnimAtlases(onPartial) {
+    if (!animLoading) {
+        // A clip whose frames aren't all on the pages loaded so far is dropped by
+        // the classifiers, so a partial only ever carries complete clips.
+        // A partial waits on the static atlases asynchronously; one landing after
+        // the full result would overwrite it with fewer clips (`mergeTileTextures`'
+        // animTop lets the later merge win). Microtask timing happens to keep them
+        // in order today, so partials and the full result share one chain to make
+        // that a guarantee: the full result is always handed out last.
+        //
+        // The static pools are classified once and shared by every partial and the
+        // full result: only the clips change page by page, so rebuilding the static
+        // classification per page made a 25-page load cost 25 full classifications.
+        let chain = Promise.resolve();
+        let staticsLoading = null;
+        const statics = () => (staticsLoading ??= Promise.all([
+            loadAtlasCategory('buildings-static'),
+            loadOptionalAtlasCategory('buildings-level1'),
+            loadAtlasCategory('terrain'),
+        ]).then(([staticAtlas, level1Atlas, terrainAtlas]) => ({
+            terrain: buildTileTextures([terrainAtlas]),
+            buildings: buildTileTextures([staticAtlas, level1Atlas]),
+        })));
+        const onAnimPartial = onPartial &&
+            ((partial) => {
+                chain = chain
+                    .then(statics)
+                    .then((pools) => onPartial(buildAnimTextures(pools, partial)))
+                    .catch(() => { }); // The full load's own rejection is what callers handle.
+            });
+        const promise = Promise.all([statics(), loadAtlasCategory('buildings-anim', undefined, onAnimPartial)]).then(async ([pools, animAtlas]) => {
+            await chain;
+            return buildAnimTextures(pools, animAtlas);
+        });
+        animLoading = evictOnReject(promise, () => {
+            if (animLoading === promise)
+                animLoading = null;
+        });
+    }
+    return animLoading;
+}
+/**
+ * Releases `buildings-anim`'s decoded GPU textures (see
+ * `atlas.ts`'s `unloadAtlasCategory`) and drops this module's own memoised
+ * promise, so a later `loadAnimAtlases` call actually reloads rather than
+ * replaying a reference to now-destroyed textures. The caller (
+ * `HexMapRenderer.setAnimationsEnabled`) is responsible for first pointing
+ * every sprite that was showing an anim texture back at its static one
+ * (`releaseTopAnim`/`syncTopAnim`) — this only frees the GPU memory, it
+ * doesn't touch anything still drawing with it.
+ */
+export function unloadAnimAtlases() {
+    animLoading = null;
+    void unloadAtlasCategory('buildings-anim');
+}
+const packLoading = new Map();
+/**
+ * One pack's own terrain/building-static/building-level1 atlases
+ * (`${pack}-terrain`, `${pack}-buildings-static`, `${pack}-buildings-level1`)
+ * — no `${pack}-buildings-anim`, same static-only split as
+ * `loadBuildingAtlases` vs. `loadAnimAtlases` above, see `loadPackAnimAtlases`
+ * for the animated half. Built into a `TileTextures` the same shape
+ * `loadTerrainAtlas`/`loadBuildingAtlases` produce — merge it in with
+ * `mergeTileTextures` once the world reveals that pack (see
+ * `HexMapRenderer`'s wasted-reveal handling). Each category loads via
+ * `loadAtlasPackCategory`, which returns an empty, non-throwing
+ * `LoadedAtlas` for a category the pack has no pages for yet (the currently
+ * vendored atlas ships neither pack pages nor any `buildings-level1` split
+ * at all) — so this never fails outright, it just contributes nothing until
+ * the pack's pages actually exist.
+ *
+ * `buildings-static` and `buildings-level1` are merged into the same
+ * `buildTileTextures` call (not loaded/merged separately the way
+ * `HexMapRenderer` stages the plain, unpacked buildings) — both folded into
+ * one frame pool before classification runs, so strict (non-`sparse`)
+ * classification is safe here, same reasoning as `loadTileTextures`.
+ */
+export function loadPackAtlases(pack) {
+    const cached = packLoading.get(pack);
+    if (cached)
+        return cached;
+    const promise = Promise.all([
+        loadAtlasPackCategory(pack, 'terrain'),
+        loadAtlasPackCategory(pack, 'buildings-static'),
+        loadAtlasPackCategory(pack, 'buildings-level1'),
+    ]).then(([terrain, buildings, level1]) => buildTileTextures([terrain, buildings, level1]));
+    packLoading.set(pack, promise);
+    return evictOnReject(promise, () => {
+        if (packLoading.get(pack) === promise)
+            packLoading.delete(pack);
+    });
+}
+const packAnimLoading = new Map();
+/**
+ * `${pack}-buildings-anim`'s clips — the pack half of `loadAnimAtlases`,
+ * loaded only once that pack is both revealed (`maybeLoadWastedPack`) and
+ * animations are enabled. Reuses `loadAtlasPackCategory`'s own per-key cache
+ * for `terrain`/`buildings-static`/`buildings-level1`, so — same as
+ * `loadAnimAtlases` — calling this after `loadPackAtlases(pack)` has already
+ * resolved only actually loads the pack's `buildings-anim` pages.
+ */
+export function loadPackAnimAtlases(pack, onPartial) {
+    const cached = packAnimLoading.get(pack);
+    if (cached)
+        return cached;
+    // Partials and the full result share one chain — see loadAnimAtlases.
+    let chain = Promise.resolve();
+    const statics = () => Promise.all([
+        loadAtlasPackCategory(pack, 'terrain'),
+        loadAtlasPackCategory(pack, 'buildings-static'),
+        loadAtlasPackCategory(pack, 'buildings-level1'),
+    ]);
+    const onAnimPartial = onPartial &&
+        ((partial) => {
+            chain = chain
+                .then(statics)
+                .then(([terrain, buildings, level1]) => onPartial(buildTileTextures([terrain, buildings, level1], partial)))
+                .catch(() => { });
+        });
+    const promise = Promise.all([
+        loadAtlasPackCategory(pack, 'terrain'),
+        loadAtlasPackCategory(pack, 'buildings-static'),
+        loadAtlasPackCategory(pack, 'buildings-level1'),
+        loadAtlasPackCategory(pack, 'buildings-anim', onAnimPartial),
+    ]).then(async ([terrain, buildings, level1, animAtlas]) => {
+        await chain;
+        return buildTileTextures([terrain, buildings, level1], animAtlas);
+    });
+    packAnimLoading.set(pack, promise);
+    return evictOnReject(promise, () => {
+        if (packAnimLoading.get(pack) === promise)
+            packAnimLoading.delete(pack);
+    });
+}
+/** The pack-scoped mirror of `unloadAnimAtlases` — see its own doc comment. */
+export function unloadPackAnimAtlases(pack) {
+    packAnimLoading.delete(pack);
+    void unloadAtlasCategory(`${pack}-buildings-anim`);
+}
+let combinedLoading = null;
+/**
+ * All four atlases (terrain, `buildings-static`, `buildings-level1`,
+ * `buildings-anim`), merged. Existing callers that don't need staged loading
+ * keep using this — `buildings-level1`/`buildings-static` merge into the
+ * same `buildTileTextures` call, same reasoning as `loadAnimAtlases`/
+ * `loadPackAtlases`: one complete frame pool, so strict classification is
+ * safe.
+ */
+export function loadTileTextures() {
+    if (!combinedLoading) {
+        const promise = Promise.all([
+            loadAtlasCategory('terrain'),
+            loadAtlasCategory('buildings-static'),
+            loadOptionalAtlasCategory('buildings-level1'),
+            loadAtlasCategory('buildings-anim'),
+        ]).then(([terrain, buildings, level1, animAtlas]) => buildTileTextures([terrain, buildings, level1], animAtlas));
+        combinedLoading = evictOnReject(promise, () => {
+            if (combinedLoading === promise)
+                combinedLoading = null;
+        });
+    }
+    return combinedLoading;
+}
+/**
+ * A wasted tile's green terrain, mapped to the wasted-island art family it
+ * renders with instead — see `docs/design/river-generation.md`'s wasted-
+ * island section and `WorldModel.setWastedRevealed`. A wasted mountain is
+ * the ashen `mountaintile_jagged` (the plain `mountaintile` art, base and
+ * top, carries a green grass skirt).
+ *
+ * `sea` maps to `taintedwater` here purely so `baseTextureFor`'s own
+ * "no dedicated wasted family, sit on wasteland" fallback (below) doesn't
+ * fire for it — the vendored wasted pack does ship a proper open-water
+ * family. This never actually changes in-game rendering today:
+ * `WorldModel.getTile` only ever sets `Tile.wasted` on wasted *land*, and on
+ * coastal water bordering it (`isCoastalWater`, its own `WASTED_COASTAL_FAMILY`
+ * lookup in `baseTextureFor`, unrelated to this map) — never on open,
+ * non-coastal sea, so a live/demo-mode wasted open-sea tile can't occur. The
+ * one real caller is the Wasted Lands docs page's `StaticWorldModel`
+ * (`src/lib/docs/wastedIsland.ts`'s `buildIslandTiles`), whose hand-built
+ * island *does* mark its open-water ring wasted once the blight reaches it —
+ * see `textures.test.ts`'s "wasted open sea resolves taintedwater" guard.
+ */
+const WASTED_TEXTURE_KEY = {
+    grass: 'wasteland',
+    forest: 'deadforest',
+    sand: 'blacksand',
+    mountain: 'wastedmountain',
+    sea: 'taintedwater',
+};
+/**
+ * A Sawmill is never actually on plain ground — placing one requires a
+ * river shape (`BuildingCatalogue.SawmillRiverShapes`) — so its wire
+ * building type never resolves to the flat/inland `sawmill` art family:
+ * absent a `riverArt` override (which the render path always supplies when
+ * it has the river tile in hand — see `riverBuildingArtFor`), this falls
+ * back to `sawmillriver` rather than the grass family, so a caller that
+ * forgets to pass one (or genuinely has no river tile to look up, e.g. a
+ * stale/malformed tile) still never shows the grass sawmill. See
+ * `textures.test.ts`'s "grass sawmill art is never used" guard.
+ */
+export function textureKeyFor(tile, riverArt) {
+    if (riverArt)
+        return riverArt.key;
+    if (tile.lakeProp && !tile.buildingType)
+        return LAKE_PROP_KEY[tile.lakeProp];
+    if (tile.buildingType === 'sawmill')
+        return 'sawmillriver';
+    if (tile.buildingType === 'bridge')
+        return 'riverbridge';
+    // A Fishing Hut on a bog lake's half shore has its own lake art; the Hammer Forge on a creek is the river hammer mill
+    // (straight creek or bend), a placeholder until the bog-creek art exists.
+    if (tile.buildingType === 'fishinghut' && tile.bog?.kind === 'half')
+        return 'fisherhutlake';
+    if (tile.buildingType === 'hammerschmiede' && tile.bog?.kind === 'creek') {
+        return bogTextureKey(tile.bog) === 'bogcreek' ? 'hammerschmiede' : 'hammerschmiedebend';
+    }
+    // A tower replaces the tile it stands on, so its art depends on the ground: sand, forest and plain bog moss have their own, grass is `tower`.
+    if (tile.buildingType === 'tower' && tile.bog?.kind === 'bog')
+        return 'towerbog';
+    if (tile.buildingType === 'tower' && tile.terrain === 'forest')
+        return 'towerforest';
+    if (tile.buildingType === 'tower' && tile.terrain === 'sand')
+        return 'towersand';
+    if (tile.buildingType)
+        return tile.buildingType;
+    if (tile.wasted)
+        return WASTED_TEXTURE_KEY[tile.terrain] ?? tile.terrain;
+    if (tile.bog)
+        return bogTextureKey(tile.bog);
+    if (tile.terrain === 'mountain')
+        return MOUNTAIN_SHAPE_KEY[tile.variant ?? 0] ?? 'mountain';
+    // A living forest draws its biome's art; a forest the generator hasn't given a kind (older saves, hand-built islands) is the mixed one.
+    if (tile.terrain === 'forest')
+        return BIOME_FOREST_KEY[tile.forestKind ?? 'mixed'];
+    return tile.terrain;
+}
+/**
+ * `textureKeyFor`, except that a biome forest key whose family has no frames in `textures` yet (the vendored atlas predates
+ * hextile143-145) resolves to the old `forest` (foresttile) art. Checked per call against the textures at hand, so it follows the
+ * progressive atlas loading: the key flips to the biome art the moment its frames are merged in. Every texture lookup that
+ * has `textures` goes through this; only a caller without them (`textureKeyFor` itself) sees the biome key.
+ */
+function artKeyFor(textures, tile, riverArt) {
+    const key = textureKeyFor(tile, riverArt);
+    if (VARIANT_SLOT_CLIP_KEYS.has(key) && !hasFrames(textures, key))
+        return 'forest';
+    return key;
+}
+/** True when `key` has a top frame in any orientation. */
+function hasFrames(textures, key) {
+    const top = textures.top[key];
+    return top !== undefined && TILE_ORIENTATIONS.some((o) => top[o].length > 0);
+}
+/**
+ * The texture key of a bog hex: moss and open water are the `bog` / `lake` terrain keys, the shores and the mouth
+ * are told apart by how many lake edges they carry, and a creek is straight or a bend by its in and out directions
+ * (a straight crossing has them opposite; the game only ever makes Straight and 60-degree Bend creeks).
+ */
+export function bogTextureKey(bog) {
+    switch (bog.kind) {
+        case 'bog':
+            return 'bog';
+        case 'lake':
+            return 'lake';
+        case 'inlet':
+            return 'lakeinlet';
+        case 'shore':
+            return 'lakeshore';
+        case 'half':
+            return 'lakehalf';
+        case 'mouth':
+            return 'lakemouth';
+        case 'creekspring':
+            return 'bogcreekspring';
+        case 'creek': {
+            const inIndex = bog.inDirections[0] ? TILE_ORIENTATIONS.indexOf(bog.inDirections[0]) : -1;
+            const outIndex = bog.outDirection ? TILE_ORIENTATIONS.indexOf(bog.outDirection) : -1;
+            return inIndex >= 0 && outIndex >= 0 && (inIndex + 3) % 6 === outIndex ? 'bogcreek' : 'bogcreekbend';
+        }
+    }
+}
+/**
+ * The art rotation of a bog hex, from the pixel-measured conventions of each family (`types.ts`, and
+ * `docs/design/bog.md`'s "Art pack orientation convention"): the shores and the mouth by where their water is,
+ * the creeks exactly like the river crossings they are (straight, bend) and the mountain springs (spring). Moss and
+ * open water have no direction, so they keep the tile's own cosmetic rotation (`fallback`).
+ */
+export function bogOrientationFor(bog, fallback) {
+    switch (bog.kind) {
+        case 'bog':
+        case 'lake':
+            return fallback;
+        case 'inlet':
+        case 'shore':
+        case 'half':
+            return bog.waterEdges.length > 0 ? bogShoreOrientationOf(bog.waterEdges) : fallback;
+        case 'mouth':
+            return bog.waterEdges[0] ? bogMouthOrientationOf(bog.waterEdges[0]) : fallback;
+        case 'creekspring':
+            return bog.outDirection ? springOrientationOf(bog.outDirection) : fallback;
+        case 'creek': {
+            const inDirection = bog.inDirections[0];
+            const outDirection = bog.outDirection;
+            if (!inDirection || !outDirection)
+                return fallback;
+            return bogTextureKey(bog) === 'bogcreek' ? straightOrientationOf(inDirection) : bendOrientationOf(inDirection, outDirection);
+        }
+    }
+}
+/**
+ * Whether a bog hex renders with its bog kind's own art rotation: bare bog always, and the two buildings whose art is drawn
+ * over the hex's own water — the lake Fishing Hut (over the half shore) and the Hammer Forge (over the creek). The other
+ * bog buildings (bog-ore works, Clay Brickworks) stand on plain moss and keep the tile's cosmetic rotation.
+ */
+function usesBogOrientation(tile) {
+    if (!tile.bog || drawnCampOf(tile))
+        return false;
+    if (!tile.buildingType)
+        return true;
+    return tile.buildingType === 'hammerschmiede' || (tile.buildingType === 'fishinghut' && tile.bog.kind === 'half');
+}
+/**
+ * The rotation a tile renders with: a river's or bog's own art rotation where it has one, else the tile's cosmetic one.
+ * A lake decoration keeps its variant's rotation: the boats exist in one camera only (`LAKE_PROP_KEPT_ORIENTATION`), the
+ * weir (all six) keeps the tile's own.
+ */
+function tileOrientationFor(tile, riverArt) {
+    if (riverArt)
+        return riverArt.orientation;
+    const own = tile.orientation ?? 'SE';
+    if (tile.lakeProp && !tile.buildingType)
+        return LAKE_PROP_KEPT_ORIENTATION[tile.lakeProp] ?? own;
+    return usesBogOrientation(tile) ? bogOrientationFor(tile.bog, own) : own;
+}
+/**
+ * Bog looks the game no longer shows, per family: a hex never draws one, its variant is spread over the family's other
+ * looks instead. The art pack still has them, so every look keeps its slot index.
+ * Look 0 of every bog ground and water-edge family (moss, creeks, springs, inlets, shores, halves, mouths) is the plain
+ * hex: bare green with nothing on it, so those hexes always draw one of their decorated looks (a building on the moss
+ * keeps the plain base, it never reads these tops). The open lake keeps its plain look: plain water is just water.
+ * `bog` 6 is the peat cuttings: its stepped peat bank stands on the moss as a hard-edged slab.
+ */
+export const RETIRED_BOG_VARIANTS = {
+    bog: new Set([0, 6]),
+    bogcreek: new Set([0]),
+    bogcreekbend: new Set([0]),
+    bogcreekspring: new Set([0]),
+    lakeinlet: new Set([0]),
+    lakeshore: new Set([0]),
+    lakehalf: new Set([0]),
+    lakemouth: new Set([0]),
+};
+/** A bog family's variant slot for a tile: its hashed variant, wrapped onto the looks the family shows (creeks have 2, shores 1-2, ...), skipping retired ones. Exported for the tests. */
+export function bogVariantIn(key, tile, arr) {
+    if (arr.length <= 1)
+        return 0;
+    const variant = tile.variant ?? 0;
+    const retired = RETIRED_BOG_VARIANTS[key];
+    if (!retired)
+        return variant % arr.length;
+    const shown = arr.map((_, i) => i).filter((i) => !retired.has(i));
+    return shown.length > 0 ? shown[variant % shown.length] : 0;
+}
+/** Clamps an index into `[0, length)` — the shared fallback for both terrain variants and building levels: an index the art pack doesn't have falls back to its richest known one. */
+function clampIndex(index, length) {
+    if (length <= 0)
+        return 0;
+    return Math.min(Math.max(index, 0), length - 1);
+}
+/**
+ * Picks the entry at `index` in a *possibly sparse* per-level array (see
+ * `classifyFamilyFrames`'s `sparse` option and `buildTileTextures`'s own
+ * `sparse` parameter), returning both the value and the index it actually
+ * came from — a caller with a second array indexed the same way (`topTextureFor`
+ * next to `topAnimFor`'s `animTop`) needs that real index to read the
+ * matching slot out of it, not just the value.
+ *
+ * Three rungs, in order:
+ * 1. Exact: `arr[index]` if it's loaded.
+ * 2. Walk down from `index - 1` to `0` — the original clamp-to-richest-known
+ *    fallback (`clampIndex`) generalized to a sparse array: for a fully
+ *    dense array (the normal, fully-loaded case) this reduces to exactly
+ *    that clamp, since walking down from an out-of-range `index` lands on
+ *    the last real entry immediately.
+ * 3. Walk up from `index + 1` — reached only when nothing at or below
+ *    `index` is loaded, which happens exactly while only the `buildings-level1`
+ *    atlas has loaded (see `loadLevel1Atlases`): index 0 (and everything
+ *    below whatever level was requested) is empty, but index 1 is not, so
+ *    this naturally lands on it — "every building renders its level-1 art
+ *    whatever its level" falls out of this walk rather than needing its own
+ *    special case.
+ */
+function pickIndexedEntry(arr, index) {
+    if (!arr)
+        return undefined;
+    if (arr[index] !== undefined)
+        return { value: arr[index], index };
+    for (let i = index - 1; i >= 0; i--) {
+        if (arr[i] !== undefined)
+            return { value: arr[i], index: i };
+    }
+    for (let i = index + 1; i < arr.length; i++) {
+        if (arr[i] !== undefined)
+            return { value: arr[i], index: i };
+    }
+    return undefined;
+}
+/** `pickIndexedEntry`, for a caller that only needs the value (most callers — `topAnimFor` is the one that also needs the resolved index). */
+function pickIndexed(arr, index) {
+    return pickIndexedEntry(arr, index)?.value;
+}
+/**
+ * Whether a tile draws as plain coastal water (`coastalBase`/`coastalTop`, or their wasted pair): a building on it, or the
+ * shore end of an Utgard wall, brings its own base like the palisade's sea end.
+ */
+function drawsCoastalWater(tile, riverArt) {
+    return tile.terrain === 'sea' && tile.isCoastalWater === true && !tile.buildingType && !(riverArt && ENDGAME_KEYS.has(riverArt.key));
+}
+/** Coastal water's base and prop frames by variant: a split pack's `baseIndexed` and `top`, an unsplit one's single indexed bucket as the base. */
+function coastalBaseAndTop(classified) {
+    const empty = () => emptyOrientationMap(() => []);
+    if (classified.baseIndexed)
+        return { base: classified.baseIndexed, top: classified.top ?? empty() };
+    return { base: classified.top ?? empty(), top: empty() };
+}
+/**
+ * The base (ground) layer texture for a tile — coastal water overrides the
+ * plain sea texture, and a leveled-but-unsplit building (tower) swaps its
+ * whole base texture by level instead of layering a top. A building on the
+ * water (the fishing hut) takes priority over both: its own texture
+ * (below, via `textureKeyFor`) replaces the water tile entirely rather than
+ * layering on top of it, since the pack draws the hut with its own base
+ * already included.
+ */
+export function baseTextureFor(textures, tile, riverArt) {
+    // A land wall hex keeps its own ground: the terrain's base (grass, forest floor without the trees, sand, bog moss) as that hex would be drawn
+    // plain, in the hex's own rotation so it blends with its neighbours; only the wall's top is drawn over it.
+    if (riverArt && LAND_WALL_KEYS.has(riverArt.key)) {
+        const ground = { ...tile, buildingType: undefined, buildingLevel: undefined, variant: 0 };
+        // The plain base, never a bog look's own props: slot 0 directly, since bare moss never draws that (retired) look.
+        const bogBase = tile.bog?.kind === 'bog' ? textures.baseIndexed.bog?.[tileOrientationFor(ground)]?.[0] : undefined;
+        return bogBase ?? baseTextureFor(textures, ground);
+    }
+    const orientation = tileOrientationFor(tile, riverArt);
+    if (drawsCoastalWater(tile, riverArt)) {
+        const arr = tile.wasted ? textures.wastedCoastalBase[orientation] : textures.coastalBase[orientation];
+        return arr[clampIndex(tile.variant ?? 0, arr.length)];
+    }
+    // A giant on a wasted island (and any wasted land tile without a wasted
+    // family of its own) sits on the `wasteland` base: the giant's own terrain
+    // key would pick a green grass or mountain base, leaving every volcano and
+    // Utgard in a bright green ring. Not routed through textureKeyFor, which
+    // also decides top art — a giant draws its own top (HexMapRenderer's giant
+    // branch), so only the base diverges here.
+    if (tile.wasted && !tile.buildingType && (tile.giant || !WASTED_TEXTURE_KEY[tile.terrain])) {
+        const wastelandBase = textures.base.wasteland;
+        if (wastelandBase)
+            return wastelandBase[orientation];
+    }
+    const key = artKeyFor(textures, tile, riverArt);
+    const indexed = textures.baseIndexed[key];
+    if (indexed && BOG_TEXTURE_KEYS.has(key)) {
+        // A bog family's base differs per variant (its submerged props), not per building level.
+        const arr = indexed[orientation];
+        if (arr.length > 0)
+            return arr[bogVariantIn(key, tile, arr)];
+    }
+    if (indexed && !BOG_TEXTURE_KEYS.has(key)) {
+        const picked = pickIndexed(indexed[orientation], (tile.buildingLevel ?? 1));
+        if (picked !== undefined)
+            return picked;
+    }
+    // A building with no art of its own in the pack (e.g. Lumberjack/Quarry —
+    // see the module doc comment above) renders as its bare terrain instead of
+    // throwing; BuildingModal.vue's own `art` computed falls back the same way.
+    // Also reached while `indexed` exists but every one of its rungs is still
+    // a hole (only `buildings-level1` loaded, and this particular family's
+    // level 1 base frame hasn't resolved either) — same graceful degradation.
+    const base = textures.base[key] ?? textures.base[tile.terrain];
+    return base[orientation];
+}
+/** A camp's art levels: `level000` cleared (static), `level001` guarded (animated). */
+const CAMP_CLEARED_LEVEL = 0;
+const CAMP_GUARDED_LEVEL = 1;
+/**
+ * The camp a tile actually draws: none once a building stands on its hex or the server reports
+ * it removed. A camp without live state (demo mode, state not fetched yet) is guarded.
+ */
+export function drawnCampOf(tile) {
+    const camp = tile.camp;
+    if (!camp || camp.removed || tile.buildingType)
+        return undefined;
+    return camp;
+}
+/** The art level a camp shows: cleared (`level000`) once empty, else guarded (`level001`). */
+export function campArtLevel(camp) {
+    return camp.empty ? CAMP_CLEARED_LEVEL : CAMP_GUARDED_LEVEL;
+}
+/** The texture key and art-level index a tile's top layer resolves to: a camp's own family (guarded or cleared level), a building's level, or a terrain variant. */
+function topKeyAndIndex(textures, tile, riverArt) {
+    const camp = drawnCampOf(tile);
+    if (camp && !riverArt)
+        return { key: camp.family, index: campArtLevel(camp) };
+    const key = artKeyFor(textures, tile, riverArt);
+    if (camp && riverArt?.key === camp.family)
+        return { key, index: campArtLevel(camp) };
+    // An endgame site draws at its level (carried in buildingLevel, `endgameDrawTile`).
+    if (riverArt && ENDGAME_KEYS.has(riverArt.key))
+        return { key, index: tile.buildingLevel ?? 2 };
+    // A lake decoration is one frame per rotation (index 0); a building is its level; terrain its hashed variant.
+    if (tile.lakeProp && !tile.buildingType)
+        return { key, index: 0 };
+    if (tile.buildingType)
+        return { key, index: tile.buildingLevel ?? 1 };
+    // A mountain shape is a family of its own with one look per rotation: its variant chose the family (`textureKeyFor`), so it draws index 0.
+    if (MOUNTAIN_SHAPE_KEYS.has(key))
+        return { key, index: 0 };
+    const variant = tile.variant ?? 0;
+    // A biome forest that fell back to foresttile draws its plain frame: the variant indexes the biome looks (index 1, the
+    // full forest, is ~84% of hexes), and on foresttile that index is the bear, which would then stand in most forests.
+    if (key === 'forest' && tile.terrain === 'forest' && !tile.wasted)
+        return { key, index: 0 };
+    return { key, index: variant };
+}
+/** Camps that stand on a straight river tile and bring their own river base per level: the bears and the otters. */
+const RIVER_CAMPS = new Set(['bearrapids', 'otterslide']);
+/**
+ * Which art rotation a camp renders with, and (river camps only) its river art override.
+ *
+ * The guarded art ships only the one to three rotations that show its animals best (3D_assets
+ * `docs/wildlife-camps.md`, "Kept orientations"), which are read off the loaded frames rather
+ * than typed out: the tile's own orientation is mapped onto them by modulo, in
+ * `TILE_ORIENTATIONS` order. A river camp (`RIVER_CAMPS`) stands on its river, so it keeps its channel: a
+ * straight channel is the same picture 180 degrees round (orientation index mod 3), and the
+ * kept rotation with the river's own index mod 3 is used. Returns `undefined` when the tile has
+ * no camp, or a river camp is not on a straight river tile (drawn as plain river then).
+ */
+export function campArtFor(textures, tile, river) {
+    const camp = drawnCampOf(tile);
+    if (!camp)
+        return undefined;
+    const family = camp.family;
+    const level = campArtLevel(camp);
+    const kept = TILE_ORIENTATIONS.filter((o) => textures.top[family]?.[o]?.[level] !== undefined);
+    if (RIVER_CAMPS.has(family)) {
+        if (!river || river.shape !== 'straight' || river.wasted)
+            return undefined;
+        const channel = riverArtFor(river, null).orientation;
+        const channelClass = TILE_ORIENTATIONS.indexOf(channel) % 3;
+        const orientation = kept.find((o) => TILE_ORIENTATIONS.indexOf(o) % 3 === channelClass) ?? channel;
+        return { orientation, riverArt: { key: family, orientation } };
+    }
+    if (kept.length === 0)
+        return { orientation: camp.orientation };
+    return { orientation: kept[TILE_ORIENTATIONS.indexOf(camp.orientation) % kept.length] };
+}
+/** The top (props/building) layer texture for a tile, or `undefined` if this key has no top layer. */
+export function topTextureFor(textures, tile, riverArt) {
+    if (drawsCoastalWater(tile, riverArt)) {
+        const arr = (tile.wasted ? textures.wastedCoastalTop : textures.coastalTop)[tileOrientationFor(tile, riverArt)];
+        return arr[tile.variant ?? 0];
+    }
+    const { key, index } = topKeyAndIndex(textures, tile, riverArt);
+    const orientation = tileOrientationFor(tile, riverArt);
+    const arr = textures.top[key]?.[orientation];
+    if (!arr)
+        return undefined;
+    if (BOG_TEXTURE_KEYS.has(key))
+        return arr[bogVariantIn(key, tile, arr)];
+    return pickIndexed(arr, index);
+}
+/**
+ * The playable clip standing in for this tile's top texture, or `undefined`
+ * if this exact key/orientation/level has no animation (most rungs don't —
+ * see `TileTextures.animTop`'s own comment). Resolves the level index
+ * identically to `topTextureFor` so the two always agree on which rung a
+ * given tile is showing.
+ */
+export function topAnimFor(textures, tile, riverArt) {
+    const { key, index } = topKeyAndIndex(textures, tile, riverArt);
+    const orientation = tileOrientationFor(tile, riverArt);
+    const arr = textures.top[key]?.[orientation];
+    if (!arr)
+        return undefined;
+    // Bog art has no animated toppings of its own on a plain tile (the boats are placed by the buildings that use them).
+    if (BOG_TEXTURE_KEYS.has(key))
+        return undefined;
+    // Resolved through the same `pickIndexedEntry` walk as `topTextureFor`
+    // (not a plain `clampIndex`) so the two always agree on which rung is
+    // actually showing — including while only `buildings-level1` has loaded
+    // and every requested level resolves to index 1's art (see
+    // `pickIndexedEntry`'s own doc comment).
+    const resolved = pickIndexedEntry(arr, index);
+    if (!resolved)
+        return undefined;
+    return textures.animTop[key]?.[orientation]?.[resolved.index];
+}
+/**
+ * Which art file (family + rotation) a river tile renders with.
+ *
+ * None of these families' filename index matches the screen edge it
+ * actually touches (the isometric projection reflects direction indices,
+ * not just relabels them — see `docs/design/river-generation.md`'s "Art
+ * pack orientation convention"), so every shape resolves its orientation
+ * through the derived helpers in `types.ts` rather than using
+ * `inDirections`/`outDirection` as a `TileOrientation` directly.
+ *
+ * `bend` is directional (`bendOrientationOf`); `bend60` — the sharper
+ * 120°-off-straight turn between two adjacent edges, a separate art family
+ * from `bend` — has its own rotation convention (`bend60OrientationOf`: its
+ * files touch edges `D`/`D+1`, not `bend`'s `D-1`/`D+1`); `spring` has only
+ * an outflow (`springOrientationOf`) — which of its two art families
+ * (`springcorrie`/`springsaddleback`) to use is the caller's own per-tile
+ * lookup (`springShape`, mirroring the backend's
+ * `TerrainSampler.SpringMountainShapeAt` — see `WorldModel.springShapeAt`),
+ * since which mountain shape a spring's coordinate hashes to has nothing to
+ * do with the river tile itself; `straight` orients by whichever of
+ * `inDirections[0]`/`outDirection` is available, since `straightOrientationOf`
+ * gives the same file either way (`docs/design/river-generation.md` again).
+ *
+ * `mouth` has no art of its own — it renders as `straight` or `bend`
+ * depending on the actual angle to the sea (`mouthOrientationOf`;
+ * `seaDirection` is the caller's own terrain lookup, since a `RiverTile`
+ * carries none), not the inflow's geometric opposite `straight` alone
+ * would assume.
+ *
+ * `confluence` has two junction assets, each pixel-verified the same way
+ * the other families were (`docs/design/river-generation.md`'s "Art pack
+ * orientation convention"): `y_narrow` (`confluenceOrientationOf`) is
+ * asymmetric — a fixed opposite pair (the trunk) plus a third edge adjacent
+ * to one end (the branch); `ywide` (`confluenceWideOrientationOf`) is fully
+ * symmetric — three arms exactly 120° apart, no distinguished trunk or
+ * branch. Unlike an ordinary bend, nothing on the generation side
+ * constrains a confluence's (in1, in2, out) angles to one fixed relative
+ * arrangement — two independently traced paths collide wherever they
+ * happen to — so this tries `y_narrow` first, then `ywide` (the two never
+ * both match the same triple — an opposite pair and an evenly-120°-spaced
+ * triple are mutually exclusive), and only falls back to the untransformed
+ * `outDirection ?? inDirections[0]` this whole function used before either
+ * fix, for a triple neither asset can represent.
+ */
+// Exported (only) so textures.test.ts can check the shape/orientation this
+// picks without going through loadTileTextures' real asset pipeline
+// (Pixi's Assets.load needs a browser `document`, which this repo's node-
+// environment vitest config doesn't provide).
+export function riverArtFor(river, seaDirection, springShape = 'corrie') {
+    const width = river.width ?? 'river';
+    const stream = width === 'stream';
+    if (river.shape === 'bend' && river.outDirection && river.inDirections[0]) {
+        return {
+            shape: stream ? 'small_bend' : 'bend',
+            orientation: bendOrientationOf(river.inDirections[0], river.outDirection),
+        };
+    }
+    if (river.shape === 'bend60' && river.outDirection && river.inDirections[0]) {
+        return {
+            shape: stream ? 'small_bend60' : 'bend60',
+            orientation: bend60OrientationOf(river.inDirections[0], river.outDirection),
+        };
+    }
+    if (river.shape === 'spring' && river.outDirection) {
+        const shape = springShape === 'saddleback' ? 'springsaddleback' : 'springcorrie';
+        return { shape, orientation: springOrientationOf(river.outDirection) };
+    }
+    if (river.shape === 'confluence') {
+        // A stream joining a river (width 'riverstream'): the tributary tile. The generator stores the
+        // stream inflow first; pixel-measured, file D carries the stream on polygon edge D+3 and the river
+        // on D+1 / D+5, so a stream arriving from direction s uses file (6 - s) mod 6.
+        if (width === 'riverstream' && river.inDirections[0]) {
+            return { shape: 'riverstream', orientation: tributaryOrientationOf(river.inDirections[0]) };
+        }
+        // Two streams meeting: the smallwide Y (river out); otherwise the river Y.
+        const narrow = confluenceOrientationOf(river.inDirections, river.outDirection);
+        if (narrow)
+            return { shape: width === 'widen' ? 'widen_yn' : 'confluencenarrow', orientation: narrow };
+        const wide = confluenceWideOrientationOf(river.inDirections, river.outDirection);
+        if (wide)
+            return { shape: width === 'widen' ? 'widen_yw' : 'confluencewide', orientation: wide };
+        const orientation = river.outDirection ?? river.inDirections[0] ?? 'SE';
+        return { shape: 'confluencenarrow', orientation };
+    }
+    if (river.shape === 'mouth' && river.inDirections[0]) {
+        const inDirection = river.inDirections[0];
+        // A stream that reaches the sea head-on widens on the mouth tile itself (the generator only
+        // allows that when the sea is straight ahead).
+        if (width === 'widen')
+            return { shape: 'widen_straight', orientation: widenStraightOrientationOf(inDirection) };
+        // A river meeting the sea head-on is a delta (green islands: it is sand-based art).
+        if (!river.wasted && seaDirection) {
+            const inIndex = TILE_ORIENTATIONS.indexOf(inDirection);
+            if (TILE_ORIENTATIONS.indexOf(seaDirection) === (inIndex + 3) % 6) {
+                return { shape: 'delta', orientation: deltaOrientationOf(inDirection) };
+            }
+        }
+        return mouthOrientationOf(inDirection, seaDirection);
+    }
+    if (width === 'widen') {
+        const inDirection = river.inDirections[0] ?? (river.outDirection ? oppositeOf(river.outDirection) : null);
+        return { shape: 'widen_straight', orientation: inDirection ? widenStraightOrientationOf(inDirection) : 'SE' };
+    }
+    const direction = river.inDirections[0] ?? river.outDirection;
+    return {
+        shape: stream ? 'small_straight' : 'straight',
+        orientation: direction ? straightOrientationOf(direction) : 'SE',
+    };
+}
+function oppositeOf(direction) {
+    return TILE_ORIENTATIONS[(TILE_ORIENTATIONS.indexOf(direction) + 3) % 6];
+}
+/**
+ * A river-gated building's own art family/orientation, given the river tile
+ * it stands on — used instead of the tile's random `orientation` hash so a
+ * Sawmill/Crop Mill's channel lines up with its river neighbours (the same
+ * shape is what a real placement is built on, per `BuildingCatalogue`'s
+ * `SawmillRiverShapes`/`CropMillRiverShapes` and `ringCatalogue.ts`'s
+ * `RIVER_SHAPES_BY_TYPE` — see that map's own doc comment for the
+ * shape-matches-the-hex's-river-art rule this mirrors). `seaDirection`/
+ * `springShape` are never needed here: neither building is ever placed on a
+ * `mouth` or `spring` tile, the only shapes `riverArtFor` would otherwise
+ * need them for.
+ *
+ * Returns `undefined` for a river shape this building type has no matching
+ * art for (`riverBuildingAllowedHere` already keeps it from being placed
+ * there in the first place — this only defends the render path against a
+ * stale/malformed tile).
+ */
+export function riverBuildingArtFor(buildingType, river) {
+    // Gated on the river tile's own wire shape, not the art-resolved shape
+    // riverArtFor returns below: a Mouth tile's art always resolves to
+    // 'straight' or 'bend' (mouthOrientationOf), but Mouth itself is never a
+    // valid Sawmill/Crop Mill placement (absent from both SawmillRiverShapes
+    // and CropMillRiverShapes) — checking the raw shape here keeps this in
+    // lockstep with riverBuildingAllowedHere instead of accidentally drawing
+    // river-building art on a shape it was never actually built on.
+    // Their art is river width: a stream or widening hex has no building art.
+    if ((river.width ?? 'river') !== 'river')
+        return undefined;
+    if (buildingType === 'sawmill') {
+        if (river.shape !== 'straight' && river.shape !== 'bend' && river.shape !== 'bend60')
+            return undefined;
+    }
+    else if (buildingType === 'cropmill') {
+        if (river.shape !== 'straight')
+            return undefined;
+    }
+    else if (buildingType === 'bridge') {
+        if (river.shape !== 'straight' && river.shape !== 'bend' && river.shape !== 'bend60')
+            return undefined;
+    }
+    else {
+        return undefined;
+    }
+    const { shape, orientation } = riverArtFor(river, null);
+    if (buildingType === 'bridge') {
+        if (shape === 'straight')
+            return { key: 'riverbridge', orientation };
+        if (shape === 'bend')
+            return { key: 'riverbridgebend', orientation };
+        if (shape === 'bend60')
+            return { key: 'riverbridgebend60', orientation };
+        return undefined;
+    }
+    if (buildingType === 'sawmill') {
+        if (shape === 'straight')
+            return { key: 'sawmillriver', orientation };
+        if (shape === 'bend')
+            return { key: 'sawmillbend', orientation };
+        if (shape === 'bend60')
+            return { key: 'sawmillbend60', orientation };
+        return undefined;
+    }
+    return { key: 'cropmill', orientation };
+}
+/**
+ * The `RiverArtShape` a `straight`/`bend`/`bend60` tile's own `RiverVariant`
+ * resolves to (see `RiverArtShape`'s own doc comment) — `undefined` for
+ * `'plain'` or for a shape with no variant art (spring/confluence/mouth),
+ * i.e. whenever the caller should just keep drawing `shape` itself.
+ */
+const VARIANT_SHAPE = {
+    straight: { meander: 'straight_meander', island: 'straight_island' },
+    bend: { meander: 'bend_meander', island: 'bend_island' },
+    bend60: { loop: 'bend60_loop' },
+    // Streams have the meander and loop cuts but no gravel-bar island: an `island` roll draws plain.
+    small_straight: { meander: 'small_straight_meander' },
+    small_bend: { meander: 'small_bend_meander' },
+    small_bend60: { loop: 'small_bend60_loop' },
+};
+/**
+ * A river tile's own base/top textures, overriding whatever the underlying
+ * terrain would have drawn. `seaDirection` (only meaningful for a `Mouth`
+ * tile — see `riverArtFor`) is the caller's own terrain lookup
+ * (`WorldModel.seaFacingDirectionOf`), since a `RiverTile` carries none.
+ * `springShape` (only meaningful for a `Spring` tile) is likewise the
+ * caller's own lookup (`WorldModel.springShapeAt`) — see `riverArtFor`.
+ * `variant` (only meaningful for `straight`/`bend`/`bend60` — see
+ * `WorldModel.riverVariantAt`) dresses the tile with its
+ * meander/island/loop art at that same shape's own orientation, built on
+ * the same edge-crossing contract as the plain tile (see
+ * `docs/river-tiles.md`, "There are only three river shapes"). Falls back
+ * to the plain shape's own texture if the variant family's frame for this
+ * orientation hasn't loaded (the same graceful-degradation contract every
+ * other keyed lookup in this module has), and is never applied to a
+ * `river.wasted` tile at all — the vendored pack has no lava variant art
+ * (`docs/river-tiles.md`), so a wasted river always renders plain (or lava,
+ * below).
+ */
+export function riverTexturesFor(textures, river, seaDirection = null, springShape = 'corrie', variant = 'plain') {
+    const { shape, orientation } = riverArtFor(river, seaDirection, springShape);
+    // Lava streams (wasted islands) swap in the lavastream/lava-spring
+    // families for the shapes that have one — straight/bend/bend60/
+    // springcorrie/springsaddleback (LAVA_RIVER_FAMILY). Confluence cannot
+    // occur on lava (RiverGenerator's allowConfluence: false) and mouth
+    // deliberately keeps the plain river art (no dedicated lava mouth asset),
+    // so every other shape falls through to the ordinary lookup below even on
+    // a wasted island. The lava families share their water counterparts'
+    // rotation convention (the lava spring drains over edge D+1 like the
+    // mountain springs — see springOrientationOf), so the same orientation
+    // applies unchanged.
+    if (river.wasted &&
+        (shape === 'straight' || shape === 'bend' || shape === 'bend60' || shape === 'springcorrie' || shape === 'springsaddleback')) {
+        const lavaBase = textures.lavaRiverBase[shape]?.[orientation];
+        const lavaTop = textures.lavaRiverTop[shape]?.[orientation];
+        if (lavaBase && lavaTop)
+            return { base: lavaBase, top: lavaTop };
+    }
+    if (!river.wasted && variant !== 'plain') {
+        const variantShape = VARIANT_SHAPE[shape]?.[variant];
+        if (variantShape) {
+            const variantBase = textures.riverBase[variantShape][orientation];
+            const variantTop = textures.riverTop[variantShape][orientation];
+            if (variantBase !== Texture.EMPTY && variantTop !== Texture.EMPTY) {
+                return { base: variantBase, top: variantTop };
+            }
+        }
+    }
+    return { base: textures.riverBase[shape][orientation], top: textures.riverTop[shape][orientation] };
+}
+/**
+ * A giant tile's part texture — `undefined` if this `TileTextures` has no
+ * frames for `family` yet (the real art hasn't landed in the vendored atlas —
+ * see `giantTiles.ts`'s module comment), or no frame for this exact
+ * orientation/part. Callers (`HexMapRenderer.rebuildTerrain`) must degrade
+ * gracefully to drawing the covered hexes normally when this is `undefined`.
+ */
+export function giantTopTextureFor(textures, family, orientation, part) {
+    return giantTopLookup(textures.giants, family, orientation, part);
+}
+/**
+ * A giant tile's part *animation* — `undefined` if this `TileTextures` has
+ * no `buildings-anim` clip for this exact family/orientation/part (most
+ * giants; a giant with static art but no animated clip is the normal case,
+ * same as any other building rung with no `animTop` entry). Callers
+ * (`HexMapRenderer.rebuildTerrain`) fall back to the plain static texture
+ * from `giantTopTextureFor` when this is `undefined`, same as `topAnimFor`.
+ */
+export function giantTopAnimFor(textures, family, orientation, part) {
+    return giantTopLookup(textures.giantAnims, family, orientation, part);
+}
