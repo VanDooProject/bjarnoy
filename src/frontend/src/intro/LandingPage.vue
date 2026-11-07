@@ -29,6 +29,8 @@ watch(ready, (isReady) => {
   }
 });
 
+// the game's name is not translated
+const TITLE = 'BJARNØY';
 const FEATURES = [
   { id: 'multiplayer', key: 'multiplayer' },
   { id: 'noPayToWin', key: 'noPayToWin' },
@@ -39,7 +41,7 @@ const FEATURES = [
 <template>
   <div class="landing-page" data-testid="landing-page">
     <div class="copy">
-      <h1 class="title">BJARNØY</h1>
+      <h1 class="title">{{ TITLE }}</h1>
       <p class="tag">{{ t('tagline') }}</p>
       <ul class="usps">
         <li v-for="f in FEATURES" :key="f.id" class="usp" :data-testid="`landing-usp-${f.id}`">
