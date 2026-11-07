@@ -304,7 +304,17 @@ describe('LandingIntro timeline', () => {
     it('has no animations row while building animations are off (the group never reports)', async () => {
       introLoad.terrain = { loaded: 3, total: 9 };
       const w = await mountIntro();
-      expect(w.findAll('[data-testid="intro-load-detail"] .srow').map((r) => r.attributes('data-group'))).toEqual(['voices', 'terrain']);
+      expect(w.findAll('[data-testid="intro-load-detail"] .srow').map((r) => r.attributes('data-group'))).toEqual(['voices', 'terrain', 'buildings']);
+    });
+
+    it('lists buildings from the start, as 0 of an unknown total until its first page reports', async () => {
+      const w = await mountIntro();
+      const row = (id: string) => w.get(`[data-testid="intro-load-detail"] .srow[data-group="${id}"] .ct`).text();
+      expect(row('terrain')).toBe('0/?');
+      expect(row('buildings')).toBe('0/?');
+      introLoad.buildings = { loaded: 1, total: 11 };
+      await flushPromises();
+      expect(row('buildings')).toBe('1/11');
     });
   });
 

@@ -216,9 +216,10 @@ const barLocked = computed(() => landing && state.value.phase === 'exiting');
 const loadRows = computed<LoadRow[]>(() => {
   if (!landing) return [];
   const rows: LoadRow[] = [{ id: 'voices', ...voiceProgress.value, gating: true }];
+  // terrain and buildings are listed from the start: a group that has not reported a page yet shows 0 of an unknown total
   for (const id of ['terrain', 'buildings'] as const) {
-    const count = introLoad[id];
-    if (count) rows.push({ id, loaded: count.loaded, total: count.total, gating: true });
+    const count = introLoad[id] ?? { loaded: 0, total: 0 };
+    rows.push({ id, loaded: count.loaded, total: count.total, gating: true });
   }
   if (introLoad.animations) rows.push({ id: 'animations', ...introLoad.animations, gating: false });
   return rows;
@@ -406,6 +407,11 @@ onBeforeUnmount(() => {
       </button>
     </Transition>
 
+    <!-- a soft dark band under the control row, so its text reads on the bright fog and landfall scenes too -->
+    <Transition name="intro-fade">
+      <div v-if="pauseVisible" class="ctrl-scrim" aria-hidden="true" />
+    </Transition>
+
     <Transition name="intro-fade">
       <IntroTimeline
         v-if="pauseVisible"
@@ -550,8 +556,18 @@ onBeforeUnmount(() => {
   background: transparent;
   color: #f4f1ea;
   cursor: pointer;
-  filter: drop-shadow(0 2px 14px rgba(0, 0, 0, 0.55));
+  /* a tight dark edge plus a wide soft shadow: the pale symbol still reads on the bright fog */
+  filter: drop-shadow(0 0 1.5px rgba(11, 17, 22, 0.55)) drop-shadow(0 3px 22px rgba(11, 17, 22, 0.7));
   z-index: 2;
+}
+.ctrl-scrim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(160px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, rgba(11, 17, 22, 0.6), rgba(11, 17, 22, 0.32) 45%, rgba(11, 17, 22, 0));
+  pointer-events: none;
 }
 /* opacity on the whole symbol, so fill and rounded stroke do not overlap into a lighter rim */
 .cplay svg {

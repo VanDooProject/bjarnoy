@@ -300,7 +300,7 @@ function onVolumeKey(e: KeyboardEvent): void {
         <div v-for="row in shownRows" :key="row.id" class="srow" :class="{ anim: !row.gating, done: row.total > 0 && row.loaded >= row.total }" :data-group="row.id">
           <span class="nm">{{ introText(locale, `loadGroups.${row.id}`) }}</span>
           <span class="lb"><i :style="{ transform: `scaleX(${rowFraction(row)})` }"></i></span>
-          <span class="ct">{{ row.loaded }}/{{ row.total }}</span>
+          <span class="ct">{{ row.loaded }}/{{ row.total > 0 ? row.total : '?' }}</span>
         </div>
       </div>
 
