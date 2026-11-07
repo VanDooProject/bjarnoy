@@ -6,3 +6,15 @@ const PRIMARY_IDS = ['build', 'upgrade'];
 export function primaryActionFirst<T extends { id: string }>(actions: T[]): T[] {
   return [...actions.filter((a) => PRIMARY_IDS.includes(a.id)), ...actions.filter((a) => !PRIMARY_IDS.includes(a.id))];
 }
+
+const TRAINING_BUILDINGS = new Set(['archeryrange', 'siegeworkshop', 'dockyard', 'barracks', 'cartworkshop']);
+
+/**
+ * The building-specific entry a built tile adds to the ring, next to Upgrade and Raze: Train on every building a unit
+ * is trained at (the longhouse trains none), Feasts on a finished Town Square (opens its BuildingModal, where the feast is held).
+ */
+export function buildingEntryId(buildingType: string, level: number): 'train' | 'feasts' | null {
+  if (TRAINING_BUILDINGS.has(buildingType)) return 'train';
+  if (buildingType === 'townsquare' && level >= 1) return 'feasts';
+  return null;
+}

@@ -148,7 +148,7 @@ the tile:
 | Tile state | Actions |
 |---|---|
 | Own empty tile | Build (→ outer ring of categories → outer ring of buildings) |
-| Own building | Upgrade, Raze (tear down) |
+| Own building | Upgrade, Raze (tear down), Train (unit buildings), Feasts (finished Town Square) |
 | Enemy-owned tile | Attack/Raid (**disabled** — no combat system exists) |
 | Unclaimed hex | Send settlers / Land here (**disabled** — no settler mechanic exists yet) |
 

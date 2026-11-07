@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { lane1Arc } from './ringLayout';
-import { primaryActionFirst } from './ringActions';
+import { buildingEntryId, primaryActionFirst } from './ringActions';
 
 const ids = (list: { id: string }[]) => list.map((a) => a.id);
 
@@ -28,5 +28,14 @@ describe('the first slot of the ring', () => {
       expect(first.x).toBeCloseTo(800);
       expect(first.y).toBeLessThan(450);
     }
+  });
+});
+
+describe('buildingEntryId', () => {
+  it('offers Train on unit buildings and Feasts on a finished Town Square only', () => {
+    expect(buildingEntryId('barracks', 1)).toBe('train');
+    expect(buildingEntryId('townsquare', 1)).toBe('feasts');
+    expect(buildingEntryId('townsquare', 0)).toBeNull();
+    expect(buildingEntryId('longhouse', 3)).toBeNull();
   });
 });

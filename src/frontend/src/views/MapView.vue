@@ -57,7 +57,7 @@ import { buildingStatsAt, buildingUpgradeCost, scaleOutput, upgradeRateGain } fr
 import { formatBuildTime, formatMissingResources, longhouseLock } from '../lib/map/ringCatalogue';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
-import { primaryActionFirst } from '../lib/map/ringActions';
+import { buildingEntryId, primaryActionFirst } from '../lib/map/ringActions';
 import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
 import { useRingMaxScale } from '../composables/useRingMaxScale';
 import type { Tile } from '../lib/map/types';
@@ -926,18 +926,12 @@ function rootActionList(): RingAction[] {
       },
     ];
     // Training belongs to a building: every building any UnitDefinition.RequiredBuildingType
-    // points at (barracks, archery range, siege workshop, dockyard, cart workshop) offers the
-    // action, which opens that building's own TrainingModal. The longhouse trains no unit.
+    // points at offers the action, which opens that building's own TrainingModal; a finished Town Square
+    // offers Feasts, which opens its BuildingModal (the feast lives there). The longhouse trains no unit.
     // The backend enforces the real gate either way — this is just where the UI surfaces the button.
-    if (
-      tile.buildingType === 'archeryrange'
-      || tile.buildingType === 'siegeworkshop'
-      || tile.buildingType === 'dockyard'
-      || tile.buildingType === 'barracks'
-      || tile.buildingType === 'cartworkshop'
-    ) {
-      actions.push({ id: 'train', label: t('hud.ringMenu.actions.trainUnits') });
-    }
+    const entry = buildingEntryId(tile.buildingType, tile.buildingLevel ?? 0);
+    if (entry === 'train') actions.push({ id: 'train', label: t('hud.ringMenu.actions.trainUnits') });
+    if (entry === 'feasts') actions.push({ id: 'feasts', label: t('hud.ringMenu.actions.feasts') });
     actions.push(sendArmyAction(tile));
     return actions;
   }
@@ -1095,6 +1089,10 @@ async function onRingSelect(id: string) {
       // leaves selectedTile/ringScreen alone, so the ring stays open and
       // shows the rejection's message (`actionError`, passed as `error`).
       await upgrade();
+      return;
+    case 'feasts':
+      // The ring closes and BuildingModal takes over the same selectedTile (its feast section).
+      ringScreen.value = null;
       return;
     case 'train':
       // Hand-off to TrainingModal: the ring closes, the modal takes over the same selectedTile.
