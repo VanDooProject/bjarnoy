@@ -84,11 +84,12 @@ const C = {
         <path class="b4-dawn b4-a" :style="C.sky1" d="M-200,330 C200,300 500,350 800,320 C1100,290 1400,340 1800,310 L1800,560 L-200,560 Z"/>
         <path class="b4-dawn b4-a" :style="C.sky2" d="M-200,520 C150,490 520,540 860,505 C1180,475 1450,520 1800,500 L1800,700 L-200,700 Z"/>
         <path class="b4-dawn b4-a" :style="C.sky3" d="M-200,640 C300,615 700,650 1000,628 C1300,608 1550,640 1800,630 L1800,800 L-200,800 Z"/>
-        <g transform="translate(277 278)">
+        <!-- the moon rises out of the sea behind the ship (the far water covers it below the horizon) -->
+        <g class="b4-moonrise b4-a"><g transform="translate(277 278)">
           <circle cx="1030" cy="470" r="260" :fill="url('moonHalo')"/>
           <circle cx="1030" cy="470" r="118" fill="#dfe5e8"/>
           <path class="b4-craterout b4-a" fill="#c8d0d5" d="M990,410 a22,18 0 1,0 1,0 Z M1080,500 a30,24 0 1,0 1,0 Z M1040,535 a12,10 0 1,0 1,0 Z"/>
-        </g>
+        </g></g>
       </g>
 
       <!-- L2 far: Bjarnøy and a farther skerry on the horizon, the sea out to it, fog band, moon glints -->
@@ -281,6 +282,9 @@ const C = {
   30%, 88% { transform: translateX(-380px); animation-timing-function: cubic-bezier(.5, 0, .8, .5) }
   99%, 100% { transform: translateX(0) }
 }
+/* the moon rises out of the sea over the first third */
+.b4 .b4-moonrise { animation-name: b4-moonrise; }
+@keyframes b4-moonrise { 0% { transform: translateY(150px); animation-timing-function: cubic-bezier(.2, .5, .4, 1) } 35%, 100% { transform: translateY(0) } }
 /* the craters fade while the moon fills the frame, so the beat ends on even, fog-pale moonlight */
 .b4 .b4-craterout { animation-name: b4-crater-out; }
 @keyframes b4-crater-out { 0%, 95% { opacity: 1 } 99%, 100% { opacity: 0 } }
