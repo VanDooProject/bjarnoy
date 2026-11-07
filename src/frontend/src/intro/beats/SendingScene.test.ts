@@ -37,7 +37,7 @@ describe('SendingScene', () => {
       expect(area, m.attributes('id')).toBeLessThanOrEqual(0.4 * 1600 * 1600);
     }
     const bands = svg.findAll('.sd-fog rect');
-    expect(bands).toHaveLength(3);
+    expect(bands).toHaveLength(2);
     // the view plus the widest drift tile (1024) and a camera margin
     for (const b of bands) expect(Number(b.attributes('width'))).toBeLessThanOrEqual(1600 + 1024 + 80);
   });

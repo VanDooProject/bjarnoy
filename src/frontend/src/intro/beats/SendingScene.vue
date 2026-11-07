@@ -8,10 +8,10 @@ import { sineLoop } from './sineLoop';
  * Beat 3, the sending: dusk on the burning shore. The jarl, spear planted, goes down on one knee to his
  * son, takes him by the shoulder and pats it, then lets go. The boy turns and walks down to the water
  * and is lost in the shore mist; the jarl raises his arm and waves while the longship drops its sail and
- * pulls out toward the light. Fog closes over the shore at the end, half way: the ravens scene opens on the same
- * horizon and ship under the same veil and thins it. The beat starts from the dark of
+ * pulls out toward the light. At the end the camera turns with the ship, out to sea, and the ravens scene goes on
+ * with that pan. The beat starts from the dark of
  * the prophecy's last frame.
- * The story (figures, camera push, sail, oars, ship's departure, fog closing) is baked from the design's
+ * The story (figures, camera push, sail, oars, ship's departure) is baked from the design's
  * pose function into the keyframes at the bottom: figures and ship on fixed times, camera and fog on
  * `--beat-duration` (see there). Smoke, fire, fog, glints, ash and the ship's swell loop on their own periods.
  */
@@ -130,7 +130,6 @@ const SIDES = [
       </mask>
       <mask :id="id('hzTex')"><rect x="-40" y="640" width="2700" height="300" :fill="url('fog')"/></mask>
       <mask :id="id('shoreTex')"><rect x="-808" y="840" width="2448" height="260" :fill="url('fog2')"/></mask>
-      <mask :id="id('veilTex')"><rect x="0" y="0" width="2624" height="1600" :fill="url('fog')"/></mask>
     </defs>
 
     <rect width="1600" height="1600" :fill="url('sky')"/>
@@ -140,6 +139,8 @@ const SIDES = [
     <ellipse cx="1110" cy="790" rx="190" ry="30" fill="#d39d78" opacity=".6"/>
 
     <g class="sd-a sd-cam-far">
+      <!-- the homeland: the camera pans away from it with the ship at the end -->
+      <g class="sd-a sd-pan-far">
       <ellipse v-for="([bx, by], c) in SMOKE_COLS" :key="c" class="sd-ember" :style="{ '--i': c }" :cx="bx" :cy="by - 70" rx="140" ry="120" :fill="url('ember')"/>
       <!-- one rising texture pair for both columns: the columns overlap, and two pairs cost twice the layers -->
       <g :mask="url('cols')">
@@ -150,6 +151,7 @@ const SIDES = [
       <path d="M0 790 L0 600 L90 560 L170 610 L250 540 L330 600 L430 520 L520 590 L610 560 L700 640 L800 650 L880 720 L940 790 Z" fill="#2d343e"/>
       <path d="M0 790 L0 680 L120 650 L230 690 L360 640 L470 690 L590 670 L700 720 L820 760 L880 790 Z" fill="#252b34"/>
       <SendingFire :x="FIRES[2][0]" :y="FIRES[2][1]" :scale="FIRES[2][2]" :index="2" :glow="url('fireglow')" />
+      </g>
       <rect x="0" y="786" width="1600" height="814" fill="#1d252e"/>
       <g>
         <rect v-for="([x, y, w, h, o], i) in GLINTS" :key="i" class="sd-glint" :style="sineLoop(0.4, i * 1.3)" :x="x" :y="y" :width="w" :height="h" fill="#8c6a5c" :opacity="o"/>
@@ -163,14 +165,17 @@ const SIDES = [
       </g></g></g>
       <rect x="0" y="851" width="1600" height="40" fill="#1d252e"/>
       <rect x="860" y="852" width="520" height="2" fill="#8c6a5c" opacity=".4"/>
+      <g class="sd-a sd-pan-shore">
       <path d="M0 872 L380 880 C640 892 860 908 1040 952 C1150 980 1260 1050 1600 1110 L1600 1600 L0 1600 Z" fill="#2a2f35"/>
       <path d="M0 884 L380 892 C640 904 860 922 1030 968 C1140 998 1250 1068 1600 1130 L1600 1600 L0 1600 Z" fill="#161b21"/>
+      </g>
     </g>
 
     <g>
       <circle v-for="(a, i) in ASH" :key="i" class="sd-ash" :style="a.style" :r="a.r" fill="#8f969d" opacity=".4"/>
     </g>
     <g class="sd-a sd-cam-fig">
+      <g class="sd-a sd-pan-fig">
       <ellipse cx="610" cy="1164" rx="170" ry="12" fill="#05070a" opacity=".5"/>
       <g v-for="fig in FIGS" :key="fig.fill" :transform="fig.shift" :fill="fig.fill">
         <rect x="495" y="540" width="8" height="626"/><path d="M499,494 L511,546 L487,546 Z"/>
@@ -218,20 +223,18 @@ const SIDES = [
             <g class="sd-a sd-j-fore"><rect x="-5" y="-6" width="46" height="12" rx="6"/><circle cx="43" cy="0" r="7"/></g></g></g>
         </g>
       </g>
+      </g>
     </g>
 
     <g :mask="url('right')"><g :mask="url('shore')" opacity=".26"><g class="sd-fog sd-fog-shore"><rect x="-808" y="840" width="2448" height="260" fill="#808891" :mask="url('shoreTex')"/></g></g></g>
 
     <g class="sd-a sd-cam-near">
+      <g class="sd-a sd-pan-near">
       <path d="M-40 1600 L-40 1330 C40 1290 120 1300 190 1340 C260 1320 330 1350 380 1420 C420 1460 460 1520 470 1600 Z" fill="#090b0e"/>
       <path d="M120 1310 L132 1250 L142 1312 M170 1330 L190 1262 L196 1336 M230 1330 L236 1280 L250 1334" stroke="#090b0e" stroke-width="5" fill="none"/>
+      </g>
     </g>
     <rect width="1600" height="1600" :fill="url('vig')"/>
-    <!-- the closing fog: half closed at the end, the ravens scene picks it up -->
-    <g class="sd-a sd-veil">
-      <rect width="1600" height="1600" fill="#4d545c"/>
-      <g class="sd-fog sd-fog-veil"><rect x="0" y="0" width="2624" height="1600" fill="#808891" :mask="url('veilTex')"/></g>
-    </g>
     <!-- the beat starts from the prophecy's dark -->
     <rect class="sd-a sd-dark" width="1600" height="1600" fill="#06080b"/>
   </svg>
@@ -271,8 +274,19 @@ const SIDES = [
 .b3 .sd-ship-depart { animation-name: sd-ship-depart; }
 .b3 :deep(.ship-sail) { animation: sd-sail var(--ship-ms) linear both; }
 .b3 :deep(.ship-oar) { animation: sd-oar var(--ship-ms) linear both; }
-.b3 .sd-veil { animation-name: sd-veil; }
 .b3 .sd-dark { animation-name: sd-dark; }
+/* the end: the camera turns with the ship, out to sea. The shore and the jarl slide away to the bottom left, the
+   burning homeland to the left (nearer layers faster); the ship and the sea keep their place. The pan is still
+   moving when the beat ends, and the ravens scene goes on with it. */
+.b3 .sd-pan-far, .b3 .sd-pan-shore, .b3 .sd-pan-fig, .b3 .sd-pan-near { animation-duration: var(--beat-duration); }
+.b3 .sd-pan-far { animation-name: sd-pan-far; }
+.b3 .sd-pan-shore { animation-name: sd-pan-shore; }
+.b3 .sd-pan-fig { animation-name: sd-pan-fig; }
+.b3 .sd-pan-near { animation-name: sd-pan-near; }
+@keyframes sd-pan-far { 0%, 84% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.5, 0, .9, .6); } 100% { transform: translate(-480px, 0); } }
+@keyframes sd-pan-shore { 0%, 84% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.5, 0, .9, .6); } 100% { transform: translate(-520px, 240px); } }
+@keyframes sd-pan-fig { 0%, 84% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.5, 0, .9, .6); } 100% { transform: translate(-720px, 360px); } }
+@keyframes sd-pan-near { 0%, 84% { transform: translate(0, 0); animation-timing-function: cubic-bezier(.5, 0, .9, .6); } 100% { transform: translate(-950px, 480px); } }
 /* the figures and the ship run on fixed times (see the keyframes below); the ship's run outlasts any beat */
 .b3 { --story-ms: 11200ms; --ship-ms: 14000ms; }
 .b3 .sd-j-thigh, .b3 .sd-j-shin, .b3 .sd-j-bthigh, .b3 .sd-j-bshin, .b3 .sd-j-cloak, .b3 .sd-j-torso, .b3 .sd-j-head, .b3 .sd-j-arm, .b3 .sd-j-fore, .b3 .sd-j-farm, .b3 .sd-j-ffore, .b3 .sd-boy-bob, .b3 .sd-boy-l, .b3 .sd-boy-r, .b3 .sd-legf, .b3 .sd-legb, .b3 .sd-boy-arm, .b3 .sd-look { animation-duration: var(--story-ms); }
@@ -300,11 +314,10 @@ const SIDES = [
 .b3 .sd-rise-a { animation: sd-rise 9000ms linear infinite; }
 .b3 .sd-rise-b { animation: sd-rise 6500ms linear infinite; }
 @keyframes sd-rise { from { transform: translateY(0); } to { transform: translateY(-512px); } }
-/* fog bands drift one whole texture tile per loop: 14 units/s (horizon), 22 (shore, 768 tile), 40 (closing fog).
+/* fog bands drift one whole texture tile per loop: 14 units/s (horizon), 22 (shore, 768 tile).
    Each band is the view plus one tile wide, no more: every unit of it is rastered, on screen or not. */
 .b3 .sd-fog-hz { animation: sd-fog-left 73143ms linear infinite; }
 .b3 .sd-fog-shore { animation: sd-fog-right 34909ms linear infinite; }
-.b3 .sd-fog-veil { animation: sd-fog-left 25600ms linear infinite; }
 @keyframes sd-fog-left { from { transform: translateX(0); } to { transform: translateX(-1024px); } }
 @keyframes sd-fog-right { from { transform: translateX(0); } to { transform: translateX(768px); } }
 /* ash falls through the frame (1640 units) and drifts left a third as fast */
@@ -319,8 +332,8 @@ const SIDES = [
    that stay within 0.25 units / 0.25 deg / 0.005 opacity of it. Designed at 10 s; the beat now lasts as long as
    its voice clip (11.8 s English, 13.3 s German), so the story runs on fixed times instead: the jarl stands
    1.2 s longer before he kneels, the figures' tracks are percentages of --story-ms (10 s + 1.2 s), the ship's
-   of --ship-ms (14 s: it keeps sailing, oars stroking, at its last speed however long the beat is). The camera,
-   the fade from dark and the fog veil (closing only after the voice, from 92 %) stay on --beat-duration. ---- */
+   of --ship-ms (14 s: it keeps sailing, oars stroking, at its last speed however long the beat is). The camera and
+   the fade from dark stay on --beat-duration. ---- */
 @keyframes sd-cam-far {
   0% { transform: translate(0, 0) scale(1); } 10.1% { transform: translate(-0.46px, -0.47px) scale(1.0006); }
   21.15% { transform: translate(-1.84px, -1.89px) scale(1.0023); }
@@ -1313,10 +1326,6 @@ const SIDES = [
   98.57% { transform: rotate(-16.88deg); }
   98.93% { transform: rotate(-12.59deg); }
   100% { transform: rotate(1.70deg); }
-}
-@keyframes sd-veil {
-  0% { opacity: 0; visibility: hidden; } 91.5% { opacity: 0; visibility: hidden; }
-  92% { opacity: 0; visibility: visible; } 96% { opacity: 0.3; } 100% { opacity: 0.5; visibility: visible; }
 }
 @keyframes sd-dark {
   0% { opacity: 1; } 9%, 100% { opacity: 0; visibility: hidden; }
