@@ -1,4 +1,5 @@
 import { reactive } from 'vue';
+import { introSignal } from './introSignal';
 
 /** Pages (atlas pages) loaded so far out of the group's total. */
 export interface LoadCount {
@@ -23,4 +24,20 @@ export function reportIntroLoad(group: MapLoadGroup, count: LoadCount): void {
   const cur = introLoad[group];
   if (cur && cur.loaded === count.loaded && cur.total === count.total) return;
   introLoad[group] = { loaded: count.loaded, total: count.total };
+}
+
+/**
+ * How far the map has loaded, 0..1: the loaded pages over the total pages of the groups that have reported (terrain,
+ * buildings, animations); 0 while none has; 1 once the main app says the tiles are loaded.
+ */
+export function mapLoadFraction(load: Record<MapLoadGroup, LoadCount | null> = introLoad, tilesLoaded: boolean = introSignal.tilesLoaded): number {
+  if (tilesLoaded) return 1;
+  let loaded = 0;
+  let total = 0;
+  for (const count of Object.values(load)) {
+    if (!count) continue;
+    loaded += count.loaded;
+    total += count.total;
+  }
+  return total > 0 ? Math.min(1, loaded / total) : 0;
 }
