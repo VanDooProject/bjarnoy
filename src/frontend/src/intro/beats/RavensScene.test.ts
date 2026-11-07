@@ -27,6 +27,23 @@ describe('RavensScene', () => {
     w.unmount();
   });
 
+  // A seek or skip can take the scene away before its ship's animation has started; the animation's `ready` then
+  // rejects with an AbortError ("The user aborted a request."), which must not surface as an unhandled rejection.
+  it('ignores the ship animation being cancelled before it starts', async () => {
+    const proto = Element.prototype as unknown as { getAnimations?: unknown };
+    const had = 'getAnimations' in proto;
+    const original = proto.getAnimations;
+    proto.getAnimations = () => [{ currentTime: null, ready: Promise.reject(new DOMException('The user aborted a request.', 'AbortError')) }];
+    try {
+      const w = mount(RavensScene, { attachTo: document.body });
+      w.unmount();
+      await new Promise((r) => setTimeout(r, 0));
+    } finally {
+      if (had) proto.getAnimations = original;
+      else delete proto.getAnimations;
+    }
+  });
+
   it('pauses with the host', () => {
     expect(mount(RavensScene, { props: { paused: true } }).find('svg').classes()).toContain('is-paused');
     expect(mount(RavensScene).find('svg').classes()).not.toContain('is-paused');

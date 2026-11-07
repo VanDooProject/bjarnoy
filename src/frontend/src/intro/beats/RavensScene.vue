@@ -38,12 +38,14 @@ const root = useTemplateRef<HTMLElement>('root');
 const runOf = (el: Element | null | undefined) => (el && typeof el.getAnimations === 'function' ? el.getAnimations()[0] : undefined);
 onMounted(() => {
   const own = runOf(root.value?.querySelector('.b4-ship'));
-  // a new animation has no time until it has started
-  void own?.ready?.then(() => {
-    const track = runOf(document.querySelector(SENDING_SHIP_TRACK));
-    if (track?.currentTime == null || own.currentTime == null) return;
-    shipFrom.value = Number(track.currentTime) - Number(own.currentTime);
-  });
+  // a new animation has no time until it has started; `ready` rejects (AbortError) when the scene goes before that
+  own?.ready
+    ?.then(() => {
+      const track = runOf(document.querySelector(SENDING_SHIP_TRACK));
+      if (track?.currentTime == null || own.currentTime == null) return;
+      shipFrom.value = Number(track.currentTime) - Number(own.currentTime);
+    })
+    .catch(() => {});
 });
 
 const uid = useId().replace(/[^a-zA-Z0-9]/g, '-');
