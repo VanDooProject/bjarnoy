@@ -116,7 +116,6 @@
       "water": "Water"
     },
     "actions": {
-      "info": "Info",
       "attackRaid": "Attack / Raid",
       "combatNotImplemented": "Combat is not implemented yet",
       "landHere": "Land here",
@@ -128,7 +127,6 @@
       "noUnitsAtHome": "No units at home",
       "upgrade": "Upgrade",
       "notEnough": "Needs {resources}",
-      "details": "Details",
       "raze": "Raze",
       "cantRazeLonghouse": "Can't raze the longhouse",
       "notWiredYet": "Not wired to the backend yet",
@@ -165,8 +163,7 @@
     },
     "tap": {
       "build": "Tap {name} again to build",
-      "upgrade": "Tap {name} again to upgrade",
-      "details": "Tap {name} again for all details"
+      "upgrade": "Tap {name} again to upgrade"
     },
     "errors": {
       "couldNotQueueBuild": "Could not queue that build.",

@@ -73,8 +73,6 @@ export interface RingAction {
   state?: RingAvailabilityState;
   /** Read-out card shown while this root action is hovered (Upgrade). */
   card?: RingCard;
-  /** Info card shown while this root action is hovered (Details). */
-  info?: RingInfo;
 }
 
 /** What a detail card for a buildable thing (a building, or an upgrade) shows. */
@@ -97,14 +95,6 @@ export interface RingCard {
   /** Art for the card thumbnail. */
   art?: ArtRef;
   availability?: RingAvailability;
-}
-
-/** A purely informational card: the tile's own facts (the Details bubble's hover). */
-export interface RingInfo {
-  title: string;
-  sub?: string;
-  art?: ArtRef;
-  rows: { label: string; value: string }[];
 }
 
 export interface RingBuilding extends RingAction, Omit<RingCard, 'title'> {
@@ -323,12 +313,12 @@ const hoveredIndex = computed(() => {
 // No card until a building is genuinely hovered — opening the ring must not
 // preselect one and pop a card the player didn't ask for.
 const hovered = computed(() => (hoveredIndex.value === null ? null : buildings.value[hoveredIndex.value]));
-/** Index (on the inner lane) of the hovered root bubble that has a card or info to show. */
+/** Index (on the inner lane) of the hovered root bubble that has a card to show. */
 const hoveredLane1Index = computed(() => {
   const i = laneItems.value.findIndex((item) => item.id === hoverLane1.value);
   if (i < 0 || !atRoot.value) return null;
   const item = laneItems.value[i];
-  return item.card || item.info ? i : null;
+  return item.card ? i : null;
 });
 /**
  * A disabled root bubble with a reason, hovered: its hint shows as a chip beside it.
@@ -467,10 +457,6 @@ const activeCard = computed<RingCard | null>(() => {
   const item = hoveredLane1Index.value === null ? null : laneItems.value[hoveredLane1Index.value];
   return item?.card ?? null;
 });
-const activeInfo = computed<RingInfo | null>(() => {
-  if (hovered.value || hoveredLane1Index.value === null) return null;
-  return laneItems.value[hoveredLane1Index.value].info ?? null;
-});
 
 type Tone = 'lock' | 'wait' | 'queue';
 interface CardView {
@@ -482,7 +468,6 @@ interface CardView {
   time?: string;
   gives?: string;
   givesTotal?: string;
-  rows: { label: string; value: string }[];
   warning?: string;
   statuses: { text: string; tone: Tone }[];
   /** Touch: "Tap X again to build" — only while the shown item is armed and committable. */
@@ -496,10 +481,6 @@ function resourceList(shortfall: Partial<Record<(typeof RESOURCE_KEYS)[number], 
 }
 
 const cardView = computed<CardView | null>(() => {
-  const info = activeInfo.value;
-  if (info) {
-    return { title: info.title, sub: info.sub, art: info.art, chips: [], rows: info.rows, statuses: [], tapHint: tapHint.value };
-  }
   const card = activeCard.value;
   if (!card) return null;
   const a = card.availability;
@@ -553,7 +534,6 @@ const cardView = computed<CardView | null>(() => {
     time: card.time,
     gives: card.gives,
     givesTotal: card.givesTotal,
-    rows: [],
     warning: card.warning,
     statuses,
     tapHint: tapHint.value,
@@ -575,7 +555,6 @@ const tapHint = computed<string | undefined>(() => {
   }
   const item = hoveredLane1Index.value === null ? null : laneItems.value[hoveredLane1Index.value];
   if (!item || item.id !== id || item.disabled) return undefined;
-  if (item.info) return t('hud.ringMenu.tap.details', { name: item.label });
   return t('hud.ringMenu.tap.upgrade', { name: item.label });
 });
 
@@ -853,12 +832,12 @@ function onBuildingTouchStart(e: TouchEvent, building: RingBuilding) {
   hover.value = building.id;
   hoverLane1.value = null;
 }
-// The same two-tap rule for the root bubbles that carry a card (Upgrade) or
-// tile info (Details): the first tap arms and shows it, the second commits.
+// The same two-tap rule for the root bubble that carries a card (Upgrade):
+// the first tap arms and shows it, the second commits.
 // Every other root bubble (Build, a category, Send army …) acts on the first
 // tap as before — navigating or opening a sheet spends nothing.
 function onLaneTouchStart(e: TouchEvent, item: RingAction) {
-  if (!atRoot.value || (!item.card && !item.info)) return;
+  if (!atRoot.value || !item.card) return;
   const tap = tapArm(armed.value, item.id);
   if (tap.commit) return;
   e.preventDefault();
@@ -1066,10 +1045,6 @@ function onBackdropPointerDown(e: PointerEvent) {
           <dd class="nowrap">
             {{ cardView.gives }}<span v-if="cardView.givesTotal" class="gives-total" data-testid="ring-card-total"> · {{ cardView.givesTotal }}</span>
           </dd>
-        </template>
-        <template v-for="row in cardView.rows" :key="row.label">
-          <dt>{{ row.label }}</dt>
-          <dd>{{ row.value }}</dd>
         </template>
       </dl>
       <p v-if="cardView.warning" class="card-warning" data-testid="ring-card-warning">{{ cardView.warning }}</p>
