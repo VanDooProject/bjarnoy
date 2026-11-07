@@ -64,6 +64,22 @@ describe('LandingIntro', () => {
     }
   });
 
+  it('keeps the hall alive behind the landing page: only its turn waits, and it starts on play', async () => {
+    const w = await mountIntro({ playNow: false });
+    const hall = () => w.get('svg.hall');
+    expect(hall().classes()).toContain('is-held');
+    expect(hall().classes()).not.toContain('is-paused');
+    await w.get('[data-testid="landing-hear"]').trigger('click');
+    expect(hall().classes()).not.toContain('is-held');
+    expect(hall().classes()).not.toContain('is-paused');
+  });
+
+  it('shows the replay first frame still: no landing page, the hall is paused, not held', async () => {
+    const w = await mountIntro({ mode: 'replay', reducedMotion: true, playNow: false });
+    expect(w.get('svg.hall').classes()).toContain('is-paused');
+    expect(w.get('svg.hall').classes()).not.toContain('is-held');
+  });
+
   it('shows skip only after loading, and emits done after the exit beat', async () => {
     const w = await mountIntro();
     expect(phase(w)).toBe('playing');

@@ -13,7 +13,7 @@ import { computed, useId } from 'vue';
  * shifts them so the prophecy's copy of the hall continues where the fire
  * beat's copy left off and the crossfade between them shows no jump.
  */
-const props = defineProps<{ beat: 'fire' | 'prophecy'; paused?: boolean; elapsedMs?: number }>();
+const props = defineProps<{ beat: 'fire' | 'prophecy'; paused?: boolean; held?: boolean; elapsedMs?: number }>();
 
 const uid = useId().replace(/[^a-zA-Z0-9]/g, '-');
 const id = (name: string) => `${uid}-${name}`;
@@ -73,7 +73,7 @@ const ARM =
 <template>
   <svg
     class="intro-beat hall"
-    :class="[`is-${beat}`, { 'is-paused': paused }]"
+    :class="[`is-${beat}`, { 'is-paused': paused, 'is-held': held }]"
     :style="sceneStyle"
     viewBox="0 0 1600 1600"
     preserveAspectRatio="xMidYMid slice"
@@ -276,6 +276,8 @@ const ARM =
 .is-fire .rimlight { animation: hall-open-rim 3400ms ease both; }
 .is-fire .dark { animation: hall-open-dark 3400ms ease both; }
 .is-fire .arm { animation: hall-arm-tell var(--beat-duration) ease-in-out both; }
+/* held (behind the landing page): the turn waits at its first frame, the ambient loops (flames, glow, embers, smoke) run */
+.is-held :is(.cam, .far, .near, .skald, .staff, .gutter, .dim, .rimlight, .dark, .arm) { animation-play-state: paused; }
 @keyframes hall-turn-cam { from { transform: none; } to { transform: var(--cam-end); } }
 @keyframes hall-turn-far { from { transform: none; } to { transform: var(--far-end); } }
 @keyframes hall-turn-near { from { transform: none; } to { transform: var(--near-end); } }

@@ -347,7 +347,8 @@ onBeforeUnmount(() => {
       <!-- beats sharing a scene keep one mounted component; the beat switches on it. A seek within the mounted
            scene does not remount it: the seek sync below moves its animations instead -->
       <div :key="`${meta.scene ?? state.beat}:${state.round}`" class="beat-layer" :style="beatStyle">
-        <component :is="BEAT_COMPONENTS[shownBeat]" :paused="state.phase === 'waitingForPlay' || state.paused" />
+        <!-- behind the landing page the hall lives (fire, smoke), only its turn into the saga waits for the click -->
+        <component :is="BEAT_COMPONENTS[shownBeat]" :paused="(state.phase === 'waitingForPlay' && !showLanding) || state.paused" v-bind="showLanding ? { held: true } : {}" />
       </div>
     </Transition>
 

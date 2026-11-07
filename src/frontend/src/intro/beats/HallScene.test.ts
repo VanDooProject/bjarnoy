@@ -37,6 +37,14 @@ describe('HallScene', () => {
   });
 
   // A loop whose end frame differs from its start frame makes the smoke jump at every restart.
+  it('holds only the turn into the saga while held: the flames, glow, embers and smoke keep running', () => {
+    const rule = hallSource.match(/\.is-held :is\(([^)]*)\) \{ animation-play-state: paused; \}/);
+    expect(rule).not.toBeNull();
+    const held = rule![1].split(',').map((x) => x.trim());
+    expect(held).toEqual(expect.arrayContaining(['.cam', '.far', '.near', '.skald', '.staff', '.gutter', '.dim', '.rimlight', '.dark']));
+    for (const ambient of ['.tongue', '.glow', '.ember', '.rim', '.sway', '.rise-a', '.rise-b']) expect(held).not.toContain(ambient);
+  });
+
   it('scrolls the smoke exactly one texture tile (512) per loop, and only upwards', () => {
     const [from, to] = translates(keyframes(hallSource, 'hall-rise'));
     expect(from).toEqual([0, 0]);
