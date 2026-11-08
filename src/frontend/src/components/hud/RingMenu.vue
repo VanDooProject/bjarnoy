@@ -496,7 +496,14 @@ const cardView = computed<CardView | null>(() => {
   const statuses: CardView['statuses'] = locks.map((text) => ({ text, tone: 'lock' as const }));
   const resourcesShort = !!a && Object.keys(a.shortfall).length > 0;
   if (a && resourcesShort) {
-    statuses.push({ text: t('hud.ringMenu.card.needResources', { resources: resourceList(a.shortfall) }), tone: 'wait' });
+    const resources = resourceList(a.shortfall);
+    statuses.push({
+      text:
+        a.resourcesReadyInSeconds === null
+          ? t('hud.ringMenu.card.needResources', { resources })
+          : t('hud.ringMenu.card.needResourcesIn', { resources, time: formatBuildTime(a.resourcesReadyInSeconds) }),
+      tone: 'wait',
+    });
   }
   if (a?.slots.short) {
     if (a.queue.hasRoom && !resourcesShort) {

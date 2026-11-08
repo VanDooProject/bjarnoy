@@ -360,6 +360,8 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
     return computeAvailability({
       cost,
       available: world.hud.available,
+      rates: world.hud.rates,
+      storageCap: world.hud.storageCap,
       slotsNeeded: slotsNeeded(definition, construction.slots),
       construction,
       queue: world.hud.queue,
