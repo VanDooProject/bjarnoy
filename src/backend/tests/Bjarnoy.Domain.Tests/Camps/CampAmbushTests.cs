@@ -58,6 +58,18 @@ public class CampAmbushTests
     }
 
     [Fact]
+    public void Ambush_happens_when_the_army_crosses_the_edge_into_the_range_not_at_the_hex_centre()
+    {
+        // Each edge is crossed half an hour before the hex centre is reached.
+        var movement = OutAndBack() with { EdgeHours = [0, .. Enumerable.Range(1, 20).Select(i => i - 0.5)] };
+
+        var hit = Find(movement, [Pristine(CampAt(10))]);
+
+        Assert.Equal(T0.AddHours(6.5), hit!.Value.At);
+        Assert.Equal(new HexCoord(7, 0), hit.Value.Hex);
+    }
+
+    [Fact]
     public void Earliest_camp_wins_across_several()
     {
         var hit = Find(OutAndBack(), [Pristine(CampAt(16)), Pristine(CampAt(10))]);
