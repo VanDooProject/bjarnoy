@@ -282,36 +282,65 @@ const TITLE = 'BJARNØY';
   }
 }
 
-/* desktop */
+/*
+ * desktop: placed and sized in the hall scene's own units, so the column and the list keep their spot beside the
+ * skald and the fire at every window size. The scene is a 1600×1600 SVG with preserveAspectRatio "xMidYMid slice"
+ * (HallScene.vue): one scene unit is max(100vw, 100dvh) / 1600 px, centred on the screen. Positions below are scene
+ * coordinates (x, y in 0…1600), sizes are scene units; at 1280×800 one unit is 0.8 px.
+ */
 @media (min-width: 641px) and (min-height: 501px) {
+  .landing-page {
+    --u: calc(max(100vw, 100dvh) / 1600);
+  }
   .left {
-    left: 72px;
-    top: 18.5vh;
-    width: 290px;
+    left: max(max(24px, env(safe-area-inset-left)), calc(50vw + (90 - 800) * var(--u)));
+    top: calc(50dvh + (485 - 800) * var(--u));
+    width: calc(362.5 * var(--u));
   }
   .copy {
-    gap: 14px;
+    gap: calc(17.5 * var(--u));
   }
   .title {
-    font-size: 76px;
+    font-size: calc(95 * var(--u));
   }
   .tag {
-    font-size: 20px;
-    width: 400px;
+    font-size: max(15px, calc(25 * var(--u)));
+    width: calc(500 * var(--u));
   }
   .ctas {
-    gap: 14px;
-    margin-top: 38px;
+    gap: calc(17.5 * var(--u));
+    margin-top: calc(47.5 * var(--u));
+  }
+  .btn {
+    min-height: max(44px, calc(65 * var(--u)));
+    padding: 0 calc(30 * var(--u));
+    border-radius: calc(10 * var(--u));
+    font-size: max(15px, calc(22.5 * var(--u)));
+    gap: calc(12.5 * var(--u));
+  }
+  .btn svg {
+    width: calc(22.5 * var(--u));
+    height: calc(22.5 * var(--u));
+  }
+  .mlink {
+    font-size: max(13px, calc(17.5 * var(--u)));
+    min-height: calc(40 * var(--u));
+  }
+  .rtag {
+    font-size: max(11px, calc(15 * var(--u)));
   }
   .usps {
-    left: 67%;
-    top: 24vh;
-    width: 360px;
-    --fl-gap: 26px;
-    --fl-col-gap: 16px;
-    --fl-icon: 34px;
-    --fl-title: 19px;
-    --fl-text: 15.5px;
+    left: calc(50vw + (1072 - 800) * var(--u));
+    top: calc(50dvh + (540 - 800) * var(--u));
+    width: calc(450 * var(--u));
+    --fl-gap: calc(32.5 * var(--u));
+    --fl-col-gap: calc(20 * var(--u));
+    --fl-icon: calc(42.5 * var(--u));
+    --fl-title: max(15px, calc(23.75 * var(--u)));
+    --fl-text: max(13px, calc(19.4 * var(--u)));
+  }
+  .usps::before {
+    inset: calc(-50 * var(--u)) calc(-62.5 * var(--u));
   }
   .legal {
     font-size: 14px;
