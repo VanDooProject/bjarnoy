@@ -31,6 +31,10 @@
       "title": "Baue dein Langhaus auf Stufe 3 aus",
       "hint": "Öffne das Langhaus und wähle erneut „Ausbauen“."
     },
+    "tower3": {
+      "title": "Baue einen Turm auf Stufe 3",
+      "hint": "Setz deinen Turm an den Rand deines Reichs, dorthin, wo du als Nächstes Land beanspruchen willst. Jede Stufe beansprucht einen Ring mehr um ihn. Auf Stufe 3 schaltet er die Kaserne frei."
+    },
     "longhouse5": {
       "title": "Baue dein Langhaus auf Stufe 5 aus",
       "hint": "Baue das Langhaus weiter aus. Jede Stufe dauert etwas länger."

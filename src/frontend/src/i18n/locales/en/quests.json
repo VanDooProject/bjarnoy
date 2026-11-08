@@ -31,6 +31,10 @@
       "title": "Upgrade your Longhouse to level 3",
       "hint": "Open the Longhouse and choose Upgrade again."
     },
+    "tower3": {
+      "title": "Build a Tower to level 3",
+      "hint": "Place your Tower at the edge of your realm, facing the land you want to claim next: each level claims one more ring around it. Level 3 unlocks the Barracks."
+    },
     "longhouse5": {
       "title": "Upgrade your Longhouse to level 5",
       "hint": "Keep upgrading the Longhouse. Each level takes a little longer."

@@ -44,13 +44,15 @@ public class QuestTests
     public void The_quests_come_in_the_tutorial_order_with_their_rewards()
     {
         Assert.Equal(
-            ["producers3", "longhouse2", "storagehouse1", "producers6", "longhouse3", "longhouse5", "spearmen5", "hunt1"],
+            ["producers3", "longhouse2", "storagehouse1", "producers6", "longhouse3", "tower3", "longhouse5", "spearmen5", "hunt1"],
             Quests.All.Select(q => q.Id));
         Assert.Equal(new ResourceAmounts(150, 120, 80, 0), Quests.Find("producers3")!.Reward);
         Assert.Equal(new ResourceAmounts(250, 200, 150, 0), Quests.Find("longhouse2")!.Reward);
         Assert.Equal(new ResourceAmounts(200, 200, 200, 0), Quests.Find("storagehouse1")!.Reward);
         Assert.Equal(new ResourceAmounts(200, 150, 100, 0), Quests.Find("producers6")!.Reward);
         Assert.Equal(new ResourceAmounts(400, 300, 200, 0), Quests.Find("longhouse3")!.Reward);
+        Assert.Equal(new ResourceAmounts(400, 300, 200, 0), Quests.Find("tower3")!.Reward);
+        Assert.Equal(8, Quests.Find("tower3")!.Bit);
         Assert.Equal(new ResourceAmounts(800, 600, 400, 0), Quests.Find("longhouse5")!.Reward);
         Assert.Equal(new ResourceAmounts(500, 400, 300, 0), Quests.Find("spearmen5")!.Reward);
         Assert.Equal(6, Quests.Find("spearmen5")!.Bit);
@@ -118,6 +120,84 @@ public class QuestTests
     [InlineData("longhouse5", 7, true)]
     public void Longhouse_quests_follow_the_longhouse_level(string id, int level, bool done) =>
         Assert.Equal(done, Quests.Find(id)!.IsCompleted(Found(longhouse: level)));
+
+    private static Settlement WithTower(int level) =>
+        Found() with { Buildings = [.. Found().Buildings, new PlacedBuilding(new HexCoord(2, 0), BuildingType.Tower, level)] };
+
+    [Theory]
+    [InlineData(-1, false)]
+    [InlineData(2, false)]
+    [InlineData(3, true)]
+    [InlineData(4, true)]
+    public void The_tower_quest_needs_a_tower_at_level_3(int level, bool done)
+    {
+        var s = level < 0 ? Found() : WithTower(level);
+        Assert.Equal(done, Quests.Find("tower3")!.IsCompleted(s));
+    }
+
+    [Fact]
+    public void The_tower_quest_uses_the_highest_of_several_towers()
+    {
+        var s = Found() with
+        {
+            Buildings =
+            [
+                .. Found().Buildings,
+                new PlacedBuilding(new HexCoord(2, 0), BuildingType.Tower, 1),
+                new PlacedBuilding(new HexCoord(3, 0), BuildingType.Tower, 3),
+            ],
+        };
+        Assert.True(Quests.Find("tower3")!.IsCompleted(s));
+        Assert.Equal(3, Quests.Find("tower3")!.Progress!(s).Current);
+    }
+
+    [Fact]
+    public void The_tower_quest_pays_on_bit_8()
+    {
+        var s = WithTower(3);
+        var decision = s.PlanClaimQuest("tower3");
+
+        Assert.True(decision.Accepted);
+        var claimed = s.ClaimQuest(decision.Quest!, T0);
+
+        Assert.Equal(1 << 8, claimed.ClaimedQuests);
+        Assert.Equal(500, claimed.Resources.At(T0).Wood, 6);
+        Assert.Equal(400, claimed.Resources.At(T0).Stone, 6);
+        Assert.Equal(300, claimed.Resources.At(T0).Food, 6);
+        Assert.Equal(QuestRejection.AlreadyClaimed, claimed.PlanClaimQuest("tower3").Rejection);
+    }
+
+    [Fact]
+    public void Quests_report_counted_progress_clamped_to_the_target()
+    {
+        static (int, int)? P(string id, Settlement s) =>
+            Quests.Find(id)!.Progress?.Invoke(s) is { } p ? (p.Current, p.Target) : null;
+
+        Assert.Equal((2, 3), P("producers3", Found(others: Producers(2))));
+        Assert.Equal((3, 3), P("producers3", Found(others: Producers(5))));
+        Assert.Equal((5, 6), P("producers6", Found(others: Producers(5))));
+        Assert.Equal((6, 6), P("producers6", Found(others: Producers(8))));
+        Assert.Equal((1, 2), P("longhouse2", Found(longhouse: 1)));
+        Assert.Equal((2, 3), P("longhouse3", Found(longhouse: 2)));
+        Assert.Equal((5, 5), P("longhouse5", Found(longhouse: 7)));
+        Assert.Equal((4, 5), P("longhouse5", Found(longhouse: 4)));
+        Assert.Equal((0, 3), P("tower3", Found()));
+        Assert.Equal((2, 3), P("tower3", WithTower(2)));
+        Assert.Equal((3, 3), P("tower3", WithTower(5)));
+        Assert.Null(P("hunt1", Found()));
+        Assert.Null(P("storagehouse1", Found()));
+    }
+
+    [Fact]
+    public void Spearmen_progress_counts_fighting_units_and_reports_the_target_once_trained()
+    {
+        static (int, int) P(Settlement s) { var p = Quests.Find("spearmen5")!.Progress!(s); return (p.Current, p.Target); }
+
+        Assert.Equal((0, 5), P(Found()));
+        Assert.Equal((3, 5), P(Found() with { Garrison = [new UnitStack(UnitType.Spearman, 3), new UnitStack(UnitType.Thrall, 9)] }));
+        Assert.Equal((5, 5), P(Found() with { Garrison = [new UnitStack(UnitType.Spearman, 9)] }));
+        Assert.Equal((5, 5), P(Found() with { TroopsTrained = true }));
+    }
 
     [Fact]
     public void The_storage_house_quest_needs_a_standing_storage_house()

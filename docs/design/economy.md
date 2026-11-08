@@ -579,9 +579,10 @@ their renown.
   | 3 | First Storage House | a standing Storage House | 200 / 200 / 200 |
   | 4 | 6 producers built | 6 standing resource producers | 200 / 150 / 100 |
   | 5 | Longhouse 3 | Longhouse level 3 or more | 400 / 300 / 200 |
-  | 6 | Longhouse 5 | Longhouse level 5 or more | 800 / 600 / 400 |
-  | 7 | Train 5 spearmen | 5 fighting land units at home (any type), stored once reached: it stays completed after the troops leave or die | 500 / 400 / 300 |
-  | 8 | Hunt a camp | an army sent to hunt a wildlife camp; unlocks once troops were trained (5 fighting land units were ever at home when it was sent), no claim needed | 400 / 300 / 300 |
+  | 6 | Tower 3 | your highest Tower at level 3 or more (what the Barracks needs) | 400 / 300 / 200 |
+  | 7 | Longhouse 5 | Longhouse level 5 or more | 800 / 600 / 400 |
+  | 8 | Train 5 spearmen | 5 fighting land units at home (any type), stored once reached: it stays completed after the troops leave or die | 500 / 400 / 300 |
+  | 9 | Hunt a camp | an army sent to hunt a wildlife camp; unlocks once troops were trained (5 fighting land units were ever at home when it was sent), no claim needed | 400 / 300 / 300 |
 
   Rules:
 

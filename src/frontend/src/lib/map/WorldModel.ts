@@ -1245,6 +1245,20 @@ export class WorldModel {
     return counts;
   }
 
+  /** Level of the highest standing building of `type` on the settlement's claimed hexes (0 when there is none). */
+  highestBuildingLevel(settlementId: string, type: string): number {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return 0;
+    let best = 0;
+    for (const c of this.claimedHexes(settlement)) {
+      const tile = this.getTile(c.q, c.r);
+      if (tile.ownerId === settlementId && tile.buildingType === type) {
+        best = Math.max(best, tile.buildingLevel ?? 1);
+      }
+    }
+    return best;
+  }
+
   listSettlements(): Settlement[] {
     return [...this.settlements.values()];
   }
