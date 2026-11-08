@@ -2137,18 +2137,30 @@ export class WorldModel {
   }
 
   /**
-   * Issue #16 ring menu "tear down": demo-mode only — the backend
-   * (`Bjarnoy.Domain.Buildings`) has no raze endpoint yet, so live mode
-   * disables this action rather than pretending to support it (see
-   * SettlementView.vue's ring-menu wiring). Clears the building. The hex
-   * stays with the settlement while it is inside its claim; razing a Tower
-   * drops its satellite disc and the border shrinks (`syncClaim`), the same
-   * as a burnt tower on the server.
+   * Demo-mode raze from the ring (live mode queues a raze order on the server instead): takes ONE level off the building, like
+   * a finished raze order (docs/design/construction-slots.md, "Razing"), instantly like `upgradeBuilding`. Level 1 removes
+   * the building; the hex stays with the settlement while it is inside its claim. A Tower or Odin's Statue that keeps a lower
+   * level re-derives its claim like a level change; a Tower that is removed drops its satellite disc, so the border shrinks
+   * (`syncClaim`), the same as a burnt tower on the server. The Longhouse cannot be razed.
    */
   razeBuilding(settlementId: string, at: AxialCoord): boolean {
     const tile = this.getTile(at.q, at.r);
     if (tile.ownerId !== settlementId || !tile.buildingType || tile.buildingType === 'longhouse') return false;
+    const settlement = this.settlements.get(settlementId);
+    const nextLevel = (tile.buildingLevel ?? 1) - 1;
     const wasTower = tile.buildingType === 'tower';
+    if (nextLevel >= 1) {
+      tile.buildingLevel = nextLevel;
+      if (wasTower) {
+        const tower = this.settlementTowers.get(settlementId)?.find((t) => t.q === at.q && t.r === at.r);
+        if (tower) tower.level = nextLevel;
+      } else if (tile.buildingType === 'odinstatue') {
+        this.settlementOdinLevels.set(settlementId, nextLevel);
+      }
+      this.wallRevision++;
+      if (settlement && (wasTower || tile.buildingType === 'odinstatue')) this.syncClaim(settlement);
+      return true;
+    }
     if (wasTower) {
       const towers = this.settlementTowers.get(settlementId);
       if (towers) {
@@ -2160,7 +2172,6 @@ export class WorldModel {
     if (tile.buildingType === 'bogoreworks' || tile.buildingType === 'fishinghut') this.lakePropsDirty = true;
     tile.buildingType = undefined;
     tile.buildingLevel = undefined;
-    const settlement = this.settlements.get(settlementId);
     if (settlement && wasTower) this.syncClaim(settlement);
     this.wallRevision++;
     return true;
