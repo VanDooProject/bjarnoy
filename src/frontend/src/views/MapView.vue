@@ -1300,7 +1300,7 @@ async function upgrade() {
       </template>
       <ExpansionPanel />
       <QuestTray v-if="!hasActiveDraft" />
-      <ArmyPanel v-if="!isMobile" />
+      <ArmyPanel v-if="!isMobile" @focus-army="onArmySelect" />
       <HexTooltip v-if="hoverInfo" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
       <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
@@ -1351,7 +1351,7 @@ async function upgrade() {
            queue drawer (mobile fleets need to be tracked here too) are
            mode-agnostic. -->
       <QueueDrawer v-if="isMobile && !hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
-      <ArmyPanel v-if="!isMobile" />
+      <ArmyPanel v-if="!isMobile" @focus-army="onArmySelect" />
       <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
           v-if="selectedTile && ringScreen"
