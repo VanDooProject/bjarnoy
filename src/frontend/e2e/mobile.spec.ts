@@ -69,7 +69,7 @@ async function expectColumnClear(page: Page): Promise<void> {
   const settlement = await SettlementPage.openLanding(page);
   const column = page.locator('.founding-col');
   await expect(column).toBeVisible();
-  await expect(column.getByTestId('landing-usp-multiplayer').locator('span')).toBeHidden();
+  await expect(column.getByTestId('map-usp-multiplayer').locator('span')).toBeHidden();
   await expectNoOverlap(column, settlement.guidancePointer.locator('.chip'), 'column covers the "click this plot" chip');
   const badge = page.locator('.demo-badge');
   if (await badge.isVisible()) await expectNoOverlap(column, badge, 'column covers the demo badge');
@@ -154,7 +154,7 @@ test.describe('phone layout', { tag: '@g1' }, () => {
 
     await settlement.claimLandfall();
     await expect(settlement.banner).toBeVisible();
-    await expect(settlement.checklist).toContainText('Step 2 of 3');
+    await expect(settlement.checklist).toHaveAttribute('aria-label', 'Step 2 of 3');
     await expectInsideViewport(page, settlement.banner);
     await expectInsideViewport(page, settlement.checklist);
     await expectInsideViewport(page, settlement.guidancePointer.locator('.chip'));
@@ -180,7 +180,7 @@ test.describe('phone layout, landscape', { tag: '@g1' }, () => {
     expect(hitsCanvas).toBe(true);
 
     await claimLandfall(page);
-    await expect(page.getByTestId('onboarding-checklist')).toContainText('Step 2 of 3');
+    await expect(page.getByTestId('onboarding-checklist')).toHaveAttribute('aria-label', 'Step 2 of 3');
   });
 });
 
@@ -197,7 +197,7 @@ test.describe('phone layout, narrow (320px)', { tag: '@g1' }, () => {
     expect(hitsCanvas).toBe(true);
 
     await settlement.claimLandfall();
-    await expect(settlement.checklist).toContainText('Step 2 of 3');
+    await expect(settlement.checklist).toHaveAttribute('aria-label', 'Step 2 of 3');
   });
 
   test('the compact landing column leaves the plot chip and demo badge uncovered', async ({ page }) => {
@@ -231,7 +231,7 @@ test.describe('phone layout, landscape (667x375)', { tag: '@g1' }, () => {
     expect(await plotHitsCanvas(page)).toBe(true);
 
     await claimLandfall(page);
-    await expect(page.getByTestId('onboarding-checklist')).toContainText('Step 2 of 3');
+    await expect(page.getByTestId('onboarding-checklist')).toHaveAttribute('aria-label', 'Step 2 of 3');
   });
 
   // guidance-chip-edge: this short-but-wide viewport is where "centred
@@ -273,9 +273,10 @@ test.describe('mobile tutorial focus', { tag: '@g1' }, () => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.openLanding(page);
 
-    // Before founding: the pre-founding bar (locale switcher + "I already
-    // have a realm") is untouched by this feature.
-    await expect(page.locator('.hud-bar')).toBeVisible();
+    // Before founding there is no bar, only the floating "How to play" and
+    // "I already have a realm" group at the top right.
+    await expect(page.locator('.hud-bar')).toHaveCount(0);
+    await expect(page.getByTestId('returning-player-trigger')).toBeVisible();
 
     await settlement.claimLandfall();
 

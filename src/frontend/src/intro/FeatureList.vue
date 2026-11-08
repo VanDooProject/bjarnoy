@@ -7,7 +7,7 @@ import { introText, type IntroLocale } from './introText';
  * the caller sets on this element (`--fl-icon`, `--fl-title`, `--fl-text`, `--fl-gap`, `--fl-col-gap`, `--fl-align`,
  * `--fl-text-display: none` for titles only); colours `--fl-title-color` and `--fl-text-color`.
  */
-defineProps<{ locale: IntroLocale }>();
+withDefaults(defineProps<{ locale: IntroLocale; /** prefix of the rows' test ids (`<prefix>-usp-<id>`); the map view sits behind the intro's landing page, so ids must differ */ idPrefix?: string }>(), { idPrefix: 'landing' });
 
 const FEATURES = [
   { id: 'multiplayer', key: 'multiplayer' },
@@ -18,7 +18,7 @@ const FEATURES = [
 
 <template>
   <ul class="feature-list">
-    <li v-for="f in FEATURES" :key="f.id" class="usp" :data-testid="`landing-usp-${f.id}`">
+    <li v-for="f in FEATURES" :key="f.id" class="usp" :data-testid="`${idPrefix}-usp-${f.id}`">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <template v-if="f.id === 'multiplayer'">
           <circle cx="8" cy="9" r="3" />

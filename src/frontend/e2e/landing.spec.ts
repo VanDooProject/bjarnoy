@@ -12,7 +12,7 @@ test('landing page is the village view, not a marketing page in front of it', { 
   // zip 6a: a real plot of terrain is on screen immediately — no world map,
   // no click-through, no separate marketing page.
   await expect(page.locator('canvas')).toBeVisible();
-  await expect(page.getByRole('heading', { name: /put your longhouse somewhere/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /choose where your realm begins/i })).toBeVisible();
   await expect(page.getByText('Longhouse & yard')).toBeVisible();
 
   // Founding, then the 2 guided onboarding buildings, then the completion
@@ -58,7 +58,7 @@ test('landing page shows the guided pointer and a step-1 checklist before foundi
   await expect(settlement.guidancePointer).toContainText('Click this plot');
 
   await expect(settlement.checklist).toBeVisible();
-  await expect(settlement.checklist).toContainText('Step 1 of 3');
+  await expect(settlement.checklist).toHaveAttribute('aria-label', 'Step 1 of 3');
   await expect(page.locator('.step.current')).toContainText('Longhouse & yard');
 });
 
@@ -113,7 +113,7 @@ test('onboarding build step uses the map\'s two-lane ring, and the pointer walks
   await expect(settlement.banner).toBeVisible();
   await expect(settlement.banner).toContainText('Landfall made.');
   await expect(settlement.guidancePointer).toContainText('Now build here');
-  await expect(settlement.checklist).toContainText('Step 2 of 3');
+  await expect(settlement.checklist).toHaveAttribute('aria-label', 'Step 2 of 3');
 
   const target = await settlement.findHex({ terrain: 'grass' });
   await settlement.clickHex(target);
@@ -169,7 +169,7 @@ test('onboarding build step uses the map\'s two-lane ring, and the pointer walks
   await expect(page.locator('.step.done')).toHaveCount(2);
 
   // Frame 4: one guided building down, the pointer moves on to the other.
-  await expect(settlement.checklist).toContainText('Step 3 of 3');
+  await expect(settlement.checklist).toHaveAttribute('aria-label', 'Step 3 of 3');
   await expect(settlement.guidancePointer).toContainText('One more');
 });
 });
@@ -318,7 +318,7 @@ test('the pre-founding view has no header band or dead in-game nav, only How to 
   await expect(page.getByRole('link', { name: 'Alliance', exact: true })).toHaveCount(0);
 
   await expect(page.locator('.hud-bar')).toHaveCount(0);
-  const howTo = page.getByTestId('landing-how-to-play');
+  const howTo = page.getByTestId('map-how-to-play');
   await expect(howTo).toBeVisible();
   await expect(howTo).toHaveAttribute('href', '/docs');
 

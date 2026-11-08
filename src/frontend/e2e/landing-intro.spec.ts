@@ -471,7 +471,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await page.goto('/');
 
       await expect(landingPage(page)).toBeVisible();
-      await expect(page.getByRole('heading', { name: 'BJARNØY' })).toBeVisible();
+      await expect(landingPage(page).getByRole('heading', { name: 'BJARNØY' })).toBeVisible();
       await expect(page.getByText('A saga of the north, played together.')).toBeVisible();
       await expect(page.getByTestId('landing-hear')).toBeVisible();
       await expect(page.getByTestId('landing-muted')).toBeVisible();

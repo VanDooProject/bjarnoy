@@ -980,7 +980,7 @@ watch(
          returning-player menu (log in, other worlds, settings, start page). No `#drawer`, no HudNav: nothing here
          is a dead click for someone who has not founded anything (docs/design/zip-brainstorms.md:44). -->
     <div v-if="!player.hasFoundedSettlement" class="topright">
-      <HudNavLink :href="docsHref" class="howto" data-testid="landing-how-to-play" @navigate="router.push('/docs')">
+      <HudNavLink :href="docsHref" class="howto" data-testid="map-how-to-play" @navigate="router.push('/docs')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1z" />
           <path d="M12 6v14" />
@@ -1005,17 +1005,17 @@ watch(
     <div v-else-if="!player.hasFoundedSettlement" class="founding-col" :class="{ 'founding-col--blocked': joinBlocked }">
       <h1 class="wordmark">{{ WORDMARK }}</h1>
       <template v-if="joinBlocked">
-        <p class="heading">{{ t('landing.hero.notOpenTitle') }}</p>
+        <h2 class="heading">{{ t('landing.hero.notOpenTitle') }}</h2>
         <p class="blocked-msg">{{ joinBlockedMessage }}</p>
       </template>
       <template v-else>
-        <p class="heading">{{ t('landing.hero.choose') }}</p>
+        <h2 class="heading">{{ t('landing.hero.choose') }}</h2>
         <p v-if="founding" class="status">{{ t('landing.hero.makingLandfall') }}</p>
         <p v-else-if="invalidClickMessage" class="status">{{ invalidClickMessage }}</p>
-        <FeatureList class="features" :locale="introLocale" />
+        <FeatureList class="features" :locale="introLocale" id-prefix="map" />
       </template>
     </div>
-    <ImpressumLink v-if="!player.hasFoundedSettlement" class="impressum" :locale="introLocale" />
+    <ImpressumLink v-if="!player.hasFoundedSettlement" class="impressum" :locale="introLocale" testid="map-impressum" />
 
     <GuidancePointer
       v-if="pointerTarget && mapDrawn"

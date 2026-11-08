@@ -2,11 +2,11 @@
 import { introText, type IntroLocale } from './introText';
 
 /** The small "Impressum" link shared by the intro's landing page and the pre-founding map view. The caller positions and sizes it. */
-defineProps<{ locale: IntroLocale }>();
+withDefaults(defineProps<{ locale: IntroLocale; testid?: string }>(), { testid: 'landing-impressum' });
 </script>
 
 <template>
-  <a class="legal" href="/impressum" data-testid="landing-impressum">{{ introText(locale, 'landing.impressum') }}</a>
+  <a class="legal" href="/impressum" :data-testid="testid">{{ introText(locale, 'landing.impressum') }}</a>
 </template>
 
 <style scoped>
