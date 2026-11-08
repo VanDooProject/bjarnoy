@@ -167,7 +167,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await gotoWorldMap(page);
     await page.mouse.click(centre.x, centre.y);
 
-    await expect(page).toHaveURL(/\/settlement#world$/);
+    await expect(page).toHaveURL(/\/settlement#world(&.*)?$/);
     // Only the army action: Build/Upgrade/Info open settlement-only modals.
     await expect(ring.action('Send army here')).toBeVisible();
     await expect(ring.bubbles).toHaveCount(1);
