@@ -32,7 +32,7 @@ import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
 import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
 import { useRingMaxScale } from '../composables/useRingMaxScale';
-import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount } from '../lib/map/buildingEconomy';
+import { buildingStatsAt, scaleOutput } from '../lib/map/buildingEconomy';
 import {
   deriveOnboardingGuidance,
   findGuidedTarget,
@@ -717,11 +717,9 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
 const resourceTicks = ref<ResourceTick[]>([]);
 let tickIdSeq = 0;
 function fireResourceTick(type: 'reindeerherder' | 'lumberjack', coord: AxialCoord) {
-  const boostTerrain = BOOST_TERRAIN[type];
-  const neighbours = boostTerrain
-    ? matchingNeighbourCount(coord, boostTerrain, (q, r) => world.model.getTile(q, r))
-    : 0;
-  const output = buildingStatsFor(type, 1, neighbours).output;
+  // The same output, at the world's speed, as the hover card shows for this building.
+  const stats = buildingStatsAt(type, 1, coord, (q, r) => world.model.getTile(q, r));
+  const output = stats.output && scaleOutput(stats.output, world.worldSpeedFactor);
   const screen = canvasRef.value?.renderer?.hexCenterScreen(coord);
   if (!screen || output?.kind !== 'resourceRate') return;
   resourceTicks.value.push({ id: ++tickIdSeq, resource: output.resource, amount: output.amount, ...screen });
