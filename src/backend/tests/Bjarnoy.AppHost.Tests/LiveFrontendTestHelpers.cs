@@ -76,7 +76,7 @@ public static class LiveFrontendTestHelpers
     /// <summary>
     /// Navigates <paramref name="page"/> to <paramref name="frontendUrl"/> and
     /// founds the starting settlement through the real UI, the same way a
-    /// brand-new player does. Returns once the tray confirms
+    /// brand-new player does. Returns once the stepper confirms
     /// <c>player.hasFoundedSettlement</c> is true (mirrors
     /// <see cref="FoundingSettlementPersistenceTests"/>'s own click-retry loop
     /// and its reasoning — see that file for why the retry exists).
@@ -91,7 +91,7 @@ public static class LiveFrontendTestHelpers
         // about a real backend.
         await Assertions.Expect(page.GetByText("Demo mode")).Not.ToBeVisibleAsync(new() { Timeout = 15_000 });
 
-        var trayStatus = page.Locator(".tray-item .sub").First;
+        var firstStep = page.Locator("[data-testid=\"onboarding-checklist\"] .step").First;
         var canvas = page.Locator("canvas");
         // The canvas mounts only once PixiJS has a WebGL context and its
         // first frame ready — on a cold, unbundled Vite dev server under
@@ -156,11 +156,11 @@ public static class LiveFrontendTestHelpers
                 // mid-flight, which most likely means a previous attempt's
                 // click DID found and the view has already flipped into
                 // settlement mode. There is no plot left to click, so settle
-                // it on the tray rather than burning the remaining attempts
+                // it on the stepper rather than burning the remaining attempts
                 // clicking into a view that can no longer found.
                 try
                 {
-                    await Assertions.Expect(trayStatus).ToHaveTextAsync("Placed", new() { Timeout = 10_000 });
+                    await Assertions.Expect(firstStep).ToHaveClassAsync(new System.Text.RegularExpressions.Regex(@"\bdone\b"), new() { Timeout = 10_000 });
                     founded = true;
                 }
                 catch (PlaywrightException)
@@ -175,7 +175,7 @@ public static class LiveFrontendTestHelpers
             await page.Mouse.ClickAsync(box.X + (float)point[0], box.Y + (float)point[1]);
             try
             {
-                await Assertions.Expect(trayStatus).ToHaveTextAsync("Placed", new() { Timeout = 2_000 });
+                await Assertions.Expect(firstStep).ToHaveClassAsync(new System.Text.RegularExpressions.Regex(@"\bdone\b"), new() { Timeout = 2_000 });
                 founded = true;
             }
             catch (PlaywrightException)
@@ -195,7 +195,7 @@ public static class LiveFrontendTestHelpers
             // #96) — is the difference between "the request never went out"
             // and "the click hit the wrong hex", so surface it rather than
             // leaving this exception to guess.
-            var heroStatus = await page.Locator(".hero .status").AllTextContentsAsync();
+            var heroStatus = await page.Locator(".founding-col .status").AllTextContentsAsync();
             var recentConsole = consoleMessages.Count > 20
                 ? consoleMessages.Skip(consoleMessages.Count - 20)
                 : consoleMessages;

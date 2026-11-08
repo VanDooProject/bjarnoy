@@ -95,7 +95,7 @@ export class SettlementPage {
   readonly accountMenu: Locator;
   /** The account dropdown's "Log out" row — triggers useLogout's full page reload to '/'. */
   readonly accountMenuLogoutButton: Locator;
-  /** Player logout/login gate: replaces the founding hero when this device remembers a logged-out account (ReturningLoginPanel.vue). */
+  /** Player logout/login gate: replaces the founding column when this device remembers a logged-out account (ReturningLoginPanel.vue). */
   readonly returningLoginPanel: Locator;
   /** The panel's password field. */
   readonly returningLoginPasswordInput: Locator;

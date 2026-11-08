@@ -749,10 +749,14 @@ test.describe('mobile HUD drawer on non-map pages', () => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     for (const path of ['/#no-intro', '/login', '/register', '/worlds', '/reports', '/impressum', '/docs', '/docs/tech-tree']) {
       await page.goto(path);
-      // The page has rendered (its HUD bar, or a standalone page's own
-      // switcher), so this can't pass just because nothing is there yet. HUD
-      // pages keep the switcher in their dropdown menu, which is closed here.
-      await expect(page.locator('.hud-bar, .locale-switcher:not(.in-drawer)').first(), path).toBeAttached();
+      // The page has rendered (its HUD bar, a standalone page's own switcher,
+      // or the bar-less pre-founding map view's floating links), so this can't
+      // pass just because nothing is there yet. HUD pages keep the switcher in
+      // their dropdown menu, which is closed here.
+      await expect(
+        page.locator('.hud-bar, .locale-switcher:not(.in-drawer), [data-testid="map-how-to-play"]').first(),
+        path,
+      ).toBeAttached();
       await expect(page.locator('.locale-switcher:not(.in-drawer):visible'), path).toHaveCount(0);
     }
   });

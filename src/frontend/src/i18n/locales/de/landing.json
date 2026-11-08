@@ -1,13 +1,8 @@
 {
   "hero": {
-    "eyebrow": "Leeres Grundstück · Bjarnøy",
     "notOpenTitle": "Noch nicht geöffnet.",
-    "title": "Errichte irgendwo dein Langhaus.",
-    "lede": "Das ist das ganze Tutorial. Wähle ein Feld, platziere das Gebäude, und die Kornzählung beginnt. Niemand fragt nach deinem Namen, bevor du etwas hast, das einen Namen verdient.",
-    "makingLandfall": "Landung wird gemacht…",
-    "noAccount": "Kein Konto",
-    "nothingToInstall": "Nichts zu installieren",
-    "leavesInOneClick": "Mit einem Klick wieder weg"
+    "choose": "Wähle, wo dein Reich beginnt.",
+    "makingLandfall": "Landung wird gemacht…"
   },
   "joinBlocked": {
     "opensAt": "Diese Welt öffnet {date}.",
@@ -37,15 +32,12 @@
     "unnamedRealm": "Unbenanntes Reich"
   },
   "tray": {
-    "title": "Deine ersten drei Schritte",
     "stepOf": "Schritt {step} von {total}",
     "longhouseName": "Langhaus & Hof",
-    "placed": "Platziert",
     "clickToPlace": "Klicke dein Grundstück an, um es zu platzieren",
     "tapToPlace": "Tippe dein Grundstück an, um es zu platzieren",
     "clickEmptyHex": "Klicke ein leeres Feld in deiner Grenze an",
-    "tapEmptyHex": "Tippe ein leeres Feld in deiner Grenze an",
-    "foundFirst": "Gründe zuerst dein Langhaus"
+    "tapEmptyHex": "Tippe ein leeres Feld in deiner Grenze an"
   },
   "banner": {
     "landfallTitle": "Landung geglückt.",

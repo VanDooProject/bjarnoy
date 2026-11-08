@@ -471,7 +471,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await page.goto('/');
 
       await expect(landingPage(page)).toBeVisible();
-      await expect(page.getByRole('heading', { name: 'BJARNØY' })).toBeVisible();
+      await expect(landingPage(page).getByRole('heading', { name: 'BJARNØY' })).toBeVisible();
       await expect(page.getByText('A saga of the north, played together.')).toBeVisible();
       await expect(page.getByTestId('landing-hear')).toBeVisible();
       await expect(page.getByTestId('landing-muted')).toBeVisible();
@@ -653,7 +653,7 @@ test.describe('landing intro', { tag: '@g3' }, () => {
     await page.goto('/#no-intro');
     await expect(page.locator('canvas')).toBeVisible();
     await page.getByTestId('returning-player-trigger').click();
-    await expect(page.getByTestId('returning-player-docs')).toBeVisible();
+    await expect(page.getByTestId('returning-player-start-page')).toBeVisible();
     await expect(page.getByTestId('returning-player-play-intro')).toBeHidden();
   });
 

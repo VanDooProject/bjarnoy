@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { introText, type IntroLocale } from './introText';
+import FeatureList from './FeatureList.vue';
+import ImpressumLink from './ImpressumLink.vue';
 
 /**
  * The landing page: shown over the intro's first scene until the player starts the saga (with or without sound) or goes
@@ -31,11 +33,6 @@ watch(ready, (isReady) => {
 
 // the game's name is not translated
 const TITLE = 'BJARNØY';
-const FEATURES = [
-  { id: 'multiplayer', key: 'multiplayer' },
-  { id: 'noPayToWin', key: 'noPayToWin' },
-  { id: 'adFree', key: 'adFree' },
-] as const;
 </script>
 
 <template>
@@ -71,27 +68,9 @@ const FEATURES = [
       </div>
     </div>
 
-    <ul class="usps">
-      <li v-for="f in FEATURES" :key="f.id" class="usp" :data-testid="`landing-usp-${f.id}`">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <template v-if="f.id === 'multiplayer'">
-            <circle cx="8" cy="9" r="3" />
-            <circle cx="16" cy="9" r="3" />
-            <path d="M2 20c0-3 3-5 6-5s6 2 6 5M12 20c0-3 3-5 4-5 3 0 6 2 6 5" />
-          </template>
-          <template v-else-if="f.id === 'noPayToWin'">
-            <circle cx="12" cy="12" r="8" />
-            <circle cx="12" cy="12" r="5" />
-            <path d="M4.5 19.5l15-15" />
-          </template>
-          <path v-else d="M12 20.5s-8-4.6-8-10.6A4.4 4.4 0 0 1 12 7.6a4.4 4.4 0 0 1 8 2.3c0 6-8 10.6-8 10.6z" />
-        </svg>
-        <b>{{ t(`features.${f.key}.title`) }}</b>
-        <span>{{ t(`features.${f.key}.text`) }}</span>
-      </li>
-    </ul>
+    <FeatureList class="usps" :locale="locale" />
 
-    <a class="legal" href="/impressum" data-testid="landing-impressum">{{ t('impressum') }}</a>
+    <ImpressumLink class="legal" :locale="locale" />
   </div>
 </template>
 
@@ -151,12 +130,8 @@ const FEATURES = [
 }
 .usps {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
   margin: 22px 0 0;
   padding: 0 28px;
-  list-style: none;
 }
 .usps::before {
   content: '';
@@ -165,29 +140,6 @@ const FEATURES = [
   z-index: -1;
   background: radial-gradient(closest-side, rgba(10, 6, 4, 0.72), rgba(10, 6, 4, 0.45) 60%, transparent);
   pointer-events: none;
-}
-.usp {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  column-gap: 12px;
-  align-items: start;
-}
-.ico {
-  grid-row: span 2;
-  width: 26px;
-  height: 26px;
-  color: #ffc35c;
-}
-.usp b {
-  font-size: 16px;
-  font-weight: 600;
-  color: #f4f1ea;
-}
-.usp span {
-  font-size: 13.5px;
-  font-weight: 300;
-  color: #d8ccbb;
-  line-height: 1.4;
 }
 .ctas {
   display: flex;
@@ -287,13 +239,6 @@ const FEATURES = [
   align-self: center;
   margin-top: 10px;
   font-size: 13px;
-  color: #b5a796;
-  text-decoration: none;
-}
-.legal:hover,
-.legal:focus-visible {
-  color: #f4f1ea;
-  text-decoration: underline;
 }
 
 /* split layout (desktop and landscape phone): title and buttons left, the list right of the fire, Impressum bottom-right */
@@ -362,20 +307,11 @@ const FEATURES = [
     left: 67%;
     top: 24vh;
     width: 360px;
-    gap: 26px;
-  }
-  .usp {
-    column-gap: 16px;
-  }
-  .ico {
-    width: 34px;
-    height: 34px;
-  }
-  .usp b {
-    font-size: 19px;
-  }
-  .usp span {
-    font-size: 15.5px;
+    --fl-gap: 26px;
+    --fl-col-gap: 16px;
+    --fl-icon: 34px;
+    --fl-title: 19px;
+    --fl-text: 15.5px;
   }
   .legal {
     font-size: 14px;
@@ -420,25 +356,14 @@ const FEATURES = [
     left: 64%;
     top: 72px;
     width: 280px;
-    gap: 18px;
+    --fl-gap: 18px;
+    --fl-align: center;
+    --fl-icon: 24px;
+    --fl-title: 15px;
+    --fl-text-display: none;
   }
   .usps::before {
     inset: -30px -40px;
-  }
-  .usp {
-    align-items: center;
-    column-gap: 12px;
-  }
-  .ico {
-    grid-row: auto;
-    width: 24px;
-    height: 24px;
-  }
-  .usp b {
-    font-size: 15px;
-  }
-  .usp span {
-    display: none;
   }
   .legal {
     font-size: 12px;
