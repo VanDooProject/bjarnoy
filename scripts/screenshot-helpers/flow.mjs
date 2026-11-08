@@ -10,6 +10,9 @@
 // nudge — this script no longer clicks `button.cta` ("Enter the world",
 // gone) or "Skip for now" (nothing to skip anymore) accordingly.
 //
+// The landing page opens with an intro and a "Go to the map" button; the
+// script presses it (util.mjs's gotoMapReady) before the click-to-found step.
+//
 // Usage: node scripts/screenshot-helpers/flow.mjs [outDir] [baseUrl] [stops...]
 //   outDir  default: current directory
 //   baseUrl default: http://localhost:5183 (requires a running dev server:
@@ -50,7 +53,9 @@ async function shoot(page, name) {
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 
-await gotoMapReady(page, baseUrl + '/');
+// The landing intro comes first (gotoMapReady presses "Go to the map"); `landing_intro`
+// is that intro page, `landing` the village view behind it.
+await gotoMapReady(page, baseUrl + '/', { onIntro: (p) => shoot(p, 'landing_intro') });
 await shoot(page, 'landing');
 
 // The deterministic starter plot (LandingView's own screenBiasX=0.16 bias,

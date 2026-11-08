@@ -23,15 +23,28 @@ export async function forceRebuild(page, { x = 720, y = 450 } = {}) {
   await page.waitForTimeout(400);
 }
 
-// Loads `url` and waits for the map to be ready to screenshot — the same
-// signal e2e/helpers.ts's waitForMapReady uses (`data-map-ready`, then the
-// loading overlay gone). Not `waitUntil: 'networkidle'`: once the map's own
-// art is in, the app keeps warming the rest of the atlas in the background
-// (atlas.ts's startBackgroundAtlasLoad), so the network can stay busy for a
-// long while after the page is ready. Dev-server first loads are slow, hence
-// the generous timeout.
-export async function gotoMapReady(page, url, { timeout = 120_000 } = {}) {
+// Loads `url`, passes the landing intro and waits for the map to be ready to
+// screenshot. A fresh visitor lands on the intro page (LandingPage.vue), which
+// covers the map until they press "Go to the map": while the atlases still
+// load that arms the button and the intro opens by itself once they are in
+// (same path as e2e/onboarding-happy-path.spec.ts). Press it exactly once - a
+// second press while armed disarms it again. `onIntro(page)` runs while the
+// intro is showing, for a screenshot of it.
+//
+// Then the same signal e2e/helpers.ts's waitForMapReady uses
+// (`data-map-ready`, then the loading overlay gone). Not
+// `waitUntil: 'networkidle'`: once the map's own art is in, the app keeps
+// warming the rest of the atlas in the background (atlas.ts's
+// startBackgroundAtlasLoad), so the network can stay busy for a long while
+// after the page is ready. Dev-server first loads are slow, hence the
+// generous timeout.
+export async function gotoMapReady(page, url, { timeout = 120_000, onIntro } = {}) {
   await page.goto(url);
+  const toMap = page.getByRole('button', { name: /Go to the map/ });
+  await toMap.waitFor({ timeout });
+  if (onIntro) await onIntro(page);
+  await toMap.click();
+  await page.getByTestId('landing-page').waitFor({ state: 'detached', timeout });
   await page.locator('.map-container[data-map-ready]').first().waitFor({ timeout });
   await page.locator('[data-testid="map-status-overlay"]').waitFor({ state: 'detached', timeout });
 }
