@@ -476,6 +476,8 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await expect(page.getByTestId('landing-hear')).toBeVisible();
       await expect(page.getByTestId('landing-muted')).toBeVisible();
       await expect(page.getByTestId('intro-login')).toBeVisible();
+      await expect(page.getByTestId('landing-how-to-play')).toHaveAttribute('href', '/docs');
+      await expect(page.getByTestId('landing-impressum')).toHaveAttribute('href', '/impressum');
       await expect(page.getByTestId('intro-narration')).toHaveCount(0);
       await expect(page.getByTestId('intro-controls')).toHaveCount(0);
       await expect(intro(page)).toHaveAttribute('data-phase', 'waitingForPlay');

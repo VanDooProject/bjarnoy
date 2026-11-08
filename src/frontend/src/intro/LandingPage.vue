@@ -40,86 +40,104 @@ const FEATURES = [
 
 <template>
   <div class="landing-page" data-testid="landing-page">
-    <div class="copy">
-      <h1 class="title">{{ TITLE }}</h1>
-      <p class="tag">{{ t('tagline') }}</p>
-      <ul class="usps">
-        <li v-for="f in FEATURES" :key="f.id" class="usp" :data-testid="`landing-usp-${f.id}`">
-          <b>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <template v-if="f.id === 'multiplayer'">
-                <circle cx="8" cy="9" r="3" />
-                <circle cx="16" cy="9" r="3" />
-                <path d="M2 20c0-3 3-5 6-5s6 2 6 5M12 20c0-3 3-5 4-5 3 0 6 2 6 5" />
-              </template>
-              <template v-else-if="f.id === 'noPayToWin'">
-                <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" />
-                <path d="M8.5 12l2.5 2.5 4.5-5" />
-              </template>
-              <path v-else d="M12 20.5s-8-4.6-8-10.6A4.4 4.4 0 0 1 12 7.6a4.4 4.4 0 0 1 8 2.3c0 6-8 10.6-8 10.6z" />
-            </svg>
-            {{ t(`features.${f.key}.title`) }}
-          </b>
-          <span>{{ t(`features.${f.key}.text`) }}</span>
-        </li>
-      </ul>
+    <div class="left">
+      <div class="copy">
+        <h1 class="title">{{ TITLE }}</h1>
+        <p class="tag">{{ t('tagline') }}</p>
+      </div>
+      <div class="ctas">
+        <div class="sw">
+          <button type="button" class="btn saga" data-testid="landing-hear" @click="emit('hear')">
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z" fill="currentColor" /></svg>
+            {{ t('hear') }}
+          </button>
+          <button type="button" class="mlink" data-testid="landing-muted" @click="emit('muted')">{{ t('muted') }}</button>
+        </div>
+        <button
+          type="button"
+          class="btn map"
+          :class="loadState"
+          :aria-pressed="ready ? undefined : armed"
+          data-testid="landing-map"
+          :data-load-state="loadState"
+          @click="onMap"
+        >
+          <span class="lbl">
+            {{ mapLabel }}
+            <span v-if="ready" class="rtag">{{ t('ready') }}</span>
+          </span>
+          <span class="bar" :style="{ width: ready ? '0%' : `${pct}%` }" />
+        </button>
+      </div>
     </div>
 
-    <div class="ctas">
-      <div class="sw">
-        <button type="button" class="btn saga" data-testid="landing-hear" @click="emit('hear')">
-          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z" fill="currentColor" /></svg>
-          {{ t('hear') }}
-        </button>
-        <button type="button" class="mlink" data-testid="landing-muted" @click="emit('muted')">{{ t('muted') }}</button>
-      </div>
-      <button
-        type="button"
-        class="btn map"
-        :class="loadState"
-        :aria-pressed="ready ? undefined : armed"
-        data-testid="landing-map"
-        :data-load-state="loadState"
-        @click="onMap"
-      >
-        <span class="lbl">
-          {{ mapLabel }}
-          <span v-if="ready" class="rtag">{{ t('ready') }}</span>
-        </span>
-        <span class="bar" :style="{ width: ready ? '0%' : `${pct}%` }" />
-      </button>
-    </div>
+    <ul class="usps">
+      <li v-for="f in FEATURES" :key="f.id" class="usp" :data-testid="`landing-usp-${f.id}`">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <template v-if="f.id === 'multiplayer'">
+            <circle cx="8" cy="9" r="3" />
+            <circle cx="16" cy="9" r="3" />
+            <path d="M2 20c0-3 3-5 6-5s6 2 6 5M12 20c0-3 3-5 4-5 3 0 6 2 6 5" />
+          </template>
+          <template v-else-if="f.id === 'noPayToWin'">
+            <circle cx="12" cy="12" r="8" />
+            <circle cx="12" cy="12" r="5" />
+            <path d="M4.5 19.5l15-15" />
+          </template>
+          <path v-else d="M12 20.5s-8-4.6-8-10.6A4.4 4.4 0 0 1 12 7.6a4.4 4.4 0 0 1 8 2.3c0 6-8 10.6-8 10.6z" />
+        </svg>
+        <b>{{ t(`features.${f.key}.title`) }}</b>
+        <span>{{ t(`features.${f.key}.text`) }}</span>
+      </li>
+    </ul>
+
+    <a class="legal" href="/impressum" data-testid="landing-impressum">{{ t('impressum') }}</a>
   </div>
 </template>
 
 <style scoped>
-/* font inherits the intro's; the page scrolls instead of overlapping on a short landscape phone */
+/* font inherits the intro's. Base = portrait phone: title and list on top, buttons at the bottom, Impressum below */
 .landing-page {
   position: absolute;
   inset: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 24px;
   box-sizing: border-box;
-  padding: max(72px, 9vh) 16px max(44px, env(safe-area-inset-bottom));
-  overflow-y: auto;
+  padding: max(80px, calc(env(safe-area-inset-top) + 64px)) 0 max(14px, env(safe-area-inset-bottom));
+  overflow: hidden;
   color: #f4f1ea;
 }
 .landing-page.intro-fade-leave-active {
   pointer-events: none;
 }
+.left {
+  display: contents;
+}
+/* .left is display: contents here, so its children order against the list and the link */
+.copy {
+  order: 1;
+}
+.usps {
+  order: 2;
+}
+.ctas {
+  order: 3;
+}
+.legal {
+  order: 4;
+}
 .copy {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  padding: 0 16px;
   text-align: center;
 }
 .title {
   margin: 0;
   font-weight: 300;
-  font-size: 88px;
+  font-size: 46px;
   letter-spacing: 0.18em;
   text-indent: 0.18em;
   line-height: 1;
@@ -127,49 +145,57 @@ const FEATURES = [
 }
 .tag {
   margin: 0;
-  font-size: 19px;
+  font-size: 16px;
   font-weight: 300;
   color: #e6d9c4;
 }
 .usps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  max-width: 980px;
-  margin: 18px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.usp {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  align-items: center;
-  padding: 16px 18px;
-  border-radius: 10px;
-  background: rgba(18, 12, 8, 0.62);
-  border: 1px solid rgba(240, 122, 44, 0.28);
+  gap: 16px;
+  margin: 22px 0 0;
+  padding: 0 28px;
+  list-style: none;
 }
-.usp b {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  font-size: 19px;
-  font-weight: 600;
+.usps::before {
+  content: '';
+  position: absolute;
+  inset: -20px -10px;
+  z-index: -1;
+  background: radial-gradient(closest-side, rgba(10, 6, 4, 0.72), rgba(10, 6, 4, 0.45) 60%, transparent);
+  pointer-events: none;
+}
+.usp {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: start;
+}
+.ico {
+  grid-row: span 2;
+  width: 26px;
+  height: 26px;
   color: #ffc35c;
 }
+.usp b {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f4f1ea;
+}
 .usp span {
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 300;
   color: #d8ccbb;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 .ctas {
   display: flex;
-  flex-direction: row;
-  justify-content: center;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: stretch;
   gap: 14px;
+  margin-top: auto;
+  padding: 0 20px;
 }
 .sw {
   display: flex;
@@ -177,11 +203,13 @@ const FEATURES = [
   align-items: center;
   gap: 6px;
 }
+.sw > .btn {
+  align-self: stretch;
+}
 .btn {
   position: relative;
   overflow: hidden;
   min-height: 52px;
-  min-width: 270px;
   padding: 0 24px;
   border-radius: 8px;
   font: inherit;
@@ -255,52 +283,165 @@ const FEATURES = [
   align-items: center;
   gap: 6px;
 }
+.legal {
+  align-self: center;
+  margin-top: 10px;
+  font-size: 13px;
+  color: #b5a796;
+  text-decoration: none;
+}
+.legal:hover,
+.legal:focus-visible {
+  color: #f4f1ea;
+  text-decoration: underline;
+}
 
-/* phones */
-@media (max-width: 640px) {
+/* split layout (desktop and landscape phone): title and buttons left, the list right of the fire, Impressum bottom-right */
+@media (min-width: 641px), (orientation: landscape) and (max-height: 500px) {
   .landing-page {
-    padding-bottom: max(24px, env(safe-area-inset-bottom));
+    display: block;
+    padding: 0;
+  }
+  .left {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
   }
   .copy {
-    gap: 8px;
-  }
-  .title {
-    font-size: 52px;
-  }
-  .tag {
-    font-size: 16px;
-  }
-  .usps {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
-    margin-top: 8px;
-  }
-  .usp {
-    flex-direction: row;
-    align-items: baseline;
-    gap: 10px;
-    padding: 10px 12px;
+    align-items: flex-start;
+    padding: 0;
     text-align: left;
   }
-  .usp b {
-    font-size: 16px;
-    flex: 0 0 auto;
-  }
-  .usp span {
-    font-size: 14px;
+  .title {
+    text-indent: 0;
   }
   .ctas {
-    flex-direction: column;
     align-items: stretch;
+    margin-top: 0;
+    padding: 0;
   }
-  .sw {
-    align-self: stretch;
+  .usps {
+    position: absolute;
+    margin: 0;
+    padding: 0;
   }
-  .sw > .btn {
-    align-self: stretch;
+  .usps::before {
+    inset: -40px -50px;
+  }
+  .legal {
+    position: absolute;
+    right: max(18px, env(safe-area-inset-right));
+    bottom: max(14px, env(safe-area-inset-bottom));
+    margin: 0;
+  }
+}
+
+/* desktop */
+@media (min-width: 641px) and (min-height: 501px) {
+  .left {
+    left: 72px;
+    top: 18.5vh;
+    width: 290px;
+  }
+  .copy {
+    gap: 14px;
+  }
+  .title {
+    font-size: 76px;
+  }
+  .tag {
+    font-size: 20px;
+    width: 400px;
+  }
+  .ctas {
+    gap: 14px;
+    margin-top: 38px;
+  }
+  .usps {
+    left: 67%;
+    top: 24vh;
+    width: 360px;
+    gap: 26px;
+  }
+  .usp {
+    column-gap: 16px;
+  }
+  .ico {
+    width: 34px;
+    height: 34px;
+  }
+  .usp b {
+    font-size: 19px;
+  }
+  .usp span {
+    font-size: 15.5px;
+  }
+  .legal {
+    font-size: 14px;
+  }
+}
+
+/* landscape phone: compact, everything within 390px of height */
+@media (orientation: landscape) and (max-height: 500px) {
+  .left {
+    left: max(28px, env(safe-area-inset-left));
+    top: 34px;
+    width: 210px;
+  }
+  .copy {
+    gap: 6px;
+  }
+  .title {
+    font-size: 42px;
+  }
+  .tag {
+    font-size: 14.5px;
+    width: 340px;
+  }
+  .ctas {
+    gap: 10px;
+    margin-top: 22px;
   }
   .btn {
-    min-width: 0;
+    min-height: 42px;
+    font-size: 15px;
+    padding: 0 8px;
+  }
+  .map {
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .mlink {
+    font-size: 12.5px;
+    min-height: 28px;
+  }
+  .usps {
+    left: 64%;
+    top: 72px;
+    width: 280px;
+    gap: 18px;
+  }
+  .usps::before {
+    inset: -30px -40px;
+  }
+  .usp {
+    align-items: center;
+    column-gap: 12px;
+  }
+  .ico {
+    grid-row: auto;
+    width: 24px;
+    height: 24px;
+  }
+  .usp b {
+    font-size: 15px;
+  }
+  .usp span {
+    display: none;
+  }
+  .legal {
+    font-size: 12px;
   }
 }
 </style>
