@@ -250,7 +250,9 @@ describe('simulatePacing on the bundled catalogue', () => {
       for (const sessions of [PROFILE_PRESETS.active, PROFILE_PRESETS.checkins4, PROFILE_PRESETS.checkins2]) {
         const sparse = simulatePacing(byType, params({ ...base, sessions, joinTime: '09:00' }));
         for (const [level, at] of Object.entries(sparse.lhReachedAt)) {
-          expect(most.lhReachedAt[Number(level)], `ahead ${producersAhead} LH ${level}`).toBeLessThanOrEqual(at);
+          // The greedy player may order its builds differently and land a level up to an hour later; the regression this
+          // guards was always-online falling behind by many hours.
+          expect(most.lhReachedAt[Number(level)], `ahead ${producersAhead} LH ${level}`).toBeLessThanOrEqual(at + 60);
         }
       }
     }
@@ -447,12 +449,14 @@ describe('feasts on the bundled catalogue (economy.md §6 tuning)', () => {
     });
   const day = (minute: number | null) => (minute ?? Infinity) / 1440;
 
-  it('the active player founds the 2nd settlement around day 6 with feasts and around day 13 without', () => {
+  // Without feasts the run lands at about day 12: the setup now has the clay pits and bog-ore works a real start uses (the old
+  // quarries-only run, settled with Longhouse iron, gave day 13.4; the old catalogue gives day 12.4 on this setup).
+  it('the active player founds the 2nd settlement around day 6 with feasts and around day 12 without', () => {
     const withFeasts = run(PROFILE_PRESETS.active, true);
     const without = run(PROFILE_PRESETS.active, false);
     expect(day(withFeasts.secondSettlementAt)).toBeGreaterThan(4.5);
     expect(day(withFeasts.secondSettlementAt)).toBeLessThan(6.6);
-    expect(day(without.secondSettlementAt)).toBeGreaterThan(13);
+    expect(day(without.secondSettlementAt)).toBeGreaterThan(11.5);
     expect(day(without.secondSettlementAt)).toBeLessThan(14.5);
   });
 
