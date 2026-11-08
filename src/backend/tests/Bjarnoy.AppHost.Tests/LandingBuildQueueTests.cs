@@ -100,7 +100,7 @@ public class LandingBuildQueueTests(AppHostFixture fixture)
         // waiting for it to complete — too high a factor (50 was tried
         // first) let the order finish before that first assertion's own API
         // round trip, since GetSettlementAsync lazily completes any queued
-        // build that's due whenever it's read. 24s (SpeedFactor 10) leaves
+        // build that's due whenever it's read. 40s (SpeedFactor 6) leaves
         // comfortable room for that first check while still resolving well
         // inside this test's overall budget. Set before queuing: PlanBuild
         // divides the definition's BuildDuration by the world's SpeedFactor
@@ -128,7 +128,7 @@ public class LandingBuildQueueTests(AppHostFixture fixture)
 
         var speedUpResponse = await adminHttpClient.PatchAsJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest { SpeedFactor = 10.0 },
+            new UpdateWorldSettingsRequest { SpeedFactor = 6.0 },
             cancellationToken);
         speedUpResponse.EnsureSuccessStatusCode();
 
@@ -143,8 +143,14 @@ public class LandingBuildQueueTests(AppHostFixture fixture)
         // startHudSync()'s own LIVE_POLL_MS (4s) poll — already running on
         // the landing page since founding — is what's expected to pick this
         // up and mount BuildQueuePanel; no page reload, no extra click.
+        // The panel can only show up with a poll that *starts* after the order
+        // exists: the one in flight at queue time answers with the old, empty
+        // queue, so the worst case is that response + one full interval + the
+        // next response. On a loaded runner that took ~9 s (a 10 s budget
+        // flaked); 20 s covers it and the 40 s order (SpeedFactor 6) is still
+        // running when the budget ends, so the panel can't have come and gone.
         var statusCard = page.Locator(".status-card");
-        await Assertions.Expect(statusCard).ToBeVisibleAsync(new() { Timeout = 10_000 });
+        await Assertions.Expect(statusCard).ToBeVisibleAsync(new() { Timeout = 20_000 });
         await Assertions.Expect(statusCard.GetByText("Construction")).ToBeVisibleAsync();
         await Assertions.Expect(page.Locator(".status-row-time")).ToBeVisibleAsync();
 
@@ -161,7 +167,7 @@ public class LandingBuildQueueTests(AppHostFixture fixture)
         // doesn't move on" would look like if it regressed: the card stays
         // up forever and the tray never advances even though the backend
         // finished the build.
-        await Assertions.Expect(statusCard).ToBeHiddenAsync(new() { Timeout = 45_000 });
+        await Assertions.Expect(statusCard).ToBeHiddenAsync(new() { Timeout = 60_000 }); // rest of the 40 s order + the poll that sees it finished
         await Assertions.Expect(page.Locator("[data-testid=\"onboarding-checklist\"] .step").Nth(1)).ToHaveClassAsync(new System.Text.RegularExpressions.Regex(@"\bdone\b"));
 
         var settlementAfterCompletion = await apiClient.GetFromJsonAsync<SettlementResponse>(
