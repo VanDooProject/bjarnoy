@@ -242,9 +242,12 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
             departedAt,
             path,
             cumulativeHours: [0, 20, 25, 30],
+            // Hex prices 35, 5, 5, 5: each edge is crossed after half the price of the hex left.
+            edgeHours: [0, 17.5, 22.5, 27.5],
             arrivesAt,
             returnPath: [...path].reverse(),
             returnCumulativeHours: [0, 2, 5, 6],
+            returnEdgeHours: [0, 1, 3.5, 5.5],
             turnAroundAt: arrivesAt,
             returnArrivesAt: new Date(Date.now() + 60_000).toISOString(),
             isReturning: false,
