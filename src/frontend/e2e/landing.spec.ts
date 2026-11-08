@@ -59,7 +59,7 @@ test('landing page shows the guided pointer and a step-1 checklist before foundi
 
   await expect(settlement.checklist).toBeVisible();
   await expect(settlement.checklist).toContainText('Step 1 of 3');
-  await expect(page.locator('.tray-item.current')).toContainText('Longhouse & yard');
+  await expect(page.locator('.step.current')).toContainText('Longhouse & yard');
 });
 
 /** The bubble nearest the arrow's tip is the intended one, the tip just outside its rim, and no bubble under the tip. */
@@ -166,7 +166,7 @@ test('onboarding build step uses the map\'s two-lane ring, and the pointer walks
     await settlement.ring.click(herder);
   }
   await expect.poll(() => settlement.countBuildings(), { timeout: 5_000 }).toBeGreaterThan(before);
-  await expect(page.locator('.tray-item .sub').nth(1)).toHaveText('Placed');
+  await expect(page.locator('.step.done')).toHaveCount(2);
 
   // Frame 4: one guided building down, the pointer moves on to the other.
   await expect(settlement.checklist).toContainText('Step 3 of 3');
@@ -287,7 +287,7 @@ test('onboarding ring menu closes on an outside click and on Escape', { tag: '@g
 // click that opened the dropdown. Mocked the same way world-picker.spec.ts
 // mocks WorldList's own two calls, since they go out over real HTTP
 // regardless of DEMO_MODE (see that file's own scope note).
-test('the pre-founding header has no dead in-game nav, only the returning-player menu', { tag: '@g3' }, async ({ page }) => {
+test('the pre-founding view has no header band or dead in-game nav, only How to play and the returning-player menu', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
 
   await page.route('**/api/v1/worlds/joinable', (route: Route) =>
@@ -317,12 +317,18 @@ test('the pre-founding header has no dead in-game nav, only the returning-player
   await expect(page.getByRole('link', { name: 'Reports', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Alliance', exact: true })).toHaveCount(0);
 
+  await expect(page.locator('.hud-bar')).toHaveCount(0);
+  const howTo = page.getByTestId('landing-how-to-play');
+  await expect(howTo).toBeVisible();
+  await expect(howTo).toHaveAttribute('href', '/docs');
+
   const trigger = page.getByTestId('returning-player-trigger');
   await expect(trigger).toBeVisible();
   await expect(page.getByTestId('returning-player-menu')).toHaveCount(0);
 
   await trigger.click();
   await expect(page.getByTestId('returning-player-menu')).toBeVisible();
+  await expect(page.getByTestId('returning-player-docs')).toHaveCount(0);
 
   const login = page.getByTestId('returning-player-login');
   await expect(login).toBeVisible();

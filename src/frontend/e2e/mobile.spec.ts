@@ -61,19 +61,19 @@ async function expectNoOverlap(a: Locator, b: Locator, what: string): Promise<vo
 }
 
 /**
- * The minimal phone hero (title + one-line facts) must leave the preview
- * island's "click this plot" chip and the demo-mode badge uncovered — the
- * full desktop hero ran into both on a phone.
+ * The compact phone left column (wordmark, heading, feature titles) must
+ * leave the preview island's "click this plot" chip and the demo-mode badge
+ * uncovered, and show no feature descriptions.
  */
-async function expectHeroClear(page: Page): Promise<void> {
+async function expectColumnClear(page: Page): Promise<void> {
   const settlement = await SettlementPage.openLanding(page);
-  const hero = page.locator('.hero--founding');
-  await expect(hero).toBeVisible();
-  await expect(hero.locator('.lede')).toBeHidden();
-  await expectNoOverlap(hero, settlement.guidancePointer.locator('.chip'), 'hero covers the "click this plot" chip');
+  const column = page.locator('.founding-col');
+  await expect(column).toBeVisible();
+  await expect(column.getByTestId('landing-usp-multiplayer').locator('span')).toBeHidden();
+  await expectNoOverlap(column, settlement.guidancePointer.locator('.chip'), 'column covers the "click this plot" chip');
   const badge = page.locator('.demo-badge');
-  if (await badge.isVisible()) await expectNoOverlap(hero, badge, 'hero covers the demo badge');
-  await expectInsideViewport(page, hero);
+  if (await badge.isVisible()) await expectNoOverlap(column, badge, 'column covers the demo badge');
+  await expectInsideViewport(page, column);
 }
 
 /**
@@ -140,9 +140,9 @@ test.describe('phone layout', { tag: '@g1' }, () => {
     expect((await heading.boundingBox())!.x).toBeGreaterThanOrEqual(12);
   });
 
-  test('the minimal landing hero leaves the plot chip and demo badge uncovered', async ({ page }) => {
+  test('the compact landing column leaves the plot chip and demo badge uncovered', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await expectHeroClear(page);
+    await expectColumnClear(page);
   });
 
   test('onboarding overlays stay on screen before and after landfall', async ({ page }) => {
@@ -164,9 +164,9 @@ test.describe('phone layout', { tag: '@g1' }, () => {
 test.describe('phone layout, landscape', { tag: '@g1' }, () => {
   test.use({ viewport: PHONE_LANDSCAPE, hasTouch: true, isMobile: true });
 
-  test('the minimal landing hero leaves the plot chip and demo badge uncovered', async ({ page }) => {
+  test('the compact landing column leaves the plot chip and demo badge uncovered', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await expectHeroClear(page);
+    await expectColumnClear(page);
   });
 
   test('the onboarding checklist leaves the landing plot tappable', async ({ page }) => {
@@ -200,9 +200,9 @@ test.describe('phone layout, narrow (320px)', { tag: '@g1' }, () => {
     await expect(settlement.checklist).toContainText('Step 2 of 3');
   });
 
-  test('the minimal landing hero leaves the plot chip and demo badge uncovered', async ({ page }) => {
+  test('the compact landing column leaves the plot chip and demo badge uncovered', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await expectHeroClear(page);
+    await expectColumnClear(page);
   });
 
   // guidance-chip-edge: at 320px the chip used to sit to the side of the
