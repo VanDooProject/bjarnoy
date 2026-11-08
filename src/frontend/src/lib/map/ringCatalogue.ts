@@ -127,8 +127,8 @@ const EXCLUDED_VARIANTS_BY_TYPE: Partial<Record<string, ReadonlySet<RiverVariant
  * bubble), this is a fixed property of the hex itself: a hex that will
  * never grow a matching river should not offer the bubble at all, so
  * callers filter it out of the category rather than rendering it locked.
- * Every other buildable type has no such requirement (the water buildings —
- * see `isWaterOnlyBuilding` — need coastal water, checked separately).
+ * Every other buildable type is refused on a river hex altogether (`riverShape` is the hex's river tile of any width, `undefined`
+ * when there is none); the water buildings — see `isWaterOnlyBuilding` — need coastal water, checked separately.
  */
 export function riverBuildingAllowedHere(
   type: string,
@@ -137,7 +137,9 @@ export function riverBuildingAllowedHere(
   riverWidth: string = 'river',
 ): boolean {
   const allowedShapes = RIVER_SHAPES_BY_TYPE[type];
-  if (!allowedShapes) return true;
+  // A river hex of any width or shape (stream, widening, spring, confluence, mouth, bend, straight) takes no ordinary building, walls
+  // included: only the river buildings below and the bridge stand on one (matches `Settlement.PlanBuild`'s `onRiverTile`).
+  if (!allowedShapes) return riverShape === undefined;
   // The river buildings' art is river width: a stream or widening hex never takes one.
   if (riverWidth !== 'river') return false;
   if (riverShape === undefined || !allowedShapes.has(riverShape)) return false;
@@ -213,6 +215,37 @@ function wallOrTowerGround(tile: { terrain: string; bog?: { kind: BogTileKind } 
 }
 
 /**
+ * The land terrains each building stands on — the client mirror of `BuildingDefinition.AllowedTerrain` (the catalogue's
+ * `allowedTerrain`; `ringCatalogue.test.ts` compares this table with the bundled catalogue snapshot). The tower and the walls
+ * also stand on plain bog moss (`wallOrTowerGround`); water, bog-bound and bridge rules are handled in `buildingAllowedOnHex`.
+ * `hut` is the demo-only starter hut.
+ */
+const LAND_TERRAIN_BY_TYPE: Readonly<Record<string, readonly string[]>> = {
+  hut: ['grass'],
+  farm: ['grass'],
+  pumpkinfarm: ['grass'],
+  reindeerherder: ['grass'],
+  lumberjack: ['forest'],
+  quarry: ['mountain'],
+  storagehouse: ['grass'],
+  greatstorehouse: ['grass'],
+  sawmill: ['grass'],
+  cropmill: ['grass'],
+  meadery: ['grass'],
+  townsquare: ['grass'],
+  druidhut: ['grass'],
+  cartworkshop: ['grass'],
+  archeryrange: ['grass'],
+  barracks: ['grass'],
+  siegeworkshop: ['grass'],
+  smithy: ['grass'],
+  shrineofthor: ['grass'],
+  shrineoffreyja: ['grass'],
+  shrineofullr: ['grass'],
+  odinstatue: ['grass'],
+};
+
+/**
  * Whether `type` may stand on this one hex, from its terrain, coastal-water flag and bog kind — the client mirror of
  * `BuildingDefinition.AllowsHex` (river shape and soil rules are separate, see `riverBuildingAllowedHere`/`cropAllowedHere`).
  * Nothing stands on a lake or on open sea; the coastal-water buildings stand on coastal water, or (Fishing Hut) on a lake's
@@ -238,7 +271,7 @@ export function buildingAllowedOnHex(
     if (tile.terrain === 'sea') return tile.isCoastalWater === true;
     return tile.terrain === 'bog' && tile.bog !== undefined && LAKE_SHORE_KINDS_BY_TYPE[type]?.has(tile.bog.kind) === true;
   }
-  return tile.terrain !== 'sea' && tile.terrain !== 'bog';
+  return LAND_TERRAIN_BY_TYPE[type]?.includes(tile.terrain) === true;
 }
 
 /**

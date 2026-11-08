@@ -120,4 +120,37 @@ describe('useBuildRing', () => {
     expect(categoriesFor({ terrain: 'sea', isCoastalWater: false } as Tile)).toEqual([]);
     expect(categoriesFor({ terrain: 'sea', isCoastalWater: true } as Tile).map((c) => c.id)).toEqual(['water', 'defense']);
   });
+
+  it('offers sand only the tower and the walls, and a lake\'s half shore only the Fishing Hut', () => {
+    const sand = categoriesFor({ terrain: 'sand' } as Tile);
+    expect(sand.map((c) => c.id)).toEqual(['defense']);
+    expect(sand[0].buildings.map((b) => b.type)).toEqual(['tower', 'palisade', 'palisadegate', 'bridge']);
+    const half = categoriesFor({ terrain: 'bog', bog: { kind: 'half' } } as Tile);
+    expect(half.map((c) => c.id)).toEqual(['water']);
+    expect(half[0].buildings.map((b) => b.type)).toEqual(['fishinghut']);
+  });
+
+  it('offers nothing to build on a stream, a widening or a spring hex, and only the river buildings on a river-width straight', () => {
+    const hex = emptyHex(world, 'grass');
+    // The model's river map is not reactive: each case gets its own ring, as a fresh selection does.
+    const ringOn = (shape: 'straight' | 'spring' | 'bend', width?: 'stream' | 'widen' | 'river') => {
+      if (width) world.model.setRiverTiles([{ q: hex.q, r: hex.r, shape, inDirections: [], outDirection: null, width }]);
+      else world.model.setRiverTiles([]);
+      const { ring, select } = mountRing();
+      select(hex);
+      return ring;
+    };
+    expect(ringOn('straight').canBuildHere.value).toBe(true);
+
+    for (const [shape, width] of [['straight', 'stream'], ['straight', 'widen'], ['spring', 'stream'], ['bend', 'stream'], ['spring', 'river']] as const) {
+      const ring = ringOn(shape, width);
+      expect(ring.categories.value, `${shape}/${width}`).toEqual([]);
+      expect(ring.canBuildHere.value, `${shape}/${width}`).toBe(false);
+    }
+
+    // A river-width straight takes the river buildings and the bridge, no ordinary building (not a farm, a tower, a wall piece).
+    const types = ringOn('straight', 'river').categories.value.flatMap((c) => c.buildings.map((b) => b.id));
+    expect(types.every((id) => ['sawmill', 'cropmill', 'bridge'].includes(id))).toBe(true);
+    expect(types).toContain('sawmill');
+  });
 });

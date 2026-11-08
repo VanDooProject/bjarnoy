@@ -30,12 +30,14 @@ describe('buildShowcaseVillage', () => {
     expect(built.settlement.ownerId).toBe(SHOWCASE_VILLAGE_OWNER);
     const types = new Set(buildingsOf(built.model, built.settlement.id, built.center).map((t) => t.buildingType));
     expect(types.has('longhouse')).toBe(true);
-    expect(types.size).toBeGreaterThanOrEqual(20);
+    // Every building stands on the ground the backend allows it (`LAND_TERRAIN_BY_TYPE`); this seed's claim has less grass than the old
+    // loose client rule let it use.
+    expect(types.size).toBeGreaterThanOrEqual(18);
   });
 
   it('raises a bigger village: dozens of buildings, three towers, a dockyard and the coast', () => {
     const own = buildingsOf(built.model, built.settlement.id, built.center);
-    expect(own.length).toBeGreaterThanOrEqual(30);
+    expect(own.length).toBeGreaterThanOrEqual(26);
     expect(own.filter((t) => t.buildingType === 'tower')).toHaveLength(3);
     expect(own.filter((t) => t.buildingType === 'hut').length).toBeGreaterThanOrEqual(5);
     expect(own.some((t) => t.buildingType === 'dockyard')).toBe(true);
