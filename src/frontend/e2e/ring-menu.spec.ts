@@ -244,9 +244,8 @@ test.describe('ring menu drill-down', () => {
     const longhouse = await settlement.centreHex();
     const buildingLevel = () => settlement.longhouseBuildingLevel();
 
-    // Longhouse's next level costs 161 wood / 134 brick / 81 food
-    // (BuildingCatalogue.cs's 120/100/60 base * 1.34, rounded up for
-    // display) and 0 iron at every level — zeroing every resource is short on exactly the first three.
+    // Longhouse's next level costs 160 wood / 80 food (BuildingCatalogue.cs's 120/60 base * 1.34, nice-rounded; no brick
+    // up to level 5, no iron at any level) — zeroing every resource is short on exactly wood and food.
     await settlement.setResources({ wood: 0, stone: 0, food: 0, iron: 0 });
     await settlement.clickHex(longhouse);
 
@@ -261,10 +260,10 @@ test.describe('ring menu drill-down', () => {
     const card = settlement.ring.card;
     await expect(card).toBeVisible();
     await expect(card).toContainText('Upgrade to level 2');
-    await expect(card).toContainText('161');
+    await expect(card).toContainText('160');
     await expect(card).toContainText('NOT ENOUGH RESOURCES');
     // Stock keeps ticking up from zero, so the shortfall shrinks while the test runs.
-    await expect(card).toContainText(/Need \d+ Wood · \d+ Brick · \d+ Food/);
+    await expect(card).toContainText(/Need \d+ Wood · \d+ Food/);
     await expect(card.locator('button')).toHaveCount(0);
 
     const levelBefore = await buildingLevel();
