@@ -328,6 +328,12 @@ export interface BuildOrderResponse {
   q: number;
   r: number;
   building: string;
+  /**
+   * `'build'` for a new building or an upgrade, `'raze'` for tearing one level down (docs/design/construction-slots.md,
+   * "Razing"). Cancelling either goes through the same cancel endpoint.
+   */
+  kind: 'build' | 'raze';
+  /** The level the building has once the order completes; for a raze the level after it (0 = the building is removed). */
   targetLevel: number;
   /** `'building'` while under construction, `'waiting'` while queued behind a full set of construction slots (the premium queue) — issue #158. */
   state: 'building' | 'waiting';

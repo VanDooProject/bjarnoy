@@ -855,32 +855,53 @@ export const useWorldStore = defineStore('world', {
      */
     async queueBuildOptimistic(building: string, at: AxialCoord, cost?: Partial<Resources>) {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
-      const pending = makePendingOrder(building, at);
       const before = { ...this.hud.resources };
-      this.hud.queue = [...this.hud.queue, pending];
-      try {
-        await api.queueBuild(
-          this.selectedSettlementId, { building, q: at.q, r: at.r }, this.ownerId ?? undefined,
-        );
-      } catch (err) {
-        this.hud.queue = this.hud.queue.filter((o) => o.id !== pending.id);
-        throw err;
-      }
-      // Confirmed. The refresh swaps the pending entry for the real order; a
-      // failed refresh must not read as a refused build, the poll catches up.
-      try {
-        await this.refreshLiveSettlement();
-      } catch (err) {
-        console.warn('Refresh after a confirmed build failed; the next poll will catch up', err);
-      } finally {
-        this.hud.queue = this.hud.queue.filter((o) => o.id !== pending.id);
-      }
+      await this.queueOrderOptimistic(
+        makePendingOrder(building, at),
+        () => api.queueBuild(this.selectedSettlementId!, { building, q: at.q, r: at.r }, this.ownerId ?? undefined),
+      );
       if (cost) {
         const spent: Partial<Resources> = {};
         for (const kind of Object.keys(cost) as (keyof Resources)[]) {
           if ((cost[kind] ?? 0) > 0 && this.hud.resources[kind] < before[kind]) spent[kind] = cost[kind];
         }
         this.recordSpend(spent);
+      }
+    },
+    /**
+     * Razes one level of the building on `at` (docs/design/construction-slots.md, "Razing"): the same optimistic pending order
+     * as `queueBuildOptimistic`, so the hex shows its "…" dial at once and a refusal removes it again. A raze costs nothing,
+     * so no spend is recorded. Throws `ApiError` on rejection.
+     */
+    async razeBuildingLive(at: AxialCoord) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      const placed = this.hud.buildings.find((b) => b.q === at.q && b.r === at.r);
+      if (!placed) throw new Error('No building on that hex');
+      await this.queueOrderOptimistic(
+        makePendingOrder(placed.type, at, 'raze', Math.max(0, placed.level - 1)),
+        () => api.razeBuilding(this.selectedSettlementId!, { q: at.q, r: at.r }, this.ownerId ?? undefined),
+      );
+    },
+    /**
+     * The optimistic round trip shared by builds and razes: `pending` goes into `hud.queue`, `send` runs, a refusal removes it
+     * again and rethrows, a confirmation refreshes (the refresh swaps in the real order) and then drops the stand-in.
+     */
+    async queueOrderOptimistic(pending: BuildOrderResponse, send: () => Promise<unknown>) {
+      this.hud.queue = [...this.hud.queue, pending];
+      try {
+        await send();
+      } catch (err) {
+        this.hud.queue = this.hud.queue.filter((o) => o.id !== pending.id);
+        throw err;
+      }
+      // Confirmed. The refresh swaps the pending entry for the real order; a
+      // failed refresh must not read as a refused order, the poll catches up.
+      try {
+        await this.refreshLiveSettlement();
+      } catch (err) {
+        console.warn('Refresh after a confirmed order failed; the next poll will catch up', err);
+      } finally {
+        this.hud.queue = this.hud.queue.filter((o) => o.id !== pending.id);
       }
     },
     /** X8: announces a confirmed spend; the resource bar counts the affected pills down. Empty costs are ignored. */
