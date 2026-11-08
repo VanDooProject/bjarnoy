@@ -246,7 +246,7 @@
       "water": "Water"
     },
     "lore": {
-      "longhouse": "The heart of the settlement. Its level sets the claim radius, the build slots and which buildings unlock, and it produces a little of every resource and adds storage of its own. Every settlement starts with one, standing on grass.",
+      "longhouse": "The heart of the settlement. Its level sets the claim radius, the build slots and which buildings unlock, and it produces a little wood and food and adds storage of its own. Every settlement starts with one, standing on grass.",
       "lumberjack": "Fells timber on forested ground — the wood behind every wall and roof.",
       "quarry": "Cuts stone from a mountain ridge — the bones of every keep.",
       "odinstatue": "Odin's statue on grass, at Longhouse 25 behind a level-10 Druid Hut. Wisdom: every build in this settlement takes 2% less time per level (10% at level 5). Ravens: its claim, its towers and its armies see 2 more rings per level (10 at level 5). Counts as the settlement's one shrine.",
@@ -935,7 +935,7 @@
     },
     "producers": {
       "heading": "Producers",
-      "growth": "A producer's output grows by 20% with every level: each level makes 1.2 times what the one before made.",
+      "growth": "A producer's output grows with every level, and each level adds 20% more than the one before added.",
       "columns": {
         "building": "Building",
         "makes": "Makes",
@@ -951,7 +951,7 @@
         "claybrickworks": "Plain bog moss only",
         "bogoreworks": "Plain bog moss only, not shore, creek or lake"
       },
-      "longhouse": "The Longhouse is the exception: it adds the same fixed amount every level ({amounts} an hour: wood / brick / food / iron) instead of growing by 20%.",
+      "longhouse": "The Longhouse is the exception: it adds the same fixed amount every level ({amounts} an hour: wood / food) instead of adding 20% more each time.",
       "soil": "Every island has either wheat or pumpkin soil, about half of them each. A {pumpkin} fits only pumpkin soil and makes {pumpkinRate} food at level 1 where a {farm} makes {farmRate}; a {farm} fits any island."
     },
     "boost": {
