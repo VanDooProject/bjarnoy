@@ -423,27 +423,10 @@ const hudBarAtBottomLanding = computed(() => isCompactHudLanding.value && isHudB
 // TopBar unmounts (see its own onBeforeUnmount), so this can't just rely on
 // that ref alone without re-introducing a stale 64px gap under nothing.
 //
-// Before founding there is no bar at all, only the floating top-right group
-// (How to play + the returning-player menu): its bottom edge is the inset
-// there, so the pointer, the loading indicator and the like stay clear of it.
-const topRightEl = ref<HTMLElement | null>(null);
-const topRightBottomPx = ref(0);
-let topRightObserver: ResizeObserver | undefined;
-watch(topRightEl, (el) => {
-  topRightObserver?.disconnect();
-  topRightObserver = undefined;
-  if (!el) {
-    topRightBottomPx.value = 0;
-    return;
-  }
-  const measure = () => (topRightBottomPx.value = Math.ceil(el.getBoundingClientRect().bottom));
-  measure();
-  topRightObserver = new ResizeObserver(measure);
-  topRightObserver.observe(el);
-});
-onUnmounted(() => topRightObserver?.disconnect());
+// Before founding there is no bar at all (the floating top-right group is
+// small chrome, not a band), so nothing is reserved at the top then.
 const hudInsetTopPxLanding = computed(() => {
-  if (!player.hasFoundedSettlement) return topRightBottomPx.value;
+  if (!player.hasFoundedSettlement) return 0;
   return hideBarForTutorial.value || hudBarAtBottomLanding.value ? 0 : hudBarHeightPx.value;
 });
 // Landscape rail mode (TopBar.vue): no top band (hudBarHeightPx is 0 there),
@@ -996,7 +979,7 @@ watch(
     <!-- Before founding there is no header band: the floating group at the top right holds "How to play" and the
          returning-player menu (log in, other worlds, settings, start page). No `#drawer`, no HudNav: nothing here
          is a dead click for someone who has not founded anything (docs/design/zip-brainstorms.md:44). -->
-    <div v-if="!player.hasFoundedSettlement" ref="topRightEl" class="topright">
+    <div v-if="!player.hasFoundedSettlement" class="topright">
       <HudNavLink :href="docsHref" class="howto" data-testid="landing-how-to-play" @navigate="router.push('/docs')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1z" />
@@ -1302,6 +1285,7 @@ watch(
     --fl-col-gap: 8px;
     --fl-icon: 18px;
     --fl-title: 13px;
+    --fl-text-display: none;
   }
   .impressum {
     left: max(22px, env(safe-area-inset-left));
