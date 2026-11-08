@@ -63,6 +63,7 @@ import {
   type ConstructionDial,
 } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
+import { atlasPageCount } from './atlasManifests';
 import { attachFramePacing } from './framePacing';
 import { splitBorderEdges } from './realmBorderEdges';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
@@ -1586,8 +1587,8 @@ export function wheelPassesToPage(o: {
  * `isLand` is `isLandOrLake`, not `isLand`: a bog lake is water to the game
  * (`WorldModel.isLand` says so), but to the water mask it is land. Lakes are
  * drawn entirely by their own art, so the sea's shader must never reach into
- * them. This is also what the bake worker already answers (its
- * seed-only `isLandFor` never sees a bog lake), so both bake paths agree.
+ * them. A pocket lake sits on what the seed calls sea, so the bake worker gets
+ * those hexes as a list (`seaBogHexKeys`), and both bake paths agree.
  */
 export function waterMaskTerrainFor(worldModel: WorldModel): TerrainLookup {
   const isLand = (q: number, r: number) => worldModel.isLandOrLake(q, r);
@@ -1709,7 +1710,11 @@ export interface MapLoadState {
    * animation rather than a stalled/empty bar.
    */
   progress?: number;
-  /** The same page counts `progress` is derived from (loaded/total atlas pages of the current phase), when known — the landing intro's timeline shows them as counts. */
+  /**
+   * The same page counts `progress` is derived from (loaded/total atlas pages of the current phase), when known — the
+   * landing intro's timeline shows them as counts. The `'buildings'` phase covers `buildings-level1` and
+   * `buildings-static` together: one constant total, `loaded` counting level 1's pages first and then static's.
+   */
   pages?: { loaded: number; total: number };
 }
 
@@ -1737,9 +1742,14 @@ export interface TextureLoadDeps {
    * merged and drawn before `loadBuildings` so each building shows *some*
    * real art (its level-1 rung) as soon as that small atlas lands. Resolves
    * empty on an atlas packed before the split. A failure is logged and the
-   * full building stage still runs.
+   * full building stage still runs. `onProgress` counts its pages.
    */
-  loadLevel1?: () => Promise<TileTextures>;
+  loadLevel1?: (onProgress: (loaded: number, total: number) => void) => Promise<TileTextures>;
+  /**
+   * Page counts of the two building atlases, known before either loads (see `atlasManifests.ts`'s `atlasPageCount`):
+   * the `'buildings'` phase reports `level1 + buildings` as its constant total.
+   */
+  buildingPageTotals: { level1: number; buildings: number };
   /**
    * `onPartial` is called with the art built from the pages loaded so far
    * (pages arrive in priority order; each partial is a superset of the
@@ -1812,10 +1822,16 @@ export function startTextureLoad(deps: TextureLoadDeps): TextureLoadHandles {
     } catch {
       return; // Already handled by whoever awaits terrainReady directly; nothing more to narrate.
     }
+    const { level1: level1Total, buildings: staticTotal } = deps.buildingPageTotals;
+    const buildingsTotal = level1Total + staticTotal;
+    // `loaded` pages of the combined buildings phase (level 1's pages come first, then static's).
+    const emitBuildings = (loaded: number) => {
+      if (settlement) deps.emit({ phase: 'buildings', progress: loadProgressFraction(loaded, buildingsTotal), pages: { loaded, total: buildingsTotal } });
+    };
     if (settlement) deps.emit({ phase: 'buildings' });
     if (deps.loadLevel1) {
       try {
-        const level1 = await deps.loadLevel1();
+        const level1 = await deps.loadLevel1((loaded) => emitBuildings(Math.min(loaded, level1Total)));
         const base = deps.getTextures();
         if (deps.isDestroyed() || !base) return;
         deps.setTextures(deps.merge(base, level1));
@@ -1825,10 +1841,9 @@ export function startTextureLoad(deps: TextureLoadDeps): TextureLoadHandles {
       }
     }
     try {
+      // Level 1 (done, failed or empty) counts as fully loaded once static starts.
       const buildings = await deps.loadBuildings(
-        (loaded, total) => {
-          if (settlement) deps.emit({ phase: 'buildings', progress: loadProgressFraction(loaded, total), pages: { loaded, total } });
-        },
+        (loaded) => emitBuildings(level1Total + Math.min(loaded, staticTotal)),
         (partial) => {
           const base = deps.getTextures();
           if (deps.isDestroyed() || !base) return;
@@ -1965,13 +1980,14 @@ export class HexMapRenderer {
    */
   private waterMaskWastedRevealed = false;
   /**
-   * `worldModel.riverRevision` for the bake behind `waterMaskRegionBuilt`. The
-   * mask's no-foam field depends on where the river mouths are, which the
-   * worker only learns from the request, so — exactly like the reveal flag —
-   * `maybeBakeWaterMask` drops the recorded region when the model's revision
-   * has moved (rivers arrive after the first bake in live mode).
+   * `worldModel.waterMaskRevision` for the bake behind `waterMaskRegionBuilt`. The
+   * mask's no-foam field depends on where the river mouths are, and its land on
+   * the bog's pocket lakes, which the worker only learns from the request, so —
+   * exactly like the reveal flag — `maybeBakeWaterMask` drops the recorded region
+   * when the model's revision has moved (rivers and bog arrive after the first
+   * bake in live mode).
    */
-  private waterMaskRiverRevision = 0;
+  private waterMaskRevision = 0;
   /**
    * Set whenever a rebuild wanted a bake but deferred it (see
    * `maybeBakeWaterMask`), and cleared by the bake that services it.
@@ -2004,9 +2020,9 @@ export class HexMapRenderer {
    * fetched and compiled while the map is still loading, instead of on the
    * first camera move that needs a mask.
    */
-  private maskBaker = new WaterMaskBaker((mask, region, bakeMs, wastedRevealed, riverRevision) => {
+  private maskBaker = new WaterMaskBaker((mask, region, bakeMs, wastedRevealed, revision) => {
     if (this.destroyed) return;
-    this.applyWaterMask(mask, region, bakeMs, true, wastedRevealed, riverRevision);
+    this.applyWaterMask(mask, region, bakeMs, true, wastedRevealed, revision);
   });
   private wavePoints: WavePoint[] = [];
   // Mirrors rebuildAll's local `deepFogOnly` (see isEntirelyDeepFog) so
@@ -2565,7 +2581,8 @@ export class HexMapRenderer {
           console.warn('Map marker icons failed to load; falling back to plain shapes', err);
           return null;
         }),
-      loadLevel1: () => loadLevel1Atlases(),
+      loadLevel1: (onProgress) => loadLevel1Atlases(onProgress),
+      buildingPageTotals: { level1: atlasPageCount('buildings-level1'), buildings: atlasPageCount('buildings-static') },
       loadBuildings: (onProgress, onPartial) => loadBuildingAtlases(onProgress, onPartial),
       merge: mergeTileTextures,
       isDestroyed: () => this.destroyed,
@@ -4067,7 +4084,7 @@ export class HexMapRenderer {
     if (
       this.waterMaskRegionBuilt &&
       (this.waterMaskWastedRevealed !== worldModel.isWastedRevealed() ||
-        this.waterMaskRiverRevision !== worldModel.riverRevision)
+        this.waterMaskRevision !== worldModel.waterMaskRevision)
     ) {
       this.waterMaskRegionBuilt = null;
     }
@@ -4109,12 +4126,13 @@ export class HexMapRenderer {
         wastedRevealed: worldModel.isWastedRevealed(),
         // Both modes draw sea foam, so both need the mouths.
         noFoamHexes: worldModel.riverMouthHexKeys(),
-        riverRevision: worldModel.riverRevision,
+        landHexes: worldModel.seaBogHexKeys(),
+        revision: worldModel.waterMaskRevision,
       },
       this.waterMaskTerrain(),
     );
     if (!mask) return; // off to the worker; applyWaterMask finishes it
-    this.applyWaterMask(mask, region, performance.now() - bakeStart, false, worldModel.isWastedRevealed(), worldModel.riverRevision);
+    this.applyWaterMask(mask, region, performance.now() - bakeStart, false, worldModel.isWastedRevealed(), worldModel.waterMaskRevision);
   }
 
   /**
@@ -4131,7 +4149,7 @@ export class HexMapRenderer {
     bakeMs: number,
     onWorker: boolean,
     wastedRevealed: boolean,
-    riverRevision: number,
+    revision: number,
   ) {
     waterPerfStats.bakeMs = bakeMs;
     waterPerfStats.bakedOnWorker = onWorker;
@@ -4147,7 +4165,7 @@ export class HexMapRenderer {
     this.waterLayer.setMask(mask);
     this.waterMaskRegionBuilt = region;
     this.waterMaskWastedRevealed = wastedRevealed;
-    this.waterMaskRiverRevision = riverRevision;
+    this.waterMaskRevision = revision;
     this.refreshWaterDry();
   }
 

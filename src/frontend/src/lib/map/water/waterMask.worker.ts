@@ -37,6 +37,11 @@ export interface BakeRequest {
    * no-foam field is all zero.
    */
   noFoamHexes?: number[];
+  /**
+   * Hexes the seed calls sea that bake as land (`WorldModel.seaBogHexKeys`, packed with `hexKey`): pocket lakes and
+   * their bog rings. The bog is server state like the rivers, so it travels as a list too.
+   */
+  landHexes?: number[];
 }
 
 export interface BakeResponse {
@@ -114,6 +119,13 @@ export function isLandFor(seed: number, generation: WorldGenerationConstants, wa
   };
 }
 
+/** `isLand`, plus the hexes in `landHexes` (packed with `hexKey`) as land whatever the seed says. */
+export function withLandHexes(isLand: (q: number, r: number) => boolean, landHexes: number[] | undefined): (q: number, r: number) => boolean {
+  if (!landHexes || landHexes.length === 0) return isLand;
+  const land = new Set(landHexes);
+  return (q, r) => land.has(hexKey(q, r)) || isLand(q, r);
+}
+
 // Exported (only) so waterMask.worker.test.ts can exercise the taint-aware
 // wasted-land check directly, the same way it exercises `isLandFor` — see
 // that export's own comment for why (no `self` under this repo's
@@ -148,10 +160,10 @@ export function isWastedLandFor(
 // has one, so this changes nothing there.
 if (typeof self !== 'undefined') {
   self.onmessage = (event: MessageEvent<BakeRequest>) => {
-    const { id, region, tileWidth, tileHeight, seed, generation, wastedRevealed, noFoamHexes } = event.data;
+    const { id, region, tileWidth, tileHeight, seed, generation, wastedRevealed, noFoamHexes, landHexes } = event.data;
     const noFoamSet = noFoamHexes && noFoamHexes.length > 0 ? new Set(noFoamHexes) : null;
     const started = performance.now();
-    const isLand = isLandFor(seed, generation, wastedRevealed ?? false);
+    const isLand = withLandHexes(isLandFor(seed, generation, wastedRevealed ?? false), landHexes);
     const mask = bakeWaterMask(region, tileWidth, tileHeight, {
       isLand,
       isWastedLand: isWastedLandFor(seed, generation, wastedRevealed ?? false),

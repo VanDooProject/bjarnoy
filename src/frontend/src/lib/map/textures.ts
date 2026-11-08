@@ -1414,9 +1414,9 @@ let level1Loading: Promise<TileTextures> | null = null;
  * whatever their real level — while the larger `buildings-static` atlas is
  * still loading (see `pickIndexedEntry`'s walk).
  */
-export function loadLevel1Atlases(): Promise<TileTextures> {
+export function loadLevel1Atlases(onPage?: AtlasPageProgress): Promise<TileTextures> {
   if (!level1Loading) {
-    const promise = loadOptionalAtlasCategory('buildings-level1').then((atlas) =>
+    const promise = loadOptionalAtlasCategory('buildings-level1', onPage).then((atlas) =>
       buildTileTextures([atlas], undefined, { sparse: true }),
     );
     level1Loading = evictOnReject(promise, () => {
