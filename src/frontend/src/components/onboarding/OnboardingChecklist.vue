@@ -130,6 +130,15 @@ function instructionFor(row: ChecklistRow): string {
   color: #f1efe9;
   pointer-events: none;
 }
+/* soft dark backdrop so the names stay readable over the pale fog after founding and over the island's edge */
+.steps::before {
+  content: '';
+  position: absolute;
+  inset: -22px -40px;
+  z-index: -1;
+  background: radial-gradient(closest-side, rgba(14, 16, 18, 0.72), rgba(14, 16, 18, 0.45) 65%, transparent);
+  pointer-events: none;
+}
 .step {
   position: relative;
   display: flex;
