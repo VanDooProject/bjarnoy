@@ -145,8 +145,10 @@ public sealed class FieldBattleServiceTests : IDisposable
             DepartedAt = departedAt,
             Path = [.. path.Select(p => new HexPoint(p.Q, p.R))],
             CumulativeHours = [.. cumulativeHours],
+            EdgeHours = [.. cumulativeHours],
             ReturnPath = [.. path.Reverse().Select(p => new HexPoint(p.Q, p.R))],
             ReturnCumulativeHours = [.. cumulativeHours],
+            ReturnEdgeHours = [.. cumulativeHours],
             TurnAroundAt = departedAt + TimeSpan.FromHours(cumulativeHours[^1]),
             IsReturning = false,
         };
