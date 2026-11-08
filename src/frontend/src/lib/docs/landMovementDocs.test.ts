@@ -16,7 +16,10 @@ import { bridgeRestrictions } from '../map/bridgeMovement';
 import { maxLevelFor } from '../map/buildingEconomy';
 import type { Terrain } from '../map/types';
 
-// A one-step path priced by the real pathfinder, to hold the mirrored table against hexPath.ts.
+// Grass, the hex under test, grass: a step is billed half and half, so the whole walk costs the hex's price plus the grass hexes'
+// two halves (1.0). Priced by the real pathfinder, to hold the mirrored table against hexPath.ts.
+const WALK = [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }];
+
 function stepCostOf(terrain: Terrain, river = false, wide = false): number {
   const ctx: PathContext = {
     terrainAt: (c) => (c.q === 1 ? terrain : 'grass'),
@@ -28,18 +31,18 @@ function stepCostOf(terrain: Terrain, river = false, wide = false): number {
     },
     hexesPerHour: 1,
   };
-  return pathCost([{ q: 0, r: 0 }, { q: 1, r: 0 }], ctx);
+  return pathCost(WALK, ctx) - 1;
 }
 
 describe('landMovementDocs', () => {
   it('prices each ground the way the pathfinder does', () => {
-    for (const g of GROUND_COSTS) expect(stepCostOf(g.terrain), g.terrain).toBe(g.cost);
+    for (const g of GROUND_COSTS) expect(stepCostOf(g.terrain), g.terrain).toBeCloseTo(g.cost, 9);
   });
 
   it('charges a stream a flat 9 whatever it runs over, and refuses a wide river and a mountain', () => {
     expect(STREAM_COST).toBe(9);
-    expect(stepCostOf('grass', true)).toBe(STREAM_COST);
-    expect(stepCostOf('bog', true)).toBe(STREAM_COST);
+    expect(stepCostOf('grass', true)).toBeCloseTo(STREAM_COST, 9);
+    expect(stepCostOf('bog', true)).toBeCloseTo(STREAM_COST, 9);
     expect(stepCostOf('mountain')).toBe(Infinity);
     expect(stepCostOf('grass', true, true)).toBe(Infinity);
   });
@@ -69,7 +72,7 @@ describe('landMovementDocs', () => {
   describe('bridges', () => {
     const rules = { land: Object.fromEntries(GROUND_COSTS.map((g) => [g.terrain, g.cost])), riverCrossingCost: RIVER_CROSSING_COST };
 
-    // The cost of one step onto a wide-river hex that a bridge of `level` (owned by OWNER) spans, walked by `walker`.
+    // The price of a wide-river hex that a bridge of `level` (owned by OWNER) spans, walked by `walker`.
     function bridgeStep(level: number, walker: string, ground: Terrain = 'grass'): number {
       const terrainAt = (c: { q: number; r: number }): Terrain => (c.q === 1 ? ground : 'grass');
       const bridges = new Map([['1,0', { level, owner: 'owner' }]]);
@@ -81,7 +84,7 @@ describe('landMovementDocs', () => {
         hexesPerHour: 1,
         restrictions: bridgeRestrictions(bridges, terrainAt, rules, walker, new Set(['friend'])),
       };
-      return pathCost([{ q: 0, r: 0 }, { q: 1, r: 0 }], ctx);
+      return pathCost(WALK, ctx) - 1;
     }
 
     it('lists the four levels the pathfinder prices: 6 and 4 for causeway and footbridge, the ground for the rest', () => {
@@ -89,19 +92,19 @@ describe('landMovementDocs', () => {
       expect(BRIDGE_LEVELS.map((b) => b.cost)).toEqual([6, 4, null, null]);
       expect(maxLevelFor('bridge')).toBe(BRIDGE_LEVELS.length);
       for (const b of BRIDGE_LEVELS) {
-        if (b.cost !== null) expect(bridgeStep(b.level, 'stranger'), `level ${b.level}`).toBe(b.cost);
+        if (b.cost !== null) expect(bridgeStep(b.level, 'stranger'), `level ${b.level}`).toBeCloseTo(b.cost, 9);
       }
     });
 
     it('lets every army over levels 1 to 3 at the ground cost from level 3, and only friends over the guarded one', () => {
       for (const ground of ['grass', 'sand', 'forest'] as const) {
         const cost = GROUND_COSTS.find((g) => g.terrain === ground)!.cost;
-        expect(bridgeStep(3, 'stranger', ground)).toBe(cost);
-        expect(bridgeStep(4, 'owner', ground)).toBe(cost);
+        expect(bridgeStep(3, 'stranger', ground)).toBeCloseTo(cost, 9);
+        expect(bridgeStep(4, 'owner', ground)).toBeCloseTo(cost, 9);
         expect(bridgeStep(4, 'stranger', ground)).toBe(Infinity);
       }
       expect(BRIDGE_LEVELS.filter((b) => !b.everyone).map((b) => b.level)).toEqual([4]);
-      expect(bridgeStep(1, 'stranger')).toBe(6);
+      expect(bridgeStep(1, 'stranger')).toBeCloseTo(6, 9);
     });
 
     it('quotes the cheapest and dearest ground a bridge can stand on, bog left out', () => {

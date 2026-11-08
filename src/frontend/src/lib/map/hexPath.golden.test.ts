@@ -125,7 +125,7 @@ describe('hexPath golden fixture (issue #159 part B parity)', () => {
     const byName = new Map(fixture.findPathCases.map((c) => [c.name, c]));
     expect(byName.get('wide_river_is_impassable')?.expectedPath).toBeNull();
     expect(byName.get('mountain_with_no_way_round_has_no_route')?.expectedPath).toBeNull();
-    expect(byName.get('stream_on_a_mountain_costs_a_flat_9')?.expectedCumulativeHours).toEqual([0, 9, 10]);
+    expect(byName.get('stream_on_a_mountain_costs_a_flat_9')?.expectedCumulativeHours).toEqual([0, 5, 10]);
   });
 
   it('covers a gate for the owner and not for an enemy, a half-open end at the ground plus 3 and a sealed end', () => {
@@ -133,18 +133,26 @@ describe('hexPath golden fixture (issue #159 part B parity)', () => {
     expect(byName.get('wall_with_a_gate_stops_an_enemy')?.expectedPath).toBeNull();
     expect(byName.get('wall_with_a_gate_lets_the_owner_through')?.expectedCumulativeHours?.at(-1)).toBe(4);
     expect(byName.get('wall_without_a_gate_stops_the_owner_too')?.expectedPath).toBeNull();
-    expect(byName.get('half_open_end_is_crossed_by_an_enemy_at_ground_plus_3')?.expectedCumulativeHours?.slice(3, 5)).toEqual([3, 7]);
+    expect(byName.get('half_open_end_is_crossed_by_an_enemy_at_ground_plus_3')?.expectedCumulativeHours?.slice(4, 6)).toEqual([5.5, 8]);
     expect(byName.get('sealed_end_beside_a_mountain_blocks')?.expectedPath).toBeNull();
   });
 
   it('covers a bridge per level, a guarded bridge for a friend and a stranger, and a foundation that opens nothing', () => {
     const byName = new Map(fixture.findPathCases.map((c) => [c.name, c]));
-    expect(byName.get('bridge_level_1_causeway_crosses_a_wide_river_at_6')?.expectedCumulativeHours).toEqual([0, 6, 7]);
-    expect(byName.get('bridge_level_2_footbridge_crosses_a_wide_river_at_4')?.expectedCumulativeHours).toEqual([0, 4, 5]);
-    expect(byName.get('bridge_level_3_kings_bridge_costs_the_terrain_under_it')?.expectedCumulativeHours?.[1]).toBeCloseTo(1.3, 9);
+    expect(byName.get('bridge_level_1_causeway_crosses_a_wide_river_at_6')?.expectedCumulativeHours).toEqual([0, 3.5, 7]);
+    expect(byName.get('bridge_level_2_footbridge_crosses_a_wide_river_at_4')?.expectedCumulativeHours).toEqual([0, 2.5, 5]);
+    expect(byName.get('bridge_level_3_kings_bridge_costs_the_terrain_under_it')?.expectedCumulativeHours?.[1]).toBeCloseTo(1.15, 9);
     expect(byName.get('bridge_level_4_guarded_bridge_lets_a_friend_over')?.expectedPath).not.toBeNull();
     expect(byName.get('bridge_level_4_guarded_bridge_stops_a_stranger')?.expectedPath).toBeNull();
     expect(byName.get('bridge_foundation_opens_nothing')?.expectedPath).toBeNull();
+  });
+
+  it('covers a half-and-half step, an army under its own wall and an army on a burnt bridge', () => {
+    const byName = new Map(fixture.findPathCases.map((c) => [c.name, c]));
+    const hours = (name: string) => byName.get(name)?.expectedCumulativeHours?.map((h) => Math.round(h * 1e9) / 1e9);
+    expect(hours('a_step_is_billed_half_and_half_over_forest')).toEqual([0, 1.15, 2.3]);
+    expect(hours('an_army_standing_under_its_own_wall_leaves_at_the_ground_price')).toEqual([0, 1.15, 2.15]);
+    expect(hours('an_army_standing_on_a_burnt_bridge_leaves_at_12')).toEqual([0, 6.5, 7.5]);
   });
 
   it.each(fixture.reachableRangeCases)('$name: matches the shared golden fixture', (testCase: ReachableRangeCase) => {

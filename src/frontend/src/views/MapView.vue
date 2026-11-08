@@ -205,11 +205,13 @@ function onArmySelect(armyId: string) {
   if (!army) return;
   let coord: { q: number; r: number } = army.position;
   if (army.movement) {
-    const { path, cumulativeHours, departedAt, arrivesAt, isReturning, returnPath, returnCumulativeHours, turnAroundAt, returnArrivesAt } =
-      army.movement;
+    const {
+      path, cumulativeHours, edgeHours, departedAt, arrivesAt, isReturning,
+      returnPath, returnCumulativeHours, returnEdgeHours, turnAroundAt, returnArrivesAt,
+    } = army.movement;
     const progress = isReturning
-      ? routeProgressAt(returnPath, returnCumulativeHours, Date.parse(turnAroundAt), Date.parse(returnArrivesAt), Date.now())
-      : routeProgressAt(path, cumulativeHours, Date.parse(departedAt), Date.parse(arrivesAt), Date.now());
+      ? routeProgressAt(returnPath, returnCumulativeHours, returnEdgeHours, Date.parse(turnAroundAt), Date.parse(returnArrivesAt), Date.now())
+      : routeProgressAt(path, cumulativeHours, edgeHours, Date.parse(departedAt), Date.parse(arrivesAt), Date.now());
     if (progress) coord = progress.arrived || progress.t >= 0.5 ? progress.to : progress.from;
   }
   onQueueSelect(coord);
@@ -386,6 +388,7 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
       ? {
           path: a.movement.path.map((p) => ({ q: p.q, r: p.r })),
           cumulativeHours: a.movement.cumulativeHours ?? [],
+          edgeHours: a.movement.edgeHours ?? [],
           departedAtMs: Date.parse(a.movement.departedAt),
           arrivesAtMs: Date.parse(a.movement.arrivesAt),
         }

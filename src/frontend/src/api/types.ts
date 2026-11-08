@@ -1538,7 +1538,10 @@ export interface FieldOrderRequest {
  *
  * `cumulativeHours` is the per-hex schedule for `path` (`[0]` is always 0,
  * same length as `path`), and `returnCumulativeHours` the same for
- * `returnPath` measured from `turnAroundAt`. Issue #94 exposed them so the
+ * `returnPath` measured from `turnAroundAt`. `edgeHours` (`returnEdgeHours`)
+ * is when the army crosses the edge into each hex (`[0]` is 0, same length,
+ * each between its two hex centres' cumulative hours): a step is billed half
+ * at the hex left and half at the hex entered. Issue #94 exposed them so the
  * map can interpolate an army's live position per leg (see
  * `lib/units/armyProgress.ts`) — legs cost wildly different amounts of time
  * on mixed terrain, so spreading the trip evenly over the path drifts away
@@ -1548,9 +1551,11 @@ export interface MovementResponse {
   departedAt: string;
   path: HexPoint[];
   cumulativeHours: number[];
+  edgeHours: number[];
   arrivesAt: string;
   returnPath: HexPoint[];
   returnCumulativeHours: number[];
+  returnEdgeHours: number[];
   turnAroundAt: string;
   returnArrivesAt: string;
   isReturning: boolean;

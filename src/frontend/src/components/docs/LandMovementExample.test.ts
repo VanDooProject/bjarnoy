@@ -52,12 +52,13 @@ describe('LandMovementExample', () => {
 
     const steps = wrapper.findAll('[data-testid="land-example-steps"] tbody tr');
     expect(steps).toHaveLength(route.steps.length);
-    // Spearman: 4 hexes per hour is 15 minutes on grass, 1.3 times that in the forest; the stream costs 9 times that.
+    // Spearman: 4 hexes per hour is 15 minutes on grass. A step is half the hex left, half the hex entered: grass into
+    // forest is 1.15 times that, grass into the stream 5 times that.
     expect(steps[0]!.text()).toContain('Forest');
-    expect(steps[0]!.text()).toContain('19.5 min');
-    expect(steps[1]!.text()).toContain('15 min');
+    expect(steps[0]!.text()).toContain('17.3 min');
+    expect(steps[2]!.text()).toContain('Stream');
+    expect(steps[2]!.text()).toContain('1 h 15 min');
     expect(wrapper.text()).toContain('Stream');
-    expect(wrapper.text()).toContain('2 h 15 min');
     expect(wrapper.get('[data-testid="land-example-total"]').text()).toContain('4 h 58.5 min');
     wrapper.unmount();
   });

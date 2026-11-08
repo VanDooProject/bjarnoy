@@ -242,7 +242,7 @@ export interface LandExampleStep {
   coord: AxialCoord;
   /** What the hex is, for its name in the legend. */
   kind: LandExampleKind;
-  /** What entering it costs (grass = 1). */
+  /** What the step onto it costs (grass = 1): half the price of the hex left, half the price of this one. */
   cost: number;
 }
 

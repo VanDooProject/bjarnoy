@@ -133,8 +133,8 @@ describe('the land movement example island', () => {
       expect(wide).toEqual([coordKey(LAND_EXAMPLE_BRIDGE)]);
     });
 
-    it('costs 19.9: forest 1.3 three times, stream 9, and seven steps of ground, bridge and gate at 1', () => {
-      expect(route.steps.map((s) => s.cost)).toEqual([1.3, 1, 9, 1, 1, 1.3, 1, 1, 1.3, 1, 1]);
+    it('costs 19.9, each step half the hex left and half the hex entered: 1.15 into and out of a forest, 5 into and out of the stream', () => {
+      expect(route.steps.map((s) => s.cost)).toEqual([1.15, 1.15, 5, 5, 1, 1.15, 1.15, 1, 1.15, 1.15, 1]);
       expect(route.total).toBeCloseTo(19.9);
     });
 
