@@ -131,4 +131,25 @@ describe('useBuildRing', () => {
     expect(categoriesFor({ terrain: 'sea', isCoastalWater: false } as Tile)).toEqual([]);
     expect(categoriesFor({ terrain: 'sea', isCoastalWater: true } as Tile).map((c) => c.id)).toEqual(['water', 'defense']);
   });
+
+  it('lists the tower under defense, and only, on every ground it may stand on (plain bog moss included)', () => {
+    const tiles: Tile[] = [
+      { terrain: 'grass' },
+      { terrain: 'sand' },
+      { terrain: 'forest' },
+      { terrain: 'bog', bog: { kind: 'bog' } },
+    ] as Tile[];
+    for (const tile of tiles) {
+      const where = categoriesFor(tile).filter((c) => c.buildings.some((b) => b.type === 'tower'));
+      expect(where.map((c) => c.id), JSON.stringify(tile)).toEqual(['defense']);
+    }
+    // The bog's wall hexes stay next to it.
+    const bogDefense = categoriesFor(tiles[3]).find((c) => c.id === 'defense')!;
+    expect(bogDefense.buildings.map((b) => b.type)).toEqual(['tower', 'palisade', 'palisadegate', 'bridge']);
+    // Bog ground that is not plain moss, and sea, never offer one.
+    for (const kind of ['creek', 'half', 'shore', 'mouth', 'spring']) {
+      const ids = categoriesFor({ terrain: 'bog', bog: { kind } } as Tile).flatMap((c) => c.buildings.map((b) => b.type));
+      expect(ids, kind).not.toContain('tower');
+    }
+  });
 });
