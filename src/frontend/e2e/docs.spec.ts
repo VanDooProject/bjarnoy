@@ -814,7 +814,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     ).toHaveCount(8);
     await expect(page.locator('[data-producer="quarry"]')).toHaveCount(0);
     await expect(page.locator('[data-producer="lumberjack"]')).toContainText(
-      "206",
+      "208",
     );
     await expect(page.locator('[data-mill="cropmill"]')).toContainText(
       "Straight river",
