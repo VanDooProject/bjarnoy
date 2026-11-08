@@ -162,7 +162,7 @@ public class LandingBuildQueueTests(AppHostFixture fixture)
         // up forever and the tray never advances even though the backend
         // finished the build.
         await Assertions.Expect(statusCard).ToBeHiddenAsync(new() { Timeout = 45_000 });
-        await Assertions.Expect(page.Locator(".tray-item .sub").Nth(1)).ToHaveTextAsync("Placed");
+        await Assertions.Expect(page.Locator("[data-testid=\"onboarding-checklist\"] .step").Nth(1)).ToHaveClassAsync(new System.Text.RegularExpressions.Regex(@"\bdone\b"));
 
         var settlementAfterCompletion = await apiClient.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlement.Id}", cancellationToken);
