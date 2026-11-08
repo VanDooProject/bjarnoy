@@ -446,6 +446,8 @@
     "msPerFrame": "{n} ms/frame",
     "worstFrame": "Worst frame (last {seconds} s)",
     "ms": "{n} ms",
+    "average": "Average (last {n} frames)",
+    "fpsValue": "{n} fps",
     "ago": "{n} s ago",
     "stutters": "Frames over {threshold} ms",
     "sparkLabel": "Last {n} frame intervals",
