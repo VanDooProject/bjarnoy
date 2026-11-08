@@ -26,17 +26,11 @@ describe('SendingScene', () => {
     w.unmount();
   });
 
-  // Every composited layer and mask region is rastered whole, on screen or not. Full-frame masks and fog bands
-  // several frames wide put the scene over the GPU tile budget, and Chrome then drops layers for a few frames
-  // (the mountains, spear and foreground flickered out).
-  it('keeps its mask regions and drifting fog bands to what can be on screen', () => {
+  // Every composited layer is rastered whole, on screen or not: fog bands several frames wide put the scene over
+  // the GPU tile budget, and Chrome then drops layers for a few frames (the mountains, spear and foreground
+  // flickered out). Mask regions are checked for every scene in maskRegions.test.ts.
+  it('keeps its drifting fog bands to what can be on screen', () => {
     const svg = mount(SendingScene).find('svg');
-    const masks = svg.findAll('mask').filter((m) => m.attributes('maskUnits') === 'userSpaceOnUse');
-    expect(masks.length).toBeGreaterThan(0);
-    for (const m of masks) {
-      const area = Number(m.attributes('width')) * Number(m.attributes('height'));
-      expect(area, m.attributes('id')).toBeLessThanOrEqual(0.4 * 1600 * 1600);
-    }
     const bands = svg.findAll('.sd-fog rect');
     expect(bands).toHaveLength(2);
     // the view plus the widest drift tile (1024) and a camera margin
