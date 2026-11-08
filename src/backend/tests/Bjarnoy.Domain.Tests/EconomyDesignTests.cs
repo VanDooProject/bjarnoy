@@ -185,7 +185,7 @@ public class EconomyDesignTests
     [InlineData(BuildingType.Sawmill, 20)]
     [InlineData(BuildingType.CropMill, 20)]
     [InlineData(BuildingType.Hammerschmiede, 20)]
-    [InlineData(BuildingType.Tower, 10)]
+    [InlineData(BuildingType.Tower, 5)]
     [InlineData(BuildingType.GreatStorehouse, 10)]
     [InlineData(BuildingType.ShrineOfThor, 5)]
     [InlineData(BuildingType.ShrineOfFreyja, 5)]
@@ -204,29 +204,162 @@ public class EconomyDesignTests
     [Fact]
     public void Producer_cost_output_and_time_follow_the_design_formulas()
     {
-        var one = BuildingCatalogue.Get(BuildingType.Lumberjack, 1);
-        var ten = BuildingCatalogue.Get(BuildingType.Lumberjack, 10);
+        // The Lumberjack is a start building (no brick before level 6); the Farm shows the plain producer cost.
+        var one = BuildingCatalogue.Get(BuildingType.Farm, 1);
+        var ten = BuildingCatalogue.Get(BuildingType.Farm, 10);
 
-        Assert.Equal(new ResourceAmounts(50, 40, 15, 0), one.Cost);
-        Assert.Equal(40, one.ProductionPerHour.Wood, 6);
+        Assert.Equal(new ResourceAmounts(35, 28, 10, 0), one.Cost);
+        Assert.Equal(12, one.ProductionPerHour.Food, 6);
         Assert.Equal(TimeSpan.FromMinutes(3), one.BuildDuration);
 
-        Assert.Equal(50 * Math.Pow(1.30, 9), ten.Cost.Wood, 6);
-        Assert.Equal(40 * Math.Pow(1.20, 9), ten.ProductionPerHour.Wood, 6);
+        Assert.Equal(BuildingCatalogue.NiceRound(35 * Math.Pow(1.30, 9)), ten.Cost.Wood, 6);
+        Assert.Equal(BuildingCatalogue.NiceRound(28 * Math.Pow(1.30, 9)), ten.Cost.Stone, 6);
         Assert.Equal(TimeSpan.FromSeconds(Math.Round(180 * Math.Pow(1.33, 9))), ten.BuildDuration);
     }
 
     [Fact]
-    public void The_longhouse_costs_grow_faster_and_its_output_is_linear()
+    public void Producer_output_is_increment_geometric_each_level_adds_1_point_2_times_the_last_increment()
+    {
+        var wood = Enumerable.Range(1, 10).Select(l => BuildingCatalogue.Get(BuildingType.Lumberjack, l).ProductionPerHour.Wood).ToArray();
+
+        Assert.Equal(8, wood[0], 6);
+        for (var level = 2; level <= 10; level++)
+        {
+            Assert.Equal(8 * Math.Pow(1.20, level - 1), wood[level - 1] - wood[level - 2], 6);
+            Assert.Equal(8 * (Math.Pow(1.20, level) - 1) / 0.20, wood[level - 1], 6);
+        }
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Lumberjack, 8)]
+    [InlineData(BuildingType.Quarry, 8)]
+    [InlineData(BuildingType.ClayBrickworks, 8)]
+    [InlineData(BuildingType.ReindeerHerder, 12)]
+    [InlineData(BuildingType.Farm, 12)]
+    [InlineData(BuildingType.PumpkinFarm, 13)]
+    [InlineData(BuildingType.FishingHut, 12)]
+    [InlineData(BuildingType.BogOreWorks, 4)]
+    public void Each_producers_level_1_output_is_its_increment(BuildingType type, double increment)
+    {
+        Assert.Equal(increment, Sum(BuildingCatalogue.Get(type, 1).ProductionPerHour), 6);
+        Assert.Equal(increment * (Math.Pow(1.20, 6) - 1) / 0.20, Sum(BuildingCatalogue.Get(type, 6).ProductionPerHour), 6);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Longhouse)]
+    [InlineData(BuildingType.Tower)]
+    [InlineData(BuildingType.Lumberjack)]
+    [InlineData(BuildingType.ReindeerHerder)]
+    public void The_start_buildings_cost_no_brick_at_levels_1_to_5_and_the_normal_brick_from_level_6(BuildingType type)
+    {
+        for (var level = 1; level <= 5; level++)
+        {
+            var cost = BuildingCatalogue.Get(type, level).Cost;
+            Assert.Equal(0, cost.Stone);
+            Assert.True(cost.Wood > 0 || cost.Food > 0, $"{type} level {level} costs nothing at all");
+        }
+
+        // The Tower tops out at level 5, so it never pays brick at all.
+        if (BuildingCatalogue.MaxLevelFor(type) >= 6)
+        {
+            Assert.True(BuildingCatalogue.Get(type, 6).Cost.Stone > 0);
+        }
+    }
+
+    [Fact]
+    public void The_clay_brickworks_costs_no_brick_at_level_1_only()
+    {
+        Assert.Equal(0, BuildingCatalogue.Get(BuildingType.ClayBrickworks, 1).Cost.Stone);
+        Assert.Equal(BuildingCatalogue.NiceRound(28 * 1.30), BuildingCatalogue.Get(BuildingType.ClayBrickworks, 2).Cost.Stone);
+    }
+
+    [Fact]
+    public void The_start_buildings_keep_their_other_resources_at_the_brick_free_levels()
+    {
+        Assert.Equal(new ResourceAmounts(35, 0, 10, 0), BuildingCatalogue.Get(BuildingType.Lumberjack, 1).Cost);
+        Assert.Equal(new ResourceAmounts(120, 0, 60, 0), BuildingCatalogue.Get(BuildingType.Longhouse, 1).Cost);
+        Assert.Equal(new ResourceAmounts(120, 0, 0, 0), BuildingCatalogue.Get(BuildingType.Tower, 1).Cost);
+    }
+
+    [Fact]
+    public void The_longhouse_costs_grow_faster_and_its_output_is_linear_wood_and_food_only()
     {
         var one = BuildingCatalogue.Get(BuildingType.Longhouse, 1);
         var five = BuildingCatalogue.Get(BuildingType.Longhouse, 5);
+        var six = BuildingCatalogue.Get(BuildingType.Longhouse, 6);
 
-        Assert.Equal(new ResourceAmounts(120, 100, 60, 0), one.Cost);
-        Assert.Equal(120 * Math.Pow(1.34, 4), five.Cost.Wood, 6);
+        Assert.Equal(new ResourceAmounts(120, 0, 60, 0), one.Cost);
+        Assert.Equal(BuildingCatalogue.NiceRound(120 * Math.Pow(1.34, 4)), five.Cost.Wood, 6);
+        Assert.Equal(BuildingCatalogue.NiceRound(100 * Math.Pow(1.34, 5)), six.Cost.Stone, 6);
         Assert.Equal(TimeSpan.FromSeconds(Math.Round(90 * Math.Pow(1.33, 4))), five.BuildDuration);
-        Assert.Equal(new ResourceAmounts(15 * 5, 12 * 5, 15 * 5, 2 * 5), five.ProductionPerHour);
+        Assert.Equal(new ResourceAmounts(15 * 5, 0, 15 * 5, 0), five.ProductionPerHour);
         Assert.Equal(ResourceAmounts.Uniform(250 * 5), five.StorageCapacity);
+    }
+
+    [Fact]
+    public void The_longhouse_makes_no_brick_and_no_iron_at_any_level()
+    {
+        for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse); level++)
+        {
+            var production = BuildingCatalogue.Get(BuildingType.Longhouse, level).ProductionPerHour;
+            Assert.Equal(0, production.Stone);
+            Assert.Equal(0, production.Iron);
+        }
+    }
+
+    [Fact]
+    public void A_new_settlement_has_no_iron_income_before_a_bog_ore_works_stands()
+    {
+        Assert.Equal(0, BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]).ProductionPerHour.Iron);
+    }
+
+    [Fact]
+    public void The_tower_tops_out_at_level_5()
+    {
+        Assert.Equal(5, BuildingCatalogue.MaxLevelFor(BuildingType.Tower));
+        Assert.Null(BuildingCatalogue.TryGet(BuildingType.Tower, 6));
+    }
+
+    [Fact]
+    public void The_great_storehouse_costs_4000_wood_and_3500_brick_and_holds_a_geometric_50000()
+    {
+        Assert.Equal(new ResourceAmounts(4000, 3500, 0, 0), BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1).Cost);
+        Assert.Equal(ResourceAmounts.Uniform(50000), BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1).StorageCapacity);
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(48, 48)]
+    [InlineData(47.6, 48)]
+    [InlineData(99.4, 99)]
+    [InlineData(148, 150)]
+    [InlineData(144, 140)]
+    [InlineData(999, 1000)]
+    [InlineData(1458, 1450)]
+    [InlineData(1476, 1500)]
+    [InlineData(9990, 10000)]
+    [InlineData(12345, 12500)]
+    [InlineData(27140, 27000)]
+    [InlineData(123456, 125000)]
+    public void Nice_rounding_steps_by_the_number_of_digits(double value, double expected)
+    {
+        Assert.Equal(expected, BuildingCatalogue.NiceRound(value));
+    }
+
+    [Fact]
+    public void Every_building_cost_is_nice_rounded()
+    {
+        foreach (var type in BuildingCatalogue.AllTypes)
+        {
+            for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
+            {
+                var cost = BuildingCatalogue.Get(type, level).Cost;
+                foreach (var amount in new[] { cost.Wood, cost.Stone, cost.Food, cost.Iron })
+                {
+                    Assert.Equal(BuildingCatalogue.NiceRound(amount), amount);
+                }
+            }
+        }
     }
 
     [Fact]
@@ -245,9 +378,9 @@ public class EconomyDesignTests
             600 * (Math.Pow(1.22, 7) - 1) / 0.22,
             BuildingCatalogue.Get(BuildingType.StorageHouse, 7).StorageCapacity.Stone,
             6);
-        Assert.Equal(2500, BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1).StorageCapacity.Food, 6);
+        Assert.Equal(50000, BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1).StorageCapacity.Food, 6);
         Assert.Equal(
-            2500 * (Math.Pow(1.30, 10) - 1) / 0.30,
+            50000 * (Math.Pow(1.25, 10) - 1) / 0.25,
             BuildingCatalogue.Get(BuildingType.GreatStorehouse, 10).StorageCapacity.Iron,
             6);
     }

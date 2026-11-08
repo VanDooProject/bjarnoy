@@ -74,7 +74,7 @@ public sealed class PalisadePlacementTests
             // The standard growth: cost x1.30, time x1.33 per level, and the Longhouse never has to be above the unlock level... except
             // that a building's level can never exceed it, so level 3 still only needs LH 7.
             var three = BuildingCatalogue.Get(type, 3);
-            Assert.Equal(one.Cost * 1.30 * 1.30, three.Cost);
+            Assert.Equal(BuildingCatalogue.NiceRound(one.Cost * 1.30 * 1.30), three.Cost);
             Assert.Equal(TimeSpan.FromSeconds(Math.Round(120 * 1.33 * 1.33)), three.BuildDuration);
             Assert.Equal(7, three.RequiredLonghouseLevel);
         }

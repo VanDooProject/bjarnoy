@@ -111,10 +111,17 @@ public sealed class LinkedStoreTests
             Assert.Equal(fraction, stockB[r] / capB[r], 9);
         }
 
-        // Far later both are exactly full.
+        // Far later both are exactly full of every resource that is produced at all (the Longhouse makes wood and food only).
         store.SettleTo(T0.AddDays(30));
-        AssertNear(store.Outcome(a.Id).Settlement.Resources.Capacity, store.Outcome(a.Id).Settlement.Resources.At(T0.AddDays(30)));
-        AssertNear(store.Outcome(b.Id).Settlement.Resources.Capacity, store.Outcome(b.Id).Settlement.Resources.At(T0.AddDays(30)));
+        foreach (var member in new[] { a, b })
+        {
+            var resources = store.Outcome(member.Id).Settlement.Resources;
+            var (cap, stock) = (V(resources.Capacity), V(resources.At(T0.AddDays(30))));
+            for (var r = 0; r < 4; r++)
+            {
+                Assert.Equal(poolRate[r] > 0 ? cap[r] : 0, stock[r], 6);
+            }
+        }
     }
 
     [Fact]
