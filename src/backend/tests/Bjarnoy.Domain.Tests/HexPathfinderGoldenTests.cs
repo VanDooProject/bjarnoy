@@ -90,7 +90,7 @@ public class HexPathfinderGoldenTests
         var byName = Fixture.FindPathCases.ToDictionary(c => c.Name);
         Assert.Equal([0.0, 3.5, 7.0], byName["bridge_level_1_causeway_crosses_a_wide_river_at_6"].ExpectedCumulativeHours);
         Assert.Equal([0.0, 2.5, 5.0], byName["bridge_level_2_footbridge_crosses_a_wide_river_at_4"].ExpectedCumulativeHours);
-        Assert.Equal(1.15, byName["bridge_level_3_kings_bridge_costs_the_terrain_under_it"].ExpectedCumulativeHours![1], 9);
+        Assert.Equal(1.25, byName["bridge_level_3_kings_bridge_costs_1_5_whatever_the_ground"].ExpectedCumulativeHours![1], 9);
         Assert.NotNull(byName["bridge_level_4_guarded_bridge_lets_a_friend_over"].ExpectedPath);
         Assert.Null(byName["bridge_level_4_guarded_bridge_stops_a_stranger"].ExpectedPath);
         Assert.Null(byName["bridge_foundation_opens_nothing"].ExpectedPath);

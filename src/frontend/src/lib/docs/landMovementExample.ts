@@ -233,7 +233,7 @@ export function landExampleContext(tiles: readonly Tile[] = buildLandExampleTile
     hexesPerHour: 1,
     restrictions: {
       ...palisadeRestrictions(walls, terrainAt, isWideRiver, LAND_EXAMPLE_SETTLEMENT),
-      ...bridgeRestrictions(bridges, terrainAt, rules, LAND_EXAMPLE_SETTLEMENT),
+      ...bridgeRestrictions(bridges, LAND_EXAMPLE_SETTLEMENT),
     },
   };
 }

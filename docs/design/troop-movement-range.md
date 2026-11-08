@@ -154,8 +154,8 @@ Consequences:
   | --- | --- |
   | 1, causeway | `1.0 + CausewayCrossingCost` (= 6), slower than any ground |
   | 2, footbridge | `1.0 + FootbridgeCrossingCost` (= 4), slower than the ground, quicker than the causeway |
-  | 3, king's bridge | the terrain cost, every army |
-  | 4, guarded bridge | the terrain cost for the owner's armies and their friends (the gate rule), impassable for everyone else |
+  | 3, king's bridge | `1.0 + KingsBridgeCrossingCost` (= 1.5), every army |
+  | 4, guarded bridge | `1.0 + KingsBridgeCrossingCost` (= 1.5) for the owner's armies and their friends (the gate rule), impassable for everyone else |
 
   `docs/design/economy.md` section 5 has the placement and burning rules.
 

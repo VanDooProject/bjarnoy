@@ -2,7 +2,7 @@
 // `HexPathfinder.LandTerrainCost` and its stream rule. The game gets the costs from the server with the world
 // (`WorldResponse.movement`), so there is no client copy to read them from. Keep these in step with that file.
 import { HALF_OPEN_END_COST } from '../map/hexPath';
-import { CAUSEWAY_CROSSING_COST, FOOTBRIDGE_CROSSING_COST, GUARDED_BRIDGE_LEVEL } from '../map/bridgeMovement';
+import { CAUSEWAY_CROSSING_COST, FOOTBRIDGE_CROSSING_COST, GUARDED_BRIDGE_LEVEL, KINGS_BRIDGE_CROSSING_COST } from '../map/bridgeMovement';
 
 /** The ground a land army can enter, with the cost of one hex (`HexPathfinder.LandTerrainCost`, grass = 1). */
 export const GROUND_COSTS = [
@@ -23,14 +23,14 @@ export const WALL_END_COST = HALF_OPEN_END_COST;
 
 /**
  * What entering a wide river costs over a bridge (`BridgeIndex.CrossingCost`, mirrored by `bridgeCrossingCost` in bridgeMovement.ts), by level:
- * a causeway and a footbridge have a price of their own (`1 + CausewayCrossingCost`, `1 + FootbridgeCrossingCost`); the king's bridge and the
- * guarded one cost what the ground under the river costs (`groundBelow`), the guarded one only for its owner and their friends.
+ * every level has a price of its own, never the ground under the river (`1 + CausewayCrossingCost`, `1 + FootbridgeCrossingCost`,
+ * `1 + KingsBridgeCrossingCost` for the king's and the guarded bridge); the guarded one only for its owner and their friends.
  */
 export const BRIDGE_LEVELS = [
   { level: 1, name: 'causeway', cost: 1 + CAUSEWAY_CROSSING_COST, everyone: true },
   { level: 2, name: 'footbridge', cost: 1 + FOOTBRIDGE_CROSSING_COST, everyone: true },
-  { level: 3, name: 'kings', cost: null, everyone: true },
-  { level: GUARDED_BRIDGE_LEVEL, name: 'guarded', cost: null, everyone: false },
+  { level: 3, name: 'kings', cost: 1 + KINGS_BRIDGE_CROSSING_COST, everyone: true },
+  { level: GUARDED_BRIDGE_LEVEL, name: 'guarded', cost: 1 + KINGS_BRIDGE_CROSSING_COST, everyone: false },
 ] as const;
 
 /**
@@ -38,12 +38,6 @@ export const BRIDGE_LEVELS = [
  * (`RequiredBuildings`).
  */
 export const BRIDGE_UNLOCK = { longhouse: 7, townSquare: 1 } as const;
-
-/** The cheapest and dearest ground a bridge can stand on (grass, forest, sand: `BuildingCatalogue.BridgeHex`), the cost of a level 3 and 4 crossing. */
-export const BRIDGE_GROUND_COST = {
-  min: Math.min(...GROUND_COSTS.filter((g) => g.terrain !== 'bog').map((g) => g.cost)),
-  max: Math.max(...GROUND_COSTS.filter((g) => g.terrain !== 'bog').map((g) => g.cost)),
-} as const;
 
 /** `FogVisionRadii.ArmyVisionRadiusHexes`: rings of the map a travelling army explores around itself. */
 export const ARMY_VISION_RINGS = 2;

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BRIDGE_GROUND_COST,
   BRIDGE_LEVELS,
   BRIDGE_UNLOCK,
   GROUND_COSTS,
@@ -82,33 +81,28 @@ describe('landMovementDocs', () => {
         isWideRiver: (c) => c.q === 1,
         rules,
         hexesPerHour: 1,
-        restrictions: bridgeRestrictions(bridges, terrainAt, rules, walker, new Set(['friend'])),
+        restrictions: bridgeRestrictions(bridges, walker, new Set(['friend'])),
       };
       return pathCost(WALK, ctx) - 1;
     }
 
-    it('lists the four levels the pathfinder prices: 6 and 4 for causeway and footbridge, the ground for the rest', () => {
+    it('lists the four levels the pathfinder prices: 6, 4, 1.5 and 1.5', () => {
       expect(BRIDGE_LEVELS.map((b) => b.level)).toEqual([1, 2, 3, 4]);
-      expect(BRIDGE_LEVELS.map((b) => b.cost)).toEqual([6, 4, null, null]);
+      expect(BRIDGE_LEVELS.map((b) => b.cost)).toEqual([6, 4, 1.5, 1.5]);
       expect(maxLevelFor('bridge')).toBe(BRIDGE_LEVELS.length);
       for (const b of BRIDGE_LEVELS) {
-        if (b.cost !== null) expect(bridgeStep(b.level, 'stranger'), `level ${b.level}`).toBeCloseTo(b.cost, 9);
+        if (b.everyone) expect(bridgeStep(b.level, 'stranger'), `level ${b.level}`).toBeCloseTo(b.cost, 9);
       }
     });
 
-    it('lets every army over levels 1 to 3 at the ground cost from level 3, and only friends over the guarded one', () => {
+    it('lets every army over levels 1 to 3, prices levels 3 and 4 at 1.5 on any ground, and lets only friends over the guarded one', () => {
       for (const ground of ['grass', 'sand', 'forest'] as const) {
-        const cost = GROUND_COSTS.find((g) => g.terrain === ground)!.cost;
-        expect(bridgeStep(3, 'stranger', ground)).toBeCloseTo(cost, 9);
-        expect(bridgeStep(4, 'owner', ground)).toBeCloseTo(cost, 9);
+        expect(bridgeStep(3, 'stranger', ground)).toBeCloseTo(1.5, 9);
+        expect(bridgeStep(4, 'owner', ground)).toBeCloseTo(1.5, 9);
         expect(bridgeStep(4, 'stranger', ground)).toBe(Infinity);
       }
       expect(BRIDGE_LEVELS.filter((b) => !b.everyone).map((b) => b.level)).toEqual([4]);
       expect(bridgeStep(1, 'stranger')).toBeCloseTo(6, 9);
-    });
-
-    it('quotes the cheapest and dearest ground a bridge can stand on, bog left out', () => {
-      expect(BRIDGE_GROUND_COST).toEqual({ min: 1, max: 1.3 });
     });
 
     it('unlocks at Longhouse 7 behind a level-1 Town Square', () => {

@@ -119,6 +119,9 @@ public static class HexPathfinder
     /// <summary>Extra cost, on top of the base 1.0 step, of crossing a wide river over a level-2 bridge (the footbridge).</summary>
     public const double FootbridgeCrossingCost = 3.0;
 
+    /// <summary>Extra cost, on top of the base 1.0 step, of crossing a wide river over a level-3 (king's) or level-4 (guarded) bridge: a little slower than grass, whatever ground lies under the river.</summary>
+    public const double KingsBridgeCrossingCost = 0.5;
+
     /// <summary>The cost of entering a land terrain, or <see langword="null"/> for one a land army cannot enter (sea, lakes).</summary>
     internal static double? LandTerrainCostOf(Terrain terrain) =>
         LandTerrainCost.TryGetValue(terrain, out var cost) ? cost : null;

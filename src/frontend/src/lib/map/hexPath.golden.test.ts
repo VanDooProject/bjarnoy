@@ -82,7 +82,7 @@ function contextFor(fixture: GoldenFixture, army: 'friendly' | 'friend' | 'enemy
     hexesPerHour: 1,
     restrictions: {
       ...palisadeRestrictions(walls, terrainAt, isWideRiver, walker, friends),
-      ...bridgeRestrictions(bridges, terrainAt, RULES, walker, friends),
+      ...bridgeRestrictions(bridges, walker, friends),
     },
   };
 }
@@ -141,7 +141,7 @@ describe('hexPath golden fixture (issue #159 part B parity)', () => {
     const byName = new Map(fixture.findPathCases.map((c) => [c.name, c]));
     expect(byName.get('bridge_level_1_causeway_crosses_a_wide_river_at_6')?.expectedCumulativeHours).toEqual([0, 3.5, 7]);
     expect(byName.get('bridge_level_2_footbridge_crosses_a_wide_river_at_4')?.expectedCumulativeHours).toEqual([0, 2.5, 5]);
-    expect(byName.get('bridge_level_3_kings_bridge_costs_the_terrain_under_it')?.expectedCumulativeHours?.[1]).toBeCloseTo(1.15, 9);
+    expect(byName.get('bridge_level_3_kings_bridge_costs_1_5_whatever_the_ground')?.expectedCumulativeHours?.[1]).toBeCloseTo(1.25, 9);
     expect(byName.get('bridge_level_4_guarded_bridge_lets_a_friend_over')?.expectedPath).not.toBeNull();
     expect(byName.get('bridge_level_4_guarded_bridge_stops_a_stranger')?.expectedPath).toBeNull();
     expect(byName.get('bridge_foundation_opens_nothing')?.expectedPath).toBeNull();

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { coordKey } from '../hex/coords';
 import { findPath, hoursFrom, pathCost, type PathContext } from './hexPath';
-import { bridgeCrossingCost, bridgeRestrictions, type StandingBridges } from './bridgeMovement';
+import { bridgeCrossingCost, bridgeRestrictions, KINGS_BRIDGE_CROSSING_COST, type StandingBridges } from './bridgeMovement';
 import { gamePathContext, type MovementWorldView } from './movementContext';
 import type { RiverTile, Terrain } from './types';
 
@@ -37,7 +37,7 @@ function ctxFor(terrain: Map<string, Terrain>, standing: StandingBridges, walker
     isWideRiver: wide,
     rules: RULES,
     hexesPerHour: 1,
-    restrictions: bridgeRestrictions(standing, terrainAt, RULES, walker, new Set([FRIEND].filter(() => walker === OWNER))),
+    restrictions: bridgeRestrictions(standing, walker, new Set([FRIEND].filter(() => walker === OWNER))),
   };
 }
 
@@ -61,8 +61,8 @@ describe('bridge movement (mirror of BridgeMovementTests.cs)', () => {
   it.each([
     [1, 3 + 6.0],
     [2, 3 + 4.0],
-    [3, 3 + 1.0],
-    [4, 3 + 1.0],
+    [3, 3 + 1.5],
+    [4, 3 + 1.5],
   ])('level %i prices the crossing at %f for the owner (and a stranger up to level 3)', (level, expected) => {
     const terrain = strip();
     const owner = cost(terrain, bridges(level), OWNER);
@@ -72,18 +72,20 @@ describe('bridge movement (mirror of BridgeMovementTests.cs)', () => {
     if (level <= 3) expect(cost(terrain, bridges(level), STRANGER)!.hours).toBeCloseTo(expected, 9);
   });
 
-  it('prices a king\'s bridge at the terrain under it', () => {
-    const terrain = strip();
-    terrain.set(coordKey(SPAN), 'forest');
-    expect(bridgeCrossingCost({ level: 3, owner: OWNER }, 'forest', RULES, STRANGER)).toBe(1.3);
-    expect(bridgeCrossingCost({ level: 3, owner: OWNER }, 'sand', RULES, STRANGER)).toBe(1.1);
+  it('prices a king\'s bridge at 1.5 whatever ground lies under the river', () => {
+    expect(bridgeCrossingCost({ level: 3, owner: OWNER }, STRANGER)).toBe(1.0 + KINGS_BRIDGE_CROSSING_COST);
+    for (const ground of ['grass', 'sand', 'forest'] as const) {
+      const terrain = strip();
+      terrain.set(coordKey(SPAN), ground);
+      expect(cost(terrain, bridges(3), STRANGER)!.hours, ground).toBeCloseTo(3 + 1.5, 9);
+    }
   });
 
   it('opens a guarded bridge for its owner and friends and not for strangers', () => {
     const guarded = { level: 4, owner: OWNER };
-    expect(bridgeCrossingCost(guarded, 'grass', RULES, OWNER)).toBe(1.0);
-    expect(bridgeCrossingCost(guarded, 'grass', RULES, FRIEND, new Set([OWNER]))).toBe(1.0);
-    expect(bridgeCrossingCost(guarded, 'grass', RULES, STRANGER)).toBeNull();
+    expect(bridgeCrossingCost(guarded, OWNER)).toBe(1.5);
+    expect(bridgeCrossingCost(guarded, FRIEND, new Set([OWNER]))).toBe(1.5);
+    expect(bridgeCrossingCost(guarded, STRANGER)).toBeNull();
     expect(cost(strip(), bridges(4), STRANGER)).toBeNull();
     expect(cost(strip(), bridges(3), STRANGER)).not.toBeNull();
   });
@@ -104,7 +106,7 @@ describe('bridge movement (mirror of BridgeMovementTests.cs)', () => {
   });
 
   it('returns no restrictions when no bridge stands', () => {
-    expect(bridgeRestrictions(new Map(), () => 'grass', RULES, OWNER)).toBeUndefined();
+    expect(bridgeRestrictions(new Map(), OWNER)).toBeUndefined();
   });
 
   it('shows up in the range tint through gamePathContext', () => {

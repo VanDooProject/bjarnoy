@@ -133,9 +133,9 @@ describe('the land movement example island', () => {
       expect(wide).toEqual([coordKey(LAND_EXAMPLE_BRIDGE)]);
     });
 
-    it('costs 19.9, each step half the hex left and half the hex entered: 1.15 into and out of a forest, 5 into and out of the stream', () => {
-      expect(route.steps.map((s) => s.cost)).toEqual([1.15, 1.15, 5, 5, 1, 1.15, 1.15, 1, 1.15, 1.15, 1]);
-      expect(route.total).toBeCloseTo(19.9);
+    it('costs 20.4, each step half the hex left and half the hex entered: 1.15 into and out of a forest, 5 into and out of the stream', () => {
+      expect(route.steps.map((s) => s.cost)).toEqual([1.15, 1.15, 5, 5, 1, 1.15, 1.4, 1.25, 1.15, 1.15, 1]);
+      expect(route.total).toBeCloseTo(20.4);
     });
 
     it('without the bridge wades where the two streams widen into the river, a longer and slower way', () => {

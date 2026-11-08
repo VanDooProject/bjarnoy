@@ -1253,12 +1253,11 @@
         "kings": "King's bridge",
         "guarded": "Guarded bridge"
       },
-      "groundCost": "as the ground under it",
       "everyone": "Every army, its owner’s included",
       "friends": "Its owner’s armies and their friends’: the same guild, or a guild at peace with it. Every other army is stopped as if there were no bridge.",
       "rules": {
         "where": "A bridge fits on a straight or bending wide river hex, whatever ground lies under it. It does not fit on a spring, a fork or a mouth, on a stream (armies wade streams anyway) or on a wasted island.",
-        "site": "A building site does not open the river. Only a finished bridge, level 1 or more, counts. Each level makes the crossing quicker, up to the king’s bridge, where armies cross as fast as over the ground itself.",
+        "site": "A building site does not open the river. Only a finished bridge, level 1 or more, counts. Each level makes the crossing quicker, up to the king’s bridge, which armies cross a little slower than grass, whatever ground lies under the river.",
         "guarded": "The guarded bridge works like a wall gate: it lets through its owner’s armies and their friends’ and stops everyone else. Outside its owner's realm it has no function and is open to every army.",
         "siege": "Catapults can burn a bridge down (rams cannot), one level per won siege, however many catapults survive. A guarded bridge therefore falls to the king’s bridge first and is then open to everyone, attackers included. A causeway burnt down once is gone, and the river is shut again.",
         "walls": "A bridge does not change walls: a wall that runs up to a wide river is sealed there, with or without a bridge. See {walls}.",

@@ -59,7 +59,7 @@ describe('LandMovementExample', () => {
     expect(steps[2]!.text()).toContain('Stream');
     expect(steps[2]!.text()).toContain('1 h 15 min');
     expect(wrapper.text()).toContain('Stream');
-    expect(wrapper.get('[data-testid="land-example-total"]').text()).toContain('4 h 58.5 min');
+    expect(wrapper.get('[data-testid="land-example-total"]').text()).toContain('5 h 6 min');
     wrapper.unmount();
   });
 
