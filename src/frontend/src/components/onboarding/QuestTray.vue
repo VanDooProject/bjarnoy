@@ -5,19 +5,21 @@
 // this tray walks the player through six goals that each pay a resource
 // reward on a manual Claim. It shows the first unclaimed quest prominently,
 // any *other* completed-but-unclaimed quest as a small claimable row (quests
-// can be claimed in any order), and hides itself once all six are claimed.
-import { computed, ref } from 'vue';
+// can be claimed in any order), and hides itself once all of them are claimed.
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { apiErrorMessage } from '../../i18n/apiErrors';
 import { resourceName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
-import { rewardOverflows } from '../../lib/quests';
+import { questProgressKind, rewardOverflows } from '../../lib/quests';
+import { useQuestSeen } from '../../composables/useQuestSeen';
+import QuestProgress from './QuestProgress.vue';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
 import type { QuestResponse } from '../../api/types';
 
-const { t, te } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, te, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const world = useWorldStore();
 
 const REWARD_KINDS = ['wood', 'stone', 'food'] as const;
@@ -30,13 +32,56 @@ const claimedCount = computed(() => known.value.length - unclaimed.value.length)
 const current = computed<QuestResponse | undefined>(() => unclaimed.value[0]);
 const alsoReady = computed(() => unclaimed.value.slice(1).filter((q) => q.completed));
 
-// Phones: the tray is a round quest button until tapped open — the full card
-// covered a third of a landscape screen. The dot says a reward is waiting to
-// be claimed (there is always an open quest while the tray exists at all).
+// Phones: the tray is a peek strip (quest title + progress) until tapped open —
+// the full card covered a third of a landscape screen. The dot says there is
+// something the player has not seen in the opened card yet: a quest that became
+// current, or one that became claimable.
 const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
 const expanded = ref(false);
 const collapsed = computed(() => isCompact.value && !expanded.value);
-const hasReady = computed(() => unclaimed.value.some((q) => q.completed));
+
+const noticeKeys = computed(() => {
+  const keys: string[] = [];
+  if (current.value) keys.push(`${current.value.id}:open`);
+  for (const q of unclaimed.value) if (q.completed) keys.push(`${q.id}:ready`);
+  return keys;
+});
+const { hasUnseen, markSeen } = useQuestSeen(computed(() => world.selectedSettlementId));
+const hasNew = computed(() => hasUnseen(noticeKeys.value));
+// Whatever the opened card shows counts as seen (always open on desktop).
+// Only once mounted: the media query is read in onMounted, so before that a
+// phone still looks like a desktop and would mark everything seen unseen.
+const mounted = ref(false);
+watchEffect(() => {
+  if (mounted.value && current.value && !collapsed.value) markSeen(noticeKeys.value);
+});
+
+function progressOf(q: QuestResponse) {
+  const kind = questProgressKind(q.id);
+  return kind && q.progress && !q.completed ? { kind, progress: q.progress } : null;
+}
+const currentProgress = computed(() => (current.value ? progressOf(current.value) : null));
+
+// Phone card: the hint clamps to two lines; "More" shows only when it overflows.
+const hintEl = ref<HTMLElement | null>(null);
+const hintOpen = ref(false);
+const hintOverflows = ref(false);
+function measureHint() {
+  const el = hintEl.value;
+  if (!el || hintOpen.value) return;
+  hintOverflows.value = el.scrollHeight > el.clientHeight + 1;
+}
+watch([hintEl, () => current.value?.id, () => locale.value, isCompact], async () => {
+  hintOpen.value = false;
+  hintOverflows.value = false;
+  await nextTick();
+  measureHint();
+});
+onMounted(() => {
+  mounted.value = true;
+  window.addEventListener('resize', measureHint);
+});
+onBeforeUnmount(() => window.removeEventListener('resize', measureHint));
 
 const busyId = ref<string | null>(null);
 const error = ref<string | null>(null);
@@ -60,23 +105,31 @@ async function claim(q: QuestResponse) {
 </script>
 
 <template>
+  <Transition name="quest-swap" mode="out-in">
   <button
     v-if="current && collapsed"
+    key="strip"
     type="button"
     class="quest-toggle"
     data-testid="quest-toggle"
     :aria-label="t('quests.open')"
-    :title="t('quests.title')"
     @click="expanded = true"
   >
-    <svg class="quest-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M18 17V6a2 2 0 0 0-2-2H5" />
-      <path d="M8 20h11a2 2 0 0 0 2-2v-.5a.5.5 0 0 0-.5-.5H10.5a.5.5 0 0 0-.5.5v.5a2 2 0 1 1-4 0V6a2 2 0 1 0-4 0v1.5a.5.5 0 0 0 .5.5H6" />
-      <path d="M10 9h5M10 12.5h5" />
-    </svg>
-    <span v-if="hasReady" class="quest-dot" data-testid="quest-ready-dot" aria-hidden="true" />
+    <span class="quest-icon-wrap">
+      <svg class="quest-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M18 17V6a2 2 0 0 0-2-2H5" />
+        <path d="M8 20h11a2 2 0 0 0 2-2v-.5a.5.5 0 0 0-.5-.5H10.5a.5.5 0 0 0-.5.5v.5a2 2 0 1 1-4 0V6a2 2 0 1 0-4 0v1.5a.5.5 0 0 0 .5.5H6" />
+        <path d="M10 9h5M10 12.5h5" />
+      </svg>
+      <span v-if="hasNew" class="quest-dot" data-testid="quest-ready-dot" aria-hidden="true" />
+    </span>
+    <span class="strip-text">
+      <span class="strip-title" data-testid="quest-strip-title">{{ t(`quests.items.${current.id}.title`) }}</span>
+      <QuestProgress v-if="currentProgress" compact :kind="currentProgress.kind" :progress="currentProgress.progress" />
+    </span>
+    <span class="strip-chevron" aria-hidden="true" />
   </button>
-  <aside v-else-if="current" class="quest-tray" data-testid="quest-tray" :aria-label="t('quests.title')">
+  <aside v-else-if="current" key="card" class="quest-tray" data-testid="quest-tray" :aria-label="t('quests.title')">
     <div class="quest-header">
       <span class="quest-heading">{{ t('quests.title') }}</span>
       <span class="quest-progress" data-testid="quest-progress">
@@ -94,7 +147,18 @@ async function claim(q: QuestResponse) {
 
     <div class="quest-current" :class="{ 'is-ready': current.completed }" data-testid="quest-current" :data-quest-id="current.id">
       <div class="quest-title">{{ t(`quests.items.${current.id}.title`) }}</div>
-      <div class="quest-hint">{{ t(`quests.items.${current.id}.hint`) }}</div>
+      <div ref="hintEl" class="quest-hint" :class="{ clamped: isCompact && !hintOpen }">{{ t(`quests.items.${current.id}.hint`) }}</div>
+      <button
+        v-if="isCompact && (hintOverflows || hintOpen)"
+        type="button"
+        class="quest-more"
+        data-testid="quest-more"
+        :aria-expanded="hintOpen"
+        @click="hintOpen = !hintOpen"
+      >
+        {{ hintOpen ? t('quests.less') : t('quests.more') }}
+      </button>
+      <QuestProgress v-if="currentProgress" :kind="currentProgress.kind" :progress="currentProgress.progress" />
       <div class="quest-footer">
         <span class="quest-reward" :aria-label="t('quests.rewardLabel')">
           <span v-for="kind in REWARD_KINDS" :key="kind" class="reward-item" :title="resourceName(kind)">
@@ -137,6 +201,7 @@ async function claim(q: QuestResponse) {
 
     <div v-if="error" class="quest-error" role="alert" data-testid="quest-error">{{ error }}</div>
   </aside>
+  </Transition>
 </template>
 
 <style scoped>
@@ -294,10 +359,10 @@ async function claim(q: QuestResponse) {
     padding-bottom: 5px;
     margin-bottom: 6px;
   }
-  .quest-hint {
+  .quest-hint.clamped {
     display: -webkit-box;
-    -webkit-line-clamp: 1;
-    line-clamp: 1;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
@@ -305,7 +370,7 @@ async function claim(q: QuestResponse) {
     margin-top: 6px;
   }
 }
-/* Phones: the collapsed tray, a round quest button in the same corner. */
+/* Phones: the collapsed tray, a peek strip in the same corner. */
 .quest-toggle {
   position: absolute;
   /* The corner itself, not right of the landscape rail like the open card:
@@ -314,20 +379,24 @@ async function claim(q: QuestResponse) {
   /* 20px, not 12: clear of the demo-mode tag in the very corner. */
   bottom: calc(20px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
   z-index: 10;
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border-radius: 50%;
-  background: rgba(6, 12, 16, 0.94);
+  width: calc(100% - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+  max-width: 360px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 12px;
+  background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  font: inherit;
+  color: var(--text);
+  text-align: left;
   cursor: pointer;
 }
 .quest-icon {
   width: 22px;
   height: 22px;
+  flex: none;
 }
 .quest-icon path {
   fill: none;
@@ -336,15 +405,63 @@ async function claim(q: QuestResponse) {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+.strip-text {
+  flex: 1;
+  min-width: 0;
+}
+.strip-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.strip-chevron {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 0 4px;
+  border-left: 2px solid var(--muted);
+  border-top: 2px solid var(--muted);
+  transform: translateY(2px) rotate(45deg);
+}
+.quest-more {
+  display: block;
+  margin: 2px 0 0 auto;
+  padding: 6px 0 6px 10px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gold);
+  cursor: pointer;
+}
+.quest-swap-enter-active,
+.quest-swap-leave-active {
+  transition: opacity 0.15s ease;
+}
+.quest-swap-enter-from,
+.quest-swap-leave-to {
+  opacity: 0;
+}
+/* The dot sits on the quest icon, not on the strip's corner. */
+.quest-icon-wrap {
+  position: relative;
+  flex: none;
+  display: grid;
+}
 .quest-dot {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: -3px;
+  right: -4px;
   width: 9px;
   height: 9px;
   border-radius: 50%;
   background: #e5533d;
-  box-shadow: 0 0 0 2px rgba(6, 12, 16, 0.94);
+  box-shadow: 0 0 0 2px var(--panel-bg);
 }
 /* The open card's collapse control: a CSS-drawn chevron (no raw text). */
 .quest-collapse {

@@ -309,12 +309,14 @@ test.describe('landscape rail HUD', { tag: '@g2' }, () => {
     expect(gripBox.x + gripBox.width).toBeLessThanOrEqual(bubbleBox.x + bubbleBox.width);
     expect(Math.abs(gripBox.y + gripBox.height / 2 - (bubbleBox.y + bubbleBox.height / 2))).toBeLessThanOrEqual(2);
 
-    // The quest card is a round quest button on a phone until tapped.
+    // The quest card is a peek strip (title + progress) on a phone until tapped.
     await expect(page.getByTestId('quest-tray')).toHaveCount(0);
     const questToggle = page.getByTestId('quest-toggle');
     await expect(questToggle).toBeVisible();
-    const questBox = await box(questToggle, 'quest button');
-    expect(questBox.width).toBeLessThanOrEqual(48);
+    await expect(questToggle.getByTestId('quest-strip-title')).toContainText('Build 3 resource producers');
+    const questBox = await box(questToggle, 'quest strip');
+    expect(questBox.width).toBeLessThanOrEqual(361);
+    expect(questBox.height).toBeLessThanOrEqual(64);
 
     // Tapping the toggle opens the drawer as a left side sheet with the nav in it.
     await grip.tap();
