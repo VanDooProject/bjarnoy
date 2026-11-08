@@ -30,6 +30,7 @@ import { peek, popCount, pulseHandle, slideDrawer } from '../../lib/hud/queueMot
 import axeIconUrl from '../../assets/icons/axe.svg?url';
 import swordIconUrl from '../../assets/icons/sword.svg?url';
 import flagIconUrl from '../../assets/icons/flag.svg?url';
+import { isDoubleTap, type Tap } from '../../lib/map/doubleTap';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -162,13 +163,24 @@ function beginFieldOrder(armyId: string) {
   close();
   world.startFieldOrder(armyId);
 }
-function selectArmy(armyId: string) {
-  close();
-  if (world.selectedArmyId === armyId) {
-    world.clearSelectedArmy();
+// A single tap toggles the army's selection (route on the map) and leaves
+// the drawer open; a double tap (the shared isDoubleTap rule, same as the
+// map's double-tap zoom) closes it and has the map focus the army.
+let lastArmyTap: { armyId: string; tap: Tap } | null = null;
+function selectArmy(armyId: string, event: MouseEvent) {
+  const tap: Tap = { at: { x: event.clientX, y: event.clientY }, timeMs: event.timeStamp };
+  if (lastArmyTap && lastArmyTap.armyId === armyId && isDoubleTap(lastArmyTap.tap, tap)) {
+    lastArmyTap = null;
+    close();
+    emit('select-army', armyId);
     return;
   }
-  emit('select-army', armyId);
+  lastArmyTap = { armyId, tap };
+  if (world.selectedArmyId === armyId) {
+    world.clearSelectedArmy();
+  } else {
+    world.selectArmy(armyId);
+  }
 }
 
 const hasAnything = computed(
@@ -456,7 +468,7 @@ function onDrawerLeave(el: Element, done: () => void) {
               <span class="status-card-count">{{ sortedArmyRows.length }}</span>
             </div>
             <div v-for="row in sortedArmyRows" :key="row.id" class="status-row army-row" :class="{ 'is-selected': row.selected }">
-              <button type="button" class="status-row-click" @click="selectArmy(row.id)">
+              <button type="button" class="status-row-click" @click="selectArmy(row.id, $event)">
                 <div class="status-row-top">
                   <span class="status-row-name">{{ row.composition }}</span>
                   <span class="status-row-time">{{ row.eta ?? '—' }}</span>
@@ -603,6 +615,8 @@ function onDrawerLeave(el: Element, done: () => void) {
   font: inherit;
   padding: 0;
   cursor: pointer;
+  /* no browser double-tap zoom delay: a double tap is read in selectArmy */
+  touch-action: manipulation;
 }
 .status-row-top {
   display: flex;
