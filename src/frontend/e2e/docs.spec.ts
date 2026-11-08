@@ -884,7 +884,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     // at phone width (expectPlayerPage resized the viewport already).
     const example = page.getByTestId("land-example");
     await expect(example.locator("canvas")).toBeVisible();
-    await expect(example.getByTestId("land-example-steps").locator("tbody tr")).toHaveCount(11);
+    await expect(example.getByTestId("land-example-steps").locator("tbody tr")).toHaveCount(12);
     await expect(example.getByTestId("land-example-total")).toContainText("5 h 6 min");
     const box = await example.locator("canvas").boundingBox();
     expect(box!.x + box!.width).toBeLessThanOrEqual(390);

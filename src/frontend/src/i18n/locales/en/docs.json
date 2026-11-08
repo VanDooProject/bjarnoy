@@ -1174,7 +1174,7 @@
       "columns": {
         "step": "#",
         "hex": "Hex",
-        "time": "Time"
+        "time": "Time on the hex"
       },
       "names": {
         "settlement": "Settlement",

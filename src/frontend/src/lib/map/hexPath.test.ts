@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { coordKey, type AxialCoord } from '../hex/coords';
-import { BURNT_BRIDGE_LEAVE_COST, findPath, HALF_OPEN_END_COST, hoursFrom, leaveCost, MAX_TINT_HEXES, pathCost, reachableFrom, reachableRange, type MovementRules, type PathContext } from './hexPath';
+import { BURNT_BRIDGE_LEAVE_COST, findPath, HALF_OPEN_END_COST, hoursFrom, leaveCost, MAX_TINT_HEXES, pathCost, reachableFrom, reachableRange, timeOnHex, type MovementRules, type PathContext } from './hexPath';
 import type { Terrain } from './types';
 
 // Mirrors HexPathfinder's own cost tables (issue #159 part A/B) — kept as a
@@ -201,6 +201,14 @@ describe('findPath', () => {
     const path = findPath(from, to, contextFor(meadow()))!;
     expect(path.map(coordKey)).toEqual(['0,0', '1,0', '2,0', '3,0', '4,0']);
     expect(pathCost(path, contextFor(meadow()))).toBe(4);
+  });
+
+  it('splits the cost of a path into the time spent on each hex: half on the first and the last, the full price between', () => {
+    const ctx = contextFor(meadow());
+    const path = findPath(from, to, ctx)!;
+    const times = path.map((_, i) => timeOnHex(path, i, ctx));
+    expect(times).toEqual([0.5, 1, 1, 1, 0.5]);
+    expect(times.reduce((a, b) => a + b, 0)).toBe(pathCost(path, ctx));
   });
 
   it('returns null when an endpoint is sea or the sea cuts the two apart', () => {

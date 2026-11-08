@@ -130,6 +130,18 @@ function halfAndHalf(from: AxialCoord, to: AxialCoord, ctx: PathContext): number
   return enter === null ? null : (leave + enter) / 2;
 }
 
+/**
+ * Price of the time spent ON hex `path[i]` (grass = 1), in hex-cost units: every step is paid half at the hex left and half at the hex
+ * entered, so the first hex of a path counts half its leave price, the last half its enter price and a hex in between half of each (its
+ * price); `Infinity` for an impassable hex. These prices add up to `pathCost(path)`.
+ */
+export function timeOnHex(path: readonly AxialCoord[], i: number, ctx: PathContext): number {
+  const hex = path[i]!;
+  const leave = i < path.length - 1 ? leaveCost(hex, ctx) : 0;
+  const enter = i > 0 ? stepCost(hex, ctx) : 0;
+  return leave === null || enter === null ? Number.POSITIVE_INFINITY : (leave + enter) / 2;
+}
+
 /** Binary min-heap keyed by priority — Dijkstra's usual decrease-key stand-in (push a new entry, ignore stale pops). */
 class MinHeap<T> {
   private items: { priority: number; value: T }[] = [];

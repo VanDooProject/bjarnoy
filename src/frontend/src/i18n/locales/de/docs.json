@@ -1174,7 +1174,7 @@
       "columns": {
         "step": "#",
         "hex": "Feld",
-        "time": "Zeit"
+        "time": "Zeit auf dem Feld"
       },
       "names": {
         "settlement": "Siedlung",
