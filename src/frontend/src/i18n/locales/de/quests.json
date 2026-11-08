@@ -1,7 +1,7 @@
 {
   "title": "Aufgaben",
-  "open": "Quests anzeigen",
-  "collapse": "Quests ausblenden",
+  "open": "Aufgaben anzeigen",
+  "collapse": "Aufgaben ausblenden",
   "progress": "{done} von {total}",
   "claim": "Abholen",
   "claiming": "Wird abgeholt …",
@@ -51,8 +51,8 @@
       "hint": "Baue eine Kaserne und bilde dort Speerkämpfer aus. Jede kämpfende Landeinheit zählt mit."
     },
     "hunt1": {
-      "title": "Jage ein Wildtierlager",
-      "hint": "Klicke ein Lager auf deiner Insel an, wähle Jagen und schicke Landtruppen. Schwache Lager (Hasen, Hirsche, Robben) sind die leichte erste Beute."
+      "title": "Jage ein Revier",
+      "hint": "Klicke ein Revier auf deiner Insel an, wähle Jagen und schicke Landtruppen. Schwache Reviere (Hasen, Hirsche, Robben) sind die leichte erste Beute."
     }
   }
 }
