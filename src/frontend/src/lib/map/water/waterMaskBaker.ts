@@ -19,19 +19,21 @@ export interface AsyncBakeInput {
   wastedRevealed?: boolean;
   /** River-mouth hexes whose surroundings carry no foam — see `BakeRequest.noFoamHexes`. */
   noFoamHexes?: number[];
+  /** Seed-sea hexes that bake as land — see `BakeRequest.landHexes`. */
+  landHexes?: number[];
   /**
-   * `WorldModel.riverRevision` the request was made under. Not sent to the
+   * `WorldModel.waterMaskRevision` the request was made under. Not sent to the
    * worker; carried through `pending` to the callback like `wastedRevealed`,
-   * so the renderer can tell a mask baked from stale rivers.
+   * so the renderer can tell a mask baked from stale rivers or bog.
    */
-  riverRevision?: number;
+  revision?: number;
 }
 
 export class WaterMaskBaker {
   private worker: Worker | null = null;
   /** Bumped per request, so a response can be matched against the request still outstanding. */
   private nextId = 1;
-  private onDone: ((mask: WaterMask, region: WaterMaskRegion, bakeMs: number, wastedRevealed: boolean, riverRevision: number) => void) | null =
+  private onDone: ((mask: WaterMask, region: WaterMaskRegion, bakeMs: number, wastedRevealed: boolean, revision: number) => void) | null =
     null;
   /**
    * The one request still outstanding, with the region and reveal state it
@@ -47,10 +49,10 @@ export class WaterMaskBaker {
    * what it was baked with, and the reveal flag could in principle flip while
    * this exact request is still in flight.
    */
-  private pending: { id: number; region: WaterMaskRegion; wastedRevealed: boolean; riverRevision: number } | null = null;
+  private pending: { id: number; region: WaterMaskRegion; wastedRevealed: boolean; revision: number } | null = null;
 
   constructor(
-    handle: (mask: WaterMask, region: WaterMaskRegion, bakeMs: number, wastedRevealed: boolean, riverRevision: number) => void,
+    handle: (mask: WaterMask, region: WaterMaskRegion, bakeMs: number, wastedRevealed: boolean, revision: number) => void,
   ) {
     this.onDone = handle;
     this.worker = createWorker();
@@ -87,7 +89,7 @@ export class WaterMaskBaker {
       id,
       region: input.region,
       wastedRevealed: input.wastedRevealed ?? false,
-      riverRevision: input.riverRevision ?? 0,
+      revision: input.revision ?? 0,
     };
     const request: BakeRequest = {
       id,
@@ -98,6 +100,7 @@ export class WaterMaskBaker {
       generation: input.generation,
       wastedRevealed: input.wastedRevealed,
       noFoamHexes: input.noFoamHexes,
+      landHexes: input.landHexes,
     };
     this.worker.postMessage(request);
     return null;
@@ -130,7 +133,7 @@ export class WaterMaskBaker {
       pending.region,
       response.bakeMs,
       pending.wastedRevealed,
-      pending.riverRevision,
+      pending.revision,
     );
   }
 }

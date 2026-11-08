@@ -1027,6 +1027,31 @@ export class WorldModel {
   }
 
   /**
+   * The bog hexes (lake or bog) on hexes the seed alone calls sea: an enclosed sea pocket the bog turned into a lake
+   * (`bogGenerator.findPockets`). The water mask calls them land (`isLandOrLake`), but the bake worker only knows the
+   * seed, so they travel to it as a list like `riverMouthHexKeys`. Packed with `terrainKey`.
+   */
+  seaBogHexKeys(): number[] {
+    if (this.seaBogHexKeysCache?.revision === this.overlayRevision) return this.seaBogHexKeysCache.keys;
+    const world = { seed: this.seed, generation: this.generation };
+    const keys: number[] = [];
+    for (const bog of this.bogByHex.values()) {
+      if (terrainAt(bog.q, bog.r, world) === 'sea') keys.push(terrainKey(bog.q, bog.r));
+    }
+    this.seaBogHexKeysCache = { revision: this.overlayRevision, keys };
+    return keys;
+  }
+  private seaBogHexKeysCache: { revision: number; keys: number[] } | null = null;
+
+  /**
+   * Moves whenever an input of the water mask that the seed can't give changes: the river mouths (no-foam field) and the
+   * bog overlay (`seaBogHexKeys`). Both revisions only grow, so their sum moves whenever either does.
+   */
+  get waterMaskRevision(): number {
+    return this.riverRevision + this.overlayRevision;
+  }
+
+  /**
    * Everything an island's picture is made of: land and the bog lakes among it (not the sea).
    * Also what the water mask calls land: a bog lake is drawn by its own art, never by the sea's
    * water shader, so the shader (foam included) must stop at the sea's coast.
