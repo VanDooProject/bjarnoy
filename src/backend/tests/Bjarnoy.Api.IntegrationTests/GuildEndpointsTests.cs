@@ -419,6 +419,167 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
         Assert.Equal("TreatyCapReached", await second.RejectionAsync(Ct));
     }
 
+    /// <summary>Founds a guild as <paramref name="leader"/> and returns it.</summary>
+    private async Task<GuildResponse> FoundGuildAsync(HttpClient client, AuthResponse leader, string tag)
+    {
+        Authorize(client, leader.AccessToken);
+        var worldId = await WorldOfAsync(leader.User.Id);
+        return await (await client.PostJsonAsync(
+            $"/api/v1/worlds/{worldId}/guilds", new CreateGuildRequest(Unique("Hird"), tag, null), Ct))
+            .ReadStrictAsync<GuildResponse>(Ct);
+    }
+
+    /// <summary>
+    /// A fresh player with a real settlement in the world, on a client of its own (a client already authorised as someone else would found
+    /// under that account and be refused), at least the minimum distance from every settlement already standing.
+    /// </summary>
+    private async Task<AuthResponse> JoinAnonymouslyAsync(Guid worldId)
+    {
+        using var fresh = Client();
+        var islands = await fresh.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+
+        List<(int Q, int R)> taken;
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            taken = (await db.Settlements.AsNoTracking().Where(s => s.WorldId == worldId)
+                    .Select(s => new { s.CentreQ, s.CentreR }).ToListAsync(Ct))
+                .Select(s => (s.CentreQ, s.CentreR)).ToList();
+        }
+
+        static int Distance(int q1, int r1, int q2, int r2) =>
+            (Math.Abs(q1 - q2) + Math.Abs(q1 + r1 - q2 - r2) + Math.Abs(r1 - r2)) / 2;
+
+        var (islandId, q, r) = islands!
+            .SelectMany(i => i.StartPositions.Select(p => (i.Id, p.Q, p.R)))
+            .First(p => taken.All(t => Distance(t.Q, t.R, p.Q, p.R) >= 15));
+
+        var ownerId = Unique("owner");
+        var found = await fresh.PostJsonAsync(
+            $"/api/v1/worlds/{worldId}/settlements",
+            new FoundSettlementRequest(islandId, q, r, Unique("Stad"), Unique("Jarl"), ownerId),
+            Ct);
+        Assert.True(found.IsSuccessStatusCode, await found.Content.ReadAsStringAsync(Ct));
+
+        return await RegisterAsync(fresh, ownerId);
+    }
+
+    private async Task<Guid> WorldOfAsync(Guid userId)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        return await db.Settlements.AsNoTracking().Where(s => s.UserId == userId).Select(s => s.WorldId).FirstAsync(Ct);
+    }
+
+    /// <summary>
+    /// Moves each user's settlement next to the first user's, inside the fog the first user explores, so the world list shows them all.
+    /// </summary>
+    private async Task GatherSettlementsAsync(params AuthResponse[] players)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        var anchor = await db.Settlements.FirstAsync(s => s.UserId == players[0].User.Id, Ct);
+        for (var i = 1; i < players.Length; i++)
+        {
+            var moved = await db.Settlements.FirstAsync(s => s.UserId == players[i].User.Id, Ct);
+            moved.CentreQ = anchor.CentreQ + i;
+            moved.CentreR = anchor.CentreR;
+        }
+
+        await db.SaveChangesAsync(Ct);
+    }
+
+    private async Task<Dictionary<Guid, SettlementSummary>> ListAsSeenByAsync(HttpClient client, AuthResponse caller, Guid worldId)
+    {
+        Authorize(client, caller.AccessToken);
+        var list = await client.GetFromJsonAsync<List<SettlementSummary>>(
+            $"/api/v1/worlds/{worldId}/settlements", SqliteApiFixture.StrictJson, Ct);
+        return list!.ToDictionary(s => s.Id);
+    }
+
+    private async Task<Guid> SettlementIdOfAsync(AuthResponse player)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        return await db.Settlements.AsNoTracking().Where(s => s.UserId == player.User.Id).Select(s => s.Id).FirstAsync(Ct);
+    }
+
+    [Fact]
+    public async Task World_list_tells_own_guild_treaty_and_rival_settlements_apart()
+    {
+        using var client = Client();
+        var (leaderA, worldId, _) = await RegisterWithSettlementAsync(client);
+        var guildA = await FoundGuildAsync(client, leaderA, "RL1");
+
+        var mateA = await JoinAnonymouslyAsync(worldId);
+        Authorize(client, mateA.AccessToken);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostJsonAsync($"/api/v1/guilds/{guildA.Id}/join", new { }, Ct)).StatusCode);
+
+        var leaderB = await JoinAnonymouslyAsync(worldId);
+        var guildB = await FoundGuildAsync(client, leaderB, "RL2");
+
+        var stranger = await JoinAnonymouslyAsync(worldId);
+
+        Authorize(client, leaderA.AccessToken);
+        var proposed = await (await client.PostJsonAsync(
+            $"/api/v1/guilds/{guildA.Id}/treaties", new ProposeTreatyRequest(guildB.Id), Ct))
+            .ReadStrictAsync<GuildTreatyResponse>(Ct);
+        Authorize(client, leaderB.AccessToken);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostJsonAsync($"/api/v1/treaties/{proposed.Id}/accept", new { }, Ct)).StatusCode);
+
+        await GatherSettlementsAsync(leaderA, mateA, leaderB, stranger);
+        var own = await SettlementIdOfAsync(leaderA);
+        var mate = await SettlementIdOfAsync(mateA);
+        var treaty = await SettlementIdOfAsync(leaderB);
+        var rival = await SettlementIdOfAsync(stranger);
+
+        var seen = await ListAsSeenByAsync(client, leaderA, worldId);
+
+        Assert.Equal(("mine", true), (seen[own].Relation, seen[own].Mine));
+        Assert.Equal(("guild", false), (seen[mate].Relation, seen[mate].Mine));
+        Assert.Equal(("treaty", false), (seen[treaty].Relation, seen[treaty].Mine));
+        Assert.Equal(("rival", false), (seen[rival].Relation, seen[rival].Mine));
+
+        // The treaty runs both ways.
+        var fromTheOtherSide = await ListAsSeenByAsync(client, leaderB, worldId);
+        Assert.Equal("treaty", fromTheOtherSide[own].Relation);
+        Assert.Equal("treaty", fromTheOtherSide[mate].Relation);
+    }
+
+    [Fact]
+    public async Task A_treaty_that_is_only_proposed_does_not_make_the_other_guild_an_ally()
+    {
+        using var client = Client();
+        var (leaderA, worldId, _) = await RegisterWithSettlementAsync(client);
+        var guildA = await FoundGuildAsync(client, leaderA, "RP1");
+        var leaderB = await JoinAnonymouslyAsync(worldId);
+        var guildB = await FoundGuildAsync(client, leaderB, "RP2");
+
+        Authorize(client, leaderA.AccessToken);
+        await client.PostJsonAsync($"/api/v1/guilds/{guildA.Id}/treaties", new ProposeTreatyRequest(guildB.Id), Ct);
+
+        await GatherSettlementsAsync(leaderA, leaderB);
+        var seen = await ListAsSeenByAsync(client, leaderA, worldId);
+
+        Assert.Equal("rival", seen[await SettlementIdOfAsync(leaderB)].Relation);
+    }
+
+    [Fact]
+    public async Task A_player_in_no_guild_sees_every_other_settlement_as_a_rival()
+    {
+        using var client = Client();
+        var (leaderA, worldId, _) = await RegisterWithSettlementAsync(client);
+        await FoundGuildAsync(client, leaderA, "RN1");
+        var loner = await JoinAnonymouslyAsync(worldId);
+
+        await GatherSettlementsAsync(loner, leaderA);
+        var seen = await ListAsSeenByAsync(client, loner, worldId);
+
+        Assert.Equal("mine", seen[await SettlementIdOfAsync(loner)].Relation);
+        Assert.Equal("rival", seen[await SettlementIdOfAsync(leaderA)].Relation);
+    }
+
     [Fact]
     public async Task Mutating_routes_refuse_an_unauthenticated_caller()
     {

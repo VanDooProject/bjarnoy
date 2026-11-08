@@ -476,6 +476,8 @@ export interface SettlementSummary {
   islandId: string;
   /** Whether the settlement belongs to the caller. */
   mine: boolean;
+  /** How the owner stands to the caller: `mine`, `guild` (same guild), `treaty` (guild with an active peace treaty) or `rival`. */
+  relation: 'mine' | 'guild' | 'treaty' | 'rival';
 }
 
 /**

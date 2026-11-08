@@ -1101,7 +1101,7 @@
   },
   "realm": {
     "title": "Extending the realm",
-    "intro": "The ground you hold is your realm, drawn on the map with a gold border. The longhouse claims the first rings round itself; beyond them your realm only grows through towers at its border.",
+    "intro": "The ground you hold is your realm, drawn on the map with a blue border. Other realms show their own colour: green for members of your guild, purple for guilds at peace with yours, red for everyone else. Where two realms meet, you see both borders side by side. The longhouse claims the first rings round itself; beyond them your realm only grows through towers at its border.",
     "claim": {
       "heading": "Your longhouse's claim",
       "body": "The {longhouse} claims every hex up to {level1} hexes away from it at level 1, and up to {level2} hexes from level 2 on. That is as far as it reaches: higher longhouse levels do not move the border any further.",
@@ -1119,7 +1119,7 @@
     },
     "example": {
       "heading": "An example",
-      "alt": "An example island with the longhouse near its middle, the gold border round the ground it claims, and the towers that push the border out.",
+      "alt": "An example island with the longhouse near its middle, the blue border round the ground it claims, and the towers that push the border out.",
       "step": "Step",
       "steps": {
         "1": "Step 1: a level-2 longhouse on its own. Its claim reaches 3 hexes out, and that is where the border stops.",

@@ -1337,6 +1337,7 @@ export const useWorldStore = defineStore('world', {
           foundedAt: Date.now(),
           realmId: summary.realmId,
           islandId: summary.islandId,
+          relation: summary.relation === 'guild' || summary.relation === 'treaty' ? summary.relation : undefined,
         });
       }
     },

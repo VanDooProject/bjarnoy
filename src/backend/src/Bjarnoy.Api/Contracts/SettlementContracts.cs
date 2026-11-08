@@ -507,17 +507,53 @@ public sealed record BuildingDefinitionResponse(
 /// <param name="Name">The linked realm's name (the oldest member's), the same on every longhouse of the realm.</param>
 /// <param name="Mine">Whether the settlement belongs to the caller (never the owner or user id itself).</param>
 /// <param name="RealmId">The oldest member of the linked realm this settlement belongs to (itself when it stands alone).</param>
+/// <param name="Relation">How the owner stands to the caller, which picks the realm colour: <c>mine</c>, <c>guild</c> (same guild), <c>treaty</c> (guild with an active peace treaty) or <c>rival</c>.</param>
 public sealed record SettlementSummary(
-    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine, Guid RealmId)
+    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine, Guid RealmId, string Relation)
 {
-    public static SettlementSummary From(SettlementEntity s, bool mine, RealmLabel realm)
+    public static SettlementSummary From(SettlementEntity s, bool mine, RealmLabel realm, string relation)
     {
         ArgumentNullException.ThrowIfNull(s);
 
         return new SettlementSummary(
             s.Id, realm.Name, s.OwnerName, s.CentreQ, s.CentreR,
             s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
-            s.IslandId, mine, realm.RealmId);
+            s.IslandId, mine, realm.RealmId, relation);
+    }
+}
+
+/// <summary>The wire values of <see cref="SettlementSummary.Relation"/> and how a caller's relation to a settlement's owner is worked out.</summary>
+public static class SettlementRelations
+{
+    public const string Mine = "mine";
+    public const string Guild = "guild";
+    public const string Treaty = "treaty";
+    public const string Rival = "rival";
+
+    /// <summary>
+    /// A lookup from settlement to its relation for the caller: <c>mine</c> per <paramref name="isMine"/>, else <c>guild</c> or
+    /// <c>treaty</c> through <see cref="GuildRelations"/>, else <c>rival</c>. An anonymous caller (no user id) is in no guild, so
+    /// everything that is not theirs is a rival. Loads the guild data once, not per settlement.
+    /// </summary>
+    public static async Task<Func<SettlementEntity, string>> ForCallerAsync(
+        GameDbContext db, Guid worldId, Guid? callerUserId, Func<SettlementEntity, bool> isMine, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(isMine);
+        var guildRelation = callerUserId is not null
+            ? await GuildRelations.LoadAsync(db, worldId, cancellationToken)
+            : null;
+
+        return s =>
+        {
+            if (isMine(s)) return Mine;
+            if (guildRelation is null || callerUserId is not { } caller) return Rival;
+            return guildRelation(caller, s.UserId) switch
+            {
+                GuildRelation.SameGuild => Guild,
+                GuildRelation.Treaty => Treaty,
+                _ => Rival,
+            };
+        };
     }
 }
 

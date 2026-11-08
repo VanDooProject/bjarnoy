@@ -2239,8 +2239,9 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
 });
 
 describe('useWorldStore live realm membership', () => {
-  const summary = (id: string, mine: boolean, realmId = id) => ({
+  const summary = (id: string, mine: boolean, realmId = id, relation: 'guild' | 'treaty' | 'rival' = 'rival') => ({
     id, realmId, name: id, ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-1', mine,
+    relation: mine ? ('mine' as const) : relation,
   });
 
   it("registers the player's own settlements under the player id and everyone else as rivals", async () => {
@@ -2251,6 +2252,23 @@ describe('useWorldStore live realm membership', () => {
 
     expect(store.model.getSettlement('own-other')?.ownerId).toBe('player-1');
     expect(store.model.getSettlement('rival')?.ownerId).toBe('rival');
+  });
+
+  it('keeps a guild or treaty relation on the settlement and leaves rivals and own ones without', async () => {
+    const store = await loadStoreModule(false);
+    store.ownerId = 'player-1';
+
+    store.registerSettlementSummaries([
+      summary('mate', false, 'mate', 'guild'),
+      summary('partner', false, 'partner', 'treaty'),
+      summary('rival', false),
+      summary('own-other', true),
+    ]);
+
+    expect(store.model.getSettlement('mate')?.relation).toBe('guild');
+    expect(store.model.getSettlement('partner')?.relation).toBe('treaty');
+    expect(store.model.getSettlement('rival')?.relation).toBeUndefined();
+    expect(store.model.getSettlement('own-other')?.relation).toBeUndefined();
   });
 
   it("forwards the response's realm to the model", async () => {
@@ -2360,7 +2378,7 @@ describe('useWorldStore linked realms', () => {
   it('registerSettlementSummaries stores the realmId', async () => {
     const store = await loadStoreModule(false);
     store.registerSettlementSummaries([
-      { id: 'r2', realmId: 'r1', name: 'Rival', ownerName: 'Bo', q: 5, r: 5, longhouseLevel: 1, islandId: 'i', mine: false },
+      { id: 'r2', realmId: 'r1', name: 'Rival', ownerName: 'Bo', q: 5, r: 5, longhouseLevel: 1, islandId: 'i', mine: false, relation: 'rival' },
     ]);
 
     expect(store.model.getSettlement('r2')?.realmId).toBe('r1');
