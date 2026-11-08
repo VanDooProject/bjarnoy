@@ -115,17 +115,19 @@ async function claim(q: QuestResponse) {
     :aria-label="t('quests.open')"
     @click="expanded = true"
   >
-    <svg class="quest-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M18 17V6a2 2 0 0 0-2-2H5" />
-      <path d="M8 20h11a2 2 0 0 0 2-2v-.5a.5.5 0 0 0-.5-.5H10.5a.5.5 0 0 0-.5.5v.5a2 2 0 1 1-4 0V6a2 2 0 1 0-4 0v1.5a.5.5 0 0 0 .5.5H6" />
-      <path d="M10 9h5M10 12.5h5" />
-    </svg>
+    <span class="quest-icon-wrap">
+      <svg class="quest-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M18 17V6a2 2 0 0 0-2-2H5" />
+        <path d="M8 20h11a2 2 0 0 0 2-2v-.5a.5.5 0 0 0-.5-.5H10.5a.5.5 0 0 0-.5.5v.5a2 2 0 1 1-4 0V6a2 2 0 1 0-4 0v1.5a.5.5 0 0 0 .5.5H6" />
+        <path d="M10 9h5M10 12.5h5" />
+      </svg>
+      <span v-if="hasNew" class="quest-dot" data-testid="quest-ready-dot" aria-hidden="true" />
+    </span>
     <span class="strip-text">
       <span class="strip-title" data-testid="quest-strip-title">{{ t(`quests.items.${current.id}.title`) }}</span>
       <QuestProgress v-if="currentProgress" compact :kind="currentProgress.kind" :progress="currentProgress.progress" />
     </span>
     <span class="strip-chevron" aria-hidden="true" />
-    <span v-if="hasNew" class="quest-dot" data-testid="quest-ready-dot" aria-hidden="true" />
   </button>
   <aside v-else-if="current" key="card" class="quest-tray" data-testid="quest-tray" :aria-label="t('quests.title')">
     <div class="quest-header">
@@ -445,9 +447,15 @@ async function claim(q: QuestResponse) {
 .quest-swap-leave-to {
   opacity: 0;
 }
+/* The dot sits on the quest icon, not on the strip's corner. */
+.quest-icon-wrap {
+  position: relative;
+  flex: none;
+  display: grid;
+}
 .quest-dot {
   position: absolute;
-  top: -4px;
+  top: -3px;
   right: -4px;
   width: 9px;
   height: 9px;
