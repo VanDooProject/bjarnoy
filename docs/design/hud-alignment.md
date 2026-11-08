@@ -71,10 +71,10 @@ its pre-founding state). `HudNav`'s pills were also restyled to plain uppercase 
 
 **Storage cap + fill bar:** the reference also shows a max/cap and a fill-progress underline for each of the
 four base resources (e.g. "4,965 / 12,000"). No storage-cap field exists anywhere in the data model
-(`Resources`, `Settlement`, the backend) for wood/stone/food/iron — only population had a real `max`. Rather
+(`Resources`, `Settlement`, the backend) for wood/brick/food/iron — only population had a real `max`. Rather
 than leave the pills capless, `WorldModel.storageCapFor()` derives a per-resource cap the same way
 `populationFor` derives population — client-side, from the longhouse level, with a different base per
-resource (wood/stone/food/iron aren't all the same number in the reference either) so the caps read as
+resource (wood/brick/food/iron aren't all the same number in the reference either) so the caps read as
 varied rather than one flat value repeated four times. `stores/world.ts`'s `syncHud()` now sets
 `hud.storageCap` alongside `hud.resources`/`hud.rates`, and `ResourceBar` renders `current/cap` plus a
 thin fill-percentage bar under every pill (population included, reusing its already-real `max`). Same

@@ -168,7 +168,7 @@ export function newPlacementDisabled(type: string): boolean {
 }
 
 /**
- * The exact shortfall against `cost`, e.g. "40 Wood, 15 Stone" — omits any
+ * The exact shortfall against `cost`, e.g. "40 Wood, 15 Brick" — omits any
  * resource `stock` already covers. Mirrors `trainingEconomy.ts`'s
  * `formatCostLine` (which shows the whole price), but for what's still
  * missing: a disabled Upgrade/Build bubble's hint needs to say precisely what

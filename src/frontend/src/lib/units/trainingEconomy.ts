@@ -113,7 +113,7 @@ export function formatTrainingDuration(seconds: number, count: number): string {
   return `${s}s`;
 }
 
-/** `"80 Wood · 40 Stone · ..."`, omitting any resource that costs 0. */
+/** `"80 Wood · 40 Brick · ..."`, omitting any resource that costs 0. */
 export function formatCostLine(cost: ResourceLine): string {
   return RESOURCE_KEYS.filter((key) => cost[key] > 0)
     .map((key) => `${cost[key]} ${resourceName(key)}`)

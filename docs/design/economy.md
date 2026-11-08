@@ -23,10 +23,10 @@ formula changes, re-run the lab and check all of them.
 
 ## 2. Resources
 
-Wood, Stone, Food, Iron.
+Wood, Brick, Food, Iron. (The internal key stays `stone` in the API, stores and i18n keys; the German name is Stein.)
 
 - **Wood** — Lumberjack (forest).
-- **Stone** — the **Clay Brickworks** on bog ground is the start's stone
+- **Brick** — the **Clay Brickworks** on bog ground is the start's brick
   source: bog is guaranteed in reach of every start (§8, `bog.md`), a
   mountain is not. Where a mountain is in reach, the **Quarry** is an
   alternative. Both unlock at LH 1.
@@ -61,10 +61,10 @@ per level: the next level is always worth building, just less obviously.
 
 ### Level-1 values
 
-| Building | C₁ wood/stone/food | P₁ /h | t₁ min |
+| Building | C₁ wood/brick/food | P₁ /h | t₁ min |
 |---|---|---|---|
 | Producers (Lumberjack, Quarry, Clay, Herder, Farm, Fishing) | 50 / 40 / 15 | 40 | 3 |
-| Longhouse | 120 / 100 / 60 | +15 wood, +12 stone, +15 food per level (linear) | 1.5 |
+| Longhouse | 120 / 100 / 60 | +15 wood, +12 brick, +15 food per level (linear) | 1.5 |
 | Storage House | 80 / 60 / 0 | +600 capacity · 1.22^(L−1) | 2.5 |
 
 (Other buildings: same formulas, `C₁`/`t₁` set per building in the
@@ -154,7 +154,7 @@ If producers could never outlevel the Longhouse, an active player's economy
 would stall at the cap while the Longhouse (the slow, expensive upgrade)
 catches up, and a casual player who checks in twice a day would close the gap.
 Capping producers by storage lets an active player's production run ahead.
-Simulator result, production per hour (wood + stone + food) of an active
+Simulator result, production per hour (wood + brick + food) of an active
 player (awake 07–23) relative to one checking in twice a day, 3 of each
 producer:
 
@@ -282,7 +282,7 @@ The settlement's wall, built **one hex at a time** (`BuildingType.Palisade` 30 a
 `BuildingType.PalisadeGate` 31, wire ids `palisade` and `palisadegate`; they share
 one tech-tree card, "Palisade / Gate", in the LH 7 row). It unlocks at Longhouse 7
 behind a level-5 Tower, and has **3 levels**. Per hex it costs `C₁ = 40 wood /
-10 stone`, no food, and takes `t₁ = 2 min` at level 1, with the standard growth
+10 brick`, no food, and takes `t₁ = 2 min` at level 1, with the standard growth
 (cost ×1.30 and time ×1.33 per level). It has no production, storage or claim.
 
 **Placement** (`Settlement.PlanBuild`, `Palisades/PalisadeRules.cs`; the frontend
@@ -403,9 +403,9 @@ is impassable to every land army (`troop-movement-range.md` section 5); a bridge
 only way to open one. It unlocks at Longhouse 7 behind a level-1 Town Square, has **4
 levels** (a causeway, a footbridge, a king's bridge and a guarded bridge), and no
 production, storage or claim. Costs and times are set per level (no cost growth), wood-heavy,
-with stone from level 3 and no iron:
+with brick from level 3 and no iron:
 
-| Level | Name | Wood | Stone | Food | Iron | Time |
+| Level | Name | Wood | Brick | Food | Iron | Time |
 |---|---|---|---|---|---|---|
 | 1 | Causeway | 120 | 0 | 20 | 0 | 10 min |
 | 2 | Footbridge | 220 | 0 | 30 | 0 | 20 min |
@@ -479,7 +479,7 @@ A new settlement needs:
 Travian's celebrations.
 
 - A feast needs a standing Town Square; its level TS sets the numbers.
-- It costs `800 · 1.25^(TS−1)` of each of wood, stone and food, paid up front.
+- It costs `800 · 1.25^(TS−1)` of each of wood, brick and food, paid up front.
 - It runs for 12 h and then grants `3 500 · 1.15^(TS−1)` renown to the account.
 - Only one feast can run at a time per settlement. It does not use a
   construction slot.
@@ -558,7 +558,7 @@ their renown.
 ## 7. First 10 minutes (T1)
 
 - Founding stock: the starting storage nearly full — capacity (500 base +
-  250 from the Longhouse) less 50, so 700 wood / 700 stone / 700 food, no
+  250 from the Longhouse) less 50, so 700 wood / 700 brick / 700 food, no
   iron.
 - Level-1 producers cost 50 / 40 / 15 and build in 3 min; the Longhouse is
   +15 / 12 / 15 per level.
@@ -572,7 +572,7 @@ their renown.
   The quests come in this order (`Bjarnoy.Domain.Settlers.Quests`, mirrored
   for demo mode in `src/frontend/src/lib/quests.ts`):
 
-  | # | Quest | Condition | Reward (wood / stone / food) |
+  | # | Quest | Condition | Reward (wood / brick / food) |
   |---|---|---|---|
   | 1 | 3 producers built | 3 standing resource producers | 150 / 120 / 80 |
   | 2 | Longhouse 2 | Longhouse level 2 or more | 250 / 200 / 150 |
@@ -598,7 +598,7 @@ their renown.
     payment. A second settlement has its own list.
   - **Only standing buildings count.** Queued and under-construction orders do
     not; a producer is any building (other than the Longhouse) that yields
-    wood, stone, food or iron of its own, so storage, towers and the
+    wood, brick, food or iron of its own, so storage, towers and the
     radius-boost buildings (Sawmill, Crop Mill) do not.
   - **Clamped to storage.** The reward is deposited like any other income, so
     whatever would exceed a resource's storage capacity is lost; the tray
@@ -692,7 +692,7 @@ Why 20: iron is the indirect gate for the army, so it must stay scarcer than
 wood. A unit costs about half as much iron as wood (Spearman 40 iron / 80
 wood, Karve 100 / 250, Catapult 250 / 300), so iron income at about **half of
 wood income** makes both equally binding. With the default three bog-ore
-works the lab (three producers each of wood, stone and food, two storage
+works the lab (three producers each of wood, brick and food, two storage
 houses, producers up to three levels ahead) gives iron/wood 0.44 to 0.49 from
 Longhouse 8 on; one works gives 0.16, so a settlement with one works is
 iron-limited. P₁ 40 gave 0.9 (iron never binds), P₁ 10 gave 0.23.

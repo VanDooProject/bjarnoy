@@ -22,7 +22,7 @@
   },
   "stocks": {
     "wood": "Wood {stock} / {capacity}",
-    "stone": "Stone {stock} / {capacity}",
+    "stone": "Brick {stock} / {capacity}",
     "food": "Food {stock} / {capacity}",
     "iron": "Iron {stock} / {capacity}"
   },
