@@ -23,6 +23,7 @@
     "animations": "Animations"
   },
   "login": "Log in",
+  "howToPlay": "How to play",
   "enterWorld": "Enter world",
   "play": "Play the saga",
   "playIntro": "Play intro",
@@ -50,7 +51,8 @@
     "map": "Go to the map",
     "mapLoading": "Go to the map · loading {pct} %",
     "mapArmed": "Opens when loaded · {pct} %",
-    "ready": "ready"
+    "ready": "ready",
+    "impressum": "Impressum"
   },
   "beats": {
     "fire": "Listen! Come closer to the fire, and hear how the jarls lost their home.",

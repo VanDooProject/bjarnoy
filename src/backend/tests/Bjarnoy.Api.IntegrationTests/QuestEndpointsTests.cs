@@ -73,6 +73,8 @@ public sealed class QuestEndpointsTests : IAsyncLifetime
             Assert.False(q.Claimed);
         });
         Assert.Equal(250, settlement.Quests.Single(q => q.Id == "longhouse2").Reward.Wood);
+        Assert.Equal(new QuestProgressResponse(0, 3), settlement.Quests.Single(q => q.Id == "tower3").Progress);
+        Assert.Null(settlement.Quests.Single(q => q.Id == "hunt1").Progress);
     }
 
     [Fact]

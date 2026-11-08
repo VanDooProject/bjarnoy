@@ -172,6 +172,9 @@ public sealed record Settlement
     public int LonghouseLevel =>
         Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
 
+    /// <summary>The level of the highest standing Tower (0 when there is none). Completes the onboarding quest <c>tower3</c>.</summary>
+    public int TowerLevel => HighestLevelOf(BuildingType.Tower);
+
     /// <summary>
     /// The level of this settlement's best building of <paramref name="type"/>,
     /// or 0 when it has none. A settlement may hold several buildings of one

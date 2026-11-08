@@ -52,6 +52,7 @@ const state = shallowRef<IntroState>({
   offsetMs: 0,
   seq: 0,
   waiting: false,
+  closed: false,
 });
 // A seek switches scene and narration at once (no crossfade); a beat change on the timers fades again.
 const instant = ref(false);
@@ -392,18 +393,29 @@ onBeforeUnmount(() => {
       </button>
     </Transition>
 
-    <Transition name="intro-fade">
-      <button
-        v-if="loginVisible"
-        type="button"
-        class="intro-btn login"
-        data-testid="intro-login"
-        :data-login-state="loggedIn ? 'enter' : 'login'"
-        @click="onLogin()"
-      >
-        {{ introText(locale, loggedIn ? 'enterWorld' : 'login') }}
-      </button>
-    </Transition>
+    <div class="topright">
+      <Transition name="intro-fade">
+        <a v-if="showLanding" class="howto" href="/docs" data-testid="landing-how-to-play">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1z" />
+            <path d="M12 6v14" />
+          </svg>
+          {{ introText(locale, 'howToPlay') }}
+        </a>
+      </Transition>
+      <Transition name="intro-fade">
+        <button
+          v-if="loginVisible"
+          type="button"
+          class="intro-btn login"
+          data-testid="intro-login"
+          :data-login-state="loggedIn ? 'enter' : 'login'"
+          @click="onLogin()"
+        >
+          {{ introText(locale, loggedIn ? 'enterWorld' : 'login') }}
+        </button>
+      </Transition>
+    </div>
 
     <div class="actions">
       <Transition name="intro-fade">
@@ -543,9 +555,32 @@ onBeforeUnmount(() => {
   gap: 8px;
   pointer-events: none;
 }
-.intro-btn.login {
+/* top-right: "How to play" link left of the login button, vertically centred with it */
+.topright {
+  position: absolute;
   top: max(16px, env(safe-area-inset-top));
   right: max(16px, env(safe-area-inset-right));
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.topright .intro-btn.login {
+  position: static;
+}
+.howto {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #f4f1ea;
+  font-size: 15px;
+  text-decoration: none;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
+}
+.howto:hover,
+.howto:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 /*
  * Idle: the controls fade back. Opacity only. The enter/leave states of the intro-fade transition (also opacity)
@@ -553,7 +588,8 @@ onBeforeUnmount(() => {
  */
 .landing-intro.is-idle .actions .intro-btn:not(.is-fresh):not(.intro-fade-enter-from):not(.intro-fade-leave-to),
 .landing-intro.is-idle .ctrl:not(.intro-fade-enter-from):not(.intro-fade-leave-to),
-.landing-intro.is-idle .intro-btn.login:not(.intro-fade-enter-from):not(.intro-fade-leave-to) {
+.landing-intro.is-idle .intro-btn.login:not(.intro-fade-enter-from):not(.intro-fade-leave-to),
+.landing-intro.is-idle .howto:not(.intro-fade-enter-from):not(.intro-fade-leave-to) {
   opacity: 0.35;
   transition: opacity 600ms ease;
 }
@@ -562,7 +598,9 @@ onBeforeUnmount(() => {
 .landing-intro.is-idle .ctrl:not(.intro-fade-enter-from):not(.intro-fade-leave-to):hover,
 .landing-intro.is-idle .ctrl:not(.intro-fade-enter-from):not(.intro-fade-leave-to):focus-within,
 .landing-intro.is-idle .intro-btn.login:not(.intro-fade-enter-from):not(.intro-fade-leave-to):hover,
-.landing-intro.is-idle .intro-btn.login:not(.intro-fade-enter-from):not(.intro-fade-leave-to):focus-visible {
+.landing-intro.is-idle .intro-btn.login:not(.intro-fade-enter-from):not(.intro-fade-leave-to):focus-visible,
+.landing-intro.is-idle .howto:not(.intro-fade-enter-from):not(.intro-fade-leave-to):hover,
+.landing-intro.is-idle .howto:not(.intro-fade-enter-from):not(.intro-fade-leave-to):focus-visible {
   opacity: 1;
 }
 .actions .intro-btn {

@@ -5,6 +5,8 @@ dedicated cleanup passes (see "Where these came from" at the bottom). Apply them
 that touches the UI** — when you change a flow, check the surfaces around it against this list and clean up what
 the change made stale. Don't defer it to a later cleanup.
 
+For the words in the UI, see [copy-guidelines.md](copy-guidelines.md).
+
 ## 1. No leftover actions
 
 - Every button must do something that can succeed for the player who sees it. A button that can only fail

@@ -10,10 +10,17 @@
   "rewardLabel": "Reward",
   "overflowNote": "Some of this reward won't fit in storage.",
   "claimError": "Couldn't claim that reward. Try again.",
+  "more": "More",
+  "less": "Less",
+  "left": {
+    "build": "{n} more to build | {n} more to build",
+    "train": "{n} more to train | {n} more to train",
+    "level": "1 level to go | {n} levels to go"
+  },
   "items": {
     "producers3": {
       "title": "Build 3 resource producers",
-      "hint": "Place Lumberjacks, Quarries or Reindeer Herders on free hexes and let them finish building."
+      "hint": "Place Lumberjacks, Reindeer Herders or Clay Brickworks on free hexes and let them finish building."
     },
     "longhouse2": {
       "title": "Upgrade your Longhouse to level 2",
@@ -25,11 +32,15 @@
     },
     "producers6": {
       "title": "Build 6 resource producers",
-      "hint": "Keep adding Lumberjacks, Quarries and Reindeer Herders until six of them stand."
+      "hint": "Keep adding Lumberjacks, Reindeer Herders and Clay Brickworks until six of them stand."
     },
     "longhouse3": {
       "title": "Upgrade your Longhouse to level 3",
       "hint": "Open the Longhouse and choose Upgrade again."
+    },
+    "tower3": {
+      "title": "Build a Tower to level 3",
+      "hint": "Place your Tower at the edge of your realm, facing the land you want to claim next: each level claims one more ring around it. Level 3 unlocks the Barracks."
     },
     "longhouse5": {
       "title": "Upgrade your Longhouse to level 5",

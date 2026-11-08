@@ -414,6 +414,8 @@ export interface QuestResponse {
   completed: boolean;
   claimed: boolean;
   reward: ResourceLine;
+  /** Counted progress toward the goal; null/absent for a quest without one. */
+  progress?: { current: number; target: number } | null;
 }
 
 /** One connected claim disc of a realm, exactly as the server resolves it. */
