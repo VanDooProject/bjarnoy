@@ -1044,12 +1044,15 @@ watch(
          strip of screen near the bottom — the tray steps aside while the
          ring is open and reappears the moment it closes. Desktop has room
          for both at once and keeps showing it. -->
-    <OnboardingChecklist
-      v-if="!joinBlocked && !guidance.complete && !showReturningLoginGate && !(isCompactHudLanding && ringScreen)"
-      :guidance="guidance"
-      :can-focus="!!pointerTarget && mapDrawn"
-      @focus="pointerNudge++"
-    />
+    <!-- The stepper fades out when it goes; after the last step it stays a moment first so the finishing wave plays. -->
+    <Transition :name="guidance.complete ? 'steps-done' : 'steps'">
+      <OnboardingChecklist
+        v-if="!joinBlocked && !guidance.complete && !showReturningLoginGate && !(isCompactHudLanding && ringScreen)"
+        :guidance="guidance"
+        :can-focus="!!pointerTarget && mapDrawn"
+        @focus="pointerNudge++"
+      />
+    </Transition>
 
     <template v-if="player.hasFoundedSettlement">
       <QueueDrawer v-if="isMobile" v-model:open="queueDrawerOpen" @select="onQueueSelect" />
@@ -1294,5 +1297,22 @@ watch(
     text-align: left;
     font-size: 11.5px;
   }
+}
+
+/* the stepper's leave: a plain fade (150ms with reduced motion, see OnboardingChecklist); after the last step it waits for the finishing wave */
+.steps-leave-active,
+.steps-done-leave-active {
+  transition: opacity 300ms ease;
+}
+.steps-done-leave-active {
+  transition-delay: 1.3s;
+}
+.steps-leave-to,
+.steps-done-leave-to {
+  opacity: 0;
+}
+html[data-hud-motion='reduced'] .steps-leave-active,
+html[data-hud-motion='reduced'] .steps-done-leave-active {
+  transition: opacity 150ms ease;
 }
 </style>

@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import OnboardingChecklist from './OnboardingChecklist.vue';
 import { deriveOnboardingGuidance } from '../../lib/map/onboardingGuidance';
 import { createTestI18n } from '../../test/i18n';
 import enLanding from '../../i18n/locales/en/landing.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
+import { motionPreferences } from '../../lib/perf/motionPreferences';
 
 function mountChecklist(hasFounded: boolean, placedTypes: string[] = [], canFocus = false) {
   return mount(OnboardingChecklist, {
@@ -35,7 +36,7 @@ describe('OnboardingChecklist', () => {
 
   it('draws one numbered node per step and one line segment between each pair', () => {
     const wrapper = mountChecklist(false, []);
-    expect(wrapper.findAll('.node').map((n) => n.text())).toEqual(['1', '2', '3']);
+    expect(wrapper.findAll('.node .num').map((n) => n.text())).toEqual(['1', '2', '3']);
     expect(wrapper.findAll('.seg')).toHaveLength(2);
   });
 
@@ -59,16 +60,15 @@ describe('OnboardingChecklist', () => {
     expect(mountChecklist(false, []).get('.step.current .sub').text()).toBe('Click your plot to place it');
   });
 
-  it('a done step shows a check instead of its number and no instruction', () => {
+  it('a done step carries the check (the number fades out in CSS) and no instruction', () => {
     const wrapper = mountChecklist(true, ['longhouse', 'reindeerherder']);
     const done = wrapper.findAll('.step.done');
     expect(done).toHaveLength(2);
     for (const step of done) {
       expect(step.find('.node svg.check').exists()).toBe(true);
-      expect(step.find('.node').text()).toBe('');
       expect(step.find('.sub').exists()).toBe(false);
     }
-    expect(wrapper.get('.step.current .node').text()).toBe('3');
+    expect(wrapper.get('.step.current .num').text()).toBe('3');
   });
 
   it('before founding, only the longhouse step is current and the others are upcoming', () => {
@@ -89,5 +89,52 @@ describe('OnboardingChecklist', () => {
   it('the current step is no button while there is no arrow to poke', () => {
     const wrapper = mountChecklist(true, ['longhouse'], false);
     expect(wrapper.find('button').exists()).toBe(false);
+  });
+
+  describe('progress animation', () => {
+    afterEach(() => {
+      motionPreferences.hud = 'auto';
+    });
+
+    async function finishStep(wrapper: ReturnType<typeof mountChecklist>, placed: string[]) {
+      await wrapper.setProps({ guidance: deriveOnboardingGuidance(true, placed as never) });
+    }
+
+    it('plays nothing on the first render', () => {
+      const wrapper = mountChecklist(true, ['longhouse']);
+      expect(wrapper.findAll('.just-done, .line-in, .ignite')).toHaveLength(0);
+      expect(wrapper.classes()).not.toContain('all-done');
+    });
+
+    it('a current to done change flips that node, runs the ember into the next step and ignites it', async () => {
+      motionPreferences.hud = 'on';
+      const wrapper = mountChecklist(true, ['longhouse']);
+      await finishStep(wrapper, ['longhouse', 'reindeerherder']);
+      const steps = wrapper.findAll('.step');
+      expect(steps[1].classes()).toContain('just-done');
+      expect(steps[2].classes()).toEqual(expect.arrayContaining(['current', 'line-in', 'ignite']));
+      expect(steps[0].classes()).not.toContain('just-done');
+      expect(steps[1].find('.seg .ember').exists()).toBe(true);
+      expect(steps[2].find('.seg .fill').exists()).toBe(true);
+    });
+
+    it('finishing the last step waves all nodes instead of igniting one', async () => {
+      motionPreferences.hud = 'on';
+      const wrapper = mountChecklist(true, ['longhouse', 'reindeerherder']);
+      await finishStep(wrapper, ['longhouse', 'reindeerherder', 'lumberjack']);
+      expect(wrapper.classes()).toContain('all-done');
+      expect(wrapper.findAll('.ignite')).toHaveLength(0);
+      expect(wrapper.findAll('.step')[2].classes()).toContain('just-done');
+    });
+
+    it('with menu animations off the states just change: no animation classes', async () => {
+      motionPreferences.hud = 'off';
+      const wrapper = mountChecklist(true, ['longhouse']);
+      expect(wrapper.classes()).toContain('is-reduced');
+      await finishStep(wrapper, ['longhouse', 'reindeerherder']);
+      expect(wrapper.findAll('.just-done, .line-in, .ignite')).toHaveLength(0);
+      expect(wrapper.findAll('.step')[1].classes()).toContain('done');
+      expect(wrapper.findAll('.step')[2].classes()).toContain('current');
+    });
   });
 });
