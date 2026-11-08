@@ -14,11 +14,16 @@ import { useWorldStore } from '../../stores/world';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enWorlds from '../../i18n/locales/en/worlds.json';
+import enIntro from '../../i18n/locales/en/intro.json';
+import { introMounted } from '../../intro/introSignal';
 
 const { listJoinableWorlds, getWorldMembership } = vi.hoisted(() => ({
   listJoinableWorlds: vi.fn(),
   getWorldMembership: vi.fn(),
 }));
+
+const { mountLandingIntro } = vi.hoisted(() => ({ mountLandingIntro: vi.fn() }));
+vi.mock('../../intro/startLandingIntro', () => ({ mountLandingIntro }));
 
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
@@ -36,17 +41,18 @@ function testRouter() {
       { path: '/login', name: 'login', component: { template: '<div />' } },
       { path: '/register', name: 'register', component: { template: '<div />' } },
       { path: '/settings', name: 'settings', component: { template: '<div />' } },
+      { path: '/docs', name: 'docs', component: { template: '<div />' } },
     ],
   });
 }
 
-async function mountMenu(props: { unclaimedRealm?: boolean } = {}) {
+async function mountMenu(props: { unclaimedRealm?: boolean; landingEntries?: boolean } = {}) {
   const router = testRouter();
   await router.push('/');
   await router.isReady();
   const wrapper = mount(ReturningPlayerMenu, {
     props,
-    global: { plugins: [router, createTestI18n({ hud: enHud, worlds: enWorlds })] },
+    global: { plugins: [router, createTestI18n({ hud: enHud, worlds: enWorlds, intro: enIntro })] },
   });
   return { wrapper, router };
 }
@@ -171,5 +177,57 @@ describe('ReturningPlayerMenu settings row', () => {
     expect(router.currentRoute.value.path).toBe('/settings');
     expect((router.options.history.state as { backgroundView?: unknown }).backgroundView).toBe('/');
     expect(wrapper.find('[data-testid="returning-player-menu"]').exists()).toBe(false);
+  });
+});
+
+describe('ReturningPlayerMenu landing entries', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    listJoinableWorlds.mockReset().mockResolvedValue([]);
+    getWorldMembership.mockReset();
+    mountLandingIntro.mockReset();
+    introMounted.value = false;
+  });
+
+  async function openMenu(props: { landingEntries?: boolean }) {
+    const mounted = await mountMenu(props);
+    await mounted.wrapper.find('[data-testid="returning-player-trigger"]').trigger('click');
+    await flushPromises();
+    return mounted;
+  }
+
+  it('has no Docs, Start page or Play intro row by default', async () => {
+    const { wrapper } = await openMenu({});
+    expect(wrapper.find('[data-testid="returning-player-docs"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="returning-player-start-page"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="returning-player-play-intro"]').exists()).toBe(false);
+  });
+
+  it('links to /docs', async () => {
+    const { wrapper, router } = await openMenu({ landingEntries: true });
+    await wrapper.find('[data-testid="returning-player-docs"]').trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe('/docs');
+  });
+
+  it('plays the intro and closes the menu', async () => {
+    const { wrapper } = await openMenu({ landingEntries: true });
+    await wrapper.find('[data-testid="returning-player-play-intro"]').trigger('click');
+    expect(mountLandingIntro).toHaveBeenCalledWith({ playNow: true });
+    expect(wrapper.find('[data-testid="returning-player-menu"]').exists()).toBe(false);
+  });
+
+  it('opens the start page (the intro waiting for play) and closes the menu', async () => {
+    const { wrapper } = await openMenu({ landingEntries: true });
+    await wrapper.find('[data-testid="returning-player-start-page"]').trigger('click');
+    expect(mountLandingIntro).toHaveBeenCalledWith({ playNow: false });
+    expect(wrapper.find('[data-testid="returning-player-menu"]').exists()).toBe(false);
+  });
+
+  it('drops the Play intro row while the intro is on screen', async () => {
+    introMounted.value = true;
+    const { wrapper } = await openMenu({ landingEntries: true });
+    expect(wrapper.find('[data-testid="returning-player-play-intro"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="returning-player-start-page"]').exists()).toBe(false);
   });
 });

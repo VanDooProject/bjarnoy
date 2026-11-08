@@ -23,7 +23,7 @@ const { t } = useI18n({ useScope: 'global' });
   right: max(16px, env(safe-area-inset-right));
   bottom: max(16px, env(safe-area-inset-bottom));
 }
-/* left out on phones for now: the onboarding checklist covers the bottom right there (same breakpoint as its tray) */
+/* left out on phones: the onboarding checklist covers the bottom right there (same breakpoint as its tray); the landing menu has a "Play intro" row instead (ReturningPlayerMenu.vue) */
 @media (max-width: 768px), (max-height: 500px) {
   .play-intro {
     display: none;
