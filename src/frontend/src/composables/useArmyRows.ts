@@ -7,7 +7,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../stores/world';
 import { useAuthStore } from '../stores/auth';
-import { missionName, unitName } from '../i18n/catalogueNames';
+import { runningMissionName, unitName } from '../i18n/catalogueNames';
 import {
   armyStatusLabel,
   canFieldOrderArmy,
@@ -83,7 +83,7 @@ export function useArmyRows() {
         fieldOrderLocked: midMarch && !auth.isPremium,
         fieldOrderLabel: midMarch ? t('hud.armyPanel.appendGoal') : t('hud.armyPanel.moveOn'),
         selected: army.id === world.selectedArmyId,
-        mission: army.mission !== 'move' ? missionName(army.mission) : null,
+        mission: army.mission !== 'move' ? runningMissionName(army.mission) : null,
       };
     });
   });

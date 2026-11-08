@@ -19,7 +19,7 @@
     "fieldOrderFailed": "Field order failed.",
     "selectAtLeastOneUnit": "Select at least one unit to send.",
     "clickMapForDestination": "Click the map to set a destination first.",
-    "chooseSettlementFor": "Choose a settlement to {mission} first.",
+    "chooseSettlementFor": "Choose a target settlement first ({mission}).",
     "fieldOrderPremiumRequired": "Premium required to plot more than one stop — clear the extra stop, or upgrade.",
     "chooseCampToHunt": "Choose a wildlife camp to hunt first."
   },

@@ -15,14 +15,14 @@ function mountBanner(variant: 'landfall' | 'complete') {
 describe('OnboardingBanner', () => {
   it('landfall variant shows the landfall copy and no continue button', () => {
     const wrapper = mountBanner('landfall');
-    expect(wrapper.text()).toContain('Landfall made.');
-    expect(wrapper.text()).toContain('Your longhouse stands. Two buildings to go.');
+    expect(wrapper.text()).toContain('Your longhouse stands.');
+    expect(wrapper.text()).toContain('Build two more buildings.');
     expect(wrapper.find('[data-testid="onboarding-continue"]').exists()).toBe(false);
   });
 
   it('complete variant shows the completion copy and a continue button that emits continue', async () => {
     const wrapper = mountBanner('complete');
-    expect(wrapper.text()).toContain('All three placed.');
+    expect(wrapper.text()).toContain('Three buildings built');
     const cta = wrapper.get('[data-testid="onboarding-continue"]');
     await cta.trigger('click');
     expect(wrapper.emitted('continue')).toHaveLength(1);

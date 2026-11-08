@@ -17,6 +17,8 @@ export const endgameName = (site: string) => lookup(`endgame.${site}`, site);
 export const beastName = (family: string, tier: string) => lookup(`beasts.${family}.${tier}`, tier);
 export const resourceName = (resource: string) => lookup(`resources.${resource}`, resource);
 export const missionName = (mission: string) => lookup(`missions.${mission}`, mission);
+/** A running mission's label in a status view (a noun in German: „Angriff", not the „Angreifen" of the mission choice). */
+export const runningMissionName = (mission: string) => lookup(`runningMissions.${mission}`, mission);
 export const runeTypeName = (type: string) => lookup(`runes.types.${type}`, type);
 export const runeRarityName = (rarity: string) => lookup(`runes.rarities.${rarity}`, rarity);
 export const guildRoleName = (role: string) => lookup(`guild.roles.${role}`, role);

@@ -355,13 +355,13 @@ test.describe('phone overlay layering', { tag: '@g1' }, () => {
 
     const trigger = page.getByTestId('returning-player-trigger');
     await expect(trigger).toBeVisible();
-    await expect(trigger).toContainText('Name your jarl');
+    await expect(trigger).toContainText('Create account');
 
     await page.getByTestId('onboarding-continue').click();
     await expect(page).toHaveURL(/\/settlement(#q=[^#]*)?$/);
     await waitForMapReady(page);
     await expect(trigger).toBeVisible();
-    await expect(trigger).toContainText('Name your jarl');
+    await expect(trigger).toContainText('Create account');
     await expectInsideViewport(page, trigger);
     await expectNoOverlap(trigger, page.locator('.settlement-bubble'), 'the chip covers the settlement bubble');
 

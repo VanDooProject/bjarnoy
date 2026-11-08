@@ -250,7 +250,7 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
               v-model="targetSearch"
               type="text"
               class="target-search"
-              :placeholder="t('hud.armyPanel.searchSettlements', { mission: draft.mission })"
+              :placeholder="t('hud.armyPanel.searchSettlements', { mission: missionName(draft.mission) })"
             />
             <div v-if="attackTargets.length" class="target-list">
               <button v-for="target in attackTargets" :key="target.id" type="button" class="target-row" @click="pickTarget(target.id)">

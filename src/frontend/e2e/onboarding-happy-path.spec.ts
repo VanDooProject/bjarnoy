@@ -71,7 +71,7 @@ async function foundAndFinishGuidedBuilds(page: Page) {
 
   await settlement.claimLandfall();
   await expect(settlement.banner).toBeVisible();
-  await expect(settlement.banner).toContainText('Landfall made.');
+  await expect(settlement.banner).toContainText('Your longhouse stands.');
 
   // --- Guided build 1: Reindeer Herder on a grass hex, via the real ring menu -------
   const grassHex = await settlement.findHex({ terrain: 'grass' });
@@ -321,7 +321,7 @@ for (const size of SCREEN_SIZES) {
         await page.locator('.hud-grip').click();
         const trigger = page.getByTestId('returning-player-trigger');
         await expect(trigger).toBeVisible();
-        await expect(trigger).toContainText('Name your jarl');
+        await expect(trigger).toContainText('Create account');
         await trigger.click();
         const rows = page.getByTestId('returning-player-menu').getByRole('menuitem');
         await expect(rows.nth(0)).toHaveAttribute('data-testid', 'returning-player-name-jarl');
@@ -329,7 +329,7 @@ for (const size of SCREEN_SIZES) {
         await rows.nth(0).click();
       } else {
         const trigger = page.getByTestId('returning-player-trigger');
-        await expect(trigger).toContainText('Name your jarl');
+        await expect(trigger).toContainText('Create account');
         await expect(trigger).toContainText('or I already have a realm');
 
         await trigger.click();

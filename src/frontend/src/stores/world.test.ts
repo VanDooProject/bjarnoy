@@ -234,6 +234,25 @@ describe('useWorldStore confirmDispatch with no land route', () => {
   });
 });
 
+// The "choose a target settlement" error names the mission with its translated label, not the raw
+// mission key ('attack') the draft stores.
+describe('useWorldStore confirmDispatch without a target settlement', () => {
+  it('names the mission with its translated label', async () => {
+    const store = await loadStoreModule(false);
+    const { missionName } = await import('../i18n/catalogueNames');
+    dispatchArmy.mockReset();
+    store.selectedSettlementId = 'home-1';
+    store.startDispatch();
+    store.dispatchDraft!.mission = 'attack';
+    store.dispatchDraft!.unitCounts = { spearman: 2 };
+
+    await store.confirmDispatch();
+
+    expect(dispatchArmy).not.toHaveBeenCalled();
+    expect(store.dispatchDraft!.error).toContain(`(${missionName('attack')})`);
+  });
+});
+
 // Issue #93: editing an arbitrary waypoint of a plotted route, not just
 // popping the newest one — the map's drag-a-pin gesture and the panel's
 // per-waypoint remove button both go through these.
