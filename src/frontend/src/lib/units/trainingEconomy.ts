@@ -70,9 +70,13 @@ export function trainingBonusPercent(level: number): number {
   return Math.round((1 - trainingTimeFactor(level)) * 100);
 }
 
-/** One unit's training time in seconds in a building of `level`. */
-export function unitTrainingSeconds(definition: Pick<UnitDefinitionResponse, 'trainingSeconds'>, level: number): number {
-  return definition.trainingSeconds * trainingTimeFactor(level);
+/** One unit's training time in seconds in a building of `level`, in a world running at `speedFactor` (`UnitCatalogue.TrainingTime`). */
+export function unitTrainingSeconds(
+  definition: Pick<UnitDefinitionResponse, 'trainingSeconds'>,
+  level: number,
+  speedFactor: number,
+): number {
+  return (definition.trainingSeconds * trainingTimeFactor(level)) / speedFactor;
 }
 
 /**
@@ -85,9 +89,10 @@ export function distributedTrainingSeconds(
   count: number,
   levels: number[],
   split: Exclude<TrainingSplit, 'here'>,
+  speedFactor: number,
 ): number {
   if (levels.length === 0 || count <= 0) return 0;
-  const perUnit = levels.map((level) => unitTrainingSeconds(definition, level));
+  const perUnit = levels.map((level) => unitTrainingSeconds(definition, level, speedFactor));
   if (split === 'fastest') {
     const rate = perUnit.reduce((sum, seconds) => sum + 1 / seconds, 0);
     return count / rate;

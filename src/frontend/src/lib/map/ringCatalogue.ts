@@ -28,6 +28,14 @@ export function formatBuildTime(seconds: number): string {
 }
 
 /**
+ * A catalogue `buildSeconds` as the build actually runs: times Odin's Wisdom (`wisdomFactor`), divided by the world's speed
+ * factor. Mirrors the server's `Settlement.ScaledBuildDuration`.
+ */
+export function scaledBuildSeconds(baseSeconds: number, wisdomFactor: number, speedFactor: number): number {
+  return (baseSeconds * wisdomFactor) / speedFactor;
+}
+
+/**
  * The reason a building can't be placed yet, or undefined when it can. Only
  * the longhouse gate is checked here: terrain is already filtered by which
  * categories the tile offers, and affordability is shown as a red cost chip

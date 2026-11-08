@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
+import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, scaledBuildSeconds, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
+
+describe('scaledBuildSeconds', () => {
+  it('divides the catalogue time by the world speed factor and applies Odin\'s Wisdom', () => {
+    expect(scaledBuildSeconds(600, 1, 1)).toBe(600);
+    expect(scaledBuildSeconds(600, 1, 4)).toBe(150);
+    expect(scaledBuildSeconds(600, 0.9, 2)).toBeCloseTo(270);
+  });
+});
 
 describe('formatBuildTime', () => {
   it('renders the level-1 catalogue durations the way the design card shows them', () => {
