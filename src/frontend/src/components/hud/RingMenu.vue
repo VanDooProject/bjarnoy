@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ResourceIcon from '../ResourceIcon.vue';
 // Issue #16 "ring menu on click of tile", second pass — the "2a" design
 // (Claude Design's `Tile Menu 2a`, chosen over four other directions).
 //
@@ -421,8 +422,8 @@ const footprint = computed(() => {
 });
 watch(footprint, (circle) => emit('footprint', circle), { immediate: true });
 
-const RESOURCE_COLORS = { wood: 'var(--wood)', stone: 'var(--stone)', food: 'var(--food)', iron: 'var(--iron)' } as const;
 const RESOURCE_KEYS = ['wood', 'stone', 'food', 'iron'] as const;
+type ResourceKey = (typeof RESOURCE_KEYS)[number];
 
 /** A building's own fields as the card shape the hover card renders. */
 function cardOf(b: RingBuilding): RingCard {
@@ -464,7 +465,7 @@ interface CardView {
   sub?: string;
   art?: ArtRef;
   badge?: { text: string; tone: 'ok' | Tone };
-  chips: { key: string; color: string; amount: number; short: boolean }[];
+  chips: { key: ResourceKey; amount: number; short: boolean }[];
   time?: string;
   gives?: string;
   givesTotal?: string;
@@ -487,7 +488,6 @@ const cardView = computed<CardView | null>(() => {
   const locks = card.locks ?? [];
   const chips = RESOURCE_KEYS.filter((key) => !!card.cost?.[key]).map((key) => ({
     key,
-    color: RESOURCE_COLORS[key],
     // Upgrade costs scale by a fractional factor; show what the player has to have, rounded up.
     amount: Math.ceil(card.cost![key]!),
     short: a ? !!a.shortfall[key] : !!props.stock && card.cost![key]! > props.stock[key],
@@ -1031,7 +1031,7 @@ function onBackdropPointerDown(e: PointerEvent) {
           <dt>{{ t('hud.ringMenu.cost') }}</dt>
           <dd class="cost">
             <span v-for="chip in cardView.chips" :key="chip.key" class="chip">
-              <i :style="{ background: chip.color }" />
+              <ResourceIcon :kind="chip.key" :size="12" />
               <b :class="{ short: chip.short }">{{ chip.amount }}</b>
             </span>
           </dd>
@@ -1406,12 +1406,6 @@ function onBackdropPointerDown(e: PointerEvent) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-}
-.chip i {
-  width: 8px;
-  height: 8px;
-  flex: none;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
 }
 .chip b.short {
   color: var(--rival);

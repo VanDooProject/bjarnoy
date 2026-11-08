@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ResourceIcon from '../ResourceIcon.vue';
 // Issue #16 "header": resource icons redrawn as hexes (the mockup's
 // diamonds), and population wired up as a fifth pill exactly like the other
 // four (current/max stock + a rate) instead of being unimplemented — see
@@ -357,7 +358,7 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
   >
     <template v-if="!collapsed || isExpanded">
       <div v-for="pill in pills" :key="pill.key" class="resource" :data-res="pill.key">
-        <span class="hex-icon" :style="{ background: pill.color }" />
+        <ResourceIcon :kind="pill.key" />
         <div class="numbers">
           <span class="value">
             {{ fmt(pill.value) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(pill.cap) }) }}</span>
@@ -378,11 +379,11 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
         </div>
       </div>
       <div v-if="population.max > 0" class="resource population">
-        <span class="hex-icon" style="background: var(--pop, #7fb3d5)" />
+        <ResourceIcon kind="pop" />
         <div class="numbers">
           <span class="value">{{ fmt(population.current) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(population.max) }) }}</span></span>
           <span class="rate">{{ t('hud.resourceBar.rate', { n: fmtRate(population.rate) }) }}</span>
-          <span class="fill-track"><span class="fill" :style="{ width: fillPct(population.current, population.max) + '%', background: 'var(--pop, #7fb3d5)' }" /></span>
+          <span class="fill-track"><span class="fill" :style="{ width: fillPct(population.current, population.max) + '%', background: 'var(--pop)' }" /></span>
         </div>
       </div>
     </template>
@@ -398,7 +399,7 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
         :aria-label="t(`catalogue.resources.${pill.key}`) + ': ' + pillSummary(pill.value, pill.rate, pill.cap)"
         @click="onPillTap"
       >
-        <span class="hex-icon" :style="{ background: pill.color }" />
+        <ResourceIcon :kind="pill.key" />
         <div class="numbers-compact">
           <span class="value-compact" :class="railTwoLine ? 'stage-0' : `stage-${stage}`">
             {{ railTwoLine ? fmt(pill.value) : stageText(pill.value, pill.rate, pill.cap) }}
@@ -430,7 +431,7 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
         :aria-label="t('hud.nav.settlement') + ': ' + pillSummary(population.current, population.rate, population.max)"
         @click="onPillTap"
       >
-        <span class="hex-icon" style="background: var(--pop, #7fb3d5)" />
+        <ResourceIcon kind="pop" />
         <div class="numbers-compact">
           <span class="value-compact" :class="railTwoLine ? 'stage-0' : `stage-${stage}`">
             {{ railTwoLine ? fmt(population.current) : stageText(population.current, population.rate, population.max) }}
@@ -439,7 +440,7 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
             {{ line2Text(population.rate, population.max) }}
           </span>
           <span class="fill-track">
-            <span class="fill" :style="{ width: fillPct(population.current, population.max) + '%', background: 'var(--pop, #7fb3d5)' }" />
+            <span class="fill" :style="{ width: fillPct(population.current, population.max) + '%', background: 'var(--pop)' }" />
           </span>
         </div>
       </button>
@@ -462,7 +463,7 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
   >
     <template v-if="isExpanded">
       <div v-for="pill in pills" :key="pill.key" class="resource">
-        <span class="hex-icon" :style="{ background: pill.color }" />
+        <ResourceIcon :kind="pill.key" />
         <div class="numbers">
           <span class="value">
             {{ fmt(pill.value, true) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(pill.cap, true) }) }}</span>
@@ -472,7 +473,7 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
         </div>
       </div>
       <div v-if="population.max > 0" class="resource population">
-        <span class="hex-icon" style="background: var(--pop, #7fb3d5)" />
+        <ResourceIcon kind="pop" />
         <div class="numbers">
           <span class="value">{{ fmt(population.current, true) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(population.max, true) }) }}</span></span>
           <span class="rate">{{ t('hud.resourceBar.rate', { n: fmtRate(population.rate, true) }) }}</span>
@@ -481,7 +482,7 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
     </template>
     <template v-else>
       <div v-for="pill in pills" :key="pill.key" class="resource resource--compact">
-        <span class="hex-icon" :style="{ background: pill.color }" />
+        <ResourceIcon :kind="pill.key" />
         <div class="numbers-compact">
           <span class="value-compact">
             {{ stageText(pill.value, pill.rate, pill.cap, true) }}
@@ -490,7 +491,7 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
         </div>
       </div>
       <div v-if="population.max > 0" class="resource resource--compact population">
-        <span class="hex-icon" style="background: var(--pop, #7fb3d5)" />
+        <ResourceIcon kind="pop" />
         <div class="numbers-compact">
           <span class="value-compact">{{ stageText(population.current, population.rate, population.max, true) }}</span>
         </div>
@@ -510,7 +511,7 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
     inert
   >
     <div v-for="pill in pills" :key="pill.key" class="resource">
-      <span class="hex-icon" :style="{ background: pill.color }" />
+      <ResourceIcon :kind="pill.key" />
       <div class="numbers">
         <span class="value">
           {{ fmt(pill.value, true) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(pill.cap, true) }) }}</span>
@@ -521,7 +522,7 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
       </div>
     </div>
     <div v-if="population.max > 0" class="resource population">
-      <span class="hex-icon" style="background: var(--pop, #7fb3d5)" />
+      <ResourceIcon kind="pop" />
       <div class="numbers">
         <span class="value">{{ fmt(population.current, true) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(population.max, true) }) }}</span></span>
         <span class="rate">{{ t('hud.resourceBar.rate', { n: fmtRate(population.rate, true) }) }}</span>
@@ -557,11 +558,9 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
   padding-left: 22px;
   border-left: 1px solid var(--panel-border);
 }
-.hex-icon {
-  width: 13px;
-  height: 13px;
-  flex: none;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+.resource-icon {
+  width: 16px;
+  height: 16px;
 }
 .numbers {
   display: flex;
@@ -659,9 +658,9 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
 .resource-bar.expanded .value {
   font-size: 12px;
 }
-.resource-bar.expanded .hex-icon {
-  width: 11px;
-  height: 11px;
+.resource-bar.expanded .resource-icon {
+  width: 14px;
+  height: 14px;
 }
 /* The shared `.fill-track` rule above carries a 64px min-width tuned for
    roomy desktop pills — on a narrow expanded mobile pill (where the cap now
@@ -873,9 +872,9 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
 .resource-bar.tight-font .value-compact {
   font-size: 10px;
 }
-.resource-bar.tight-font .hex-icon {
-  width: 10px;
-  height: 10px;
+.resource-bar.tight-font .resource-icon {
+  width: 13px;
+  height: 13px;
 }
 .resource-bar.tight-font.expanded .value,
 .resource-bar.tight-font.expanded .rate {
