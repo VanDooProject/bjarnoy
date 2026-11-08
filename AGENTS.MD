@@ -238,6 +238,18 @@
 - page art: no big picture on top of a page; the header shows the page's art as a small icon beside the title (pages
   about one tile or building) or a faded backdrop (the others; phones always use the icon)
 
+# writing UI copy (en and de)
+- write every UI string with its game context in mind: what the thing is in the game, where the string shows up and what
+  the same thing is called elsewhere. Look up the existing name first (`catalogue.json`, the "German terms" in
+  `docs/design/copy-guidelines.md`, other strings for the same concept) and use it. One name per concept, everywhere: no
+  second word for the same thing, and no word that already means something else in the game (e.g. „Lager" is storage,
+  so a wildlife camp is „Revier")
+- translate the meaning in the game, not the English word: "slot", "sheet", "drawer", "retarget" are UI or code words,
+  not things in the game world
+- plain and factual. No slogans, punchlines, sales pitch ("no account, nothing to install"), "made with love", cute
+  asides, reassurance filler ("these are the real rules", "no mockups") or self-aware "honest" notes. Check new copy
+  against the "Rejected copy" list in `docs/design/copy-guidelines.md` and don't write in its style
+
 # German text (de locale)
 - write German the way a native speaker writes a game's help pages — not a translation of the English sentence. Restructure
   freely; keep the meaning (rules, numbers, conditions) exact
