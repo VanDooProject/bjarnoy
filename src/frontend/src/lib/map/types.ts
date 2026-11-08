@@ -478,6 +478,8 @@ export interface Settlement {
   realmId?: string;
   /** Which island (see `IslandLabel`) this settlement sits on, live mode only — used to gold-highlight the player's own island on the world map. */
   islandId?: string;
+  /** Live mode: how the owner stands to the player when not the player (`guild` = same guild, `treaty` = guild with an active peace treaty). Absent = own or rival, decided by `ownerId`. */
+  relation?: 'guild' | 'treaty';
 }
 
 /**

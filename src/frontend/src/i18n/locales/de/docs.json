@@ -1101,7 +1101,7 @@
   },
   "realm": {
     "title": "Das Gebiet erweitern",
-    "intro": "Das Land, das du hältst, ist dein Gebiet; auf der Karte zieht sich eine goldene Grenze darum. Das Langhaus beansprucht die ersten Ringe um sich herum. Darüber hinaus wächst dein Gebiet nur durch Wachtürme an seiner Grenze.",
+    "intro": "Alles Land, das du beanspruchst, ist dein Gebiet. Auf der Karte umgibt es eine blaue Grenze. Andere Gebiete erkennst du an ihrer Farbe: Grün gehört Mitgliedern deiner Gilde, Lila Gilden mit Friedensvertrag und Rot allen anderen. Wo zwei Gebiete aneinanderstoßen, siehst du beide Grenzen nebeneinander. Das Langhaus beansprucht die ersten Ringe um sich herum. Darüber hinaus wächst dein Gebiet nur durch Wachtürme an seiner Grenze.",
     "claim": {
       "heading": "Der Anspruch deines Langhauses",
       "body": "Dein {longhouse} beansprucht auf Stufe 1 alle Felder im Umkreis von {level1}, ab Stufe 2 im Umkreis von {level2}. Weiter reicht es nie: Höhere Langhaus-Stufen schieben die Grenze nicht weiter hinaus.",
@@ -1119,7 +1119,7 @@
     },
     "example": {
       "heading": "Ein Beispiel",
-      "alt": "Eine Beispielinsel mit dem Langhaus nahe der Mitte, der goldenen Grenze um das beanspruchte Land und den Wachtürmen, die die Grenze hinausschieben.",
+      "alt": "Eine Beispielinsel mit dem Langhaus nahe der Mitte, der blauen Grenze um das beanspruchte Land und den Wachtürmen, die die Grenze hinausschieben.",
       "step": "Schritt",
       "steps": {
         "1": "Schritt 1: ein Langhaus der Stufe 2 allein. Sein Anspruch reicht 3 Felder weit, dort endet die Grenze.",

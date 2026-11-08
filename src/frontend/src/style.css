@@ -120,6 +120,10 @@
    ("Visual language") so the real app matches the design brainstorms. */
 :root {
   --gold: #ffc55c;
+  /* Realm colours: own, same guild, guild with a peace treaty (any other realm is --rival). Mirror lib/map/realmColours.ts — keep in sync. */
+  --realm-own: #3f7fe8;
+  --realm-guild: #4fd17a;
+  --realm-treaty: #9b5cf0;
   --rival: #e2705f;
   --shell: #0b1116;
   --panel-bg: rgba(10, 20, 27, 0.92);
