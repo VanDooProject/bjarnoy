@@ -1,11 +1,9 @@
 <script setup lang="ts">
-// The landing page's guided-onboarding tray, rebuilt as a live checklist
-// (design handoff "Landing Onboarding Flow 2a"): a header with a step
-// count, a progress bar, and three rows that read "done" the instant their
-// building is actually standing (see onboardingGuidance.ts) rather than a
-// fixed step counter. Previously this markup lived inline in
-// LandingView.vue; pulled out so the derivation (onboardingGuidance.ts) and
-// the render can each be tested on their own.
+// The landing page's guided-onboarding progress: a stepper line of three hex nodes (step number, a check once
+// done) joined by a thin line, each with its building's name under it; the current step also says what to do. A
+// step reads "done" the instant its building is actually standing (see onboardingGuidance.ts), not by a fixed
+// step counter. Pulled out of LandingView.vue so the derivation (onboardingGuidance.ts) and the render can each
+// be tested on their own. One element per node and one per connecting line segment, so each can be animated.
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { buildingName } from '../../i18n/catalogueNames';
@@ -13,9 +11,8 @@ import type { ChecklistRow, ChecklistRowKey, OnboardingGuidance } from '../../li
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { TOUCH_QUERY } from '../../lib/breakpoints';
 
-const props = defineProps<{
+defineProps<{
   guidance: OnboardingGuidance;
-  hasFounded: boolean;
   /** The guidance arrow is on screen: tapping the current row then makes it poke its target. */
   canFocus?: boolean;
 }>();
@@ -29,258 +26,200 @@ function nameFor(key: ChecklistRowKey): string {
   return key === 'longhouse' ? t('landing.tray.longhouseName') : buildingName(key);
 }
 
-function subtextFor(row: ChecklistRow): string {
-  if (row.state === 'done') return t('landing.tray.placed');
+/** What to do now; only the current step says it. */
+function instructionFor(row: ChecklistRow): string {
   if (row.key === 'longhouse') return isTouch.value ? t('landing.tray.tapToPlace') : t('landing.tray.clickToPlace');
-  if (!props.hasFounded) return t('landing.tray.foundFirst');
   return isTouch.value ? t('landing.tray.tapEmptyHex') : t('landing.tray.clickEmptyHex');
 }
 </script>
 
 <template>
-  <div class="tray panel" data-testid="onboarding-checklist">
-    <div class="tray-header">
-      <span class="tray-title">{{ t('landing.tray.title') }}</span>
-      <span class="tray-step">{{ t('landing.tray.stepOf', { step: guidance.step, total: guidance.totalSteps }) }}</span>
-    </div>
-    <div class="tray-progress">
-      <div class="tray-progress-fill" :style="{ width: `${Math.round(guidance.progress * 100)}%` }" />
-    </div>
-    <div class="tray-rows">
-      <component
-        :is="row.state === 'current' && canFocus ? 'button' : 'div'"
-        v-for="row in guidance.rows"
-        :key="row.key"
-        class="tray-item"
-        :class="row.state"
-        :type="row.state === 'current' && canFocus ? 'button' : undefined"
-        :data-testid="row.state === 'current' && canFocus ? 'onboarding-focus' : undefined"
-        @click="row.state === 'current' && canFocus && emit('focus')"
-      >
-        <div class="dot" />
-        <div>
-          <div class="name">{{ nameFor(row.key) }}</div>
-          <div class="sub">{{ subtextFor(row) }}</div>
-        </div>
-      </component>
-    </div>
-  </div>
+  <nav
+    class="steps"
+    data-testid="onboarding-checklist"
+    :aria-label="t('landing.tray.stepOf', { step: guidance.step, total: guidance.totalSteps })"
+  >
+    <component
+      :is="row.state === 'current' && canFocus ? 'button' : 'div'"
+      v-for="(row, index) in guidance.rows"
+      :key="row.key"
+      class="step"
+      :class="row.state"
+      :type="row.state === 'current' && canFocus ? 'button' : undefined"
+      :data-testid="row.state === 'current' && canFocus ? 'onboarding-focus' : undefined"
+      @click="row.state === 'current' && canFocus && emit('focus')"
+    >
+      <span v-if="index > 0" class="seg" aria-hidden="true" />
+      <span class="node">
+        <svg v-if="row.state === 'done'" class="check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+        <template v-else>{{ index + 1 }}</template>
+      </span>
+      <b class="name">{{ nameFor(row.key) }}</b>
+      <span v-if="row.state === 'current'" class="sub">{{ instructionFor(row) }}</span>
+    </component>
+  </nav>
 </template>
 
 <style scoped>
-@keyframes checklist-tick {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.09);
-  }
-}
-.tray {
+/* desktop: bottom-centre under the island, clear of the Play intro button at the bottom-right */
+.steps {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 96px;
+  bottom: 44px;
   z-index: 15;
-  width: 712px;
-  max-width: calc(100vw - 32px);
-  padding: 14px 14px 12px;
+  width: min(560px, calc(100vw - 32px));
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  color: #f1efe9;
+  pointer-events: none;
 }
-.tray-header {
+.step {
+  position: relative;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-.tray-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text);
-  white-space: nowrap;
-}
-.tray-step {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.tray-progress {
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.1);
-  margin-bottom: 12px;
-  overflow: hidden;
-}
-.tray-progress-fill {
-  height: 100%;
-  border-radius: 2px;
-  background: var(--gold);
-  transition: width 0.3s ease;
-}
-.tray-rows {
-  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-}
-.tray-item {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 11px 15px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
   font: inherit;
-  text-align: left;
   color: inherit;
+  text-align: center;
+  pointer-events: auto;
 }
-button.tray-item {
+button.step {
   cursor: pointer;
 }
-.tray-item.current {
-  background: var(--gold);
-  border-color: var(--gold);
-  animation: checklist-tick 1.6s ease-in-out infinite;
-  transform-origin: center;
+/* the line from the previous node's centre to this one's, under the nodes */
+.seg {
+  position: absolute;
+  top: 18px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.18);
+  z-index: 0;
 }
-html[data-hud-motion='reduced'] .tray-item.current {
-  animation: none;
-}
-.tray-item.current .name,
-.tray-item.current .sub {
-  color: #20160a;
-}
-.tray-item.done {
-  opacity: 0.55;
-}
-.dot {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.tray-item.done .dot {
-  background: var(--gold);
-  color: #20160a;
+/* hex node: the element is the outline, ::after the fill */
+.node {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 38px;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: #4a4743;
+  color: #b9b4ab;
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
+  transition: background-color 300ms ease, color 300ms ease;
 }
-.tray-item.done .dot::after {
-  content: '✓';
+.node::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  z-index: -1;
+  clip-path: inherit;
+  background: #2a2826;
+  transition: background-color 300ms ease;
+}
+.check {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .name {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  color: var(--text);
+  color: #b9b4ab;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.85);
+  transition: color 300ms ease;
 }
 .sub {
-  font-size: 12px;
-  color: var(--muted);
+  font-size: 13px;
+  color: #ffc35c;
+  text-wrap: balance;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.85);
+}
+.current .node {
+  background: #ffc35c;
+  color: #241a08;
+}
+.current .node::after {
+  background: #ffc35c;
+}
+.current .name {
+  color: #f1efe9;
+}
+.done .node {
+  background: #ffc35c;
+  color: #ffc35c;
+}
+.done .node::after {
+  background: #3a3122;
 }
 
-/* Mobile-readiness audit (finding a): at 390px-wide the 3-card row put the
-   3rd card's right edge past the viewport (x 320..468) and squeezed each
-   card down to one-word-per-line text, while the whole tray sat ~250px
-   tall at `bottom: 96px`, covering the map and the ring-menu bubbles below
-   it. The header's step count + progress bar already say where the player
-   is overall, so on a narrow/short viewport only the CURRENT row needs to
-   render at all, full-width, keeping the tray to a couple of rows tall
-   instead of three side by side. `(max-height: 500px)` also catches a
-   landscape phone (844x390) even though its width is well past 768px. */
-@media (max-width: 768px), (max-height: 500px) {
-  .tray {
-    bottom: calc(12px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
-    padding: 10px 12px;
-    width: calc(100vw - 24px);
-  }
-  .tray-item:not(.current) {
-    display: none;
-  }
-}
-
-/* Short-landscape phones (e.g. iPhone 13 landscape, 844x390): the preview
-   plot sits centred on screen, so a tray still centred at the bottom would
-   cover it and swallow the founding tap (finding b) — dock it to the
-   bottom-right corner instead, out of the plot's way. */
-@media (max-height: 500px) {
-  .tray {
-    left: auto;
-    right: 12px;
+/* portrait phones: full width above the Impressum row */
+@media (max-width: 640px) {
+  .steps {
+    left: 16px;
+    right: 16px;
+    width: auto;
     transform: none;
-    width: min(340px, calc(100vw - 24px));
+    bottom: calc(44px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
   }
-}
-
-/* Short-landscape phones, slim strip: docked in the corner the tray still
-   stood ~150px tall, and at 667x375 the landfall plot (the island is
-   framed, not the plot) ended up under it, swallowing the founding tap.
-   Here the tray is one line instead of three: the current step's card on
-   the left, the step count on the right, and the progress bar as a thin
-   rule along the bottom edge. The title goes — the step count and the
-   card already say what it is. */
-@media (max-height: 500px) {
-  .tray {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 6px 8px 10px;
+  .node {
+    width: 30px;
+    height: 34px;
+    font-size: 14px;
   }
-  .tray-title {
-    display: none;
-  }
-  .tray-header {
-    order: 2;
-    margin-bottom: 0;
-  }
-  .tray-rows {
-    order: 1;
-    flex: 1;
-    min-width: 0;
-  }
-  .tray-progress {
-    position: absolute;
-    left: 10px;
-    right: 10px;
-    bottom: 4px;
-    height: 3px;
-    margin-bottom: 0;
-  }
-  .tray-item {
-    gap: 8px;
-    padding: 5px 10px;
-    border-radius: 8px;
-    min-width: 0;
-  }
-  .tray-item > div:last-child {
-    min-width: 0;
-  }
-  .dot {
-    width: 20px;
-    height: 20px;
-    border-radius: 6px;
-  }
-  .tray-item.done .dot {
-    font-size: 12px;
+  .seg {
+    top: 16px;
   }
   .name {
-    font-size: 13px;
-    line-height: 1.2;
+    font-size: 12.5px;
   }
   .sub {
-    font-size: 11px;
-    line-height: 1.2;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 11.5px;
+  }
+}
+
+/* landscape phones: compact, bottom-right */
+@media (max-height: 500px) {
+  .steps {
+    left: auto;
+    right: 14px;
+    bottom: calc(12px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
+    width: 360px;
+    transform: none;
+  }
+  .step {
+    gap: 3px;
+  }
+  .node {
+    width: 24px;
+    height: 27px;
+    font-size: 12px;
+  }
+  .seg {
+    top: 12px;
+  }
+  .check {
+    width: 13px;
+    height: 13px;
+  }
+  .name {
+    font-size: 11.5px;
+  }
+  .sub {
+    font-size: 10.5px;
   }
 }
 </style>
