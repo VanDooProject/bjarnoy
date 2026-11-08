@@ -27,6 +27,9 @@ public sealed record FoundSettlementRequest(
     [property: Required, MinLength(2), MaxLength(100)] string OwnerName,
     [property: Required, MinLength(1), MaxLength(200)] string OwnerId);
 
+/// <param name="Q">The hex whose building loses one level.</param>
+public sealed record RazeBuildingRequest(int Q, int R);
+
 public sealed record QueueBuildRequest(
     [property: Required] string Building,
     int Q,
@@ -128,6 +131,10 @@ public sealed record PlacedBuildingResponse(
 /// (<c>OccupiesAllSlots</c>); otherwise the catalogue's per-order
 /// <c>SlotCost</c> (1 for everything today).
 /// </param>
+/// <param name="Kind">
+/// <c>"build"</c> for an order that builds a level, <c>"raze"</c> for one that razes a level: then
+/// <c>TargetLevel</c> is the level the building is left at (0 = removed) and <c>SlotCost</c> is that of the razed level.
+/// </param>
 /// <param name="CompletesAtGameTime">
 /// <see langword="null"/> for a waiting order — it has not started, so there
 /// is no real completion instant yet, only <see cref="TotalSeconds"/>'s
@@ -157,7 +164,8 @@ public sealed record BuildOrderResponse(
     int SlotCost,
     DateTimeOffset? CompletesAtGameTime,
     double? CompletesInSeconds,
-    double TotalSeconds);
+    double TotalSeconds,
+    string Kind);
 
 public sealed record UnitStackResponse(string Unit, int Count);
 
@@ -389,14 +397,15 @@ public sealed record SettlementResponse(
                 o.Type.ToWireName(),
                 o.TargetLevel,
                 o.IsWaiting ? "waiting" : "building",
-                BuildingCatalogue.Get(o.Type, o.TargetLevel).OccupiesAllSlots
+                BuildingCatalogue.Get(o.Type, o.LevelInWork).OccupiesAllSlots
                     ? domain.ConstructionSlots
-                    : BuildingCatalogue.Get(o.Type, o.TargetLevel).SlotCost,
+                    : BuildingCatalogue.Get(o.Type, o.LevelInWork).SlotCost,
                 o.CompletesAt,
                 (clock.FreezesTime || o.IsWaiting) ? null : o.RemainingAt(gameNow).TotalSeconds,
                 o.IsWaiting
                     ? o.BaseDuration.TotalSeconds * domain.BuildTimeFactor / speedFactor
-                    : (o.CompletesAt!.Value - o.StartedAt!.Value).TotalSeconds))],
+                    : (o.CompletesAt!.Value - o.StartedAt!.Value).TotalSeconds,
+                o.Kind.ToWireName()))],
             [.. domain.Garrison.Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
             [.. domain.TrainingQueue.Select(o => TrainingOrderResponse.From(o, clock, gameNow))],
             [.. domain.Runes.Select(r => new RuneInstanceResponse(
