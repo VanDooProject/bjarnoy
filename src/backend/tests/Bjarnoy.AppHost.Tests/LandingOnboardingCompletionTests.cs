@@ -166,7 +166,7 @@ public class LandingOnboardingCompletionTests(AppHostFixture fixture)
         await page.GetByTestId("profile-nudge-later").ClickAsync();
         await Assertions.Expect(profileNudge).ToHaveCountAsync(0);
         await Assertions.Expect(completionBanner).ToBeVisibleAsync(new() { Timeout = 10_000 });
-        await Assertions.Expect(completionBanner).ToContainTextAsync("All three placed.");
+        await Assertions.Expect(completionBanner).ToContainTextAsync("Three buildings built");
 
         await page.GetByTestId("onboarding-continue").ClickAsync();
 

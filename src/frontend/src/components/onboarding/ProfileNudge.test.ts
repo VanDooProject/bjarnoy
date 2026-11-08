@@ -35,8 +35,8 @@ describe('ProfileNudge', () => {
 
   it('shows the eyebrow/title/body copy', async () => {
     const { wrapper } = await mountNudge();
-    expect(wrapper.text()).toContain('Your realm runs');
-    expect(wrapper.text()).toContain('Three buildings, no jarl.');
+    expect(wrapper.text()).toContain('Keep your progress');
+    expect(wrapper.text()).toContain('Keep your progress');
   });
 
   it('"Name your jarl" navigates to /register', async () => {

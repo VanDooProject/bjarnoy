@@ -41,7 +41,7 @@
       "bogLands": {
         "tiles": "Alle übrigen Bodenarten.",
         "production": "Wie Lehm und Raseneisenerz gewonnen werden.",
-        "wildlifeCamps": "Die Moorlager stehen auf schlichtem Moorboden."
+        "wildlifeCamps": "Die Moorreviere stehen auf schlichtem Moorboden."
       },
       "walls": {
         "landMovement": "Wie Armeen eine Mauer überwinden – oder nicht.",
@@ -55,31 +55,31 @@
       },
       "founding": {
         "landMovement": "Wie schnell Siedler jedes Feld überqueren.",
-        "wildlifeCamps": "Starke Lager können Siedler unterwegs überfallen.",
+        "wildlifeCamps": "Starke Reviere können Siedler unterwegs überfallen.",
         "realm": "Eine neue Siedlung hält Abstand zu deinem Gebiet, Wachtürme eingerechnet."
       },
       "realm": {
         "founding": "Wo eine neue Siedlung landen darf, wird von jeder Gebietsgrenze aus gemessen, Wachtürme eingerechnet.",
         "walls": "Auch Mauern stehen innerhalb deines Gebiets und brauchen einen Wachturm der Stufe 5.",
-        "wildlifeCamps": "Starke Lager greifen Wachtürme an."
+        "wildlifeCamps": "Starke Reviere greifen Wachtürme an."
       },
       "landMovement": {
         "walls": "Ein Mauerfeld hält jede Landarmee auf.",
-        "wildlifeCamps": "Starke Lager überfallen Armeen, die ihnen zu nahe kommen.",
+        "wildlifeCamps": "Starke Reviere überfallen Armeen, die ihnen zu nahe kommen.",
         "founding": "Siedler ziehen über dieselben Böden."
       },
       "ships": {
         "shrines": "Njörds Schrein lässt deine Schiffe härter zuschlagen.",
         "walls": "Mauern halten keine Flotten auf.",
-        "wildlifeCamps": "Der Walweg, das einzige Lager auf See, überfällt Flotten."
+        "wildlifeCamps": "Der Walweg, das einzige Revier auf See, überfällt Flotten."
       },
       "wildlifeCamps": {
-        "landMovement": "Lager überfallen Armeen unterwegs.",
-        "bogLands": "Die Moorlager stehen auf schlichtem Moorboden.",
+        "landMovement": "Reviere überfallen Armeen unterwegs.",
+        "bogLands": "Die Moorreviere stehen auf schlichtem Moorboden.",
         "wastedLands": "Fenrirs Brut und die Jötnar beherrschen die Ödlande."
       },
       "wastedLands": {
-        "wildlifeCamps": "Auch das Ödland hat eigene Lager.",
+        "wildlifeCamps": "Auch das Ödland hat eigene Reviere.",
         "walls": "Deine eigenen Mauern, aus Holz gebaut.",
         "landMovement": "Wie Armeen das Land bis dorthin durchqueren."
       },
@@ -93,7 +93,7 @@
   "hub": {
     "title": "Docs",
     "heading": "Das Bjarnøy-Handbuch",
-    "intro": "Wie Inseln, Gebäude, Bestien und das Endspiel funktionieren. Alles hier sind die Regeln und die Grafiken des Spiels selbst.",
+    "intro": "Wie Inseln, Gebäude, Wildtiere und das Endspiel funktionieren.",
     "artAlt": "Utgard, die Riesenfestung der Ödlande",
     "groups": {
       "story": {
@@ -167,8 +167,8 @@
         "description": "Schiffe aus der Werft, Flotten auf See und was Mauern nicht aufhalten."
       },
       "wildlifeCamps": {
-        "title": "Wildtierlager",
-        "description": "Wölfe, Eber und Schlimmeres beherrschen die freien Inseln. Jage sie und nimm dir die Beute."
+        "title": "Wildtiere",
+        "description": "Die Wildtiere der freien Inseln: wo sie leben, wie du sie jagst und welche Beute sie bringen."
       },
       "wastedLands": {
         "title": "Ödlande",
@@ -206,7 +206,7 @@
     "hammerschmiede": "Hammerschmiede",
     "odinstatue": "Odin-Statue",
     "palisade": "Palisade",
-    "palisadegate": "Palisaden-Tor",
+    "palisadegate": "Palisadentor",
     "bridge": "Brücke",
     "siegeworkshop": "Belagerungswerkstatt",
     "reindeerherder": "Rentierhirte"
@@ -246,7 +246,7 @@
       "water": "Wasser"
     },
     "lore": {
-      "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und welche Gebäude freigeschaltet sind. Außerdem liefert es von jedem Rohstoff ein wenig und erweitert das Lager. Jede Siedlung beginnt mit einem Langhaus auf Gras.",
+      "longhouse": "Das Hauptgebäude der Siedlung. Seine Stufe bestimmt, wie weit dein Gebiet reicht, wie viele Baumeister du hast und welche Gebäude freigeschaltet sind. Außerdem liefert es von jedem Rohstoff ein wenig und erweitert das Lager. Jede Siedlung beginnt mit einem Langhaus auf Gras.",
       "lumberjack": "Schlägt Holz auf bewaldetem Boden – das Holz hinter jeder Wand und jedem Dach.",
       "quarry": "Bricht Stein aus einem Bergkamm – die Knochen jeder Festung.",
       "odinstatue": "Odins Statue steht auf Gras und wird ab Langhaus 25 hinter einer Druidenhütte der Stufe 10 freigeschaltet. Weisheit: Jeder Bau in dieser Siedlung dauert pro Stufe 2 % kürzer (auf Stufe 5 sind es 10 %). Raben: Das Gebiet, die Türme und die Armeen der Siedlung sehen pro Stufe 2 Ringe weiter (auf Stufe 5 sind es 10). Sie zählt als der eine Schrein der Siedlung.",
@@ -265,14 +265,14 @@
       "archeryrange": "Bildet auf Gras oder Sand die Bogenschützen der Landarmee aus.",
       "dockyard": "Bildet auf flachem (Küsten-)Wasser Schiffe aus.",
       "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras. Sie setzt voraus, dass sowohl das Langhaus als auch das Lagerhaus dieser Siedlung auf Stufe 15 stehen.",
-      "barracks": "Bildet auf Gras oder Sand an der Grenze die Kernlinie der Landarmee aus – Thralls, Speerkämpfer, Axtkämpfer und Berserker. Die Bogenschützen bildet der Schießplatz aus, die Belagerungswaffen die Belagerungswerkstatt. Keine Einheit lässt sich an zwei Gebäuden ausbilden.",
+      "barracks": "Bildet auf Gras oder Sand an der Grenze die Kernlinie der Landarmee aus – Knechte, Speerkämpfer, Axtkämpfer und Berserker. Die Bogenschützen bildet der Schießplatz aus, die Belagerungswaffen die Belagerungswerkstatt. Keine Einheit lässt sich an zwei Gebäuden ausbilden.",
       "sawmill": "Verarbeitet Holz direkt auf einem geraden, sanft gebogenen oder eng gebogenen Flussfeld – ein Wasserrad, das sich mit der Strömung dreht, wie bei der Getreidemühle. Sie liefert kein eigenes Holz, sondern steigert jeden Holzfäller im Umkreis ihrer Stufe. Mit steigender Stufe wachsen Reichweite und Bonus.",
       "meadery": "Züchtet Bienen auf Gras hinter einem Bauernhof der Stufe 5 – Bienenkörbe, eine Honigpresse und ein Metkeller. Sie hat noch keine eigene Wirkung, der Met ist für einen künftigen Moralbonus gedacht.",
       "townsquare": "Der eigene Marktplatz des Dorfes auf Gras. Er hat noch keine eigene Wirkung, ist aber als künftige Voraussetzung oder künftiger Bonus vorgesehen.",
       "cropmill": "Mahlt auf einem geraden Flussfeld das Getreide eines Bauernhofs, der bis Stufe 10 ausgebaut ist – ein Mühlstein unter freiem Himmel, dessen Wasserrad sich mit der Strömung dreht. Sie erzeugt keine eigene Nahrung, sondern steigert jeden Bauernhof im Umkreis ihrer Stufe. Mit steigender Stufe wachsen Reichweite und Bonus. Die Kürbisfarm profitiert nicht davon: Kürbisse sind eine andere Feldfrucht, die eine Mühle nicht mahlt.",
       "smithy": "Die Schmiede der Siedlung mit Amboss, auf Gras oder Sand hinter einer Kaserne der Stufe 10. Sie ist der Gipfelpunkt der Militärlinie und Voraussetzung für den Schrein des Thor. Sie erzeugt nichts: Hier sollen später einmal Truppen aufgewertet werden, die Mechanik dafür kommt noch.",
       "druidhut": "Ein Rundhaus mit Rasendach auf Gras hinter einem Dorfplatz, umgeben von einem Ring aus Runensteinen. Es hat noch keine eigene Wirkung, ist aber für eine künftige Gunst- oder Runenmechanik gedacht.",
-      "cartworkshop": "Baut auf Gras hinter einem Dorfplatz die Karren der Siedlung. Sie bildet Furiere und Siedler aus. Eigene Lagerkapazität hat sie nicht.",
+      "cartworkshop": "Baut auf Gras hinter einem Dorfplatz die Karren der Siedlung. Sie bildet Versorger und Siedler aus. Eigene Lagerkapazität hat sie nicht.",
       "claybrickworks": "Gräbt und brennt Lehm auf Moorboden. Eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht.",
       "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See), hinter einer Ziegelei der Stufe 3: von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %.",
       "hammerschmiede": "Ein wassergetriebenes Hammerwerk an einem Moorbach, hinter einer Raseneisenerz-Grube der Stufe 10. Es liefert kein eigenes Eisen, sondern steigert jede Raseneisenerz-Grube in der Reichweite seiner Stufe (höhere Stufen: größere Reichweite und stärkerer Bonus).",
@@ -388,7 +388,7 @@
       "heading": "Am Rand des langen Winters",
       "p1": "Die Skalden erzählen, das Meer um Bjarnøy sei nie leer gewesen. Hinter den letzten Schären, wo die Seekarten enden, liegt Útgarðr, der Außenhof, die Heimat der Jötnar. Die Riesen waren schon vor Göttern und Menschen da. Solange die Inseln jung sind, schlafen sie, und die Jarle kämpfen untereinander um Holz, Stein und Ruhm.",
       "p2": "Doch jedes Zeitalter wird alt. Sind die Hallen voll und stehen auf jeder Insel Runensteine, erwachen die Riesen. Weit hinter den kartierten Inseln beginnt das Meer zu kochen, und neues Land steigt daraus auf: Inseln, die nie grün waren. Auf jeder raucht ein Feuerberg, und auf der größten ragt Utgard auf, eine schwarze Zitadelle, deren Fenster in kaltem Runenfeuer brennen.",
-      "p3": "Dort ist nie etwas Lebendiges gewachsen. Der Boden besteht aus Asche und Schlacke, die Wälder sind gebleichte Stümpfe mit abgebrochenen Kronen, und die Flüsse führen Feuer. Die Strände sind schwarzer Sand, und das Meer ringsum schimmert kränklich grünschwarz, voller Wracks der Langschiffe, die zu nah heransegelten, um zu sehen, was da aufgestiegen war. Auf den Graten bewachen Jötun-Wachtürme die Zugänge, und Utgards Mauern ziehen sich vom Fels bis ans Ufer.",
+      "p3": "Dort ist nie etwas Lebendiges gewachsen. Der Boden besteht aus Asche und Schlacke, die Wälder sind gebleichte Stümpfe mit abgebrochenen Kronen, und die Flüsse führen Feuer. Die Strände sind schwarzer Sand, und das Meer ringsum schimmert kränklich grünschwarz, voller Wracks der Langschiffe, die zu nah heransegelten, um zu sehen, was da aufgestiegen war. Auf den Graten bewachen Jötunn-Wachtürme die Zugänge, und Utgards Mauern ziehen sich vom Fels bis ans Ufer.",
       "p4": "Kein einzelner Jarl bezwingt Utgard. Seine Mauern sind für eine Belagerung gebaut, die eine Generation dauert, und die Riesen werden stärker, während die Jarle streiten. Nur Gilden, die als ein Heer segeln, können den Außenhof stürmen. Wer sein Tor niederwirft, beendet das Zeitalter. Sein Name wird als letzter eingeritzt, bevor die Welt von vorn beginnt.",
       "caption": "So soll sich das Endspiel anfühlen. Ein Regelwerk ist das nicht: Die Mechanik wird noch entworfen und kann sich ändern."
     },
@@ -404,16 +404,16 @@
     },
     "defences": {
       "heading": "Utgards Wehranlagen",
-      "body": "Die Riesen lassen ihre Inseln nicht schutzlos. Jötun-Wachtürme bewachen die Zugänge, und Mauern aus Utgards eigenem Mauerwerk schließen das Land rund um den Riesen bis hinunter zum Wasser.",
+      "body": "Die Riesen lassen ihre Inseln nicht schutzlos. Jötunn-Wachtürme bewachen die Zugänge, und Mauern aus Utgards eigenem Mauerwerk schließen das Land rund um den Riesen bis hinunter zum Wasser.",
       "example": {
-        "alt": "Ein Beispiel-Utgard: der Riese in der Mitte, zwei Mauerlinien mit Toren darum und Jötun-Wachtürme außerhalb der inneren Linie.",
+        "alt": "Ein Beispiel-Utgard: der Riese in der Mitte, zwei Mauerlinien mit Toren darum und Jötunn-Wachtürme außerhalb der inneren Linie.",
         "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
         "caption": "Utgard steht hinter zwei Mauerlinien. Die innere hat Stufe 2, die äußere Stufe 1, und Wachtürme sichern das Land außerhalb der inneren Linie, einer davon zwischen den beiden Linien, wenn dort Platz ist. Die Linien folgen dem Gelände und schließen sich an Bergen und an der Küste von selbst, es sind also keine glatten Kreise."
       },
       "wallsTechNote": "Jede Mauerlinie ist die günstigste geschlossene Schleife durch ein Entfernungsband um Utgards Anker (innen 3 bis 6 Felder, außen 7 bis 11), gezogen zu einer schwankenden Zielentfernung. Berge, Flüsse und Riesenfelder kosten weit weniger als ein Feld, das eine Mauer braucht, die Linie läuft also durch sie hindurch. Meer kostet weit mehr, die Linie bleibt daher an Land. Die äußere Linie hält ein Feld Abstand zur inneren. Wachtürme stehen mehr als 7 Felder von Utgard entfernt, nie auf und nie neben einem Mauerfeld.",
       "level": "Stufe",
       "watchtower": {
-        "heading": "Jötun-Wachturm",
+        "heading": "Jötunn-Wachturm",
         "body": "Utgards Antwort auf die Türme der Jarle: ein Rundturm aus dunklem, lagenweise gemauertem Stein mit runenhell leuchtenden Schießscharten. Er wächst in drei Stufen, vom Gerüst bis zur gekrönten Spitze, auf der das Runenfeuer offen brennt."
       },
       "walls": {
@@ -435,8 +435,8 @@
       "status": "Geplant: Diese Regeln werden Schritt für Schritt gebaut und sind noch nicht alle im Spiel.",
       "body": "Wenn der Endboss erwacht, tauchen die verwüsteten Inseln auf. Gilden zermürben gemeinsam die Jötnar, besetzen deren Türme mit Armeen, brechen Utgards Mauern mit Rammböcken und stürmen die Festung. Die Armee, die Utgard leert, beendet das Zeitalter.",
       "rules": {
-        "fullBattles": "Jeder Kampf im Endspiel ist eine volle Schlacht: Der Verlierer verliert alles, der Sieger einen Anteil – je knapper der Kampf, desto größer. Eine Raubzug-Grenze gibt es hier nicht.",
-        "towers": "Jede verwüstete Insel mit Utgard trägt drei bis sechs Jötun-Wachtürme, die über die Insel verteilt stehen, und dazu Utgard selbst. Jeder dieser Orte hat eine Jötunn-Besatzung.",
+        "fullBattles": "Jeder Kampf im Endspiel ist eine volle Schlacht: Der Verlierer verliert alles, der Sieger einen Anteil – je knapper der Kampf, desto größer. Eine Plünderungsgrenze gibt es hier nicht.",
+        "towers": "Jede verwüstete Insel mit Utgard trägt drei bis sechs Jötunn-Wachtürme, die über die Insel verteilt stehen, und dazu Utgard selbst. Jeder dieser Orte hat eine Jötunn-Besatzung.",
         "assault": "Schick eine Armee, um einen Wachturm oder Utgard zu stürmen. Getötete Jötnar bleiben tot, die Besatzung wächst nur langsam nach. So kann eine Gilde sie über mehrere Angriffe zermürben.",
         "grace": "Ein Wachturm ohne Jötnar gilt als eingenommen. Er wird still und bleibt 1 Stunde leer, dann wächst die Besatzung wieder nach.",
         "holding": "Eine Armee, die auf einem Ort steht, besetzt ihn. Jede Stunde kommen die nachgewachsenen Jötnar heraus und kämpfen in einer vollen Schlacht gegen sie. Solange die Armee gewinnt, bleibt der Ort unten.",
@@ -542,33 +542,33 @@
     }
   },
   "wildlifeCamps": {
-    "title": "Wildtierlager",
-    "intro": "Unbesiedelte Inseln sind nicht leer. Wölfe, Bären, Robben und Schlimmeres beherrschen sie, jedes Rudel in einem eigenen Lager. Du darfst landen und siedeln, aber ein starkes Lager brennt jeden Turm in seiner Nähe nieder, den keine Armee bewacht. Auf einer großen Insel räumst du deshalb die Lager, die dir im Weg sind, und baust dort, wo das Land frei ist.",
-    "status": "Die Lager leben: Du kannst sie jagen, sie wachsen nach, und starke Lager wehren sich. Die Regeln unten sind genau die, nach denen das Spiel läuft. Die Moorlager (Elchmoor, Biberburg, Kranichtanz) stehen auf einfachem Moorboden.",
+    "title": "Wildtiere",
+    "intro": "Unbesiedelte Inseln sind nicht leer. Auf ihnen leben Wölfe, Bären, Robben und andere Wildtiere, jedes Rudel in seinem eigenen Revier. Du darfst landen und siedeln, aber ein starkes Revier brennt jeden Turm in seiner Nähe nieder, den keine Armee bewacht. Auf einer großen Insel räumst du deshalb die Reviere, die dir im Weg sind, und baust dort, wo das Land frei ist.",
+    "status": "Du kannst Reviere jagen, sie wachsen nach, und starke Reviere wehren sich. Die Moorreviere (Elchmoor, Biberburg, Kranichtanz) liegen auf einfachem Moorboden.",
     "rules": {
-      "heading": "Wie ein Lager funktioniert",
-      "towers": "Ein bewachtes Lager beansprucht das Land um sich herum. Starke Lager sind angriffslustig: Steht einer deiner Türme in ihrer Reichweite und keine deiner Armeen bewacht ihn, brennen sie ihn nieder. Willst du dort trotzdem einen Turm bauen, warnt dich das Spiel vorher. Außerhalb ihrer Reichweite kannst du auf der Insel frei bauen.",
-      "range": "Wie weit ein Lager reicht, hängt von seiner Stufe ab, die beim Erscheinen des Lagers zufällig ausgewürfelt wird. Ein starkes Lager kann einen weiten Landstrich beanspruchen, ein schwaches nur die nächsten Felder.",
-      "bigIslands": "Eine kleine Insel kann ein einzelnes Lager komplett beherrschen. Auf einer großen Insel räumst du nur die Lager, die dir im Weg sind, und baust Türme dort, wo das Land dann frei ist.",
-      "states": "Ein Lager hat zwei Zustände: bewacht (mit seinen Tieren) und geräumt (leer). Ein angeschlagenes Lager wächst nach und gilt weiterhin als bewacht.",
-      "building": "Sobald ein Lager geräumt ist, kannst du auf seinem Feld bauen (nur bei Fenrirs Brut nicht). Solange das Gebäude steht, bleibt das Lager entfernt.",
-      "respawn": "Ein geräumtes Lager füllt sich nur wieder auf, solange sein Feld außerhalb jedes Reichs liegt. Ein leeres Lager innerhalb eines Reichs bleibt leer. Steht das Gebäude darauf nicht mehr und liegt das Feld außerhalb jedes Reichs, kehrt das Lager zurück.",
+      "heading": "Wie ein Revier funktioniert",
+      "towers": "Ein bewachtes Revier beansprucht das Land um sich herum. Starke Reviere sind angriffslustig: Steht einer deiner Türme in ihrer Reichweite und keine deiner Armeen bewacht ihn, brennen sie ihn nieder. Willst du dort trotzdem einen Turm bauen, warnt dich das Spiel vorher. Außerhalb ihrer Reichweite kannst du auf der Insel frei bauen.",
+      "range": "Wie weit ein Revier reicht, hängt von seiner Stufe ab, die beim Erscheinen des Reviers zufällig ausgewürfelt wird. Ein starkes Revier kann einen weiten Landstrich beanspruchen, ein schwaches nur die nächsten Felder.",
+      "bigIslands": "Eine kleine Insel kann ein einzelnes Revier komplett beherrschen. Auf einer großen Insel räumst du nur die Reviere, die dir im Weg sind, und baust Türme dort, wo das Land dann frei ist.",
+      "states": "Ein Revier hat zwei Zustände: bewacht (mit seinen Tieren) und geräumt (leer). Ein angeschlagenes Revier wächst nach und gilt weiterhin als bewacht.",
+      "building": "Sobald ein Revier geräumt ist, kannst du auf seinem Feld bauen (nur bei Fenrirs Brut nicht). Solange das Gebäude steht, bleibt das Revier entfernt.",
+      "respawn": "Ein geräumtes Revier füllt sich nur wieder auf, solange sein Feld außerhalb jedes Reichs liegt. Ein leeres Revier innerhalb eines Reichs bleibt leer. Steht das Gebäude darauf nicht mehr und liegt das Feld außerhalb jedes Reichs, kehrt das Revier zurück.",
       "neverBuilt": "Auf dem Adlerhorst auf seiner Brandungssäule und auf Fenrirs Brut in den Ödlanden wird nie gebaut. Das leere Nest bleibt auf der Karte, und Fenrirs Brut kehrt immer wieder zurück.",
       "atSea": "Der Walweg liegt auf offener See, weit vor der Küste. Er beansprucht kein Land und brennt keine Türme nieder. Segelt eine Flotte auf sein Feld, solange er nicht ruhig ist, gerät sie dort in einen Hinterhalt. Jagen kannst du ihn nur mit Schiffen. Er liefert nur Nahrung, so viel deine überlebenden Schiffe tragen können, und kehrt nach jeder Räumung zurück.",
-      "hunting": "Jagd: Schick Landeinheiten (zum Walweg Schiffe) mit dem Jagdbefehl auf das Feld eines Lagers. Der Angriff deiner Armee wird gegen die Verteidigung der Tiere ausgekämpft, bei Gleichstand gewinnt das Lager. Der Verlierer verliert alles, der Gewinner einen Teil seiner Streitmacht. Ein Sieg räumt das Lager und zahlt seine Beute aus.",
-      "regrowth": "Nachwuchs: Ein angeschlagenes Lager bekommt seine Tiere gleichmäßig über 4 Stunden (schwache Lager) oder 8 Stunden (starke Lager) zurück.",
-      "calm": "Ruhe: Nach jedem Kampf ist ein Lager 24 Stunden lang ruhig. Es wächst weiter nach, greift aber nicht an.",
-      "leveling": "Aufstieg: Jede 10. Räumung eines Lagers, egal durch welchen Spieler, hebt seine Stufe um 1, höchstens bis 100. Die Stufe sinkt nie wieder. Die Reichweite bleibt, wie sie ausgewürfelt wurde: Ein abgefarmtes Lager wird also stärker, beansprucht aber nicht mehr Land.",
-      "ambush": "Hinterhalt: Ein starkes Lager, das nicht ruhig ist und noch Alttiere oder Alphas hat, überfällt Armeen, die in seine Reichweite kommen. Geschlagene Armeen ziehen sich nach Hause zurück. In jedem Fall ist das Lager danach 24 Stunden ruhig.",
-      "leftover": "Restbeute: Was deine Armee nicht tragen kann, bleibt im Lager für den nächsten Jäger liegen. Eine Jagd auf ein kaum nachgewachsenes Lager bringt wenig, und bei einem leeren Lager sammelst du nur die Restbeute ein."
+      "hunting": "Jagd: Schick Landeinheiten (zum Walweg Schiffe) mit dem Jagdbefehl auf das Feld eines Reviers. Der Angriff deiner Armee wird gegen die Verteidigung der Tiere ausgekämpft, bei Gleichstand gewinnt das Revier. Der Verlierer verliert alles, der Gewinner einen Teil seiner Streitmacht. Ein Sieg räumt das Revier und zahlt seine Beute aus.",
+      "regrowth": "Nachwuchs: Ein angeschlagenes Revier bekommt seine Tiere gleichmäßig über 4 Stunden (schwache Reviere) oder 8 Stunden (starke Reviere) zurück.",
+      "calm": "Ruhe: Nach jedem Kampf ist ein Revier 24 Stunden lang ruhig. Es wächst weiter nach, greift aber nicht an.",
+      "leveling": "Aufstieg: Jede 10. Räumung eines Reviers, egal durch welchen Spieler, hebt seine Stufe um 1, höchstens bis 100. Die Stufe sinkt nie wieder. Die Reichweite bleibt, wie sie ausgewürfelt wurde: Ein abgefarmtes Revier wird also stärker, beansprucht aber nicht mehr Land.",
+      "ambush": "Hinterhalt: Ein starkes Revier, das nicht ruhig ist und noch Alttiere oder Alphas hat, überfällt Armeen, die in seine Reichweite kommen. Geschlagene Armeen ziehen sich nach Hause zurück. In jedem Fall ist das Revier danach 24 Stunden ruhig.",
+      "leftover": "Restbeute: Was deine Armee nicht tragen kann, bleibt im Revier für den nächsten Jäger liegen. Eine Jagd auf ein kaum nachgewachsenes Revier bringt wenig, und bei einem leeren Revier sammelst du nur die Restbeute ein."
     },
     "camps": {
-      "heading": "Die Lager",
-      "body": "Jede Bodenart hat ihre eigenen Lager: ein starkes und manchmal ein schwaches. Du kannst sie nach Stärke oder Boden filtern, ein Lager zwischen bewacht und geräumt umschalten und es in die sechs Richtungen drehen, in die ein Feld blicken kann.",
-      "rotations": "Ein bewachtes Lager hat nur für die Richtungen eine Grafik, aus denen man seine Tiere am besten sieht. Die anderen Richtungen sind ausgegraut, und auf der Karte wird das Lager in eine der verfügbaren gedreht. Ein geräumtes Lager kann in jede Richtung blicken."
+      "heading": "Die Reviere",
+      "body": "Jede Bodenart hat ihre eigenen Reviere: ein starkes und manchmal ein schwaches. Du kannst sie nach Stärke oder Boden filtern, ein Revier zwischen bewacht und geräumt umschalten und es in die sechs Richtungen drehen, in die ein Feld blicken kann.",
+      "rotations": "Ein bewachtes Revier hat nur für die Richtungen eine Grafik, aus denen man seine Tiere am besten sieht. Die anderen Richtungen sind ausgegraut, und auf der Karte wird das Revier in eine der verfügbaren gedreht. Ein geräumtes Revier kann in jede Richtung blicken."
     },
     "state": {
-      "all": "Alle Lager",
+      "all": "Alle Reviere",
       "label": "Zustand",
       "guarded": "Bewacht",
       "cleared": "Geräumt"
@@ -577,12 +577,12 @@
       "label": "Stärke",
       "strong": "Stark",
       "weak": "Schwach",
-      "help": "Starke Lager würfeln hohe Stufen aus und beanspruchen einen weiten Landstrich. In ihrer Nähe landet kein neuer Spieler. Schwache Lager würfeln niedrige Stufen und beanspruchen nur ihre nächsten Felder: die ersten, sicheren Kämpfe eines neuen Spielers."
+      "help": "Starke Reviere würfeln hohe Stufen aus und beanspruchen einen weiten Landstrich. In ihrer Nähe landet kein neuer Spieler. Schwache Reviere würfeln niedrige Stufen und beanspruchen nur ihre nächsten Felder: die ersten, sicheren Kämpfe eines neuen Spielers."
     },
     "filters": {
       "all": "Alle",
       "ground": "Boden",
-      "none": "Kein Lager passt zu diesen Filtern."
+      "none": "Kein Revier passt zu diesen Filtern."
     },
     "range": "Bewacht {min} bis {max} Felder um sich herum, je nach Stufe (1 bis {levels}).",
     "loot": {
@@ -592,12 +592,12 @@
       "wood": "Holz",
       "iron": "Eisen",
       "more": "{kind} ++",
-      "moreHint": "Davon gibt es hier mehr als bei anderen Lagern",
-      "note": "Ein geräumtes Lager bringt Beute. Jedes Lager gibt Nahrung aus der Jagd, ein starkes zusätzlich Eisen aus der Ausrüstung früherer Siedler, die sein Rudel gefressen hat. Manche Lager geben außerdem, was ihr Boden hergibt, und ++ markiert den größten Anteil eines Lagers (doppeltes Gewicht). Der Vorrat wächst mit der Stufe des Lagers, aber langsamer als seine Besatzung. Eine frühe Räumung lohnt sich deshalb weit mehr, als sie kostet.",
+      "moreHint": "Davon gibt es hier mehr als bei anderen Revieren",
+      "note": "Ein geräumtes Revier bringt Beute. Jedes Revier gibt Nahrung aus der Jagd, ein starkes zusätzlich Eisen aus der Ausrüstung früherer Siedler, die sein Rudel gefressen hat. Manche Reviere geben außerdem, was ihr Boden hergibt, und ++ markiert den größten Anteil eines Reviers (doppeltes Gewicht). Der Vorrat wächst mit der Stufe des Reviers, aber langsamer als seine Besatzung. Eine frühe Räumung lohnt sich deshalb weit mehr, als sie kostet.",
       "atLevel": "Auf Stufe {level}"
     },
     "camera": "Richtung",
-    "notKept": "Für bewachte Lager gibt es nur Grafiken für die Richtungen, aus denen man die Tiere am besten sieht",
+    "notKept": "Für bewachte Reviere gibt es nur Grafiken für die Richtungen, aus denen man die Tiere am besten sieht",
     "grounds": {
       "grass": "Gras",
       "sand": "Sand",
@@ -681,7 +681,7 @@
     "stage": "Stufe",
     "example": {
       "heading": "Beispielkarte",
-      "body": "Eine kleine Insel, die das Spiel selbst erzeugt hat. Moor, Bach und See sind genau so gezeichnet wie in einer echten Welt. Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
+      "body": "Eine kleine Insel, die das Spiel erzeugt hat. Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
       "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
       "river": "Fluss"
     },
@@ -914,7 +914,7 @@
       "heading": "Belagerung",
       "body": "Eine Mauer lässt sich durchbrechen, und zwar Stufe um Stufe. Das schaffen Rammböcke und Flotten, aber nur bei einem Angriff auf die Siedlung, zu der die Mauer gehört. Katapulte können keine Mauer beschädigen; sie brennen Türme und alle anderen Gebäude nieder.",
       "rules": {
-        "who": "Schick einen Angriff (oder einen Raubzug) mit Rammböcken gegen die Siedlung und wähl beim Losschicken das Mauerfeld als Ziel. Bei der Mauer eines Rivalen erledigt das die Aktion „Belagern“ im Ringmenü für dich (sie braucht einen Rammbock zu Hause). Gewinnt deine Armee die Schlacht, schlagen die überlebenden Rammböcke auf dieses Feld. Ein einziger überlebender Rammbock genügt. Verliert deine Armee die Schlacht, schlägt nichts zu. Rammböcke werden in der Belagerungswerkstatt ausgebildet.",
+        "who": "Schick einen Angriff (oder eine Plünderung) mit Rammböcken gegen die Siedlung und wähl beim Losschicken das Mauerfeld als Ziel. Bei der Mauer eines Rivalen erledigt das die Aktion „Belagern“ im Ringmenü für dich (sie braucht einen Rammbock zu Hause). Gewinnt deine Armee die Schlacht, schlagen die überlebenden Rammböcke auf dieses Feld. Ein einziger überlebender Rammbock genügt. Verliert deine Armee die Schlacht, schlägt nichts zu. Rammböcke werden in der Belagerungswerkstatt ausgebildet.",
         "ships": "Gewinnt eine Flotte ihren Kampf, beschädigt sie das Gebäude, gegen das du sie geschickt hast, auf dieselbe Weise, auch das Seeende einer Mauer. Einem Mauerfeld nimmt sie dann ebenfalls genau eine Stufe.",
         "target": "Wählst du kein Ziel oder steht das gewählte Gebäude bei der Ankunft nicht mehr, trifft die Belagerung ein zufälliges Gebäude der Siedlung, das deine überlebenden Belagerungswaffen beschädigen können. Eine Mauer, die nur Katapulten genannt wird, nimmt keinen Schaden.",
         "level": "Eine gewonnene Belagerung nimmt einem Mauerfeld genau eine Stufe, egal wie viele Rammböcke überleben. Das gilt auch für das Tor. Die meisten Gebäude verlieren gegen eine starke Armee mehrere Stufen auf einmal, eine Mauer bricht dagegen Stufe für Stufe. Palisade und Tor haben {levels} Stufen, ein fertig ausgebautes Mauerfeld braucht also {levels} gewonnene Belagerungen. Eine beschädigte Mauer hält Armeen weiter auf, bis ihre letzte Stufe fällt.",
@@ -1045,7 +1045,7 @@
     },
     "first": {
       "heading": "Deine erste Siedlung",
-      "body": "Deine erste Siedlung suchst du dir aus ein paar Startplätzen aus, die das Spiel dir anbietet. Jeder liegt auf Grasland nahe am Wald, abseits des Meeres, mit Moor in Reichweite für Ton und Eisen und weit weg von starken Wildtierlagern und Riesen."
+      "body": "Deine erste Siedlung suchst du dir aus ein paar Startplätzen aus, die das Spiel dir anbietet. Jeder liegt auf Grasland nahe am Wald, abseits des Meeres, mit Moor in Reichweite für Ton und Eisen und weit weg von starken Revieren und Riesen."
     },
     "more": {
       "heading": "Weitere Siedlungen",
@@ -1060,8 +1060,8 @@
         "minutes": "{n} Min."
       },
       "provisions": "Jeder Siedler trägt {food} Nahrung, alle fünf zusammen {total}. Nimm genug für Hin- und Rückweg mit.",
-      "ambush": "Unterwegs können starke Wildtierlager deine Siedler überfallen (siehe {camps}). Wie schnell sie über das jeweilige Gelände kommen, steht auf der Seite {movement}.",
-      "campsLink": "Wildtierlager",
+      "ambush": "Unterwegs können starke Reviere deine Siedler überfallen (siehe {camps}). Wie schnell sie über das jeweilige Gelände kommen, steht auf der Seite {movement}.",
+      "campsLink": "Wildtiere",
       "movementLink": "Bewegung an Land"
     },
     "renown": {
@@ -1150,7 +1150,7 @@
     },
     "linked": {
       "heading": "Verbundene Gebiete",
-      "body": "Berühren sich die Gebiete zweier deiner Siedlungen auf einer Insel, verbinden sie sich zu einem Gebiet. Es trägt den Namen deiner ältesten Siedlung darin und hat einen gemeinsamen Vorrat: Alles, was du produzierst, fließt hinein, und alles, was du dort baust, ausbildest oder handelst, bezahlst du daraus. Seine Lagerkapazität ist die aller Siedlungen zusammen, ebenso seine Bauplätze, die sich alle Bauaufträge teilen. Du verwaltest das Gebiet von deiner ältesten Siedlung aus und kannst von dort auf jedem seiner Felder bauen. Deine übrigen Siedlungen darin tauchen in keiner Liste mehr auf, und Rivalen sehen auf jedem Langhaus den Namen der ältesten. Ein Überfall auf eines seiner Langhäuser kann den ganzen Vorrat plündern. Reißt die Verbindung ab, behält jede Siedlung ihren Anteil am Vorrat – im Verhältnis zu ihrer Lagerkapazität."
+      "body": "Berühren sich die Gebiete zweier deiner Siedlungen auf einer Insel, verbinden sie sich zu einem Gebiet. Es trägt den Namen deiner ältesten Siedlung darin und hat einen gemeinsamen Vorrat: Alles, was du produzierst, fließt hinein, und alles, was du dort baust, ausbildest oder handelst, bezahlst du daraus. Seine Lagerkapazität ist die aller Siedlungen zusammen, ebenso seine Baumeister, die sich alle Bauaufträge teilen. Du verwaltest das Gebiet von deiner ältesten Siedlung aus und kannst von dort auf jedem seiner Felder bauen. Deine übrigen Siedlungen darin tauchen in keiner Liste mehr auf, und Rivalen sehen auf jedem Langhaus den Namen der ältesten. Wer eines seiner Langhäuser plündert, kann den ganzen Vorrat erbeuten. Reißt die Verbindung ab, behält jede Siedlung ihren Anteil am Vorrat – im Verhältnis zu ihrer Lagerkapazität."
     }
   },
   "landMovement": {
@@ -1167,7 +1167,7 @@
     },
     "example": {
       "heading": "Ein Marsch über die Insel",
-      "intro": "Eine Armee marschiert von ihrer Siedlung auf die andere Seite der Mauer. Die Route hat das Spiel selbst berechnet: Sie führt um das Moor und den Bergrücken herum, durch den Bach, über die Brücke ans andere Ufer des breiten Flusses und durch das Tor.",
+      "intro": "Eine Armee marschiert von ihrer Siedlung auf die andere Seite der Mauer. Ihre Route führt um das Moor und den Bergrücken herum, durch den Bach, über die Brücke ans andere Ufer des breiten Flusses und durch das Tor.",
       "alt": "Eine Beispielinsel mit dem Weg einer Armee von ihrer Siedlung auf die andere Seite einer Mauer.",
       "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
       "total": "Eine {unit}-Armee braucht für die ganze Route {time}.",
@@ -1182,7 +1182,7 @@
         "wideRiver": "Breiter Fluss",
         "stream": "Bach",
         "wall": "Palisade",
-        "gate": "Palisaden-Tor",
+        "gate": "Palisadentor",
         "coast": "Küstenwasser",
         "sea": "Offenes Wasser"
       }
@@ -1230,8 +1230,8 @@
     },
     "road": {
       "heading": "Unterwegs",
-      "camps": "Kommt eine Armee in die Reichweite eines starken Wildtierlagers, wird sie überfallen, außer das Lager ist ruhig. Ein starkes Lager bewacht {min} bis {max} Felder um sich (2 plus seine Stufe). Mehr dazu unter {link}.",
-      "campsLink": "Wildtierlager",
+      "camps": "Kommt eine Armee in die Reichweite eines starken Reviers, wird sie überfallen, außer das Revier ist ruhig. Ein starkes Revier bewacht {min} bis {max} Felder um sich (2 plus seine Stufe). Mehr dazu unter {link}.",
+      "campsLink": "Wildtiere",
       "enemies": "Feindliche Armeen, die sich auf der Straße treffen, kämpfen eine Feldschlacht. Armeen desselben Besitzers oder derselben Gilde kämpfen nie gegeneinander.",
       "orders": "Jeder Befehl hat ein Ziel gratis. Wegpunkte unterwegs sind eine Premium-Funktion."
     },
@@ -1297,8 +1297,8 @@
       "targets": "Eine Flotte kann Siedlungen angreifen, plündern oder unterstützen, die Küste beanspruchen.",
       "walls": "{walls} halten Flotten nicht auf.",
       "wallsLink": "Mauern",
-      "camps": "Lager an Land überfallen nie eine Flotte. Der Walweg liegt auf offener See und überfällt jede Flotte, die auf sein Feld segelt (siehe {camps}).",
-      "campsLink": "Wildtierlager"
+      "camps": "Reviere an Land überfallen nie eine Flotte. Der Walweg liegt auf offener See und überfällt jede Flotte, die auf sein Feld segelt (siehe {camps}).",
+      "campsLink": "Wildtiere"
     },
     "troops": {
       "heading": "Truppen an Bord",
@@ -1326,7 +1326,7 @@
   },
   "shrines": {
     "title": "Schreine",
-    "intro": "Ein Schrein sichert dir die Gunst eines Gottes: einen dauerhaften Bonus für die ganze Siedlung. Pro Siedlung bekommst du nur einen Schrein, die Wahl zählt also.",
+    "intro": "Ein Schrein sichert dir die Gunst eines Gottes: einen dauerhaften Bonus für die ganze Siedlung. Pro Siedlung bekommst du nur einen Schrein.",
     "rules": {
       "heading": "Die Regeln",
       "oneShrine": "Eine Siedlung kann insgesamt nur einen Schrein haben, gleich für welchen Gott. Auch die Odin-Statue zählt als Schrein.",

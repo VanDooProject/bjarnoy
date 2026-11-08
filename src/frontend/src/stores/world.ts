@@ -3,6 +3,7 @@ import { markRaw } from 'vue';
 import { api, ApiError, isSettlementNotFound, isWorldNotFound } from '../api/client';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { i18n } from '../i18n';
+import { missionName } from '../i18n/catalogueNames';
 import type {
   ArmyResponse,
   BuildOrderResponse,
@@ -1791,7 +1792,7 @@ export const useWorldStore = defineStore('world', {
         } else if (draft.mission === 'hunt' && !draft.targetCamp) {
           draft.error = i18n.global.t('common.errors.chooseCampToHunt');
         } else if ((draft.mission === 'attack' || draft.mission === 'support') && !draft.targetSettlementId) {
-          draft.error = i18n.global.t('common.errors.chooseSettlementFor', { mission: draft.mission });
+          draft.error = i18n.global.t('common.errors.chooseSettlementFor', { mission: missionName(draft.mission) });
         } else {
           draft.error = i18n.global.t('common.errors.selectAtLeastOneUnit');
         }

@@ -15,7 +15,7 @@
     "trigger": "I already have a realm",
     "triggerSub": "or want to join another world",
     "logIn": "Log in",
-    "nameJarlTrigger": "Name your jarl",
+    "nameJarlTrigger": "Create account",
     "nameJarlTriggerSub": "or I already have a realm"
   },
   "accountMenu": {
@@ -395,11 +395,11 @@
     "sending": "Sending…",
     "confirmOrder": "Confirm order",
     "dispatchInstructions": "Click hexes on the map to plot a route — the last click is the destination. {count} {hexWord} plotted.",
-    "targetInstructions": "Choose a settlement to {mission}, then optionally click hexes on the map to plot a route there. {count} {waypointWord} plotted.",
+    "targetInstructions": "Choose a target settlement ({mission}), then optionally click hexes on the map to plot a route there. {count} {waypointWord} plotted.",
     "waypointWord": "waypoint | waypoints",
     "target": "Target:",
     "change": "Change",
-    "searchSettlements": "Search settlements to {mission}…",
+    "searchSettlements": "Search target settlements ({mission})…",
     "noSettlementsFound": "No other settlements found yet.",
     "supportNote": "The host feeds your troops once they arrive, but they still need enough food loaded for the round trip home if recalled.",
     "buildingPickerHint": "Preferred siege target — may change if it's no longer there by the time your army arrives.",

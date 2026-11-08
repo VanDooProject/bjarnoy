@@ -7,7 +7,7 @@
     "title": "Premium feature",
     "rejected": "The fight simulator is a premium feature. This account isn't premium, so the server turned that last request down.",
     "notPremium": "The fight simulator is a premium feature. This account isn't premium.",
-    "honestNote": "There's no upgrade flow in this game yet — nowhere here actually sells premium — so there's nothing more to click. Ask whoever runs this world if you think that's wrong."
+    "honestNote": "Premium can't be bought yet. If you think that's wrong, ask whoever runs this world."
   },
   "sections": {
     "attacker": "Attacker",

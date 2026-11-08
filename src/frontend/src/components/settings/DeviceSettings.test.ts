@@ -170,6 +170,6 @@ describe('DeviceSettings', () => {
 
     const wrapper = mountSettings();
 
-    expect(wrapper.text()).toContain('reduced motion');
+    expect(wrapper.text()).toContain('“Reduce motion” is on on your device');
   });
 });

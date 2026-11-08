@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import deCatalogue from './locales/de/catalogue.json';
+import { i18n } from './index';
 import buildingCatalogue from '../data/building-catalogue.json';
 import unitCatalogue from '../data/unit-catalogue.json';
 import {
@@ -10,6 +11,7 @@ import {
   leaderboardCategoryName,
   leaderboardScopeName,
   missionName,
+  runningMissionName,
   resourceName,
   runeRarityName,
   runeTypeName,
@@ -59,6 +61,25 @@ describe('catalogueNames', () => {
   it('has a translated name for every mission', () => {
     for (const mission of ['move', 'attack', 'support', 'raid', 'found']) {
       expect(missionName(mission), mission).not.toBe(mission);
+    }
+  });
+
+  it('has a translated running-mission name for every mission', () => {
+    for (const mission of ['move', 'attack', 'support', 'raid', 'found', 'hunt']) {
+      expect(runningMissionName(mission), mission).not.toBe(mission);
+    }
+  });
+
+  it('names a running mission with a noun and a mission choice with a verb in German', () => {
+    const previous = i18n.global.locale.value;
+    i18n.global.locale.value = 'de';
+    try {
+      expect(missionName('attack')).toBe('Angreifen');
+      expect(runningMissionName('attack')).toBe('Angriff');
+      expect(missionName('raid')).toBe('Plündern');
+      expect(runningMissionName('raid')).toBe('Plünderung');
+    } finally {
+      i18n.global.locale.value = previous;
     }
   });
 

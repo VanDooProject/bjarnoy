@@ -111,7 +111,7 @@ test('onboarding build step uses the map\'s two-lane ring, and the pointer walks
 
   // Frame 2: the landfall banner and the map pointer, right after founding and before the ring has ever opened.
   await expect(settlement.banner).toBeVisible();
-  await expect(settlement.banner).toContainText('Landfall made.');
+  await expect(settlement.banner).toContainText('Your longhouse stands.');
   await expect(settlement.guidancePointer).toContainText('Now build here');
   await expect(settlement.checklist).toContainText('Step 2 of 3');
 
@@ -223,7 +223,7 @@ test('onboarding completion leads with the profile nudge, then the completion ba
   // modal — anchored to the returning-player trigger (ReturningPlayerMenu.vue),
   // not an avatar circle (retired along with the anonymous avatar itself).
   await expect(settlement.profileNudge).toBeVisible();
-  await expect(settlement.profileNudge).toContainText('Three buildings, no jarl.');
+  await expect(settlement.profileNudge).toContainText('Keep your progress');
   await expect(page.getByTestId('returning-player-trigger')).toHaveClass(/is-nudging/);
 
   // The nudge is the one call to action while it is up: the completion
@@ -234,7 +234,7 @@ test('onboarding completion leads with the profile nudge, then the completion ba
   await expect(settlement.profileNudge).toHaveCount(0);
   await expect(page.getByTestId('returning-player-trigger')).not.toHaveClass(/is-nudging/);
   await expect(settlement.banner).toBeVisible();
-  await expect(settlement.banner).toContainText('All three placed.');
+  await expect(settlement.banner).toContainText('Three buildings built');
 
   await settlement.continueButton.click();
   await page.waitForURL('**/settlement');

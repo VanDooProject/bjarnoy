@@ -18,7 +18,7 @@
     "dockyard": "Werft",
     "barracks": "Kaserne",
     "sawmill": "Sägewerk",
-    "meadery": "Met-Brennerei",
+    "meadery": "Metbrauerei",
     "townsquare": "Dorfplatz",
     "cropmill": "Getreidemühle",
     "smithy": "Waffenschmiede",
@@ -29,7 +29,7 @@
     "hammerschmiede": "Hammerschmiede",
     "odinstatue": "Odin-Statue",
     "palisade": "Palisade",
-    "palisadegate": "Palisaden-Tor",
+    "palisadegate": "Palisadentor",
     "bridge": "Brücke",
     "siegeworkshop": "Belagerungswerkstatt",
     "reindeerherder": "Rentierhirte"
@@ -57,7 +57,7 @@
     "wolfden": "Wolfsbau",
     "bearrapids": "Bärenstromschnelle",
     "sealhaulout": "Robbenbank",
-    "walrushaulout": "Walross-Liegeplatz",
+    "walrushaulout": "Walrossbank",
     "boarwallow": "Wildschweinsuhle",
     "eagleeyrie": "Adlerhorst",
     "fenrirbrood": "Fenrirs Brut",
@@ -71,7 +71,7 @@
   },
   "terrain": {
     "sea": "Offenes Wasser",
-    "sand": "Ufer",
+    "sand": "Strand",
     "grass": "Grasland",
     "forest": "Wald",
     "mountain": "Gebirge",
@@ -92,10 +92,18 @@
   },
   "missions": {
     "move": "Ziehen",
+    "attack": "Angreifen",
+    "support": "Unterstützen",
+    "raid": "Plündern",
+    "found": "Siedlung gründen",
+    "hunt": "Jagen"
+  },
+  "runningMissions": {
+    "move": "Marsch",
     "attack": "Angriff",
     "support": "Unterstützung",
-    "raid": "Überfall",
-    "found": "Siedlung gründen",
+    "raid": "Plünderung",
+    "found": "Siedlungsgründung",
     "hunt": "Jagd"
   },
   "runes": {
@@ -107,7 +115,7 @@
     "rarities": {
       "carved": "Geritzt",
       "bound": "Gebunden",
-      "blooded": "Geblutet"
+      "blooded": "Blutgeweiht"
     }
   },
   "guild": {
@@ -129,12 +137,12 @@
       "guild": "Gilden"
     },
     "categories": {
-      "score": "Punktzahl",
+      "score": "Punkte",
       "biggestSettlement": "Größte Siedlung",
       "weeklyScoreGained": "Punkte diese Woche",
-      "weeklyFightsWon": "Siege diese Woche",
-      "weeklyFightsLost": "Niederlagen diese Woche",
-      "weeklyResourcesLooted": "Geplünderte Rohstoffe diese Woche",
+      "weeklyFightsWon": "Gewonnene Kämpfe diese Woche",
+      "weeklyFightsLost": "Verlorene Kämpfe diese Woche",
+      "weeklyResourcesLooted": "Erbeutete Rohstoffe diese Woche",
       "biggestArmy": "Größte Armee"
     }
   },
@@ -147,7 +155,7 @@
     "boarwallow": {
       "young": "Frischling",
       "adult": "Keiler",
-      "alpha": "Hauer"
+      "alpha": "Alter Keiler"
     },
     "bearrapids": {
       "young": "Bärenjunges",
@@ -195,14 +203,14 @@
       "alpha": "Rammler"
     },
     "deerglade": {
-      "young": "Rehkitz",
+      "young": "Hirschkalb",
       "adult": "Hirsch",
       "alpha": "Platzhirsch"
     },
     "otterslide": {
       "young": "Otterjunges",
       "adult": "Otter",
-      "alpha": "Alter Bulle"
+      "alpha": "Alter Otter"
     },
     "whaleroad": {
       "young": "Walkalb",

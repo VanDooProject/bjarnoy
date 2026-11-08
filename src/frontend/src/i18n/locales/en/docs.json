@@ -93,7 +93,7 @@
   "hub": {
     "title": "Docs",
     "heading": "The Bjarnøy handbook",
-    "intro": "How the islands, buildings, beasts and the endgame work. Everything here is the game's own rules and art.",
+    "intro": "How the islands, buildings, wildlife and the endgame work.",
     "artAlt": "Utgard, the giant fortress of the wasted lands",
     "groups": {
       "story": {
@@ -168,7 +168,7 @@
       },
       "wildlifeCamps": {
         "title": "Wildlife camps",
-        "description": "Wolves, boars and worse hold the unclaimed islands. Hunt them for loot."
+        "description": "The wildlife of the free islands: where it lives, how you hunt it and what loot it brings."
       },
       "wastedLands": {
         "title": "Wasted lands",
@@ -246,7 +246,7 @@
       "water": "Water"
     },
     "lore": {
-      "longhouse": "The heart of the settlement. Its level sets the claim radius, the build slots and which buildings unlock, and it produces a little of every resource and adds storage of its own. Every settlement starts with one, standing on grass.",
+      "longhouse": "The main building of the settlement. Its level sets how far your territory reaches, the build slots and which buildings unlock, and it produces a little of every resource and adds storage of its own. Every settlement starts with one, standing on grass.",
       "lumberjack": "Fells timber on forested ground — the wood behind every wall and roof.",
       "quarry": "Cuts stone from a mountain ridge — the bones of every keep.",
       "odinstatue": "Odin's statue on grass, at Longhouse 25 behind a level-10 Druid Hut. Wisdom: every build in this settlement takes 2% less time per level (10% at level 5). Ravens: its claim, its towers and its armies see 2 more rings per level (10 at level 5). Counts as the settlement's one shrine.",
@@ -543,8 +543,8 @@
   },
   "wildlifeCamps": {
     "title": "Wildlife camps",
-    "intro": "Unclaimed islands are not empty. Wolves, bears, seals and worse hold them, each pack in a camp of its own. You may land and settle, but a strong camp burns down any tower near it that no army guards, so on a big island you clear the camps in your way and build where the land is free.",
-    "status": "Camps are alive: you can hunt them, they regrow, and strong camps fight back. The rules below are the ones the game plays by; the bog camps (moose mire, beaver lodge, crane dance) stand on plain bog moss.",
+    "intro": "Unclaimed islands are not empty. Wolves, bears, seals and other wildlife live on them, each pack in a camp of its own. You may land and settle, but a strong camp burns down any tower near it that no army guards, so on a big island you clear the camps in your way and build where the land is free.",
+    "status": "You can hunt camps, they regrow, and strong camps fight back. The bog camps (moose mire, beaver lodge, crane dance) stand on plain bog moss.",
     "rules": {
       "heading": "How a camp works",
       "towers": "A guarded camp holds the land around it. Strong camps attack: a tower inside the range of an aggressive strong camp is burned down unless one of your armies stands guard on it. The game warns you when you place one. Beyond the range the island is open to build on.",
@@ -681,7 +681,7 @@
     "stage": "Stage",
     "example": {
       "heading": "Example map",
-      "body": "A small island the game itself generated, with its bog, creek and lake drawn exactly as a world draws them. Hover a hex to see what it is.",
+      "body": "A small island the game generated. Hover a hex to see what it is.",
       "hoverHint": "Point at a hex to see what it is.",
       "river": "River"
     },
@@ -1167,7 +1167,7 @@
     },
     "example": {
       "heading": "A march across the island",
-      "intro": "An army marches from its settlement to the far side of the wall. The game worked out the route itself: it goes around the bog and the mountain ridge, wades through the stream, crosses the wide river on the bridge and passes through the gate.",
+      "intro": "An army marches from its settlement to the far side of the wall. Its route goes around the bog and the mountain ridge, wades through the stream, crosses the wide river on the bridge and passes through the gate.",
       "alt": "An example island with the route of an army from its settlement to the far side of a wall.",
       "hoverHint": "Point at a hex to see what it is.",
       "total": "A {unit} army needs {time} for the whole route.",
@@ -1326,7 +1326,7 @@
   },
   "shrines": {
     "title": "Shrines",
-    "intro": "A shrine wins you a god's favour: a lasting bonus for the whole settlement. You get one shrine per settlement, so the choice matters.",
+    "intro": "A shrine wins you a god's favour: a lasting bonus for the whole settlement. You get one shrine per settlement.",
     "rules": {
       "heading": "The rules",
       "oneShrine": "A settlement can hold one shrine in total, of any god. Odin's statue counts as a shrine.",

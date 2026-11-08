@@ -24,3 +24,42 @@ Lines that were rejected as cringe. Don't reuse them or write in their style.
 - „Fast — eines der leuchtenden Grundstücke gehört dir." (de, landing): patronising "Fast —".
 - „Landung wird gemacht…" (de, landing): a literal calque of "making landfall".
 - „Das Herz der Siedlung." (de, docs, longhouse): a cliché.
+- „Alles hier sind die Regeln und die Grafiken des Spiels selbst." (de, docs hub): "this is the real thing" filler.
+- „Die Lager leben: … Die Regeln unten sind genau die, nach denen das Spiel läuft." (de, docs camps): the same filler.
+- „Moor, Bach und See sind genau so gezeichnet wie in einer echten Welt." (de, docs bog map): the same filler.
+- „Die Route hat das Spiel selbst berechnet: …" (de, docs movement): the same filler.
+- „Wölfe, Eber und Schlimmeres beherrschen die freien Inseln. Jage sie und nimm dir die Beute." (de, docs): teaser
+  tone, „und Schlimmeres" is a cliché.
+- „Pro Siedlung bekommst du nur einen Schrein, die Wahl zählt also." (de, docs shrines): teaser tone.
+- „Eine Saga aus dem Norden – gemeinsam gespielt." (de, intro landing): a slogan.
+- „Stich in See, beanspruche einen Bauplatz und errichte ein Reich, das auch offline weiterwächst — …" (de, showcase):
+  a sales pitch.
+- „Grenzen, die wachsen" / „Echtzeit, ständig in Bewegung" / „Englisch + Deutsch, immer im Gleichschritt" (de,
+  showcase): slogan titles.
+- „… die Karte zu kennen ist Teil des Spiels." (de, showcase): filler.
+- „Nichts ist gemeinsam — Karawanen und Schiffe bewegen Güter …" (de, showcase): opens with a puzzling claim.
+- „… nichts „öffnet" eine eigene Ansicht." (de, showcase): filler.
+- „Leeres Grundstück · Bjarnøy" (de, landing eyebrow).
+- „Landung geglückt." / „Alle drei stehen." / „Betritt deine Siedlung" (de, landing): pathos for a tutorial step.
+- „Dein Gerät wünscht weniger Bewegung …" / „dein System wünscht reduzierte Bewegung" (de): the device "wishes".
+- „… ASCII-Art willkommen." (de, profile bio): cutesy.
+- „Grundstück" (de): never use it.
+- „Hauptschwein" (de): never use it.
+- „Lager" (de) for a wildlife camp: cringe, and „Lager" already means storage.
+
+## German terms
+
+One German word per game concept. Use these, not the alternatives listed after them.
+
+- Raid (mission): „Plündern", not „Überfall".
+- Provisions an army carries on the move: „Proviant", not „Vorräte".
+- Rune rarity "Blooded": „Blutgeweiht", not „Geblutet" (that means "bled").
+- Wildlife camp: „Wildtiere" for labels and headings (reports tab, docs page), „Revier" wherever one place is meant
+  („Starkes Revier", „Revier Stufe 5", „Jage in einem Revier"). Not „Lager".
+- Missions as actions or choices are verbs: „Angreifen", „Plündern", „Unterstützen", „Jagen", „Ziehen", „Siedlung
+  gründen". A running mission in a status view is a noun: „Angriff", „Plünderung", „Unterstützung".
+- Build slots (builds that run at the same time): „Baumeister" („Kein Baumeister frei", „Wartet auf einen Baumeister",
+  „2 / 3 Baumeister"). Not „Bauplatz".
+- The waiting queue behind the build slots: „Warteschlange" („Die Warteschlange ist voll."). Not „Baustellenschlange"
+  (not a German word).
+- A player's start plot: „Startplatz". Any other tile: „Feld".

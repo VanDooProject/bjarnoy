@@ -74,13 +74,13 @@ describe('HudNav profile nudge', () => {
     const wrapper = await mountHudNav();
     expect(wrapper.find('[data-testid="returning-player-trigger"]').classes()).toContain('is-nudging');
     expect(wrapper.find('.nudge-dot').exists()).toBe(true);
-    expect(wrapper.text()).toContain('Three buildings, no jarl.');
+    expect(wrapper.text()).toContain('Keep your progress');
   });
 
   it('does not show before founding', async () => {
     const wrapper = await mountHudNav();
     expect(wrapper.find('[data-testid="returning-player-trigger"]').classes()).not.toContain('is-nudging');
-    expect(wrapper.text()).not.toContain('Three buildings, no jarl.');
+    expect(wrapper.text()).not.toContain('Keep your progress');
   });
 
   it('does not show before onboarding is actually complete', async () => {
@@ -125,7 +125,7 @@ describe('HudNav profile nudge', () => {
     // anywhere, and no returning-player trigger at all.
     expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(false);
     expect(wrapper.find('.nudge-dot').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('Three buildings, no jarl.');
+    expect(wrapper.text()).not.toContain('Keep your progress');
   });
 });
 
@@ -208,7 +208,7 @@ describe('HudNav "Name your jarl" trigger', () => {
       player.dismissProfileNudge();
       const wrapper = await mountWith(props);
       const trigger = wrapper.get('[data-testid="returning-player-trigger"]');
-      expect(trigger.text()).toContain('Name your jarl');
+      expect(trigger.text()).toContain('Create account');
       expect(trigger.classes()).toContain('trigger--chip');
       expect(wrapper.find('[data-testid="profile-nudge"]').exists()).toBe(false);
     });
@@ -410,7 +410,7 @@ describe('HudNav unclaimed-realm trigger label', () => {
     await wrapper.find('[data-testid="profile-nudge-later"]').trigger('click');
     const trigger = wrapper.find('[data-testid="returning-player-trigger"]');
     expect(wrapper.find('[data-testid="profile-nudge"]').exists()).toBe(false);
-    expect(trigger.text()).toContain('Name your jarl');
+    expect(trigger.text()).toContain('Create account');
     expect(trigger.text()).toContain('or I already have a realm');
   });
 
@@ -418,7 +418,7 @@ describe('HudNav unclaimed-realm trigger label', () => {
     const wrapper = await mountHudNav();
     const trigger = wrapper.find('[data-testid="returning-player-trigger"]');
     expect(trigger.text()).toContain('I already have a realm');
-    expect(trigger.text()).not.toContain('Name your jarl');
+    expect(trigger.text()).not.toContain('Create account');
   });
 
   it('keeps "I already have a realm" once a nickname is set', async () => {
@@ -426,7 +426,7 @@ describe('HudNav unclaimed-realm trigger label', () => {
     foundAndOnboarded(player);
     player.nickname = 'Ragnar';
     const wrapper = await mountHudNav();
-    expect(wrapper.find('[data-testid="returning-player-trigger"]').text()).not.toContain('Name your jarl');
+    expect(wrapper.find('[data-testid="returning-player-trigger"]').text()).not.toContain('Create account');
   });
 });
 

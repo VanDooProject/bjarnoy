@@ -4,7 +4,7 @@
     "notOpenTitle": "Not open yet.",
     "title": "Put your longhouse somewhere.",
     "lede": "That's the whole tutorial. Pick a hex, drop the building, and the grain starts counting. Nobody asks your name until you have something worth naming.",
-    "makingLandfall": "Making landfall…",
+    "makingLandfall": "Landing…",
     "noAccount": "No account",
     "nothingToInstall": "Nothing to install",
     "leavesInOneClick": "Leaves in one click"
@@ -17,7 +17,7 @@
     "noPlotAvailable": "Every plot in this world is taken or held right now — check back in a few minutes."
   },
   "invalidClick": {
-    "pickGlowingPlot": "Not quite — one of the glowing plots is yours to take.",
+    "pickGlowingPlot": "Pick one of the glowing start plots.",
     "beyondClaim": "That hex is beyond your longhouse's claim — build closer to home.",
     "orderFailed": "That order didn't go through — try a different hex.",
     "plotTaken": "That plot was just taken — here's another one."
@@ -48,11 +48,11 @@
     "foundFirst": "Found your longhouse first"
   },
   "banner": {
-    "landfallTitle": "Landfall made.",
-    "landfallBody": "Your longhouse stands. Two buildings to go.",
-    "completeTitle": "All three placed.",
-    "completeBody": "The grain is counting. Drag the map, or click any hex to keep building.",
-    "completeBodyTouch": "The grain is counting. Drag the map, or tap any hex to keep building.",
-    "continueCta": "Enter your settlement"
+    "landfallTitle": "Your longhouse stands.",
+    "landfallBody": "Build two more buildings.",
+    "completeTitle": "Three buildings built",
+    "completeBody": "Your settlement is producing now. Drag the map, or click any hex to keep building.",
+    "completeBodyTouch": "Your settlement is producing now. Drag the map, or tap any hex to keep building.",
+    "continueCta": "Go to your settlement"
   }
 }

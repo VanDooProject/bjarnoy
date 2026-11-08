@@ -11,7 +11,7 @@ describe('LandingPage', () => {
   it('shows the title, the tagline and the three feature rows in English and German', () => {
     const en = mountPage();
     expect(en.get('h1').text()).toBe('BJARNØY');
-    expect(en.text()).toContain('A saga of the north, played together.');
+    expect(en.text()).toContain('A Viking building game in the browser for many players.');
     expect(en.findAll('.usp').map((c) => c.find('b').text())).toEqual(['Multiplayer', 'No pay to win', 'Ad-free']);
     const de = mountPage({ locale: 'de' });
     expect(de.get('h1').text()).toBe('BJARNØY');

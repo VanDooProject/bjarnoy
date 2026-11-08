@@ -98,6 +98,14 @@
     "found": "Found settlement",
     "hunt": "Hunt"
   },
+  "runningMissions": {
+    "move": "Move",
+    "attack": "Attack",
+    "support": "Support",
+    "raid": "Raid",
+    "found": "Founding",
+    "hunt": "Hunt"
+  },
   "runes": {
     "types": {
       "fehu": "Fehu",
@@ -130,12 +138,12 @@
     },
     "categories": {
       "score": "Score",
-      "biggestSettlement": "Biggest Settlement",
-      "weeklyScoreGained": "Weekly Score Gained",
-      "weeklyFightsWon": "Weekly Fights Won",
-      "weeklyFightsLost": "Weekly Fights Lost",
-      "weeklyResourcesLooted": "Weekly Resources Looted",
-      "biggestArmy": "Biggest Army"
+      "biggestSettlement": "Biggest settlement",
+      "weeklyScoreGained": "Weekly score gained",
+      "weeklyFightsWon": "Weekly fights won",
+      "weeklyFightsLost": "Weekly fights lost",
+      "weeklyResourcesLooted": "Weekly resources looted",
+      "biggestArmy": "Biggest army"
     }
   },
   "beasts": {

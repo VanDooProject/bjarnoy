@@ -19,9 +19,9 @@
     "fieldOrderFailed": "Marschbefehl fehlgeschlagen.",
     "selectAtLeastOneUnit": "Wähle mindestens eine Einheit zum Entsenden.",
     "clickMapForDestination": "Klicke zuerst auf die Karte, um ein Ziel festzulegen.",
-    "chooseSettlementFor": "Wähle zuerst eine Siedlung zum {mission}.",
+    "chooseSettlementFor": "Wähle zuerst eine Zielsiedlung ({mission}).",
     "fieldOrderPremiumRequired": "Premium erforderlich, um mehr als einen Stopp zu planen — entferne den zusätzlichen Stopp oder führe ein Upgrade durch.",
-    "chooseCampToHunt": "Wähle zuerst ein Wildtierlager zum Jagen."
+    "chooseCampToHunt": "Wähle zuerst ein Revier zum Jagen."
   },
   "localeSwitcher": {
     "label": "Sprache",

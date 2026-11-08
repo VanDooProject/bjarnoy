@@ -372,7 +372,7 @@ async function confirmFieldOrderClick() {
         <template v-else>
           <p class="status-subtext instructions">
             {{ t('hud.armyPanel.targetInstructions', {
-              mission: draft.mission,
+              mission: missionName(draft.mission),
               count: routeLength,
               waypointWord: t('hud.armyPanel.waypointWord', routeLength),
             }) }}
@@ -387,7 +387,7 @@ async function confirmFieldOrderClick() {
               v-model="targetSearch"
               type="text"
               class="target-search"
-              :placeholder="t('hud.armyPanel.searchSettlements', { mission: draft.mission })"
+              :placeholder="t('hud.armyPanel.searchSettlements', { mission: missionName(draft.mission) })"
             />
             <div v-if="attackTargets.length" class="target-list">
               <button

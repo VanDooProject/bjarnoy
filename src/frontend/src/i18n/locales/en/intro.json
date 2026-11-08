@@ -31,7 +31,7 @@
   "backToDocs": "Back to docs",
   "enterGame": "Enter the game",
   "landing": {
-    "tagline": "A saga of the north, played together.",
+    "tagline": "A Viking building game in the browser for many players.",
     "features": {
       "multiplayer": {
         "title": "Multiplayer",
@@ -43,7 +43,7 @@
       },
       "adFree": {
         "title": "Ad-free",
-        "text": "An indie game, made with love. No ads."
+        "text": "An indie game with no ads."
       }
     },
     "hear": "Hear the saga",

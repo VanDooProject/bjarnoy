@@ -7,7 +7,7 @@
     "title": "Premium-Feature",
     "rejected": "Der Kampfsimulator ist ein Premium-Feature. Dieses Konto ist nicht Premium, daher hat der Server die letzte Anfrage abgelehnt.",
     "notPremium": "Der Kampfsimulator ist ein Premium-Feature. Dieses Konto ist nicht Premium.",
-    "honestNote": "Es gibt in diesem Spiel noch keinen Upgrade-Weg — hier wird nirgends tatsächlich Premium verkauft — also gibt es nichts weiter zu klicken. Frag denjenigen, der diese Welt betreibt, wenn du das für falsch hältst."
+    "honestNote": "Premium kannst du noch nicht kaufen. Hältst du das für einen Fehler, frag den Betreiber dieser Welt."
   },
   "sections": {
     "attacker": "Angreifer",
@@ -21,8 +21,8 @@
     "landAttackBonusPercent": "Angriffsbonus Landeinheiten %",
     "shipAttackBonusPercent": "Angriffsbonus Schiffe %",
     "mission": "Mission",
-    "attack": "Angriff",
-    "raid": "Plünderung",
+    "attack": "Angreifen",
+    "raid": "Plündern",
     "seed": "Seed (optional)",
     "seedPlaceholder": "zufällig"
   },

@@ -1,22 +1,22 @@
 {
   "profileNudge": {
-    "eyebrow": "Dein Reich läuft",
-    "title": "Drei Gebäude, kein Jarl.",
-    "body": "Benenne deins über das Zeichen hier oben, und diese Insel folgt dir auf jedes Gerät. Dauert eine Minute — nur Benutzername und Passwort.",
-    "cta": "Jarl benennen",
+    "eyebrow": "Konto",
+    "title": "Sichere deinen Spielstand",
+    "body": "Erstell über das Zeichen oben ein Konto, dann spielst du dein Reich auf jedem Gerät weiter. Du brauchst nur einen Benutzernamen und ein Passwort.",
+    "cta": "Konto erstellen",
     "later": "Später"
   },
   "motionPrompt": {
     "eyebrow": "Animationen reduziert",
     "title": "Mit Animationen spielen?",
-    "body": "Dein Gerät wünscht weniger Bewegung, deshalb stehen Menüs und Karte still.",
+    "body": "Auf deinem Gerät ist „Bewegung reduzieren“ eingeschaltet, deshalb stehen Menüs und Karte still.",
     "turnOn": "Einschalten",
     "keep": "Reduziert lassen",
     "close": "Schließen",
     "footer": "Jederzeit änderbar: Profil → Grafik"
   },
   "returningLogin": {
-    "eyebrow": "Dein Reich wartet",
+    "eyebrow": "Anmelden",
     "title": "Willkommen zurück, {name}",
     "body": "Melde dich wieder an, um dein Reich dort fortzusetzen, wo du aufgehört hast.",
     "newRealm": "Stattdessen ein neues Reich beginnen"
