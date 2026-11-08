@@ -33,8 +33,10 @@ public class CampAmbushTests
         DepartedAt = T0,
         Path = Line(0, 20),
         CumulativeHours = Hours(21),
+        EdgeHours = Hours(21),
         ReturnPath = Line(20, 0),
         ReturnCumulativeHours = Hours(21),
+        ReturnEdgeHours = Hours(21),
         TurnAroundAt = T0.AddHours(turnAtHours),
         IsReturning = returning,
         RetreatImmune = immune,
@@ -152,8 +154,10 @@ public class CampAmbushTests
             DepartedAt = T0,
             Path = Line(6, 10),
             CumulativeHours = Hours(5),
+            EdgeHours = Hours(5),
             ReturnPath = Line(10, -1),
             ReturnCumulativeHours = Hours(12),
+            ReturnEdgeHours = Hours(12),
             TurnAroundAt = T0.AddHours(10),
         };
 

@@ -69,7 +69,7 @@ public class HexPathfinderGoldenTests
         var byName = Fixture.FindPathCases.ToDictionary(c => c.Name);
         Assert.Null(byName["wide_river_is_impassable"].ExpectedPath);
         Assert.Null(byName["mountain_with_no_way_round_has_no_route"].ExpectedPath);
-        Assert.Equal([0.0, 9.0, 10.0], byName["stream_on_a_mountain_costs_a_flat_9"].ExpectedCumulativeHours);
+        Assert.Equal([0.0, 5.0, 10.0], byName["stream_on_a_mountain_costs_a_flat_9"].ExpectedCumulativeHours);
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public class HexPathfinderGoldenTests
         Assert.Null(byName["wall_with_a_gate_stops_an_enemy"].ExpectedPath);
         Assert.Equal(4.0, byName["wall_with_a_gate_lets_the_owner_through"].ExpectedCumulativeHours![^1]);
         Assert.Null(byName["wall_without_a_gate_stops_the_owner_too"].ExpectedPath);
-        Assert.Equal([3.0, 7.0], byName["half_open_end_is_crossed_by_an_enemy_at_ground_plus_3"].ExpectedCumulativeHours!.Skip(3).Take(2));
+        Assert.Equal([5.5, 8.0], byName["half_open_end_is_crossed_by_an_enemy_at_ground_plus_3"].ExpectedCumulativeHours!.Skip(4).Take(2));
         Assert.Equal(HexPathfinder.HalfOpenEndCost, 3.0);
         Assert.Null(byName["sealed_end_beside_a_mountain_blocks"].ExpectedPath);
     }
@@ -88,12 +88,28 @@ public class HexPathfinderGoldenTests
     public void The_fixture_covers_a_bridge_per_level_a_guarded_bridge_for_a_friend_and_a_stranger_and_a_foundation()
     {
         var byName = Fixture.FindPathCases.ToDictionary(c => c.Name);
-        Assert.Equal([0.0, 6.0, 7.0], byName["bridge_level_1_causeway_crosses_a_wide_river_at_6"].ExpectedCumulativeHours);
-        Assert.Equal([0.0, 4.0, 5.0], byName["bridge_level_2_footbridge_crosses_a_wide_river_at_4"].ExpectedCumulativeHours);
-        Assert.Equal(1.3, byName["bridge_level_3_kings_bridge_costs_the_terrain_under_it"].ExpectedCumulativeHours![1], 9);
+        Assert.Equal([0.0, 3.5, 7.0], byName["bridge_level_1_causeway_crosses_a_wide_river_at_6"].ExpectedCumulativeHours);
+        Assert.Equal([0.0, 2.5, 5.0], byName["bridge_level_2_footbridge_crosses_a_wide_river_at_4"].ExpectedCumulativeHours);
+        Assert.Equal(1.15, byName["bridge_level_3_kings_bridge_costs_the_terrain_under_it"].ExpectedCumulativeHours![1], 9);
         Assert.NotNull(byName["bridge_level_4_guarded_bridge_lets_a_friend_over"].ExpectedPath);
         Assert.Null(byName["bridge_level_4_guarded_bridge_stops_a_stranger"].ExpectedPath);
         Assert.Null(byName["bridge_foundation_opens_nothing"].ExpectedPath);
+    }
+
+    [Fact]
+    public void The_fixture_covers_a_half_and_half_step_and_an_origin_that_is_left_at_its_own_price()
+    {
+        var byName = Fixture.FindPathCases.ToDictionary(c => c.Name);
+        Assert.Equal([0.0, 1.15, 2.3], byName["a_step_is_billed_half_and_half_over_forest"].ExpectedCumulativeHours!, new ApproximateComparer());
+        Assert.Equal([0.0, 1.15, 2.15], byName["an_army_standing_under_its_own_wall_leaves_at_the_ground_price"].ExpectedCumulativeHours!, new ApproximateComparer());
+        Assert.Equal([0.0, 6.5, 7.5], byName["an_army_standing_on_a_burnt_bridge_leaves_at_12"].ExpectedCumulativeHours!, new ApproximateComparer());
+    }
+
+    private sealed class ApproximateComparer : IEqualityComparer<double>
+    {
+        public bool Equals(double x, double y) => Math.Abs(x - y) < 1e-9;
+
+        public int GetHashCode(double obj) => 0;
     }
 
     private static string Key(HexCoord c) => $"{c.Q},{c.R}";

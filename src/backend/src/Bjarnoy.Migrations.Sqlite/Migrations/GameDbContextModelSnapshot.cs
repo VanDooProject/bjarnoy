@@ -231,6 +231,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset>("DepartedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("EdgeHours")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("IsReturning")
                         .HasColumnType("INTEGER");
 
@@ -263,6 +267,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("ReturnCumulativeHours")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReturnEdgeHours")
                         .IsRequired()
                         .HasColumnType("TEXT");
 

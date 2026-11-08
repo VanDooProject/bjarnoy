@@ -14,8 +14,10 @@ public class MovementOccupancyTests
             DepartedAt = departedAt,
             Path = path,
             CumulativeHours = cumulativeHours,
+            EdgeHours = cumulativeHours,
             ReturnPath = path,
             ReturnCumulativeHours = cumulativeHours,
+            ReturnEdgeHours = cumulativeHours,
             TurnAroundAt = departedAt,
         };
 

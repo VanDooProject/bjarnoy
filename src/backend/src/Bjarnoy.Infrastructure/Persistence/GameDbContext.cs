@@ -507,6 +507,14 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .HasConversion(new DoubleListConverter())
                 .Metadata.SetValueComparer(DoubleListConverter.Comparer);
 
+            army.Property(a => a.EdgeHours)
+                .HasConversion(new DoubleListConverter())
+                .Metadata.SetValueComparer(DoubleListConverter.Comparer);
+
+            army.Property(a => a.ReturnEdgeHours)
+                .HasConversion(new DoubleListConverter())
+                .Metadata.SetValueComparer(DoubleListConverter.Comparer);
+
             // Restrict rather than cascade: nothing should delete a
             // settlement out from under an army still travelling. In
             // practice settlements are never deleted today, but the intent
