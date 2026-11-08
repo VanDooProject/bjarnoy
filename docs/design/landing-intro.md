@@ -121,10 +121,39 @@ Opening the landing page or the replay with `#loop` plays the intro without end:
 
 ## Play again
 
-On desktop the landing page always shows a "Play intro" button at the bottom right, styled like skip, for every visitor. It plays the intro again over the landing page. Phones don't show the button (the onboarding checklist sits there); they get a "Play intro" row in the landing page's menu instead.
+On desktop the landing page always shows a "Play intro" button at the bottom right, styled like skip, for every visitor. It plays the intro again over the landing page. Phones don't show the button (the onboarding stepper sits there); they get a "Play intro" row in the landing page's menu instead.
 
-The landing page's menu (top right, before a settlement is founded) also has "Docs" and "Start page", which opens the
-intro's landing page again.
+The landing page's menu (top right, before a settlement is founded) also has "Start page", which opens the
+intro's landing page again. "How to play" (the docs) is a link of its own beside the menu.
+
+## Map view before founding
+
+What a visitor without a settlement sees after "Go to the map": the island preview on a neutral fog-grey background
+(`radial-gradient(120% 100% at 68% 42%, #3b4148, #262b30 55%, #15181b)`), in the landing page's design.
+
+- No header band. A floating group at the top right (16px from the edges) holds the "How to play" link (book icon,
+  to `/docs`) and the returning-player menu trigger, vertically centred with each other. Nothing is reserved at the top
+  (`--hud-inset-top` is 0).
+- Left column (desktop: 64px from the left, about 150px from the top): the wordmark "BJARNØY" (weight 300, letter
+  spacing .18em, 58px, not translated), the heading "Choose where your realm begins." (21px, weight 300), then the
+  same three features as the landing page (`intro/FeatureList.vue`: Multiplayer, No pay to win, Ad-free, with icon
+  and description) behind a thin gold rule. The status lines ("Making landfall…", a refused click) sit under the
+  heading. When the world is not open, the heading is "Not open yet." and its message follows below it. A small
+  "Impressum" link sits bottom left.
+- Portrait phones: wordmark (38px) centred near the top, the heading (15px), the features as titles only in one row;
+  "Impressum" centred at the bottom. Landscape phones: a compact left column (wordmark 28px, heading 13px, feature
+  titles) on a soft dark backdrop, the links top right.
+- Progress is a stepper line (`OnboardingChecklist.vue`): three hex nodes joined by a 2px line, the building's name
+  under each (current: white, bold, with its instruction in gold: click or tap to place; done: gold outline with a
+  tick, name muted; upcoming: dark node, muted). It sits bottom centre on desktop, full width at the bottom on portrait
+  phones, compact at the bottom right on landscape phones. The current step is the button that pokes the guidance
+  arrow. It stays after founding, through steps 2 and 3, and leaves when all three are done.
+- Progress animation, when a step is placed: its node flips edge-on (0.5s) from the number to the tick; an ember runs
+  along the line into the next step (0.7s, after 0.3s) while the gold fills behind it; the next node ignites at 0.95s
+  (glow, then it turns current) and its instruction fades in at 1.15s; the current node's glow breathes while it
+  waits; when all three are done the nodes do one small wave. The first render never animates. With menu animations
+  off (or the device asking for reduced motion) none of this plays and states only fade (150ms). The timings are CSS
+  custom properties on `.steps`.
 
 ## Technique
 
