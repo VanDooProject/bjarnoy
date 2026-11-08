@@ -350,11 +350,13 @@ public static class SettlementEndpoints
         // Every longhouse stays (the map draws them), each under its linked realm's name.
         var labels = await LinkedRealmNames.ForAsync(db, worldId, entities, cancellationToken);
 
+        var relationOf = await SettlementRelations.ForCallerAsync(db, worldId, callerUserId, IsMine, cancellationToken);
+
         IReadOnlyList<SettlementSummary> response =
         [
             .. entities
                 .Where(s => IsMine(s) || explored.Contains(new HexCoord(s.CentreQ, s.CentreR)))
-                .Select(s => SettlementSummary.From(s, IsMine(s), labels[s.Id])),
+                .Select(s => SettlementSummary.From(s, IsMine(s), labels[s.Id], relationOf(s))),
         ];
 
         return TypedResults.Ok(response);
