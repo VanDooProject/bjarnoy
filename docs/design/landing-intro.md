@@ -11,7 +11,7 @@ fire lit, nothing moving). The saga starts only on a click.
 - Title "BJARNØY" (not translated) and the tagline "A saga of the north, played together."
 - Three features as a plain list (icon, bold title, one-line description; no frame or fill) over a soft dark backdrop:
   "Multiplayer" (every other realm on the island is a real player, ally with them or raid them), "No pay to win"
-  (crossed coin icon; premium supports the game and only adds quality-of-life features) and "Ad-free" (an indie game,
+  (balance scale icon; premium supports the game and only adds quality-of-life features) and "Ad-free" (an indie game,
   made with love, no ads).
 - "Hear the saga" starts the saga with the sound on (the click is the user gesture browsers need). The link "or play it
   muted" under it starts it with the sound off.
@@ -23,9 +23,13 @@ fire lit, nothing moving). The saga starts only on a click.
   loaded.
 - The top-right "Log in" / "Enter world" button stays. The narration line and the playback controls stay hidden until
   the saga starts.
-- Desktop: split layout, nothing centred. Left column (72 px from the left edge, top at about 18 vh): the title
-  left-aligned, the tagline, then the buttons stacked (about 290 px wide). Right column, right of the fire (from about
-  67 % of the width, 360 px wide): the feature list. A small "Impressum" link (/impressum) sits bottom-right.
+- Desktop: split layout, nothing centred, placed and sized in the hall scene's own units so it keeps its spot beside
+  the skald and the fire at every window size. The scene is a 1600×1600 drawing that covers the window
+  (`preserveAspectRatio="xMidYMid slice"`): one scene unit is max(window width, window height) / 1600, centred on the
+  screen (0.8 px at 1280×800, 1.25 px at 2000×1060). Left column at scene x 90, y 485 (not closer than 24 px to the
+  left edge): the title left-aligned (95 units), the tagline, then the buttons stacked (362.5 units wide). Right
+  column, right of the fire, at scene x 1072, y 540 and 450 units wide: the feature list. Small text keeps a minimum
+  size in px. A small "Impressum" link (/impressum) sits bottom-right, anchored to the screen corner.
 - Portrait phone (up to 640 px wide): title and tagline centred at the top, the feature list full width below them, the
   buttons full width at the bottom with the "Impressum" link centred under them.
 - Landscape phone (landscape, up to 500 px high): the desktop split in compact sizes (buttons about 210 px wide, list

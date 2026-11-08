@@ -26,9 +26,9 @@ const FEATURES = [
           <path d="M2 20c0-3 3-5 6-5s6 2 6 5M12 20c0-3 3-5 4-5 3 0 6 2 6 5" />
         </template>
         <template v-else-if="f.id === 'noPayToWin'">
-          <circle cx="12" cy="12" r="8" />
-          <circle cx="12" cy="12" r="5" />
-          <path d="M4.5 19.5l15-15" />
+          <!-- balance scale: a level field -->
+          <path d="M12 3v17M7 20h10M4 7h16" />
+          <path d="M6.5 7L3.5 13a3 3 0 0 0 6 0zM17.5 7l-3 6a3 3 0 0 0 6 0z" />
         </template>
         <path v-else d="M12 20.5s-8-4.6-8-10.6A4.4 4.4 0 0 1 12 7.6a4.4 4.4 0 0 1 8 2.3c0 6-8 10.6-8 10.6z" />
       </svg>

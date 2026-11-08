@@ -487,6 +487,32 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       release();
     });
 
+    // The desktop column and list are laid out in the hall scene's units (a 1600×1600 SVG that slices to cover the
+    // window), so on a big screen they grow with the scene and keep their spot beside the skald and the fire.
+    test('on desktop the title and the feature list scale and move with the hall scene', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const release = await holdAtlases(page);
+      const measure = async (width: number, height: number) => {
+        await page.setViewportSize({ width, height });
+        await page.goto('/');
+        await expect(landingPage(page)).toBeVisible();
+        const title = landingPage(page).getByRole('heading', { name: 'BJARNØY' });
+        const fontSize = await title.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+        const list = await landingPage(page).locator('.usps').boundingBox();
+        return { fontSize, listLeft: list!.x };
+      };
+      const small = await measure(1280, 800);
+      const big = await measure(2000, 1060);
+      // one scene unit is max(width, height) / 1600: 0.8 px at 1280×800, 1.25 px at 2000×1060
+      expect(small.fontSize).toBeCloseTo(95 * 0.8, 0);
+      expect(big.fontSize).toBeCloseTo(95 * 1.25, 0);
+      // the list starts at scene x = 1072, measured from the screen centre
+      expect(small.listLeft).toBeCloseTo(640 + (1072 - 800) * 0.8, 0);
+      expect(big.listLeft).toBeCloseTo(1000 + (1072 - 800) * 1.25, 0);
+      release();
+    });
+
     test('"Hear the saga" starts the saga and the landing page fades out', async ({ page }) => {
       test.setTimeout(MAP_SPEC_TIMEOUT_MS);
       await freezeClock(page);
