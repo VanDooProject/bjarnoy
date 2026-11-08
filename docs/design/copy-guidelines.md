@@ -35,4 +35,12 @@ One German word per game concept. Use these, not the alternatives listed after t
 - Raid (mission): „Plündern", not „Überfall".
 - Provisions an army carries on the move: „Proviant", not „Vorräte".
 - Rune rarity "Blooded": „Blutgeweiht", not „Geblutet" (that means "bled").
-- The build queue: not „Baustellenschlange" (not a German word).
+- Wildlife camp: „Wildtiere" for labels and headings (reports tab, docs page), „Revier" wherever one place is meant
+  („Starkes Revier", „Revier Stufe 5", „Jage in einem Revier"). Not „Lager".
+- Missions as actions or choices are verbs: „Angreifen", „Plündern", „Unterstützen", „Jagen", „Ziehen", „Siedlung
+  gründen". A running mission in a status view is a noun: „Angriff", „Plünderung", „Unterstützung".
+- Build slots (builds that run at the same time): „Baumeister" („Kein Baumeister frei", „Wartet auf einen Baumeister",
+  „2 / 3 Baumeister"). Not „Bauplatz".
+- The waiting queue behind the build slots: „Warteschlange" („Die Warteschlange ist voll."). Not „Baustellenschlange"
+  (not a German word).
+- A player's start plot: „Startplatz". Any other tile: „Feld".
