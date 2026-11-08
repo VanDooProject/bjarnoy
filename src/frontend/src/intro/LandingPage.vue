@@ -103,7 +103,7 @@ const FEATURES = [
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  padding: max(56px, env(safe-area-inset-top)) 0 max(14px, env(safe-area-inset-bottom));
+  padding: max(80px, calc(env(safe-area-inset-top) + 64px)) 0 max(14px, env(safe-area-inset-bottom));
   overflow: hidden;
   color: #f4f1ea;
 }
@@ -112,6 +112,19 @@ const FEATURES = [
 }
 .left {
   display: contents;
+}
+/* .left is display: contents here, so its children order against the list and the link */
+.copy {
+  order: 1;
+}
+.usps {
+  order: 2;
+}
+.ctas {
+  order: 3;
+}
+.legal {
+  order: 4;
 }
 .copy {
   display: flex;
@@ -393,7 +406,11 @@ const FEATURES = [
   .btn {
     min-height: 42px;
     font-size: 15px;
-    padding: 0 14px;
+    padding: 0 8px;
+  }
+  .map {
+    font-size: 13px;
+    white-space: nowrap;
   }
   .mlink {
     font-size: 12.5px;
