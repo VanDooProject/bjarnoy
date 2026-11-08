@@ -728,6 +728,7 @@ describe('startTextureLoad', () => {
     return {
       loadTerrain: async () => FAKE_TEXTURES,
       loadIcons: async () => null,
+      buildingPageTotals: { level1: 0, buildings: 3 },
       loadBuildings: async () => FAKE_TEXTURES,
       merge: (base) => base,
       isDestroyed: () => false,
@@ -821,6 +822,53 @@ describe('startTextureLoad', () => {
     });
     expect(events).toEqual(['load full', 'merge full', 'rebuild']);
     warn.mockRestore();
+  });
+
+  it("reports the 'buildings' phase as level-1 then static pages with one constant total and a non-decreasing count", async () => {
+    const states: MapLoadState[] = [];
+    const deps = fakeDeps({
+      mode: 'settlement',
+      buildingPageTotals: { level1: 2, buildings: 3 },
+      loadLevel1: async (onProgress) => {
+        onProgress(1, 2);
+        onProgress(2, 2);
+        return FAKE_TEXTURES;
+      },
+      loadBuildings: async (onProgress) => {
+        onProgress(1, 3);
+        onProgress(2, 3);
+        onProgress(3, 3);
+        return FAKE_TEXTURES;
+      },
+      emit: (state) => states.push(state),
+    });
+    await startTextureLoad(deps).done;
+
+    const pages = states.filter((s) => s.phase === 'buildings' && s.pages).map((s) => s.pages!);
+    expect(pages).toEqual([1, 2, 3, 4, 5].map((loaded) => ({ loaded, total: 5 })));
+    const progress = states.filter((s) => s.phase === 'buildings' && s.pages).map((s) => s.progress);
+    expect(progress).toEqual([1 / 5, 2 / 5, 3 / 5, 4 / 5, 1]);
+  });
+
+  it("counts level 1 as done when it failed or had no pages, so static continues from the level-1 total", async () => {
+    const states: MapLoadState[] = [];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await startTextureLoad(
+      fakeDeps({
+        mode: 'settlement',
+        buildingPageTotals: { level1: 2, buildings: 3 },
+        loadLevel1: async () => {
+          throw new Error('missing');
+        },
+        loadBuildings: async (onProgress) => {
+          onProgress(1, 3);
+          return FAKE_TEXTURES;
+        },
+        emit: (state) => states.push(state),
+      }),
+    ).done;
+    warn.mockRestore();
+    expect(states.filter((s) => s.pages).map((s) => s.pages)).toEqual([{ loaded: 3, total: 5 }]);
   });
 
   it('goes straight to ready in world mode, even though the same terrain/building loads still run in the background', async () => {

@@ -438,8 +438,10 @@ function evictOnReject(key: string, promise: Promise<LoadedAtlas>): void {
  * from 1, `total` is the category's page count known up front (`pages.length`,
  * fixed before the loop starts) — a best-effort progress signal for
  * HexMapRenderer's loading-state overlay (see `MapLoadState.progress`).
- * Pages are counted in page order (see `loadPages` on when their downloads
- * overlap), so this is exact, not an estimate.
+ * `loaded` never decreases and reaches `total` exactly once per page. When
+ * the pages are fetched in parallel (no `onPartial`, see `loadPages`) a page
+ * counts as soon as its download finished, in completion order; otherwise
+ * pages are counted in page order.
  */
 export type AtlasPageProgress = (loaded: number, total: number) => void;
 
@@ -511,15 +513,21 @@ async function loadPages(
   // Each early start gets a no-op catch so a page that fails while an earlier
   // one is still awaited is not reported as an unhandled rejection; the
   // failure still surfaces when the loop reaches that page.
+  // In the parallel case progress is counted as each download resolves
+  // (completion order), so a page that finished early is not held back by an
+  // earlier, slower one; in the sequential case it is counted per parsed page.
+  let loaded = 0;
   const prefetched = onPartial
     ? null
     : pages.map(({ webpUrl }) => {
         const load = Assets.load<Texture>(webpUrl);
-        load.catch(() => {});
+        load.then(
+          () => onPage?.(++loaded, pages.length),
+          () => {},
+        );
         return load;
       });
 
-  let loaded = 0;
   for (const [i, { manifest, webpUrl }] of pages.entries()) {
     const pageTexture = await (prefetched ? prefetched[i] : Assets.load<Texture>(webpUrl));
     const sheet = new Spritesheet(pageTexture, manifest);
@@ -530,7 +538,7 @@ async function loadPages(
     }
     Object.assign(clips, manifest.clips ?? {});
     Object.assign(aliases, manifest.meta.bjarnoy?.aliases ?? {});
-    onPage?.(++loaded, pages.length);
+    if (!prefetched) onPage?.(++loaded, pages.length);
 
     if (onPartial && loaded < pages.length) {
       const snapshot: LoadedAtlas = { textures: { ...textures }, frameMeta: { ...frameMeta }, clips: { ...clips } };
@@ -635,15 +643,16 @@ export function loadAtlasPackCategory(
 /**
  * Loads a *core* (non-pack) category that may not exist at all yet — same
  * empty-if-missing degradation as `loadAtlasPackCategory`, but for a plain
- * category name rather than a `${pack}-${category}` one. Used for
+ * category name rather than a `${pack}-${category}` one. `onPage` is only
+ * invoked on the first (uncached) load, as in `loadAtlasCategory`. Used for
  * `buildings-level1` (see `textures.ts`'s `loadLevel1Atlases`): the older
  * atlas has no such category at all (every building frame still lives in
  * `buildings-static`), which must degrade to "nothing to draw yet" rather
  * than the hard failure `loadAtlasCategory` gives a genuinely-missing core
  * category.
  */
-export function loadOptionalAtlasCategory(category: string): Promise<LoadedAtlas> {
-  return loadCategoryOrEmpty(category);
+export function loadOptionalAtlasCategory(category: string, onPage?: AtlasPageProgress): Promise<LoadedAtlas> {
+  return loadCategoryOrEmpty(category, onPage);
 }
 
 /**
