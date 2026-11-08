@@ -3,7 +3,7 @@
   "hero": {
     "eyebrow": "A real-time viking island game",
     "title": "Bjarnoy",
-    "pitch": "Sail out, claim a plot, and build a realm that keeps growing while you're offline — build queues run, fleets sail, and raids land on a wall clock, not a turn counter.",
+    "pitch": "Found a settlement on an island and grow it into a realm. The world keeps running in real time while you're offline: builds finish, fleets sail, and armies arrive by the clock, not by turns.",
     "playCta": "Play now",
     "docsCta": "Read the docs",
     "seed": "World seed {seed}",
@@ -11,35 +11,35 @@
   },
   "oneView": {
     "title": "One view — map and village",
-    "body": "The world map and your village are the same hex lattice, not two screens. Zoom in on an island and the same rendered surface turns from territory and terrain into huts, farms and people — nothing ever \"opens\" a separate view."
+    "body": "The world map and your village are the same hex grid. Zoom in on an island and the same surface shows huts, fields and people instead of terrain and territory. There is no separate village screen."
   },
   "features": {
-    "title": "Built to play, not just to look at",
-    "intro": "Every feature below runs on the same engine you're looking at above — no mockups.",
+    "title": "In the game",
+    "intro": "These features are in the game already. They run on the same engine as the map above.",
     "items": {
       "sharedIslands": {
         "title": "Shared islands",
         "body": "Islands are shared ground — many players' settlements can stand on the same island, side by side."
       },
       "borders": {
-        "title": "Borders that grow",
-        "body": "Territory follows Settlers-II logic: your claim radius grows with your Longhouse and border towers, and contracts if they fall."
+        "title": "Territory and borders",
+        "body": "As in The Settlers II, your territory grows with your longhouse and watchtowers, and shrinks when they fall."
       },
       "realTime": {
-        "title": "Real time, always running",
-        "body": "Build queues, upgrades and fleets run on a wall clock. Log back in tomorrow and the world moved without you."
+        "title": "Real time",
+        "body": "Build queues, upgrades and fleets keep running by the clock while you're offline."
       },
       "fogOfWar": {
-        "title": "Fog of war & scouting",
-        "body": "Unexplored ground stays hidden until a scout or a settlement reveals it — knowing the map is part of the game."
+        "title": "Fog of war and scouting",
+        "body": "Unexplored ground stays hidden until a scout or a settlement reveals it."
       },
       "expansion": {
         "title": "Expansion by sea",
-        "body": "Load settlers onto a ship, sail it to an unclaimed coastal hex on any island, and found a second settlement."
+        "body": "Load settlers onto a longship, sail to a free coastal hex on any island and found a second settlement there."
       },
       "trade": {
         "title": "Trade between players",
-        "body": "Nothing is pooled — caravans and ships move goods between settlements, yours and anyone else's you strike a deal with."
+        "body": "There is no shared stock: caravans and ships carry goods between settlements, your own and your trade partners'."
       },
       "guilds": {
         "title": "Guilds & alliances",
@@ -53,7 +53,7 @@
   },
   "engineering": {
     "title": "Under the hood",
-    "intro": "The portfolio half of this page — how it's actually built.",
+    "intro": "How the game is built.",
     "items": {
       "renderer": {
         "title": "One hex renderer, two views",
@@ -69,14 +69,14 @@
       },
       "e2e": {
         "title": "Sharded Playwright e2e suite",
-        "body": "A real end-to-end test suite drives an actual browser against a production build, split across CI shards to keep runs fast."
+        "body": "An end-to-end test suite drives a browser against a production build, split across CI shards to keep runs fast."
       },
       "deploy": {
         "title": "Per-PR preview environments",
         "body": "Every pull request gets its own throwaway preview deployment on Coolify, so a change can be reviewed running, not just read as a diff."
       },
       "i18n": {
-        "title": "English + German, fully in step",
+        "title": "English and German",
         "body": "Every user-visible string ships in English and German, with automated tests enforcing key parity between the two."
       }
     },

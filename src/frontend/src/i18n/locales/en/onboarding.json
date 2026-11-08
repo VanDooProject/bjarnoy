@@ -1,22 +1,22 @@
 {
   "profileNudge": {
-    "eyebrow": "Your realm runs",
-    "title": "Three buildings, no jarl.",
-    "body": "Name yours from the mark up here and this island follows you to any device. Takes a minute — just a username and password.",
-    "cta": "Name your jarl",
+    "eyebrow": "Account",
+    "title": "Keep your progress",
+    "body": "Create an account from the mark up here to play your realm on any device. You only need a username and a password.",
+    "cta": "Create account",
     "later": "Later"
   },
   "motionPrompt": {
     "eyebrow": "Animations reduced",
     "title": "Play with animations?",
-    "body": "Your device asks for less motion, so menus and the map are held still.",
+    "body": "“Reduce motion” is on on your device, so menus and the map are held still.",
     "turnOn": "Turn on",
     "keep": "Keep reduced",
     "close": "Dismiss",
     "footer": "Change anytime: Profile → Graphics"
   },
   "returningLogin": {
-    "eyebrow": "Your realm is waiting",
+    "eyebrow": "Log in",
     "title": "Welcome back, {name}",
     "body": "Log back in to pick up your realm where you left off.",
     "newRealm": "Start a new realm instead"

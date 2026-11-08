@@ -62,7 +62,7 @@
     "status": {
       "forcedOn": "On (this device)",
       "forcedOff": "Off (this device)",
-      "reducedMotion": "Off — your system asks for reduced motion",
+      "reducedMotion": "Off — “Reduce motion” is on on your device",
       "saveData": "Off — data saver is on",
       "measuring": "Auto — measuring frame rate…",
       "autoOn": "Auto — on",
@@ -77,7 +77,7 @@
     "title": "Bio",
     "edit": "Edit bio",
     "add": "Add a bio",
-    "placeholder": "Tell the other players about yourself — ASCII art welcome.",
+    "placeholder": "Tell the other players about yourself.",
     "empty": "This player has not written a bio yet.",
     "tooLong": "The bio is limited to {max} characters.",
     "saveError": "Could not save the bio."
