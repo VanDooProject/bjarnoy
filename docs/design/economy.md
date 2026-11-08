@@ -429,8 +429,8 @@ impassable wide river in `HexPathfinder.LandStepCost`; streams keep their own pr
 |---|---|
 | 1 | every army, the owner's included: slower than any ground (`1.0 + CausewayCrossingCost` = 6) |
 | 2 | every army: still slower than the ground, but quicker than the causeway (`1.0 + FootbridgeCrossingCost` = 4) |
-| 3 | every army: as quickly as the ground under it (its terrain cost) |
-| 4 | the owner's armies and their friends: as quickly as the ground; everyone else is stopped as if there were no bridge |
+| 3 | every army: `1.0 + KingsBridgeCrossingCost` = 1.5, a little slower than grass whatever ground lies under the river |
+| 4 | the owner's armies and their friends: also 1.5; everyone else is stopped as if there were no bridge |
 
 Friends of a guarded bridge are the same as for a palisade gate: the owner's guildmates
 and the members of guilds with an active peace treaty with that guild

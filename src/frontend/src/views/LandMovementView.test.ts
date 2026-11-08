@@ -86,8 +86,8 @@ describe('LandMovementView bridges', () => {
     expect(page.findAll('[data-testid="bridge-table"] tbody tr')).toHaveLength(4);
     expect(row('causeway')).toContain('6');
     expect(row('footbridge')).toContain('4');
-    expect(row('kings')).toContain('1–1.3');
-    expect(row('guarded')).toContain('1–1.3');
+    expect(row('kings')).toContain('1.5');
+    expect(row('guarded')).toContain('1.5');
     expect(row('causeway')).toContain('Every army');
     expect(row('guarded')).toContain('Its owner’s armies and their friends’');
     expect(page.findAll('.building-link').map((l) => l.attributes('data-type'))).toEqual(['bridge', 'townsquare', 'odinstatue']);
@@ -98,6 +98,6 @@ describe('LandMovementView bridges', () => {
     expect(page.get('[data-ground="wideRiver"]').text()).toContain('Nur über eine Brücke');
     expect(page.get('[data-bridge="guarded"]').text()).toContain('Wehrbrücke');
     expect(page.get('[data-bridge="causeway"]').text()).toContain('Damm');
-    expect(page.get('[data-bridge="kings"]').text()).toContain('1–1,3');
+    expect(page.get('[data-bridge="kings"]').text()).toContain('1,5');
   });
 });

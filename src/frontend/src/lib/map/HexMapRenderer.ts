@@ -586,6 +586,8 @@ export interface ArmyOverlayMovement {
   path: AxialCoord[];
   /** Game-hours to reach each hex of `path` — `MovementResponse.cumulativeHours`. Empty falls back to uniform legs. */
   cumulativeHours: number[];
+  /** Game-hours at which the army crosses the edge into each hex of `path` — `MovementResponse.edgeHours`. Empty splits each leg at its midpoint. */
+  edgeHours: number[];
   departedAtMs: number;
   arrivesAtMs: number;
 }
@@ -6145,6 +6147,7 @@ export class HexMapRenderer {
       ? routeProgressAt(
           movement.path,
           movement.cumulativeHours,
+          movement.edgeHours,
           movement.departedAtMs,
           movement.arrivesAtMs,
           nowMs,
@@ -6254,6 +6257,7 @@ export class HexMapRenderer {
         ? routeProgressAt(
             selected.movement.path,
             selected.movement.cumulativeHours,
+            selected.movement.edgeHours,
             selected.movement.departedAtMs,
             selected.movement.arrivesAtMs,
             now,

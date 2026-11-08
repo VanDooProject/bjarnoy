@@ -3,7 +3,8 @@
 // tick with no round trip — but it mirrors HexPathfinder.cs's own cost model
 // hex for hex: the movement rules (wide rivers and mountains impassable, a
 // stream a flat 1.0 + riverCrossingCost whatever it runs over), sea impassable
-// to land units, no distance-circle shortcut. `rules` always comes from the backend
+// to land units, no distance-circle shortcut. A step is billed half and half:
+// (leave price of the hex left + enter price of the hex entered) / 2. `rules` always comes from the backend
 // (`WorldResponse.movement`), never a hardcoded literal here, so this and the
 // server can't quietly drift apart — see hexPath.golden.test.ts.
 import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
@@ -23,6 +24,12 @@ export interface MovementRules {
  */
 /** What entering a half-open palisade end costs on top of the ground's own cost (`HexPathfinder.HalfOpenEndCost`). */
 export const HALF_OPEN_END_COST = 3.0;
+
+/**
+ * What leaving a wide-river hex costs on top of the base 1.0 when no bridge this army may cross stands on it any more (it burnt
+ * under the army): 1.0 + this = 12 (`HexPathfinder.BurntBridgeLeaveCost`).
+ */
+export const BURNT_BRIDGE_LEAVE_COST = 11.0;
 
 export interface PathRestrictions {
   /** Default `true`. A river hex for which `isWideRiver` holds is impassable (streams stay crossable at the river cost). */
@@ -76,26 +83,63 @@ export interface PathContext {
 export const MAX_TINT_HEXES = 4000;
 
 /**
- * Step cost for a land unit entering `c`, or `null` if impassable (sea, a lake, a wide river, a mountain
+ * Price of a land unit's hex `c`, or `null` if impassable (sea, a lake, a wide river, a mountain
  * that is not also a stream, a palisade). A stream costs a flat `1.0 + riverCrossingCost` whatever
  * terrain it runs over — the C# twin is `HexPathfinder.LandStepCost`, and the two apply the rules in
  * the same order: wide river (impassable unless a bridge this army may cross opens it, at the bridge's price) and mountain impassable -> stream flat 9 (+ 3 under a half-open end) -> half-open palisade end ground + 3 ->
  * blocked palisade hex (unless a friendly gate) -> terrain cost.
+ *
+ * `leaving` prices the hex the army stands on instead of the one it enters: a blocked palisade hex is not shut (a wall built under
+ * the army is left at its ground or stream price) and a wide river with no crossable bridge costs `1.0 + BURNT_BRIDGE_LEAVE_COST`.
+ * For every hex the enter price accepts, both prices are equal.
  */
-function stepCost(c: AxialCoord, ctx: PathContext): number | null {
+function hexCost(c: AxialCoord, ctx: PathContext, leaving: boolean): number | null {
   const terrain = ctx.terrainAt(c);
   const base = ctx.rules.land[terrain];
   if (base === undefined) return null;
   const r = ctx.restrictions;
   const river = ctx.isRiver(c);
   const wide = river && ctx.isWideRiver(c);
-  if ((r?.wideRiversImpassable ?? true) && wide) return r?.bridgeCost?.(c) ?? null;
+  if ((r?.wideRiversImpassable ?? true) && wide) {
+    const bridge = r?.bridgeCost?.(c) ?? null;
+    return leaving ? (bridge ?? 1.0 + BURNT_BRIDGE_LEAVE_COST) : bridge;
+  }
   const endCost = r?.halfOpen?.(c) ? (r.halfOpenCost ?? HALF_OPEN_END_COST) : 0;
   if ((r?.streamsIgnoreTerrain ?? true) && river && !wide) return 1.0 + ctx.rules.riverCrossingCost + endCost;
   if ((r?.mountainsImpassable ?? true) && terrain === 'mountain') return null;
   if (r?.halfOpen?.(c)) return base + endCost;
-  if (r?.blocked?.(c) && !r.friendlyGate?.(c)) return null;
+  if (!leaving && r?.blocked?.(c) && !r.friendlyGate?.(c)) return null;
   return river ? base + ctx.rules.riverCrossingCost : base;
+}
+
+/** Step cost for a land unit entering `c`, or `null` if impassable; see `hexCost`. */
+function stepCost(c: AxialCoord, ctx: PathContext): number | null {
+  return hexCost(c, ctx, false);
+}
+
+/** Price of leaving `c` (the hex the army stands on), or `null` if it could never stand there (sea, lake, plain mountain); see `hexCost`. */
+export function leaveCost(c: AxialCoord, ctx: PathContext): number | null {
+  return hexCost(c, ctx, true);
+}
+
+/** Price of the step from `from` to its neighbour `to`: half the leave price of `from`, half the enter price of `to`; `null` if either is impassable. */
+function halfAndHalf(from: AxialCoord, to: AxialCoord, ctx: PathContext): number | null {
+  const leave = leaveCost(from, ctx);
+  if (leave === null) return null;
+  const enter = stepCost(to, ctx);
+  return enter === null ? null : (leave + enter) / 2;
+}
+
+/**
+ * Price of the time spent ON hex `path[i]` (grass = 1), in hex-cost units: every step is paid half at the hex left and half at the hex
+ * entered, so the first hex of a path counts half its leave price, the last half its enter price and a hex in between half of each (its
+ * price); `Infinity` for an impassable hex. These prices add up to `pathCost(path)`.
+ */
+export function timeOnHex(path: readonly AxialCoord[], i: number, ctx: PathContext): number {
+  const hex = path[i]!;
+  const leave = i < path.length - 1 ? leaveCost(hex, ctx) : 0;
+  const enter = i > 0 ? stepCost(hex, ctx) : 0;
+  return leave === null || enter === null ? Number.POSITIVE_INFINITY : (leave + enter) / 2;
 }
 
 /** Binary min-heap keyed by priority — Dijkstra's usual decrease-key stand-in (push a new entry, ignore stale pops). */
@@ -162,7 +206,7 @@ export function hoursFrom(origin: AxialCoord, ctx: PathContext, maxHours: number
       const neighbourKey = coordKey(neighbour);
       if (settled.has(neighbourKey)) continue;
 
-      const cost = stepCost(neighbour, ctx);
+      const cost = halfAndHalf(current, neighbour, ctx);
       if (cost === null) continue;
 
       const hours = currentHours + cost / ctx.hexesPerHour;
@@ -187,14 +231,12 @@ export function hoursFrom(origin: AxialCoord, ctx: PathContext, maxHours: number
 
 /**
  * Round-trip hours per hex, capped at `hoursOfFood` — the tint itself.
- * `hoursFrom(origin, X) + hoursFrom(home, X)`, not the cost of an actual
- * round-trip path (which would double-count or skip the origin/destination
- * hex's own terrain cost depending on direction, since cost is charged on
- * entry — see `HexPathfinder`'s remarks on why); two independent one-way
- * fills summed is the model the issue specifies, and it collapses to the
- * useful special case on its own: for an ordinary dispatch `origin === home`,
- * so both fills are literally the same computation and the sum is just
- * `2 × hoursFrom(origin, X)`.
+ * `hoursFrom(origin, X) + hoursFrom(home, X)`: two independent one-way fills
+ * summed. A step is billed half at the hex left and half at the hex entered,
+ * so a one-way cost is symmetric (A to B costs what B to A costs) and the
+ * sum is the cost of the actual round trip; for an ordinary dispatch
+ * `origin === home`, so both fills are literally the same computation and the
+ * sum is just `2 × hoursFrom(origin, X)`.
  */
 export function reachableRange(
   origin: AxialCoord,
@@ -263,7 +305,7 @@ export function findPath(from: AxialCoord, to: AxialCoord, ctx: PathContext): Ax
       if (n.q < qMin || n.q > qMax || n.r < rMin || n.r > rMax) continue;
       const nKey = coordKey(n);
       if (closed.has(nKey)) continue;
-      const step = stepCost(n, ctx);
+      const step = halfAndHalf(current, n, ctx);
       if (step === null) continue;
       const tentative = g.get(currentKey)! + step;
       const existing = g.get(nKey);
@@ -276,10 +318,10 @@ export function findPath(from: AxialCoord, to: AxialCoord, ctx: PathContext): Ax
   return null;
 }
 
-/** Terrain-and-river cost of walking `path` (the origin is free, every later hex is charged on entry), in hex-cost units; `Infinity` through an impassable hex. */
+/** Terrain-and-river cost of walking `path`, in hex-cost units: every step is half the leave price of the hex left plus half the enter price of the hex entered; `Infinity` through an impassable hex. */
 export function pathCost(path: readonly AxialCoord[], ctx: PathContext): number {
   let total = 0;
-  for (let i = 1; i < path.length; i++) total += stepCost(path[i]!, ctx) ?? Number.POSITIVE_INFINITY;
+  for (let i = 1; i < path.length; i++) total += halfAndHalf(path[i - 1]!, path[i]!, ctx) ?? Number.POSITIVE_INFINITY;
   return total;
 }
 
@@ -288,6 +330,8 @@ export function reachableFrom(origin: AxialCoord, ctx: PathContext, limit = 200_
   const seen = new Set<string>([coordKey(origin)]);
   const queue: AxialCoord[] = [origin];
   for (let i = 0; i < queue.length && seen.size < limit; i++) {
+    // An origin that cannot be left (a plain mountain) reaches nothing but itself.
+    if (leaveCost(queue[i]!, ctx) === null) continue;
     for (const n of neighbors(queue[i]!)) {
       const k = coordKey(n);
       if (seen.has(k) || stepCost(n, ctx) === null) continue;

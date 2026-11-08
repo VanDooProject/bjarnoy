@@ -64,7 +64,7 @@ describe('gamePathContext range tint behind a wall', () => {
 
     for (const owner of ['ulf', 'egil']) {
       const range = reachableRange(origin, origin, 100, gamePathContext(world, RULES, 1, owner));
-      expect(range.get(coordKey({ q: 3, r: 2 }))).toBe(2 * (3 + 1 + 3)); // 3 grass steps, then the tip at grass 1 + 3, out and back
+      expect(range.get(coordKey({ q: 3, r: 2 }))).toBe(2 * (3 + (1 + (1 + 3)) / 2)); // 3 grass steps, then half grass and half the tip (grass 1 + 3), out and back
       expect(range.has(behind)).toBe(true);
     }
   });

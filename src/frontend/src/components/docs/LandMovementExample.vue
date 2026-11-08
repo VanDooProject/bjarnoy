@@ -2,7 +2,7 @@
 // The Land movement docs page's example map: a small hand-placed island with a dummy army's route over it, drawn by the game's own
 // HexMapRenderer through a StaticWorldModel (like BogIsland.vue and WallExample.vue), with the realm claimed by the model itself. The route is the one the real pathfinder finds
 // (lib/docs/landMovementExample.ts) and is drawn by the renderer's army overlay, the same line and flag a marching army gets on the
-// map. Hovering a hex names it. Below the map every step of the route is listed in a table with the time a Spearman needs for it;
+// map. Hovering a hex names it. Below the map every hex of the route is listed in a table with the time a Spearman spends on it;
 // hovering a row (or tapping it) highlights its hex on the map, and hovering a hex on the map marks its row.
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -82,7 +82,7 @@ function nameAt(coord: AxialCoord): string {
 const hoverText = computed(() => {
   const info = hovered.value;
   if (info) return nameAt(info.coord);
-  const step = route.steps.find((s) => coordKey(s.coord) === selectedKey.value);
+  const step = route.hexes.find((s) => coordKey(s.coord) === selectedKey.value);
   return step ? nameAt(step.coord) : t('docs.landMovement.example.hoverHint');
 });
 
@@ -92,7 +92,7 @@ function selectRow(coord: AxialCoord): void {
 }
 /** The pointer left the table: back to the tapped row if there is one, else no row. */
 function clearRow(): void {
-  const pinned = route.steps.find((s) => coordKey(s.coord) === pinnedKey.value);
+  const pinned = route.hexes.find((s) => coordKey(s.coord) === pinnedKey.value);
   selectedKey.value = pinned ? pinnedKey.value : null;
   renderer.value?.setHighlight(pinned?.coord);
 }
@@ -109,8 +109,8 @@ function tapRow(coord: AxialCoord): void {
 
 const speed = computed(() => units.byType.spearman?.speed ?? 0);
 const lang = computed(() => String(locale.value));
-const steps = computed(() =>
-  route.steps.map((s) => ({
+const rows = computed(() =>
+  route.hexes.map((s) => ({
     key: coordKey(s.coord),
     coord: s.coord,
     name: kindName(s.kind),
@@ -138,7 +138,7 @@ const total = computed(() => (speed.value ? formatMinutes(minutesPerHex(route.to
         </thead>
         <tbody @mouseleave="clearRow">
           <tr
-            v-for="(s, i) in steps"
+            v-for="(s, i) in rows"
             :key="s.key"
             :data-step="i + 1"
             :class="{ active: s.key === activeKey }"

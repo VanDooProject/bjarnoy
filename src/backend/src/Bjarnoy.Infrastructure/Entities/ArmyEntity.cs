@@ -100,9 +100,15 @@ public class ArmyEntity
 
     public List<double> CumulativeHours { get; set; } = [];
 
+    /// <summary>Persisted mirror of <see cref="Movement.EdgeHours"/>.</summary>
+    public List<double> EdgeHours { get; set; } = [];
+
     public List<HexPoint> ReturnPath { get; set; } = [];
 
     public List<double> ReturnCumulativeHours { get; set; } = [];
+
+    /// <summary>Persisted mirror of <see cref="Movement.ReturnEdgeHours"/>.</summary>
+    public List<double> ReturnEdgeHours { get; set; } = [];
 
     public DateTimeOffset TurnAroundAt { get; set; }
 
@@ -123,8 +129,10 @@ public class ArmyEntity
                     DepartedAt = DepartedAt,
                     Path = [.. Path.Select(p => new HexCoord(p.Q, p.R))],
                     CumulativeHours = CumulativeHours,
+                    EdgeHours = EdgeHours,
                     ReturnPath = [.. ReturnPath.Select(p => new HexCoord(p.Q, p.R))],
                     ReturnCumulativeHours = ReturnCumulativeHours,
+                    ReturnEdgeHours = ReturnEdgeHours,
                     TurnAroundAt = TurnAroundAt,
                     IsReturning = IsReturning,
                     RetreatImmune = RetreatImmune,
@@ -185,8 +193,10 @@ public class ArmyEntity
                 DepartedAt = default;
                 Path = [];
                 CumulativeHours = [];
+                EdgeHours = [];
                 ReturnPath = [];
                 ReturnCumulativeHours = [];
+                ReturnEdgeHours = [];
                 TurnAroundAt = default;
                 IsReturning = false;
                 RetreatImmune = false;
@@ -199,8 +209,10 @@ public class ArmyEntity
                 DepartedAt = default;
                 Path = [];
                 CumulativeHours = [];
+                EdgeHours = [];
                 ReturnPath = [];
                 ReturnCumulativeHours = [];
+                ReturnEdgeHours = [];
                 TurnAroundAt = default;
                 IsReturning = false;
                 RetreatImmune = false;
@@ -213,8 +225,10 @@ public class ArmyEntity
                 DepartedAt = movement.DepartedAt;
                 Path = [.. movement.Path.Select(c => new HexPoint(c.Q, c.R))];
                 CumulativeHours = [.. movement.CumulativeHours];
+                EdgeHours = [.. movement.EdgeHours];
                 ReturnPath = [.. movement.ReturnPath.Select(c => new HexPoint(c.Q, c.R))];
                 ReturnCumulativeHours = [.. movement.ReturnCumulativeHours];
+                ReturnEdgeHours = [.. movement.ReturnEdgeHours];
                 TurnAroundAt = movement.TurnAroundAt;
                 IsReturning = movement.IsReturning;
                 RetreatImmune = movement.RetreatImmune;

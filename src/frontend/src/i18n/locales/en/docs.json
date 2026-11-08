@@ -1174,7 +1174,7 @@
       "columns": {
         "step": "#",
         "hex": "Hex",
-        "time": "Time"
+        "time": "Time on the hex"
       },
       "names": {
         "settlement": "Settlement",
@@ -1189,7 +1189,7 @@
     },
     "cost": {
       "heading": "What a hex costs",
-      "body": "Every hex an army enters has a cost set by its ground. An army needs the cost divided by its speed, in hours, to cross the hex, so a hex of cost 2 takes twice as long as grass.",
+      "body": "Every hex has a cost set by its ground. An army needs the cost divided by its speed, in hours, to cross the hex, so a hex of cost 2 takes twice as long as grass. A step to the next hex is paid half for the hex you leave and half for the hex you enter, so your army always moves at the speed of the ground it is on.",
       "summary": "Grass is the quickest ground. Sand and forest slow an army down a little, bog a lot. A stream can be waded, but it costs far more than any ground. A wide river only opens over a bridge, and mountains, lakes and the sea cannot be entered at all.",
       "columns": {
         "ground": "Ground",
@@ -1253,12 +1253,11 @@
         "kings": "King's bridge",
         "guarded": "Guarded bridge"
       },
-      "groundCost": "as the ground under it",
       "everyone": "Every army, its owner’s included",
       "friends": "Its owner’s armies and their friends’: the same guild, or a guild at peace with it. Every other army is stopped as if there were no bridge.",
       "rules": {
         "where": "A bridge fits on a straight or bending wide river hex, whatever ground lies under it. It does not fit on a spring, a fork or a mouth, on a stream (armies wade streams anyway) or on a wasted island.",
-        "site": "A building site does not open the river. Only a finished bridge, level 1 or more, counts. Each level makes the crossing quicker, up to the king’s bridge, where armies cross as fast as over the ground itself.",
+        "site": "A building site does not open the river. Only a finished bridge, level 1 or more, counts. Each level makes the crossing quicker, up to the king’s bridge, which armies cross a little slower than grass, whatever ground lies under the river.",
         "guarded": "The guarded bridge works like a wall gate: it lets through its owner’s armies and their friends’ and stops everyone else. Outside its owner's realm it has no function and is open to every army.",
         "siege": "Catapults can burn a bridge down (rams cannot), one level per won siege, however many catapults survive. A guarded bridge therefore falls to the king’s bridge first and is then open to everyone, attackers included. A causeway burnt down once is gone, and the river is shut again.",
         "walls": "A bridge does not change walls: a wall that runs up to a wide river is sealed there, with or without a bridge. See {walls}.",

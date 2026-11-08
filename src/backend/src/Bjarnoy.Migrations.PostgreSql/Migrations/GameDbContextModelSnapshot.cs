@@ -236,6 +236,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<DateTimeOffset>("DepartedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("EdgeHours")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<bool>("IsReturning")
                         .HasColumnType("boolean");
 
@@ -268,6 +272,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("ReturnCumulativeHours")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ReturnEdgeHours")
                         .IsRequired()
                         .HasColumnType("text");
 

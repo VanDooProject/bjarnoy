@@ -221,7 +221,7 @@ public class HexPathfinderTests
 
         Assert.Equal(0, hours[0]);
         Assert.Equal(0.5, hours[1], 6); // grass: 1.0 / 2.0
-        Assert.Equal(0.5 + 1.0, hours[2], 6); // + bog: 2.0 / 2.0
+        Assert.Equal(0.5 + 0.75, hours[2], 6); // + (grass 1.0 + bog 2.0) / 2 / 2.0
     }
 
     [Fact]
@@ -283,7 +283,7 @@ public class HexPathfinderTests
     }
 
     [Fact]
-    public void Cumulative_hours_bill_the_river_crossing_penalty_on_entry()
+    public void Cumulative_hours_bill_a_river_hex_half_when_entered_and_half_when_left()
     {
         var path = new List<HexCoord> { new(0, 0), new(1, 0), new(2, 0) };
         bool IsRiver(HexCoord c) => c == new HexCoord(2, 0);
@@ -292,7 +292,7 @@ public class HexPathfinderTests
 
         Assert.Equal(0, hours[0]);
         Assert.Equal(1.0, hours[1], 6); // grass, no river
-        Assert.Equal(1.0 + 1.0 + HexPathfinder.RiverCrossingCost, hours[2], 6); // grass + river penalty
+        Assert.Equal(1.0 + ((1.0 + 1.0 + HexPathfinder.RiverCrossingCost) / 2), hours[2], 6); // half grass, half the stream
     }
 
     [Fact]
@@ -399,7 +399,9 @@ public class HexPathfinderTests
         Assert.Contains(new HexCoord(2, 0), path);
         var hours = HexPathfinder.CumulativeHours(path, AllGrass(), hexesPerHour: 1.0, isRiver: stream.Contains, isWideRiver: _ => false);
         Assert.Equal(1.0 + 9.0 + 1.0 + 1.0, hours[^1], 6);
-        Assert.Equal(1.0 + HexPathfinder.RiverCrossingCost, hours[2] - hours[1], 6);
+        // Half the stream is billed wading in, half wading out.
+        Assert.Equal((1.0 + 1.0 + HexPathfinder.RiverCrossingCost) / 2, hours[2] - hours[1], 6);
+        Assert.Equal((1.0 + HexPathfinder.RiverCrossingCost + 1.0) / 2, hours[3] - hours[2], 6);
     }
 
     [Fact]
@@ -413,7 +415,7 @@ public class HexPathfinderTests
         var hours = HexPathfinder.CumulativeHours(path, TerrainAt, hexesPerHour: 1.0, isRiver: IsRiver, isWideRiver: _ => false);
 
         // Flat 1.0 + RiverCrossingCost = 9, not the mountain's own cost plus 8.
-        Assert.Equal(9.0, hours[1], 6);
+        Assert.Equal(5.0, hours[1], 6);
         Assert.Equal(10.0, hours[2], 6);
     }
 
@@ -473,5 +475,157 @@ public class HexPathfinderTests
 
         Assert.NotNull(path);
         Assert.Equal(4, path!.Count);
+    }
+
+    // --- A step is billed half and half ------------------------------------
+
+    private static Func<HexCoord, Terrain> Row(params Terrain[] terrains) =>
+        c => c.R == 0 && c.Q >= 0 && c.Q < terrains.Length ? terrains[c.Q] : Terrain.Sea;
+
+    private static List<HexCoord> Line(int count) => [.. Enumerable.Range(0, count).Select(q => new HexCoord(q, 0))];
+
+    [Fact]
+    public void A_step_costs_half_the_hex_left_and_half_the_hex_entered()
+    {
+        var terrain = Row(Terrain.Grass, Terrain.Forest, Terrain.Grass);
+        var path = Line(3);
+
+        var hours = HexPathfinder.CumulativeHours(path, terrain, hexesPerHour: 1.0);
+
+        Assert.Equal((1.0 + 1.3) / 2, hours[1], 9);
+        Assert.Equal((1.0 + 1.3) / 2 + ((1.3 + 1.0) / 2), hours[2], 9);
+        // The same route walked back costs the same.
+        var back = HexPathfinder.CumulativeHours([.. path.AsEnumerable().Reverse()], terrain, hexesPerHour: 1.0);
+        Assert.Equal(hours[^1], back[^1], 9);
+    }
+
+    [Fact]
+    public void FindPath_prices_steps_half_and_half_so_a_forest_detour_is_judged_by_both_halves()
+    {
+        // A grass corridor around a forest hex is only taken when it is cheaper by the half-and-half price: the direct line over
+        // the forest costs 1.15 + 1.15 = 2.3, the detour over grass 3 steps of 1.0.
+        var forest = new HexCoord(1, 0);
+        Terrain TerrainAt(HexCoord c) => c == forest ? Terrain.Forest : Terrain.Grass;
+
+        var path = HexPathfinder.FindPath(new HexCoord(0, 0), new HexCoord(2, 0), TerrainAt, isLandUnit: true)!;
+
+        Assert.Equal([new HexCoord(0, 0), forest, new HexCoord(2, 0)], path);
+        Assert.Equal(2.3, HexPathfinder.CumulativeHours(path, TerrainAt, hexesPerHour: 1.0)[^1], 9);
+    }
+
+    [Fact]
+    public void An_army_standing_under_a_wall_built_on_its_hex_leaves_at_the_ground_price()
+    {
+        var wall = new HexCoord(0, 0);
+        var terrain = Row(Terrain.Forest, Terrain.Grass, Terrain.Grass);
+
+        var path = HexPathfinder.FindPath(wall, new HexCoord(2, 0), terrain, isLandUnit: true, blocked: c => c == wall);
+
+        Assert.NotNull(path);
+        var hours = HexPathfinder.CumulativeHours(path!, terrain, hexesPerHour: 1.0, blocked: c => c == wall);
+        Assert.Equal((1.3 + 1.0) / 2, hours[1], 9);
+        // Entering the same hex stays shut.
+        Assert.Null(HexPathfinder.FindPath(new HexCoord(2, 0), wall, terrain, isLandUnit: true, blocked: c => c == wall));
+    }
+
+    [Fact]
+    public void An_army_standing_on_a_wide_river_whose_bridge_is_gone_leaves_it_at_twelve()
+    {
+        var river = new HexCoord(0, 0);
+        var terrain = Row(Terrain.Grass, Terrain.Grass, Terrain.Grass);
+
+        var path = HexPathfinder.FindPath(river, new HexCoord(2, 0), terrain, isLandUnit: true, isRiver: c => c == river, isWideRiver: c => c == river);
+
+        Assert.NotNull(path);
+        Assert.Equal(1.0 + HexPathfinder.BurntBridgeLeaveCost, 12.0);
+        var hours = HexPathfinder.CumulativeHours(path!, terrain, hexesPerHour: 1.0, isRiver: c => c == river, isWideRiver: c => c == river);
+        Assert.Equal((12.0 + 1.0) / 2, hours[1], 9);
+        // Entering it is still impossible without a bridge.
+        Assert.Null(HexPathfinder.FindPath(new HexCoord(2, 0), river, terrain, isLandUnit: true, isRiver: c => c == river, isWideRiver: c => c == river));
+    }
+
+    [Fact]
+    public void An_army_standing_on_a_wide_river_with_a_bridge_leaves_at_the_bridge_price()
+    {
+        var river = new HexCoord(0, 0);
+        var terrain = Row(Terrain.Grass, Terrain.Grass);
+
+        var hours = HexPathfinder.CumulativeHours(
+            Line(2), terrain, hexesPerHour: 1.0, isRiver: c => c == river, isWideRiver: c => c == river,
+            bridgeCost: c => c == river ? 1.0 + HexPathfinder.CausewayCrossingCost : null);
+
+        Assert.Equal((6.0 + 1.0) / 2, hours[1], 9);
+    }
+
+    [Fact]
+    public void An_army_on_a_plain_mountain_has_no_route_out()
+    {
+        var terrain = Row(Terrain.Mountain, Terrain.Grass, Terrain.Grass);
+
+        // FindPath refuses a mountain origin (a land army's endpoints must be enterable terrain)...
+        Assert.Null(HexPathfinder.FindPath(new HexCoord(0, 0), new HexCoord(2, 0), terrain, isLandUnit: true));
+        // ...while a stored path leaving one is charged as impassable.
+        Assert.True(double.IsPositiveInfinity(HexPathfinder.CumulativeHours(Line(2), terrain, hexesPerHour: 1.0)[1]));
+    }
+
+    [Fact]
+    public void Leaving_a_hex_costs_what_entering_it_costs_wherever_entering_is_allowed()
+    {
+        // Streams, half-open ends, bridges, gates and every ground: the leave price equals the enter price for any hex that can be entered.
+        var stream = new HexCoord(1, 0);
+        var halfOpen = new HexCoord(2, 0);
+        var gate = new HexCoord(3, 0);
+        var terrain = Row(Terrain.Grass, Terrain.Mountain, Terrain.Forest, Terrain.Sand, Terrain.Bog);
+        bool IsRiver(HexCoord c) => c == stream;
+
+        foreach (var hex in Line(5))
+        {
+            var intoHex = HexPathfinder.CumulativeHours(
+                [new HexCoord(0, 1), hex], c => c == new HexCoord(0, 1) ? Terrain.Grass : terrain(c), hexesPerHour: 1.0,
+                isRiver: IsRiver, isWideRiver: _ => false, blocked: gate.Equals, friendlyGate: gate.Equals, halfOpen: halfOpen.Equals)[1];
+            if (double.IsPositiveInfinity(intoHex))
+            {
+                continue;
+            }
+
+            var outOfHex = HexPathfinder.CumulativeHours(
+                [hex, new HexCoord(0, 1)], c => c == new HexCoord(0, 1) ? Terrain.Grass : terrain(c), hexesPerHour: 1.0,
+                isRiver: IsRiver, isWideRiver: _ => false, blocked: gate.Equals, friendlyGate: gate.Equals, halfOpen: halfOpen.Equals)[1];
+            Assert.Equal(intoHex, outOfHex, 9);
+        }
+    }
+
+    [Fact]
+    public void EdgeHours_are_crossed_after_half_the_leave_price_of_the_hex_left()
+    {
+        var terrain = Row(Terrain.Grass, Terrain.Forest, Terrain.Bog);
+        var path = Line(3);
+
+        var edges = HexPathfinder.EdgeHours(path, terrain, hexesPerHour: 2.0);
+        var hours = HexPathfinder.CumulativeHours(path, terrain, hexesPerHour: 2.0);
+
+        Assert.Equal(3, edges.Count);
+        Assert.Equal(0.0, edges[0]);
+        Assert.Equal(1.0 / 2 / 2.0, edges[1], 9); // half of the grass origin at 2 hexes/hour
+        Assert.Equal(hours[1] + (1.3 / 2 / 2.0), edges[2], 9); // half of the forest, after the centre of the forest
+        for (var i = 1; i < path.Count; i++)
+        {
+            Assert.InRange(edges[i], hours[i - 1], hours[i]);
+        }
+    }
+
+    [Fact]
+    public void A_fleet_leaves_and_enters_a_land_endpoint_at_the_flat_fallback_so_its_hours_stay_plain()
+    {
+        // Harbour (land) -> three sea hexes -> shore target (land): every step costs 1.0.
+        Terrain TerrainAt(HexCoord c) => c.Q is 0 or 4 ? Terrain.Grass : Terrain.Sea;
+        var path = Line(5);
+
+        var hours = HexPathfinder.CumulativeHours(path, TerrainAt, hexesPerHour: 1.0, isLandUnit: false);
+        var found = HexPathfinder.FindPath(path[0], path[^1], TerrainAt, isLandUnit: false);
+
+        Assert.Equal([0.0, 1.0, 2.0, 3.0, 4.0], hours);
+        Assert.Equal(path, found);
+        Assert.Equal([0.0, 0.5, 1.5, 2.5, 3.5], HexPathfinder.EdgeHours(path, TerrainAt, 1.0, isLandUnit: false));
     }
 }
