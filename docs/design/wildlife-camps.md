@@ -333,10 +333,10 @@ base rule and each camp's own extras from the design roster (#334's brainstorm);
 |---|---|---|
 | wolfden | strong | food, wood, iron |
 | boarwallow | strong | **food ++**, iron |
-| bearrapids | strong | food, stone, iron |
+| bearrapids | strong | food, brick, iron |
 | moosemire | strong | **food ++**, iron |
 | fenrirbrood | strong | food, **iron ++** |
-| eagleeyrie | strong | food, stone, iron |
+| eagleeyrie | strong | food, brick, iron |
 | walrushaulout | strong | food, iron |
 | sealhaulout | weak | food |
 | beaverlodge | weak | food, wood |

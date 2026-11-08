@@ -169,7 +169,7 @@ describe('BuildQueuePanel', () => {
     const footer = withReserve.find('.reserved-footer');
     expect(footer.exists()).toBe(true);
     expect(footer.text()).toContain('100w');
-    expect(footer.text()).toContain('80s');
+    expect(footer.text()).toContain('80b');
     withReserve.unmount();
   });
 });

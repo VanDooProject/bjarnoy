@@ -2163,7 +2163,7 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
 
     await store.queueBuildOptimistic('lumberjack', at, { wood: 100, stone: 50 });
 
-    // Stone stayed at 300 (a reserved waiting order spends nothing yet).
+    // Brick stayed at 300 (a reserved waiting order spends nothing yet).
     expect(store.hud.lastSpend?.cost).toEqual({ wood: 100 });
   });
 

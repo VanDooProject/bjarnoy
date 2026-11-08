@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ResourceIcon from '../ResourceIcon.vue';
 // Onboarding quest tray in the settlement view (docs/design/economy.md
 // section 7). The landing page's found -> reindeer herder -> lumberjack checklist
 // (OnboardingChecklist.vue) hands off to the settlement view; from there
@@ -162,7 +163,7 @@ async function claim(q: QuestResponse) {
       <div class="quest-footer">
         <span class="quest-reward" :aria-label="t('quests.rewardLabel')">
           <span v-for="kind in REWARD_KINDS" :key="kind" class="reward-item" :title="resourceName(kind)">
-            <span class="hex-icon" :style="{ background: `var(--${kind})` }" />{{ current.reward[kind] }}
+            <ResourceIcon :kind="kind" :size="14" />{{ current.reward[kind] }}
           </span>
         </span>
         <button
@@ -188,7 +189,7 @@ async function claim(q: QuestResponse) {
           <div class="quest-row-title">{{ t(`quests.items.${q.id}.title`) }}</div>
           <span class="quest-reward">
             <span v-for="kind in REWARD_KINDS" :key="kind" class="reward-item" :title="resourceName(kind)">
-              <span class="hex-icon" :style="{ background: `var(--${kind})` }" />{{ q.reward[kind] }}
+              <ResourceIcon :kind="kind" :size="14" />{{ q.reward[kind] }}
             </span>
           </span>
           <div v-if="overflows(q)" class="quest-note">{{ t('quests.overflowNote') }}</div>
@@ -284,12 +285,6 @@ async function claim(q: QuestResponse) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-}
-.hex-icon {
-  width: 11px;
-  height: 11px;
-  flex: none;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
 }
 .claim-button {
   flex: none;

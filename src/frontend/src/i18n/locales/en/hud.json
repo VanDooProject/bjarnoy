@@ -182,7 +182,7 @@
     "hexSubtext": "hex {q}-{r}",
     "cancel": "✕",
     "cancelError": "Could not cancel the order.",
-    "reservedFooter": "Reserved for queued construction: {wood}w {stone}s {food}f {iron}i"
+    "reservedFooter": "Reserved for queued construction: {wood}w {stone}b {food}f {iron}i"
   },
   "trainingQueue": {
     "title": "Training",
@@ -240,7 +240,7 @@
     "queueBuild": "Queue build",
     "upgradeToLevel": "Upgrade to level {level}",
     "feastTitle": "Feast",
-    "feastDesc": "Turn surplus wood, stone and food into renown. It is paid up front and the renown arrives when the feast ends.",
+    "feastDesc": "Turn surplus wood, brick and food into renown. It is paid up front and the renown arrives when the feast ends.",
     "feastCost": "Cost",
     "feastDuration": "Duration",
     "feastHours": "{hours} h",

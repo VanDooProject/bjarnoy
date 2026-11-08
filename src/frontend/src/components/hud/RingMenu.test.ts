@@ -540,9 +540,9 @@ describe('RingMenu', () => {
     });
 
     it('shows the new total next to an upgrade’s gain', async () => {
-      const wrapper = ringWith({ gives: '+15 Stone/h', givesTotal: '90 total' });
+      const wrapper = ringWith({ gives: '+15 Brick/h', givesTotal: '90 total' });
       await hoverHut(wrapper);
-      expect(wrapper.get('.ring-card').text()).toContain('+15 Stone/h');
+      expect(wrapper.get('.ring-card').text()).toContain('+15 Brick/h');
       expect(wrapper.get('[data-testid="ring-card-total"]').text()).toBe('· 90 total');
     });
 
@@ -617,7 +617,7 @@ describe('RingMenu', () => {
       expect(card.text()).toContain('Level 1 → 2');
       expect(card.text()).toContain('161');
       expect(card.text()).toContain('15:00');
-      expect(card.text()).toContain('Need 161 Wood · 134 Stone · 81 Food');
+      expect(card.text()).toContain('Need 161 Wood · 134 Brick · 81 Food');
 
       await upgrade.trigger('mouseleave');
       expect(wrapper.find('.ring-card').exists()).toBe(false);
@@ -961,9 +961,9 @@ describe('RingMenu', () => {
     });
 
     it('shows the new total next to an upgrade’s gain', async () => {
-      const wrapper = ringWith({ gives: '+15 Stone/h', givesTotal: '90 total' });
+      const wrapper = ringWith({ gives: '+15 Brick/h', givesTotal: '90 total' });
       await hoverHut(wrapper);
-      expect(wrapper.get('.ring-card').text()).toContain('+15 Stone/h');
+      expect(wrapper.get('.ring-card').text()).toContain('+15 Brick/h');
       expect(wrapper.get('[data-testid="ring-card-total"]').text()).toBe('· 90 total');
     });
 
@@ -1038,7 +1038,7 @@ describe('RingMenu', () => {
       expect(card.text()).toContain('Level 1 → 2');
       expect(card.text()).toContain('161');
       expect(card.text()).toContain('15:00');
-      expect(card.text()).toContain('Need 161 Wood · 134 Stone · 81 Food');
+      expect(card.text()).toContain('Need 161 Wood · 134 Brick · 81 Food');
 
       await upgrade.trigger('mouseleave');
       expect(wrapper.find('.ring-card').exists()).toBe(false);
@@ -1112,7 +1112,7 @@ describe('RingMenu', () => {
       // No "2" badge either.
       expect(hut.find('[data-testid="ring-arm-badge"]').exists()).toBe(false);
       expect(wrapper.find('[data-testid="ring-tap-hint"]').exists()).toBe(false);
-      expect(wrapper.get('[data-testid="ring-card-status"]').text()).toContain('Need 100 Wood · 80 Stone');
+      expect(wrapper.get('[data-testid="ring-card-status"]').text()).toContain('Need 100 Wood · 80 Brick');
       await hut.trigger('touchstart');
       await hut.trigger('click');
       expect(wrapper.emitted('select')).toBeUndefined();

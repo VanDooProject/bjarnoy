@@ -171,7 +171,7 @@ describe('formatMissingResources', () => {
   it('lists every short resource, in wood/stone/food/iron order', () => {
     const cost = { wood: 100, stone: 50, food: 30, iron: 10 };
     const stock = { wood: 0, stone: 0, food: 0, iron: 0 };
-    expect(formatMissingResources(cost, stock)).toBe('100 Wood, 50 Stone, 30 Food, 10 Iron');
+    expect(formatMissingResources(cost, stock)).toBe('100 Wood, 50 Brick, 30 Food, 10 Iron');
   });
 
   it('is empty when the stock already covers the cost', () => {
