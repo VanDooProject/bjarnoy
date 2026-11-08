@@ -110,7 +110,7 @@ const feastOffer = computed(() => {
   return {
     townSquareLevel: ts,
     cost: { wood: each, stone: each, food: each, iron: 0 } as ResourceLine,
-    durationSeconds: FEAST_HOURS * 3600,
+    durationSeconds: (FEAST_HOURS * 3600) / world.worldSpeedFactor,
     renownGain: feastRenown(ts),
   };
 });

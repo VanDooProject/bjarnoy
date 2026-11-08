@@ -726,7 +726,7 @@ const {
   builtLevels,
   prerequisiteLocks,
   availabilityFor,
-  wisdomFactor,
+  buildSeconds,
   formatOutput,
   formatModifier,
   tileAt,
@@ -858,7 +858,7 @@ function upgradeActionFor(tile: Tile): RingAction {
       title: t('hud.ringMenu.card.upgradeTitle', { level: nextLevel }),
       sub: t('hud.ringMenu.card.upgradeSub', { building: buildingName(type), from: level, to: nextLevel }),
       cost,
-      time: upgradeDefinition ? formatBuildTime(upgradeDefinition.buildSeconds * wisdomFactor()) : undefined,
+      time: upgradeDefinition ? formatBuildTime(buildSeconds(upgradeDefinition.buildSeconds)) : undefined,
       gives: rate
         ? formatOutput(rate.gain)
         : stats.output

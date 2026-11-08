@@ -152,7 +152,11 @@ describe('trainingTimeFactor', () => {
   });
 
   it('scales a unit\'s catalogue time by the building level', () => {
-    expect(unitTrainingSeconds(unit({ type: 'thrall', trainingSeconds: 100 }), 10)).toBeCloseTo(90);
+    expect(unitTrainingSeconds(unit({ type: 'thrall', trainingSeconds: 100 }), 10, 1)).toBeCloseTo(90);
+  });
+
+  it('divides by the world speed factor, like the server', () => {
+    expect(unitTrainingSeconds(unit({ type: 'thrall', trainingSeconds: 100 }), 10, 3)).toBeCloseTo(30);
   });
 });
 
@@ -161,17 +165,22 @@ describe('distributedTrainingSeconds', () => {
 
   it('evenly: the building with the larger share and the lower level finishes last', () => {
     // 5 units over levels 0 and 20: shares 3 and 2 -> max(3 * 100, 2 * 80)
-    expect(distributedTrainingSeconds(thrall, 5, [0, 20], 'evenly')).toBeCloseTo(300);
+    expect(distributedTrainingSeconds(thrall, 5, [0, 20], 'evenly', 1)).toBeCloseTo(300);
   });
 
   it('fastest: orders finish together, faster buildings take more', () => {
     // rates 1/100 + 1/80 per second -> 10 units take 10 / 0.0225
-    expect(distributedTrainingSeconds(thrall, 10, [0, 20], 'fastest')).toBeCloseTo(10 / (1 / 100 + 1 / 80));
+    expect(distributedTrainingSeconds(thrall, 10, [0, 20], 'fastest', 1)).toBeCloseTo(10 / (1 / 100 + 1 / 80));
+  });
+
+  it('divides both splits by the world speed factor', () => {
+    expect(distributedTrainingSeconds(thrall, 5, [0, 20], 'evenly', 2)).toBeCloseTo(150);
+    expect(distributedTrainingSeconds(thrall, 10, [0, 20], 'fastest', 2)).toBeCloseTo(10 / (1 / 100 + 1 / 80) / 2);
   });
 
   it('fastest is never slower than evenly', () => {
-    expect(distributedTrainingSeconds(thrall, 7, [0, 20], 'fastest')).toBeLessThanOrEqual(
-      distributedTrainingSeconds(thrall, 7, [0, 20], 'evenly'),
+    expect(distributedTrainingSeconds(thrall, 7, [0, 20], 'fastest', 1)).toBeLessThanOrEqual(
+      distributedTrainingSeconds(thrall, 7, [0, 20], 'evenly', 1),
     );
   });
 });

@@ -9,6 +9,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { categoriesFor, useBuildRing } from './useBuildRing';
 import { useWorldStore } from '../stores/world';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
+import { formatBuildTime } from '../lib/map/ringCatalogue';
 import { createTestI18n } from '../test/i18n';
 import enHud from '../i18n/locales/en/hud.json';
 import enCatalogue from '../i18n/locales/en/catalogue.json';
@@ -74,6 +75,16 @@ describe('useBuildRing', () => {
       expect(building.cost).toBeDefined();
       expect(building.availability).toBeDefined();
     }
+  });
+
+  it('shows the build time at the world\'s speed', () => {
+    const { ring, select } = mountRing();
+    select(emptyHex(world, 'forest'));
+    const lumberjack = () => ring.categories.value.flatMap((c) => c.buildings).find((b) => b.id === 'lumberjack')!;
+    const base = useBuildingCatalogueStore().byType.lumberjack![0]!.buildSeconds;
+    expect(lumberjack().time).toBe(formatBuildTime(base));
+    world.worldSpeedFactor = 4;
+    expect(lumberjack().time).toBe(formatBuildTime(base / 4));
   });
 
   it('offers a forest hex the lumberjack and nothing that only fits grass', () => {

@@ -23,6 +23,7 @@ import {
 import {
   cropAllowedHere,
   formatBuildTime,
+  scaledBuildSeconds,
   isWallBuilding,
   longhouseLock,
   palisadeLock,
@@ -311,10 +312,10 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
       .map((order) => ({ q: order.q, r: order.r, gate: order.building === 'palisadegate' }));
   }
 
-  // Odin's Wisdom for the selected settlement: the multiplier on build times shown on the ring cards.
-  function wisdomFactor(): number {
+  // A catalogue build time as the selected settlement runs it: Odin's Wisdom and the world's speed (`scaledBuildSeconds`).
+  function buildSeconds(baseSeconds: number): number {
     const id = world.selectedSettlementId;
-    return id ? world.model.wisdomFactor(id) : 1;
+    return scaledBuildSeconds(baseSeconds, id ? world.model.wisdomFactor(id) : 1, world.worldSpeedFactor);
   }
 
   // Building a tower inside a strong, aggressive camp's guard range is allowed but the beasts will
@@ -385,8 +386,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
       label: buildingName(type),
       level: 1,
       cost,
-      // Odin's Wisdom shortens every build in the settlement (`wisdomFactor`).
-      time: definition ? formatBuildTime(definition.buildSeconds * wisdomFactor()) : undefined,
+      time: definition ? formatBuildTime(buildSeconds(definition.buildSeconds)) : undefined,
       gives: stats.output ? formatOutput(scaleOutput(stats.output, world.worldSpeedFactor)) : stats.modifier ? formatModifier(stats.modifier) : undefined,
       locks,
       warning: type === 'tower' ? towerCampWarning(coord) : undefined,
@@ -452,7 +452,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
     builtLevels,
     prerequisiteLocks,
     availabilityFor,
-    wisdomFactor,
+    buildSeconds,
     formatOutput,
     formatModifier,
     tileAt,

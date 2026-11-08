@@ -133,8 +133,14 @@ const rows = computed(() =>
       costText: formatCostLine(cost),
       durationText: formatTrainingDuration(
         split.value === 'here'
-          ? unitTrainingSeconds(definition, props.building.level) * count
-          : distributedTrainingSeconds(definition, count, siblings.value.map((b) => b.level), split.value),
+          ? unitTrainingSeconds(definition, props.building.level, world.worldSpeedFactor) * count
+          : distributedTrainingSeconds(
+              definition,
+              count,
+              siblings.value.map((b) => b.level),
+              split.value,
+              world.worldSpeedFactor,
+            ),
         1,
       ),
       available,
