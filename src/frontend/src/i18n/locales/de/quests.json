@@ -10,6 +10,13 @@
   "rewardLabel": "Belohnung",
   "overflowNote": "Ein Teil dieser Belohnung passt nicht mehr ins Lager.",
   "claimError": "Die Belohnung konnte nicht abgeholt werden. Versuch es erneut.",
+  "more": "Mehr",
+  "less": "Weniger",
+  "left": {
+    "build": "noch {n} bauen | noch {n} bauen",
+    "train": "noch {n} ausbilden | noch {n} ausbilden",
+    "level": "noch 1 Stufe | noch {n} Stufen"
+  },
   "items": {
     "producers3": {
       "title": "Baue 3 Rohstoffproduzenten",

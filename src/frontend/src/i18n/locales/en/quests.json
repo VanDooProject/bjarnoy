@@ -10,6 +10,13 @@
   "rewardLabel": "Reward",
   "overflowNote": "Some of this reward won't fit in storage.",
   "claimError": "Couldn't claim that reward. Try again.",
+  "more": "More",
+  "less": "Less",
+  "left": {
+    "build": "{n} more to build | {n} more to build",
+    "train": "{n} more to train | {n} more to train",
+    "level": "1 level to go | {n} levels to go"
+  },
   "items": {
     "producers3": {
       "title": "Build 3 resource producers",

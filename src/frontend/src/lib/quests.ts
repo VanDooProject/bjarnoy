@@ -99,3 +99,21 @@ export function questBit(questId: string): number {
 export function rewardOverflows(reward: ResourceLine, stock: Resources, capacity: Resources): boolean {
   return (['wood', 'stone', 'food'] as const).some((k) => stock[k] + reward[k] > capacity[k]);
 }
+
+/** How a quest's counted progress is shown: pips (build), a bar (train) or numbered level steps (level). */
+export type QuestProgressKind = 'build' | 'train' | 'level';
+
+const PROGRESS_KINDS: Readonly<Record<string, QuestProgressKind>> = {
+  producers3: 'build',
+  producers6: 'build',
+  spearmen5: 'train',
+  longhouse2: 'level',
+  longhouse3: 'level',
+  longhouse5: 'level',
+  tower3: 'level',
+};
+
+/** The progress display kind for a quest id; undefined for a quest without a visual. */
+export function questProgressKind(id: string): QuestProgressKind | undefined {
+  return PROGRESS_KINDS[id];
+}
