@@ -133,10 +133,10 @@ onBeforeUnmount(() => {
 });
 
 const pills = computed(() => [
-  { key: 'wood', color: 'var(--wood)', value: world.hud.resources.wood + tickBack.wood, rate: world.hud.rates.wood, cap: world.hud.storageCap.wood, reserved: world.hud.reserved.wood },
-  { key: 'stone', color: 'var(--stone)', value: world.hud.resources.stone + tickBack.stone, rate: world.hud.rates.stone, cap: world.hud.storageCap.stone, reserved: world.hud.reserved.stone },
-  { key: 'food', color: 'var(--food)', value: world.hud.resources.food + tickBack.food, rate: world.hud.rates.food, cap: world.hud.storageCap.food, reserved: world.hud.reserved.food },
-  { key: 'iron', color: 'var(--iron)', value: world.hud.resources.iron + tickBack.iron, rate: world.hud.rates.iron, cap: world.hud.storageCap.iron, reserved: world.hud.reserved.iron },
+  { key: 'wood' as const, color: 'var(--wood)', value: world.hud.resources.wood + tickBack.wood, rate: world.hud.rates.wood, cap: world.hud.storageCap.wood, reserved: world.hud.reserved.wood },
+  { key: 'stone' as const, color: 'var(--stone)', value: world.hud.resources.stone + tickBack.stone, rate: world.hud.rates.stone, cap: world.hud.storageCap.stone, reserved: world.hud.reserved.stone },
+  { key: 'food' as const, color: 'var(--food)', value: world.hud.resources.food + tickBack.food, rate: world.hud.rates.food, cap: world.hud.storageCap.food, reserved: world.hud.reserved.food },
+  { key: 'iron' as const, color: 'var(--iron)', value: world.hud.resources.iron + tickBack.iron, rate: world.hud.rates.iron, cap: world.hud.storageCap.iron, reserved: world.hud.reserved.iron },
 ]);
 
 const population = computed(() => world.hud.population);
