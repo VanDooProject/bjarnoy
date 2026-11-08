@@ -1,10 +1,10 @@
 {
   "hero": {
-    "eyebrow": "Leeres Grundstück · Bjarnøy",
+    "eyebrow": "Freier Startplatz · Bjarnøy",
     "notOpenTitle": "Noch nicht geöffnet.",
     "title": "Errichte irgendwo dein Langhaus.",
-    "lede": "Das ist das ganze Tutorial. Wähle ein Feld, platziere das Gebäude, und die Kornzählung beginnt. Niemand fragt nach deinem Namen, bevor du etwas hast, das einen Namen verdient.",
-    "makingLandfall": "Landung wird gemacht…",
+    "lede": "Wähle einen Startplatz und setz dein Langhaus darauf. Danach baust du zwei weitere Gebäude, und deine Siedlung beginnt zu produzieren.",
+    "makingLandfall": "Landung läuft…",
     "noAccount": "Kein Konto",
     "nothingToInstall": "Nichts zu installieren",
     "leavesInOneClick": "Mit einem Klick wieder weg"
@@ -14,18 +14,18 @@
     "joinsClosed": "Diese Welt nimmt keine neuen Spieler mehr auf.",
     "noWorldYet": "Es wurde noch keine Welt erstellt — schau bald wieder vorbei.",
     "notAcceptingPlayers": "Diese Welt nimmt momentan keine neuen Spieler auf.",
-    "noPlotAvailable": "Gerade ist jedes Grundstück in dieser Welt vergeben oder reserviert — schau in ein paar Minuten wieder vorbei."
+    "noPlotAvailable": "Gerade ist jeder Startplatz in dieser Welt vergeben oder reserviert. Schau in ein paar Minuten wieder vorbei."
   },
   "invalidClick": {
-    "pickGlowingPlot": "Fast — eines der leuchtenden Grundstücke gehört dir.",
+    "pickGlowingPlot": "Wähle einen der leuchtenden Startplätze.",
     "beyondClaim": "Dieses Feld liegt außerhalb des Anspruchs deines Langhauses — baue näher an deiner Heimat.",
     "orderFailed": "Der Auftrag wurde nicht übermittelt — versuche ein anderes Feld.",
-    "plotTaken": "Dieses Grundstück wurde gerade vergeben — hier ist ein anderes."
+    "plotTaken": "Dieser Startplatz wurde gerade vergeben. Hier ist ein anderer."
   },
   "pointer": {
-    "clickThisPlot": "Klicke dieses Grundstück an",
-    "tapThisPlot": "Tippe dieses Grundstück an",
-    "anyGlowingPlot": "Jedes leuchtende Grundstück",
+    "clickThisPlot": "Klicke diesen Startplatz an",
+    "tapThisPlot": "Tippe diesen Startplatz an",
+    "anyGlowingPlot": "Jeder leuchtende Startplatz",
     "nowBuildHere": "Jetzt hier bauen",
     "oneMore": "Noch eins — {terrain}",
     "openBuild": "Öffne Bauen",
@@ -41,18 +41,18 @@
     "stepOf": "Schritt {step} von {total}",
     "longhouseName": "Langhaus & Hof",
     "placed": "Platziert",
-    "clickToPlace": "Klicke dein Grundstück an, um es zu platzieren",
-    "tapToPlace": "Tippe dein Grundstück an, um es zu platzieren",
+    "clickToPlace": "Klicke deinen Startplatz an, um das Langhaus zu setzen",
+    "tapToPlace": "Tippe deinen Startplatz an, um das Langhaus zu setzen",
     "clickEmptyHex": "Klicke ein leeres Feld in deiner Grenze an",
     "tapEmptyHex": "Tippe ein leeres Feld in deiner Grenze an",
     "foundFirst": "Gründe zuerst dein Langhaus"
   },
   "banner": {
-    "landfallTitle": "Landung geglückt.",
-    "landfallBody": "Dein Langhaus steht. Noch zwei Gebäude.",
-    "completeTitle": "Alle drei stehen.",
-    "completeBody": "Das Getreide wird gezählt. Verschiebe die Karte oder klicke ein Feld an, um weiterzubauen.",
-    "completeBodyTouch": "Das Getreide wird gezählt. Verschiebe die Karte oder tippe ein Feld an, um weiterzubauen.",
-    "continueCta": "Betritt deine Siedlung"
+    "landfallTitle": "Dein Langhaus steht.",
+    "landfallBody": "Bau noch zwei Gebäude.",
+    "completeTitle": "Drei Gebäude gebaut",
+    "completeBody": "Deine Siedlung produziert jetzt. Verschieb die Karte oder klick ein Feld an, um weiterzubauen.",
+    "completeBodyTouch": "Deine Siedlung produziert jetzt. Verschieb die Karte oder tipp ein Feld an, um weiterzubauen.",
+    "continueCta": "Weiter zur Siedlung"
   }
 }

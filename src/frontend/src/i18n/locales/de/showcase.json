@@ -3,7 +3,7 @@
   "hero": {
     "eyebrow": "Ein Echtzeit-Wikinger-Inselspiel",
     "title": "Bjarnoy",
-    "pitch": "Stich in See, beanspruche einen Bauplatz und errichte ein Reich, das auch offline weiterwächst — Bauaufträge laufen weiter, Flotten segeln, und Überfälle landen nach der echten Uhrzeit, nicht nach Spielzügen.",
+    "pitch": "Gründe eine Siedlung auf einer Insel und bau sie zu einem Reich aus. Die Welt läuft in Echtzeit weiter, auch wenn du offline bist: Bauaufträge werden fertig, Flotten segeln, und Armeen kommen nach der Uhr an, nicht nach Spielzügen.",
     "playCta": "Jetzt spielen",
     "docsCta": "Dokumentation lesen",
     "seed": "Welt-Seed {seed}",
@@ -11,39 +11,39 @@
   },
   "oneView": {
     "title": "Eine Ansicht — Karte und Dorf",
-    "body": "Die Weltkarte und dein Dorf sind dasselbe Sechseckgitter, nicht zwei getrennte Ansichten. Zoome auf eine Insel, und dieselbe gerenderte Fläche wird aus Gelände und Territorium zu Hütten, Feldern und Menschen — nichts \"öffnet\" eine eigene Ansicht."
+    "body": "Weltkarte und Dorf sind dasselbe Sechseckgitter. Zoomst du auf eine Insel, zeigt dieselbe Fläche statt Gelände und Gebiet Hütten, Felder und Menschen. Eine eigene Dorfansicht gibt es nicht."
   },
   "features": {
-    "title": "Gebaut zum Spielen, nicht nur zum Ansehen",
-    "intro": "Jedes Feature unten läuft auf derselben Engine, die du oben siehst — keine Attrappen.",
+    "title": "Im Spiel",
+    "intro": "Diese Funktionen gibt es im Spiel schon. Sie laufen auf derselben Engine wie die Karte oben.",
     "items": {
       "sharedIslands": {
         "title": "Geteilte Inseln",
         "body": "Inseln sind gemeinsamer Boden — die Siedlungen vieler Spieler können nebeneinander auf derselben Insel stehen."
       },
       "borders": {
-        "title": "Grenzen, die wachsen",
-        "body": "Territorium folgt der Settlers-II-Logik: Dein Claim-Radius wächst mit deinem Langhaus und deinen Grenztürmen — und schrumpft, wenn sie fallen."
+        "title": "Gebiet und Grenzen",
+        "body": "Wie in „Die Siedler II“ wächst dein Gebiet mit deinem Langhaus und deinen Wachtürmen und schrumpft, wenn sie fallen."
       },
       "realTime": {
-        "title": "Echtzeit, ständig in Bewegung",
-        "body": "Bauaufträge, Ausbauten und Flotten laufen nach der Uhr. Logg dich morgen wieder ein, und die Welt hat sich ohne dich weitergedreht."
+        "title": "Echtzeit",
+        "body": "Bauaufträge, Ausbauten und Flotten laufen nach der Uhr weiter, auch während du offline bist."
       },
       "fogOfWar": {
-        "title": "Nebel des Krieges & Aufklärung",
-        "body": "Unerkundetes Gebiet bleibt verborgen, bis ein Späher oder eine Siedlung es aufdeckt — die Karte zu kennen ist Teil des Spiels."
+        "title": "Kriegsnebel und Aufklärung",
+        "body": "Unerkundetes Gebiet bleibt verborgen, bis ein Späher oder eine Siedlung es aufdeckt."
       },
       "expansion": {
         "title": "Expansion über See",
-        "body": "Lade eine Siedlermannschaft auf ein Langschiff, segle zu einem unbeanspruchten Küstenhex auf einer beliebigen Insel und gründe eine zweite Siedlung."
+        "body": "Lade Siedler auf ein Langschiff, segle zu einem freien Küstenfeld auf einer beliebigen Insel und gründe dort eine zweite Siedlung."
       },
       "trade": {
         "title": "Handel zwischen Spielern",
-        "body": "Nichts ist gemeinsam — Karawanen und Schiffe bewegen Güter zwischen Siedlungen, deinen eigenen und denen, mit denen du einen Handel schließt."
+        "body": "Es gibt keinen gemeinsamen Vorrat: Karawanen und Schiffe bringen Güter zwischen Siedlungen, deinen eigenen und denen deiner Handelspartner."
       },
       "guilds": {
         "title": "Gilden & Bündnisse",
-        "body": "Schließe dich mit anderen Jarls zusammen, um Sicht zu teilen, Landungen zu koordinieren und Inseln gemeinsam zu halten."
+        "body": "Schließ dich mit anderen Jarlen zusammen, um Sicht zu teilen, Landungen abzustimmen und Inseln gemeinsam zu halten."
       },
       "battles": {
         "title": "Kämpfe, Berichte & ein Simulator",
@@ -53,7 +53,7 @@
   },
   "engineering": {
     "title": "Unter der Haube",
-    "intro": "Die Portfolio-Hälfte dieser Seite — wie das Ganze tatsächlich gebaut ist.",
+    "intro": "Wie das Spiel technisch gebaut ist.",
     "items": {
       "renderer": {
         "title": "Ein Sechseck-Renderer, zwei Ansichten",
@@ -69,14 +69,14 @@
       },
       "e2e": {
         "title": "Gesplittete Playwright-E2E-Suite",
-        "body": "Eine echte End-to-End-Testsuite steuert einen echten Browser gegen einen Produktions-Build, aufgeteilt auf CI-Shards, damit Läufe schnell bleiben."
+        "body": "Eine End-to-End-Testsuite steuert einen Browser gegen einen Produktions-Build, aufgeteilt auf CI-Shards, damit die Läufe schnell bleiben."
       },
       "deploy": {
         "title": "Preview-Umgebungen pro Pull Request",
         "body": "Jeder Pull Request bekommt eine eigene Wegwerf-Preview-Umgebung auf Coolify, damit eine Änderung laufend begutachtet werden kann, nicht nur als Diff gelesen."
       },
       "i18n": {
-        "title": "Englisch + Deutsch, immer im Gleichschritt",
+        "title": "Englisch und Deutsch",
         "body": "Jeder sichtbare Text erscheint auf Englisch und Deutsch, automatisierte Tests erzwingen die Schlüsselparität zwischen beiden."
       }
     },

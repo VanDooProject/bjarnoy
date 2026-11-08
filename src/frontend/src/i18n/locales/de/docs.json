@@ -93,7 +93,7 @@
   "hub": {
     "title": "Docs",
     "heading": "Das Bjarnøy-Handbuch",
-    "intro": "Wie Inseln, Gebäude, Bestien und das Endspiel funktionieren. Alles hier sind die Regeln und die Grafiken des Spiels selbst.",
+    "intro": "Wie Inseln, Gebäude, Wildtiere und das Endspiel funktionieren.",
     "artAlt": "Utgard, die Riesenfestung der Ödlande",
     "groups": {
       "story": {
@@ -168,7 +168,7 @@
       },
       "wildlifeCamps": {
         "title": "Wildtierlager",
-        "description": "Wölfe, Eber und Schlimmeres beherrschen die freien Inseln. Jage sie und nimm dir die Beute."
+        "description": "Die Wildtiere der freien Inseln: wo sie leben, wie du sie jagst und welche Beute sie bringen."
       },
       "wastedLands": {
         "title": "Ödlande",
@@ -246,7 +246,7 @@
       "water": "Wasser"
     },
     "lore": {
-      "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und welche Gebäude freigeschaltet sind. Außerdem liefert es von jedem Rohstoff ein wenig und erweitert das Lager. Jede Siedlung beginnt mit einem Langhaus auf Gras.",
+      "longhouse": "Das Hauptgebäude der Siedlung. Seine Stufe bestimmt, wie weit dein Gebiet reicht, wie viele Baumeister du hast und welche Gebäude freigeschaltet sind. Außerdem liefert es von jedem Rohstoff ein wenig und erweitert das Lager. Jede Siedlung beginnt mit einem Langhaus auf Gras.",
       "lumberjack": "Schlägt Holz auf bewaldetem Boden – das Holz hinter jeder Wand und jedem Dach.",
       "quarry": "Bricht Stein aus einem Bergkamm – die Knochen jeder Festung.",
       "odinstatue": "Odins Statue steht auf Gras und wird ab Langhaus 25 hinter einer Druidenhütte der Stufe 10 freigeschaltet. Weisheit: Jeder Bau in dieser Siedlung dauert pro Stufe 2 % kürzer (auf Stufe 5 sind es 10 %). Raben: Das Gebiet, die Türme und die Armeen der Siedlung sehen pro Stufe 2 Ringe weiter (auf Stufe 5 sind es 10). Sie zählt als der eine Schrein der Siedlung.",
@@ -543,8 +543,8 @@
   },
   "wildlifeCamps": {
     "title": "Wildtierlager",
-    "intro": "Unbesiedelte Inseln sind nicht leer. Wölfe, Bären, Robben und Schlimmeres beherrschen sie, jedes Rudel in einem eigenen Lager. Du darfst landen und siedeln, aber ein starkes Lager brennt jeden Turm in seiner Nähe nieder, den keine Armee bewacht. Auf einer großen Insel räumst du deshalb die Lager, die dir im Weg sind, und baust dort, wo das Land frei ist.",
-    "status": "Die Lager leben: Du kannst sie jagen, sie wachsen nach, und starke Lager wehren sich. Die Regeln unten sind genau die, nach denen das Spiel läuft. Die Moorlager (Elchmoor, Biberburg, Kranichtanz) stehen auf einfachem Moorboden.",
+    "intro": "Unbesiedelte Inseln sind nicht leer. Auf ihnen leben Wölfe, Bären, Robben und andere Wildtiere, jedes Rudel in seinem eigenen Revier. Du darfst landen und siedeln, aber ein starkes Revier brennt jeden Turm in seiner Nähe nieder, den keine Armee bewacht. Auf einer großen Insel räumst du deshalb die Reviere, die dir im Weg sind, und baust dort, wo das Land frei ist.",
+    "status": "Du kannst Reviere jagen, sie wachsen nach, und starke Reviere wehren sich. Die Moorreviere (Elchmoor, Biberburg, Kranichtanz) liegen auf einfachem Moorboden.",
     "rules": {
       "heading": "Wie ein Lager funktioniert",
       "towers": "Ein bewachtes Lager beansprucht das Land um sich herum. Starke Lager sind angriffslustig: Steht einer deiner Türme in ihrer Reichweite und keine deiner Armeen bewacht ihn, brennen sie ihn nieder. Willst du dort trotzdem einen Turm bauen, warnt dich das Spiel vorher. Außerhalb ihrer Reichweite kannst du auf der Insel frei bauen.",
@@ -681,7 +681,7 @@
     "stage": "Stufe",
     "example": {
       "heading": "Beispielkarte",
-      "body": "Eine kleine Insel, die das Spiel selbst erzeugt hat. Moor, Bach und See sind genau so gezeichnet wie in einer echten Welt. Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
+      "body": "Eine kleine Insel, die das Spiel erzeugt hat. Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
       "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
       "river": "Fluss"
     },
@@ -1167,7 +1167,7 @@
     },
     "example": {
       "heading": "Ein Marsch über die Insel",
-      "intro": "Eine Armee marschiert von ihrer Siedlung auf die andere Seite der Mauer. Die Route hat das Spiel selbst berechnet: Sie führt um das Moor und den Bergrücken herum, durch den Bach, über die Brücke ans andere Ufer des breiten Flusses und durch das Tor.",
+      "intro": "Eine Armee marschiert von ihrer Siedlung auf die andere Seite der Mauer. Ihre Route führt um das Moor und den Bergrücken herum, durch den Bach, über die Brücke ans andere Ufer des breiten Flusses und durch das Tor.",
       "alt": "Eine Beispielinsel mit dem Weg einer Armee von ihrer Siedlung auf die andere Seite einer Mauer.",
       "hoverHint": "Fahr mit der Maus über ein Feld, um zu sehen, was es ist.",
       "total": "Eine {unit}-Armee braucht für die ganze Route {time}.",
@@ -1326,7 +1326,7 @@
   },
   "shrines": {
     "title": "Schreine",
-    "intro": "Ein Schrein sichert dir die Gunst eines Gottes: einen dauerhaften Bonus für die ganze Siedlung. Pro Siedlung bekommst du nur einen Schrein, die Wahl zählt also.",
+    "intro": "Ein Schrein sichert dir die Gunst eines Gottes: einen dauerhaften Bonus für die ganze Siedlung. Pro Siedlung bekommst du nur einen Schrein.",
     "rules": {
       "heading": "Die Regeln",
       "oneShrine": "Eine Siedlung kann insgesamt nur einen Schrein haben, gleich für welchen Gott. Auch die Odin-Statue zählt als Schrein.",

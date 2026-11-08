@@ -31,7 +31,7 @@
   "backToDocs": "Zurück zur Doku",
   "enterGame": "Zum Spiel",
   "landing": {
-    "tagline": "Eine Saga aus dem Norden – gemeinsam gespielt.",
+    "tagline": "Ein Wikinger-Aufbauspiel im Browser für viele Spieler.",
     "features": {
       "multiplayer": {
         "title": "Mehrspieler",
@@ -43,7 +43,7 @@
       },
       "adFree": {
         "title": "Werbefrei",
-        "text": "Ein Indie-Spiel, mit Liebe gemacht. Ohne Werbung."
+        "text": "Ein Indie-Spiel ohne Werbung."
       }
     },
     "hear": "Saga anhören",
