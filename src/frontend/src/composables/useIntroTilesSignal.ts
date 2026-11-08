@@ -1,4 +1,5 @@
 import { watch, type Ref } from 'vue';
+import { atlasPageCount } from '../lib/map/atlasManifests';
 import { reportIntroLoad } from '../intro/introLoad';
 import { markIntroTilesLoaded } from '../intro/introSignal';
 import type { MapLoadState } from '../lib/map/HexMapRenderer';
@@ -28,22 +29,25 @@ export function useIntroTilesSignal({
   loadState,
   animLoad,
 }: IntroTilesSignalSources): void {
-  // Feeds the intro timeline's per-group page counts. A phase that has moved on counts as fully loaded.
-  const lastTotal = { terrain: 0, buildings: 0 };
+  // Feeds the intro timeline's per-group page counts. The totals are known from the atlas manifests' file names, so
+  // they are reported up front: the timeline's denominator is the whole map from the start. A phase that has moved
+  // on counts as fully loaded.
+  const totals = {
+    terrain: atlasPageCount('terrain'),
+    buildings: atlasPageCount('buildings-level1') + atlasPageCount('buildings-static'),
+  };
+  reportIntroLoad('terrain', { loaded: 0, total: totals.terrain });
+  reportIntroLoad('buildings', { loaded: 0, total: totals.buildings });
   watch(
     () => loadState.value,
     (state) => {
       if (!state) return;
       if (state.phase === 'terrain' || state.phase === 'buildings') {
-        if (state.pages) {
-          lastTotal[state.phase] = state.pages.total;
-          reportIntroLoad(state.phase, state.pages);
-        }
-        if (state.phase === 'buildings' && lastTotal.terrain > 0) {
-          reportIntroLoad('terrain', { loaded: lastTotal.terrain, total: lastTotal.terrain });
-        }
-      } else if (lastTotal.buildings > 0) {
-        reportIntroLoad('buildings', { loaded: lastTotal.buildings, total: lastTotal.buildings });
+        if (state.pages) reportIntroLoad(state.phase, state.pages);
+        if (state.phase === 'buildings') reportIntroLoad('terrain', { loaded: totals.terrain, total: totals.terrain });
+      } else {
+        reportIntroLoad('terrain', { loaded: totals.terrain, total: totals.terrain });
+        reportIntroLoad('buildings', { loaded: totals.buildings, total: totals.buildings });
       }
     },
     { immediate: true },

@@ -48,6 +48,11 @@ export function discoveredPages(category: string): DiscoveredPage[] {
   return discovered.filter((p) => p.category === category);
 }
 
+/** How many pages `category` has (exact category match: `terrain` does not count `wasted-terrain`), known from the glob without fetching anything. */
+export function atlasPageCount(category: string): number {
+  return discoveredPages(category).length;
+}
+
 /** Every category that has at least one page, sorted by name. */
 export function discoveredCategories(): string[] {
   return [...new Set(discovered.map((p) => p.category))];
