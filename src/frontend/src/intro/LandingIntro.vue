@@ -52,6 +52,7 @@ const state = shallowRef<IntroState>({
   offsetMs: 0,
   seq: 0,
   waiting: false,
+  closed: false,
 });
 // A seek switches scene and narration at once (no crossfade); a beat change on the timers fades again.
 const instant = ref(false);
