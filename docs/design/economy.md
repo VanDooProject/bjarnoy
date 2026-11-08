@@ -605,6 +605,9 @@ their renown.
     warns when a reward will not fully fit.
   - **Never a building.** Rewards are resources only, never a finished or
     free building.
+  - **New and claimable marker.** On phones the quest strip shows a dot on its
+    icon when a quest appeared that you haven't opened yet, or a quest just
+    became claimable.
 
 Simulated: the first 25 minutes are continuous building (9 producers, then
 LH 2 at about 13 min), LH 3 at about 1h45.
