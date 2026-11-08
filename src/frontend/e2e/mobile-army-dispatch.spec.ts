@@ -97,8 +97,11 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect.poll(async () => (await demoWorld(page)).dispatchDraft?.route).toEqual([first.hex, second.hex]);
     await expect(ring.bubbles).toHaveCount(0);
 
-    // Tap (not drag) the first pin to remove it.
-    await settlement.clickHex(first);
+    // Tap (not drag) the first pin to remove it. The map slid when the ring opened (it makes room for the full
+    // circle), so the pin is where the renderer says it is now, not where `first` found it.
+    await settlement.clickHex(
+      await page.evaluate((hex) => (window as unknown as DemoWindow).__settlementRenderer().hexCenterScreen(hex), first.hex),
+    );
     await expect.poll(async () => (await demoWorld(page)).dispatchDraft?.route).toEqual([second.hex]);
 
     // Demo mode always shows the note and keeps Start disabled, even with a
