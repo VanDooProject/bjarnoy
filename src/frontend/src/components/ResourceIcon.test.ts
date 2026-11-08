@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { defineComponent } from 'vue';
 import ResourceIcon from './ResourceIcon.vue';
 
 const KINDS = ['wood', 'stone', 'food', 'iron', 'pop'] as const;
@@ -21,12 +22,18 @@ describe('ResourceIcon', () => {
   });
 
   it('gives every iron instance its own mask id, referenced by its own path', () => {
-    const ids = [0, 1].map(() => {
-      const svg = mount(ResourceIcon, { props: { kind: 'iron' } }).get('svg');
+    // Two instances in one app, as on a real page (separate mounts are separate apps with restarting ids).
+    const Pair = defineComponent({
+      components: { ResourceIcon },
+      template: '<div><ResourceIcon kind="iron" /><ResourceIcon kind="iron" /></div>',
+    });
+    const svgs = mount(Pair).findAll('svg');
+    const ids = svgs.map((svg) => {
       const id = svg.get('mask').attributes('id')!;
       expect(svg.get('path[mask]').attributes('mask')).toBe(`url(#${id})`);
       return id;
     });
+    expect(ids).toHaveLength(2);
     expect(ids[0]).not.toBe(ids[1]);
   });
 });
