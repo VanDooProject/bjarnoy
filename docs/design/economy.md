@@ -73,9 +73,11 @@ whole number, 100–999 to the nearest 10, 1 000–9 999 to the nearest 50,
 | Storage House | 80 / 60 / 0 | +600 capacity · 1.22^(L−1) | 2.5 |
 | Great Storehouse | 4 000 / 3 500 / 0 | +50 000 capacity · 1.25^(L−1) | 10 |
 
-Brick is not charged at levels 1–5 of the Longhouse, Tower, Lumberjack and
-Reindeer Herder, nor at level 1 of the Clay Brickworks; from the next level on they cost the
-formula's brick.
+- The starting buildings (Longhouse, Tower, Lumberjack, Reindeer Herder) cost no brick up to and including level 5. The Clay Brickworks costs no brick at level 1.
+- The Longhouse produces wood and food only: no brick, no iron.
+- Each producer level adds 20% more output than the level before it, starting at 8/h for wood and brick and 12/h for food.
+- The Great Storehouse is the follow-up to the Storage House: a single level stores far more than a Storage House level (50 000 at level 1).
+- Building costs are round numbers: below 100 exact, three digits to the nearest 10 (148 → 150), from four digits to the nearest half step of the second digit (1 458 → 1 450).
 
 (Other buildings: same formulas, `C₁`/`t₁` set per building in the
 catalogue; the lab shows all of them.)
@@ -511,7 +513,7 @@ lab's defaults (join 09:00, 3/3/3 producers, 2 storage houses, producers 3
 ahead), against four targets:
 
 - active with feasts founds the 2nd settlement around day 5 (4.5–6.5), without
-  around day 13–14;
+  around day 12–14 (about day 12 since the lab's default start has clay pits and bog-ore works instead of quarries);
 - 4 check-ins with feasts around day 13–15;
 - renown is the binding gate for the active player (it reaches 55 000 well
   after Longhouse 10, which is done on day 3.4);
