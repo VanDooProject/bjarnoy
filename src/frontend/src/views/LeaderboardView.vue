@@ -6,28 +6,13 @@ import { useLeaderboardStore } from '../stores/leaderboard';
 import { useWorldStore } from '../stores/world';
 import type { LeaderboardCategory, LeaderboardScope } from '../api/types';
 import type { MessageSchema } from '../i18n/schema';
+import { leaderboardCategoryName, leaderboardScopeName } from '../i18n/catalogueNames';
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const world = useWorldStore();
 const auth = useAuthStore();
 const leaderboard = useLeaderboardStore();
-
-const scopeLabels = computed<Record<LeaderboardScope, string>>(() => ({
-  user: t('leaderboard.scopes.user'),
-  settlement: t('leaderboard.scopes.settlement'),
-  guild: t('leaderboard.scopes.guild'),
-}));
-
-const categoryLabels = computed<Record<LeaderboardCategory, string>>(() => ({
-  score: t('leaderboard.categories.score'),
-  biggestSettlement: t('leaderboard.categories.biggestSettlement'),
-  weeklyScoreGained: t('leaderboard.categories.weeklyScoreGained'),
-  weeklyFightsWon: t('leaderboard.categories.weeklyFightsWon'),
-  weeklyFightsLost: t('leaderboard.categories.weeklyFightsLost'),
-  weeklyResourcesLooted: t('leaderboard.categories.weeklyResourcesLooted'),
-  biggestArmy: t('leaderboard.categories.biggestArmy'),
-}));
 
 // Mirrors the reasons `LeaderboardCatalogue.cs` hands back — kept as a plain
 // map so a reason with no entry here still renders something (its raw code).
@@ -103,7 +88,7 @@ watch(() => world.worldId, loadForCurrentWorld);
       <template v-else>
         <div class="tab-groups">
           <div v-for="group in groupedBoards" :key="group.scope" class="tab-group">
-            <span class="tab-group-label">{{ scopeLabels[group.scope] }}</span>
+            <span class="tab-group-label">{{ leaderboardScopeName(group.scope) }}</span>
             <div class="tabs">
               <button
                 v-for="board in group.boards"
@@ -114,7 +99,7 @@ watch(() => world.worldId, loadForCurrentWorld);
                 :title="board.available ? undefined : darkReasonLabels[board.reason ?? ''] ?? board.reason ?? ''"
                 @click="selectTab(board.scope, board.category)"
               >
-                {{ categoryLabels[board.category] }}
+                {{ leaderboardCategoryName(board.category) }}
               </button>
             </div>
           </div>
@@ -122,7 +107,7 @@ watch(() => world.worldId, loadForCurrentWorld);
 
         <div v-if="activeBoard" class="board">
           <div class="board-header">
-            <h2>{{ categoryLabels[activeBoard.category] }}</h2>
+            <h2>{{ leaderboardCategoryName(activeBoard.category) }}</h2>
             <button v-if="canJumpToMyRank" type="button" class="jump-btn" @click="jumpToMyRank">
               {{ $t('leaderboard.jumpToMyRank') }}
             </button>

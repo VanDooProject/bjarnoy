@@ -16,20 +16,6 @@
     "flat": "—"
   },
   "loadMore": "Load more",
-  "scopes": {
-    "user": "Players",
-    "settlement": "Settlements",
-    "guild": "Guilds"
-  },
-  "categories": {
-    "score": "Score",
-    "biggestSettlement": "Biggest settlement",
-    "weeklyScoreGained": "Weekly score gained",
-    "weeklyFightsWon": "Weekly fights won",
-    "weeklyFightsLost": "Weekly fights lost",
-    "weeklyResourcesLooted": "Weekly resources looted",
-    "biggestArmy": "Biggest army"
-  },
   "darkReasons": {
     "noBattleSystemYet": "Unlocks once battles exist.",
     "noArmySystemYet": "Unlocks once armies exist.",
