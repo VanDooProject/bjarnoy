@@ -9,8 +9,9 @@ namespace Bjarnoy.Domain.Buildings;
 /// </summary>
 /// <remarks>
 /// Cost, production and build time are all geometric in the level (the
-/// Travian shape): cost ×1.30 per level (Longhouse ×1.34), production ×1.20,
-/// build time ×1.33 (the Longhouse starts at 1.5 min, so level 2 takes about 2). Because cost outgrows output, a
+/// Travian shape): cost ×1.30 per level (Longhouse ×1.34), build time ×1.33 (the Longhouse starts at 1.5 min, so level 2 takes about 2). A producer's
+/// production is increment-geometric: each level adds ×1.20 more than the one before
+/// (<c>I1 · 1.20^(L−1)</c>), so its level total is <c>I1 · (1.20^L − 1) / 0.20</c>. Because cost outgrows output, a
 /// producer's payback time rises about 8% per level — the next level is
 /// always worth building, just less obviously. Buildings cost no iron. Each
 /// building has its own maximum level (<see cref="MaxLevelFor"/>). The
@@ -35,8 +36,7 @@ public static class BuildingCatalogue
     /// <summary>
     /// The highest level <paramref name="type"/> can be built to
     /// (<c>docs/design/economy.md</c> §4): Longhouse 30; resource producers and
-    /// Storage House 25 (the bog-ore works too); military/civic buildings and the mills (the Hammerschmiede too) 20; Tower and
-    /// Great Storehouse 10; shrines 5; Palisade and Palisade Gate 3; Bridge 4; Siege Workshop 20. Unknown/removed types return 0.
+    /// Storage House 25 (the bog-ore works too); military/civic buildings and the mills (the Hammerschmiede too) 20; Great Storehouse 10; Tower 5; shrines 5; Palisade and Palisade Gate 3; Bridge 4; Siege Workshop 20. Unknown/removed types return 0.
     /// </summary>
     public static int MaxLevelFor(BuildingType type) => type switch
     {
@@ -48,7 +48,8 @@ public static class BuildingCatalogue
             or BuildingType.TownSquare or BuildingType.CartWorkshop or BuildingType.DruidHut
             or BuildingType.Smithy or BuildingType.Meadery or BuildingType.Sawmill
             or BuildingType.CropMill or BuildingType.Hammerschmiede => 20,
-        BuildingType.Tower or BuildingType.GreatStorehouse => 10,
+        BuildingType.GreatStorehouse => 10,
+        BuildingType.Tower => 5,
         BuildingType.ShrineOfThor or BuildingType.ShrineOfFreyja
             or BuildingType.ShrineOfUllr or BuildingType.ShrineOfNjord
             or BuildingType.OdinStatue => 5,
@@ -117,7 +118,7 @@ public static class BuildingCatalogue
     /// <see cref="FoundingHeadroom"/> — so the first builds never wait
     /// (docs/design/economy.md, T1: the first ten minutes are a run of real
     /// moves, not a countdown). No iron: the first unit needs none, and the
-    /// Longhouse's trickle covers the rest until lake ore. Computed on access
+    /// first iron comes from the bog-ore works. Computed on access
     /// rather than in a static initializer, since the Longhouse definition
     /// reads tables declared further down this class.
     /// </summary>
@@ -327,15 +328,15 @@ public static class BuildingCatalogue
         var definition = type switch
         {
             BuildingType.Longhouse => Longhouse(level),
-            BuildingType.Lumberjack => Producer(type, level, Forest, new ResourceAmounts(Wood: 40, 0, 0, 0)),
-            BuildingType.Quarry => Producer(type, level, Ridge, new ResourceAmounts(0, Stone: 40, 0, 0)),
+            BuildingType.Lumberjack => Producer(type, level, Forest, new ResourceAmounts(Wood: 8, 0, 0, 0), brickFreeLevels: StartBrickFreeLevels),
+            BuildingType.Quarry => Producer(type, level, Ridge, new ResourceAmounts(0, Stone: 8, 0, 0)),
             // The starting food building: any grass, any island, LH 1. No
             // terrain boost, like Farm (a herd is not a concentrating resource).
-            BuildingType.ReindeerHerder => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 40, 0)),
+            BuildingType.ReindeerHerder => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 12, 0), brickFreeLevels: StartBrickFreeLevels),
             // Buildable on any island regardless of soil, from LH 4 behind a
             // level-3 Reindeer Herder (it and PumpkinFarm are one tech-tree
             // card, split into two types only by their soil rule).
-            BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 40, 0)),
+            BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 12, 0)),
             BuildingType.StorageHouse => StorageHouse(level),
             BuildingType.Tower => Tower(level),
             BuildingType.FishingHut => FishingHut(level),
@@ -346,7 +347,7 @@ public static class BuildingCatalogue
             // Yields more than Farm: an indirect fertility signal via the
             // production curve rather than a separate bonus multiplier —
             // that's what makes a Pumpkin-soil island "more fertile".
-            BuildingType.PumpkinFarm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 44, 0)),
+            BuildingType.PumpkinFarm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 13, 0)),
             BuildingType.ShrineOfThor => Shrine(type, level),
             BuildingType.ShrineOfFreyja => Shrine(type, level),
             BuildingType.ShrineOfUllr => Shrine(type, level),
@@ -400,7 +401,7 @@ public static class BuildingCatalogue
             BuildingType.CartWorkshop => CartWorkshop(level),
             // The start's stone source: on plain bog moss (the landing spots guarantee bog in reach), not on grass.
             BuildingType.ClayBrickworks =>
-                Producer(type, level, Bog, new ResourceAmounts(0, Stone: 36, 0, 0))
+                Producer(type, level, Bog, new ResourceAmounts(0, Stone: 8, 0, 0), brickFreeLevels: 1)
                     with { RequiresBogKind = PlainBogOnly },
             // Iron, on plain bog moss only (not a shore, mouth, creek or lake). Its own P1 is tuned in the Economy lab
             // (docs/design/economy.md section 8); terrain boost in Boosts, the Hammerschmiede's radius boost below.
@@ -424,6 +425,7 @@ public static class BuildingCatalogue
             ? null
             : definition with
             {
+                Cost = NiceRound(definition.Cost),
                 Prerequisites = PrerequisitesFor(type, level),
                 RequiredLonghouseLevel = RequiredLonghouseLevelFor(type, level),
             };
@@ -586,8 +588,8 @@ public static class BuildingCatalogue
     private static readonly IReadOnlySet<BogTileKind> CreekOnly = new HashSet<BogTileKind> { BogTileKind.Creek };
     private static readonly IReadOnlySet<BogTileKind> HalfShoreOnly = new HashSet<BogTileKind> { BogTileKind.Half };
 
-    /// <summary>Iron per hour of a level-1 bog-ore works (<c>docs/design/economy.md</c> section 8); the Economy lab numbers are in that page.</summary>
-    public const double BogOreWorksIronAtLevelOne = 20;
+    /// <summary>Iron per hour a level-1 bog-ore works adds (its increment I1, the level total follows <see cref="ProductionFor"/>) (<c>docs/design/economy.md</c> section 8); the Economy lab numbers are in that page.</summary>
+    public const double BogOreWorksIronAtLevelOne = 4;
 
     /// <summary>
     /// Terrain-bound producers boosted by their matching neighbour terrain.
@@ -684,18 +686,42 @@ public static class BuildingCatalogue
         TimeSpan.FromSeconds(Math.Round(baseMinutes * 60.0 * Geometric(growth, level)));
 
     /// <summary>
-    /// A level's total production: <paramref name="perHourAtLevelOne"/> ·
-    /// 1.20^(level−1). It is the level's <em>total</em>, not an increment —
+    /// A level's total production, increment-geometric: level L adds
+    /// <paramref name="incrementAtLevelOne"/> · 1.20^(L−1) on top of the levels below it, so the total is
+    /// <c>I1 · (1.20^L − 1) / 0.20</c> (the shape of <see cref="GeometricCapacity"/>). It is the level's <em>total</em> —
     /// <see cref="Totals(IEnumerable{(BuildingType Type, int Level)})"/> reads
     /// the current level's definition only.
     /// </summary>
-    private static ResourceAmounts ProductionFor(ResourceAmounts perHourAtLevelOne, int level) =>
-        perHourAtLevelOne * Geometric(ProductionGrowth, level);
+    private static ResourceAmounts ProductionFor(ResourceAmounts incrementAtLevelOne, int level) =>
+        incrementAtLevelOne * ((Math.Pow(ProductionGrowth, level) - 1) / (ProductionGrowth - 1));
+
+    /// <summary>The levels (1 to this) at which the start buildings — Longhouse, Tower, Lumberjack, Reindeer Herder — cost no stone.</summary>
+    private const int StartBrickFreeLevels = 5;
+
+    /// <summary>
+    /// A building cost rounded the way a player reads it, per resource: below 100 to a whole number, 100 to 999 to the nearest 10,
+    /// and from four digits on to <c>5 · 10^(digits − 3)</c> (1,000 to 9,999 to 50, 10,000 to 99,999 to 500, ...).
+    /// </summary>
+    public static double NiceRound(double value)
+    {
+        if (value < 100)
+        {
+            return Math.Round(value, MidpointRounding.AwayFromZero);
+        }
+
+        var digits = (int)Math.Floor(Math.Log10(value)) + 1;
+        var step = digits == 3 ? 10.0 : 5.0 * Math.Pow(10, digits - 3);
+        return Math.Round(value / step, MidpointRounding.AwayFromZero) * step;
+    }
+
+    /// <summary><see cref="NiceRound(double)"/> of every resource of a cost.</summary>
+    public static ResourceAmounts NiceRound(ResourceAmounts cost) =>
+        new(NiceRound(cost.Wood), NiceRound(cost.Stone), NiceRound(cost.Food), NiceRound(cost.Iron));
 
     /// <summary>Level-1 cost of the small utility buildings (Sawmill, Crop Mill, Weaponsmith, Meadery).</summary>
     private static readonly ResourceAmounts SmallBuildingCost = new(Wood: 100, Stone: 80, Food: 0, Iron: 0);
 
-    private static readonly ResourceAmounts LevelOneProducerCost = new(Wood: 50, Stone: 40, Food: 15, Iron: 0);
+    private static readonly ResourceAmounts LevelOneProducerCost = new(Wood: 35, Stone: 28, Food: 10, Iron: 0);
 
     /// <summary>Total capacity of a geometric storage building: <c>c1 · (g^L − 1) / (g − 1)</c> per resource.</summary>
     private static ResourceAmounts GeometricCapacity(double c1, double growth, int level) =>
@@ -707,27 +733,32 @@ public static class BuildingCatalogue
         IReadOnlySet<Terrain> terrain,
         ResourceAmounts perHourAtLevelOne,
         ResourceAmounts? costAtLevelOne = null,
-        double minutesAtLevelOne = 3) => new()
+        double minutesAtLevelOne = 3,
+        int brickFreeLevels = 0) => new()
         {
             Type = type,
             Level = level,
-            Cost = (costAtLevelOne ?? LevelOneProducerCost) * CostFactor(level),
+            Cost = BrickFree((costAtLevelOne ?? LevelOneProducerCost) * CostFactor(level), level, brickFreeLevels),
             BuildDuration = Duration(minutesAtLevelOne, level),
-            // Geometric in level (x1.20 per level), the level's total.
+            // Increment-geometric in level (each level adds x1.20 more than the last), the level's total.
             ProductionPerHour = ProductionFor(perHourAtLevelOne, level),
             AllowedTerrain = terrain,
         };
+
+    /// <summary>The cost without its stone while <paramref name="level"/> is within <paramref name="brickFreeLevels"/>.</summary>
+    private static ResourceAmounts BrickFree(ResourceAmounts cost, int level, int brickFreeLevels) =>
+        level <= brickFreeLevels ? cost with { Stone = 0 } : cost;
 
     private static BuildingDefinition Longhouse(int level) => new()
     {
         Type = BuildingType.Longhouse,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 120, Stone: 100, Food: 60, Iron: 0) * CostFactor(level, LonghouseCostGrowth),
+        Cost = BrickFree(new ResourceAmounts(Wood: 120, Stone: 100, Food: 60, Iron: 0) * CostFactor(level, LonghouseCostGrowth), level, StartBrickFreeLevels),
         BuildDuration = Duration(1.5, level),
         // The anchor feeds its own settlement a little, so a new holding is
         // never completely stalled. Linear in level (unlike every other
-        // producer): +15 wood, +12 stone, +15 food, +2 iron per level.
-        ProductionPerHour = new ResourceAmounts(Wood: 15, Stone: 12, Food: 15, Iron: 2) * level,
+        // producer): +15 wood and +15 food per level, no stone and no iron.
+        ProductionPerHour = new ResourceAmounts(Wood: 15, Stone: 0, Food: 15, Iron: 0) * level,
         StorageCapacity = ResourceAmounts.Uniform(250) * level,
         AllowedTerrain = Grass,
         // The settlement's own centre-disc claim radius at this longhouse
@@ -758,7 +789,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.Tower,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 120, Stone: 200, Food: 0, Iron: 0) * CostFactor(level),
+        Cost = BrickFree(new ResourceAmounts(Wood: 120, Stone: 200, Food: 0, Iron: 0) * CostFactor(level), level, StartBrickFreeLevels),
         BuildDuration = Duration(8, level),
         // Stands on grass, sand, forest or plain bog moss (the palisade's rule); the tower replaces the tile under it.
         AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Sand, Terrain.Forest },
@@ -786,7 +817,7 @@ public static class BuildingCatalogue
         Level = level,
         Cost = LevelOneProducerCost * CostFactor(level),
         BuildDuration = Duration(3, level),
-        ProductionPerHour = ProductionFor(new ResourceAmounts(0, 0, Food: 40, 0), level),
+        ProductionPerHour = ProductionFor(new ResourceAmounts(0, 0, Food: 12, 0), level),
         RequiresCoastalWater = true,
         // Also on a lake's half shore (three water edges), drawn with the lake art.
         LakeShoreKinds = HalfShoreOnly,
@@ -910,10 +941,10 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.GreatStorehouse,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 300, Stone: 260, Food: 0, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 4000, Stone: 3500, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(10, level),
-        // Total at this level: 2500 * (1.30^L - 1) / 0.30 per resource.
-        StorageCapacity = GeometricCapacity(2500, 1.30, level),
+        // Total at this level: 50000 * (1.25^L - 1) / 0.25 per resource.
+        StorageCapacity = GeometricCapacity(50000, 1.25, level),
         AllowedTerrain = Grass,
     };
 
