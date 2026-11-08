@@ -129,7 +129,7 @@ describe('buildTechTreeNodes', () => {
   });
 
   it('describes what a building gives from the shared stats helper', () => {
-    expect(byName.get('lumberjack')!.gives).toBe('+40 Wood/h');
+    expect(byName.get('lumberjack')!.gives).toBe('+8 Wood/h');
     expect(byName.get('storagehouse')!.gives).toBe('+600 storage capacity');
     expect(byName.get('barracks')!.gives).toBe('Trains land troops');
   });

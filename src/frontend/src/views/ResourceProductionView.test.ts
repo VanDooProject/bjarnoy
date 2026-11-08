@@ -57,10 +57,10 @@ describe('ResourceProductionView', () => {
       'longhouse',
     ]);
     const cells = (type: string) => wrapper.get(`[data-producer=${type}]`).findAll('td').map((td) => td.text());
-    expect(cells('lumberjack').slice(0, 3)).toEqual(['Wood', '40', '206']);
-    expect(cells('pumpkinfarm').slice(0, 3)).toEqual(['Food', '44', '227']);
-    expect(cells('bogoreworks').slice(0, 3)).toEqual(['Iron', '20', '103']);
-    expect(cells('longhouse').slice(0, 3)).toEqual(['Wood / Brick / Food / Iron', '15 / 12 / 15 / 2', '150 / 120 / 150 / 20']);
+    expect(cells('lumberjack').slice(0, 3)).toEqual(['Wood', '8', '208']);
+    expect(cells('pumpkinfarm').slice(0, 3)).toEqual(['Food', '13', '337']);
+    expect(cells('bogoreworks').slice(0, 3)).toEqual(['Iron', '4', '104']);
+    expect(cells('longhouse').slice(0, 3)).toEqual(['Wood / Food', '15 / 15', '150 / 150']);
     wrapper.unmount();
   });
 

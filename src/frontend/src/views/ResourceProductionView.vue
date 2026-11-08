@@ -80,12 +80,14 @@ const producerRows = computed(() =>
   }),
 );
 
+// The Longhouse makes only what its level-1 row makes (wood and food), so its row lists just those resources.
+const longhouseResources = computed(() => RESOURCES.filter((r) => (definitionAt('longhouse', 1)?.productionPerHour[r] ?? 0) > 0));
 const longhouseRow = computed(() => ({
   cells: PRODUCER_LEVELS.map((level) => ({
     level,
-    amounts: RESOURCES.map((r) => Math.round(definitionAt('longhouse', level)?.productionPerHour[r] ?? 0)),
+    amounts: longhouseResources.value.map((r) => Math.round(definitionAt('longhouse', level)?.productionPerHour[r] ?? 0)),
   })),
-  perLevel: RESOURCES.map((r) => Math.round(definitionAt('longhouse', 1)?.productionPerHour[r] ?? 0)),
+  perLevel: longhouseResources.value.map((r) => Math.round(definitionAt('longhouse', 1)?.productionPerHour[r] ?? 0)),
 }));
 
 const pumpkinPerHour = computed(() => Math.round(definitionAt('pumpkinfarm', 1)?.productionPerHour.food ?? 0));
@@ -176,7 +178,7 @@ const tocLinks = computed(() =>
             </tr>
             <tr data-producer="longhouse">
               <th scope="row" class="name"><BuildingLink type="longhouse" always /></th>
-              <td>{{ RESOURCES.map(resourceName).join(' / ') }}</td>
+              <td>{{ longhouseResources.map(resourceName).join(' / ') }}</td>
               <td v-for="cell in longhouseRow.cells" :key="cell.level" class="value">{{ cell.amounts.map((a) => n(a)).join(' / ') }}</td>
               <td>{{ standsOn('longhouse') }}</td>
               <td>{{ $t('docs.production.producers.longhouseUnlock') }}</td>

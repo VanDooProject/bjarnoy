@@ -434,7 +434,9 @@ describe('feasts on the bundled catalogue (economy.md §6 tuning)', () => {
     simulatePacing(byType, {
       startStock: { wood: 700, stone: 700, food: 700, iron: 0 },
       horizonDays,
-      producerCounts: { lumberjack: 3, quarry: 3, reindeerherder: 3 },
+      // Iron only comes from the bog-ore works now (the Longhouse makes none), and the Settler costs iron: two works, as the
+      // Quarry is no longer placed anew and the Clay Brickworks is the start's brick source.
+      producerCounts: { lumberjack: 3, claybrickworks: 3, reindeerherder: 3, bogoreworks: 2 },
       settlerCost: settlerCostFrom(undefined),
       settleType: 'cartworkshop',
       storageCount: 2,
@@ -522,9 +524,9 @@ describe('a producer that unlocks late (the bog-ore works)', () => {
   });
 });
 
-// docs/design/economy.md section 8: the bog-ore works' level-1 iron (20/h) was tuned in this lab so iron stays the indirect gate for
-// the army: before the works stand (LH 3) the Longhouse trickle alone (2/h per level) is the only iron,
-// and with the default three works iron income settles at about half the wood income, where a unit costs about half the wood.
+// docs/design/economy.md section 8: the bog-ore works' level-1 iron increment (4/h) was tuned in this lab so iron stays the indirect
+// gate for the army: there is no iron at all before the works stand (LH 3, the Longhouse makes none),
+// and with three works iron income settles at about 0.4 to 0.5 of the wood income, where a unit costs about half the wood.
 describe('iron on the bundled catalogue (bog-ore works P1 tuning)', () => {
   const byType = group(catalogueSnapshot.data as BuildingDefinitionResponse[]);
   const run = (works: number) =>
@@ -539,19 +541,24 @@ describe('iron on the bundled catalogue (bog-ore works P1 tuning)', () => {
     }));
   const hourAt = (r: ReturnType<typeof run>, lh: number) => Math.ceil(r.lhReachedAt[lh]! / 60);
 
-  it('has only the Longhouse trickle (2 iron/h per level) until the bog-ore works open at Longhouse 3', () => {
+  it('makes no iron until the bog-ore works open at Longhouse 3, and some from Longhouse 4 on', () => {
     const r = run(3);
     for (let lh = 1; lh <= 2; lh++) {
-      const at = hourAt(r, lh);
-      expect(r.series.rate.iron[at], `LH ${lh}`).toBe(2 * lh);
+      expect(r.series.rate.iron[hourAt(r, lh)], `LH ${lh}`).toBe(0);
     }
-    expect(r.series.rate.iron[hourAt(r, 4)]).toBeGreaterThan(2 * 4);
+    expect(r.series.rate.iron[hourAt(r, 4)]).toBeGreaterThan(0);
   });
 
   it('builds no bog-ore works before Longhouse 3', () => {
     const r = run(3);
     const before = hourAt(r, 3) - 1;
-    expect(r.series.rate.iron[before]).toBeLessThanOrEqual(2 * 2);
+    expect(r.series.rate.iron.slice(0, before + 1).every((rate) => rate === 0)).toBe(true);
+  });
+
+  it('never makes iron without a bog-ore works', () => {
+    const r = run(0);
+    expect(r.series.rate.iron.every((rate) => rate === 0)).toBe(true);
+    expect(r.series.stock.iron.every((stock) => stock === 0)).toBe(true);
   });
 
   it('keeps iron income at about a third to a half of wood income with three works from Longhouse 8 on', () => {
@@ -571,10 +578,10 @@ describe('iron on the bundled catalogue (bog-ore works P1 tuning)', () => {
     expect(one.series.rate.iron[h]! / one.series.rate.wood[h]!).toBeLessThan(0.25);
   });
 
-  it('pays for a first Spearman from the banked trickle the moment the Barracks open at Longhouse 5', () => {
-    const r = run(0);
+  it('pays for a first Spearman from one bog-ore works once the Barracks open at Longhouse 5', () => {
+    const r = run(1);
     const h = hourAt(r, 5);
-    // Spearman: 40 iron. The trickle has banked at least that by the time LH 5 lands.
+    // Spearman: 40 iron. A single works has banked more than that by the time LH 5 lands.
     expect(r.series.stock.iron[h]!).toBeGreaterThanOrEqual(40);
   });
 });

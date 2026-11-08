@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyWhatIf, defaultWhatIf } from './whatIf';
+import { niceRound } from '../map/buildingEconomy';
 import { group } from './testFixtures';
 import type { BuildingDefinitionResponse, ResourceLine } from '../../api/types';
 import catalogueSnapshot from '../../data/building-catalogue.json';
@@ -40,23 +41,32 @@ describe('applyWhatIf', () => {
     const w = applyWhatIf(live, { ...defaultWhatIf(), costGrowth: 1.5, timeGrowth: 1.5, productionGrowth: 1.1 });
     const [l1, l5] = [live.quarry[0], live.quarry[4]];
     expect(w.quarry[0].cost).toEqual(l1.cost);
-    expect(w.quarry[4].cost.wood).toBeCloseTo(l1.cost.wood * 1.5 ** 4, 6);
+    expect(w.quarry[4].cost.wood).toBe(niceRound(l1.cost.wood * 1.5 ** 4));
     expect(w.quarry[4].buildSeconds).toBe(Math.round(l1.buildSeconds * 1.5 ** 4));
-    expect(w.quarry[4].productionPerHour.stone).toBeCloseTo(l1.productionPerHour.stone * 1.1 ** 4, 6);
+    // Increment-geometric: level 5 totals I1 · (1 + g + g² + g³ + g⁴).
+    expect(w.quarry[4].productionPerHour.stone).toBeCloseTo(l1.productionPerHour.stone * (1 + 1.1 + 1.1 ** 2 + 1.1 ** 3 + 1.1 ** 4), 6);
     expect(w.quarry[4].cost.wood).toBeGreaterThan(l5.cost.wood);
   });
 
   it('the Longhouse has its own growth factors and stays linear in production', () => {
     const w = applyWhatIf(live, { ...defaultWhatIf(), longhouseCostGrowth: 1.5, productionGrowth: 3 });
     const lh1 = live.longhouse[0];
-    expect(w.longhouse[9].cost.stone).toBeCloseTo(lh1.cost.stone * 1.5 ** 9, 6);
+    expect(w.longhouse[9].cost.stone).toBe(niceRound(100 * 1.5 ** 9));
     expect(w.longhouse[9].productionPerHour.wood).toBeCloseTo(lh1.productionPerHour.wood * 10, 6);
+  });
+
+  it('keeps the start buildings brick-free for their first levels, whatever the knobs', () => {
+    const w = applyWhatIf(live, { ...defaultWhatIf(), producerCostScale: 2, costGrowth: 1.5 });
+    for (const level of [1, 5]) expect(w.lumberjack[level - 1].cost.stone, `lumberjack ${level}`).toBe(0);
+    expect(w.lumberjack[5].cost.stone).toBe(niceRound(28 * 2 * 1.5 ** 5));
+    expect(w.claybrickworks[0].cost.stone).toBe(0);
+    expect(w.claybrickworks[1].cost.stone).toBeGreaterThan(0);
   });
 
   it('level-1 multipliers scale whole curves and only their own group', () => {
     const w = applyWhatIf(live, { ...defaultWhatIf(), producerCostScale: 2, longhouseCostScale: 0.5, timeScale: 3 });
-    expect(w.farm[3].cost.wood).toBeCloseTo(live.farm[3].cost.wood * 2, 3);
-    expect(w.longhouse[3].cost.wood).toBeCloseTo(live.longhouse[3].cost.wood * 0.5, 3);
+    expect(w.farm[3].cost.wood).toBe(niceRound(35 * 1.3 ** 3 * 2));
+    expect(w.longhouse[3].cost.wood).toBe(niceRound(120 * 1.34 ** 3 * 0.5));
     expect(Math.abs(w.farm[3].buildSeconds - live.farm[3].buildSeconds * 3)).toBeLessThanOrEqual(3);
     expect(w.farm[3].productionPerHour).toEqual(live.farm[3].productionPerHour);
   });
