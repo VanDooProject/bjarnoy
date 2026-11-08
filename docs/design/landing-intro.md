@@ -9,8 +9,9 @@ Before the saga a landing page shows over the intro's own first scene, the skald
 fire lit, nothing moving). The saga starts only on a click.
 
 - Title "BJARNØY" (not translated) and the tagline "A saga of the north, played together."
-- Three feature cards: "Multiplayer" (every other realm on the island is a real player, ally with them or raid them),
-  "No pay to win" (premium supports the game and only adds quality-of-life features) and "Ad-free" (an indie game,
+- Three features as a plain list (icon, bold title, one-line description; no frame or fill) over a soft dark backdrop:
+  "Multiplayer" (every other realm on the island is a real player, ally with them or raid them), "No pay to win"
+  (crossed coin icon; premium supports the game and only adds quality-of-life features) and "Ad-free" (an indie game,
   made with love, no ads).
 - "Hear the saga" starts the saga with the sound on (the click is the user gesture browsers need). The link "or play it
   muted" under it starts it with the sound off.
@@ -22,7 +23,15 @@ fire lit, nothing moving). The saga starts only on a click.
   loaded.
 - The top-right "Log in" / "Enter world" button stays. The narration line and the playback controls stay hidden until
   the saga starts.
-- On phones the cards stack and the buttons are full width, centred.
+- Desktop: split layout, nothing centred. Left column (72 px from the left edge, top at about 18 vh): the title
+  left-aligned, the tagline, then the buttons stacked (about 290 px wide). Right column, right of the fire (from about
+  67 % of the width, 360 px wide): the feature list. A small "Impressum" link (/impressum) sits bottom-right.
+- Portrait phone (up to 640 px wide): title and tagline centred at the top, the feature list full width below them, the
+  buttons full width at the bottom with the "Impressum" link centred under them.
+- Landscape phone (landscape, up to 500 px high): the desktop split in compact sizes (buttons about 210 px wide, list
+  from 64 % of the width, titles only); everything fits without scrolling.
+- Top right, left of "Log in": a "How to play" link to /docs with a book icon, shown only while the landing page is
+  shown. It dims when idle like the login button.
 - When the saga starts the page fades out (600 ms) while the camera moves into the scene (see Technique).
 - The landing page waits for the player in every case, with or without reduced motion and whether or not the tiles are
   loaded. The replay and "Play intro" have no landing page.

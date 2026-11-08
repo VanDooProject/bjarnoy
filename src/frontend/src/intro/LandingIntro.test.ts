@@ -64,6 +64,19 @@ describe('LandingIntro', () => {
     }
   });
 
+  it('shows the How to play link next to Log in only while the landing page is shown', async () => {
+    const w = await mountIntro({ playNow: false });
+    const link = w.get('[data-testid="landing-how-to-play"]');
+    expect(link.attributes('href')).toBe('/docs');
+    expect(link.text()).toBe('How to play');
+    expect(w.find('[data-testid="intro-login"]').exists()).toBe(true);
+    await w.get('[data-testid="landing-hear"]').trigger('click');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(w.find('[data-testid="landing-how-to-play"]').exists()).toBe(false);
+    const replay = await mountIntro({ mode: 'replay', reducedMotion: true, playNow: false });
+    expect(replay.find('[data-testid="landing-how-to-play"]').exists()).toBe(false);
+  });
+
   it('keeps the hall alive behind the landing page: only its turn waits, and it starts on play', async () => {
     const w = await mountIntro({ playNow: false });
     const hall = () => w.get('svg.hall');
