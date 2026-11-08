@@ -24,3 +24,15 @@ Lines that were rejected as cringe. Don't reuse them or write in their style.
 - „Fast — eines der leuchtenden Grundstücke gehört dir." (de, landing): patronising "Fast —".
 - „Landung wird gemacht…" (de, landing): a literal calque of "making landfall".
 - „Das Herz der Siedlung." (de, docs, longhouse): a cliché.
+- „Grundstück" (de): never use it.
+- „Hauptschwein" (de): never use it.
+- „Lager" (de) for a wildlife camp: cringe, and „Lager" already means storage.
+
+## German terms
+
+One German word per game concept. Use these, not the alternatives listed after them.
+
+- Raid (mission): „Plündern", not „Überfall".
+- Provisions an army carries on the move: „Proviant", not „Vorräte".
+- Rune rarity "Blooded": „Blutgeweiht", not „Geblutet" (that means "bled").
+- The build queue: not „Baustellenschlange" (not a German word).
