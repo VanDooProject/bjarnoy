@@ -634,4 +634,34 @@ test.describe('landing intro', { tag: '@g3' }, () => {
     await expect(page.locator('canvas')).toBeVisible();
     await expect(page.getByTestId('play-intro')).toBeHidden();
   });
+
+  test('phones play the intro from the landing menu', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/#no-intro');
+    await expect(page.locator('canvas')).toBeVisible();
+    await page.getByTestId('returning-player-trigger').click();
+    await page.getByTestId('returning-player-play-intro').click();
+    await expect(intro(page)).toHaveAttribute('data-phase', 'playing');
+    await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
+  });
+
+  test('desktop menus leave the play intro row to the button', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await page.goto('/#no-intro');
+    await expect(page.locator('canvas')).toBeVisible();
+    await page.getByTestId('returning-player-trigger').click();
+    await expect(page.getByTestId('returning-player-docs')).toBeVisible();
+    await expect(page.getByTestId('returning-player-play-intro')).toBeHidden();
+  });
+
+  test('the landing menu opens the start page again', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await page.goto('/#no-intro');
+    await expect(page.locator('canvas')).toBeVisible();
+    await page.getByTestId('returning-player-trigger').click();
+    await page.getByTestId('returning-player-start-page').click();
+    await expect(intro(page)).toHaveAttribute('data-phase', 'waitingForPlay');
+    await expect(landingPage(page)).toBeVisible();
+  });
 });

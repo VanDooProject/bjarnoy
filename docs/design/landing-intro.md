@@ -46,7 +46,8 @@ fire lit, nothing moving). The saga starts only on a click.
 ## Timing
 
 - The landing page shows only on a device that has neither founded a settlement nor stored a login. `#intro` shows it
-  anyway; `#loop` loops the saga without it; "Play intro" plays the saga at once.
+  anyway, and so does "Start page" in the landing page's menu; `#loop` loops the saga without it; "Play intro" plays
+  the saga at once.
 - The saga starts on the click on the landing page, then plays once, then the hold, then the exit.
 - Each intro beat lasts as long as its voice clip in the player's language plus 0.8 s; the sending ends with its
   voice, and the ravens take over in a 1.8 s crossfade while its camera turn and ship are still moving. The scenes are timed
@@ -111,7 +112,10 @@ Opening the landing page or the replay with `#loop` plays the intro without end:
 
 ## Play again
 
-On desktop the landing page always shows a "Play intro" button at the bottom right, styled like skip, for every visitor. It plays the intro again over the landing page. Phones don't show it for now.
+On desktop the landing page always shows a "Play intro" button at the bottom right, styled like skip, for every visitor. It plays the intro again over the landing page. Phones don't show the button (the onboarding checklist sits there); they get a "Play intro" row in the landing page's menu instead.
+
+The landing page's menu (top right, before a settlement is founded) also has "Docs" and "Start page", which opens the
+intro's landing page again.
 
 ## Technique
 

@@ -992,7 +992,7 @@ watch(
          bar at all. `v-else-if="!player.hasFoundedSettlement"` keeps this
          branch scoped to its own original condition. -->
     <TopBar v-else-if="!player.hasFoundedSettlement" title="Bjarnoy">
-      <ReturningPlayerMenu>
+      <ReturningPlayerMenu landing-entries>
         <!-- One-time offer to turn animations on when the device asks for reduced motion. -->
         <template #nudge><MotionPrompt /></template>
       </ReturningPlayerMenu>
