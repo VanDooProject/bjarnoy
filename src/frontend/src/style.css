@@ -128,10 +128,14 @@
   --muted: #8fa3af;
   --muted-2: #7d909c;
 
-  --wood: #c98b4b;
-  --stone: #9aa7ad;
-  --food: #8fc35a;
-  --iron: #6f8fa8;
+  /* Resource palette: lightness steps evenly (brick darkest, iron lightest) so
+     the resources stay apart in grey and for colour-blind players; each also
+     has its own pictogram (`ResourceIcon.vue`). */
+  --wood: #c47a36;
+  --stone: #a84a32;
+  --food: #9ed05f;
+  --iron: #cbd5dc;
+  --pop: #6fb0e0;
   /* Shrines have no resource of their own to borrow a colour from, but the
      ring menu tints each build category and its buildings by category — see
      `Tile Menu 2a`. */
