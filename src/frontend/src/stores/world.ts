@@ -1835,7 +1835,11 @@ export const useWorldStore = defineStore('world', {
       this.hud.claimedHexes = this.model.claimedHexCount(settlement.id);
       if (DEMO_MODE) {
         this.hud.quests = evaluateDemoQuests(
-          { level: settlement.level, counts: this.model.countPlacedBuildingsByType(settlement.id) },
+          {
+            level: settlement.level,
+            counts: this.model.countPlacedBuildingsByType(settlement.id),
+            towerLevel: this.model.highestBuildingLevel(settlement.id, 'tower'),
+          },
           this.demoClaimedQuests,
         );
       }

@@ -264,7 +264,11 @@ public sealed record FeastOfferResponse(
 /// <param name="Completed">Whether its condition is met right now.</param>
 /// <param name="Claimed">Whether its reward was already claimed.</param>
 /// <param name="Reward">Wood, stone and food paid on claim (clamped to storage).</param>
-public sealed record QuestResponse(string Id, bool Completed, bool Claimed, ResourceLine Reward);
+/// <param name="Progress">Where the settlement stands toward the goal, or null for a quest without a counted goal.</param>
+public sealed record QuestResponse(string Id, bool Completed, bool Claimed, ResourceLine Reward, QuestProgressResponse? Progress = null);
+
+/// <summary>Counted progress toward a quest: <paramref name="Current"/> of <paramref name="Target"/> (never above the target).</summary>
+public sealed record QuestProgressResponse(int Current, int Target);
 
 /// <param name="Name">The linked realm's name: the oldest member's (<c>docs/design/economy.md</c> section 5, "A linked group is one realm").</param>
 /// <param name="Resources">
@@ -406,7 +410,8 @@ public sealed record SettlementResponse(
                     Feasts.RenownFor(domain.TownSquareLevel))
                 : null,
             [.. Bjarnoy.Domain.Settlers.Quests.All.Select(q => new QuestResponse(
-                q.Id, q.IsCompleted(domain), domain.HasClaimed(q), ResourceLine.From(q.Reward)))],
+                q.Id, q.IsCompleted(domain), domain.HasClaimed(q), ResourceLine.From(q.Reward),
+                q.Progress?.Invoke(domain) is { } p ? new QuestProgressResponse(p.Current, p.Target) : null))],
             WorldClockResponse.From(clock, gameNow),
             [.. store.Realm.SettlementIds
                 .OrderBy(other => other == entity.Id ? 0 : 1)

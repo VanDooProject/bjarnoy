@@ -65,7 +65,8 @@ wave += ' v4 q-20 8 -40 0 Z';
         <stop offset="0" stop-color="#ff8a3d" stop-opacity=".55" />
         <stop offset="1" stop-color="#ff8a3d" stop-opacity="0" />
       </radialGradient>
-      <mask :id="id('vis')" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600">
+      <!-- the region is the vision's ellipse and no more: a mask region is rastered whole -->
+      <mask :id="id('vis')" maskUnits="userSpaceOnUse" x="545" y="400" width="700" height="520">
         <ellipse cx="895" cy="660" rx="340" ry="250" :fill="`url(#${id('vis-g')})`" />
       </mask>
       <clipPath :id="id('above-sea')"><rect x="400" y="300" width="1000" height="412" /></clipPath>

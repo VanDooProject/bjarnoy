@@ -12,6 +12,8 @@ import enApiErrors from '../../i18n/locales/en/apiErrors.json';
 
 const IDS = ['producers3', 'longhouse2', 'storagehouse1', 'producers6', 'longhouse3', 'longhouse5', 'spearmen5', 'hunt1'];
 
+const progress = (current: number, target: number) => ({ current, target });
+
 function quest(id: string, patch: Partial<QuestResponse> = {}): QuestResponse {
   return { id, completed: false, claimed: false, reward: { wood: 250, stone: 200, food: 150, iron: 0 }, ...patch };
 }
@@ -152,12 +154,52 @@ describe('QuestTray', () => {
     expect(wrapper.get('[data-testid="quest-current"]').attributes('data-quest-id')).toBe('longhouse2');
     expect(wrapper.get('[data-testid="quest-progress"]').text()).toBe('0 of 1');
   });
+
+  it.each([
+    ['producers3', 'build', progress(1, 3), '2 more to build'],
+    ['producers3', 'build', progress(2, 3), '1 more to build'],
+    ['spearmen5', 'train', progress(2, 5), '3 more to train'],
+    ['longhouse5', 'level', progress(2, 5), '3 levels to go'],
+    ['longhouse2', 'level', progress(1, 2), '1 level to go'],
+  ])('shows the %s progress as %s with remaining text', (id, kind, prog, left) => {
+    const world = useWorldStore();
+    world.hud.quests = IDS.map((i) => quest(i, { claimed: IDS.indexOf(i) < IDS.indexOf(id), ...(i === id ? { progress: prog } : {}) }));
+
+    const wrapper = mountTray();
+
+    expect(wrapper.get('[data-testid="quest-progress-visual"]').attributes('data-kind')).toBe(kind);
+    expect(wrapper.get('[data-testid="quest-progress-left"]').text()).toBe(left);
+  });
+
+  it('draws one pip per target unit with the current ones filled', () => {
+    useWorldStore().hud.quests = all({ producers3: { progress: progress(2, 3) } });
+    const pips = mountTray().findAll('[data-testid="quest-progress-visual"] i');
+    expect(pips.map((p) => p.classes('on'))).toEqual([true, true, false]);
+  });
+
+  it('draws numbered level steps with the current ringed and the target marked', () => {
+    useWorldStore().hud.quests = all({ producers3: { claimed: true }, longhouse2: { claimed: true }, storagehouse1: { claimed: true }, producers6: { claimed: true }, longhouse3: { claimed: true }, longhouse5: { progress: progress(2, 5) } });
+    const steps = mountTray().findAll('[data-testid="quest-progress-visual"] span');
+    expect(steps.map((x) => x.text())).toEqual(['1', '2', '3', '4', '5']);
+    expect(steps.map((x) => x.classes('on'))).toEqual([true, true, false, false, false]);
+    expect(steps[1].classes('cur')).toBe(true);
+    expect(steps[4].classes('goal')).toBe(true);
+  });
+
+  it('hides the progress when the quest is completed or has none', () => {
+    useWorldStore().hud.quests = all({ producers3: { completed: true, progress: progress(3, 3) } });
+    expect(mountTray().find('[data-testid="quest-progress-visual"]').exists()).toBe(false);
+    useWorldStore().hud.quests = all();
+    expect(mountTray().find('[data-testid="quest-progress-visual"]').exists()).toBe(false);
+  });
 });
 
 describe('QuestTray on a phone', () => {
   beforeEach(() => {
+    localStorage.clear();
     setActivePinia(createPinia());
     const world = useWorldStore();
+    world.selectedSettlementId = 's1';
     world.hud.resources = { wood: 0, stone: 0, food: 0, iron: 0 };
     world.hud.storageCap = { wood: 750, stone: 750, food: 900, iron: 375 };
     vi.stubGlobal('matchMedia', (query: string) => ({
@@ -168,30 +210,97 @@ describe('QuestTray on a phone', () => {
     }));
   });
 
-  it('starts as a quest button, without a dot while nothing is ready to claim', async () => {
-    useWorldStore().hud.quests = all();
+  async function mounted() {
     const wrapper = mountTray();
     await flushPromises();
+    return wrapper;
+  }
+
+  it('starts as a strip with the quest title and its progress', async () => {
+    useWorldStore().hud.quests = all({ producers3: { progress: progress(1, 3) } });
+    const wrapper = await mounted();
     expect(wrapper.find('[data-testid="quest-tray"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="quest-toggle"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="quest-ready-dot"]').exists()).toBe(false);
+    const strip = wrapper.get('[data-testid="quest-toggle"]');
+    expect(strip.get('[data-testid="quest-strip-title"]').text()).toBe('Build 3 resource producers');
+    expect(strip.get('[data-testid="quest-progress-visual"]').attributes('data-kind')).toBe('build');
+    expect(strip.find('[data-testid="quest-progress-left"]').exists()).toBe(false);
   });
 
-  it('shows a dot when a quest is ready to claim', async () => {
+  it('lights the dot for a quest not seen yet', async () => {
+    useWorldStore().hud.quests = all();
+    const wrapper = await mounted();
+    expect(wrapper.find('[data-testid="quest-ready-dot"]').exists()).toBe(true);
+  });
+
+  it('clears the dot after opening and keeps it cleared on remount', async () => {
     useWorldStore().hud.quests = all({ longhouse2: { completed: true } });
-    const wrapper = mountTray();
+    const wrapper = await mounted();
+    await wrapper.get('[data-testid="quest-toggle"]').trigger('click');
+    await wrapper.get('[data-testid="quest-collapse"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="quest-ready-dot"]').exists()).toBe(false);
+    wrapper.unmount();
+
+    const again = await mounted();
+    expect(again.find('[data-testid="quest-toggle"]').exists()).toBe(true);
+    expect(again.find('[data-testid="quest-ready-dot"]').exists()).toBe(false);
+  });
+
+  it('lights the dot again for a new current quest and for a newly claimable one', async () => {
+    const world = useWorldStore();
+    world.hud.quests = all();
+    const wrapper = await mounted();
+    await wrapper.get('[data-testid="quest-toggle"]').trigger('click');
+    await wrapper.get('[data-testid="quest-collapse"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="quest-ready-dot"]').exists()).toBe(false);
+
+    world.hud.quests = all({ storagehouse1: { completed: true } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="quest-ready-dot"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="quest-toggle"]').trigger('click');
+    await wrapper.get('[data-testid="quest-collapse"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="quest-ready-dot"]').exists()).toBe(false);
+
+    world.hud.quests = all({ producers3: { claimed: true }, storagehouse1: { completed: true } });
     await flushPromises();
     expect(wrapper.find('[data-testid="quest-ready-dot"]').exists()).toBe(true);
   });
 
   it('opens on tap and collapses again', async () => {
     useWorldStore().hud.quests = all();
-    const wrapper = mountTray();
-    await flushPromises();
+    const wrapper = await mounted();
     await wrapper.get('[data-testid="quest-toggle"]').trigger('click');
     expect(wrapper.find('[data-testid="quest-current"]').exists()).toBe(true);
     await wrapper.get('[data-testid="quest-collapse"]').trigger('click');
     expect(wrapper.find('[data-testid="quest-tray"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="quest-toggle"]').exists()).toBe(true);
+  });
+
+  it('offers More/Less only when the hint overflows its two lines', async () => {
+    useWorldStore().hud.quests = all();
+    const sh = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(80);
+    const ch = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(32);
+    const wrapper = await mounted();
+    await wrapper.get('[data-testid="quest-toggle"]').trigger('click');
+    await flushPromises();
+    const hint = wrapper.get('.quest-hint');
+    expect(hint.classes('clamped')).toBe(true);
+    const more = wrapper.get('[data-testid="quest-more"]');
+    expect(more.text()).toBe('More');
+    await more.trigger('click');
+    expect(wrapper.get('.quest-hint').classes('clamped')).toBe(false);
+    expect(wrapper.get('[data-testid="quest-more"]').text()).toBe('Less');
+    sh.mockRestore();
+    ch.mockRestore();
+  });
+
+  it('shows no More button when the hint fits', async () => {
+    useWorldStore().hud.quests = all();
+    const wrapper = await mounted();
+    await wrapper.get('[data-testid="quest-toggle"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="quest-more"]').exists()).toBe(false);
   });
 });
