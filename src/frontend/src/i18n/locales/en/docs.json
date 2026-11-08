@@ -1189,7 +1189,7 @@
     },
     "cost": {
       "heading": "What a hex costs",
-      "body": "Every hex an army enters has a cost set by its ground. An army needs the cost divided by its speed, in hours, to cross the hex, so a hex of cost 2 takes twice as long as grass.",
+      "body": "Every hex has a cost set by its ground. An army needs the cost divided by its speed, in hours, to cross the hex, so a hex of cost 2 takes twice as long as grass. A step to the next hex is paid half for the hex you leave and half for the hex you enter, so your army always moves at the speed of the ground it is on.",
       "summary": "Grass is the quickest ground. Sand and forest slow an army down a little, bog a lot. A stream can be waded, but it costs far more than any ground. A wide river only opens over a bridge, and mountains, lakes and the sea cannot be entered at all.",
       "columns": {
         "ground": "Ground",
