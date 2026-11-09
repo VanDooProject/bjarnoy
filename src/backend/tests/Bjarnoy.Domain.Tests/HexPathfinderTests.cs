@@ -435,6 +435,27 @@ public class HexPathfinderTests
     }
 
     [Fact]
+    public void Search_tells_a_cut_off_target_apart_from_a_search_that_ran_out_of_budget()
+    {
+        var near = new HexCoord(5, 0);
+        var far = new HexCoord(250, 0);
+
+        Terrain Ringed(HexCoord target, HexCoord c) => target.Neighbours().Contains(c) ? Terrain.Mountain : Terrain.Sea;
+
+        // Close by, the whole reachable sea is explored: provably no route.
+        var cutOff = HexPathfinder.Search(new HexCoord(0, 0), near, c => Ringed(near, c), isLandUnit: false);
+        Assert.Null(cutOff.Path);
+        Assert.False(cutOff.LimitReached);
+
+        // Far out, the search stops at its node cap: unknown, reported as too long rather than as cut off.
+        var tooFar = HexPathfinder.Search(new HexCoord(0, 0), far, c => Ringed(far, c), isLandUnit: false);
+        Assert.Null(tooFar.Path);
+        Assert.True(tooFar.LimitReached);
+
+        Assert.Null(HexPathfinder.FindPath(new HexCoord(0, 0), far, c => Ringed(far, c), isLandUnit: false));
+    }
+
+    [Fact]
     public void Mountains_are_impassable_to_land_armies()
     {
         var wall = Wall(2);
