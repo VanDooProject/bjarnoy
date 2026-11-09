@@ -29,6 +29,15 @@ describe('DispatchSlots', () => {
     expect(mountSlots({ spearman: 5, ram: 1 }).find('[data-testid=ship-slots]').exists()).toBe(false);
   });
 
+  it('keeps its reserved space whether or not a ship is selected, so the form below never jumps', async () => {
+    const wrapper = mountSlots({ spearman: 5 });
+    expect(wrapper.find('.dispatch-slots-slot').exists()).toBe(true);
+
+    await wrapper.setProps({ unitCounts: { spearman: 5, karve: 1 } });
+    expect(wrapper.find('.dispatch-slots-slot').exists()).toBe(true);
+    expect(wrapper.get('[data-testid=ship-slots]').text()).toBe('Troop slots: 5 of 10 used');
+  });
+
   it('shows the slots the troops aboard use out of what the ships offer', () => {
     const wrapper = mountSlots({ karve: 1, longship: 1, axeman: 3, ram: 1 });
 
