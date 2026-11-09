@@ -4,6 +4,7 @@ import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 import { RingMenuComponent } from './pages/RingMenuComponent';
 import { gotoWorldMap, layoutOverflow, loginTestUser } from './helpers';
+import { DOUBLE_TAP_SLOP_PX } from '../src/lib/map/doubleTap';
 
 /**
  * Issue: mobile army dispatch. Phones (<=768px) get no ArmyPanel — a 260px
@@ -254,14 +255,25 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect(armyRow).toBeVisible();
     await expect(armyRow.locator('.status-row-time')).not.toHaveText('—');
 
-    await armyRow.locator('.status-row-click').click();
+    // The single tap lands on the row's left end and the double tap below on
+    // its centre, further apart than DOUBLE_TAP_SLOP_PX: the spec runs the two
+    // gestures within one double-tap window (DOUBLE_TAP_MS), so at the same
+    // point the double tap's first click would pair with this tap instead.
+    // The drawer would then close a click early and the double tap's second
+    // click would land on the map underneath, opening a ring menu whose
+    // make-room pan moves the camera off the army.
+    const rowButton = armyRow.locator('.status-row-click');
+    const rowBox = (await rowButton.boundingBox())!;
+    expect(rowBox.width / 2 - 8).toBeGreaterThan(DOUBLE_TAP_SLOP_PX);
+    await rowButton.click({ position: { x: 8, y: rowBox.height / 2 } });
 
     await expect.poll(async () => (await demoWorld(page)).selectedArmyId).toBe('army-1');
     await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'false');
 
-    await armyRow.locator('.status-row-click').dblclick();
+    await rowButton.dblclick();
 
     await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'true');
+    await expect(new RingMenuComponent(page).bubbles).toHaveCount(0);
     await expect.poll(async () => (await demoWorld(page)).selectedArmyId).toBe('army-1');
     await expect
       .poll(async () => {
