@@ -98,6 +98,54 @@ describe('auth store tryRefresh', () => {
     expect(storage.get('bjarnoy.refreshToken')).toBe('rt-1');
   });
 
+  it('retries once with the stored token when another tab rotated it during the call', async () => {
+    const sent: string[] = [];
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const { refreshToken } = JSON.parse(init.body as string) as { refreshToken: string };
+      sent.push(refreshToken);
+      if (refreshToken === 'rt-1') {
+        // Another tab's refresh lands first: it spends rt-1 and stores rt-2.
+        storage.set('bjarnoy.refreshToken', 'rt-2');
+        return jsonResponse(401, { error: 'invalid_refresh_token' });
+      }
+      return jsonResponse(200, authResponse('rt-3'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await loadStore();
+
+    expect(await auth.tryRefresh()).toBe(true);
+
+    expect(sent).toEqual(['rt-1', 'rt-2']);
+    expect(auth.isAuthenticated).toBe(true);
+    expect(storage.get('bjarnoy.refreshToken')).toBe('rt-3');
+  });
+
+  it('gives up after one retry when the replacement token is rejected too', async () => {
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const { refreshToken } = JSON.parse(init.body as string) as { refreshToken: string };
+      if (refreshToken === 'rt-1') storage.set('bjarnoy.refreshToken', 'rt-2');
+      return jsonResponse(401, { error: 'invalid_refresh_token' });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await loadStore();
+
+    expect(await auth.tryRefresh()).toBe(false);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(auth.user).toBeNull();
+    expect(storage.has('bjarnoy.refreshToken')).toBe(false);
+  });
+
+  it('does not retry a rejection when the stored token is unchanged', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(401, { error: 'invalid_refresh_token' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await loadStore();
+
+    expect(await auth.tryRefresh()).toBe(false);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('returns false without a request when there is no stored refresh token', async () => {
     storage.clear();
     const fetchMock = vi.fn();

@@ -124,7 +124,9 @@ export const useAuthStore = defineStore('auth', {
      *
      * Only a server verdict that the token is no good (401/403) ends the
      * session. A network error or 5xx leaves the stored token alone so the next
-     * call can retry it.
+     * call can retry it. A rejection while another tab has meanwhile replaced
+     * the stored token is retried once with that token (the single-flight
+     * promise is per tab; the token in localStorage is shared across tabs).
      */
     tryRefresh(): Promise<boolean> {
       if (!refreshInFlight) {
@@ -135,18 +137,30 @@ export const useAuthStore = defineStore('auth', {
       return refreshInFlight;
     },
     async performRefresh(): Promise<boolean> {
-      const refreshToken = readStoredRefreshToken();
+      let refreshToken = readStoredRefreshToken();
       if (!refreshToken) return false;
 
-      try {
-        const response = await post<AuthResponse>('/auth/refresh', { refreshToken });
-        this.applyAuthResponse(response);
-        return true;
-      } catch (err) {
-        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+      // At most one retry: see the comment on `tryRefresh` for why.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const response = await post<AuthResponse>('/auth/refresh', { refreshToken });
+          this.applyAuthResponse(response);
+          return true;
+        } catch (err) {
+          if (!(err instanceof ApiError) || (err.status !== 401 && err.status !== 403)) return false;
+
+          // Another tab shares this localStorage token. If it rotated the token
+          // while our call was in flight, ours was rejected only because it was
+          // already spent — the stored one is the live one, so try that
+          // instead of ending a session that is still good.
+          const stored = readStoredRefreshToken();
+          if (attempt === 0 && stored && stored !== refreshToken) {
+            refreshToken = stored;
+            continue;
+          }
           this.clearSession();
+          return false;
         }
-        return false;
       }
     },
     async fetchMe() {
