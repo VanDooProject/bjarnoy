@@ -133,6 +133,10 @@
   independent PR for just that fix: branch off latest `main` (not off the
   PR branch that surfaced it), fix + test it there, open its own PR, drive
   it to green, then squash-merge it via GitHub
+- exception to "CI green before squash-merge": a PR may be squash-merged with a red job when the only failure is **one single
+  test** that is a known flake or pre-existing failure on `main` AND an open session or PR is already working on that fix
+  (confirmed via the dedupe check, say which one). Everything else is green. Two or more failing tests, or any failure the
+  PR's diff could have caused, means wait for the fix. No re-running the job to get there
 - afterwards, update the original PR by merging `main` back into its branch
   so it picks up the fix (see "squash always means GitHub's squash-merge"
   above for how the merge lands on `main`)
@@ -213,6 +217,11 @@
 # tests
 - tests need to be meaningful and not test third party stuff
 - for e2e tests increasing timeouts is usually not the fix for an issue, most of the time its wrong/broken selectors
+- no retries of test runs: don't re-run a failing test (or the suite) hoping it passes, don't enable test retries
+  (`retries` stays 0 in `playwright.config.ts`), and don't re-trigger a red CI job to get a green. A failure gets read,
+  reproduced and fixed. A pass after a re-run means the test is flaky, not that it's fine
+- the one use of repeated runs: validating a fix. Once a flake or intermittent failure is fixed, run the affected test
+  repeatedly (e.g. `--repeat-each 5`) to show it's no longer flaky. Not for diagnosing, not as a substitute for finding the cause
 - do not make rendering/behavior code branch on "are we in a test/CI
   environment" or "is this a software (non-GPU) renderer" as a way to make
   e2e tests pass faster or more reliably. That makes the code path under

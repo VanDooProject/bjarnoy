@@ -1191,6 +1191,9 @@ export class WorldModel {
     // the world-settlements poll re-claims every settlement on the island next to the settlement poll.
     home.buildingLevel = settlement.level;
     this.syncClaim(settlement);
+    // Only the player's own settlements explore: a rival's vision ring is the rival's, the player sees it through the server's fog
+    // coverage alone (`setFogCoverage`). A rival keeps its own id as `ownerId`, which never equals the player's account id.
+    if (settlement.ownerId === settlement.id) return;
     for (const c of this.exploredHexesFor(settlement)) {
       this.explored.add(coordKey(c));
     }
@@ -1208,6 +1211,11 @@ export class WorldModel {
     for (const settlement of this.settlements.values()) {
       this.claimTerritory(settlement.id);
     }
+  }
+
+  /** The hex a settlement's marker and label are drawn on: the server's `labelAt` when it gave one, else the centre. */
+  labelHexOf(settlement: Settlement): AxialCoord {
+    return settlement.labelAt ?? { q: settlement.q, r: settlement.r };
   }
 
   getSettlement(id: string): Settlement | undefined {
@@ -1861,56 +1869,53 @@ export class WorldModel {
     return levels;
   }
 
-  /** The rival walls `applyRivalWalls` last placed, by hex: who owns each (a user id, null for an anonymous settlement) and its settlement. */
-  private rivalWalls = new Map<string, { settlementId: string; ownerUserId: string | null }>();
+  /** The rival buildings `applyRivalBuildings` last placed, by hex: who owns each (a user id, null for an anonymous settlement) and its settlement. */
+  private rivalBuildings = new Map<string, { settlementId: string; ownerUserId: string | null }>();
 
   /**
-   * Replaces the set of other players' walls this model knows (live mode: `GET /worlds/{id}/walls`, which is fog-gated and leaves the
-   * player's own walls out). Each wall is put on its tile the way an own wall is (type, level, owning settlement), so the piece it
-   * draws, the hit-test and the route rules need nothing special. A wall of the previous call that is missing now is cleared; a hex
-   * one of the player's own settlements renders is never touched.
+   * Replaces the set of other players' buildings this model knows (live mode: `GET /worlds/{id}/rival-buildings`, which is fog-gated
+   * per hex and leaves the player's own buildings out). Each building is put on its tile the way an own one is (type, level, owning
+   * settlement), so the piece it draws, the hit-test and the route rules need nothing special. A building of the previous call that
+   * is missing now is cleared; a hex one of the player's own settlements renders is never touched.
    */
-  applyRivalWalls(
-    walls: { q: number; r: number; type: string; level: number; settlementId: string; ownerUserId: string | null; outsideRealm?: boolean }[],
+  applyRivalBuildings(
+    buildings: { q: number; r: number; type: string; level: number; settlementId: string; ownerUserId: string | null; outsideRealm?: boolean }[],
   ) {
     const ownRendered = new Set<string>();
     for (const keys of this.renderedBuildingCoords.values()) for (const key of keys) ownRendered.add(key);
 
     const next = new Map<string, { settlementId: string; ownerUserId: string | null }>();
-    for (const wall of walls) {
-      if (wall.type !== 'palisade' && wall.type !== 'palisadegate') continue;
-      const key = coordKey({ q: wall.q, r: wall.r });
+    for (const building of buildings) {
+      const key = coordKey({ q: building.q, r: building.r });
       if (ownRendered.has(key)) continue;
-      const tile = this.getTile(wall.q, wall.r);
-      tile.ownerId = wall.settlementId;
-      tile.buildingType = wall.type;
-      tile.buildingLevel = wall.level;
-      tile.buildingOutsideRealm = wall.outsideRealm === true || undefined;
-      next.set(key, { settlementId: wall.settlementId, ownerUserId: wall.ownerUserId });
+      const tile = this.getTile(building.q, building.r);
+      tile.ownerId = building.settlementId;
+      tile.buildingType = building.type as Tile['buildingType'];
+      tile.buildingLevel = building.level;
+      tile.buildingOutsideRealm = building.outsideRealm === true || undefined;
+      next.set(key, { settlementId: building.settlementId, ownerUserId: building.ownerUserId });
     }
 
-    for (const [key, previous] of this.rivalWalls) {
+    for (const [key, previous] of this.rivalBuildings) {
       if (next.has(key) || ownRendered.has(key)) continue;
       const { q, r } = parseKey(key);
       const tile = this.getTile(q, r);
       if (tile.ownerId !== previous.settlementId) continue;
-      if (tile.buildingType === 'palisade' || tile.buildingType === 'palisadegate') {
-        tile.buildingType = undefined;
-        tile.buildingLevel = undefined;
-        tile.buildingOutsideRealm = undefined;
-      }
+      tile.buildingType = undefined;
+      tile.buildingLevel = undefined;
+      tile.buildingOutsideRealm = undefined;
     }
 
-    this.rivalWalls = next;
+    this.rivalBuildings = next;
     this.wallRevision++;
   }
 
   /**
-   * Who owns the rival wall on a hex: its account's user id, `null` for an anonymous settlement, `undefined` when the hex is not
-   * a rival wall `applyRivalWalls` placed (the player's own walls, or none). What the siege action's own/friendly check reads.
+   * Who owns the rival building on a hex: its account's user id, `null` for an anonymous settlement, `undefined` when the hex is not
+   * a rival building `applyRivalBuildings` placed (the player's own, or none). What the siege action's own/friendly check reads.
    */
-  rivalWallOwner(q: number, r: number): string | null | undefined {
-    return this.rivalWalls.get(coordKey({ q, r }))?.ownerUserId;
+  rivalBuildingOwner(q: number, r: number): string | null | undefined {
+    return this.rivalBuildings.get(coordKey({ q, r }))?.ownerUserId;
   }
 
   /**
@@ -1969,7 +1974,7 @@ export class WorldModel {
     for (const [key, wall] of this.palisadeIndex()) {
       if (wall.level < 1) continue;
       // A rival wall's owner key is the one the server's PalisadeIndex uses: the account, or the settlement for an anonymous one.
-      const rival = this.rivalWalls.get(key);
+      const rival = this.rivalBuildings.get(key);
       const owner = rival
         ? (rival.ownerUserId ?? rival.settlementId)
         : wall.tileOwner

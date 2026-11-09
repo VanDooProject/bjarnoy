@@ -180,6 +180,36 @@ describe('WorldModel.registerSettlement / claimTerritory', () => {
     expect(model.getTile(0, 0).buildingLevel).toBe(15);
   });
 
+  // Regression: a rival's claim used to add its whole vision ring to the explored set, which lifted the hover, border and label
+  // gating over ground the player never explored. Only the player's own settlements explore; a rival is seen through the server's fog.
+  it('claimTerritory does not mark a rival\'s vision ring as explored, an own settlement\'s it does', () => {
+    const model = new WorldModel();
+    const empty = { wood: 0, stone: 0, food: 0, iron: 0 };
+    const base = { ownerName: 'X', name: 'X', q: 0, r: 0, level: 1, resources: empty, rates: empty, foundedAt: 0, islandId: 'i' };
+    const rival = model.registerSettlement({ ...base, id: 'rival-9', ownerId: 'rival-9', q: 60, r: 60 });
+    const own = model.registerSettlement({ ...base, id: 'own-9', ownerId: 'player-9' });
+
+    model.claimTerritory(rival.id);
+    expect(model.isExplored(60, 60)).toBe(false);
+    expect(model.isExplored(61, 60)).toBe(false);
+    expect(model.getTile(60, 60).buildingType).toBe('longhouse');
+
+    model.claimTerritory(own.id);
+    expect(model.isExplored(0, 0)).toBe(true);
+    expect(model.isExplored(1, 0)).toBe(true);
+  });
+
+  it('labels a settlement on the hex the server gave, on its centre without one', () => {
+    const model = new WorldModel();
+    const empty = { wood: 0, stone: 0, food: 0, iron: 0 };
+    const base = { ownerName: 'X', name: 'X', level: 1, resources: empty, rates: empty, foundedAt: 0, islandId: 'i' };
+    const seen = model.registerSettlement({ ...base, id: 'a', ownerId: 'a', q: 10, r: 4, labelAt: { q: 7, r: 4 } });
+    const plain = model.registerSettlement({ ...base, id: 'b', ownerId: 'b', q: 20, r: 4 });
+
+    expect(model.labelHexOf(seen)).toEqual({ q: 7, r: 4 });
+    expect(model.labelHexOf(plain)).toEqual({ q: 20, r: 4 });
+  });
+
   it('claimTerritory draws a rival longhouse at the level its summary reports', () => {
     const model = new WorldModel();
     const rival = model.registerSettlement({
@@ -2576,42 +2606,63 @@ describe('WorldModel bridge', () => {
   });
 });
 
-describe('WorldModel.applyRivalWalls', () => {
-  const rivalWall = (q: number, r: number, over: Partial<{ type: string; level: number; ownerUserId: string | null }> = {}) => ({
+describe('WorldModel.applyRivalBuildings', () => {
+  const rivalBuilding = (q: number, r: number, over: Partial<{ type: string; level: number; ownerUserId: string | null }> = {}) => ({
     q, r, type: 'palisade', level: 2, settlementId: 'rival-1', ownerUserId: 'user-rival' as string | null, ...over,
   });
 
   it('puts the walls on their tiles like own walls, with the owner kept per hex', () => {
     const model = new WorldModel(20260825);
-    model.applyRivalWalls([rivalWall(5, 5), rivalWall(5, 6, { type: 'palisadegate', level: 1 }), rivalWall(5, 7, { ownerUserId: null })]);
+    model.applyRivalBuildings([rivalBuilding(5, 5), rivalBuilding(5, 6, { type: 'palisadegate', level: 1 }), rivalBuilding(5, 7, { ownerUserId: null })]);
 
     expect(model.getTile(5, 5)).toMatchObject({ buildingType: 'palisade', buildingLevel: 2, ownerId: 'rival-1' });
     expect(model.getTile(5, 6)).toMatchObject({ buildingType: 'palisadegate', buildingLevel: 1 });
-    expect(model.rivalWallOwner(5, 5)).toBe('user-rival');
-    expect(model.rivalWallOwner(5, 7)).toBeNull();
-    expect(model.rivalWallOwner(9, 9)).toBeUndefined();
+    expect(model.rivalBuildingOwner(5, 5)).toBe('user-rival');
+    expect(model.rivalBuildingOwner(5, 7)).toBeNull();
+    expect(model.rivalBuildingOwner(9, 9)).toBeUndefined();
     // The piece a wall draws follows its wall neighbours, rival or not.
     expect(model.wallNeighbourFlags({ q: 5, r: 6 }).filter(Boolean)).toHaveLength(2);
   });
 
+  it('places every building type of a rival, not just walls, and clears each one that is gone', () => {
+    const model = new WorldModel(20260825);
+    model.applyRivalBuildings([
+      rivalBuilding(5, 5, { type: 'tower', level: 3 }),
+      rivalBuilding(5, 6, { type: 'farm', level: 1 }),
+      rivalBuilding(5, 7, { type: 'longhouse', level: 4 }),
+    ]);
+
+    expect(model.getTile(5, 5)).toMatchObject({ buildingType: 'tower', buildingLevel: 3, ownerId: 'rival-1' });
+    expect(model.getTile(5, 6)).toMatchObject({ buildingType: 'farm', ownerId: 'rival-1' });
+    expect(model.getTile(5, 7)).toMatchObject({ buildingType: 'longhouse', buildingLevel: 4 });
+    expect(model.rivalBuildingOwner(5, 6)).toBe('user-rival');
+    // Only walls are walls for the movement rules.
+    expect(model.standingPalisadeWalls().size).toBe(0);
+
+    model.applyRivalBuildings([rivalBuilding(5, 7, { type: 'longhouse', level: 4 })]);
+    expect(model.getTile(5, 5).buildingType).toBeUndefined();
+    expect(model.getTile(5, 6).buildingType).toBeUndefined();
+    expect(model.getTile(5, 7).buildingType).toBe('longhouse');
+  });
+
   it('replaces the previous set: moved walls follow and walls gone server-side disappear', () => {
     const model = new WorldModel(20260825);
-    model.applyRivalWalls([rivalWall(5, 5), rivalWall(5, 6)]);
-    model.applyRivalWalls([rivalWall(5, 6, { level: 3 })]);
+    model.applyRivalBuildings([rivalBuilding(5, 5), rivalBuilding(5, 6)]);
+    model.applyRivalBuildings([rivalBuilding(5, 6, { level: 3 })]);
 
     expect(model.getTile(5, 5).buildingType).toBeUndefined();
     expect(model.getTile(5, 5).buildingLevel).toBeUndefined();
-    expect(model.rivalWallOwner(5, 5)).toBeUndefined();
+    expect(model.rivalBuildingOwner(5, 5)).toBeUndefined();
     expect(model.getTile(5, 6).buildingLevel).toBe(3);
     expect([...model.standingPalisadeWalls().keys()]).toEqual(['5,6']);
 
-    model.applyRivalWalls([]);
+    model.applyRivalBuildings([]);
     expect(model.standingPalisadeWalls().size).toBe(0);
   });
 
   it('keys a rival wall to its account (or its settlement when anonymous) for the route rules', () => {
     const model = new WorldModel(20260825);
-    model.applyRivalWalls([rivalWall(5, 5, { type: 'palisadegate' }), rivalWall(5, 6, { ownerUserId: null })]);
+    model.applyRivalBuildings([rivalBuilding(5, 5, { type: 'palisadegate' }), rivalBuilding(5, 6, { ownerUserId: null })]);
 
     const standing = model.standingPalisadeWalls();
     expect(standing.get('5,5')).toEqual({ gate: true, owner: 'user-rival' });
@@ -2630,11 +2681,11 @@ describe('WorldModel.applyRivalWalls', () => {
       buildings: [{ ...own, type: 'palisade', level: 1 }],
     });
 
-    model.applyRivalWalls([rivalWall(own.q, own.r)]);
-    model.applyRivalWalls([]);
+    model.applyRivalBuildings([rivalBuilding(own.q, own.r), rivalBuilding(settlement.q, settlement.r, { type: 'longhouse' })]);
+    model.applyRivalBuildings([]);
 
     expect(model.getTile(own.q, own.r)).toMatchObject({ buildingType: 'palisade', ownerId: settlement.id });
-    expect(model.rivalWallOwner(own.q, own.r)).toBeUndefined();
+    expect(model.rivalBuildingOwner(own.q, own.r)).toBeUndefined();
   });
 });
 

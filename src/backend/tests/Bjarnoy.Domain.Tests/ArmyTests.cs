@@ -822,4 +822,448 @@ public class ArmyTests
 
         Assert.Equal(10, garrison.Single(g => g.Type == UnitType.Spearman).Count);
     }
+
+    // Field orders with a mission, and splitting a standing army (issue #156): the target rules are the dispatch ones
+    // (Army.ValidateMissionTarget), so these only pin that PlanFieldOrder applies them, sets the mission and handles the split.
+
+    private static readonly HexCoord Beyond = new(12, 0);
+
+    private static Army StandingWith(
+        IReadOnlyList<UnitStack> garrison, IReadOnlyList<UnitStack> sent, double provisions, HexCoord? destination = null)
+    {
+        var settlement = Found(garrison: garrison);
+        var decision = Dispatch(settlement, destination ?? new HexCoord(10, 0), provisions, requested: sent);
+        Assert.True(decision.Accepted, $"setup dispatch refused: {decision.Rejection}");
+        var army = decision.Army!;
+        return army.SettleTo(((ArmyLocation.InTransit)army.Location).Movement.ArrivesAt.AddMinutes(1)).Army;
+    }
+
+    private static Bjarnoy.Domain.Movement.Movement MovementOf(Army army) => ((ArmyLocation.InTransit)army.Location).Movement;
+
+    [Fact]
+    public void FieldOrder_attack_is_accepted_and_carries_the_mission_and_target()
+    {
+        var army = Standing(new HexCoord(10, 0));
+        var target = Guid.CreateVersion7();
+
+        var result = Army.PlanFieldOrder(
+            army, [], Beyond, Home, ArrivedAt(army), AllGrass(), isPremium: false,
+            mission: ArmyMission.Attack, targetSettlementId: target, targetBuildingCoord: new HexCoord(12, 0));
+
+        Assert.True(result.Accepted, $"expected accept, got {result.Rejection}");
+        Assert.Equal(ArmyMission.Attack, result.Army!.Mission);
+        Assert.Equal(target, result.Army.TargetSettlementId);
+        Assert.Equal(new HexCoord(12, 0), result.Army.TargetBuildingCoord);
+        Assert.Null(result.Army.TargetCampCoord);
+        Assert.Equal(army.Id, result.Army.Id);
+        Assert.Null(result.Remainder);
+        Assert.Equal(Beyond, MovementOf(result.Army).Path[^1]);
+    }
+
+    [Fact]
+    public void FieldOrder_support_is_accepted_and_carries_the_host()
+    {
+        var army = Standing(new HexCoord(10, 0));
+        var host = Guid.CreateVersion7();
+
+        var result = Army.PlanFieldOrder(
+            army, [], Beyond, Home, ArrivedAt(army), AllGrass(), isPremium: false,
+            mission: ArmyMission.Support, targetSettlementId: host);
+
+        Assert.True(result.Accepted, $"expected accept, got {result.Rejection}");
+        Assert.Equal(ArmyMission.Support, result.Army!.Mission);
+        Assert.Equal(host, result.Army.TargetSettlementId);
+        Assert.Null(result.Army.TargetBuildingCoord);
+    }
+
+    [Fact]
+    public void FieldOrder_hunt_is_accepted_and_carries_the_camp_and_move_clears_an_earlier_target()
+    {
+        var army = Standing(new HexCoord(10, 0));
+        var now = ArrivedAt(army);
+
+        var hunt = Army.PlanFieldOrder(
+            army, [], Beyond, Home, now, AllGrass(), isPremium: false,
+            mission: ArmyMission.Hunt, targetCampCoord: Beyond);
+        Assert.True(hunt.Accepted, $"expected accept, got {hunt.Rejection}");
+        Assert.Equal(ArmyMission.Hunt, hunt.Army!.Mission);
+        Assert.Equal(Beyond, hunt.Army.TargetCampCoord);
+        Assert.Null(hunt.Army.TargetSettlementId);
+
+        // A Move order sets the Move mission and drops any target the army carried.
+        var asSupport = army with { Mission = ArmyMission.Move, TargetSettlementId = Guid.CreateVersion7() };
+        var move = Army.PlanFieldOrder(asSupport, [], Beyond, Home, now, AllGrass(), isPremium: false);
+        Assert.Equal(ArmyMission.Move, move.Army!.Mission);
+        Assert.Null(move.Army.TargetSettlementId);
+    }
+
+    [Fact]
+    public void FieldOrder_found_is_not_an_order_mission()
+    {
+        var army = Standing(new HexCoord(10, 0));
+
+        var result = Army.PlanFieldOrder(
+            army, [], Beyond, Home, ArrivedAt(army), AllGrass(), isPremium: true, mission: ArmyMission.Found);
+
+        Assert.Equal(FieldOrderRejection.MissionNotAllowed, result.Rejection);
+    }
+
+    [Fact]
+    public void FieldOrder_attack_or_support_without_a_target_settlement_is_rejected()
+    {
+        var army = Standing(new HexCoord(10, 0));
+        var now = ArrivedAt(army);
+
+        foreach (var mission in new[] { ArmyMission.Attack, ArmyMission.Support, ArmyMission.Raid })
+        {
+            var result = Army.PlanFieldOrder(army, [], Beyond, Home, now, AllGrass(), isPremium: true, mission: mission);
+            Assert.Equal(FieldOrderRejection.TargetSettlementRequired, result.Rejection);
+        }
+    }
+
+    [Fact]
+    public void FieldOrder_cannot_target_the_armys_own_home_settlement()
+    {
+        var army = Standing(new HexCoord(10, 0));
+        var now = ArrivedAt(army);
+
+        var attack = Army.PlanFieldOrder(
+            army, [], Beyond, Home, now, AllGrass(), isPremium: true,
+            mission: ArmyMission.Attack, targetSettlementId: army.SettlementId);
+        Assert.Equal(FieldOrderRejection.CannotAttackOwnSettlement, attack.Rejection);
+
+        var support = Army.PlanFieldOrder(
+            army, [], Beyond, Home, now, AllGrass(), isPremium: true,
+            mission: ArmyMission.Support, targetSettlementId: army.SettlementId);
+        Assert.Equal(FieldOrderRejection.CannotSupportOwnSettlement, support.Rejection);
+    }
+
+    [Fact]
+    public void FieldOrder_target_building_only_goes_with_attack_or_raid()
+    {
+        var army = Standing(new HexCoord(10, 0));
+
+        var result = Army.PlanFieldOrder(
+            army, [], Beyond, Home, ArrivedAt(army), AllGrass(), isPremium: true,
+            mission: ArmyMission.Support, targetSettlementId: Guid.CreateVersion7(), targetBuildingCoord: Beyond);
+
+        Assert.Equal(FieldOrderRejection.TargetBuildingRequiresAttackMission, result.Rejection);
+    }
+
+    [Fact]
+    public void FieldOrder_hunt_without_a_camp_or_with_the_wrong_kind_of_camp_is_rejected()
+    {
+        var army = Standing(new HexCoord(10, 0));
+        var now = ArrivedAt(army);
+
+        var none = Army.PlanFieldOrder(army, [], Beyond, Home, now, AllGrass(), isPremium: true, mission: ArmyMission.Hunt);
+        Assert.Equal(FieldOrderRejection.NoCampAtDestination, none.Rejection);
+
+        var water = Army.PlanFieldOrder(
+            army, [], Beyond, Home, now, AllGrass(), isPremium: true,
+            mission: ArmyMission.Hunt, targetCampCoord: Beyond, targetCampIsWater: true);
+        Assert.Equal(FieldOrderRejection.HuntRequiresFleet, water.Rejection);
+    }
+
+    [Fact]
+    public void FieldOrder_premium_gate_is_the_same_for_every_mission()
+    {
+        var standing = Standing(new HexCoord(10, 0));
+        var now = ArrivedAt(standing);
+        var target = Guid.CreateVersion7();
+
+        // Standing: free without waypoints, premium with them.
+        Assert.True(Army.PlanFieldOrder(
+            standing, [], Beyond, Home, now, AllGrass(), isPremium: false,
+            mission: ArmyMission.Attack, targetSettlementId: target).Accepted);
+        Assert.Equal(FieldOrderRejection.PremiumRequired, Army.PlanFieldOrder(
+            standing, [new HexCoord(11, 0)], Beyond, Home, now, AllGrass(), isPremium: false,
+            mission: ArmyMission.Attack, targetSettlementId: target).Rejection);
+
+        // Still marching: premium for any mission.
+        var marching = Marching(new HexCoord(10, 0));
+        var midway = MidwayOf(marching);
+        Assert.Equal(FieldOrderRejection.PremiumRequired, Army.PlanFieldOrder(
+            marching, [], Beyond, Home, midway, AllGrass(), isPremium: false,
+            mission: ArmyMission.Support, targetSettlementId: target).Rejection);
+        Assert.True(Army.PlanFieldOrder(
+            marching, [], Beyond, Home, midway, AllGrass(), isPremium: true,
+            mission: ArmyMission.Support, targetSettlementId: target).Accepted);
+    }
+
+    [Fact]
+    public void FieldOrder_split_leaves_a_new_army_and_keeps_the_rest_standing_on_its_own_movement()
+    {
+        var army = StandingWith([new UnitStack(UnitType.Spearman, 10)], [new UnitStack(UnitType.Spearman, 8)], provisions: 80);
+        var now = ArrivedAt(army);
+        var originalMovement = MovementOf(army);
+        var splitId = Guid.CreateVersion7();
+
+        var result = Army.PlanFieldOrder(
+            army, [], Beyond, Home, now, AllGrass(), isPremium: false,
+            mission: ArmyMission.Attack, targetSettlementId: Guid.CreateVersion7(),
+            requestedUnits: [new UnitStack(UnitType.Spearman, 3)], splitArmyId: splitId);
+
+        Assert.True(result.Accepted, $"expected accept, got {result.Rejection}");
+        var leaving = result.Army!;
+        var remainder = result.Remainder!;
+
+        Assert.Equal(splitId, leaving.Id);
+        Assert.Equal(army.SettlementId, leaving.SettlementId);
+        Assert.Equal(3, Assert.Single(leaving.Stacks).Count);
+        Assert.Equal(ArmyMission.Attack, leaving.Mission);
+        var leavingMovement = MovementOf(leaving);
+        Assert.Equal(now, leavingMovement.DepartedAt);
+        Assert.Equal(new HexCoord(10, 0), leavingMovement.Path[0]);
+        Assert.Equal(Beyond, leavingMovement.Path[^1]);
+
+        Assert.Equal(army.Id, remainder.Id);
+        Assert.Equal(5, Assert.Single(remainder.Stacks).Count);
+        Assert.Equal(army.Mission, remainder.Mission);
+        Assert.Equal(originalMovement, MovementOf(remainder));
+
+        // Food by upkeep share (3 of 8 upkeep leaves): together exactly what the army had.
+        var before = army.ProvisionsAt(now);
+        Assert.Equal(before * 3 / 8, leaving.Provisions, precision: 9);
+        Assert.Equal(before * 5 / 8, remainder.ProvisionsAt(now), precision: 9);
+        Assert.Equal(before, leaving.Provisions + remainder.ProvisionsAt(now), precision: 9);
+    }
+
+    [Fact]
+    public void FieldOrder_split_keeps_the_remainders_turn_around_unchanged()
+    {
+        var army = StandingWith([new UnitStack(UnitType.Spearman, 10)], [new UnitStack(UnitType.Spearman, 8)], provisions: 80);
+
+        var result = Army.PlanFieldOrder(
+            army, [], Beyond, Home, ArrivedAt(army), AllGrass(), isPremium: false,
+            requestedUnits: [new UnitStack(UnitType.Spearman, 3)], splitArmyId: Guid.CreateVersion7());
+
+        Assert.True(result.Accepted, $"expected accept, got {result.Rejection}");
+        var expected = MovementOf(army).TurnAroundAt;
+        Assert.True(
+            Math.Abs((MovementOf(result.Remainder!).TurnAroundAt - expected).TotalMilliseconds) < 1,
+            "the part that stays must turn around exactly when the whole army would have");
+
+        // And what is left of the remainder's own burn still leads to that same instant: at the turn-around the food
+        // equals what the way home costs it.
+        var remainder = result.Remainder!;
+        var m = MovementOf(remainder);
+        var atTurn = remainder.ProvisionsAt(m.TurnAroundAt);
+        Assert.Equal(m.ReturnCumulativeHours[^1] * remainder.TotalUpkeepPerHour, atTurn, precision: 6);
+    }
+
+    [Fact]
+    public void FieldOrder_split_caps_each_parts_food_and_moves_the_excess_to_the_other_part()
+    {
+        // 1 provisioner (carries 150) and 4 spearmen (carry 10 each), all the food shared by upkeep (4 of 5 would leave).
+        var army = StandingWith(
+            [new UnitStack(UnitType.Provisioner, 1), new UnitStack(UnitType.Spearman, 4)],
+            [new UnitStack(UnitType.Provisioner, 1), new UnitStack(UnitType.Spearman, 4)], provisions: 100);
+        var now = ArrivedAt(army);
+        var foodNow = army.ProvisionsAt(now);
+
+        var result = Army.PlanFieldOrder(
+            army, [], Beyond, Home, now, AllGrass(), isPremium: false,
+            requestedUnits: [new UnitStack(UnitType.Spearman, 4)], splitArmyId: Guid.CreateVersion7());
+
+        Assert.True(result.Accepted, $"expected accept, got {result.Rejection}");
+        // The spearmen's 4/5 share is over their 40 carry capacity: they take 40, the provisioner keeps the rest.
+        Assert.Equal(40, result.Army!.Provisions, precision: 9);
+        var remainder = result.Remainder!;
+        Assert.Equal(foodNow - 40, remainder.ProvisionsAt(now), precision: 9);
+
+        // The remainder's movement was rebuilt from its new food: it turns around when that food just covers the way home.
+        var m = MovementOf(remainder);
+        var expectedTurn = now + TimeSpan.FromHours((foodNow - 40) / remainder.TotalUpkeepPerHour - m.ReturnCumulativeHours[^1]);
+        Assert.True(Math.Abs((m.TurnAroundAt - expectedTurn).TotalMilliseconds) < 1, "turn-around must follow the remainder's food");
+        Assert.Equal(m.DepartedAt, MovementOf(army).DepartedAt);
+    }
+
+    [Fact]
+    public void FieldOrder_split_drops_the_food_neither_part_can_carry()
+    {
+        var army = StandingWith([new UnitStack(UnitType.Spearman, 10)], [new UnitStack(UnitType.Spearman, 8)], provisions: 80);
+        // More food than the whole army can carry (admin edits can do this): 3 spearmen carry 30, 5 carry 50.
+        var overloaded = army with { Provisions = 1000 };
+        var now = ArrivedAt(army);
+
+        var result = Army.PlanFieldOrder(
+            overloaded, [], Beyond, Home, now, AllGrass(), isPremium: false,
+            requestedUnits: [new UnitStack(UnitType.Spearman, 3)], splitArmyId: Guid.CreateVersion7());
+
+        Assert.True(result.Accepted, $"expected accept, got {result.Rejection}");
+        Assert.Equal(30, result.Army!.Provisions, precision: 9);
+        Assert.Equal(50, result.Remainder!.ProvisionsAt(now), precision: 9);
+    }
+
+    [Fact]
+    public void FieldOrder_split_that_takes_the_whole_army_is_no_split()
+    {
+        var army = StandingWith([new UnitStack(UnitType.Spearman, 10)], [new UnitStack(UnitType.Spearman, 8)], provisions: 80);
+
+        // Listed in two lines that add up to everything.
+        var result = Army.PlanFieldOrder(
+            army, [], Beyond, Home, ArrivedAt(army), AllGrass(), isPremium: false,
+            requestedUnits: [new UnitStack(UnitType.Spearman, 5), new UnitStack(UnitType.Spearman, 3)],
+            splitArmyId: Guid.CreateVersion7());
+
+        Assert.True(result.Accepted, $"expected accept, got {result.Rejection}");
+        Assert.Null(result.Remainder);
+        Assert.Equal(army.Id, result.Army!.Id);
+        Assert.Equal(8, Assert.Single(result.Army.Stacks).Count);
+        Assert.Equal(army.ProvisionsAt(ArrivedAt(army)), result.Army.Provisions, precision: 9);
+    }
+
+    [Fact]
+    public void FieldOrder_split_of_a_marching_army_is_rejected_but_the_whole_army_may_append()
+    {
+        var settlement = Found();
+        var army = Dispatch(settlement, new HexCoord(10, 0), 80, requested: [new UnitStack(UnitType.Spearman, 8)]).Army!;
+        var midway = MidwayOf(army);
+
+        var split = Army.PlanFieldOrder(
+            army, [], Beyond, Home, midway, AllGrass(), isPremium: true,
+            requestedUnits: [new UnitStack(UnitType.Spearman, 3)], splitArmyId: Guid.CreateVersion7());
+        Assert.Equal(FieldOrderRejection.SplitRequiresStandingArmy, split.Rejection);
+
+        var whole = Army.PlanFieldOrder(
+            army, [], Beyond, Home, midway, AllGrass(), isPremium: true,
+            requestedUnits: [new UnitStack(UnitType.Spearman, 8)]);
+        Assert.True(whole.Accepted, $"expected accept, got {whole.Rejection}");
+        Assert.Null(whole.Remainder);
+    }
+
+    [Fact]
+    public void FieldOrder_split_with_an_invalid_unit_selection_is_rejected()
+    {
+        var army = StandingWith([new UnitStack(UnitType.Spearman, 10)], [new UnitStack(UnitType.Spearman, 8)], provisions: 80);
+        var now = ArrivedAt(army);
+
+        FieldOrderRejection Order(IReadOnlyList<UnitStack> units) => Army.PlanFieldOrder(
+            army, [], Beyond, Home, now, AllGrass(), isPremium: true, requestedUnits: units).Rejection;
+
+        Assert.Equal(FieldOrderRejection.InvalidUnitSelection, Order([new UnitStack(UnitType.Spearman, 9)]));
+        Assert.Equal(FieldOrderRejection.InvalidUnitSelection, Order([new UnitStack(UnitType.Axeman, 1)]));
+        Assert.Equal(FieldOrderRejection.InvalidUnitSelection, Order([new UnitStack((UnitType)999, 1)]));
+        Assert.Equal(FieldOrderRejection.InvalidUnitSelection, Order([new UnitStack(UnitType.Spearman, 0)]));
+        Assert.Equal(FieldOrderRejection.InvalidUnitSelection, Order([]));
+    }
+
+    [Fact]
+    public void FieldOrder_split_is_checked_against_the_leaving_partss_own_food_for_the_round_trip()
+    {
+        // 1 provisioner carries most of the food; 4 spearmen can carry 40 at most. A far target the whole army can
+        // afford (it burns 5 an hour on the provisioner's food) is out of reach for the spearmen alone.
+        var army = StandingWith(
+            [new UnitStack(UnitType.Provisioner, 1), new UnitStack(UnitType.Spearman, 4)],
+            [new UnitStack(UnitType.Provisioner, 1), new UnitStack(UnitType.Spearman, 4)], provisions: 100);
+        var now = ArrivedAt(army);
+        var far = new HexCoord(30, 0);
+
+        var whole = Army.PlanFieldOrder(army, [], far, Home, now, AllGrass(), isPremium: false);
+        Assert.True(whole.Accepted, $"the whole army can afford it, got {whole.Rejection}");
+
+        var split = Army.PlanFieldOrder(
+            army, [], far, Home, now, AllGrass(), isPremium: false,
+            requestedUnits: [new UnitStack(UnitType.Spearman, 4)], splitArmyId: Guid.CreateVersion7());
+        Assert.Equal(FieldOrderRejection.InsufficientProvisionsForRoundTrip, split.Rejection);
+    }
+
+    // Fleets: a fleet stands at sea hex (5,0) of the Strait (sea in columns 3-8, grass either side); the dockyard home is (3,0).
+
+    private static Terrain Strait(HexCoord c) => c.Q is >= 3 and <= 8 ? Terrain.Sea : Terrain.Grass;
+
+    private static readonly HexCoord Dock = new(3, 0);
+    private static readonly HexCoord CoastalTarget = new(9, 0);
+
+    private static Army StandingFleet(IReadOnlyList<UnitStack> stacks, double provisions = 200)
+    {
+        var path = new[] { Dock, new HexCoord(4, 0), new HexCoord(5, 0) };
+        var hours = new[] { 0.0, 1.0, 2.0 };
+        var upkeep = stacks.Sum(s => UnitCatalogue.Get(s.Type).UpkeepPerHour * s.Count);
+        var movement = Bjarnoy.Domain.Movement.Movement.Create(
+            T0, path, hours, hours, path.Reverse().ToArray(), hours, hours, provisions, upkeep);
+        return new Army
+        {
+            Id = Guid.CreateVersion7(),
+            SettlementId = Guid.CreateVersion7(),
+            Stacks = stacks,
+            Provisions = provisions,
+            Location = new ArmyLocation.InTransit(movement),
+        };
+    }
+
+    [Fact]
+    public void FieldOrder_fleet_attack_sails_to_the_shore_building_and_needs_one_on_the_shore()
+    {
+        var fleet = StandingFleet([new UnitStack(UnitType.Karve, 2)]);
+        var now = ArrivedAt(fleet);
+        var target = Guid.CreateVersion7();
+
+        FieldOrderResult Attack(HexCoord? building) => Army.PlanFieldOrder(
+            fleet, [], CoastalTarget, Dock, now, Strait, isPremium: false,
+            mission: ArmyMission.Attack, targetSettlementId: target, targetBuildingCoord: building,
+            targetClaimDiscs: [(CoastalTarget, 3)]);
+
+        var accepted = Attack(CoastalTarget);
+        Assert.True(accepted.Accepted, $"expected accept, got {accepted.Rejection}");
+        Assert.Equal(CoastalTarget, MovementOf(accepted.Army!).Path[^1]);
+        Assert.Equal(CoastalTarget, accepted.Army!.TargetBuildingCoord);
+
+        Assert.Equal(FieldOrderRejection.FleetTargetBuildingRequired, Attack(null).Rejection);
+        // (11,0) lies inside the claim but is neither shoreline nor sea.
+        Assert.Equal(FieldOrderRejection.FleetTargetBuildingNotOnShore, Attack(new HexCoord(11, 0)).Rejection);
+    }
+
+    [Fact]
+    public void FieldOrder_fleet_hunt_needs_a_water_camp()
+    {
+        var fleet = StandingFleet([new UnitStack(UnitType.Karve, 2)]);
+        var now = ArrivedAt(fleet);
+
+        var onLand = Army.PlanFieldOrder(
+            fleet, [], new HexCoord(7, 0), Dock, now, Strait, isPremium: true,
+            mission: ArmyMission.Hunt, targetCampCoord: new HexCoord(7, 0), targetCampIsWater: false);
+        Assert.Equal(FieldOrderRejection.HuntRequiresLandUnits, onLand.Rejection);
+
+        var atSea = Army.PlanFieldOrder(
+            fleet, [], new HexCoord(7, 0), Dock, now, Strait, isPremium: true,
+            mission: ArmyMission.Hunt, targetCampCoord: new HexCoord(7, 0), targetCampIsWater: true);
+        Assert.True(atSea.Accepted, $"expected accept, got {atSea.Rejection}");
+    }
+
+    [Fact]
+    public void FieldOrder_fleet_split_needs_ship_slots_for_the_passengers_of_both_parts()
+    {
+        // 2 karves (20 slots) carrying 12 spearmen (1 slot each) and 4 axemen (2 slots each): 20 slots used.
+        var fleet = StandingFleet(
+            [new UnitStack(UnitType.Karve, 2), new UnitStack(UnitType.Spearman, 12), new UnitStack(UnitType.Axeman, 4)]);
+        var now = ArrivedAt(fleet);
+        var move = new HexCoord(7, 0);
+
+        FieldOrderResult Split(params UnitStack[] leaving) => Army.PlanFieldOrder(
+            fleet, [], move, Dock, now, Strait, isPremium: true,
+            requestedUnits: leaving, splitArmyId: Guid.CreateVersion7());
+
+        // One karve with 10 slots of passengers each: fits both ways.
+        var fits = Split(new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Spearman, 6), new UnitStack(UnitType.Axeman, 2));
+        Assert.True(fits.Accepted, $"expected accept, got {fits.Rejection}");
+        Assert.True(fits.Army!.IsFleet);
+        Assert.True(fits.Remainder!.IsFleet);
+
+        // The leaving karve would carry 12 slots, the other part 8: the leaving part is over.
+        Assert.Equal(
+            FieldOrderRejection.InsufficientShipCapacity,
+            Split(new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Spearman, 12)).Rejection);
+
+        // The part that stays is over its one ship's slots.
+        Assert.Equal(
+            FieldOrderRejection.InsufficientShipCapacity,
+            Split(new UnitStack(UnitType.Karve, 1)).Rejection);
+
+        // Troops without a ship cannot leave a fleet standing at sea.
+        Assert.Equal(
+            FieldOrderRejection.InsufficientShipCapacity,
+            Split(new UnitStack(UnitType.Spearman, 4)).Rejection);
+    }
 }

@@ -319,12 +319,12 @@ public static class HexPathfinder
 
         bool InBounds(HexCoord c) => c.Q >= qMin && c.Q <= qMax && c.R >= rMin && c.R <= rMax;
 
-        var open = new PriorityQueue<HexCoord, double>();
+        var open = new PriorityQueue<HexCoord, OpenKey>();
         var gScore = new Dictionary<HexCoord, double> { [from] = 0 };
         var cameFrom = new Dictionary<HexCoord, HexCoord>();
         var closed = new HashSet<HexCoord>();
 
-        open.Enqueue(from, Heuristic(from, to));
+        open.Enqueue(from, OpenKey.For(from, 0, from, to));
         var expanded = 0;
 
         while (open.TryDequeue(out var current, out _))
@@ -393,7 +393,7 @@ public static class HexPathfinder
 
                 gScore[neighbour] = tentativeG;
                 cameFrom[neighbour] = current;
-                open.Enqueue(neighbour, tentativeG + Heuristic(neighbour, to));
+                open.Enqueue(neighbour, OpenKey.For(neighbour, tentativeG, from, to));
             }
         }
 
@@ -407,6 +407,36 @@ public static class HexPathfinder
     /// distance never overestimates the cheapest possible route.
     /// </summary>
     private static double Heuristic(HexCoord a, HexCoord b) => a.DistanceTo(b);
+
+    /// <summary>
+    /// Open-set order, ascending: f = g + h, then h (of two equal-f hexes the one further along
+    /// the route goes first, which stops a uniform-cost sea from expanding every tied hex side by
+    /// side), then the hex's distance from the straight start-to-goal line (axial cross product,
+    /// so open-water routes follow that line), then q and r so the order never depends on heap
+    /// internals. The TS twin (<c>findPath</c> in hexPath.ts) uses the same order.
+    /// </summary>
+    private readonly record struct OpenKey(double F, double H, long LineDeviation, int Q, int R) : IComparable<OpenKey>
+    {
+        public static OpenKey For(HexCoord n, double g, HexCoord from, HexCoord to)
+        {
+            double h = Heuristic(n, to);
+            long deviation = Math.Abs(
+                ((long)(n.Q - from.Q) * (to.R - from.R)) - ((long)(n.R - from.R) * (to.Q - from.Q)));
+            return new OpenKey(g + h, h, deviation, n.Q, n.R);
+        }
+
+        public int CompareTo(OpenKey other)
+        {
+            int c = F.CompareTo(other.F);
+            if (c != 0) return c;
+            c = H.CompareTo(other.H);
+            if (c != 0) return c;
+            c = LineDeviation.CompareTo(other.LineDeviation);
+            if (c != 0) return c;
+            c = Q.CompareTo(other.Q);
+            return c != 0 ? c : R.CompareTo(other.R);
+        }
+    }
 
     private static IReadOnlyList<HexCoord> Reconstruct(Dictionary<HexCoord, HexCoord> cameFrom, HexCoord current)
     {

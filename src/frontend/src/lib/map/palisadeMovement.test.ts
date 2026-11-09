@@ -131,7 +131,7 @@ describe('Utgard walls in the palisade rules (the jötnar owner key)', () => {
 describe('palisadeRestrictions with a rival wall from the walls read', () => {
   it('opens a rival gate for its own friends only, and blocks a rival wall for everyone else', () => {
     const rival = new WorldModel(20260825);
-    rival.applyRivalWalls([
+    rival.applyRivalBuildings([
       { q: 3, r: 0, type: 'palisadegate', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival' },
       { q: 3, r: -1, type: 'palisade', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival' },
       { q: 3, r: 1, type: 'palisade', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival' },
@@ -156,7 +156,7 @@ describe('palisadeRestrictions with a rival wall from the walls read', () => {
 describe('palisadeRestrictions outside the realm', () => {
   it('opens a gate outside its owner realm to every army but still blocks a plain wall', () => {
     const rival = new WorldModel(20260825);
-    rival.applyRivalWalls([
+    rival.applyRivalBuildings([
       { q: 3, r: 0, type: 'palisadegate', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival', outsideRealm: true },
       { q: 3, r: -1, type: 'palisade', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival', outsideRealm: true },
       { q: 3, r: 1, type: 'palisade', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival' },

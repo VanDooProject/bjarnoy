@@ -8,6 +8,7 @@ using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Bjarnoy.Infrastructure.World;
@@ -224,8 +225,9 @@ public static class SettlementEndpoints
 
     /// <summary>
     /// The rival-safe counterpart to <see cref="Get"/>: identity, position and
-    /// buildings only, and only once the caller has actually explored this
-    /// settlement's own centre hex — see <see cref="SettlementViewResponse"/>.
+    /// buildings only, and only once the caller has explored the settlement's
+    /// centre hex or the hex of one of its standing buildings (<see cref="RivalVisibility"/>); the buildings
+    /// returned are exactly the ones on explored hexes — see <see cref="SettlementViewResponse"/>.
     /// Resolves the caller's realm the same way the per-world reads in
     /// <see cref="WorldEndpoints"/> do (<see cref="CallerRealmResolver"/>): no
     /// realm at all is refused rather than answered with an empty view, since
@@ -269,25 +271,25 @@ public static class SettlementEndpoints
         }
 
         var isOwnSettlement = string.Equals(entity.OwnerId, realm.OwnerId, StringComparison.Ordinal);
-        var explored = isOwnSettlement
-            ? []
-            : await exploredArea.ExploredAmongAsync(
-                area,
-                entity.Buildings.Select(b => new HexCoord(b.Q, b.R))
-                    .Append(new HexCoord(entity.CentreQ, entity.CentreR)),
-                cancellationToken);
-        if (!isOwnSettlement && !explored.Contains(new HexCoord(entity.CentreQ, entity.CentreR)))
+        IReadOnlyList<PlacedBuildingEntity> visibleBuildings;
+        if (isOwnSettlement)
         {
-            // Never reveal that an unexplored settlement even exists.
-            return TypedResults.NotFound(SettlementNotFoundProblem());
+            visibleBuildings = entity.Buildings;
+        }
+        else
+        {
+            var sights = await RivalVisibility.ForAsync(exploredArea, area, [entity], _ => false, cancellationToken);
+            if (sights.Count == 0)
+            {
+                // Never reveal that a settlement with no explored hex even exists.
+                return TypedResults.NotFound(SettlementNotFoundProblem());
+            }
+
+            visibleBuildings = sights[0].ExploredBuildings;
         }
 
         IReadOnlyList<PlacedBuildingResponse> buildings =
-        [
-            .. entity.Buildings
-                .Where(b => isOwnSettlement || explored.Contains(new HexCoord(b.Q, b.R)))
-                .Select(b => PlacedBuildingResponse.From(b.ToPlacedBuilding())),
-        ];
+            [.. visibleBuildings.Select(b => PlacedBuildingResponse.From(b.ToPlacedBuilding()))];
 
         var realmLabel = await LinkedRealmNames.ForSettlementAsync(db, entity, cancellationToken);
 
@@ -311,9 +313,10 @@ public static class SettlementEndpoints
     /// rather than a 403/400 — this is a passive listing, not a specific
     /// ask. Otherwise: the caller's own settlements (every realm they hold,
     /// not just their primary one — settler-convoy foundings can leave a
-    /// player with several) plus every settlement whose centre hex is in
-    /// their explored area (<see cref="ExploredAreaService"/>) — exactly
-    /// what their own fog mask/world map already shows them.
+    /// player with several) plus every rival settlement whose centre hex or any
+    /// standing building's hex is in their explored area (<see cref="ExploredAreaService"/>,
+    /// <see cref="RivalVisibility"/>) — exactly what their own fog mask/world map already shows them. A listed
+    /// rival's summary is complete; its <c>LabelQ</c>/<c>LabelR</c> say which explored hex to label it on.
     /// </summary>
     private static async Task<Ok<IReadOnlyList<SettlementSummary>>> ListForWorld(
         Guid worldId,
@@ -336,27 +339,16 @@ public static class SettlementEndpoints
             return TypedResults.Ok<IReadOnlyList<SettlementSummary>>([]);
         }
 
-        var user = httpContext.User;
-        var idClaim = user.Identity?.IsAuthenticated == true
-            ? user.FindFirstValue(ClaimTypes.NameIdentifier)
-            : null;
-        var callerUserId = Guid.TryParse(idClaim, out var parsedUserId) ? parsedUserId : (Guid?)null;
+        var callerUserId = RivalVisibility.CallerUserId(httpContext.User);
 
         var entities = await settlements.GetForWorldAsync(worldId, cancellationToken);
 
-        bool IsMine(Bjarnoy.Infrastructure.Entities.SettlementEntity s) =>
-            s.OwnerId == realm.OwnerId || (callerUserId is not null && s.UserId == callerUserId);
+        bool IsMine(SettlementEntity s) => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId);
 
-        // Only rivals' centres need the fog check; the explored lookup reads
-        // just the stored chunks those centres fall in.
-        var explored = await exploredArea.ExploredAmongAsync(
-            area,
-            entities
-                .Where(s => !IsMine(s))
-                .Select(s => new HexCoord(s.CentreQ, s.CentreR)),
-            cancellationToken);
+        var sights = await RivalVisibility.ForAsync(exploredArea, area, entities, IsMine, cancellationToken);
+        var labelHexOf = sights.ToDictionary(sight => sight.Settlement.Id, sight => sight.LabelHex);
 
-        // Every longhouse stays (the map draws them), each under its linked realm's name.
+        // Every visible longhouse stays (the map draws them), each under its linked realm's name.
         var labels = await LinkedRealmNames.ForAsync(db, worldId, entities, cancellationToken);
 
         var relationOf = await SettlementRelations.ForCallerAsync(db, worldId, callerUserId, IsMine, cancellationToken);
@@ -364,8 +356,10 @@ public static class SettlementEndpoints
         IReadOnlyList<SettlementSummary> response =
         [
             .. entities
-                .Where(s => IsMine(s) || explored.Contains(new HexCoord(s.CentreQ, s.CentreR)))
-                .Select(s => SettlementSummary.From(s, IsMine(s), labels[s.Id], relationOf(s))),
+                .Where(s => IsMine(s) || labelHexOf.ContainsKey(s.Id))
+                .Select(s => SettlementSummary.From(
+                    s, IsMine(s), labels[s.Id], relationOf(s),
+                    IsMine(s) ? new HexCoord(s.CentreQ, s.CentreR) : labelHexOf[s.Id])),
         ];
 
         return TypedResults.Ok(response);

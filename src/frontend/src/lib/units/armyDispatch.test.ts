@@ -397,6 +397,59 @@ describe('buildFieldOrderRequest', () => {
   });
 });
 
+describe('buildFieldOrderRequest (mission, target and split)', () => {
+  it('a plain move stays a destination-only order (no mission key: the ArmyPanel flow is unchanged)', () => {
+    expect(buildFieldOrderRequest([{ q: 3, r: -1 }])).toEqual({ destination: { q: 3, r: -1 } });
+  });
+
+  it('carries the mission and the leaving units of a split move', () => {
+    expect(
+      buildFieldOrderRequest([{ q: 3, r: -1 }], { mission: 'move', units: { spearman: 4, archer: 0 } }),
+    ).toEqual({ destination: { q: 3, r: -1 }, mission: 'move', units: [{ unit: 'spearman', count: 4 }] });
+  });
+
+  it('an attack names its target settlement and building and sends no destination', () => {
+    const request = buildFieldOrderRequest([], {
+      mission: 'attack',
+      targetSettlementId: 'rival-1',
+      targetBuildingCoord: { q: 2, r: 5 },
+      units: { spearman: 3 },
+    });
+
+    expect(request).toEqual({
+      mission: 'attack',
+      targetSettlementId: 'rival-1',
+      targetBuildingCoord: { q: 2, r: 5 },
+      units: [{ unit: 'spearman', count: 3 }],
+    });
+    expect(request).not.toHaveProperty('destination');
+  });
+
+  it('a support carries no building even if one was left in the draft', () => {
+    const request = buildFieldOrderRequest([], { mission: 'support', targetSettlementId: 'own-2', targetBuildingCoord: { q: 1, r: 1 } });
+
+    expect(request?.targetBuildingCoord).toBeUndefined();
+    expect(request?.targetSettlementId).toBe('own-2');
+  });
+
+  it('an attack or support without a target settlement is incomplete', () => {
+    expect(buildFieldOrderRequest([], { mission: 'attack' })).toBeNull();
+    expect(buildFieldOrderRequest([{ q: 1, r: 1 }], { mission: 'support', targetSettlementId: null })).toBeNull();
+  });
+
+  it('a hunt goes to the camp hex', () => {
+    expect(buildFieldOrderRequest([{ q: 7, r: -3 }], { mission: 'hunt' })).toEqual({ destination: { q: 7, r: -3 }, mission: 'hunt' });
+  });
+
+  it('a selection that leaves no unit sends nothing', () => {
+    expect(buildFieldOrderRequest([{ q: 3, r: -1 }], { mission: 'move', units: { spearman: 0 } })).toBeNull();
+  });
+
+  it('whole army (units null) sends no units list', () => {
+    expect(buildFieldOrderRequest([{ q: 3, r: -1 }], { mission: 'move', units: null })).toEqual({ destination: { q: 3, r: -1 }, mission: 'move' });
+  });
+});
+
 describe('canFieldOrderArmy', () => {
   it('refuses an army standing at home', () => {
     expect(canFieldOrderArmy({ atHome: true, supporting: false, mission: 'move', movement: null })).toBe(false);

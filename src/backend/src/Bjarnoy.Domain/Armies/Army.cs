@@ -293,41 +293,20 @@ public sealed record Army
         // Any request with at least one ship is a fleet, for every mission; the non-ship stacks in it are its
         // passengers (docs/design/economy.md, "Troops on ships"). Whether a requested unit type even exists is
         // Settlement.PlanDispatch's job below.
-        var requestedClasses = normalisedRequest
-            .Select(s => UnitCatalogue.Get(s.Type).Class)
-            .ToHashSet();
         var isFoundingConvoy = mission == ArmyMission.Found;
-        var isFleet = requestedClasses.Contains(UnitClass.Ship);
+        var isFleet = normalisedRequest.Any(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Ship);
 
-        if (isFleet)
+        // Ship slots, hunt camp, target settlement, target building and fleet shore rules: shared with
+        // PlanFieldOrder, which holds a field order to exactly the same targets.
+        var target = ValidateMissionTarget(
+            mission, normalisedRequest, settlement.Id, targetSettlementId, targetBuildingCoord, targetClaimDiscs,
+            destination, targetCampCoord, targetCampIsWater, terrainAt, giants);
+        if (target.Rejection != DispatchRejection.None)
         {
-            // Passengers need slots on the ships, whatever the mission.
-            if (ShipCargo.SlotsNeeded(ShipCargo.Passengers(normalisedRequest)) > ShipCargo.SlotsOffered(normalisedRequest))
-            {
-                return DispatchDecision.Rejected(DispatchRejection.InsufficientShipCapacity);
-            }
+            return DispatchDecision.Rejected(target.Rejection);
         }
 
-        if (mission == ArmyMission.Hunt)
-        {
-            // The camp itself is looked up by the caller, which passes its hex as targetCampCoord only when one
-            // exists (and says whether it stands on the sea). Land units hunt land camps and fleets hunt water
-            // camps (the whale road); neither can reach the other's.
-            if (targetCampCoord is null)
-            {
-                return DispatchDecision.Rejected(DispatchRejection.NoCampAtDestination);
-            }
-
-            if (isFleet && !targetCampIsWater)
-            {
-                return DispatchDecision.Rejected(DispatchRejection.HuntRequiresLandUnits);
-            }
-
-            if (!isFleet && targetCampIsWater && requestedClasses.Count > 0)
-            {
-                return DispatchDecision.Rejected(DispatchRejection.HuntRequiresFleet);
-            }
-        }
+        var routeDestination = target.RouteDestination;
 
         if (isFoundingConvoy)
         {
@@ -348,61 +327,6 @@ public sealed record Army
             {
                 return DispatchDecision.Rejected(DispatchRejection.TargetHexNotFoundable);
             }
-        }
-
-        if (mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid)
-        {
-            if (targetSettlementId is null)
-            {
-                return DispatchDecision.Rejected(DispatchRejection.TargetSettlementRequired);
-            }
-
-            if (targetSettlementId == settlement.Id)
-            {
-                return DispatchDecision.Rejected(mission == ArmyMission.Support
-                    ? DispatchRejection.CannotSupportOwnSettlement
-                    : DispatchRejection.CannotAttackOwnSettlement);
-            }
-        }
-
-        // Shape validation only — whether a building actually stands at this
-        // coordinate on the target settlement is checked at resolution time
-        // (see TargetBuildingCoord's remarks), since the layout can change
-        // before the army arrives. All this rejects is "a target building was
-        // named for a mission that has no battle to apply it in". Raid mirrors
-        // Attack here — a raid can carry catapults just as an attack can (the
-        // design doc places no restriction on this), even though it usually
-        // wouldn't.
-        if (targetBuildingCoord is not null && mission is not (ArmyMission.Attack or ArmyMission.Raid))
-        {
-            return DispatchDecision.Rejected(DispatchRejection.TargetBuildingRequiresAttackMission);
-        }
-
-        // A fleet Attack/Raid is always sent at one building on the target's shore: it sails to that building's
-        // hex, the fight happens there, and a won fight damages only that building. The target's Longhouse may be
-        // inland. "On the shore" = inside the target's claim and either a shoreline land hex or a sea hex (the
-        // coastal-water buildings: Dockyard, Fishing Hut, Shrine of Njörd). Whether a building actually stands there
-        // is checked at arrival, like for catapults. Land armies are unaffected.
-        var routeDestination = destination;
-        if (mission is ArmyMission.Attack or ArmyMission.Raid && isFleet)
-        {
-            if (targetBuildingCoord is not { } shoreBuilding)
-            {
-                return DispatchDecision.Rejected(DispatchRejection.FleetTargetBuildingRequired);
-            }
-
-            IReadOnlyList<(HexCoord Centre, int Radius)> discs =
-                targetClaimDiscs is { Count: > 0 } ? targetClaimDiscs : [(destination, 0)];
-            // The territory rule, not the raw disc union: a giant hex only geometrically inside a disc but not
-            // actually claimed must not count as the defender's shore either.
-            var onShore = Territory.Claims(discs, shoreBuilding, giants ?? GiantIndex.Empty)
-                && (terrainAt(shoreBuilding) == Terrain.Sea || Shoreline.IsShoreline(shoreBuilding, terrainAt));
-            if (!onShore)
-            {
-                return DispatchDecision.Rejected(DispatchRejection.FleetTargetBuildingNotOnShore);
-            }
-
-            routeDestination = shoreBuilding;
         }
 
         var settlementDecision = settlement.PlanDispatch(requestedUnits, provisions, now);
@@ -427,8 +351,7 @@ public sealed record Army
         // settlers on (issue #55 §2) — same beaching exemption, no separate shoreline check needed:
         // HexPathfinder can only ever reach that land hex by sea if it is adjacent to reachable open water, which is
         // exactly what "shoreline" means (see Shoreline.IsShoreline); any other land hex fails as UnreachableLeg below.
-        var skipDestinationTerrainCheck = isFleet && mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid or ArmyMission.Found;
-        if (!skipDestinationTerrainCheck && !terrainAt(routeDestination).IsTraversable(isLandUnit))
+        if (!SkipsDestinationTerrainCheck(isFleet, mission) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
         {
             return DispatchDecision.Rejected(isFleet
                 ? DispatchRejection.DestinationNotSea
@@ -515,6 +438,135 @@ public sealed record Army
 
         return DispatchDecision.Accept(settlementDecision.Settlement!, army);
     }
+
+    /// <summary>
+    /// The mission and target rules a dispatch from home (<see cref="PlanDispatch"/>) and a field order
+    /// (<see cref="PlanFieldOrder"/>) both hold an army to, in one place: a fleet's passengers need ship slots, a
+    /// <see cref="ArmyMission.Hunt"/> needs a camp the units can reach (land units a land camp, ships a water camp), an
+    /// Attack/Support/Raid needs a target settlement other than the army's own, a target building only goes with
+    /// Attack/Raid, and a fleet Attack/Raid is always sent at one building on the target's shore.
+    /// </summary>
+    /// <param name="units">The units that will actually travel (zero-count stacks already dropped).</param>
+    /// <param name="homeSettlementId">The army's own settlement: "own settlement" means this one.</param>
+    /// <param name="destination">
+    /// The resolved destination: the target settlement's centre for Attack/Support/Raid, the camp's route hex for a Hunt,
+    /// the plain hex for a Move.
+    /// </param>
+    /// <returns>
+    /// The first rule broken, or <see cref="DispatchRejection.None"/> with the hex the route really ends on: the shore
+    /// building for a fleet Attack/Raid, otherwise <paramref name="destination"/>.
+    /// </returns>
+    private static (DispatchRejection Rejection, HexCoord RouteDestination) ValidateMissionTarget(
+        ArmyMission mission,
+        IReadOnlyList<UnitStack> units,
+        Guid homeSettlementId,
+        Guid? targetSettlementId,
+        HexCoord? targetBuildingCoord,
+        IReadOnlyList<(HexCoord Centre, int Radius)>? targetClaimDiscs,
+        HexCoord destination,
+        HexCoord? targetCampCoord,
+        bool targetCampIsWater,
+        Func<HexCoord, Terrain> terrainAt,
+        IGiantIndex? giants)
+    {
+        var classes = units.Select(s => UnitCatalogue.Get(s.Type).Class).ToHashSet();
+        var isFleet = classes.Contains(UnitClass.Ship);
+
+        if (isFleet)
+        {
+            // Passengers need slots on the ships, whatever the mission.
+            if (ShipCargo.SlotsNeeded(ShipCargo.Passengers(units)) > ShipCargo.SlotsOffered(units))
+            {
+                return (DispatchRejection.InsufficientShipCapacity, destination);
+            }
+        }
+
+        if (mission == ArmyMission.Hunt)
+        {
+            // The camp itself is looked up by the caller, which passes its hex as targetCampCoord only when one
+            // exists (and says whether it stands on the sea). Land units hunt land camps and fleets hunt water
+            // camps (the whale road); neither can reach the other's.
+            if (targetCampCoord is null)
+            {
+                return (DispatchRejection.NoCampAtDestination, destination);
+            }
+
+            if (isFleet && !targetCampIsWater)
+            {
+                return (DispatchRejection.HuntRequiresLandUnits, destination);
+            }
+
+            if (!isFleet && targetCampIsWater && classes.Count > 0)
+            {
+                return (DispatchRejection.HuntRequiresFleet, destination);
+            }
+        }
+
+        if (mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid)
+        {
+            if (targetSettlementId is null)
+            {
+                return (DispatchRejection.TargetSettlementRequired, destination);
+            }
+
+            if (targetSettlementId == homeSettlementId)
+            {
+                return (mission == ArmyMission.Support
+                    ? DispatchRejection.CannotSupportOwnSettlement
+                    : DispatchRejection.CannotAttackOwnSettlement, destination);
+            }
+        }
+
+        // Shape validation only — whether a building actually stands at this
+        // coordinate on the target settlement is checked at resolution time
+        // (see TargetBuildingCoord's remarks), since the layout can change
+        // before the army arrives. All this rejects is "a target building was
+        // named for a mission that has no battle to apply it in". Raid mirrors
+        // Attack here — a raid can carry catapults just as an attack can (the
+        // design doc places no restriction on this), even though it usually
+        // wouldn't.
+        if (targetBuildingCoord is not null && mission is not (ArmyMission.Attack or ArmyMission.Raid))
+        {
+            return (DispatchRejection.TargetBuildingRequiresAttackMission, destination);
+        }
+
+        // A fleet Attack/Raid is always sent at one building on the target's shore: it sails to that building's
+        // hex, the fight happens there, and a won fight damages only that building. The target's Longhouse may be
+        // inland. "On the shore" = inside the target's claim and either a shoreline land hex or a sea hex (the
+        // coastal-water buildings: Dockyard, Fishing Hut, Shrine of Njörd). Whether a building actually stands there
+        // is checked at arrival, like for catapults. Land armies are unaffected.
+        if (mission is ArmyMission.Attack or ArmyMission.Raid && isFleet)
+        {
+            if (targetBuildingCoord is not { } shoreBuilding)
+            {
+                return (DispatchRejection.FleetTargetBuildingRequired, destination);
+            }
+
+            IReadOnlyList<(HexCoord Centre, int Radius)> discs =
+                targetClaimDiscs is { Count: > 0 } ? targetClaimDiscs : [(destination, 0)];
+            // The territory rule, not the raw disc union: a giant hex only geometrically inside a disc but not
+            // actually claimed must not count as the defender's shore either.
+            var onShore = Territory.Claims(discs, shoreBuilding, giants ?? GiantIndex.Empty)
+                && (terrainAt(shoreBuilding) == Terrain.Sea || Shoreline.IsShoreline(shoreBuilding, terrainAt));
+            if (!onShore)
+            {
+                return (DispatchRejection.FleetTargetBuildingNotOnShore, destination);
+            }
+
+            return (DispatchRejection.None, shoreBuilding);
+        }
+
+        return (DispatchRejection.None, destination);
+    }
+
+    /// <summary>
+    /// Whether a route to <paramref name="mission"/>'s destination skips the generic "destination must be traversable
+    /// for this unit kind" check: a fleet landing on a settlement (Attack/Support/Raid) or on a founding site (Found)
+    /// ends on land, which is exactly the point (see <see cref="HexPathfinder.FindPath"/>'s beaching exemption at both
+    /// route endpoints). The real fleet-reachability gate for Attack/Raid is the shore-building check.
+    /// </summary>
+    private static bool SkipsDestinationTerrainCheck(bool isFleet, ArmyMission mission) =>
+        isFleet && mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid or ArmyMission.Found;
 
     /// <summary>
     /// Settles an <see cref="ArmyMission.Attack"/> or <see cref="ArmyMission.Raid"/>
@@ -1101,7 +1153,7 @@ public sealed record Army
         var isFleet = army.Stacks.Count > 0 && army.Stacks.Any(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Ship);
         var isLandUnit = !isFleet;
 
-        // Mirrors PlanDispatch's own skipDestinationTerrainCheck: an overland
+        // Mirrors PlanDispatch's own SkipsDestinationTerrainCheck: an overland
         // convoy's new target must itself be land; a sea convoy is exempt —
         // the beaching exemption baked into HexPathfinder/FindPath below
         // already requires the hex to be reachable by water, which is exactly
@@ -1370,12 +1422,12 @@ public sealed record Army
         : FieldOrderRejection.NoSeaRoute;
 
     /// <summary>
-    /// Orders an army already out in the field onward to a new destination
-    /// (issue #156 phase 1) — the gap the design doc opens with: an army that
-    /// has reached where it was sent could previously only be
-    /// <see cref="Recall"/>ed, never sent further. Two shapes, one method, per
-    /// the design doc's "an in-flight order may only extend the route, never
-    /// divert it" rule:
+    /// Orders an army already out in the field onward (issue #156) — the gap the design doc opens with: an army that
+    /// has reached where it was sent could previously only be <see cref="Recall"/>ed, never sent further. The order
+    /// carries a mission (<see cref="ArmyMission.Move"/>, Attack, Support, Hunt or Raid) held to exactly the same
+    /// target rules as a dispatch from home (<see cref="ValidateMissionTarget"/>), and — for a standing army only —
+    /// can take just part of it. Two shapes, one method, per the design doc's "an in-flight order may only extend the
+    /// route, never divert it" rule:
     /// <list type="bullet">
     /// <item>
     /// Standing at its current destination (<c>now &gt;= Movement.ArrivesAt</c>,
@@ -1397,24 +1449,56 @@ public sealed record Army
     /// <see cref="ArmyLocation.AtHome"/>, <see cref="ArmyLocation.Supporting"/>,
     /// or an already-returning <see cref="ArmyLocation.InTransit"/> — none of
     /// those have anywhere left to extend from (recall/re-dispatch cover them
-    /// instead). Restricted by the caller (<c>ArmyService</c>) to
-    /// <see cref="ArmyMission.Move"/>/<see cref="ArmyMission.Found"/> armies —
-    /// see <c>ArmyService.FieldOrderAsync</c>'s remarks for why Attack/Support/
-    /// Raid are out of scope here.
+    /// instead). Restricted by the caller (<c>ArmyService</c>) to armies whose current mission is
+    /// <see cref="ArmyMission.Move"/>/<see cref="ArmyMission.Found"/>; <see cref="ArmyMission.Found"/> is not an order
+    /// mission (founding from the field is <c>RetargetFounding</c>).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Split.</b> <paramref name="requestedUnits"/> names what leaves. Anything short of the whole army is a split,
+    /// allowed only while the army stands (<see cref="FieldOrderRejection.SplitRequiresStandingArmy"/> otherwise): the
+    /// leaving units become a new army (<paramref name="splitArmyId"/>, same home settlement) departing from here, and the
+    /// rest stay standing where they are with their existing <see cref="Movement"/> (the result's
+    /// <see cref="FieldOrderResult.Remainder"/>). For a fleet, both parts must still have ship slots for their passengers.
+    /// </para>
+    /// <para>
+    /// <b>Provisions.</b> The food on hand now is split by upkeep share: the leaving part takes
+    /// <c>upkeepLeaving / upkeepTotal</c> of it. <see cref="Provisions"/> of an in-transit army is the figure at departure
+    /// and its burn is derived from <see cref="TotalUpkeepPerHour"/>, so scaling the remainder's stored figure by its
+    /// share keeps its <see cref="ProvisionsAt"/> and its <see cref="Movement.TurnAroundAt"/> (which depends only on
+    /// provisions divided by upkeep) exactly as they were. Each part is capped at its own
+    /// <see cref="TotalFoodCarryCapacity"/>; whatever is over one part's cap goes to the other part, and is dropped if
+    /// that is full too. When the cap moved the remainder's food, its movement is rebuilt from the new figure so the
+    /// turn-around matches it. The leaving part must then pass the usual round-trip food check from where it stands
+    /// with its own share.
+    /// </para>
+    /// </remarks>
     /// <param name="isPremium">
     /// Gates the premium half of the design doc's rule table: waypoints on a
     /// "move on" order, and any "append goal" order at all, are premium-only
     /// (<see cref="FieldOrderRejection.PremiumRequired"/>) — a free "move on"
-    /// straight to a new hex, no waypoints, is the one case every player gets.
+    /// straight to a new hex, no waypoints, is the one case every player gets, whatever the mission.
     /// A pure boolean rather than a user id: whether the caller resolves that
     /// from a live premium check or a test fixture is not this method's
     /// concern (mirrors how <see cref="PlanDispatch"/> takes already-resolved
     /// <c>renownAndSlotAllowed</c> for the same reason).
     /// </param>
+    /// <param name="destination">
+    /// The resolved destination, as for <see cref="PlanDispatch"/>: the target settlement's centre for
+    /// Attack/Support/Raid, the camp's route hex (<see cref="HuntRouteDestination"/>) for a Hunt, the plain hex for a Move.
+    /// </param>
     /// <param name="home">The army's home settlement's own hex — needed to price the new return leg, exactly as <see cref="Recall"/> needs it.</param>
     /// <param name="isRiver">Optional river-tile lookup (issue #159 part A), threaded into every <see cref="HexPathfinder"/> call this makes.</param>
     /// <param name="isWideRiver">Optional wide-river lookup (impassable to a land army), threaded alongside <paramref name="isRiver"/>.</param>
+    /// <param name="mission">What the ordered army does on arrival; <see cref="ArmyMission.Found"/> is refused.</param>
+    /// <param name="targetSettlementId">The settlement to fight/support; required for Attack/Support/Raid.</param>
+    /// <param name="targetBuildingCoord">Attack/Raid only; always required for a fleet (see <see cref="PlanDispatch"/>).</param>
+    /// <param name="targetClaimDiscs">The target's claim discs, for the fleet shore rule — see <see cref="PlanDispatch"/>.</param>
+    /// <param name="targetCampCoord">The camp's hex for a Hunt, or <see langword="null"/> when no camp stands there.</param>
+    /// <param name="targetCampIsWater">Whether that camp stands on the sea.</param>
+    /// <param name="giants">Giant hexes, for the fleet shore rule's territory test.</param>
+    /// <param name="requestedUnits">What leaves; <see langword="null"/> means the whole army.</param>
+    /// <param name="splitArmyId">The id of the new army when this is a split.</param>
     public static FieldOrderResult PlanFieldOrder(
         Army army,
         IReadOnlyList<HexCoord> waypoints,
@@ -1426,7 +1510,16 @@ public sealed record Army
         double speedFactor = 1.0,
         Func<HexCoord, bool>? isRiver = null,
         Func<HexCoord, bool>? isWideRiver = null,
-        WallRules? walls = null)
+        WallRules? walls = null,
+        ArmyMission mission = ArmyMission.Move,
+        Guid? targetSettlementId = null,
+        HexCoord? targetBuildingCoord = null,
+        IReadOnlyList<(HexCoord Centre, int Radius)>? targetClaimDiscs = null,
+        HexCoord? targetCampCoord = null,
+        bool targetCampIsWater = false,
+        IGiantIndex? giants = null,
+        IReadOnlyList<UnitStack>? requestedUnits = null,
+        Guid? splitArmyId = null)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(waypoints);
@@ -1437,10 +1530,57 @@ public sealed record Army
             return FieldOrderResult.Rejected(FieldOrderRejection.NoActiveJourney);
         }
 
-        var movement = inTransit.Movement;
-        var isLandUnit = !army.IsFleet;
+        if (mission == ArmyMission.Found)
+        {
+            return FieldOrderResult.Rejected(FieldOrderRejection.MissionNotAllowed);
+        }
 
-        if (!terrainAt(destination).IsTraversable(isLandUnit))
+        var movement = inTransit.Movement;
+        var arrived = now >= movement.ArrivesAt;
+
+        // Which units leave: everything, or the named part (a split).
+        IReadOnlyList<UnitStack> leavingStacks = army.Stacks;
+        IReadOnlyList<UnitStack> remainingStacks = [];
+        if (requestedUnits is not null)
+        {
+            var selection = SelectUnits(army.Stacks, requestedUnits);
+            if (selection is null)
+            {
+                return FieldOrderResult.Rejected(FieldOrderRejection.InvalidUnitSelection);
+            }
+
+            leavingStacks = selection.Value.Leaving;
+            remainingStacks = selection.Value.Remaining;
+        }
+
+        var isSplit = remainingStacks.Count > 0;
+        if (isSplit && !arrived)
+        {
+            return FieldOrderResult.Rejected(FieldOrderRejection.SplitRequiresStandingArmy);
+        }
+
+        // Both parts of a fleet keep riding in ship slots: a part left with passengers but too few (or no) ships is refused.
+        if (isSplit && army.IsFleet
+            && (!HasSlotsForPassengers(leavingStacks) || !HasSlotsForPassengers(remainingStacks)))
+        {
+            return FieldOrderResult.Rejected(FieldOrderRejection.InsufficientShipCapacity);
+        }
+
+        var leaving = army with { Stacks = leavingStacks };
+        var isFleet = leaving.IsFleet;
+        var isLandUnit = !isFleet;
+
+        var target = ValidateMissionTarget(
+            mission, leavingStacks, army.SettlementId, targetSettlementId, targetBuildingCoord, targetClaimDiscs,
+            destination, targetCampCoord, targetCampIsWater, terrainAt, giants);
+        if (target.Rejection != DispatchRejection.None)
+        {
+            return FieldOrderResult.Rejected(ToFieldOrderRejection(target.Rejection));
+        }
+
+        var routeDestination = target.RouteDestination;
+
+        if (!SkipsDestinationTerrainCheck(isFleet, mission) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
         {
             return FieldOrderResult.Rejected(isLandUnit
                 ? FieldOrderRejection.DestinationNotLand
@@ -1456,8 +1596,6 @@ public sealed record Army
                     : FieldOrderRejection.WaypointNotSea);
             }
         }
-
-        var arrived = now >= movement.ArrivesAt;
 
         if (!arrived)
         {
@@ -1477,6 +1615,7 @@ public sealed record Army
         DateTimeOffset departedAt;
         double provisionsAtDeparture;
         List<HexCoord> fullPath;
+        Army? remainder = null;
 
         if (arrived)
         {
@@ -1484,7 +1623,12 @@ public sealed record Army
             departedAt = now;
             provisionsAtDeparture = army.ProvisionsAt(now);
 
-            List<HexCoord> stops = [fromHex, .. waypoints, destination];
+            if (isSplit)
+            {
+                (provisionsAtDeparture, remainder) = SplitStanding(army, leavingStacks, remainingStacks, now);
+            }
+
+            List<HexCoord> stops = [fromHex, .. waypoints, routeDestination];
             fullPath = [fromHex];
             for (var i = 0; i < stops.Count - 1; i++)
             {
@@ -1505,7 +1649,7 @@ public sealed record Army
             provisionsAtDeparture = army.Provisions;
 
             var originalDestination = movement.Path[^1];
-            List<HexCoord> stops = [originalDestination, .. waypoints, destination];
+            List<HexCoord> stops = [originalDestination, .. waypoints, routeDestination];
             fullPath = [.. movement.Path];
             for (var i = 0; i < stops.Count - 1; i++)
             {
@@ -1519,19 +1663,20 @@ public sealed record Army
             }
         }
 
-        var returnSearch = HexPathfinder.Search(destination, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnSearch = HexPathfinder.Search(routeDestination, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (returnSearch.Path is not { Count: > 0 } returnPath)
         {
             return FieldOrderResult.Rejected(NoRouteRejection(returnSearch, isLandUnit));
         }
 
-        var speed = army.TotalSpeed;
-        var upkeepPerHour = army.TotalUpkeepPerHour;
+        var speed = leaving.TotalSpeed;
+        var upkeepPerHour = leaving.TotalUpkeepPerHour;
         var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         var edgeHours = HexPathfinder.EdgeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         var returnEdgeHours = HexPathfinder.EdgeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
+        // The leaving part's own share of the food must carry it there and back from where it stands.
         var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
         if (provisionsAtDeparture < totalFoodNeeded)
         {
@@ -1541,14 +1686,133 @@ public sealed record Army
         var newMovement = Movement.Movement.Create(
             departedAt, fullPath, cumulativeHours, edgeHours, returnPath, returnCumulativeHours, returnEdgeHours, provisionsAtDeparture, upkeepPerHour);
 
-        var ordered = army with
+        var ordered = leaving with
         {
+            Id = isSplit ? splitArmyId ?? Guid.CreateVersion7() : army.Id,
             Location = new ArmyLocation.InTransit(newMovement),
             Provisions = provisionsAtDeparture,
+            Loot = isSplit ? default : army.Loot,
+            Mission = mission,
+            TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
+            TargetBuildingCoord = mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null,
+            TargetCampCoord = mission == ArmyMission.Hunt ? targetCampCoord : null,
         };
 
-        return FieldOrderResult.Accept(ordered);
+        return FieldOrderResult.Accept(ordered, remainder);
     }
+
+    /// <summary>
+    /// Splits <paramref name="requested"/> off <paramref name="stacks"/>, per type. <see langword="null"/> when the
+    /// selection is empty, names a type the army does not hold, or more of a type than it holds. An empty
+    /// <c>Remaining</c> means the selection is the whole army (no split).
+    /// </summary>
+    private static (IReadOnlyList<UnitStack> Leaving, IReadOnlyList<UnitStack> Remaining)? SelectUnits(
+        IReadOnlyList<UnitStack> stacks, IReadOnlyList<UnitStack> requested)
+    {
+        if (requested.Any(s => s.Count < 0))
+        {
+            return null;
+        }
+
+        var wanted = requested
+            .Where(s => s.Count > 0)
+            .GroupBy(s => s.Type)
+            .Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))
+            .ToList();
+        if (wanted.Count == 0)
+        {
+            return null;
+        }
+
+        var held = MergeStacksByType(stacks, []);
+        foreach (var stack in wanted)
+        {
+            if (held.FirstOrDefault(h => h.Type == stack.Type).Count < stack.Count)
+            {
+                return null;
+            }
+        }
+
+        return (wanted, SubtractStacks(held, wanted));
+    }
+
+    private static bool HasSlotsForPassengers(IReadOnlyList<UnitStack> part) =>
+        ShipCargo.SlotsNeeded(ShipCargo.Passengers(part)) <= ShipCargo.SlotsOffered(part);
+
+    /// <summary>
+    /// Divides a standing army's food between the part that leaves and the part that stays (see
+    /// <see cref="PlanFieldOrder"/>'s remarks): by upkeep share, each part capped at its own carry capacity, the excess of
+    /// one going to the other. Returns what the leaving part departs with and the remainder army, whose stored
+    /// <see cref="Provisions"/> keeps <see cref="ProvisionsAt"/> and <see cref="Movement.TurnAroundAt"/> consistent.
+    /// </summary>
+    private static (double LeavingFood, Army Remainder) SplitStanding(
+        Army army, IReadOnlyList<UnitStack> leavingStacks, IReadOnlyList<UnitStack> remainingStacks, DateTimeOffset now)
+    {
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+        var leaving = army with { Stacks = leavingStacks };
+        var staying = army with { Stacks = remainingStacks };
+
+        var foodNow = army.ProvisionsAt(now);
+        var totalUpkeep = army.TotalUpkeepPerHour;
+        var leavingShare = totalUpkeep > 0
+            ? leaving.TotalUpkeepPerHour / totalUpkeep
+            : leavingStacks.Sum(s => s.Count) / (double)army.Stacks.Sum(s => s.Count);
+
+        var proportionalStayingFood = foodNow * (1 - leavingShare);
+        var leavingFood = foodNow * leavingShare;
+        var stayingFood = foodNow - leavingFood;
+
+        var leavingCap = leaving.TotalFoodCarryCapacity;
+        var stayingCap = staying.TotalFoodCarryCapacity;
+        if (leavingFood > leavingCap)
+        {
+            stayingFood += leavingFood - leavingCap;
+            leavingFood = leavingCap;
+        }
+
+        if (stayingFood > stayingCap)
+        {
+            leavingFood = Math.Min(leavingCap, leavingFood + (stayingFood - stayingCap));
+            stayingFood = stayingCap;
+        }
+
+        // The remainder keeps its Movement. Its stored (departure) figure is scaled by its share: with burn derived from
+        // its own upkeep, ProvisionsAt(now) and the turn-around (departure + provisions / upkeep - way home) are then
+        // exactly what they were. Only when capping moved its food is the movement rebuilt from the new figure.
+        Army remainder;
+        if (Math.Abs(stayingFood - proportionalStayingFood) < 1e-9)
+        {
+            remainder = staying with { Provisions = army.Provisions * (1 - leavingShare) };
+        }
+        else
+        {
+            var stayingUpkeep = staying.TotalUpkeepPerHour;
+            var hoursSinceDeparture = Math.Max(0, (now - movement.DepartedAt).TotalHours);
+            var storedFood = stayingFood + (stayingUpkeep * hoursSinceDeparture);
+            var rebuilt = Movement.Movement.Create(
+                movement.DepartedAt, movement.Path, movement.CumulativeHours, movement.EdgeHours,
+                movement.ReturnPath, movement.ReturnCumulativeHours, movement.ReturnEdgeHours, storedFood, stayingUpkeep);
+            remainder = staying with { Provisions = storedFood, Location = new ArmyLocation.InTransit(rebuilt) };
+        }
+
+        return (leavingFood, remainder);
+    }
+
+    /// <summary>The field-order name of a rule <see cref="ValidateMissionTarget"/> broke (the names match the dispatch ones).</summary>
+    private static FieldOrderRejection ToFieldOrderRejection(DispatchRejection rejection) => rejection switch
+    {
+        DispatchRejection.TargetSettlementRequired => FieldOrderRejection.TargetSettlementRequired,
+        DispatchRejection.CannotAttackOwnSettlement => FieldOrderRejection.CannotAttackOwnSettlement,
+        DispatchRejection.CannotSupportOwnSettlement => FieldOrderRejection.CannotSupportOwnSettlement,
+        DispatchRejection.NoCampAtDestination => FieldOrderRejection.NoCampAtDestination,
+        DispatchRejection.HuntRequiresLandUnits => FieldOrderRejection.HuntRequiresLandUnits,
+        DispatchRejection.HuntRequiresFleet => FieldOrderRejection.HuntRequiresFleet,
+        DispatchRejection.TargetBuildingRequiresAttackMission => FieldOrderRejection.TargetBuildingRequiresAttackMission,
+        DispatchRejection.FleetTargetBuildingRequired => FieldOrderRejection.FleetTargetBuildingRequired,
+        DispatchRejection.FleetTargetBuildingNotOnShore => FieldOrderRejection.FleetTargetBuildingNotOnShore,
+        DispatchRejection.InsufficientShipCapacity => FieldOrderRejection.InsufficientShipCapacity,
+        _ => throw new ArgumentOutOfRangeException(nameof(rejection), rejection, "Not a rule ValidateMissionTarget can break."),
+    };
 
     /// <summary>
     /// Admin god-mode "speed up": slides the whole active leg along the time
@@ -1802,7 +2066,7 @@ public sealed record RetargetFoundingResult(RetargetFoundingRejection Rejection,
     public static RetargetFoundingResult Accept(Army army) => new(RetargetFoundingRejection.None, army);
 }
 
-/// <summary>Why <see cref="Army.PlanFieldOrder"/> was refused (issue #156 phase 1).</summary>
+/// <summary>Why <see cref="Army.PlanFieldOrder"/> was refused (issue #156).</summary>
 public enum FieldOrderRejection
 {
     None = 0,
@@ -1811,14 +2075,56 @@ public enum FieldOrderRejection
     NoActiveJourney,
 
     /// <summary>
-    /// Only <see cref="ArmyMission.Move"/>/<see cref="ArmyMission.Found"/>
-    /// armies can take a field order — checked by the caller
-    /// (<c>ArmyService.FieldOrderAsync</c>), not <see cref="Army.PlanFieldOrder"/>
-    /// itself, since redirecting an Attack/Support/Raid army mid-march needs
-    /// the same target-settlement re-validation <see cref="PlanDispatch"/>
-    /// already does and is explicitly out of scope for issue #156 phase 1.
+    /// Only <see cref="ArmyMission.Move"/>/<see cref="ArmyMission.Found"/> armies can take a field order — checked by
+    /// the caller (<c>ArmyService.FieldOrderAsync</c>), not <see cref="Army.PlanFieldOrder"/> itself: an army that
+    /// already fights, hunts, supports or raids is on its way to that and finishes it (or is recalled).
     /// </summary>
     MissionNotFieldOrderable,
+
+    /// <summary>The order's mission is <see cref="ArmyMission.Found"/>; founding from the field is a retarget, not a field order.</summary>
+    MissionNotAllowed,
+
+    /// <summary>A <see cref="ArmyMission.Move"/> or <see cref="ArmyMission.Hunt"/> order named no destination.</summary>
+    DestinationRequired,
+
+    /// <summary>An Attack/Support/Raid order named no target settlement.</summary>
+    TargetSettlementRequired,
+
+    /// <summary>The named target settlement does not exist (in this world).</summary>
+    TargetSettlementNotFound,
+
+    /// <summary>An army cannot attack or raid its own home settlement.</summary>
+    CannotAttackOwnSettlement,
+
+    /// <summary>An army cannot support its own home settlement.</summary>
+    CannotSupportOwnSettlement,
+
+    /// <summary>A <see cref="ArmyMission.Hunt"/> order's destination holds no wildlife camp.</summary>
+    NoCampAtDestination,
+
+    /// <summary>A hunt by ships named a land camp; fleets only hunt water camps.</summary>
+    HuntRequiresLandUnits,
+
+    /// <summary>A hunt by land units named a water camp; only fleets reach one.</summary>
+    HuntRequiresFleet,
+
+    /// <summary>A target building was named for a mission other than Attack/Raid.</summary>
+    TargetBuildingRequiresAttackMission,
+
+    /// <summary>A fleet Attack/Raid named no target building on the target's shore.</summary>
+    FleetTargetBuildingRequired,
+
+    /// <summary>A fleet Attack/Raid's target building is not on the target's shore.</summary>
+    FleetTargetBuildingNotOnShore,
+
+    /// <summary>A fleet (or, for a split, one of its two parts) has more passengers than its ships have slots for.</summary>
+    InsufficientShipCapacity,
+
+    /// <summary>Only part of an army was ordered while it is still marching; only a standing army can be split.</summary>
+    SplitRequiresStandingArmy,
+
+    /// <summary>The selected units are empty, of a type the army does not hold, or more than it holds.</summary>
+    InvalidUnitSelection,
 
     DestinationNotLand,
     DestinationNotSea,
@@ -1842,13 +2148,18 @@ public enum FieldOrderRejection
 }
 
 /// <summary>The outcome of asking to send an already-fielded army onward — mirrors <see cref="RetargetFoundingResult"/>.</summary>
-public sealed record FieldOrderResult(FieldOrderRejection Rejection, Army? Army = null)
+/// <param name="Rejection">Why the order was refused, or <see cref="FieldOrderRejection.None"/>.</param>
+/// <param name="Army">The army that leaves: the ordered army itself, or, for a split, the new army made of the selected units.</param>
+/// <param name="Remainder">
+/// For a split, the part that stays where it is (same id as the army that was ordered); <see langword="null"/> when the whole army was ordered.
+/// </param>
+public sealed record FieldOrderResult(FieldOrderRejection Rejection, Army? Army = null, Army? Remainder = null)
 {
     public bool Accepted => Rejection == FieldOrderRejection.None && Army is not null;
 
     public static FieldOrderResult Rejected(FieldOrderRejection reason) => new(reason);
 
-    public static FieldOrderResult Accept(Army army) => new(FieldOrderRejection.None, army);
+    public static FieldOrderResult Accept(Army army, Army? remainder = null) => new(FieldOrderRejection.None, army, remainder);
 }
 
 /// <summary>Why a dispatch was refused.</summary>

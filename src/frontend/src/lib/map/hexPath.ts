@@ -142,20 +142,29 @@ export function timeOnHex(path: readonly AxialCoord[], i: number, ctx: PathConte
   return leave === null || enter === null ? Number.POSITIVE_INFINITY : (leave + enter) / 2;
 }
 
-/** Binary min-heap keyed by priority — Dijkstra's usual decrease-key stand-in (push a new entry, ignore stale pops). */
-class MinHeap<T> {
-  private items: { priority: number; value: T }[] = [];
+/**
+ * Binary min-heap keyed by priority — Dijkstra's usual decrease-key stand-in (push a new entry, ignore stale pops).
+ * Priorities compare numerically unless a `less` comparator is passed (findPath's tuple key).
+ */
+class MinHeap<T, P = number> {
+  private items: { priority: P; value: T }[] = [];
+
+  private readonly less: (a: P, b: P) => boolean;
+
+  constructor(less: (a: P, b: P) => boolean = (a, b) => (a as number) < (b as number)) {
+    this.less = less;
+  }
 
   get size(): number {
     return this.items.length;
   }
 
-  push(value: T, priority: number): void {
+  push(value: T, priority: P): void {
     this.items.push({ value, priority });
     let i = this.items.length - 1;
     while (i > 0) {
       const parent = (i - 1) >> 1;
-      if (this.items[parent].priority <= this.items[i].priority) break;
+      if (!this.less(this.items[i].priority, this.items[parent].priority)) break;
       [this.items[parent], this.items[i]] = [this.items[i], this.items[parent]];
       i = parent;
     }
@@ -172,8 +181,8 @@ class MinHeap<T> {
         const l = i * 2 + 1;
         const r = i * 2 + 2;
         let smallest = i;
-        if (l < this.items.length && this.items[l].priority < this.items[smallest].priority) smallest = l;
-        if (r < this.items.length && this.items[r].priority < this.items[smallest].priority) smallest = r;
+        if (l < this.items.length && this.less(this.items[l].priority, this.items[smallest].priority)) smallest = l;
+        if (r < this.items.length && this.less(this.items[r].priority, this.items[smallest].priority)) smallest = r;
         if (smallest === i) break;
         [this.items[smallest], this.items[i]] = [this.items[i], this.items[smallest]];
         i = smallest;
@@ -266,14 +275,47 @@ export function reachableRange(
 export const MAX_EXPANDED_NODES = 20_000;
 
 /**
+ * Open-set order of `findPath`, ascending (the C# twin is `HexPathfinder.OpenKey`): f = g + h, then h (of two equal-f
+ * hexes the one further along goes first), then the hex's distance from the straight start-to-goal line (axial cross
+ * product), then q, then r so the order never depends on heap internals.
+ */
+type OpenKey = readonly [f: number, h: number, lineDeviation: number, q: number, r: number];
+
+function openKey(n: AxialCoord, g: number, from: AxialCoord, to: AxialCoord): OpenKey {
+  const h = hexDistance(n, to);
+  const deviation = Math.abs((n.q - from.q) * (to.r - from.r) - (n.r - from.r) * (to.q - from.q));
+  return [g + h, h, deviation, n.q, n.r];
+}
+
+function openKeyLess(a: OpenKey, b: OpenKey): boolean {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return a[i]! < b[i]!;
+  }
+  return false;
+}
+
+/**
  * Cheapest land route from `from` to `to` (both included), or `null` if there is none: the TS
  * twin of `HexPathfinder.FindPath` for land armies. Same A* (plain hex distance as the
  * heuristic), same endpoint check (both must be land terrain),
- * same bounding box (the endpoints padded by their distance, at least 10) and expansion cap.
+ * same open-set order (f, then h, then distance from the start-to-goal line, then q and r), same bounding box (the endpoints padded by their distance, at least 10) and expansion cap.
  * Prices exactly what the backend does; `ctx.restrictions` can add a palisade or (preview tool only) switch a rule off.
  */
 export function findPath(from: AxialCoord, to: AxialCoord, ctx: PathContext): AxialCoord[] | null {
   if (ctx.rules.land[ctx.terrainAt(from)] === undefined || ctx.rules.land[ctx.terrainAt(to)] === undefined) return null;
+  return aStar(from, to, (a, b) => halfAndHalf(a, b, ctx));
+}
+
+/**
+ * The one A* loop behind `findPath` and `findSeaPath` (the backend's `HexPathfinder.FindPath` is likewise one loop with two cost
+ * tables): plain hex distance as the heuristic, the endpoints padded by their distance (at least 10) as the bounding box, and
+ * `MAX_EXPANDED_NODES` as the expansion cap. `step` prices the move between two neighbours, `null` when it is impassable.
+ */
+function aStar(
+  from: AxialCoord,
+  to: AxialCoord,
+  step: (a: AxialCoord, b: AxialCoord) => number | null,
+): AxialCoord[] | null {
   if (from.q === to.q && from.r === to.r) return [from];
 
   const padding = Math.max(10, hexDistance(from, to));
@@ -282,11 +324,11 @@ export function findPath(from: AxialCoord, to: AxialCoord, ctx: PathContext): Ax
   const rMin = Math.min(from.r, to.r) - padding;
   const rMax = Math.max(from.r, to.r) + padding;
 
-  const open = new MinHeap<AxialCoord>();
+  const open = new MinHeap<AxialCoord, OpenKey>(openKeyLess);
   const g = new Map<string, number>([[coordKey(from), 0]]);
   const cameFrom = new Map<string, AxialCoord>();
   const closed = new Set<string>();
-  open.push(from, hexDistance(from, to));
+  open.push(from, openKey(from, 0, from, to));
   let expanded = 0;
 
   for (let current = open.pop(); current; current = open.pop()) {
@@ -305,14 +347,14 @@ export function findPath(from: AxialCoord, to: AxialCoord, ctx: PathContext): Ax
       if (n.q < qMin || n.q > qMax || n.r < rMin || n.r > rMax) continue;
       const nKey = coordKey(n);
       if (closed.has(nKey)) continue;
-      const step = halfAndHalf(current, n, ctx);
-      if (step === null) continue;
-      const tentative = g.get(currentKey)! + step;
+      const cost = step(current, n);
+      if (cost === null) continue;
+      const tentative = g.get(currentKey)! + cost;
       const existing = g.get(nKey);
       if (existing !== undefined && tentative >= existing) continue;
       g.set(nKey, tentative);
       cameFrom.set(nKey, current);
-      open.push(n, tentative + hexDistance(n, to));
+      open.push(n, openKey(n, tentative, from, to));
     }
   }
   return null;
@@ -340,4 +382,17 @@ export function reachableFrom(origin: AxialCoord, ctx: PathContext, limit = 200_
     }
   }
   return seen;
+}
+
+/**
+ * Shortest route for a fleet from `from` to `to` (both included), or `null` if there is none: the TS twin of `HexPathfinder.FindPath`
+ * for ships. Open sea costs a flat 1.0 per hex (`SeaTerrainCost`) and the two endpoints are exempt from the sea-only rule (a harbour or
+ * beaching hex, the shore a fleet is sent at), so every hex in between has to be sea. Same bounding box and expansion cap as `findPath`.
+ */
+export function findSeaPath(
+  from: AxialCoord,
+  to: AxialCoord,
+  terrainAt: (c: AxialCoord) => Terrain,
+): AxialCoord[] | null {
+  return aStar(from, to, (_, b) => ((b.q === to.q && b.r === to.r) || terrainAt(b) === 'sea' ? 1 : null));
 }

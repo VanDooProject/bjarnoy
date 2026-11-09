@@ -370,7 +370,15 @@ and treats as out of scope: whether the settlement-listing endpoints
 *other* callers use (world map view, guild rosters, etc., for an
 authenticated player who has already founded) are properly scoped. That's
 an existing-endpoint audit; the landing-page fix above is scoped narrowly
-to the one genuinely pre-authentication, current-state-exposing path.
+to the one genuinely pre-authentication, current-state-exposing path. (Since resolved for rival settlements: see §1g.)
+
+### 1g. Rival settlements: per-hex gate
+
+A rival settlement is delivered to a player as soon as its Longhouse centre or any of its standing buildings lies in the
+player's explored area. What is delivered is decided hex by hex: a rival building is only sent when its own hex is explored,
+so nothing about an unexplored hex (type, level) leaves the server. The summary of a visible rival is full: name, owner,
+relation, Longhouse position and level. Its label sits on the Longhouse when that hex is explored, otherwise on the explored
+standing building closest to it (ties go to the lower q, then r). A foundation (level 0) alone does not make a rival visible.
 
 ### 1g. Foreign troops
 

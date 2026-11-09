@@ -484,20 +484,27 @@ export interface SettlementSummary {
   mine: boolean;
   /** How the owner stands to the caller: `mine`, `guild` (same guild), `treaty` (guild with an active peace treaty) or `rival`. */
   relation: 'mine' | 'guild' | 'treaty' | 'rival';
+  /**
+   * The hex the label goes on, decided by the server: the centre for the caller's own settlements and for a rival whose centre is
+   * explored, else the explored standing building of a rival closest to its centre.
+   */
+  labelQ: number;
+  labelR: number;
 }
 
 /**
- * Mirrors `WallResponse` (`GET /worlds/{id}/walls`): one standing wall hex of another player's settlement, fog-gated like
- * the settlement list. `ownerUserId` is null for an anonymous settlement.
+ * Mirrors `RivalBuildingResponse` (`GET /worlds/{id}/rival-buildings`): one standing building of another player's settlement on a
+ * hex the caller has explored (every building type, the caller's own settlements left out). `ownerUserId` is null for an anonymous
+ * settlement.
  */
-export interface WorldWall {
+export interface RivalBuilding {
   q: number;
   r: number;
-  type: 'palisade' | 'palisadegate';
+  type: string;
   level: number;
   settlementId: string;
   ownerUserId: string | null;
-  /** The wall's hex lies outside its owner's realm: a gate there has no function and is open to every army. */
+  /** The building's hex lies outside its owner's realm: a gate there has no function and is open to every army. */
   outsideRealm?: boolean;
 }
 
@@ -1570,13 +1577,18 @@ export interface DispatchArmyRequest {
 }
 
 /**
- * Sends an army already out in the field onward to a new hex (issue #156
- * phase 1) — "move on" when it's standing at its destination, "append goal"
- * when it's still travelling. Mirrors `FieldOrderRequest`.
+ * Sends an army already out in the field onward (issue #156 phase 1) — "move on" when it's standing at its destination, "append
+ * goal" when it's still travelling — on any mission, and a standing army optionally only in part. Mirrors `FieldOrderRequest`.
+ * `destination` is required for move and hunt (the camp's hex); an attack or support derives it from `targetSettlementId`.
+ * `units` omitted sends the whole army; fewer split it (a standing army only).
  */
 export interface FieldOrderRequest {
   waypoints?: HexPoint[];
-  destination: HexPoint;
+  destination?: HexPoint;
+  mission?: 'move' | 'attack' | 'support' | 'hunt';
+  targetSettlementId?: string;
+  targetBuildingCoord?: HexPoint;
+  units?: { unit: string; count: number }[];
 }
 
 /**
