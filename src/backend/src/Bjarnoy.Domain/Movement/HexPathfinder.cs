@@ -275,6 +275,18 @@ public static class HexPathfinder
         HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt, bool isLandUnit,
         Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null,
         Func<HexCoord, bool>? blocked = null, Func<HexCoord, bool>? friendlyGate = null,
+        Func<HexCoord, bool>? halfOpen = null, Func<HexCoord, double?>? bridgeCost = null) =>
+        Search(from, to, terrainAt, isLandUnit, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost).Path;
+
+    /// <summary>
+    /// <see cref="FindPath"/> with the reason for a missing route: <see cref="PathSearch.LimitReached"/> is
+    /// <see langword="true"/> when the search gave up at <see cref="MaxExpandedNodes"/> instead of proving that
+    /// no route exists, i.e. the trip is too long to plan rather than cut off.
+    /// </summary>
+    public static PathSearch Search(
+        HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt, bool isLandUnit,
+        Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null,
+        Func<HexCoord, bool>? blocked = null, Func<HexCoord, bool>? friendlyGate = null,
         Func<HexCoord, bool>? halfOpen = null, Func<HexCoord, double?>? bridgeCost = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
@@ -288,12 +300,12 @@ public static class HexPathfinder
         // endpoints are deliberately exempt from the sea-only rule.
         if (isLandUnit && (!costTable.ContainsKey(terrainAt(from)) || !costTable.ContainsKey(terrainAt(to))))
         {
-            return null;
+            return new PathSearch(null, false);
         }
 
         if (from == to)
         {
-            return [from];
+            return new PathSearch([from], false);
         }
 
         // A bounding box around the two endpoints, padded generously — the
@@ -324,12 +336,12 @@ public static class HexPathfinder
 
             if (current == to)
             {
-                return Reconstruct(cameFrom, current);
+                return new PathSearch(Reconstruct(cameFrom, current), false);
             }
 
             if (++expanded > MaxExpandedNodes)
             {
-                return null;
+                return new PathSearch(null, true);
             }
 
             foreach (var neighbour in current.Neighbours())
@@ -385,7 +397,7 @@ public static class HexPathfinder
             }
         }
 
-        return null;
+        return new PathSearch(null, false);
     }
 
     /// <summary>
@@ -530,3 +542,10 @@ public static class HexPathfinder
         return (hours, edges);
     }
 }
+
+/// <summary>The outcome of <see cref="HexPathfinder.Search"/>: the route, or why there is none.</summary>
+/// <param name="Path">The route, or <see langword="null"/> when none was found.</param>
+/// <param name="LimitReached">
+/// <see langword="true"/> when the search stopped at the node cap, so a route may exist but is too long to plan.
+/// </param>
+public readonly record struct PathSearch(IReadOnlyList<HexCoord>? Path, bool LimitReached);
