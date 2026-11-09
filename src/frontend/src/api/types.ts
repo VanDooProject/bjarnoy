@@ -484,6 +484,28 @@ export interface SettlementSummary {
   mine: boolean;
   /** How the owner stands to the caller: `mine`, `guild` (same guild), `treaty` (guild with an active peace treaty) or `rival`. */
   relation: 'mine' | 'guild' | 'treaty' | 'rival';
+  /**
+   * The hex the label goes on, decided by the server: the centre for the caller's own settlements and for a rival whose centre is
+   * explored, else the explored standing building of a rival closest to its centre.
+   */
+  labelQ: number;
+  labelR: number;
+}
+
+/**
+ * Mirrors `RivalBuildingResponse` (`GET /worlds/{id}/rival-buildings`): one standing building of another player's settlement on a
+ * hex the caller has explored (every building type, the caller's own settlements left out). `ownerUserId` is null for an anonymous
+ * settlement.
+ */
+export interface RivalBuilding {
+  q: number;
+  r: number;
+  type: string;
+  level: number;
+  settlementId: string;
+  ownerUserId: string | null;
+  /** The building's hex lies outside its owner's realm: a gate there has no function and is open to every army. */
+  outsideRealm?: boolean;
 }
 
 /**
