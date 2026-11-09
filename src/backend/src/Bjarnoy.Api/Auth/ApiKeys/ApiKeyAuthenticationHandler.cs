@@ -41,6 +41,9 @@ public sealed class ApiKeyAuthenticationHandler(
 
     public const string HeaderName = "X-Api-Key";
 
+    /// <summary>Names the account of a multi-account key a request acts as; absent means the key owner.</summary>
+    public const string ActAsHeaderName = "X-Act-As";
+
     /// <summary>How often a key's <see cref="ApiKeyEntity.LastUsedAt"/> is rewritten at most.</summary>
     private static readonly TimeSpan LastUsedGranularity = TimeSpan.FromMinutes(1);
 
@@ -84,6 +87,7 @@ public sealed class ApiKeyAuthenticationHandler(
         var key = await dbContext.ApiKeys
             .AsNoTracking()
             .Include(k => k.OwnerUser)
+            .Include(k => k.Accounts).ThenInclude(a => a.User)
             .FirstOrDefaultAsync(k => k.KeyId == keyId, cancellationToken);
 
         // The same answer for "no such key" and "wrong secret": nothing to tell a prober apart.
@@ -101,10 +105,30 @@ public sealed class ApiKeyAuthenticationHandler(
                 return Failed("API key expired.");
         }
 
+        // Every request is evaluated as exactly one account: the owner, or one of the key's extra accounts picked by
+        // name with X-Act-As. Never a union of accounts.
         var owner = key.OwnerUser!;
-        if (owner.Status == UserStatus.Banned)
+        var acting = owner;
+        var requested = Request.Headers[ActAsHeaderName].ToString().Trim();
+        if (requested.Length > 0)
         {
-            return Failed("API key owner is banned.");
+            acting = new[] { owner }
+                .Concat(key.Accounts.Select(a => a.User!))
+                .FirstOrDefault(u => string.Equals(u.UserName, requested, StringComparison.OrdinalIgnoreCase));
+            if (acting is null)
+            {
+                // Same answer for "no such account" and "not one of this key's accounts": nothing to enumerate.
+                Logger.LogWarning(
+                    "API key {ApiKeyName} ({ApiKeyId}) asked to act as {RequestedAccount}, which is not one of its accounts.",
+                    key.Name, key.Id, requested);
+                Context.Items[ApiKeyContext.ForbiddenItemKey] = "Account not allowed for this API key.";
+                return AuthenticateResult.Fail("Account not allowed for this API key.");
+            }
+        }
+
+        if (acting.Status == UserStatus.Banned)
+        {
+            return Failed("API key account is banned.");
         }
 
         if (key.LastUsedAt is null || now - key.LastUsedAt.Value >= LastUsedGranularity)
@@ -113,20 +137,20 @@ public sealed class ApiKeyAuthenticationHandler(
                 .Where(k => k.Id == key.Id)
                 .ExecuteUpdateAsync(s => s.SetProperty(k => k.LastUsedAt, now), cancellationToken);
             Logger.LogInformation(
-                "API key {ApiKeyName} ({ApiKeyId}) used as {OwnerUserName} ({OwnerUserId}).",
-                key.Name, key.Id, owner.UserName, owner.Id);
+                "API key {ApiKeyName} ({ApiKeyId}) used as {ActingUserName} ({ActingUserId}).",
+                key.Name, key.Id, acting.UserName, acting.Id);
         }
 
         var hasAdminFeature = key.Features.Keys.Any(f => ApiKeyFeature.Find(f)?.Admin == true);
         var claims = new List<Claim>
         {
-            new(ClaimTypes.NameIdentifier, owner.Id.ToString()),
-            new("sub", owner.Id.ToString()),
-            new("unique_name", owner.UserName),
+            new(ClaimTypes.NameIdentifier, acting.Id.ToString()),
+            new("sub", acting.Id.ToString()),
+            new("unique_name", acting.UserName),
             new(ApiKeyClaims.ApiKeyId, key.Id.ToString()),
             new(ApiKeyClaims.ApiKeyName, key.Name),
         };
-        if (owner.Role == UserRole.Admin && hasAdminFeature)
+        if (acting.Role == UserRole.Admin && hasAdminFeature)
         {
             claims.Add(new Claim(ClaimTypes.Role, nameof(UserRole.Admin)));
         }
@@ -136,6 +160,7 @@ public sealed class ApiKeyAuthenticationHandler(
             key.KeyId,
             key.Name,
             owner.Id,
+            acting.Id,
             key.Features,
             key.AllWorlds,
             key.WorldIds.ToHashSet(),
@@ -143,6 +168,7 @@ public sealed class ApiKeyAuthenticationHandler(
 
         Activity.Current?.SetTag("bjarnoy.api_key.id", key.Id.ToString());
         Activity.Current?.SetTag("bjarnoy.api_key.name", key.Name);
+        Activity.Current?.SetTag("bjarnoy.api_key.acting_user_id", acting.Id.ToString());
 
         var identity = new ClaimsIdentity(claims, SchemeName);
         return AuthenticateResult.Success(

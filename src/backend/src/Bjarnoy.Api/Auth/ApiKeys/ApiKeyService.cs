@@ -19,7 +19,8 @@ public sealed record ApiKeySettings(
     IReadOnlyList<Guid> WorldIds,
     DateTimeOffset ExpiresAt,
     int RequestsPerMinute,
-    DateTimeOffset? AutoRenewUntil);
+    DateTimeOffset? AutoRenewUntil,
+    IReadOnlyList<Guid>? AdditionalUserIds = null);
 
 /// <summary>The outcome of <see cref="ApiKeyService.ValidateAsync"/>: field errors, empty when the settings are valid.</summary>
 public sealed record ApiKeyValidation(IReadOnlyDictionary<string, string[]> Errors)
@@ -41,6 +42,9 @@ public sealed class ApiKeyService(
     IOptions<ApiKeyOptions> options,
     ILogger<ApiKeyService> logger)
 {
+    /// <summary>How many extra accounts one key may act as, besides its owner.</summary>
+    public const int MaxAdditionalAccounts = 10;
+
     private readonly ApiKeyOptions _options = options.Value;
 
     /// <summary>Drops <see cref="ApiKeyAccess.None"/> entries; what is left is what a key stores.</summary>
@@ -129,19 +133,74 @@ public sealed class ApiKeyService(
             errors["requestsPerMinute"] = [$"Requests per minute must be between 1 and {_options.MaxRequestsPerMinute}."];
         }
 
-        if (owner is not null && !errors.ContainsKey("ownerUserId"))
+        if (owner is not null && !errors.ContainsKey("ownerUserId")
+            && await IsAtCapAsync(owner.Id, excludeKeyId, now, cancellationToken))
         {
-            var ownersKeys = await dbContext.ApiKeys.AsNoTracking()
-                .Where(k => k.OwnerUserId == owner.Id && k.Id != excludeKeyId && k.RevokedAt == null)
-                .Select(k => k.ExpiresAt)
-                .ToListAsync(cancellationToken);
-            if (ownersKeys.Count(expiry => expiry > now) >= _options.MaxActiveKeysPerOwner)
+            errors["ownerUserId"] = [$"This user already has {_options.MaxActiveKeysPerOwner} active API keys."];
+        }
+
+        var additional = settings.AdditionalUserIds ?? [];
+        if (additional.Count > MaxAdditionalAccounts)
+        {
+            errors["additionalUserIds"] = [$"A key may act as at most {MaxAdditionalAccounts} further accounts."];
+        }
+        else if (additional.Count > 0)
+        {
+            var extraErrors = await ValidateAdditionalAsync(
+                settings.OwnerUserId, additional, excludeKeyId, now, cancellationToken);
+            if (extraErrors.Count > 0)
             {
-                errors["ownerUserId"] = [$"This user already has {_options.MaxActiveKeysPerOwner} active API keys."];
+                errors["additionalUserIds"] = [.. extraErrors];
             }
         }
 
         return new ApiKeyValidation(errors);
+    }
+
+    private async Task<List<string>> ValidateAdditionalAsync(
+        Guid ownerId, IReadOnlyList<Guid> additional, Guid? excludeKeyId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var errors = new List<string>();
+        if (additional.Distinct().Count() != additional.Count)
+        {
+            errors.Add("An account may be listed only once.");
+        }
+
+        var users = await dbContext.Users.AsNoTracking()
+            .Where(u => additional.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, cancellationToken);
+        foreach (var id in additional.Distinct())
+        {
+            if (id == ownerId)
+            {
+                errors.Add("The owner is already an account of the key; list only the further ones.");
+            }
+            else if (!users.TryGetValue(id, out var user) || user.IsSystem)
+            {
+                errors.Add($"Unknown account {id}.");
+            }
+            else if (user.Status == UserStatus.Banned)
+            {
+                errors.Add($"{user.UserName} is banned and cannot be an account of an API key.");
+            }
+            else if (await IsAtCapAsync(id, excludeKeyId, now, cancellationToken))
+            {
+                errors.Add($"{user.UserName} already has {_options.MaxActiveKeysPerOwner} active API keys.");
+            }
+        }
+
+        return errors;
+    }
+
+    /// <summary>A key counts against every account it can act as, so the cap covers owned and extra accounts alike.</summary>
+    private async Task<bool> IsAtCapAsync(Guid userId, Guid? excludeKeyId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var expiries = await dbContext.ApiKeys.AsNoTracking()
+            .Where(k => (k.OwnerUserId == userId || k.Accounts.Any(a => a.UserId == userId))
+                && k.Id != excludeKeyId && k.RevokedAt == null)
+            .Select(k => k.ExpiresAt)
+            .ToListAsync(cancellationToken);
+        return expiries.Count(expiry => expiry > now) >= _options.MaxActiveKeysPerOwner;
     }
 
     /// <summary>Feature-map errors only (known ids, a level other than None, at least one feature).</summary>
@@ -193,6 +252,7 @@ public sealed class ApiKeyService(
             ExpiresAt = settings.ExpiresAt,
             AutoRenewUntil = settings.AutoRenewUntil,
             Purpose = string.IsNullOrWhiteSpace(settings.Purpose) ? null : settings.Purpose.Trim(),
+            Accounts = [.. (settings.AdditionalUserIds ?? []).Distinct().Select(id => new ApiKeyAccountEntity { UserId = id })],
         };
         dbContext.ApiKeys.Add(key);
         return (key, token);
@@ -201,7 +261,11 @@ public sealed class ApiKeyService(
     /// <summary>Loads a key with its owner and creator for responses; null when it does not exist.</summary>
     public Task<ApiKeyEntity?> FindAsync(Guid id, bool track, CancellationToken cancellationToken)
     {
-        var query = dbContext.ApiKeys.Include(k => k.OwnerUser).Include(k => k.CreatedByUser).AsQueryable();
+        var query = dbContext.ApiKeys
+            .Include(k => k.OwnerUser)
+            .Include(k => k.CreatedByUser)
+            .Include(k => k.Accounts).ThenInclude(a => a.User)
+            .AsQueryable();
         if (!track)
         {
             query = query.AsNoTracking();

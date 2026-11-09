@@ -93,7 +93,8 @@ internal sealed class ApiKeyHarness(BjarnoyApiFactory factory)
         TimeSpan? lifetime = null,
         int? requestsPerMinute = null,
         DateTimeOffset? autoRenewUntil = null,
-        string? name = null)
+        string? name = null,
+        IReadOnlyList<Guid>? additionalUserIds = null)
     {
         var response = await admin.PostJsonAsync(
             "/api/v1/admin/api-keys",
@@ -106,7 +107,8 @@ internal sealed class ApiKeyHarness(BjarnoyApiFactory factory)
                 worldIds,
                 Factory.Time.GetUtcNow() + (lifetime ?? TimeSpan.FromHours(1)),
                 requestsPerMinute,
-                autoRenewUntil),
+                autoRenewUntil,
+                additionalUserIds),
             Ct);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return await response.ReadStrictAsync<ApiKeyTokenResponse>(Ct);
