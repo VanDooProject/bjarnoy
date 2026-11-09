@@ -70,17 +70,34 @@ public sealed record DispatchArmyRequest(
 public sealed record RetargetFoundingRequest([property: Required] HexPointRequest Target);
 
 /// <summary>
-/// Sends an army already out in the field onward to a new hex (issue #156
-/// phase 1) — "move on" when it is standing at its current destination,
-/// "append goal" when it is still travelling there. See
-/// <see cref="Army.PlanFieldOrder"/> for the exact rules, including which of
-/// the two this becomes and when waypoints require a premium account.
+/// Sends an army already out in the field onward (issue #156) — "move on" when it is standing at its current
+/// destination, "append goal" when it is still travelling there — on a move, attack, support, hunt or raid, against the
+/// same targets and with the same checks as a dispatch from home. A standing army can send only part of itself. See
+/// <see cref="Army.PlanFieldOrder"/> for the exact rules, including when waypoints and continuing a march require a premium
+/// account.
 /// </summary>
 /// <param name="Waypoints">Ordered intermediate hexes; empty/omitted for a direct route.</param>
-/// <param name="Destination">The new hex to head for.</param>
+/// <param name="Destination">
+/// Required for <c>"move"</c> (the default) and <c>"hunt"</c> (the camp's hex); ignored for
+/// <c>"attack"</c>/<c>"support"</c>/<c>"raid"</c>, whose destination is always the target settlement's own hex.
+/// </param>
+/// <param name="Mission">
+/// <c>"move"</c> (the default), <c>"attack"</c>, <c>"support"</c>, <c>"hunt"</c> or <c>"raid"</c>; <c>"found"</c> is refused
+/// (founding from the field is a retarget).
+/// </param>
+/// <param name="TargetSettlementId">Required for <c>"attack"</c>/<c>"support"</c>/<c>"raid"</c>.</param>
+/// <param name="TargetBuildingCoord">Only for <c>"attack"</c>/<c>"raid"</c>; required when the army that leaves is a fleet.</param>
+/// <param name="Units">
+/// What leaves, for a standing army. Omitted: the whole army goes. Naming only part of it splits the army: the units listed
+/// leave as a new army (the response), the rest keep standing where they are.
+/// </param>
 public sealed record FieldOrderRequest(
     IReadOnlyList<HexPointRequest>? Waypoints,
-    [property: Required] HexPointRequest Destination);
+    HexPointRequest? Destination,
+    string? Mission = null,
+    Guid? TargetSettlementId = null,
+    HexPointRequest? TargetBuildingCoord = null,
+    IReadOnlyList<UnitCountRequest>? Units = null);
 
 public sealed record ArmyUnitStackResponse(string Unit, int Count);
 
