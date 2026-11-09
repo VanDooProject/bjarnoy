@@ -456,6 +456,97 @@ public class RiverStreamTests
         Assert.True(adjacent < 0.03 * riverTiles, $"{adjacent} hugging adjacencies over {riverTiles} river tiles");
     }
 
+    /// <summary>
+    /// The bug this guards: a river could only end on one of very few outlets and nothing pulled it off the coast, so
+    /// springs near the sea ran for many tiles along the ring just inside the shore (19% of the rivers of seeds 1-8 hugged
+    /// it for 6+ tiles), and rivers to different mouths ran side by side in opposite directions (6.7 per 1000 river tiles).
+    /// </summary>
+    [Fact]
+    public void Rivers_do_not_run_along_the_coast_nor_beside_each_other_in_opposite_directions()
+    {
+        var rivers = 0;
+        var hugging = 0;
+        var antiparallel = 0;
+        var riverTiles = 0;
+        foreach (var (_, island, sampler) in GreenIslands())
+        {
+            bool IsLand(HexCoord c) => sampler.TerrainAt(c) != Terrain.Sea;
+
+            // 1 = touches the sea, up to 4; 5 = further in.
+            int SeaDistance(HexCoord c)
+            {
+                var frontier = new List<HexCoord> { c };
+                var seen = new HashSet<HexCoord> { c };
+                for (var d = 1; d <= 4; d++)
+                {
+                    var next = new List<HexCoord>();
+                    foreach (var f in frontier)
+                    {
+                        foreach (var n in f.Neighbours())
+                        {
+                            if (!IsLand(n))
+                            {
+                                return d;
+                            }
+
+                            if (seen.Add(n))
+                            {
+                                next.Add(n);
+                            }
+                        }
+                    }
+
+                    frontier = next;
+                }
+
+                return 5;
+            }
+
+            var byCoord = island.RiverTiles.ToDictionary(t => t.Coord);
+            var distance = island.RiverTiles.ToDictionary(t => t.Coord, t => SeaDistance(t.Coord));
+            riverTiles += island.RiverTiles.Count;
+            foreach (var spring in island.RiverTiles.Where(t => t.Shape == RiverTileShape.Spring))
+            {
+                rivers++;
+                var run = 0;
+                var best = 0;
+                for (HexCoord? at = spring.Coord; at is { } c && byCoord.TryGetValue(c, out var cur);)
+                {
+                    run = distance[c] <= 2 ? run + 1 : 0;
+                    best = Math.Max(best, run);
+                    at = cur.OutDirection is { } o ? Step(c, o) : null;
+                }
+
+                if (best >= 6)
+                {
+                    hugging++;
+                }
+            }
+
+            // Adjacent tiles of different rivers, not linked by flow, heading in opposite directions.
+            foreach (var t in island.RiverTiles)
+            {
+                foreach (var n in t.Coord.Neighbours())
+                {
+                    if (!byCoord.TryGetValue(n, out var other) || n.Q * 100000L + n.R <= t.Coord.Q * 100000L + t.Coord.R)
+                    {
+                        continue;
+                    }
+
+                    var linked = (t.OutDirection is { } a && Step(t.Coord, a) == n) || (other.OutDirection is { } b && Step(other.Coord, b) == t.Coord);
+                    if (!linked && t.OutDirection is { } od && other.OutDirection is { } od2 && ((int)od + 3) % 6 == (int)od2)
+                    {
+                        antiparallel++;
+                    }
+                }
+            }
+        }
+
+        Assert.True(rivers > 500, $"only {rivers} rivers");
+        Assert.True(hugging < 0.03 * rivers, $"{hugging} of {rivers} rivers run 6+ tiles within two tiles of the sea");
+        Assert.True(antiparallel < 0.0055 * riverTiles, $"{antiparallel} antiparallel adjacent pairs over {riverTiles} river tiles");
+    }
+
     [Fact]
     public void Lava_rivers_stay_river_width()
     {

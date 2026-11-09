@@ -46,12 +46,16 @@ export const RIVER_TILES_PER_SPRING = 500;
 export const MAX_SPRINGS_PER_ISLAND = 24;
 /** Springs are picked farthest-first until the best is closer than this — mirrors `WorldGenerationOptions.MinSpringSpacing`. */
 export const MIN_SPRING_SPACING = 8;
-/** Land tiles an island needs per river outlet — mirrors `WorldGenerationOptions.OutletTilesPer`. */
-export const OUTLET_TILES_PER = 2000;
+/** Springs an island gets per river mouth (outlets = round(springs / this), at least 1) — mirrors `WorldGenerationOptions.SpringsPerOutlet`. */
+export const SPRINGS_PER_OUTLET = 3;
 /** Most outlets one island gets — mirrors `WorldGenerationOptions.MaxOutlets`. */
 export const MAX_OUTLETS = 12;
 /** Outlets are picked farthest-first until the best is closer than this — mirrors `WorldGenerationOptions.MinOutletSpacing`. */
-export const MIN_OUTLET_SPACING = 25;
+export const MIN_OUTLET_SPACING = 12;
+/** Extra drainage cost of an interior tile next to the coast (half that one tile further in) — mirrors `WorldGenerationOptions.ShoreCost`. */
+export const SHORE_COST = 6.0;
+/** Extra cost, per earlier-river neighbour of a candidate tile, in the walk's choice of out-direction — mirrors `WorldGenerationOptions.WalkCrowdingCost`. */
+export const WALK_CROWDING_COST = 1.0;
 /** Weight of the per-tile noise in a drainage step's cost — mirrors `WorldGenerationOptions.DrainageNoise`. */
 export const DRAINAGE_NOISE = 1.5;
 /** Weight of the smooth valley noise in a drainage step's cost — mirrors `WorldGenerationOptions.ValleyNoise`. */
@@ -765,8 +769,7 @@ class Drainage {
     const isBlocked = new Array<boolean>(n).fill(false);
     if (blocked) for (let i = 0; i < n; i++) isBlocked[i] = blocked.has(this.tiles[i]!);
     for (let i = 0; i < n; i++) {
-      const tile = this.tiles[i]!;
-      const ns = neighbors(tile);
+      const ns = neighbors(this.tiles[i]!);
       for (let d = 0; d < 6; d++) {
         // Water never flows into a blocked tile (a bog): it is as good as not being there.
         const idx = this.index.get(coordKey(ns[d]!));
@@ -780,11 +783,36 @@ class Drainage {
       }
       if (isBlocked[i]) coastal[i] = false;
       this.interior[i] = !coastal[i] && !isBlocked[i];
+    }
+
+    // Sea distance 2: an interior tile with a coastal neighbour; sea distance 3: an interior tile next to one of those.
+    const shore = new Array<boolean>(n).fill(false);
+    for (let i = 0; i < n; i++) {
+      if (!this.interior[i]!) continue;
+      for (let d = 0; d < 6; d++) {
+        const nb = this.neighbour[i * 6 + d]!;
+        if (nb >= 0 && coastal[nb]!) shore[i] = true;
+      }
+    }
+
+    for (let i = 0; i < n; i++) {
+      const tile = this.tiles[i]!;
+      let shoreCost = 0.0;
+      if (this.interior[i]!) {
+        if (shore[i]!) shoreCost = SHORE_COST;
+        else {
+          for (let d = 0; d < 6; d++) {
+            const nb = this.neighbour[i * 6 + d]!;
+            if (nb >= 0 && shore[nb]!) shoreCost = SHORE_COST * 0.5;
+          }
+        }
+      }
       this.step[i] =
         1.0 +
         DRAINAGE_NOISE * hash2(tile.q, tile.r, seed + 53) +
         VALLEY_NOISE * valueNoise(tile.q, tile.r, seed + 61, VALLEY_SCALE) +
-        (terrainOf(tile) === 'mountain' ? MOUNTAIN_COST : 0.0);
+        (terrainOf(tile) === 'mountain' ? MOUNTAIN_COST : 0.0) +
+        shoreCost;
     }
 
     for (let i = 0; i < n; i++) {
@@ -855,11 +883,43 @@ class Drainage {
     return { out: best, cost: bestCost };
   }
 
+  /** Earlier-river neighbours of a free tile (0 for an earlier river's own tile: reaching it is a join, not running beside) — mirrors `Drainage.ClaimedAround`. */
+  claimedAround(tile: number, claims: (Claim | null)[]): number {
+    if (claims[tile] !== null) return 0;
+    let count = 0;
+    for (let d = 0; d < 6; d++) {
+      const n = this.neighbour[tile * 6 + d]!;
+      if (n >= 0 && claims[n] !== null) count++;
+    }
+    return count;
+  }
+
+  /**
+   * `bestOut` for the walk: each candidate also pays `WALK_CROWDING_COST` per earlier-river neighbour, so a river that runs on alone
+   * does not drift along another one — mirrors `Drainage.CrowdedOut`. The static field and `bestOut` stay as they are.
+   */
+  crowdedOut(tile: number, inDir: number, claims: (Claim | null)[]): number {
+    let best = -1;
+    let bestCost = Infinity;
+    for (let o = 0; o < 6; o++) {
+      const n = this.neighbour[tile * 6 + o]!;
+      if (n < 0 || (inDir >= 0 && o === inDir)) continue;
+      const d = this.dist[n * 6 + ((o + 3) % 6)]!;
+      if (d === Infinity) continue;
+      const cost = d + this.step[n]! + this.turnCost(inDir, o) + this.edge[tile * 6 + o]! + WALK_CROWDING_COST * this.claimedAround(n, claims);
+      if (cost < bestCost) {
+        bestCost = cost;
+        best = o;
+      }
+    }
+    return best;
+  }
+
   /**
    * Like `bestOut` but pulled towards `target`: a direction costs `MEANDER_STEER` extra when it is not the target (half that
    * when 60 degrees off it), and tiles on the walk are not offered. -1 when nothing qualifies — mirrors `Drainage.SteeredOut`.
    */
-  steeredOut(tile: number, inDir: number, target: number, onPath: boolean[]): number {
+  steeredOut(tile: number, inDir: number, target: number, onPath: boolean[], claims: (Claim | null)[] | null): number {
     let best = -1;
     let bestCost = Infinity;
     for (let o = 0; o < 6; o++) {
@@ -869,7 +929,8 @@ class Drainage {
       if (d === Infinity || onPath[n]!) continue;
       const off = Math.min((o - target + 6) % 6, (target - o + 6) % 6);
       const steer = off === 0 ? 0.0 : off === 1 ? MEANDER_STEER * 0.5 : MEANDER_STEER;
-      const cost = d + this.step[n]! + this.turnCost(inDir, o) + this.edge[tile * 6 + o]! + steer;
+      const crowd = claims === null ? 0.0 : WALK_CROWDING_COST * this.claimedAround(n, claims);
+      const cost = d + this.step[n]! + this.turnCost(inDir, o) + this.edge[tile * 6 + o]! + steer + crowd;
       if (cost < bestCost) {
         bestCost = cost;
         best = o;
@@ -905,7 +966,7 @@ class Drainage {
     const outlets: number[] = [];
     if (candidates.length === 0) return outlets;
 
-    const k = Math.min(MAX_OUTLETS, Math.max(1, Math.floor(this.tiles.length / OUTLET_TILES_PER + 0.5)));
+    const k = Math.min(MAX_OUTLETS, Math.max(1, Math.floor(plannedSprings(this.tiles.length) / SPRINGS_PER_OUTLET + 0.5)));
     let first = 0;
     for (let i = 1; i < candidates.length; i++) if (score[i]! > score[first]!) first = i;
 
@@ -1056,7 +1117,10 @@ function traceDrainageWalk(
       const { out: naturalOut, cost: naturalCost } = drainage.bestOut(current, inDir, null);
       if (naturalOut < 0) return null;
 
-      let outDir = naturalOut;
+      // The walk's own pick also keeps off earlier rivers; the junction searches are priced with the plain natural cost.
+      const crowdClaims = anyClaims ? claims : null;
+      const walkOut = crowdClaims === null ? naturalOut : drainage.crowdedOut(current, inDir, crowdClaims);
+      let outDir = walkOut;
       if (steer && inDir >= 0) {
         // Each stretch of the walk bends to one side through its middle half, then the side flips: the river arcs.
         if (left <= 0) {
@@ -1068,8 +1132,8 @@ function traceDrainageWalk(
         left--;
         const at = len - 1 - left;
         const bent = at >= len * 0.25 && at < len * 0.75;
-        const target = bent ? (((naturalOut + side) % 6) + 6) % 6 : naturalOut;
-        const steered = drainage.steeredOut(current, inDir, target, onPath);
+        const target = bent ? (((walkOut + side) % 6) + 6) % 6 : walkOut;
+        const steered = drainage.steeredOut(current, inDir, target, onPath, crowdClaims);
         if (steered >= 0) outDir = steered;
       }
 
@@ -1228,6 +1292,11 @@ function crowding(drainage: Drainage, claims: (Claim | null)[], tile: number): n
   return total;
 }
 
+/** How many springs an island of this size gets — mirrors `RiverGenerator.PlannedSprings`. */
+function plannedSprings(islandTileCount: number): number {
+  return Math.min(MAX_SPRINGS_PER_ISLAND, Math.max(1, Math.floor(islandTileCount / RIVER_TILES_PER_SPRING + 0.5)));
+}
+
 /** Spring candidates — mirrors `RiverGenerator.SpringCandidates`. */
 function springCandidates(
   islandTiles: AxialCoord[],
@@ -1271,7 +1340,7 @@ function pickSprings(
   if (candidates.length === 0) return springs;
 
   const hash = candidates.map((c) => hash2(c.q, c.r, seed + 41));
-  const k = Math.min(MAX_SPRINGS_PER_ISLAND, Math.max(1, Math.floor(islandTileCount / RIVER_TILES_PER_SPRING + 0.5)));
+  const k = plannedSprings(islandTileCount);
 
   let first = 0;
   let firstDepth = depthAt(candidates[0]!) ?? 0;

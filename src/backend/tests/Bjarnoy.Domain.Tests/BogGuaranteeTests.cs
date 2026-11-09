@@ -77,17 +77,22 @@ public class BogGuaranteeTests
 
     [Theory]
     // A 2705-tile arc joined to a 74-tile islet by a one-hex strip of beach: the island's one drainage outlet sat on the islet, so
-    // no river traced from a spawn bog on the arc could reach the sea until every basin got an outlet of its own.
-    [InlineData(4, 28)]
+    // no river traced from a spawn bog on the arc could reach the sea until every basin got an outlet of its own. Since rivers get
+    // a mouth for every three springs the arc's own river runs through a bog lake, so the guarantee needs no spawn bog there any more.
+    [InlineData(4, 28, false)]
     // A ring of forest round a mountain massif, its one inland patch split by the only river: the spawn lake grew towards the
     // mountains and was thrown away every time until the guarantee's lakes grew only onto tiles their shore can surround.
-    [InlineData(8, 31)]
-    public void Islands_the_guarantee_used_to_miss_get_a_spawn_bog(int seed, int index)
+    [InlineData(8, 31, true)]
+    public void Islands_the_guarantee_used_to_miss_get_a_bog(int seed, int index, bool spawn)
     {
         var island = TestWorlds.Default(seed).Islands.Single(i => i.Index == index);
 
         Assert.False(island.IsWasted);
-        Assert.Contains(island.BogTiles, t => t.Kind == BogTileKind.CreekSpring && FeedsLake(island, t));
+        Assert.Contains(island.BogTiles, t => t.Kind == BogTileKind.Lake);
+        if (spawn)
+        {
+            Assert.Contains(island.BogTiles, t => t.Kind == BogTileKind.CreekSpring && FeedsLake(island, t));
+        }
     }
 
     [Fact]

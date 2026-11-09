@@ -6,7 +6,7 @@ import { maxLevelFor } from '../map/buildingEconomy';
 import { buildShowcaseVillage, DECORATED_BOG_VARIANTS, diversifyLooks, SHOWCASE_PREVIEW_RADIUS, SHOWCASE_RENDER_RADIUS, SHOWCASE_VILLAGE_OWNER, SHOWCASE_WORLD_SEA_MARGIN, showcaseWorldFrame } from './showcaseVillage';
 
 // The showcase page's own default seed (ShowcaseView.vue DEFAULT_SEED): its village site has shore for the dockyard.
-const SEED = 20261824;
+const SEED = 20261831;
 
 function build() {
   const model = new WorldModel(SEED);

@@ -170,17 +170,22 @@ public sealed record WorldGenerationOptions
     public int MinSpringSpacing { get; init; } = 8;
 
     /// <summary>
-    /// Land tiles an island needs per river outlet (a mouth the whole drainage network of that
-    /// part of the island runs to): <c>round(land / OutletTilesPer)</c>, at least 1, at most
-    /// <see cref="MaxOutlets"/>.
+    /// Springs an island gets per river outlet (a mouth the drainage network of that part of the island runs to):
+    /// <c>round(springs / SpringsPerOutlet)</c>, at least 1, at most <see cref="MaxOutlets"/>.
     /// </summary>
-    public int OutletTilesPer { get; init; } = 2000;
+    public int SpringsPerOutlet { get; init; } = 3;
 
     /// <summary>Most outlets one island gets.</summary>
     public int MaxOutlets { get; init; } = 12;
 
     /// <summary>Outlets are picked farthest-first among bays; picking stops once the best is closer than this (hexes) to a chosen one.</summary>
-    public int MinOutletSpacing { get; init; } = 25;
+    public int MinOutletSpacing { get; init; } = 12;
+
+    /// <summary>Extra drainage cost of an interior tile next to the coast (half of it one tile further in): keeps rivers off the shore.</summary>
+    public double ShoreCost { get; init; } = 6.0;
+
+    /// <summary>Extra cost, per earlier-river neighbour of a candidate tile, in a walk's choice of out-direction: keeps a river that runs on alone from drifting along another.</summary>
+    public double WalkCrowdingCost { get; init; } = 1.0;
 
     /// <summary>Weight of the per-tile noise in a drainage step's cost (<c>1 + DrainageNoise * noise</c>): larger meanders the network more.</summary>
     public double DrainageNoise { get; init; } = 1.5;
@@ -353,7 +358,9 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfLessThan(RiverTilesPerSpring, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(MaxSpringsPerIsland, 1);
         ArgumentOutOfRangeException.ThrowIfNegative(MinSpringSpacing);
-        ArgumentOutOfRangeException.ThrowIfLessThan(OutletTilesPer, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(SpringsPerOutlet, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(ShoreCost);
+        ArgumentOutOfRangeException.ThrowIfNegative(WalkCrowdingCost);
         ArgumentOutOfRangeException.ThrowIfLessThan(MaxOutlets, 1);
         ArgumentOutOfRangeException.ThrowIfNegative(MinOutletSpacing);
         ArgumentOutOfRangeException.ThrowIfNegative(DrainageNoise);

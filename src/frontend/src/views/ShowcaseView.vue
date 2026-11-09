@@ -32,10 +32,10 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // A fixed, known-good archipelago rather than a fresh roll on every page load.
 // Picked by scoring 3000 seeds (20260000..20262999) on the "one view" frame, then
-// moved one seed on by hand when the river generator started meandering: its
+// moved on by hand when the river generator started meandering and again when rivers got more mouths and left the shore: its
 // island frames a big bog lake and moss land, a village between the rivers and
 // the coast (with a dockyard), a giant mountain and a sand coast.
-const DEFAULT_SEED = 20261824;
+const DEFAULT_SEED = 20261831;
 // The whole default world: islands are ~150 hexes across and ~100+ apart, so a
 // small disc around the origin is usually open sea. Listing the labels costs
 // nothing like DEMO_MASK_RADIUS's fog mask (this page never fogs — see
