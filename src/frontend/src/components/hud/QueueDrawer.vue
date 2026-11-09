@@ -7,8 +7,7 @@
 // desktop panels do — with more than a handful of slots (premium accounts
 // can queue well past 3), a static "N / M" count stops being useful at a
 // glance. Instead it's a small 48px-wide edge tab showing, per non-empty
-// category (build then training), an icon, a count chip when more than one
-// order is queued, the soonest order's remaining time, and a thin progress
+// category (build then training), an icon, the soonest order's remaining time, and a thin progress
 // bar for that soonest order — see soonest()/buildHandleRow/
 // trainingHandleRow below.
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -26,7 +25,7 @@ import {
 import { sortArmyRowsByEta, useArmyRows } from '../../composables/useArmyRows';
 import { confirmedBuild } from '../../composables/buildFeedback';
 import { motionEnabled } from '../../lib/motion';
-import { peek, popCount, pulseHandle, slideDrawer } from '../../lib/hud/queueMotion';
+import { peek, pulseHandle, slideDrawer } from '../../lib/hud/queueMotion';
 import axeIconUrl from '../../assets/icons/axe.svg?url';
 import swordIconUrl from '../../assets/icons/sword.svg?url';
 import flagIconUrl from '../../assets/icons/flag.svg?url';
@@ -64,7 +63,6 @@ function soonest<T extends { remainingSeconds: number | null }>(pool: T[]): T | 
 interface HandleRow {
   category: 'build' | 'train' | 'army';
   icon: string;
-  count: number;
   timeText: string;
   progress: number;
   done: boolean;
@@ -84,7 +82,6 @@ const buildHandleRow = computed<HandleRow | null>(() => {
   return {
     category: 'build',
     icon: axeIconUrl,
-    count: buildOrders.value.length,
     timeText: order ? formatCountdownShort(order.remainingSeconds ?? 0) : '—',
     progress: order?.progress ?? 0,
     done: order?.done ?? false,
@@ -98,7 +95,6 @@ const trainingHandleRow = computed<HandleRow | null>(() => {
   return {
     category: 'train',
     icon: swordIconUrl,
-    count: trainingOrders.value.length,
     timeText: order?.remainingSeconds != null ? formatCountdownShort(order.remainingSeconds) : '—',
     progress: order?.progress ?? 0,
     done: order?.done ?? false,
@@ -116,7 +112,6 @@ const armyHandleRow = computed<HandleRow | null>(() => {
   return {
     category: 'army',
     icon: flagIconUrl,
-    count: sortedArmyRows.value.length,
     timeText: next ? formatCountdownShort((next.etaMs! - Date.now()) / 1000) : '—',
     progress: next?.progress ?? 0,
     done: false,
@@ -342,9 +337,9 @@ function onHandleClick(event: MouseEvent) {
 // P2 + P4: after a confirmed build, with the drawer collapsed, a peek panel
 // slides out from behind the handle with the new order ("Farm → 1",
 // "3:00 · queued"), stays 1.5 s and slides back. Only once it has retracted
-// does the handle's count chip pop and the handle give one gold pulse. The
+// does the handle give one gold pulse. The
 // drawer itself stays closed; with it open (or under reduced motion) nothing
-// plays — the handle's own count and times still update.
+// plays — the handle's own times still update.
 const handleEl = ref<HTMLElement | null>(null);
 const peekEl = ref<HTMLElement | null>(null);
 const peekOrder = ref<{ name: string; level: number; time: string | null } | null>(null);
@@ -356,8 +351,6 @@ watch(confirmedBuild, async (event) => {
   peekOrder.value = null;
   await nextTick();
   if (open.value || !handleEl.value) return;
-  const chip = handleEl.value.querySelector('.queue-drawer-handle-count');
-  if (chip) void popCount(chip);
   void pulseHandle(handleEl.value);
 });
 
@@ -547,7 +540,6 @@ function onDrawerLeave(el: Element, done: () => void) {
         <div v-for="row in handleRows" :key="row.category" class="queue-drawer-handle-row" :class="`is-${row.category}`">
           <span class="queue-drawer-handle-icon-wrap">
             <img :src="row.icon" alt="" aria-hidden="true" class="queue-drawer-handle-icon" />
-            <span v-if="row.count > 1" class="queue-drawer-handle-count">{{ row.count }}</span>
           </span>
           <span class="queue-drawer-handle-time" :class="{ 'is-muted': !row.showProgress }">{{ row.timeText }}</span>
           <div v-if="row.showProgress" class="queue-drawer-handle-progress">
@@ -888,21 +880,6 @@ html[data-hud-motion='reduced'] .queue-drawer {
   width: 14px;
   height: 14px;
   display: block;
-}
-.queue-drawer-handle-count {
-  position: absolute;
-  top: -5px;
-  right: -7px;
-  min-width: 11px;
-  height: 11px;
-  padding: 0 2px;
-  border-radius: 6px;
-  background: var(--gold);
-  color: #1a1a1a;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 11px;
-  text-align: center;
 }
 .queue-drawer-handle-time {
   font-size: 11px;

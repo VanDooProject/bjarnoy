@@ -99,7 +99,7 @@ describe('QueueDrawer', () => {
     expect(wrapper.find('.queue-drawer').exists()).toBe(false);
   });
 
-  it('shows one row per non-empty category with the soonest remaining time and a count chip', () => {
+  it('shows one row per non-empty category with the soonest remaining time', () => {
     const world = useWorldStore();
     world.hud.queueFetchedAt = Date.now();
     world.hud.queue = [
@@ -115,11 +115,9 @@ describe('QueueDrawer', () => {
 
     const buildRow = rows.find((r) => r.classes('is-build'))!;
     expect(buildRow.get('.queue-drawer-handle-time').text()).toBe('0:50');
-    expect(buildRow.get('.queue-drawer-handle-count').text()).toBe('2');
 
     const trainRow = rows.find((r) => r.classes('is-train'))!;
     expect(trainRow.get('.queue-drawer-handle-time').text()).toBe('0:20');
-    expect(trainRow.find('.queue-drawer-handle-count').exists()).toBe(false);
   });
 
   it('shows a muted dash and no progress bar when every build order is waiting', () => {
@@ -363,7 +361,7 @@ describe('QueueDrawer', () => {
       expect(etas).toEqual(['1h 0m', '5h 0m', '—']);
     });
 
-    it('adds an army row to the handle with the soonest arrival and a count chip', () => {
+    it('adds an army row to the handle with the soonest arrival', () => {
       const world = useWorldStore();
       world.armies = [
         army({ id: 'far', movement: { ...army().movement!, arrivesAt: '2026-01-01T05:00:00Z' } }),
@@ -372,7 +370,6 @@ describe('QueueDrawer', () => {
 
       const row = mountDrawer().get('.queue-drawer-handle-row.is-army');
       expect(row.get('.queue-drawer-handle-time').text()).toBe('1h00');
-      expect(row.get('.queue-drawer-handle-count').text()).toBe('2');
     });
 
     it('shows a muted dash on the army handle row when every army is supporting', () => {
