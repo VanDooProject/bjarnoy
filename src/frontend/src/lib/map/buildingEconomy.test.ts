@@ -94,11 +94,11 @@ describe('buildingStatsFor terrain-adjacency boost (mirrors BuildingCatalogue.cs
 
   it('fishinghut is boosted by open sea, not the coastal flag alone', () => {
     expect(buildingStatsFor('fishinghut', 1, 0)).toEqual({
-      output: { kind: 'resourceRate', resource: 'food', amount: 12 },
+      output: { kind: 'resourceRate', resource: 'food', amount: 16 },
       modifier: { kind: 'coastal' },
     });
     expect(buildingStatsFor('fishinghut', 1, 2)).toEqual({
-      output: { kind: 'resourceRate', resource: 'food', amount: 14 },
+      output: { kind: 'resourceRate', resource: 'food', amount: 19 },
       modifier: { kind: 'coastal', percent: 20 },
     });
   });
@@ -173,10 +173,13 @@ describe('economy curves (mirror BuildingCatalogue.cs, docs/design/economy.md)',
   });
 
   it('cost is geometric: x1.30 per level, x1.34 for the Longhouse, and never asks for iron', () => {
-    expect(buildingUpgradeCost('farm', 1)).toEqual({ wood: 35, stone: 28, food: 10, iron: 0 });
-    expect(buildingUpgradeCost('farm', 5).wood).toBe(100);
-    expect(buildingUpgradeCost('farm', 20).wood).toBe(5100);
+    expect(buildingUpgradeCost('farm', 1)).toEqual({ wood: 57, stone: 29, food: 9, iron: 0 });
+    expect(buildingUpgradeCost('farm', 5).wood).toBe(160);
+    expect(buildingUpgradeCost('farm', 20).wood).toBe(8350);
     expect(buildingUpgradeCost('longhouse', 2).wood).toBe(160);
+    // The Longhouse grows x1.34 up to level 10 and x1.45 per level from level 11 on.
+    expect(buildingUpgradeCost('longhouse', 10).wood).toBe(niceRound(120 * 1.34 ** 9));
+    expect(buildingUpgradeCost('longhouse', 12).wood).toBe(niceRound(120 * 1.34 ** 9 * 1.45 ** 2));
     for (const type of ['tower', 'barracks', 'archeryrange', 'dockyard', 'cartworkshop'] as const) {
       expect(buildingUpgradeCost(type, 3).iron).toBe(0);
     }
@@ -188,8 +191,8 @@ describe('economy curves (mirror BuildingCatalogue.cs, docs/design/economy.md)',
       expect(buildingUpgradeCost(type, 6).stone, `${type} 6`).toBeGreaterThan(0);
     }
     expect(buildingUpgradeCost('claybrickworks', 1).stone).toBe(0);
-    expect(buildingUpgradeCost('claybrickworks', 2).stone).toBe(36);
-    expect(buildingUpgradeCost('lumberjack', 1)).toEqual({ wood: 35, stone: 0, food: 10, iron: 0 });
+    expect(buildingUpgradeCost('claybrickworks', 2).stone).toBe(13);
+    expect(buildingUpgradeCost('lumberjack', 1)).toEqual({ wood: 16, stone: 0, food: 30, iron: 0 });
   });
 
   it('niceRound steps by digits: whole below 100, 10s to 999, then 5 * 10^(digits - 3)', () => {
@@ -311,7 +314,7 @@ describe('bog buildings', () => {
     const lakeHut: Tile = { q: 0, r: 0, terrain: 'bog', buildingType: 'fishinghut', bog: { q: 0, r: 0, kind: 'half', inDirections: [], outDirection: null, waterEdges: ['E', 'NE', 'NW'] } };
     const lakeNeighbours = terrainMap('lake', 3);
     expect(buildingStatsAt('fishinghut', 1, lakeHut, lakeNeighbours).modifier).toEqual({ kind: 'terrainBoost', terrain: 'lake', percent: 30 });
-    expect(buildingStatsAt('fishinghut', 1, lakeHut, lakeNeighbours).output).toEqual({ kind: 'resourceRate', resource: 'food', amount: 16 });
+    expect(buildingStatsAt('fishinghut', 1, lakeHut, lakeNeighbours).output).toEqual({ kind: 'resourceRate', resource: 'food', amount: 21 });
 
     const coastHut: Tile = { q: 0, r: 0, terrain: 'sea', buildingType: 'fishinghut' };
     expect(buildingStatsAt('fishinghut', 1, coastHut, terrainMap('sea', 2)).modifier).toEqual({ kind: 'coastal', percent: 20 });
@@ -334,8 +337,8 @@ describe('bog buildings', () => {
   it('max levels and costs: bog-ore works 25 like the producers, Hammer Forge 20 like the mills', () => {
     expect(maxLevelFor('bogoreworks')).toBe(25);
     expect(maxLevelFor('hammerschmiede')).toBe(20);
-    expect(buildingUpgradeCost('bogoreworks', 1)).toEqual({ wood: 35, stone: 28, food: 10, iron: 0 });
-    expect(buildingUpgradeCost('hammerschmiede', 1)).toEqual({ wood: 100, stone: 80, food: 0, iron: 0 });
+    expect(buildingUpgradeCost('bogoreworks', 1)).toEqual({ wood: 42, stone: 34, food: 20, iron: 0 });
+    expect(buildingUpgradeCost('hammerschmiede', 1)).toEqual({ wood: 10000, stone: 6350, food: 1800, iron: 0 });
   });
 });
 
