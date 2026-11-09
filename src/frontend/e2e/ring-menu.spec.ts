@@ -181,7 +181,7 @@ test.describe('ring menu drill-down', () => {
     // app's canvas views every Playwright round trip waits out a frame (see ring.settledCentre),
     // and these eight made up a tenth of the test's time. The card is purely informational: no
     // BUILD button, locked or not. Cost, time and the gate all come from the building catalogue,
-    // so these are the backend's own numbers: 130 wood / 110 brick, 7:00, longhouse 5.
+    // so these are the backend's own numbers: 100 wood / 78 brick, 7:00, longhouse 5.
     const readCard = () =>
       barracks.evaluate((bubble) => {
         const card = document.querySelector('.ring-card');
@@ -189,8 +189,8 @@ test.describe('ring menu drill-down', () => {
         const box = card?.getBoundingClientRect();
         return {
           cardShown: !!box && box.width > 0 && box.height > 0,
-          cost130: text.includes('130'),
-          cost110: text.includes('110'),
+          cost100: text.includes('100'),
+          cost78: text.includes('78'),
           buildTime: text.includes('7:00'),
           gate: text.includes('REQUIRES LONGHOUSE 5'),
           bubbleLocked: bubble.classList.contains('locked'),
@@ -202,8 +202,8 @@ test.describe('ring menu drill-down', () => {
       .poll(readCard)
       .toEqual({
         cardShown: true,
-        cost130: true,
-        cost110: true,
+        cost100: true,
+        cost78: true,
         buildTime: true,
         gate: true,
         bubbleLocked: true,
