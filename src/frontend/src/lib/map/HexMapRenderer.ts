@@ -1633,6 +1633,23 @@ export function isWaypointTap(startCoordKey: string, lastCoordKey: string, moved
 /** One zoom-button step (`zoomStep`). */
 const ZOOM_STEP = 1.25;
 
+type ArrowKey = 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown';
+/** Camera direction per arrow key (screen axes: +x right, +y down). */
+const ARROW_KEY_PAN = new Map<ArrowKey, [number, number]>([
+  ['ArrowLeft', [-1, 0]],
+  ['ArrowRight', [1, 0]],
+  ['ArrowUp', [0, -1]],
+  ['ArrowDown', [0, 1]],
+]);
+/** Arrow-key pan speed in screen px per second. */
+const KEY_PAN_SPEED = 700;
+
+/** Whether a key event's target is somewhere the user types or navigates with the arrows (input, select, dialog, ...). */
+export function isTypingTarget(t: EventTarget | null): boolean {
+  if (!(t instanceof HTMLElement)) return false;
+  return t.isContentEditable || !!t.closest('input, textarea, select, [role="dialog"], [role="menu"], [role="listbox"]');
+}
+
 /**
  * Whether a wheel event over the canvas goes to the page (scrolls it) instead of the map's zoom.
  * Only `allowPageScroll` hosts ever pass: a locked camera cannot zoom, so its wheel always scrolls the
@@ -2624,6 +2641,9 @@ export class HexMapRenderer {
     // the ghost click at the source instead of trying to ignore it later.
     canvas.addEventListener('touchstart', this.onTouchStart, { passive: false });
     document.addEventListener('visibilitychange', this.onVisibilityChange);
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('blur', this.clearHeldKeys);
 
     // World mode never renders tile-art sprites (see WORLD_TERRAIN_FILL
     // above), so it has no need for the (large) building atlas at all —
@@ -2824,6 +2844,7 @@ export class HexMapRenderer {
       this.applyCameraTransform();
       this.scheduleCull();
     }
+    this.tickKeyPan();
     this.tickCameraAnim();
     this.tickDoubleTapZoom();
     const now = performance.now();
@@ -3467,6 +3488,56 @@ export class HexMapRenderer {
   }
 
   private getTile = (q: number, r: number): Tile => this.options.worldModel.getTile(q, r);
+
+  /** Arrow keys currently held; they pan the camera each tick (see `tickKeyPan`). */
+  private heldArrowKeys = new Set<ArrowKey>();
+
+  private onKeyDown = (e: KeyboardEvent) => {
+    const key = e.key as ArrowKey;
+    if (!ARROW_KEY_PAN.has(key)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || isTypingTarget(e.target)) return;
+    // A host that lets the page scroll keeps the arrow keys for that; a locked or menu-covered map does not pan.
+    if (this.lockCamera || this.interactionLocked || this.options.allowPageScroll) return;
+    e.preventDefault();
+    this.heldArrowKeys.add(key);
+  };
+
+  private onKeyUp = (e: KeyboardEvent) => {
+    this.heldArrowKeys.delete(e.key as ArrowKey);
+  };
+
+  private clearHeldKeys = () => {
+    this.heldArrowKeys.clear();
+  };
+
+  /** Pans by `KEY_PAN_SPEED` screen px/s along the held arrow keys, through the same clamp the drag uses. */
+  private tickKeyPan() {
+    if (this.heldArrowKeys.size === 0) return;
+    if (this.lockCamera || this.interactionLocked) {
+      this.heldArrowKeys.clear();
+      return;
+    }
+    let dx = 0;
+    let dy = 0;
+    for (const key of this.heldArrowKeys) {
+      const [kx, ky] = ARROW_KEY_PAN.get(key)!;
+      dx += kx;
+      dy += ky;
+    }
+    if (dx === 0 && dy === 0) return;
+    const len = Math.hypot(dx, dy);
+    const px = (KEY_PAN_SPEED * clampAnimationDeltaMs(this.app!.ticker.deltaMS)) / 1000;
+    this.idleDrift = false;
+    this.cameraAnim = null;
+    this.camera = this.clampCamera({
+      ...this.camera,
+      x: this.camera.x + ((dx / len) * px) / this.camera.zoom,
+      y: this.camera.y + ((dy / len) * px) / this.camera.zoom,
+    });
+    this.cameraTouched = true;
+    this.applyCameraTransform();
+    this.scheduleCull();
+  }
 
   private onWheel = (e: WheelEvent) => {
     if (
@@ -6793,6 +6864,9 @@ export class HexMapRenderer {
     canvas?.removeEventListener('wheel', this.onWheel as EventListener);
     canvas?.removeEventListener('touchstart', this.onTouchStart);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('blur', this.clearHeldKeys);
     // Otherwise a zoom gesture still settling when the renderer goes away
     // would fire its rebuild into a torn-down app (see noteZoomActivity).
     this.endZoomActivity();

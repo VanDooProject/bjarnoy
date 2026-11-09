@@ -1,0 +1,386 @@
+import { ref } from 'vue';
+import { describe, expect, it } from 'vitest';
+import { useHudDrawer } from './useHudDrawer';
+// The element the handlers are bound to (TopBar's `.hud-bar`/`.hud-drawer`),
+// shared by every event so the one a drag captures is the one a later
+// `lostpointercapture` names.
+const bar = { setPointerCapture: () => { }, hasPointerCapture: () => true, releasePointerCapture: () => { } };
+function fakeEvent(clientY, timeStamp, pointerId = 1, opts = {}) {
+    const currentTarget = bar;
+    return {
+        pointerId,
+        clientY,
+        timeStamp,
+        isPrimary: opts.isPrimary ?? true,
+        pointerType: opts.pointerType ?? 'touch',
+        button: opts.button ?? 0,
+        currentTarget,
+        target: opts.target ?? currentTarget,
+    };
+}
+describe('useHudDrawer', () => {
+    it('does nothing below the drag-intent threshold', () => {
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        drawer.onPointerDown(fakeEvent(0, 0));
+        drawer.onPointerMove(fakeEvent(4, 10)); // < 8px
+        expect(drawer.dragging.value).toBe(false);
+        drawer.onPointerUp(fakeEvent(4, 10));
+        expect(drawer.isOpen.value).toBe(false);
+    });
+    it('opens when dragged past the distance threshold on a top-docked bar', () => {
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        drawer.onPointerDown(fakeEvent(0, 0));
+        drawer.onPointerMove(fakeEvent(150, 50)); // past 8px, and past 30% of 300
+        expect(drawer.dragging.value).toBe(true);
+        drawer.onPointerUp(fakeEvent(150, 50));
+        expect(drawer.isOpen.value).toBe(true);
+        expect(drawer.dragging.value).toBe(false);
+    });
+    it('snaps back closed when released short of the threshold, with no flick', () => {
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        drawer.onPointerDown(fakeEvent(0, 0));
+        drawer.onPointerMove(fakeEvent(10, 20)); // arms the drag
+        // A slow second move settles velocity near zero before release, so only
+        // the (short-of-threshold) distance decides the outcome.
+        drawer.onPointerMove(fakeEvent(30, 100));
+        drawer.onPointerUp(fakeEvent(30, 100)); // 30/300 = 10%, well short of the 30% threshold
+        expect(drawer.isOpen.value).toBe(false);
+    });
+    it('snaps back closed when a fast short drag is held still before release', () => {
+        // Regression: release speed used to be the last move's speed, kept
+        // however long the finger then rested, so this still counted as a flick.
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        drawer.onPointerDown(fakeEvent(0, 0));
+        drawer.onPointerMove(fakeEvent(10, 2));
+        drawer.onPointerMove(fakeEvent(20, 4)); // 5 px/ms, well past the flick speed
+        drawer.onPointerUp(fakeEvent(20, 300)); // released after resting ~300ms
+        expect(drawer.isOpen.value).toBe(false);
+    });
+    it('a close flick held still before release leaves an open drawer open', () => {
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        drawer.toggle();
+        drawer.onPointerDown(fakeEvent(200, 0));
+        drawer.onPointerMove(fakeEvent(180, 2));
+        drawer.onPointerMove(fakeEvent(170, 4)); // 30px up fast, 10% of the drawer
+        drawer.onPointerUp(fakeEvent(170, 300));
+        expect(drawer.isOpen.value).toBe(true);
+    });
+    it('opens on a fast downward flick even far short of the distance threshold', () => {
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        drawer.onPointerDown(fakeEvent(0, 0));
+        drawer.onPointerMove(fakeEvent(20, 5)); // 20px in 5ms => 4 px/ms, well past the flick threshold
+        drawer.onPointerUp(fakeEvent(20, 5));
+        expect(drawer.isOpen.value).toBe(true);
+    });
+    it('inverts drag direction for a bottom-docked bar — dragging up opens it', () => {
+        const drawer = useHudDrawer(ref('bottom'), ref(300));
+        drawer.onPointerDown(fakeEvent(300, 0));
+        drawer.onPointerMove(fakeEvent(150, 50)); // dragged up 150px
+        drawer.onPointerUp(fakeEvent(150, 50));
+        expect(drawer.isOpen.value).toBe(true);
+    });
+    it('pointercancel snaps back without committing any change', () => {
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        drawer.onPointerDown(fakeEvent(0, 0));
+        drawer.onPointerMove(fakeEvent(250, 50)); // would have opened
+        drawer.onPointerCancel(fakeEvent(250, 50));
+        expect(drawer.isOpen.value).toBe(false);
+        expect(drawer.dragging.value).toBe(false);
+        expect(drawer.currentOffset()).toBe(0);
+    });
+    it('resize/height change never leaves the drawer offset out of range', () => {
+        const height = ref(300);
+        const drawer = useHudDrawer(ref('top'), height);
+        drawer.onPointerDown(fakeEvent(0, 0));
+        drawer.onPointerMove(fakeEvent(280, 50));
+        height.value = 100; // e.g. orientation change mid-drag
+        drawer.onPointerMove(fakeEvent(280, 60));
+        expect(drawer.currentOffset()).toBeLessThanOrEqual(100);
+    });
+    it('toggle() flips open state directly, e.g. for a chevron tap', () => {
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        expect(drawer.isOpen.value).toBe(false);
+        drawer.toggle();
+        expect(drawer.isOpen.value).toBe(true);
+        drawer.close();
+        expect(drawer.isOpen.value).toBe(false);
+    });
+    it('ignores pointer events from a different pointer than the one that started the drag', () => {
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        drawer.onPointerDown(fakeEvent(0, 0, 1));
+        drawer.onPointerMove(fakeEvent(150, 50, 2)); // different pointerId
+        expect(drawer.dragging.value).toBe(false);
+    });
+    describe('consumeClickSuppression', () => {
+        it('flags exactly one click to suppress after a real drag, e.g. one that started on a nav link', () => {
+            const drawer = useHudDrawer(ref('top'), ref(300));
+            drawer.onPointerDown(fakeEvent(500, 0));
+            drawer.onPointerMove(fakeEvent(150, 50)); // a real drag (past 8px)
+            drawer.onPointerUp(fakeEvent(50, 100));
+            expect(drawer.consumeClickSuppression()).toBe(true);
+            // Only the one synthetic click that follows this specific drag —
+            // a later, unrelated click must not still be swallowed.
+            expect(drawer.consumeClickSuppression()).toBe(false);
+        });
+        it('does not suppress a click after a plain tap (below the drag threshold)', () => {
+            const drawer = useHudDrawer(ref('top'), ref(300));
+            drawer.onPointerDown(fakeEvent(0, 0));
+            drawer.onPointerMove(fakeEvent(3, 10)); // below the 8px intent threshold
+            drawer.onPointerUp(fakeEvent(3, 10));
+            expect(drawer.consumeClickSuppression()).toBe(false);
+        });
+        it('does not suppress a click after a cancelled drag', () => {
+            const drawer = useHudDrawer(ref('top'), ref(300));
+            drawer.onPointerDown(fakeEvent(0, 0));
+            drawer.onPointerMove(fakeEvent(150, 50));
+            drawer.onPointerCancel(fakeEvent(150, 50));
+            expect(drawer.consumeClickSuppression()).toBe(false);
+        });
+        it('finding #5: a touch drag (no compatibility click ever fires) does not swallow a later, unrelated tap', () => {
+            const drawer = useHudDrawer(ref('top'), ref(300));
+            // A real drag opens the drawer — on a touch device this never
+            // dispatches a `click` at all, so nothing ever calls
+            // consumeClickSuppression() for it.
+            drawer.onPointerDown(fakeEvent(0, 0, 1, { pointerType: 'touch' }));
+            drawer.onPointerMove(fakeEvent(150, 50, 1, { pointerType: 'touch' }));
+            drawer.onPointerUp(fakeEvent(150, 50, 1, { pointerType: 'touch' }));
+            // The very next gesture — e.g. a genuine tap on "Reports" inside the
+            // now-open drawer — must not still be swallowed by the stale flag.
+            drawer.onPointerDown(fakeEvent(10, 200, 1, { pointerType: 'touch' }));
+            expect(drawer.consumeClickSuppression()).toBe(false);
+        });
+    });
+    it('finding #17: ignores a second pointerdown while a drag is already active', () => {
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        drawer.onPointerDown(fakeEvent(0, 0, 1));
+        drawer.onPointerMove(fakeEvent(50, 20, 1)); // arms pointer 1's drag
+        drawer.onPointerDown(fakeEvent(500, 0, 2)); // a second finger lands mid-drag
+        // Pointer 1's drag must still be the live one — its own move/up keep working.
+        drawer.onPointerMove(fakeEvent(150, 50, 1));
+        drawer.onPointerUp(fakeEvent(150, 50, 1));
+        expect(drawer.isOpen.value).toBe(true);
+    });
+    it('finding #17: ignores a non-primary pointer (a second touch point)', () => {
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        drawer.onPointerDown(fakeEvent(0, 0, 1, { isPrimary: false }));
+        drawer.onPointerMove(fakeEvent(150, 50, 1, { isPrimary: false }));
+        expect(drawer.dragging.value).toBe(false);
+    });
+    it('finding #17: ignores a non-left mouse button', () => {
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        drawer.onPointerDown(fakeEvent(0, 0, 1, { pointerType: 'mouse', button: 2 })); // right-click
+        drawer.onPointerMove(fakeEvent(150, 50, 1, { pointerType: 'mouse', button: 2 }));
+        expect(drawer.dragging.value).toBe(false);
+    });
+    it('finding #7: a lost pointer capture mid-drag cancels it without committing any change', () => {
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        drawer.onPointerDown(fakeEvent(0, 0));
+        drawer.onPointerMove(fakeEvent(250, 50)); // would have opened
+        drawer.onLostPointerCapture(fakeEvent(250, 50));
+        expect(drawer.isOpen.value).toBe(false);
+        expect(drawer.dragging.value).toBe(false);
+        expect(drawer.currentOffset()).toBe(0);
+    });
+    it('a touch drag survives the lostpointercapture its own capture fires on the child it started on', () => {
+        // A touch pointer is implicitly captured by the element it went down on
+        // (here a pill's inner `.fill`). Arming moves the capture to the bar, so
+        // the browser fires `lostpointercapture` on that child, which bubbles to
+        // the bar's own listener. That must not cancel the drag: it used to, on
+        // the very next move, so no touch drag ever opened the drawer.
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        const child = {};
+        drawer.onPointerDown(fakeEvent(0, 0, 1, { target: child }));
+        drawer.onPointerMove(fakeEvent(20, 10, 1, { target: child })); // arms, captures the bar
+        drawer.onLostPointerCapture(fakeEvent(20, 10, 1, { target: child }));
+        expect(drawer.dragging.value).toBe(true);
+        drawer.onPointerMove(fakeEvent(250, 50));
+        expect(drawer.currentOffset()).toBe(250);
+        drawer.onPointerUp(fakeEvent(250, 50));
+        expect(drawer.isOpen.value).toBe(true);
+    });
+    it('cancels touch moves only once a drag is armed, so a jittery tap is never canceled', () => {
+        // Canceling an armed drag's touchmoves keeps Chromium from starting a
+        // (scroll-filtered, invisible) fling at release, which would swallow the
+        // next tap. Before the intent threshold the moves must stay untouched.
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        const touchMove = () => {
+            let prevented = false;
+            drawer.onTouchMove({ cancelable: true, preventDefault: () => (prevented = true) });
+            return prevented;
+        };
+        drawer.onPointerDown(fakeEvent(0, 0));
+        drawer.onPointerMove(fakeEvent(4, 10)); // under the 8px threshold
+        expect(touchMove()).toBe(false);
+        drawer.onPointerMove(fakeEvent(40, 20)); // armed
+        expect(touchMove()).toBe(true);
+        drawer.onPointerUp(fakeEvent(40, 20));
+        expect(touchMove()).toBe(false);
+    });
+    it('finding #18: cancelDrag() tears down an in-flight drag without committing it', () => {
+        const drawer = useHudDrawer(ref('top'), ref(300));
+        drawer.onPointerDown(fakeEvent(0, 0));
+        drawer.onPointerMove(fakeEvent(250, 50)); // would have opened
+        drawer.cancelDrag();
+        expect(drawer.dragging.value).toBe(false);
+        expect(drawer.currentOffset()).toBe(0);
+        // A stray pointerup for the now-torn-down pointer is a no-op.
+        drawer.onPointerUp(fakeEvent(250, 50));
+        expect(drawer.isOpen.value).toBe(false);
+    });
+    describe('scroll-priority gestures on an already-open, overflowing drawer', () => {
+        // A fake `.hud-drawer-scroll` element — enough of the real DOM surface
+        // (scrollTop/scrollHeight/clientHeight) for splitDrawerDragDelta to work
+        // against, without needing an actual browser layout.
+        function fakeScrollEl(scrollTop, scrollHeight, clientHeight) {
+            return { scrollTop, scrollHeight, clientHeight };
+        }
+        function openedDrawer(edge, scrollEl) {
+            const drawer = useHudDrawer(ref(edge), ref(300), scrollEl);
+            // Open it first via a plain toggle (not a drag) so the *next* gesture
+            // starts from an already-open drawer, per the spec.
+            drawer.toggle();
+            expect(drawer.isOpen.value).toBe(true);
+            return drawer;
+        }
+        it('top-docked: swiping up (closing direction) scrolls the content down before closing the drawer', () => {
+            const el = fakeScrollEl(0, 500, 300); // 200px of scroll room
+            const drawer = openedDrawer('top', () => el);
+            drawer.onPointerDown(fakeEvent(300, 0));
+            drawer.onPointerMove(fakeEvent(250, 50)); // 50px up — past the 8px threshold, all absorbed by scroll
+            expect(el.scrollTop).toBe(50);
+            expect(drawer.currentOffset()).toBe(300); // drawer itself hasn't budged
+            drawer.onPointerUp(fakeEvent(250, 50));
+            expect(drawer.isOpen.value).toBe(true); // still open — the drag never actually moved
+        });
+        it('top-docked: swiping up only starts closing the drawer once the content is fully scrolled', () => {
+            const el = fakeScrollEl(190, 500, 300); // only 10px of scroll room left (maxScrollTop 200)
+            const drawer = openedDrawer('top', () => el);
+            drawer.onPointerDown(fakeEvent(300, 0));
+            drawer.onPointerMove(fakeEvent(250, 50)); // 50px up: 10px scrolls, remaining 40px closes
+            expect(el.scrollTop).toBe(200); // scrolled all the way to the end
+            expect(drawer.currentOffset()).toBe(260); // 300 - 40
+            drawer.onPointerMove(fakeEvent(50, 100)); // 200px further up: 60/300 = 20%, past the close threshold
+            drawer.onPointerUp(fakeEvent(50, 300)); // released at rest, so the distance alone decides
+            expect(drawer.isOpen.value).toBe(false);
+        });
+        it('top-docked: swiping down at scrollTop 0 does nothing extra (already fully open)', () => {
+            const el = fakeScrollEl(0, 500, 300);
+            const drawer = openedDrawer('top', () => el);
+            drawer.onPointerDown(fakeEvent(0, 0));
+            drawer.onPointerMove(fakeEvent(50, 50)); // dragging down (opening direction)
+            expect(el.scrollTop).toBe(0); // nothing to scroll up to
+            expect(drawer.currentOffset()).toBe(300); // stays clamped at fully open
+        });
+        it('top-docked: a pull down at scrollTop 0 that then reverses up still scrolls first, not closes', () => {
+            // The downward pull is clamped away (already fully open) — it must not
+            // count as "the sheet moved" and switch scrolling off for the rest of
+            // the gesture.
+            const el = fakeScrollEl(0, 500, 300);
+            const drawer = openedDrawer('top', () => el);
+            drawer.onPointerDown(fakeEvent(300, 0));
+            drawer.onPointerMove(fakeEvent(330, 30)); // 30px down: nothing to scroll, drawer already fully open
+            drawer.onPointerMove(fakeEvent(280, 60)); // then 50px up
+            expect(el.scrollTop).toBe(50);
+            expect(drawer.currentOffset()).toBe(300);
+        });
+        it('bottom-docked: swiping down (its closing direction) scrolls the content toward its start before closing', () => {
+            // Natural scrolling always moves content with the finger regardless
+            // of docking edge — finger down scrolls *toward the start*
+            // (scrollTop falling), the mirror image of the top-docked case above
+            // (finger up scrolls toward the end). scrollTop starts with room to
+            // fall (50 of it).
+            const el = fakeScrollEl(50, 500, 300);
+            const drawer = openedDrawer('bottom', () => el);
+            drawer.onPointerDown(fakeEvent(0, 0));
+            drawer.onPointerMove(fakeEvent(50, 50)); // dragged down 50px — closing direction for a bottom bar
+            expect(el.scrollTop).toBe(0);
+            expect(drawer.currentOffset()).toBe(300); // drawer itself hasn't budged
+        });
+        it('bottom-docked: swiping down at scrollTop 0 closes immediately — nothing left to scroll toward the start', () => {
+            const el = fakeScrollEl(0, 500, 300);
+            const drawer = openedDrawer('bottom', () => el);
+            drawer.onPointerDown(fakeEvent(0, 0));
+            drawer.onPointerMove(fakeEvent(50, 50)); // dragged down 50px, closing direction, nothing to scroll
+            expect(el.scrollTop).toBe(0); // unchanged — no room to scroll toward the start
+            expect(drawer.currentOffset()).toBe(250); // the full 50px instead drags the sheet closed
+        });
+        it('bottom-docked: swiping up (opening direction) scrolls toward the end and never closes', () => {
+            const el = fakeScrollEl(150, 500, 300); // room to rise toward maxScrollTop (200)
+            const drawer = openedDrawer('bottom', () => el);
+            drawer.onPointerDown(fakeEvent(300, 0));
+            drawer.onPointerMove(fakeEvent(250, 50)); // dragged up 50px — opening direction for a bottom bar
+            expect(el.scrollTop).toBe(200);
+            expect(drawer.currentOffset()).toBe(300); // stays clamped at fully open
+        });
+        it('gestures that start on the collapsed bar (opening it) are unaffected, even with a scroll element present', () => {
+            const el = fakeScrollEl(0, 500, 300);
+            const drawer = useHudDrawer(ref('top'), ref(300), () => el);
+            expect(drawer.isOpen.value).toBe(false);
+            drawer.onPointerDown(fakeEvent(0, 0));
+            drawer.onPointerMove(fakeEvent(150, 50)); // opening drag from closed
+            expect(el.scrollTop).toBe(0); // never touched
+            expect(drawer.currentOffset()).toBe(150); // the drag itself moved normally
+        });
+        it('non-overflowing content behaves exactly as without a scroll element', () => {
+            const el = fakeScrollEl(0, 300, 300); // scrollHeight === clientHeight: nothing to scroll
+            const withScroll = openedDrawer('top', () => el);
+            const withoutScroll = useHudDrawer(ref('top'), ref(300));
+            withoutScroll.toggle();
+            withScroll.onPointerDown(fakeEvent(300, 0));
+            withScroll.onPointerMove(fakeEvent(250, 50));
+            withoutScroll.onPointerDown(fakeEvent(300, 0));
+            withoutScroll.onPointerMove(fakeEvent(250, 50));
+            expect(el.scrollTop).toBe(0);
+            expect(withScroll.currentOffset()).toBe(withoutScroll.currentOffset());
+        });
+    });
+    describe('grabbing the drawer mid-animation (liveOffset)', () => {
+        it('without liveOffset, a gesture seeds from the resting target as before', () => {
+            const drawer = useHudDrawer(ref('top'), ref(472));
+            drawer.onPointerDown(fakeEvent(0, 0));
+            drawer.onPointerMove(fakeEvent(10, 10));
+            expect(drawer.currentOffset()).toBe(10);
+        });
+        it('mid-close grab (isOpen false, rendered 200 of 472): the drag continues from the rendered height', () => {
+            const drawer = useHudDrawer(ref('top'), ref(472), undefined, () => 200);
+            drawer.onPointerDown(fakeEvent(0, 0));
+            drawer.onPointerMove(fakeEvent(10, 10));
+            expect(drawer.dragging.value).toBe(true);
+            expect(drawer.currentOffset()).toBe(210);
+        });
+        it('mid-open grab (isOpen true, rendered 220 of 472): the drag continues from the rendered height, scroll priority still applies', () => {
+            const el = { scrollTop: 0, scrollHeight: 900, clientHeight: 300 };
+            const drawer = useHudDrawer(ref('top'), ref(472), () => el, () => 220);
+            drawer.toggle();
+            drawer.onPointerDown(fakeEvent(300, 0));
+            drawer.onPointerMove(fakeEvent(290, 10)); // 10px up, absorbed by scrolling content
+            expect(el.scrollTop).toBe(10);
+            expect(drawer.currentOffset()).toBe(220);
+        });
+        it('mid-open grab without scroll priority: an upward drag closes from 220, not 472', () => {
+            const drawer = useHudDrawer(ref('top'), ref(472), undefined, () => 220);
+            drawer.toggle();
+            drawer.onPointerDown(fakeEvent(300, 0));
+            drawer.onPointerMove(fakeEvent(290, 10));
+            expect(drawer.currentOffset()).toBe(210);
+        });
+        it('mid-close grab does not route the gesture into the content scroller', () => {
+            const el = { scrollTop: 0, scrollHeight: 900, clientHeight: 300 };
+            const drawer = useHudDrawer(ref('top'), ref(472), () => el, () => 200);
+            drawer.onPointerDown(fakeEvent(0, 0));
+            drawer.onPointerMove(fakeEvent(-10, 10));
+            expect(el.scrollTop).toBe(0);
+            expect(drawer.currentOffset()).toBe(190);
+        });
+        it('ignores an unknown or non-finite live height and clamps to the drawer', () => {
+            const a = useHudDrawer(ref('top'), ref(472), undefined, () => null);
+            a.onPointerDown(fakeEvent(0, 0));
+            a.onPointerMove(fakeEvent(10, 10));
+            expect(a.currentOffset()).toBe(10);
+            const b = useHudDrawer(ref('top'), ref(472), undefined, () => 9999);
+            b.onPointerDown(fakeEvent(0, 0));
+            b.onPointerMove(fakeEvent(-10, 10));
+            expect(b.currentOffset()).toBe(462);
+        });
+    });
+});

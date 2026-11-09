@@ -1,0 +1,135 @@
+import { describe, expect, it } from 'vitest';
+import { deriveOnboardingGuidance, findGuidedTarget, guidedRingStep, nextGuidedType, snapToOfferedPlot, } from './onboardingGuidance';
+describe('deriveOnboardingGuidance', () => {
+    it('before founding: longhouse is current, both guided rows upcoming, step 1 of 3', () => {
+        const g = deriveOnboardingGuidance(false, []);
+        expect(g.step).toBe(1);
+        expect(g.totalSteps).toBe(3);
+        expect(g.progress).toBe(0);
+        expect(g.complete).toBe(false);
+        expect(g.rows).toEqual([
+            { key: 'longhouse', state: 'current' },
+            { key: 'reindeerherder', state: 'upcoming' },
+            { key: 'lumberjack', state: 'upcoming' },
+        ]);
+    });
+    it('just founded, nothing else placed: longhouse done, first guided row current', () => {
+        const g = deriveOnboardingGuidance(true, ['longhouse']);
+        expect(g.step).toBe(2);
+        expect(g.progress).toBeCloseTo(1 / 3);
+        expect(g.rows).toEqual([
+            { key: 'longhouse', state: 'done' },
+            { key: 'reindeerherder', state: 'current' },
+            { key: 'lumberjack', state: 'upcoming' },
+        ]);
+    });
+    it('lumberjack placed before reindeer herder: reindeer herder still reads current, not stuck on a fixed order', () => {
+        const g = deriveOnboardingGuidance(true, ['longhouse', 'lumberjack']);
+        expect(g.step).toBe(3);
+        expect(g.rows).toEqual([
+            { key: 'longhouse', state: 'done' },
+            { key: 'reindeerherder', state: 'current' },
+            { key: 'lumberjack', state: 'done' },
+        ]);
+    });
+    it('both guided buildings placed: complete, no current row, full progress', () => {
+        const g = deriveOnboardingGuidance(true, ['longhouse', 'reindeerherder', 'lumberjack']);
+        expect(g.step).toBe(3);
+        expect(g.progress).toBe(1);
+        expect(g.complete).toBe(true);
+        expect(g.rows.every((row) => row.state === 'done')).toBe(true);
+    });
+    it('reloading mid-onboarding (arrived past a step already) reflects the real state, not a stale counter', () => {
+        const g = deriveOnboardingGuidance(true, ['longhouse', 'reindeerherder']);
+        expect(g.rows).toEqual([
+            { key: 'longhouse', state: 'done' },
+            { key: 'reindeerherder', state: 'done' },
+            { key: 'lumberjack', state: 'current' },
+        ]);
+    });
+});
+describe('nextGuidedType', () => {
+    it('is reindeer herder when nothing is placed yet', () => {
+        expect(nextGuidedType([])).toBe('reindeerherder');
+    });
+    it('skips whichever guided type is already standing, in either order', () => {
+        expect(nextGuidedType(['longhouse', 'reindeerherder'])).toBe('lumberjack');
+        expect(nextGuidedType(['longhouse', 'lumberjack'])).toBe('reindeerherder');
+    });
+    it('is null once both guided buildings are placed', () => {
+        expect(nextGuidedType(['longhouse', 'reindeerherder', 'lumberjack'])).toBeNull();
+    });
+});
+describe('findGuidedTarget', () => {
+    const center = { q: 0, r: 0 };
+    // A tiny hand-built terrain map: origin is grass (the longhouse), one
+    // forest hex two rings out, everything else grass — enough to exercise
+    // "picks the closest match", not a full world generator.
+    const terrainAt = (c) => (c.q === 2 && c.r === 0 ? 'forest' : 'grass');
+    const owned = new Set(['0,0', '1,0', '2,0', '-1,0', '0,1', '0,-1']);
+    const isBuildable = (c) => owned.has(`${c.q},${c.r}`) && !(c.q === 0 && c.r === 0);
+    it('finds the nearest hex matching the guided type\'s required terrain', () => {
+        const target = findGuidedTarget(center, 3, 'lumberjack', terrainAt, isBuildable);
+        expect(target).toEqual({ q: 2, r: 0 });
+    });
+    it('picks the closest of several matching hexes to center', () => {
+        const target = findGuidedTarget(center, 3, 'reindeerherder', terrainAt, isBuildable);
+        // Every owned non-origin hex except (2,0) is grass — the closest of
+        // those (distance 1) should win over farther ones.
+        expect(target).not.toBeNull();
+        expect(target.q === 0 || target.r === 0).toBe(true);
+    });
+    it('returns null when nothing in range is both buildable and the right terrain', () => {
+        expect(findGuidedTarget(center, 3, 'lumberjack', () => 'grass', isBuildable)).toBeNull();
+    });
+    it('never returns a hex isBuildable rejects, even if the terrain matches', () => {
+        expect(findGuidedTarget(center, 3, 'lumberjack', terrainAt, () => false)).toBeNull();
+    });
+});
+// landing-page-defects.md L6a: near-miss founding, so a click one hex off an
+// offered plot succeeds instead of refusing the click outright.
+describe('snapToOfferedPlot', () => {
+    const offered = [{ q: 0, r: 0 }, { q: 5, r: 5 }];
+    it('snaps to the single offered plot at distance 1', () => {
+        expect(snapToOfferedPlot({ q: 1, r: 0 }, offered)).toEqual({ q: 0, r: 0 });
+    });
+    it('refuses (returns null) when two offered plots are equidistant at distance 1', () => {
+        // (1,0) is distance 1 from both (0,0) and (1,-1) — genuinely ambiguous.
+        const twoNearby = [{ q: 0, r: 0 }, { q: 1, r: -1 }];
+        expect(snapToOfferedPlot({ q: 1, r: 0 }, twoNearby)).toBeNull();
+    });
+    it('refuses at distance 2 — only an unambiguous distance-1 near-miss snaps', () => {
+        expect(snapToOfferedPlot({ q: 2, r: 0 }, offered)).toBeNull();
+    });
+    it('refuses when the click matches an offered plot exactly (distance 0 is not a near-miss)', () => {
+        expect(snapToOfferedPlot({ q: 0, r: 0 }, offered)).toBeNull();
+    });
+    it('refuses when nothing is offered', () => {
+        expect(snapToOfferedPlot({ q: 1, r: 0 }, [])).toBeNull();
+    });
+});
+describe('guidedRingStep', () => {
+    const categories = [
+        { id: 'resource', buildings: [{ id: 'reindeerherder' }, { id: 'farm' }] },
+        { id: 'military', buildings: [{ id: 'tower' }] },
+    ];
+    const at = (x) => ({ x, y: 0 });
+    it('points at the Build hub while the ring is at its root', () => {
+        expect(guidedRingStep('reindeerherder', categories, { build: at(1) })).toEqual({ kind: 'build', spot: at(1) });
+    });
+    it('points at the category holding the building once the categories are showing', () => {
+        const spots = { resource: at(2), military: at(3) };
+        expect(guidedRingStep('reindeerherder', categories, spots)).toEqual({ kind: 'category', id: 'resource', spot: at(2) });
+    });
+    it('points at the building once its category is open', () => {
+        const spots = { resource: at(2), military: at(3), reindeerherder: at(4), farm: at(5) };
+        expect(guidedRingStep('reindeerherder', categories, spots)).toEqual({ kind: 'building', id: 'reindeerherder', spot: at(4) });
+    });
+    it('keeps pointing at the right category when another one is open', () => {
+        const spots = { resource: at(2), military: at(3), tower: at(6) };
+        expect(guidedRingStep('reindeerherder', categories, spots)?.kind).toBe('category');
+    });
+    it('is null when the building is not offered on this hex (no dimmed bubble, the map pointer takes over)', () => {
+        expect(guidedRingStep('lumberjack', categories, { build: at(1) })).toBeNull();
+    });
+});

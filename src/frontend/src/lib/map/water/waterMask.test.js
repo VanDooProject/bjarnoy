@@ -1,0 +1,505 @@
+import { describe, expect, it } from 'vitest';
+import { isoGridPosition, isoPixelToAxial, isoTopPoints } from '../../hex/geometry';
+import { bakeWaterMask, euclideanDistanceTransform, NEAR_SPAN_TILES, FOAM_REACH_TILES, groundSquash, hexMitreDistance, NO_FOAM_INNER_TILES, NO_FOAM_REACH_TILES, taintFade, TAINT_INNER_TILES, TAINT_REACH_TILES, topFaceHalfPlanes, waterNoiseSeed, } from './waterMask';
+import { waterMaskRegion } from './waterMaskLayout';
+const TILE_W = 168;
+const TILE_H = (TILE_W * 92) / 200;
+/** Land everywhere at or left of `q <= boundary`, open water beyond — a straight north-south coast. */
+function verticalCoast(boundary) {
+    return { isLand: (q) => q <= boundary };
+}
+const ALL_WATER = { isLand: () => false };
+const ALL_LAND = { isLand: () => true };
+function region() {
+    return waterMaskRegion({ minX: -600, maxX: 600, minY: -400, maxY: 400 }, TILE_W);
+}
+function channel(mask, x, y, c) {
+    return mask.data[(y * mask.width + x) * 4 + c];
+}
+/** The taint field at a texel — see `WaterMask.taint`. */
+function taintAt(mask, x, y) {
+    return mask.taint[y * mask.width + x];
+}
+/**
+ * Whether a texel reads as water, off the signed near field (R). R is the
+ * mask's only land/water statement — A is unused.
+ */
+function isWaterTexel(mask, x, y) {
+    return channel(mask, x, y, 0) > 128;
+}
+/** The far-field (G) channel at a world point — unsigned distance from land over FOAM_REACH_TILES. */
+function sample(mask, r, worldX, worldY) {
+    return channel(mask, Math.floor((worldX - r.rect.minX) / r.texelWorldSize), Math.floor((worldY - r.rect.minY) / r.texelWorldSize), 1);
+}
+/** The signed near field (R) at a world point, decoded back into tile widths. */
+function signedAt(mask, r, worldX, worldY) {
+    const raw = channel(mask, Math.floor((worldX - r.rect.minX) / r.texelWorldSize), Math.floor((worldY - r.rect.minY) / r.texelWorldSize), 0);
+    return (raw / 255 - 0.5) * 2 * NEAR_SPAN_TILES;
+}
+/**
+ * One texel's worth of the R ramp, in channel units. The mask stores one value
+ * per texel and these tests read the texel a point falls in, so nothing can be
+ * asserted tighter than this without testing the raster rather than the metric.
+ */
+function texelSlack(r) {
+    return (255 * r.texelWorldSize) / (FOAM_REACH_TILES * TILE_W);
+}
+/** A single land hex with open water all round it — the cleanest shape to measure a metric against. */
+const ONE_HEX_ISLAND = { isLand: (q, r) => q === 0 && r === 0 };
+describe('euclideanDistanceTransform', () => {
+    it('is zero on the seeds and exact off them', () => {
+        const w = 9;
+        const h = 7;
+        const seeds = new Uint8Array(w * h);
+        seeds[3 * w + 4] = 1;
+        const d = euclideanDistanceTransform(seeds, w, h);
+        expect(d[3 * w + 4]).toBe(0);
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                expect(d[y * w + x]).toBeCloseTo(Math.hypot(x - 4, y - 3), 5);
+            }
+        }
+    });
+    it('is exactly euclidean on a diagonal, where a chamfer is not', () => {
+        // A 3-4 chamfer reads (8,8) as 32/3 = 10.67 against the true 11.31 — a 6%
+        // error that is *directional*, which is what showed up as radial streaks
+        // in the spike (see this transform's own comment).
+        const n = 12;
+        const seeds = new Uint8Array(n * n);
+        seeds[0] = 1;
+        const d = euclideanDistanceTransform(seeds, n, n);
+        expect(d[8 * n + 8]).toBeCloseTo(Math.sqrt(128), 5);
+    });
+    it('saturates to a large finite distance when there are no seeds at all', () => {
+        // Open ocean with no land in the region: every texel must still come out
+        // finite, or the normalisation below turns the whole mask into NaN.
+        const d = euclideanDistanceTransform(new Uint8Array(16), 4, 4);
+        for (const v of d)
+            expect(Number.isFinite(v)).toBe(true);
+    });
+});
+describe('waterNoiseSeed', () => {
+    it('is deterministic per hex and varies between neighbours', () => {
+        expect(waterNoiseSeed(3, -7)).toBe(waterNoiseSeed(3, -7));
+        const seeds = new Set([waterNoiseSeed(0, 0), waterNoiseSeed(1, 0), waterNoiseSeed(0, 1), waterNoiseSeed(-1, 2)]);
+        expect(seeds.size).toBeGreaterThan(1);
+    });
+    it('fits a byte', () => {
+        for (let q = -20; q <= 20; q++) {
+            const s = waterNoiseSeed(q, q * 3 - 5);
+            expect(s).toBeGreaterThanOrEqual(0);
+            expect(s).toBeLessThanOrEqual(255);
+        }
+    });
+});
+describe('bakeWaterMask', () => {
+    it('puts every land texel below the coastline in R and every water texel above it', () => {
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, verticalCoast(0));
+        let sawLand = false;
+        let sawWater = false;
+        for (let y = 0; y < mask.height; y++) {
+            for (let x = 0; x < mask.width; x++) {
+                const worldX = r.rect.minX + (x + 0.5) * r.texelWorldSize;
+                const worldY = r.rect.minY + (y + 0.5) * r.texelWorldSize;
+                const hex = isoPixelToAxial({ x: worldX, y: worldY }, TILE_W, TILE_H);
+                if (hex.q <= 0) {
+                    sawLand = true;
+                    // Land: the signed near field is at or below the coastline, and the
+                    // far field (distance from land) is zero.
+                    expect(channel(mask, x, y, 0)).toBeLessThanOrEqual(128);
+                    expect(channel(mask, x, y, 1)).toBe(0);
+                }
+                else {
+                    sawWater = true;
+                    expect(channel(mask, x, y, 0)).toBeGreaterThanOrEqual(128);
+                }
+            }
+        }
+        expect(sawLand && sawWater).toBe(true);
+    });
+    it('puts the signed near field at exactly 0.5 on the coastline', () => {
+        // The property the whole inner-edge fix rests on: R crosses 0.5 on the tile
+        // edge the art draws, so linear filtering places the crossing within a
+        // fraction of a texel of it instead of on a texel boundary.
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, ONE_HEX_ISLAND);
+        const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+        const squash = groundSquash(TILE_W, TILE_H);
+        for (const t of [0.35, 0.5, 0.65]) {
+            const onEdge = signedAt(mask, r, grid.x + TILE_W * t, grid.y);
+            expect(Math.abs(onEdge)).toBeLessThan((r.texelWorldSize / TILE_W) * 1.5);
+        }
+        // And it is signed the right way either side of that edge.
+        expect(signedAt(mask, r, grid.x + TILE_W / 2, grid.y - 0.3 * TILE_W * squash)).toBeGreaterThan(0.2);
+        expect(signedAt(mask, r, grid.x + TILE_W / 2, grid.y + TILE_H / 2)).toBeLessThan(-0.2);
+    });
+    it('ramps the signed near field linearly in ground units out from a real tile edge', () => {
+        // Measured out from an actual top-face edge rather than by counting texels
+        // from the first water texel: the coastline of a hex grid zig-zags, so "one
+        // tile east of the first water texel" is not one tile from land.
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, ONE_HEX_ISLAND);
+        const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+        const squash = groundSquash(TILE_W, TILE_H);
+        for (const tilesOut of [0.15, 0.3, 0.45]) {
+            // Straight up from the middle of the hex's flat top edge. The offset is a
+            // ground distance, so on screen it is foreshortened by `squash`.
+            const value = signedAt(mask, r, grid.x + TILE_W / 2, grid.y - tilesOut * TILE_W * squash);
+            expect(Math.abs(value - tilesOut)).toBeLessThan(r.texelWorldSize / TILE_W);
+        }
+    });
+    it('measures distance along the ground, not on screen — so the band is not painted on the glass', () => {
+        // The isometric projection squashes the ground to ~53% in y. A band of
+        // constant *screen* distance around a tile is not the projection of a band
+        // of constant ground distance, and reads as a decal in front of the map
+        // rather than as foam lying on the water. So the same ground distance north
+        // of a hex must come out at the same value as diagonally out from it —
+        // which on screen is a visibly smaller offset.
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, ONE_HEX_ISLAND);
+        const squash = groundSquash(TILE_W, TILE_H);
+        const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+        const out = 0.35 * TILE_W;
+        const north = signedAt(mask, r, grid.x + TILE_W / 2, grid.y - out * squash);
+        // Perpendicular to the upper-right edge, whose ground-space outward normal
+        // is 30 degrees above the x axis.
+        const edgeMid = { x: grid.x + (7 * TILE_W) / 8, y: grid.y + TILE_H / 4 };
+        const diagonal = signedAt(mask, r, edgeMid.x + Math.cos(Math.PI / 6) * out, edgeMid.y - Math.sin(Math.PI / 6) * out * squash);
+        expect(Math.abs(north - diagonal)).toBeLessThan(r.texelWorldSize / TILE_W);
+        expect(squash).toBeLessThan(0.6);
+    });
+    it('has a far field that is monotonic outward from the coast and saturates past the reach', () => {
+        // G is the raster transform, deliberately approximate: it only feeds the
+        // wave coast-fade, which reads it out in the middle of its range where a
+        // texel of error is invisible. The exact metric is reserved for R, near the
+        // shore, where the foam is.
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, verticalCoast(-2));
+        const y = Math.floor(mask.height / 2);
+        let previous = -1;
+        let sawSaturated = false;
+        for (let x = 0; x < mask.width; x++) {
+            if (!isWaterTexel(mask, x, y))
+                continue;
+            const value = channel(mask, x, y, 1);
+            expect(value).toBeGreaterThanOrEqual(previous);
+            previous = value;
+            if (value === 255)
+                sawSaturated = true;
+        }
+        expect(sawSaturated).toBe(true);
+    });
+    it('measures the far field along the ground too, not on the glass', () => {
+        // The same failure the signed near field had before it was lifted into
+        // ground space: a distance measured in screen pixels puts its level sets
+        // 1/squash further out on a north-facing shore than an east-facing one, so
+        // anything keyed off it — the wave coast fade, the caustics' keep-off — sits
+        // at a different distance depending on which way the coast happens to run.
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, ONE_HEX_ISLAND);
+        const squash = groundSquash(TILE_W, TILE_H);
+        const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+        const out = 0.9 * TILE_W;
+        // Straight up from the middle of the flat top edge, and straight out from
+        // the middle of the east point — the same ground distance either way.
+        const north = sample(mask, r, grid.x + TILE_W / 2, grid.y - out * squash);
+        const east = sample(mask, r, grid.x + TILE_W + out, grid.y + TILE_H / 2);
+        expect(north).toBeGreaterThan(0);
+        expect(north).toBeLessThan(255);
+        // Within a couple of levels: G is the raster transform, so a texel of
+        // disagreement is expected — a factor of 1/squash (1.9x) is not.
+        expect(Math.abs(north - east)).toBeLessThan(16);
+    });
+    it('is symmetric across a straight coast', () => {
+        // Two coasts the same distance apart on either side of a land strip must
+        // produce mirrored ramps — an asymmetric transform (a one-pass chamfer,
+        // say) fails this.
+        const strip = { isLand: (q) => q >= -1 && q <= 1 };
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, strip);
+        const y = Math.floor(mask.height / 2);
+        const rowLeft = [];
+        const rowRight = [];
+        let inLand = false;
+        for (let x = 0; x < mask.width; x++) {
+            const isLand = !isWaterTexel(mask, x, y);
+            if (isLand)
+                inLand = true;
+            else if (!inLand)
+                rowLeft.push(channel(mask, x, y, 1));
+            else
+                rowRight.push(channel(mask, x, y, 1));
+        }
+        const n = Math.min(rowLeft.length, rowRight.length, 8);
+        for (let i = 0; i < n; i++) {
+            // rowLeft runs *towards* the coast, rowRight runs away from it.
+            expect(rowLeft[rowLeft.length - 1 - i]).toBeCloseTo(rowRight[i], -1);
+        }
+    });
+    it('saturates across a region with no land in it at all', () => {
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, ALL_WATER);
+        for (let i = 0; i < mask.width * mask.height; i++) {
+            expect(mask.data[i * 4 + 0]).toBe(255);
+            expect(mask.data[i * 4 + 1]).toBe(255);
+        }
+    });
+    it('saturates across a region with no water in it at all', () => {
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, ALL_LAND);
+        for (let i = 0; i < mask.width * mask.height; i++) {
+            expect(mask.data[i * 4 + 0]).toBe(0);
+            expect(mask.data[i * 4 + 1]).toBe(0);
+        }
+    });
+    it('carries the per-hex seed through unchanged', () => {
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, ALL_WATER);
+        const x = Math.floor(mask.width / 3);
+        const y = Math.floor(mask.height / 3);
+        const hex = isoPixelToAxial({ x: r.rect.minX + (x + 0.5) * r.texelWorldSize, y: r.rect.minY + (y + 0.5) * r.texelWorldSize }, TILE_W, TILE_H);
+        expect(channel(mask, x, y, 2)).toBe(waterNoiseSeed(hex.q, hex.r));
+    });
+});
+describe('mask/art alignment (§3.4)', () => {
+    // The invariant the whole design rests on, stated as an assertion: the mask
+    // is baked through isoPixelToAxial, and the *visible* land/water boundary in
+    // the art is the top-face polygon edge, because top faces tessellate and
+    // every tile's 68px skirt is covered by the tile in front of it. So a point
+    // inside a hex's top face must belong to that hex, and a point in its skirt
+    // must belong to the hex in front — the one whose art actually paints there.
+    // If the tile geometry constants ever move, this fails loudly instead of
+    // detaching the foam from the coastline by up to 68 world units.
+    // `oddQToAxial` can hand back a negative zero (`-0`), which `toEqual`
+    // distinguishes from `0` — normalise so these assertions test the geometry
+    // rather than the sign of a zero.
+    const at = (p) => {
+        const c = isoPixelToAxial(p, TILE_W, TILE_H);
+        return { q: c.q + 0, r: c.r + 0 };
+    };
+    const hexes = [
+        { q: 0, r: 0 },
+        { q: 1, r: 0 },
+        { q: 1, r: -1 },
+        { q: -3, r: 5 },
+        { q: 7, r: -2 },
+    ];
+    it('puts every point inside a top face in that hex', () => {
+        for (const hex of hexes) {
+            const grid = isoGridPosition(hex, TILE_W, TILE_H);
+            const centreX = grid.x + TILE_W / 2;
+            const centreY = grid.y + TILE_H / 2;
+            for (const p of isoTopPoints(TILE_W, TILE_H)) {
+                // 90% of the way from the centre to each corner — inside, but close
+                // enough to the edge to catch a half-cell error.
+                const x = centreX + (grid.x + p.x - centreX) * 0.9;
+                const y = centreY + (grid.y + p.y - centreY) * 0.9;
+                expect(at({ x, y })).toEqual(hex);
+            }
+        }
+    });
+    it('puts a point in a tile’s skirt in the hex in front of it, not the tile itself', () => {
+        for (const hex of hexes) {
+            const grid = isoGridPosition(hex, TILE_W, TILE_H);
+            // A third of a row below the hex's own top face — inside the skirt the
+            // art draws there, and inside the top face of the hex one row down.
+            const skirt = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H + TILE_H / 3 };
+            expect(at(skirt)).not.toEqual(hex);
+            expect(at(skirt)).toEqual({ q: hex.q, r: hex.r + 1 });
+        }
+    });
+});
+describe('mitred hex-edge distance', () => {
+    // Why the field is not a plain euclidean distance transform: a euclidean band
+    // rounds every convex corner over a radius equal to its own width, and a hex
+    // edge is half a tile long while the foam band is a third of one — so on a hex
+    // coastline the corners dominate and the band reads as a soft blob rather than
+    // as something following the shoreline.
+    const r = waterMaskRegion({ minX: -600, maxX: 600, minY: -400, maxY: 400 }, TILE_W);
+    const mask = bakeWaterMask(r, TILE_W, TILE_H, ONE_HEX_ISLAND);
+    const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+    const squash = groundSquash(TILE_W, TILE_H);
+    it('is constant along a straight run parallel to a tile edge', () => {
+        // Sampling parallel to the flat top edge at a fixed perpendicular offset
+        // must read the same value all the way along. That is what "straight edges"
+        // means: the band's outer boundary is a line parallel to the tile edge, not
+        // an arc swung from its endpoints.
+        const offset = 0.3 * TILE_W * squash;
+        const y = grid.y - offset;
+        const values = [0.3, 0.45, 0.5, 0.6, 0.7].map((t) => sample(mask, r, grid.x + TILE_W * t, y));
+        for (const value of values)
+            expect(Math.abs(value - values[0])).toBeLessThan(texelSlack(r));
+    });
+    it('mitres the corners instead of rounding them off', () => {
+        // Asserted on the metric itself rather than through the mask: the raster
+        // stores one value per texel, and the difference this is about is smaller
+        // than a texel's worth of the ramp.
+        //
+        // Straight out along a corner's bisector a mitred field reads *lower* than a
+        // euclidean one by cos(30 degrees) — which is the same thing as saying its
+        // level set reaches 1/cos(30) further out there, so the band comes to a
+        // point at the corner instead of being cut off by an arc.
+        const planes = topFaceHalfPlanes(TILE_W, TILE_H);
+        const groundGrid = { x: grid.x, y: grid.y / squash };
+        const out = 0.3 * TILE_W;
+        // Perpendicular from the middle of the flat top edge, and along the east
+        // vertex's bisector — the same ground distance in both cases.
+        const groundH = TILE_H / squash;
+        const fromEdge = hexMitreDistance(grid.x + TILE_W / 2, groundGrid.y - out, groundGrid.x, groundGrid.y, planes);
+        const fromCorner = hexMitreDistance(grid.x + TILE_W + out, groundGrid.y + groundH / 2, groundGrid.x, groundGrid.y, planes);
+        expect(fromEdge).toBeCloseTo(out, 6);
+        expect(fromCorner).toBeCloseTo(out * Math.cos(Math.PI / 6), 6);
+    });
+    it('is zero exactly on a top-face edge, which is where the art\'s coastline is', () => {
+        const planes = topFaceHalfPlanes(TILE_W, TILE_H);
+        const groundGrid = { x: grid.x, y: grid.y / squash };
+        for (const t of [0.3, 0.5, 0.7]) {
+            expect(hexMitreDistance(grid.x + TILE_W * t, groundGrid.y, groundGrid.x, groundGrid.y, planes)).toBeCloseTo(0, 6);
+        }
+    });
+    it('is negative inside the hex', () => {
+        const planes = topFaceHalfPlanes(TILE_W, TILE_H);
+        const groundGrid = { x: grid.x, y: grid.y / squash };
+        const centre = hexMitreDistance(grid.x + TILE_W / 2, groundGrid.y + TILE_H / squash / 2, groundGrid.x, groundGrid.y, planes);
+        expect(centre).toBeLessThan(0);
+        // A regular flat-top hexagon's inradius is w * sqrt(3) / 4.
+        expect(-centre).toBeCloseTo((TILE_W * Math.sqrt(3)) / 4, 6);
+    });
+});
+describe('taintFade', () => {
+    it('is fully on out to the inner plateau and fully off past the reach', () => {
+        expect(taintFade(0, 60, 150)).toBe(1);
+        expect(taintFade(60, 60, 150)).toBe(1);
+        expect(taintFade(-5, 60, 150)).toBe(1);
+        expect(taintFade(150, 60, 150)).toBe(0);
+        expect(taintFade(500, 60, 150)).toBe(0);
+    });
+    it('falls monotonically across the fade', () => {
+        let previous = 1;
+        for (let d = 60; d <= 150; d += 5) {
+            const value = taintFade(d, 60, 150);
+            expect(value).toBeLessThanOrEqual(previous);
+            previous = value;
+        }
+    });
+    it('flattens out at both ends rather than meeting the untainted water at a corner', () => {
+        // Smoothstep: a linear ramp meets the untainted water at a corner.
+        const inner = 60;
+        const reach = 150;
+        const atStart = taintFade(inner, inner, reach) - taintFade(inner + (reach - inner) * 0.05, inner, reach);
+        const inMiddle = taintFade(inner + (reach - inner) * 0.475, inner, reach) - taintFade(inner + (reach - inner) * 0.525, inner, reach);
+        expect(atStart).toBeLessThan(inMiddle * 0.5);
+    });
+});
+describe("the mask's taint field", () => {
+    /** A world where the single hex `(q, r)` is wasted land — sea everywhere else, no land at all. */
+    function oneWastedHex(q, r) {
+        return { isLand: () => false, isWastedLand: (tq, tr) => tq === q && tr === r };
+    }
+    it('is all zero when the lookup carries no isWastedLand at all', () => {
+        // Optional, and omitted entirely, is the documented way to ask for an
+        // all-zero taint field .
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, ALL_WATER);
+        expect(mask.taint.every((v) => v === 0)).toBe(true);
+    });
+    it('is all zero when isWastedLand never answers true over the region', () => {
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, { isLand: () => false, isWastedLand: () => false });
+        expect(mask.taint.every((v) => v === 0)).toBe(true);
+    });
+    it("is byte-identical to today's mask (data) for a world with no wasted land", () => {
+        // The load-bearing regression: adding taint must not perturb the four
+        // existing channels for every world that predates wasted islands.
+        const r = region();
+        const withoutHook = bakeWaterMask(r, TILE_W, TILE_H, verticalCoast(0));
+        const withHook = bakeWaterMask(r, TILE_W, TILE_H, { isLand: (q) => q <= 0, isWastedLand: () => false });
+        expect(withHook.data).toEqual(withoutHook.data);
+    });
+    it('is full strength at a wasted hex centre and beyond it', () => {
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, oneWastedHex(0, 0));
+        const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+        const at = (x, y) => taintAt(mask, Math.floor((x - r.rect.minX) / r.texelWorldSize), Math.floor((y - r.rect.minY) / r.texelWorldSize));
+        expect(at(grid.x + TILE_W / 2, grid.y + TILE_H / 2)).toBe(255);
+    });
+    it('stays full strength out to TAINT_INNER_TILES and fades to zero by TAINT_REACH_TILES', () => {
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, oneWastedHex(0, 0));
+        const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+        const centre = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
+        const at = (dx) => taintAt(mask, Math.floor((centre.x + dx - r.rect.minX) / r.texelWorldSize), Math.floor((centre.y - r.rect.minY) / r.texelWorldSize));
+        // Just inside the plateau: still full strength. Well past the reach: zero.
+        // In between: at least one texel that is neither, and the whole walk only
+        // ever falls.
+        expect(at(TILE_W * (TAINT_INNER_TILES - 0.1))).toBe(255);
+        expect(at(TILE_W * (TAINT_REACH_TILES + 1))).toBe(0);
+        const ramp = [];
+        for (let t = TAINT_INNER_TILES; t <= TAINT_REACH_TILES; t += 0.05)
+            ramp.push(at(TILE_W * t));
+        expect(ramp.some((v) => v > 0 && v < 255)).toBe(true);
+        for (let i = 1; i < ramp.length; i++)
+            expect(ramp[i]).toBeLessThanOrEqual(ramp[i - 1]);
+    });
+    it('leaves the other channels alone — taint is a separate field, not a fifth channel', () => {
+        const r = region();
+        const withoutWaste = bakeWaterMask(r, TILE_W, TILE_H, ALL_WATER);
+        const withWaste = bakeWaterMask(r, TILE_W, TILE_H, oneWastedHex(0, 0));
+        for (let i = 0; i < withoutWaste.data.length; i++) {
+            expect(withWaste.data[i]).toBe(withoutWaste.data[i]);
+        }
+        // ...and the wasted hex really did taint something, so the assertion above
+        // isn't passing because nothing happened.
+        expect(withWaste.taint.some((v) => v > 0)).toBe(true);
+    });
+});
+describe("the mask's no-foam field", () => {
+    /** Land at `q <= 0` with the coastal land hex (0, 0) a river mouth: its east edge is the shore, water beyond. */
+    const mouthCoast = { isLand: (q) => q <= 0, noFoam: (q, r) => q === 0 && r === 0 };
+    /** The field at a world point. */
+    function noFoamAtWorld(mask, r, x, y) {
+        return mask.noFoam[Math.floor((y - r.rect.minY) / r.texelWorldSize) * mask.width + Math.floor((x - r.rect.minX) / r.texelWorldSize)];
+    }
+    it('is all zero when the lookup carries no noFoam', () => {
+        const mask = bakeWaterMask(region(), TILE_W, TILE_H, verticalCoast(0));
+        expect(mask.noFoam).toHaveLength(mask.width * mask.height);
+        expect(mask.noFoam.every((v) => v === 0)).toBe(true);
+    });
+    it('leaves the four mask channels and the taint untouched', () => {
+        const r = region();
+        const plain = bakeWaterMask(r, TILE_W, TILE_H, verticalCoast(0));
+        const withMouth = bakeWaterMask(r, TILE_W, TILE_H, mouthCoast);
+        expect(withMouth.data).toEqual(plain.data);
+        expect(withMouth.taint).toEqual(plain.taint);
+        expect(withMouth.noFoam.some((v) => v > 0)).toBe(true);
+    });
+    it('is full on the mouth hex and on the water just off its coast, and zero well beyond the reach and along a far stretch of coast', () => {
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, mouthCoast);
+        const hex = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+        const centre = { x: hex.x + TILE_W / 2, y: hex.y + TILE_H / 2 };
+        // The hex's east tip is the coast on this row; the field is measured out of the hex's texels.
+        const tipX = centre.x + TILE_W / 2;
+        expect(noFoamAtWorld(mask, r, centre.x, centre.y)).toBe(255);
+        // Foam reaches at most ~0.44 tiles off the coast; inside INNER it must be fully gone.
+        expect(noFoamAtWorld(mask, r, tipX + TILE_W * (NO_FOAM_INNER_TILES - 0.1), centre.y)).toBe(255);
+        // Past REACH it is gone again, so foam resumes beyond the mouth.
+        expect(noFoamAtWorld(mask, r, tipX + TILE_W * (NO_FOAM_REACH_TILES + 0.2), centre.y)).toBe(0);
+        // Same shore, several hexes up the coast: no mouth there, so no suppression.
+        expect(noFoamAtWorld(mask, r, centre.x + TILE_W * 0.3, centre.y + TILE_H * 3)).toBe(0);
+    });
+    it('fades monotonically between INNER and REACH', () => {
+        const r = region();
+        const mask = bakeWaterMask(r, TILE_W, TILE_H, mouthCoast);
+        const hex = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+        const tipX = hex.x + TILE_W;
+        const ramp = [];
+        for (let t = NO_FOAM_INNER_TILES; t <= NO_FOAM_REACH_TILES; t += 0.05) {
+            ramp.push(noFoamAtWorld(mask, r, tipX + TILE_W * t, hex.y + TILE_H / 2));
+        }
+        expect(ramp.some((v) => v > 0 && v < 255)).toBe(true);
+        for (let i = 1; i < ramp.length; i++)
+            expect(ramp[i]).toBeLessThanOrEqual(ramp[i - 1]);
+    });
+});
