@@ -1274,11 +1274,11 @@ async function upgrade() {
            and army panels); double-click puts it back. -->
       <div
         class="debug-drag-handle"
-        title="Drag to move, double-click to reset"
+        :title="t('hud.debugStack.handleTitle')"
         @pointerdown="debugStackDrag.onPointerDown"
         @dblclick="debugStackDrag.reset"
       >
-        ⠿ debug
+        {{ `⠿ ${t('hud.debugStack.handle')}` }}
       </div>
       <!-- First in the stack on purpose: it is the one panel that answers
            "is the map smooth right now", which is the question every other

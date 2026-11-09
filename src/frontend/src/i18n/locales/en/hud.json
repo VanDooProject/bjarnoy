@@ -440,6 +440,10 @@
   "tradeReport": {
     "summary": "Gave {gaveAmount} {gave} for {gotAmount} {got}"
   },
+  "debugStack": {
+    "handle": "debug",
+    "handleTitle": "Drag to move, double-click to reset"
+  },
   "fpsMeter": {
     "title": "Frame rate",
     "fps": "fps",
