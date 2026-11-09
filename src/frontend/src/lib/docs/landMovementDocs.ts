@@ -39,7 +39,7 @@ export const BRIDGE_LEVELS = [
  */
 export const BRIDGE_UNLOCK = { longhouse: 7, townSquare: 1 } as const;
 
-/** Rings of the map a land army explores around itself (the Spearman's `UnitDefinition.VisionRadius`; the player docs still say every army sees this far). */
+/** Rings of the map the docs example army (a Spearman stack) explores around itself: the Spearman's `UnitDefinition.VisionRadius`. */
 export const ARMY_VISION_RINGS = 2;
 
 /** `CampGenerator.GuardRange` for a strong camp: it guards `2 + level` hexes around itself. */

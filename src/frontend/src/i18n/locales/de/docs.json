@@ -1249,7 +1249,7 @@
     },
     "sight": {
       "heading": "Was eine Armee sieht",
-      "body": "Eine marschierende Armee deckt {rings} Ringe der Karte um sich auf, dazu {bonus} weitere für jede Stufe der {odin}.",
+      "body": "Wie weit eine marschierende Armee sieht, hängt davon ab, wer mitzieht: Sie sieht so weit wie ihre aufmerksamste Einheit, dazu {bonus} weitere Ringe für jede Stufe der {odin}. Thralls sehen 3 Ringe weit, die meisten Truppen 2, Belagerungswaffen nur 1. Eine Flotte sieht am weitesten: 6 Ringe mit einem Karve, 4 mit einem Langschiff.",
       "others": "Marschieren Truppen anderer Spieler durch dein Sichtfeld, siehst du sie in der Farbe ihres Besitzers über die Karte ziehen. Wohin sie wollen und was sie tragen, bleibt dir verborgen."
     },
     "bridges": {

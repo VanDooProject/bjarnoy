@@ -120,11 +120,14 @@ on every member's settlement change. Both are needed.
 `uArmyHexSize`/`uArmyRamp` uniforms, uploaded every tick by `HexMapRenderer` from
 its own already-computed live army render positions (`resolveArmyPoint`,
 reused as-is), composited as a `min()` of the troop's own ramps with the
-mask's ramp values — never written into `uMask`/`uMaskPrev`, exactly as designed below. The
-vision radius is a single flat constant (`ArmyVisionRadiusHexes`, backend;
-`ARMY_VISION_RADIUS_HEXES`, frontend) rather than per-unit-type, since no
-unit anywhere in `UnitCatalogue` carries a vision stat to draw a different
-number from.
+mask's ramp values — never written into `uMask`/`uMaskPrev`, exactly as designed below. The uniforms are `uArmyVisionSources` (x, y), `uArmyVisionRadii` (one radius in hexes per source), `uArmyVisionCount`,
+`uArmyHexSize` and `uArmyRamp`; the ramp offsets and margins are relative to each source's own radius. Vision is a
+per-unit-type stat (`UnitDefinition.VisionRadius`, in rings): Thrall 3; Spearman, Axeman, Bowman, Berserker,
+Provisioner and Settler 2; Catapult and Ram 1; Karve 6; Longship 4. Faster units see a little more (scouts), stronger
+ones less. An army or fleet sees as far as the highest value among the unit types actually in it (count above zero),
+plus the Ravens' rings of its home settlement (additive). The backend computes this once
+(`FogVisionRadii.ArmyVisionRadius`) and uses it for the live disc, the persisted walked-ground reveal and
+`ArmyResponse.visionRadius`. The client draws that field as is and computes nothing itself.
 
 **Edge shaping.** The troop writes its own pair of ramps in the mask's own
 units (0 at the troop, 1 far away, one per channel) and takes the `min()`
