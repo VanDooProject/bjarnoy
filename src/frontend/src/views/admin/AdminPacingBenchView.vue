@@ -825,6 +825,10 @@ input.changed {
   color: var(--muted);
   white-space: nowrap;
 }
+.toggle input {
+  width: auto;
+  flex: none;
+}
 .toggle {
   display: inline-flex;
   align-items: center;
