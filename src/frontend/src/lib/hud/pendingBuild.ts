@@ -54,3 +54,16 @@ export function nextUpgradeLevel(
   const queued = queue.filter((o) => o.q === at.q && o.r === at.r && (o.kind ?? 'build') === 'build').map((o) => o.targetLevel);
   return Math.max(builtLevel, ...queued) + 1;
 }
+
+/**
+ * Whether the hex on `at` takes no further order: it already holds `maxOrdersPerHex` orders (1 today, stacking is gated
+ * off, docs/design/construction-slots.md) or a raze. The server refuses an upgrade there with `AlreadyQueuedOnHex`.
+ */
+export function hexTakesNoOrder(
+  queue: Pick<BuildOrderResponse, 'q' | 'r' | 'kind'>[],
+  at: AxialCoord,
+  maxOrdersPerHex: number,
+): boolean {
+  const here = queue.filter((o) => o.q === at.q && o.r === at.r);
+  return here.length >= maxOrdersPerHex || here.some((o) => o.kind === 'raze');
+}

@@ -31,7 +31,7 @@ const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' }
 import { buildingArtOnTile, terrainArt } from '../../lib/map/buildingArt';
 import { tileIsBuildable } from '../../lib/map/ringCatalogue';
 import AtlasSprite from '../AtlasSprite.vue';
-import { nextUpgradeLevel } from '../../lib/hud/pendingBuild';
+import { hexTakesNoOrder, nextUpgradeLevel } from '../../lib/hud/pendingBuild';
 
 const props = defineProps<{
   tile: Tile;
@@ -292,6 +292,9 @@ const razeOrderHere = computed(() =>
   world.hud.queue.find((o) => o.q === props.tile.q && o.r === props.tile.r && o.kind === 'raze'),
 );
 
+// Any other order at the hex's limit (today: a running build or upgrade, one order per hex): the hex takes no upgrade.
+const hexFull = computed(() => hexTakesNoOrder(world.hud.queue, props.tile, world.hud.construction.maxOrdersPerHex));
+
 // No free construction slot right now (every slot occupied by an
 // already-building order) — for a premium account (a non-zero waiting
 // queue), the action still submits, but as a waiting-queue request rather
@@ -443,6 +446,9 @@ const actionLabel = computed(() => {
         </div>
         <div v-else-if="mine && buildable && waitingOrderHere && !outsideRealm" class="actions">
           <p class="desc queued-note">{{ t('hud.buildingModal.queuedNote') }}</p>
+        </div>
+        <div v-else-if="mine && buildable && hexFull && !outsideRealm" class="actions">
+          <p class="desc queued-note" data-testid="hex-busy-note">{{ t('hud.ringMenu.actions.hexBusy') }}</p>
         </div>
         <div v-else-if="mine && buildable && tile.buildingType && !outsideRealm" class="actions">
           <div class="cost">{{ t('hud.buildingModal.upgradeCost') }}: {{ costLine }}</div>

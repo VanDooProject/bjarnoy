@@ -49,7 +49,7 @@ import { useMediaQuery } from '../composables/useMediaQuery';
 import { hudBarHeightPx, hudRailWidthPx } from '../composables/hudBarHeight';
 import { isHudRail } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
-import { nextUpgradeLevel } from '../lib/hud/pendingBuild';
+import { hexTakesNoOrder, nextUpgradeLevel } from '../lib/hud/pendingBuild';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
@@ -860,25 +860,30 @@ function upgradeActionFor(tile: Tile): RingAction {
   ].filter((lock): lock is string => !!lock);
   const hexBusy = world.hud.queue.some((o) => o.q === tile.q && o.r === tile.r);
   const availability = availabilityFor(cost, upgradeDefinition, locks.length > 0, hexBusy);
+  // A hex at its order limit (or with a raze) takes no upgrade: the card says so, like Raze's, instead of listing slots.
+  const busyNote = hexTakesNoOrder(world.hud.queue, tile, world.hud.construction.maxOrdersPerHex)
+    ? t('hud.ringMenu.actions.hexBusy')
+    : undefined;
   const stats = buildingStatsAt(type, nextLevel, tile, tileAt);
   // Production is per hour at the world's speed: the card shows the gain, and the new total next to it.
   const rate = upgradeRateGain(buildingStatsAt(type, level, tile, tileAt).output, stats.output, world.worldSpeedFactor);
   const missing = formatMissingResources(cost, world.hud.available);
-  const blocked = availability.state === 'locked' || availability.state === 'waiting';
+  const blocked = !!busyNote || availability.state === 'locked' || availability.state === 'waiting';
   return {
     id: 'upgrade',
     label,
     color: 'var(--gold)',
     disabled: blocked,
-    state: blocked ? availability.state : undefined,
+    state: !blocked ? undefined : busyNote ? 'waiting' : availability.state,
     // Read out by screen readers; sighted players get the card on hover.
     hint: !blocked
       ? undefined
-      : locks.length
-        ? locks[0]
-        : missing
-          ? t('hud.ringMenu.actions.notEnough', { resources: missing })
-          : t('hud.ringMenu.card.badgeNoSlot'),
+      : (busyNote ??
+        (locks.length
+          ? locks[0]
+          : missing
+            ? t('hud.ringMenu.actions.notEnough', { resources: missing })
+            : t('hud.ringMenu.card.badgeNoSlot'))),
     card: {
       title: t('hud.ringMenu.card.upgradeTitle', { level: nextLevel }),
       sub: t('hud.ringMenu.card.upgradeSub', { building: buildingName(type), from: level, to: nextLevel }),
@@ -892,9 +897,9 @@ function upgradeActionFor(tile: Tile): RingAction {
             ? formatModifier(stats.modifier)
             : undefined,
       givesTotal: rate ? t('hud.ringMenu.card.givesTotal', { amount: rate.total }) : undefined,
-      locks,
+      locks: busyNote ? [busyNote, ...locks] : locks,
       art: buildingArt(type, nextLevel),
-      availability,
+      availability: busyNote ? undefined : availability,
     },
   };
 }
