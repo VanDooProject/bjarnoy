@@ -1652,6 +1652,8 @@ export interface ArmyResponse {
   provisions: number;
   totalSpeed: number;
   totalUpkeepPerHour: number;
+  /** Rings of the map the army sees around itself while it travels: its best-sighted unit type plus the home settlement's Odin's Ravens (`ArmyResponse.VisionRadius`). The live fog layer draws it as is. */
+  visionRadius: number;
   stacks: ArmyUnitStackResponse[];
   movement: MovementResponse | null;
 }
@@ -1838,6 +1840,8 @@ export interface UnitDefinitionResponse {
   defense: number;
   /** Hexes per hour. Unused by anything this phase builds (army movement is a later phase). */
   speed: number;
+  /** Rings of the map an army sees around itself while it travels, as far as its best-sighted unit type (`UnitDefinition.VisionRadius`). */
+  visionRadius: number;
   carryCapacity: number;
   foodCarryCapacity: number;
   /** Slots this unit takes aboard a ship (0 for ships). */
