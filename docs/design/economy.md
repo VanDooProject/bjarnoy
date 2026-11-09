@@ -809,6 +809,11 @@ or a producer's next level costs more than the current capacity (upgrade the low
 can be upgraded, the lowest or a new Great Storehouse, the best capacity per cost); and the Town Square and the Cart Workshop
 are built and paid for like any building.
 
+The admin page **Pacing bench** (`/admin/pacing-bench`) runs this simulator on the what-if catalogue (`whatIf.ts`) for four fixed
+profiles (active with and without feasts, 4 and 2 check-ins with feasts) and compares them with a pinned reference run: the
+producer counts and level-1 outputs, the producers' cost growth and early price factors, the Longhouse's growth and break level,
+the two storage buildings' capacity and cost, the renown threshold and the simulated days are its knobs.
+
 ### What the simulator showed
 
 - **Measure economic strength as production per hour on a given day**, not
