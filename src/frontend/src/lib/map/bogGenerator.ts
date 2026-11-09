@@ -272,6 +272,8 @@ export class BogGenerator {
 
   /** The water tiles of accepted pockets: sea that became lake. */
   readonly pocketWater = new HexSet();
+  /** Enclosed water the bog did not fill (a pocket too small or too large, or whose ring broke a rule): it becomes an inland lake. */
+  readonly inlandLake = new HexSet();
   /** The bog ring tiles of accepted pockets (and the island tiles filled into their lakes): drainage treats them as blocked. */
   readonly pocketRing = new HexSet();
 
@@ -323,12 +325,22 @@ export class BogGenerator {
   // ---------------------------------------------------------------- pockets
 
   /** Finds enclosed sea pockets and turns the ones that satisfy every rule into lakes with a bog ring — mirrors `FindPockets`. */
+  /** The inland-lake hexes, sorted by (q, r). */
+  inlandLakeTiles(): AxialCoord[] {
+    return sorted(this.inlandLake);
+  }
+
   findPockets(): void {
     if (this.islandTiles.length === 0) return;
     for (const comp of enclosedWaterPockets(this.islandTiles, this.isLand)) {
-      if (comp.length < BOG_POCKET_MIN_TILES || comp.length > BOG_POCKET_MAX_TILES) continue;
+      if (comp.length < BOG_POCKET_MIN_TILES || comp.length > BOG_POCKET_MAX_TILES) {
+        for (const t of comp) this.inlandLake.add(t);
+        continue;
+      }
       if (this.stats) this.stats.pocketsFound++;
-      if (this.tryBuildPocket(comp) && this.stats) this.stats.pocketsFilled++;
+      if (!this.tryBuildPocket(comp)) {
+        for (const t of comp) this.inlandLake.add(t);
+      } else if (this.stats) this.stats.pocketsFilled++;
     }
 
     // The pockets' rings are now bog: re-measure the distance to anything a bog site must keep away from.

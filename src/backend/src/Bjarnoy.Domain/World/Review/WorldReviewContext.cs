@@ -87,6 +87,7 @@ public sealed class ReviewedIsland
         }
 
         BogLakes = island.BogTiles.Where(t => t.Kind == BogTileKind.Lake).Select(t => t.Coord).ToHashSet();
+        InlandLakes = island.InlandLakeTiles.ToHashSet();
         LandingCandidates = LandingCandidatesOf(island.Tiles, BaseLand);
     }
 
@@ -99,6 +100,9 @@ public sealed class ReviewedIsland
 
     /// <summary>The terrain the game sees: <see cref="BaseLand"/> with bog moss and bog lakes laid over it.</summary>
     public Dictionary<HexCoord, Terrain> Land { get; }
+
+    /// <summary>Inland-lake hexes (enclosed water the bog did not fill); like a bog lake, not a shore.</summary>
+    public HashSet<HexCoord> InlandLakes { get; }
 
     public Dictionary<HexCoord, RiverTile> Rivers { get; }
 

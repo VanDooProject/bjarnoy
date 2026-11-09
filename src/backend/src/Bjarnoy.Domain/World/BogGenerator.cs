@@ -130,6 +130,11 @@ internal sealed class BogGenerator
     /// <summary>The water tiles of accepted pockets: sea that became lake. A river's drainage counts them as land it cannot enter.</summary>
     public HashSet<HexCoord> PocketWater { get; } = [];
 
+    /// <summary>Enclosed water the bog did not fill (a pocket too small or too large, or whose ring broke a rule): it stays water and becomes an inland lake.</summary>
+    public HashSet<HexCoord> InlandLake { get; } = [];
+
+    internal List<HexCoord> InlandLakeTiles() => Sorted(InlandLake);
+
     /// <summary>The bog ring tiles of accepted pockets (non-lake): drainage treats them as blocked.</summary>
     public HashSet<HexCoord> PocketRing { get; } = [];
 
@@ -265,6 +270,7 @@ internal sealed class BogGenerator
         {
             if (comp.Count < _options.BogPocketMinTiles || comp.Count > _options.BogPocketMaxTiles)
             {
+                InlandLake.UnionWith(comp);
                 continue;
             }
 
@@ -273,7 +279,11 @@ internal sealed class BogGenerator
                 _stats.BogPocketsFound++;
             }
 
-            if (TryBuildPocket(comp) && _stats is not null)
+            if (!TryBuildPocket(comp))
+            {
+                InlandLake.UnionWith(comp);
+            }
+            else if (_stats is not null)
             {
                 _stats.BogPocketsFilled++;
             }

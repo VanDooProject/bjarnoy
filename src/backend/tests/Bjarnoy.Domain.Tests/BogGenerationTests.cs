@@ -255,6 +255,59 @@ public class BogGenerationTests
     }
 
     [Fact]
+    public void Every_enclosed_pocket_is_a_bog_lake_or_an_inland_lake()
+    {
+        var inland = 0;
+        foreach (var (seed, sampler, island) in GreenIslands())
+        {
+            var bogLakes = island.BogTiles.Where(t => t.Kind == BogTileKind.Lake).Select(t => t.Coord).ToHashSet();
+            var inlandLakes = island.InlandLakeTiles.ToHashSet();
+            var pockets = EnclosedWater.Pockets(island.Tiles, sampler.IsLand);
+            foreach (var pocket in pockets)
+            {
+                var allBog = pocket.All(bogLakes.Contains);
+                var allInland = pocket.All(inlandLakes.Contains);
+                Assert.True(allBog || allInland, $"seed {seed} island {island.Index}: pocket at {pocket[0]} is neither a bog lake nor an inland lake");
+                Assert.False(allBog && allInland);
+                inland += allInland ? 1 : 0;
+            }
+
+            // Nothing but enclosed water is an inland lake.
+            var enclosed = pockets.SelectMany(p => p).ToHashSet();
+            Assert.All(island.InlandLakeTiles, t => Assert.Contains(t, enclosed));
+            Assert.Equal(island.InlandLakeTiles.Count, inlandLakes.Count);
+        }
+
+        Assert.True(inland >= 1, "no inland lake in eight worlds");
+    }
+
+    [Fact]
+    public void Every_enclosed_pocket_of_a_wasted_island_is_an_inland_lake()
+    {
+        foreach (var seed in Seeds)
+        {
+            var world = TestWorlds.Default(seed);
+            var sampler = new TerrainSampler(world.Options);
+            foreach (var island in world.Islands.Where(i => i.IsWasted))
+            {
+                Assert.Empty(island.BogTiles);
+                var expected = EnclosedWater.Tiles(island.Tiles, c => sampler.TerrainAt(c).IsLand() || sampler.WastedTerrainAt(c).IsLand());
+                Assert.Equal(expected, island.InlandLakeTiles);
+            }
+        }
+    }
+
+    [Fact]
+    public void Terrain_InlandLake_is_neither_sea_nor_land()
+    {
+        Assert.False(Terrain.InlandLake.IsLand());
+        Assert.False(Terrain.InlandLake.IsSea());
+        Assert.False(Terrain.InlandLake.IsTraversable(isLandUnit: true));
+        Assert.False(Terrain.InlandLake.IsTraversable(isLandUnit: false));
+        Assert.Equal("inlandlake", Terrain.InlandLake.ToWireName());
+    }
+
+    [Fact]
     public void Enclosed_sea_pockets_become_lakes_ringed_by_bog()
     {
         var pockets = 0;
