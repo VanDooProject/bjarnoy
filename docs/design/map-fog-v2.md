@@ -377,6 +377,14 @@ so nothing about an unexplored hex (type, level) leaves the server. The summary 
 relation, Longhouse position and level. Its label sits on the Longhouse when that hex is explored, otherwise on the explored
 standing building closest to it (ties go to the lower q, then r). A foundation (level 0) alone does not make a rival visible.
 
+### 1g. Foreign troops
+
+Troops of other players (and camp beasts) marching inside your sight are shown on the map in their owner's colour, as
+a flag or ship. Sight is your settlements' and towers' visible rings and the vision of your own marching armies. You see
+only a short stretch of their route ahead of them, inside your sight (+1 hex): the marker moves along it, but the route
+itself is not drawn, and you see neither the stretch behind them nor their mission, target or units. Troops standing at
+home or as a guest garrison are not shown.
+
 ## 2. Rendering mechanics — inlined (closes the "original plan" gap)
 
 Everything in §1 and §3 onward repeatedly cited "the original plan" for

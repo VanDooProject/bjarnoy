@@ -60,6 +60,11 @@ public static class WorldEndpoints
             .WithSummary("The live state (garrison, calm, clears, loot left) at the world's game time of every wildlife camp on an island the caller has seen part of, optionally for one island.")
             .RequireCallerRealm();
 
+        worlds.MapGet("/{worldId:guid}/foreign-armies", GetForeignArmies)
+            .WithName("GetWorldForeignArmies")
+            .WithSummary("The marching armies of other players inside the caller's sight, each with only the short stretch of its route ahead.")
+            .RequireCallerRealm();
+
         worlds.MapGet("/{worldId:guid}/walls", GetWalls)
             .WithName("GetWorldWalls")
             .WithSummary("Every standing palisade/gate hex of rival settlements that lies on a hex the caller has explored (their own walls excluded).")
@@ -321,6 +326,36 @@ public static class WorldEndpoints
 
         IReadOnlyList<CampStateResponse> response = [.. camps.Select(c => CampStateResponse.From(c, now, realm))];
         return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// The marching armies of other players inside the caller's sight (<see cref="ForeignArmyService"/>, <c>docs/design/map-fog-v2.md</c> §1g).
+    /// A caller that does not resolve to a realm sees none.
+    /// </summary>
+    private static async Task<Results<Ok<IReadOnlyList<ForeignArmyResponse>>, NotFound<ProblemDetails>>> GetForeignArmies(
+        Guid worldId,
+        HttpContext httpContext,
+        WorldService worlds,
+        ForeignArmyService foreignArmies,
+        RealmDirectory realms,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var world = await worlds.GetWorldAsync(worldId, cancellationToken);
+        if (world is null)
+        {
+            return TypedResults.NotFound(WorldNotFoundProblem());
+        }
+
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<ForeignArmyResponse>>([]);
+        }
+
+        var now = world.ToClock().ToGameTime(timeProvider.GetUtcNow());
+        var seen = await foreignArmies.GetAsync(worldId, realm.OwnerId!, now, cancellationToken);
+        return TypedResults.Ok<IReadOnlyList<ForeignArmyResponse>>([.. seen.Select(ForeignArmyResponse.From)]);
     }
 
     /// <summary>

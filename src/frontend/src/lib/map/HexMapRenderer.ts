@@ -611,6 +611,24 @@ export interface ArmyOverlayMarker {
   isFleet: boolean;
   /** Issue #94: present only while in transit — the renderer interpolates along it every frame. */
   movement?: ArmyOverlayMovement;
+  /**
+   * A marching army of another player inside our sight (docs/design/map-fog-v2.md §1g). Drawn in `color`, never selected, and it grants no
+   * live fog vision (that is only our own armies'). Its `movement` is the short stretch we may see, not the full leg.
+   */
+  foreign?: boolean;
+  /** The marker's colour for a `foreign` army: its owner's realm colour (`realmColor`). Own armies ignore it. */
+  color?: number;
+}
+
+/** Whether `army` lifts our fog live: only our own armies on the march (a foreign army's sight is its owner's). */
+export function grantsArmyVision(army: ArmyOverlayMarker): boolean {
+  return !!army.movement && !army.foreign;
+}
+
+/** A foreign army wears its owner's realm colour; ours is gold when selected, grey once turned around, blue otherwise. */
+export function armyMarkerColor(army: ArmyOverlayMarker): number {
+  if (army.foreign) return army.color ?? RIVAL_REALM_COLOR;
+  return army.selected ? GOLD : army.returning ? RETURNING_COLOR : ROUTE_COLOR;
 }
 
 /** Issue #93: what an army is being sent *at*, marked on the target settlement's own hex. */
@@ -6450,13 +6468,14 @@ export class HexMapRenderer {
       // home or as a guest garrison already sits inside its settlement's own
       // explored/visible rings, same scope as the backend's own in-transit-
       // only condition (FogMaskService.GeneratePlayerMaskAsync).
-      if (army.movement && fogDebugFlags.armyVisionReveal) {
+      // A foreign army's sight is its owner's, not ours: no live fog reveal from it.
+      if (grantsArmyVision(army) && fogDebugFlags.armyVisionReveal) {
         armyVisionPoints.push({ x: point.x, y: point.y });
         armyVisionLegs.push(point.hexes);
       }
       const p = this.toScreen(point);
       frame.armies.push({ id: army.id, x: p.x, y: p.y, interpolated: point.interpolated });
-      const color = army.selected ? GOLD : army.returning ? RETURNING_COLOR : ROUTE_COLOR;
+      const color = armyMarkerColor(army);
       const size = army.selected ? 40 : 32;
       // Both markers are authored pointing right (+x) — see the icon set's
       // README — so a plain heading-sign flip orients either one with no

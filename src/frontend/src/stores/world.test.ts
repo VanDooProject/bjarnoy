@@ -33,6 +33,7 @@ const listWorlds = vi.fn();
 const getWorldMembership = vi.fn();
 const dispatchArmy = vi.fn();
 const getWorldCamps = vi.fn();
+const getForeignArmies = vi.fn();
 const queueBuild = vi.fn();
 const razeBuilding = vi.fn();
 
@@ -90,6 +91,7 @@ async function loadStoreModule(demoMode: boolean) {
       getWorldMembership: (...args: unknown[]) => getWorldMembership(...args),
       dispatchArmy: (...args: unknown[]) => dispatchArmy(...args),
       getWorldCamps: (...args: unknown[]) => getWorldCamps(...args),
+      getForeignArmies: (...args: unknown[]) => getForeignArmies(...args),
       queueBuild: (...args: unknown[]) => queueBuild(...args),
       razeBuilding: (...args: unknown[]) => razeBuilding(...args),
     },
@@ -2196,6 +2198,50 @@ describe('useWorldStore refreshCampStates', () => {
     demo.worldId = 'world-1';
     await demo.refreshCampStates();
     expect(getWorldCamps).not.toHaveBeenCalled();
+  });
+});
+
+describe('useWorldStore refreshForeignArmies', () => {
+  const foreign = {
+    id: 'army-x',
+    settlementId: 'rival-1',
+    isFleet: false,
+    position: { q: 1, r: 2 },
+    movement: { departedAt: '2026-01-01T00:00:00Z', path: [{ q: 1, r: 2 }], cumulativeHours: [0], edgeHours: [0], arrivesAt: '2026-01-01T00:00:00Z' },
+  };
+
+  it('stores what the endpoint returns and refetches it with the army poll', async () => {
+    getForeignArmies.mockReset().mockResolvedValue([foreign]);
+    getSettlementArmies.mockReset().mockResolvedValue([]);
+    getSettlementGuests.mockReset().mockResolvedValue([]);
+    getWorldCamps.mockReset().mockResolvedValue([]);
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.selectedSettlementId = 'settlement-1';
+
+    await store.refreshArmies();
+
+    expect(getForeignArmies).toHaveBeenCalledWith('world-1', expect.any(String));
+    expect(store.foreignArmies).toEqual([foreign]);
+  });
+
+  it('keeps the previous list when the fetch fails and never throws', async () => {
+    getForeignArmies.mockReset().mockResolvedValueOnce([foreign]).mockRejectedValueOnce(new Error('down'));
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    await store.refreshForeignArmies();
+    await expect(store.refreshForeignArmies()).resolves.toBeUndefined();
+    expect(store.foreignArmies).toEqual([foreign]);
+  });
+
+  it('does nothing in demo mode or without a world', async () => {
+    getForeignArmies.mockReset();
+    const demo = await loadStoreModule(true);
+    demo.worldId = 'world-1';
+    await demo.refreshForeignArmies();
+    const live = await loadStoreModule(false);
+    await live.refreshForeignArmies();
+    expect(getForeignArmies).not.toHaveBeenCalled();
   });
 });
 

@@ -74,6 +74,7 @@ builder.Services.AddScoped<FogChunkService>();
 // its chunks from — see ExploredAreaService's own remarks for why it's a
 // separate, shared service rather than something only FogChunkService owns.
 builder.Services.AddScoped<ExploredAreaService>();
+builder.Services.AddScoped<ForeignArmyService>();
 builder.Services.AddOptions<UserActivityOptions>()
     .Bind(builder.Configuration.GetSection(UserActivityOptions.SectionName))
     .ValidateOnStart();

@@ -109,6 +109,7 @@ import type {
   WorldSummaryResponse,
   CampReportResponse,
   CampStateResponse,
+  ForeignArmyResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -289,6 +290,9 @@ export const api = {
     }),
   getIslands: (worldId: string, ownerId?: string) =>
     request<IslandResponse[]>(`/worlds/${worldId}/islands`, { headers: ownerHeader(ownerId) }),
+  // Cut to the *caller's* sight like /camps: an account-less player is identified by `X-Owner-Id` alone.
+  getForeignArmies: (worldId: string, ownerId?: string) =>
+    request<ForeignArmyResponse[]>(`/worlds/${worldId}/foreign-armies`, { headers: ownerHeader(ownerId) }),
   foundSettlement: (worldId: string, body: FoundSettlementRequest) =>
     request<SettlementResponse>(`/worlds/${worldId}/settlements`, {
       method: 'POST',
