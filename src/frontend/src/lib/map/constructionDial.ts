@@ -312,3 +312,14 @@ export function retainFinishingDials(prev: ConstructionDial[], next: Constructio
   }
   return out;
 }
+
+/**
+ * The dials after the server refused the optimistic order on `coord`: its "…" dial becomes a rejected one (shakes, fades,
+ * is pruned). A hex that still shows a running build (a dial with timing, e.g. an upgrade queued behind it) keeps that dial
+ * and gets no reject dial, so the refusal doesn't wipe the real progress.
+ */
+export function rejectDialAt(dials: ConstructionDial[], coord: AxialCoord, nowMs: number): ConstructionDial[] {
+  const here = (d: ConstructionDial) => d.coord.q === coord.q && d.coord.r === coord.r;
+  if (dials.some((d) => here(d) && d.endMs !== null)) return dials;
+  return [...dials.filter((d) => !here(d)), { coord, startMs: null, endMs: null, rejectedAtMs: nowMs }];
+}

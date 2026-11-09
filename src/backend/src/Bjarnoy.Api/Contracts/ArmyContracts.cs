@@ -329,8 +329,12 @@ public sealed record FieldBattleReportResponse(
     HexPointResponse Hex,
     Guid SideAArmyId,
     Guid SideASettlementId,
+    string? SideAName,
+    string? SideAOwnerName,
     Guid SideBArmyId,
     Guid SideBSettlementId,
+    string? SideBName,
+    string? SideBOwnerName,
     string Winner,
     double SideAPower,
     double SideBPower,
@@ -340,9 +344,15 @@ public sealed record FieldBattleReportResponse(
     ResourceAmountsResponse LootTaken,
     IReadOnlyList<FieldBattleReportLineResponse> Lines)
 {
-    public static FieldBattleReportResponse From(FieldBattleReportEntity entity)
+    /// <param name="names">Settlement/owner names by settlement id (<c>FieldBattleReportService.GetSideNamesAsync</c>); a side whose settlement is gone has null names.</param>
+    public static FieldBattleReportResponse From(
+        FieldBattleReportEntity entity, IReadOnlyDictionary<Guid, FieldBattleSideName> names)
     {
         ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(names);
+
+        names.TryGetValue(entity.SideASettlementId, out var a);
+        names.TryGetValue(entity.SideBSettlementId, out var b);
 
         return new FieldBattleReportResponse(
             entity.Id,
@@ -350,8 +360,12 @@ public sealed record FieldBattleReportResponse(
             new HexPointResponse(entity.HexQ, entity.HexR),
             entity.SideAArmyId,
             entity.SideASettlementId,
+            a?.SettlementName,
+            a?.OwnerName,
             entity.SideBArmyId,
             entity.SideBSettlementId,
+            b?.SettlementName,
+            b?.OwnerName,
             ((FieldBattleWinner)entity.Winner).ToString().ToLowerInvariant(),
             entity.SideAPower,
             entity.SideBPower,

@@ -338,6 +338,18 @@ node scripts/export-catalogue-data.mjs
 Run it whenever `BuildingCatalogue.cs` changes. Same manual/at-build-time
 policy as the codegen above — nothing regenerates it automatically.
 
+The same response is the client's only source for where a building may stand and
+where the build ring lists it: `ringCategory` and `ringOrder` (the ring group and
+the position in it), `allowedTerrain`, `requiresCoastalWater`, `alsoOnCoastalWater`,
+`requiresBogKinds`, `alsoOnBogKinds`, `lakeShoreKinds`, `requiresRiverShapes`,
+`excludedRiverVariants` and `newPlacementDisabled`. `stores/buildingCatalogue.ts`
+registers them in `lib/map/placementRules.ts` when the catalogue loads; the ring
+(`useBuildRing.categoriesFor`), demo placement (`WorldModel.placeBuilding`) and the
+building modal read them from there, so a new building, terrain or bog rule is a
+`BuildingCatalogue.cs` change plus a regenerated snapshot, with no client table to
+edit. The per-hex rules that depend on the world (river shape and curve, island soil,
+wall and bridge placement, locks) stay in the client.
+
 The health endpoints are only mapped outside development when
 `ExposeHealthChecks` is set; the container image sets it, since an orchestrator
 needs to probe them.

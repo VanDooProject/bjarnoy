@@ -1201,6 +1201,50 @@ describe('useWorldStore bootstrapLiveWorld', () => {
 
     expect(store.model?.isFrozenEnabled()).toBe(true);
   });
+
+  // Regression: see 'refreshCampStates' - /islands hides the camps of unseen islands from a caller it cannot identify.
+  it('asks for the islands as the local player, so an account-less player gets the camps of the islands they have seen', async () => {
+    const store = await loadStoreModule(false);
+    // The landing page bootstraps before any realm is known: no `ownerId` yet, the browser's player id stands in.
+    const { usePlayerStore } = await import('./player');
+    expect(store.ownerId).toBeNull();
+    listWorlds.mockReset().mockResolvedValue([
+      {
+        id: 'world-1',
+        name: 'Kettil Sea',
+        status: 'Running',
+        joinable: true,
+        joinableReason: 'None',
+        playerCount: 0,
+        maxPlayers: 100,
+        freeSlots: 100,
+        startsAt: null,
+      },
+    ]);
+    getWorld.mockReset().mockResolvedValue({
+      id: 'world-1',
+      name: 'Kettil Sea',
+      seed: 1,
+      radius: 30,
+      maxPlayers: 100,
+      status: 'Running',
+      islandCount: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'None',
+      startsAt: null,
+      endbossTriggered: false,
+      frozenIslesEnabled: false,
+      speedFactor: 1,
+      generation: generationResponse(),
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    });
+    getIslands.mockReset().mockResolvedValue([]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(getIslands).toHaveBeenCalledWith('world-1', usePlayerStore().id);
+  });
 });
 
 describe('useWorldStore restoreLiveSettlement', () => {
@@ -2049,12 +2093,39 @@ describe('useWorldStore refreshCampStates', () => {
 
     await store.refreshCampStates();
 
-    expect(getWorldCamps).toHaveBeenCalledWith('world-1');
+    expect(getWorldCamps).toHaveBeenCalledWith('world-1', expect.any(String));
     expect(store.model.campAt({ q: 2, r: 1 })?.empty).toBe(true);
     expect(store.campStatesVersion).toBe(1);
 
     await store.refreshCampStates();
     expect(store.campStatesVersion).toBe(1);
+  });
+
+  // Regression: an account-less player is identified by X-Owner-Id alone, and the server cuts the camps of /islands and
+  // /camps off to the islands the caller has seen: without the header it answered no camps, so the map drew none.
+  it('sends the local player id, which identifies an account-less player to the server', async () => {
+    getWorldCamps.mockReset().mockResolvedValue([]);
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    await store.refreshCampStates();
+
+    expect(getWorldCamps).toHaveBeenCalledWith('world-1', 'player-1');
+  });
+
+  // The landing page bootstraps the world before it knows any settlement, so `ownerId` is still null: the browser's own
+  // player id has to identify the caller then (an account-less visitor sees the camps of their pinned island).
+  it('falls back to the browser player id while no realm is loaded yet', async () => {
+    getWorldCamps.mockReset().mockResolvedValue([]);
+    const store = await loadStoreModule(false);
+    const { usePlayerStore } = await import('./player');
+    store.worldId = 'world-1';
+    expect(store.ownerId).toBeNull();
+
+    await store.refreshCampStates();
+
+    expect(getWorldCamps).toHaveBeenCalledWith('world-1', usePlayerStore().id);
   });
 
   it('adds a camp it first learns about from the poll (a newly seen island) with its state', async () => {
@@ -2113,7 +2184,7 @@ describe('useWorldStore refreshForeignArmies', () => {
 
     await store.refreshArmies();
 
-    expect(getForeignArmies).toHaveBeenCalledWith('world-1');
+    expect(getForeignArmies).toHaveBeenCalledWith('world-1', expect.any(String));
     expect(store.foreignArmies).toEqual([foreign]);
   });
 
@@ -2336,6 +2407,76 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
       razeBuilding.mockReset();
       await expect(store.razeBuildingLive(at)).rejects.toThrow();
       expect(razeBuilding).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('upgradeBuildingLive', () => {
+    const upgradeOrder = { ...realOrder, id: 'upgrade-1', targetLevel: 3 };
+
+    async function setupWithLumberjack(level: number) {
+      const store = await setup();
+      store.hud.buildings = [{ q: 3, r: -2, type: 'lumberjack', level }];
+      return store;
+    }
+
+    it('puts a pending order for the next level on the hex before the request resolves', async () => {
+      const store = await setupWithLumberjack(2);
+      let release!: () => void;
+      queueBuild.mockReturnValue(new Promise<void>((resolve) => (release = resolve)));
+
+      const done = store.upgradeBuildingLive(at);
+      expect(store.hud.queue).toHaveLength(1);
+      expect(store.hud.queue[0]).toMatchObject({ q: 3, r: -2, building: 'lumberjack', kind: 'build', targetLevel: 3, state: 'waiting' });
+      expect(store.hud.queue[0].id.startsWith('pending:')).toBe(true);
+
+      getSettlement.mockResolvedValue(settlementResponse({ wood: 400, queue: [upgradeOrder] }));
+      release();
+      await done;
+      expect(queueBuild).toHaveBeenCalledWith('settlement-1', { building: 'lumberjack', q: 3, r: -2 }, undefined);
+      expect(store.hud.queue.map((o) => o.id)).toEqual(['upgrade-1']);
+    });
+
+    it('targets the level after an upgrade already running on the hex', async () => {
+      const store = await setupWithLumberjack(2);
+      store.hud.queue = [{ ...upgradeOrder, kind: 'build', state: 'building', targetLevel: 3 }];
+      let release!: () => void;
+      queueBuild.mockReturnValue(new Promise<void>((resolve) => (release = resolve)));
+
+      const done = store.upgradeBuildingLive(at);
+      expect(store.hud.queue[1]).toMatchObject({ kind: 'build', targetLevel: 4, state: 'waiting' });
+
+      getSettlement.mockResolvedValue(settlementResponse({ queue: [upgradeOrder] }));
+      release();
+      await done;
+    });
+
+    it('records the confirmed spend for the resources that really dropped', async () => {
+      const store = await setupWithLumberjack(2);
+      queueBuild.mockResolvedValue(undefined);
+      getSettlement.mockResolvedValue(settlementResponse({ wood: 400, queue: [upgradeOrder] }));
+
+      await store.upgradeBuildingLive(at, { wood: 100, stone: 50 });
+
+      expect(store.hud.lastSpend?.cost).toEqual({ wood: 100 });
+    });
+
+    it('removes the pending order and rethrows on a refusal, without a spend or a refresh', async () => {
+      const store = await setupWithLumberjack(2);
+      const refusal = new Error('No free construction slot.');
+      queueBuild.mockRejectedValue(refusal);
+      getSettlement.mockClear();
+
+      await expect(store.upgradeBuildingLive(at, { wood: 100 })).rejects.toBe(refusal);
+
+      expect(store.hud.queue).toEqual([]);
+      expect(store.hud.lastSpend).toBeNull();
+      expect(getSettlement).not.toHaveBeenCalled();
+    });
+
+    it('refuses a hex without a building', async () => {
+      const store = await setup();
+      await expect(store.upgradeBuildingLive(at)).rejects.toThrow();
+      expect(queueBuild).not.toHaveBeenCalled();
     });
   });
 

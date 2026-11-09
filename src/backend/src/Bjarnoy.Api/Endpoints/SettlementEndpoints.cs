@@ -176,7 +176,8 @@ public static class SettlementEndpoints
             new HexCoord(request.Q, request.R),
             request.Name,
             request.OwnerName,
-            request.OwnerId,
+            // A key acting as an anonymous settlement founds as exactly that identity, whatever the body says.
+            ApiKeyContext.From(httpContext)?.ActingAnonymousOwnerId ?? request.OwnerId,
             callerUserId,
             cancellationToken);
 

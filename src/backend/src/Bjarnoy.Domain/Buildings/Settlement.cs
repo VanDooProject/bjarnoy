@@ -1275,6 +1275,11 @@ public sealed record Settlement
     /// <see cref="BuildingType.Bridge"/> cares: streams are already passable, so it is refused there
     /// (<see cref="BuildRejection.BridgeNeedsWideRiver"/>).
     /// </param>
+    /// <param name="onRiverTile">
+    /// Whether any river tile (of any width) stands on <paramref name="coord"/>. Every building but the river ones
+    /// (<see cref="BuildingDefinition.RequiresRiverShape"/>), the bridge and the walls is refused there
+    /// (<see cref="BuildRejection.TerrainNotAllowed"/>).
+    /// </param>
     /// <param name="onWastedIsland">
     /// Whether <paramref name="coord"/> lies on a wasted (lava) island, where no bridge is built. Only a <see cref="BuildingType.Bridge"/> cares.
     /// </param>
@@ -1299,7 +1304,8 @@ public sealed record Settlement
         bool isWideRiverAt = false,
         bool onWastedIsland = false,
         World.IEndgameSiteIndex? endgameSites = null,
-        ConnectedRealm? realm = null)
+        ConnectedRealm? realm = null,
+        bool onRiverTile = false)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
         var connected = realm ?? ConnectedRealm.Resolve([AsRealmSettlement()]);
@@ -1373,6 +1379,14 @@ public sealed record Settlement
         }
 
         if (!definition.AllowsHex(terrain, isCoastalWater, bogKindAt))
+        {
+            return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
+        }
+
+        // A river hex (any width or shape: stream, widening, spring, confluence, mouth, bend, straight) takes no ordinary building: only the
+        // river buildings (RequiresRiverShape, checked below) and the bridge stand on one. A wall keeps its own, more specific refusal.
+        if (onRiverTile && definition.RequiresRiverShape is null
+            && type is not (BuildingType.Bridge or BuildingType.Palisade or BuildingType.PalisadeGate))
         {
             return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
         }

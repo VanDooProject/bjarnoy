@@ -47,6 +47,24 @@ test('panning writes the camera into the URL hash and a fresh map view restores 
   expect((await cameraView(page)).zoom).toBeCloseTo(saved.zoom, 1);
 });
 
+// Regression: MapView's watcher on the displayed route's hash read `route.hash` off the ref `useDisplayedRoute()` returns, which is
+// undefined, so a camera anchor arriving while the map was already mounted (a report's "show on map" link behind a modal) never moved it.
+test('a camera hash that arrives while the map is mounted moves the camera', async ({ page }) => {
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+  await foundSettlement(page);
+  const before = await cameraView(page);
+  const target = { q: before.coord.q + 4, r: before.coord.r - 3 };
+
+  await page.evaluate(
+    ({ q, r, z }) => {
+      window.location.hash = `q=${q}&r=${r}&z=${z}`;
+    },
+    { ...target, z: before.zoom },
+  );
+
+  await expect.poll(() => cameraView(page).then((v) => v.coord)).toEqual(target);
+});
+
 test('an invalid camera hash is ignored', async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await foundSettlement(page);

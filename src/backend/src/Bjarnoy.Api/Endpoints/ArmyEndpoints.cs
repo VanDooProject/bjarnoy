@@ -459,6 +459,12 @@ public static class ArmyEndpoints
     /// <summary>Why a land army has no route: mountains and wide rivers stop it (streams and open land do not).</summary>
     private const string NoLandRoute = "No land route: mountains and wide rivers can't be crossed.";
 
+    /// <summary>Why a fleet has no route: the water it sails is cut off from the target.</summary>
+    private const string NoSeaRoute = "No sea route: the ships can't reach that by water.";
+
+    /// <summary>The route search gave up: the trip is too long to plan, so a shorter one has to be picked.</summary>
+    private const string RouteTooLong = "That trip is too long to plan. Choose a closer destination.";
+
     private static ProblemDetails FieldOrderProblem(FieldOrderRejection rejection)
     {
         var problem = new ProblemDetails
@@ -475,6 +481,8 @@ public static class ArmyEndpoints
                 FieldOrderRejection.WaypointNotLand => "A waypoint is not land; sea pathing is not supported yet.",
                 FieldOrderRejection.WaypointNotSea => "A waypoint is not sea; fleets can only path over water.",
                 FieldOrderRejection.UnreachableLeg => NoLandRoute,
+                FieldOrderRejection.NoSeaRoute => NoSeaRoute,
+                FieldOrderRejection.RouteTooLong => RouteTooLong,
                 FieldOrderRejection.InsufficientProvisionsForRoundTrip =>
                     "The provisions remaining would not cover the round trip to the new destination.",
                 FieldOrderRejection.PremiumRequired =>
@@ -515,9 +523,10 @@ public static class ArmyEndpoints
         CancellationToken cancellationToken)
     {
         var report = await reports.GetAsync(reportId, cancellationToken);
-        return report is null
-            ? TypedResults.NotFound()
-            : TypedResults.Ok(FieldBattleReportResponse.From(report));
+        if (report is null) return TypedResults.NotFound();
+
+        var names = await reports.GetSideNamesAsync([report], cancellationToken);
+        return TypedResults.Ok(FieldBattleReportResponse.From(report, names));
     }
 
     private static async Task<Ok<IReadOnlyList<FieldBattleReportResponse>>> ListFieldReportsForSettlement(
@@ -526,7 +535,8 @@ public static class ArmyEndpoints
         CancellationToken cancellationToken)
     {
         var entities = await reports.GetForSettlementAsync(settlementId, cancellationToken);
-        IReadOnlyList<FieldBattleReportResponse> response = [.. entities.Select(FieldBattleReportResponse.From)];
+        var names = await reports.GetSideNamesAsync(entities, cancellationToken);
+        IReadOnlyList<FieldBattleReportResponse> response = [.. entities.Select(e => FieldBattleReportResponse.From(e, names))];
         return TypedResults.Ok(response);
     }
 
@@ -625,6 +635,8 @@ public static class ArmyEndpoints
                 DispatchRejection.DestinationNotLand => "The destination is not land; sea pathing is not supported yet.",
                 DispatchRejection.WaypointNotLand => "A waypoint is not land; sea pathing is not supported yet.",
                 DispatchRejection.UnreachableLeg => NoLandRoute,
+                DispatchRejection.NoSeaRoute => NoSeaRoute,
+                DispatchRejection.RouteTooLong => RouteTooLong,
                 DispatchRejection.InsufficientProvisionsForRoundTrip =>
                     "The loaded provisions would not cover the full round trip's upkeep.",
                 DispatchRejection.TargetSettlementRequired => "This mission requires a target settlement.",

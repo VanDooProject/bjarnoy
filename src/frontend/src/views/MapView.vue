@@ -3,7 +3,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import { buildingName, terrainName } from '../i18n/catalogueNames';
-import { useRoute, useRouter } from 'vue-router';
+import { useRouter } from 'vue-router';
+import { useDisplayedRoute } from '../composables/useDisplayedRoute';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
 import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
@@ -44,10 +45,12 @@ import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { useBuildRing, type BuildableType } from '../composables/useBuildRing';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
+import { useDraggablePosition } from '../composables/useDraggablePosition';
 import { useMediaQuery } from '../composables/useMediaQuery';
 import { hudBarHeightPx, hudRailWidthPx } from '../composables/hudBarHeight';
 import { isHudRail } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
+import { hexTakesNoOrder, nextUpgradeLevel } from '../lib/hud/pendingBuild';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
@@ -105,7 +108,8 @@ const hudInsetBottomPx = computed(() => (hudBarAtBottom.value ? hudBarHeightPx.v
 const unitCatalogue = useUnitCatalogueStore();
 const guild = useGuildStore();
 const buildingCatalogue = useBuildingCatalogueStore();
-const route = useRoute();
+// The route this view renders, not the URL: under a modal route (App.vue) the URL is the modal's.
+const route = useDisplayedRoute();
 const router = useRouter();
 
 // One view/one persistent renderer serves both the settlement and the world
@@ -117,7 +121,7 @@ const router = useRouter();
 // from the route rather than tracked as separate local state, so a zoom
 // crossing, a nav click, browser back/forward, or a direct URL load all agree with the
 // renderer on what to show.
-const mode = computed<RenderMode>(() => (isWorldHash(route.hash) ? 'world' : 'settlement'));
+const mode = computed<RenderMode>(() => (isWorldHash(route.value.hash) ? 'world' : 'settlement'));
 // World map's own sea backdrop (must match WorldMapCanvas.vue's — that
 // component is still used standalone by AdminWorldReseedView's world
 // preview, which has no settlement/ring-menu UI to merge and so keeps its
@@ -140,6 +144,9 @@ function onZoomModeChange(next: RenderMode) {
 // rendering toggles, nothing about game state. See useFogDebug for why this
 // is a shared composable rather than a local computed().
 const showFogDebug = useFogDebug();
+const debugStackRef = ref<HTMLElement | null>(null);
+const debugStackDrag = useDraggablePosition('debugStack', debugStackRef);
+const debugStackStyle = debugStackDrag.style;
 const isMobile = useIsMobile();
 const queueDrawerOpen = ref(false);
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
@@ -147,7 +154,7 @@ const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 // Both modes keep their camera in the URL hash (lib/mapCameraHash.ts), so a reload or a shared link
 // lands on the same spot. Read once, before the first camera change rewrites the hash; a missing or
 // invalid hash leaves the default framing.
-const initialCameraView = parseCameraHash(route.hash);
+const initialCameraView = parseCameraHash(route.value.hash);
 const CAMERA_HASH_DEBOUNCE_MS = 300;
 let cameraHashTimer: ReturnType<typeof setTimeout> | undefined;
 function onCameraChange() {
@@ -156,7 +163,8 @@ function onCameraChange() {
 }
 function writeCameraHash() {
   const renderer = canvasRef.value?.renderer;
-  if (!renderer || route.path !== '/settlement') return;
+  // The real URL, not `route`: under a modal route it is the modal's, and must not get a camera hash.
+  if (!renderer || router.currentRoute.value.path !== '/settlement') return;
   // Not router.replace: that would run the route watchers; vue-router keeps its own state in history.state.
   const hash = serializeCameraHash(renderer.cameraView, mode.value === 'world');
   history.replaceState(history.state, '', `${location.pathname}${location.search}${hash}`);
@@ -331,6 +339,19 @@ watch(mode, (m) => {
   zoomDrivenTransition = false;
 });
 
+// A navigation that carries a camera anchor (e.g. a report's "show on map" link: `/settlement#world&q=..&r=..&z=..`)
+// moves the camera there. The anchor is also read once at setup (`initialCameraView`) for a reload or a fresh mount;
+// this covers the map already being mounted behind a modal. `flush: 'post'` runs it after the `mode` watcher above has
+// switched the renderer's mode.
+watch(
+  () => route.value.hash,
+  (hash) => {
+    const view = parseCameraHash(hash);
+    if (view) canvasRef.value?.renderer?.restoreCameraView(view.coord, view.zoom);
+  },
+  { flush: 'post' },
+);
+
 // Fog v2 (map-fog-v2.md §3): pushes a freshly fetched mask bitmap into the
 // renderer — same "watch both together" reasoning the army-overlay watcher
 // below uses, since the renderer may not exist yet on the tick a fetch
@@ -498,7 +519,7 @@ watch(
 );
 
 // Live mode: `refreshLiveSettlement` (the poll loop, and the immediate
-// re-fetch after queueBuildLive/cancelBuildLive/upgrade) writes completed
+// re-fetch after queueBuildOptimistic/cancelBuildLive/upgrade) writes completed
 // levels and new/removed foundation stubs straight into `world.model`'s
 // tiles, but the renderer only ever redraws sprites on a real camera pan/
 // zoom (`cameraMovedEnough`) — nothing tied a data refresh to a redraw, so
@@ -551,11 +572,9 @@ function onHover(info: HoverInfo | null) {
 // what opens BuildingModal now, rather than every click doing so.
 const selectedCoord = ref<AxialCoord | null>(null);
 const selectedTile = ref<Tile | null>(null);
-const modalBusy = ref(false);
-// Why the last build/upgrade attempt was rejected (NoFreeSlot's premium
-// hint included, issue #158) — surfaced in BuildingModal rather than only
-// `console.error`'d, and cleared whenever a fresh attempt starts, the modal
-// closes, or a different tile is selected.
+// Why the last demo build was rejected — shown in the ring, which stays open
+// (live orders are optimistic: a refusal shows in the chip under the hex). Cleared
+// whenever a fresh attempt starts, the ring closes, or a different tile is selected.
 const actionError = ref<string | null>(null);
 // A building's training window, separate from BuildingModal (it lists the units that building
 // trains with a quantity picker each, not a single build/upgrade action) — see the ring's
@@ -816,8 +835,9 @@ function siegeActions(tile: Tile): RingAction[] {
 function upgradeActionFor(tile: Tile): RingAction {
   const type = tile.buildingType!;
   const label = t('hud.ringMenu.actions.upgrade');
-  const level = tile.buildingLevel ?? 1;
-  const nextLevel = level + 1;
+  // Queued behind a running upgrade, this one starts from the level that one reaches.
+  const nextLevel = nextUpgradeLevel(tile.buildingLevel ?? 1, world.hud.queue, tile);
+  const level = nextLevel - 1;
   const definitions = buildingCatalogue.byType[type];
   const upgradeDefinition = definitions?.find((d) => d.level === nextLevel);
   // A catalogue that lists the building but has no further level: nothing left to upgrade to.
@@ -831,25 +851,30 @@ function upgradeActionFor(tile: Tile): RingAction {
   ].filter((lock): lock is string => !!lock);
   const hexBusy = world.hud.queue.some((o) => o.q === tile.q && o.r === tile.r);
   const availability = availabilityFor(cost, upgradeDefinition, locks.length > 0, hexBusy);
+  // A hex at its order limit (or with a raze) takes no upgrade: the card says so, like Raze's, instead of listing slots.
+  const busyNote = hexTakesNoOrder(world.hud.queue, tile, world.hud.construction.maxOrdersPerHex)
+    ? t('hud.ringMenu.actions.hexBusy')
+    : undefined;
   const stats = buildingStatsAt(type, nextLevel, tile, tileAt);
   // Production is per hour at the world's speed: the card shows the gain, and the new total next to it.
   const rate = upgradeRateGain(buildingStatsAt(type, level, tile, tileAt).output, stats.output, world.worldSpeedFactor);
   const missing = formatMissingResources(cost, world.hud.available);
-  const blocked = availability.state === 'locked' || availability.state === 'waiting';
+  const blocked = !!busyNote || availability.state === 'locked' || availability.state === 'waiting';
   return {
     id: 'upgrade',
     label,
     color: 'var(--gold)',
     disabled: blocked,
-    state: blocked ? availability.state : undefined,
+    state: !blocked ? undefined : busyNote ? 'waiting' : availability.state,
     // Read out by screen readers; sighted players get the card on hover.
     hint: !blocked
       ? undefined
-      : locks.length
-        ? locks[0]
-        : missing
-          ? t('hud.ringMenu.actions.notEnough', { resources: missing })
-          : t('hud.ringMenu.card.badgeNoSlot'),
+      : (busyNote ??
+        (locks.length
+          ? locks[0]
+          : missing
+            ? t('hud.ringMenu.actions.notEnough', { resources: missing })
+            : t('hud.ringMenu.card.badgeNoSlot'))),
     card: {
       title: t('hud.ringMenu.card.upgradeTitle', { level: nextLevel }),
       sub: t('hud.ringMenu.card.upgradeSub', { building: buildingName(type), from: level, to: nextLevel }),
@@ -863,9 +888,9 @@ function upgradeActionFor(tile: Tile): RingAction {
             ? formatModifier(stats.modifier)
             : undefined,
       givesTotal: rate ? t('hud.ringMenu.card.givesTotal', { amount: rate.total }) : undefined,
-      locks,
+      locks: busyNote ? [busyNote, ...locks] : locks,
       art: buildingArt(type, nextLevel),
-      availability,
+      availability: busyNote ? undefined : availability,
     },
   };
 }
@@ -1116,9 +1141,7 @@ async function onRingSelect(id: string) {
   }
   switch (id) {
     case 'upgrade':
-      // upgrade() already closes on success (both branches); on failure it
-      // leaves selectedTile/ringScreen alone, so the ring stays open and
-      // shows the rejection's message (`actionError`, passed as `error`).
+      // Optimistic like a new build: the ring closes at once, a refusal shows under the hex.
       await upgrade();
       return;
     case 'feasts':
@@ -1131,7 +1154,7 @@ async function onRingSelect(id: string) {
       trainModalOpen.value = true;
       return;
     case 'raze':
-      // Like upgrade: on a refusal the ring stays open and shows the rejection's message (`actionError`).
+      // Optimistic too: a raze costs nothing, so there is no spend and no confirmation animation.
       await raze();
       return;
     case 'send-army':
@@ -1187,27 +1210,35 @@ async function buildFromRing(type: BuildableType) {
     closeRing();
     return;
   }
+  await sendOptimisticOrder(coord, () => world.queueBuildOptimistic(type, coord, cost), {
+    fallback: t('hud.ringMenu.errors.couldNotQueueBuild'),
+    confirmed: { name: entry?.label ?? buildingName(type), level: 1, time: entry?.time ?? null },
+  });
+}
+
+// The live half shared by build, upgrade and raze: the ring (or modal) closes at once, the store's optimistic pending
+// order puts the "…" dial on the hex, and only a refusal undoes it — the dial shakes and fades and a chip under the hex
+// carries the server's message. With `confirmed`, the queue row is held back until the confirmation animation reveals
+// it (Q1/Q5, BuildQueuePanel).
+async function sendOptimisticOrder(
+  coord: AxialCoord,
+  send: () => Promise<void>,
+  opts: { fallback: string; confirmed?: { name: string; level: number; time: string | null } },
+) {
   const renderer = canvasRef.value?.renderer;
-  closeRing();
-  // Hold the new queue row back until the confirmation animation reveals it (Q1/Q5, BuildQueuePanel).
-  holdBuildRow(coord);
+  closeModal();
+  if (opts.confirmed) holdBuildRow(coord);
   try {
-    await world.queueBuildOptimistic(type, coord, cost);
+    await send();
   } catch (err) {
-    releaseBuildRow(coord);
-    console.error('Failed to queue building against the backend', err);
+    if (opts.confirmed) releaseBuildRow(coord);
+    console.error('Failed to queue an order against the backend', err);
     // Surface the rejection's detail (NoFreeSlot's premium hint included, issue #158).
     renderer?.rejectConstructionDial(coord);
-    showBuildRefusal(coord, describeActionError(err, t('hud.ringMenu.errors.couldNotQueueBuild')));
+    showBuildRefusal(coord, describeActionError(err, opts.fallback));
     return;
   }
-  announceConfirmedBuild({
-    coord,
-    name: entry?.label ?? buildingName(type),
-    level: 1,
-    time: entry?.time ?? null,
-    from: renderer?.dialScreenPoint(coord) ?? null,
-  });
+  if (opts.confirmed) announceConfirmedBuild({ coord, ...opts.confirmed, from: renderer?.dialScreenPoint(coord) ?? null });
 }
 
 const BUILD_REFUSAL_MS = 2500;
@@ -1227,7 +1258,6 @@ onUnmounted(() => {
 
 function closeModal() {
   closeRing();
-  modalBusy.value = false;
   actionError.value = null;
 }
 
@@ -1249,13 +1279,10 @@ async function raze() {
     closeRing();
     return;
   }
-  try {
-    await world.razeBuildingLive(selectedCoord.value);
-    closeRing();
-  } catch (err) {
-    console.error('Failed to queue raze against the backend', err);
-    actionError.value = describeActionError(err, t('hud.ringMenu.errors.couldNotQueueRaze'));
-  }
+  const coord = selectedCoord.value;
+  await sendOptimisticOrder(coord, () => world.razeBuildingLive(coord), {
+    fallback: t('hud.ringMenu.errors.couldNotQueueRaze'),
+  });
 }
 
 async function upgrade() {
@@ -1267,16 +1294,18 @@ async function upgrade() {
     closeModal();
     return;
   }
-  modalBusy.value = true;
-  actionError.value = null;
-  try {
-    await world.queueBuildLive(selectedTile.value.buildingType, selectedCoord.value);
-    closeModal();
-  } catch (err) {
-    console.error('Failed to queue upgrade against the backend', err);
-    actionError.value = describeActionError(err, t('hud.ringMenu.errors.couldNotQueueUpgrade'));
-    modalBusy.value = false;
-  }
+  const coord = selectedCoord.value;
+  const tile = selectedTile.value;
+  // What the Upgrade card promised (read before the ring closes: the card follows the selected tile).
+  const card = upgradeActionFor(tile).card;
+  const level = nextUpgradeLevel(tile.buildingLevel ?? 1, world.hud.queue, coord);
+  // Queued behind a running order on the same hex: the queue's held row and confirmation are keyed by hex, so they
+  // would hide and animate that running order's row instead. The new order just appears in the queue.
+  const queuedBehind = world.hud.queue.some((o) => o.q === coord.q && o.r === coord.r);
+  await sendOptimisticOrder(coord, () => world.upgradeBuildingLive(coord, card?.cost), {
+    fallback: t('hud.ringMenu.errors.couldNotQueueUpgrade'),
+    confirmed: queuedBehind ? undefined : { name: buildingName(tile.buildingType!), level, time: card?.time ?? null },
+  });
 }
 </script>
 
@@ -1307,7 +1336,17 @@ async function upgrade() {
       @zoom-mode-change="onZoomModeChange"
       @camera-change="onCameraChange"
     />
-    <div v-if="showFogDebug" class="fog-debug-stack">
+    <div v-if="showFogDebug" ref="debugStackRef" class="fog-debug-stack" :style="debugStackStyle">
+      <!-- Drag to move the whole stack off whatever it is covering (the garrison
+           and army panels); double-click puts it back. -->
+      <div
+        class="debug-drag-handle"
+        :title="t('hud.debugStack.handleTitle')"
+        @pointerdown="debugStackDrag.onPointerDown"
+        @dblclick="debugStackDrag.reset"
+      >
+        {{ `⠿ ${t('hud.debugStack.handle')}` }}
+      </div>
       <!-- First in the stack on purpose: it is the one panel that answers
            "is the map smooth right now", which is the question every other
            panel here exists to help explain. -->
@@ -1370,10 +1409,7 @@ async function upgrade() {
         :tile="selectedTile"
         :mine="modalMine"
         :owner-label="modalOwnerLabel"
-        :busy="modalBusy"
-        :error="actionError"
         @close="closeModal"
-        @upgrade="upgrade"
       />
       <TrainingModal
         v-if="selectedTile?.buildingType && trainModalOpen"
@@ -1481,5 +1517,23 @@ async function upgrade() {
    cross-size by default, which squashes the slider rows instead of scrolling. */
 .fog-debug-stack > * {
   flex-shrink: 0;
+}
+.debug-drag-handle {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 4px 10px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: rgba(7, 15, 20, 0.85);
+  border-radius: 6px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.debug-drag-handle:active {
+  cursor: grabbing;
 }
 </style>

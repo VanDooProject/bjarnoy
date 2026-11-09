@@ -99,7 +99,7 @@ public sealed class AdminUserEndpointsTests(SqliteApiFixture fixture) : IClassFi
     }
 
     [Fact]
-    public async Task Lookup_finds_accounts_by_user_name_settlement_and_jarl_but_not_system_owners()
+    public async Task Lookup_finds_accounts_by_user_name_settlement_and_jarl_and_anonymous_players_without_their_owner_id()
     {
         using var client = _fixture.CreateClient();
         var (userName, _, userId) = await CreatePlayerAsync(client);
@@ -162,7 +162,14 @@ public sealed class AdminUserEndpointsTests(SqliteApiFixture fixture) : IClassFi
         Assert.Equal(userId, jarlHit.UserId);
         Assert.Equal("jarl", jarlHit.Via);
 
-        Assert.Empty(await Lookup($"verlassen{stamp}"));
+        // A player without an account is found too: by settlement id, never by their client-local owner id.
+        var anonymousHit = Assert.Single(await Lookup($"verlassen{stamp}"));
+        Assert.Equal("anonymous", anonymousHit.Kind);
+        Assert.Null(anonymousHit.UserId);
+        Assert.Equal("jarl", anonymousHit.Via);
+        Assert.Equal($"Verlassen{stamp}", anonymousHit.UserName);
+        Assert.NotNull(anonymousHit.SettlementId);
+        Assert.DoesNotContain($"o-{stamp}-2", await (await client.GetAsync($"/api/v1/admin/users/lookup?q=verlassen{stamp}", Ct)).Content.ReadAsStringAsync(Ct));
         Assert.Empty(await Lookup("x"));
     }
 

@@ -744,6 +744,52 @@ public class ArmyTests
     }
 
     [Fact]
+    public void Fleet_dispatch_return_path_is_the_outbound_path_walked_backwards()
+    {
+        // The way home is not searched again: a second search has its own node budget and once gave up on a long
+        // trip the outbound search had just planned (a fleet to open water ~320 hexes out was refused as unreachable).
+        var settlement = Found(garrison: [new UnitStack(UnitType.Karve, 5)]);
+        var islet = new HexCoord(3, 0).Neighbours().Append(new HexCoord(3, 0)).ToHashSet();
+        Terrain TerrainAt(HexCoord c) => islet.Contains(c) ? Terrain.Mountain : Terrain.Sea;
+
+        var decision = Dispatch(settlement, new HexCoord(7, 0), provisions: 80,
+            requested: [new UnitStack(UnitType.Karve, 5)], terrainAt: TerrainAt);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        var movement = ((ArmyLocation.InTransit)decision.Army!.Location).Movement;
+        Assert.Equal(movement.Path.Reverse(), movement.ReturnPath);
+    }
+
+    [Fact]
+    public void Fleet_dispatch_to_a_sea_hex_walled_in_by_land_is_a_sea_route_failure_not_a_land_one()
+    {
+        var settlement = Found(garrison: [new UnitStack(UnitType.Karve, 5)]);
+        var target = new HexCoord(5, 0);
+        var ring = target.Neighbours().ToHashSet();
+        Terrain TerrainAt(HexCoord c) => ring.Contains(c) ? Terrain.Mountain : Terrain.Sea;
+
+        var decision = Dispatch(settlement, target, provisions: 40,
+            requested: [new UnitStack(UnitType.Karve, 5)], terrainAt: TerrainAt);
+
+        Assert.Equal(DispatchRejection.NoSeaRoute, decision.Rejection);
+    }
+
+    [Fact]
+    public void Fleet_dispatch_too_far_to_plan_is_refused_as_a_too_long_trip_not_as_unreachable()
+    {
+        // No route exists, but a target this far out cannot be proven cut off within the search budget.
+        var settlement = Found(garrison: [new UnitStack(UnitType.Karve, 5)]);
+        var target = new HexCoord(250, 0);
+        var ring = target.Neighbours().ToHashSet();
+        Terrain TerrainAt(HexCoord c) => ring.Contains(c) ? Terrain.Mountain : Terrain.Sea;
+
+        var decision = Dispatch(settlement, target, provisions: 40,
+            requested: [new UnitStack(UnitType.Karve, 5)], terrainAt: TerrainAt);
+
+        Assert.Equal(DispatchRejection.RouteTooLong, decision.Rejection);
+    }
+
+    [Fact]
     public void Land_dispatch_to_a_non_land_hex_is_still_rejected_the_ordinary_way()
     {
         // Mirrors Fleet_dispatch_validates_the_destination_as_sea_not_land —

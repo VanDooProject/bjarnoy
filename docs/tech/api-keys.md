@@ -34,6 +34,38 @@ a banned acting account is a 401, the key's other accounts keep working. A key
 counts against the active-key cap of every account it can act as. Recreate and
 renewal carry the further accounts over.
 
+### Players without an account
+
+A settlement founded without logging in belongs to the reserved `Abandoned`
+system user; its player proves ownership with a client-local id (`X-Owner-Id`).
+A key can be granted such a player too, picked by jarl in the admin
+autocomplete (the settlement is the handle; the client-local id is stored on the
+key and never returned by the API):
+
+```bash
+curl -H "Authorization: Bearer bjk_…" -H "X-Act-As: jarl:Jarl-aae5" https://<host>/api/v1/settlements/<id>
+```
+
+- The request is evaluated as that player and nobody else: it carries **no user
+  id and no role**, whoever owns the key. Everything that needs a signed-in
+  account (guilds, chat, profiles, `/auth/me`, every `admin.*` route) answers
+  403. Founding with such a key always uses the granted identity.
+- **A key request never sends its own `X-Owner-Id`**: the header is ignored for
+  keys, so a key only reaches the anonymous settlements an admin granted it.
+- Jarl names are not unique. When two granted players share a name, the label
+  gets the settlement name added (`Jarl-aae5 (Hedeby)`); the label is what
+  follows `jarl:` (case-insensitive).
+- If the player later registers an account, the grant stops working (403,
+  "claimed") instead of following the claim; an admin adds the new account.
+- A key whose accounts are all anonymous has an owner who is only the
+  **sponsor** (audit and key cap): "the owner can act as themself" is off, a
+  request without `X-Act-As` acts as the default anonymous account, and
+  `admin.*` features are not allowed.
+- Requests: an `ownerUserName` or `additionalUserNames` hint that is an exact
+  jarl or settlement name (`Jarl-a741`) resolves to the one matching account or
+  player; several matches are never guessed, the approval form says so.
+
+
 ## Scoping
 
 A key's effective rights are the intersection of:
@@ -135,6 +167,33 @@ curl -X POST https://<host>/api/v1/api-key-requests/<id>/token -H "Content-Type:
   after `RequestTimeout` without a decision or pickup.
 - An IP can have `MaxOpenRequestsPerIp` open requests, all requesters together
   `MaxOpenRequestsTotal`.
+
+### Polling for approval
+
+`scripts/api-key-poll.sh` wraps the request and the poll, so a session finds out
+the moment an admin approves, and the one-time token is never lost or printed:
+
+```bash
+# request.json is the body of step 1 above; prints the user code and approvalUrl for the admin
+scripts/api-key-poll.sh request <host> request.json
+# poll until decided; run it in the background so the session is woken when it exits
+scripts/api-key-poll.sh wait <host> request.state.json
+# or, for a request made by hand with curl
+scripts/api-key-poll.sh wait <host> --id <id> --secret <pollSecret> --out key.token
+```
+
+- Exit codes of `wait`: 0 approved (token in the token file, mode 600), 1 denied,
+  2 expired or already picked up, 3 timeout (`POLL_TIMEOUT_SECONDS`, default
+  3600) or an unexpected answer. Transient errors and 429/5xx keep polling.
+- The token endpoint hands the token out **exactly once**. Never poll it by hand
+  once the request may be approved, and never pipe its answer through something
+  that discards the token: the request is then spent and the admin has to
+  approve a new one. Let the script own the poll and read the token from its file.
+- Keep the token file and the state file out of the repository (use the session's
+  scratchpad). Never print the token, put it in a PR, a comment or a doc.
+- `GET /worlds/{id}/camps` only lists camps on islands **the key's owner has
+  seen**. A key owned by an admin who never visited the island answers an empty
+  list: ask the admin to pick the playing account as owner when approving.
 
 ### Renewal
 

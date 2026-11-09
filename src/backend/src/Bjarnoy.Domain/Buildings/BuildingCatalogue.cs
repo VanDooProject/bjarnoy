@@ -401,7 +401,7 @@ public static class BuildingCatalogue
             // effects not yet designed); the military line's capstone and the
             // feeder of the Shrine of Thor.
             BuildingType.Smithy =>
-                Producer(type, level, SandOrGrass, ResourceAmounts.Zero, SmallBuildingCost, 4),
+                Producer(type, level, Grass, ResourceAmounts.Zero, SmallBuildingCost, 4),
             BuildingType.DruidHut => DruidHut(level),
             BuildingType.CartWorkshop => CartWorkshop(level),
             // The start's stone source: on plain bog moss (the landing spots guarantee bog in reach), not on grass.
@@ -426,14 +426,61 @@ public static class BuildingCatalogue
         // (unlock ladder + prerequisites) lives in exactly one place, and every
         // building goes through the same rule for which of its levels the
         // prerequisites gate.
-        return definition is null
-            ? null
-            : definition with
-            {
-                Prerequisites = PrerequisitesFor(type, level),
-                RequiredLonghouseLevel = RequiredLonghouseLevelFor(type, level),
-            };
+        if (definition is null)
+        {
+            return null;
+        }
+
+        var ring = RingPlacements.TryGetValue(type, out var placement) ? placement : default;
+        return definition with
+        {
+            Prerequisites = PrerequisitesFor(type, level),
+            RequiredLonghouseLevel = RequiredLonghouseLevelFor(type, level),
+            RingCategory = ring.Category,
+            RingOrder = ring.Order,
+        };
     }
+
+    /// <summary>
+    /// Where each building sits in the build ring: its category and its position within it. The client builds its ring from this
+    /// (filtering by the hex's terrain, bog kind and river), so a new building is added here only. The Longhouse is never listed;
+    /// the Quarry is listed but <see cref="NewPlacementDisabled"/> keeps it off the ring.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<BuildingType, (BuildingRingCategory? Category, int Order)> RingPlacements =
+        new Dictionary<BuildingType, (BuildingRingCategory? Category, int Order)>
+        {
+            [BuildingType.ReindeerHerder] = (BuildingRingCategory.Resource, 0),
+            [BuildingType.Farm] = (BuildingRingCategory.Resource, 1),
+            [BuildingType.PumpkinFarm] = (BuildingRingCategory.Resource, 2),
+            [BuildingType.Sawmill] = (BuildingRingCategory.Resource, 3),
+            [BuildingType.CropMill] = (BuildingRingCategory.Resource, 4),
+            [BuildingType.Meadery] = (BuildingRingCategory.Resource, 5),
+            [BuildingType.Lumberjack] = (BuildingRingCategory.Resource, 6),
+            [BuildingType.Quarry] = (BuildingRingCategory.Resource, 7),
+            [BuildingType.ClayBrickworks] = (BuildingRingCategory.Resource, 8),
+            [BuildingType.BogOreWorks] = (BuildingRingCategory.Resource, 9),
+            [BuildingType.Hammerschmiede] = (BuildingRingCategory.Resource, 10),
+            [BuildingType.ArcheryRange] = (BuildingRingCategory.Military, 0),
+            [BuildingType.SiegeWorkshop] = (BuildingRingCategory.Military, 1),
+            [BuildingType.Barracks] = (BuildingRingCategory.Military, 2),
+            [BuildingType.Smithy] = (BuildingRingCategory.Military, 3),
+            [BuildingType.StorageHouse] = (BuildingRingCategory.Logistics, 0),
+            [BuildingType.GreatStorehouse] = (BuildingRingCategory.Logistics, 1),
+            [BuildingType.TownSquare] = (BuildingRingCategory.Logistics, 2),
+            [BuildingType.CartWorkshop] = (BuildingRingCategory.Logistics, 3),
+            [BuildingType.DruidHut] = (BuildingRingCategory.Logistics, 4),
+            [BuildingType.Tower] = (BuildingRingCategory.Defense, 0),
+            [BuildingType.Palisade] = (BuildingRingCategory.Defense, 1),
+            [BuildingType.PalisadeGate] = (BuildingRingCategory.Defense, 2),
+            [BuildingType.Bridge] = (BuildingRingCategory.Defense, 3),
+            [BuildingType.ShrineOfThor] = (BuildingRingCategory.Religion, 0),
+            [BuildingType.ShrineOfFreyja] = (BuildingRingCategory.Religion, 1),
+            [BuildingType.ShrineOfUllr] = (BuildingRingCategory.Religion, 2),
+            [BuildingType.OdinStatue] = (BuildingRingCategory.Religion, 3),
+            [BuildingType.FishingHut] = (BuildingRingCategory.Water, 0),
+            [BuildingType.Dockyard] = (BuildingRingCategory.Water, 1),
+            [BuildingType.ShrineOfNjord] = (BuildingRingCategory.Water, 2),
+        };
 
     public static BuildingDefinition Get(BuildingType type, int level) =>
         TryGet(type, level)
@@ -579,7 +626,6 @@ public static class BuildingCatalogue
     private static readonly IReadOnlySet<Terrain> Forest = new HashSet<Terrain> { Terrain.Forest };
     private static readonly IReadOnlySet<Terrain> Ridge = new HashSet<Terrain> { Terrain.Mountain };
     private static readonly IReadOnlySet<Terrain> Grass = new HashSet<Terrain> { Terrain.Grass };
-    private static readonly IReadOnlySet<Terrain> SandOrGrass = new HashSet<Terrain> { Terrain.Sand, Terrain.Grass };
     private static readonly IReadOnlySet<Terrain> Sea = new HashSet<Terrain> { Terrain.Sea };
     private static readonly IReadOnlySet<Terrain> Bog = new HashSet<Terrain> { Terrain.Bog };
 
@@ -807,7 +853,7 @@ public static class BuildingCatalogue
     /// <see cref="SawmillExcludedRiverVariants"/>. See
     /// <see cref="BuildingDefinition.RequiresRiverShape"/>/
     /// <see cref="BuildingDefinition.ExcludedRiverVariants"/> and the
-    /// frontend's <c>ringCatalogue.ts</c> <c>RIVER_SHAPES_BY_TYPE</c>/
+    /// frontend's <c>placementRules.ts</c> (served as <c>requiresRiverShapes</c>)/
     /// <c>riverBuildingAllowedHere</c>, which mirror this same rule for the
     /// placement UI.
     /// </summary>
@@ -873,7 +919,8 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 40, Stone: 10, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(2, level),
         AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Forest, Terrain.Sand },
-        AlsoOnCoastalWater = true,
+        // Only the plain palisade is the wall's sea end; a gate never is (Palisades.PalisadeRules), so it is not offered on the water.
+        AlsoOnCoastalWater = type == BuildingType.Palisade,
         AlsoOnBogKinds = PlainBogOnly,
     };
 
@@ -937,7 +984,7 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 140, Stone: 100, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(7, level),
-        AllowedTerrain = SandOrGrass,
+        AllowedTerrain = Grass,
         // The deepest tier of the early military line (Tower -> Barracks ->
         // Archery Range), behind a level-5 Barracks.
     };
@@ -987,7 +1034,7 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 130, Stone: 110, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(7, level),
-        AllowedTerrain = SandOrGrass,
+        AllowedTerrain = Grass,
         // The middle rung of the military line: needs a level-3 Tower
         // standing first (see PrerequisiteTable) and gates Archery Range in
         // turn, so raising an army is a mid-game commitment rather than

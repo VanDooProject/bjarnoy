@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Services;
@@ -338,8 +339,23 @@ internal static class OwnershipGate
             return Guid.TryParse(idClaim, out var callerId) && callerId == settlementUserId;
         }
 
-        var headerOwnerId = httpContext.Request.Headers[OwnerIdHeaderName].ToString();
-        return !string.IsNullOrEmpty(headerOwnerId) && headerOwnerId == settlementOwnerId;
+        var callerOwnerId = CallerOwnerId(httpContext);
+        return !string.IsNullOrEmpty(callerOwnerId) && callerOwnerId == settlementOwnerId;
+    }
+
+    /// <summary>
+    /// The client-local id the caller proves an anonymous settlement with. A browser sends it as
+    /// <see cref="OwnerIdHeaderName"/>; an API key request never does: whatever header it sends is ignored, and it
+    /// only ever acts as the anonymous identity an admin granted the key (<see cref="ApiKeyContext.ActingAnonymousOwnerId"/>),
+    /// so a key cannot reach anonymous settlements it was not given.
+    /// </summary>
+    internal static string? CallerOwnerId(HttpContext httpContext)
+    {
+        ArgumentNullException.ThrowIfNull(httpContext);
+
+        return ApiKeyContext.From(httpContext) is { } key
+            ? key.ActingAnonymousOwnerId
+            : httpContext.Request.Headers[OwnerIdHeaderName].ToString();
     }
 
     private static IResult Refuse() =>

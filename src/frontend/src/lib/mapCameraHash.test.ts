@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCameraHash, serializeCameraHash } from './mapCameraHash';
+import { WORLD_FOCUS_ZOOM, parseCameraHash, serializeCameraHash, worldMapLocation } from './mapCameraHash';
 import { isWorldHash } from './mapModeRoute';
 
 describe('map camera hash', () => {
@@ -32,4 +32,13 @@ describe('map camera hash', () => {
       expect(parseCameraHash(hash)).toBeNull();
     },
   );
+});
+
+describe('worldMapLocation', () => {
+  it('points the map route at the hex in world mode, in a form parseCameraHash reads back', () => {
+    const location = worldMapLocation({ q: -3, r: 7 });
+    expect(location.path).toBe('/settlement');
+    expect(parseCameraHash(location.hash)).toEqual({ coord: { q: -3, r: 7 }, zoom: WORLD_FOCUS_ZOOM });
+    expect(isWorldHash(location.hash)).toBe(true);
+  });
 });
