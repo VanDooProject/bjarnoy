@@ -48,6 +48,9 @@ import {
   DIAL_FINISH_MS,
   dialFinishFrame,
   dialRejectFrame,
+  hexPerimeterSegment,
+  pendingDotFrame,
+  DIAL_PENDING_SWEEP_MS,
   DIAL_REJECT_MS,
   polylinePartial,
   retainFinishingDials,
@@ -963,8 +966,11 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
 
 // Construction progress dial (see `constructionDial.ts`): drawn in screen space
 // by `drawConstructionDials` (scaled with the map, grows on hover) over a building under construction — white track, yellow elapsed arc,
-// remaining time inside.
+// remaining time inside. A queued order draws `#position` on the plain track, a pending one an orbiting sweep and dots,
+// a refused one a red flash and cross.
 const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
+// Refused-build dial: red outline, flash and rings.
+const CONSTRUCTION_DIAL_REJECT_COLOR = 0xff4d3d;
 // Dial height above the tile centre: half a tile, so the dial's middle sits on
 // the hex's upper edge and the dial overlaps its own tile instead of floating
 // above it.
@@ -5733,8 +5739,8 @@ export class HexMapRenderer {
     if (this.tapRevealKey !== null && nowMs - this.tapRevealAtMs >= DIAL_TAP_REVEAL_MS) this.tapRevealKey = null;
     const placed = live.map((dial) => {
       const anchor = this.dialScreenPoint(dial.coord);
-      // A refused build's "…" dial shakes, then shrinks and fades (dialRejectFrame).
-      const reject = dial.rejectedAtMs !== undefined ? dialRejectFrame(nowMs - dial.rejectedAtMs) : null;
+      // A refused build's dial shakes, flashes red with a cross, then shrinks and fades (dialRejectFrame).
+      const reject = dial.rejectedAtMs !== undefined ? dialRejectFrame(nowMs - dial.rejectedAtMs, reduced) : null;
       const key = coordKey(dial.coord);
       seen.add(key);
       const cx = anchor.x + (reject?.offsetX ?? 0);
@@ -5797,15 +5803,54 @@ export class HexMapRenderer {
         continue;
       }
 
-      g.poly(hexPoints(cx, cy, r))
-        .fill({ color: 0x08121a, alpha: 0.85 * dAlpha })
-        .stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.3 * dAlpha, join: 'round' });
-      strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
+      if (reject) {
+        const a = reject.alpha * vis;
+        for (const ring of reject.rings) {
+          g.poly(hexPoints(cx, cy, r * ring.scale)).stroke({
+            width: 3 * zs,
+            color: CONSTRUCTION_DIAL_REJECT_COLOR,
+            alpha: ring.alpha * a,
+            join: 'round',
+          });
+        }
+        g.poly(hexPoints(cx, cy, r)).fill({ color: 0x08121a, alpha: 0.85 * a });
+        g.poly(hexPoints(cx, cy, r)).fill({ color: CONSTRUCTION_DIAL_REJECT_COLOR, alpha: 0.7 * reject.flash * a });
+        strokePath(hexPerimeterPath(cx, cy, r, 1), 6 * zs, CONSTRUCTION_DIAL_REJECT_COLOR, a);
+        const h = 0.34 * r;
+        const cross = reject.cross;
+        strokePath(polylinePartial([{ x: cx - h, y: cy - h }, { x: cx + h, y: cy + h }], cross * 2), 5 * zs, 0xffffff, a);
+        strokePath(polylinePartial([{ x: cx + h, y: cy - h }, { x: cx - h, y: cy + h }], cross * 2 - 1), 5 * zs, 0xffffff, a);
+        continue;
+      }
+
+      const queued = dial.state === 'queued';
+      g.poly(hexPoints(cx, cy, r)).fill({ color: 0x08121a, alpha: 0.85 * dAlpha });
+      g.poly(hexPoints(cx, cy, r)).stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.3 * dAlpha, join: 'round' });
+      if (dial.state === 'pending') {
+        if (reduced) {
+          for (let k = 0; k < 3; k++) {
+            strokePath(hexPerimeterSegment(cx, cy, r, k / 3, k / 3 + 1 / 12), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
+          }
+        } else {
+          const head = (nowMs % DIAL_PENDING_SWEEP_MS) / DIAL_PENDING_SWEEP_MS;
+          strokePath(hexPerimeterSegment(cx, cy, r, head, head + 1 / 6), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
+        }
+      } else if (!queued) {
+        strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
+      }
       if (!showLabel) continue;
-      const label = this.acquireLabel(LABEL_STYLES.dialTime, zs * 1.2 * (reject?.scale ?? 1));
+      if (dial.state === 'pending') {
+        const s = 0.1 * r;
+        for (let i = 0; i < 3; i++) {
+          const dot = pendingDotFrame(nowMs, i, reduced);
+          g.circle(cx + (i - 1) * 3.2 * s, cy - dot.lift * s, s).fill({ color: 0xffffff, alpha: dot.alpha * dAlpha });
+        }
+        continue;
+      }
+      const label = this.acquireLabel(LABEL_STYLES.dialTime, zs * 1.2);
       label.alpha = dAlpha;
-      label.text = remaining === null ? '…' : formatCountdownShort(remaining);
-      label.tint = remaining !== null && remaining <= 60 ? CONSTRUCTION_DIAL_ELAPSED_COLOR : 0xffffff;
+      label.text = queued ? `#${dial.queuePosition}` : remaining === null ? '…' : formatCountdownShort(remaining);
+      label.tint = !queued && remaining !== null && remaining <= 60 ? CONSTRUCTION_DIAL_ELAPSED_COLOR : 0xffffff;
       label.anchor.set(0.5);
       label.position.set(cx, cy);
       label.visible = true;

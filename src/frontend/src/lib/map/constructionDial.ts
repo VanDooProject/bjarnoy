@@ -5,15 +5,24 @@
  */
 import type { BuildOrderResponse } from '../../api/types';
 import type { AxialCoord } from '../hex/coords';
+import { isPendingOrder } from '../hud/pendingBuild';
 
 export interface ConstructionDial {
   coord: AxialCoord;
-  /** `Date.now()`-epoch ms the build started; null while waiting / unknown. */
+  /** `Date.now()`-epoch ms the build started; null while queued / pending / unknown. */
   startMs: number | null;
-  /** `Date.now()`-epoch ms the build completes; null while waiting / unknown. */
+  /** `Date.now()`-epoch ms the build completes; null while queued / pending / unknown. */
   endMs: number | null;
   /**
-   * `Date.now()`-epoch ms the server refused the build this (still "…") dial
+   * `building`: a running build (progress arc + countdown). `queued`: a real server `waiting` order behind full
+   * construction slots (plain track + `#position`). `pending`: a client-only order the server has not answered yet
+   * (sweep + dots).
+   */
+  state: 'building' | 'queued' | 'pending';
+  /** 1-based place among the queued (non-pending) orders in queue order; null unless `state` is `queued`. */
+  queuePosition: number | null;
+  /**
+   * `Date.now()`-epoch ms the server refused the build this pending dial
    * stood for: the dial plays `dialRejectFrame` from then and is pruned.
    */
   rejectedAtMs?: number;
@@ -22,12 +31,25 @@ export interface ConstructionDial {
 /**
  * One dial per hex from the HUD build queue. `fetchedAt` is the `Date.now()`
  * at which `completesInSeconds` was measured. A 'building' order wins over a
- * 'waiting' one sharing the same hex.
+ * 'waiting' one sharing the same hex. A client pending order is `pending`, any
+ * other 'waiting' order is `queued` with its 1-based place among the real
+ * waiting orders (the queue array's order is taken as the promotion order; the
+ * next refresh corrects it).
  */
 export function constructionDialsFromQueue(queue: BuildOrderResponse[], fetchedAt: number): ConstructionDial[] {
   const byHex = new Map<string, { dial: ConstructionDial; building: boolean }>();
+  let queuedSoFar = 0;
   for (const o of queue) {
     const building = o.state === 'building';
+    const pending = !building && isPendingOrder(o);
+    let state: ConstructionDial['state'] = 'building';
+    let queuePosition: number | null = null;
+    if (pending) state = 'pending';
+    else if (!building) {
+      state = 'queued';
+      queuedSoFar += 1;
+      queuePosition = queuedSoFar;
+    }
     let startMs: number | null = null;
     let endMs: number | null = null;
     if (building && o.completesInSeconds !== null && o.totalSeconds > 0) {
@@ -37,7 +59,7 @@ export function constructionDialsFromQueue(queue: BuildOrderResponse[], fetchedA
     const key = `${o.q},${o.r}`;
     const existing = byHex.get(key);
     if (existing && (existing.building || !building)) continue;
-    byHex.set(key, { dial: { coord: { q: o.q, r: o.r }, startMs, endMs }, building });
+    byHex.set(key, { dial: { coord: { q: o.q, r: o.r }, startMs, endMs, state, queuePosition }, building });
   }
   return [...byHex.values()].map((e) => e.dial);
 }
@@ -48,7 +70,7 @@ export function dialProgress(d: ConstructionDial, nowMs: number): number {
   return Math.min(1, Math.max(0, (nowMs - d.startMs) / (d.endMs - d.startMs)));
 }
 
-/** Seconds left at `nowMs`; null when timing is unknown (waiting order). */
+/** Seconds left at `nowMs`; null when timing is unknown (queued / pending order). */
 export function dialRemainingSeconds(d: ConstructionDial, nowMs: number): number | null {
   if (d.startMs === null || d.endMs === null) return null;
   return Math.max(0, (d.endMs - nowMs) / 1000);
@@ -102,6 +124,56 @@ export function hexPerimeterPath(cx: number, cy: number, r: number, fraction: nu
     return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
   });
   return polygonPerimeterPath(vertices, fraction);
+}
+
+/**
+ * Flat [x, y, ...] polyline along the hexagon's perimeter (same layout as `hexPerimeterPath`) from perimeter fraction
+ * `from` to `to`. `to` may exceed 1: the segment wraps past the top vertex. A span of 1 or more covers the full loop.
+ */
+export function hexPerimeterSegment(cx: number, cy: number, r: number, from: number, to: number): number[] {
+  const vertices = Array.from({ length: 6 }, (_, i) => {
+    const a = (Math.PI / 180) * (-90 + 60 * i);
+    return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+  });
+  const span = to - from;
+  if (span <= 0) return [];
+  if (span >= 1) return hexPerimeterPath(cx, cy, r, 1);
+  const start = ((from % 1) + 1) % 1;
+  const end = start + span;
+  // Hex edges are equal length, so fraction k/6 is vertex k.
+  const pointAt = (f: number) => {
+    const t = (((f % 1) + 1) % 1) * 6;
+    const i = Math.min(5, Math.floor(t));
+    const a = vertices[i];
+    const b = vertices[(i + 1) % 6];
+    const u = t - i;
+    return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u };
+  };
+  const out: number[] = [];
+  const first = pointAt(start);
+  out.push(first.x, first.y);
+  for (let k = Math.floor(start * 6) + 1; k / 6 < end - 1e-9; k++) {
+    const v = vertices[k % 6];
+    out.push(v.x, v.y);
+  }
+  const last = pointAt(end);
+  out.push(last.x, last.y);
+  return out;
+}
+
+/** Pending dial: one orbit of the perimeter sweep, in ms. */
+export const DIAL_PENDING_SWEEP_MS = 1100;
+/** Pending dial: one bounce cycle of the centre dots, in ms. */
+export const DIAL_PENDING_DOT_MS = 700;
+
+/**
+ * One centre dot of the pending dial at `nowMs`: `lift` is the upward offset in dot radii, `alpha` the opacity factor.
+ * With reduced motion the dots stand still at full opacity.
+ */
+export function pendingDotFrame(nowMs: number, index: number, reducedMotion: boolean): { lift: number; alpha: number } {
+  if (reducedMotion) return { lift: 0, alpha: 1 };
+  const ph = Math.max(0, Math.sin(2 * Math.PI * (nowMs / DIAL_PENDING_DOT_MS - index * 0.18)));
+  return { lift: ph * 1.4, alpha: 0.5 + 0.5 * ph };
 }
 
 /**
@@ -257,37 +329,57 @@ export function dialFinishFrame(msSinceEnd: number): DialFinishFrame | null {
   };
 }
 
-/** How long the rejection animation (shake, then fade out) plays. */
-export const DIAL_REJECT_MS = 480;
-const REJECT_SHAKE_MS = 280;
+/** How long the rejection animation (shake, pop, red cross, fade out) plays. */
+export const DIAL_REJECT_MS = 1500;
+const REJECT_SHAKE_MS = 420;
 
 export interface DialRejectFrame {
   /** Horizontal shake offset in px. */
   offsetX: number;
-  /** Dial size multiplier (shrinks to .6 while fading). */
+  /** Dial size multiplier (pop, then shrink while fading). */
   scale: number;
+  /** Red fill overlay strength 0..1. */
+  flash: number;
+  /** Cross draw progress 0..1. */
+  cross: number;
+  /** Expanding red hex shockwaves. */
+  rings: { scale: number; alpha: number }[];
   /** Whole-dial opacity 0..1. */
   alpha: number;
 }
 
-const REJECT_SHAKE_OFFSETS = [0, -4, 4, -2, 0];
+const REJECT_SHAKE_OFFSETS = [0, -6, 6, -5, 5, -3, 0];
 
 /**
  * Rejection animation state `msSinceReject` after the server refused the
- * build: a +-4 px shake over 280 ms, then fade and shrink to .6 over 200 ms;
- * null outside it.
+ * build: shake (420 ms), pop, red flash, a cross drawn over it, two red
+ * shockwaves, then fade and shrink from 1150 ms; null outside 0..1500 ms.
+ * With reduced motion there is no shake, pop or rings.
  */
-export function dialRejectFrame(msSinceReject: number): DialRejectFrame | null {
+export function dialRejectFrame(msSinceReject: number, reducedMotion: boolean): DialRejectFrame | null {
   if (msSinceReject < 0 || msSinceReject >= DIAL_REJECT_MS) return null;
-  if (msSinceReject < REJECT_SHAKE_MS) {
-    // Five evenly spaced keyframes (0, -4, 4, -2, 0), linearly interpolated.
-    const pos = (msSinceReject / REJECT_SHAKE_MS) * (REJECT_SHAKE_OFFSETS.length - 1);
+  const s = msSinceReject;
+  let offsetX = 0;
+  if (!reducedMotion && s < REJECT_SHAKE_MS) {
+    // Seven evenly spaced keyframes, linearly interpolated.
+    const pos = (s / REJECT_SHAKE_MS) * (REJECT_SHAKE_OFFSETS.length - 1);
     const i = Math.min(REJECT_SHAKE_OFFSETS.length - 2, Math.floor(pos));
-    const offsetX = REJECT_SHAKE_OFFSETS[i] + (REJECT_SHAKE_OFFSETS[i + 1] - REJECT_SHAKE_OFFSETS[i]) * (pos - i);
-    return { offsetX, scale: 1, alpha: 1 };
+    offsetX = REJECT_SHAKE_OFFSETS[i] + (REJECT_SHAKE_OFFSETS[i + 1] - REJECT_SHAKE_OFFSETS[i]) * (pos - i);
   }
-  const p = clamp01((msSinceReject - REJECT_SHAKE_MS) / (DIAL_REJECT_MS - REJECT_SHAKE_MS));
-  return { offsetX: 0, scale: 1 - 0.4 * p, alpha: 1 - p };
+  let scale = 1;
+  if (!reducedMotion) {
+    if (s < 150) scale = 1 + 0.12 * easeOut(s / 150);
+    else if (s < 400) scale = 1.12 - 0.12 * ((s - 150) / 250);
+  }
+  const flash = s < 150 ? s / 150 : s < 500 ? 1 - 0.65 * ((s - 150) / 350) : 0.35;
+  const rings = reducedMotion
+    ? []
+    : [0, 160].flatMap((start) => {
+        const p = clamp01((s - start) / 700);
+        return s < start || p >= 1 ? [] : [{ scale: 1 + 1.1 * easeOut(p), alpha: 0.9 * (1 - p) }];
+      });
+  const f = clamp01((s - 1150) / 350);
+  return { offsetX, scale: scale * (1 - 0.4 * f), flash, cross: clamp01((s - 150) / 300), rings, alpha: 1 - f };
 }
 
 /**
@@ -314,12 +406,12 @@ export function retainFinishingDials(prev: ConstructionDial[], next: Constructio
 }
 
 /**
- * The dials after the server refused the optimistic order on `coord`: its "…" dial becomes a rejected one (shakes, fades,
+ * The dials after the server refused the optimistic order on `coord`: its pending dial becomes a rejected one (shakes, fades,
  * is pruned). A hex that still shows a running build (a dial with timing, e.g. an upgrade queued behind it) keeps that dial
  * and gets no reject dial, so the refusal doesn't wipe the real progress.
  */
 export function rejectDialAt(dials: ConstructionDial[], coord: AxialCoord, nowMs: number): ConstructionDial[] {
   const here = (d: ConstructionDial) => d.coord.q === coord.q && d.coord.r === coord.r;
   if (dials.some((d) => here(d) && d.endMs !== null)) return dials;
-  return [...dials.filter((d) => !here(d)), { coord, startMs: null, endMs: null, rejectedAtMs: nowMs }];
+  return [...dials.filter((d) => !here(d)), { coord, startMs: null, endMs: null, state: 'pending', queuePosition: null, rejectedAtMs: nowMs }];
 }
