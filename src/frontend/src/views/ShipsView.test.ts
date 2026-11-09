@@ -53,8 +53,8 @@ describe('ShipsView', () => {
     expect(row('perHex')).toEqual(['7.5 min', '6 min']);
     expect(row('loot')).toEqual(['200', '80']);
     expect(row('slots')).toEqual(['10', '20']);
-    expect(row('food')).toEqual(['100', '60']);
-    expect(row('upkeep')).toEqual(['2', '3']);
+    expect(row('food')).toEqual(['600', '320']);
+    expect(row('upkeep')).toEqual(['1.5', '2']);
     expect(row('cost')).toEqual(['250 / 100 / 40 / 100', '400 / 200 / 60 / 220']);
     expect(row('time')).toEqual(['45 min', '90 min']);
     expect(row('needs')).toEqual(['Longhouse 8', 'Longhouse 20 · Karve']);

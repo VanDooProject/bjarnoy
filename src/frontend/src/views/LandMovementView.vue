@@ -209,7 +209,7 @@ const tocLinks = computed(() =>
           <tbody>
             <tr v-for="row in unitRows" :key="row.type" :data-unit="row.type">
               <th scope="row" class="name">{{ unitName(row.type) }}</th>
-              <td class="value">{{ row.upkeep }}</td>
+              <td class="value">{{ n(row.upkeep) }}</td>
               <td class="value">{{ row.food }}</td>
             </tr>
           </tbody>

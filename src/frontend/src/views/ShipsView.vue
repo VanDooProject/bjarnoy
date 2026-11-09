@@ -107,7 +107,7 @@ const loc = computed(() => String(locale.value));
             </tr>
             <tr data-row="upkeep">
               <th scope="row" class="name">{{ $t('docs.ships.table.rows.upkeep') }}</th>
-              <td v-for="ship in ships" :key="ship.type" class="value">{{ ship.upkeepPerHour }}</td>
+              <td v-for="ship in ships" :key="ship.type" class="value">{{ n(ship.upkeepPerHour) }}</td>
             </tr>
             <tr data-row="cost">
               <th scope="row" class="name">{{ $t('docs.ships.table.rows.cost', { resources: RESOURCES.map(resourceName).join(' / ') }) }}</th>

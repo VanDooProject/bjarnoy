@@ -407,11 +407,11 @@ public class ArmyTests
     [Fact]
     public void TurnAroundAt_is_computed_from_provisions_and_upkeep()
     {
-        // One Spearman (upkeep 1/h, speed 4/h) moving 4 hexes: outbound and
+        // One Spearman (upkeep 0.25/h, speed 4/h) moving 4 hexes: outbound and
         // return each take 1 hour. Load exactly enough for the round trip
         // plus 2 hours of standing.
         var settlement = Found(garrison: [new UnitStack(UnitType.Spearman, 1)]);
-        var provisions = 2.0 + 2.0; // round trip (2h @ 1/h) + 2h standing
+        var provisions = 0.25 * (2.0 + 2.0); // round trip (2h @ 0.25/h) + 2h standing
         var decision = Dispatch(settlement, new HexCoord(4, 0), provisions,
             requested: [new UnitStack(UnitType.Spearman, 1)]);
 
@@ -619,9 +619,9 @@ public class ArmyTests
     [Fact]
     public void FieldOrder_is_rejected_when_provisions_do_not_cover_the_new_round_trip()
     {
-        // Enough for the original round trip (10 out, 10 back) with a small
-        // margin — nowhere near enough for a much longer detour to (60, 0).
-        var army = Standing(new HexCoord(10, 0), provisions: 40);
+        // 5 Spearmen eat 1.25/h. 10 food is 8 hours: enough for the original round trip (10 out, 10 back = 5 h)
+        // with a margin — nowhere near enough for a much longer detour to (60, 0) (30 h).
+        var army = Standing(new HexCoord(10, 0), provisions: 10);
 
         var result = Army.PlanFieldOrder(
             army, [], new HexCoord(60, 0), Home, ArrivedAt(army), AllGrass(), isPremium: false);
