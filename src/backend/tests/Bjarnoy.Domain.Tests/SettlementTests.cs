@@ -283,7 +283,7 @@ public class BuildingCatalogueTests
         var herder = BuildingCatalogue.Get(BuildingType.ReindeerHerder, 1);
 
         Assert.Equal(1, herder.RequiredLonghouseLevel);
-        Assert.Equal(12, herder.ProductionPerHour.Food);
+        Assert.Equal(8, herder.ProductionPerHour.Food);
         Assert.Equal(0, herder.ProductionPerHour.Wood);
         Assert.Equal(new HashSet<Terrain> { Terrain.Grass }, herder.AllowedTerrain.ToHashSet());
         Assert.Equal(25, BuildingCatalogue.MaxLevelFor(BuildingType.ReindeerHerder));

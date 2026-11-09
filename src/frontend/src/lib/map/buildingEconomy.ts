@@ -305,6 +305,7 @@ export function buildingStatsFor(
     // islands (see ringCatalogue.ts's cropAllowedHere) and yields more, the
     // "more fertile" island's bonus crop.
     case 'reindeerherder':
+      return { output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(8, level) } };
     case 'farm':
       return { output: { kind: 'resourceRate', resource: 'food', amount: producerOutput(12, level) } };
     case 'hut':
@@ -380,7 +381,7 @@ export function buildingStatsFor(
     // surrounds it, same 10%-per-neighbour/50%-cap curve as lumberjack/quarry.
     case 'fishinghut': {
       const multiplier = boostMultiplier(matchingNeighbours);
-      const output = producerOutput(12, level, multiplier);
+      const output = producerOutput(16, level, multiplier);
       return {
         output: { kind: 'resourceRate', resource: 'food', amount: output },
         modifier: onLake

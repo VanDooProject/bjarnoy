@@ -332,7 +332,7 @@ public static class BuildingCatalogue
             BuildingType.Quarry => Producer(type, level, Ridge, new ResourceAmounts(0, Stone: 8, 0, 0)),
             // The starting food building: any grass, any island, LH 1. No
             // terrain boost, like Farm (a herd is not a concentrating resource).
-            BuildingType.ReindeerHerder => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 12, 0), brickFreeLevels: StartBrickFreeLevels),
+            BuildingType.ReindeerHerder => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 8, 0), brickFreeLevels: StartBrickFreeLevels),
             // Buildable on any island regardless of soil, from LH 4 behind a
             // level-3 Reindeer Herder (it and PumpkinFarm are one tech-tree
             // card, split into two types only by their soil rule).
@@ -817,7 +817,7 @@ public static class BuildingCatalogue
         Level = level,
         Cost = LevelOneProducerCost * CostFactor(level),
         BuildDuration = Duration(3, level),
-        ProductionPerHour = ProductionFor(new ResourceAmounts(0, 0, Food: 12, 0), level),
+        ProductionPerHour = ProductionFor(new ResourceAmounts(0, 0, Food: 16, 0), level),
         RequiresCoastalWater = true,
         // Also on a lake's half shore (three water edges), drawn with the lake art.
         LakeShoreKinds = HalfShoreOnly,

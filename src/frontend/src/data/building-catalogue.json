@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-11-08T22:43:19.798Z"
+    "generatedAt": "2026-11-08T23:57:11.188Z"
   },
   "data": [
     {
@@ -4487,7 +4487,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 12,
+        "food": 16,
         "iron": 0
       },
       "storageCapacity": {
@@ -4518,7 +4518,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 26.400000000000002,
+        "food": 35.2,
         "iron": 0
       },
       "storageCapacity": {
@@ -4549,7 +4549,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 43.67999999999999,
+        "food": 58.239999999999995,
         "iron": 0
       },
       "storageCapacity": {
@@ -4580,7 +4580,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 64.416,
+        "food": 85.888,
         "iron": 0
       },
       "storageCapacity": {
@@ -4611,7 +4611,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 89.29919999999998,
+        "food": 119.06559999999998,
         "iron": 0
       },
       "storageCapacity": {
@@ -4642,7 +4642,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 119.15903999999999,
+        "food": 158.87872,
         "iron": 0
       },
       "storageCapacity": {
@@ -4673,7 +4673,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 154.990848,
+        "food": 206.654464,
         "iron": 0
       },
       "storageCapacity": {
@@ -4704,7 +4704,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 197.98901759999995,
+        "food": 263.9853567999999,
         "iron": 0
       },
       "storageCapacity": {
@@ -4735,7 +4735,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 249.58682111999997,
+        "food": 332.78242815999994,
         "iron": 0
       },
       "storageCapacity": {
@@ -4766,7 +4766,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 311.5041853439999,
+        "food": 415.33891379199986,
         "iron": 0
       },
       "storageCapacity": {
@@ -4797,7 +4797,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 385.8050224127999,
+        "food": 514.4066965503998,
         "iron": 0
       },
       "storageCapacity": {
@@ -4828,7 +4828,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 474.96602689535985,
+        "food": 633.2880358604798,
         "iron": 0
       },
       "storageCapacity": {
@@ -4859,7 +4859,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 581.9592322744318,
+        "food": 775.9456430325757,
         "iron": 0
       },
       "storageCapacity": {
@@ -4890,7 +4890,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 710.351078729318,
+        "food": 947.1347716390908,
         "iron": 0
       },
       "storageCapacity": {
@@ -4921,7 +4921,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 864.4212944751819,
+        "food": 1152.561725966909,
         "iron": 0
       },
       "storageCapacity": {
@@ -4952,7 +4952,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 1049.3055533702181,
+        "food": 1399.0740711602907,
         "iron": 0
       },
       "storageCapacity": {
@@ -4983,7 +4983,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 1271.1666640442616,
+        "food": 1694.8888853923488,
         "iron": 0
       },
       "storageCapacity": {
@@ -5014,7 +5014,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 1537.3999968531139,
+        "food": 2049.8666624708185,
         "iron": 0
       },
       "storageCapacity": {
@@ -5045,7 +5045,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 1856.8799962237365,
+        "food": 2475.839994964982,
         "iron": 0
       },
       "storageCapacity": {
@@ -5076,7 +5076,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 2240.255995468484,
+        "food": 2987.0079939579787,
         "iron": 0
       },
       "storageCapacity": {
@@ -5107,7 +5107,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 2700.3071945621805,
+        "food": 3600.409592749574,
         "iron": 0
       },
       "storageCapacity": {
@@ -5138,7 +5138,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 3252.368633474616,
+        "food": 4336.491511299489,
         "iron": 0
       },
       "storageCapacity": {
@@ -5169,7 +5169,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 3914.8423601695395,
+        "food": 5219.789813559386,
         "iron": 0
       },
       "storageCapacity": {
@@ -5200,7 +5200,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 4709.810832203448,
+        "food": 6279.747776271263,
         "iron": 0
       },
       "storageCapacity": {
@@ -5231,7 +5231,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 5663.772998644137,
+        "food": 7551.697331525516,
         "iron": 0
       },
       "storageCapacity": {
@@ -16082,7 +16082,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 12,
+        "food": 8,
         "iron": 0
       },
       "storageCapacity": {
@@ -16115,7 +16115,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 26.400000000000002,
+        "food": 17.6,
         "iron": 0
       },
       "storageCapacity": {
@@ -16148,7 +16148,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 43.67999999999999,
+        "food": 29.119999999999997,
         "iron": 0
       },
       "storageCapacity": {
@@ -16181,7 +16181,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 64.416,
+        "food": 42.944,
         "iron": 0
       },
       "storageCapacity": {
@@ -16214,7 +16214,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 89.29919999999998,
+        "food": 59.53279999999999,
         "iron": 0
       },
       "storageCapacity": {
@@ -16247,7 +16247,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 119.15903999999999,
+        "food": 79.43936,
         "iron": 0
       },
       "storageCapacity": {
@@ -16280,7 +16280,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 154.990848,
+        "food": 103.327232,
         "iron": 0
       },
       "storageCapacity": {
@@ -16313,7 +16313,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 197.98901759999995,
+        "food": 131.99267839999996,
         "iron": 0
       },
       "storageCapacity": {
@@ -16346,7 +16346,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 249.58682111999997,
+        "food": 166.39121407999997,
         "iron": 0
       },
       "storageCapacity": {
@@ -16379,7 +16379,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 311.5041853439999,
+        "food": 207.66945689599993,
         "iron": 0
       },
       "storageCapacity": {
@@ -16412,7 +16412,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 385.8050224127999,
+        "food": 257.2033482751999,
         "iron": 0
       },
       "storageCapacity": {
@@ -16445,7 +16445,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 474.96602689535985,
+        "food": 316.6440179302399,
         "iron": 0
       },
       "storageCapacity": {
@@ -16478,7 +16478,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 581.9592322744318,
+        "food": 387.97282151628787,
         "iron": 0
       },
       "storageCapacity": {
@@ -16511,7 +16511,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 710.351078729318,
+        "food": 473.5673858195454,
         "iron": 0
       },
       "storageCapacity": {
@@ -16544,7 +16544,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 864.4212944751819,
+        "food": 576.2808629834545,
         "iron": 0
       },
       "storageCapacity": {
@@ -16577,7 +16577,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 1049.3055533702181,
+        "food": 699.5370355801454,
         "iron": 0
       },
       "storageCapacity": {
@@ -16610,7 +16610,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 1271.1666640442616,
+        "food": 847.4444426961744,
         "iron": 0
       },
       "storageCapacity": {
@@ -16643,7 +16643,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 1537.3999968531139,
+        "food": 1024.9333312354092,
         "iron": 0
       },
       "storageCapacity": {
@@ -16676,7 +16676,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 1856.8799962237365,
+        "food": 1237.919997482491,
         "iron": 0
       },
       "storageCapacity": {
@@ -16709,7 +16709,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 2240.255995468484,
+        "food": 1493.5039969789893,
         "iron": 0
       },
       "storageCapacity": {
@@ -16742,7 +16742,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 2700.3071945621805,
+        "food": 1800.204796374787,
         "iron": 0
       },
       "storageCapacity": {
@@ -16775,7 +16775,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 3252.368633474616,
+        "food": 2168.2457556497443,
         "iron": 0
       },
       "storageCapacity": {
@@ -16808,7 +16808,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 3914.8423601695395,
+        "food": 2609.894906779693,
         "iron": 0
       },
       "storageCapacity": {
@@ -16841,7 +16841,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 4709.810832203448,
+        "food": 3139.8738881356317,
         "iron": 0
       },
       "storageCapacity": {
@@ -16874,7 +16874,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 5663.772998644137,
+        "food": 3775.848665762758,
         "iron": 0
       },
       "storageCapacity": {

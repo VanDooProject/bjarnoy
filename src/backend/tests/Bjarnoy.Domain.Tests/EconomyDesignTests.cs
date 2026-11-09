@@ -234,10 +234,10 @@ public class EconomyDesignTests
     [InlineData(BuildingType.Lumberjack, 8)]
     [InlineData(BuildingType.Quarry, 8)]
     [InlineData(BuildingType.ClayBrickworks, 8)]
-    [InlineData(BuildingType.ReindeerHerder, 12)]
+    [InlineData(BuildingType.ReindeerHerder, 8)]
     [InlineData(BuildingType.Farm, 12)]
     [InlineData(BuildingType.PumpkinFarm, 13)]
-    [InlineData(BuildingType.FishingHut, 12)]
+    [InlineData(BuildingType.FishingHut, 16)]
     [InlineData(BuildingType.BogOreWorks, 4)]
     public void Each_producers_level_1_output_is_its_increment(BuildingType type, double increment)
     {

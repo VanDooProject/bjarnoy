@@ -68,7 +68,7 @@ whole number, 100–999 to the nearest 10, 1 000–9 999 to the nearest 50,
 
 | Building | C₁ wood/brick/food | I₁ /h | t₁ min |
 |---|---|---|---|
-| Producers (Lumberjack, Quarry, Clay, Herder, Farm, Fishing) | 35 / 28 / 10 | Lumberjack, Quarry, Clay 8; Herder, Farm, Fishing 12; Pumpkin Farm 13 | 3 |
+| Producers (Lumberjack, Quarry, Clay, Herder, Farm, Fishing) | 35 / 28 / 10 | Lumberjack, Quarry, Clay, Reindeer Herder 8; Farm 12; Pumpkin Farm 13; Fishing Hut 16 | 3 |
 | Longhouse | 120 / 100 / 60 | +15 wood, +15 food per level (linear; no brick, no iron) | 1.5 |
 | Storage House | 80 / 60 / 0 | +600 capacity · 1.22^(L−1) | 2.5 |
 | Great Storehouse | 4 000 / 3 500 / 0 | +50 000 capacity · 1.25^(L−1) | 10 |

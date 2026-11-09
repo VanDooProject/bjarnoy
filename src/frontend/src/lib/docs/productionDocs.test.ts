@@ -26,10 +26,10 @@ describe('productionDocs', () => {
     expect(rates).toEqual({
       lumberjack: ['wood', 8],
       quarry: ['stone', 8],
-      reindeerherder: ['food', 12],
+      reindeerherder: ['food', 8],
       farm: ['food', 12],
       pumpkinfarm: ['food', 13],
-      fishinghut: ['food', 12],
+      fishinghut: ['food', 16],
       claybrickworks: ['stone', 8],
       bogoreworks: ['iron', 4],
     });
