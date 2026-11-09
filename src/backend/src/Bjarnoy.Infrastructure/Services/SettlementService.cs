@@ -1128,6 +1128,57 @@ public sealed class SettlementService(
         return new BuildResult(BuildRejection.None, decision.Order);
     }
 
+    /// <summary>
+    /// Queues a raze of one level of the building on <paramref name="coord"/> (<c>docs/design/construction-slots.md</c>,
+    /// "Razing"): free, takes construction slots and goes through the queue like a build.
+    /// </summary>
+    public async Task<BuildResult> RazeBuildingLevelAsync(
+        Guid settlementId,
+        HexCoord coord,
+        CancellationToken cancellationToken = default)
+    {
+        // Settled first, like QueueBuildAsync: a build that finished a minute ago must free its slot and count for the level
+        // the raze takes off.
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
+        {
+            return new BuildResult(BuildRejection.UnknownBuildingLevel);
+        }
+
+        if (!session.Clock.AllowsCommands)
+        {
+            return new BuildResult(BuildRejection.None, null, WorldPaused: true);
+        }
+
+        var now = session.Now;
+
+        // Booked on the linked-realm member that holds the building, so the raze runs on the member whose hex it is.
+        var bookingId = session.Store.BookingMemberFor(settlementId, coord);
+        var booked = session.View(bookingId);
+
+        // Same premium waiting-room gate as a build.
+        var maxWaitingOrders = (session.Anchor.Owner?.IsPremium ?? false) ? Settlement.MaxWaitingOrders : 0;
+
+        var decision = booked.PlanRaze(
+            coord, now, Guid.CreateVersion7(), session.SpeedFactor, maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex);
+
+        if (!decision.Accepted)
+        {
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
+            return new BuildResult(decision.Rejection);
+        }
+
+        session.Apply(bookingId, booked.Enqueue(decision.Order!, now));
+        session.WriteBack();
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Settlement {Id} queued a raze of {Type} level {Level} at {Coord} (booked on {BookingId}), completing {CompletesAt}.",
+            settlementId, decision.Order!.Type, decision.Order.LevelInWork, coord, bookingId, decision.Order.CompletesAt);
+
+        return new BuildResult(BuildRejection.None, decision.Order);
+    }
+
     /// <summary>Cancels a still-queued build order, refunding its cost.</summary>
     public async Task<CancelBuildResult> CancelBuildAsync(
         Guid settlementId,

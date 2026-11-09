@@ -6,10 +6,10 @@ import type { AdminWorldResponse, ApiKeyFeatureInfo, ApproveApiKeyRequestBody, S
 import { createTestI18n } from '../../test/i18n';
 import adminApiKeys from '../../i18n/locales/en/adminApiKeys.json';
 
-const { adminListUsers } = vi.hoisted(() => ({ adminListUsers: vi.fn() }));
+const { adminLookupUsers } = vi.hoisted(() => ({ adminLookupUsers: vi.fn() }));
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
-  return { ...actual, api: { adminListUsers } };
+  return { ...actual, api: { adminLookupUsers } };
 });
 
 const global = { plugins: [createTestI18n({ adminApiKeys })] };
@@ -100,20 +100,19 @@ describe('ApiKeyScopeEditor', () => {
   });
 
   it('enables admin rows only for an admin owner and drops them when the owner changes', async () => {
-    adminListUsers.mockResolvedValue({
-      items: [{ id: 'p1', userName: 'player', role: 'player' }],
-      totalCount: 1,
-      page: 1,
-      pageSize: 10,
-    });
+    vi.useFakeTimers();
+    adminLookupUsers.mockResolvedValue([
+      { userId: 'p1', userName: 'player', displayName: null, role: 'player', status: 'active', via: 'jarl', matchedName: 'Ragnvald', worldName: 'Midgard' },
+    ]);
     const wrapper = mountEditor('key', { name: 'k', features: { 'admin.users': 'Read' } });
     const row = '[data-testid="feature-admin.users-Read"]';
     expect((wrapper.get(row).element as HTMLInputElement).disabled).toBe(false);
 
-    await wrapper.get('[data-testid="editor-owner-search"]').setValue('play');
-    await wrapper.get('[data-testid="editor-owner-search"]').trigger('keydown.enter');
+    await wrapper.get('[data-testid="editor-owner-input"]').setValue('ragn');
+    await vi.advanceTimersByTimeAsync(300);
     await flushPromises();
-    await wrapper.get('[data-testid="owner-pick-p1"]').trigger('click');
+    await wrapper.get('[data-testid="editor-owner-pick-p1"]').trigger('mousedown');
+    vi.useRealTimers();
 
     expect((wrapper.get(row).element as HTMLInputElement).disabled).toBe(true);
     await wrapper.get('[data-testid="feature-chat-Read"]').setValue(true);

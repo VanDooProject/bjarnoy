@@ -275,12 +275,14 @@ alongside B and C, not an extension of either:
   OR-ed into over time, never cleared by a settlement leveling or an army
   moving on. A real table/blob, not a derived value: `PlayerExploredEntity`
   or similar, keyed `(playerId, worldId, chunkCoord) → byte[]`.
-- **Growth.** Whenever an army's live position (§1c) enters a hex not yet
-  in that player's persisted set for the relevant chunk, that hex gets
-  OR-ed in — same trigger as the live-vision uniform array update, just
-  also written back instead of only driving the per-frame shader
-  composite. Settlement founding/leveling still OR-in the current
-  `exploredRadius` ring the same way it always has.
+- **Growth.** Every hex an army walks counts as explored, together with
+  its vision radius around each hex of the route. This holds whether or
+  not anyone was watching: a server restart or a closed browser leaves no
+  gap. The persisted set is filled from the army's route and the clock
+  (all hexes reached so far on the current leg, and each finished leg
+  when it ends), not from the live position at the moment of a fog read.
+  Settlement founding/leveling still OR-in the current `exploredRadius`
+  ring the same way it always has.
 - **Composition.** The static mask a player/guild sees is now: persisted
   explored history (this section) **OR** current settlement rings
   (Option B) **OR** current live-army radius (Option C, still shader-only

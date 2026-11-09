@@ -308,7 +308,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
   // Wall orders still in the queue (live mode only; demo places instantly): the server counts them as wall hexes when it judges the next one.
   function queuedWalls(): { q: number; r: number; gate: boolean }[] {
     return world.hud.queue
-      .filter((order) => isWallBuilding(order.building))
+      .filter((order) => order.kind !== 'raze' && isWallBuilding(order.building))
       .map((order) => ({ q: order.q, r: order.r, gate: order.building === 'palisadegate' }));
   }
 

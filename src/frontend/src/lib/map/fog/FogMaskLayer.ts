@@ -26,6 +26,15 @@ export const ARMY_FOG_BLACK_MARGIN = 2;
 export const ARMY_FOG_WHITE_OFFSET = 0.75;
 export const ARMY_FOG_WHITE_MARGIN = 6;
 
+/**
+ * How far from a troop, in hex-euclidean distance, its fog can show the ground: past
+ * `FOG_MIST_OPAQUE_AT_RAMP` of the troop's own white ramp the edge noise is shut off and the mist is fully opaque
+ * (the same bound the settlement terrain cull uses). HexMapRenderer's terrain cull draws ground out to here.
+ */
+export function armyFogClearReachHexes(visionRadiusHexes: number): number {
+  return visionRadiusHexes + ARMY_FOG_WHITE_OFFSET + ARMY_FOG_WHITE_MARGIN * FOG_MIST_OPAQUE_AT_RAMP;
+}
+
 // --- Vision-edge shaping (fogShader.ts's tierAlpha) ------------------------
 //
 // Everything below is in *ramp units*: 0 is the tier's own ring, 1 is the

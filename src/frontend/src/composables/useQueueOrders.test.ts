@@ -21,6 +21,7 @@ function buildOrder(overrides: Partial<BuildOrderResponse> = {}): BuildOrderResp
     q: 1,
     r: 2,
     building: 'farm',
+    kind: 'build',
     targetLevel: 1,
     state: 'building',
     slotCost: 1,
@@ -102,6 +103,20 @@ describe('useBuildOrders', () => {
     setActivePinia(createPinia());
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+  });
+
+  it('names a raze row by the level it leaves, or as a tear-down when the building goes', () => {
+    const world = useWorldStore();
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.queue = [
+      buildOrder({ id: 'down', kind: 'raze', targetLevel: 2 }),
+      buildOrder({ id: 'gone', kind: 'raze', targetLevel: 0, q: 5 }),
+      buildOrder({ id: 'up', kind: 'build', targetLevel: 3, q: 6 }),
+    ];
+
+    const { result } = mountWithOrders(() => useBuildOrders());
+
+    expect(result.value.map((o) => o.name)).toEqual(['Razing Farm → 2', 'Tearing down Farm', 'Farm → 3']);
   });
 
   it('never lets progress jump backward when a poll resets queueFetchedAt', async () => {

@@ -7,6 +7,7 @@ using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.World;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Movement = Bjarnoy.Domain.Movement.Movement;
@@ -101,6 +102,7 @@ public sealed class ArmyService(
     FieldBattleService fieldBattleService,
     CampService campService,
     CampAmbushService campAmbushService,
+    ExploredAreaService exploredAreaService,
     ILogger<ArmyService> logger)
 {
     private readonly GameDbContext _dbContext = dbContext;
@@ -114,7 +116,21 @@ public sealed class ArmyService(
     private readonly FieldBattleService _fieldBattleService = fieldBattleService;
     private readonly CampService _campService = campService;
     private readonly CampAmbushService _campAmbushService = campAmbushService;
+    private readonly ExploredAreaService _exploredAreaService = exploredAreaService;
     private readonly ILogger<ArmyService> _logger = logger;
+
+    /// <summary>
+    /// Saves the context, first staging the ground every tracked army walked on the legs it finished as explored
+    /// (<see cref="ExploredAreaService.StageWalkedLegsAsync"/>) so it commits with the same save and unit of work. Every
+    /// save in this service goes through here, including ones that change an army this request did not start from
+    /// (the other side of a field battle).
+    /// </summary>
+    private async Task SaveAsync(CancellationToken cancellationToken)
+    {
+        var armies = _dbContext.ChangeTracker.Entries<ArmyEntity>().Select(e => e.Entity).ToList();
+        await _exploredAreaService.StageWalkedLegsAsync(armies, cancellationToken).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Dispatches an army: charges the settlement for the units and
@@ -328,7 +344,7 @@ public sealed class ArmyService(
         armyEntity.ApplyDomain(decision.Army!);
         _dbContext.Armies.Add(armyEntity);
 
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Settlement {SettlementId} dispatched army {ArmyId} ({Count} stack(s)) to {Destination}, arriving {ArrivesAt}.",
@@ -381,7 +397,7 @@ public sealed class ArmyService(
         var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
         if (outcome != ArmySettleOutcome.NoChange)
         {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
         }
 
         return outcome == ArmySettleOutcome.FoldedHome ? (null, clock) : (army, clock);
@@ -455,7 +471,7 @@ public sealed class ArmyService(
         var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
         if (outcome == ArmySettleOutcome.FoldedHome)
         {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
             return new RecallResult(RecallOutcome.NothingToRecall);
         }
 
@@ -497,14 +513,14 @@ public sealed class ArmyService(
         {
             if (outcome == ArmySettleOutcome.Updated)
             {
-                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await SaveAsync(cancellationToken).ConfigureAwait(false);
             }
 
             return new RecallResult(isRecallable ? RecallOutcome.NoRouteHome : RecallOutcome.NothingToRecall, army);
         }
 
         army.ApplyDomain(recalled);
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Army {ArmyId} recalled at {Now}, now heading home.", armyId, now);
 
@@ -532,7 +548,7 @@ public sealed class ArmyService(
         var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
         if (outcome == ArmySettleOutcome.FoldedHome)
         {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
             return new RetargetFoundingApiResult(RetargetFoundingRejection.NothingToRetarget);
         }
 
@@ -550,14 +566,14 @@ public sealed class ArmyService(
         {
             if (outcome == ArmySettleOutcome.Updated)
             {
-                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await SaveAsync(cancellationToken).ConfigureAwait(false);
             }
 
             return new RetargetFoundingApiResult(result.Rejection);
         }
 
         army.ApplyDomain(result.Army!);
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Founding convoy (army {ArmyId}) retargeted to {NewTarget} at {Now}.", armyId, newTarget, now);
 
@@ -611,7 +627,7 @@ public sealed class ArmyService(
         var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
         if (outcome == ArmySettleOutcome.FoldedHome)
         {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
             return new FieldOrderApiResult(FieldOrderRejection.NoActiveJourney);
         }
 
@@ -620,7 +636,7 @@ public sealed class ArmyService(
         {
             if (outcome == ArmySettleOutcome.Updated)
             {
-                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await SaveAsync(cancellationToken).ConfigureAwait(false);
             }
 
             return new FieldOrderApiResult(FieldOrderRejection.MissionNotFieldOrderable, army);
@@ -643,14 +659,14 @@ public sealed class ArmyService(
         {
             if (outcome == ArmySettleOutcome.Updated)
             {
-                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await SaveAsync(cancellationToken).ConfigureAwait(false);
             }
 
             return new FieldOrderApiResult(result.Rejection, army);
         }
 
         army.ApplyDomain(result.Army!);
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Army {ArmyId} given a field order at {Now}, now heading to {Destination}.", armyId, now, destination);
 
@@ -705,7 +721,7 @@ public sealed class ArmyService(
         var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
         if (outcome == ArmySettleOutcome.FoldedHome)
         {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
             return new AdminArmyEditResult(AdminArmyEditOutcome.ArmyNotFound);
         }
 
@@ -716,7 +732,7 @@ public sealed class ArmyService(
         {
             if (outcome == ArmySettleOutcome.Updated)
             {
-                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await SaveAsync(cancellationToken).ConfigureAwait(false);
             }
 
             return new AdminArmyEditResult(reason);
@@ -775,7 +791,7 @@ public sealed class ArmyService(
         }
 
         army.ApplyDomain(domain);
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Admin edited army {ArmyId} (stacks: {Stacks}, provisions: {Provisions}, arrival in: {Arrival}, hex: {Hex}).",
@@ -840,7 +856,7 @@ public sealed class ArmyService(
         {
             var dirty = _realmDirty.ToList();
             _realmDirty.Clear();
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
             foreach (var settlementId in dirty)
             {
                 await _settlementService.ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
@@ -961,6 +977,8 @@ public sealed class ArmyService(
         {
             return ArmySettleOutcome.NoChange;
         }
+
+        army.WalkedLegs.AddRange(result.Walked);
 
         if (result.ArrivedHome)
         {
@@ -1085,6 +1103,7 @@ public sealed class ArmyService(
         if (arrival.Army is null)
         {
             // Wiped out — no return trip for zero units.
+            armyEntity.RecordWalkedToEnd();
             _dbContext.Armies.Remove(armyEntity);
             return ArmySettleOutcome.FoldedHome;
         }
@@ -1153,6 +1172,7 @@ public sealed class ArmyService(
         var returning = domain.SettleHuntArrival(plan, arrivesAt);
         if (returning is null)
         {
+            armyEntity.RecordWalkedToEnd();
             _dbContext.Armies.Remove(armyEntity);
             return ArmySettleOutcome.FoldedHome;
         }
@@ -1236,6 +1256,7 @@ public sealed class ArmyService(
             originSettlement.World!.SpeedFactor,
             cancellationToken).ConfigureAwait(false);
 
+        armyEntity.RecordWalkedToEnd();
         _dbContext.Armies.Remove(armyEntity);
 
         _logger.LogInformation(
@@ -1250,6 +1271,7 @@ public sealed class ArmyService(
     {
         var result = turnedArmy.SettleTo(now);
         var finalArmy = result.Changed ? result.Army : turnedArmy;
+        armyEntity.WalkedLegs.AddRange(result.Walked);
 
         if (result.ArrivedHome)
         {
@@ -1314,6 +1336,7 @@ public sealed class ArmyService(
 
         session.Apply(destinationEntity.Id, merged);
         session.WriteBack();
+        armyEntity.RecordWalkedToEnd();
         _dbContext.Armies.Remove(armyEntity);
     }
 
@@ -1430,7 +1453,7 @@ public sealed class ArmyService(
     {
         if (session.WriteBack())
         {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 }
