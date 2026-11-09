@@ -808,7 +808,7 @@ public sealed class ArmyService(
     public Task<List<ArmyEntity>> GetForWorldAsync(Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Armies
             .AsNoTracking()
-            .Include(a => a.Settlement)
+            .Include(a => a.Settlement!).ThenInclude(s => s.Buildings)
             .Include(a => a.Stacks)
             .Include(a => a.TargetSettlement)
             .Where(a => a.Settlement!.WorldId == worldId)

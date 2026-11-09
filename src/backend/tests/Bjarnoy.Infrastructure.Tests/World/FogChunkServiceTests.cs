@@ -1,4 +1,5 @@
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -369,12 +370,13 @@ public class FogChunkServiceTests : IDisposable
             ReturnEdgeHours = [0, 1],
             TurnAroundAt = DateTimeOffset.UnixEpoch.AddDays(3650),
             IsReturning = false,
+            Stacks = [new ArmyUnitStackEntity { UnitType = UnitType.Spearman, Count = 1 }],
         });
         await _dbContext.SaveChangesAsync(Ct);
 
         var result = await GetWorldAsync(worldId, "player-1", 40);
 
-        // Base army vision is 2 rings; Ravens at level 5 make it 12. (28, 0) is 8 rings from the
+        // A Spearman army sees 2 rings; Ravens at level 5 make it 12. (28, 0) is 8 rings from the
         // army and 28 from the settlement: only the widened army reveal explains it.
         Assert.Equal(0, CellAt(result, FogMaskLayout.ToTexel(new HexCoord(28, 0))).Unknown);
         Assert.Equal(0, CellAt(result, FogMaskLayout.ToTexel(new HexCoord(31, 0))).Unknown);
@@ -406,6 +408,7 @@ public class FogChunkServiceTests : IDisposable
             ReturnEdgeHours = [0, 1],
             TurnAroundAt = DateTimeOffset.UnixEpoch.AddDays(3650),
             IsReturning = false,
+            Stacks = [new ArmyUnitStackEntity { UnitType = UnitType.Spearman, Count = 1 }],
         });
         await _dbContext.SaveChangesAsync(Ct);
 
@@ -596,5 +599,42 @@ public class FogChunkServiceTests : IDisposable
             [new HexCoord(0, 0), new HexCoord(2, 0)],
             area!.VisionSources.Select(s => s.Coord).OrderBy(c => c.Q).ToArray());
         Assert.DoesNotContain(area.VisionSources, s => s.Coord == new HexCoord(10, 0) || s.Coord == new HexCoord(12, 0));
+    }
+
+    [Theory]
+    [InlineData(UnitType.Karve, 6)]
+    [InlineData(UnitType.Longship, 4)]
+    [InlineData(UnitType.Thrall, 3)]
+    [InlineData(UnitType.Spearman, 2)]
+    [InlineData(UnitType.Catapult, 1)]
+    public async Task A_travelling_army_explores_as_many_rings_as_its_best_sighted_unit_sees(UnitType unit, int rings)
+    {
+        var worldId = AddWorld(40);
+        var settlement = AddSettlement(worldId, "player-1", 0, 0, level: 1);
+        _dbContext.Armies.Add(new ArmyEntity
+        {
+            SettlementId = settlement.Id,
+            Settlement = settlement,
+            AtHome = false,
+            IsSupporting = false,
+            DepartedAt = DateTimeOffset.UnixEpoch,
+            Path = [new HexPoint(20, 0)],
+            CumulativeHours = [0],
+            EdgeHours = [0],
+            ReturnPath = [new HexPoint(20, 0), new HexPoint(0, 0)],
+            ReturnCumulativeHours = [0, 1],
+            ReturnEdgeHours = [0, 1],
+            TurnAroundAt = DateTimeOffset.UnixEpoch.AddDays(3650),
+            IsReturning = false,
+            // The unit under test travels with a Ram, which sees no further than any other unit.
+            Stacks = [new ArmyUnitStackEntity { UnitType = unit, Count = 1 }, new ArmyUnitStackEntity { UnitType = UnitType.Ram, Count = 3 }],
+        });
+        await _dbContext.SaveChangesAsync(Ct);
+
+        var area = await new ExploredAreaService(_dbContext, TimeProvider.System).GetAsync(worldId, "player-1", persist: false, Ct);
+
+        var standing = new HexCoord(20, 0);
+        Assert.Equal([new ExploredDisc(standing, rings)], area!.LiveArmyDiscs);
+        Assert.Contains(new ExploredDisc(standing, rings), area.Discs);
     }
 }
