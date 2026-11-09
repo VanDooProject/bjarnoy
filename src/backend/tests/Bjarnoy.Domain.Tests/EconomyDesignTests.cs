@@ -223,11 +223,11 @@ public class EconomyDesignTests
 
         Assert.Equal(new ResourceAmounts(34, 17, 5, 0), one.Cost);
         Assert.Equal(12, one.ProductionPerHour.Food, 6);
-        Assert.Equal(TimeSpan.FromMinutes(3), one.BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes(1), one.BuildDuration);
 
         Assert.Equal(BuildingCatalogue.NiceRound(57 * Math.Pow(1.30, 9)), ten.Cost.Wood, 6);
         Assert.Equal(BuildingCatalogue.NiceRound(29 * Math.Pow(1.30, 9)), ten.Cost.Stone, 6);
-        Assert.Equal(TimeSpan.FromSeconds(Math.Round(180 * Math.Pow(1.33, 9))), ten.BuildDuration);
+        Assert.Equal(BuildingCatalogue.BuildTime(BuildingType.Farm, 10), ten.BuildDuration);
     }
 
     [Fact]
@@ -304,7 +304,7 @@ public class EconomyDesignTests
         Assert.Equal(new ResourceAmounts(120, 0, 60, 0), one.Cost);
         Assert.Equal(BuildingCatalogue.NiceRound(120 * Math.Pow(1.34, 4)), five.Cost.Wood, 6);
         Assert.Equal(BuildingCatalogue.NiceRound(100 * Math.Pow(1.34, 5)), six.Cost.Stone, 6);
-        Assert.Equal(TimeSpan.FromSeconds(Math.Round(90 * Math.Pow(1.33, 4))), five.BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes(32), five.BuildDuration);
         Assert.Equal(new ResourceAmounts(15 * 5, 0, 15 * 5, 0), five.ProductionPerHour);
         Assert.Equal(ResourceAmounts.Uniform(250 * 5), five.StorageCapacity);
     }
@@ -376,11 +376,80 @@ public class EconomyDesignTests
     }
 
     [Fact]
-    public void Longhouse_2_builds_in_about_two_minutes_so_the_tutorial_upgrade_is_quick()
+    public void Longhouse_2_builds_in_under_three_minutes_so_the_tutorial_upgrade_is_quick()
     {
         var two = BuildingCatalogue.Get(BuildingType.Longhouse, 2).BuildDuration;
 
-        Assert.InRange(two.TotalMinutes, 1.9, 2.1);
+        Assert.Equal(TimeSpan.FromSeconds(170), two);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Longhouse, 26)]
+    [InlineData(BuildingType.Lumberjack, 20)]
+    [InlineData(BuildingType.ReindeerHerder, 20)]
+    [InlineData(BuildingType.Farm, 22)]
+    [InlineData(BuildingType.Quarry, 22)]
+    [InlineData(BuildingType.BogOreWorks, 24)]
+    [InlineData(BuildingType.StorageHouse, 20)]
+    public void Early_curve_is_1_then_2_83_then_8_minutes_doubles_to_level_6_and_ends_at_the_top_hours(BuildingType type, double topHours)
+    {
+        Assert.Equal(TimeSpan.FromMinutes(1), BuildingCatalogue.Get(type, 1).BuildDuration);
+        Assert.Equal(TimeSpan.FromSeconds(170), BuildingCatalogue.Get(type, 2).BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes(8), BuildingCatalogue.Get(type, 3).BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes(16), BuildingCatalogue.Get(type, 4).BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes(32), BuildingCatalogue.Get(type, 5).BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes(64), BuildingCatalogue.Get(type, 6).BuildDuration);
+        Assert.Equal(TimeSpan.FromHours(topHours), BuildingCatalogue.Get(type, BuildingCatalogue.MaxLevelFor(type)).BuildDuration);
+    }
+
+    [Fact]
+    public void Early_curve_tail_is_log_like_each_step_adds_less_than_the_one_before()
+    {
+        foreach (var type in new[] { BuildingType.Longhouse, BuildingType.Farm, BuildingType.StorageHouse })
+        {
+            var max = BuildingCatalogue.MaxLevelFor(type);
+            var times = Enumerable.Range(6, max - 5).Select(l => BuildingCatalogue.Get(type, l).BuildDuration.TotalSeconds).ToArray();
+            for (var i = 2; i < times.Length; i++)
+            {
+                // Whole-second rounding can blur a step by a second at most.
+                Assert.True(times[i] - times[i - 1] < times[i - 1] - times[i - 2] + 1, $"{type} level {6 + i}");
+            }
+        }
+
+        var farm = (int)Math.Round(BuildingCatalogue.Get(BuildingType.Farm, 12).BuildDuration.TotalMinutes);
+        var expected = 64 + (22 * 60 - 64) * BuildingCatalogue.Bend(6 / 19.0, 3);
+        Assert.Equal((int)Math.Round(expected), farm);
+    }
+
+    [Fact]
+    public void Tech_curve_runs_straight_from_the_level_1_time_to_the_top_time()
+    {
+        Assert.Equal(TimeSpan.FromMinutes(10), BuildingCatalogue.Get(BuildingType.Tower, 1).BuildDuration);
+        Assert.Equal(TimeSpan.FromHours(12), BuildingCatalogue.Get(BuildingType.Tower, 5).BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes((10 + 12 * 60) / 2.0), BuildingCatalogue.Get(BuildingType.Tower, 3).BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes(30), BuildingCatalogue.Get(BuildingType.Bridge, 1).BuildDuration);
+        Assert.Equal(TimeSpan.FromHours(3), BuildingCatalogue.Get(BuildingType.Bridge, 4).BuildDuration);
+        Assert.Equal(TimeSpan.FromHours(2), BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1).BuildDuration);
+        Assert.Equal(TimeSpan.FromHours(30), BuildingCatalogue.Get(BuildingType.GreatStorehouse, 10).BuildDuration);
+        Assert.Equal(TimeSpan.FromHours(6), BuildingCatalogue.Get(BuildingType.ShrineOfThor, 1).BuildDuration);
+        Assert.Equal(TimeSpan.FromHours(24), BuildingCatalogue.Get(BuildingType.OdinStatue, 5).BuildDuration);
+        var mid = BuildingCatalogue.Get(BuildingType.Barracks, 10).BuildDuration.TotalMinutes;
+        Assert.Equal(15 + (22 * 60 - 15) * 9 / 19.0, mid, 0);
+    }
+
+    [Fact]
+    public void Every_building_has_a_build_time_curve_that_rises_with_the_level()
+    {
+        foreach (var type in BuildingCatalogue.AllTypes)
+        {
+            var previous = TimeSpan.Zero;
+            for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(type); level++)
+            {
+                var duration = BuildingCatalogue.Get(type, level).BuildDuration;
+                Assert.True(duration > previous, $"{type} level {level}");
+                previous = duration;
+            }
+        }
     }
 
     [Fact]

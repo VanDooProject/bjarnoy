@@ -290,7 +290,7 @@ public class BuildingCatalogueTests
         Assert.Contains(BuildingType.ReindeerHerder, BuildingCatalogue.StorageCappedProducers);
         Assert.Equal("reindeerherder", BuildingType.ReindeerHerder.ToWireName());
         Assert.Equal(28, (int)BuildingType.ReindeerHerder); // persisted ints must not shift
-        Assert.Equal(TimeSpan.FromMinutes(3), herder.BuildDuration);
+        Assert.Equal(TimeSpan.FromMinutes(1), herder.BuildDuration);
         Assert.True(Bjarnoy.Domain.Settlers.Quests.IsProducer(BuildingType.ReindeerHerder));
     }
 
@@ -1161,7 +1161,7 @@ public class SettlementTests
         var order = Plan(settlement, BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0);
         var queued = settlement.Enqueue(order, T0);
 
-        var result = queued.SettleTo(T0.AddMinutes(1));
+        var result = queued.SettleTo(T0.AddSeconds(30));
 
         // The stock is only written when it changes: an idle read must leave
         // the pool's timestamp exactly where it was.

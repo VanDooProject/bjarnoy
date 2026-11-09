@@ -8,8 +8,8 @@ namespace Bjarnoy.Domain.Buildings;
 /// The tech tree, as data.
 /// </summary>
 /// <remarks>
-/// Cost, production and build time are all geometric in the level (the
-/// Travian shape): cost ×1.30 per level (Longhouse ×1.34), build time ×1.33 (the Longhouse starts at 1.5 min, so level 2 takes about 2). A producer's
+/// Cost and production are geometric in the level (the
+/// Travian shape): cost ×1.30 per level (Longhouse ×1.34); build time follows its own curves, see <see cref="BuildTimes"/>. A producer's
 /// production is increment-geometric: each level adds ×1.20 more than the one before
 /// (<c>I1 · 1.20^(L−1)</c>), so its level total is <c>I1 · (1.20^L − 1) / 0.20</c>. Because cost outgrows output, a
 /// producer's payback time rises about 8% per level — the next level is
@@ -44,8 +44,6 @@ public static class BuildingCatalogue
 
     /// <summary>Production multiplier per level.</summary>
     private const double ProductionGrowth = 1.20;
-
-    private const double BuildTimeGrowth = 1.33;
 
     /// <summary>A raze takes this share of the razed level's build time (<c>docs/design/construction-slots.md</c>, "Razing").</summary>
     public const double RazeTimeFactor = 0.75;
@@ -393,7 +391,7 @@ public static class BuildingCatalogue
             // percentage of that Lumberjack's own production, applied in
             // Totals(IEnumerable{PlacedBuilding}, Func{HexCoord,Terrain}?).
             BuildingType.Sawmill =>
-                Producer(type, level, Grass, ResourceAmounts.Zero, new ResourceAmounts(Wood: 41500, Stone: 59500, Food: 5950, Iron: 0), 4, growth: 1.313)
+                Producer(type, level, Grass, ResourceAmounts.Zero, new ResourceAmounts(Wood: 41500, Stone: 59500, Food: 5950, Iron: 0), growth: 1.313)
                     with
                     {
                         RequiresRiverShape = SawmillRiverShapes,
@@ -402,7 +400,7 @@ public static class BuildingCatalogue
             // No production of its own yet — its mead is meant for a future
             // morale-boost mechanic, buildable now so it has a place in the
             // tech tree ahead of that mechanic landing.
-            BuildingType.Meadery => Producer(type, level, Grass, ResourceAmounts.Zero, new ResourceAmounts(Wood: 860, Stone: 470, Food: 230, Iron: 0), 4, growth: 1.30),
+            BuildingType.Meadery => Producer(type, level, Grass, ResourceAmounts.Zero, new ResourceAmounts(Wood: 860, Stone: 470, Food: 230, Iron: 0), growth: 1.30),
             BuildingType.TownSquare => TownSquare(level),
             // Same shape as Sawmill: behind a level-10 Farm at LH 20.
             //
@@ -411,14 +409,14 @@ public static class BuildingCatalogue
             // grinds grain, and PumpkinFarm is a different crop (see
             // RadiusBoostTargets).
             BuildingType.CropMill =>
-                Producer(type, level, Grass, ResourceAmounts.Zero, new ResourceAmounts(Wood: 59500, Stone: 41500, Food: 5950, Iron: 0), 4, growth: 1.313)
+                Producer(type, level, Grass, ResourceAmounts.Zero, new ResourceAmounts(Wood: 59500, Stone: 41500, Food: 5950, Iron: 0), growth: 1.313)
                     with { RequiresRiverShape = CropMillRiverShapes },
             // The Weaponsmith (display name; the type stays Smithy). No
             // production of its own — a troop-upgrade building only (costs and
             // effects not yet designed); the military line's capstone and the
             // feeder of the Shrine of Thor.
             BuildingType.Smithy =>
-                Producer(type, level, SandOrGrass, ResourceAmounts.Zero, new ResourceAmounts(Wood: 4100, Stone: 5100, Food: 1000, Iron: 0), 4, growth: 1.486),
+                Producer(type, level, SandOrGrass, ResourceAmounts.Zero, new ResourceAmounts(Wood: 4100, Stone: 5100, Food: 1000, Iron: 0), growth: 1.486),
             BuildingType.DruidHut => DruidHut(level),
             BuildingType.CartWorkshop => CartWorkshop(level),
             // The start's stone source: on plain bog moss (the landing spots guarantee bog in reach), not on grass.
@@ -434,7 +432,7 @@ public static class BuildingCatalogue
             // (RadiusBoostTargets): the bog-ore works. TODO(art): bog-creek Hammerschmiede - for now the frontend draws the
             // river hammer mill on the creek.
             BuildingType.Hammerschmiede =>
-                Producer(type, level, Bog, ResourceAmounts.Zero, new ResourceAmounts(Wood: 59000, Stone: 37500, Food: 10500, Iron: 0), 4, growth: 1.313)
+                Producer(type, level, Bog, ResourceAmounts.Zero, new ResourceAmounts(Wood: 59000, Stone: 37500, Food: 10500, Iron: 0), growth: 1.313)
                     with { RequiresBogKind = CreekOnly },
             _ => null,
         };
@@ -706,12 +704,110 @@ public static class BuildingCatalogue
             ? CostFactor(level, LonghouseCostGrowth)
             : CostFactor(LonghouseLateCostFromLevel - 1, LonghouseCostGrowth) * Math.Pow(LonghouseLateCostGrowth, level - (LonghouseLateCostFromLevel - 1));
 
+    /// <summary>One building's build-time parameters, see <see cref="BuildTimes"/>.</summary>
+    /// <param name="TopMinutes">Build time at the building's max level, in minutes.</param>
+    /// <param name="LevelOneMinutes">Tech curve only: the level-1 time in minutes; <see langword="null"/> for the early curve.</param>
+    private readonly record struct BuildTimeCurve(double TopMinutes, double? LevelOneMinutes = null);
+
+    private static BuildTimeCurve Early(double topHours) => new(topHours * 60);
+
+    private static BuildTimeCurve Tech(double levelOneMinutes, double topHours) => new(topHours * 60, levelOneMinutes);
+
     /// <summary>
-    /// Build time at <paramref name="level"/>: <paramref name="baseMinutes"/> ·
-    /// growth^(level−1), rounded to whole seconds.
+    /// The build-time table, in one place (<c>docs/design/economy.md</c> section 9). Two curve kinds, in minutes, rounded to whole seconds:
+    /// <list type="bullet">
+    /// <item><b>Early curve</b> (Longhouse, resource producers, Storage House): 1 min at level 1, 8^(1/2) = 2.83 min at level 2, 8 min at
+    /// level 3, then doubling (16, 32, 64 min) up to level <see cref="EarlyKneeLevel"/> (6), and from there a log-like tail
+    /// (<see cref="Bend"/> with k = <see cref="EarlyTailShape"/>) up to the top-level time at the building's max level.</item>
+    /// <item><b>Tech curve</b> (every other building): a level-1 time set by the building's place in the tech tree, then a straight line
+    /// to the top-level time at its max level.</item>
+    /// </list>
     /// </summary>
-    private static TimeSpan Duration(double baseMinutes, int level, double growth = BuildTimeGrowth) =>
-        TimeSpan.FromSeconds(Math.Round(baseMinutes * 60.0 * Geometric(growth, level)));
+    private static readonly IReadOnlyDictionary<BuildingType, BuildTimeCurve> BuildTimes = new Dictionary<BuildingType, BuildTimeCurve>
+    {
+        [BuildingType.Longhouse] = Early(26),
+        [BuildingType.Lumberjack] = Early(20),
+        [BuildingType.ReindeerHerder] = Early(20),
+        [BuildingType.Quarry] = Early(22),
+        [BuildingType.ClayBrickworks] = Early(22),
+        [BuildingType.Farm] = Early(22),
+        [BuildingType.PumpkinFarm] = Early(22),
+        [BuildingType.FishingHut] = Early(22),
+        [BuildingType.BogOreWorks] = Early(24),
+        [BuildingType.StorageHouse] = Early(20),
+        [BuildingType.Tower] = Tech(10, 12),
+        [BuildingType.Barracks] = Tech(15, 22),
+        [BuildingType.TownSquare] = Tech(20, 22),
+        [BuildingType.Palisade] = Tech(10, 1),
+        [BuildingType.PalisadeGate] = Tech(10, 1),
+        [BuildingType.Bridge] = Tech(30, 3),
+        [BuildingType.Dockyard] = Tech(30, 24),
+        [BuildingType.ArcheryRange] = Tech(45, 22),
+        [BuildingType.CartWorkshop] = Tech(60, 22),
+        [BuildingType.Meadery] = Tech(60, 24),
+        [BuildingType.DruidHut] = Tech(90, 24),
+        [BuildingType.Smithy] = Tech(120, 24),
+        [BuildingType.GreatStorehouse] = Tech(120, 30),
+        [BuildingType.SiegeWorkshop] = Tech(180, 24),
+        [BuildingType.Sawmill] = Tech(240, 24),
+        [BuildingType.CropMill] = Tech(240, 24),
+        [BuildingType.Hammerschmiede] = Tech(240, 24),
+        [BuildingType.ShrineOfThor] = Tech(360, 24),
+        [BuildingType.ShrineOfFreyja] = Tech(360, 24),
+        [BuildingType.ShrineOfUllr] = Tech(360, 24),
+        [BuildingType.ShrineOfNjord] = Tech(360, 24),
+        [BuildingType.OdinStatue] = Tech(360, 24),
+    };
+
+    /// <summary>The level where the early curve's doubling ends and its log-like tail starts.</summary>
+    private const int EarlyKneeLevel = 6;
+
+    /// <summary>The early curve's tail shape (<see cref="Bend"/> k).</summary>
+    private const double EarlyTailShape = 3;
+
+    /// <summary>
+    /// Maps u in [0, 1] to [0, 1]: k &gt; 0 bends it like a log (fast first, flat at the top), k &lt; 0 like an exponential,
+    /// k = 0 is the straight line.
+    /// </summary>
+    public static double Bend(double u, double k)
+    {
+        if (Math.Abs(k) < 1e-6)
+        {
+            return u;
+        }
+
+        return k > 0
+            ? Math.Log(1 + k * u) / Math.Log(1 + k)
+            : (Math.Exp(-k * u) - 1) / (Math.Exp(-k) - 1);
+    }
+
+    /// <summary>Build time of <paramref name="type"/> at <paramref name="level"/> (see <see cref="BuildTimes"/>), rounded to whole seconds.</summary>
+    public static TimeSpan BuildTime(BuildingType type, int level)
+    {
+        var curve = BuildTimes[type];
+        var max = MaxLevelFor(type);
+        double minutes;
+        if (curve.LevelOneMinutes is { } levelOne)
+        {
+            var u = max <= 1 ? 0.0 : (level - 1.0) / (max - 1);
+            minutes = levelOne + (curve.TopMinutes - levelOne) * Bend(u, 0);
+        }
+        else if (level <= 3)
+        {
+            minutes = Math.Pow(8, (level - 1) / 2.0);
+        }
+        else if (level <= EarlyKneeLevel)
+        {
+            minutes = 8 * Math.Pow(2, level - 3);
+        }
+        else
+        {
+            var kneeMinutes = 8 * Math.Pow(2, EarlyKneeLevel - 3);
+            minutes = kneeMinutes + (curve.TopMinutes - kneeMinutes) * Bend((level - EarlyKneeLevel) / (double)(max - EarlyKneeLevel), EarlyTailShape);
+        }
+
+        return TimeSpan.FromSeconds(Math.Round(minutes * 60.0, MidpointRounding.AwayFromZero));
+    }
 
     /// <summary>
     /// A level's total production, increment-geometric: level L adds
@@ -760,14 +856,13 @@ public static class BuildingCatalogue
         IReadOnlySet<Terrain> terrain,
         ResourceAmounts perHourAtLevelOne,
         ResourceAmounts costAtLevelOne,
-        double minutesAtLevelOne = 3,
         int brickFreeLevels = 0,
         double growth = CostGrowth) => new()
         {
             Type = type,
             Level = level,
             Cost = BrickFree(costAtLevelOne * CostFactor(level, growth) * ProducerEarlyDiscount(type, level), level, brickFreeLevels),
-            BuildDuration = Duration(minutesAtLevelOne, level),
+            BuildDuration = BuildTime(type, level),
             // Increment-geometric in level (each level adds x1.20 more than the last), the level's total.
             ProductionPerHour = ProductionFor(perHourAtLevelOne, level),
             AllowedTerrain = terrain,
@@ -791,7 +886,7 @@ public static class BuildingCatalogue
         Type = BuildingType.Longhouse,
         Level = level,
         Cost = BrickFree(new ResourceAmounts(Wood: 120, Stone: 100, Food: 60, Iron: 0) * LonghouseCostFactor(level), level, StartBrickFreeLevels),
-        BuildDuration = Duration(1.5, level),
+        BuildDuration = BuildTime(BuildingType.Longhouse, level),
         // The anchor feeds its own settlement a little, so a new holding is
         // never completely stalled. Linear in level (unlike every other
         // producer): +15 wood and +15 food per level, no stone and no iron.
@@ -816,7 +911,7 @@ public static class BuildingCatalogue
         Type = BuildingType.StorageHouse,
         Level = level,
         Cost = new ResourceAmounts(Wood: 90, Stone: 50, Food: 0, Iron: 0) * CostFactor(level, StorageHouseCostGrowth),
-        BuildDuration = Duration(2.5, level),
+        BuildDuration = BuildTime(BuildingType.StorageHouse, level),
         // Total at this level: 300 * (1.22^L - 1) / 0.22 per resource.
         StorageCapacity = GeometricCapacity(300, 1.22, level),
         AllowedTerrain = Grass,
@@ -827,7 +922,7 @@ public static class BuildingCatalogue
         Type = BuildingType.Tower,
         Level = level,
         Cost = BrickFree(new ResourceAmounts(Wood: 140, Stone: 200, Food: 30, Iron: 0) * CostFactor(level), level, StartBrickFreeLevels),
-        BuildDuration = Duration(8, level),
+        BuildDuration = BuildTime(BuildingType.Tower, level),
         // Stands on grass, sand, forest or plain bog moss (the palisade's rule); the tower replaces the tile under it.
         AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Sand, Terrain.Forest },
         AlsoOnBogKinds = PlainBogOnly,
@@ -853,7 +948,7 @@ public static class BuildingCatalogue
         Type = BuildingType.FishingHut,
         Level = level,
         Cost = new ResourceAmounts(Wood: 49, Stone: 39, Food: 7, Iron: 0) * CostFactor(level) * ProducerEarlyDiscount(BuildingType.FishingHut, level),
-        BuildDuration = Duration(3, level),
+        BuildDuration = BuildTime(BuildingType.FishingHut, level),
         ProductionPerHour = ProductionFor(new ResourceAmounts(0, 0, Food: 16, 0), level),
         RequiresCoastalWater = true,
         // Also on a lake's half shore (three water edges), drawn with the lake art.
@@ -915,14 +1010,14 @@ public static class BuildingCatalogue
         Type = type,
         Level = level,
         Cost = new ResourceAmounts(Wood: 475000, Stone: 505000, Food: 150000, Iron: 0) * CostFactor(level, ShrineCostGrowth),
-        BuildDuration = Duration(12, level),
+        BuildDuration = BuildTime(type, level),
         AllowedTerrain = type == BuildingType.ShrineOfNjord ? new HashSet<Terrain>() : Grass,
         RequiresCoastalWater = type == BuildingType.ShrineOfNjord,
     };
 
     /// <summary>
     /// One hex of the wall (<c>docs/design/economy.md</c> section 5), the same definition for the plain palisade and the gate:
-    /// 40 wood and 10 stone at level 1, 2 minutes, then the standard growth (cost x1.30, time x1.33 per level), three levels. It stands
+    /// 540 wood, 150 stone and 40 food at level 1, then the standard cost growth (x1.30 per level), three levels; build time on the tech curve (<see cref="BuildTimes"/>). It stands
     /// on grass, forest, sand or plain bog moss, or as the wall's sea end on a coastal-water hex (<see cref="BuildingDefinition.AlsoOnCoastalWater"/>;
     /// the gate is refused there by <see cref="Palisades.PalisadeRules"/>). Unlocks at LH 7 behind a level-5 Tower; no production,
     /// storage or claim of its own.
@@ -933,22 +1028,22 @@ public static class BuildingCatalogue
         Type = type,
         Level = level,
         Cost = new ResourceAmounts(Wood: 540, Stone: 150, Food: 40, Iron: 0) * CostFactor(level),
-        BuildDuration = Duration(2, level),
+        BuildDuration = BuildTime(type, level),
         AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Forest, Terrain.Sand },
         AlsoOnCoastalWater = true,
         AlsoOnBogKinds = PlainBogOnly,
     };
 
     /// <summary>
-    /// Wood, stone, food, iron and build minutes of each bridge level, spelled out per level (no cost growth): wood-heavy, stone from
+    /// Wood, stone, food and iron of each bridge level, spelled out per level (no cost growth): wood-heavy, stone from
     /// level 3, no iron (<c>docs/design/economy.md</c> section 5).
     /// </summary>
-    private static readonly (ResourceAmounts Cost, TimeSpan Duration)[] BridgeLevels =
+    private static readonly ResourceAmounts[] BridgeCosts =
     [
-        (new ResourceAmounts(Wood: 120, Stone: 0, Food: 20, Iron: 0), TimeSpan.FromMinutes(10)),
-        (new ResourceAmounts(Wood: 220, Stone: 0, Food: 30, Iron: 0), TimeSpan.FromMinutes(20)),
-        (new ResourceAmounts(Wood: 380, Stone: 160, Food: 40, Iron: 0), TimeSpan.FromMinutes(45)),
-        (new ResourceAmounts(Wood: 660, Stone: 340, Food: 60, Iron: 0), TimeSpan.FromMinutes(90)),
+        new ResourceAmounts(Wood: 120, Stone: 0, Food: 20, Iron: 0),
+        new ResourceAmounts(Wood: 220, Stone: 0, Food: 30, Iron: 0),
+        new ResourceAmounts(Wood: 380, Stone: 160, Food: 40, Iron: 0),
+        new ResourceAmounts(Wood: 660, Stone: 340, Food: 60, Iron: 0),
     ];
 
     /// <summary>
@@ -961,8 +1056,8 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.Bridge,
         Level = level,
-        Cost = BridgeLevels[level - 1].Cost,
-        BuildDuration = BridgeLevels[level - 1].Duration,
+        Cost = BridgeCosts[level - 1],
+        BuildDuration = BuildTime(BuildingType.Bridge, level),
         AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Forest, Terrain.Sand },
         RequiresRiverShape = SawmillRiverShapes,
     };
@@ -979,7 +1074,7 @@ public static class BuildingCatalogue
         Type = BuildingType.GreatStorehouse,
         Level = level,
         Cost = new ResourceAmounts(Wood: 4500, Stone: 3000, Food: 0, Iron: 0) * CostFactor(level, GreatStorehouseCostGrowth),
-        BuildDuration = Duration(10, level),
+        BuildDuration = BuildTime(BuildingType.GreatStorehouse, level),
         // Total at this level: 50000 * (1.25^L - 1) / 0.25 per resource.
         StorageCapacity = GeometricCapacity(50000, 1.25, level),
         AllowedTerrain = Grass,
@@ -998,7 +1093,7 @@ public static class BuildingCatalogue
         Type = BuildingType.ArcheryRange,
         Level = level,
         Cost = new ResourceAmounts(Wood: 470, Stone: 200, Food: 58, Iron: 0) * CostFactor(level),
-        BuildDuration = Duration(7, level),
+        BuildDuration = BuildTime(BuildingType.ArcheryRange, level),
         AllowedTerrain = SandOrGrass,
         // The deepest tier of the early military line (Tower -> Barracks ->
         // Archery Range), behind a level-5 Barracks.
@@ -1014,7 +1109,7 @@ public static class BuildingCatalogue
         Type = BuildingType.SiegeWorkshop,
         Level = level,
         Cost = new ResourceAmounts(Wood: 26500, Stone: 13000, Food: 2200, Iron: 0) * CostFactor(level, 1.379),
-        BuildDuration = Duration(10, level),
+        BuildDuration = BuildTime(BuildingType.SiegeWorkshop, level),
         AllowedTerrain = Grass,
     };
 
@@ -1030,7 +1125,7 @@ public static class BuildingCatalogue
         Type = BuildingType.Dockyard,
         Level = level,
         Cost = new ResourceAmounts(Wood: 410, Stone: 99, Food: 33, Iron: 0) * CostFactor(level),
-        BuildDuration = Duration(9, level),
+        BuildDuration = BuildTime(BuildingType.Dockyard, level),
         RequiresCoastalWater = true,
     };
 
@@ -1048,7 +1143,7 @@ public static class BuildingCatalogue
         Type = BuildingType.Barracks,
         Level = level,
         Cost = new ResourceAmounts(Wood: 100, Stone: 78, Food: 43, Iron: 0) * CostFactor(level),
-        BuildDuration = Duration(7, level),
+        BuildDuration = BuildTime(BuildingType.Barracks, level),
         AllowedTerrain = SandOrGrass,
         // The middle rung of the military line: needs a level-3 Tower
         // standing first (see PrerequisiteTable) and gates Archery Range in
@@ -1067,7 +1162,7 @@ public static class BuildingCatalogue
         Type = BuildingType.TownSquare,
         Level = level,
         Cost = new ResourceAmounts(Wood: 120, Stone: 130, Food: 44, Iron: 0) * CostFactor(level),
-        BuildDuration = Duration(8, level),
+        BuildDuration = BuildTime(BuildingType.TownSquare, level),
         AllowedTerrain = Grass,
     };
 
@@ -1082,7 +1177,7 @@ public static class BuildingCatalogue
         Type = BuildingType.DruidHut,
         Level = level,
         Cost = new ResourceAmounts(Wood: 1050, Stone: 640, Food: 780, Iron: 0) * CostFactor(level, 1.619),
-        BuildDuration = Duration(9, level),
+        BuildDuration = BuildTime(BuildingType.DruidHut, level),
         AllowedTerrain = Grass,
     };
 
@@ -1100,7 +1195,7 @@ public static class BuildingCatalogue
         Type = BuildingType.CartWorkshop,
         Level = level,
         Cost = new ResourceAmounts(Wood: 680, Stone: 230, Food: 75, Iron: 0) * CostFactor(level),
-        BuildDuration = Duration(7, level),
+        BuildDuration = BuildTime(BuildingType.CartWorkshop, level),
         AllowedTerrain = Grass,
     };
 }
