@@ -28,6 +28,7 @@ import SendArmyPicker from './SendArmyPicker.vue';
 import DispatchSlots from './DispatchSlots.vue';
 import { useDispatchUnitPicker } from '../../composables/useDispatchUnitPicker';
 import { useArmyRows } from '../../composables/useArmyRows';
+import { useArmyRowTap } from '../../composables/useArmyRowTap';
 
 const emit = defineEmits<{ 'focus-army': [armyId: string] }>();
 const world = useWorldStore();
@@ -162,13 +163,8 @@ async function confirm() {
 // shared with QueueDrawer's Armies section.
 const armyRows = useArmyRows();
 
-function toggleSelect(armyId: string) {
-  if (world.selectedArmyId === armyId) {
-    world.clearSelectedArmy();
-  } else {
-    world.selectArmy(armyId);
-  }
-}
+// Click selects / deselects the row's army; a double click focuses it on the map.
+const onRowClick = useArmyRowTap((armyId) => emit('focus-army', armyId));
 
 const recallingId = ref<string | null>(null);
 const recalling = computed(() => (id: string) => recallingId.value === id);
@@ -224,8 +220,7 @@ async function confirmFieldOrderClick() {
           :key="row.id"
           class="status-row army-row"
           :class="{ 'is-selected': row.selected }"
-          @click="toggleSelect(row.id)"
-          @dblclick="emit('focus-army', row.id)"
+          @click="onRowClick(row.id, $event)"
         >
           <div class="status-row-top">
             <span class="status-row-name">{{ row.composition }}</span>

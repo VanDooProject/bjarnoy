@@ -8,6 +8,7 @@ import type { ArmyResponse, BuildOrderResponse, TrainingOrderResponse } from '..
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
+import { DOUBLE_TAP_MS } from '../../lib/map/doubleTap';
 
 const { recallArmy } = vi.hoisted(() => ({ recallArmy: vi.fn() }));
 vi.mock('../../api/client', async (importOriginal) => {
@@ -417,6 +418,37 @@ describe('QueueDrawer', () => {
 
       expect(wrapper.emitted('select-army')).toEqual([['army-1']]);
       expect(wrapper.emitted('update:open')).toEqual([[false]]);
+    });
+
+    it('a double tap on an already selected row keeps it selected throughout', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+      world.selectArmy('army-1');
+      const clear = vi.spyOn(world, 'clearSelectedArmy');
+
+      const wrapper = mountDrawer({ open: true });
+      const row = wrapper.get('.army-row .status-row-click');
+      await row.trigger('click');
+      expect(world.selectedArmyId).toBe('army-1');
+      await row.trigger('click');
+      vi.runAllTimers();
+
+      expect(clear).not.toHaveBeenCalled();
+      expect(world.selectedArmyId).toBe('army-1');
+      expect(wrapper.emitted('select-army')).toEqual([['army-1']]);
+    });
+
+    it('a single tap on the selected row deselects it after the double-tap window', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+      world.selectArmy('army-1');
+
+      const wrapper = mountDrawer({ open: true });
+      await wrapper.get('.army-row .status-row-click').trigger('click');
+      expect(world.selectedArmyId).toBe('army-1');
+      vi.advanceTimersByTime(DOUBLE_TAP_MS);
+
+      expect(world.selectedArmyId).toBeNull();
     });
 
     it('taps on two different rows are not a double tap', async () => {
