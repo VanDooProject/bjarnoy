@@ -116,6 +116,33 @@ curl -X POST https://<host>/api/v1/api-key-requests/<id>/token -H "Content-Type:
 - An IP can have `MaxOpenRequestsPerIp` open requests, all requesters together
   `MaxOpenRequestsTotal`.
 
+### Polling for approval
+
+`scripts/api-key-poll.sh` wraps the request and the poll, so a session finds out
+the moment an admin approves, and the one-time token is never lost or printed:
+
+```bash
+# request.json is the body of step 1 above; prints the user code and approvalUrl for the admin
+scripts/api-key-poll.sh request <host> request.json
+# poll until decided; run it in the background so the session is woken when it exits
+scripts/api-key-poll.sh wait <host> request.state.json
+# or, for a request made by hand with curl
+scripts/api-key-poll.sh wait <host> --id <id> --secret <pollSecret> --out key.token
+```
+
+- Exit codes of `wait`: 0 approved (token in the token file, mode 600), 1 denied,
+  2 expired or already picked up, 3 timeout (`POLL_TIMEOUT_SECONDS`, default
+  3600) or an unexpected answer. Transient errors and 429/5xx keep polling.
+- The token endpoint hands the token out **exactly once**. Never poll it by hand
+  once the request may be approved, and never pipe its answer through something
+  that discards the token: the request is then spent and the admin has to
+  approve a new one. Let the script own the poll and read the token from its file.
+- Keep the token file and the state file out of the repository (use the session's
+  scratchpad). Never print the token, put it in a PR, a comment or a doc.
+- `GET /worlds/{id}/camps` only lists camps on islands **the key's owner has
+  seen**. A key owned by an admin who never visited the island answers an empty
+  list: ask the admin to pick the playing account as owner when approving.
+
 ### Renewal
 
 `POST /api/v1/api-key-requests/renewal`, authenticated with the current key,
