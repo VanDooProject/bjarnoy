@@ -17,7 +17,6 @@ import {
   dialRemainingSeconds,
   hexPerimeterPath,
   hexPerimeterSegment,
-  hexDashSegments,
   pendingDotFrame,
   polygonPerimeterPath,
   polylinePartial,
@@ -136,27 +135,6 @@ describe('hexPerimeterSegment', () => {
 
   it('is empty for a non-positive span', () => {
     expect(hexPerimeterSegment(0, 0, 10, 0.5, 0.5)).toEqual([]);
-  });
-});
-
-describe('hexDashSegments', () => {
-  it('gives perEdge dashes per edge, each centred in its slot with the requested share of the edge', () => {
-    const segs = hexDashSegments(0, 0, 30, 3, 0.55);
-    expect(segs).toHaveLength(18);
-    const edge = 30;
-    for (const [x1, y1, x2, y2] of segs) expect(Math.hypot(x2 - x1, y2 - y1)).toBeCloseTo((edge / 3) * 0.55);
-    // First edge runs from (0,-30) to (r*cos(-30deg), r*sin(-30deg)); its middle dash is centred on the edge midpoint.
-    const mid = segs[1];
-    expect((mid[0] + mid[2]) / 2).toBeCloseTo((0 + 30 * Math.cos(-Math.PI / 6)) / 2);
-    expect((mid[1] + mid[3]) / 2).toBeCloseTo((-30 + 30 * Math.sin(-Math.PI / 6)) / 2);
-  });
-
-  it('is symmetric per edge: the gap before the first dash equals the gap after the last', () => {
-    const [a, , c] = hexDashSegments(0, 0, 30, 3, 0.55).slice(0, 3);
-    const startGap = Math.hypot(a[0] - 0, a[1] + 30);
-    const endX = 30 * Math.cos(-Math.PI / 6);
-    const endY = 30 * Math.sin(-Math.PI / 6);
-    expect(Math.hypot(endX - c[2], endY - c[3])).toBeCloseTo(startGap);
   });
 });
 

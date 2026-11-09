@@ -49,7 +49,6 @@ import {
   dialFinishFrame,
   dialRejectFrame,
   hexPerimeterSegment,
-  hexDashSegments,
   pendingDotFrame,
   DIAL_PENDING_SWEEP_MS,
   DIAL_REJECT_MS,
@@ -933,7 +932,7 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
 
 // Construction progress dial (see `constructionDial.ts`): drawn in screen space
 // by `drawConstructionDials` (scaled with the map, grows on hover) over a building under construction — white track, yellow elapsed arc,
-// remaining time inside. A queued order draws a dashed track and `#position`, a pending one an orbiting sweep and dots,
+// remaining time inside. A queued order draws `#position` on the plain track, a pending one an orbiting sweep and dots,
 // a refused one a red flash and cross.
 const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
 // Refused-build dial: red outline, flash and rings.
@@ -5762,15 +5761,7 @@ export class HexMapRenderer {
 
       const queued = dial.state === 'queued';
       g.poly(hexPoints(cx, cy, r)).fill({ color: 0x08121a, alpha: 0.85 * dAlpha });
-      if (queued) {
-        // Dashed white track: 3 dashes per edge, no progress arc.
-        for (const [x1, y1, x2, y2] of hexDashSegments(cx, cy, r, 3, 0.55)) {
-          g.moveTo(x1, y1).lineTo(x2, y2);
-        }
-        g.stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.42 * dAlpha, cap: 'butt' });
-      } else {
-        g.poly(hexPoints(cx, cy, r)).stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.3 * dAlpha, join: 'round' });
-      }
+      g.poly(hexPoints(cx, cy, r)).stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.3 * dAlpha, join: 'round' });
       if (dial.state === 'pending') {
         if (reduced) {
           for (let k = 0; k < 3; k++) {

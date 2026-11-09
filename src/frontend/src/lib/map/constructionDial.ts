@@ -15,7 +15,7 @@ export interface ConstructionDial {
   endMs: number | null;
   /**
    * `building`: a running build (progress arc + countdown). `queued`: a real server `waiting` order behind full
-   * construction slots (dashed track + `#position`). `pending`: a client-only order the server has not answered yet
+   * construction slots (plain track + `#position`). `pending`: a client-only order the server has not answered yet
    * (sweep + dots).
    */
   state: 'building' | 'queued' | 'pending';
@@ -158,29 +158,6 @@ export function hexPerimeterSegment(cx: number, cy: number, r: number, from: num
   }
   const last = pointAt(end);
   out.push(last.x, last.y);
-  return out;
-}
-
-/**
- * Dash segments [x1, y1, x2, y2][] around the hexagon (pointy-top, vertex 0 at -90 degrees, clockwise): `perEdge` dashes
- * on every edge, each `dashFraction` of its slot long and centred in it, so every edge is symmetric.
- */
-export function hexDashSegments(cx: number, cy: number, r: number, perEdge: number, dashFraction: number): [number, number, number, number][] {
-  const out: [number, number, number, number][] = [];
-  const half = Math.min(1, Math.max(0, dashFraction)) / 2;
-  for (let i = 0; i < 6; i++) {
-    const a0 = (Math.PI / 180) * (-90 + 60 * i);
-    const a1 = (Math.PI / 180) * (-90 + 60 * (i + 1));
-    const ax = cx + r * Math.cos(a0);
-    const ay = cy + r * Math.sin(a0);
-    const bx = cx + r * Math.cos(a1);
-    const by = cy + r * Math.sin(a1);
-    for (let j = 0; j < perEdge; j++) {
-      const t0 = (j + 0.5 - half) / perEdge;
-      const t1 = (j + 0.5 + half) / perEdge;
-      out.push([ax + (bx - ax) * t0, ay + (by - ay) * t0, ax + (bx - ax) * t1, ay + (by - ay) * t1]);
-    }
-  }
   return out;
 }
 
