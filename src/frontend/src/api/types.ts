@@ -1430,6 +1430,25 @@ export interface BuildingDefinitionResponse {
    * level-10-only tier).
    */
   prerequisites: BuildingPrerequisiteResponse[];
+  /**
+   * The build ring's group this building is listed under (`resource`, `military`, `logistics`, `defense`, `religion`, `water`), or
+   * null for the one building the ring never lists (the longhouse). The ring is built from it (`lib/map/placementRules.ts`).
+   */
+  ringCategory: string | null;
+  /** The building's position within its ring category (ascending). */
+  ringOrder: number;
+  /** Can no longer be placed anew (the quarry); standing ones keep working. */
+  newPlacementDisabled: boolean;
+  /** Bog tile kinds the building must stand on (bog-ore works, clay brickworks: `bog`; hammer forge: `creek`). Empty: no such requirement. */
+  requiresBogKinds: string[];
+  /** Bog tile kinds a land building may also stand on (the tower and the walls: plain moss, `bog`). */
+  alsoOnBogKinds: string[];
+  /** Bog tile kinds a coastal-water building may stand on instead of coastal water (the fishing hut: `half`). */
+  lakeShoreKinds: string[];
+  /** River tile shapes the building's own hex must have (sawmill, crop mill, bridge). Empty: it never stands on a river hex. */
+  requiresRiverShapes: string[];
+  /** River art variants that disqualify an otherwise matching shape (the sawmill: `loop`). */
+  excludedRiverVariants: string[];
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/GuildContracts.cs.

@@ -2249,7 +2249,7 @@ function oppositeOf(direction: TileOrientation): TileOrientation {
  * Sawmill/Crop Mill's channel lines up with its river neighbours (the same
  * shape is what a real placement is built on, per `BuildingCatalogue`'s
  * `SawmillRiverShapes`/`CropMillRiverShapes` and `ringCatalogue.ts`'s
- * `RIVER_SHAPES_BY_TYPE` — see that map's own doc comment for the
+ * the catalogue's `requiresRiverShapes` (`placementRules.ts`) — see `riverBuildingAllowedHere`'s doc comment for the
  * shape-matches-the-hex's-river-art rule this mirrors). `seaDirection`/
  * `springShape` are never needed here: neither building is ever placed on a
  * `mouth` or `spring` tile, the only shapes `riverArtFor` would otherwise

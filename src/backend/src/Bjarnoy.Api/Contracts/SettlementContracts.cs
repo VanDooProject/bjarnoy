@@ -467,6 +467,17 @@ public sealed record BuildingPrerequisiteResponse(string Type, int Level);
 /// The building stands on land (<paramref name="AllowedTerrain"/>) <em>and</em>, as an exception, on a coastal-water hex: the palisade's
 /// sea end. Unlike <paramref name="RequiresCoastalWater"/> it does not replace the land terrain.
 /// </param>
+/// <param name="RingCategory">
+/// The build ring's group this building is listed under (<c>resource</c>, <c>military</c>, <c>logistics</c>, <c>defense</c>, <c>religion</c>,
+/// <c>water</c>), or null when the ring never lists it (the Longhouse); the client builds its ring from this, so no client table repeats it.
+/// </param>
+/// <param name="RingOrder">The building's position within its <paramref name="RingCategory"/> (ascending).</param>
+/// <param name="NewPlacementDisabled">The building can no longer be placed anew (the Quarry); standing ones keep working.</param>
+/// <param name="RequiresBogKinds">Bog tile kinds the building must stand on (empty: no such requirement): plain moss, a creek.</param>
+/// <param name="AlsoOnBogKinds">Bog tile kinds a land building may also stand on (the tower and the walls: plain moss).</param>
+/// <param name="LakeShoreKinds">Bog tile kinds a coastal-water building may stand on instead of coastal water (the Fishing Hut: half shore).</param>
+/// <param name="RequiresRiverShapes">River tile shapes a river building's own hex must have (empty: no river building; the bridge's shapes too).</param>
+/// <param name="ExcludedRiverVariants">River art variants that disqualify an otherwise matching shape (the Sawmill: the hairpin loop).</param>
 /// <param name="Prerequisites">
 /// Other buildings that must stand before this one may be placed — <em>all</em>
 /// of them, not any one. Empty when there are none. These gate placement, so
@@ -488,7 +499,15 @@ public sealed record BuildingDefinitionResponse(
     int SlotCost,
     bool OccupiesAllSlots,
     int ClaimRadius,
-    IReadOnlyList<BuildingPrerequisiteResponse> Prerequisites)
+    IReadOnlyList<BuildingPrerequisiteResponse> Prerequisites,
+    string? RingCategory,
+    int RingOrder,
+    bool NewPlacementDisabled,
+    IReadOnlyList<string> RequiresBogKinds,
+    IReadOnlyList<string> AlsoOnBogKinds,
+    IReadOnlyList<string> LakeShoreKinds,
+    IReadOnlyList<string> RequiresRiverShapes,
+    IReadOnlyList<string> ExcludedRiverVariants)
 {
     public static BuildingDefinitionResponse From(BuildingDefinition definition)
     {
@@ -508,8 +527,20 @@ public sealed record BuildingDefinitionResponse(
             definition.SlotCost,
             definition.OccupiesAllSlots,
             definition.ClaimRadius,
-            [.. definition.Prerequisites.Select(p => new BuildingPrerequisiteResponse(p.Type.ToWireName(), p.Level))]);
+            [.. definition.Prerequisites.Select(p => new BuildingPrerequisiteResponse(p.Type.ToWireName(), p.Level))],
+            definition.RingCategory?.ToString().ToLowerInvariant(),
+            definition.RingOrder,
+            BuildingCatalogue.NewPlacementDisabled.Contains(definition.Type),
+            Wire(definition.RequiresBogKind),
+            Wire(definition.AlsoOnBogKinds),
+            Wire(definition.LakeShoreKinds),
+            Wire(definition.RequiresRiverShape),
+            Wire(definition.ExcludedRiverVariants));
     }
+
+    private static IReadOnlyList<string> Wire<T>(IReadOnlySet<T>? set)
+        where T : struct, Enum =>
+        set is null ? [] : [.. set.Select(v => v.ToString().ToLowerInvariant()).Order(StringComparer.Ordinal)];
 }
 
 /// <summary>A settlement as it appears on the world map: enough to draw a marker.</summary>

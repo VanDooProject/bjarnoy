@@ -379,22 +379,6 @@ describe('newPlacementDisabled', () => {
 });
 
 describe('buildingAllowedOnHex — the catalogue\'s terrain per building', () => {
-  // The bundled snapshot is what `GET /api/v1/buildings` served (`BuildingDefinition.AllowedTerrain`): the client table has to say the same.
-  it('agrees with the catalogue snapshot on every land terrain, for every land building', async () => {
-    const snapshot = (await import('../../data/building-catalogue.json')).default as {
-      data: { type: string; level: number; allowedTerrain: string[]; requiresCoastalWater: boolean }[];
-    };
-    const landTypes = snapshot.data.filter(
-      (b) => b.level === 1 && b.type !== 'longhouse' && !b.requiresCoastalWater && !['claybrickworks', 'bogoreworks', 'hammerschmiede'].includes(b.type),
-    );
-    expect(landTypes.length).toBeGreaterThan(20);
-    for (const b of landTypes) {
-      for (const terrain of ['grass', 'sand', 'forest', 'mountain']) {
-        expect(buildingAllowedOnHex(b.type, { terrain }), `${b.type} on ${terrain}`).toBe(b.allowedTerrain.includes(terrain));
-      }
-    }
-  });
-
   it('puts the military buildings on grass only; sand takes the tower and the walls', () => {
     for (const type of ['siegeworkshop', 'barracks', 'archeryrange', 'smithy']) {
       expect(buildingAllowedOnHex(type, { terrain: 'grass' }), type).toBe(true);
