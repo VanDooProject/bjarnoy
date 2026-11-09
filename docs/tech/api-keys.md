@@ -17,6 +17,23 @@ it: the admin themself, or another account (e.g. a test player), so an agent can
 play as that player and pass the settlement/army ownership checks. A key never
 grants more than its owner currently has.
 
+A key may also list up to 10 **further accounts** besides the owner (the owner
+stays the primary account and the default). A request picks one of them by user
+name with the `X-Act-As` header:
+
+```bash
+curl -H "Authorization: Bearer bjk_…" -H "X-Act-As: testplayer2" https://<host>/api/v1/auth/me
+```
+
+Every request is evaluated as exactly one account, never as a union: the key's
+features and worlds are narrowed by that account's rights. `admin.*` features
+need an admin **owner**, and the `Admin` role is only granted while acting as an
+admin, so on a mixed key an admin route answers 403 when acting as a player.
+Naming an account the key does not list (or one that does not exist) is a 403;
+a banned acting account is a 401, the key's other accounts keep working. A key
+counts against the active-key cap of every account it can act as. Recreate and
+renewal carry the further accounts over.
+
 ## Scoping
 
 A key's effective rights are the intersection of:
@@ -101,13 +118,16 @@ curl -X POST https://<host>/api/v1/api-key-requests -H "Content-Type: applicatio
   "lifetimeMinutes": 60
 }'
 # 2. show the user code and approvalUrl to an admin; on /admin/api-keys they compare
-#    the code, can change owner, features, worlds and lifetime, and approve or deny
+#    the code, can change owner, further accounts, features, worlds and lifetime, and approve
+#    or deny; the same link opens the key later, once the request was collected
 # 3. poll every pollIntervalSeconds: 202 pending, 200 with the token (exactly once),
 #    403 denied, 410 expired or already picked up
 curl -X POST https://<host>/api/v1/api-key-requests/<id>/token -H "Content-Type: application/json" \
   -d '{"pollSecret":"…"}'
 ```
 
+- `additionalUserNames` (optional list) hints further accounts the key should be able
+  to act as; names that do not exist are dropped on approval.
 - `ownerUserName` is a hint; the admin decides the owner (default: the
   approving admin). `description` and `contextUrl` (http/https only) are shown
   on the approval page.
