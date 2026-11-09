@@ -272,18 +272,23 @@ Only **strong** camps attack, and only when **aggressive**: not calm and with at
 alpha alive. Camp-initiated fights use the beasts' **attack** against the units' **defense** and are
 **raid-capped** (both sides lose at most half), so a camp is never cleared by its own attack.
 
-- **Ambush**: an army (not retreat-immune; land armies by land camps, fleets by water camps, see
-  [Water camps](#water-camps)) whose route enters an aggressive strong camp's guard
-  range is attacked at the instant it enters (`CampAmbush.EarliestAmbush`, the earliest over all camps,
-  checked when the army is settled, like field battles). A hunting army is not ambushed by the camp it
-  hunts; an army that sets out from inside the range is attacked as it leaves. Army loses: it retreats home from where it stands (`Army.ForceFieldRetreat`). Army wins: it
-  marches on. Either way the camp is then calm for 24 h.
-- **Towers**: building a tower inside an aggressive strong camp's guard range is **allowed** (the client
-  warns). The camp attacks it **30 min** after its construction started, or for a standing tower as soon
-  as the camp is aggressive (`CampAggressionHostedService`, every minute). The tower is defended only by
-  the owner's armies **standing on the tower hex** (arrived, not yet turned around); if there are none, or
-  they lose, a tower under construction burns (the order is dropped, its cost is lost) and a standing
-  tower is razed. Either way the camp is then calm for 24 h.
+- **Beasts march out**: a camp attacks by sending its **adults** out as a group. Young and alphas stay home. The group walks
+  on the map like troops (same routes and ground costs, at the beasts' own speed) and is seen by everyone whose sight covers
+  it, as a red paw. While it is away, the camp's garrison is only the young and alphas, and the camp regrows from the moment
+  the group leaves. A camp with no adults at home does not attack.
+- **Speed** (hexes per hour, troops walk 4–5): wolf 14, boar 10, bear 9, Fenrir's brood 16, walrus 6, eagle 20, moose 10.
+- **Ambush**: when an army (not retreat-immune, land armies by land camps) enters an aggressive strong camp's guard range, the
+  adults set out and intercept it on its route, at the earliest hex inside the guard range (+1) they can reach before the army
+  has left it. The fight is the adults' attack against the units' defense, raid-capped, at the point of contact. If they can't
+  catch the army there, they don't go out. A hunting army is not ambushed by the camp it hunts. Fleets at the whale road are
+  still attacked on the camp's own hex at once.
+- **Towers**: the adults set out when a tower comes due (30 min after its construction started, or at once for a standing
+  tower) and fight on arrival, against the owner's armies standing on the tower hex.
+- **Walls**: a wall or gate on the way stops the beasts like troops. They attack it like troops with rams: the defenders
+  standing on the wall hex fight back, and a won fight takes one level off the wall. Then they go home. Getting through a wall
+  takes as many trips as it has levels.
+- **Return**: after a fight, the surviving adults walk back to the camp and rejoin the garrison when they arrive. That can push
+  the garrison above its full size. The camp is calm for 24 h from the fight.
 
 ### Reports
 
