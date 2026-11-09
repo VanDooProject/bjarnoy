@@ -95,7 +95,14 @@ jobs:
       - name: Smoke test the image
         run: |
           set -euo pipefail
+          # Run exactly the image this job built. A pushed tag like `:main` is
+          # shared: a run for the next commit can overwrite it between this
+          # job's push and the pull below, so a push run pins the digest. A
+          # pull request's image is only loaded locally, so its tag is safe.
           image=$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            image="${image%:*}@${{ steps.build.outputs.digest }}"
+          fi
           data=$(mktemp -d)
           chmod 777 "$data"
 
