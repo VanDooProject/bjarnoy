@@ -461,6 +461,16 @@ describe('classifyFamilyFrames', () => {
       expect(level1Only.baseIndexed?.SE).toEqual([undefined, 'dockyard_SE_level001_base']);
     });
 
+    it('keeps level000_base at index 0 in one strict frame pool where the shared base is listed after it', () => {
+      const result = classifyFamilyFrames([
+        frame('dockyard_SE_level000_base', 'base'),
+        frame('dockyard_SE_level001_base', 'base'),
+        frame('dockyard_SE_base', 'base'),
+      ]);
+
+      expect(result.baseIndexed?.SE).toEqual(['dockyard_SE_level000_base', 'dockyard_SE_level001_base']);
+    });
+
     it('still reads the unsuffixed base as the family base when no leveled base exists', () => {
       const result = classifyFamilyFrames([frame('farm_SE_base', 'base'), frame('farm_SE_level001', 'top')], { sparse: true });
 
