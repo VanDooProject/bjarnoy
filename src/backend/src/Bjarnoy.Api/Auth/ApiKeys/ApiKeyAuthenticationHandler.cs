@@ -44,6 +44,9 @@ public sealed class ApiKeyAuthenticationHandler(
     /// <summary>Names the account of a multi-account key a request acts as; absent means the key owner.</summary>
     public const string ActAsHeaderName = "X-Act-As";
 
+    /// <summary>Prefix of an <c>X-Act-As</c> value that names an account-less settlement by its jarl: <c>jarl:Jarl-aae5</c>.</summary>
+    public const string AnonymousPrefix = "jarl:";
+
     /// <summary>How often a key's <see cref="ApiKeyEntity.LastUsedAt"/> is rewritten at most.</summary>
     private static readonly TimeSpan LastUsedGranularity = TimeSpan.FromMinutes(1);
 
@@ -88,6 +91,7 @@ public sealed class ApiKeyAuthenticationHandler(
             .AsNoTracking()
             .Include(k => k.OwnerUser)
             .Include(k => k.Accounts).ThenInclude(a => a.User)
+            .Include(k => k.AnonymousAccounts)
             .FirstOrDefaultAsync(k => k.KeyId == keyId, cancellationToken);
 
         // The same answer for "no such key" and "wrong secret": nothing to tell a prober apart.
@@ -105,54 +109,85 @@ public sealed class ApiKeyAuthenticationHandler(
                 return Failed("API key expired.");
         }
 
-        // Every request is evaluated as exactly one account: the owner, or one of the key's extra accounts picked by
-        // name with X-Act-As. Never a union of accounts.
+        // Every request is evaluated as exactly one account: the owner, one of the key's extra accounts picked by name
+        // with X-Act-As, or an account-less (anonymous) settlement picked with `X-Act-As: jarl:<label>`. Never a union.
         var owner = key.OwnerUser!;
-        var acting = owner;
+        UserEntity? acting = null;
+        ApiKeyAnonymousAccountEntity? anonymous = null;
         var requested = Request.Headers[ActAsHeaderName].ToString().Trim();
-        if (requested.Length > 0)
+        if (requested.StartsWith(AnonymousPrefix, StringComparison.OrdinalIgnoreCase))
         {
-            acting = new[] { owner }
+            var label = requested[AnonymousPrefix.Length..].Trim();
+            anonymous = key.AnonymousAccounts.FirstOrDefault(
+                a => string.Equals(a.Label, label, StringComparison.OrdinalIgnoreCase));
+        }
+        else if (requested.Length > 0)
+        {
+            acting = (key.OwnerCanAct ? new[] { owner } : [])
                 .Concat(key.Accounts.Select(a => a.User!))
                 .FirstOrDefault(u => string.Equals(u.UserName, requested, StringComparison.OrdinalIgnoreCase));
-            if (acting is null)
-            {
-                // Same answer for "no such account" and "not one of this key's accounts": nothing to enumerate.
-                Logger.LogWarning(
-                    "API key {ApiKeyName} ({ApiKeyId}) asked to act as {RequestedAccount}, which is not one of its accounts.",
-                    key.Name, key.Id, requested);
-                Context.Items[ApiKeyContext.ForbiddenItemKey] = "Account not allowed for this API key.";
-                return AuthenticateResult.Fail("Account not allowed for this API key.");
-            }
+        }
+        else if (key.OwnerCanAct)
+        {
+            acting = owner;
+        }
+        else
+        {
+            anonymous = key.AnonymousAccounts.FirstOrDefault(a => a.IsPrimary) ?? key.AnonymousAccounts.FirstOrDefault();
         }
 
-        if (acting.Status == UserStatus.Banned)
+        if (acting is null && anonymous is null)
+        {
+            // Same answer for "no such account" and "not one of this key's accounts": nothing to enumerate.
+            return AccountForbidden(key, requested, "Account not allowed for this API key.");
+        }
+
+        // An anonymous player who registered since is a real account now: the grant stops working (fail closed), an
+        // admin adds the new account to the key instead of the key following the claim on its own.
+        if (anonymous is not null
+            && !await dbContext.Settlements.AnyAsync(
+                s => s.OwnerId == anonymous.OwnerId && s.UserId == SystemUserIds.Abandoned, cancellationToken))
+        {
+            return AccountForbidden(key, requested, "The anonymous account was claimed or no longer exists.");
+        }
+
+        if (acting?.Status == UserStatus.Banned)
         {
             return Failed("API key account is banned.");
         }
 
+        var actingName = acting?.UserName ?? anonymous!.Label;
         if (key.LastUsedAt is null || now - key.LastUsedAt.Value >= LastUsedGranularity)
         {
             await dbContext.ApiKeys
                 .Where(k => k.Id == key.Id)
                 .ExecuteUpdateAsync(s => s.SetProperty(k => k.LastUsedAt, now), cancellationToken);
             Logger.LogInformation(
-                "API key {ApiKeyName} ({ApiKeyId}) used as {ActingUserName} ({ActingUserId}).",
-                key.Name, key.Id, acting.UserName, acting.Id);
+                "API key {ApiKeyName} ({ApiKeyId}) used as {ActingName} ({ActingUserId}).",
+                key.Name, key.Id, actingName, acting?.Id.ToString() ?? "anonymous");
         }
 
         var hasAdminFeature = key.Features.Keys.Any(f => ApiKeyFeature.Find(f)?.Admin == true);
         var claims = new List<Claim>
         {
-            new(ClaimTypes.NameIdentifier, acting.Id.ToString()),
-            new("sub", acting.Id.ToString()),
-            new("unique_name", acting.UserName),
+            new("unique_name", actingName),
             new(ApiKeyClaims.ApiKeyId, key.Id.ToString()),
             new(ApiKeyClaims.ApiKeyName, key.Name),
         };
-        if (acting.Role == UserRole.Admin && hasAdminFeature)
+        if (acting is not null)
         {
-            claims.Add(new Claim(ClaimTypes.Role, nameof(UserRole.Admin)));
+            claims.Add(new Claim(ClaimTypes.NameIdentifier, acting.Id.ToString()));
+            claims.Add(new Claim("sub", acting.Id.ToString()));
+            if (acting.Role == UserRole.Admin && hasAdminFeature)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, nameof(UserRole.Admin)));
+            }
+        }
+        else
+        {
+            // No id and no role: an anonymous identity owns nothing by user id and is never an admin, whatever the
+            // key's owner is. Ownership of its settlements is proven by ApiKeyContext.ActingAnonymousOwnerId.
+            claims.Add(new Claim(ApiKeyClaims.Anonymous, "true"));
         }
 
         Context.Items[ApiKeyContext.ItemKey] = new ApiKeyContext(
@@ -160,19 +195,29 @@ public sealed class ApiKeyAuthenticationHandler(
             key.KeyId,
             key.Name,
             owner.Id,
-            acting.Id,
+            acting?.Id,
             key.Features,
             key.AllWorlds,
             key.WorldIds.ToHashSet(),
-            key.RequestsPerMinute);
+            key.RequestsPerMinute,
+            anonymous?.OwnerId);
 
         Activity.Current?.SetTag("bjarnoy.api_key.id", key.Id.ToString());
         Activity.Current?.SetTag("bjarnoy.api_key.name", key.Name);
-        Activity.Current?.SetTag("bjarnoy.api_key.acting_user_id", acting.Id.ToString());
+        Activity.Current?.SetTag("bjarnoy.api_key.acting_user_id", acting?.Id.ToString() ?? "anonymous");
 
         var identity = new ClaimsIdentity(claims, SchemeName);
         return AuthenticateResult.Success(
             new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName));
+    }
+
+    private AuthenticateResult AccountForbidden(ApiKeyEntity key, string requested, string reason)
+    {
+        Logger.LogWarning(
+            "API key {ApiKeyName} ({ApiKeyId}) asked to act as {RequestedAccount}: {Reason}",
+            key.Name, key.Id, requested, reason);
+        Context.Items[ApiKeyContext.ForbiddenItemKey] = reason;
+        return AuthenticateResult.Fail(reason);
     }
 
     private AuthenticateResult Failed(string reason)

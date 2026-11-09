@@ -1,4 +1,5 @@
 using Bjarnoy.Infrastructure.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Routing;
 
 namespace Bjarnoy.Api.Auth.ApiKeys;
@@ -57,6 +58,16 @@ public sealed class ApiKeyScopeMiddleware(RequestDelegate next)
         if (endpoint is null || marker is null || marker.Kind == ApiKeyEndpointKind.Forbidden)
         {
             await Refuse(context, StatusCodes.Status403Forbidden, "Not available to API keys.");
+            return;
+        }
+
+        // An account-less identity has no user id: anything that needs a signed-in account is closed to it, and so is
+        // every admin feature, whatever the key's owner is.
+        if (context.User.IsAnonymousApiKey()
+            && (endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>().Count > 0
+                || (marker.Feature is not null && ApiKeyFeature.Find(marker.Feature)?.Admin == true)))
+        {
+            await Refuse(context, StatusCodes.Status403Forbidden, "This needs a user account; the key is acting as an anonymous settlement.");
             return;
         }
 

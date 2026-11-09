@@ -12,7 +12,7 @@ public sealed record ApiKeyContext(
     string KeyId,
     string Name,
     Guid OwnerUserId,
-    Guid ActingUserId,
+    Guid? ActingUserId,
     IReadOnlyDictionary<string, ApiKeyAccess> Features,
     bool AllWorlds,
     IReadOnlySet<Guid> WorldIds,
@@ -41,9 +41,15 @@ public static class ApiKeyClaims
     public const string ApiKeyId = "bjarnoy:api_key_id";
     public const string ApiKeyName = "bjarnoy:api_key_name";
 
+    /// <summary>Present on a key principal acting as an account-less settlement: it has no user id and no role.</summary>
+    public const string Anonymous = "bjarnoy:api_key_anonymous";
+
     /// <summary>True when the request was authenticated with an API key rather than a user's JWT.</summary>
     public static bool IsApiKey(this ClaimsPrincipal user) =>
         user.Identity?.IsAuthenticated == true && user.HasClaim(c => c.Type == ApiKeyId);
+
+    /// <summary>True for a key principal acting as an account-less (anonymous) settlement.</summary>
+    public static bool IsAnonymousApiKey(this ClaimsPrincipal user) => user.HasClaim(c => c.Type == Anonymous);
 
     /// <summary>The key's database id, or null for a non-key principal.</summary>
     public static Guid? GetApiKeyId(this ClaimsPrincipal user) =>

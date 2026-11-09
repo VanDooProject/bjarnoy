@@ -32,6 +32,38 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.ToTable("api_key_accounts", (string)null);
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAnonymousAccountEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ApiKeyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("SourceSettlementId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApiKeyId", "Label")
+                        .IsUnique();
+
+                    b.ToTable("api_key_anonymous_accounts", (string)null);
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -69,6 +101,11 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("OwnerCanAct")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
 
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("TEXT");
@@ -125,6 +162,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<bool?>("ApprovedAllWorlds")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("ApprovedAnonymousAccounts")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ApprovedFeatures")
                         .IsRequired()
                         .HasMaxLength(1000)
@@ -132,6 +173,11 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<int?>("ApprovedLifetimeMinutes")
                         .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ApprovedOwnerCanAct")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
 
                     b.Property<int?>("ApprovedRequestsPerMinute")
                         .HasColumnType("INTEGER");
@@ -2023,6 +2069,17 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAnonymousAccountEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", "ApiKey")
+                        .WithMany("AnonymousAccounts")
+                        .HasForeignKey("ApiKeyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ApiKey");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "CreatedByUser")
@@ -2510,6 +2567,8 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
                 {
                     b.Navigation("Accounts");
+
+                    b.Navigation("AnonymousAccounts");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyEntity", b =>

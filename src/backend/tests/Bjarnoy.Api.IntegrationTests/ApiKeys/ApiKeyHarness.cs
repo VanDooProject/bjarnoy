@@ -163,6 +163,21 @@ internal sealed class ApiKeyHarness(BjarnoyApiFactory factory)
         return (await response.ReadStrictAsync<SettlementResponse>(Ct), ownerId);
     }
 
+    /// <summary>Grants <paramref name="keyId"/> an anonymous identity directly in the database (the admin API for it comes later).</summary>
+    public async Task GrantAnonymousAsync(Guid keyId, string ownerId, string label, bool primary = false) =>
+        await WithDbAsync(async db =>
+        {
+            db.ApiKeyAnonymousAccounts.Add(new ApiKeyAnonymousAccountEntity
+            {
+                ApiKeyId = keyId,
+                OwnerId = ownerId,
+                Label = label,
+                IsPrimary = primary,
+            });
+            await db.SaveChangesAsync(Ct);
+            return 0;
+        });
+
     public async Task SetStatusAsync(Guid userId, UserStatus status) => await WithDbAsync(async db =>
     {
         var user = await db.Users.SingleAsync(u => u.Id == userId, Ct);
