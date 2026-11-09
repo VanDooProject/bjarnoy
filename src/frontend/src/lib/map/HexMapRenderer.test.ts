@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   armyMarkerColor,
+  armyVisionEntryOf,
   grantsArmyVision,
   type ArmyOverlayMarker,
   previewGroundCoords,
@@ -1219,6 +1220,7 @@ describe('foreign army markers', () => {
     selected: false,
     returning: false,
     isFleet: false,
+    visionRadius: 2,
     movement: { path: [{ q: 0, r: 0 }], cumulativeHours: [0], edgeHours: [0], departedAtMs: 0, arrivesAtMs: 1 },
   };
   const foreign: ArmyOverlayMarker = { ...own, id: 'foreign', foreign: true, color: 0x4fd17a };
@@ -1237,5 +1239,21 @@ describe('foreign army markers', () => {
     expect(grantsArmyVision(own)).toBe(true);
     expect(grantsArmyVision({ ...own, movement: undefined })).toBe(false);
     expect(grantsArmyVision(foreign)).toBe(false);
+  });
+
+  it('gives every marching army a vision source with its own radius, taken from the army as the backend sent it', () => {
+    const fleet = { ...own, id: 'fleet', isFleet: true, visionRadius: 16 };
+    const catapults = { ...own, id: 'catapults', visionRadius: 1 };
+    const point = { x: 10, y: 20, hexes: [{ q: 1, r: 2 }, { q: 2, r: 2 }] };
+
+    expect(armyVisionEntryOf(fleet, point)).toEqual({ x: 10, y: 20, radiusHexes: 16, hexes: point.hexes });
+    expect(armyVisionEntryOf(catapults, point)).toEqual({ x: 10, y: 20, radiusHexes: 1, hexes: point.hexes });
+  });
+
+  it('gives no vision source to an army that is not marching or is foreign', () => {
+    const point = { x: 0, y: 0, hexes: [{ q: 0, r: 0 }] };
+
+    expect(armyVisionEntryOf({ ...own, movement: undefined }, point)).toBeNull();
+    expect(armyVisionEntryOf(foreign, point)).toBeNull();
   });
 });

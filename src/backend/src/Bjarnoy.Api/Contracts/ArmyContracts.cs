@@ -151,6 +151,10 @@ public sealed record MovementResponse(
         movement.IsReturning);
 }
 
+/// <param name="VisionRadius">
+/// Rings of the map the army sees around itself while it travels: the highest <c>VisionRadius</c> among its unit types plus its
+/// home settlement's Odin's Ravens (<see cref="FogVisionRadii.ArmyVisionRadius"/>). The client's live fog layer draws it as is.
+/// </param>
 /// <param name="AtHome">True when the army is standing in its home settlement — <paramref name="Movement"/> is then null.</param>
 /// <param name="Supporting">
 /// True when the army is currently a guest garrison at
@@ -174,6 +178,7 @@ public sealed record ArmyResponse(
     double Provisions,
     double TotalSpeed,
     double TotalUpkeepPerHour,
+    int VisionRadius,
     IReadOnlyList<ArmyUnitStackResponse> Stacks,
     MovementResponse? Movement)
 {
@@ -206,6 +211,7 @@ public sealed record ArmyResponse(
             domain.ProvisionsAt(gameNow),
             domain.TotalSpeed,
             domain.TotalUpkeepPerHour,
+            FogVisionRadii.ArmyVisionRadius(domain.Stacks, entity.Settlement.ToDomain().VisionBonusRings),
             [.. domain.Stacks.Select(s => new ArmyUnitStackResponse(s.Type.ToWireName(), s.Count))],
             movement is null ? null : MovementResponse.From(movement));
     }

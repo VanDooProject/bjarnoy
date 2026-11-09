@@ -1,4 +1,5 @@
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -89,7 +90,7 @@ public sealed record ExploredArea(
 /// chunks (<see cref="PlayerExploredChunkEntity"/>, <see cref="PersistedExploredBitset"/>),
 /// one row per touched chunk, a fully explored chunk stored as a flag — OR
 /// the discs they explore from right now (settlement and tower rings,
-/// in-transit armies at <see cref="FogVisionRadii.ArmyVisionRadiusHexes"/>).
+/// in-transit armies at <see cref="FogVisionRadii.ArmyVisionRadius"/>).
 /// Nothing here iterates the world or builds a set of it: writes group the
 /// current discs' hexes by chunk and touch only those rows, reads fetch only
 /// the chunks asked for.
@@ -195,8 +196,9 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
         {
             var home = new HexCoord(armyEntity.Settlement!.CentreQ, armyEntity.Settlement.CentreR);
             // The army's origin settlement's Ravens widen its walked-ground reveal too.
-            var armyRadius = FogVisionRadii.ArmyVisionRadius(ravensBySettlement.GetValueOrDefault(armyEntity.SettlementId));
-            var reached = armyEntity.ToDomain().HexesReachedBy(home, gameNow);
+            var domainArmy = armyEntity.ToDomain();
+            var armyRadius = FogVisionRadii.ArmyVisionRadius(domainArmy.Stacks, ravensBySettlement.GetValueOrDefault(armyEntity.SettlementId));
+            var reached = domainArmy.HexesReachedBy(home, gameNow);
             foreach (var hex in reached)
             {
                 armyHexes.Add((hex, armyRadius));
@@ -404,7 +406,8 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             var settlement = settlements.FirstOrDefault(s => s.Id == army.SettlementId);
             if (settlement is not null)
             {
-                var radius = FogVisionRadii.ArmyVisionRadius(settlement.ToDomain().VisionBonusRings);
+                var radius = FogVisionRadii.ArmyVisionRadius(
+                    army.Stacks.Select(s => new UnitStack(s.UnitType, s.Count)), settlement.ToDomain().VisionBonusRings);
                 var key = (settlement.WorldId, settlement.OwnerId);
                 if (!byOwner.TryGetValue(key, out var hexes))
                 {

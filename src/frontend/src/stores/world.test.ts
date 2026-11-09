@@ -2295,8 +2295,10 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
     const done = store.queueBuildOptimistic('lumberjack', at);
     expect(store.hud.queue).toHaveLength(1);
     expect(store.hud.queue[0]).toMatchObject({ q: 3, r: -2, building: 'lumberjack', state: 'waiting', completesInSeconds: null });
-    // The dial for it has no timing, which the renderer draws as "…".
-    expect(constructionDialsFromQueue(store.hud.queue, Date.now())).toEqual([{ coord: at, startMs: null, endMs: null }]);
+    // The dial for it has no timing and is `pending` (the renderer draws the sweep and dots, not a queue number).
+    expect(constructionDialsFromQueue(store.hud.queue, Date.now())).toEqual([
+      { coord: at, startMs: null, endMs: null, state: 'pending', queuePosition: null },
+    ]);
 
     getSettlement.mockResolvedValue(settlementResponse({ queue: [realOrder] }));
     release();

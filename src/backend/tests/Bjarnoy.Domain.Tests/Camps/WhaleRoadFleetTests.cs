@@ -49,9 +49,12 @@ public class WhaleRoadFleetTests
     private static Army Hunter(UnitStack[]? units = null)
     {
         units ??= [new UnitStack(UnitType.Longship, 5)];
-        var food = units.Sum(u => UnitCatalogue.Get(u.Type).FoodCarryCapacity * u.Count);
+        var home = Found();
+        // A full load, as far as the home stores can hold.
+        var food = Math.Min(
+            units.Sum(u => UnitCatalogue.Get(u.Type).FoodCarryCapacity * u.Count), home.Resources.Capacity.Food);
         var decision = Army.PlanDispatch(
-            Found(), units, food, [], WhaleHex, T0, Guid.CreateVersion7(), Terr, ArmyMission.Hunt,
+            home, units, food, [], WhaleHex, T0, Guid.CreateVersion7(), Terr, ArmyMission.Hunt,
             targetCampCoord: WhaleHex, targetCampIsWater: true);
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
         return decision.Army!;

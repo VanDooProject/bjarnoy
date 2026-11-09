@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   armyCullSourcesOf,
+  armyRevealReachHexes,
   isPastTerrainCullOf,
   type FogSource,
 } from './HexMapRenderer';
@@ -71,7 +72,7 @@ describe('army terrain cull sources', () => {
   for (const radiusHexes of [2, 3, 4]) {
     it(`keeps every hex the reveal reaches drawn (radius ${radiusHexes})`, () => {
       for (const [from, to] of legs) {
-        const sources = armyCullSourcesOf([[from, to]], radiusHexes);
+        const sources = armyCullSourcesOf([{ hexes: [from, to], visionRadiusHexes: radiusHexes }]);
         for (const t of [0, 0.25, 0.5, 0.75, 1]) {
           for (const hex of revealedHexes(from, to, t, radiusHexes)) {
             expect(
@@ -85,48 +86,75 @@ describe('army terrain cull sources', () => {
   }
 
   it('culls a hex under opaque mist without an army, keeps it with one', () => {
-    const army = armyCullSourcesOf(
-      [
-        [
+    const army = armyCullSourcesOf([
+      {
+        hexes: [
           { q: 40, r: 0 },
           { q: 41, r: 0 },
         ],
-      ],
-      2,
-    );
+        visionRadiusHexes: 2,
+      },
+    ]);
     const settlement: FogSource[] = [{ q: 0, r: 0, radius: 5 }];
     expect(isPastTerrainCullOf(42, 0, settlement, allOpaque)).toBe(true);
     expect(isPastTerrainCullOf(42, 0, settlement, allOpaque, army)).toBe(false);
   });
 
   it('still culls far from every army', () => {
-    const army = armyCullSourcesOf(
-      [
-        [
+    const army = armyCullSourcesOf([
+      {
+        hexes: [
           { q: 40, r: 0 },
           { q: 41, r: 0 },
         ],
-      ],
-      2,
-    );
+        visionRadiusHexes: 2,
+      },
+    ]);
     expect(isPastTerrainCullOf(80, 0, [], allOpaque, army)).toBe(true);
   });
 
   it('shares hexes between armies on one road', () => {
-    const sources = armyCullSourcesOf(
-      [
-        [
+    const sources = armyCullSourcesOf([
+      {
+        hexes: [
           { q: 0, r: 0 },
           { q: 1, r: 0 },
         ],
-        [
+        visionRadiusHexes: 2,
+      },
+      {
+        hexes: [
           { q: 1, r: 0 },
           { q: 2, r: 0 },
         ],
-      ],
-      2,
-    );
+        visionRadiusHexes: 2,
+      },
+    ]);
     expect(sources.map((s) => `${s.q},${s.r}`)).toEqual(['0,0', '1,0', '2,0']);
     expect(hexDistance(sources[0], sources[2])).toBe(2);
+  });
+
+  it('gives every army the reach of its own vision radius, the larger one where two share a hex', () => {
+    const sources = armyCullSourcesOf([
+      {
+        hexes: [
+          { q: 0, r: 0 },
+          { q: 1, r: 0 },
+        ],
+        visionRadiusHexes: 1,
+      },
+      {
+        hexes: [
+          { q: 1, r: 0 },
+          { q: 2, r: 0 },
+        ],
+        visionRadiusHexes: 6,
+      },
+    ]);
+    const bySpot = Object.fromEntries(sources.map((s) => [`${s.q},${s.r}`, s.radius]));
+    expect(bySpot['0,0']).toBe(armyRevealReachHexes(1));
+    expect(bySpot['2,0']).toBe(armyRevealReachHexes(6));
+    expect(bySpot['1,0']).toBe(armyRevealReachHexes(6));
+    expect(armyRevealReachHexes(6)).toBeGreaterThan(armyRevealReachHexes(1));
   });
 });

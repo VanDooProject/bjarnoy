@@ -149,12 +149,14 @@ uniform float uShowEffective;
 // uArmyVisionCount entries of uArmyVisionSources are read (world units, the
 // same space the world position below is computed in). uArmyHexSize is the
 // world-unit size of one hex step along x and y, which turns a world offset
-// into the hex-euclidean distance used by armyRamps. uArmyRamp is
-// (blackStart, blackMargin, whiteStart, whiteMargin), all in hexes from the
-// troop, shared by every source rather than per-army, matching
-// FogVisionRadii.ArmyVisionRadiusHexes (backend) having no per-unit-type
-// variant to draw from either.
+// into the hex-euclidean distance used by armyRamps. uArmyVisionRadii[i] is
+// source i's own vision radius in hexes (ArmyResponse.visionRadius: the
+// best-sighted unit type plus Odin's Ravens). uArmyRamp is
+// (blackOffset, blackMargin, whiteOffset, whiteMargin), all in hexes and
+// relative to a source's own radius, so one set of ramp widths serves every
+// army whatever it sees.
 uniform vec2 uArmyVisionSources[${MAX_ARMY_VISION_SOURCES}];
+uniform float uArmyVisionRadii[${MAX_ARMY_VISION_SOURCES}];
 uniform float uArmyVisionCount;
 uniform vec2 uArmyHexSize;
 uniform vec4 uArmyRamp;
@@ -290,22 +292,24 @@ float tierAlpha(
  * §1c's troop ramps at a world-space point, in the mask's own units: x is the
  * unknown (white) ramp, y the out-of-sight (black) ramp — 0 where the troop
  * clears the fog, 1 where it does not, linear in between over the margin
- * given in uArmyRamp. The distance d is the hex-euclidean distance to the
- * nearest live source (world offset divided by uArmyHexSize), so a
- * neighbouring hex is 1 away and the clearing is a flat ellipse on screen
- * like the village's. The nearest source wins (min over distance), so two
+ * given in uArmyRamp. The distance d is the hex-euclidean distance to a
+ * live source (world offset divided by uArmyHexSize) less that source's own
+ * vision radius, so a neighbouring hex is 1 away and the clearing is a flat
+ * ellipse on screen like the village's. The most revealing source wins (min
+ * over the sources' ramps, each with its own radius), so two
  * armies standing close together read as one unbroken clearing. With no
  * sources the result is vec2(1.0), which min() against the mask leaves
  * untouched.
  */
 vec2 armyRamps(vec2 world) {
-  float d = 1e6;
+  if (uArmyVisionCount < 0.5) return vec2(1.0);
+  vec2 ramps = vec2(1.0);
   for (int i = 0; i < ${MAX_ARMY_VISION_SOURCES}; i++) {
     if (float(i) >= uArmyVisionCount) break;
-    d = min(d, length((world - uArmyVisionSources[i]) / uArmyHexSize));
+    float d = length((world - uArmyVisionSources[i]) / uArmyHexSize) - uArmyVisionRadii[i];
+    ramps = min(ramps, clamp(vec2((d - uArmyRamp.z) / uArmyRamp.w, (d - uArmyRamp.x) / uArmyRamp.y), 0.0, 1.0));
   }
-  if (uArmyVisionCount < 0.5) return vec2(1.0);
-  return clamp(vec2((d - uArmyRamp.z) / uArmyRamp.w, (d - uArmyRamp.x) / uArmyRamp.y), 0.0, 1.0);
+  return ramps;
 }
 
 // Outside the fetched/generated mask entirely (past the world's own

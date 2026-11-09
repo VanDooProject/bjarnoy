@@ -40,6 +40,8 @@ export function foreignArmyMarker(
     selected: false,
     returning: false,
     isFleet: army.isFleet,
+    // A foreign army lifts none of our fog, so the radius is never read.
+    visionRadius: 0,
     movement: armyOverlayMovement(army.movement),
     foreign: true,
     color: realmColor(owner, playerId),

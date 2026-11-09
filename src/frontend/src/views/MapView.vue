@@ -418,6 +418,8 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
         Object.fromEntries(a.stacks.map((s) => [s.unit, s.count])),
         unitCatalogue.byType,
       ) === 'fleet',
+    // The backend's own figure: best-sighted unit type plus the home settlement's Ravens.
+    visionRadius: a.visionRadius,
     // An `atHome`/`supporting` army has no movement at all and keeps sitting on its authoritative hex.
     movement: a.movement ? armyOverlayMovement(a.movement) : undefined,
   }));
@@ -442,9 +444,7 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
     world.dispatchDraft?.route ??
     world.fieldOrderDraft?.route ??
     (world.sendPicker && world.sendPicker.mission === 'move' ? [world.sendPicker.coord] : []);
-  // Odin's Ravens widen the live vision of this settlement's travelling armies.
-  const visionBonusRings = world.selectedSettlementId ? world.model.ravensRingsFor(world.selectedSettlementId) : 0;
-  return { armies, route, draftWaypoints, targets: overlayTargets(selected), visionBonusRings };
+  return { armies, route, draftWaypoints, targets: overlayTargets(selected) };
 });
 
 // Issue #93 "attack/raid target indicator": the settlement an attack/support
