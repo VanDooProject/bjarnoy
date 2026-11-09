@@ -7,7 +7,7 @@ using Bjarnoy.Infrastructure.World;
 namespace Bjarnoy.Api.Auth;
 
 /// <summary>
-/// What of one rival settlement a caller sees (<c>docs/design/map-fog-v2.md</c> §1g): whether its centre hex lies in the visible area
+/// What of one rival settlement a caller sees (<c>docs/design/map-fog-v2.md</c> §1h): whether its centre hex lies in the visible area
 /// (the caller's explored ground plus where the fog is not yet fully opaque), and the buildings delivered of it. A building outside
 /// the visible area is only in <see cref="VisibleBuildings"/> when it is a standing Tower or the Longhouse and its claim disc reaches
 /// visible ground; nothing else about an unseen hex (type, level) can leave through a read built on this.

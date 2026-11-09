@@ -1678,7 +1678,7 @@ export class WorldModel {
   /**
    * Whether data of another player's settlement (its realm border, its buildings) on this hex may be shown: the hex is explored or
    * its mist is not fully opaque (`FogCoverage.isOpaque`) — the same reach the server delivers rival data out to, 11.2 hexes past
-   * each of the player's sources (docs/design/map-fog-v2.md section 1g). `isExplored` stays the check for everything else (hover,
+   * each of the player's sources (docs/design/map-fog-v2.md section 1h). `isExplored` stays the check for everything else (hover,
    * clicks, founding).
    */
   isRivalDataVisible(q: number, r: number): boolean {

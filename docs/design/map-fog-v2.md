@@ -370,9 +370,9 @@ and treats as out of scope: whether the settlement-listing endpoints
 *other* callers use (world map view, guild rosters, etc., for an
 authenticated player who has already founded) are properly scoped. That's
 an existing-endpoint audit; the landing-page fix above is scoped narrowly
-to the one genuinely pre-authentication, current-state-exposing path. (Since resolved for rival settlements: see §1g.)
+to the one genuinely pre-authentication, current-state-exposing path. (Since resolved for rival settlements: see §1h.)
 
-### 1g. Rival settlements: fog gate
+### 1h. Rival settlements: fog gate
 
 A rival settlement is delivered as soon as you can see any of it through the fog: its Longhouse centre or one of its
 standing buildings lies where your fog is not fully opaque, or such ground lies inside the claim disc of its Longhouse or of

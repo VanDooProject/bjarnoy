@@ -59,7 +59,7 @@ public sealed record ExploredArea(
 
     /// <summary>
     /// Whether <paramref name="hex"/> is ground the owner sees now, for the part of the visible area that needs no stored history
-    /// (<c>docs/design/map-fog-v2.md</c> §1g): inside one of the current explored discs, or within
+    /// (<c>docs/design/map-fog-v2.md</c> §1h): inside one of the current explored discs, or within
     /// <see cref="FogVisionRadii.SourceMistOpaqueMargin"/> (straight-line) of a current settlement or tower explored ring, or within
     /// <see cref="FogVisionRadii.ArmyMistOpaqueMargin"/> of a live army's vision radius, where the fog is not yet fully opaque.
     /// Stored explored ground without a current source has no ramp and gets no such widening.
@@ -114,7 +114,7 @@ public sealed record ExploredArea(
 /// world they have actually explored, per <c>docs/design/map-fog-v2.md</c>
 /// §1e. Every fog-gated read — the fog chunks (<see cref="FogChunkService"/>),
 /// <c>GET /settlements/{id}/view</c>, <c>GET /worlds/{worldId}/settlements</c>
-/// and the world's rival walls and buildings (a rival's building hex is delivered when it lies in the visible area, §1g:
+/// and the world's rival walls and buildings (a rival's building hex is delivered when it lies in the visible area, §1h:
 /// <see cref="ExploredAreaService.VisibleAmongAsync"/>; its towers and Longhouse when any hex of their claim disc does) — shares this
 /// one computation of "which hexes has this owner explored"
 /// rather than reimplementing it, which would both duplicate the ring/tower/
@@ -306,7 +306,7 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
     }
 
     /// <summary>
-    /// Which of <paramref name="candidates"/> lie in the owner's visible area (<c>docs/design/map-fog-v2.md</c> §1g): their stored
+    /// Which of <paramref name="candidates"/> lie in the owner's visible area (<c>docs/design/map-fog-v2.md</c> §1h): their stored
     /// explored ground plus what they see now, widened to where the fog is not yet fully opaque (<see cref="ExploredArea.IsVisibleNow"/>).
     /// The gate for another realm's buildings. One stored-chunk read covers every candidate the current sources do not answer.
     /// </summary>

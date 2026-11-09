@@ -1,4 +1,4 @@
-// A rival's realm as the client draws it (docs/design/map-fog-v2.md section 1g): its Longhouse disc plus the full disc of every
+// A rival's realm as the client draws it (docs/design/map-fog-v2.md section 1h): its Longhouse disc plus the full disc of every
 // tower the server delivered, with no chain check; where two rivals' discs overlap the oldest settlement (smallest UUIDv7 id)
 // wins; and a hex outside every claim disc of its realm (a stray building, a wall outside the realm) has no border at all.
 import { describe, expect, it } from 'vitest';

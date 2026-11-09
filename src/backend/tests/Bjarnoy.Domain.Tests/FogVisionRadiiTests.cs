@@ -146,7 +146,7 @@ public class FogVisionRadiiTests
         }
     }
 
-    // The rival-data gate (docs/design/map-fog-v2.md section 1g) reads these; the frontend files below must equal them:
+    // The rival-data gate (docs/design/map-fog-v2.md section 1h) reads these; the frontend files below must equal them:
     //   fogRamp.ts FOG_MIST_OPAQUE_AT_RAMP = 0.8; FogMaskLayer.ts ARMY_FOG_WHITE_OFFSET = 0.75 and ARMY_FOG_WHITE_MARGIN = 6;
     //   the unknown ramp's width (FogMaskOptions.UnknownMarginHexes, FOG_RAMP_MARGIN_HEXES) = 14.
     [Fact]

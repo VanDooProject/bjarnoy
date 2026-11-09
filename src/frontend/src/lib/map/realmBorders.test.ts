@@ -1,5 +1,5 @@
 // Which hexes draw a realm border and which edges of them are stroked. A rival's border shows wherever the fog is not fully
-// opaque (docs/design/map-fog-v2.md section 1g), not only on explored ground; the player's own stays on explored ground.
+// opaque (docs/design/map-fog-v2.md section 1h), not only on explored ground; the player's own stays on explored ground.
 import { describe, expect, it } from 'vitest';
 import { hexesInRadius, type AxialCoord } from '../hex/coords';
 import { FogCoverage } from './fog/fogCoverage';

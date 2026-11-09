@@ -437,7 +437,7 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.ReadStrictAsync<SettlementViewResponse>(Ct);
         Assert.Equal((centre.Q, centre.R), (body.Q, body.R));
-        // The explored farm, and the Longhouse (§1g: sent as soon as a hex of its claim disc is visible, wherever it stands).
+        // The explored farm, and the Longhouse (§1h: sent as soon as a hex of its claim disc is visible, wherever it stands).
         Assert.Equivalent(
             new[] { (seenFarm.Q, seenFarm.R), (centre.Q, centre.R) },
             body.Buildings.Select(b => (b.Q, b.R)).ToArray());

@@ -11,7 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Bjarnoy.Api.IntegrationTests;
 
 /// <summary>
-/// <c>docs/design/map-fog-v2.md</c> §1g: a rival is delivered as soon as any of it is visible through the fog. The visible area is the
+/// <c>docs/design/map-fog-v2.md</c> §1h: a rival is delivered as soon as any of it is visible through the fog. The visible area is the
 /// caller's explored ground plus where the fog is not yet fully opaque (11.2 hexes past a settlement's or tower's explored ring); a
 /// building is sent when its own hex is in it, a tower or the Longhouse when any hex of its claim disc is. The caller here is a level 1
 /// Longhouse at (own.Q, own.R): explored radius 5, so on the q axis the visible area ends at +16 (5 + 11.2 = 16.2) and +17 is out of it.
