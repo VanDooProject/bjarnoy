@@ -104,6 +104,9 @@ const RIVER_SHAPES_BY_TYPE: Partial<Record<string, ReadonlySet<string>>> = {
   bridge: new Set(['straight', 'bend', 'bend60']),
 };
 
+/** The river shapes any river building can stand on (the union of `RIVER_SHAPES_BY_TYPE`). */
+const BUILDABLE_RIVER_SHAPES: ReadonlySet<string> = new Set(Object.values(RIVER_SHAPES_BY_TYPE).flatMap((shapes) => [...(shapes ?? [])]));
+
 /**
  * The river-art variant(s) that disqualify an otherwise-matching shape —
  * mirrors `BuildingCatalogue.cs`'s `SawmillExcludedRiverVariants`. Only the
@@ -144,6 +147,19 @@ export function riverBuildingAllowedHere(
   if (riverWidth !== 'river') return false;
   if (riverShape === undefined || !allowedShapes.has(riverShape)) return false;
   return !EXCLUDED_VARIANTS_BY_TYPE[type]?.has(riverVariant);
+}
+
+/**
+ * Why a river building can't take this river hex although the hex itself can host one, in the player's words, or `undefined`: the
+ * hex is a full-width Straight, Bend or Bend60 tile (the shapes a river building can stand on at all) but this building has no art for
+ * its curve (the Crop Mill needs a straight piece, the Sawmill no hairpin loop). Shown as an explained, disabled bubble; a stream, a
+ * widening, a spring, a confluence or a mouth gets no bubble at all (`riverBuildingAllowedHere`). The player is never told degrees.
+ */
+export function riverFitLock(type: string, riverShape: string | undefined, riverVariant: RiverVariant = 'plain', riverWidth: string = 'river'): string | undefined {
+  if (!RIVER_SHAPES_BY_TYPE[type] || type === 'bridge') return undefined;
+  if (riverWidth !== 'river' || riverShape === undefined || !BUILDABLE_RIVER_SHAPES.has(riverShape)) return undefined;
+  if (riverBuildingAllowedHere(type, riverShape, riverVariant, riverWidth)) return undefined;
+  return i18n.global.t('hud.ringMenu.riverLock.tooCurved') as string;
 }
 
 /**

@@ -28,6 +28,7 @@ import {
   palisadeLock,
   bridgeLock,
   riverBuildingAllowedHere,
+  riverFitLock,
   shrineLimitLock,
   storageHouseLock,
   towerLimitLock,
@@ -379,6 +380,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
       type === 'storagehouse' ? storageHouseLockFor() : undefined,
       isWallBuilding(type) ? palisadeLock(world.model.palisadePlacement(coord, type === 'palisadegate', queuedWalls())) : undefined,
       type === 'bridge' ? bridgeLock(world.model.bridgePlacement(coord)) : undefined,
+      riverFitLock(type, riverShapeAt(coord), riverVariantAt(coord), riverWidthAt(coord)),
       ...prerequisiteLocks(definition?.prerequisites, levels),
     ].filter((lock): lock is string => !!lock);
     return {
@@ -413,7 +415,12 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
         label: t(`hud.ringMenu.categories.${category.id}`),
         color: CATEGORY_COLORS[category.id] ?? 'var(--gold)',
         buildings: category.buildings
-          .filter((b) => riverBuildingAllowedHere(b.type, riverShapeAt(hex), riverVariantAt(hex), riverWidthAt(hex)))
+          // A river building whose art doesn't fit this stretch's curve stays as an explained, disabled bubble (`riverFitLock`).
+          .filter(
+            (b) =>
+              riverBuildingAllowedHere(b.type, riverShapeAt(hex), riverVariantAt(hex), riverWidthAt(hex)) ||
+              riverFitLock(b.type, riverShapeAt(hex), riverVariantAt(hex), riverWidthAt(hex)) !== undefined,
+          )
           .filter((b) => cropAllowedHere(b.type, currentIslandSoil()))
           .map((b) => ringBuildingFor(b.type, hex, levels)),
       }))

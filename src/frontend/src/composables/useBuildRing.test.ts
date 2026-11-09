@@ -152,5 +152,13 @@ describe('useBuildRing', () => {
     const types = ringOn('straight', 'river').categories.value.flatMap((c) => c.buildings.map((b) => b.id));
     expect(types.every((id) => ['sawmill', 'cropmill', 'bridge'].includes(id))).toBe(true);
     expect(types).toContain('sawmill');
+
+    // On a bend the Crop Mill stays as a disabled bubble that says (without degrees) it needs a straighter piece; the Sawmill is free.
+    const bend = ringOn('bend', 'river').categories.value.flatMap((c) => c.buildings);
+    const cropmill = bend.find((b) => b.id === 'cropmill')!;
+    const tooCurved = (enHud as unknown as { ringMenu: { riverLock: { tooCurved: string } } }).ringMenu.riverLock.tooCurved;
+    expect(cropmill.locks).toContain(tooCurved);
+    expect(tooCurved).not.toMatch(/\d|°|degree/i);
+    expect(bend.find((b) => b.id === 'sawmill')!.locks).not.toContain(tooCurved);
   });
 });
