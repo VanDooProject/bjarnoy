@@ -372,7 +372,9 @@
     "summaryLost": "lost, {n} lost",
     "summaryTied": "tied, {n} lost",
     "summaryLooted": "{n} looted",
-    "hexCoord": "Hex ({q}, {r})"
+    "hexCoord": "Hex ({q}, {r})",
+    "location": "Location",
+    "unknownOpponent": "Unknown"
   },
   "armyStatus": {
     "arriving": "Arriving",

@@ -1712,8 +1712,13 @@ export interface FieldBattleReportResponse {
   hex: HexPoint;
   sideAArmyId: string;
   sideASettlementId: string;
+  /** Settlement/owner names of each side; null when that settlement no longer exists. */
+  sideAName: string | null;
+  sideAOwnerName: string | null;
   sideBArmyId: string;
   sideBSettlementId: string;
+  sideBName: string | null;
+  sideBOwnerName: string | null;
   winner: string;
   sideAPower: number;
   sideBPower: number;

@@ -372,7 +372,9 @@
     "summaryLost": "verloren, {n} verloren",
     "summaryTied": "unentschieden, {n} verloren",
     "summaryLooted": "{n} erbeutet",
-    "hexCoord": "Hex ({q}, {r})"
+    "hexCoord": "Hex ({q}, {r})",
+    "location": "Ort",
+    "unknownOpponent": "Unbekannt"
   },
   "armyStatus": {
     "arriving": "Kommt an",

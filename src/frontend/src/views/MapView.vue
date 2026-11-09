@@ -330,6 +330,19 @@ watch(mode, (m) => {
   zoomDrivenTransition = false;
 });
 
+// A navigation that carries a camera anchor (e.g. a report's "show on map" link: `/settlement#world&q=..&r=..&z=..`)
+// moves the camera there. The anchor is also read once at setup (`initialCameraView`) for a reload or a fresh mount;
+// this covers the map already being mounted behind a modal. `flush: 'post'` runs it after the `mode` watcher above has
+// switched the renderer's mode.
+watch(
+  () => route.hash,
+  (hash) => {
+    const view = parseCameraHash(hash);
+    if (view) canvasRef.value?.renderer?.restoreCameraView(view.coord, view.zoom);
+  },
+  { flush: 'post' },
+);
+
 // Fog v2 (map-fog-v2.md §3): pushes a freshly fetched mask bitmap into the
 // renderer — same "watch both together" reasoning the army-overlay watcher
 // below uses, since the renderer may not exist yet on the tick a fetch
