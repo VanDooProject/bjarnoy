@@ -32,7 +32,7 @@ import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
-import { WORLD_HASH } from '../lib/mapModeRoute';
+import { WORLD_HASH, isWorldHash } from '../lib/mapModeRoute';
 import { parseCameraHash, serializeCameraHash } from '../lib/mapCameraHash';
 import { useAuthStore } from '../stores/auth';
 import { apiErrorMessage } from '../i18n/apiErrors';
@@ -116,7 +116,7 @@ const router = useRouter();
 // from the route rather than tracked as separate local state, so a zoom
 // crossing, a nav click, browser back/forward, or a direct URL load all agree with the
 // renderer on what to show.
-const mode = computed<RenderMode>(() => (route.hash === WORLD_HASH ? 'world' : 'settlement'));
+const mode = computed<RenderMode>(() => (isWorldHash(route.hash) ? 'world' : 'settlement'));
 // World map's own sea backdrop (must match WorldMapCanvas.vue's — that
 // component is still used standalone by AdminWorldReseedView's world
 // preview, which has no settlement/ring-menu UI to merge and so keeps its
@@ -143,10 +143,10 @@ const isMobile = useIsMobile();
 const queueDrawerOpen = ref(false);
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 
-// Settlement mode keeps its camera in the URL hash (lib/mapCameraHash.ts), so a reload or a shared link
+// Both modes keep their camera in the URL hash (lib/mapCameraHash.ts), so a reload or a shared link
 // lands on the same spot. Read once, before the first camera change rewrites the hash; a missing or
 // invalid hash leaves the default framing.
-const initialCameraView = mode.value === 'settlement' ? parseCameraHash(route.hash) : null;
+const initialCameraView = parseCameraHash(route.hash);
 const CAMERA_HASH_DEBOUNCE_MS = 300;
 let cameraHashTimer: ReturnType<typeof setTimeout> | undefined;
 function onCameraChange() {
@@ -155,9 +155,9 @@ function onCameraChange() {
 }
 function writeCameraHash() {
   const renderer = canvasRef.value?.renderer;
-  if (!renderer || mode.value !== 'settlement' || route.path !== '/settlement') return;
+  if (!renderer || route.path !== '/settlement') return;
   // Not router.replace: that would run the route watchers; vue-router keeps its own state in history.state.
-  const hash = serializeCameraHash(renderer.cameraView);
+  const hash = serializeCameraHash(renderer.cameraView, mode.value === 'world');
   history.replaceState(history.state, '', `${location.pathname}${location.search}${hash}`);
 }
 onUnmounted(() => clearTimeout(cameraHashTimer));

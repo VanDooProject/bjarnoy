@@ -2367,7 +2367,7 @@ export class HexMapRenderer {
         ? this.settlementCameraOrigin()
         : options.confineCamera
           ? this.worldConfinedCameraOrigin()
-          : { x: 0, y: 0, zoom: WORLD_DEFAULT_ZOOM };
+          : this.worldCameraOrigin();
     this.loadState = options.mode === 'settlement' ? { phase: 'terrain' } : READY_LOAD_STATE;
   }
 
@@ -2400,6 +2400,14 @@ export class HexMapRenderer {
     );
     this.confineLimits = frame.limits;
     return frame.camera;
+  }
+
+  /** World mode's resting camera: on the player's settlement (the rest of the map is unexplored mist), else the hex origin. */
+  private worldCameraOrigin(): Camera {
+    const settlement = this.settlement();
+    if (!settlement) return { x: 0, y: 0, zoom: WORLD_DEFAULT_ZOOM };
+    const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
+    return { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2, zoom: WORLD_DEFAULT_ZOOM };
   }
 
   private settlementCameraOrigin(): Camera {
