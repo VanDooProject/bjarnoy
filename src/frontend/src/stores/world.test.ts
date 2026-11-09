@@ -1199,6 +1199,50 @@ describe('useWorldStore bootstrapLiveWorld', () => {
 
     expect(store.model?.isFrozenEnabled()).toBe(true);
   });
+
+  // Regression: see 'refreshCampStates' - /islands hides the camps of unseen islands from a caller it cannot identify.
+  it('asks for the islands as the local player, so an account-less player gets the camps of the islands they have seen', async () => {
+    const store = await loadStoreModule(false);
+    // The landing page bootstraps before any realm is known: no `ownerId` yet, the browser's player id stands in.
+    const { usePlayerStore } = await import('./player');
+    expect(store.ownerId).toBeNull();
+    listWorlds.mockReset().mockResolvedValue([
+      {
+        id: 'world-1',
+        name: 'Kettil Sea',
+        status: 'Running',
+        joinable: true,
+        joinableReason: 'None',
+        playerCount: 0,
+        maxPlayers: 100,
+        freeSlots: 100,
+        startsAt: null,
+      },
+    ]);
+    getWorld.mockReset().mockResolvedValue({
+      id: 'world-1',
+      name: 'Kettil Sea',
+      seed: 1,
+      radius: 30,
+      maxPlayers: 100,
+      status: 'Running',
+      islandCount: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'None',
+      startsAt: null,
+      endbossTriggered: false,
+      frozenIslesEnabled: false,
+      speedFactor: 1,
+      generation: generationResponse(),
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    });
+    getIslands.mockReset().mockResolvedValue([]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(getIslands).toHaveBeenCalledWith('world-1', usePlayerStore().id);
+  });
 });
 
 describe('useWorldStore restoreLiveSettlement', () => {
@@ -2047,12 +2091,39 @@ describe('useWorldStore refreshCampStates', () => {
 
     await store.refreshCampStates();
 
-    expect(getWorldCamps).toHaveBeenCalledWith('world-1');
+    expect(getWorldCamps).toHaveBeenCalledWith('world-1', expect.any(String));
     expect(store.model.campAt({ q: 2, r: 1 })?.empty).toBe(true);
     expect(store.campStatesVersion).toBe(1);
 
     await store.refreshCampStates();
     expect(store.campStatesVersion).toBe(1);
+  });
+
+  // Regression: an account-less player is identified by X-Owner-Id alone, and the server cuts the camps of /islands and
+  // /camps off to the islands the caller has seen: without the header it answered no camps, so the map drew none.
+  it('sends the local player id, which identifies an account-less player to the server', async () => {
+    getWorldCamps.mockReset().mockResolvedValue([]);
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    await store.refreshCampStates();
+
+    expect(getWorldCamps).toHaveBeenCalledWith('world-1', 'player-1');
+  });
+
+  // The landing page bootstraps the world before it knows any settlement, so `ownerId` is still null: the browser's own
+  // player id has to identify the caller then (an account-less visitor sees the camps of their pinned island).
+  it('falls back to the browser player id while no realm is loaded yet', async () => {
+    getWorldCamps.mockReset().mockResolvedValue([]);
+    const store = await loadStoreModule(false);
+    const { usePlayerStore } = await import('./player');
+    store.worldId = 'world-1';
+    expect(store.ownerId).toBeNull();
+
+    await store.refreshCampStates();
+
+    expect(getWorldCamps).toHaveBeenCalledWith('world-1', usePlayerStore().id);
   });
 
   it('adds a camp it first learns about from the poll (a newly seen island) with its state', async () => {
