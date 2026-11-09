@@ -132,7 +132,7 @@ const producerTypes = computed(() =>
 const startStock = reactive({ ...FOUNDING_STOCK });
 const producerCounts = reactive<Record<string, number>>({ ...DEFAULT_PRODUCER_COUNTS });
 const horizonDays = ref(60);
-const storageCount = ref(2);
+const producersPerTower = ref(1);
 const joinTime = ref(DEFAULT_JOIN_TIME);
 const producersAhead = ref(DEFAULT_PRODUCERS_AHEAD);
 const aheadUnlimited = ref(false);
@@ -188,7 +188,7 @@ function run() {
     producerCounts: { ...producerCounts },
     settlerCost: settlerCost.value,
     settleType: 'cartworkshop',
-    storageCount: Math.max(1, Number(storageCount.value) || 1),
+    producersPerTower: Math.max(0, Math.floor(Number(producersPerTower.value) || 0)),
     joinTime: joinTime.value || DEFAULT_JOIN_TIME,
     producersAhead: aheadUnlimited.value ? Infinity : Math.max(0, Number(producersAhead.value) || 0),
     feasts: feasts.value,
@@ -402,8 +402,8 @@ function costText(line: { wood: number; stone: number; food: number; iron: numbe
               <input v-model.number="horizonDays" type="number" min="1" max="365" step="1" />
             </label>
             <label>
-              {{ $t('adminEconomy.pacing.storageCount') }}
-              <input v-model.number="storageCount" type="number" min="1" max="10" step="1" data-testid="storage-count" />
+              {{ $t('adminEconomy.pacing.producersPerTower') }}
+              <input v-model.number="producersPerTower" type="number" min="0" max="5" step="1" data-testid="producers-per-tower" />
             </label>
             <label>
               {{ $t('adminEconomy.pacing.joinTime') }}

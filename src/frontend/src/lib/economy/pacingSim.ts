@@ -1,6 +1,5 @@
 import { FEAST_HOURS, RENOWN_BASE_THRESHOLD, feastCost, feastRenown } from './feasts';
 import type { BuildingDefinitionResponse, BuildingPrerequisiteResponse, ResourceLine } from '../../api/types';
-import { additionalStorageHouseRequirement } from '../map/buildingEconomy';
 import { SETTLERS_PER_FOUNDING } from '../founding';
 
 // Deterministic minute-step pacing model of ONE settlement, generic over
@@ -46,7 +45,7 @@ const LONGHOUSE = 'longhouse';
 const TOWN_SQUARE = 'townsquare';
 const TOWN_SQUARE_MAX_LEVEL = 10;
 const STORAGE = 'storagehouse';
-const STORAGE_FULL_FRACTION = 0.85;
+const GREAT_STOREHOUSE = 'greatstorehouse';
 
 export interface PacingParams {
   startStock: ResourceLine;
@@ -69,7 +68,7 @@ export interface PacingParams {
    * level with it; Infinity limits them by storage alone. Default 3.
    */
   producersAhead?: number;
-  /** Renown needed for the second settlement. Default 55 000. */
+  /** Renown needed for the second settlement. Default 80 000 (RENOWN_BASE_THRESHOLD). */
   renownThreshold?: number;
   /** Renown per standing building level per hour. Default 1. */
   renownPerLevelHour?: number;
@@ -78,12 +77,11 @@ export interface PacingParams {
   /** Renown a feast grants at a Town Square level. Default `feastRenown` (feasts.ts). */
   feastGain?: (townSquare: number) => number;
   /**
-   * Storage houses the player may own (the first stands at level 1 from the
-   * start; the rest are placed when storage runs short). A settlement may
-   * build any number of them — the server has no one-per-settlement rule.
-   * Defaults to 1.
+   * Producers of each type added per tower the Longhouse allows (`BuildingCatalogue.MaxTowers`: from Longhouse 3, then one
+   * more every second level). They start at level 0 and are placed when affordable. Unlike the starting set they do not
+   * hold the Longhouse back. Default 1.
    */
-  storageCount?: number;
+  producersPerTower?: number;
 }
 
 export interface PacingSeries {
@@ -196,7 +194,8 @@ function compile(defs: BuildingDefinitionResponse[] | undefined): Compiled[] {
 }
 
 interface Job {
-  kind: 'lh' | 'storage' | 'producer';
+  kind: 'lh' | 'storage' | 'producer' | 'civic';
+  civicType?: string;
   /** Producer or storage-house instance index (unused for lh). */
   index: number;
   finishMinute: number;
@@ -214,6 +213,9 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
   const storageDefs = defsOf(STORAGE);
   const lhMax = lhDefs.length;
   const storageMax = storageDefs.length;
+  const gsDefs = defsOf(GREAT_STOREHOUSE);
+  // One entry per Great Storehouse placed; the level it stands at.
+  const gsLevels: number[] = [];
 
   // Owned producers, flat. Only types present in the catalogue with a positive count.
   const pType: string[] = [];
@@ -221,6 +223,8 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
   const pLevel: number[] = [];
   const pBusy: boolean[] = [];
   const pResource: number[] = [];
+  /** Whether the producer is one of the starting set (those hold the Longhouse back and are upgraded first). */
+  const pStarting: boolean[] = [];
   for (const type of Object.keys(params.producerCounts)) {
     const defs = defsOf(type);
     if (defs.length === 0 || type === LONGHOUSE || type === STORAGE) continue;
@@ -231,6 +235,25 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
       pLevel.push(defs[0].reqLh > 1 ? 0 : 1);
       pBusy.push(false);
       pResource.push(primary);
+      pStarting.push(true);
+    }
+  }
+  const towerTypes = Object.keys(params.producerCounts).filter((t) => params.producerCounts[t] > 0 && defsOf(t).length > 0 && t !== LONGHOUSE && t !== STORAGE);
+  const perTower = Math.max(0, Math.floor(params.producersPerTower ?? 1));
+  let towersCounted = 0;
+  /** Mirrors BuildingCatalogue.MaxTowers. */
+  const maxTowers = (l: number) => (l < 3 ? 0 : 1 + Math.max(0, Math.floor((l - 5) / 2)));
+  function addTowerProducers(l: number) {
+    const towers = maxTowers(l);
+    while (towersCounted < towers) {
+      towersCounted++;
+      for (const type of towerTypes) {
+        const defs = defsOf(type);
+        for (let k = 0; k < perTower; k++) {
+          pType.push(type); pDefs.push(defs); pLevel.push(0); pBusy.push(false);
+          pResource.push(primaryResource(defs[0].prod)); pStarting.push(false);
+        }
+      }
     }
   }
   const standingBest = new Map<string, number>();
@@ -252,12 +275,11 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
   const feastGain = params.feastGain ?? feastRenown;
 
   let lh = lhMax > 0 ? 1 : 0;
-  // One entry per owned storage house; 0 = not built yet.
-  const storageLevels: number[] = [];
-  for (let i = 0; i < Math.max(1, Math.floor(params.storageCount ?? 1)); i++) {
-    storageLevels.push(i === 0 && storageMax > 0 ? 1 : 0);
-  }
+  // One entry per owned Storage House: the first stands at level 1 from the start, more are placed when storage runs short.
+  const storageLevels: number[] = storageMax > 0 ? [1] : [];
   let storageBusy = false;
+  const civicLevels = new Map<string, number>();
+  let civicBusy = false;
   let lhBusy = false;
 
   const stock = Float64Array.of(
@@ -275,15 +297,23 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
   function refresh() {
     rate.fill(0);
     capacity.fill(BASE_STORAGE_CAPACITY);
+    standingBest.clear();
+    sumLevels = lh;
     if (lh > 0) addDef(lhDefs[lh - 1]);
     let storageBest = 0;
     for (const level of storageLevels) {
       if (level > 0) addDef(storageDefs[level - 1]);
       storageBest = Math.max(storageBest, level);
+      sumLevels += level;
     }
-    standingBest.clear();
-    sumLevels = lh;
-    for (const level of storageLevels) sumLevels += level;
+    for (const g of gsLevels) {
+      if (g > 0) addDef(gsDefs[g - 1]);
+      sumLevels += g;
+    }
+    for (const [t, l] of civicLevels) {
+      sumLevels += l;
+      if (l > 0) standingBest.set(t, l);
+    }
     for (let i = 0; i < pLevel.length; i++) {
       if (pLevel[i] === 0) continue; // not built yet
       addDef(pDefs[i][pLevel[i] - 1]);
@@ -292,6 +322,8 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
     }
     if (lh > 0) standingBest.set(LONGHOUSE, lh);
     if (storageBest > 0) standingBest.set(STORAGE, storageBest);
+    const gsBest = Math.max(0, ...gsLevels);
+    if (gsBest > 0) standingBest.set(GREAT_STOREHOUSE, gsBest);
   }
   function addDef(d: Compiled) {
     for (let r = 0; r < 4; r++) {
@@ -349,8 +381,13 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
         lh++;
         lhBusy = false;
         lhReachedAt[lh] = minute;
+        addTowerProducers(lh);
+      } else if (job.kind === 'civic') {
+        civicLevels.set(job.civicType!, (civicLevels.get(job.civicType!) ?? 0) + 1);
+        civicBusy = false;
       } else if (job.kind === 'storage') {
-        storageLevels[job.index]++;
+        if (job.index < 0) gsLevels[-job.index - 2]++;
+        else storageLevels[job.index]++;
         storageBusy = false;
       } else {
         pLevel[job.index]++;
@@ -371,7 +408,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
     }
 
     // 3. second settlement: Cart Workshop placeable, renown reached, settlers affordable
-    if (secondSettlementAt === null && renown >= renownThreshold && settleDef && placeable(settleDef, false)) {
+    if (secondSettlementAt === null && renown >= renownThreshold && settleDef && (civicLevels.get(params.settleType) ?? 0) >= 1) {
       if (stock[0] >= sc[0] && stock[1] >= sc[1] && stock[2] >= sc[2] && stock[3] >= sc[3]) secondSettlementAt = minute;
     }
 
@@ -416,6 +453,7 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
       const next = lhDefs[lh];
       lhWanted = placeable(next, true);
       for (let i = 0; lhWanted && i < pLevel.length; i++) {
+        if (!pStarting[i]) continue;
         if (pLevel[i] >= Math.min(lh + ahead, pDefs[i].length)) continue;
         // A producer that cannot move (next level unplaceable or too big to store) is not waited for.
         const up = pDefs[i][pLevel[i]];
@@ -432,43 +470,108 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
       }
     }
 
-    // (b) storage: when a resource is nearly full, or the next Longhouse
-    // level costs more than can be stored, raise the lowest storage house —
-    // placing a new one (level 0 -> 1) before upgrading one already standing.
-    // An additional house (level 0) may only be started once another stands
-    // at the level BuildingCatalogue.AdditionalStorageHouseRequirement asks for.
-    const heldHouses = storageLevels.filter((l) => l > 0).length;
-    const need = additionalStorageHouseRequirement(heldHouses);
-    const additionalAllowed = heldHouses < 1 || storageLevels.filter((l) => l >= need.level).length >= need.count;
-    let target = -1;
-    for (let i = 0; i < storageLevels.length; i++) {
-      if (storageLevels[i] >= storageMax) continue;
-      if (storageLevels[i] === 0 && !additionalAllowed) continue;
-      if (target < 0 || storageLevels[i] < storageLevels[target]) target = i;
-    }
-    if (!storageBusy && target >= 0) {
-      let full = false;
-      for (let r = 0; r < 4; r++) if (stock[r] > STORAGE_FULL_FRACTION * capacity[r]) full = true;
-      if (!full && lh > 0 && lh < lhMax) {
-        const nextLh = lhDefs[lh];
-        for (let r = 0; r < 4; r++) if (nextLh.cost[r] > capacity[r]) full = true;
+    // (a2) the settle building and its prerequisite chain, paid for like any building.
+    if (!civicBusy && settleDef) {
+      const chain: { type: string; level: number }[] = [...settleDef.prereqs.map((p) => ({ type: p.type, level: p.level })), { type: params.settleType, level: 1 }];
+      for (const step of chain) {
+        const have = civicLevels.get(step.type) ?? 0;
+        if (have >= step.level || (standingBest.get(step.type) ?? 0) >= step.level) continue;
+        // A step on a type the player owns as a producer is waited for, not built here.
+        if (pType.includes(step.type)) break;
+        const d = defsOf(step.type)[have];
+        if (d && placeable(d, true) && affordable(d) && usedSlots + d.slotCost <= slots) {
+          spend(d);
+          jobs.push({ kind: 'civic', civicType: step.type, index: 0, finishMinute: minute + Math.ceil(d.buildMinutes), slotCost: d.slotCost });
+          usedSlots += d.slotCost;
+          civicBusy = true;
+          return;
+        }
+        break;
       }
-      const next = storageDefs[storageLevels[target]];
-      if (full && placeable(next, true) && affordable(next) && usedSlots + next.slotCost <= slots) {
-        spend(next);
-        jobs.push({ kind: 'storage', index: target, finishMinute: minute + Math.ceil(next.buildMinutes), slotCost: next.slotCost });
-        usedSlots += next.slotCost;
-        storageBusy = true;
-        return;
+    }
+
+    // (b) storage, only when it is needed: the next Longhouse level or some producer's next level (within the
+    // producers-ahead limit) costs more than the current capacity of a resource. Candidates: upgrade the lowest Storage
+    // House, a new Storage House (only when none can be upgraded), upgrade the lowest Great Storehouse, a new Great
+    // Storehouse (the n-th needs n Storage Houses at max level). The best capacity gain per total cost wins.
+    if (!storageBusy) {
+      let needed = false;
+      if (lh > 0 && lh < lhMax) {
+        const nextLh = lhDefs[lh];
+        for (let r = 0; r < 4; r++) if (nextLh.cost[r] > capacity[r]) needed = true;
+      }
+      for (let i = 0; !needed && i < pLevel.length; i++) {
+        const nd = pDefs[i][pLevel[i]];
+        if (!nd || pLevel[i] >= lh + ahead) continue;
+        for (let r = 0; r < 4; r++) if (nd.cost[r] > capacity[r]) needed = true;
+      }
+      if (needed) {
+        type Cand = { def: Compiled; gain: number; act: () => number };
+        const cands: Cand[] = [];
+        let low = -1;
+        for (let i = 0; i < storageLevels.length; i++) if (storageLevels[i] < storageMax && (low < 0 || storageLevels[i] < storageLevels[low])) low = i;
+        if (low >= 0) {
+          const l = storageLevels[low];
+          const d = storageDefs[l];
+          cands.push({ def: d, gain: d.storage[0] - (l > 0 ? storageDefs[l - 1].storage[0] : 0), act: () => low });
+        }
+        const canUpgradeSome = storageLevels.some((l) => l < storageMax && placeable(storageDefs[l], true));
+        if (storageMax > 0 && !canUpgradeSome) {
+          cands.push({ def: storageDefs[0], gain: storageDefs[0].storage[0], act: () => { storageLevels.push(0); return storageLevels.length - 1; } });
+        }
+        let glow = -1;
+        for (let j = 0; j < gsLevels.length; j++) if (gsLevels[j] < gsDefs.length && (glow < 0 || gsLevels[j] < gsLevels[glow])) glow = j;
+        if (glow >= 0) {
+          const l = gsLevels[glow];
+          const d = gsDefs[l];
+          cands.push({ def: d, gain: d.storage[0] - (l > 0 ? gsDefs[l - 1].storage[0] : 0), act: () => -(glow + 2) });
+        }
+        const maxed = storageLevels.filter((l) => l >= storageMax).length;
+        if (gsDefs.length > 0 && maxed > gsLevels.length) {
+          cands.push({ def: gsDefs[0], gain: gsDefs[0].storage[0], act: () => { gsLevels.push(0); return -(gsLevels.length - 1 + 2); } });
+        }
+        let best: Cand | null = null;
+        let bestScore = -1;
+        for (const c of cands) {
+          if (!placeable(c.def, true) || !affordable(c.def) || usedSlots + c.def.slotCost > slots) continue;
+          const score = c.gain / Math.max(1, c.def.total);
+          if (score > bestScore) {
+            bestScore = score;
+            best = c;
+          }
+        }
+        if (best) {
+          const index = best.act();
+          spend(best.def);
+          jobs.push({ kind: 'storage', index, finishMinute: minute + Math.ceil(best.def.buildMinutes), slotCost: best.def.slotCost });
+          usedSlots += best.def.slotCost;
+          storageBusy = true;
+          return;
+        }
       }
     }
 
     // (c) best producer upgrade: lowest scarcity-weighted payback
-    if (lhWanted) return;
+    let maxPayback = Infinity;
+    if (lhWanted) {
+      // Saving for the Longhouse: only an upgrade that pays for itself before the Longhouse would be affordable anyway.
+      const next = lhDefs[lh];
+      let hours = 0;
+      for (let r = 0; r < 3; r++) {
+        const short = next.cost[r] - stock[r];
+        if (short > 0) hours = Math.max(hours, rate[r] > 0 ? short / rate[r] : Infinity);
+      }
+      maxPayback = hours;
+      if (!(maxPayback > 0)) return;
+    }
     let best = -1;
     let bestScore = Infinity;
+    // The starting set is upgraded first, the tower-added producers only when none of it can move.
+    for (const starting of [true, false]) {
+    if (best >= 0) break;
     for (let i = 0; i < pLevel.length; i++) {
       if (pBusy[i]) continue;
+      if (pStarting[i] !== starting) continue;
       const defs = pDefs[i];
       const level = pLevel[i];
       if (level >= defs.length || level >= lh + ahead) continue;
@@ -476,11 +579,14 @@ export function simulatePacing(byType: Record<string, BuildingDefinitionResponse
       const gain = next.prodTotal - (level > 0 ? defs[level - 1].prodTotal : 0);
       if (gain <= 0 || !placeable(next, true) || !affordable(next) || usedSlots + next.slotCost > slots) continue;
       const weight = 1 + 1 / (1 + rate[pResource[i]] / 50);
+      // While saving for the Longhouse only an upgrade that pays for itself before it would be affordable anyway.
+      if (next.total / gain > maxPayback) continue;
       const score = next.total / gain / weight;
       if (score < bestScore) {
         bestScore = score;
         best = i;
       }
+    }
     }
     if (best >= 0) {
       const next = pDefs[best][pLevel[best]];

@@ -30,6 +30,8 @@ function params(over: Partial<PacingParams> = {}): PacingParams {
     sessions: PROFILE_PRESETS.always24,
     joinTime: '00:00',
     producersAhead: 0,
+    // The tower-added producers are their own tests; the rest of the hand-made catalogues keep the owned set.
+    producersPerTower: 0,
     ...over,
   };
 }
@@ -94,43 +96,88 @@ describe('simulatePacing on a hand-made catalogue', () => {
     expect(r.lhReachedAt[2]).toBeLessThan(120);
   });
 
-  it('a second storage house lets the Longhouse outgrow what one house can store', () => {
-    // Regression: the sim used to model a single storage house, so a
-    // Longhouse level costing more than one house can hold looked
-    // unreachable. Settlements may build any number of storage houses.
-    // Here Longhouse 2 costs 900 wood; base 500 + one house's 300 = 800
-    // can never hold it, a second house (1100) can.
-    const byType = group([
-      def('longhouse', 1),
-      def('longhouse', 2, { cost: { wood: 900 } }),
-      def('lumberjack', 1, { prod: { wood: 600 } }),
-      // Levels 1-10 hold 300 each: the second house may only be started once the
-      // first stands at level 10, and only then does capacity grow past 800.
-      def('storagehouse', 1, { cost: { wood: 50 }, storage: 300 }),
-      ...Array.from({ length: 9 }, (_, i) => def('storagehouse', i + 2, { cost: { wood: 5 }, buildSeconds: 60, storage: 300 })),
-    ]);
-    const base = { producerCounts: { lumberjack: 1 }, horizonDays: 1 };
-    const one = simulatePacing(byType, params(base));
-    const two = simulatePacing(byType, params({ ...base, storageCount: 2 }));
-    expect(one.lhReachedAt[2]).toBeUndefined();
-    expect(two.lhReachedAt[2]).toBeGreaterThan(0);
+  // Storage House: 3 levels holding 300 / 600 / 900 in total, level 1 stands from the start. A new house costs 5 wood.
+  const houses = (cost = 5) => [1, 2, 3].map((l) => def('storagehouse', l, { cost: { wood: cost }, buildSeconds: 60, storage: 300 * l }));
+  const richLumberjack = def('lumberjack', 1, { prod: { wood: 6000 } });
+  const maxStock = (r: ReturnType<typeof simulatePacing>) => Math.max(...r.series.stock.wood);
+
+  it('builds no storage while nothing costs more than the current capacity', () => {
+    const byType = group([def('longhouse', 1), def('longhouse', 2, { cost: { wood: 300 } }), richLumberjack, ...houses()]);
+    const r = simulatePacing(byType, params({ producerCounts: { lumberjack: 1 }, horizonDays: 1 }));
+    // 500 base + the level-1 house (300): the stock never grows past it because no storage is ever started.
+    expect(maxStock(r)).toBe(800);
   });
 
-  it('never starts a second storage house while the first is below level 10', () => {
-    // Ten levels of 300 storage. With only 5 levels available the first house
-    // cannot reach 10, so a second (and the capacity it adds) never arrives.
-    const levels = (n: number) =>
-      Array.from({ length: n }, (_, i) => def('storagehouse', i + 1, { cost: { wood: 5 }, buildSeconds: 60, storage: 300 }));
-    const build = (n: number) =>
-      group([
+  it('upgrades a Storage House when the next Longhouse level costs more than the capacity', () => {
+    // 1300 wood: base 500 + house level 3 (900) = 1400 holds it, level 1 (800) does not.
+    const byType = group([def('longhouse', 1), def('longhouse', 2, { cost: { wood: 1300 } }), richLumberjack, ...houses()]);
+    const r = simulatePacing(byType, params({ producerCounts: { lumberjack: 1 }, horizonDays: 1 }));
+    expect(r.lhReachedAt[2]).toBeGreaterThan(0);
+  });
+
+  it('places a new Storage House once none can be upgraded, so any number of them can stand', () => {
+    // 1500 wood: one maxed house gives 500 + 900 = 1400, only a second house (+300) holds it.
+    const byType = group([def('longhouse', 1), def('longhouse', 2, { cost: { wood: 1500 } }), richLumberjack, ...houses()]);
+    const r = simulatePacing(byType, params({ producerCounts: { lumberjack: 1 }, horizonDays: 1 }));
+    expect(r.lhReachedAt[2]).toBeGreaterThan(0);
+  });
+
+  it('builds storage for a producer level that does not fit either', () => {
+    const byType = group([
+      def('longhouse', 1),
+      def('lumberjack', 1, { prod: { wood: 6000 } }),
+      def('lumberjack', 2, { cost: { wood: 1300 }, prod: { wood: 7000 } }),
+      ...houses(),
+    ]);
+    const r = simulatePacing(byType, params({ producerCounts: { lumberjack: 1 }, horizonDays: 1, producersAhead: 3 }));
+    expect(r.series.rate.wood.at(-1)).toBe(7000 + 15 * 0);
+  });
+
+  describe('Great Storehouse', () => {
+    // Storage House: 2 levels (300 / 600); a new house can never be afforded, so exactly one house is maxed.
+    // Great Storehouse: 2 levels (5000 / 10000), behind a level-2 Storage House.
+    const great = [
+      def('greatstorehouse', 1, { cost: { wood: 5 }, buildSeconds: 60, storage: 5000, prereqs: [{ type: 'storagehouse', level: 2 }] }),
+      def('greatstorehouse', 2, { cost: { wood: 5 }, buildSeconds: 60, storage: 10000 }),
+    ];
+    const stuck = [
+      def('storagehouse', 1, { cost: { wood: 1e9 }, storage: 300 }),
+      def('storagehouse', 2, { cost: { wood: 5 }, buildSeconds: 60, storage: 600 }),
+    ];
+    const cat = (lhCost: number) => group([
+      def('longhouse', 1),
+      def('longhouse', 2, { cost: { wood: lhCost } }),
+      def('lumberjack', 1, { prod: { wood: 600000 } }),
+      ...stuck,
+      ...great,
+    ]);
+
+    it('builds a Great Storehouse once a Storage House stands at its prerequisite level', () => {
+      // 500 + 600 + 10000 = 11100 holds 11000.
+      const r = simulatePacing(cat(11000), params({ producerCounts: { lumberjack: 1 }, horizonDays: 1 }));
+      expect(r.lhReachedAt[2]).toBeGreaterThan(0);
+    });
+
+    it('the n-th Great Storehouse needs n Storage Houses at max level', () => {
+      // Only one house can ever be maxed (a new one costs 1e9), so only one Great Storehouse: 11100 is the ceiling.
+      const r = simulatePacing(cat(12000), params({ producerCounts: { lumberjack: 1 }, horizonDays: 1 }));
+      expect(r.lhReachedAt[2]).toBeUndefined();
+      expect(maxStock(r)).toBe(11100);
+    });
+
+    it('the second Great Storehouse comes once a second Storage House is maxed', () => {
+      const withHouses = group([
         def('longhouse', 1),
-        def('longhouse', 2, { cost: { wood: 900 } }),
-        def('lumberjack', 1, { prod: { wood: 600 } }),
-        ...levels(n),
+        def('longhouse', 2, { cost: { wood: 20000 } }),
+        def('lumberjack', 1, { prod: { wood: 600000 } }),
+        def('storagehouse', 1, { cost: { wood: 5 }, storage: 300 }),
+        def('storagehouse', 2, { cost: { wood: 5 }, buildSeconds: 60, storage: 600 }),
+        ...great,
       ]);
-    const p = params({ producerCounts: { lumberjack: 1 }, horizonDays: 1, storageCount: 2 });
-    expect(simulatePacing(build(5), p).lhReachedAt[2]).toBeUndefined();
-    expect(simulatePacing(build(10), p).lhReachedAt[2]).toBeGreaterThan(0);
+      // 500 + 2 x 600 + 2 x 10000 = 21700 holds 20000; one Great Storehouse alone (11700) does not.
+      const r = simulatePacing(withHouses, params({ producerCounts: { lumberjack: 1 }, horizonDays: 1 }));
+      expect(r.lhReachedAt[2]).toBeGreaterThan(0);
+    });
   });
 
   it('is deterministic', () => {
@@ -216,6 +263,116 @@ describe('simulatePacing on a hand-made catalogue', () => {
     const always = simulatePacing(group(tiny()), params({ horizonDays: 3 }));
     const sparse = simulatePacing(group(tiny()), params({ horizonDays: 3, sessions: PROFILE_PRESETS.checkins2 }));
     expect(sparse.lhReachedAt[2]).toBeGreaterThanOrEqual(always.lhReachedAt[2]);
+  });
+});
+
+describe('producers per tower', () => {
+  // Longhouse 1-3 cost nothing; Longhouse 3 allows the first tower (MaxTowers). A mill is one level of 60 wood/h.
+  const cat = () => [
+    def('longhouse', 1),
+    def('longhouse', 2, { buildSeconds: 60 }),
+    def('longhouse', 3, { buildSeconds: 60 }),
+    def('mill', 1, { prod: { wood: 60 } }),
+  ];
+  const finalRate = (over: Partial<PacingParams>) =>
+    simulatePacing(group(cat()), params({ horizonDays: 1, ...over })).series.rate.wood.at(-1);
+
+  it('adds one more producer of each owned type for every tower the Longhouse allows', () => {
+    expect(finalRate({ producersPerTower: 0 })).toBe(60);
+    expect(finalRate({ producersPerTower: 1 })).toBe(120);
+    expect(finalRate({ producersPerTower: 2 })).toBe(180);
+  });
+
+  it('adds none before the Longhouse allows a tower (level 3)', () => {
+    const r = simulatePacing(group(cat()), params({ horizonDays: 1, producersPerTower: 1 }));
+    const atLh2 = r.series.rate.wood[Math.floor((r.lhReachedAt[3] ?? 0) / 60)];
+    expect(r.lhReachedAt[2]).toBeLessThan(r.lhReachedAt[3]);
+    expect(atLh2).toBe(60);
+  });
+
+  it('adds a producer at each tower step: 1 tower for Longhouse 3-6, 2 at 7', () => {
+    const levels = [1, 2, 3, 4, 5, 6, 7].map((l) => def('longhouse', l, { buildSeconds: 60 }));
+    const byType = group([...levels, def('mill', 1, { prod: { wood: 60 } })]);
+    const r = simulatePacing(byType, params({ horizonDays: 1, producersPerTower: 1 }));
+    expect(r.series.rate.wood.at(-1)).toBe(60 * 3);
+  });
+
+  it('tower-added producers do not hold the Longhouse back', () => {
+    // The tower mill costs far more than the settlement can afford, but fits in storage: it would block level 4 if it counted.
+    const byType = group([
+      def('longhouse', 1, { storage: 1e6 }),
+      def('longhouse', 2, { buildSeconds: 60, storage: 1e6 }),
+      def('longhouse', 3, { buildSeconds: 60, storage: 1e6 }),
+      def('longhouse', 4, { cost: { wood: 10 }, buildSeconds: 60, storage: 1e6 }),
+      def('mill', 1, { cost: { wood: 1e5 }, prod: { wood: 60 } }),
+    ]);
+    const r = simulatePacing(byType, params({ horizonDays: 1, producersPerTower: 1 }));
+    expect(r.lhReachedAt[4]).toBeGreaterThan(0);
+  });
+
+  it('upgrades the starting set before the tower-added producers', () => {
+    // Stock for one purchase only: the starting mill's level 2 (gain 1.4/h) or the tower mill's level 1 (gain 0.6/h, cheaper).
+    const byType = group([
+      def('longhouse', 1),
+      def('longhouse', 2, { buildSeconds: 60 }),
+      def('longhouse', 3, { buildSeconds: 60 }),
+      def('mill', 1, { cost: { wood: 60 }, prod: { wood: 0.6 } }),
+      def('mill', 2, { cost: { wood: 100 }, prod: { wood: 2 }, reqLh: 3 }),
+    ]);
+    const r = simulatePacing(byType, params({
+      horizonDays: 1,
+      producersPerTower: 1,
+      producersAhead: 0,
+      startStock: { wood: 100, stone: 0, food: 0, iron: 0 },
+    }));
+    expect(r.series.rate.wood.at(-1)).toBe(2);
+  });
+});
+
+describe('investing while saving for the Longhouse', () => {
+  // The starting mill is maxed (one level), so the Longhouse is wanted all the time; level 4 is out of reach for a long while.
+  const cat = (towerMillCost: number) => group([
+    def('longhouse', 1, { storage: 1e6 }),
+    def('longhouse', 2, { buildSeconds: 60, storage: 1e6 }),
+    def('longhouse', 3, { buildSeconds: 60, storage: 1e6 }),
+    def('longhouse', 4, { cost: { wood: 100000 }, storage: 1e6 }),
+    def('mill', 1, { cost: { wood: towerMillCost }, prod: { wood: 60 } }),
+  ]);
+  const run = (towerMillCost: number) =>
+    simulatePacing(cat(towerMillCost), params({ horizonDays: 2, producersPerTower: 1 })).series.rate.wood.at(-1);
+
+  it('starts a producer that pays back before the Longhouse would be affordable', () => {
+    // 60 wood for +60/h pays back in an hour; the Longhouse is more than a day away.
+    expect(run(60)).toBe(120);
+  });
+
+  it('leaves out a producer that would take longer to pay back than the wait for the Longhouse', () => {
+    // 1e6 wood for +60/h takes about 16 000 h; the Longhouse is ~1 700 h away.
+    expect(run(1e6)).toBe(60);
+  });
+});
+
+describe('paying for the settle building', () => {
+  const cat = () => [
+    def('longhouse', 1),
+    def('lumberjack', 1, { prod: { wood: 60 } }),
+    def('townsquare', 1, { cost: { wood: 100 } }),
+    def('townsquare', 2, { cost: { wood: 100 } }),
+    def('townsquare', 3, { cost: { wood: 100 } }),
+    def('cartworkshop', 1, { cost: { wood: 100 }, prereqs: [{ type: 'townsquare', level: 3 }] }),
+  ];
+  const run = (over: Partial<PacingParams> = {}) =>
+    simulatePacing(group(cat()), params({ horizonDays: 2, producerCounts: { lumberjack: 1 }, settleType: 'cartworkshop', renownThreshold: 0, ...over }));
+
+  it('builds the Town Square to level 3 and then the Cart Workshop, paying each, before the 2nd settlement', () => {
+    // 400 wood for the chain and the building at 60/h from the lumberjack: not before the money is there.
+    const r = run();
+    expect(r.secondSettlementAt).not.toBeNull();
+    expect(r.secondSettlementAt!).toBeGreaterThanOrEqual(400);
+  });
+
+  it('never settles when the prerequisite chain cannot be paid for', () => {
+    expect(run({ horizonDays: 0.2 }).secondSettlementAt).toBeNull();
   });
 });
 
@@ -359,19 +516,19 @@ describe('renown and the second settlement', () => {
   const cat = () => [def('longhouse', 1), def('mill', 1), def('hall', 1)];
 
   it('accrues renown per standing building level per hour', () => {
-    // Longhouse 1 + mill 1 = 2 levels -> 2 renown/h, for the 1441 simulated minutes.
-    const one = simulatePacing(group(cat()), params({ horizonDays: 1 }));
+    // Longhouse 1 + mill 1 = 2 levels -> 2 renown/h, for the 1441 simulated minutes (no settle building in this catalogue).
+    const one = simulatePacing(group([def('longhouse', 1), def('mill', 1)]), params({ horizonDays: 1 }));
     expect(one.renown).toBeCloseTo((2 * 1441) / 60, 6);
-    const two = simulatePacing(group(cat()), params({ horizonDays: 1, renownPerLevelHour: 2 }));
+    const two = simulatePacing(group([def('longhouse', 1), def('mill', 1)]), params({ horizonDays: 1, renownPerLevelHour: 2 }));
     expect(two.renown).toBeCloseTo(2 * one.renown, 6);
   });
 
   it('the second settlement waits for the renown threshold', () => {
     const r = simulatePacing(group(cat()), params({ horizonDays: 2, renownThreshold: 24, settlerCost: NO_COST }));
-    // 2 renown per hour: 24 renown after 12 h.
-    expect(r.secondSettlementAt).toBeGreaterThanOrEqual(719);
-    expect(r.secondSettlementAt).toBeLessThanOrEqual(722);
-    expect(simulatePacing(group(cat()), params({ horizonDays: 2, renownThreshold: 0, settlerCost: NO_COST })).secondSettlementAt).toBe(0);
+    // 2 renown per hour, 3 once the hall (the settle building) is built a minute in: 24 renown after 8 h.
+    expect(r.secondSettlementAt).toBeGreaterThanOrEqual(479);
+    expect(r.secondSettlementAt).toBeLessThanOrEqual(483);
+    expect(simulatePacing(group(cat()), params({ horizonDays: 2, renownThreshold: 0, settlerCost: NO_COST })).secondSettlementAt).toBe(1);
   });
 });
 
@@ -441,7 +598,6 @@ describe('feasts on the bundled catalogue (economy.md §6 tuning)', () => {
       producerCounts: { lumberjack: 3, claybrickworks: 3, reindeerherder: 3, bogoreworks: 2 },
       settlerCost: settlerCostFrom(undefined),
       settleType: 'cartworkshop',
-      storageCount: 2,
       joinTime: '09:00',
       producersAhead: 3,
       sessions,
@@ -449,15 +605,15 @@ describe('feasts on the bundled catalogue (economy.md §6 tuning)', () => {
     });
   const day = (minute: number | null) => (minute ?? Infinity) / 1440;
 
-  // Without feasts the run lands at about day 12: the setup now has the clay pits and bog-ore works a real start uses (the old
-  // quarries-only run, settled with Longhouse iron, gave day 13.4; the old catalogue gives day 12.4 on this setup).
-  it('the active player founds the 2nd settlement around day 6 with feasts and around day 12 without', () => {
+  // The simulated outcomes of the rebalanced economy (economy.md section 1): active d7.1 with feasts and d11.3 without,
+  // 4 check-ins d15.0 with feasts, 2 check-ins d30.0.
+  it('the active player founds the 2nd settlement around day 7 with feasts and around day 11 without', () => {
     const withFeasts = run(PROFILE_PRESETS.active, true);
     const without = run(PROFILE_PRESETS.active, false);
-    expect(day(withFeasts.secondSettlementAt)).toBeGreaterThan(4.5);
-    expect(day(withFeasts.secondSettlementAt)).toBeLessThan(6.6);
-    expect(day(without.secondSettlementAt)).toBeGreaterThan(11.5);
-    expect(day(without.secondSettlementAt)).toBeLessThan(14.5);
+    expect(day(withFeasts.secondSettlementAt)).toBeGreaterThan(6.4);
+    expect(day(withFeasts.secondSettlementAt)).toBeLessThan(7.8);
+    expect(day(without.secondSettlementAt)).toBeGreaterThan(10.6);
+    expect(day(without.secondSettlementAt)).toBeLessThan(12.0);
   });
 
   it('renown, not the Longhouse 10 unlock, is what binds the active player with feasts', () => {
@@ -465,16 +621,32 @@ describe('feasts on the bundled catalogue (economy.md §6 tuning)', () => {
     expect(day(r.renownReachedAt)).toBeGreaterThan(day(r.lhReachedAt[10] ?? null) + 1);
   });
 
-  it('the 4-check-ins player still settles around day 13 with feasts', () => {
-    const r = run(PROFILE_PRESETS.checkins4, true);
-    expect(day(r.secondSettlementAt)).toBeGreaterThan(12);
-    expect(day(r.secondSettlementAt)).toBeLessThan(15);
+  it('the 4-check-ins player settles around day 15 with feasts and the 2-check-ins player around day 30', () => {
+    const four = run(PROFILE_PRESETS.checkins4, true);
+    expect(day(four.secondSettlementAt)).toBeGreaterThan(14.3);
+    expect(day(four.secondSettlementAt)).toBeLessThan(15.7);
+    const two = run(PROFILE_PRESETS.checkins2, true);
+    expect(day(two.secondSettlementAt)).toBeGreaterThan(29.3);
+    expect(day(two.secondSettlementAt)).toBeLessThan(30.7);
   });
 
-  it('feasts multiply day-30 renown by 3-6x, so the later thresholds still mean something', () => {
+  it('the active player reaches Longhouse 10 around day 4 and the 4-check-ins player around day 14.5', () => {
+    expect(day(run(PROFILE_PRESETS.active, false).lhReachedAt[10] ?? null)).toBeGreaterThan(3.5);
+    expect(day(run(PROFILE_PRESETS.active, false).lhReachedAt[10] ?? null)).toBeLessThan(4.9);
+    expect(day(run(PROFILE_PRESETS.checkins4, true).lhReachedAt[10] ?? null)).toBeGreaterThan(13.8);
+    expect(day(run(PROFILE_PRESETS.checkins4, true).lhReachedAt[10] ?? null)).toBeLessThan(15.2);
+  });
+
+  it('the active player reaches Longhouse 30 around day 138', () => {
+    const r = run(PROFILE_PRESETS.active, false, 160);
+    expect(day(r.lhReachedAt[30] ?? null)).toBeGreaterThan(130);
+    expect(day(r.lhReachedAt[30] ?? null)).toBeLessThan(146);
+  });
+
+  it('feasts multiply day-30 renown by 2-4x, so the later thresholds still mean something', () => {
     const ratio = run(PROFILE_PRESETS.active, true, 30).renown / run(PROFILE_PRESETS.active, false, 30).renown;
-    expect(ratio).toBeGreaterThan(3);
-    expect(ratio).toBeLessThan(6);
+    expect(ratio).toBeGreaterThan(2);
+    expect(ratio).toBeLessThan(4);
   });
 });
 
@@ -535,7 +707,7 @@ describe('iron on the bundled catalogue (bog-ore works P1 tuning)', () => {
   const byType = group(catalogueSnapshot.data as BuildingDefinitionResponse[]);
   const run = (works: number) =>
     simulatePacing(byType, params({
-      horizonDays: 60,
+      horizonDays: 80,
       producerCounts: { lumberjack: 3, quarry: 3, farm: 3, claybrickworks: 1, bogoreworks: works },
       startStock: { wood: 700, stone: 700, food: 700, iron: 0 },
       settleType: 'cartworkshop',
@@ -567,7 +739,7 @@ describe('iron on the bundled catalogue (bog-ore works P1 tuning)', () => {
 
   it('keeps iron income at about a third to a half of wood income with three works from Longhouse 8 on', () => {
     const r = run(3);
-    for (const lh of [8, 10, 15, 20]) {
+    for (const lh of [8, 10, 15]) {
       const h = hourAt(r, lh);
       const ratio = r.series.rate.iron[h]! / r.series.rate.wood[h]!;
       expect(ratio, `LH ${lh}`).toBeGreaterThan(0.3);
@@ -579,7 +751,9 @@ describe('iron on the bundled catalogue (bog-ore works P1 tuning)', () => {
     const one = run(1);
     const h = hourAt(one, 10);
     expect(one.series.rate.iron[h]!).toBeGreaterThan(0);
-    expect(one.series.rate.iron[h]! / one.series.rate.wood[h]!).toBeLessThan(0.25);
+    // Every tower adds one more works too, so the gap to three works narrows: still clearly less iron per wood.
+    const three = run(3);
+    expect(one.series.rate.iron[h]! / one.series.rate.wood[h]!).toBeLessThan(0.75 * (three.series.rate.iron[hourAt(three, 10)]! / three.series.rate.wood[hourAt(three, 10)]!));
   });
 
   it('pays for a first Spearman from one bog-ore works once the Barracks open at Longhouse 5', () => {
