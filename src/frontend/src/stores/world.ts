@@ -532,7 +532,7 @@ export const useWorldStore = defineStore('world', {
       this.model.setWastedRevealed(world.endbossTriggered);
       this.model.setFrozenEnabled(world.frozenIslesEnabled);
       try {
-        this.islands = await api.getIslands(world.id);
+        this.islands = await api.getIslands(world.id, this.ownerId ?? undefined);
       } catch (err) {
         if (!isWorldNotFound(err)) throw err;
         // The world resolved a moment ago (getWorld/newestWorld, just above)
@@ -1477,7 +1477,7 @@ export const useWorldStore = defineStore('world', {
     async refreshCampStates() {
       if (DEMO_MODE || !this.worldId) return;
       try {
-        const states = await api.getWorldCamps(this.worldId);
+        const states = await api.getWorldCamps(this.worldId, this.ownerId ?? undefined);
         const added = this.model.setCamps(
           states.map((state) => ({
             family: state.family,
