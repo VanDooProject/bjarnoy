@@ -34,14 +34,23 @@ describe('FogMaskLayer army vision sources', () => {
         { x: 11, y: 22 },
         { x: 33, y: 44 },
       ],
-      7,
+      2,
+      { x: 3, y: 4 },
     );
 
     const uniforms = fogUniformsOf(layer).uniforms;
     expect(Array.from(uniforms.uArmyVisionSources as Float32Array).slice(0, 4)).toEqual([11, 22, 33, 44]);
     expect(uniforms.uArmyVisionCount).toBe(2);
-    expect(uniforms.uArmyVisionRadius).toBe(7);
+    expect(Array.from(uniforms.uArmyHexSize as Float32Array)).toEqual([3, 4]);
+    expect(Array.from(uniforms.uArmyRamp as Float32Array)).toEqual([1.75, 2, 2.75, 6]);
   });
+
+  it('shifts both ramp starts with the vision radius, margins unchanged', () => {
+    const layer = new FogMaskLayer('unknown', COLORS);
+
+    layer.setArmyVisionSources([{ x: 0, y: 0 }], 3, { x: 1, y: 1 });
+
+    expect(Array.from(fogUniformsOf(layer).uniforms.uArmyRamp as Float32Array)).toEqual([2.75, 2, 3.75, 6]);  });
 
   // The shader loops to uArmyVisionCount, so a count past the array length
   // would read slots that were never written — the same (0, 0) disc again.
@@ -49,7 +58,7 @@ describe('FogMaskLayer army vision sources', () => {
     const layer = new FogMaskLayer('unknown', COLORS);
     const points = Array.from({ length: MAX_ARMY_VISION_SOURCES + 3 }, (_, i) => ({ x: i, y: i }));
 
-    layer.setArmyVisionSources(points, 7);
+    layer.setArmyVisionSources(points, 2, { x: 1, y: 1 });
 
     expect(fogUniformsOf(layer).uniforms.uArmyVisionCount).toBe(MAX_ARMY_VISION_SOURCES);
   });
