@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-11-08T23:57:11.188Z"
+    "generatedAt": "2026-11-09T02:45:24.429Z"
   },
   "data": [
     {
@@ -338,9 +338,9 @@
       "type": "longhouse",
       "level": 11,
       "cost": {
-        "wood": 2250,
-        "stone": 1850,
-        "food": 1100,
+        "wood": 2400,
+        "stone": 2000,
+        "food": 1200,
         "iron": 0
       },
       "buildSeconds": 1559,
@@ -371,9 +371,9 @@
       "type": "longhouse",
       "level": 12,
       "cost": {
-        "wood": 3000,
-        "stone": 2500,
-        "food": 1500,
+        "wood": 3500,
+        "stone": 2950,
+        "food": 1750,
         "iron": 0
       },
       "buildSeconds": 2073,
@@ -404,9 +404,9 @@
       "type": "longhouse",
       "level": 13,
       "cost": {
-        "wood": 4000,
-        "stone": 3350,
-        "food": 2000,
+        "wood": 5100,
+        "stone": 4250,
+        "food": 2550,
         "iron": 0
       },
       "buildSeconds": 2757,
@@ -437,9 +437,9 @@
       "type": "longhouse",
       "level": 14,
       "cost": {
-        "wood": 5400,
-        "stone": 4500,
-        "food": 2700,
+        "wood": 7400,
+        "stone": 6150,
+        "food": 3700,
         "iron": 0
       },
       "buildSeconds": 3667,
@@ -470,9 +470,9 @@
       "type": "longhouse",
       "level": 15,
       "cost": {
-        "wood": 7200,
-        "stone": 6000,
-        "food": 3600,
+        "wood": 10500,
+        "stone": 8950,
+        "food": 5350,
         "iron": 0
       },
       "buildSeconds": 4877,
@@ -503,9 +503,9 @@
       "type": "longhouse",
       "level": 16,
       "cost": {
-        "wood": 9700,
-        "stone": 8050,
-        "food": 4850,
+        "wood": 15500,
+        "stone": 13000,
+        "food": 7750,
         "iron": 0
       },
       "buildSeconds": 6487,
@@ -536,9 +536,9 @@
       "type": "longhouse",
       "level": 17,
       "cost": {
-        "wood": 13000,
-        "stone": 11000,
-        "food": 6500,
+        "wood": 22500,
+        "stone": 19000,
+        "food": 11500,
         "iron": 0
       },
       "buildSeconds": 8627,
@@ -569,9 +569,9 @@
       "type": "longhouse",
       "level": 18,
       "cost": {
-        "wood": 17500,
-        "stone": 14500,
-        "food": 8700,
+        "wood": 32500,
+        "stone": 27000,
+        "food": 16500,
         "iron": 0
       },
       "buildSeconds": 11474,
@@ -602,9 +602,9 @@
       "type": "longhouse",
       "level": 19,
       "cost": {
-        "wood": 23500,
-        "stone": 19500,
-        "food": 11500,
+        "wood": 47500,
+        "stone": 39500,
+        "food": 23500,
         "iron": 0
       },
       "buildSeconds": 15261,
@@ -635,9 +635,9 @@
       "type": "longhouse",
       "level": 20,
       "cost": {
-        "wood": 31000,
-        "stone": 26000,
-        "food": 15500,
+        "wood": 68500,
+        "stone": 57000,
+        "food": 34500,
         "iron": 0
       },
       "buildSeconds": 20297,
@@ -668,9 +668,9 @@
       "type": "longhouse",
       "level": 21,
       "cost": {
-        "wood": 42000,
-        "stone": 35000,
-        "food": 21000,
+        "wood": 99500,
+        "stone": 83000,
+        "food": 50000,
         "iron": 0
       },
       "buildSeconds": 26995,
@@ -701,9 +701,9 @@
       "type": "longhouse",
       "level": 22,
       "cost": {
-        "wood": 56000,
-        "stone": 46500,
-        "food": 28000,
+        "wood": 145000,
+        "stone": 120000,
+        "food": 72000,
         "iron": 0
       },
       "buildSeconds": 35903,
@@ -734,9 +734,9 @@
       "type": "longhouse",
       "level": 23,
       "cost": {
-        "wood": 75000,
-        "stone": 62500,
-        "food": 37500,
+        "wood": 210000,
+        "stone": 175000,
+        "food": 105000,
         "iron": 0
       },
       "buildSeconds": 47751,
@@ -767,9 +767,9 @@
       "type": "longhouse",
       "level": 24,
       "cost": {
-        "wood": 100000,
-        "stone": 84000,
-        "food": 50500,
+        "wood": 305000,
+        "stone": 255000,
+        "food": 150000,
         "iron": 0
       },
       "buildSeconds": 63508,
@@ -800,9 +800,9 @@
       "type": "longhouse",
       "level": 25,
       "cost": {
-        "wood": 135000,
-        "stone": 110000,
-        "food": 67500,
+        "wood": 440000,
+        "stone": 365000,
+        "food": 220000,
         "iron": 0
       },
       "buildSeconds": 84466,
@@ -833,9 +833,9 @@
       "type": "longhouse",
       "level": 26,
       "cost": {
-        "wood": 180000,
-        "stone": 150000,
-        "food": 90500,
+        "wood": 640000,
+        "stone": 530000,
+        "food": 320000,
         "iron": 0
       },
       "buildSeconds": 112340,
@@ -866,9 +866,9 @@
       "type": "longhouse",
       "level": 27,
       "cost": {
-        "wood": 240000,
-        "stone": 200000,
-        "food": 120000,
+        "wood": 925000,
+        "stone": 770000,
+        "food": 465000,
         "iron": 0
       },
       "buildSeconds": 149412,
@@ -899,9 +899,9 @@
       "type": "longhouse",
       "level": 28,
       "cost": {
-        "wood": 325000,
-        "stone": 270000,
-        "food": 160000,
+        "wood": 1350000,
+        "stone": 1100000,
+        "food": 670000,
         "iron": 0
       },
       "buildSeconds": 198718,
@@ -932,9 +932,9 @@
       "type": "longhouse",
       "level": 29,
       "cost": {
-        "wood": 435000,
-        "stone": 360000,
-        "food": 215000,
+        "wood": 1950000,
+        "stone": 1600000,
+        "food": 975000,
         "iron": 0
       },
       "buildSeconds": 264295,
@@ -965,9 +965,9 @@
       "type": "longhouse",
       "level": 30,
       "cost": {
-        "wood": 580000,
-        "stone": 485000,
-        "food": 290000,
+        "wood": 2800000,
+        "stone": 2350000,
+        "food": 1400000,
         "iron": 0
       },
       "buildSeconds": 351512,
@@ -998,9 +998,9 @@
       "type": "lumberjack",
       "level": 1,
       "cost": {
-        "wood": 35,
+        "wood": 16,
         "stone": 0,
-        "food": 10,
+        "food": 30,
         "iron": 0
       },
       "buildSeconds": 180,
@@ -1031,9 +1031,9 @@
       "type": "lumberjack",
       "level": 2,
       "cost": {
-        "wood": 46,
+        "wood": 21,
         "stone": 0,
-        "food": 13,
+        "food": 39,
         "iron": 0
       },
       "buildSeconds": 239,
@@ -1064,9 +1064,9 @@
       "type": "lumberjack",
       "level": 3,
       "cost": {
-        "wood": 59,
+        "wood": 27,
         "stone": 0,
-        "food": 17,
+        "food": 51,
         "iron": 0
       },
       "buildSeconds": 318,
@@ -1097,9 +1097,9 @@
       "type": "lumberjack",
       "level": 4,
       "cost": {
-        "wood": 77,
+        "wood": 35,
         "stone": 0,
-        "food": 22,
+        "food": 66,
         "iron": 0
       },
       "buildSeconds": 423,
@@ -1130,9 +1130,9 @@
       "type": "lumberjack",
       "level": 5,
       "cost": {
-        "wood": 100,
+        "wood": 46,
         "stone": 0,
-        "food": 29,
+        "food": 86,
         "iron": 0
       },
       "buildSeconds": 563,
@@ -1163,9 +1163,9 @@
       "type": "lumberjack",
       "level": 6,
       "cost": {
-        "wood": 130,
-        "stone": 100,
-        "food": 37,
+        "wood": 59,
+        "stone": 180,
+        "food": 110,
         "iron": 0
       },
       "buildSeconds": 749,
@@ -1196,9 +1196,9 @@
       "type": "lumberjack",
       "level": 7,
       "cost": {
-        "wood": 170,
-        "stone": 140,
-        "food": 48,
+        "wood": 77,
+        "stone": 240,
+        "food": 140,
         "iron": 0
       },
       "buildSeconds": 996,
@@ -1229,9 +1229,9 @@
       "type": "lumberjack",
       "level": 8,
       "cost": {
-        "wood": 220,
-        "stone": 180,
-        "food": 63,
+        "wood": 100,
+        "stone": 310,
+        "food": 190,
         "iron": 0
       },
       "buildSeconds": 1325,
@@ -1262,9 +1262,9 @@
       "type": "lumberjack",
       "level": 9,
       "cost": {
-        "wood": 290,
-        "stone": 230,
-        "food": 82,
+        "wood": 130,
+        "stone": 400,
+        "food": 240,
         "iron": 0
       },
       "buildSeconds": 1762,
@@ -1295,9 +1295,9 @@
       "type": "lumberjack",
       "level": 10,
       "cost": {
-        "wood": 370,
-        "stone": 300,
-        "food": 110,
+        "wood": 170,
+        "stone": 520,
+        "food": 320,
         "iron": 0
       },
       "buildSeconds": 2344,
@@ -1328,9 +1328,9 @@
       "type": "lumberjack",
       "level": 11,
       "cost": {
-        "wood": 480,
-        "stone": 390,
-        "food": 140,
+        "wood": 220,
+        "stone": 680,
+        "food": 410,
         "iron": 0
       },
       "buildSeconds": 3117,
@@ -1361,9 +1361,9 @@
       "type": "lumberjack",
       "level": 12,
       "cost": {
-        "wood": 630,
-        "stone": 500,
-        "food": 180,
+        "wood": 290,
+        "stone": 880,
+        "food": 540,
         "iron": 0
       },
       "buildSeconds": 4146,
@@ -1394,9 +1394,9 @@
       "type": "lumberjack",
       "level": 13,
       "cost": {
-        "wood": 820,
-        "stone": 650,
-        "food": 230,
+        "wood": 370,
+        "stone": 1150,
+        "food": 700,
         "iron": 0
       },
       "buildSeconds": 5514,
@@ -1427,9 +1427,9 @@
       "type": "lumberjack",
       "level": 14,
       "cost": {
-        "wood": 1050,
-        "stone": 850,
-        "food": 300,
+        "wood": 480,
+        "stone": 1500,
+        "food": 910,
         "iron": 0
       },
       "buildSeconds": 7334,
@@ -1460,9 +1460,9 @@
       "type": "lumberjack",
       "level": 15,
       "cost": {
-        "wood": 1400,
-        "stone": 1100,
-        "food": 390,
+        "wood": 630,
+        "stone": 1950,
+        "food": 1200,
         "iron": 0
       },
       "buildSeconds": 9754,
@@ -1493,9 +1493,9 @@
       "type": "lumberjack",
       "level": 16,
       "cost": {
-        "wood": 1800,
-        "stone": 1450,
-        "food": 510,
+        "wood": 820,
+        "stone": 2500,
+        "food": 1550,
         "iron": 0
       },
       "buildSeconds": 12973,
@@ -1526,9 +1526,9 @@
       "type": "lumberjack",
       "level": 17,
       "cost": {
-        "wood": 2350,
-        "stone": 1850,
-        "food": 670,
+        "wood": 1050,
+        "stone": 3250,
+        "food": 2000,
         "iron": 0
       },
       "buildSeconds": 17254,
@@ -1559,9 +1559,9 @@
       "type": "lumberjack",
       "level": 18,
       "cost": {
-        "wood": 3050,
-        "stone": 2400,
-        "food": 870,
+        "wood": 1400,
+        "stone": 4250,
+        "food": 2600,
         "iron": 0
       },
       "buildSeconds": 22948,
@@ -1592,9 +1592,9 @@
       "type": "lumberjack",
       "level": 19,
       "cost": {
-        "wood": 3950,
-        "stone": 3150,
-        "food": 1100,
+        "wood": 1800,
+        "stone": 5500,
+        "food": 3350,
         "iron": 0
       },
       "buildSeconds": 30521,
@@ -1625,9 +1625,9 @@
       "type": "lumberjack",
       "level": 20,
       "cost": {
-        "wood": 5100,
-        "stone": 4100,
-        "food": 1450,
+        "wood": 2350,
+        "stone": 7150,
+        "food": 4400,
         "iron": 0
       },
       "buildSeconds": 40593,
@@ -1658,9 +1658,9 @@
       "type": "lumberjack",
       "level": 21,
       "cost": {
-        "wood": 6650,
-        "stone": 5300,
-        "food": 1900,
+        "wood": 3050,
+        "stone": 9300,
+        "food": 5700,
         "iron": 0
       },
       "buildSeconds": 53989,
@@ -1691,9 +1691,9 @@
       "type": "lumberjack",
       "level": 22,
       "cost": {
-        "wood": 8650,
-        "stone": 6900,
-        "food": 2450,
+        "wood": 3950,
+        "stone": 12000,
+        "food": 7400,
         "iron": 0
       },
       "buildSeconds": 71805,
@@ -1724,9 +1724,9 @@
       "type": "lumberjack",
       "level": 23,
       "cost": {
-        "wood": 11000,
-        "stone": 9000,
-        "food": 3200,
+        "wood": 5150,
+        "stone": 15500,
+        "food": 9650,
         "iron": 0
       },
       "buildSeconds": 95501,
@@ -1757,9 +1757,9 @@
       "type": "lumberjack",
       "level": 24,
       "cost": {
-        "wood": 14500,
-        "stone": 11500,
-        "food": 4200,
+        "wood": 6700,
+        "stone": 20500,
+        "food": 12500,
         "iron": 0
       },
       "buildSeconds": 127017,
@@ -1790,9 +1790,9 @@
       "type": "lumberjack",
       "level": 25,
       "cost": {
-        "wood": 19000,
-        "stone": 15000,
-        "food": 5450,
+        "wood": 8700,
+        "stone": 26500,
+        "food": 16500,
         "iron": 0
       },
       "buildSeconds": 168932,
@@ -1823,9 +1823,9 @@
       "type": "quarry",
       "level": 1,
       "cost": {
-        "wood": 35,
-        "stone": 28,
-        "food": 10,
+        "wood": 55,
+        "stone": 8,
+        "food": 33,
         "iron": 0
       },
       "buildSeconds": 180,
@@ -1856,9 +1856,9 @@
       "type": "quarry",
       "level": 2,
       "cost": {
-        "wood": 46,
-        "stone": 36,
-        "food": 13,
+        "wood": 72,
+        "stone": 10,
+        "food": 43,
         "iron": 0
       },
       "buildSeconds": 239,
@@ -1889,9 +1889,9 @@
       "type": "quarry",
       "level": 3,
       "cost": {
-        "wood": 59,
-        "stone": 47,
-        "food": 17,
+        "wood": 93,
+        "stone": 14,
+        "food": 56,
         "iron": 0
       },
       "buildSeconds": 318,
@@ -1922,9 +1922,9 @@
       "type": "quarry",
       "level": 4,
       "cost": {
-        "wood": 77,
-        "stone": 62,
-        "food": 22,
+        "wood": 120,
+        "stone": 18,
+        "food": 73,
         "iron": 0
       },
       "buildSeconds": 423,
@@ -1955,9 +1955,9 @@
       "type": "quarry",
       "level": 5,
       "cost": {
-        "wood": 100,
-        "stone": 80,
-        "food": 29,
+        "wood": 160,
+        "stone": 23,
+        "food": 94,
         "iron": 0
       },
       "buildSeconds": 563,
@@ -1988,9 +1988,9 @@
       "type": "quarry",
       "level": 6,
       "cost": {
-        "wood": 130,
-        "stone": 100,
-        "food": 37,
+        "wood": 200,
+        "stone": 30,
+        "food": 120,
         "iron": 0
       },
       "buildSeconds": 749,
@@ -2021,9 +2021,9 @@
       "type": "quarry",
       "level": 7,
       "cost": {
-        "wood": 170,
-        "stone": 140,
-        "food": 48,
+        "wood": 270,
+        "stone": 39,
+        "food": 160,
         "iron": 0
       },
       "buildSeconds": 996,
@@ -2054,9 +2054,9 @@
       "type": "quarry",
       "level": 8,
       "cost": {
-        "wood": 220,
-        "stone": 180,
-        "food": 63,
+        "wood": 350,
+        "stone": 50,
+        "food": 210,
         "iron": 0
       },
       "buildSeconds": 1325,
@@ -2087,9 +2087,9 @@
       "type": "quarry",
       "level": 9,
       "cost": {
-        "wood": 290,
-        "stone": 230,
-        "food": 82,
+        "wood": 450,
+        "stone": 65,
+        "food": 270,
         "iron": 0
       },
       "buildSeconds": 1762,
@@ -2120,9 +2120,9 @@
       "type": "quarry",
       "level": 10,
       "cost": {
-        "wood": 370,
-        "stone": 300,
-        "food": 110,
+        "wood": 580,
+        "stone": 85,
+        "food": 350,
         "iron": 0
       },
       "buildSeconds": 2344,
@@ -2153,9 +2153,9 @@
       "type": "quarry",
       "level": 11,
       "cost": {
-        "wood": 480,
-        "stone": 390,
-        "food": 140,
+        "wood": 760,
+        "stone": 110,
+        "food": 450,
         "iron": 0
       },
       "buildSeconds": 3117,
@@ -2186,9 +2186,9 @@
       "type": "quarry",
       "level": 12,
       "cost": {
-        "wood": 630,
-        "stone": 500,
-        "food": 180,
+        "wood": 990,
+        "stone": 140,
+        "food": 590,
         "iron": 0
       },
       "buildSeconds": 4146,
@@ -2219,9 +2219,9 @@
       "type": "quarry",
       "level": 13,
       "cost": {
-        "wood": 820,
-        "stone": 650,
-        "food": 230,
+        "wood": 1300,
+        "stone": 190,
+        "food": 770,
         "iron": 0
       },
       "buildSeconds": 5514,
@@ -2252,9 +2252,9 @@
       "type": "quarry",
       "level": 14,
       "cost": {
-        "wood": 1050,
-        "stone": 850,
-        "food": 300,
+        "wood": 1650,
+        "stone": 240,
+        "food": 1000,
         "iron": 0
       },
       "buildSeconds": 7334,
@@ -2285,9 +2285,9 @@
       "type": "quarry",
       "level": 15,
       "cost": {
-        "wood": 1400,
-        "stone": 1100,
-        "food": 390,
+        "wood": 2150,
+        "stone": 310,
+        "food": 1300,
         "iron": 0
       },
       "buildSeconds": 9754,
@@ -2318,9 +2318,9 @@
       "type": "quarry",
       "level": 16,
       "cost": {
-        "wood": 1800,
-        "stone": 1450,
-        "food": 510,
+        "wood": 2800,
+        "stone": 410,
+        "food": 1700,
         "iron": 0
       },
       "buildSeconds": 12973,
@@ -2351,9 +2351,9 @@
       "type": "quarry",
       "level": 17,
       "cost": {
-        "wood": 2350,
-        "stone": 1850,
-        "food": 670,
+        "wood": 3650,
+        "stone": 530,
+        "food": 2200,
         "iron": 0
       },
       "buildSeconds": 17254,
@@ -2384,9 +2384,9 @@
       "type": "quarry",
       "level": 18,
       "cost": {
-        "wood": 3050,
-        "stone": 2400,
-        "food": 870,
+        "wood": 4750,
+        "stone": 690,
+        "food": 2850,
         "iron": 0
       },
       "buildSeconds": 22948,
@@ -2417,9 +2417,9 @@
       "type": "quarry",
       "level": 19,
       "cost": {
-        "wood": 3950,
-        "stone": 3150,
-        "food": 1100,
+        "wood": 6200,
+        "stone": 900,
+        "food": 3700,
         "iron": 0
       },
       "buildSeconds": 30521,
@@ -2450,9 +2450,9 @@
       "type": "quarry",
       "level": 20,
       "cost": {
-        "wood": 5100,
-        "stone": 4100,
-        "food": 1450,
+        "wood": 8050,
+        "stone": 1150,
+        "food": 4800,
         "iron": 0
       },
       "buildSeconds": 40593,
@@ -2483,9 +2483,9 @@
       "type": "quarry",
       "level": 21,
       "cost": {
-        "wood": 6650,
-        "stone": 5300,
-        "food": 1900,
+        "wood": 10500,
+        "stone": 1500,
+        "food": 6250,
         "iron": 0
       },
       "buildSeconds": 53989,
@@ -2516,9 +2516,9 @@
       "type": "quarry",
       "level": 22,
       "cost": {
-        "wood": 8650,
-        "stone": 6900,
-        "food": 2450,
+        "wood": 13500,
+        "stone": 2000,
+        "food": 8150,
         "iron": 0
       },
       "buildSeconds": 71805,
@@ -2549,9 +2549,9 @@
       "type": "quarry",
       "level": 23,
       "cost": {
-        "wood": 11000,
-        "stone": 9000,
-        "food": 3200,
+        "wood": 17500,
+        "stone": 2550,
+        "food": 10500,
         "iron": 0
       },
       "buildSeconds": 95501,
@@ -2582,9 +2582,9 @@
       "type": "quarry",
       "level": 24,
       "cost": {
-        "wood": 14500,
-        "stone": 11500,
-        "food": 4200,
+        "wood": 23000,
+        "stone": 3350,
+        "food": 14000,
         "iron": 0
       },
       "buildSeconds": 127017,
@@ -2615,9 +2615,9 @@
       "type": "quarry",
       "level": 25,
       "cost": {
-        "wood": 19000,
-        "stone": 15000,
-        "food": 5450,
+        "wood": 30000,
+        "stone": 4350,
+        "food": 18000,
         "iron": 0
       },
       "buildSeconds": 168932,
@@ -2648,9 +2648,9 @@
       "type": "farm",
       "level": 1,
       "cost": {
-        "wood": 35,
-        "stone": 28,
-        "food": 10,
+        "wood": 57,
+        "stone": 29,
+        "food": 9,
         "iron": 0
       },
       "buildSeconds": 180,
@@ -2686,9 +2686,9 @@
       "type": "farm",
       "level": 2,
       "cost": {
-        "wood": 46,
-        "stone": 36,
-        "food": 13,
+        "wood": 74,
+        "stone": 38,
+        "food": 12,
         "iron": 0
       },
       "buildSeconds": 239,
@@ -2719,9 +2719,9 @@
       "type": "farm",
       "level": 3,
       "cost": {
-        "wood": 59,
-        "stone": 47,
-        "food": 17,
+        "wood": 96,
+        "stone": 49,
+        "food": 15,
         "iron": 0
       },
       "buildSeconds": 318,
@@ -2752,9 +2752,9 @@
       "type": "farm",
       "level": 4,
       "cost": {
-        "wood": 77,
-        "stone": 62,
-        "food": 22,
+        "wood": 130,
+        "stone": 64,
+        "food": 20,
         "iron": 0
       },
       "buildSeconds": 423,
@@ -2785,9 +2785,9 @@
       "type": "farm",
       "level": 5,
       "cost": {
-        "wood": 100,
-        "stone": 80,
-        "food": 29,
+        "wood": 160,
+        "stone": 83,
+        "food": 26,
         "iron": 0
       },
       "buildSeconds": 563,
@@ -2818,9 +2818,9 @@
       "type": "farm",
       "level": 6,
       "cost": {
-        "wood": 130,
-        "stone": 100,
-        "food": 37,
+        "wood": 210,
+        "stone": 110,
+        "food": 33,
         "iron": 0
       },
       "buildSeconds": 749,
@@ -2851,9 +2851,9 @@
       "type": "farm",
       "level": 7,
       "cost": {
-        "wood": 170,
+        "wood": 280,
         "stone": 140,
-        "food": 48,
+        "food": 43,
         "iron": 0
       },
       "buildSeconds": 996,
@@ -2884,9 +2884,9 @@
       "type": "farm",
       "level": 8,
       "cost": {
-        "wood": 220,
+        "wood": 360,
         "stone": 180,
-        "food": 63,
+        "food": 56,
         "iron": 0
       },
       "buildSeconds": 1325,
@@ -2917,9 +2917,9 @@
       "type": "farm",
       "level": 9,
       "cost": {
-        "wood": 290,
-        "stone": 230,
-        "food": 82,
+        "wood": 460,
+        "stone": 240,
+        "food": 73,
         "iron": 0
       },
       "buildSeconds": 1762,
@@ -2950,9 +2950,9 @@
       "type": "farm",
       "level": 10,
       "cost": {
-        "wood": 370,
-        "stone": 300,
-        "food": 110,
+        "wood": 600,
+        "stone": 310,
+        "food": 95,
         "iron": 0
       },
       "buildSeconds": 2344,
@@ -2983,9 +2983,9 @@
       "type": "farm",
       "level": 11,
       "cost": {
-        "wood": 480,
-        "stone": 390,
-        "food": 140,
+        "wood": 790,
+        "stone": 400,
+        "food": 120,
         "iron": 0
       },
       "buildSeconds": 3117,
@@ -3016,9 +3016,9 @@
       "type": "farm",
       "level": 12,
       "cost": {
-        "wood": 630,
-        "stone": 500,
-        "food": 180,
+        "wood": 1000,
+        "stone": 520,
+        "food": 160,
         "iron": 0
       },
       "buildSeconds": 4146,
@@ -3049,9 +3049,9 @@
       "type": "farm",
       "level": 13,
       "cost": {
-        "wood": 820,
-        "stone": 650,
-        "food": 230,
+        "wood": 1350,
+        "stone": 680,
+        "food": 210,
         "iron": 0
       },
       "buildSeconds": 5514,
@@ -3082,9 +3082,9 @@
       "type": "farm",
       "level": 14,
       "cost": {
-        "wood": 1050,
-        "stone": 850,
-        "food": 300,
+        "wood": 1750,
+        "stone": 880,
+        "food": 270,
         "iron": 0
       },
       "buildSeconds": 7334,
@@ -3115,9 +3115,9 @@
       "type": "farm",
       "level": 15,
       "cost": {
-        "wood": 1400,
-        "stone": 1100,
-        "food": 390,
+        "wood": 2250,
+        "stone": 1150,
+        "food": 350,
         "iron": 0
       },
       "buildSeconds": 9754,
@@ -3148,9 +3148,9 @@
       "type": "farm",
       "level": 16,
       "cost": {
-        "wood": 1800,
-        "stone": 1450,
-        "food": 510,
+        "wood": 2900,
+        "stone": 1500,
+        "food": 460,
         "iron": 0
       },
       "buildSeconds": 12973,
@@ -3181,9 +3181,9 @@
       "type": "farm",
       "level": 17,
       "cost": {
-        "wood": 2350,
-        "stone": 1850,
-        "food": 670,
+        "wood": 3800,
+        "stone": 1950,
+        "food": 600,
         "iron": 0
       },
       "buildSeconds": 17254,
@@ -3214,9 +3214,9 @@
       "type": "farm",
       "level": 18,
       "cost": {
-        "wood": 3050,
-        "stone": 2400,
-        "food": 870,
+        "wood": 4950,
+        "stone": 2500,
+        "food": 780,
         "iron": 0
       },
       "buildSeconds": 22948,
@@ -3247,9 +3247,9 @@
       "type": "farm",
       "level": 19,
       "cost": {
-        "wood": 3950,
-        "stone": 3150,
-        "food": 1100,
+        "wood": 6400,
+        "stone": 3250,
+        "food": 1000,
         "iron": 0
       },
       "buildSeconds": 30521,
@@ -3280,9 +3280,9 @@
       "type": "farm",
       "level": 20,
       "cost": {
-        "wood": 5100,
-        "stone": 4100,
-        "food": 1450,
+        "wood": 8350,
+        "stone": 4250,
+        "food": 1300,
         "iron": 0
       },
       "buildSeconds": 40593,
@@ -3313,9 +3313,9 @@
       "type": "farm",
       "level": 21,
       "cost": {
-        "wood": 6650,
-        "stone": 5300,
-        "food": 1900,
+        "wood": 11000,
+        "stone": 5500,
+        "food": 1700,
         "iron": 0
       },
       "buildSeconds": 53989,
@@ -3346,9 +3346,9 @@
       "type": "farm",
       "level": 22,
       "cost": {
-        "wood": 8650,
-        "stone": 6900,
-        "food": 2450,
+        "wood": 14000,
+        "stone": 7150,
+        "food": 2200,
         "iron": 0
       },
       "buildSeconds": 71805,
@@ -3379,9 +3379,9 @@
       "type": "farm",
       "level": 23,
       "cost": {
-        "wood": 11000,
-        "stone": 9000,
-        "food": 3200,
+        "wood": 18500,
+        "stone": 9300,
+        "food": 2900,
         "iron": 0
       },
       "buildSeconds": 95501,
@@ -3412,9 +3412,9 @@
       "type": "farm",
       "level": 24,
       "cost": {
-        "wood": 14500,
-        "stone": 11500,
-        "food": 4200,
+        "wood": 24000,
+        "stone": 12000,
+        "food": 3750,
         "iron": 0
       },
       "buildSeconds": 127017,
@@ -3445,9 +3445,9 @@
       "type": "farm",
       "level": 25,
       "cost": {
-        "wood": 19000,
-        "stone": 15000,
-        "food": 5450,
+        "wood": 31000,
+        "stone": 15500,
+        "food": 4900,
         "iron": 0
       },
       "buildSeconds": 168932,
@@ -3478,8 +3478,8 @@
       "type": "storagehouse",
       "level": 1,
       "cost": {
-        "wood": 80,
-        "stone": 60,
+        "wood": 90,
+        "stone": 50,
         "food": 0,
         "iron": 0
       },
@@ -3511,8 +3511,8 @@
       "type": "storagehouse",
       "level": 2,
       "cost": {
-        "wood": 100,
-        "stone": 78,
+        "wood": 120,
+        "stone": 65,
         "food": 0,
         "iron": 0
       },
@@ -3544,8 +3544,8 @@
       "type": "storagehouse",
       "level": 3,
       "cost": {
-        "wood": 140,
-        "stone": 100,
+        "wood": 150,
+        "stone": 85,
         "food": 0,
         "iron": 0
       },
@@ -3577,8 +3577,8 @@
       "type": "storagehouse",
       "level": 4,
       "cost": {
-        "wood": 180,
-        "stone": 130,
+        "wood": 200,
+        "stone": 110,
         "food": 0,
         "iron": 0
       },
@@ -3610,8 +3610,8 @@
       "type": "storagehouse",
       "level": 5,
       "cost": {
-        "wood": 230,
-        "stone": 170,
+        "wood": 260,
+        "stone": 140,
         "food": 0,
         "iron": 0
       },
@@ -3643,8 +3643,8 @@
       "type": "storagehouse",
       "level": 6,
       "cost": {
-        "wood": 300,
-        "stone": 220,
+        "wood": 330,
+        "stone": 190,
         "food": 0,
         "iron": 0
       },
@@ -3676,8 +3676,8 @@
       "type": "storagehouse",
       "level": 7,
       "cost": {
-        "wood": 390,
-        "stone": 290,
+        "wood": 430,
+        "stone": 240,
         "food": 0,
         "iron": 0
       },
@@ -3709,8 +3709,8 @@
       "type": "storagehouse",
       "level": 8,
       "cost": {
-        "wood": 500,
-        "stone": 380,
+        "wood": 560,
+        "stone": 310,
         "food": 0,
         "iron": 0
       },
@@ -3742,8 +3742,8 @@
       "type": "storagehouse",
       "level": 9,
       "cost": {
-        "wood": 650,
-        "stone": 490,
+        "wood": 730,
+        "stone": 410,
         "food": 0,
         "iron": 0
       },
@@ -3775,8 +3775,8 @@
       "type": "storagehouse",
       "level": 10,
       "cost": {
-        "wood": 850,
-        "stone": 640,
+        "wood": 950,
+        "stone": 530,
         "food": 0,
         "iron": 0
       },
@@ -3808,8 +3808,8 @@
       "type": "storagehouse",
       "level": 11,
       "cost": {
-        "wood": 1100,
-        "stone": 830,
+        "wood": 1250,
+        "stone": 690,
         "food": 0,
         "iron": 0
       },
@@ -3841,8 +3841,8 @@
       "type": "storagehouse",
       "level": 12,
       "cost": {
-        "wood": 1450,
-        "stone": 1100,
+        "wood": 1600,
+        "stone": 900,
         "food": 0,
         "iron": 0
       },
@@ -3874,8 +3874,8 @@
       "type": "storagehouse",
       "level": 13,
       "cost": {
-        "wood": 1850,
-        "stone": 1400,
+        "wood": 2100,
+        "stone": 1150,
         "food": 0,
         "iron": 0
       },
@@ -3907,8 +3907,8 @@
       "type": "storagehouse",
       "level": 14,
       "cost": {
-        "wood": 2400,
-        "stone": 1800,
+        "wood": 2750,
+        "stone": 1500,
         "food": 0,
         "iron": 0
       },
@@ -3940,8 +3940,8 @@
       "type": "storagehouse",
       "level": 15,
       "cost": {
-        "wood": 3150,
-        "stone": 2350,
+        "wood": 3550,
+        "stone": 1950,
         "food": 0,
         "iron": 0
       },
@@ -3973,8 +3973,8 @@
       "type": "storagehouse",
       "level": 16,
       "cost": {
-        "wood": 4100,
-        "stone": 3050,
+        "wood": 4600,
+        "stone": 2550,
         "food": 0,
         "iron": 0
       },
@@ -4006,8 +4006,8 @@
       "type": "storagehouse",
       "level": 17,
       "cost": {
-        "wood": 5300,
-        "stone": 4000,
+        "wood": 6000,
+        "stone": 3350,
         "food": 0,
         "iron": 0
       },
@@ -4039,8 +4039,8 @@
       "type": "storagehouse",
       "level": 18,
       "cost": {
-        "wood": 6900,
-        "stone": 5200,
+        "wood": 7800,
+        "stone": 4350,
         "food": 0,
         "iron": 0
       },
@@ -4072,8 +4072,8 @@
       "type": "storagehouse",
       "level": 19,
       "cost": {
-        "wood": 9000,
-        "stone": 6750,
+        "wood": 10000,
+        "stone": 5600,
         "food": 0,
         "iron": 0
       },
@@ -4105,8 +4105,8 @@
       "type": "storagehouse",
       "level": 20,
       "cost": {
-        "wood": 11500,
-        "stone": 8750,
+        "wood": 13000,
+        "stone": 7300,
         "food": 0,
         "iron": 0
       },
@@ -4138,8 +4138,8 @@
       "type": "storagehouse",
       "level": 21,
       "cost": {
-        "wood": 15000,
-        "stone": 11500,
+        "wood": 17000,
+        "stone": 9500,
         "food": 0,
         "iron": 0
       },
@@ -4171,8 +4171,8 @@
       "type": "storagehouse",
       "level": 22,
       "cost": {
-        "wood": 20000,
-        "stone": 15000,
+        "wood": 22000,
+        "stone": 12500,
         "food": 0,
         "iron": 0
       },
@@ -4204,8 +4204,8 @@
       "type": "storagehouse",
       "level": 23,
       "cost": {
-        "wood": 25500,
-        "stone": 19500,
+        "wood": 29000,
+        "stone": 16000,
         "food": 0,
         "iron": 0
       },
@@ -4237,8 +4237,8 @@
       "type": "storagehouse",
       "level": 24,
       "cost": {
-        "wood": 33500,
-        "stone": 25000,
+        "wood": 37500,
+        "stone": 21000,
         "food": 0,
         "iron": 0
       },
@@ -4270,8 +4270,8 @@
       "type": "storagehouse",
       "level": 25,
       "cost": {
-        "wood": 43500,
-        "stone": 32500,
+        "wood": 49000,
+        "stone": 27000,
         "food": 0,
         "iron": 0
       },
@@ -4303,9 +4303,9 @@
       "type": "tower",
       "level": 1,
       "cost": {
-        "wood": 120,
+        "wood": 140,
         "stone": 0,
-        "food": 0,
+        "food": 30,
         "iron": 0
       },
       "buildSeconds": 480,
@@ -4338,9 +4338,9 @@
       "type": "tower",
       "level": 2,
       "cost": {
-        "wood": 160,
+        "wood": 180,
         "stone": 0,
-        "food": 0,
+        "food": 39,
         "iron": 0
       },
       "buildSeconds": 638,
@@ -4373,9 +4373,9 @@
       "type": "tower",
       "level": 3,
       "cost": {
-        "wood": 200,
+        "wood": 240,
         "stone": 0,
-        "food": 0,
+        "food": 51,
         "iron": 0
       },
       "buildSeconds": 849,
@@ -4408,9 +4408,9 @@
       "type": "tower",
       "level": 4,
       "cost": {
-        "wood": 260,
+        "wood": 310,
         "stone": 0,
-        "food": 0,
+        "food": 66,
         "iron": 0
       },
       "buildSeconds": 1129,
@@ -4443,9 +4443,9 @@
       "type": "tower",
       "level": 5,
       "cost": {
-        "wood": 340,
+        "wood": 400,
         "stone": 0,
-        "food": 0,
+        "food": 86,
         "iron": 0
       },
       "buildSeconds": 1502,
@@ -4478,9 +4478,9 @@
       "type": "fishinghut",
       "level": 1,
       "cost": {
-        "wood": 35,
-        "stone": 28,
-        "food": 10,
+        "wood": 49,
+        "stone": 39,
+        "food": 7,
         "iron": 0
       },
       "buildSeconds": 180,
@@ -4509,9 +4509,9 @@
       "type": "fishinghut",
       "level": 2,
       "cost": {
-        "wood": 46,
-        "stone": 36,
-        "food": 13,
+        "wood": 64,
+        "stone": 51,
+        "food": 9,
         "iron": 0
       },
       "buildSeconds": 239,
@@ -4540,9 +4540,9 @@
       "type": "fishinghut",
       "level": 3,
       "cost": {
-        "wood": 59,
-        "stone": 47,
-        "food": 17,
+        "wood": 83,
+        "stone": 66,
+        "food": 12,
         "iron": 0
       },
       "buildSeconds": 318,
@@ -4571,9 +4571,9 @@
       "type": "fishinghut",
       "level": 4,
       "cost": {
-        "wood": 77,
-        "stone": 62,
-        "food": 22,
+        "wood": 110,
+        "stone": 86,
+        "food": 15,
         "iron": 0
       },
       "buildSeconds": 423,
@@ -4602,9 +4602,9 @@
       "type": "fishinghut",
       "level": 5,
       "cost": {
-        "wood": 100,
-        "stone": 80,
-        "food": 29,
+        "wood": 140,
+        "stone": 110,
+        "food": 20,
         "iron": 0
       },
       "buildSeconds": 563,
@@ -4633,9 +4633,9 @@
       "type": "fishinghut",
       "level": 6,
       "cost": {
-        "wood": 130,
-        "stone": 100,
-        "food": 37,
+        "wood": 180,
+        "stone": 140,
+        "food": 26,
         "iron": 0
       },
       "buildSeconds": 749,
@@ -4664,9 +4664,9 @@
       "type": "fishinghut",
       "level": 7,
       "cost": {
-        "wood": 170,
-        "stone": 140,
-        "food": 48,
+        "wood": 240,
+        "stone": 190,
+        "food": 34,
         "iron": 0
       },
       "buildSeconds": 996,
@@ -4695,9 +4695,9 @@
       "type": "fishinghut",
       "level": 8,
       "cost": {
-        "wood": 220,
-        "stone": 180,
-        "food": 63,
+        "wood": 310,
+        "stone": 240,
+        "food": 44,
         "iron": 0
       },
       "buildSeconds": 1325,
@@ -4726,9 +4726,9 @@
       "type": "fishinghut",
       "level": 9,
       "cost": {
-        "wood": 290,
-        "stone": 230,
-        "food": 82,
+        "wood": 400,
+        "stone": 320,
+        "food": 57,
         "iron": 0
       },
       "buildSeconds": 1762,
@@ -4757,9 +4757,9 @@
       "type": "fishinghut",
       "level": 10,
       "cost": {
-        "wood": 370,
-        "stone": 300,
-        "food": 110,
+        "wood": 520,
+        "stone": 410,
+        "food": 74,
         "iron": 0
       },
       "buildSeconds": 2344,
@@ -4788,9 +4788,9 @@
       "type": "fishinghut",
       "level": 11,
       "cost": {
-        "wood": 480,
-        "stone": 390,
-        "food": 140,
+        "wood": 680,
+        "stone": 540,
+        "food": 97,
         "iron": 0
       },
       "buildSeconds": 3117,
@@ -4819,9 +4819,9 @@
       "type": "fishinghut",
       "level": 12,
       "cost": {
-        "wood": 630,
-        "stone": 500,
-        "food": 180,
+        "wood": 880,
+        "stone": 700,
+        "food": 130,
         "iron": 0
       },
       "buildSeconds": 4146,
@@ -4850,9 +4850,9 @@
       "type": "fishinghut",
       "level": 13,
       "cost": {
-        "wood": 820,
-        "stone": 650,
-        "food": 230,
+        "wood": 1150,
+        "stone": 910,
+        "food": 160,
         "iron": 0
       },
       "buildSeconds": 5514,
@@ -4881,9 +4881,9 @@
       "type": "fishinghut",
       "level": 14,
       "cost": {
-        "wood": 1050,
-        "stone": 850,
-        "food": 300,
+        "wood": 1500,
+        "stone": 1200,
+        "food": 210,
         "iron": 0
       },
       "buildSeconds": 7334,
@@ -4912,9 +4912,9 @@
       "type": "fishinghut",
       "level": 15,
       "cost": {
-        "wood": 1400,
-        "stone": 1100,
-        "food": 390,
+        "wood": 1950,
+        "stone": 1550,
+        "food": 280,
         "iron": 0
       },
       "buildSeconds": 9754,
@@ -4943,9 +4943,9 @@
       "type": "fishinghut",
       "level": 16,
       "cost": {
-        "wood": 1800,
-        "stone": 1450,
-        "food": 510,
+        "wood": 2500,
+        "stone": 2000,
+        "food": 360,
         "iron": 0
       },
       "buildSeconds": 12973,
@@ -4974,9 +4974,9 @@
       "type": "fishinghut",
       "level": 17,
       "cost": {
-        "wood": 2350,
-        "stone": 1850,
-        "food": 670,
+        "wood": 3250,
+        "stone": 2600,
+        "food": 470,
         "iron": 0
       },
       "buildSeconds": 17254,
@@ -5005,9 +5005,9 @@
       "type": "fishinghut",
       "level": 18,
       "cost": {
-        "wood": 3050,
-        "stone": 2400,
-        "food": 870,
+        "wood": 4250,
+        "stone": 3350,
+        "food": 610,
         "iron": 0
       },
       "buildSeconds": 22948,
@@ -5036,9 +5036,9 @@
       "type": "fishinghut",
       "level": 19,
       "cost": {
-        "wood": 3950,
-        "stone": 3150,
-        "food": 1100,
+        "wood": 5500,
+        "stone": 4400,
+        "food": 790,
         "iron": 0
       },
       "buildSeconds": 30521,
@@ -5067,9 +5067,9 @@
       "type": "fishinghut",
       "level": 20,
       "cost": {
-        "wood": 5100,
-        "stone": 4100,
-        "food": 1450,
+        "wood": 7150,
+        "stone": 5700,
+        "food": 1000,
         "iron": 0
       },
       "buildSeconds": 40593,
@@ -5098,9 +5098,9 @@
       "type": "fishinghut",
       "level": 21,
       "cost": {
-        "wood": 6650,
-        "stone": 5300,
-        "food": 1900,
+        "wood": 9300,
+        "stone": 7400,
+        "food": 1350,
         "iron": 0
       },
       "buildSeconds": 53989,
@@ -5129,9 +5129,9 @@
       "type": "fishinghut",
       "level": 22,
       "cost": {
-        "wood": 8650,
-        "stone": 6900,
-        "food": 2450,
+        "wood": 12000,
+        "stone": 9650,
+        "food": 1750,
         "iron": 0
       },
       "buildSeconds": 71805,
@@ -5160,9 +5160,9 @@
       "type": "fishinghut",
       "level": 23,
       "cost": {
-        "wood": 11000,
-        "stone": 9000,
-        "food": 3200,
+        "wood": 15500,
+        "stone": 12500,
+        "food": 2250,
         "iron": 0
       },
       "buildSeconds": 95501,
@@ -5191,9 +5191,9 @@
       "type": "fishinghut",
       "level": 24,
       "cost": {
-        "wood": 14500,
-        "stone": 11500,
-        "food": 4200,
+        "wood": 20500,
+        "stone": 16500,
+        "food": 2900,
         "iron": 0
       },
       "buildSeconds": 127017,
@@ -5222,9 +5222,9 @@
       "type": "fishinghut",
       "level": 25,
       "cost": {
-        "wood": 19000,
-        "stone": 15000,
-        "food": 5450,
+        "wood": 26500,
+        "stone": 21000,
+        "food": 3800,
         "iron": 0
       },
       "buildSeconds": 168932,
@@ -5253,9 +5253,9 @@
       "type": "pumpkinfarm",
       "level": 1,
       "cost": {
-        "wood": 35,
-        "stone": 28,
-        "food": 10,
+        "wood": 55,
+        "stone": 33,
+        "food": 8,
         "iron": 0
       },
       "buildSeconds": 180,
@@ -5291,9 +5291,9 @@
       "type": "pumpkinfarm",
       "level": 2,
       "cost": {
-        "wood": 46,
-        "stone": 36,
-        "food": 13,
+        "wood": 72,
+        "stone": 43,
+        "food": 10,
         "iron": 0
       },
       "buildSeconds": 239,
@@ -5324,9 +5324,9 @@
       "type": "pumpkinfarm",
       "level": 3,
       "cost": {
-        "wood": 59,
-        "stone": 47,
-        "food": 17,
+        "wood": 93,
+        "stone": 56,
+        "food": 14,
         "iron": 0
       },
       "buildSeconds": 318,
@@ -5357,9 +5357,9 @@
       "type": "pumpkinfarm",
       "level": 4,
       "cost": {
-        "wood": 77,
-        "stone": 62,
-        "food": 22,
+        "wood": 120,
+        "stone": 73,
+        "food": 18,
         "iron": 0
       },
       "buildSeconds": 423,
@@ -5390,9 +5390,9 @@
       "type": "pumpkinfarm",
       "level": 5,
       "cost": {
-        "wood": 100,
-        "stone": 80,
-        "food": 29,
+        "wood": 160,
+        "stone": 94,
+        "food": 23,
         "iron": 0
       },
       "buildSeconds": 563,
@@ -5423,9 +5423,9 @@
       "type": "pumpkinfarm",
       "level": 6,
       "cost": {
-        "wood": 130,
-        "stone": 100,
-        "food": 37,
+        "wood": 200,
+        "stone": 120,
+        "food": 30,
         "iron": 0
       },
       "buildSeconds": 749,
@@ -5456,9 +5456,9 @@
       "type": "pumpkinfarm",
       "level": 7,
       "cost": {
-        "wood": 170,
-        "stone": 140,
-        "food": 48,
+        "wood": 270,
+        "stone": 160,
+        "food": 39,
         "iron": 0
       },
       "buildSeconds": 996,
@@ -5489,9 +5489,9 @@
       "type": "pumpkinfarm",
       "level": 8,
       "cost": {
-        "wood": 220,
-        "stone": 180,
-        "food": 63,
+        "wood": 350,
+        "stone": 210,
+        "food": 50,
         "iron": 0
       },
       "buildSeconds": 1325,
@@ -5522,9 +5522,9 @@
       "type": "pumpkinfarm",
       "level": 9,
       "cost": {
-        "wood": 290,
-        "stone": 230,
-        "food": 82,
+        "wood": 450,
+        "stone": 270,
+        "food": 65,
         "iron": 0
       },
       "buildSeconds": 1762,
@@ -5555,9 +5555,9 @@
       "type": "pumpkinfarm",
       "level": 10,
       "cost": {
-        "wood": 370,
-        "stone": 300,
-        "food": 110,
+        "wood": 580,
+        "stone": 350,
+        "food": 85,
         "iron": 0
       },
       "buildSeconds": 2344,
@@ -5588,9 +5588,9 @@
       "type": "pumpkinfarm",
       "level": 11,
       "cost": {
-        "wood": 480,
-        "stone": 390,
-        "food": 140,
+        "wood": 760,
+        "stone": 450,
+        "food": 110,
         "iron": 0
       },
       "buildSeconds": 3117,
@@ -5621,9 +5621,9 @@
       "type": "pumpkinfarm",
       "level": 12,
       "cost": {
-        "wood": 630,
-        "stone": 500,
-        "food": 180,
+        "wood": 990,
+        "stone": 590,
+        "food": 140,
         "iron": 0
       },
       "buildSeconds": 4146,
@@ -5654,9 +5654,9 @@
       "type": "pumpkinfarm",
       "level": 13,
       "cost": {
-        "wood": 820,
-        "stone": 650,
-        "food": 230,
+        "wood": 1300,
+        "stone": 770,
+        "food": 190,
         "iron": 0
       },
       "buildSeconds": 5514,
@@ -5687,9 +5687,9 @@
       "type": "pumpkinfarm",
       "level": 14,
       "cost": {
-        "wood": 1050,
-        "stone": 850,
-        "food": 300,
+        "wood": 1650,
+        "stone": 1000,
+        "food": 240,
         "iron": 0
       },
       "buildSeconds": 7334,
@@ -5720,9 +5720,9 @@
       "type": "pumpkinfarm",
       "level": 15,
       "cost": {
-        "wood": 1400,
-        "stone": 1100,
-        "food": 390,
+        "wood": 2150,
+        "stone": 1300,
+        "food": 310,
         "iron": 0
       },
       "buildSeconds": 9754,
@@ -5753,9 +5753,9 @@
       "type": "pumpkinfarm",
       "level": 16,
       "cost": {
-        "wood": 1800,
-        "stone": 1450,
-        "food": 510,
+        "wood": 2800,
+        "stone": 1700,
+        "food": 410,
         "iron": 0
       },
       "buildSeconds": 12973,
@@ -5786,9 +5786,9 @@
       "type": "pumpkinfarm",
       "level": 17,
       "cost": {
-        "wood": 2350,
-        "stone": 1850,
-        "food": 670,
+        "wood": 3650,
+        "stone": 2200,
+        "food": 530,
         "iron": 0
       },
       "buildSeconds": 17254,
@@ -5819,9 +5819,9 @@
       "type": "pumpkinfarm",
       "level": 18,
       "cost": {
-        "wood": 3050,
-        "stone": 2400,
-        "food": 870,
+        "wood": 4750,
+        "stone": 2850,
+        "food": 690,
         "iron": 0
       },
       "buildSeconds": 22948,
@@ -5852,9 +5852,9 @@
       "type": "pumpkinfarm",
       "level": 19,
       "cost": {
-        "wood": 3950,
-        "stone": 3150,
-        "food": 1100,
+        "wood": 6200,
+        "stone": 3700,
+        "food": 900,
         "iron": 0
       },
       "buildSeconds": 30521,
@@ -5885,9 +5885,9 @@
       "type": "pumpkinfarm",
       "level": 20,
       "cost": {
-        "wood": 5100,
-        "stone": 4100,
-        "food": 1450,
+        "wood": 8050,
+        "stone": 4800,
+        "food": 1150,
         "iron": 0
       },
       "buildSeconds": 40593,
@@ -5918,9 +5918,9 @@
       "type": "pumpkinfarm",
       "level": 21,
       "cost": {
-        "wood": 6650,
-        "stone": 5300,
-        "food": 1900,
+        "wood": 10500,
+        "stone": 6250,
+        "food": 1500,
         "iron": 0
       },
       "buildSeconds": 53989,
@@ -5951,9 +5951,9 @@
       "type": "pumpkinfarm",
       "level": 22,
       "cost": {
-        "wood": 8650,
-        "stone": 6900,
-        "food": 2450,
+        "wood": 13500,
+        "stone": 8150,
+        "food": 2000,
         "iron": 0
       },
       "buildSeconds": 71805,
@@ -5984,9 +5984,9 @@
       "type": "pumpkinfarm",
       "level": 23,
       "cost": {
-        "wood": 11000,
-        "stone": 9000,
-        "food": 3200,
+        "wood": 17500,
+        "stone": 10500,
+        "food": 2550,
         "iron": 0
       },
       "buildSeconds": 95501,
@@ -6017,9 +6017,9 @@
       "type": "pumpkinfarm",
       "level": 24,
       "cost": {
-        "wood": 14500,
-        "stone": 11500,
-        "food": 4200,
+        "wood": 23000,
+        "stone": 14000,
+        "food": 3350,
         "iron": 0
       },
       "buildSeconds": 127017,
@@ -6050,9 +6050,9 @@
       "type": "pumpkinfarm",
       "level": 25,
       "cost": {
-        "wood": 19000,
-        "stone": 15000,
-        "food": 5450,
+        "wood": 30000,
+        "stone": 18000,
+        "food": 4350,
         "iron": 0
       },
       "buildSeconds": 168932,
@@ -6083,9 +6083,9 @@
       "type": "shrineofthor",
       "level": 1,
       "cost": {
-        "wood": 180,
-        "stone": 140,
-        "food": 60,
+        "wood": 33000,
+        "stone": 35000,
+        "food": 10500,
         "iron": 0
       },
       "buildSeconds": 720,
@@ -6121,9 +6121,9 @@
       "type": "shrineofthor",
       "level": 2,
       "cost": {
-        "wood": 230,
-        "stone": 180,
-        "food": 78,
+        "wood": 56500,
+        "stone": 60000,
+        "food": 18000,
         "iron": 0
       },
       "buildSeconds": 958,
@@ -6154,9 +6154,9 @@
       "type": "shrineofthor",
       "level": 3,
       "cost": {
-        "wood": 300,
-        "stone": 240,
-        "food": 100,
+        "wood": 97000,
+        "stone": 105000,
+        "food": 31000,
         "iron": 0
       },
       "buildSeconds": 1274,
@@ -6187,9 +6187,9 @@
       "type": "shrineofthor",
       "level": 4,
       "cost": {
-        "wood": 400,
-        "stone": 310,
-        "food": 130,
+        "wood": 165000,
+        "stone": 175000,
+        "food": 53000,
         "iron": 0
       },
       "buildSeconds": 1694,
@@ -6220,9 +6220,9 @@
       "type": "shrineofthor",
       "level": 5,
       "cost": {
-        "wood": 510,
-        "stone": 400,
-        "food": 170,
+        "wood": 285000,
+        "stone": 305000,
+        "food": 91000,
         "iron": 0
       },
       "buildSeconds": 2253,
@@ -6253,9 +6253,9 @@
       "type": "shrineoffreyja",
       "level": 1,
       "cost": {
-        "wood": 180,
-        "stone": 140,
-        "food": 60,
+        "wood": 33000,
+        "stone": 35000,
+        "food": 10500,
         "iron": 0
       },
       "buildSeconds": 720,
@@ -6291,9 +6291,9 @@
       "type": "shrineoffreyja",
       "level": 2,
       "cost": {
-        "wood": 230,
-        "stone": 180,
-        "food": 78,
+        "wood": 56500,
+        "stone": 60000,
+        "food": 18000,
         "iron": 0
       },
       "buildSeconds": 958,
@@ -6324,9 +6324,9 @@
       "type": "shrineoffreyja",
       "level": 3,
       "cost": {
-        "wood": 300,
-        "stone": 240,
-        "food": 100,
+        "wood": 97000,
+        "stone": 105000,
+        "food": 31000,
         "iron": 0
       },
       "buildSeconds": 1274,
@@ -6357,9 +6357,9 @@
       "type": "shrineoffreyja",
       "level": 4,
       "cost": {
-        "wood": 400,
-        "stone": 310,
-        "food": 130,
+        "wood": 165000,
+        "stone": 175000,
+        "food": 53000,
         "iron": 0
       },
       "buildSeconds": 1694,
@@ -6390,9 +6390,9 @@
       "type": "shrineoffreyja",
       "level": 5,
       "cost": {
-        "wood": 510,
-        "stone": 400,
-        "food": 170,
+        "wood": 285000,
+        "stone": 305000,
+        "food": 91000,
         "iron": 0
       },
       "buildSeconds": 2253,
@@ -6423,8 +6423,8 @@
       "type": "greatstorehouse",
       "level": 1,
       "cost": {
-        "wood": 4000,
-        "stone": 3500,
+        "wood": 4500,
+        "stone": 3000,
         "food": 0,
         "iron": 0
       },
@@ -6461,8 +6461,8 @@
       "type": "greatstorehouse",
       "level": 2,
       "cost": {
-        "wood": 5200,
-        "stone": 4550,
+        "wood": 9000,
+        "stone": 6000,
         "food": 0,
         "iron": 0
       },
@@ -6494,8 +6494,8 @@
       "type": "greatstorehouse",
       "level": 3,
       "cost": {
-        "wood": 6750,
-        "stone": 5900,
+        "wood": 18000,
+        "stone": 12000,
         "food": 0,
         "iron": 0
       },
@@ -6527,8 +6527,8 @@
       "type": "greatstorehouse",
       "level": 4,
       "cost": {
-        "wood": 8800,
-        "stone": 7700,
+        "wood": 36000,
+        "stone": 24000,
         "food": 0,
         "iron": 0
       },
@@ -6560,8 +6560,8 @@
       "type": "greatstorehouse",
       "level": 5,
       "cost": {
-        "wood": 11500,
-        "stone": 10000,
+        "wood": 72000,
+        "stone": 48000,
         "food": 0,
         "iron": 0
       },
@@ -6593,8 +6593,8 @@
       "type": "greatstorehouse",
       "level": 6,
       "cost": {
-        "wood": 15000,
-        "stone": 13000,
+        "wood": 145000,
+        "stone": 96000,
         "food": 0,
         "iron": 0
       },
@@ -6626,8 +6626,8 @@
       "type": "greatstorehouse",
       "level": 7,
       "cost": {
-        "wood": 19500,
-        "stone": 17000,
+        "wood": 290000,
+        "stone": 190000,
         "food": 0,
         "iron": 0
       },
@@ -6659,8 +6659,8 @@
       "type": "greatstorehouse",
       "level": 8,
       "cost": {
-        "wood": 25000,
-        "stone": 22000,
+        "wood": 575000,
+        "stone": 385000,
         "food": 0,
         "iron": 0
       },
@@ -6692,8 +6692,8 @@
       "type": "greatstorehouse",
       "level": 9,
       "cost": {
-        "wood": 32500,
-        "stone": 28500,
+        "wood": 1150000,
+        "stone": 770000,
         "food": 0,
         "iron": 0
       },
@@ -6725,8 +6725,8 @@
       "type": "greatstorehouse",
       "level": 10,
       "cost": {
-        "wood": 42500,
-        "stone": 37000,
+        "wood": 2300000,
+        "stone": 1550000,
         "food": 0,
         "iron": 0
       },
@@ -6758,9 +6758,9 @@
       "type": "archeryrange",
       "level": 1,
       "cost": {
-        "wood": 140,
-        "stone": 100,
-        "food": 0,
+        "wood": 470,
+        "stone": 200,
+        "food": 58,
         "iron": 0
       },
       "buildSeconds": 420,
@@ -6797,9 +6797,9 @@
       "type": "archeryrange",
       "level": 2,
       "cost": {
-        "wood": 180,
-        "stone": 130,
-        "food": 0,
+        "wood": 610,
+        "stone": 260,
+        "food": 75,
         "iron": 0
       },
       "buildSeconds": 559,
@@ -6831,9 +6831,9 @@
       "type": "archeryrange",
       "level": 3,
       "cost": {
-        "wood": 240,
-        "stone": 170,
-        "food": 0,
+        "wood": 790,
+        "stone": 340,
+        "food": 98,
         "iron": 0
       },
       "buildSeconds": 743,
@@ -6865,9 +6865,9 @@
       "type": "archeryrange",
       "level": 4,
       "cost": {
-        "wood": 310,
-        "stone": 220,
-        "food": 0,
+        "wood": 1050,
+        "stone": 440,
+        "food": 130,
         "iron": 0
       },
       "buildSeconds": 988,
@@ -6899,9 +6899,9 @@
       "type": "archeryrange",
       "level": 5,
       "cost": {
-        "wood": 400,
-        "stone": 290,
-        "food": 0,
+        "wood": 1350,
+        "stone": 570,
+        "food": 170,
         "iron": 0
       },
       "buildSeconds": 1314,
@@ -6933,9 +6933,9 @@
       "type": "archeryrange",
       "level": 6,
       "cost": {
-        "wood": 520,
-        "stone": 370,
-        "food": 0,
+        "wood": 1750,
+        "stone": 740,
+        "food": 220,
         "iron": 0
       },
       "buildSeconds": 1748,
@@ -6967,9 +6967,9 @@
       "type": "archeryrange",
       "level": 7,
       "cost": {
-        "wood": 680,
-        "stone": 480,
-        "food": 0,
+        "wood": 2250,
+        "stone": 970,
+        "food": 280,
         "iron": 0
       },
       "buildSeconds": 2325,
@@ -7001,9 +7001,9 @@
       "type": "archeryrange",
       "level": 8,
       "cost": {
-        "wood": 880,
-        "stone": 630,
-        "food": 0,
+        "wood": 2950,
+        "stone": 1250,
+        "food": 360,
         "iron": 0
       },
       "buildSeconds": 3092,
@@ -7035,9 +7035,9 @@
       "type": "archeryrange",
       "level": 9,
       "cost": {
-        "wood": 1150,
-        "stone": 820,
-        "food": 0,
+        "wood": 3850,
+        "stone": 1650,
+        "food": 470,
         "iron": 0
       },
       "buildSeconds": 4112,
@@ -7069,9 +7069,9 @@
       "type": "archeryrange",
       "level": 10,
       "cost": {
-        "wood": 1500,
-        "stone": 1050,
-        "food": 0,
+        "wood": 5000,
+        "stone": 2100,
+        "food": 620,
         "iron": 0
       },
       "buildSeconds": 5469,
@@ -7103,9 +7103,9 @@
       "type": "archeryrange",
       "level": 11,
       "cost": {
-        "wood": 1950,
-        "stone": 1400,
-        "food": 0,
+        "wood": 6500,
+        "stone": 2750,
+        "food": 800,
         "iron": 0
       },
       "buildSeconds": 7274,
@@ -7137,9 +7137,9 @@
       "type": "archeryrange",
       "level": 12,
       "cost": {
-        "wood": 2500,
-        "stone": 1800,
-        "food": 0,
+        "wood": 8400,
+        "stone": 3600,
+        "food": 1050,
         "iron": 0
       },
       "buildSeconds": 9674,
@@ -7171,9 +7171,9 @@
       "type": "archeryrange",
       "level": 13,
       "cost": {
-        "wood": 3250,
-        "stone": 2350,
-        "food": 0,
+        "wood": 11000,
+        "stone": 4650,
+        "food": 1350,
         "iron": 0
       },
       "buildSeconds": 12867,
@@ -7205,9 +7205,9 @@
       "type": "archeryrange",
       "level": 14,
       "cost": {
-        "wood": 4250,
-        "stone": 3050,
-        "food": 0,
+        "wood": 14000,
+        "stone": 6050,
+        "food": 1750,
         "iron": 0
       },
       "buildSeconds": 17113,
@@ -7239,9 +7239,9 @@
       "type": "archeryrange",
       "level": 15,
       "cost": {
-        "wood": 5500,
-        "stone": 3950,
-        "food": 0,
+        "wood": 18500,
+        "stone": 7850,
+        "food": 2300,
         "iron": 0
       },
       "buildSeconds": 22760,
@@ -7273,9 +7273,9 @@
       "type": "archeryrange",
       "level": 16,
       "cost": {
-        "wood": 7150,
-        "stone": 5100,
-        "food": 0,
+        "wood": 24000,
+        "stone": 10000,
+        "food": 2950,
         "iron": 0
       },
       "buildSeconds": 30271,
@@ -7307,9 +7307,9 @@
       "type": "archeryrange",
       "level": 17,
       "cost": {
-        "wood": 9300,
-        "stone": 6650,
-        "food": 0,
+        "wood": 31500,
+        "stone": 13500,
+        "food": 3850,
         "iron": 0
       },
       "buildSeconds": 40260,
@@ -7341,9 +7341,9 @@
       "type": "archeryrange",
       "level": 18,
       "cost": {
-        "wood": 12000,
-        "stone": 8650,
-        "food": 0,
+        "wood": 40500,
+        "stone": 17500,
+        "food": 5000,
         "iron": 0
       },
       "buildSeconds": 53546,
@@ -7375,9 +7375,9 @@
       "type": "archeryrange",
       "level": 19,
       "cost": {
-        "wood": 15500,
-        "stone": 11000,
-        "food": 0,
+        "wood": 53000,
+        "stone": 22500,
+        "food": 6500,
         "iron": 0
       },
       "buildSeconds": 71216,
@@ -7409,9 +7409,9 @@
       "type": "archeryrange",
       "level": 20,
       "cost": {
-        "wood": 20500,
-        "stone": 14500,
-        "food": 0,
+        "wood": 68500,
+        "stone": 29000,
+        "food": 8500,
         "iron": 0
       },
       "buildSeconds": 94718,
@@ -7443,9 +7443,9 @@
       "type": "dockyard",
       "level": 1,
       "cost": {
-        "wood": 200,
-        "stone": 120,
-        "food": 0,
+        "wood": 410,
+        "stone": 99,
+        "food": 33,
         "iron": 0
       },
       "buildSeconds": 540,
@@ -7479,9 +7479,9 @@
       "type": "dockyard",
       "level": 2,
       "cost": {
-        "wood": 260,
-        "stone": 160,
-        "food": 0,
+        "wood": 530,
+        "stone": 130,
+        "food": 43,
         "iron": 0
       },
       "buildSeconds": 718,
@@ -7510,9 +7510,9 @@
       "type": "dockyard",
       "level": 3,
       "cost": {
-        "wood": 340,
-        "stone": 200,
-        "food": 0,
+        "wood": 690,
+        "stone": 170,
+        "food": 56,
         "iron": 0
       },
       "buildSeconds": 955,
@@ -7541,9 +7541,9 @@
       "type": "dockyard",
       "level": 4,
       "cost": {
-        "wood": 440,
-        "stone": 260,
-        "food": 0,
+        "wood": 900,
+        "stone": 220,
+        "food": 73,
         "iron": 0
       },
       "buildSeconds": 1270,
@@ -7572,9 +7572,9 @@
       "type": "dockyard",
       "level": 5,
       "cost": {
-        "wood": 570,
-        "stone": 340,
-        "food": 0,
+        "wood": 1150,
+        "stone": 280,
+        "food": 94,
         "iron": 0
       },
       "buildSeconds": 1690,
@@ -7603,9 +7603,9 @@
       "type": "dockyard",
       "level": 6,
       "cost": {
-        "wood": 740,
-        "stone": 450,
-        "food": 0,
+        "wood": 1500,
+        "stone": 370,
+        "food": 120,
         "iron": 0
       },
       "buildSeconds": 2247,
@@ -7634,9 +7634,9 @@
       "type": "dockyard",
       "level": 7,
       "cost": {
-        "wood": 970,
-        "stone": 580,
-        "food": 0,
+        "wood": 2000,
+        "stone": 480,
+        "food": 160,
         "iron": 0
       },
       "buildSeconds": 2989,
@@ -7665,9 +7665,9 @@
       "type": "dockyard",
       "level": 8,
       "cost": {
-        "wood": 1250,
-        "stone": 750,
-        "food": 0,
+        "wood": 2550,
+        "stone": 620,
+        "food": 210,
         "iron": 0
       },
       "buildSeconds": 3975,
@@ -7696,9 +7696,9 @@
       "type": "dockyard",
       "level": 9,
       "cost": {
-        "wood": 1650,
-        "stone": 980,
-        "food": 0,
+        "wood": 3350,
+        "stone": 810,
+        "food": 270,
         "iron": 0
       },
       "buildSeconds": 5287,
@@ -7727,9 +7727,9 @@
       "type": "dockyard",
       "level": 10,
       "cost": {
-        "wood": 2100,
-        "stone": 1250,
-        "food": 0,
+        "wood": 4350,
+        "stone": 1050,
+        "food": 350,
         "iron": 0
       },
       "buildSeconds": 7032,
@@ -7758,9 +7758,9 @@
       "type": "dockyard",
       "level": 11,
       "cost": {
-        "wood": 2750,
-        "stone": 1650,
-        "food": 0,
+        "wood": 5650,
+        "stone": 1350,
+        "food": 450,
         "iron": 0
       },
       "buildSeconds": 9352,
@@ -7789,9 +7789,9 @@
       "type": "dockyard",
       "level": 12,
       "cost": {
-        "wood": 3600,
-        "stone": 2150,
-        "food": 0,
+        "wood": 7350,
+        "stone": 1750,
+        "food": 590,
         "iron": 0
       },
       "buildSeconds": 12438,
@@ -7820,9 +7820,9 @@
       "type": "dockyard",
       "level": 13,
       "cost": {
-        "wood": 4650,
-        "stone": 2800,
-        "food": 0,
+        "wood": 9550,
+        "stone": 2300,
+        "food": 770,
         "iron": 0
       },
       "buildSeconds": 16543,
@@ -7851,9 +7851,9 @@
       "type": "dockyard",
       "level": 14,
       "cost": {
-        "wood": 6050,
-        "stone": 3650,
-        "food": 0,
+        "wood": 12500,
+        "stone": 3000,
+        "food": 1000,
         "iron": 0
       },
       "buildSeconds": 22002,
@@ -7882,9 +7882,9 @@
       "type": "dockyard",
       "level": 15,
       "cost": {
-        "wood": 7850,
-        "stone": 4700,
-        "food": 0,
+        "wood": 16000,
+        "stone": 3900,
+        "food": 1300,
         "iron": 0
       },
       "buildSeconds": 29263,
@@ -7913,9 +7913,9 @@
       "type": "dockyard",
       "level": 16,
       "cost": {
-        "wood": 10000,
-        "stone": 6150,
-        "food": 0,
+        "wood": 21000,
+        "stone": 5050,
+        "food": 1700,
         "iron": 0
       },
       "buildSeconds": 38920,
@@ -7944,9 +7944,9 @@
       "type": "dockyard",
       "level": 17,
       "cost": {
-        "wood": 13500,
-        "stone": 8000,
-        "food": 0,
+        "wood": 27500,
+        "stone": 6600,
+        "food": 2200,
         "iron": 0
       },
       "buildSeconds": 51763,
@@ -7975,9 +7975,9 @@
       "type": "dockyard",
       "level": 18,
       "cost": {
-        "wood": 17500,
-        "stone": 10500,
-        "food": 0,
+        "wood": 35500,
+        "stone": 8550,
+        "food": 2850,
         "iron": 0
       },
       "buildSeconds": 68845,
@@ -8006,9 +8006,9 @@
       "type": "dockyard",
       "level": 19,
       "cost": {
-        "wood": 22500,
-        "stone": 13500,
-        "food": 0,
+        "wood": 46000,
+        "stone": 11000,
+        "food": 3700,
         "iron": 0
       },
       "buildSeconds": 91564,
@@ -8037,9 +8037,9 @@
       "type": "dockyard",
       "level": 20,
       "cost": {
-        "wood": 29000,
-        "stone": 17500,
-        "food": 0,
+        "wood": 60000,
+        "stone": 14500,
+        "food": 4800,
         "iron": 0
       },
       "buildSeconds": 121780,
@@ -8068,9 +8068,9 @@
       "type": "barracks",
       "level": 1,
       "cost": {
-        "wood": 130,
-        "stone": 110,
-        "food": 0,
+        "wood": 100,
+        "stone": 78,
+        "food": 43,
         "iron": 0
       },
       "buildSeconds": 420,
@@ -8107,9 +8107,9 @@
       "type": "barracks",
       "level": 2,
       "cost": {
-        "wood": 170,
-        "stone": 140,
-        "food": 0,
+        "wood": 130,
+        "stone": 100,
+        "food": 56,
         "iron": 0
       },
       "buildSeconds": 559,
@@ -8141,9 +8141,9 @@
       "type": "barracks",
       "level": 3,
       "cost": {
-        "wood": 220,
-        "stone": 190,
-        "food": 0,
+        "wood": 170,
+        "stone": 130,
+        "food": 73,
         "iron": 0
       },
       "buildSeconds": 743,
@@ -8175,9 +8175,9 @@
       "type": "barracks",
       "level": 4,
       "cost": {
-        "wood": 290,
-        "stone": 240,
-        "food": 0,
+        "wood": 220,
+        "stone": 170,
+        "food": 94,
         "iron": 0
       },
       "buildSeconds": 988,
@@ -8209,9 +8209,9 @@
       "type": "barracks",
       "level": 5,
       "cost": {
-        "wood": 370,
-        "stone": 310,
-        "food": 0,
+        "wood": 290,
+        "stone": 220,
+        "food": 120,
         "iron": 0
       },
       "buildSeconds": 1314,
@@ -8243,9 +8243,9 @@
       "type": "barracks",
       "level": 6,
       "cost": {
-        "wood": 480,
-        "stone": 410,
-        "food": 0,
+        "wood": 370,
+        "stone": 290,
+        "food": 160,
         "iron": 0
       },
       "buildSeconds": 1748,
@@ -8277,9 +8277,9 @@
       "type": "barracks",
       "level": 7,
       "cost": {
-        "wood": 630,
-        "stone": 530,
-        "food": 0,
+        "wood": 480,
+        "stone": 380,
+        "food": 210,
         "iron": 0
       },
       "buildSeconds": 2325,
@@ -8311,9 +8311,9 @@
       "type": "barracks",
       "level": 8,
       "cost": {
-        "wood": 820,
-        "stone": 690,
-        "food": 0,
+        "wood": 630,
+        "stone": 490,
+        "food": 270,
         "iron": 0
       },
       "buildSeconds": 3092,
@@ -8345,9 +8345,9 @@
       "type": "barracks",
       "level": 9,
       "cost": {
-        "wood": 1050,
-        "stone": 900,
-        "food": 0,
+        "wood": 820,
+        "stone": 640,
+        "food": 350,
         "iron": 0
       },
       "buildSeconds": 4112,
@@ -8379,9 +8379,9 @@
       "type": "barracks",
       "level": 10,
       "cost": {
-        "wood": 1400,
-        "stone": 1150,
-        "food": 0,
+        "wood": 1050,
+        "stone": 830,
+        "food": 460,
         "iron": 0
       },
       "buildSeconds": 5469,
@@ -8413,9 +8413,9 @@
       "type": "barracks",
       "level": 11,
       "cost": {
-        "wood": 1800,
-        "stone": 1500,
-        "food": 0,
+        "wood": 1400,
+        "stone": 1100,
+        "food": 590,
         "iron": 0
       },
       "buildSeconds": 7274,
@@ -8447,9 +8447,9 @@
       "type": "barracks",
       "level": 12,
       "cost": {
-        "wood": 2350,
-        "stone": 1950,
-        "food": 0,
+        "wood": 1800,
+        "stone": 1400,
+        "food": 770,
         "iron": 0
       },
       "buildSeconds": 9674,
@@ -8481,9 +8481,9 @@
       "type": "barracks",
       "level": 13,
       "cost": {
-        "wood": 3050,
-        "stone": 2550,
-        "food": 0,
+        "wood": 2350,
+        "stone": 1800,
+        "food": 1000,
         "iron": 0
       },
       "buildSeconds": 12867,
@@ -8515,9 +8515,9 @@
       "type": "barracks",
       "level": 14,
       "cost": {
-        "wood": 3950,
-        "stone": 3350,
-        "food": 0,
+        "wood": 3050,
+        "stone": 2350,
+        "food": 1300,
         "iron": 0
       },
       "buildSeconds": 17113,
@@ -8549,9 +8549,9 @@
       "type": "barracks",
       "level": 15,
       "cost": {
-        "wood": 5100,
-        "stone": 4350,
-        "food": 0,
+        "wood": 3950,
+        "stone": 3050,
+        "food": 1700,
         "iron": 0
       },
       "buildSeconds": 22760,
@@ -8583,9 +8583,9 @@
       "type": "barracks",
       "level": 16,
       "cost": {
-        "wood": 6650,
-        "stone": 5650,
-        "food": 0,
+        "wood": 5100,
+        "stone": 4000,
+        "food": 2200,
         "iron": 0
       },
       "buildSeconds": 30271,
@@ -8617,9 +8617,9 @@
       "type": "barracks",
       "level": 17,
       "cost": {
-        "wood": 8650,
-        "stone": 7300,
-        "food": 0,
+        "wood": 6650,
+        "stone": 5200,
+        "food": 2850,
         "iron": 0
       },
       "buildSeconds": 40260,
@@ -8651,9 +8651,9 @@
       "type": "barracks",
       "level": 18,
       "cost": {
-        "wood": 11000,
-        "stone": 9500,
-        "food": 0,
+        "wood": 8650,
+        "stone": 6750,
+        "food": 3700,
         "iron": 0
       },
       "buildSeconds": 53546,
@@ -8685,9 +8685,9 @@
       "type": "barracks",
       "level": 19,
       "cost": {
-        "wood": 14500,
-        "stone": 12500,
-        "food": 0,
+        "wood": 11000,
+        "stone": 8750,
+        "food": 4850,
         "iron": 0
       },
       "buildSeconds": 71216,
@@ -8719,9 +8719,9 @@
       "type": "barracks",
       "level": 20,
       "cost": {
-        "wood": 19000,
-        "stone": 16000,
-        "food": 0,
+        "wood": 14500,
+        "stone": 11500,
+        "food": 6300,
         "iron": 0
       },
       "buildSeconds": 94718,
@@ -8753,9 +8753,9 @@
       "type": "sawmill",
       "level": 1,
       "cost": {
-        "wood": 100,
-        "stone": 80,
-        "food": 0,
+        "wood": 7100,
+        "stone": 10000,
+        "food": 1000,
         "iron": 0
       },
       "buildSeconds": 240,
@@ -8791,9 +8791,9 @@
       "type": "sawmill",
       "level": 2,
       "cost": {
-        "wood": 130,
-        "stone": 100,
-        "food": 0,
+        "wood": 8500,
+        "stone": 12000,
+        "food": 1200,
         "iron": 0
       },
       "buildSeconds": 319,
@@ -8824,9 +8824,9 @@
       "type": "sawmill",
       "level": 3,
       "cost": {
-        "wood": 170,
-        "stone": 140,
-        "food": 0,
+        "wood": 10000,
+        "stone": 14500,
+        "food": 1450,
         "iron": 0
       },
       "buildSeconds": 425,
@@ -8857,9 +8857,9 @@
       "type": "sawmill",
       "level": 4,
       "cost": {
-        "wood": 220,
-        "stone": 180,
-        "food": 0,
+        "wood": 12000,
+        "stone": 17000,
+        "food": 1700,
         "iron": 0
       },
       "buildSeconds": 565,
@@ -8890,9 +8890,9 @@
       "type": "sawmill",
       "level": 5,
       "cost": {
-        "wood": 290,
-        "stone": 230,
-        "food": 0,
+        "wood": 14500,
+        "stone": 20500,
+        "food": 2050,
         "iron": 0
       },
       "buildSeconds": 751,
@@ -8923,9 +8923,9 @@
       "type": "sawmill",
       "level": 6,
       "cost": {
-        "wood": 370,
-        "stone": 300,
-        "food": 0,
+        "wood": 17500,
+        "stone": 24500,
+        "food": 2450,
         "iron": 0
       },
       "buildSeconds": 999,
@@ -8956,9 +8956,9 @@
       "type": "sawmill",
       "level": 7,
       "cost": {
-        "wood": 480,
-        "stone": 390,
-        "food": 0,
+        "wood": 21000,
+        "stone": 29500,
+        "food": 2950,
         "iron": 0
       },
       "buildSeconds": 1328,
@@ -8989,9 +8989,9 @@
       "type": "sawmill",
       "level": 8,
       "cost": {
-        "wood": 630,
-        "stone": 500,
-        "food": 0,
+        "wood": 25000,
+        "stone": 35000,
+        "food": 3500,
         "iron": 0
       },
       "buildSeconds": 1767,
@@ -9022,9 +9022,9 @@
       "type": "sawmill",
       "level": 9,
       "cost": {
-        "wood": 820,
-        "stone": 650,
-        "food": 0,
+        "wood": 29500,
+        "stone": 42000,
+        "food": 4200,
         "iron": 0
       },
       "buildSeconds": 2350,
@@ -9055,9 +9055,9 @@
       "type": "sawmill",
       "level": 10,
       "cost": {
-        "wood": 1050,
-        "stone": 850,
-        "food": 0,
+        "wood": 35500,
+        "stone": 50000,
+        "food": 5000,
         "iron": 0
       },
       "buildSeconds": 3125,
@@ -9088,9 +9088,9 @@
       "type": "sawmill",
       "level": 11,
       "cost": {
-        "wood": 1400,
-        "stone": 1100,
-        "food": 0,
+        "wood": 42500,
+        "stone": 60000,
+        "food": 6000,
         "iron": 0
       },
       "buildSeconds": 4156,
@@ -9121,9 +9121,9 @@
       "type": "sawmill",
       "level": 12,
       "cost": {
-        "wood": 1800,
-        "stone": 1450,
-        "food": 0,
+        "wood": 51000,
+        "stone": 71500,
+        "food": 7150,
         "iron": 0
       },
       "buildSeconds": 5528,
@@ -9154,9 +9154,9 @@
       "type": "sawmill",
       "level": 13,
       "cost": {
-        "wood": 2350,
-        "stone": 1850,
-        "food": 0,
+        "wood": 61000,
+        "stone": 85500,
+        "food": 8550,
         "iron": 0
       },
       "buildSeconds": 7352,
@@ -9187,9 +9187,9 @@
       "type": "sawmill",
       "level": 14,
       "cost": {
-        "wood": 3050,
-        "stone": 2400,
-        "food": 0,
+        "wood": 72500,
+        "stone": 100000,
+        "food": 10000,
         "iron": 0
       },
       "buildSeconds": 9779,
@@ -9220,9 +9220,9 @@
       "type": "sawmill",
       "level": 15,
       "cost": {
-        "wood": 3950,
-        "stone": 3150,
-        "food": 0,
+        "wood": 87000,
+        "stone": 125000,
+        "food": 12500,
         "iron": 0
       },
       "buildSeconds": 13006,
@@ -9253,9 +9253,9 @@
       "type": "sawmill",
       "level": 16,
       "cost": {
-        "wood": 5100,
-        "stone": 4100,
-        "food": 0,
+        "wood": 105000,
+        "stone": 145000,
+        "food": 14500,
         "iron": 0
       },
       "buildSeconds": 17298,
@@ -9286,9 +9286,9 @@
       "type": "sawmill",
       "level": 17,
       "cost": {
-        "wood": 6650,
-        "stone": 5300,
-        "food": 0,
+        "wood": 125000,
+        "stone": 175000,
+        "food": 17500,
         "iron": 0
       },
       "buildSeconds": 23006,
@@ -9319,9 +9319,9 @@
       "type": "sawmill",
       "level": 18,
       "cost": {
-        "wood": 8650,
-        "stone": 6900,
-        "food": 0,
+        "wood": 150000,
+        "stone": 210000,
+        "food": 21000,
         "iron": 0
       },
       "buildSeconds": 30598,
@@ -9352,9 +9352,9 @@
       "type": "sawmill",
       "level": 19,
       "cost": {
-        "wood": 11000,
-        "stone": 9000,
-        "food": 0,
+        "wood": 180000,
+        "stone": 250000,
+        "food": 25000,
         "iron": 0
       },
       "buildSeconds": 40695,
@@ -9385,9 +9385,9 @@
       "type": "sawmill",
       "level": 20,
       "cost": {
-        "wood": 14500,
-        "stone": 11500,
-        "food": 0,
+        "wood": 215000,
+        "stone": 300000,
+        "food": 30000,
         "iron": 0
       },
       "buildSeconds": 54124,
@@ -9418,9 +9418,9 @@
       "type": "shrineofullr",
       "level": 1,
       "cost": {
-        "wood": 180,
-        "stone": 140,
-        "food": 60,
+        "wood": 33000,
+        "stone": 35000,
+        "food": 10500,
         "iron": 0
       },
       "buildSeconds": 720,
@@ -9456,9 +9456,9 @@
       "type": "shrineofullr",
       "level": 2,
       "cost": {
-        "wood": 230,
-        "stone": 180,
-        "food": 78,
+        "wood": 56500,
+        "stone": 60000,
+        "food": 18000,
         "iron": 0
       },
       "buildSeconds": 958,
@@ -9489,9 +9489,9 @@
       "type": "shrineofullr",
       "level": 3,
       "cost": {
-        "wood": 300,
-        "stone": 240,
-        "food": 100,
+        "wood": 97000,
+        "stone": 105000,
+        "food": 31000,
         "iron": 0
       },
       "buildSeconds": 1274,
@@ -9522,9 +9522,9 @@
       "type": "shrineofullr",
       "level": 4,
       "cost": {
-        "wood": 400,
-        "stone": 310,
-        "food": 130,
+        "wood": 165000,
+        "stone": 175000,
+        "food": 53000,
         "iron": 0
       },
       "buildSeconds": 1694,
@@ -9555,9 +9555,9 @@
       "type": "shrineofullr",
       "level": 5,
       "cost": {
-        "wood": 510,
-        "stone": 400,
-        "food": 170,
+        "wood": 285000,
+        "stone": 305000,
+        "food": 91000,
         "iron": 0
       },
       "buildSeconds": 2253,
@@ -9588,9 +9588,9 @@
       "type": "shrineofnjord",
       "level": 1,
       "cost": {
-        "wood": 180,
-        "stone": 140,
-        "food": 60,
+        "wood": 33000,
+        "stone": 35000,
+        "food": 10500,
         "iron": 0
       },
       "buildSeconds": 720,
@@ -9624,9 +9624,9 @@
       "type": "shrineofnjord",
       "level": 2,
       "cost": {
-        "wood": 230,
-        "stone": 180,
-        "food": 78,
+        "wood": 56500,
+        "stone": 60000,
+        "food": 18000,
         "iron": 0
       },
       "buildSeconds": 958,
@@ -9655,9 +9655,9 @@
       "type": "shrineofnjord",
       "level": 3,
       "cost": {
-        "wood": 300,
-        "stone": 240,
-        "food": 100,
+        "wood": 97000,
+        "stone": 105000,
+        "food": 31000,
         "iron": 0
       },
       "buildSeconds": 1274,
@@ -9686,9 +9686,9 @@
       "type": "shrineofnjord",
       "level": 4,
       "cost": {
-        "wood": 400,
-        "stone": 310,
-        "food": 130,
+        "wood": 165000,
+        "stone": 175000,
+        "food": 53000,
         "iron": 0
       },
       "buildSeconds": 1694,
@@ -9717,9 +9717,9 @@
       "type": "shrineofnjord",
       "level": 5,
       "cost": {
-        "wood": 510,
-        "stone": 400,
-        "food": 170,
+        "wood": 285000,
+        "stone": 305000,
+        "food": 91000,
         "iron": 0
       },
       "buildSeconds": 2253,
@@ -9748,9 +9748,9 @@
       "type": "meadery",
       "level": 1,
       "cost": {
-        "wood": 100,
-        "stone": 80,
-        "food": 0,
+        "wood": 720,
+        "stone": 390,
+        "food": 200,
         "iron": 0
       },
       "buildSeconds": 240,
@@ -9786,9 +9786,9 @@
       "type": "meadery",
       "level": 2,
       "cost": {
-        "wood": 130,
-        "stone": 100,
-        "food": 0,
+        "wood": 940,
+        "stone": 510,
+        "food": 260,
         "iron": 0
       },
       "buildSeconds": 319,
@@ -9819,9 +9819,9 @@
       "type": "meadery",
       "level": 3,
       "cost": {
-        "wood": 170,
-        "stone": 140,
-        "food": 0,
+        "wood": 1200,
+        "stone": 660,
+        "food": 340,
         "iron": 0
       },
       "buildSeconds": 425,
@@ -9852,9 +9852,9 @@
       "type": "meadery",
       "level": 4,
       "cost": {
-        "wood": 220,
-        "stone": 180,
-        "food": 0,
+        "wood": 1600,
+        "stone": 860,
+        "food": 440,
         "iron": 0
       },
       "buildSeconds": 565,
@@ -9885,9 +9885,9 @@
       "type": "meadery",
       "level": 5,
       "cost": {
-        "wood": 290,
-        "stone": 230,
-        "food": 0,
+        "wood": 2050,
+        "stone": 1100,
+        "food": 570,
         "iron": 0
       },
       "buildSeconds": 751,
@@ -9918,9 +9918,9 @@
       "type": "meadery",
       "level": 6,
       "cost": {
-        "wood": 370,
-        "stone": 300,
-        "food": 0,
+        "wood": 2650,
+        "stone": 1450,
+        "food": 740,
         "iron": 0
       },
       "buildSeconds": 999,
@@ -9951,9 +9951,9 @@
       "type": "meadery",
       "level": 7,
       "cost": {
-        "wood": 480,
-        "stone": 390,
-        "food": 0,
+        "wood": 3500,
+        "stone": 1900,
+        "food": 970,
         "iron": 0
       },
       "buildSeconds": 1328,
@@ -9984,9 +9984,9 @@
       "type": "meadery",
       "level": 8,
       "cost": {
-        "wood": 630,
-        "stone": 500,
-        "food": 0,
+        "wood": 4500,
+        "stone": 2450,
+        "food": 1250,
         "iron": 0
       },
       "buildSeconds": 1767,
@@ -10017,9 +10017,9 @@
       "type": "meadery",
       "level": 9,
       "cost": {
-        "wood": 820,
-        "stone": 650,
-        "food": 0,
+        "wood": 5850,
+        "stone": 3200,
+        "food": 1650,
         "iron": 0
       },
       "buildSeconds": 2350,
@@ -10050,9 +10050,9 @@
       "type": "meadery",
       "level": 10,
       "cost": {
-        "wood": 1050,
-        "stone": 850,
-        "food": 0,
+        "wood": 7650,
+        "stone": 4150,
+        "food": 2100,
         "iron": 0
       },
       "buildSeconds": 3125,
@@ -10083,9 +10083,9 @@
       "type": "meadery",
       "level": 11,
       "cost": {
-        "wood": 1400,
-        "stone": 1100,
-        "food": 0,
+        "wood": 9950,
+        "stone": 5400,
+        "food": 2750,
         "iron": 0
       },
       "buildSeconds": 4156,
@@ -10116,9 +10116,9 @@
       "type": "meadery",
       "level": 12,
       "cost": {
-        "wood": 1800,
-        "stone": 1450,
-        "food": 0,
+        "wood": 13000,
+        "stone": 7000,
+        "food": 3600,
         "iron": 0
       },
       "buildSeconds": 5528,
@@ -10149,9 +10149,9 @@
       "type": "meadery",
       "level": 13,
       "cost": {
-        "wood": 2350,
-        "stone": 1850,
-        "food": 0,
+        "wood": 17000,
+        "stone": 9100,
+        "food": 4650,
         "iron": 0
       },
       "buildSeconds": 7352,
@@ -10182,9 +10182,9 @@
       "type": "meadery",
       "level": 14,
       "cost": {
-        "wood": 3050,
-        "stone": 2400,
-        "food": 0,
+        "wood": 22000,
+        "stone": 12000,
+        "food": 6050,
         "iron": 0
       },
       "buildSeconds": 9779,
@@ -10215,9 +10215,9 @@
       "type": "meadery",
       "level": 15,
       "cost": {
-        "wood": 3950,
-        "stone": 3150,
-        "food": 0,
+        "wood": 28500,
+        "stone": 15500,
+        "food": 7850,
         "iron": 0
       },
       "buildSeconds": 13006,
@@ -10248,9 +10248,9 @@
       "type": "meadery",
       "level": 16,
       "cost": {
-        "wood": 5100,
-        "stone": 4100,
-        "food": 0,
+        "wood": 37000,
+        "stone": 20000,
+        "food": 10000,
         "iron": 0
       },
       "buildSeconds": 17298,
@@ -10281,9 +10281,9 @@
       "type": "meadery",
       "level": 17,
       "cost": {
-        "wood": 6650,
-        "stone": 5300,
-        "food": 0,
+        "wood": 48000,
+        "stone": 26000,
+        "food": 13500,
         "iron": 0
       },
       "buildSeconds": 23006,
@@ -10314,9 +10314,9 @@
       "type": "meadery",
       "level": 18,
       "cost": {
-        "wood": 8650,
-        "stone": 6900,
-        "food": 0,
+        "wood": 62500,
+        "stone": 33500,
+        "food": 17500,
         "iron": 0
       },
       "buildSeconds": 30598,
@@ -10347,9 +10347,9 @@
       "type": "meadery",
       "level": 19,
       "cost": {
-        "wood": 11000,
-        "stone": 9000,
-        "food": 0,
+        "wood": 81000,
+        "stone": 44000,
+        "food": 22500,
         "iron": 0
       },
       "buildSeconds": 40695,
@@ -10380,9 +10380,9 @@
       "type": "meadery",
       "level": 20,
       "cost": {
-        "wood": 14500,
-        "stone": 11500,
-        "food": 0,
+        "wood": 105000,
+        "stone": 57000,
+        "food": 29000,
         "iron": 0
       },
       "buildSeconds": 54124,
@@ -10413,9 +10413,9 @@
       "type": "townsquare",
       "level": 1,
       "cost": {
-        "wood": 160,
-        "stone": 140,
-        "food": 40,
+        "wood": 120,
+        "stone": 130,
+        "food": 44,
         "iron": 0
       },
       "buildSeconds": 480,
@@ -10446,9 +10446,9 @@
       "type": "townsquare",
       "level": 2,
       "cost": {
-        "wood": 210,
-        "stone": 180,
-        "food": 52,
+        "wood": 160,
+        "stone": 170,
+        "food": 57,
         "iron": 0
       },
       "buildSeconds": 638,
@@ -10479,9 +10479,9 @@
       "type": "townsquare",
       "level": 3,
       "cost": {
-        "wood": 270,
-        "stone": 240,
-        "food": 68,
+        "wood": 200,
+        "stone": 220,
+        "food": 74,
         "iron": 0
       },
       "buildSeconds": 849,
@@ -10512,9 +10512,9 @@
       "type": "townsquare",
       "level": 4,
       "cost": {
-        "wood": 350,
-        "stone": 310,
-        "food": 88,
+        "wood": 260,
+        "stone": 290,
+        "food": 97,
         "iron": 0
       },
       "buildSeconds": 1129,
@@ -10545,9 +10545,9 @@
       "type": "townsquare",
       "level": 5,
       "cost": {
-        "wood": 460,
-        "stone": 400,
-        "food": 110,
+        "wood": 340,
+        "stone": 370,
+        "food": 130,
         "iron": 0
       },
       "buildSeconds": 1502,
@@ -10578,9 +10578,9 @@
       "type": "townsquare",
       "level": 6,
       "cost": {
-        "wood": 590,
-        "stone": 520,
-        "food": 150,
+        "wood": 450,
+        "stone": 480,
+        "food": 160,
         "iron": 0
       },
       "buildSeconds": 1998,
@@ -10611,9 +10611,9 @@
       "type": "townsquare",
       "level": 7,
       "cost": {
-        "wood": 770,
-        "stone": 680,
-        "food": 190,
+        "wood": 580,
+        "stone": 630,
+        "food": 210,
         "iron": 0
       },
       "buildSeconds": 2657,
@@ -10644,9 +10644,9 @@
       "type": "townsquare",
       "level": 8,
       "cost": {
-        "wood": 1000,
-        "stone": 880,
-        "food": 250,
+        "wood": 750,
+        "stone": 820,
+        "food": 280,
         "iron": 0
       },
       "buildSeconds": 3533,
@@ -10677,9 +10677,9 @@
       "type": "townsquare",
       "level": 9,
       "cost": {
-        "wood": 1300,
-        "stone": 1150,
-        "food": 330,
+        "wood": 980,
+        "stone": 1050,
+        "food": 360,
         "iron": 0
       },
       "buildSeconds": 4700,
@@ -10710,9 +10710,9 @@
       "type": "townsquare",
       "level": 10,
       "cost": {
-        "wood": 1700,
-        "stone": 1500,
-        "food": 420,
+        "wood": 1250,
+        "stone": 1400,
+        "food": 470,
         "iron": 0
       },
       "buildSeconds": 6250,
@@ -10743,9 +10743,9 @@
       "type": "townsquare",
       "level": 11,
       "cost": {
-        "wood": 2200,
-        "stone": 1950,
-        "food": 550,
+        "wood": 1650,
+        "stone": 1800,
+        "food": 610,
         "iron": 0
       },
       "buildSeconds": 8313,
@@ -10776,9 +10776,9 @@
       "type": "townsquare",
       "level": 12,
       "cost": {
-        "wood": 2850,
-        "stone": 2500,
-        "food": 720,
+        "wood": 2150,
+        "stone": 2350,
+        "food": 790,
         "iron": 0
       },
       "buildSeconds": 11056,
@@ -10809,9 +10809,9 @@
       "type": "townsquare",
       "level": 13,
       "cost": {
-        "wood": 3750,
-        "stone": 3250,
-        "food": 930,
+        "wood": 2800,
+        "stone": 3050,
+        "food": 1050,
         "iron": 0
       },
       "buildSeconds": 14705,
@@ -10842,9 +10842,9 @@
       "type": "townsquare",
       "level": 14,
       "cost": {
-        "wood": 4850,
-        "stone": 4250,
-        "food": 1200,
+        "wood": 3650,
+        "stone": 3950,
+        "food": 1350,
         "iron": 0
       },
       "buildSeconds": 19557,
@@ -10875,9 +10875,9 @@
       "type": "townsquare",
       "level": 15,
       "cost": {
-        "wood": 6300,
-        "stone": 5500,
-        "food": 1550,
+        "wood": 4700,
+        "stone": 5100,
+        "food": 1750,
         "iron": 0
       },
       "buildSeconds": 26011,
@@ -10908,9 +10908,9 @@
       "type": "townsquare",
       "level": 16,
       "cost": {
-        "wood": 8200,
-        "stone": 7150,
-        "food": 2050,
+        "wood": 6150,
+        "stone": 6650,
+        "food": 2250,
         "iron": 0
       },
       "buildSeconds": 34595,
@@ -10941,9 +10941,9 @@
       "type": "townsquare",
       "level": 17,
       "cost": {
-        "wood": 10500,
-        "stone": 9300,
-        "food": 2650,
+        "wood": 8000,
+        "stone": 8650,
+        "food": 2950,
         "iron": 0
       },
       "buildSeconds": 46012,
@@ -10974,9 +10974,9 @@
       "type": "townsquare",
       "level": 18,
       "cost": {
-        "wood": 14000,
-        "stone": 12000,
-        "food": 3450,
+        "wood": 10500,
+        "stone": 11000,
+        "food": 3800,
         "iron": 0
       },
       "buildSeconds": 61195,
@@ -11007,9 +11007,9 @@
       "type": "townsquare",
       "level": 19,
       "cost": {
-        "wood": 18000,
-        "stone": 15500,
-        "food": 4500,
+        "wood": 13500,
+        "stone": 14500,
+        "food": 4950,
         "iron": 0
       },
       "buildSeconds": 81390,
@@ -11040,9 +11040,9 @@
       "type": "townsquare",
       "level": 20,
       "cost": {
-        "wood": 23500,
-        "stone": 20500,
-        "food": 5850,
+        "wood": 17500,
+        "stone": 19000,
+        "food": 6450,
         "iron": 0
       },
       "buildSeconds": 108249,
@@ -11073,9 +11073,9 @@
       "type": "cropmill",
       "level": 1,
       "cost": {
-        "wood": 100,
-        "stone": 80,
-        "food": 0,
+        "wood": 10000,
+        "stone": 7100,
+        "food": 1000,
         "iron": 0
       },
       "buildSeconds": 240,
@@ -11111,9 +11111,9 @@
       "type": "cropmill",
       "level": 2,
       "cost": {
-        "wood": 130,
-        "stone": 100,
-        "food": 0,
+        "wood": 12000,
+        "stone": 8500,
+        "food": 1200,
         "iron": 0
       },
       "buildSeconds": 319,
@@ -11144,9 +11144,9 @@
       "type": "cropmill",
       "level": 3,
       "cost": {
-        "wood": 170,
-        "stone": 140,
-        "food": 0,
+        "wood": 14500,
+        "stone": 10000,
+        "food": 1450,
         "iron": 0
       },
       "buildSeconds": 425,
@@ -11177,9 +11177,9 @@
       "type": "cropmill",
       "level": 4,
       "cost": {
-        "wood": 220,
-        "stone": 180,
-        "food": 0,
+        "wood": 17000,
+        "stone": 12000,
+        "food": 1700,
         "iron": 0
       },
       "buildSeconds": 565,
@@ -11210,9 +11210,9 @@
       "type": "cropmill",
       "level": 5,
       "cost": {
-        "wood": 290,
-        "stone": 230,
-        "food": 0,
+        "wood": 20500,
+        "stone": 14500,
+        "food": 2050,
         "iron": 0
       },
       "buildSeconds": 751,
@@ -11243,9 +11243,9 @@
       "type": "cropmill",
       "level": 6,
       "cost": {
-        "wood": 370,
-        "stone": 300,
-        "food": 0,
+        "wood": 24500,
+        "stone": 17500,
+        "food": 2450,
         "iron": 0
       },
       "buildSeconds": 999,
@@ -11276,9 +11276,9 @@
       "type": "cropmill",
       "level": 7,
       "cost": {
-        "wood": 480,
-        "stone": 390,
-        "food": 0,
+        "wood": 29500,
+        "stone": 21000,
+        "food": 2950,
         "iron": 0
       },
       "buildSeconds": 1328,
@@ -11309,9 +11309,9 @@
       "type": "cropmill",
       "level": 8,
       "cost": {
-        "wood": 630,
-        "stone": 500,
-        "food": 0,
+        "wood": 35000,
+        "stone": 25000,
+        "food": 3500,
         "iron": 0
       },
       "buildSeconds": 1767,
@@ -11342,9 +11342,9 @@
       "type": "cropmill",
       "level": 9,
       "cost": {
-        "wood": 820,
-        "stone": 650,
-        "food": 0,
+        "wood": 42000,
+        "stone": 29500,
+        "food": 4200,
         "iron": 0
       },
       "buildSeconds": 2350,
@@ -11375,9 +11375,9 @@
       "type": "cropmill",
       "level": 10,
       "cost": {
-        "wood": 1050,
-        "stone": 850,
-        "food": 0,
+        "wood": 50000,
+        "stone": 35500,
+        "food": 5000,
         "iron": 0
       },
       "buildSeconds": 3125,
@@ -11408,9 +11408,9 @@
       "type": "cropmill",
       "level": 11,
       "cost": {
-        "wood": 1400,
-        "stone": 1100,
-        "food": 0,
+        "wood": 60000,
+        "stone": 42500,
+        "food": 6000,
         "iron": 0
       },
       "buildSeconds": 4156,
@@ -11441,9 +11441,9 @@
       "type": "cropmill",
       "level": 12,
       "cost": {
-        "wood": 1800,
-        "stone": 1450,
-        "food": 0,
+        "wood": 71500,
+        "stone": 51000,
+        "food": 7150,
         "iron": 0
       },
       "buildSeconds": 5528,
@@ -11474,9 +11474,9 @@
       "type": "cropmill",
       "level": 13,
       "cost": {
-        "wood": 2350,
-        "stone": 1850,
-        "food": 0,
+        "wood": 85500,
+        "stone": 61000,
+        "food": 8550,
         "iron": 0
       },
       "buildSeconds": 7352,
@@ -11507,9 +11507,9 @@
       "type": "cropmill",
       "level": 14,
       "cost": {
-        "wood": 3050,
-        "stone": 2400,
-        "food": 0,
+        "wood": 100000,
+        "stone": 72500,
+        "food": 10000,
         "iron": 0
       },
       "buildSeconds": 9779,
@@ -11540,9 +11540,9 @@
       "type": "cropmill",
       "level": 15,
       "cost": {
-        "wood": 3950,
-        "stone": 3150,
-        "food": 0,
+        "wood": 125000,
+        "stone": 87000,
+        "food": 12500,
         "iron": 0
       },
       "buildSeconds": 13006,
@@ -11573,9 +11573,9 @@
       "type": "cropmill",
       "level": 16,
       "cost": {
-        "wood": 5100,
-        "stone": 4100,
-        "food": 0,
+        "wood": 145000,
+        "stone": 105000,
+        "food": 14500,
         "iron": 0
       },
       "buildSeconds": 17298,
@@ -11606,9 +11606,9 @@
       "type": "cropmill",
       "level": 17,
       "cost": {
-        "wood": 6650,
-        "stone": 5300,
-        "food": 0,
+        "wood": 175000,
+        "stone": 125000,
+        "food": 17500,
         "iron": 0
       },
       "buildSeconds": 23006,
@@ -11639,9 +11639,9 @@
       "type": "cropmill",
       "level": 18,
       "cost": {
-        "wood": 8650,
-        "stone": 6900,
-        "food": 0,
+        "wood": 210000,
+        "stone": 150000,
+        "food": 21000,
         "iron": 0
       },
       "buildSeconds": 30598,
@@ -11672,9 +11672,9 @@
       "type": "cropmill",
       "level": 19,
       "cost": {
-        "wood": 11000,
-        "stone": 9000,
-        "food": 0,
+        "wood": 250000,
+        "stone": 180000,
+        "food": 25000,
         "iron": 0
       },
       "buildSeconds": 40695,
@@ -11705,9 +11705,9 @@
       "type": "cropmill",
       "level": 20,
       "cost": {
-        "wood": 14500,
-        "stone": 11500,
-        "food": 0,
+        "wood": 300000,
+        "stone": 215000,
+        "food": 30000,
         "iron": 0
       },
       "buildSeconds": 54124,
@@ -11738,9 +11738,9 @@
       "type": "smithy",
       "level": 1,
       "cost": {
-        "wood": 100,
-        "stone": 80,
-        "food": 0,
+        "wood": 1700,
+        "stone": 2100,
+        "food": 420,
         "iron": 0
       },
       "buildSeconds": 240,
@@ -11777,9 +11777,9 @@
       "type": "smithy",
       "level": 2,
       "cost": {
-        "wood": 130,
-        "stone": 100,
-        "food": 0,
+        "wood": 2200,
+        "stone": 2700,
+        "food": 540,
         "iron": 0
       },
       "buildSeconds": 319,
@@ -11811,9 +11811,9 @@
       "type": "smithy",
       "level": 3,
       "cost": {
-        "wood": 170,
-        "stone": 140,
-        "food": 0,
+        "wood": 2850,
+        "stone": 3500,
+        "food": 700,
         "iron": 0
       },
       "buildSeconds": 425,
@@ -11845,9 +11845,9 @@
       "type": "smithy",
       "level": 4,
       "cost": {
-        "wood": 220,
-        "stone": 180,
-        "food": 0,
+        "wood": 3650,
+        "stone": 4500,
+        "food": 900,
         "iron": 0
       },
       "buildSeconds": 565,
@@ -11879,9 +11879,9 @@
       "type": "smithy",
       "level": 5,
       "cost": {
-        "wood": 290,
-        "stone": 230,
-        "food": 0,
+        "wood": 4700,
+        "stone": 5850,
+        "food": 1150,
         "iron": 0
       },
       "buildSeconds": 751,
@@ -11913,9 +11913,9 @@
       "type": "smithy",
       "level": 6,
       "cost": {
-        "wood": 370,
-        "stone": 300,
-        "food": 0,
+        "wood": 6100,
+        "stone": 7550,
+        "food": 1500,
         "iron": 0
       },
       "buildSeconds": 999,
@@ -11947,9 +11947,9 @@
       "type": "smithy",
       "level": 7,
       "cost": {
-        "wood": 480,
-        "stone": 390,
-        "food": 0,
+        "wood": 7850,
+        "stone": 9700,
+        "food": 1950,
         "iron": 0
       },
       "buildSeconds": 1328,
@@ -11981,9 +11981,9 @@
       "type": "smithy",
       "level": 8,
       "cost": {
-        "wood": 630,
-        "stone": 500,
-        "food": 0,
+        "wood": 10000,
+        "stone": 12500,
+        "food": 2500,
         "iron": 0
       },
       "buildSeconds": 1767,
@@ -12015,9 +12015,9 @@
       "type": "smithy",
       "level": 9,
       "cost": {
-        "wood": 820,
-        "stone": 650,
-        "food": 0,
+        "wood": 13000,
+        "stone": 16000,
+        "food": 3250,
         "iron": 0
       },
       "buildSeconds": 2350,
@@ -12049,9 +12049,9 @@
       "type": "smithy",
       "level": 10,
       "cost": {
-        "wood": 1050,
-        "stone": 850,
-        "food": 0,
+        "wood": 17000,
+        "stone": 21000,
+        "food": 4200,
         "iron": 0
       },
       "buildSeconds": 3125,
@@ -12083,9 +12083,9 @@
       "type": "smithy",
       "level": 11,
       "cost": {
-        "wood": 1400,
-        "stone": 1100,
-        "food": 0,
+        "wood": 22000,
+        "stone": 27000,
+        "food": 5400,
         "iron": 0
       },
       "buildSeconds": 4156,
@@ -12117,9 +12117,9 @@
       "type": "smithy",
       "level": 12,
       "cost": {
-        "wood": 1800,
-        "stone": 1450,
-        "food": 0,
+        "wood": 28000,
+        "stone": 35000,
+        "food": 6950,
         "iron": 0
       },
       "buildSeconds": 5528,
@@ -12151,9 +12151,9 @@
       "type": "smithy",
       "level": 13,
       "cost": {
-        "wood": 2350,
-        "stone": 1850,
-        "food": 0,
+        "wood": 36500,
+        "stone": 45000,
+        "food": 9000,
         "iron": 0
       },
       "buildSeconds": 7352,
@@ -12185,9 +12185,9 @@
       "type": "smithy",
       "level": 14,
       "cost": {
-        "wood": 3050,
-        "stone": 2400,
-        "food": 0,
+        "wood": 47000,
+        "stone": 58000,
+        "food": 11500,
         "iron": 0
       },
       "buildSeconds": 9779,
@@ -12219,9 +12219,9 @@
       "type": "smithy",
       "level": 15,
       "cost": {
-        "wood": 3950,
-        "stone": 3150,
-        "food": 0,
+        "wood": 60500,
+        "stone": 75000,
+        "food": 15000,
         "iron": 0
       },
       "buildSeconds": 13006,
@@ -12253,9 +12253,9 @@
       "type": "smithy",
       "level": 16,
       "cost": {
-        "wood": 5100,
-        "stone": 4100,
-        "food": 0,
+        "wood": 78500,
+        "stone": 97000,
+        "food": 19500,
         "iron": 0
       },
       "buildSeconds": 17298,
@@ -12287,9 +12287,9 @@
       "type": "smithy",
       "level": 17,
       "cost": {
-        "wood": 6650,
-        "stone": 5300,
-        "food": 0,
+        "wood": 100000,
+        "stone": 125000,
+        "food": 25000,
         "iron": 0
       },
       "buildSeconds": 23006,
@@ -12321,9 +12321,9 @@
       "type": "smithy",
       "level": 18,
       "cost": {
-        "wood": 8650,
-        "stone": 6900,
-        "food": 0,
+        "wood": 130000,
+        "stone": 160000,
+        "food": 32500,
         "iron": 0
       },
       "buildSeconds": 30598,
@@ -12355,9 +12355,9 @@
       "type": "smithy",
       "level": 19,
       "cost": {
-        "wood": 11000,
-        "stone": 9000,
-        "food": 0,
+        "wood": 170000,
+        "stone": 210000,
+        "food": 41500,
         "iron": 0
       },
       "buildSeconds": 40695,
@@ -12389,9 +12389,9 @@
       "type": "smithy",
       "level": 20,
       "cost": {
-        "wood": 14500,
-        "stone": 11500,
-        "food": 0,
+        "wood": 220000,
+        "stone": 270000,
+        "food": 54000,
         "iron": 0
       },
       "buildSeconds": 54124,
@@ -12423,9 +12423,9 @@
       "type": "druidhut",
       "level": 1,
       "cost": {
-        "wood": 160,
-        "stone": 110,
-        "food": 80,
+        "wood": 750,
+        "stone": 450,
+        "food": 550,
         "iron": 0
       },
       "buildSeconds": 540,
@@ -12461,9 +12461,9 @@
       "type": "druidhut",
       "level": 2,
       "cost": {
-        "wood": 210,
-        "stone": 140,
-        "food": 100,
+        "wood": 1050,
+        "stone": 620,
+        "food": 750,
         "iron": 0
       },
       "buildSeconds": 718,
@@ -12494,9 +12494,9 @@
       "type": "druidhut",
       "level": 3,
       "cost": {
-        "wood": 270,
-        "stone": 190,
-        "food": 140,
+        "wood": 1400,
+        "stone": 840,
+        "food": 1050,
         "iron": 0
       },
       "buildSeconds": 955,
@@ -12527,9 +12527,9 @@
       "type": "druidhut",
       "level": 4,
       "cost": {
-        "wood": 350,
-        "stone": 240,
-        "food": 180,
+        "wood": 1900,
+        "stone": 1150,
+        "food": 1400,
         "iron": 0
       },
       "buildSeconds": 1270,
@@ -12560,9 +12560,9 @@
       "type": "druidhut",
       "level": 5,
       "cost": {
-        "wood": 460,
-        "stone": 310,
-        "food": 230,
+        "wood": 2650,
+        "stone": 1600,
+        "food": 1950,
         "iron": 0
       },
       "buildSeconds": 1690,
@@ -12593,9 +12593,9 @@
       "type": "druidhut",
       "level": 6,
       "cost": {
-        "wood": 590,
-        "stone": 410,
-        "food": 300,
+        "wood": 3600,
+        "stone": 2150,
+        "food": 2650,
         "iron": 0
       },
       "buildSeconds": 2247,
@@ -12626,9 +12626,9 @@
       "type": "druidhut",
       "level": 7,
       "cost": {
-        "wood": 770,
-        "stone": 530,
-        "food": 390,
+        "wood": 4900,
+        "stone": 2950,
+        "food": 3600,
         "iron": 0
       },
       "buildSeconds": 2989,
@@ -12659,9 +12659,9 @@
       "type": "druidhut",
       "level": 8,
       "cost": {
-        "wood": 1000,
-        "stone": 690,
-        "food": 500,
+        "wood": 6700,
+        "stone": 4050,
+        "food": 4950,
         "iron": 0
       },
       "buildSeconds": 3975,
@@ -12692,9 +12692,9 @@
       "type": "druidhut",
       "level": 9,
       "cost": {
-        "wood": 1300,
-        "stone": 900,
-        "food": 650,
+        "wood": 9200,
+        "stone": 5500,
+        "food": 6750,
         "iron": 0
       },
       "buildSeconds": 5287,
@@ -12725,9 +12725,9 @@
       "type": "druidhut",
       "level": 10,
       "cost": {
-        "wood": 1700,
-        "stone": 1150,
-        "food": 850,
+        "wood": 12500,
+        "stone": 7550,
+        "food": 9250,
         "iron": 0
       },
       "buildSeconds": 7032,
@@ -12758,9 +12758,9 @@
       "type": "druidhut",
       "level": 11,
       "cost": {
-        "wood": 2200,
-        "stone": 1500,
-        "food": 1100,
+        "wood": 17000,
+        "stone": 10500,
+        "food": 12500,
         "iron": 0
       },
       "buildSeconds": 9352,
@@ -12791,9 +12791,9 @@
       "type": "druidhut",
       "level": 12,
       "cost": {
-        "wood": 2850,
-        "stone": 1950,
-        "food": 1450,
+        "wood": 23500,
+        "stone": 14000,
+        "food": 17500,
         "iron": 0
       },
       "buildSeconds": 12438,
@@ -12824,9 +12824,9 @@
       "type": "druidhut",
       "level": 13,
       "cost": {
-        "wood": 3750,
-        "stone": 2550,
-        "food": 1850,
+        "wood": 32000,
+        "stone": 19500,
+        "food": 23500,
         "iron": 0
       },
       "buildSeconds": 16543,
@@ -12857,9 +12857,9 @@
       "type": "druidhut",
       "level": 14,
       "cost": {
-        "wood": 4850,
-        "stone": 3350,
-        "food": 2400,
+        "wood": 44000,
+        "stone": 26500,
+        "food": 32500,
         "iron": 0
       },
       "buildSeconds": 22002,
@@ -12890,9 +12890,9 @@
       "type": "druidhut",
       "level": 15,
       "cost": {
-        "wood": 6300,
-        "stone": 4350,
-        "food": 3150,
+        "wood": 60500,
+        "stone": 36000,
+        "food": 44000,
         "iron": 0
       },
       "buildSeconds": 29263,
@@ -12923,9 +12923,9 @@
       "type": "druidhut",
       "level": 16,
       "cost": {
-        "wood": 8200,
-        "stone": 5650,
-        "food": 4100,
+        "wood": 82500,
+        "stone": 49500,
+        "food": 60500,
         "iron": 0
       },
       "buildSeconds": 38920,
@@ -12956,9 +12956,9 @@
       "type": "druidhut",
       "level": 17,
       "cost": {
-        "wood": 10500,
-        "stone": 7300,
-        "food": 5300,
+        "wood": 115000,
+        "stone": 67500,
+        "food": 82500,
         "iron": 0
       },
       "buildSeconds": 51763,
@@ -12989,9 +12989,9 @@
       "type": "druidhut",
       "level": 18,
       "cost": {
-        "wood": 14000,
-        "stone": 9500,
-        "food": 6900,
+        "wood": 155000,
+        "stone": 92500,
+        "food": 115000,
         "iron": 0
       },
       "buildSeconds": 68845,
@@ -13022,9 +13022,9 @@
       "type": "druidhut",
       "level": 19,
       "cost": {
-        "wood": 18000,
-        "stone": 12500,
-        "food": 9000,
+        "wood": 210000,
+        "stone": 125000,
+        "food": 155000,
         "iron": 0
       },
       "buildSeconds": 91564,
@@ -13055,9 +13055,9 @@
       "type": "druidhut",
       "level": 20,
       "cost": {
-        "wood": 23500,
-        "stone": 16000,
-        "food": 11500,
+        "wood": 290000,
+        "stone": 175000,
+        "food": 210000,
         "iron": 0
       },
       "buildSeconds": 121780,
@@ -13088,9 +13088,9 @@
       "type": "cartworkshop",
       "level": 1,
       "cost": {
-        "wood": 150,
-        "stone": 110,
-        "food": 0,
+        "wood": 680,
+        "stone": 230,
+        "food": 75,
         "iron": 0
       },
       "buildSeconds": 420,
@@ -13126,9 +13126,9 @@
       "type": "cartworkshop",
       "level": 2,
       "cost": {
-        "wood": 200,
-        "stone": 140,
-        "food": 0,
+        "wood": 880,
+        "stone": 300,
+        "food": 98,
         "iron": 0
       },
       "buildSeconds": 559,
@@ -13159,9 +13159,9 @@
       "type": "cartworkshop",
       "level": 3,
       "cost": {
-        "wood": 250,
-        "stone": 190,
-        "food": 0,
+        "wood": 1150,
+        "stone": 390,
+        "food": 130,
         "iron": 0
       },
       "buildSeconds": 743,
@@ -13192,9 +13192,9 @@
       "type": "cartworkshop",
       "level": 4,
       "cost": {
-        "wood": 330,
-        "stone": 240,
-        "food": 0,
+        "wood": 1500,
+        "stone": 510,
+        "food": 160,
         "iron": 0
       },
       "buildSeconds": 988,
@@ -13225,9 +13225,9 @@
       "type": "cartworkshop",
       "level": 5,
       "cost": {
-        "wood": 430,
-        "stone": 310,
-        "food": 0,
+        "wood": 1950,
+        "stone": 660,
+        "food": 210,
         "iron": 0
       },
       "buildSeconds": 1314,
@@ -13258,9 +13258,9 @@
       "type": "cartworkshop",
       "level": 6,
       "cost": {
-        "wood": 560,
-        "stone": 410,
-        "food": 0,
+        "wood": 2500,
+        "stone": 850,
+        "food": 280,
         "iron": 0
       },
       "buildSeconds": 1748,
@@ -13291,9 +13291,9 @@
       "type": "cartworkshop",
       "level": 7,
       "cost": {
-        "wood": 720,
-        "stone": 530,
-        "food": 0,
+        "wood": 3300,
+        "stone": 1100,
+        "food": 360,
         "iron": 0
       },
       "buildSeconds": 2325,
@@ -13324,9 +13324,9 @@
       "type": "cartworkshop",
       "level": 8,
       "cost": {
-        "wood": 940,
-        "stone": 690,
-        "food": 0,
+        "wood": 4250,
+        "stone": 1450,
+        "food": 470,
         "iron": 0
       },
       "buildSeconds": 3092,
@@ -13357,9 +13357,9 @@
       "type": "cartworkshop",
       "level": 9,
       "cost": {
-        "wood": 1200,
-        "stone": 900,
-        "food": 0,
+        "wood": 5550,
+        "stone": 1900,
+        "food": 610,
         "iron": 0
       },
       "buildSeconds": 4112,
@@ -13390,9 +13390,9 @@
       "type": "cartworkshop",
       "level": 10,
       "cost": {
-        "wood": 1600,
-        "stone": 1150,
-        "food": 0,
+        "wood": 7200,
+        "stone": 2450,
+        "food": 800,
         "iron": 0
       },
       "buildSeconds": 5469,
@@ -13423,9 +13423,9 @@
       "type": "cartworkshop",
       "level": 11,
       "cost": {
-        "wood": 2050,
-        "stone": 1500,
-        "food": 0,
+        "wood": 9350,
+        "stone": 3150,
+        "food": 1050,
         "iron": 0
       },
       "buildSeconds": 7274,
@@ -13456,9 +13456,9 @@
       "type": "cartworkshop",
       "level": 12,
       "cost": {
-        "wood": 2700,
-        "stone": 1950,
-        "food": 0,
+        "wood": 12000,
+        "stone": 4100,
+        "food": 1350,
         "iron": 0
       },
       "buildSeconds": 9674,
@@ -13489,9 +13489,9 @@
       "type": "cartworkshop",
       "level": 13,
       "cost": {
-        "wood": 3500,
-        "stone": 2550,
-        "food": 0,
+        "wood": 16000,
+        "stone": 5350,
+        "food": 1750,
         "iron": 0
       },
       "buildSeconds": 12867,
@@ -13522,9 +13522,9 @@
       "type": "cartworkshop",
       "level": 14,
       "cost": {
-        "wood": 4550,
-        "stone": 3350,
-        "food": 0,
+        "wood": 20500,
+        "stone": 6950,
+        "food": 2250,
         "iron": 0
       },
       "buildSeconds": 17113,
@@ -13555,9 +13555,9 @@
       "type": "cartworkshop",
       "level": 15,
       "cost": {
-        "wood": 5900,
-        "stone": 4350,
-        "food": 0,
+        "wood": 27000,
+        "stone": 9050,
+        "food": 2950,
         "iron": 0
       },
       "buildSeconds": 22760,
@@ -13588,9 +13588,9 @@
       "type": "cartworkshop",
       "level": 16,
       "cost": {
-        "wood": 7700,
-        "stone": 5650,
-        "food": 0,
+        "wood": 35000,
+        "stone": 12000,
+        "food": 3850,
         "iron": 0
       },
       "buildSeconds": 30271,
@@ -13621,9 +13621,9 @@
       "type": "cartworkshop",
       "level": 17,
       "cost": {
-        "wood": 10000,
-        "stone": 7300,
-        "food": 0,
+        "wood": 45000,
+        "stone": 15500,
+        "food": 5000,
         "iron": 0
       },
       "buildSeconds": 40260,
@@ -13654,9 +13654,9 @@
       "type": "cartworkshop",
       "level": 18,
       "cost": {
-        "wood": 13000,
-        "stone": 9500,
-        "food": 0,
+        "wood": 59000,
+        "stone": 20000,
+        "food": 6500,
         "iron": 0
       },
       "buildSeconds": 53546,
@@ -13687,9 +13687,9 @@
       "type": "cartworkshop",
       "level": 19,
       "cost": {
-        "wood": 17000,
-        "stone": 12500,
-        "food": 0,
+        "wood": 76500,
+        "stone": 26000,
+        "food": 8450,
         "iron": 0
       },
       "buildSeconds": 71216,
@@ -13720,9 +13720,9 @@
       "type": "cartworkshop",
       "level": 20,
       "cost": {
-        "wood": 22000,
-        "stone": 16000,
-        "food": 0,
+        "wood": 99500,
+        "stone": 33500,
+        "food": 11000,
         "iron": 0
       },
       "buildSeconds": 94718,
@@ -13753,9 +13753,9 @@
       "type": "claybrickworks",
       "level": 1,
       "cost": {
-        "wood": 35,
+        "wood": 52,
         "stone": 0,
-        "food": 10,
+        "food": 33,
         "iron": 0
       },
       "buildSeconds": 180,
@@ -13786,9 +13786,9 @@
       "type": "claybrickworks",
       "level": 2,
       "cost": {
-        "wood": 46,
-        "stone": 36,
-        "food": 13,
+        "wood": 68,
+        "stone": 13,
+        "food": 43,
         "iron": 0
       },
       "buildSeconds": 239,
@@ -13819,9 +13819,9 @@
       "type": "claybrickworks",
       "level": 3,
       "cost": {
-        "wood": 59,
-        "stone": 47,
-        "food": 17,
+        "wood": 88,
+        "stone": 17,
+        "food": 56,
         "iron": 0
       },
       "buildSeconds": 318,
@@ -13852,9 +13852,9 @@
       "type": "claybrickworks",
       "level": 4,
       "cost": {
-        "wood": 77,
-        "stone": 62,
-        "food": 22,
+        "wood": 110,
+        "stone": 22,
+        "food": 73,
         "iron": 0
       },
       "buildSeconds": 423,
@@ -13885,9 +13885,9 @@
       "type": "claybrickworks",
       "level": 5,
       "cost": {
-        "wood": 100,
-        "stone": 80,
-        "food": 29,
+        "wood": 150,
+        "stone": 29,
+        "food": 94,
         "iron": 0
       },
       "buildSeconds": 563,
@@ -13918,9 +13918,9 @@
       "type": "claybrickworks",
       "level": 6,
       "cost": {
-        "wood": 130,
-        "stone": 100,
-        "food": 37,
+        "wood": 190,
+        "stone": 37,
+        "food": 120,
         "iron": 0
       },
       "buildSeconds": 749,
@@ -13951,9 +13951,9 @@
       "type": "claybrickworks",
       "level": 7,
       "cost": {
-        "wood": 170,
-        "stone": 140,
-        "food": 48,
+        "wood": 250,
+        "stone": 48,
+        "food": 160,
         "iron": 0
       },
       "buildSeconds": 996,
@@ -13984,9 +13984,9 @@
       "type": "claybrickworks",
       "level": 8,
       "cost": {
-        "wood": 220,
-        "stone": 180,
-        "food": 63,
+        "wood": 330,
+        "stone": 63,
+        "food": 210,
         "iron": 0
       },
       "buildSeconds": 1325,
@@ -14017,9 +14017,9 @@
       "type": "claybrickworks",
       "level": 9,
       "cost": {
-        "wood": 290,
-        "stone": 230,
-        "food": 82,
+        "wood": 420,
+        "stone": 82,
+        "food": 270,
         "iron": 0
       },
       "buildSeconds": 1762,
@@ -14050,9 +14050,9 @@
       "type": "claybrickworks",
       "level": 10,
       "cost": {
-        "wood": 370,
-        "stone": 300,
-        "food": 110,
+        "wood": 550,
+        "stone": 110,
+        "food": 350,
         "iron": 0
       },
       "buildSeconds": 2344,
@@ -14083,9 +14083,9 @@
       "type": "claybrickworks",
       "level": 11,
       "cost": {
-        "wood": 480,
-        "stone": 390,
-        "food": 140,
+        "wood": 720,
+        "stone": 140,
+        "food": 450,
         "iron": 0
       },
       "buildSeconds": 3117,
@@ -14116,9 +14116,9 @@
       "type": "claybrickworks",
       "level": 12,
       "cost": {
-        "wood": 630,
-        "stone": 500,
-        "food": 180,
+        "wood": 930,
+        "stone": 180,
+        "food": 590,
         "iron": 0
       },
       "buildSeconds": 4146,
@@ -14149,9 +14149,9 @@
       "type": "claybrickworks",
       "level": 13,
       "cost": {
-        "wood": 820,
-        "stone": 650,
-        "food": 230,
+        "wood": 1200,
+        "stone": 230,
+        "food": 770,
         "iron": 0
       },
       "buildSeconds": 5514,
@@ -14182,9 +14182,9 @@
       "type": "claybrickworks",
       "level": 14,
       "cost": {
-        "wood": 1050,
-        "stone": 850,
-        "food": 300,
+        "wood": 1550,
+        "stone": 300,
+        "food": 1000,
         "iron": 0
       },
       "buildSeconds": 7334,
@@ -14215,9 +14215,9 @@
       "type": "claybrickworks",
       "level": 15,
       "cost": {
-        "wood": 1400,
-        "stone": 1100,
-        "food": 390,
+        "wood": 2050,
+        "stone": 390,
+        "food": 1300,
         "iron": 0
       },
       "buildSeconds": 9754,
@@ -14248,9 +14248,9 @@
       "type": "claybrickworks",
       "level": 16,
       "cost": {
-        "wood": 1800,
-        "stone": 1450,
-        "food": 510,
+        "wood": 2650,
+        "stone": 510,
+        "food": 1700,
         "iron": 0
       },
       "buildSeconds": 12973,
@@ -14281,9 +14281,9 @@
       "type": "claybrickworks",
       "level": 17,
       "cost": {
-        "wood": 2350,
-        "stone": 1850,
-        "food": 670,
+        "wood": 3450,
+        "stone": 670,
+        "food": 2200,
         "iron": 0
       },
       "buildSeconds": 17254,
@@ -14314,9 +14314,9 @@
       "type": "claybrickworks",
       "level": 18,
       "cost": {
-        "wood": 3050,
-        "stone": 2400,
-        "food": 870,
+        "wood": 4500,
+        "stone": 870,
+        "food": 2850,
         "iron": 0
       },
       "buildSeconds": 22948,
@@ -14347,9 +14347,9 @@
       "type": "claybrickworks",
       "level": 19,
       "cost": {
-        "wood": 3950,
-        "stone": 3150,
-        "food": 1100,
+        "wood": 5850,
+        "stone": 1100,
+        "food": 3700,
         "iron": 0
       },
       "buildSeconds": 30521,
@@ -14380,9 +14380,9 @@
       "type": "claybrickworks",
       "level": 20,
       "cost": {
-        "wood": 5100,
-        "stone": 4100,
-        "food": 1450,
+        "wood": 7600,
+        "stone": 1450,
+        "food": 4800,
         "iron": 0
       },
       "buildSeconds": 40593,
@@ -14413,9 +14413,9 @@
       "type": "claybrickworks",
       "level": 21,
       "cost": {
-        "wood": 6650,
-        "stone": 5300,
-        "food": 1900,
+        "wood": 9900,
+        "stone": 1900,
+        "food": 6250,
         "iron": 0
       },
       "buildSeconds": 53989,
@@ -14446,9 +14446,9 @@
       "type": "claybrickworks",
       "level": 22,
       "cost": {
-        "wood": 8650,
-        "stone": 6900,
-        "food": 2450,
+        "wood": 13000,
+        "stone": 2450,
+        "food": 8150,
         "iron": 0
       },
       "buildSeconds": 71805,
@@ -14479,9 +14479,9 @@
       "type": "claybrickworks",
       "level": 23,
       "cost": {
-        "wood": 11000,
-        "stone": 9000,
-        "food": 3200,
+        "wood": 16500,
+        "stone": 3200,
+        "food": 10500,
         "iron": 0
       },
       "buildSeconds": 95501,
@@ -14512,9 +14512,9 @@
       "type": "claybrickworks",
       "level": 24,
       "cost": {
-        "wood": 14500,
-        "stone": 11500,
-        "food": 4200,
+        "wood": 21500,
+        "stone": 4200,
+        "food": 14000,
         "iron": 0
       },
       "buildSeconds": 127017,
@@ -14545,9 +14545,9 @@
       "type": "claybrickworks",
       "level": 25,
       "cost": {
-        "wood": 19000,
-        "stone": 15000,
-        "food": 5450,
+        "wood": 28000,
+        "stone": 5450,
+        "food": 18000,
         "iron": 0
       },
       "buildSeconds": 168932,
@@ -14578,9 +14578,9 @@
       "type": "bogoreworks",
       "level": 1,
       "cost": {
-        "wood": 35,
-        "stone": 28,
-        "food": 10,
+        "wood": 42,
+        "stone": 34,
+        "food": 20,
         "iron": 0
       },
       "buildSeconds": 180,
@@ -14616,9 +14616,9 @@
       "type": "bogoreworks",
       "level": 2,
       "cost": {
-        "wood": 46,
-        "stone": 36,
-        "food": 13,
+        "wood": 55,
+        "stone": 44,
+        "food": 26,
         "iron": 0
       },
       "buildSeconds": 239,
@@ -14649,9 +14649,9 @@
       "type": "bogoreworks",
       "level": 3,
       "cost": {
-        "wood": 59,
-        "stone": 47,
-        "food": 17,
+        "wood": 71,
+        "stone": 57,
+        "food": 34,
         "iron": 0
       },
       "buildSeconds": 318,
@@ -14682,9 +14682,9 @@
       "type": "bogoreworks",
       "level": 4,
       "cost": {
-        "wood": 77,
-        "stone": 62,
-        "food": 22,
+        "wood": 92,
+        "stone": 75,
+        "food": 44,
         "iron": 0
       },
       "buildSeconds": 423,
@@ -14715,9 +14715,9 @@
       "type": "bogoreworks",
       "level": 5,
       "cost": {
-        "wood": 100,
-        "stone": 80,
-        "food": 29,
+        "wood": 120,
+        "stone": 97,
+        "food": 57,
         "iron": 0
       },
       "buildSeconds": 563,
@@ -14748,9 +14748,9 @@
       "type": "bogoreworks",
       "level": 6,
       "cost": {
-        "wood": 130,
-        "stone": 100,
-        "food": 37,
+        "wood": 160,
+        "stone": 130,
+        "food": 74,
         "iron": 0
       },
       "buildSeconds": 749,
@@ -14781,9 +14781,9 @@
       "type": "bogoreworks",
       "level": 7,
       "cost": {
-        "wood": 170,
-        "stone": 140,
-        "food": 48,
+        "wood": 200,
+        "stone": 160,
+        "food": 97,
         "iron": 0
       },
       "buildSeconds": 996,
@@ -14814,9 +14814,9 @@
       "type": "bogoreworks",
       "level": 8,
       "cost": {
-        "wood": 220,
-        "stone": 180,
-        "food": 63,
+        "wood": 260,
+        "stone": 210,
+        "food": 130,
         "iron": 0
       },
       "buildSeconds": 1325,
@@ -14847,9 +14847,9 @@
       "type": "bogoreworks",
       "level": 9,
       "cost": {
-        "wood": 290,
-        "stone": 230,
-        "food": 82,
+        "wood": 340,
+        "stone": 280,
+        "food": 160,
         "iron": 0
       },
       "buildSeconds": 1762,
@@ -14880,9 +14880,9 @@
       "type": "bogoreworks",
       "level": 10,
       "cost": {
-        "wood": 370,
-        "stone": 300,
-        "food": 110,
+        "wood": 450,
+        "stone": 360,
+        "food": 210,
         "iron": 0
       },
       "buildSeconds": 2344,
@@ -14913,9 +14913,9 @@
       "type": "bogoreworks",
       "level": 11,
       "cost": {
-        "wood": 480,
-        "stone": 390,
-        "food": 140,
+        "wood": 580,
+        "stone": 470,
+        "food": 280,
         "iron": 0
       },
       "buildSeconds": 3117,
@@ -14946,9 +14946,9 @@
       "type": "bogoreworks",
       "level": 12,
       "cost": {
-        "wood": 630,
-        "stone": 500,
-        "food": 180,
+        "wood": 750,
+        "stone": 610,
+        "food": 360,
         "iron": 0
       },
       "buildSeconds": 4146,
@@ -14979,9 +14979,9 @@
       "type": "bogoreworks",
       "level": 13,
       "cost": {
-        "wood": 820,
-        "stone": 650,
-        "food": 230,
+        "wood": 980,
+        "stone": 790,
+        "food": 470,
         "iron": 0
       },
       "buildSeconds": 5514,
@@ -15012,9 +15012,9 @@
       "type": "bogoreworks",
       "level": 14,
       "cost": {
-        "wood": 1050,
-        "stone": 850,
-        "food": 300,
+        "wood": 1250,
+        "stone": 1050,
+        "food": 610,
         "iron": 0
       },
       "buildSeconds": 7334,
@@ -15045,9 +15045,9 @@
       "type": "bogoreworks",
       "level": 15,
       "cost": {
-        "wood": 1400,
-        "stone": 1100,
-        "food": 390,
+        "wood": 1650,
+        "stone": 1350,
+        "food": 790,
         "iron": 0
       },
       "buildSeconds": 9754,
@@ -15078,9 +15078,9 @@
       "type": "bogoreworks",
       "level": 16,
       "cost": {
-        "wood": 1800,
-        "stone": 1450,
-        "food": 510,
+        "wood": 2150,
+        "stone": 1750,
+        "food": 1000,
         "iron": 0
       },
       "buildSeconds": 12973,
@@ -15111,9 +15111,9 @@
       "type": "bogoreworks",
       "level": 17,
       "cost": {
-        "wood": 2350,
-        "stone": 1850,
-        "food": 670,
+        "wood": 2800,
+        "stone": 2250,
+        "food": 1350,
         "iron": 0
       },
       "buildSeconds": 17254,
@@ -15144,9 +15144,9 @@
       "type": "bogoreworks",
       "level": 18,
       "cost": {
-        "wood": 3050,
-        "stone": 2400,
-        "food": 870,
+        "wood": 3650,
+        "stone": 2950,
+        "food": 1750,
         "iron": 0
       },
       "buildSeconds": 22948,
@@ -15177,9 +15177,9 @@
       "type": "bogoreworks",
       "level": 19,
       "cost": {
-        "wood": 3950,
-        "stone": 3150,
-        "food": 1100,
+        "wood": 4700,
+        "stone": 3800,
+        "food": 2250,
         "iron": 0
       },
       "buildSeconds": 30521,
@@ -15210,9 +15210,9 @@
       "type": "bogoreworks",
       "level": 20,
       "cost": {
-        "wood": 5100,
-        "stone": 4100,
-        "food": 1450,
+        "wood": 6150,
+        "stone": 4950,
+        "food": 2900,
         "iron": 0
       },
       "buildSeconds": 40593,
@@ -15243,9 +15243,9 @@
       "type": "bogoreworks",
       "level": 21,
       "cost": {
-        "wood": 6650,
-        "stone": 5300,
-        "food": 1900,
+        "wood": 8000,
+        "stone": 6450,
+        "food": 3800,
         "iron": 0
       },
       "buildSeconds": 53989,
@@ -15276,9 +15276,9 @@
       "type": "bogoreworks",
       "level": 22,
       "cost": {
-        "wood": 8650,
-        "stone": 6900,
-        "food": 2450,
+        "wood": 10500,
+        "stone": 8400,
+        "food": 4950,
         "iron": 0
       },
       "buildSeconds": 71805,
@@ -15309,9 +15309,9 @@
       "type": "bogoreworks",
       "level": 23,
       "cost": {
-        "wood": 11000,
-        "stone": 9000,
-        "food": 3200,
+        "wood": 13500,
+        "stone": 11000,
+        "food": 6400,
         "iron": 0
       },
       "buildSeconds": 95501,
@@ -15342,9 +15342,9 @@
       "type": "bogoreworks",
       "level": 24,
       "cost": {
-        "wood": 14500,
-        "stone": 11500,
-        "food": 4200,
+        "wood": 17500,
+        "stone": 14000,
+        "food": 8350,
         "iron": 0
       },
       "buildSeconds": 127017,
@@ -15375,9 +15375,9 @@
       "type": "bogoreworks",
       "level": 25,
       "cost": {
-        "wood": 19000,
-        "stone": 15000,
-        "food": 5450,
+        "wood": 23000,
+        "stone": 18500,
+        "food": 11000,
         "iron": 0
       },
       "buildSeconds": 168932,
@@ -15408,9 +15408,9 @@
       "type": "hammerschmiede",
       "level": 1,
       "cost": {
-        "wood": 100,
-        "stone": 80,
-        "food": 0,
+        "wood": 10000,
+        "stone": 6350,
+        "food": 1800,
         "iron": 0
       },
       "buildSeconds": 240,
@@ -15446,9 +15446,9 @@
       "type": "hammerschmiede",
       "level": 2,
       "cost": {
-        "wood": 130,
-        "stone": 100,
-        "food": 0,
+        "wood": 12000,
+        "stone": 7600,
+        "food": 2150,
         "iron": 0
       },
       "buildSeconds": 319,
@@ -15479,9 +15479,9 @@
       "type": "hammerschmiede",
       "level": 3,
       "cost": {
-        "wood": 170,
-        "stone": 140,
-        "food": 0,
+        "wood": 14500,
+        "stone": 9100,
+        "food": 2550,
         "iron": 0
       },
       "buildSeconds": 425,
@@ -15512,9 +15512,9 @@
       "type": "hammerschmiede",
       "level": 4,
       "cost": {
-        "wood": 220,
-        "stone": 180,
-        "food": 0,
+        "wood": 17000,
+        "stone": 11000,
+        "food": 3100,
         "iron": 0
       },
       "buildSeconds": 565,
@@ -15545,9 +15545,9 @@
       "type": "hammerschmiede",
       "level": 5,
       "cost": {
-        "wood": 290,
-        "stone": 230,
-        "food": 0,
+        "wood": 20500,
+        "stone": 13000,
+        "food": 3700,
         "iron": 0
       },
       "buildSeconds": 751,
@@ -15578,9 +15578,9 @@
       "type": "hammerschmiede",
       "level": 6,
       "cost": {
-        "wood": 370,
-        "stone": 300,
-        "food": 0,
+        "wood": 24500,
+        "stone": 15500,
+        "food": 4400,
         "iron": 0
       },
       "buildSeconds": 999,
@@ -15611,9 +15611,9 @@
       "type": "hammerschmiede",
       "level": 7,
       "cost": {
-        "wood": 480,
-        "stone": 390,
-        "food": 0,
+        "wood": 29500,
+        "stone": 18500,
+        "food": 5250,
         "iron": 0
       },
       "buildSeconds": 1328,
@@ -15644,9 +15644,9 @@
       "type": "hammerschmiede",
       "level": 8,
       "cost": {
-        "wood": 630,
-        "stone": 500,
-        "food": 0,
+        "wood": 35000,
+        "stone": 22000,
+        "food": 6300,
         "iron": 0
       },
       "buildSeconds": 1767,
@@ -15677,9 +15677,9 @@
       "type": "hammerschmiede",
       "level": 9,
       "cost": {
-        "wood": 820,
-        "stone": 650,
-        "food": 0,
+        "wood": 42000,
+        "stone": 26500,
+        "food": 7550,
         "iron": 0
       },
       "buildSeconds": 2350,
@@ -15710,9 +15710,9 @@
       "type": "hammerschmiede",
       "level": 10,
       "cost": {
-        "wood": 1050,
-        "stone": 850,
-        "food": 0,
+        "wood": 50000,
+        "stone": 32000,
+        "food": 9000,
         "iron": 0
       },
       "buildSeconds": 3125,
@@ -15743,9 +15743,9 @@
       "type": "hammerschmiede",
       "level": 11,
       "cost": {
-        "wood": 1400,
-        "stone": 1100,
-        "food": 0,
+        "wood": 60000,
+        "stone": 38000,
+        "food": 11000,
         "iron": 0
       },
       "buildSeconds": 4156,
@@ -15776,9 +15776,9 @@
       "type": "hammerschmiede",
       "level": 12,
       "cost": {
-        "wood": 1800,
-        "stone": 1450,
-        "food": 0,
+        "wood": 71500,
+        "stone": 45500,
+        "food": 13000,
         "iron": 0
       },
       "buildSeconds": 5528,
@@ -15809,9 +15809,9 @@
       "type": "hammerschmiede",
       "level": 13,
       "cost": {
-        "wood": 2350,
-        "stone": 1850,
-        "food": 0,
+        "wood": 85500,
+        "stone": 54500,
+        "food": 15500,
         "iron": 0
       },
       "buildSeconds": 7352,
@@ -15842,9 +15842,9 @@
       "type": "hammerschmiede",
       "level": 14,
       "cost": {
-        "wood": 3050,
-        "stone": 2400,
-        "food": 0,
+        "wood": 100000,
+        "stone": 65000,
+        "food": 18500,
         "iron": 0
       },
       "buildSeconds": 9779,
@@ -15875,9 +15875,9 @@
       "type": "hammerschmiede",
       "level": 15,
       "cost": {
-        "wood": 3950,
-        "stone": 3150,
-        "food": 0,
+        "wood": 125000,
+        "stone": 78000,
+        "food": 22000,
         "iron": 0
       },
       "buildSeconds": 13006,
@@ -15908,9 +15908,9 @@
       "type": "hammerschmiede",
       "level": 16,
       "cost": {
-        "wood": 5100,
-        "stone": 4100,
-        "food": 0,
+        "wood": 145000,
+        "stone": 93000,
+        "food": 26500,
         "iron": 0
       },
       "buildSeconds": 17298,
@@ -15941,9 +15941,9 @@
       "type": "hammerschmiede",
       "level": 17,
       "cost": {
-        "wood": 6650,
-        "stone": 5300,
-        "food": 0,
+        "wood": 175000,
+        "stone": 110000,
+        "food": 31500,
         "iron": 0
       },
       "buildSeconds": 23006,
@@ -15974,9 +15974,9 @@
       "type": "hammerschmiede",
       "level": 18,
       "cost": {
-        "wood": 8650,
-        "stone": 6900,
-        "food": 0,
+        "wood": 210000,
+        "stone": 135000,
+        "food": 37500,
         "iron": 0
       },
       "buildSeconds": 30598,
@@ -16007,9 +16007,9 @@
       "type": "hammerschmiede",
       "level": 19,
       "cost": {
-        "wood": 11000,
-        "stone": 9000,
-        "food": 0,
+        "wood": 250000,
+        "stone": 160000,
+        "food": 45000,
         "iron": 0
       },
       "buildSeconds": 40695,
@@ -16040,9 +16040,9 @@
       "type": "hammerschmiede",
       "level": 20,
       "cost": {
-        "wood": 14500,
-        "stone": 11500,
-        "food": 0,
+        "wood": 300000,
+        "stone": 190000,
+        "food": 54000,
         "iron": 0
       },
       "buildSeconds": 54124,
@@ -16073,9 +16073,9 @@
       "type": "reindeerherder",
       "level": 1,
       "cost": {
-        "wood": 35,
+        "wood": 52,
         "stone": 0,
-        "food": 10,
+        "food": 7,
         "iron": 0
       },
       "buildSeconds": 180,
@@ -16106,9 +16106,9 @@
       "type": "reindeerherder",
       "level": 2,
       "cost": {
-        "wood": 46,
+        "wood": 68,
         "stone": 0,
-        "food": 13,
+        "food": 9,
         "iron": 0
       },
       "buildSeconds": 239,
@@ -16139,9 +16139,9 @@
       "type": "reindeerherder",
       "level": 3,
       "cost": {
-        "wood": 59,
+        "wood": 88,
         "stone": 0,
-        "food": 17,
+        "food": 12,
         "iron": 0
       },
       "buildSeconds": 318,
@@ -16172,9 +16172,9 @@
       "type": "reindeerherder",
       "level": 4,
       "cost": {
-        "wood": 77,
+        "wood": 110,
         "stone": 0,
-        "food": 22,
+        "food": 15,
         "iron": 0
       },
       "buildSeconds": 423,
@@ -16205,9 +16205,9 @@
       "type": "reindeerherder",
       "level": 5,
       "cost": {
-        "wood": 100,
+        "wood": 150,
         "stone": 0,
-        "food": 29,
+        "food": 20,
         "iron": 0
       },
       "buildSeconds": 563,
@@ -16238,9 +16238,9 @@
       "type": "reindeerherder",
       "level": 6,
       "cost": {
-        "wood": 130,
-        "stone": 100,
-        "food": 37,
+        "wood": 190,
+        "stone": 130,
+        "food": 26,
         "iron": 0
       },
       "buildSeconds": 749,
@@ -16271,9 +16271,9 @@
       "type": "reindeerherder",
       "level": 7,
       "cost": {
-        "wood": 170,
-        "stone": 140,
-        "food": 48,
+        "wood": 250,
+        "stone": 170,
+        "food": 34,
         "iron": 0
       },
       "buildSeconds": 996,
@@ -16304,9 +16304,9 @@
       "type": "reindeerherder",
       "level": 8,
       "cost": {
-        "wood": 220,
-        "stone": 180,
-        "food": 63,
+        "wood": 330,
+        "stone": 230,
+        "food": 44,
         "iron": 0
       },
       "buildSeconds": 1325,
@@ -16337,9 +16337,9 @@
       "type": "reindeerherder",
       "level": 9,
       "cost": {
-        "wood": 290,
-        "stone": 230,
-        "food": 82,
+        "wood": 420,
+        "stone": 290,
+        "food": 57,
         "iron": 0
       },
       "buildSeconds": 1762,
@@ -16370,9 +16370,9 @@
       "type": "reindeerherder",
       "level": 10,
       "cost": {
-        "wood": 370,
-        "stone": 300,
-        "food": 110,
+        "wood": 550,
+        "stone": 380,
+        "food": 74,
         "iron": 0
       },
       "buildSeconds": 2344,
@@ -16403,9 +16403,9 @@
       "type": "reindeerherder",
       "level": 11,
       "cost": {
-        "wood": 480,
-        "stone": 390,
-        "food": 140,
+        "wood": 720,
+        "stone": 500,
+        "food": 97,
         "iron": 0
       },
       "buildSeconds": 3117,
@@ -16436,9 +16436,9 @@
       "type": "reindeerherder",
       "level": 12,
       "cost": {
-        "wood": 630,
-        "stone": 500,
-        "food": 180,
+        "wood": 930,
+        "stone": 650,
+        "food": 130,
         "iron": 0
       },
       "buildSeconds": 4146,
@@ -16469,9 +16469,9 @@
       "type": "reindeerherder",
       "level": 13,
       "cost": {
-        "wood": 820,
-        "stone": 650,
-        "food": 230,
+        "wood": 1200,
+        "stone": 840,
+        "food": 160,
         "iron": 0
       },
       "buildSeconds": 5514,
@@ -16502,9 +16502,9 @@
       "type": "reindeerherder",
       "level": 14,
       "cost": {
-        "wood": 1050,
-        "stone": 850,
-        "food": 300,
+        "wood": 1550,
+        "stone": 1100,
+        "food": 210,
         "iron": 0
       },
       "buildSeconds": 7334,
@@ -16535,9 +16535,9 @@
       "type": "reindeerherder",
       "level": 15,
       "cost": {
-        "wood": 1400,
-        "stone": 1100,
-        "food": 390,
+        "wood": 2050,
+        "stone": 1400,
+        "food": 280,
         "iron": 0
       },
       "buildSeconds": 9754,
@@ -16568,9 +16568,9 @@
       "type": "reindeerherder",
       "level": 16,
       "cost": {
-        "wood": 1800,
-        "stone": 1450,
-        "food": 510,
+        "wood": 2650,
+        "stone": 1850,
+        "food": 360,
         "iron": 0
       },
       "buildSeconds": 12973,
@@ -16601,9 +16601,9 @@
       "type": "reindeerherder",
       "level": 17,
       "cost": {
-        "wood": 2350,
-        "stone": 1850,
-        "food": 670,
+        "wood": 3450,
+        "stone": 2400,
+        "food": 470,
         "iron": 0
       },
       "buildSeconds": 17254,
@@ -16634,9 +16634,9 @@
       "type": "reindeerherder",
       "level": 18,
       "cost": {
-        "wood": 3050,
-        "stone": 2400,
-        "food": 870,
+        "wood": 4500,
+        "stone": 3100,
+        "food": 610,
         "iron": 0
       },
       "buildSeconds": 22948,
@@ -16667,9 +16667,9 @@
       "type": "reindeerherder",
       "level": 19,
       "cost": {
-        "wood": 3950,
-        "stone": 3150,
-        "food": 1100,
+        "wood": 5850,
+        "stone": 4050,
+        "food": 790,
         "iron": 0
       },
       "buildSeconds": 30521,
@@ -16700,9 +16700,9 @@
       "type": "reindeerherder",
       "level": 20,
       "cost": {
-        "wood": 5100,
-        "stone": 4100,
-        "food": 1450,
+        "wood": 7600,
+        "stone": 5250,
+        "food": 1000,
         "iron": 0
       },
       "buildSeconds": 40593,
@@ -16733,9 +16733,9 @@
       "type": "reindeerherder",
       "level": 21,
       "cost": {
-        "wood": 6650,
-        "stone": 5300,
-        "food": 1900,
+        "wood": 9900,
+        "stone": 6850,
+        "food": 1350,
         "iron": 0
       },
       "buildSeconds": 53989,
@@ -16766,9 +16766,9 @@
       "type": "reindeerherder",
       "level": 22,
       "cost": {
-        "wood": 8650,
-        "stone": 6900,
-        "food": 2450,
+        "wood": 13000,
+        "stone": 8900,
+        "food": 1750,
         "iron": 0
       },
       "buildSeconds": 71805,
@@ -16799,9 +16799,9 @@
       "type": "reindeerherder",
       "level": 23,
       "cost": {
-        "wood": 11000,
-        "stone": 9000,
-        "food": 3200,
+        "wood": 16500,
+        "stone": 11500,
+        "food": 2250,
         "iron": 0
       },
       "buildSeconds": 95501,
@@ -16832,9 +16832,9 @@
       "type": "reindeerherder",
       "level": 24,
       "cost": {
-        "wood": 14500,
-        "stone": 11500,
-        "food": 4200,
+        "wood": 21500,
+        "stone": 15000,
+        "food": 2900,
         "iron": 0
       },
       "buildSeconds": 127017,
@@ -16865,9 +16865,9 @@
       "type": "reindeerherder",
       "level": 25,
       "cost": {
-        "wood": 19000,
-        "stone": 15000,
-        "food": 5450,
+        "wood": 28000,
+        "stone": 19500,
+        "food": 3800,
         "iron": 0
       },
       "buildSeconds": 168932,
@@ -16898,9 +16898,9 @@
       "type": "odinstatue",
       "level": 1,
       "cost": {
-        "wood": 180,
-        "stone": 140,
-        "food": 60,
+        "wood": 33000,
+        "stone": 35000,
+        "food": 10500,
         "iron": 0
       },
       "buildSeconds": 720,
@@ -16936,9 +16936,9 @@
       "type": "odinstatue",
       "level": 2,
       "cost": {
-        "wood": 230,
-        "stone": 180,
-        "food": 78,
+        "wood": 56500,
+        "stone": 60000,
+        "food": 18000,
         "iron": 0
       },
       "buildSeconds": 958,
@@ -16969,9 +16969,9 @@
       "type": "odinstatue",
       "level": 3,
       "cost": {
-        "wood": 300,
-        "stone": 240,
-        "food": 100,
+        "wood": 97000,
+        "stone": 105000,
+        "food": 31000,
         "iron": 0
       },
       "buildSeconds": 1274,
@@ -17002,9 +17002,9 @@
       "type": "odinstatue",
       "level": 4,
       "cost": {
-        "wood": 400,
-        "stone": 310,
-        "food": 130,
+        "wood": 165000,
+        "stone": 175000,
+        "food": 53000,
         "iron": 0
       },
       "buildSeconds": 1694,
@@ -17035,9 +17035,9 @@
       "type": "odinstatue",
       "level": 5,
       "cost": {
-        "wood": 510,
-        "stone": 400,
-        "food": 170,
+        "wood": 285000,
+        "stone": 305000,
+        "food": 91000,
         "iron": 0
       },
       "buildSeconds": 2253,
@@ -17068,9 +17068,9 @@
       "type": "palisade",
       "level": 1,
       "cost": {
-        "wood": 40,
-        "stone": 10,
-        "food": 0,
+        "wood": 540,
+        "stone": 150,
+        "food": 40,
         "iron": 0
       },
       "buildSeconds": 120,
@@ -17108,9 +17108,9 @@
       "type": "palisade",
       "level": 2,
       "cost": {
-        "wood": 52,
-        "stone": 13,
-        "food": 0,
+        "wood": 700,
+        "stone": 200,
+        "food": 52,
         "iron": 0
       },
       "buildSeconds": 160,
@@ -17143,9 +17143,9 @@
       "type": "palisade",
       "level": 3,
       "cost": {
-        "wood": 68,
-        "stone": 17,
-        "food": 0,
+        "wood": 910,
+        "stone": 250,
+        "food": 68,
         "iron": 0
       },
       "buildSeconds": 212,
@@ -17178,9 +17178,9 @@
       "type": "palisadegate",
       "level": 1,
       "cost": {
-        "wood": 40,
-        "stone": 10,
-        "food": 0,
+        "wood": 540,
+        "stone": 150,
+        "food": 40,
         "iron": 0
       },
       "buildSeconds": 120,
@@ -17218,9 +17218,9 @@
       "type": "palisadegate",
       "level": 2,
       "cost": {
-        "wood": 52,
-        "stone": 13,
-        "food": 0,
+        "wood": 700,
+        "stone": 200,
+        "food": 52,
         "iron": 0
       },
       "buildSeconds": 160,
@@ -17253,9 +17253,9 @@
       "type": "palisadegate",
       "level": 3,
       "cost": {
-        "wood": 68,
-        "stone": 17,
-        "food": 0,
+        "wood": 910,
+        "stone": 250,
+        "food": 68,
         "iron": 0
       },
       "buildSeconds": 212,
@@ -17433,9 +17433,9 @@
       "type": "siegeworkshop",
       "level": 1,
       "cost": {
-        "wood": 220,
-        "stone": 160,
-        "food": 0,
+        "wood": 6400,
+        "stone": 3200,
+        "food": 530,
         "iron": 0
       },
       "buildSeconds": 600,
@@ -17471,9 +17471,9 @@
       "type": "siegeworkshop",
       "level": 2,
       "cost": {
-        "wood": 290,
-        "stone": 210,
-        "food": 0,
+        "wood": 7900,
+        "stone": 3950,
+        "food": 650,
         "iron": 0
       },
       "buildSeconds": 798,
@@ -17504,9 +17504,9 @@
       "type": "siegeworkshop",
       "level": 3,
       "cost": {
-        "wood": 370,
-        "stone": 270,
-        "food": 0,
+        "wood": 9750,
+        "stone": 4850,
+        "food": 810,
         "iron": 0
       },
       "buildSeconds": 1061,
@@ -17537,9 +17537,9 @@
       "type": "siegeworkshop",
       "level": 4,
       "cost": {
-        "wood": 480,
-        "stone": 350,
-        "food": 0,
+        "wood": 12000,
+        "stone": 6000,
+        "food": 990,
         "iron": 0
       },
       "buildSeconds": 1412,
@@ -17570,9 +17570,9 @@
       "type": "siegeworkshop",
       "level": 5,
       "cost": {
-        "wood": 630,
-        "stone": 460,
-        "food": 0,
+        "wood": 15000,
+        "stone": 7400,
+        "food": 1200,
         "iron": 0
       },
       "buildSeconds": 1877,
@@ -17603,9 +17603,9 @@
       "type": "siegeworkshop",
       "level": 6,
       "cost": {
-        "wood": 820,
-        "stone": 590,
-        "food": 0,
+        "wood": 18000,
+        "stone": 9100,
+        "food": 1500,
         "iron": 0
       },
       "buildSeconds": 2497,
@@ -17636,9 +17636,9 @@
       "type": "siegeworkshop",
       "level": 7,
       "cost": {
-        "wood": 1050,
-        "stone": 770,
-        "food": 0,
+        "wood": 22500,
+        "stone": 11000,
+        "food": 1850,
         "iron": 0
       },
       "buildSeconds": 3321,
@@ -17669,9 +17669,9 @@
       "type": "siegeworkshop",
       "level": 8,
       "cost": {
-        "wood": 1400,
-        "stone": 1000,
-        "food": 0,
+        "wood": 27500,
+        "stone": 14000,
+        "food": 2300,
         "iron": 0
       },
       "buildSeconds": 4417,
@@ -17702,9 +17702,9 @@
       "type": "siegeworkshop",
       "level": 9,
       "cost": {
-        "wood": 1800,
-        "stone": 1300,
-        "food": 0,
+        "wood": 34000,
+        "stone": 17000,
+        "food": 2850,
         "iron": 0
       },
       "buildSeconds": 5874,
@@ -17735,9 +17735,9 @@
       "type": "siegeworkshop",
       "level": 10,
       "cost": {
-        "wood": 2350,
-        "stone": 1700,
-        "food": 0,
+        "wood": 42000,
+        "stone": 21000,
+        "food": 3500,
         "iron": 0
       },
       "buildSeconds": 7813,
@@ -17768,9 +17768,9 @@
       "type": "siegeworkshop",
       "level": 11,
       "cost": {
-        "wood": 3050,
-        "stone": 2200,
-        "food": 0,
+        "wood": 52000,
+        "stone": 26000,
+        "food": 4300,
         "iron": 0
       },
       "buildSeconds": 10391,
@@ -17801,9 +17801,9 @@
       "type": "siegeworkshop",
       "level": 12,
       "cost": {
-        "wood": 3950,
-        "stone": 2850,
-        "food": 0,
+        "wood": 64000,
+        "stone": 32000,
+        "food": 5300,
         "iron": 0
       },
       "buildSeconds": 13820,
@@ -17834,9 +17834,9 @@
       "type": "siegeworkshop",
       "level": 13,
       "cost": {
-        "wood": 5150,
-        "stone": 3750,
-        "food": 0,
+        "wood": 79000,
+        "stone": 39500,
+        "food": 6550,
         "iron": 0
       },
       "buildSeconds": 18381,
@@ -17867,9 +17867,9 @@
       "type": "siegeworkshop",
       "level": 14,
       "cost": {
-        "wood": 6650,
-        "stone": 4850,
-        "food": 0,
+        "wood": 97500,
+        "stone": 48500,
+        "food": 8050,
         "iron": 0
       },
       "buildSeconds": 24447,
@@ -17900,9 +17900,9 @@
       "type": "siegeworkshop",
       "level": 15,
       "cost": {
-        "wood": 8650,
-        "stone": 6300,
-        "food": 0,
+        "wood": 120000,
+        "stone": 60000,
+        "food": 9950,
         "iron": 0
       },
       "buildSeconds": 32514,
@@ -17933,9 +17933,9 @@
       "type": "siegeworkshop",
       "level": 16,
       "cost": {
-        "wood": 11500,
-        "stone": 8200,
-        "food": 0,
+        "wood": 150000,
+        "stone": 74000,
+        "food": 12500,
         "iron": 0
       },
       "buildSeconds": 43244,
@@ -17966,9 +17966,9 @@
       "type": "siegeworkshop",
       "level": 17,
       "cost": {
-        "wood": 14500,
-        "stone": 10500,
-        "food": 0,
+        "wood": 185000,
+        "stone": 91500,
+        "food": 15000,
         "iron": 0
       },
       "buildSeconds": 57515,
@@ -17999,9 +17999,9 @@
       "type": "siegeworkshop",
       "level": 18,
       "cost": {
-        "wood": 19000,
-        "stone": 14000,
-        "food": 0,
+        "wood": 225000,
+        "stone": 115000,
+        "food": 18500,
         "iron": 0
       },
       "buildSeconds": 76494,
@@ -18032,9 +18032,9 @@
       "type": "siegeworkshop",
       "level": 19,
       "cost": {
-        "wood": 24500,
-        "stone": 18000,
-        "food": 0,
+        "wood": 280000,
+        "stone": 140000,
+        "food": 23000,
         "iron": 0
       },
       "buildSeconds": 101737,
@@ -18065,9 +18065,9 @@
       "type": "siegeworkshop",
       "level": 20,
       "cost": {
-        "wood": 32000,
-        "stone": 23500,
-        "food": 0,
+        "wood": 340000,
+        "stone": 170000,
+        "food": 28500,
         "iron": 0
       },
       "buildSeconds": 135311,
