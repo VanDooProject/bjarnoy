@@ -89,6 +89,7 @@ import type { TerrainLookup, WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement, type MaskBounds } from './fog/fogMaskLayout';
+import { outerEdgesOf, ownedAcrossEdges, shownBorderOwner } from './realmBorders';
 import { chunkRangeOfTexels, rangesEqual, type ChunkRange } from './fog/fogChunks';
 import { bogCreekPathFor, riverPathFor, type RiverDrawing } from './riverPath';
 import {
@@ -5325,14 +5326,15 @@ export class HexMapRenderer {
     }
 
     for (const c of coords) {
-      if (fogActive && !worldModel.isExplored(c.q, c.r)) continue;
+      // Own realm on explored ground, a rival's wherever the mist is not fully opaque; ground outside every claim has no owner.
+      const ownerId = shownBorderOwner(worldModel, c.q, c.r, fogActive);
+      if (!ownerId) continue;
 
       const tile = worldModel.getTile(c.q, c.r);
       if (mode === 'world' && tile.terrain === 'sea') continue;
-      if (!tile.ownerId) continue;
 
       fogPerfStats.borderedHexCount++;
-      const owner = worldModel.getSettlement(tile.ownerId);
+      const owner = worldModel.getSettlement(ownerId);
       const color = realmColor(owner, playerId);
 
       const grid = isoGridPosition(c, TILE_W, TILE_H);
@@ -5352,7 +5354,7 @@ export class HexMapRenderer {
       // Back edges (and in world mode, which has no tall art, all edges) stay in the layer under the toppings; in
       // settlement mode the front edges go to their own graphic in terrainTop so the hex's own art can't hide them.
       // Each realm draws its outline inside its own hexes (see insetBorderCorners), so touching realms show two lines side by side.
-      const owned = ownedAcrossEdges(worldModel, c, tile.ownerId);
+      const owned = ownedAcrossEdges(worldModel, c, ownerId);
       const corners = insetBorderCorners(top, owned);
       const { back, front } = splitBorderEdges(outerEdgesOf(owned));
       if (mode === 'settlement') {
@@ -6880,15 +6882,6 @@ const NEIGHBOR_DIRS: AxialCoord[] = [
   { q: 0, r: 1 },
 ];
 
-// isoTopPoints()'s 6 corners (P0..P5) form edges [P0,P1],[P1,P2],...,[P5,P0];
-// this maps each NEIGHBOR_DIRS index to the corner-index pair of the one
-// edge that actually faces that neighbour (derived by comparing each
-// direction's screen-space offset to each edge's outward normal — see the
-// worked-out mapping in this file's history/PR description). Used so only
-// the realm's true outer edges get a border stroke, not every claimed
-// hex's full hexagon outline.
-const EDGE_FOR_DIR = [3, 2, 1, 0, 5, 4];
-
 /** Sort offset of a hex's front border edges in `terrainTop`: above its topping (+0 sprite, +0.5 overlay), below the next hex's. */
 const BORDER_FRONT_Z = 0.6;
 
@@ -6901,24 +6894,6 @@ function strokeBorderEdges(g: Graphics, corners: readonly ({ x: number; y: numbe
     g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
     g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
   }
-}
-
-/** Per edge (corner `i` to `i + 1` of isoTopPoints()), whether the neighbour across it belongs to the same realm. */
-function ownedAcrossEdges(worldModel: WorldModel, c: AxialCoord, ownerId: string): boolean[] {
-  const owned: boolean[] = new Array(6).fill(false);
-  NEIGHBOR_DIRS.forEach((d, i) => {
-    owned[EDGE_FOR_DIR[i]] = worldModel.getTile(c.q + d.q, c.r + d.r).ownerId === ownerId;
-  });
-  return owned;
-}
-
-/** Corner-index pairs (into isoTopPoints()) of a claimed hex's edges that face an unclaimed/rival neighbour. */
-function outerEdgesOf(ownedAcrossEdge: readonly boolean[]): [number, number][] {
-  const edges: [number, number][] = [];
-  ownedAcrossEdge.forEach((owned, edge) => {
-    if (!owned) edges.push([edge, (edge + 1) % 6]);
-  });
-  return edges;
 }
 
 function formatEta(ms: number): string {
