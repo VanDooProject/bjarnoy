@@ -948,16 +948,22 @@ export interface ReseedWorldResponse {
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminUserContracts.cs.
 
-/** One autocomplete hit: the account, and whether it matched by user name, settlement name or jarl name. */
+/**
+ * One autocomplete hit. `kind: 'user'` is a registered account (with `userId`); `kind: 'anonymous'` is a player without
+ * an account, identified by `settlementId` (`userName` then holds the jarl name). `via` says what matched.
+ */
 export interface AdminUserLookupResponse {
-  userId: string;
+  kind: 'user' | 'anonymous';
+  userId: string | null;
   userName: string;
   displayName: string | null;
-  role: string;
-  status: string;
+  role: string | null;
+  status: string | null;
   via: 'user' | 'settlement' | 'jarl';
   matchedName: string | null;
   worldName: string | null;
+  settlementId: string | null;
+  settlementName: string | null;
 }
 
 export interface AdminUserResponse {
@@ -1847,6 +1853,31 @@ export interface ApiKeyScope {
 
 export type ApiKeyStatus = 'Active' | 'Expired' | 'Revoked';
 
+/** A player without an account a key may act as (`X-Act-As: jarl:<label>`); the settlement fields come from the admin list only. */
+export interface ApiKeyAnonymousAccount {
+  id: string;
+  label: string;
+  isPrimary: boolean;
+  settlementName?: string | null;
+  worldName?: string | null;
+  /** True once that player registered: the grant no longer works. */
+  claimed?: boolean | null;
+}
+
+/** An anonymous account of an approved request; `settlementId` lets the approval form hand it back. */
+export interface ApprovedAnonymousAccount {
+  settlementId: string | null;
+  label: string;
+  isPrimary: boolean;
+}
+
+/** An anonymous account in a create / edit / approve body: an existing grant by `id`, or a new one from a settlement. */
+export interface AnonymousAccountInput {
+  id?: string;
+  settlementId?: string;
+  primary: boolean;
+}
+
 /** An account a key may act as besides its owner (picked per request with `X-Act-As`). */
 export interface ApiKeyAccount {
   userId: string;
@@ -1875,6 +1906,9 @@ export interface ApiKeyResponse extends ApiKeyScope {
   /** Code (`XXXX-XXXX`) of the request this key was collected from; only the admin key list fills it in. */
   requestUserCode?: string | null;
   additionalAccounts?: ApiKeyAccount[];
+  /** False for a key whose accounts are all anonymous: the owner is only the sponsor. */
+  ownerCanAct?: boolean;
+  anonymousAccounts?: ApiKeyAnonymousAccount[];
 }
 
 /** Create / recreate response: the only time the token is ever returned. */
@@ -1890,6 +1924,8 @@ export interface SaveApiKeyRequest extends ApiKeyScope {
   ownerUserId?: string | null;
   /** Further accounts besides the owner; omitted keeps the current ones on update. */
   additionalUserIds?: string[];
+  anonymousAccounts?: AnonymousAccountInput[];
+  ownerCanAct?: boolean;
   expiresAt: string;
   requestsPerMinute?: number | null;
 }
@@ -1932,12 +1968,16 @@ export interface ApiKeyApprovedSettings extends ApiKeyScope {
   lifetimeMinutes: number;
   autoRenewUntil: string | null;
   additionalAccounts: ApiKeyAccount[];
+  ownerCanAct: boolean;
+  anonymousAccounts: ApprovedAnonymousAccount[];
 }
 
 /** Body of `POST /admin/api-key-requests/{id}/approve`; every field overrides the request. */
 export interface ApproveApiKeyRequestBody {
   ownerUserId?: string | null;
   additionalUserIds?: string[];
+  anonymousAccounts?: AnonymousAccountInput[];
+  ownerCanAct?: boolean;
   features?: ApiKeyFeatureMap;
   allWorlds?: boolean;
   worldIds?: string[];

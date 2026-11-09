@@ -77,30 +77,36 @@ public sealed record AdminUserDetailResponse(
     }
 }
 
-/// <summary>One autocomplete hit of <c>GET /admin/users/lookup</c>: the account, and how it was found (<c>user</c>, <c>settlement</c> or <c>jarl</c>).</summary>
+/// <summary>
+/// One autocomplete hit of <c>GET /admin/users/lookup</c>. <c>Kind</c> is <c>user</c> (a registered account, with
+/// <c>UserId</c>) or <c>anonymous</c> (a player without an account, identified by <c>SettlementId</c>; the client-local
+/// owner id is never returned). <c>Via</c> says what matched: <c>user</c>, <c>settlement</c> or <c>jarl</c>.
+/// </summary>
 public sealed record AdminUserLookupResponse(
-    Guid UserId,
+    string Kind,
+    Guid? UserId,
     string UserName,
     string? DisplayName,
-    string Role,
-    string Status,
+    string? Role,
+    string? Status,
     string Via,
     string? MatchedName,
-    string? WorldName)
+    string? WorldName,
+    Guid? SettlementId,
+    string? SettlementName)
 {
     public static AdminUserLookupResponse From(UserLookupMatch match)
     {
         ArgumentNullException.ThrowIfNull(match);
 
-        return new AdminUserLookupResponse(
-            match.User.Id,
-            match.User.UserName,
-            match.User.DisplayName,
-            match.User.Role.ToString().ToLowerInvariant(),
-            match.User.Status.ToString().ToLowerInvariant(),
-            match.Via.ToString().ToLowerInvariant(),
-            match.MatchedName,
-            match.WorldName);
+        var via = match.Via.ToString().ToLowerInvariant();
+        return match.User is { } user
+            ? new AdminUserLookupResponse(
+                "user", user.Id, user.UserName, user.DisplayName, user.Role.ToString().ToLowerInvariant(),
+                user.Status.ToString().ToLowerInvariant(), via, match.MatchedName, match.WorldName, null, null)
+            : new AdminUserLookupResponse(
+                "anonymous", null, match.JarlName ?? string.Empty, null, null, null, via, match.MatchedName,
+                match.WorldName, match.SettlementId, match.SettlementName);
     }
 }
 

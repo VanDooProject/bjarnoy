@@ -16,6 +16,9 @@ const global = { plugins: [createTestI18n({ adminApiKeys })] };
 
 function hit(id: string, overrides: Partial<AdminUserLookupResponse> = {}): AdminUserLookupResponse {
   return {
+    kind: 'user',
+    settlementId: null,
+    settlementName: null,
     userId: id,
     userName: `user-${id}`,
     displayName: null,
@@ -53,6 +56,29 @@ describe('UserLookupInput', () => {
     await flushPromises();
     expect(adminLookupUsers).toHaveBeenCalledTimes(1);
     expect(adminLookupUsers.mock.calls[0][0]).toBe('rag');
+  });
+
+  it('marks a player without an account and shows their settlement', async () => {
+    adminLookupUsers.mockResolvedValue([
+      hit('x', {
+        kind: 'anonymous',
+        userId: null,
+        userName: 'Jarl-aae5',
+        role: null,
+        status: null,
+        via: 'jarl',
+        matchedName: 'Jarl-aae5',
+        settlementId: 's1',
+        settlementName: 'Hedeby',
+        worldName: 'Midgard',
+      }),
+    ]);
+    const wrapper = mount(UserLookupInput, { global, props: { exclude: [] } });
+    await type(wrapper, 'aae5');
+    const row = wrapper.get('[data-testid="user-lookup-pick-s1"]');
+    expect(row.text()).toContain('Jarl-aae5');
+    expect(row.text()).toContain('no account');
+    expect(row.text()).toContain('Hedeby · Midgard');
   });
 
   it('says which settlement or jarl matched', async () => {

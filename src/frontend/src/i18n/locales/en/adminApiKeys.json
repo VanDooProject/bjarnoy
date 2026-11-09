@@ -50,6 +50,7 @@
     "context": "Context",
     "requester": "Requester",
     "owner": "Requested owner",
+    "ambiguous": "\"{name}\" matches {n} players; pick the right one yourself.",
     "accounts": "Requested further accounts",
     "features": "Features",
     "worlds": "Worlds",
@@ -64,6 +65,7 @@
     "includeInactive": "Show revoked and expired",
     "empty": "No API keys.",
     "neverUsed": "Never",
+    "claimed": "claimed",
     "edit": "Edit",
     "recreate": "Recreate",
     "revoke": "Revoke",
@@ -87,7 +89,9 @@
       "user": "{name}",
       "settlement": "settlement {name}",
       "jarl": "jarl {name}"
-    }
+    },
+    "noAccount": "no account",
+    "settlementIn": "{settlement} · {world}"
   },
   "editor": {
     "name": "Name",
@@ -100,6 +104,14 @@
     "accountsHint": "The key may also act as these accounts: a request picks one with the X-Act-As header, otherwise it acts as the owner.",
     "accountSearch": "Add account: search user, settlement or jarl",
     "removeAccount": "Remove {name}",
+    "anonymousBadge": "no account",
+    "anonymousHeader": "X-Act-As: jarl:{label}",
+    "anonymousPrimary": "default",
+    "makePrimary": "Make {name} the default",
+    "claimedWarning": "This player registered an account; the key can no longer act as them. Remove it and add the account.",
+    "ownerCanAct": "The owner can act as themself",
+    "ownerCanActOff": "Sponsor only: requests without X-Act-As act as the default anonymous account, and admin features are off.",
+    "ownerSponsor": "Owner (sponsor; the key does not act as this user)",
     "features": "Features",
     "feature": "Feature",
     "worldScoped": "world-scoped",
