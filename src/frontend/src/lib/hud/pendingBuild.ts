@@ -43,8 +43,8 @@ export function isPendingOrder(order: Pick<BuildOrderResponse, 'id'>): boolean {
 
 /**
  * The level an upgrade of the building on `at` queues: one above the highest level it already has (`builtLevel`) or is
- * already being built to (an upgrade can queue behind a running one when the waiting room has room). The ring's Upgrade
- * card, the building panel and the optimistic order all read it, so they agree with the order the server creates.
+ * already being built to (once stacking is switched on, an upgrade can queue behind a running one). The ring's Upgrade
+ * card and the optimistic order both read it, so they agree with the order the server creates.
  */
 export function nextUpgradeLevel(
   builtLevel: number,

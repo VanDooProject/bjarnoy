@@ -211,39 +211,12 @@ describe('BuildingModal actions', () => {
     expect(wrapper.find('button.primary').exists()).toBe(false);
   });
 
-  it('still offers the upgrade action on a built tile', async () => {
+  it('offers no upgrade on a built tile: upgrading lives in the ring menu', () => {
     rich(useWorldStore());
     const wrapper = mountModal({ q: 1, r: 1, terrain: 'grass', buildingType: 'farm', buildingLevel: 1 } as Tile);
 
-    const button = wrapper.get('button.primary');
-    expect(button.text()).toContain('Upgrade to level 2');
-    await button.trigger('click');
-    expect(wrapper.emitted('upgrade')).toHaveLength(1);
-  });
-
-  const runningUpgrade = {
-    id: 'order-1', q: 1, r: 1, building: 'farm', kind: 'build' as const, targetLevel: 3, state: 'building' as const, slotCost: 1,
-    completesAtGameTime: null, completesInSeconds: 60, totalSeconds: 60,
-  };
-
-  it('offers no upgrade while the hex already has its one order (the server would refuse it)', () => {
-    const world = useWorldStore();
-    rich(world);
-    world.hud.queue = [runningUpgrade];
-    const wrapper = mountModal({ q: 1, r: 1, terrain: 'grass', buildingType: 'farm', buildingLevel: 2 } as Tile);
-
-    expect(wrapper.get('[data-testid="hex-busy-note"]').text()).toBe('This hex already has an order');
+    expect(wrapper.text()).not.toMatch(/upgrade/i);
     expect(wrapper.find('button.primary').exists()).toBe(false);
-  });
-
-  it('with stacking allowed, offers the level after the running upgrade', () => {
-    const world = useWorldStore();
-    rich(world);
-    world.hud.construction = { ...world.hud.construction, maxOrdersPerHex: 2 };
-    world.hud.queue = [runningUpgrade];
-    const wrapper = mountModal({ q: 1, r: 1, terrain: 'grass', buildingType: 'farm', buildingLevel: 2 } as Tile);
-
-    expect(wrapper.get('button.primary').text()).toContain('Upgrade to level 4');
   });
 });
 
@@ -290,7 +263,6 @@ describe('BuildingModal outside the realm', () => {
     const wrapper = mountModal(farm());
 
     expect(wrapper.find('[data-testid="outside-realm"]').exists()).toBe(false);
-    expect(wrapper.find('.actions').exists()).toBe(true);
   });
 
   it('hides the Town Square feast while the square is outside the realm', () => {

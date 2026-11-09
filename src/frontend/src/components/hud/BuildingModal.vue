@@ -21,7 +21,6 @@ import { isOutsideRealm, secondsToNextLevelLoss, formatDecayWait } from '../../l
 import {
   buildingStatsAt,
   scaleOutput,
-  buildingUpgradeCost,
   SHRINE_BUILDING_TYPES,
 } from '../../lib/map/buildingEconomy';
 
@@ -31,19 +30,13 @@ const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' }
 import { buildingArtOnTile, terrainArt } from '../../lib/map/buildingArt';
 import { tileIsBuildable } from '../../lib/map/ringCatalogue';
 import AtlasSprite from '../AtlasSprite.vue';
-import { hexTakesNoOrder, nextUpgradeLevel } from '../../lib/hud/pendingBuild';
 
 const props = defineProps<{
   tile: Tile;
   mine: boolean;
   ownerLabel: string | null;
-  // Issue #158: the caller (SettlementView) surfaces a queue rejection's
-  // detail text here (NoFreeSlot's premium hint included) rather than this
-  // modal reaching into the API layer itself.
-  /** Why the last build/upgrade attempt was rejected by the backend, or null once dismissed by a fresh attempt. */
-  error?: string | null;
 }>();
-const emit = defineEmits<{ close: []; upgrade: [] }>();
+const emit = defineEmits<{ close: [] }>();
 
 // Issue #53: shrine slots by level, mirroring ShrineCatalogue.Slots.cs.
 function shrineSlotsFor(level: number): number {
@@ -248,71 +241,6 @@ const currentStats = computed(() =>
       }
     : undefined,
 );
-
-// Only an existing building has an action here (upgrade); a fresh build
-// is placed from the ring menu, so an empty tile has no cost to show.
-// Queued behind a running upgrade, this one is for the level after it (the order the server creates).
-const upgradeLevel = computed(() => nextUpgradeLevel(level.value, world.hud.queue, props.tile));
-const upgradeCost = computed<ResourceLine>(() =>
-  props.tile.buildingType
-    ? buildingUpgradeCost(props.tile.buildingType, upgradeLevel.value)
-    : { wood: 0, stone: 0, food: 0, iron: 0 },
-);
-
-const costLine = computed(() =>
-  (Object.keys(upgradeCost.value) as (keyof ResourceLine)[])
-    .filter((key) => upgradeCost.value[key] > 0)
-    .map((key) => `${upgradeCost.value[key]} ${resourceName(key)}`)
-    .join(' · '),
-);
-
-// Issue #158: affordability is checked against `available` (stock minus
-// what the waiting build queue has reserved), not raw stock — a reservation
-// that could still be spent here would not be a reservation. Demo mode has
-// no reservation concept (`hud.available` mirrors `hud.resources` there —
-// see stores/world.ts), so this degrades to the old plain-stock check for
-// free.
-const canAfford = computed(() =>
-  (Object.keys(upgradeCost.value) as (keyof ResourceLine)[]).every(
-    (key) => world.hud.available[key] >= upgradeCost.value[key],
-  ),
-);
-
-// A hex already holding a waiting order (this settlement's premium queue,
-// still on this same hex) shows a distinct "queued, no slot yet" state
-// instead of a build/upgrade button — cancelling it is BuildQueuePanel's
-// job, not this modal's.
-const waitingOrderHere = computed(() =>
-  world.hud.queue.find((o) => o.q === props.tile.q && o.r === props.tile.r && o.state === 'waiting'),
-);
-
-// A raze order on this hex (building or waiting): the building keeps working until it finishes, and the hex takes no
-// upgrade meanwhile — cancelling is BuildQueuePanel's job.
-const razeOrderHere = computed(() =>
-  world.hud.queue.find((o) => o.q === props.tile.q && o.r === props.tile.r && o.kind === 'raze'),
-);
-
-// Any other order at the hex's limit (today: a running build or upgrade, one order per hex): the hex takes no upgrade.
-const hexFull = computed(() => hexTakesNoOrder(world.hud.queue, props.tile, world.hud.construction.maxOrdersPerHex));
-
-// No free construction slot right now (every slot occupied by an
-// already-building order) — for a premium account (a non-zero waiting
-// queue), the action still submits, but as a waiting-queue request rather
-// than an immediate build, so the button copy says so up front instead of
-// surprising the player with a 409.
-const noFreeSlot = computed(() => world.hud.construction.slotsUsed >= world.hud.construction.slots);
-
-// No free slot *and* no waiting queue at all (`maxWaitingOrders === 0`
-// doubles as "not premium" — see stores/world.ts's own comment on the
-// field) — there is nothing this click could do but be rejected, so the
-// button is disabled outright instead of only failing after the round trip.
-const noSlotNoQueue = computed(() => noFreeSlot.value && world.hud.construction.maxWaitingOrders === 0);
-
-const actionLabel = computed(() => {
-  if (noSlotNoQueue.value) return t('hud.buildingModal.noFreeSlotPremium');
-  if (noFreeSlot.value) return t('hud.buildingModal.queueBuild');
-  return t('hud.buildingModal.upgradeToLevel', { level: upgradeLevel.value });
-});
 </script>
 
 <template>
@@ -434,39 +362,6 @@ const actionLabel = computed(() => {
             {{ t('hud.buildingModal.feastAction') }}
           </button>
         </div>
-
-        <div v-if="mine && buildable && razeOrderHere && !outsideRealm" class="actions">
-          <p class="desc queued-note" data-testid="raze-note">
-            {{
-              razeOrderHere.targetLevel > 0
-                ? t('hud.buildingModal.razingNote', { level: razeOrderHere.targetLevel })
-                : t('hud.buildingModal.razingRemoveNote')
-            }}
-          </p>
-        </div>
-        <div v-else-if="mine && buildable && waitingOrderHere && !outsideRealm" class="actions">
-          <p class="desc queued-note">{{ t('hud.buildingModal.queuedNote') }}</p>
-        </div>
-        <div v-else-if="mine && buildable && hexFull && !outsideRealm" class="actions">
-          <p class="desc queued-note" data-testid="hex-busy-note">{{ t('hud.ringMenu.actions.hexBusy') }}</p>
-        </div>
-        <div v-else-if="mine && buildable && tile.buildingType && !outsideRealm" class="actions">
-          <div class="cost">{{ t('hud.buildingModal.upgradeCost') }}: {{ costLine }}</div>
-          <p v-if="!canAfford" class="desc afford-note">
-            {{ t('hud.buildingModal.notEnoughResources') }}
-          </p>
-          <i18n-t v-if="noSlotNoQueue" keypath="hud.buildingModal.premiumRequired" tag="p" class="desc afford-note">
-            <template #premium><strong>{{ t('hud.buildingModal.premium') }}</strong></template>
-          </i18n-t>
-          <p v-if="error" class="desc afford-note">{{ error }}</p>
-          <button
-            class="primary"
-            :disabled="!canAfford || noSlotNoQueue"
-            @click="emit('upgrade')"
-          >
-            {{ actionLabel }}
-          </button>
-        </div>
       </div>
     </div>
   </div>
@@ -574,24 +469,11 @@ const actionLabel = computed(() => {
 .actions {
   margin-top: 22px;
 }
-.action-error {
-  margin: 0 0 10px;
-  font-size: 13px;
-  color: #e07a5f;
-}
-.cost {
-  margin-bottom: 10px;
-  font-size: 13px;
-  color: var(--gold);
-}
 .afford-note {
   margin: 0 0 10px;
   font-size: 12px;
   color: #e07a5f;
   max-width: 380px;
-}
-.queued-note {
-  color: var(--muted);
 }
 .primary {
   padding: 12px 22px;

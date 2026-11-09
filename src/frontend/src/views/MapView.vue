@@ -580,10 +580,9 @@ function onHover(info: HoverInfo | null) {
 // what opens BuildingModal now, rather than every click doing so.
 const selectedCoord = ref<AxialCoord | null>(null);
 const selectedTile = ref<Tile | null>(null);
-// Why the last build/upgrade attempt was rejected (NoFreeSlot's premium
-// hint included, issue #158) — surfaced in BuildingModal rather than only
-// `console.error`'d, and cleared whenever a fresh attempt starts, the modal
-// closes, or a different tile is selected.
+// Why the last demo build was rejected — shown in the ring, which stays open
+// (live orders are optimistic: a refusal shows in the chip under the hex). Cleared
+// whenever a fresh attempt starts, the ring closes, or a different tile is selected.
 const actionError = ref<string | null>(null);
 // A building's training window, separate from BuildingModal (it lists the units that building
 // trains with a quantity picker each, not a single build/upgrade action) — see the ring's
@@ -1418,9 +1417,7 @@ async function upgrade() {
         :tile="selectedTile"
         :mine="modalMine"
         :owner-label="modalOwnerLabel"
-        :error="actionError"
         @close="closeModal"
-        @upgrade="upgrade"
       />
       <TrainingModal
         v-if="selectedTile?.buildingType && trainModalOpen"
