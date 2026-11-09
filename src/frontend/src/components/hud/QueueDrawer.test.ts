@@ -395,15 +395,41 @@ describe('QueueDrawer', () => {
       expect(recallArmy).toHaveBeenCalledWith('army-1', undefined);
     });
 
-    it('a row tap closes the drawer and emits select-army', async () => {
+    it('a single row tap selects the army and keeps the drawer open', async () => {
       const world = useWorldStore();
       world.armies = [army({ id: 'army-1' })];
 
       const wrapper = mountDrawer({ open: true });
       await wrapper.get('.army-row .status-row-click').trigger('click');
 
+      expect(world.selectedArmyId).toBe('army-1');
+      expect(wrapper.emitted('select-army')).toBeUndefined();
+      expect(wrapper.emitted('update:open')).toBeUndefined();
+    });
+
+    it('a second tap on the same row closes the drawer and emits select-army', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+
+      const wrapper = mountDrawer({ open: true });
+      const row = wrapper.get('.army-row .status-row-click');
+      await row.trigger('click');
+      await row.trigger('click');
+
       expect(wrapper.emitted('select-army')).toEqual([['army-1']]);
       expect(wrapper.emitted('update:open')).toEqual([[false]]);
+    });
+
+    it('taps on two different rows are not a double tap', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' }), army({ id: 'army-2' })];
+
+      const wrapper = mountDrawer({ open: true });
+      const rows = wrapper.findAll('.army-row .status-row-click');
+      await rows[0].trigger('click');
+      await rows[1].trigger('click');
+
+      expect(wrapper.emitted('select-army')).toBeUndefined();
     });
 
     it('build and training sections stay unaffected by the Armies section', () => {
