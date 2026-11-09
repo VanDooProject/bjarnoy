@@ -102,17 +102,22 @@ describe('useBuildRing limit hints in live mode', () => {
     expect(lockOf('shrineoffreyja')).not.toContain(enHud.ringMenu.shrineLimitLock);
   });
 
-  it('counts the storage houses of the whole realm for an extra one', () => {
-    world.hud.buildings = [placed('storagehouse', 25, 3, 0), placed('storagehouse', 1, 9, 9)];
-    expect(lockOf('storagehouse')).toContain('Needs 2 Storehouses at level 15');
+  it('counts the maxed storage houses of the whole realm for the next Great Storehouse', () => {
+    world.hud.buildings = [placed('storagehouse', 25, 3, 0), placed('storagehouse', 1, 9, 9), placed('greatstorehouse', 1, 5, 5)];
+    expect(lockOf('greatstorehouse')).toContain('Needs 2 Storehouses at level 25');
 
-    world.hud.buildings = [placed('storagehouse', 25, 3, 0), placed('storagehouse', 25, 9, 9)];
-    expect(lockOf('storagehouse')).not.toContain('Needs 2 Storehouses at level 15');
+    world.hud.buildings = [placed('storagehouse', 25, 3, 0), placed('storagehouse', 25, 9, 9), placed('greatstorehouse', 1, 5, 5)];
+    expect(lockOf('greatstorehouse')).not.toContain('Needs 2 Storehouses at level 25');
   });
 
-  it('counts a queued storage house in the realm as held', () => {
+  it('counts a queued Great Storehouse in the realm as held', () => {
     world.hud.buildings = [placed('storagehouse', 25, 3, 0)];
-    world.hud.queue = [queued('storagehouse', 9, 9)];
-    expect(lockOf('storagehouse')).toContain('Needs 2 Storehouses at level 15');
+    world.hud.queue = [queued('greatstorehouse', 9, 9)];
+    expect(lockOf('greatstorehouse')).toContain('Needs 2 Storehouses at level 25');
+  });
+
+  it('never locks a new Storage House by count', () => {
+    world.hud.buildings = [placed('storagehouse', 1, 3, 0), placed('storagehouse', 1, 9, 9)];
+    expect(lockOf('storagehouse')).toEqual([]);
   });
 });

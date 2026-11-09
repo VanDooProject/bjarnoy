@@ -982,7 +982,7 @@
       "capacity": "Adds, per resource",
       "cell": "Level {level}: {capacity}",
       "levelCap": "A {great} cannot be higher than your {longhouse}.",
-      "greatCount": "You can build any number of {storehouse}s, and their level does not depend on your longhouse. A {great} needs a {storehouse} at level 25, and every further one needs one more: the second needs two at level 25, the third three, and so on.",
+      "greatCount": "You can build any number of storehouses, and their level does not depend on your longhouse. A {great} needs a {storehouse} at level 25, and every further one needs one more: the second needs two at level 25, the third three, and so on.",
       "overCap": "A cost above your storage limit can never be paid, however long you wait. Build storage before an upgrade that costs more than you can hold."
     },
     "upkeep": {

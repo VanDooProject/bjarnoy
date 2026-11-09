@@ -120,7 +120,7 @@ describe('buildTechTreeNodes', () => {
     expect(byName.get('storagehouse')!.chips).toEqual([{ text: 'LH 1', kind: 'longhouse' }]);
     expect(byName.get('greatstorehouse')!.chips).toEqual([
       { text: 'LH 15', kind: 'longhouse' },
-      { text: 'Storage 15', kind: 'building' },
+      { text: 'Storage 25', kind: 'building' },
     ]);
     expect(byName.get('shrineofthor')!.chips).toEqual([
       { text: 'LH 25', kind: 'longhouse' },
@@ -130,7 +130,7 @@ describe('buildTechTreeNodes', () => {
 
   it('describes what a building gives from the shared stats helper', () => {
     expect(byName.get('lumberjack')!.gives).toBe('+8 Wood/h');
-    expect(byName.get('storagehouse')!.gives).toBe('+600 storage capacity');
+    expect(byName.get('storagehouse')!.gives).toBe('+300 storage capacity');
     expect(byName.get('barracks')!.gives).toBe('Trains land troops');
   });
 
