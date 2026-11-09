@@ -3,7 +3,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import { buildingName, terrainName } from '../i18n/catalogueNames';
-import { useRoute, useRouter } from 'vue-router';
+import { useRouter } from 'vue-router';
+import { useDisplayedRoute } from '../composables/useDisplayedRoute';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
 import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
@@ -105,7 +106,8 @@ const hudInsetBottomPx = computed(() => (hudBarAtBottom.value ? hudBarHeightPx.v
 const unitCatalogue = useUnitCatalogueStore();
 const guild = useGuildStore();
 const buildingCatalogue = useBuildingCatalogueStore();
-const route = useRoute();
+// The route this view renders, not the URL: under a modal route (App.vue) the URL is the modal's.
+const route = useDisplayedRoute();
 const router = useRouter();
 
 // One view/one persistent renderer serves both the settlement and the world
@@ -117,7 +119,7 @@ const router = useRouter();
 // from the route rather than tracked as separate local state, so a zoom
 // crossing, a nav click, browser back/forward, or a direct URL load all agree with the
 // renderer on what to show.
-const mode = computed<RenderMode>(() => (isWorldHash(route.hash) ? 'world' : 'settlement'));
+const mode = computed<RenderMode>(() => (isWorldHash(route.value.hash) ? 'world' : 'settlement'));
 // World map's own sea backdrop (must match WorldMapCanvas.vue's — that
 // component is still used standalone by AdminWorldReseedView's world
 // preview, which has no settlement/ring-menu UI to merge and so keeps its
@@ -150,7 +152,7 @@ const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 // Both modes keep their camera in the URL hash (lib/mapCameraHash.ts), so a reload or a shared link
 // lands on the same spot. Read once, before the first camera change rewrites the hash; a missing or
 // invalid hash leaves the default framing.
-const initialCameraView = parseCameraHash(route.hash);
+const initialCameraView = parseCameraHash(route.value.hash);
 const CAMERA_HASH_DEBOUNCE_MS = 300;
 let cameraHashTimer: ReturnType<typeof setTimeout> | undefined;
 function onCameraChange() {
@@ -159,7 +161,8 @@ function onCameraChange() {
 }
 function writeCameraHash() {
   const renderer = canvasRef.value?.renderer;
-  if (!renderer || route.path !== '/settlement') return;
+  // The real URL, not `route`: under a modal route it is the modal's, and must not get a camera hash.
+  if (!renderer || router.currentRoute.value.path !== '/settlement') return;
   // Not router.replace: that would run the route watchers; vue-router keeps its own state in history.state.
   const hash = serializeCameraHash(renderer.cameraView, mode.value === 'world');
   history.replaceState(history.state, '', `${location.pathname}${location.search}${hash}`);
