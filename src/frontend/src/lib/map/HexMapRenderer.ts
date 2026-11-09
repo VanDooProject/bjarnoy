@@ -134,6 +134,11 @@ import { layoutRealmPill, REALM_PILL, type RealmPillLayout } from './realmPill';
 export type RenderMode = 'world' | 'settlement';
 
 const GOLD = 0xffc55c;
+/** The send picker (ArmyOverlayMarker.pick): how faded an army that cannot go is drawn, the radius of the ring round a marker and of its tap target. */
+const PICK_FADED_ALPHA = 0.35;
+const PICK_RING_RADIUS = 24;
+/** The furthest `frameHexes` zooms out, so the markers it frames stay tappable. */
+const MIN_FRAME_ZOOM = 0.3;
 // Distinct from OWN_REALM_COLOR / RIVAL_REALM_COLOR (see realmColours.ts) — trade
 // carts belong to neither ownership axis, so they get their own color
 // rather than borrowing one that would otherwise read as an owner cue.
@@ -539,6 +544,11 @@ export interface HexMapRendererOptions {
   // did nothing at all — see the pointerup early-return this replaces).
   onWaypointTap?: (index: number) => void;
   /**
+   * A tap landed on an army's marker while the send picker is open (some `ArmyOverlayMarker.pick` is set): the army's id and the
+   * marker's canvas position, so the host can show a hint beside it. The tap does not reach the tile below.
+   */
+  onArmyTap?: (armyId: string, screen: { x: number; y: number }) => void;
+  /**
    * docs/design/zoom-transition.md: fired when a wheel/pinch zoom step
    * crosses the enter-settlement or exit-to-world threshold
    * (zoomTransition.ts's transitionForZoom). The renderer has already
@@ -609,6 +619,12 @@ export interface ArmyOverlayMarker {
    * (docs/design/ship-movement.md §4).
    */
   isFleet: boolean;
+  /**
+   * The send picker is open (SendArmyPicker.vue): `eligible` armies get a dashed gold ring and can be tapped (`onArmyTap`),
+   * the `selected` one a solid ring, `ineligible` ones are drawn faded (a tap still reports them, so the reason can be shown).
+   * Absent while no picker is open, and then markers are not hit-tested at all.
+   */
+  pick?: 'eligible' | 'selected' | 'ineligible';
   /** Issue #94: present only while in transit — the renderer interpolates along it every frame. */
   movement?: ArmyOverlayMovement;
   /**
@@ -3666,6 +3682,12 @@ export class HexMapRenderer {
     // Touch/pen has no hover: a tap on a construction dial reveals it instead
     // of reaching the tile below. Mouse clicks always go to the tile.
     if (e.pointerType !== 'mouse' && this.handleDialTap(screen)) return;
+    // While the send picker is open an army's marker is a button: the tap picks (or explains) that army instead of the tile below.
+    const armyId = this.pickedArmyAt(screen);
+    if (armyId) {
+      this.options.onArmyTap?.(armyId, screen);
+      return;
+    }
     const world = screenToWorld(this.camera, screen, this.viewport);
     const coord = isoPixelToAxial(world, TILE_W, TILE_H);
     const tile = this.options.worldModel.getTile(coord.q, coord.r);
@@ -3676,6 +3698,26 @@ export class HexMapRenderer {
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
     const anchor = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET });
     this.options.onHexClick?.(coord, tile, anchor);
+  }
+
+  /** Where a marker's body is on screen: a land army's flag stands on its point, so its body sits above it; a ship floats on it. */
+  private armyHitCentre(p: { x: number; y: number }, isFleet: boolean): { x: number; y: number } {
+    return { x: p.x, y: isFleet ? p.y : p.y - 14 };
+  }
+
+  /** The id of the army marker under canvas point `screen`, nearest first; only while the send picker marks armies (`pick`). */
+  private pickedArmyAt(screen: { x: number; y: number }): string | null {
+    const overlay = this.armyOverlay;
+    if (!overlay || !overlay.armies.some((a) => a.pick)) return null;
+    let best: { id: string; distance: number } | null = null;
+    for (const placed of this.armyOverlayFrame.armies) {
+      const army = overlay.armies.find((a) => a.id === placed.id);
+      if (!army?.pick) continue;
+      const c = this.armyHitCentre(placed, army.isFleet);
+      const distance = Math.hypot(screen.x - c.x, screen.y - c.y);
+      if (distance <= PICK_RING_RADIUS + 4 && (!best || distance < best.distance)) best = { id: army.id, distance };
+    }
+    return best?.id ?? null;
   }
 
   /**
@@ -5961,6 +6003,48 @@ export class HexMapRenderer {
   }
 
   /**
+   * Frames `coords` in the part of the canvas that stays visible: the camera centres on them and zooms to fit with `marginPx` to
+   * spare, never closer than the settlement default or further out than a readable `MIN_FRAME_ZOOM`. `bottomInsetPx` is what a
+   * sheet covers at the bottom. Eased over `durationMs`, at once when that is 0. False when the camera cannot move.
+   */
+  frameHexes(coords: AxialCoord[], opts: { bottomInsetPx?: number; marginPx?: number; durationMs?: number } = {}): boolean {
+    if (!this.app || this.lockCamera || coords.length === 0 || this.viewport.width === 0) return false;
+    const margin = opts.marginPx ?? 48;
+    const bottom = Math.max(0, opts.bottomInsetPx ?? 0);
+    const points = coords.map((c) => {
+      const g = isoGridPosition(c, TILE_W, TILE_H);
+      return { x: g.x + TILE_W / 2, y: g.y + TILE_CENTER_Y_OFFSET };
+    });
+    const minX = Math.min(...points.map((p) => p.x));
+    const maxX = Math.max(...points.map((p) => p.x));
+    const minY = Math.min(...points.map((p) => p.y));
+    const maxY = Math.max(...points.map((p) => p.y));
+    const availW = Math.max(1, this.viewport.width - margin * 2);
+    const availH = Math.max(1, this.viewport.height - bottom - margin * 2);
+    const fit = Math.min(availW / Math.max(1, maxX - minX), availH / Math.max(1, maxY - minY));
+    // Zooms out only as far as needed to fit everything, never in past the player's own zoom.
+    const zoom = Math.min(this.camera.zoom, Math.max(MIN_FRAME_ZOOM, fit));
+    // The visible area is the top (height - bottom) px: its centre sits `bottom / 2` px above the canvas centre.
+    const to = this.clampCamera({
+      ...this.camera,
+      zoom,
+      x: (minX + maxX) / 2,
+      y: (minY + maxY) / 2 + bottom / 2 / zoom,
+    });
+    this.cameraTouched = true;
+    this.idleDrift = false;
+    if ((opts.durationMs ?? 0) > 0) {
+      this.animateCameraTo(to, opts.durationMs!);
+    } else {
+      this.cameraAnim = null;
+      this.camera = to;
+      this.applyCameraTransform();
+      this.rebuildAll();
+    }
+    return true;
+  }
+
+  /**
    * Slides the map so everything drawn on it moves (dx, dy) screen px: eased over `durationMs`, or
    * at once when that is 0. The ring menu uses it to bring a tile near an edge to where its ring
    * fits as a circle (MapView's onHexClick). False when the camera cannot move (a locked camera).
@@ -6500,6 +6584,7 @@ export class HexMapRenderer {
           !this.drawIcon('ship', p.x, p.y, {
             size,
             color,
+            alpha: army.pick === 'ineligible' ? PICK_FADED_ALPHA : 1,
             anchorX: 0.5,
             anchorY: 0.5,
             flipX,
@@ -6528,6 +6613,7 @@ export class HexMapRenderer {
           !this.drawIcon('flag', p.x, p.y, {
             size,
             color,
+            alpha: army.pick === 'ineligible' ? PICK_FADED_ALPHA : 1,
             // The pole's foot, not the sprite's centre, is what stands on the
             // army's position (see flag.svg's own geometry).
             anchorX: flipX ? 1 - 22.5 / 64 : 22.5 / 64,
@@ -6544,6 +6630,23 @@ export class HexMapRenderer {
         // A small ground shadow anchors the banner to its point — without it
         // a pole drawn upward from the position reads as hovering above the map.
         this.markerLayer.ellipse(p.x, p.y, 7, 3).fill({ color: 0x0b1116, alpha: 0.35 });
+      }
+      // The send picker's cue: a ring says "tap me" (dashed) or "this one" (solid). Static, so there is no motion to gate.
+      if (army.pick === 'eligible' || army.pick === 'selected') {
+        const c = this.armyHitCentre(p, army.isFleet);
+        if (army.pick === 'selected') {
+          this.markerLayer.circle(c.x, c.y, PICK_RING_RADIUS).stroke({ width: 2.5, color: GOLD, alpha: 1 });
+        } else {
+          const dashes = 14;
+          for (let i = 0; i < dashes; i++) {
+            const a0 = (i / dashes) * Math.PI * 2;
+            const a1 = ((i + 0.55) / dashes) * Math.PI * 2;
+            this.markerLayer
+              .moveTo(c.x + Math.cos(a0) * PICK_RING_RADIUS, c.y + Math.sin(a0) * PICK_RING_RADIUS)
+              .arc(c.x, c.y, PICK_RING_RADIUS, a0, a1);
+          }
+          this.markerLayer.stroke({ width: 2, color: GOLD, alpha: 0.95 });
+        }
       }
     }
 

@@ -60,7 +60,7 @@ const slowest = computed(() => {
 });
 
 const tocLinks = computed(() =>
-  ['example', 'cost', 'bridges', 'pace', 'food', 'road', 'sight'].map((id) => ({ href: `#${id}`, label: t(`docs.landMovement.toc.${id}`) })),
+  ['example', 'cost', 'bridges', 'pace', 'food', 'road', 'sendOut', 'sight'].map((id) => ({ href: `#${id}`, label: t(`docs.landMovement.toc.${id}`) })),
 );
 </script>
 
@@ -230,6 +230,16 @@ const tocLinks = computed(() =>
         </i18n-t>
         <li>{{ $t('docs.landMovement.road.enemies') }}</li>
         <li>{{ $t('docs.landMovement.road.orders') }}</li>
+      </ul>
+    </section>
+
+    <section id="sendOut" class="block">
+      <h2>{{ $t('docs.landMovement.sendOut.heading') }}</h2>
+      <ul class="rules">
+        <li>{{ $t('docs.landMovement.sendOut.orders') }}</li>
+        <li>{{ $t('docs.landMovement.sendOut.split') }}</li>
+        <li>{{ $t('docs.landMovement.sendOut.reach') }}</li>
+        <li>{{ $t('docs.landMovement.sendOut.support') }}</li>
       </ul>
     </section>
 

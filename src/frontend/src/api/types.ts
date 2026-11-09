@@ -1577,13 +1577,18 @@ export interface DispatchArmyRequest {
 }
 
 /**
- * Sends an army already out in the field onward to a new hex (issue #156
- * phase 1) — "move on" when it's standing at its destination, "append goal"
- * when it's still travelling. Mirrors `FieldOrderRequest`.
+ * Sends an army already out in the field onward (issue #156 phase 1) — "move on" when it's standing at its destination, "append
+ * goal" when it's still travelling — on any mission, and a standing army optionally only in part. Mirrors `FieldOrderRequest`.
+ * `destination` is required for move and hunt (the camp's hex); an attack or support derives it from `targetSettlementId`.
+ * `units` omitted sends the whole army; fewer split it (a standing army only).
  */
 export interface FieldOrderRequest {
   waypoints?: HexPoint[];
-  destination: HexPoint;
+  destination?: HexPoint;
+  mission?: 'move' | 'attack' | 'support' | 'hunt';
+  targetSettlementId?: string;
+  targetBuildingCoord?: HexPoint;
+  units?: { unit: string; count: number }[];
 }
 
 /**

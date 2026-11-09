@@ -33,7 +33,12 @@ import {
   buildFieldOrderRequest,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
+  isFieldOrderMidMarch,
+  isHuntUnit,
 } from '../lib/units/armyDispatch';
+import { isWaterCampFamily } from '../lib/map/campPlacement';
+import { useUnitCatalogueStore } from './unitCatalogue';
+import { stackCounts } from '../lib/units/fieldOrderFeasibility';
 import { DemoTradeError, WorldModel } from '../lib/map/WorldModel';
 import { evaluateDemoQuests, questBit } from '../lib/quests';
 import { useConnectionStatusStore } from './connectionStatus';
@@ -352,6 +357,24 @@ export const useWorldStore = defineStore('world', {
       route: AxialCoord[];
       submitting: boolean;
       error: string | null;
+      // What the order is for. The ArmyPanel "Move on"/"Append goal" flow is a plain 'move'; the send picker (`sendPicker`) also
+      // sends a field army to attack, support or hunt. An attack/support names its target settlement and its route only holds
+      // waypoints (the server derives the destination); a move/hunt route ends on the destination (a hunt's: the camp's hex).
+      mission: 'move' | 'attack' | 'support' | 'hunt';
+      targetSettlementId: string | null;
+      // A fleet's attack must name the shore building it sails to, a land attack may prefer one for its siege engines.
+      targetBuildingCoord: AxialCoord | null;
+      // The units that leave: a standing army can be split. `null` sends the whole army (always, for one still marching).
+      units: Record<string, number> | null;
+    } | null,
+    // The "Send army here" / Attack / Support / Hunt source picker (SendArmyPicker.vue): which target the player tapped in the ring
+    // menu and which source (`'home'` or a field army's id) is selected. Selecting a field army composes its order in
+    // `fieldOrderDraft`; selecting home hands over to a dispatch draft, which closes the picker. `null` while no picker is open.
+    sendPicker: null as {
+      mission: 'move' | 'attack' | 'support' | 'hunt';
+      coord: AxialCoord;
+      targetSettlementId: string | null;
+      selectedId: string | null;
     } | null,
     // The target settlement's own placed buildings, fetched on demand once an
     // Attack dispatch's target is chosen (issue #40 phase 5) — this is what
@@ -1276,6 +1299,7 @@ export const useWorldStore = defineStore('world', {
       this.selectedArmyId = null;
       this.dispatchDraft = null;
       this.fieldOrderDraft = null;
+      this.sendPicker = null;
       this.dispatchTargetBuildings = null;
       this.dispatchTargetBuildingsFor = null;
       this.dispatchTargetBuildingsError = false;
@@ -1575,10 +1599,108 @@ export const useWorldStore = defineStore('world', {
      */
     startFieldOrder(armyId: string) {
       this.dispatchDraft = null;
-      this.fieldOrderDraft = { armyId, route: [], submitting: false, error: null };
+      this.sendPicker = null;
+      this.fieldOrderDraft = {
+        armyId,
+        route: [],
+        submitting: false,
+        error: null,
+        mission: 'move',
+        targetSettlementId: null,
+        targetBuildingCoord: null,
+        units: null,
+      };
     },
     cancelFieldOrder() {
       this.fieldOrderDraft = null;
+    },
+    /**
+     * The ring's army bubbles (Send army here, Attack, Support, Hunt) open the source picker aimed at the tapped target: `coord` is
+     * the hex (a settlement's own for Attack/Support, the camp's for Hunt). Any draft in progress is dropped first, the picker
+     * and the click-to-plot flows share the canvas.
+     */
+    openSendPicker(
+      coord: AxialCoord,
+      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string } = {},
+    ) {
+      this.dispatchDraft = null;
+      this.fieldOrderDraft = null;
+      this.sendPicker = {
+        mission: opts.mission ?? 'move',
+        coord: { q: coord.q, r: coord.r },
+        targetSettlementId: opts.targetSettlementId ?? null,
+        selectedId: null,
+      };
+    },
+    /** Closes the picker and drops the field order it was composing. */
+    closeSendPicker() {
+      this.sendPicker = null;
+      this.fieldOrderDraft = null;
+    },
+    /**
+     * Picks a source in the open picker: `null` unselects, `'home'` hands over to the dispatch flow for the home garrison (the
+     * picker closes, the dispatch draft is prefilled with the same mission and target the ring used to start), a field army's id
+     * composes its order in `fieldOrderDraft` — a standing army with every unit selected (the player trims it to split), a
+     * marching one whole.
+     */
+    selectSendSource(id: string | null) {
+      const picker = this.sendPicker;
+      if (!picker) return;
+      if (id === null) {
+        picker.selectedId = null;
+        this.fieldOrderDraft = null;
+        return;
+      }
+      if (id === 'home') {
+        this.sendPicker = null;
+        this.fieldOrderDraft = null;
+        this.startDispatchAt(
+          picker.coord,
+          picker.mission === 'move'
+            ? {}
+            : picker.mission === 'hunt'
+              ? { mission: 'hunt' }
+              : { mission: picker.mission, targetSettlementId: picker.targetSettlementId ?? undefined },
+        );
+        return;
+      }
+      const army = this.armies.find((a) => a.id === id);
+      if (!army) return;
+      picker.selectedId = id;
+      const standing = !isFieldOrderMidMarch(army, Date.now());
+      this.fieldOrderDraft = {
+        armyId: id,
+        route: picker.mission === 'move' || picker.mission === 'hunt' ? [{ q: picker.coord.q, r: picker.coord.r }] : [],
+        submitting: false,
+        error: null,
+        mission: picker.mission,
+        targetSettlementId: picker.targetSettlementId,
+        targetBuildingCoord: null,
+        units: standing ? stackCounts(army.stacks) : null,
+      };
+      // A hunt takes land units against a land camp, and against a camp at sea the ships and their passengers: the units of
+      // the other class start out unselected.
+      const draft = this.fieldOrderDraft;
+      if (picker.mission === 'hunt' && draft?.units) {
+        const camp = this.model.campAt(picker.coord);
+        const atSea = !!camp && isWaterCampFamily(camp.family);
+        const byType = useUnitCatalogueStore().byType;
+        for (const unit of Object.keys(draft.units)) if (!isHuntUnit(unit, byType, atSea)) draft.units[unit] = 0;
+      }
+      if (picker.mission === 'attack' && picker.targetSettlementId) void this.loadDispatchTargetBuildings(picker.targetSettlementId);
+    },
+    /** Sets how many of one unit of the selected field army leave (a standing army's split), clamped to what the army holds. */
+    setFieldOrderUnitCount(unit: string, count: number) {
+      const draft = this.fieldOrderDraft;
+      const army = draft ? this.armies.find((a) => a.id === draft.armyId) : undefined;
+      if (!draft?.units || !army) return;
+      const max = army.stacks.find((s) => s.unit === unit)?.count ?? 0;
+      draft.units[unit] = Math.min(max, Math.max(0, Math.floor(count)));
+    },
+    /** The preferred or required target building of whichever order is being composed (dispatch from home, or a field order). */
+    setActiveTargetBuilding(coord: { q: number; r: number } | null) {
+      if (this.dispatchDraft) this.setDispatchTargetBuilding(coord);
+      else if (this.fieldOrderDraft) this.fieldOrderDraft.targetBuildingCoord = coord;
     },
     /**
      * A standing army's first click is the free "move on" destination — the
@@ -1625,9 +1747,23 @@ export const useWorldStore = defineStore('world', {
     async confirmFieldOrder() {
       const draft = this.fieldOrderDraft;
       if (!draft) return;
-      const request = buildFieldOrderRequest(draft.route);
+      const army = this.armies.find((a) => a.id === draft.armyId);
+      // Every unit selected is the whole army: leave `units` out, so a stale stack count can never turn it into a split.
+      const whole = !draft.units || !army || army.stacks.every((s) => (draft.units![s.unit] ?? 0) >= s.count);
+      const request = buildFieldOrderRequest(draft.route, {
+        mission: draft.mission,
+        targetSettlementId: draft.targetSettlementId,
+        targetBuildingCoord: draft.targetBuildingCoord,
+        units: whole ? null : draft.units,
+      });
       if (!request) {
-        draft.error = i18n.global.t('common.errors.clickMapForDestination');
+        if (draft.units && Object.values(draft.units).every((c) => c <= 0)) {
+          draft.error = i18n.global.t('common.errors.selectAtLeastOneUnit');
+        } else if ((draft.mission === 'attack' || draft.mission === 'support') && !draft.targetSettlementId) {
+          draft.error = i18n.global.t('common.errors.chooseSettlementFor', { mission: draft.mission });
+        } else {
+          draft.error = i18n.global.t('common.errors.clickMapForDestination');
+        }
         return;
       }
       draft.submitting = true;
@@ -1635,6 +1771,7 @@ export const useWorldStore = defineStore('world', {
       try {
         await api.fieldOrderArmy(draft.armyId, request, this.ownerId ?? undefined);
         this.fieldOrderDraft = null;
+        this.sendPicker = null;
         await this.refreshArmies();
       } catch (err) {
         draft.error = apiErrorMessage(err, i18n.global.t('common.errors.fieldOrderFailed'));

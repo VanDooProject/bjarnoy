@@ -130,7 +130,7 @@
       "sendArmyHere": "Armee hierher entsenden",
       "attack": "Angreifen",
       "support": "Unterstützen",
-      "noUnitsAtHome": "Keine Einheiten daheim",
+      "noArmyCanGo": "Keine Armee kann losziehen",
       "upgrade": "Ausbauen",
       "notEnough": "Benötigt {resources}",
       "raze": "Abreißen",
@@ -142,8 +142,6 @@
       "hunt": "Jagen",
       "campOccupied": "Von wilden Tieren belegt",
       "maxLevel": "Höchste Stufe",
-      "noLandUnitsAtHome": "Keine Landeinheiten zu Hause",
-      "noShipsAtHome": "Keine Schiffe zu Hause",
       "siege": "Belagern",
       "noRamAtHome": "Braucht einen Rammbock zu Hause",
       "hexBusy": "Auf diesem Feld läuft schon ein Auftrag"
@@ -444,6 +442,33 @@
     "allButton": "Alle",
     "decrement": "−",
     "increment": "+"
+  },
+  "sendPicker": {
+    "title": "{mission} → {target}",
+    "close": "Schließen",
+    "hex": "Feld ({q}, {r})",
+    "home": "Zu Hause",
+    "garrison": "Garnison",
+    "units": "{count} Einheit | {count} Einheiten",
+    "standingAt": "Steht bei ({q}, {r})",
+    "marchingTo": "Marschiert nach ({q}, {r})",
+    "etaMinutes": "{minutes} Min.",
+    "etaHours": "{hours} Std. {minutes} Min.",
+    "wholeArmy": "Die ganze Armee zieht los.",
+    "splits": "Geteilt: {go} ziehen los, {stay} bleiben stehen.",
+    "pickOne": "Wähle mindestens eine Einheit.",
+    "reasons": {
+      "noUnitsAtHome": "Keine Einheiten zu Hause",
+      "noLandUnits": "Keine Landeinheiten",
+      "noShips": "Keine Schiffe",
+      "supportingNamed": "Unterstützt {name}, ruf sie erst zurück",
+      "supporting": "Unterstützt eine Siedlung, ruf sie erst zurück",
+      "returning": "Kehrt gerade heim",
+      "notOrderable": "Ist auf einem Auftrag und nimmt keine neuen Befehle an",
+      "premium": "Premium: Umleiten während des Marschs",
+      "unreachable": "Kommt dort nicht hin",
+      "noFood": "Proviant reicht nicht für den Rückweg"
+    }
   },
   "tradeReport": {
     "summary": "Gab {gaveAmount} {gave} für {gotAmount} {got}"

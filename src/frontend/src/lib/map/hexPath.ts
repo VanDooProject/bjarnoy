@@ -303,6 +303,19 @@ function openKeyLess(a: OpenKey, b: OpenKey): boolean {
  */
 export function findPath(from: AxialCoord, to: AxialCoord, ctx: PathContext): AxialCoord[] | null {
   if (ctx.rules.land[ctx.terrainAt(from)] === undefined || ctx.rules.land[ctx.terrainAt(to)] === undefined) return null;
+  return aStar(from, to, (a, b) => halfAndHalf(a, b, ctx));
+}
+
+/**
+ * The one A* loop behind `findPath` and `findSeaPath` (the backend's `HexPathfinder.FindPath` is likewise one loop with two cost
+ * tables): plain hex distance as the heuristic, the endpoints padded by their distance (at least 10) as the bounding box, and
+ * `MAX_EXPANDED_NODES` as the expansion cap. `step` prices the move between two neighbours, `null` when it is impassable.
+ */
+function aStar(
+  from: AxialCoord,
+  to: AxialCoord,
+  step: (a: AxialCoord, b: AxialCoord) => number | null,
+): AxialCoord[] | null {
   if (from.q === to.q && from.r === to.r) return [from];
 
   const padding = Math.max(10, hexDistance(from, to));
@@ -334,9 +347,9 @@ export function findPath(from: AxialCoord, to: AxialCoord, ctx: PathContext): Ax
       if (n.q < qMin || n.q > qMax || n.r < rMin || n.r > rMax) continue;
       const nKey = coordKey(n);
       if (closed.has(nKey)) continue;
-      const step = halfAndHalf(current, n, ctx);
-      if (step === null) continue;
-      const tentative = g.get(currentKey)! + step;
+      const cost = step(current, n);
+      if (cost === null) continue;
+      const tentative = g.get(currentKey)! + cost;
       const existing = g.get(nKey);
       if (existing !== undefined && tentative >= existing) continue;
       g.set(nKey, tentative);
@@ -369,4 +382,17 @@ export function reachableFrom(origin: AxialCoord, ctx: PathContext, limit = 200_
     }
   }
   return seen;
+}
+
+/**
+ * Shortest route for a fleet from `from` to `to` (both included), or `null` if there is none: the TS twin of `HexPathfinder.FindPath`
+ * for ships. Open sea costs a flat 1.0 per hex (`SeaTerrainCost`) and the two endpoints are exempt from the sea-only rule (a harbour or
+ * beaching hex, the shore a fleet is sent at), so every hex in between has to be sea. Same bounding box and expansion cap as `findPath`.
+ */
+export function findSeaPath(
+  from: AxialCoord,
+  to: AxialCoord,
+  terrainAt: (c: AxialCoord) => Terrain,
+): AxialCoord[] | null {
+  return aStar(from, to, (_, b) => ((b.q === to.q && b.r === to.r) || terrainAt(b) === 'sea' ? 1 : null));
 }

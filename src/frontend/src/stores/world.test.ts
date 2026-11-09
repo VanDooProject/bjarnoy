@@ -32,6 +32,7 @@ const getIslands = vi.fn();
 const listWorlds = vi.fn();
 const getWorldMembership = vi.fn();
 const dispatchArmy = vi.fn();
+const fieldOrderArmy = vi.fn();
 const getWorldCamps = vi.fn();
 const getForeignArmies = vi.fn();
 const queueBuild = vi.fn();
@@ -90,6 +91,7 @@ async function loadStoreModule(demoMode: boolean) {
       listWorlds: (...args: unknown[]) => listWorlds(...args),
       getWorldMembership: (...args: unknown[]) => getWorldMembership(...args),
       dispatchArmy: (...args: unknown[]) => dispatchArmy(...args),
+      fieldOrderArmy: (...args: unknown[]) => fieldOrderArmy(...args),
       getWorldCamps: (...args: unknown[]) => getWorldCamps(...args),
       getForeignArmies: (...args: unknown[]) => getForeignArmies(...args),
       queueBuild: (...args: unknown[]) => queueBuild(...args),
@@ -2686,5 +2688,241 @@ describe('useWorldStore linked realms', () => {
     const ids = store.listAttackableSettlements().map((s) => s.id).sort();
 
     expect(ids).toEqual(['rival-old', 'solo']);
+  });
+});
+
+// The ring's army bubbles open the source picker; a field army picked there composes its order in `fieldOrderDraft`, the home garrison
+// hands over to the dispatch flow the ring used to start directly.
+describe('useWorldStore send picker', () => {
+  function army(id: string, overrides: Record<string, unknown> = {}) {
+    return {
+      id,
+      settlementId: 'home-1',
+      mission: 'move',
+      targetSettlementId: null,
+      atHome: false,
+      supporting: false,
+      position: { q: 10, r: 0 },
+      provisions: 100,
+      totalSpeed: 2,
+      totalUpkeepPerHour: 10,
+      stacks: [
+        { unit: 'spearman', count: 6 },
+        { unit: 'archer', count: 4 },
+      ],
+      movement: {
+        departedAt: '2020-01-01T00:00:00Z',
+        path: [{ q: 0, r: 0 }, { q: 10, r: 0 }],
+        cumulativeHours: [0, 5],
+        edgeHours: [0, 2.5],
+        arrivesAt: '2020-01-01T05:00:00Z', // long arrived: standing
+        returnPath: [],
+        returnCumulativeHours: [],
+        returnEdgeHours: [],
+        turnAroundAt: '2099-01-01T00:00:00Z',
+        returnArrivesAt: '2099-01-02T00:00:00Z',
+        isReturning: false,
+      },
+      ...overrides,
+    };
+  }
+
+  it('opens aimed at the tapped target, with no source selected and no draft running', async () => {
+    const store = await loadStoreModule(true);
+    store.startDispatch();
+
+    store.openSendPicker({ q: 3, r: -2 });
+
+    expect(store.sendPicker).toEqual({ mission: 'move', coord: { q: 3, r: -2 }, targetSettlementId: null, selectedId: null });
+    expect(store.dispatchDraft).toBeNull();
+    expect(store.fieldOrderDraft).toBeNull();
+  });
+
+  it('home hands over to a dispatch draft with the ring\'s mission and target, and closes the picker', async () => {
+    const store = await loadStoreModule(true);
+    store.openSendPicker({ q: 5, r: 1 }, { mission: 'attack', targetSettlementId: 'enemy-1' });
+
+    store.selectSendSource('home');
+
+    expect(store.sendPicker).toBeNull();
+    expect(store.dispatchDraft?.mission).toBe('attack');
+    expect(store.dispatchDraft?.targetSettlementId).toBe('enemy-1');
+  });
+
+  it('home on a plain move plots the tapped hex as the destination', async () => {
+    const store = await loadStoreModule(true);
+    store.openSendPicker({ q: 3, r: -2 });
+
+    store.selectSendSource('home');
+
+    expect(store.dispatchDraft?.route).toEqual([{ q: 3, r: -2 }]);
+  });
+
+  it('a standing army is composed with every unit selected (splittable); a marching one moves whole', async () => {
+    const store = await loadStoreModule(true);
+    store.armies = [
+      army('standing'),
+      army('marching', { movement: { ...army('x').movement, arrivesAt: '2099-01-01T00:00:00Z' } }),
+    ] as never;
+    store.openSendPicker({ q: 3, r: -2 });
+
+    store.selectSendSource('standing');
+    expect(store.fieldOrderDraft).toMatchObject({ armyId: 'standing', mission: 'move', route: [{ q: 3, r: -2 }], units: { spearman: 6, archer: 4 } });
+
+    store.selectSendSource('marching');
+    expect(store.fieldOrderDraft).toMatchObject({ armyId: 'marching', units: null });
+    expect(store.sendPicker?.selectedId).toBe('marching');
+  });
+
+  it('an attack names its target and leaves the route empty (the server derives the destination)', async () => {
+    getSettlementView.mockReset().mockResolvedValue({ buildings: [] });
+    const store = await loadStoreModule(true);
+    store.armies = [army('a')] as never;
+    store.openSendPicker({ q: 5, r: 1 }, { mission: 'attack', targetSettlementId: 'enemy-1' });
+
+    store.selectSendSource('a');
+
+    expect(store.fieldOrderDraft).toMatchObject({ mission: 'attack', targetSettlementId: 'enemy-1', route: [] });
+  });
+
+  it('unselecting drops the field order but keeps the picker open', async () => {
+    const store = await loadStoreModule(true);
+    store.armies = [army('a')] as never;
+    store.openSendPicker({ q: 3, r: -2 });
+    store.selectSendSource('a');
+
+    store.selectSendSource(null);
+
+    expect(store.fieldOrderDraft).toBeNull();
+    expect(store.sendPicker).not.toBeNull();
+  });
+
+  it('closing drops the order it was composing', async () => {
+    const store = await loadStoreModule(true);
+    store.armies = [army('a')] as never;
+    store.openSendPicker({ q: 3, r: -2 });
+    store.selectSendSource('a');
+
+    store.closeSendPicker();
+
+    expect(store.sendPicker).toBeNull();
+    expect(store.fieldOrderDraft).toBeNull();
+  });
+
+  it('the unit count is clamped to what the army holds', async () => {
+    const store = await loadStoreModule(true);
+    store.armies = [army('a')] as never;
+    store.openSendPicker({ q: 3, r: -2 });
+    store.selectSendSource('a');
+
+    store.setFieldOrderUnitCount('spearman', 99);
+    expect(store.fieldOrderDraft?.units?.spearman).toBe(6);
+    store.setFieldOrderUnitCount('spearman', -3);
+    expect(store.fieldOrderDraft?.units?.spearman).toBe(0);
+  });
+});
+
+describe('useWorldStore confirmFieldOrder from the send picker', () => {
+  async function composed(mission: 'move' | 'attack' = 'move') {
+    const store = await loadStoreModule(false);
+    fieldOrderArmy.mockReset().mockResolvedValue({});
+    store.armies = [
+      {
+        id: 'a',
+        settlementId: 'home-1',
+        mission: 'move',
+        targetSettlementId: null,
+        atHome: false,
+        supporting: false,
+        position: { q: 10, r: 0 },
+        provisions: 100,
+        totalSpeed: 2,
+        totalUpkeepPerHour: 10,
+        stacks: [
+          { unit: 'spearman', count: 6 },
+          { unit: 'archer', count: 4 },
+        ],
+        movement: {
+          departedAt: '2020-01-01T00:00:00Z',
+          path: [{ q: 0, r: 0 }, { q: 10, r: 0 }],
+          cumulativeHours: [0, 5],
+          edgeHours: [0, 2.5],
+          arrivesAt: '2020-01-01T05:00:00Z',
+          returnPath: [],
+          returnCumulativeHours: [],
+          returnEdgeHours: [],
+          turnAroundAt: '2099-01-01T00:00:00Z',
+          returnArrivesAt: '2099-01-02T00:00:00Z',
+          isReturning: false,
+        },
+      },
+    ] as never;
+    if (mission === 'attack') {
+      getSettlementView.mockReset().mockResolvedValue({ buildings: [] });
+      store.openSendPicker({ q: 5, r: 1 }, { mission: 'attack', targetSettlementId: 'enemy-1' });
+    } else {
+      store.openSendPicker({ q: 3, r: -2 });
+    }
+    store.selectSendSource('a');
+    return store;
+  }
+
+  it('sends the whole army without a units list when every unit is selected', async () => {
+    const store = await composed();
+
+    await store.confirmFieldOrder();
+
+    expect(fieldOrderArmy).toHaveBeenCalledWith('a', { destination: { q: 3, r: -2 }, mission: 'move' }, undefined);
+    expect(store.fieldOrderDraft).toBeNull();
+    expect(store.sendPicker).toBeNull();
+  });
+
+  it('splits: only the chosen units leave', async () => {
+    const store = await composed();
+    store.setFieldOrderUnitCount('archer', 0);
+    store.setFieldOrderUnitCount('spearman', 2);
+
+    await store.confirmFieldOrder();
+
+    expect(fieldOrderArmy.mock.calls[0]![1]).toEqual({
+      destination: { q: 3, r: -2 },
+      mission: 'move',
+      units: [{ unit: 'spearman', count: 2 }],
+    });
+  });
+
+  it('an attack sends the target settlement and the preferred building, not a destination', async () => {
+    const store = await composed('attack');
+    store.setActiveTargetBuilding({ q: 4, r: 4 });
+
+    await store.confirmFieldOrder();
+
+    expect(fieldOrderArmy.mock.calls[0]![1]).toEqual({
+      mission: 'attack',
+      targetSettlementId: 'enemy-1',
+      targetBuildingCoord: { q: 4, r: 4 },
+    });
+  });
+
+  it('with no unit left it sends nothing and says so', async () => {
+    const store = await composed();
+    store.setFieldOrderUnitCount('archer', 0);
+    store.setFieldOrderUnitCount('spearman', 0);
+
+    await store.confirmFieldOrder();
+
+    expect(fieldOrderArmy).not.toHaveBeenCalled();
+    expect(store.fieldOrderDraft?.error).toBeTruthy();
+  });
+
+  it('keeps the order open with the server\'s reason when it is refused', async () => {
+    const store = await composed();
+    const { ApiError } = await import('../api/client');
+    fieldOrderArmy.mockReset().mockRejectedValue(new ApiError(409, { title: 'Refused.', detail: 'x', rejection: 'UnreachableLeg' }));
+
+    await store.confirmFieldOrder();
+
+    expect(store.fieldOrderDraft?.error).toBe("No land route: mountains and wide rivers can't be crossed.");
+    expect(store.sendPicker).not.toBeNull();
   });
 });

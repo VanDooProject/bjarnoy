@@ -11,7 +11,7 @@
 // Units are picked manually here — no default selection (see the PR's own
 // notes): the common path is tap tile -> pick units -> Start, not tap ->
 // Start.
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
@@ -25,6 +25,8 @@ import { campName, missionName, unitName } from '../../i18n/catalogueNames';
 import {
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
+import DispatchTargetBuildingPicker from './DispatchTargetBuildingPicker.vue';
+import SendArmyPicker from './SendArmyPicker.vue';
 import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
 import { useUnsavedInput } from '../../composables/useUnsavedInput';
 
@@ -46,6 +48,13 @@ useUnsavedInput(() => !!draft.value || !!fieldDraft.value);
 // order opens collapsed (route only, and the free "move on" hex is usually
 // already plotted by the tap that started it).
 const expanded = ref(!!world.dispatchDraft);
+// The source picker hands the home garrison over to a dispatch draft: that form opens expanded, units still need picking.
+watch(
+  () => world.dispatchDraft,
+  (d) => {
+    if (d) expanded.value = true;
+  },
+);
 function toggleExpanded() {
   expanded.value = !expanded.value;
 }
@@ -201,7 +210,8 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
 
 <template>
   <div class="dispatch-sheet" :class="{ 'is-expanded': expanded }">
-    <div class="dispatch-sheet-collapsed">
+    <SendArmyPicker v-if="world.sendPicker" />
+    <div v-else class="dispatch-sheet-collapsed">
       <div class="dispatch-sheet-row1">
         <span class="mission-chip">{{ missionLabel }}</span>
         <span class="summary-text">{{ summaryText }}</span>
@@ -222,7 +232,7 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
       </div>
     </div>
 
-    <div v-if="expanded" class="dispatch-sheet-expanded">
+    <div v-if="expanded && !world.sendPicker" class="dispatch-sheet-expanded">
       <template v-if="!isFieldOrder && draft">
         <div class="mission-tabs">
           <button type="button" class="mission-tab" :class="{ active: draft.mission === 'move' }" @click="setMission('move')">
@@ -261,36 +271,7 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
             <p v-else class="status-subtext">{{ t('hud.armyPanel.noSettlementsFound') }}</p>
           </div>
 
-          <div v-if="buildingPicker.showPicker.value" class="building-picker">
-            <p class="status-subtext">{{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetBuildingPickerHint' : 'hud.armyPanel.buildingPickerHint') }}</p>
-            <p v-if="!buildingPicker.isRequired.value" class="status-subtext" data-testid="engine-reach">{{ t('hud.armyPanel.engineReach') }}</p>
-            <div v-if="buildingPicker.selectedLabel.value" class="target-selected">
-              <span>{{ t('hud.armyPanel.target') }} <strong>{{ buildingPicker.selectedLabel.value }}</strong></span>
-              <button type="button" class="secondary change-target" @click="buildingPicker.clear">{{ t('hud.armyPanel.clear') }}</button>
-            </div>
-            <p v-if="buildingPicker.selectedUnreachable.value" class="status-subtext" data-testid="target-unreachable">{{ t('hud.armyPanel.cannotDamage') }}</p>
-            <template v-else>
-              <p v-if="world.dispatchTargetBuildingsLoading" class="status-subtext">{{ t('hud.armyPanel.loadingEnemyLayout') }}</p>
-              <p v-else-if="world.dispatchTargetBuildingsError" class="status-subtext">{{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetLayoutLoadError' : 'hud.armyPanel.layoutLoadError') }}</p>
-              <div v-else-if="buildingPicker.rows.value.length" class="target-list building-list">
-                <button
-                  v-for="b in buildingPicker.rows.value"
-                  :key="`${b.q},${b.r}`"
-                  type="button"
-                  class="target-row"
-                  :class="{ 'out-of-reach': !b.damageable }"
-                  :disabled="!b.damageable"
-                  :title="b.damageable ? undefined : t('hud.armyPanel.cannotDamage')"
-                  data-testid="building-target"
-                  @click="buildingPicker.pick(b.q, b.r)"
-                >
-                  <span class="target-name">{{ b.label }}</span>
-                  <span class="target-owner">{{ b.damageable ? t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) : t('hud.armyPanel.cannotDamage') }}</span>
-                </button>
-              </div>
-              <p v-else class="status-subtext">{{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetNoShoreBuilding' : 'hud.armyPanel.noPreference') }}</p>
-            </template>
-          </div>
+          <DispatchTargetBuildingPicker :has-target="!!selectedTarget" />
         </template>
 
         <div v-if="routeRows.length" class="waypoint-list">
@@ -538,21 +519,9 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
   text-align: left;
   cursor: pointer;
 }
-.target-row.out-of-reach {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 .target-owner {
   color: var(--muted);
   white-space: nowrap;
-}
-.building-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.building-list {
-  max-height: 120px;
 }
 .fleet-note {
   color: #e0b25a;

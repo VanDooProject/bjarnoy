@@ -23,6 +23,8 @@ import {
 } from '../../lib/units/armyDispatch';
 import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
 import HuntTargetSummary from './HuntTargetSummary.vue';
+import DispatchTargetBuildingPicker from './DispatchTargetBuildingPicker.vue';
+import SendArmyPicker from './SendArmyPicker.vue';
 import DispatchSlots from './DispatchSlots.vue';
 import { useDispatchUnitPicker } from '../../composables/useDispatchUnitPicker';
 import { useArmyRows } from '../../composables/useArmyRows';
@@ -208,11 +210,14 @@ async function confirmFieldOrderClick() {
       <span class="status-card-count">{{ armyRows.length }}</span>
     </div>
 
-    <p v-if="DEMO_MODE" class="status-subtext demo-note">
+    <!-- The picker carries the same note itself (it is also the phone sheet's content). -->
+    <p v-if="DEMO_MODE && !world.sendPicker" class="status-subtext demo-note">
       {{ t('hud.armyPanel.demoNote') }}
     </p>
 
-    <template v-if="!draft && !fieldDraft">
+    <SendArmyPicker v-if="world.sendPicker" />
+
+    <template v-else-if="!draft && !fieldDraft">
       <div v-if="armyRows.length" class="army-list">
         <div
           v-for="row in armyRows"
@@ -410,40 +415,7 @@ async function confirmFieldOrderClick() {
             {{ t('hud.armyPanel.supportNote') }}
           </p>
 
-          <div v-if="buildingPicker.showPicker.value" class="building-picker">
-            <p class="status-subtext building-picker-hint">
-              {{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetBuildingPickerHint' : 'hud.armyPanel.buildingPickerHint') }}
-            </p>
-            <p v-if="!buildingPicker.isRequired.value" class="status-subtext" data-testid="engine-reach">{{ t('hud.armyPanel.engineReach') }}</p>
-            <div v-if="buildingPicker.selectedLabel.value" class="target-selected">
-              <span>{{ t('hud.armyPanel.target') }} <strong>{{ buildingPicker.selectedLabel.value }}</strong></span>
-              <button type="button" class="secondary change-target" @click="buildingPicker.clear">{{ t('hud.armyPanel.clear') }}</button>
-            </div>
-            <p v-if="buildingPicker.selectedUnreachable.value" class="status-subtext" data-testid="target-unreachable">{{ t('hud.armyPanel.cannotDamage') }}</p>
-            <template v-else>
-              <p v-if="world.dispatchTargetBuildingsLoading" class="status-subtext">{{ t('hud.armyPanel.loadingEnemyLayout') }}</p>
-              <p v-else-if="world.dispatchTargetBuildingsError" class="status-subtext">
-                {{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetLayoutLoadError' : 'hud.armyPanel.layoutLoadError') }}
-              </p>
-              <div v-else-if="buildingPicker.rows.value.length" class="target-list building-list">
-                <button
-                  v-for="b in buildingPicker.rows.value"
-                  :key="`${b.q},${b.r}`"
-                  type="button"
-                  class="target-row"
-                  :class="{ 'out-of-reach': !b.damageable }"
-                  :disabled="!b.damageable"
-                  :title="b.damageable ? undefined : t('hud.armyPanel.cannotDamage')"
-                  data-testid="building-target"
-                  @click="buildingPicker.pick(b.q, b.r)"
-                >
-                  <span class="target-name">{{ b.label }}</span>
-                  <span class="target-owner">{{ b.damageable ? t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) : t('hud.armyPanel.cannotDamage') }}</span>
-                </button>
-              </div>
-              <p v-else class="status-subtext">{{ t(buildingPicker.isRequired.value ? 'hud.armyPanel.fleetNoShoreBuilding' : 'hud.armyPanel.noPreference') }}</p>
-            </template>
-          </div>
+          <DispatchTargetBuildingPicker :has-target="!!selectedTarget" />
         </template>
 
         <div v-if="routeRows.length" class="waypoint-list">
@@ -756,24 +728,9 @@ async function confirmFieldOrderClick() {
 .target-row:hover {
   background: rgba(255, 197, 92, 0.08);
 }
-.target-row.out-of-reach {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 .target-owner {
   color: var(--muted);
   white-space: nowrap;
-}
-.building-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.building-picker-hint {
-  margin-top: 0;
-}
-.building-list {
-  max-height: 120px;
 }
 .fleet-note {
   margin-top: 0;
