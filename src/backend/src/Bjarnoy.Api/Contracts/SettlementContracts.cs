@@ -549,7 +549,8 @@ public sealed record BuildingDefinitionResponse(
 /// <param name="RealmId">The oldest member of the linked realm this settlement belongs to (itself when it stands alone).</param>
 /// <param name="Relation">How the owner stands to the caller, which picks the realm colour: <c>mine</c>, <c>guild</c> (same guild), <c>treaty</c> (guild with an active peace treaty) or <c>rival</c>.</param>
 public sealed record SettlementSummary(
-    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine, Guid RealmId, string Relation)
+    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine, Guid RealmId, string Relation,
+    int? LabelQ = null, int? LabelR = null)
 {
     public static SettlementSummary From(SettlementEntity s, bool mine, RealmLabel realm, string relation)
     {
