@@ -15,8 +15,8 @@ formula changes, re-run the lab and check all of them.
 |---|---|---|
 | T1 | A new player is never waiting in the first 10 minutes | founding stock covers every build started in the first 10 min; first builds take 1–3 min |
 | T2 | Something new unlocks often, one building at a time | at most one new building per Longhouse level (LH1 excepted); no run of 3+ LH levels without an unlock before LH 18 |
-| T3 | 2nd settlement: optimising player ≈ **5 days**, average player ≈ **2 weeks** | simulator profiles `pro` / `average` (§6) |
-| T4 | A settlement is "full" (LH 30, producers maxed) after about **3–4 months** (LH 30 now needs the Great Storehouse) | simulated: active ≈ 12 weeks (d85), 4 check-ins ≈ 17–18 weeks (d123) |
+| T3 | 2nd settlement: optimising player ≈ **1 week**, average player ≈ **2 weeks** | simulated (§6, with feasts): active d7.1, 4 check-ins d15.0, 2 check-ins d30.0; without feasts the active player d11.6 |
+| T4 | A settlement is "full" (LH 30, producers maxed) after about **4–7 months** (LH 30 needs Great Storehouses, the Longhouse costs ×1.60 per level from level 11) | simulated: active ≈ d138 (about 4.5 months), 4 check-ins ≈ d207 (about 7 months) |
 | T5 | Later levels still pay off, but ever more slowly | producer payback grows ~8% per level (cost ×1.30 vs the level's added output ×1.20) |
 | T6 | Troops come before settling | Cart Workshop (settlers) at LH 10, after Barracks (LH 5) and Dockyard (LH 8) |
 | T7 | Territory grows through towers, not the Longhouse | Longhouse claim radius stops growing at LH 3 (§5) |
@@ -151,17 +151,14 @@ has 3–8 stages per building, and each level maps onto a stage
 Construction slots: `2 + ⌊(LH − 5) / 5⌋` → 2 at LH 1–9, 7 at LH 30.
 
 **What caps a building's level.** Most buildings can never be a higher level
-than the Longhouse (level `L` needs LH `max(unlock, L)`), and Storage Houses
-keep that cap. The **resource producers** (Lumberjack, Quarry, Clay Brickworks,
-Reindeer Herder, Farm, Pumpkin Farm, Fishing Hut, bog-ore works) are capped by **storage**
+than the Longhouse (level `L` needs LH `max(unlock, L)`). The **resource producers** (Lumberjack, Quarry, Clay Brickworks,
+Reindeer Herder, Farm, Pumpkin Farm, Fishing Hut, bog-ore works) and the **Storage House** are capped by **storage**
 instead: they only need their unlock LH at every level, and a level whose cost
 exceeds what the settlement can store can never be afforded, so the next level
-has to fit in storage. Each **additional Storage House** raises the bar: with `n` held (standing plus
-queued), the next needs `min(n, 4)` Storage Houses at level
-`min(10 + 5·(n − 1), 25)`, so the second needs one at L10, the third two at L15,
-the fourth three at L20, the fifth four at L25, and once four are maxed any
-number more is allowed (the first is never held back, and upgrading is always
-allowed). See §5 for why.
+has to fit in storage. Any number of Storage Houses may be built. A new
+**Great Storehouse** needs one more Storage House at level 25 than the settlement
+already holds Great Storehouses (standing plus queued): the n-th needs n maxed
+Storage Houses (upgrading one is always allowed). See §5 for why.
 
 ## 5. Unlock ladder
 
@@ -186,7 +183,7 @@ Early levels unlock one building each; late game comes in tiers (LH 15, 20,
 | 10 | Cart Workshop (settlers) | Town Square 3 |
 | 11 | Meadery | Farm 5 |
 | 12 | Druid Hut | Town Square 5 |
-| 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 15 |
+| 15 | Weaponsmith, Great Storehouse | Barracks 10 / Storage House 25 (the n-th Great Storehouse: n Storage Houses at 25) |
 | 18 | Siege Workshop (trains the catapult and the battering ram) | Archery Range 3 |
 | 20 | Sawmill, Crop Mill, Hammer Forge | Lumberjack 10 / Farm 10 / Bog-ore works 10 |
 | 25 | Shrine of Ullr, Freyja, Njörd, Thor, and the Odin Statue | Sawmill 5 / Crop Mill 5 / Dockyard 10 / Weaponsmith 5 / **Druid Hut 10** (Odin) |
@@ -218,9 +215,9 @@ stalls at the cap; without it the active player's lead keeps growing.
 
 Storage stays a real brake because a higher producer level costs more than
 base capacity plus the Longhouse can hold, so storage has to grow with it.
-Storage Houses themselves keep the Longhouse cap, and each additional one needs
-more houses at a higher level (1 at L10, 2 at L15, 3 at L20, 4 at L25), so
-storage cannot be stacked cheaply in place of upgrading.
+Storage Houses are capped by storage too (any number, no Longhouse cap), and the
+Great Storehouse, the big capacity step, needs maxed Storage Houses (the n-th
+needs n at level 25), so the biggest storage cannot be had cheaply.
 
 **Design principle.** When an active player's first settlement slows down (the
 Longhouse and storage become the limit), the answer is a second settlement,
@@ -295,7 +292,7 @@ play.
 - **Linked realms share their stores.** Two of your settlements are linked when their realms touch (share a hex edge). Linked settlements share one stock: it is kept split between them in proportion to each one's storage capacity, per resource; production goes into it and a build in any of them draws from all of them in that ratio. When the link breaks, each keeps its share. The oldest settlement of a linked group is the one the game shows; the stock of the others is shown with it.
 - **A linked group is one realm.** It has one name (the oldest settlement's) and one stock. The newer settlements are left out of every list, yours and your rivals', and rivals see the oldest settlement's name on every longhouse of the group. Only their longhouses and the border stay on the map. You run the whole linked realm from the oldest settlement and can build on any of its hexes from there. A raid on any longhouse of the group can loot the whole stock.
 - A linked realm has one build queue: its construction slots are the members' slots added up, and a build on any of its hexes joins that queue.
-- In a linked realm, build requirements count for the whole realm: its highest longhouse level unlocks buildings on all of its ground, its tower limit is the members' limits added up, and the extra-storage-house requirement counts all of its storage houses.
+- In a linked realm, build requirements count for the whole realm: its highest longhouse level unlocks buildings on all of its ground, its tower limit is the members' limits added up, and the Great Storehouse count requirement counts all of its Storage Houses and Great Storehouses.
 - A linked realm's units eat from the shared food. When it runs out, the units with the highest upkeep across the whole realm starve first, until the shared food stops falling.
 - Leaderboards show a linked realm once, under the oldest settlement's name, with the members' scores added up; battle and trade reports use the realm's name.
 - A linked realm holds one shrine in total, like a settlement: while it holds one or more, no new shrine can be built in it. Settlements that each raised a shrine before they linked keep them all, and all of them keep working, so linking settlements is a way to combine favours.
@@ -521,7 +518,7 @@ A new settlement needs:
 1. a Cart Workshop (LH 10, Town Square 3), so troops come first (T6);
 2. 5 Settlers (the settler cost doubles per settlement already held);
 3. **renown**: +1 per building level per hour, across all settlements
-   (`Renown.cs`), never spent. Thresholds: **55 000** for the 2nd, then
+   (`Renown.cs`), never spent. Thresholds: **80 000** for the 2nd, then
    ×2 per settlement.
 
 **Feasts (Town Square)** are what lets a strong player settle early:
@@ -541,21 +538,22 @@ player turns surplus into feasts.
 ### Tuning the gain
 
 The first guess, `6 000 · 1.20^(TS−1)`, was too strong: by day 60 the lab
-showed 2.4–3.7 million renown against a 55 000 threshold, so feasts stopped
+showed 2.4–3.7 million renown against a 55 000 threshold (the threshold is 80 000 now, see the rebalance note below), so feasts stopped
 mattering and the Cart Workshop's Longhouse 10 unlock became the only gate.
 The gain `G1 · g^(TS−1)` was picked on a grid, with the live catalogue and the
 lab's defaults (join 09:00, 3/3/3 producers, 2 storage houses, producers 3
-ahead), against four targets:
+ahead), against four targets (the grid and the chosen-gain table below were run on the catalogue before the rebalance;
+the numbers after the rebalance are in the last paragraph of this section):
 
 - active with feasts founds the 2nd settlement around day 5 (4.5–6.5), without
   around day 12–14 (about day 12 since the lab's default start has clay pits and bog-ore works instead of quarries);
 - 4 check-ins with feasts around day 13–15;
-- renown is the binding gate for the active player (it reaches 55 000 well
-  after Longhouse 10, which is done on day 3.4);
-- renown on day 30 with feasts stays within 3–6× the no-feast figure, so the
-  3rd and 4th thresholds (110k, 220k) still mean something.
+- renown is the binding gate for the active player (it reaches 80 000 well
+  after Longhouse 10, which is done on day 4.1);
+- renown on day 30 with feasts stays within 2–6× the no-feast figure, so the
+  3rd and 4th thresholds (160k, 320k) still mean something.
 
-| G1 | g | active 2nd | active renown 55k | active r30 (x no-feast) | 4 check-ins 2nd | 4 check-ins r30 (x) | 2 check-ins 2nd |
+| G1 | g | active 2nd | active renown 55k (old threshold) | active r30 (x no-feast) | 4 check-ins 2nd | 4 check-ins r30 (x) | 2 check-ins 2nd |
 |---|---|---|---|---|---|---|---|
 | no feasts | | d13.48 | d13.47 | 162k | d20.65 | 106k | d28.18 |
 | 1500 | 1 | d10.08 | d10.08 | 241k (1.5x) | d16.18 | 157k (1.5x) | d25.98 |
@@ -591,14 +589,21 @@ ahead), against four targets:
 
 **Chosen: `G(TS) = 3 500 · 1.15^(TS−1)`.**
 
-| Profile | 2nd settlement, no feasts | 2nd settlement, feasts | Renown reaches 55k (feasts) | Longhouse 10 | Renown day 30, feasts (no feasts) | Binds with feasts |
+| Profile | 2nd settlement, no feasts | 2nd settlement, feasts | Renown reaches 55k (feasts, old threshold) | Longhouse 10 | Renown day 30, feasts (no feasts) | Binds with feasts |
 |---|---|---|---|---|---|---|
 | active | d13.5 | d6.4 | d6.4 | d3.4 | 773k (162k, 4.8×) | renown |
 | 4 check-ins | d20.7 | d13.0 | d12.5 | d13.0 | 408k (106k, 3.9×) | Longhouse 10 (renown half a day earlier) |
 | 2 check-ins | d28.2 | d26.0 | d18.5 | d26.0 | 211k (61k, 3.4×) | Longhouse 10 |
 
-These runs predate the faster Longhouse (t₁ 1.5 min ×1.33, §3). With it, the
-4-check-ins player settles about half a day earlier (d12.35 in the lab test).
+These runs predate the faster Longhouse (t₁ 1.5 min ×1.33, §3) and the cost rebalance.
+
+**After the rebalance** (threshold 80 000, Longhouse ×1.60 from level 11, producers' first levels cheaper, every
+tower adding one more producer of each type, the Cart Workshop and its Town Square paid for, three Lumberjacks, Clay
+Brickworks and Reindeer Herders and two bog-ore works, join 09:00, producers 3 ahead; the same gain
+`3 500 · 1.15^(TS−1)`): the 2nd settlement comes on day 7.1 for the active player with feasts (11.6 without), day 15.0
+for 4 check-ins and day 30.0 for 2 check-ins. Longhouse 10 is reached on day 4.1 (active) and day 14.5 (4 check-ins),
+so renown binds the active player and the Longhouse the 4-check-ins player. Feasts multiply the day-30 renown by about
+2.7× for the active player and 3.3× for 4 check-ins.
 
 Feasts are what lets an active player settle a week early. A casual player
 gains a few days at most, because the Longhouse 10 unlock is still ahead of
@@ -773,12 +778,8 @@ levels ahead, joining at 09:00, 60 days).
 Second-settlement timing (§6) needs iron for the Settlers, so a lab run without
 bog-ore works never settles. With the lab's default producers plus two bog-ore works
 (three Lumberjacks, Clay Brickworks and Reindeer Herders, feasts on) it
-is 6.4 days for the active player and 14.5 for 4 check-ins; without feasts the
-active player settles at 12.2 days. One works gives 15.5 / 21.0 / 28.8 days (active / 4
-check-ins / 2 check-ins, no feasts), three works 14.3 / 20.5 / 28.5, because the
-simulator's greedy player upgrades the scarce iron producer ahead of the others;
-a player raises iron only as far as the army needs, so these are a simulator
-artefact, not a target.
+is 7.1 days for the active player and 15.0 for 4 check-ins; without feasts the
+active player settles at 11.6 days (§6, after the rebalance).
 
 ## 9. Pacing model (the Economy lab)
 
@@ -800,7 +801,13 @@ acts inside them, starting at a join time (default 09:00). The lab also has a
 24 h reference profile and an editable custom schedule, a *producers ahead of
 the Longhouse* strategy setting, a what-if panel (growth factors and level-1
 values, shown dashed next to the live catalogue) and a second-settlement
-check (renown, optional feasts).
+check (renown, optional feasts). It models the settlement's growth the way a player plays it: every tower the
+Longhouse allows adds one more producer of each owned type (a setting, default 1, placed when affordable; they do not hold
+the Longhouse back, and the starting set is upgraded first); while saving for the Longhouse it still starts a producer
+upgrade that pays back sooner than the Longhouse would be affordable; storage is built only when the next Longhouse level
+or a producer's next level costs more than the current capacity (upgrade the lowest Storage House, a new one only when none
+can be upgraded, the lowest or a new Great Storehouse, the best capacity per cost); and the Town Square and the Cart Workshop
+are built and paid for like any building.
 
 ### What the simulator showed
 
@@ -895,7 +902,7 @@ Open work, in rough order. Each is its own PR.
 1. ~~**Economy lab:** session-based profiles, what-if panel, producers-ahead
    strategy and second settlement.~~ Done.
 2. ~~**Feasts and renown** (§6): Town Square feasts, and the renown threshold
-   for the 2nd settlement at 55 000.~~ Done.
+   for the 2nd settlement at 80 000.~~ Done.
 3. **Tutorial** (§7): placing a Storage House and upgrading the Longhouse,
    resource rewards for the onboarding steps, and a fast Longhouse 2 (about
    2 minutes).
