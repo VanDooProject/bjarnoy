@@ -126,7 +126,7 @@
       "sendArmyHere": "Send army here",
       "attack": "Attack",
       "support": "Support",
-      "noUnitsAtHome": "No units at home",
+      "noArmyCanGo": "No army can go",
       "upgrade": "Upgrade",
       "notEnough": "Needs {resources}",
       "raze": "Raze",
@@ -139,8 +139,6 @@
       "hunt": "Hunt",
       "campOccupied": "Occupied by wild beasts",
       "maxLevel": "Max level",
-      "noLandUnitsAtHome": "No land units at home",
-      "noShipsAtHome": "No ships at home",
       "siege": "Siege",
       "noRamAtHome": "Needs a battering ram at home"
     },
@@ -436,6 +434,33 @@
     "allButton": "All",
     "decrement": "−",
     "increment": "+"
+  },
+  "sendPicker": {
+    "title": "{mission} → {target}",
+    "close": "Close",
+    "hex": "Hex ({q}, {r})",
+    "home": "Home",
+    "garrison": "Garrison",
+    "units": "{count} unit | {count} units",
+    "standingAt": "Standing at ({q}, {r})",
+    "marchingTo": "Marching to ({q}, {r})",
+    "etaMinutes": "{minutes} min",
+    "etaHours": "{hours} h {minutes} min",
+    "wholeArmy": "Whole army moves.",
+    "splits": "Splits: {go} go, {stay} keep standing.",
+    "pickOne": "Pick at least one unit.",
+    "reasons": {
+      "noUnitsAtHome": "No units at home",
+      "noLandUnits": "No land units",
+      "noShips": "No ships",
+      "supportingNamed": "Supporting {name}, recall it first",
+      "supporting": "Supporting, recall it first",
+      "returning": "Returning home",
+      "notOrderable": "On a mission, can't take new orders",
+      "premium": "Premium: redirect while marching",
+      "unreachable": "Can't get there",
+      "noFood": "Not enough food for the way home"
+    }
   },
   "tradeReport": {
     "summary": "Gave {gaveAmount} {gave} for {gotAmount} {got}"

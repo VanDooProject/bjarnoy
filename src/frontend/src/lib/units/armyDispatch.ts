@@ -137,18 +137,52 @@ export function garrisonCanHunt(
   });
 }
 
+/** What a field order is for, beyond the route: the mission and its target, and which units leave. */
+export interface FieldOrderOptions {
+  mission?: 'move' | 'attack' | 'support' | 'hunt';
+  targetSettlementId?: string | null;
+  targetBuildingCoord?: AxialCoord | null;
+  /** The units that leave (a standing army splits); omitted or `null` sends the whole army. */
+  units?: Record<string, number> | null;
+}
+
 /**
  * Builds a `FieldOrderRequest` from a clicked route (issue #156 phase 1) —
  * same split as `routeToWaypointsAndDestination` (last click is the
  * destination, everything before it a waypoint), but for an army already out
- * in the field rather than one being dispatched from a garrison, so there's
- * no unit selection to validate. `null` for an empty route: a field order
- * always needs a destination.
+ * in the field rather than one being dispatched from a garrison. `null` when
+ * the order is incomplete: a move or hunt always needs a destination (a hunt's
+ * is the camp's hex), an attack or support a target settlement (its destination
+ * is derived server-side, so the route holds only waypoints), and a `units`
+ * selection that leaves nothing sends nothing.
  */
-export function buildFieldOrderRequest(route: AxialCoord[]): FieldOrderRequest | null {
+export function buildFieldOrderRequest(route: AxialCoord[], options: FieldOrderOptions = {}): FieldOrderRequest | null {
+  const { mission, targetSettlementId, targetBuildingCoord, units } = options;
+  const leaving = units
+    ? Object.entries(units)
+        .filter(([, count]) => count > 0)
+        .map(([unit, count]) => ({ unit, count }))
+    : undefined;
+  if (leaving && leaving.length === 0) return null;
+
+  if (mission === 'attack' || mission === 'support') {
+    if (!targetSettlementId) return null;
+    const waypoints = route.map((c) => ({ q: c.q, r: c.r }));
+    return {
+      waypoints: waypoints.length > 0 ? waypoints : undefined,
+      mission,
+      targetSettlementId,
+      targetBuildingCoord: mission === 'attack' && targetBuildingCoord ? { q: targetBuildingCoord.q, r: targetBuildingCoord.r } : undefined,
+      units: leaving,
+    };
+  }
+
   if (route.length === 0) return null;
   const { waypoints, destination } = routeToWaypointsAndDestination(route);
-  return { waypoints: waypoints.length > 0 ? waypoints : undefined, destination: destination! };
+  const request: FieldOrderRequest = { waypoints: waypoints.length > 0 ? waypoints : undefined, destination: destination! };
+  if (mission) request.mission = mission;
+  if (leaving) request.units = leaving;
+  return request;
 }
 
 /**

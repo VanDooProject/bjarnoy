@@ -71,6 +71,8 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect(ring.action('Send army here')).toBeVisible();
 
     await ring.action('Send army here').click();
+    // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
+    await page.locator('.send-picker [data-source="home"] .send-row-head').click();
 
     const sheet = page.locator('.dispatch-sheet');
     await expect(sheet).toBeVisible();
@@ -150,6 +152,8 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect(ring.action('Attack')).toBeVisible();
 
     await ring.action('Attack').click();
+    // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
+    await page.locator('.send-picker [data-source="home"] .send-row-head').click();
 
     await expect(page.locator('.dispatch-sheet')).toBeVisible();
     const draft = await demoWorld(page).then((w) => w.dispatchDraft);
@@ -183,6 +187,8 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     const hex = await settlement.findHex();
     await settlement.clickHex(hex);
     await ring.action('Send army here').click();
+    // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
+    await page.locator('.send-picker [data-source="home"] .send-row-head').click();
 
     const sheet = page.locator('.dispatch-sheet');
     await expect(sheet).toBeVisible();

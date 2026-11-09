@@ -63,12 +63,10 @@ import { useRingMaxScale } from '../composables/useRingMaxScale';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { campHexBuildable } from '../lib/map/campRules';
-import { isWaterCampFamily } from '../lib/map/campPlacement';
 import { isHostileWallTile, siegeAttackOptions } from '../lib/map/siegeRules';
 import {
   breachesWalls,
   classifyUnitSelection,
-  garrisonCanHunt,
   totalSpeed,
   totalUpkeepPerHour,
   trainingSite,
@@ -76,6 +74,9 @@ import {
 import { reachableRange } from '../lib/map/hexPath';
 import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
+import { anySendSourceCanGo } from '../lib/units/sendSources';
+import { useSendBlockText, useSendPickerRows, useSendSources } from '../composables/useSendSources';
+import { motionEnabled } from '../lib/motion';
 import MobileDispatchSheet from '../components/hud/MobileDispatchSheet.vue';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -203,7 +204,12 @@ function onArmySelect(armyId: string) {
   world.selectArmy(armyId);
   const army = world.armies.find((a) => a.id === armyId);
   if (!army) return;
-  let coord: { q: number; r: number } = army.position;
+  onQueueSelect(liveArmyCoord(army));
+}
+
+/** The hex an army's marker is on right now: where it is along its leg (the half it has reached), not the last hex the poll reported. */
+function liveArmyCoord(army: (typeof world.armies)[number]): AxialCoord {
+  let coord: AxialCoord = army.position;
   if (army.movement) {
     const {
       path, cumulativeHours, edgeHours, departedAt, arrivesAt, isReturning,
@@ -214,7 +220,7 @@ function onArmySelect(armyId: string) {
       : routeProgressAt(path, cumulativeHours, edgeHours, Date.parse(departedAt), Date.parse(arrivesAt), Date.now());
     if (progress) coord = progress.arrived || progress.t >= 0.5 ? progress.to : progress.from;
   }
-  onQueueSelect(coord);
+  return coord;
 }
 
 // What the map view is waiting on, shown by MapStatusOverlay — a failed
@@ -363,11 +369,16 @@ watch(
 // both together (rather than assuming the renderer is already mounted the
 // first time this fires) covers the ordering race between the canvas
 // mounting and this store data arriving.
+const sendPicker = useSendPickerRows();
 const armyOverlayData = computed<ArmyOverlayData>(() => {
+  const picker = world.sendPicker;
+  const pickRows = picker ? new Map(sendPicker.rows.value.map((r) => [r.id, r])) : null;
   const armies: ArmyOverlayMarker[] = world.armies.map((a) => ({
     id: a.id,
     position: a.position,
     selected: a.id === world.selectedArmyId,
+    // The send picker marks which armies can be tapped (see HexMapRenderer's `pick`).
+    pick: pickRows ? (picker!.selectedId === a.id ? 'selected' : pickRows.get(a.id)?.ok ? 'eligible' : 'ineligible') : undefined,
     returning: !!a.movement?.isReturning,
     // docs/design/ship-movement.md §4: ship marker for a fleet (any ship in
     // the army, its land units are passengers), flag for a land army — the
@@ -395,12 +406,21 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
       : undefined,
   }));
   const selected = world.armies.find((a) => a.id === world.selectedArmyId);
-  const route = selected?.movement
-    ? selected.movement.isReturning
-      ? selected.movement.returnPath
-      : selected.movement.path
-    : [];
-  const draftWaypoints = world.dispatchDraft?.route ?? world.fieldOrderDraft?.route ?? [];
+  // While the send picker is open the route drawn is the preview of the order: from where the selected army will stand to the target.
+  const pickerVerdict = world.sendPicker ? sendPicker.rows.value.find((r) => r.id === world.sendPicker?.selectedId)?.verdict : undefined;
+  const route = world.sendPicker
+    ? pickerVerdict?.ok
+      ? pickerVerdict.path
+      : []
+    : selected?.movement
+      ? selected.movement.isReturning
+        ? selected.movement.returnPath
+        : selected.movement.path
+      : [];
+  const draftWaypoints =
+    world.dispatchDraft?.route ??
+    world.fieldOrderDraft?.route ??
+    (world.sendPicker && world.sendPicker.mission === 'move' ? [world.sendPicker.coord] : []);
   // Odin's Ravens widen the live vision of this settlement's travelling armies.
   const visionBonusRings = world.selectedSettlementId ? world.model.ravensRingsFor(world.selectedSettlementId) : 0;
   return { armies, route, draftWaypoints, targets: overlayTargets(selected), visionBonusRings };
@@ -434,6 +454,17 @@ function overlayTargets(selectedArmy: (typeof world.armies)[number] | undefined)
   if (draft) {
     add(draft.targetSettlementId, draft.mission);
     if (draft.mission === 'hunt') addCamp(draft.targetCamp ?? undefined);
+  }
+  // The order a picker is composing for a field army, and the picker's own target before any army is chosen.
+  const field = world.fieldOrderDraft;
+  if (field) {
+    add(field.targetSettlementId, field.mission);
+    if (field.mission === 'hunt') addCamp(field.route[field.route.length - 1]);
+  }
+  const picker = world.sendPicker;
+  if (picker) {
+    add(picker.targetSettlementId, picker.mission);
+    if (picker.mission === 'hunt') addCamp(picker.coord);
   }
   if (selectedArmy && !selectedArmy.movement?.isReturning) {
     add(selectedArmy.targetSettlementId, selectedArmy.mission);
@@ -493,6 +524,57 @@ watch(
   },
   { immediate: true },
 );
+
+// The send picker frames the target and every army that can go, not just the selected one, so another can still be tapped. Keyed on the
+// target and the set of armies that can go: a poll that changes nothing about them must not move the camera under the player's hands.
+const PICKER_FRAME_MS = 300;
+const pickerFrameKey = computed(() => {
+  const picker = world.sendPicker;
+  if (!picker) return null;
+  const ids = sendPicker.rows.value.filter((r) => r.kind === 'field' && r.ok).map((r) => r.id);
+  return `${picker.coord.q},${picker.coord.r}|${ids.sort().join(',')}`;
+});
+watch(
+  [() => canvasRef.value?.renderer, pickerFrameKey],
+  ([renderer, key]) => {
+    const picker = world.sendPicker;
+    if (!renderer || !key || !picker) return;
+    const coords: AxialCoord[] = [picker.coord];
+    for (const row of sendPicker.rows.value) {
+      if (row.kind === 'field' && row.ok && row.army) coords.push(liveArmyCoord(row.army));
+    }
+    // On a phone the sheet covers the lower part of the screen: frame the rest.
+    renderer.frameHexes(coords, { bottomInsetPx: isMobile.value ? Math.round(stage.value.h * 0.5) : 0, durationMs: motionEnabled() ? PICKER_FRAME_MS : 0 });
+  },
+  { immediate: true },
+);
+
+// A tap on an army's marker while the picker is open: a army that can go is selected, the same as tapping its row; one that cannot
+// shows its reason in a small hint above it.
+const armyHint = ref<{ x: number; y: number; text: string } | null>(null);
+let armyHintTimer: ReturnType<typeof setTimeout> | null = null;
+const sendBlockText = useSendBlockText();
+function onArmyTap(armyId: string, screen: { x: number; y: number }) {
+  if (armyHintTimer) clearTimeout(armyHintTimer);
+  armyHint.value = null;
+  const row = sendPicker.rows.value.find((r) => r.id === armyId);
+  if (!row || !world.sendPicker) return;
+  if (row.ok) {
+    world.selectSendSource(armyId);
+    return;
+  }
+  const text = sendBlockText(row, sendPicker.target.value);
+  if (!text) return;
+  armyHint.value = { x: Math.min(Math.max(screen.x, 110), Math.max(110, stage.value.w - 110)), y: Math.max(48, screen.y - 34), text };
+  armyHintTimer = setTimeout(() => (armyHint.value = null), 3500);
+}
+watch(
+  () => world.sendPicker,
+  (picker) => {
+    if (!picker) armyHint.value = null;
+  },
+);
+onUnmounted(() => armyHintTimer && clearTimeout(armyHintTimer));
 
 // Construction progress dials over buildings still being built; the renderer
 // animates the progress itself every tick from these absolute timestamps.
@@ -682,7 +764,7 @@ watch(canvasInteractionLocked, (locked) => {
 // over the bottom of the screen while one is, so QueueDrawer (which would
 // otherwise clash with it) hides, and the HUD pull-down drawer closes the
 // same way opening QueueDrawer already does above.
-const hasActiveDraft = computed(() => !!(world.dispatchDraft || world.fieldOrderDraft));
+const hasActiveDraft = computed(() => !!(world.dispatchDraft || world.fieldOrderDraft || world.sendPicker));
 watch(hasActiveDraft, (active) => {
   if (active) {
     queueDrawerOpen.value = false;
@@ -737,6 +819,8 @@ const {
 // World zoom only offers the army action, so it has no build ring at all.
 const ringCategories = computed<RingCategory[]>(() => (mode.value === 'world' ? [] : buildCategories.value));
 
+const sendSources = useSendSources();
+
 const isEnemyTile = computed(
   () => !!selectedTile.value?.ownerId && !world.isRealmSettlement(selectedTile.value.ownerId),
 );
@@ -753,7 +837,6 @@ const isMineTile = computed(
 // on desktop, starting a draft this way just pre-fills ArmyPanel's existing
 // dispatch form, same as picking a mission tab and a target there by hand.
 function sendArmyAction(tile: Tile): RingAction {
-  const hasUnits = world.hud.garrison.some((g) => g.count > 0);
   const ownerSettlementId = tile.ownerId;
   const ownerIsSelf = ownerSettlementId
     ? world.model.getSettlement(ownerSettlementId)?.ownerId === player.id
@@ -767,28 +850,25 @@ function sendArmyAction(tile: Tile): RingAction {
     id = 'support';
     label = t('hud.ringMenu.actions.support');
   }
-  return {
-    id,
-    label,
-    disabled: !hasUnits,
-    hint: hasUnits ? undefined : t('hud.ringMenu.actions.noUnitsAtHome'),
-  };
+  const canGo = anySendSourceCanGo(
+    sendSources.evaluate(sendSources.targetAt(id === 'send-army' ? 'move' : id, { q: tile.q, r: tile.r })),
+  );
+  return { id, label, disabled: !canGo, hint: canGo ? undefined : t('hud.ringMenu.actions.noArmyCanGo') };
 }
 
 // Hunt a wildlife camp: offered on a camp tile that is still on the map, live mode only
-// (the demo has no army simulation, so no camp fights). A land camp needs land units at home, a camp at sea (the
-// whale road) ships — the other class cannot hunt it.
+// (the demo has no army simulation, so no camp fights). A land camp needs land units, a camp at sea (the whale road)
+// ships — the other class cannot hunt it. Enabled when the home garrison or an army in the field can go.
 function huntActions(tile: Tile): RingAction[] {
   if (DEMO_MODE || !tile.camp || tile.camp.removed || tile.buildingType) return [];
-  const atSea = isWaterCampFamily(tile.camp.family);
-  const hasLandUnits = garrisonCanHunt(world.hud.garrison, unitCatalogue.byType, atSea);
+  const canGo = anySendSourceCanGo(sendSources.evaluate(sendSources.targetAt('hunt', { q: tile.q, r: tile.r })));
   return [
     {
       id: 'hunt',
       label: t('hud.ringMenu.actions.hunt'),
       color: 'var(--rival)',
-      disabled: !hasLandUnits,
-      hint: hasLandUnits ? undefined : t(atSea ? 'hud.ringMenu.actions.noShipsAtHome' : 'hud.ringMenu.actions.noLandUnitsAtHome'),
+      disabled: !canGo,
+      hint: canGo ? undefined : t('hud.ringMenu.actions.noArmyCanGo'),
     },
   ];
 }
@@ -1011,6 +1091,11 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
     world.addWaypoint(coord);
     return;
   }
+  // The send picker is open: the target is fixed and the armies are picked by their markers (onArmyTap), so a tap on the ground does nothing.
+  if (world.sendPicker) {
+    armyHint.value = null;
+    return;
+  }
   // Issue #156 phase 1: a field order being composed (ArmyPanel's "Move
   // on"/"Append goal" flow) claims clicks the same way a dispatch draft
   // does — mutually exclusive interaction modes, same as above.
@@ -1043,6 +1128,7 @@ function roomForRing(screen: { x: number; y: number }): RingPlacement {
 // the pin was dragged onto (snapping happens there, against the same
 // isoPixelToAxial a click uses); this just writes it into the draft.
 function onWaypointMove(index: number, coord: AxialCoord) {
+  if (world.sendPicker) return; // the picker's target is fixed
   if (world.fieldOrderDraft) {
     world.moveFieldOrderWaypoint(index, coord);
     return;
@@ -1054,6 +1140,7 @@ function onWaypointMove(index: number, coord: AxialCoord) {
 // HexMapRendererOptions.onWaypointTap's own comment for how a tap is told
 // apart from a drag.
 function onWaypointTap(index: number) {
+  if (world.sendPicker) return;
   if (world.fieldOrderDraft) {
     world.removeFieldOrderWaypoint(index);
     return;
@@ -1111,11 +1198,11 @@ async function onRingSelect(id: string) {
       closeRing();
       return;
     case 'send-army':
-      if (selectedCoord.value) world.startDispatchAt(selectedCoord.value);
+      if (selectedCoord.value) world.openSendPicker(selectedCoord.value);
       closeRing();
       return;
     case 'hunt':
-      if (selectedCoord.value) world.startDispatchAt(selectedCoord.value, { mission: 'hunt' });
+      if (selectedCoord.value) world.openSendPicker(selectedCoord.value, { mission: 'hunt' });
       closeRing();
       return;
     case 'siege':
@@ -1129,7 +1216,7 @@ async function onRingSelect(id: string) {
     case 'attack':
     case 'support':
       if (selectedCoord.value && tile?.ownerId) {
-        world.startDispatchAt(selectedCoord.value, { mission: id, targetSettlementId: tile.ownerId });
+        world.openSendPicker(selectedCoord.value, { mission: id, targetSettlementId: tile.ownerId });
       }
       closeRing();
       return;
@@ -1262,6 +1349,7 @@ async function upgrade() {
       @hover="onHover"
       @waypoint-move="onWaypointMove"
       @waypoint-tap="onWaypointTap"
+      @army-tap="onArmyTap"
       @zoom-mode-change="onZoomModeChange"
       @camera-change="onCameraChange"
     />
@@ -1380,6 +1468,15 @@ async function upgrade() {
       :coord="buildRefusal.coord"
       :message="buildRefusal.message"
     />
+    <div
+      v-if="armyHint"
+      class="army-hint"
+      role="status"
+      :style="{ left: armyHint.x + 'px', top: armyHint.y + 'px' }"
+      data-testid="army-hint"
+    >
+      {{ armyHint.text }}
+    </div>
     <MobileDispatchSheet v-if="isMobile && hasActiveDraft" />
   </div>
 </template>
@@ -1397,6 +1494,20 @@ async function upgrade() {
      cancelling the pointer capture the drag-to-open drawer gesture
      (TopBar.vue's useHudDrawer) relies on. */
   overscroll-behavior-y: none;
+}
+.army-hint {
+  position: absolute;
+  z-index: 37;
+  max-width: min(260px, calc(100vw - 32px));
+  transform: translate(-50%, -100%);
+  padding: 5px 9px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
 }
 .hud-scrim {
   position: absolute;
