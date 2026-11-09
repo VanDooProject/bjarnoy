@@ -30,7 +30,13 @@ public sealed record FogMaskOptions
     /// not fail anywhere, it just quietly puts the live and demo fog edges
     /// at different distances from the realm.
     /// </summary>
-    public int UnknownMarginHexes { get; init; } = 14;
+    public int UnknownMarginHexes { get; init; } = DefaultUnknownMarginHexes;
+
+    /// <summary>
+    /// The default <see cref="UnknownMarginHexes"/>, and the one number <see cref="FogVisionRadii.SourceMistOpaqueMargin"/> (how far
+    /// past a source the fog is fully opaque, which decides what rival data a read delivers) derives from.
+    /// </summary>
+    public const int DefaultUnknownMarginHexes = 14;
 
     /// <summary>Ramp width, in hexes, of the G (out-of-sight) channel.</summary>
     public int OutOfSightMarginHexes { get; init; } = 2;
