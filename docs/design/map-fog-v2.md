@@ -372,13 +372,16 @@ authenticated player who has already founded) are properly scoped. That's
 an existing-endpoint audit; the landing-page fix above is scoped narrowly
 to the one genuinely pre-authentication, current-state-exposing path. (Since resolved for rival settlements: see §1g.)
 
-### 1g. Rival settlements: per-hex gate
+### 1g. Rival settlements: fog gate
 
-A rival settlement is delivered to a player as soon as its Longhouse centre or any of its standing buildings lies in the
-player's explored area. What is delivered is decided hex by hex: a rival building is only sent when its own hex is explored,
-so nothing about an unexplored hex (type, level) leaves the server. The summary of a visible rival is full: name, owner,
-relation, Longhouse position and level. Its label sits on the Longhouse when that hex is explored, otherwise on the explored
-standing building closest to it (ties go to the lower q, then r). A foundation (level 0) alone does not make a rival visible.
+A rival settlement is delivered as soon as you can see any of it through the fog: its Longhouse centre or one of its
+standing buildings lies where your fog is not fully opaque, or such ground lies inside the claim disc of its Longhouse or of
+one of its towers. A building is only sent when its own hex lies in that area; a Longhouse or tower is sent as soon as any
+hex of its claim disc does, wherever it stands itself. The realm border is drawn from the full discs of the Longhouse and
+every tower sent, without the chain rule, and clipped by fog. "Not fully opaque" reaches 11.2 hexes (straight-line
+distance) past the explored ring of each of your settlements and towers and 5.55 hexes past the vision of each of your
+marching armies; explored ground without current vision has no such margin. The label rule stays: on the Longhouse when its
+hex is explored, otherwise on the nearest visible hex of the realm.
 
 ### 1g. Foreign troops
 
