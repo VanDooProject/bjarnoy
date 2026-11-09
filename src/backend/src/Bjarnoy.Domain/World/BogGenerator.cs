@@ -252,7 +252,7 @@ internal sealed class BogGenerator
     /// <summary>
     /// Finds enclosed sea pockets (sea not connected to the open sea: the inside of an O-shaped island),
     /// builds each one's lake and bog ring on scratch state and keeps the ones that satisfy every rule
-    /// (a pocket whose ring would touch the open sea, sand-to-sea, a mountain shore or another bog is left as sea).
+    /// (a pocket whose ring would touch the open sea, sand, a mountain shore or another bog is left as sea).
     /// </summary>
     public void FindPockets()
     {
@@ -392,8 +392,7 @@ internal sealed class BogGenerator
             layer = next;
         }
 
-        // R7 for the whole ring: nothing touches the open sea. (Sand is fine here: the pocket is inside the island, its own
-        // beach and the sand beside it turn to bog as far as the ring reaches; see docs/design/bog.md.)
+        // R7 for the whole ring: nothing touches the open sea or sand.
         foreach (var t in ring)
         {
             foreach (var n in Nb6(t))
@@ -404,6 +403,11 @@ internal sealed class BogGenerator
                 }
 
                 if (OpenSea(n))
+                {
+                    return false;
+                }
+
+                if (_islandLand.Contains(n) && _land[n] == Terrain.Sand)
                 {
                     return false;
                 }
@@ -447,7 +451,7 @@ internal sealed class BogGenerator
 
         if (connected.Count != ring.Count)
         {
-            // A stranded piece would have to be dropped, and the sand rule may need it: keep only the connected part
+            // A stranded piece would have to be dropped, and R7 may need it: keep only the connected part
             // when nothing was dropped that touches sand, else give the pocket up.
             foreach (var t in ring.Where(t => !connected.Contains(t)))
             {

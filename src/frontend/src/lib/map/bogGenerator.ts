@@ -404,13 +404,13 @@ export class BogGenerator {
       layer = next;
     }
 
-    // R7 for the whole ring: nothing touches the open sea. (Sand is fine here: the pocket is inside the island, its own
-    // beach and the sand beside it turn to bog as far as the ring reaches; see docs/design/bog.md.)
+    // R7 for the whole ring: nothing touches the open sea or sand.
     for (const t of ring) {
       for (let d = 0; d < 6; d++) {
         const n = nb(t, d);
         if (lake.has(n) || ring.has(n)) continue;
         if (openSea(n)) return false;
+        if (this.inIsland(n) && this.terrainOf(n) === 'sand') return false;
       }
     }
 
@@ -437,7 +437,7 @@ export class BogGenerator {
     }
 
     if (connected.size !== ring.size) {
-      // A stranded piece would have to be dropped, and the sand rule may need it: keep only the connected part
+      // A stranded piece would have to be dropped, and R7 may need it: keep only the connected part
       // when nothing was dropped that touches sand, else give the pocket up.
       for (const t of [...ring].filter((x) => !connected.has(x))) {
         for (let d = 0; d < 6; d++) if (connected.has(nb(t, d))) return false;

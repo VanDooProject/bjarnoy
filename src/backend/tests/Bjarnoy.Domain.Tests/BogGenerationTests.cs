@@ -237,27 +237,18 @@ public class BogGenerationTests
     }
 
     [Fact]
-    public void Bog_never_touches_the_sea_or_the_coast_sand_except_the_sand_ring_of_an_enclosed_pocket()
+    public void Bog_never_touches_the_sea_or_sand()
     {
         foreach (var (seed, sampler, island) in GreenIslands().Where(i => i.Island.BogTiles.Count > 0))
         {
             var bog = island.BogTiles.Select(t => t.Coord).ToHashSet();
-            var pocketWater = island.BogTiles
-                .Where(t => t.Kind == BogTileKind.Lake && sampler.TerrainAt(t.Coord) == Terrain.Sea)
-                .Select(t => t.Coord)
-                .ToList();
             foreach (var tile in island.BogTiles.Where(t => t.Kind != BogTileKind.Lake))
             {
-                var inPocketRing = pocketWater.Any(w => HexCoord.Distance(w, tile.Coord) <= 6);
                 foreach (var n in tile.Coord.Neighbours().Where(n => !bog.Contains(n)))
                 {
                     var terrain = sampler.TerrainAt(n);
                     Assert.NotEqual(Terrain.Sea, terrain);
-                    if (terrain == Terrain.Sand)
-                    {
-                        // Inside an island's own pocket the beach turns to bog with the ring; nowhere else may a bog touch sand.
-                        Assert.True(inPocketRing, $"seed {seed}: bog {tile.Coord} touches sand at {n} away from any pocket");
-                    }
+                    Assert.True(terrain != Terrain.Sand, $"seed {seed}: bog {tile.Coord} touches sand at {n}");
                 }
             }
         }
@@ -401,6 +392,10 @@ public class BogGenerationTests
         var sandy = new List<BogTile> { T(0, 0, BogTileKind.Bog) };
         Terrain Terrain0(HexCoord c) => c == new HexCoord(1, 0) ? Terrain.Sand : Terrain.Grass;
         Assert.True(BogRules.Check(sandy, [], Terrain0).R7 > 0);
+
+        // A bog with a sand neighbour breaks R7 even inside a pocket (a pocket bog may stand on what was beach).
+        var inPocket = new List<BogTile> { T(0, 0, BogTileKind.Bog), T(-1, 0, BogTileKind.Lake) };
+        Assert.True(BogRules.Check(inPocket, [], c => c == new HexCoord(-1, 0) ? Terrain.Sea : Terrain0(c)).R7 > 0);
     }
 
     [Fact]
