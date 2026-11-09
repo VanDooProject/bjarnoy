@@ -144,6 +144,25 @@ internal sealed class ApiKeyHarness(BjarnoyApiFactory factory)
         return settlement;
     }
 
+    /// <summary>Founds an anonymous settlement (no account; owned by the Abandoned system user) and returns it with its client-local owner id.</summary>
+    public async Task<(SettlementResponse Settlement, string OwnerId)> FoundAnonymousSettlementAsync(Guid worldId, string? jarlName = null)
+    {
+        using var client = Factory.CreateClient();
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var island = islands!.First(i => i.StartPositions.Count > 0);
+        var plot = island.StartPositions[0];
+        var ownerId = Unique("anon");
+        client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/worlds/{worldId}/settlements",
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, Unique("v"), jarlName ?? Unique("Jarl"), ownerId),
+            Ct);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.ReadStrictAsync<SettlementResponse>(Ct), ownerId);
+    }
+
     public async Task SetStatusAsync(Guid userId, UserStatus status) => await WithDbAsync(async db =>
     {
         var user = await db.Users.SingleAsync(u => u.Id == userId, Ct);

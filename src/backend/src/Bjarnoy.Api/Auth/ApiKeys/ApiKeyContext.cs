@@ -16,7 +16,8 @@ public sealed record ApiKeyContext(
     IReadOnlyDictionary<string, ApiKeyAccess> Features,
     bool AllWorlds,
     IReadOnlySet<Guid> WorldIds,
-    int RequestsPerMinute)
+    int RequestsPerMinute,
+    string? ActingAnonymousOwnerId = null)
 {
     internal const string ItemKey = "bjarnoy:api_key_context";
 
