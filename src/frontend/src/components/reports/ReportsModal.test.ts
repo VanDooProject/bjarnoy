@@ -128,26 +128,60 @@ describe('ReportsModal', () => {
     expect(wrapper.find('.mobile-title').text()).toBe('Reports');
   });
 
-  it('clicking a row navigates to the detail, keeping the stashed backgroundView', async () => {
+  it('clicking a row expands its report in place, without leaving the list or touching the URL', async () => {
     const router = testRouter();
     await router.push('/settlement');
     await router.push({ path: '/reports', state: { backgroundView: '/settlement' } });
     await router.isReady();
 
     const wrapper = await mountModal(router);
-    await wrapper.find('[data-testid="report-row"]').trigger('click');
-    await flushPromises();
+    expect(wrapper.find('[data-testid="report-detail"]').exists()).toBe(false);
 
-    expect(router.currentRoute.value.path).toBe('/reports/battle-1');
-    expect((router.options.history.state as { backgroundView?: unknown }).backgroundView).toBe('/settlement');
+    await wrapper.find('[data-testid="report-row"]').trigger('click');
+
+    expect(router.currentRoute.value.path).toBe('/reports');
+    expect(wrapper.find('[data-testid="report-row"]').attributes('aria-expanded')).toBe('true');
     expect(wrapper.find('[data-testid="report-detail"]').exists()).toBe(true);
+
+    await wrapper.find('[data-testid="report-row"]').trigger('click');
+    expect(wrapper.find('[data-testid="report-detail"]').exists()).toBe(false);
   });
 
-  it('on mobile, the chevron on a detail returns to the list rather than closing the modal', async () => {
+  it('keeps several reports open at once', async () => {
+    getSettlementReports.mockResolvedValue([
+      battleReport({ id: 'battle-1' }),
+      battleReport({ id: 'battle-2', occurredAt: '2026-01-16T00:00:00Z' }),
+    ]);
+    const router = testRouter();
+    await router.push('/reports');
+    await router.isReady();
+
+    const wrapper = await mountModal(router);
+    const rows = wrapper.findAll('[data-testid="report-row"]');
+    await rows[0].trigger('click');
+    await rows[1].trigger('click');
+
+    expect(wrapper.findAll('[data-testid="report-detail"]')).toHaveLength(2);
+  });
+
+  it('a deep link to a report opens that row', async () => {
+    getSettlementReports.mockResolvedValue([battleReport({ id: 'battle-1' }), battleReport({ id: 'battle-2' })]);
+    const router = testRouter();
+    await router.push('/reports/battle-2');
+    await router.isReady();
+
+    const wrapper = await mountModal(router);
+
+    const items = wrapper.findAll('.item');
+    expect(items.find((i) => i.attributes('data-report-id') === 'battle-2')?.find('[data-testid="report-detail"]').exists()).toBe(true);
+    expect(items.find((i) => i.attributes('data-report-id') === 'battle-1')?.find('[data-testid="report-detail"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="reports-back-to-list"]').exists()).toBe(false);
+  });
+
+  it('on mobile, the chevron closes the modal even with a report open', async () => {
     setIsMobile(true);
     const router = testRouter();
     await router.push('/settlement');
-    await router.push({ path: '/reports', state: { backgroundView: '/settlement' } });
     await router.push({ path: '/reports/battle-1', state: { backgroundView: '/settlement' } });
     await router.isReady();
 
@@ -155,8 +189,7 @@ describe('ReportsModal', () => {
     await wrapper.find('.back-button').trigger('click');
     await flushPromises();
 
-    // Back to the list, not out to the background route.
-    expect(router.currentRoute.value.path).toBe('/reports');
+    expect(router.currentRoute.value.path).toBe('/settlement');
   });
 
   it('Escape closes the whole modal, going back to the stashed backgroundView, even from a detail', async () => {

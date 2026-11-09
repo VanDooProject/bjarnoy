@@ -76,6 +76,21 @@
   head, squash-merge the PR via GitHub without waiting for a further go-ahead (squash rules above). If the review is not
   good, or CI is red, don't merge: fix it, or tell me what blocks
 
+# SONNET: check before and after every push (explicit, not optional)
+- Sonnet has repeatedly pushed code that CI rejected on lint or type errors it never ran locally. The rules below are for
+  Sonnet (any session running as Sonnet, including Sonnet subagents); stronger models follow them too, but Sonnet must not skip them
+- **before every push**, run locally what CI's `build` job runs, in `src/frontend`: `npm run lint` (eslint over `src/**/*.vue`,
+  including `@intlify/vue-i18n/no-raw-text`: no literal text/symbols in templates), `npx vue-tsc -b` (type-checks the test
+  files too; a bare `vue-tsc --noEmit` does not), `npm run test:unit` for what you touched, and `npm run build`. Backend:
+  `dotnet build Bjarnoy.slnx` and the test projects the change touches. A file-path argument to eslint is not the project
+  lint (it ignores non-`.vue` files); use `npm run lint`
+- **after every push**, check the PR's CI yourself (`get_check_runs` on the PR) — don't report "pushed" and stop, and don't wait
+  for me to ask. Read the log of every failed job (`get_job_logs`), reproduce the failure locally, fix, push, check again
+- iterate until the `build` checks (frontend `build`, Docker `build`, `build-and-test`, lint) are green. Other jobs (e2e, aspire-e2e)
+  that are still queued/running are reported as such; a red one gets the same read-log, reproduce, fix loop. Failures that are
+  provably unrelated to the PR follow the "unrelated/pre-existing CI failures" rules below instead
+- when reporting, state what CI says (job names and conclusions), not what was run locally. Never write "CI should be fine"
+
 # driving red CI to green
 - reproduce each failing CI test locally and iterate on it there until it
   passes: run just that test (`dotnet test --filter-method`/`--filter-class`,
