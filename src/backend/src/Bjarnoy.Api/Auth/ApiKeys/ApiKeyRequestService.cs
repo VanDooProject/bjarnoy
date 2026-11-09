@@ -56,7 +56,8 @@ public sealed record NewApiKeyRequest(
     bool AllWorlds,
     IReadOnlyList<Guid>? WorldIds,
     int LifetimeMinutes,
-    int? RequestsPerMinute);
+    int? RequestsPerMinute,
+    IReadOnlyList<string>? AdditionalUserNames = null);
 
 /// <summary>Admin overrides applied when approving; any null keeps what the request asked for.</summary>
 public sealed record ApprovalOverrides(
@@ -66,7 +67,8 @@ public sealed record ApprovalOverrides(
     IReadOnlyList<Guid>? WorldIds,
     int? LifetimeMinutes,
     int? RequestsPerMinute,
-    int? AutoRenewMinutes);
+    int? AutoRenewMinutes,
+    IReadOnlyList<Guid>? AdditionalUserIds = null);
 
 /// <summary>
 /// The device-flow style request lifecycle for API keys: an agent asks anonymously, an admin approves or denies with
@@ -116,6 +118,17 @@ public sealed class ApiKeyRequestService(
         RequireText(errors, "purpose", input.Purpose, 500, required: false);
         RequireText(errors, "description", input.Description, 1000, required: false);
         RequireText(errors, "ownerUserName", input.OwnerUserName, 100, required: false);
+        var additionalNames = (input.AdditionalUserNames ?? [])
+            .Select(n => n?.Trim() ?? string.Empty)
+            .Where(n => n.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (additionalNames.Count > ApiKeyService.MaxAdditionalAccounts || additionalNames.Any(n => n.Length > 100))
+        {
+            errors["additionalUserNames"] =
+                [$"At most {ApiKeyService.MaxAdditionalAccounts} names of at most 100 characters each."];
+        }
+
         ValidateContextUrl(errors, input.ContextUrl);
 
         var featureErrors = ApiKeyService.ValidateFeatures(features);
@@ -187,6 +200,7 @@ public sealed class ApiKeyRequestService(
             Description = Clean(input.Description),
             ContextUrl = Clean(input.ContextUrl),
             RequestedOwnerUserName = Clean(input.OwnerUserName),
+            RequestedAdditionalUserNames = additionalNames,
             Features = features,
             AllWorlds = input.AllWorlds,
             WorldIds = worldIds,
@@ -223,7 +237,9 @@ public sealed class ApiKeyRequestService(
         CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
-        var key = await dbContext.ApiKeys.AsNoTracking().FirstOrDefaultAsync(k => k.Id == apiKeyId, cancellationToken);
+        var key = await dbContext.ApiKeys.AsNoTracking()
+            .Include(k => k.Accounts)
+            .FirstOrDefaultAsync(k => k.Id == apiKeyId, cancellationToken);
         if (key is null || key.GetStatus(now) != ApiKeyStatus.Active)
         {
             return new ApiKeyRequestResult(ApiKeyRequestOutcome.NotFound);
@@ -287,6 +303,7 @@ public sealed class ApiKeyRequestService(
             LifetimeMinutes = lifetime,
             RenewsApiKeyId = key.Id,
             OwnerUserId = key.OwnerUserId,
+            ApprovedAdditionalUserIds = [.. key.Accounts.Select(a => a.UserId)],
             AutoRenewUntil = key.AutoRenewUntil,
             RequesterIp = requesterIp,
             RequesterUserAgent = TrimUserAgent(userAgent),
@@ -370,7 +387,8 @@ public sealed class ApiKeyRequestService(
             request.ApprovedWorldIds,
             expiresAt,
             request.ApprovedRequestsPerMinute ?? request.RequestsPerMinute,
-            request.AutoRenewUntil);
+            request.AutoRenewUntil,
+            request.ApprovedAdditionalUserIds);
         var validation = await keyService.ValidateAsync(settings, request.RenewsApiKeyId, cancellationToken);
         if (!validation.IsValid)
         {
@@ -483,6 +501,27 @@ public sealed class ApiKeyRequestService(
 
         ownerId ??= adminUserId;
 
+        // Extra accounts: the admin's list; else (a renewal) the key's own, kept on the request at filing; else the
+        // user names the agent hinted, where they exist.
+        List<Guid> additional;
+        if (overrides.AdditionalUserIds is not null)
+        {
+            additional = [.. overrides.AdditionalUserIds];
+        }
+        else if (request.Kind == ApiKeyRequestKind.Renewal)
+        {
+            additional = [.. request.ApprovedAdditionalUserIds];
+        }
+        else
+        {
+            var hinted = request.RequestedAdditionalUserNames.Select(n => n.Trim().ToLowerInvariant()).ToList();
+            additional = await dbContext.Users.AsNoTracking()
+                .Where(u => hinted.Contains(u.NormalizedUserName) && !u.IsSystem)
+                .Select(u => u.Id)
+                .ToListAsync(cancellationToken);
+            additional.RemoveAll(id => id == ownerId);
+        }
+
         var features = overrides.Features is null
             ? new Dictionary<string, ApiKeyAccess>(request.Features)
             : ApiKeyService.NormaliseFeatures(overrides.Features);
@@ -500,7 +539,7 @@ public sealed class ApiKeyRequestService(
 
         var settings = new ApiKeySettings(
             request.Name, request.Purpose, ownerId.Value, features, allWorlds, worldIds,
-            now + TimeSpan.FromMinutes(Math.Max(lifetime, 0)), rpm, autoRenewUntil);
+            now + TimeSpan.FromMinutes(Math.Max(lifetime, 0)), rpm, autoRenewUntil, additional);
         var validation = await keyService.ValidateAsync(settings, request.RenewsApiKeyId, cancellationToken);
         var errors = new Dictionary<string, string[]>(validation.Errors);
         if (lifetime < 1)
@@ -522,6 +561,7 @@ public sealed class ApiKeyRequestService(
         request.DecidedAt = now;
         request.DecidedByUserId = adminUserId;
         request.OwnerUserId = ownerId;
+        request.ApprovedAdditionalUserIds = additional;
         request.ApprovedFeatures = features;
         request.ApprovedAllWorlds = allWorlds;
         request.ApprovedWorldIds = worldIds;
@@ -600,9 +640,11 @@ public sealed class ApiKeyRequestService(
             .OfType<Guid>()
             .Distinct()
             .ToList();
-        var names = await dbContext.Users.AsNoTracking()
+        userIds.AddRange(requests.SelectMany(r => r.ApprovedAdditionalUserIds));
+        var users = await dbContext.Users.AsNoTracking()
             .Where(u => userIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, u => u.UserName, cancellationToken);
+            .ToDictionaryAsync(u => u.Id, cancellationToken);
+        var names = users.ToDictionary(kv => kv.Key, kv => kv.Value.UserName);
         var now = timeProvider.GetUtcNow();
 
         return
@@ -622,6 +664,7 @@ public sealed class ApiKeyRequestService(
                 r.RequestsPerMinute,
                 r.LifetimeMinutes,
                 r.RequestedOwnerUserName,
+                [.. r.RequestedAdditionalUserNames],
                 r.RenewsApiKeyId,
                 r.RequesterIp,
                 r.RequesterUserAgent,
@@ -641,7 +684,11 @@ public sealed class ApiKeyRequestService(
                         [.. r.ApprovedWorldIds],
                         r.ApprovedRequestsPerMinute ?? r.RequestsPerMinute,
                         r.ApprovedLifetimeMinutes ?? r.LifetimeMinutes,
-                        r.AutoRenewUntil)
+                        r.AutoRenewUntil,
+                        [.. r.ApprovedAdditionalUserIds
+                            .Where(users.ContainsKey)
+                            .Select(id => new ApiKeyAccountResponse(
+                                id, users[id].UserName, users[id].Role.ToString().ToLowerInvariant()))])
                     : null)),
         ];
     }

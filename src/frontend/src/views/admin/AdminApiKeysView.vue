@@ -139,6 +139,10 @@ async function resolveOwner(userName: string | null): Promise<ScopeEditorOwner |
   }
 }
 
+function toEditorAccount(a: { userId: string; userName: string; role: string }): ScopeEditorOwner {
+  return { id: a.userId, userName: a.userName, role: a.role };
+}
+
 function openNew() {
   actionError.value = null;
   editorError.value = null;
@@ -167,6 +171,7 @@ async function openEdit(key: ApiKeyResponse) {
       name: key.name,
       purpose: key.purpose,
       owner,
+      additionalAccounts: (key.additionalAccounts ?? []).map(toEditorAccount),
       features: key.features,
       allWorlds: key.allWorlds,
       worldIds: key.worldIds,
@@ -180,11 +185,18 @@ async function openApprove(request: ApiKeyRequestResponse) {
   actionError.value = null;
   editorError.value = null;
   const owner = (await resolveOwner(request.requestedOwnerUserName)) ?? selfOwner();
+  // Pre-fill the further accounts: what was approved already (a renewal), else the names the agent hinted.
+  const hinted = request.approved
+    ? request.approved.additionalAccounts.map(toEditorAccount)
+    : (await Promise.all(request.requestedAdditionalUserNames.map(resolveOwner))).filter(
+        (a): a is ScopeEditorOwner => a !== null && a.id !== owner.id,
+      );
   editor.value = {
     kind: 'approve',
     request,
     initial: {
       owner,
+      additionalAccounts: hinted,
       features: request.features,
       allWorlds: request.allWorlds,
       worldIds: request.worldIds,
@@ -357,6 +369,10 @@ const openRequests = computed(() =>
               <dt>{{ $t('adminApiKeys.requests.owner') }}</dt>
               <dd>{{ request.requestedOwnerUserName }}</dd>
             </template>
+            <template v-if="request.requestedAdditionalUserNames.length > 0">
+              <dt>{{ $t('adminApiKeys.requests.accounts') }}</dt>
+              <dd>{{ request.requestedAdditionalUserNames.join(', ') }}</dd>
+            </template>
             <dt>{{ $t('adminApiKeys.requests.features') }}</dt>
             <dd>{{ featureSummary(request.features) }}</dd>
             <dt>{{ $t('adminApiKeys.requests.worlds') }}</dt>
@@ -419,6 +435,7 @@ const openRequests = computed(() =>
               <th>{{ $t('adminApiKeys.keys.columns.hint') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.request') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.owner') }}</th>
+              <th>{{ $t('adminApiKeys.keys.columns.accounts') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.createdBy') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.status') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.expires') }}</th>
@@ -442,6 +459,7 @@ const openRequests = computed(() =>
                 <code v-if="key.requestUserCode" :data-testid="`key-request-${key.id}`">{{ key.requestUserCode }}</code>
               </td>
               <td>{{ key.ownerUserName }}</td>
+              <td class="summary">{{ (key.additionalAccounts ?? []).map((a) => a.userName).join(', ') }}</td>
               <td>{{ key.createdByUserName ?? '' }}</td>
               <td>
                 <span :class="['status', key.status.toLowerCase()]">

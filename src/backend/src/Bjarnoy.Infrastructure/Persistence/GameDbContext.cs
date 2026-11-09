@@ -64,6 +64,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
     public DbSet<ApiKeyEntity> ApiKeys => Set<ApiKeyEntity>();
 
     public DbSet<ApiKeyRequestEntity> ApiKeyRequests => Set<ApiKeyRequestEntity>();
+    public DbSet<ApiKeyAccountEntity> ApiKeyAccounts => Set<ApiKeyAccountEntity>();
 
     public DbSet<GuildEntity> Guilds => Set<GuildEntity>();
 
@@ -812,6 +813,23 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        // Extra accounts a key may act as (the owner is not a row here). Rows die with the key; the account is
+        // Restrict for the same audit-trail reason as the owner.
+        modelBuilder.Entity<ApiKeyAccountEntity>(account =>
+        {
+            account.ToTable("api_key_accounts");
+            account.HasKey(a => new { a.ApiKeyId, a.UserId });
+            account.HasIndex(a => a.UserId);
+            account.HasOne(a => a.ApiKey)
+                .WithMany(k => k.Accounts)
+                .HasForeignKey(a => a.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+            account.HasOne(a => a.User)
+                .WithMany()
+                .HasForeignKey(a => a.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<ApiKeyRequestEntity>(request =>
         {
             request.ToTable("api_key_requests");
@@ -851,6 +869,14 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .IsRequired()
                 .HasConversion(new GuidListConverter())
                 .Metadata.SetValueComparer(GuidListConverter.Comparer);
+            request.Property(r => r.ApprovedAdditionalUserIds)
+                .IsRequired()
+                .HasConversion(new GuidListConverter())
+                .Metadata.SetValueComparer(GuidListConverter.Comparer);
+            request.Property(r => r.RequestedAdditionalUserNames)
+                .IsRequired()
+                .HasConversion(new StringListConverter())
+                .Metadata.SetValueComparer(StringListConverter.Comparer);
 
             // Admins find a request by the code the agent shows them.
             request.HasIndex(r => r.UserCode).IsUnique();

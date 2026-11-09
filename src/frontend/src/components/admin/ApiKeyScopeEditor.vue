@@ -31,6 +31,8 @@ export interface ScopeEditorInitial {
   name?: string;
   purpose?: string | null;
   owner: ScopeEditorOwner;
+  /** Further accounts the key may act as (`X-Act-As`). */
+  additionalAccounts?: ScopeEditorOwner[];
   features?: ApiKeyFeatureMap;
   allWorlds?: boolean;
   worldIds?: string[];
@@ -72,6 +74,7 @@ const form = reactive({
   name: props.initial.name ?? '',
   purpose: props.initial.purpose ?? '',
   owner: { ...props.initial.owner } as ScopeEditorOwner,
+  additional: (props.initial.additionalAccounts ?? []).map((a) => ({ ...a })) as ScopeEditorOwner[],
   features: { ...(props.initial.features ?? {}) } as ApiKeyFeatureMap,
   allWorlds: props.initial.allWorlds ?? false,
   worldIds: [...(props.initial.worldIds ?? [])],
@@ -103,7 +106,20 @@ watch(ownerIsAdmin, (isAdmin) => {
 
 function pickOwner(user: AdminUserLookupResponse) {
   form.owner = { id: user.userId, userName: user.userName, role: user.role };
+  // The owner is already an account of the key: it never also sits in the extra list.
+  form.additional = form.additional.filter((a) => a.id !== user.userId);
 }
+
+function addAccount(user: AdminUserLookupResponse) {
+  if (user.userId === form.owner.id || form.additional.some((a) => a.id === user.userId)) return;
+  form.additional.push({ id: user.userId, userName: user.userName, role: user.role });
+}
+
+function removeAccount(id: string) {
+  form.additional = form.additional.filter((a) => a.id !== id);
+}
+
+const takenAccountIds = computed(() => [form.owner.id, ...form.additional.map((a) => a.id)]);
 
 function pickSelf() {
   form.owner = { ...props.initial.owner };
@@ -147,6 +163,7 @@ function submit() {
       name: form.name.trim(),
       purpose: form.purpose.trim() || null,
       ownerUserId: form.owner.id,
+      additionalUserIds: form.additional.map((a) => a.id),
       ...scope,
       expiresAt: new Date(form.expiresAtLocal).toISOString(),
       requestsPerMinute: rpm,
@@ -156,6 +173,7 @@ function submit() {
     const renew = form.autoRenewMinutes ? Number(form.autoRenewMinutes) : null;
     const body: ApproveApiKeyRequestBody = {
       ownerUserId: form.owner.id,
+      additionalUserIds: form.additional.map((a) => a.id),
       ...scope,
       lifetimeMinutes: Number(form.lifetimeMinutes),
       requestsPerMinute: rpm,
@@ -195,6 +213,31 @@ function submit() {
           {{ $t('adminApiKeys.editor.ownerSelf') }}
         </button>
       </div>
+    </fieldset>
+
+    <fieldset class="accounts">
+      <legend>{{ $t('adminApiKeys.editor.accounts') }}</legend>
+      <p class="muted">{{ $t('adminApiKeys.editor.accountsHint') }}</p>
+      <ul v-if="form.additional.length > 0" class="chips" data-testid="editor-accounts">
+        <li v-for="account in form.additional" :key="account.id" class="chip">
+          {{ account.userName }}
+          <span v-if="account.role.toLowerCase() === 'admin'" class="badge">{{ $t('adminApiKeys.editor.adminBadge') }}</span>
+          <button
+            type="button"
+            :aria-label="$t('adminApiKeys.editor.removeAccount', { name: account.userName })"
+            :data-testid="`account-remove-${account.id}`"
+            @click="removeAccount(account.id)"
+          >
+            ×
+          </button>
+        </li>
+      </ul>
+      <UserLookupInput
+        :placeholder="$t('adminApiKeys.editor.accountSearch')"
+        :exclude="takenAccountIds"
+        testid="editor-account"
+        @pick="addAccount"
+      />
     </fieldset>
 
     <fieldset class="features">
@@ -356,6 +399,32 @@ tr.disabled {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 16px;
+}
+.chips {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  font-size: 14px;
+}
+.chip button {
+  padding: 0 8px;
+  line-height: 1.4;
+}
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 8px;
 }
 .owner-current {
   margin: 0 0 8px;
