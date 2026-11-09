@@ -36,6 +36,7 @@ function army(id: string, overrides: Partial<ArmyResponse> = {}, arrivesAt = '20
     provisions: 5000,
     totalSpeed: 2,
     totalUpkeepPerHour: 10,
+    visionRadius: 2,
     stacks: [{ unit: 'spearman', count: 10 }],
     movement: {
       departedAt: '2020-01-01T00:00:00Z',
