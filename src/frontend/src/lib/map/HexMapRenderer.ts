@@ -77,6 +77,7 @@ import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP, armyFogClearReachHexes, type ArmyVisionSource } from './fog/FogMaskLayer';
 import type { FogCoverageLookup } from './fog/fogCoverage';
+import { UNKNOWN_RAMP_MARGIN_HEXES } from './fog/fogRamp';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
 import { WaterDryLayer, entriesWorldBounds, maskEntries, type DryEntry } from './water/waterDryMask';
@@ -1237,12 +1238,9 @@ const FOG_ZOOM_MARGIN_HEXES = 10;
 // is saturated and no amount of edge shaping can reach (fogShader.ts works
 // in ramp units, where 1.0 is exactly this many hexes).
 //
-// Must stay equal to the backend generator's FogMaskOptions.UnknownMarginHexes
-// and demoFogMask.ts's UNKNOWN_MARGIN_HEXES — the three describe the same
-// ramp, and a mismatch silently puts the live and demo fog edges at
-// different distances. Nothing derives it from the mask itself; a PNG
-// carries no metadata beyond its pixel dimensions.
-const FOG_RAMP_MARGIN_HEXES = 14;
+// The one constant for it lives in fogRamp.ts (UNKNOWN_RAMP_MARGIN_HEXES), shared with demoFogMask.ts and pinned against
+// the backend generator's FogMaskOptions.UnknownMarginHexes by fogConstants.test.ts.
+const FOG_RAMP_MARGIN_HEXES = UNKNOWN_RAMP_MARGIN_HEXES;
 // Floor for zoomForFogMargin — a very high-level settlement's explored ring
 // is already large, and without a floor the margin target would zoom out
 // far enough to make individual hexes too small to read or click precisely.

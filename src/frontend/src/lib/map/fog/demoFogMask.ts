@@ -22,13 +22,11 @@ import {
   type MaskTexel,
 } from './fogMaskLayout';
 import { FogCoverage } from './fogCoverage';
+import { UNKNOWN_RAMP_MARGIN_HEXES } from './fogRamp';
 
-// Mirrors FogMaskOptions' defaults (UnknownMarginHexes / OutOfSightMarginHexes)
-// — UNKNOWN_MARGIN_HEXES also matches HexMapRenderer's own
-// FOG_RAMP_MARGIN_HEXES. All three describe the same ramp and have to move
-// together; see FogMaskOptions.UnknownMarginHexes for why a mismatch is
-// silent rather than an error.
-const UNKNOWN_MARGIN_HEXES = 14;
+// Mirrors FogMaskOptions' defaults (UnknownMarginHexes / OutOfSightMarginHexes); the unknown ramp's width is the one shared
+// UNKNOWN_RAMP_MARGIN_HEXES (fogRamp.ts), see FogMaskOptions.UnknownMarginHexes for why a mismatch is silent rather than an error.
+const UNKNOWN_MARGIN_HEXES = UNKNOWN_RAMP_MARGIN_HEXES;
 const OUT_OF_SIGHT_MARGIN_HEXES = 2;
 
 // Demo worlds are procedurally generated on demand and their islands are far apart (the nearest
