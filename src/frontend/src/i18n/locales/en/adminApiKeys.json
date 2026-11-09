@@ -69,6 +69,7 @@
     "columns": {
       "name": "Name",
       "hint": "Key",
+      "request": "Request",
       "owner": "Owner",
       "createdBy": "Created by",
       "status": "Status",

@@ -57,8 +57,17 @@ const highlightedCode = computed(() => {
   return value ? value.trim().toUpperCase() : null;
 });
 
+function matchesCode(code: string | null | undefined): boolean {
+  return highlightedCode.value !== null && !!code && code.toUpperCase() === highlightedCode.value;
+}
+
 function isHighlighted(request: ApiKeyRequestResponse): boolean {
-  return highlightedCode.value !== null && request.userCode.toUpperCase() === highlightedCode.value;
+  return matchesCode(request.userCode);
+}
+
+// A request that was collected is no longer listed under Requests: its link opens the key it became.
+function isKeyHighlighted(key: ApiKeyResponse): boolean {
+  return matchesCode(key.requestUserCode);
 }
 
 async function scrollToHighlighted() {
@@ -88,11 +97,26 @@ async function load() {
   } finally {
     loading.value = false;
   }
+  await revealHighlightedKey();
   await scrollToHighlighted();
 }
 
+/** The linked request's key may be expired or revoked, which the key list hides by default. */
+async function revealHighlightedKey() {
+  const code = highlightedCode.value;
+  if (!code || includeInactive.value) return;
+  const open = requests.value.some((r) => isHighlighted(r));
+  if (open || keys.value.some((k) => isKeyHighlighted(k))) return;
+  includeInactive.value = true;
+  try {
+    await loadKeys();
+  } catch {
+    loadError.value = t('adminApiKeys.loadError');
+  }
+}
+
 onMounted(load);
-watch(highlightedCode, () => void scrollToHighlighted());
+watch(highlightedCode, () => void revealHighlightedKey().then(scrollToHighlighted));
 watch(includeInactive, () => void loadKeys().catch(() => (loadError.value = t('adminApiKeys.loadError'))));
 
 function selfOwner(): ScopeEditorOwner {
@@ -393,6 +417,7 @@ const openRequests = computed(() =>
             <tr>
               <th>{{ $t('adminApiKeys.keys.columns.name') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.hint') }}</th>
+              <th>{{ $t('adminApiKeys.keys.columns.request') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.owner') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.createdBy') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.status') }}</th>
@@ -404,9 +429,18 @@ const openRequests = computed(() =>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="key in keys" :key="key.id" :data-testid="`key-${key.id}`">
+            <tr
+              v-for="key in keys"
+              :key="key.id"
+              :class="{ highlight: isKeyHighlighted(key) }"
+              :data-highlighted="isKeyHighlighted(key) ? 'true' : 'false'"
+              :data-testid="`key-${key.id}`"
+            >
               <td>{{ key.name }}</td>
               <td><code>{{ key.keyHint }}</code></td>
+              <td>
+                <code v-if="key.requestUserCode" :data-testid="`key-request-${key.id}`">{{ key.requestUserCode }}</code>
+              </td>
               <td>{{ key.ownerUserName }}</td>
               <td>{{ key.createdByUserName ?? '' }}</td>
               <td>
@@ -531,6 +565,9 @@ section {
   max-width: 260px;
   overflow-wrap: anywhere;
   font-size: 12px;
+}
+.table tr.highlight td {
+  background: color-mix(in srgb, var(--gold) 18%, transparent);
 }
 .status.revoked,
 .status.expired {

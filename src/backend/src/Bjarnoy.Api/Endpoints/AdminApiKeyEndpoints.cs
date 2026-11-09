@@ -90,10 +90,15 @@ public static class AdminApiKeyEndpoints
             .Include(k => k.OwnerUser)
             .Include(k => k.CreatedByUser)
             .ToListAsync(cancellationToken);
+        var codes = (await dbContext.ApiKeyRequests.AsNoTracking()
+                .Where(r => r.ApiKeyId != null)
+                .Select(r => new { ApiKeyId = r.ApiKeyId!.Value, r.UserCode })
+                .ToListAsync(cancellationToken))
+            .ToDictionary(r => r.ApiKeyId, r => r.UserCode);
         return Results.Ok(all
             .Where(k => includeInactive == true || k.GetStatus(now) == ApiKeyStatus.Active)
             .OrderByDescending(k => k.CreatedAt)
-            .Select(k => ApiKeyResponse.From(k, now))
+            .Select(k => ApiKeyResponse.From(k, now, codes.GetValueOrDefault(k.Id)))
             .ToList());
     }
 
