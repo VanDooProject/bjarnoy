@@ -11,7 +11,7 @@ import type { AdminUserLookupResponse } from '../../api/types';
 const props = withDefaults(
   defineProps<{
     placeholder?: string;
-    /** Accounts that cannot be picked (already chosen). */
+    /** Accounts that cannot be picked (already chosen): user ids and, for anonymous players, settlement ids. */
     exclude?: string[];
     testid?: string;
   }>(),
@@ -43,7 +43,7 @@ async function run(text: string) {
   try {
     const found = await api.adminLookupUsers(text, mine.signal);
     if (controller !== mine) return;
-    results.value = found.filter((u) => !props.exclude.includes(u.userId));
+    results.value = found.filter((u) => !props.exclude.includes((u.userId ?? u.settlementId) as string));
   } catch {
     if (controller !== mine) return;
     results.value = [];
@@ -108,16 +108,20 @@ onBeforeUnmount(cancelPending);
     <ul v-if="open && results.length > 0" class="results" role="listbox" :data-testid="`${testid}-results`">
       <li
         v-for="(user, index) in results"
-        :key="user.userId"
+        :key="user.userId ?? user.settlementId ?? user.userName"
         role="option"
         :aria-selected="index === active"
         :class="{ active: index === active }"
-        :data-testid="`${testid}-pick-${user.userId}`"
+        :data-testid="`${testid}-pick-${user.userId ?? user.settlementId}`"
         @mousedown.prevent="choose(user)"
       >
         <strong>{{ user.userName }}</strong>
-        <span class="role">({{ user.role }})</span>
-        <span v-if="user.via !== 'user'" class="via">
+        <span v-if="user.kind === 'anonymous'" class="badge">{{ $t('adminApiKeys.lookup.noAccount') }}</span>
+        <span v-else class="role">({{ user.role }})</span>
+        <span v-if="user.kind === 'anonymous'" class="via">
+          {{ $t('adminApiKeys.lookup.settlementIn', { settlement: user.settlementName ?? '', world: user.worldName ?? '' }) }}
+        </span>
+        <span v-else-if="user.via !== 'user'" class="via">
           {{ $t(`adminApiKeys.lookup.via.${user.via}`, { name: user.matchedName ?? '' }) }}<template v-if="user.worldName">
             · {{ user.worldName }}</template>
         </span>
@@ -162,6 +166,13 @@ onBeforeUnmount(cancelPending);
 .results li.active,
 .results li:hover {
   background: color-mix(in srgb, var(--gold) 18%, transparent);
+}
+.badge {
+  padding: 0 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--muted);
 }
 .role,
 .via {

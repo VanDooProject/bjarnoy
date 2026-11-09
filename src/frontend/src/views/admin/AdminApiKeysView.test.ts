@@ -170,6 +170,8 @@ describe('AdminApiKeysView', () => {
     expect(mocks.adminApproveApiKeyRequest).toHaveBeenCalledWith('id-ABCD-2345', {
       ownerUserId: 'a1',
       additionalUserIds: [],
+      anonymousAccounts: [],
+      ownerCanAct: true,
       features: { chat: 'Read' },
       allWorlds: false,
       worldIds: [],
@@ -186,7 +188,7 @@ describe('AdminApiKeysView', () => {
     ]);
     mocks.adminLookupUsers.mockImplementation(async (q: string) =>
       q === 'ally'
-        ? [{ userId: 'u2', userName: 'Ally', displayName: null, role: 'player', status: 'active', via: 'user', matchedName: null, worldName: null }]
+        ? [{ kind: 'user', settlementId: null, settlementName: null, userId: 'u2', userName: 'Ally', displayName: null, role: 'player', status: 'active', via: 'user', matchedName: null, worldName: null }]
         : [],
     );
     mocks.adminApproveApiKeyRequest.mockResolvedValue(request('ABCD-2345', { status: 'Approved' }));
@@ -206,7 +208,7 @@ describe('AdminApiKeysView', () => {
     ]);
     mocks.adminLookupUsers.mockImplementation(async (q: string) =>
       q === 'jarl-a741'
-        ? [{ userId: 'u9', userName: 'player9', displayName: null, role: 'player', status: 'active', via: 'jarl', matchedName: 'Jarl-a741', worldName: 'Midgard' }]
+        ? [{ kind: 'user', settlementId: null, settlementName: null, userId: 'u9', userName: 'player9', displayName: null, role: 'player', status: 'active', via: 'jarl', matchedName: 'Jarl-a741', worldName: 'Midgard' }]
         : [],
     );
     mocks.adminApproveApiKeyRequest.mockResolvedValue(request('ABCD-2345', { status: 'Approved' }));
@@ -225,13 +227,49 @@ describe('AdminApiKeysView', () => {
       request('ABCD-2345', { requestedOwnerUserName: 'Jarl-a741' }),
     ]);
     mocks.adminLookupUsers.mockResolvedValue([
-      { userId: 'u8', userName: 'p8', displayName: null, role: 'player', status: 'active', via: 'jarl', matchedName: 'Jarl-a741', worldName: null },
-      { userId: 'u9', userName: 'p9', displayName: null, role: 'player', status: 'active', via: 'jarl', matchedName: 'Jarl-a741', worldName: null },
+      { kind: 'user', settlementId: null, settlementName: null, userId: 'u8', userName: 'p8', displayName: null, role: 'player', status: 'active', via: 'jarl', matchedName: 'Jarl-a741', worldName: null },
+      { kind: 'user', settlementId: null, settlementName: null, userId: 'u9', userName: 'p9', displayName: null, role: 'player', status: 'active', via: 'jarl', matchedName: 'Jarl-a741', worldName: null },
     ]);
     const wrapper = await mountAt('/admin/api-keys');
     await wrapper.get('[data-testid="approve-ABCD-2345"]').trigger('click');
     await flushPromises();
     expect(wrapper.get('[data-testid="editor-owner"]').text()).toContain('boss');
+    wrapper.unmount();
+  });
+
+  it('turns a requested owner that is a player without an account into a sponsor-only key', async () => {
+    mocks.adminListApiKeyRequests.mockResolvedValue([
+      request('ABCD-2345', { requestedOwnerUserName: 'Jarl-a741' }),
+    ]);
+    mocks.adminLookupUsers.mockResolvedValue([
+      { kind: 'anonymous', userId: null, userName: 'Jarl-a741', displayName: null, role: null, status: null, via: 'jarl', matchedName: 'Jarl-a741', worldName: 'Midgard', settlementId: 's7', settlementName: 'Hedeby' },
+    ]);
+    mocks.adminApproveApiKeyRequest.mockResolvedValue(request('ABCD-2345', { status: 'Approved' }));
+    const wrapper = await mountAt('/admin/api-keys');
+    await wrapper.get('[data-testid="approve-ABCD-2345"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="anonymous-s7"]').text()).toContain('Jarl-a741');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(mocks.adminApproveApiKeyRequest.mock.calls[0][1]).toMatchObject({
+      ownerUserId: 'a1',
+      ownerCanAct: false,
+      anonymousAccounts: [{ settlementId: 's7', primary: true }],
+    });
+    wrapper.unmount();
+  });
+
+  it('says so when a requested jarl name matches several players', async () => {
+    mocks.adminListApiKeyRequests.mockResolvedValue([
+      request('ABCD-2345', { requestedOwnerUserName: 'Jarl-a741' }),
+    ]);
+    const anon = (id: string) => ({ kind: 'anonymous', userId: null, userName: 'Jarl-a741', displayName: null, role: null, status: null, via: 'jarl', matchedName: 'Jarl-a741', worldName: null, settlementId: id, settlementName: null });
+    mocks.adminLookupUsers.mockResolvedValue([anon('s1'), anon('s2')]);
+    const wrapper = await mountAt('/admin/api-keys');
+    await wrapper.get('[data-testid="approve-ABCD-2345"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="hint-notes"]').text()).toContain('matches 2 players');
+    expect(wrapper.find('[data-testid^="anonymous-s"]').exists()).toBe(false);
     wrapper.unmount();
   });
 
