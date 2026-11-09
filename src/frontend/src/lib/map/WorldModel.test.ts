@@ -16,7 +16,7 @@ import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } f
 import type { BogTile, RiverTile, Settlement } from './types';
 import { JOTNAR_OWNER_KEY } from './endgamePlacement';
 
-// A free grass hex with no river on it: the ground every ordinary building stands on (`LAND_TERRAIN_BY_TYPE`, `riverBuildingAllowedHere`).
+// A free grass hex with no river on it: the ground every ordinary building stands on (the catalogue's `allowedTerrain`, `riverBuildingAllowedHere`).
 function isEmptyGrass(model: WorldModel, c: AxialCoord): boolean {
   return model.getTile(c.q, c.r).terrain === 'grass' && !model.getTile(c.q, c.r).buildingType && !model.getRiverTile(c.q, c.r);
 }

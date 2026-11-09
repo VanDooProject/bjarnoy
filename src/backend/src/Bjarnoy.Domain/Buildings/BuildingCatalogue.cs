@@ -853,7 +853,7 @@ public static class BuildingCatalogue
     /// <see cref="SawmillExcludedRiverVariants"/>. See
     /// <see cref="BuildingDefinition.RequiresRiverShape"/>/
     /// <see cref="BuildingDefinition.ExcludedRiverVariants"/> and the
-    /// frontend's <c>ringCatalogue.ts</c> <c>RIVER_SHAPES_BY_TYPE</c>/
+    /// frontend's <c>placementRules.ts</c> (served as <c>requiresRiverShapes</c>)/
     /// <c>riverBuildingAllowedHere</c>, which mirror this same rule for the
     /// placement UI.
     /// </summary>

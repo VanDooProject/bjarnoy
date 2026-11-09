@@ -186,7 +186,7 @@ describe('useBuildRing', () => {
     }
     // The bog's wall hexes stay next to it.
     const bogDefense = categoriesFor(tiles[3]).find((c) => c.id === 'defense')!;
-    expect(bogDefense.buildings.map((b) => b.type)).toEqual(['tower', 'palisade', 'palisadegate', 'bridge']);
+    expect(bogDefense.buildings.map((b) => b.type)).toEqual(['tower', 'palisade', 'palisadegate']);
     // Bog ground that is not plain moss, and sea, never offer one.
     for (const kind of ['creek', 'half', 'shore', 'mouth', 'spring']) {
       const ids = categoriesFor({ terrain: 'bog', bog: { kind } } as Tile).flatMap((c) => c.buildings.map((b) => b.type));

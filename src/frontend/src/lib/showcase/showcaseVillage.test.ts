@@ -30,7 +30,7 @@ describe('buildShowcaseVillage', () => {
     expect(built.settlement.ownerId).toBe(SHOWCASE_VILLAGE_OWNER);
     const types = new Set(buildingsOf(built.model, built.settlement.id, built.center).map((t) => t.buildingType));
     expect(types.has('longhouse')).toBe(true);
-    // Every building stands on the ground the backend allows it (`LAND_TERRAIN_BY_TYPE`); this seed's claim has less grass than the old
+    // Every building stands on the ground the backend allows it (the catalogue's `allowedTerrain`); this seed's claim has less grass than the old
     // loose client rule let it use.
     expect(types.size).toBeGreaterThanOrEqual(18);
   });

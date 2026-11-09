@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-11-09T04:47:14.054Z"
+    "generatedAt": "2026-11-09T04:52:54.033Z"
   },
   "data": [
     {
@@ -21877,7 +21877,7 @@
         "sand"
       ],
       "requiresCoastalWater": false,
-      "alsoOnCoastalWater": true,
+      "alsoOnCoastalWater": false,
       "requiredLonghouseLevel": 7,
       "slotCost": 1,
       "occupiesAllSlots": false,
@@ -21927,7 +21927,7 @@
         "sand"
       ],
       "requiresCoastalWater": false,
-      "alsoOnCoastalWater": true,
+      "alsoOnCoastalWater": false,
       "requiredLonghouseLevel": 7,
       "slotCost": 1,
       "occupiesAllSlots": false,
@@ -21972,7 +21972,7 @@
         "sand"
       ],
       "requiresCoastalWater": false,
-      "alsoOnCoastalWater": true,
+      "alsoOnCoastalWater": false,
       "requiredLonghouseLevel": 7,
       "slotCost": 1,
       "occupiesAllSlots": false,
