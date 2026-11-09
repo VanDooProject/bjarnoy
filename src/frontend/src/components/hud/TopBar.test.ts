@@ -64,6 +64,26 @@ describe('TopBar', () => {
     });
   });
 
+  it('emits focus-home when the settlement name is tapped, inline and in the phone bubble', async () => {
+    useWorldStore().hud.settlementName = 'Bjørnstad';
+    stubCompactMediaQuery(false);
+    const inline = mountTopBar();
+    await inline.find('.titles .name-btn').trigger('click');
+    expect(inline.emitted('focus-home')).toHaveLength(1);
+
+    stubCompactMediaQuery(true);
+    const phone = mountTopBar();
+    await phone.vm.$nextTick();
+    await phone.find('.settlement-bubble .name-btn').trigger('click');
+    expect(phone.emitted('focus-home')).toHaveLength(1);
+  });
+
+  it('does not make a page title tappable', () => {
+    stubCompactMediaQuery(false);
+    const wrapper = mountTopBar({ title: 'Docs' });
+    expect(wrapper.find('.name-btn').exists()).toBe(false);
+  });
+
   it('renders nothing but the logo when there is no settlement and no title', () => {
     const wrapper = mountTopBar();
 

@@ -189,6 +189,13 @@ function onFogDebugChange() {
 // and highlightCoord (already a pulsing gold outline HexMapRenderer draws
 // every tick — see drawHighlight) is set for a few seconds to read as a
 // flash rather than a permanent marker.
+function onFocusHome() {
+  const renderer = canvasRef.value?.renderer;
+  if (!renderer) return;
+  if (mode.value === 'world') renderer.focusWorldCamera();
+  else renderer.focusSettlementCamera();
+}
+
 let flashTimeout: ReturnType<typeof setTimeout> | null = null;
 function onQueueSelect(coord: { q: number; r: number }) {
   const renderer = canvasRef.value?.renderer;
@@ -1372,7 +1379,7 @@ async function upgrade() {
          top-bar gradient) keeps the logo/resources/nav readable regardless
          of what's under them. -->
     <div class="hud-scrim" :class="{ 'hud-scrim--bottom': hudBarAtBottom }" />
-    <TopBar :hide-title="mode === 'settlement'">
+    <TopBar :hide-title="mode === 'settlement'" @focus-home="onFocusHome">
       <ResourceBar :ring-open="ringOpen" />
       <HudNav has-resource-bar />
       <template #drawer="{ close }">

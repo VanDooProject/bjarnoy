@@ -1,0 +1,329 @@
+import { ref } from 'vue';
+import { clampOffset, releaseVelocity, shouldOpenOnRelease, splitDrawerDragDelta } from '../lib/hud/drawerDrag';
+// Android-notification-shade-style pull-down for the mobile-only HUD bar
+// (see components/hud/TopBar.vue). Drag the collapsed bar to open a full
+// drawer revealing everything that doesn't fit collapsed (full resource
+// detail + nav links — components/hud/MobileHudDrawer.vue); drag it back to
+// close. Open/closed is transient UI state, never persisted — only the
+// top/bottom docking edge (hudPrefs.barPosition) is a real preference.
+const DRAG_INTENT_PX = 8;
+const OPEN_THRESHOLD_RATIO = 0.3;
+const FLICK_VELOCITY_PX_MS = 0.5;
+// Release speed is how far the drawer moved over this long before the finger lifted.
+const RELEASE_VELOCITY_WINDOW_MS = 100;
+export function useHudDrawer(edge, drawerHeight, 
+// Optional getter for the open drawer's own scroll container (see
+// TopBar.vue's `.hud-drawer-scroll`). When set, a gesture that starts
+// while the drawer is already open scrolls this element before it drags
+// the drawer closed — see the "content scrolling" block in onPointerMove
+// and drawerDrag.ts's `splitDrawerDragDelta`. Omitted entirely by
+// callers/tests that don't care about scrolling (e.g. useHudDrawer.test.ts's
+// plain-number gestures), which keeps the drag-only behaviour untouched.
+scrollEl, 
+// Optional getter for the drawer's height *as currently rendered* (null =
+// unknown). The open/close animation is a CSS height transition (see
+// TopBar.vue's `drawerStyle`), so mid-animation that differs from the
+// resting target. A grab seeds from it at arm time, otherwise the drawer
+// snaps to its target under the finger the moment the transition is
+// switched off for the drag. Omitted by callers/tests that don't animate.
+liveOffset) {
+    const isOpen = ref(false);
+    const dragging = ref(false);
+    const dragOffset = ref(0); // 0 = closed .. drawerHeight = open; only meaningful while dragging.value is true
+    let pointerId = null;
+    let capturedTarget = null;
+    let armed = false; // past the intent threshold — a real drag, not a stray touch
+    let startY = 0;
+    let startOffset = 0;
+    let lastY = 0;
+    let lastT = 0;
+    // The drawer's offset over the gesture's recent past, for the release
+    // speed (see releaseVelocity in drawerDrag.ts). Trimmed to the window.
+    let samples = [];
+    // Set once per gesture, at arm time: whether this gesture began on an
+    // already fully-open drawer (as opposed to opening it from the collapsed
+    // bar) — only then is there a scroll container to give priority to. See
+    // the spec comment on the `scrollEl` param above.
+    let scrollPriority = false;
+    // A real mouse/touch drag that started on an interactive element (a nav
+    // link inside the open drawer, or the grip/a resource pill on the
+    // collapsed bar) still gets a compatibility `click` dispatched on
+    // mouseup/touchend by the browser afterward, hit-tested at wherever the
+    // pointer ends up — which can land back on another clickable element and
+    // fire ITS handler (e.g. re-toggling the grip, cycling a pill, navigating
+    // away) even though the user's intent was clearly "drag", not "tap this".
+    // `consumeClickSuppression` lets the caller swallow exactly that one
+    // synthetic click, and only that one.
+    //
+    // Finding #5: a *touch* drag never actually fires that compatibility
+    // click at all (only a real mouse drag does) — so nothing ever calls
+    // `consumeClickSuppression` to clear this flag, and it sat there true
+    // until it happened to swallow some entirely unrelated *later* tap (e.g.
+    // "Reports" inside the drawer, well after the drag that set it). Cleared
+    // on the very next pointerdown below (a real gesture started, so any
+    // stale suppression from a previous one is definitely no longer wanted),
+    // and as a backstop, one macrotask after pointerup — long enough for a
+    // real compatibility click (dispatched synchronously by the browser
+    // before that macrotask runs) to still consume it first, but short
+    // enough that no genuine later tap could land inside that window.
+    let suppressNextClick = false;
+    let suppressClickBackstop = null;
+    function clearSuppressBackstop() {
+        if (suppressClickBackstop !== null) {
+            clearTimeout(suppressClickBackstop);
+            suppressClickBackstop = null;
+        }
+    }
+    function restingOffset() {
+        return isOpen.value ? drawerHeight.value : 0;
+    }
+    /** The offset to render at right now, whether dragging or at rest. */
+    function currentOffset() {
+        return dragging.value ? dragOffset.value : restingOffset();
+    }
+    function releaseCapture() {
+        if (capturedTarget && pointerId !== null) {
+            // Guarded: the capture may already be gone (finding #7's own
+            // `lostpointercapture` path calls into teardown after the browser has
+            // already released it) — releasePointerCapture on an id the element
+            // no longer holds throws (DOMException), so check first.
+            const el = capturedTarget;
+            if (el.hasPointerCapture?.(pointerId))
+                el.releasePointerCapture?.(pointerId);
+        }
+        capturedTarget = null;
+    }
+    function onPointerDown(e) {
+        // Finding #5: a fresh gesture starting clears any suppression left over
+        // from a previous one — see the flag's own comment above.
+        suppressNextClick = false;
+        clearSuppressBackstop();
+        // Finding #17: a drag is already in progress (or mid-capture) — a
+        // second finger, or a mouse button pressed while a touch drag is still
+        // resolving, must not steal `pointerId` out from under it (that would
+        // silently orphan the first drag: no more pointermove/pointerup ever
+        // matches its id again).
+        if (pointerId !== null)
+            return;
+        // Finding #17: only the primary pointer for its input source, and for a
+        // mouse specifically the left button — a secondary touch point still
+        // dispatches pointerdown as non-primary, and a right/middle mouse
+        // button click should never start a drawer drag.
+        if (!e.isPrimary)
+            return;
+        if (e.pointerType === 'mouse' && e.button !== 0)
+            return;
+        pointerId = e.pointerId;
+        startY = e.clientY;
+        lastY = e.clientY;
+        lastT = e.timeStamp;
+        startOffset = restingOffset();
+        samples = [];
+        armed = false;
+    }
+    function onPointerMove(e) {
+        if (pointerId === null || e.pointerId !== pointerId)
+            return;
+        if (!armed) {
+            if (Math.abs(e.clientY - startY) < DRAG_INTENT_PX)
+                return;
+            armed = true;
+            dragging.value = true;
+            // Finding #6: capture on `e.currentTarget` (the element the listener
+            // is actually attached to — the bar or the drawer, both stable for
+            // the gesture's whole lifetime), not `e.target` (whatever specific
+            // child — a grip icon, a nav link's inner span — happened to be under
+            // the finger at the *first* qualifying move, which is a coincidence
+            // of hit-testing, not something guaranteed to still exist or stay
+            // capture-capable for the rest of the drag).
+            capturedTarget = e.currentTarget;
+            capturedTarget?.setPointerCapture?.(pointerId);
+            // Grabbed mid-animation: continue from the height on screen, not the
+            // target it was heading for. Done here rather than at pointerdown
+            // because the transition keeps running during the intent threshold.
+            const live = liveOffset?.();
+            if (live != null && Number.isFinite(live))
+                startOffset = Math.min(Math.max(live, 0), drawerHeight.value);
+            // Scroll-vs-drag routing only ever applies to a gesture that begins on
+            // an already open drawer (`isOpen` and still showing some height — a
+            // drawer grabbed mid-close has no scroll position to give priority to;
+            // see the spec's "gestures that start on the collapsed bar are
+            // unaffected" carve-out).
+            scrollPriority = isOpen.value && startOffset > 0;
+            // Seeds the running offset that every branch below now accumulates
+            // onto incrementally (move-by-move), rather than recomputing from
+            // `startOffset` + the *total* delta since gesture start each time —
+            // the scroll-priority branch has to work incrementally regardless (it
+            // splits against the scroll container's *current* scrollTop, which
+            // itself changes move-by-move), and once scroll priority disengages
+            // for a gesture that used it, the plain path has to pick up
+            // incrementally from wherever that left `dragOffset`, not jump back to
+            // a value computed from the raw total finger movement (which would
+            // ignore the portion of it already spent on scrolling).
+            dragOffset.value = startOffset;
+            // Where the drawer stood when the finger went down (`lastT` is still
+            // the pointerdown's own timeStamp: unarmed moves don't advance it).
+            samples = [{ t: lastT, offset: startOffset }];
+        }
+        // This move's own incremental, *raw* (screen-space, unflipped) delta —
+        // as opposed to the total delta since gesture start, and as opposed to
+        // useHudDrawer's own "opening direction is positive" convention.
+        // splitDrawerDragDelta needs the raw form (natural scrolling moves
+        // content with the finger regardless of which edge the bar docks to —
+        // see its own comment); the plain-drag fallback below converts it with
+        // the same sign flip `directionalDelta` used to.
+        const rawStep = e.clientY - lastY;
+        lastY = e.clientY;
+        lastT = e.timeStamp;
+        let appliedDelta = rawStep * (edge.value === 'top' ? 1 : -1);
+        if (scrollPriority) {
+            const el = scrollEl?.() ?? null;
+            if (el) {
+                const { scrollDelta, dragDelta } = splitDrawerDragDelta(rawStep, el.scrollTop, el.scrollHeight, el.clientHeight, edge.value);
+                if (scrollDelta !== 0)
+                    el.scrollTop += scrollDelta;
+                appliedDelta = dragDelta;
+                // The instant any of this gesture's motion actually moves the
+                // drawer itself, the player is dragging the sheet,
+                // not scrolling its content — every later step of this same
+                // gesture (even one that reverses direction) drags it from here on.
+                // Re-splitting on a later step would otherwise read the scroll
+                // container's own `clientHeight`, which is `.hud-drawer`'s current
+                // (now-shrinking, mid-close) height — that grows `maxScrollTop` out
+                // from under the split maths as the drag itself proceeds, which
+                // stalled the close indefinitely (confirmed while testing this fix:
+                // the close drag's own container kept "gaining" scroll room exactly
+                // as fast as it was being consumed).
+                // Only motion that actually *moves* the drawer counts — a pull in
+                // the opening direction on an already fully-open drawer is clamped
+                // away below and must not disengage scrolling for the rest of the
+                // gesture (the finger reversing afterwards would otherwise close
+                // the drawer instead of scrolling it).
+                if (clampOffset(dragOffset.value + dragDelta, drawerHeight.value) !== dragOffset.value)
+                    scrollPriority = false;
+            }
+            else {
+                // No scroll element at all — behaves exactly like a plain drag.
+                scrollPriority = false;
+            }
+        }
+        dragOffset.value = clampOffset(dragOffset.value + appliedDelta, drawerHeight.value);
+        // Release speed has to follow the *drawer*, not the raw finger: a fast
+        // swipe entirely absorbed by scrolling the content (appliedDelta 0)
+        // must not register as a closing flick just because the finger moved.
+        samples.push({ t: e.timeStamp, offset: dragOffset.value });
+        // Keep one sample at or before the window's start, drop the older ones.
+        const windowStart = e.timeStamp - RELEASE_VELOCITY_WINDOW_MS;
+        while (samples.length > 2 && samples[1].t <= windowStart)
+            samples.shift();
+    }
+    function teardown() {
+        releaseCapture();
+        pointerId = null;
+        armed = false;
+        scrollPriority = false;
+        dragging.value = false;
+        dragOffset.value = 0;
+    }
+    function onPointerUp(e) {
+        if (pointerId === null || e.pointerId !== pointerId)
+            return;
+        const wasArmed = armed;
+        const finalOffset = dragOffset.value;
+        const finalVelocity = releaseVelocity(samples, e.timeStamp, RELEASE_VELOCITY_WINDOW_MS);
+        teardown();
+        if (!wasArmed)
+            return; // a tap, not a drag — the chevron/pill/link handles taps separately
+        suppressNextClick = true;
+        clearSuppressBackstop();
+        suppressClickBackstop = setTimeout(() => {
+            suppressNextClick = false;
+            suppressClickBackstop = null;
+        }, 0);
+        isOpen.value = shouldOpenOnRelease(finalOffset, drawerHeight.value, finalVelocity, OPEN_THRESHOLD_RATIO, FLICK_VELOCITY_PX_MS);
+    }
+    function onPointerCancel(e) {
+        if (pointerId === null || e.pointerId !== pointerId)
+            return;
+        teardown(); // always springs back to whatever isOpen already was — nothing commits
+    }
+    /**
+     * Finding #7: the drawer's own capture target can be torn down mid-drag —
+     * ResourceBar swaps its whole pill markup the instant `isOpen` commits
+     * (compact <-> expanded are different elements), and *that* used to be
+     * driven by "open OR dragging" (see TopBar.vue's old `isHudDrawerOpen`
+     * wiring), so a drag could commit-open, cause that swap, and lose its own
+     * captured element mid-gesture. Now that the expanded layout only follows
+     * the *committed* `isOpen`, this should no longer happen in practice —
+     * but a lost capture from any other cause (devtools, a browser quirk)
+     * must still not leave the drag permanently "stuck" with a `pointerId`
+     * nothing will ever move or release again. Treated exactly like a cancel:
+     * springs back, commits nothing.
+     */
+    function onLostPointerCapture(e) {
+        if (pointerId === null || e.pointerId !== pointerId)
+            return;
+        // `lostpointercapture` bubbles. A touch pointer starts out implicitly
+        // captured by whatever it went down on (a pill's `.fill`, the grip, a
+        // nav link inside the drawer), so moving the capture to the bar/drawer
+        // at arm time fires `lostpointercapture` on that child, and it bubbles
+        // up to the very listener this handler sits behind. Treating that as
+        // "our capture was lost" tore down every touch drag on its second move,
+        // so only a drawer dragged with a mouse (no implicit capture) ever
+        // opened. Only the element this gesture captured itself counts.
+        if (capturedTarget !== null && e.target !== capturedTarget)
+            return;
+        teardown();
+    }
+    /** Finding #18: called when the breakpoint/slot crossing makes dragging no longer available at all. */
+    function cancelDrag() {
+        if (pointerId === null)
+            return;
+        teardown();
+    }
+    function toggle() {
+        isOpen.value = !isOpen.value;
+    }
+    function close() {
+        isOpen.value = false;
+    }
+    /**
+     * Bound (non-passive) to `touchmove` on the same elements as the pointer
+     * handlers. Once a drag is armed, its touch moves are canceled so the
+     * browser drops the gesture's scroll/fling recognition outright. Without
+     * this, `touch-action: none` alone still let Chromium start a fling at
+     * `touchend` (its fling controller sees the fling before the touch-action
+     * filter throws its scroll updates away), invisible on screen but "active"
+     * for a few hundred ms — and Chromium deliberately swallows the next tap
+     * that cancels an active fling, so a link tapped right after flicking the
+     * drawer open did nothing. Moves before the 8px intent threshold are left
+     * alone: canceling those would also cancel the tap of a slightly jittery
+     * finger.
+     */
+    function onTouchMove(e) {
+        if (armed && e.cancelable)
+            e.preventDefault();
+    }
+    /** Call from a capture-phase click handler; returns true if this click should be swallowed. */
+    function consumeClickSuppression() {
+        const should = suppressNextClick;
+        suppressNextClick = false;
+        clearSuppressBackstop();
+        return should;
+    }
+    return {
+        isOpen,
+        dragging,
+        currentOffset,
+        onPointerDown,
+        onPointerMove,
+        onPointerUp,
+        onPointerCancel,
+        onLostPointerCapture,
+        onTouchMove,
+        cancelDrag,
+        toggle,
+        close,
+        consumeClickSuppression,
+    };
+}

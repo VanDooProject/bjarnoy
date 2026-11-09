@@ -1,0 +1,163 @@
+import { defineStore } from 'pinia';
+import { ApiError, api } from '../api/client';
+import { DEMO_MODE } from '../config';
+import { inboxUnreadCount, mergeInbox } from '../lib/units/inbox';
+// How often the badge/inbox re-polls while a HUD nav is mounted — battle
+// reports arrive at unpredictable times (whenever another player's army
+// settles a fight), so this is a light poll rather than a websocket/push
+// channel, matching ARMY_POLL_MS's own reasoning in stores/world.ts.
+const REPORT_POLL_MS = 5000;
+const LAST_SEEN_KEY = 'bjarnoy.reportsLastSeenAt';
+/**
+ * Battle reports for the player's own settlement (issue #40 phase 3). Kept
+ * as its own store rather than folded into `stores/world.ts`'s `hud` —
+ * reports are read-at-leisure history, not part of the live settlement
+ * snapshot, and this store's own polling only needs to run while a HUD nav
+ * badge or the reports view is actually mounted (see `startPolling`/
+ * `stopPolling`), unlike `hud.garrison`/`armies` which poll for as long as
+ * the settlement/world view itself is open.
+ *
+ * "Unread" is a purely client-side notion — the backend does not track a
+ * per-player read state for reports (see `BattleReportService`) — so it's
+ * just "occurred after the last time this browser looked at the inbox",
+ * persisted in `localStorage` (per `lastSeenAt`'s own comment).
+ *
+ * Issue #46 phase 3 folds `TradeReport`s into the same inbox/badge — see
+ * the design doc's §7 note that both kinds share one per-player inbox.
+ * Rather than duplicating the polling/localStorage plumbing in a second
+ * store, `tradeItems` is fetched alongside `items` in the same `load`/poll
+ * cycle, and `inboxItems`/`unreadCount` below are computed over the merge
+ * of both (see `lib/units/inbox.ts`).
+ *
+ * Issue #206 folds in a third kind, `fieldItems` (in-flight interceptions),
+ * the same way — fetched alongside the other two rather than given its own
+ * store/polling loop.
+ */
+export const useReportsStore = defineStore('reports', {
+    state: () => ({
+        settlementId: null,
+        // The client-local owner id these reports were last loaded under — see
+        // `load`'s own comment. Needed again by `getById`/`getFieldById`'s deep
+        // links, which don't otherwise carry it.
+        ownerId: null,
+        items: [],
+        tradeItems: [],
+        fieldItems: [],
+        campItems: [],
+        loading: false,
+        error: null,
+        lastSeenAt: (() => {
+            try {
+                return localStorage.getItem(LAST_SEEN_KEY);
+            }
+            catch {
+                return null;
+            }
+        })(),
+        pollHandle: null,
+    }),
+    getters: {
+        /** All three report kinds, merged newest-first — see `lib/units/inbox.ts`. */
+        inboxItems(state) {
+            return mergeInbox(state.items, state.tradeItems, state.fieldItems, state.campItems);
+        },
+        unreadCount(state) {
+            return inboxUnreadCount(mergeInbox(state.items, state.tradeItems, state.fieldItems, state.campItems), state.lastSeenAt);
+        },
+    },
+    actions: {
+        /**
+         * Fetches (or re-fetches) this settlement's battle, field-battle, and
+         * trade reports, each newest first. `ownerId` is the caller's own
+         * client-local id (`stores/player.ts`'s `id`) — proves ownership of
+         * `settlementId` to the backend's ownership filters; remembered so
+         * `getById`/`getFieldById` can reuse it for a deep-linked report not in
+         * the already-loaded list.
+         */
+        async load(settlementId, ownerId) {
+            this.settlementId = settlementId;
+            this.ownerId = ownerId ?? null;
+            this.loading = true;
+            this.error = null;
+            try {
+                // Wildlife camp fights exist only against a live backend (the demo has no army simulation).
+                const [battleItems, tradeItems, fieldItems, campItems] = await Promise.all([
+                    api.getSettlementReports(settlementId, ownerId),
+                    api.getSettlementTradeReports(settlementId, ownerId),
+                    api.getSettlementFieldReports(settlementId, ownerId),
+                    DEMO_MODE ? Promise.resolve([]) : api.getSettlementCampReports(settlementId, ownerId),
+                ]);
+                this.campItems = [...campItems].sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+                this.items = [...battleItems].sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+                this.tradeItems = [...tradeItems].sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+                // The backend already returns these newest-first (FieldBattleReportService),
+                // but sorting client-side too keeps this store's own invariant explicit
+                // regardless of that.
+                this.fieldItems = [...fieldItems].sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+            }
+            catch (err) {
+                this.error = err instanceof ApiError ? err.message : 'Could not load reports.';
+            }
+            finally {
+                this.loading = false;
+            }
+        },
+        /** A single report by id — served from the already-loaded list when possible (e.g. inbox → detail navigation), else fetched directly (a deep link). */
+        async getById(reportId) {
+            const cached = this.items.find((r) => r.id === reportId);
+            if (cached)
+                return cached;
+            try {
+                return await api.getReport(reportId, this.ownerId ?? undefined);
+            }
+            catch {
+                return null;
+            }
+        },
+        /** The field-battle sibling of `getById` — see its own comment. */
+        async getFieldById(reportId) {
+            const cached = this.fieldItems.find((r) => r.id === reportId);
+            if (cached)
+                return cached;
+            try {
+                return await api.getFieldReport(reportId, this.ownerId ?? undefined);
+            }
+            catch {
+                return null;
+            }
+        },
+        /** The camp-report sibling of `getById` — see its own comment. */
+        async getCampById(reportId) {
+            const cached = this.campItems.find((r) => r.id === reportId);
+            if (cached)
+                return cached;
+            try {
+                return await api.getCampReport(reportId, this.ownerId ?? undefined);
+            }
+            catch {
+                return null;
+            }
+        },
+        /** Marks every currently-known report as seen — call when the player opens the inbox. */
+        markAllSeen() {
+            this.lastSeenAt = new Date().toISOString();
+            try {
+                localStorage.setItem(LAST_SEEN_KEY, this.lastSeenAt);
+            }
+            catch {
+                // Private-browsing/storage-disabled: unread badge just won't persist across reloads.
+            }
+        },
+        /** Starts (or restarts, if already polling for a different settlement) the light background poll HudNav's badge relies on. */
+        startPolling(settlementId, ownerId) {
+            this.stopPolling();
+            void this.load(settlementId, ownerId);
+            this.pollHandle = setInterval(() => void this.load(settlementId, ownerId), REPORT_POLL_MS);
+        },
+        stopPolling() {
+            if (this.pollHandle)
+                clearInterval(this.pollHandle);
+            this.pollHandle = null;
+        },
+    },
+});

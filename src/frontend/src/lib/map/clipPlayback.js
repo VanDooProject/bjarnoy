@@ -1,0 +1,116 @@
+// Pure playback math for a `buildings-anim` clip (see `atlas.ts`'s
+// `AtlasClip`): which frame index to show at a given elapsed time, given
+// the clip's own fps/playback/pause. Shared by every clip player so this
+// exists in exactly one place — `AnimatedBuildingSprite.vue` (one sprite,
+// driven by its own `setInterval`) and the Wasted Lands docs page's giant
+// previews (`WastedIsland.vue`/`AnimatedGiant.vue`, several sprites sharing
+// one clock — see `useAnimationClock.ts`).
+//
+// `pause` (seconds of extra dwell the atlas manifest tacks onto the end of
+// its own cycle) is spent holding the loop's last frame — a pingpong clip's
+// own cycle already ends back at frame 0 (it bounced there and is about to
+// head into frame 1 of the next cycle), so its `pause` just delays that next
+// upswing rather than holding a distinct "turnaround" frame.
+/** `ClipTiming` from a resolved clip (`findAtlasClip`'s/`resolveIslandClip`'s return shape) — the small adapter every call site would otherwise repeat. */
+export function clipTimingOf(clip) {
+    return {
+        frameCount: clip.frameRects.length,
+        fps: clip.fps,
+        playback: clip.playback,
+        pause: clip.pause,
+    };
+}
+/** Total steps (frame-lengths) in one full cycle, including the held `pause` tail. */
+function stepsPerCycle(clip) {
+    const n = clip.frameCount;
+    const pauseSteps = Math.round(clip.pause * clip.fps);
+    return (clip.playback === 'pingpong' ? Math.max(1, n * 2 - 2) : n) + pauseSteps;
+}
+/** The frame index for a step already known to be within `[0, stepsPerCycle(clip))`. */
+function frameIndexAtStep(clip, step) {
+    const n = clip.frameCount;
+    if (n === 0)
+        return 0;
+    if (clip.playback === 'pingpong') {
+        const cycle = Math.max(1, n * 2 - 2);
+        const s = step % cycle;
+        return s < n ? s : cycle - s;
+    }
+    return Math.min(step, n - 1);
+}
+/**
+ * The clip frame to show `elapsedMs` after playback started. `elapsedMs` is
+ * floored to whole frame-steps at the clip's own fps (frames don't
+ * interpolate) before being folded into the loop/pingpong cycle — the same
+ * `position`/`frameIndexAt` math `AnimatedBuildingSprite.vue` used to keep
+ * inline, now shared.
+ */
+export function clipFrameIndex(clip, elapsedMs) {
+    if (clip.frameCount <= 0)
+        return 0;
+    const total = stepsPerCycle(clip);
+    const step = Math.floor(elapsedMs / (1000 / clip.fps)) % total;
+    return frameIndexAtStep(clip, step);
+}
+/**
+ * One tick of a clip player that keeps its own clock (`HexMapRenderer`'s
+ * per-hex top animations): adds `deltaMs` to `state.playedMs` and returns the
+ * frame now due if it differs from `state.frame` (updating `state.frame`),
+ * else `undefined` — so the caller only swaps a texture when one is due.
+ * Goes through `clipFrameIndex`, so the clip's `pause` holds its last frame
+ * between cycles here too.
+ */
+export function advanceClipFrame(clip, state, deltaMs) {
+    state.playedMs += deltaMs;
+    const frame = clipFrameIndex(clip, state.playedMs);
+    if (frame === state.frame)
+        return undefined;
+    state.frame = frame;
+    return frame;
+}
+/**
+ * The playback state a clip starts in on the shared global clock (`TileAnimClip.sharedClock`: the biome forests' wind
+ * sway): `playedMs` is the clock's current time, not 0, so every tile of the family shows frame floor(t * fps) mod
+ * frameCount at the same moment whenever it was spawned, and the gust wave is continuous across tiles. The caller then advances
+ * every state by the same per-tick delta (`advanceClipFrame`), which keeps them in lockstep.
+ */
+export function sharedClockPlayback(clip, clockMs, frameOffset = 0) {
+    // `frameOffset` (whole frames; a sway clip's `framesPerColumn * column`, may be negative) shows the global frame that many steps behind,
+    // wrapping in the clip's cycle (including a `pause` tail) like any other clip.
+    if (frameOffset === 0)
+        return { playedMs: clockMs, frame: clipFrameIndex(clip, clockMs) };
+    const stepMs = 1000 / clip.fps;
+    const cycleSteps = stepsPerCycle(clip);
+    // Shift in whole frame-steps (not ms) so float error can't tip the floor onto the neighbouring frame; keep the sub-step remainder.
+    const clockSteps = clockMs / stepMs;
+    const whole = Math.floor(clockSteps + 1e-9);
+    const shifted = (((whole - frameOffset) % cycleSteps) + cycleSteps) % cycleSteps;
+    // Keep playedMs on the clock's own cycle count (>= 0, same magnitude) so `advanceClipFrame` continues it seamlessly.
+    const cycles = Math.floor(whole / cycleSteps);
+    const playedMs = (cycles * cycleSteps + shifted + Math.max(0, clockSteps - whole) + 1e-6) * stepMs;
+    return { playedMs, frame: clipFrameIndex(clip, playedMs) };
+}
+/**
+ * The playback state a clip on its own clock (a building's wheel, a flag) starts in so identical tiles are out of phase: a start step
+ * `floor(h * cycleSteps)` into the clip's full cycle (the `pause` tail and a pingpong's way back included). `h` in `[0, 1)` is the tile's hash;
+ * `h = 0` is frame 0 at 0 ms.
+ */
+export function phasedStart(clip, h) {
+    if (clip.frameCount <= 0)
+        return { playedMs: 0, frame: 0 };
+    const steps = Math.min(stepsPerCycle(clip) - 1, Math.max(0, Math.floor(h * stepsPerCycle(clip))));
+    const playedMs = steps * (1000 / clip.fps);
+    return { playedMs, frame: frameIndexAtStep(clip, steps) };
+}
+/**
+ * Extra `sharedClockPlayback` frame offset that desyncs the content of a long shared-clock clip without breaking its gust phase: `k * swayPeriod`
+ * with `k = floor(h * frameCount / swayPeriod)`. A whole number of sway periods leaves `frame mod swayPeriod` (the trees) untouched while
+ * whatever runs on the full clip (a camp's animals, 48 frames over a 16-frame sway) lands elsewhere. No offset (0) unless `swayPeriod` is a
+ * positive integer that divides `frameCount` into more than one period.
+ */
+export function swayPeriodOffset(frameCount, swayPeriod, h) {
+    if (!swayPeriod || !Number.isInteger(swayPeriod) || swayPeriod <= 0 || swayPeriod >= frameCount || frameCount % swayPeriod !== 0)
+        return 0;
+    const periods = frameCount / swayPeriod;
+    return Math.min(periods - 1, Math.max(0, Math.floor(h * periods))) * swayPeriod;
+}

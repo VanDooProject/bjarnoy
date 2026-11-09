@@ -1,0 +1,1697 @@
+// A bit-exact TypeScript port of the backend's
+// `Bjarnoy.Domain.World.RiverGenerator.Generate` (see that file's own doc
+// comment for the design): spring placement on mountain clusters, a
+// funnel-to-coast walk with a meander term, a minimum-length filter, and a
+// merge-two/drop-the-third rule for paths that collide. Pure and
+// side-effect-free, mirroring `giantPlacement.ts`'s own "bit-exact port of a
+// backend PlaceCore" pattern — `riverGenerator.golden.test.ts` asserts this
+// against the same `src/shared/river-generation-golden.json` fixture the
+// backend's `RiverGenerationGoldenTests` asserts its own `RiverGenerator.Generate`
+// against.
+//
+// Order matters here, not just membership: `RiverTile.inDirections`/
+// `outDirection` depend on the exact path a river traced, and the golden
+// fixture compares the frozen tile list directly.
+import { coordKey, hexDistance, neighbors, parseKey } from '../hex/coords';
+import { hash2, valueNoise } from './worldGenerator';
+import { confluenceKind, TILE_ORIENTATIONS } from './types';
+import { BogGenerator, BogPaths, emptyBogStats, HexSet } from './bogGenerator';
+import { checkBogRules, totalViolations } from './bogRules';
+/**
+ * A traced river shorter than this (in tiles, spring to mouth inclusive) is
+ * discarded rather than rendered — mirrors `WorldGenerationOptions.MinRiverLength`'s
+ * default.
+ */
+export const MIN_RIVER_LENGTH = 2;
+/**
+ * How much a river's path wanders sideways instead of taking the steepest
+ * descent to the coast at every step — mirrors
+ * `WorldGenerationOptions.RiverMeanderWeight`'s default.
+ */
+export const RIVER_MEANDER_WEIGHT = 0.35;
+/**
+ * Subtracted from a candidate step's score when it would turn 120° off
+ * straight-ahead (a `bend60` tile) — mirrors
+ * `WorldGenerationOptions.SharpBendPenalty`'s default.
+ */
+export const SHARP_BEND_PENALTY = 0.5;
+/** Land tiles an island needs per river spring — mirrors `WorldGenerationOptions.RiverTilesPerSpring`. */
+export const RIVER_TILES_PER_SPRING = 500;
+/** Most springs one island gets — mirrors `WorldGenerationOptions.MaxSpringsPerIsland`. */
+export const MAX_SPRINGS_PER_ISLAND = 24;
+/** Springs are picked farthest-first until the best is closer than this — mirrors `WorldGenerationOptions.MinSpringSpacing`. */
+export const MIN_SPRING_SPACING = 8;
+/** Land tiles an island needs per river outlet — mirrors `WorldGenerationOptions.OutletTilesPer`. */
+export const OUTLET_TILES_PER = 2000;
+/** Most outlets one island gets — mirrors `WorldGenerationOptions.MaxOutlets`. */
+export const MAX_OUTLETS = 12;
+/** Outlets are picked farthest-first until the best is closer than this — mirrors `WorldGenerationOptions.MinOutletSpacing`. */
+export const MIN_OUTLET_SPACING = 25;
+/** Weight of the per-tile noise in a drainage step's cost — mirrors `WorldGenerationOptions.DrainageNoise`. */
+export const DRAINAGE_NOISE = 1.5;
+/** Weight of the smooth valley noise in a drainage step's cost — mirrors `WorldGenerationOptions.ValleyNoise`. */
+export const VALLEY_NOISE = 6.0;
+/** Wavelength (hexes) of the valley noise — mirrors `WorldGenerationOptions.ValleyScale`. */
+export const VALLEY_SCALE = 4.0;
+/** Extra drainage cost of a mountain tile — mirrors `WorldGenerationOptions.MountainCost`. */
+export const MOUNTAIN_COST = 2.0;
+/** Drainage cost of a 60 degree turn — mirrors `WorldGenerationOptions.BendCost`. */
+export const BEND_COST = 0.03;
+/** Drainage cost of a 120 degree turn — mirrors `WorldGenerationOptions.SharpBendCost`. */
+export const SHARP_BEND_COST = 1.0;
+/** Extra drainage cost of stepping from a non-mountain tile onto a mountain tile — mirrors `WorldGenerationOptions.MountainEntryCost`. */
+export const MOUNTAIN_ENTRY_COST = 15.0;
+/** Drainage cost a step pays for not heading where its meander stretch wants (half when 60 degrees off); 0 turns meandering off — mirrors `WorldGenerationOptions.MeanderSteer`. */
+export const MEANDER_STEER = 16.0;
+/** Fewest steps of one meander stretch — mirrors `WorldGenerationOptions.MeanderMinStretch`. */
+export const MEANDER_MIN_STRETCH = 8;
+/** Most steps of one meander stretch — mirrors `WorldGenerationOptions.MeanderMaxStretch`. */
+export const MEANDER_MAX_STRETCH = 16;
+/** How much longer a tributary's way via a drawable junction may be than running on alone and still be taken — mirrors `WorldGenerationOptions.MergeSlack`. */
+export const MERGE_SLACK = 6.0;
+/** Drainage cost within which a tributary looks for a trunk to join — mirrors `WorldGenerationOptions.MergeReach`. */
+export const MERGE_REACH = 20.0;
+/** Cost a junction search takes off a wide-Y junction into a river-width trunk — mirrors `WorldGenerationOptions.RiverStreamBonus`. */
+export const RIVER_STREAM_BONUS = 3.0;
+export function emptyRiverStats() {
+    return {
+        springs: 0,
+        outlets: 0,
+        rivers: 0,
+        merges: 0,
+        widenings: 0,
+        riverStreamJoins: 0,
+        truncatedBranches: 0,
+        droppedRivers: 0,
+        valleyCandidates: 0,
+        valleyStreams: 0,
+        valleyStreamsIntoRivers: 0,
+        valleysJoined: 0,
+        valleySkippedNoPath: 0,
+        valleySkippedTrace: 0,
+        valleySkippedLayout: 0,
+        valleySkippedWidths: 0,
+        valleySkippedRules: 0,
+        valleySkippedCutsOff: 0,
+        valleySkippedChanged: 0,
+        ...emptyBogStats(),
+    };
+}
+function sortedByQR(tiles) {
+    return [...tiles].sort((a, b) => a.q - b.q || a.r - b.r);
+}
+/** The direction index (0-5, matching `TILE_ORIENTATIONS`) from one hex to an adjacent one — mirrors `RiverGenerator.DirectionIndex`. */
+function directionIndex(from, to) {
+    const ns = neighbors(from);
+    for (let i = 0; i < ns.length; i++) {
+        if (ns[i].q === to.q && ns[i].r === to.r)
+            return i;
+    }
+    throw new Error(`(${to.q},${to.r}) is not a neighbour of (${from.q},${from.r})`);
+}
+/** Connected groups of mountain tiles within one island (mountain-to-mountain adjacency only) — mirrors `RiverGenerator.ClusterMountains`. */
+function clusterMountains(islandTiles, terrainOf) {
+    const mountains = new Set();
+    const byKey = new Map();
+    for (const tile of islandTiles) {
+        if (terrainOf(tile) === 'mountain') {
+            const key = coordKey(tile);
+            mountains.add(key);
+            byKey.set(key, tile);
+        }
+    }
+    const visited = new Set();
+    const clusters = [];
+    // Sorted scan order keeps cluster (and therefore spring) assignment stable
+    // for a given seed — mirrors `ClusterMountains`'s own reasoning.
+    for (const start of sortedByQR([...mountains].map((k) => byKey.get(k)))) {
+        const startKey = coordKey(start);
+        if (visited.has(startKey))
+            continue;
+        visited.add(startKey);
+        const cluster = [];
+        const pending = [start];
+        while (pending.length > 0) {
+            const coord = pending.pop();
+            cluster.push(coord);
+            for (const n of neighbors(coord)) {
+                const k = coordKey(n);
+                if (mountains.has(k) && !visited.has(k)) {
+                    visited.add(k);
+                    pending.push(n);
+                }
+            }
+        }
+        clusters.push(cluster);
+    }
+    return clusters;
+}
+/** The highest seed-hash-scored tile in a qualifying cluster — mirrors `RiverGenerator.PickSpring`. */
+function pickSpring(cluster, seed) {
+    let best = cluster[0];
+    let bestScore = -1;
+    for (const coord of sortedByQR(cluster)) {
+        const score = hash2(coord.q, coord.r, seed + 41);
+        if (score > bestScore) {
+            bestScore = score;
+            best = coord;
+        }
+    }
+    return best;
+}
+/** A tile "touches the sea" when at least one of its neighbours is not land — mirrors `RiverGenerator.TouchesSea`. */
+function touchesSea(tile, isLand) {
+    return neighbors(tile).some((n) => !isLand(n));
+}
+/**
+ * Unvisited land neighbours of `tile`, non-decreasing-depth candidates first
+ * (ordered best score to worst), then lower-depth fallback candidates (also
+ * best score to worst) — mirrors `RiverGenerator.BuildCandidates`.
+ */
+function buildCandidates(tile, path, islandLand, visited, depthAt, seed) {
+    const ns = neighbors(tile);
+    // The two candidate directions a 120°-off-straight-ahead turn would take,
+    // once there's a previous tile to measure "straight ahead" from — scored
+    // down below rather than excluded, so a bend60 tile stays possible but
+    // rarer.
+    let sharpTurnA = -1;
+    let sharpTurnB = -1;
+    if (path.length >= 2) {
+        const previous = path[path.length - 2];
+        const inIndex = directionIndex(tile, previous);
+        const straightAhead = (inIndex + 3) % 6;
+        sharpTurnA = (straightAhead + 2) % 6;
+        sharpTurnB = (straightAhead + 4) % 6;
+    }
+    const currentDepth = depthAt(tile) ?? 0;
+    const forward = [];
+    const fallback = [];
+    for (let i = 0; i < ns.length; i++) {
+        const neighbour = ns[i];
+        const key = coordKey(neighbour);
+        if (!islandLand.has(key) || visited.has(key))
+            continue;
+        const depth = depthAt(neighbour);
+        if (depth === null)
+            continue;
+        const noise = hash2(neighbour.q, neighbour.r, seed + 43);
+        let score = depth + RIVER_MEANDER_WEIGHT * noise;
+        if (i === sharpTurnA || i === sharpTurnB)
+            score -= SHARP_BEND_PENALTY;
+        (depth >= currentDepth ? forward : fallback).push({ coord: neighbour, score });
+    }
+    forward.sort((a, b) => b.score - a.score);
+    fallback.sort((a, b) => b.score - a.score);
+    return [...forward.map((c) => c.coord), ...fallback.map((c) => c.coord)];
+}
+/**
+ * Walks from a spring toward the coast — mirrors `RiverGenerator.TracePath`
+ * (including its explicit-stack backtracking: a dead end unvisits its own
+ * tile so a different branch from its parent can still route through it).
+ */
+function tracePath(spring, islandLand, depthAt, isLand, seed) {
+    const path = [spring];
+    const visited = new Set([coordKey(spring)]);
+    const frames = [
+        { candidates: buildCandidates(spring, path, islandLand, visited, depthAt, seed), nextIndex: 0 },
+    ];
+    // Each tile's candidate list is built once, when it's pushed, and every
+    // candidate in it is consumed at most once before the frame is popped — so
+    // total work is bounded by edges in the island's tile graph, not
+    // exponential. This cap is a defensive backstop against any pathological
+    // island shape, not the normal exit path.
+    let budget = islandLand.size * 8;
+    while (frames.length > 0 && budget-- > 0) {
+        const current = path[path.length - 1];
+        if (touchesSea(current, isLand)) {
+            return { path, outcome: 'sea' };
+        }
+        const frame = frames[frames.length - 1];
+        if (frame.nextIndex >= frame.candidates.length) {
+            // Dead end: no candidate from here leads anywhere new. Backtrack —
+            // unvisit this tile so a different branch from its parent can still
+            // route through it.
+            frames.pop();
+            visited.delete(coordKey(current));
+            path.pop();
+            continue;
+        }
+        const next = frame.candidates[frame.nextIndex++];
+        const nextKey = coordKey(next);
+        if (visited.has(nextKey))
+            continue;
+        visited.add(nextKey);
+        path.push(next);
+        frames.push({ candidates: buildCandidates(next, path, islandLand, visited, depthAt, seed), nextIndex: 0 });
+    }
+    return { path, outcome: 'failed' };
+}
+/**
+ * Deterministic-priority pass over independently-traced paths: the first two
+ * to reach a tile share it (a confluence); a path is truncated the moment it
+ * reaches a tile already claimed twice, and discarded if that leaves it
+ * under the minimum length — mirrors `RiverGenerator.ResolveCollisions`.
+ */
+function resolveCollisions(paths, allowConfluence) {
+    const ordered = [...paths].sort((a, b) => a[0].q - b[0].q || a[0].r - b[0].r);
+    const claimCount = new Map();
+    const survivors = [];
+    for (const path of ordered) {
+        if (!allowConfluence) {
+            // Lava streams never merge, never share a tile: a path that reaches
+            // any tile an earlier path already claimed is dropped entirely rather
+            // than truncated into a confluence.
+            if (path.some((tile) => claimCount.has(coordKey(tile))))
+                continue;
+            if (path.length < MIN_RIVER_LENGTH)
+                continue;
+            for (const tile of path)
+                claimCount.set(coordKey(tile), 1);
+            survivors.push(path);
+            continue;
+        }
+        const truncated = [];
+        for (const tile of path) {
+            const key = coordKey(tile);
+            const count = claimCount.get(key) ?? 0;
+            if (count >= 2)
+                break;
+            truncated.push(tile);
+            claimCount.set(key, count + 1);
+            if (count >= 1) {
+                // This tile just became a confluence: this path merges into
+                // whichever path already owns it rather than continuing past it as
+                // an independent line.
+                break;
+            }
+        }
+        if (truncated.length >= MIN_RIVER_LENGTH)
+            survivors.push(truncated);
+    }
+    return survivors;
+}
+/** The shape of a tile with these inflow directions and this outflow (-1 = none) — mirrors `RiverGenerator.ShapeOf`. */
+function shapeOf(ins, out) {
+    if (ins.length === 0)
+        return 'spring';
+    if (ins.length >= 2)
+        return 'confluence';
+    if (out < 0)
+        return 'mouth';
+    // 0°: continues straight through. 60° either side: a gentle bend. 120° either side: the
+    // sharper bend60.
+    const opposite = (ins[0] + 3) % 6;
+    const turn = Math.min((out - opposite + 6) % 6, (opposite - out + 6) % 6);
+    return turn === 0 ? 'straight' : turn === 2 ? 'bend60' : 'bend';
+}
+/** Mirrors `RiverGenerator.BuildRiverTiles`. */
+function buildNodes(paths, forcedOut = null, bogIn = null) {
+    const inDirections = new Map();
+    const outDirection = new Map();
+    const allTiles = new Map();
+    for (const path of paths) {
+        for (let i = 0; i < path.length; i++) {
+            const tile = path[i];
+            const key = coordKey(tile);
+            allTiles.set(key, tile);
+            if (i > 0) {
+                const direction = directionIndex(tile, path[i - 1]);
+                const list = inDirections.get(key);
+                if (list)
+                    list.push(direction);
+                else
+                    inDirections.set(key, [direction]);
+            }
+            if (i < path.length - 1)
+                outDirection.set(key, directionIndex(tile, path[i + 1]));
+        }
+    }
+    // A river handing its water to a bog creek flows out toward it; one coming out of a creek flows in from it.
+    if (forcedOut)
+        for (const [key, dir] of forcedOut)
+            if (allTiles.has(key))
+                outDirection.set(key, dir);
+    if (bogIn) {
+        for (const [key, dir] of bogIn) {
+            if (!allTiles.has(key))
+                continue;
+            const list = inDirections.get(key);
+            if (list)
+                list.push(dir);
+            else
+                inDirections.set(key, [dir]);
+        }
+    }
+    const result = [];
+    for (const tile of sortedByQR([...allTiles.values()])) {
+        const key = coordKey(tile);
+        const ins = inDirections.get(key) ?? [];
+        const out = outDirection.get(key) ?? -1;
+        result.push({
+            coord: tile,
+            shape: shapeOf(ins, out),
+            ins,
+            out,
+            width: 'river',
+            outRiver: false,
+            removed: false,
+            bogIn: bogIn !== null && bogIn.has(key),
+        });
+    }
+    return result;
+}
+function nodeToTile(n, width, wasted) {
+    return {
+        q: n.coord.q,
+        r: n.coord.r,
+        shape: n.shape,
+        inDirections: n.ins.map((d) => TILE_ORIENTATIONS[d]),
+        outDirection: n.out >= 0 ? TILE_ORIENTATIONS[n.out] : null,
+        width,
+        wasted,
+    };
+}
+const step = (from, dir) => {
+    const n = neighbors(from)[dir];
+    return { q: n.q, r: n.r };
+};
+/**
+ * Assigns each tile's width — mirrors `RiverGenerator.AssignWidths`. Every tile starts as a
+ * stream; two streams meeting widen at the Y (smallwide Y, river below); a branch that must
+ * arrive at river width (the sea mouth, a confluence with a river) widens on a straight tile
+ * chosen by hash from the second half of its stream run, and is truncated when that half has none.
+ */
+function assignWidths(nodes, seed, stats, requireRiver = null) {
+    const byCoord = new Map(nodes.map((n) => [coordKey(n.coord), n]));
+    // A tile fed by a bog creek starts a river-width run: the creek is river width.
+    const pending = new Map(nodes.map((n) => [coordKey(n.coord), n.ins.length - (n.bogIn ? 1 : 0)]));
+    const queue = nodes.filter((n) => n.ins.length - (n.bogIn ? 1 : 0) === 0);
+    const upstream = (n, dir) => byCoord.get(coordKey(step(n.coord, dir)));
+    // The pure stream run ending at `last`, spring first.
+    const chainTo = (last) => {
+        const chain = [];
+        let cur = last;
+        for (;;) {
+            chain.push(cur);
+            if (cur.ins.length === 0 || cur.bogIn)
+                break;
+            cur = upstream(cur, cur.ins[0]);
+        }
+        return chain.reverse();
+    };
+    // Widens somewhere in the second half of the chain; false when no straight tile lives there.
+    const tryWiden = (chain, requirement) => {
+        const candidates = [];
+        for (let i = Math.max(1, Math.floor((chain.length + 1) / 2)); i < chain.length; i++) {
+            if (chain[i].shape === 'straight')
+                candidates.push(i);
+        }
+        if (candidates.length === 0)
+            return false;
+        widenAt(chain, candidates[Math.floor(hash2(requirement.q, requirement.r, seed + 47) * candidates.length)]);
+        return true;
+    };
+    // The tile at `pick` widens; every tile after it is river width.
+    const widenAt = (chain, pick) => {
+        chain[pick].width = 'widen';
+        chain[pick].outRiver = true;
+        for (let i = pick + 1; i < chain.length; i++) {
+            chain[i].width = 'river';
+            chain[i].outRiver = true;
+        }
+        if (stats)
+            stats.widenings++;
+    };
+    // Widens on the straight tile nearest the end of the chain (never the spring); false when there is none.
+    const tryWidenNearest = (chain) => {
+        for (let i = chain.length - 1; i >= 1; i--) {
+            if (chain[i].shape === 'straight') {
+                widenAt(chain, i);
+                return true;
+            }
+        }
+        return false;
+    };
+    const remove = (chain) => {
+        for (const n of chain)
+            n.removed = true;
+    };
+    for (let head = 0; head < queue.length; head++) {
+        const v = queue[head];
+        if (v.bogIn) {
+            v.width = 'river';
+            v.outRiver = true;
+        }
+        else
+            switch (v.shape) {
+                case 'spring':
+                    v.width = 'stream';
+                    v.outRiver = false;
+                    break;
+                case 'confluence': {
+                    const a = upstream(v, v.ins[0]);
+                    const b = upstream(v, v.ins[1]);
+                    if (!a.outRiver && !b.outRiver) {
+                        v.width = 'widen';
+                        v.outRiver = true;
+                        if (stats)
+                            stats.widenings++;
+                    }
+                    else if (a.outRiver && b.outRiver) {
+                        v.width = 'river';
+                        v.outRiver = true;
+                    }
+                    else if (v.out >= 0 && confluenceKind(v.ins[0], v.ins[1], v.out) === 'wide') {
+                        // A stream joining a river at the wide Y: the river-stream Y, no widening needed. The stream
+                        // inflow is stored first so the renderer can orient the tributary art by it.
+                        v.width = 'riverstream';
+                        v.outRiver = true;
+                        if (a.outRiver)
+                            [v.ins[0], v.ins[1]] = [v.ins[1], v.ins[0]];
+                        if (stats)
+                            stats.riverStreamJoins++;
+                    }
+                    else {
+                        const streamBranch = a.outRiver ? b : a;
+                        const streamDir = a.outRiver ? v.ins[1] : v.ins[0];
+                        const chain = chainTo(streamBranch);
+                        if (tryWiden(chain, v.coord)) {
+                            v.width = 'river';
+                        }
+                        else {
+                            // No straight tile to widen on: the branch is dropped up to where it would join, and
+                            // this tile carries on as a plain tile of the river.
+                            remove(chain);
+                            v.ins.splice(v.ins.indexOf(streamDir), 1);
+                            v.shape = shapeOf(v.ins, v.out);
+                            v.width = 'river';
+                            if (stats)
+                                stats.truncatedBranches++;
+                        }
+                        v.outRiver = true;
+                    }
+                    break;
+                }
+                case 'mouth': {
+                    const up = upstream(v, v.ins[0]);
+                    if (up.outRiver) {
+                        v.width = 'river';
+                        v.outRiver = true;
+                    }
+                    else {
+                        const chain = chainTo(up);
+                        if (tryWiden(chain, v.coord)) {
+                            v.width = 'river';
+                        }
+                        else if (tryWidenNearest(chain)) {
+                            // Never on the mouth itself: the nearest straight tile upstream carries the widening.
+                            v.width = 'river';
+                        }
+                        else {
+                            chain.push(v);
+                            remove(chain);
+                            if (stats)
+                                stats.droppedRivers++;
+                        }
+                        v.outRiver = true;
+                    }
+                    break;
+                }
+                default: {
+                    const up = upstream(v, v.ins[0]);
+                    v.width = up.outRiver ? 'river' : 'stream';
+                    v.outRiver = up.outRiver;
+                    // A river handing its water to a bog creek must be river width there: widen upstream, or drop the branch.
+                    if (!v.outRiver && requireRiver !== null && requireRiver.has(coordKey(v.coord))) {
+                        const chain = chainTo(v);
+                        if (!tryWiden(chain, v.coord))
+                            remove(chain);
+                    }
+                    break;
+                }
+            }
+        // A tile that hands its water to a bog creek has no next river tile.
+        const nextNode = v.out >= 0 && !v.removed ? byCoord.get(coordKey(step(v.coord, v.out))) : undefined;
+        if (nextNode) {
+            const next = nextNode;
+            const key = coordKey(next.coord);
+            const left = pending.get(key) - 1;
+            pending.set(key, left);
+            if (left === 0)
+                queue.push(next);
+        }
+    }
+    return nodes.filter((n) => !n.removed).map((n) => nodeToTile(n, n.width, false));
+}
+/** A tile already part of a committed river; mirrors `RiverGenerator.Claim`. */
+function joinable(c) {
+    return !c.spring && c.in1 >= 0 && c.in2 < 0 && c.out >= 0;
+}
+function commit(drainage, path, merged, claims) {
+    for (let i = 0; i < path.length; i++) {
+        const tile = path[i];
+        const inDir = i > 0 ? directionIndex(tile, path[i - 1]) : -1;
+        const outDir = i < path.length - 1 ? directionIndex(tile, path[i + 1]) : -1;
+        const idx = drainage.index.get(coordKey(tile));
+        if (i === path.length - 1 && merged) {
+            claims[idx].in2 = inDir;
+            for (let cur = idx; cur >= 0; cur = claims[cur].out >= 0 ? drainage.neighbour[cur * 6 + claims[cur].out] : -1) {
+                claims[cur].downstream = true;
+            }
+            continue;
+        }
+        claims[idx] = { in1: inDir, in2: -1, out: outDir, spring: i === 0, downstream: false };
+    }
+}
+/** A binary min-heap on (priority, item), the item index breaking ties; mirrors `RiverGenerator.Heap`. */
+class Heap {
+    pri = [];
+    item = [];
+    get count() {
+        return this.pri.length;
+    }
+    less(a, b) {
+        return this.pri[a] < this.pri[b] || (this.pri[a] === this.pri[b] && this.item[a] < this.item[b]);
+    }
+    swap(a, b) {
+        [this.pri[a], this.pri[b]] = [this.pri[b], this.pri[a]];
+        [this.item[a], this.item[b]] = [this.item[b], this.item[a]];
+    }
+    push(priority, item) {
+        this.pri.push(priority);
+        this.item.push(item);
+        let i = this.pri.length - 1;
+        while (i > 0) {
+            const parent = (i - 1) >> 1;
+            if (!this.less(i, parent))
+                break;
+            this.swap(i, parent);
+            i = parent;
+        }
+    }
+    pop() {
+        const top = { priority: this.pri[0], item: this.item[0] };
+        const lastPri = this.pri.pop();
+        const lastItem = this.item.pop();
+        if (this.pri.length > 0) {
+            this.pri[0] = lastPri;
+            this.item[0] = lastItem;
+            let i = 0;
+            for (;;) {
+                const l = 2 * i + 1;
+                const r = l + 1;
+                let m = i;
+                if (l < this.pri.length && this.less(l, m))
+                    m = l;
+                if (r < this.pri.length && this.less(r, m))
+                    m = r;
+                if (m === i)
+                    break;
+                this.swap(i, m);
+                i = m;
+            }
+        }
+        return top;
+    }
+}
+/**
+ * One island's drainage field — mirrors `RiverGenerator.Drainage`: land tiles indexed in (q, r)
+ * order, the cost of the rest of the way to an outlet kept per (tile, arrival direction) state,
+ * outlets on bays.
+ */
+class Drainage {
+    tiles;
+    index = new Map();
+    neighbour;
+    interior;
+    outlet;
+    /** Per (tile, direction): the neighbour there is open sea (not island land, not bog water). A river ends on a coastal tile only head-on, towards such a direction, so every sea mouth is a delta. */
+    seaAt;
+    step;
+    dist;
+    /** Per (tile, direction): `MOUNTAIN_ENTRY_COST` when stepping from a non-mountain tile onto a mountain neighbour, else 0; leaving a range stays cheap. */
+    edge;
+    seed;
+    outletCount = 0;
+    constructor(islandTiles, terrainOf, isLand, seed, blocked = null, outletPerBasin = false) {
+        this.seed = seed;
+        this.tiles = sortedByQR(islandTiles);
+        const n = this.tiles.length;
+        for (let i = 0; i < n; i++)
+            this.index.set(coordKey(this.tiles[i]), i);
+        this.neighbour = new Int32Array(n * 6);
+        this.interior = new Array(n).fill(false);
+        this.outlet = new Array(n).fill(false);
+        this.seaAt = new Array(n * 6).fill(false);
+        this.step = new Array(n).fill(0);
+        this.dist = new Array(n * 6).fill(Infinity);
+        this.edge = new Array(n * 6).fill(0);
+        const coastal = new Array(n).fill(false);
+        const isBlocked = new Array(n).fill(false);
+        if (blocked)
+            for (let i = 0; i < n; i++)
+                isBlocked[i] = blocked.has(this.tiles[i]);
+        for (let i = 0; i < n; i++) {
+            const tile = this.tiles[i];
+            const ns = neighbors(tile);
+            for (let d = 0; d < 6; d++) {
+                // Water never flows into a blocked tile (a bog): it is as good as not being there.
+                const idx = this.index.get(coordKey(ns[d]));
+                this.neighbour[i * 6 + d] = idx !== undefined && !isBlocked[idx] ? idx : -1;
+            }
+            // Neighbours that are island tiles are land without asking the (costly) sampler.
+            coastal[i] = false;
+            for (let d = 0; d < 6; d++) {
+                this.seaAt[i * 6 + d] = !this.index.has(coordKey(ns[d])) && !isLand(ns[d]);
+                coastal[i] = coastal[i] || this.seaAt[i * 6 + d];
+            }
+            if (isBlocked[i])
+                coastal[i] = false;
+            this.interior[i] = !coastal[i] && !isBlocked[i];
+            this.step[i] =
+                1.0 +
+                    DRAINAGE_NOISE * hash2(tile.q, tile.r, seed + 53) +
+                    VALLEY_NOISE * valueNoise(tile.q, tile.r, seed + 61, VALLEY_SCALE) +
+                    (terrainOf(tile) === 'mountain' ? MOUNTAIN_COST : 0.0);
+        }
+        for (let i = 0; i < n; i++) {
+            const fromMountain = terrainOf(this.tiles[i]) === 'mountain';
+            for (let d = 0; d < 6; d++) {
+                const nb = this.neighbour[i * 6 + d];
+                this.edge[i * 6 + d] = nb >= 0 && !fromMountain && terrainOf(this.tiles[nb]) === 'mountain' ? MOUNTAIN_ENTRY_COST : 0.0;
+            }
+        }
+        const outlets = this.pickOutlets(coastal, seed, outletPerBasin);
+        this.outletCount = outlets.length;
+        const heap = new Heap();
+        for (const o of outlets) {
+            this.outlet[o] = true;
+            for (let j = 0; j < 6; j++) {
+                // Head-on only: the river arrives from direction j, so the sea must lie straight ahead.
+                if (!this.seaAt[o * 6 + ((j + 3) % 6)])
+                    continue;
+                this.dist[o * 6 + j] = 0.0;
+                heap.push(0.0, o * 6 + j);
+            }
+        }
+        while (heap.count > 0) {
+            const { priority: d, item: s } = heap.pop();
+            if (d > this.dist[s])
+                continue;
+            const node = Math.floor(s / 6);
+            const j = s % 6;
+            const t = this.neighbour[node * 6 + j];
+            if (t < 0 || !this.interior[t])
+                continue;
+            const outDir = (j + 3) % 6;
+            for (let i = 0; i < 6; i++) {
+                if (i === outDir)
+                    continue;
+                const nd = d + this.step[node] + this.turnCost(i, outDir) + this.edge[t * 6 + outDir];
+                const ts = t * 6 + i;
+                if (nd < this.dist[ts]) {
+                    this.dist[ts] = nd;
+                    heap.push(nd, ts);
+                }
+            }
+        }
+    }
+    /** The cost of turning from arrival direction `inDir` to leave by `outDir`; negative for a 180 degree hairpin. */
+    turnCost(inDir, outDir) {
+        if (inDir < 0)
+            return 0.0;
+        if (inDir === outDir)
+            return -1.0;
+        const opposite = (inDir + 3) % 6;
+        const turn = Math.min((outDir - opposite + 6) % 6, (opposite - outDir + 6) % 6);
+        return turn === 0 ? 0.0 : turn === 1 ? BEND_COST : SHARP_BEND_COST;
+    }
+    /** The cheapest way on from a tile entered from `inDir` (-1 for a spring); `out` is -1 when nothing leads on. */
+    bestOut(tile, inDir, excluded) {
+        let best = -1;
+        let bestCost = Infinity;
+        for (let o = 0; o < 6; o++) {
+            const n = this.neighbour[tile * 6 + o];
+            if (n < 0 || (inDir >= 0 && o === inDir))
+                continue;
+            const d = this.dist[n * 6 + ((o + 3) % 6)];
+            if (d === Infinity || (excluded !== null && excluded(n)))
+                continue;
+            const cost = d + this.step[n] + this.turnCost(inDir, o) + this.edge[tile * 6 + o];
+            if (cost < bestCost) {
+                bestCost = cost;
+                best = o;
+            }
+        }
+        return { out: best, cost: bestCost };
+    }
+    /**
+     * Like `bestOut` but pulled towards `target`: a direction costs `MEANDER_STEER` extra when it is not the target (half that
+     * when 60 degrees off it), and tiles on the walk are not offered. -1 when nothing qualifies — mirrors `Drainage.SteeredOut`.
+     */
+    steeredOut(tile, inDir, target, onPath) {
+        let best = -1;
+        let bestCost = Infinity;
+        for (let o = 0; o < 6; o++) {
+            const n = this.neighbour[tile * 6 + o];
+            if (n < 0 || (inDir >= 0 && o === inDir))
+                continue;
+            const d = this.dist[n * 6 + ((o + 3) % 6)];
+            if (d === Infinity || onPath[n])
+                continue;
+            const off = Math.min((o - target + 6) % 6, (target - o + 6) % 6);
+            const steer = off === 0 ? 0.0 : off === 1 ? MEANDER_STEER * 0.5 : MEANDER_STEER;
+            const cost = d + this.step[n] + this.turnCost(inDir, o) + this.edge[tile * 6 + o] + steer;
+            if (cost < bestCost) {
+                bestCost = cost;
+                best = o;
+            }
+        }
+        return best;
+    }
+    pickOutlets(coastal, seed, outletPerBasin) {
+        const candidates = [];
+        const score = [];
+        for (let i = 0; i < this.tiles.length; i++) {
+            if (!coastal[i])
+                continue;
+            let receives = false;
+            for (let d = 0; d < 6 && !receives; d++) {
+                const n = this.neighbour[i * 6 + d];
+                // Flow from direction d leaves head-on only if the sea lies straight ahead of it.
+                receives = n >= 0 && this.interior[n] && this.seaAt[i * 6 + ((d + 3) % 6)];
+            }
+            if (!receives)
+                continue;
+            const tile = this.tiles[i];
+            let nearby = 0;
+            for (let dq = -3; dq <= 3; dq++) {
+                for (let dr = Math.max(-3, -dq - 3); dr <= Math.min(3, -dq + 3); dr++) {
+                    if (this.index.has(coordKey({ q: tile.q + dq, r: tile.r + dr })))
+                        nearby++;
+                }
+            }
+            candidates.push(i);
+            score.push(nearby + hash2(tile.q, tile.r, seed + 59));
+        }
+        const outlets = [];
+        if (candidates.length === 0)
+            return outlets;
+        const k = Math.min(MAX_OUTLETS, Math.max(1, Math.floor(this.tiles.length / OUTLET_TILES_PER + 0.5)));
+        let first = 0;
+        for (let i = 1; i < candidates.length; i++)
+            if (score[i] > score[first])
+                first = i;
+        outlets.push(candidates[first]);
+        const minDistance = candidates.map((c) => hexDistance(this.tiles[c], this.tiles[candidates[first]]));
+        while (outlets.length < k) {
+            let best = 0;
+            for (let i = 1; i < candidates.length; i++) {
+                if (minDistance[i] > minDistance[best] ||
+                    (minDistance[i] === minDistance[best] && score[i] > score[best])) {
+                    best = i;
+                }
+            }
+            if (minDistance[best] < MIN_OUTLET_SPACING || minDistance[best] === 0)
+                break;
+            outlets.push(candidates[best]);
+            for (let i = 0; i < candidates.length; i++) {
+                minDistance[i] = Math.min(minDistance[i], hexDistance(this.tiles[candidates[i]], this.tiles[candidates[best]]));
+            }
+        }
+        if (outletPerBasin)
+            this.addBasinOutlets(outlets, candidates, score);
+        return outlets;
+    }
+    /**
+     * One more outlet for every basin (connected group of interior tiles) that no outlet drains: the best-scored candidate that
+     * receives from it. The outlets above are spread by count, so a basin cut off by a neck of coastal tiles (a peninsula, two
+     * landmasses joined by a strip of beach) can be left without one, and nothing in it can reach the sea — mirrors `AddBasinOutlets`.
+     */
+    addBasinOutlets(outlets, candidates, score) {
+        const n = this.tiles.length;
+        const basin = new Int32Array(n).fill(-1);
+        let basins = 0;
+        for (let i = 0; i < n; i++) {
+            if (!this.interior[i] || basin[i] !== -1)
+                continue;
+            basin[i] = basins;
+            const stack = [i];
+            while (stack.length > 0) {
+                const t = stack.pop();
+                for (let d = 0; d < 6; d++) {
+                    const m = this.neighbour[t * 6 + d];
+                    if (m >= 0 && this.interior[m] && basin[m] === -1) {
+                        basin[m] = basins;
+                        stack.push(m);
+                    }
+                }
+            }
+            basins++;
+        }
+        const drained = new Array(basins).fill(false);
+        const markDrained = (o) => {
+            for (let d = 0; d < 6; d++) {
+                const m = this.neighbour[o * 6 + d];
+                if (m >= 0 && this.interior[m] && this.seaAt[o * 6 + ((d + 3) % 6)])
+                    drained[basin[m]] = true;
+            }
+        };
+        for (const o of outlets)
+            markDrained(o);
+        // The best candidate per basin it receives from (first in tile order on a tie).
+        const best = new Int32Array(basins).fill(-1);
+        for (let c = 0; c < candidates.length; c++) {
+            const o = candidates[c];
+            for (let d = 0; d < 6; d++) {
+                const m = this.neighbour[o * 6 + d];
+                if (m < 0 || !this.interior[m] || !this.seaAt[o * 6 + ((d + 3) % 6)])
+                    continue;
+                const b = basin[m];
+                if (best[b] === -1 || score[c] > score[best[b]])
+                    best[b] = c;
+            }
+        }
+        for (let b = 0; b < basins; b++) {
+            if (drained[b] || best[b] === -1)
+                continue;
+            const o = candidates[best[b]];
+            outlets.push(o);
+            markDrained(o);
+        }
+    }
+}
+/**
+ * Follows the drainage pointers from a spring to its outlet, after first looking for a nearby
+ * trunk to join — mirrors `RiverGenerator.TraceDrainage`. Returns null when the walk is dropped.
+ */
+function traceDrainage(drainage, spring, claims, onPath, anyClaims, startIn = -1) {
+    // The meandering walk can box itself in; then the plain cheapest way is better than no river.
+    if (MEANDER_STEER > 0) {
+        const steered = traceDrainageWalk(drainage, spring, claims, onPath, anyClaims, startIn, true);
+        if (steered && steered.path.length >= MIN_RIVER_LENGTH)
+            return steered;
+    }
+    return traceDrainageWalk(drainage, spring, claims, onPath, anyClaims, startIn, false);
+}
+function traceDrainageWalk(drainage, spring, claims, onPath, anyClaims, startIn, steer) {
+    const seed = drainage.seed;
+    const stretchSpan = MEANDER_MAX_STRETCH - MEANDER_MIN_STRETCH + 1;
+    let side = hash2(spring.q, spring.r, seed + 113) < 0.5 ? 1 : -1;
+    let stretch = 0;
+    let left = MEANDER_MIN_STRETCH + Math.floor(hash2(spring.q, spring.r, seed + 127) * stretchSpan);
+    let len = left;
+    const path = [spring];
+    const tiles = [];
+    let current = drainage.index.get(coordKey(spring));
+    tiles.push(current);
+    onPath[current] = true;
+    try {
+        let inDir = startIn;
+        let guard = drainage.tiles.length * 2;
+        const taken = (i) => claims[i] !== null || onPath[i];
+        const step = (to, dir) => {
+            path.push(drainage.tiles[to]);
+            tiles.push(to);
+            onPath[to] = true;
+            current = to;
+            inDir = (dir + 3) % 6;
+        };
+        if (anyClaims) {
+            // Join a nearby trunk at a drawable Y unless that is much longer than running on alone.
+            const route = searchJunction(drainage, path, claims, onPath, drainage.bestOut(current, inDir, null).cost + MERGE_SLACK, MERGE_REACH, RIVER_STREAM_BONUS);
+            if (route) {
+                path.push(...route);
+                return { path, merged: true };
+            }
+        }
+        while (guard-- > 0) {
+            // Outlets are seeded head-on only (dist is finite at an outlet just for arrivals with sea straight ahead)
+            // and bestOut never offers an infinite state, so the walk can only end on an outlet as a delta.
+            if (drainage.outlet[current])
+                return { path, merged: false };
+            const { out: naturalOut, cost: naturalCost } = drainage.bestOut(current, inDir, null);
+            if (naturalOut < 0)
+                return null;
+            let outDir = naturalOut;
+            if (steer && inDir >= 0) {
+                // Each stretch of the walk bends to one side through its middle half, then the side flips: the river arcs.
+                if (left <= 0) {
+                    side = -side;
+                    stretch++;
+                    left = MEANDER_MIN_STRETCH + Math.floor(hash2(spring.q + stretch * 7, spring.r, seed + 127) * stretchSpan);
+                    len = left;
+                }
+                left--;
+                const at = len - 1 - left;
+                const bent = at >= len * 0.25 && at < len * 0.75;
+                const target = bent ? (((naturalOut + side) % 6) + 6) % 6 : naturalOut;
+                const steered = drainage.steeredOut(current, inDir, target, onPath);
+                if (steered >= 0)
+                    outDir = steered;
+            }
+            const next = drainage.neighbour[current * 6 + outDir];
+            if (!taken(next)) {
+                if (!anyClaims || crowding(drainage, claims, next) === 0.0) {
+                    step(next, outDir);
+                    continue;
+                }
+                // About to run alongside an earlier river: join it if a drawable Y is near.
+                const beside = searchJunction(drainage, path, claims, onPath, naturalCost + MERGE_SLACK, MERGE_REACH, RIVER_STREAM_BONUS);
+                if (beside) {
+                    path.push(...beside);
+                    return { path, merged: true };
+                }
+                step(next, outDir);
+                continue;
+            }
+            const claim = claims[next];
+            if (claim && joinable(claim) && confluenceKind(claim.in1, (outDir + 3) % 6, claim.out) !== null) {
+                path.push(drainage.tiles[next]);
+                return { path, merged: true };
+            }
+            if (anyClaims) {
+                const route = searchJunction(drainage, path, claims, onPath, naturalCost + MERGE_SLACK, MERGE_REACH, RIVER_STREAM_BONUS);
+                if (route) {
+                    path.push(...route);
+                    return { path, merged: true };
+                }
+            }
+            // No drawable junction: run on alone to the nearest free coast (a new mouth). Head-on mouths are rarer than
+            // any coastal tile, so the reach is 10x MERGE_REACH: at 3x about 2% more rivers found none and were dropped.
+            const alone = searchJunction(drainage, path, claims, onPath, Infinity, MERGE_REACH * 10.0, 0.0, true);
+            if (alone) {
+                path.push(...alone);
+                return { path, merged: false };
+            }
+            return null;
+        }
+        return null;
+    }
+    finally {
+        for (const t of tiles)
+            onPath[t] = false;
+    }
+}
+/**
+ * The cheapest way for the walk (at its last tile) to join an earlier river at a Y the art can
+ * draw — mirrors `RiverGenerator.SearchJunction`. Returns the tiles to append (ending on the
+ * trunk tile), or null.
+ */
+function searchJunction(drainage, path, claims, onPath, limit, reach, riverStreamBonus, toMouth = false) {
+    const last = path[path.length - 1];
+    const start = drainage.index.get(coordKey(last));
+    const startIn = path.length > 1 ? directionIndex(last, path[path.length - 2]) : -1;
+    const startKey = start * 6 + Math.max(startIn, 0);
+    const cost = new Map([[startKey, 0.0]]);
+    const parent = new Map([[startKey, -1]]);
+    const heap = new Heap();
+    heap.push(0.0, startKey);
+    let found = false;
+    let bestTotal = limit;
+    let bestState = -1;
+    let bestJunction = -1;
+    while (heap.count > 0) {
+        const { priority: d, item: state } = heap.pop();
+        if (d > cost.get(state) || d > bestTotal || d > reach)
+            continue;
+        const tile = Math.floor(state / 6);
+        const inDir = state === startKey ? startIn : state % 6;
+        for (let dir = 0; dir < 6; dir++) {
+            const turn = drainage.turnCost(inDir, dir);
+            const n = drainage.neighbour[tile * 6 + dir];
+            if (turn < 0 || n < 0)
+                continue;
+            const claim = claims[n];
+            if (toMouth) {
+                // Alone to the sea: any free coastal tile with sea straight ahead is a new mouth.
+                if (claim || onPath[n])
+                    continue;
+                if (!drainage.interior[n]) {
+                    // A new mouth must be head-on too: the sea straight ahead of the step.
+                    if (!drainage.seaAt[n * 6 + dir])
+                        continue;
+                    const total = d + turn + drainage.step[n] + drainage.edge[tile * 6 + dir] + crowding(drainage, claims, n);
+                    if (!found || total < bestTotal) {
+                        found = true;
+                        bestTotal = total;
+                        bestState = state;
+                        bestJunction = n;
+                    }
+                    continue;
+                }
+            }
+            else if (claim) {
+                if (!joinable(claim) || confluenceKind(claim.in1, (dir + 3) % 6, claim.out) === null)
+                    continue;
+                const total = d + turn + drainage.step[n] + drainage.edge[tile * 6 + dir] + drainage.dist[n * 6 + claim.in1];
+                // A stream reaching a river trunk prefers the wide Y: the river-stream Y needs no widening first.
+                const preferred = claim.downstream && confluenceKind(claim.in1, (dir + 3) % 6, claim.out) === 'wide' ? total - riverStreamBonus : total;
+                if (total <= limit && (!found || preferred < bestTotal)) {
+                    found = true;
+                    bestTotal = preferred;
+                    bestState = state;
+                    bestJunction = n;
+                }
+                continue;
+            }
+            if (!drainage.interior[n] || onPath[n] || claim)
+                continue;
+            const key = n * 6 + ((dir + 3) % 6);
+            const nd = d + turn + drainage.step[n] + drainage.edge[tile * 6 + dir] + (toMouth ? crowding(drainage, claims, n) : 0.0);
+            const known = cost.get(key);
+            if (nd <= reach && (known === undefined || nd < known)) {
+                cost.set(key, nd);
+                parent.set(key, state);
+                heap.push(nd, key);
+            }
+        }
+    }
+    if (!found)
+        return null;
+    const route = [drainage.tiles[bestJunction]];
+    for (let cur = bestState; cur >= 0 && cur !== startKey; cur = parent.get(cur))
+        route.unshift(drainage.tiles[Math.floor(cur / 6)]);
+    // A shortest route in state space can, rarely, cross its own tile in another state.
+    return new Set(route.map((c) => coordKey(c))).size === route.length ? route : null;
+}
+/** Extra cost per neighbour that is an earlier river, for a walk running on alone — mirrors `RiverGenerator.CrowdingCost`. */
+const CROWDING_COST = 2.0;
+/** Extra cost of a tile beside an earlier river on a walk that is not joining it — mirrors `RiverGenerator.Crowding`. */
+function crowding(drainage, claims, tile) {
+    let total = 0.0;
+    for (let d = 0; d < 6; d++) {
+        const n = drainage.neighbour[tile * 6 + d];
+        if (n >= 0 && claims[n] !== null)
+            total += CROWDING_COST;
+    }
+    return total;
+}
+/** Spring candidates — mirrors `RiverGenerator.SpringCandidates`. */
+function springCandidates(islandTiles, terrainOf, islandLand) {
+    const strict = [];
+    const loose = [];
+    for (const cluster of clusterMountains(islandTiles, terrainOf)) {
+        if (cluster.length < 2)
+            continue;
+        for (const tile of cluster) {
+            let seaAdjacent = false;
+            let rangeEdge = false;
+            for (const n of neighbors(tile)) {
+                if (!islandLand.has(coordKey(n))) {
+                    seaAdjacent = true;
+                    break;
+                }
+                if (terrainOf(n) !== 'mountain')
+                    rangeEdge = true;
+            }
+            if (seaAdjacent)
+                continue;
+            loose.push(tile);
+            if (rangeEdge)
+                strict.push(tile);
+        }
+    }
+    return strict.length > 0 ? strict : loose;
+}
+/** Springs by farthest-point sampling over the candidates the drainage can carry to an outlet — mirrors `RiverGenerator.PickSprings`. */
+function pickSprings(allCandidates, islandTileCount, depthAt, drainage, seed) {
+    const candidates = sortedByQR(allCandidates.filter((c) => drainage.bestOut(drainage.index.get(coordKey(c)), -1, null).out >= 0));
+    const springs = [];
+    if (candidates.length === 0)
+        return springs;
+    const hash = candidates.map((c) => hash2(c.q, c.r, seed + 41));
+    const k = Math.min(MAX_SPRINGS_PER_ISLAND, Math.max(1, Math.floor(islandTileCount / RIVER_TILES_PER_SPRING + 0.5)));
+    let first = 0;
+    let firstDepth = depthAt(candidates[0]) ?? 0;
+    for (let i = 1; i < candidates.length; i++) {
+        const d = depthAt(candidates[i]) ?? 0;
+        if (d < firstDepth || (d === firstDepth && hash[i] > hash[first])) {
+            first = i;
+            firstDepth = d;
+        }
+    }
+    springs.push(candidates[first]);
+    const minDistance = candidates.map((c) => hexDistance(c, candidates[first]));
+    while (springs.length < k) {
+        let best = -1;
+        for (let i = 0; i < candidates.length; i++) {
+            if (best < 0 ||
+                minDistance[i] > minDistance[best] ||
+                (minDistance[i] === minDistance[best] && hash[i] > hash[best])) {
+                best = i;
+            }
+        }
+        if (minDistance[best] < MIN_SPRING_SPACING || minDistance[best] === 0)
+            break;
+        springs.push(candidates[best]);
+        for (let i = 0; i < candidates.length; i++) {
+            minDistance[i] = Math.min(minDistance[i], hexDistance(candidates[i], candidates[best]));
+        }
+    }
+    return springs;
+}
+/**
+ * The pure river-tracing core — bit-exact mirror of `RiverGenerator.Generate` (backend).
+ *
+ * `terrainOf` only needs to answer for hexes in `islandTiles`; `depthAt` and `globalIsLand`
+ * mirror the backend's `sampler.IslandDepthAt`/`WastedDepthAt` and `sampler.IsLand` — callers pick
+ * the green or wasted pair the same way `WorldGenerator.Generate` does. `globalIsLand` is only
+ * consulted when `wasted` is false.
+ *
+ * Green islands get a drainage network: outlets on bays, a noisy shortest-path field over
+ * (tile, arrival direction) states, springs that follow its pointers (paths that meet share the
+ * rest of their route), junctions only where the art can draw the Y, then widths (stream, one
+ * widening, river). Lava (wasted) rivers keep the older independent-walk rule
+ * (`allowConfluence: false`, one spring per cluster, river width).
+ */
+export function generateRivers(islandTiles, terrainOf, depthAt, globalIsLand, worldSeed, islandIndex, wasted = false, allowConfluence = true, stats) {
+    return generateRiversWithBogs(islandTiles, terrainOf, depthAt, globalIsLand, worldSeed, islandIndex, wasted, allowConfluence, stats).rivers;
+}
+/**
+ * Like `generateRivers`, and also returns the island's bogland (`BogGenerator`): lakes with a river re-routed through them,
+ * creeks, moss, sinks, spawns and enclosed sea pockets turned into lakes. Bogs exist only on green islands.
+ */
+export function generateRiversWithBogs(islandTiles, terrainOf, depthAt, globalIsLand, worldSeed, islandIndex, wasted = false, allowConfluence = true, stats) {
+    const islandLand = new Set(islandTiles.map((c) => coordKey(c)));
+    // Large prime spacing so two islands never draw from overlapping noise — the same trick
+    // `giantPlacement.ts`/`IslandNames` use for their own per-index offsets.
+    const seed = worldSeed + islandIndex * 104_729;
+    const isLand = wasted ? (c) => islandLand.has(coordKey(c)) : globalIsLand;
+    if (wasted || !allowConfluence) {
+        const springs = [];
+        for (const cluster of clusterMountains(islandTiles, terrainOf)) {
+            if (cluster.length < 2)
+                continue;
+            springs.push(pickSpring(cluster, seed));
+        }
+        const paths = [];
+        for (const spring of springs) {
+            const { path, outcome } = tracePath(spring, islandLand, depthAt, isLand, seed);
+            if (outcome === 'sea' && path.length >= MIN_RIVER_LENGTH)
+                paths.push(path);
+        }
+        const survivors = resolveCollisions(paths, allowConfluence);
+        return { rivers: buildNodes(survivors).map((n) => nodeToTile(n, 'river', wasted)), bogs: [] };
+    }
+    // Enclosed sea pockets become bog lakes with a bog ring before any river is traced: the drainage
+    // network treats the lake as land it cannot enter and the ring as blocked.
+    const bogs = new BogGenerator(islandTiles, terrainOf, isLand, seed, stats);
+    bogs.findPockets();
+    const pocketWater = bogs.pocketWater;
+    const riverLand = pocketWater.size === 0 ? isLand : (c) => isLand(c) || pocketWater.has(c);
+    const candidates = springCandidates(islandTiles, terrainOf, islandLand);
+    // An island without mountains has no river to run through a bog, but the bog guarantee may still spawn one.
+    const guaranteeOnly = candidates.length === 0;
+    if (guaranteeOnly && !bogs.guaranteeApplies) {
+        bogs.fillHoles(null);
+        return { rivers: [], bogs: bogs.classify() };
+    }
+    const drainage = new Drainage(islandTiles, terrainOf, riverLand, seed, bogs.pocketRing);
+    if (stats && !guaranteeOnly)
+        stats.outlets += drainage.outletCount;
+    const springs = guaranteeOnly ? [] : pickSprings(candidates, islandTiles.length, depthAt, drainage, seed);
+    const order = springs
+        .map((spring) => ({ spring, cost: drainage.bestOut(drainage.index.get(coordKey(spring)), -1, null).cost }))
+        .sort((a, b) => b.cost - a.cost || a.spring.q - b.spring.q || a.spring.r - b.spring.r)
+        .map((x) => x.spring);
+    const claims = new Array(drainage.tiles.length).fill(null);
+    const onPath = new Array(drainage.tiles.length).fill(false);
+    const paths = [];
+    const mergedFlags = [];
+    for (const spring of order) {
+        if (claims[drainage.index.get(coordKey(spring))] !== null)
+            continue;
+        const traced = traceDrainage(drainage, spring, claims, onPath, paths.length > 0);
+        if (!traced) {
+            if (stats)
+                stats.droppedRivers++;
+            continue;
+        }
+        if (traced.path.length < MIN_RIVER_LENGTH)
+            continue;
+        commit(drainage, traced.path, traced.merged, claims);
+        paths.push(traced.path);
+        mergedFlags.push(traced.merged);
+        if (stats) {
+            stats.rivers++;
+            if (traced.merged)
+                stats.merges++;
+        }
+    }
+    if (stats)
+        stats.springs += springs.length;
+    // Bog sites: through-river lakes (the river is re-routed through them), sinks and spawns.
+    const bp = new BogPaths(paths, mergedFlags);
+    const widthTrial = (trial) => assignWidths(buildNodes(trial.paths, trial.forcedOut, trial.bogIn), seed, undefined, trial.requireRiver);
+    const traceRiver = (exit, startIn, current, blocked) => {
+        // A spawned river must reach the sea from wherever the bog is: every basin gets an outlet.
+        const d2 = new Drainage(islandTiles, terrainOf, riverLand, seed, blocked, true);
+        const claims2 = new Array(d2.tiles.length).fill(null);
+        for (let k = 0; k < current.paths.length; k++)
+            commit(d2, current.paths[k], current.merged[k], claims2);
+        const onPath2 = new Array(d2.tiles.length).fill(false);
+        const traced = traceDrainage(d2, exit, claims2, onPath2, current.paths.length > 0, startIn);
+        return traced ? traced.path : null;
+    };
+    if (guaranteeOnly)
+        bogs.placeGuaranteeOnly(bp, widthTrial, traceRiver);
+    else
+        bogs.placeSites(bp, widthTrial, traceRiver);
+    // A stream out of every mountain-enclosed valley that the rivers and bogs left cut off.
+    const bogTiles = bogs.classify();
+    const settled = assignWidths(buildNodes(bp.paths, bp.forcedOut, bp.bogIn), seed, undefined, bp.requireRiver);
+    carveValleyStreams(islandTiles, islandLand, terrainOf, seed, bogTiles, bp, settled, (blocked) => new Drainage(islandTiles, terrainOf, riverLand, seed, blocked), stats);
+    const nodes = buildNodes(bp.paths, bp.forcedOut, bp.bogIn);
+    return { rivers: assignWidths(nodes, seed, stats, bp.requireRiver), bogs: bogTiles };
+}
+/**
+ * River tiles for hand-laid `paths` (each from its spring to its mouth, or to the tile where it joins another path), with the
+ * shapes and widths the generator gives a traced network: the same `buildNodes` + `assignWidths` pass, so a stream widens
+ * where the generator would widen it. For fixed example maps (the docs pages), not for worlds.
+ */
+export function riverTilesFromPaths(paths, seed) {
+    return assignWidths(buildNodes(paths), seed, undefined);
+}
+// ---------------------------------------------------------------------------------------------
+// Valley streams: a stream out of every mountain-enclosed valley of at least VALLEY_MIN_HEXES.
+// ---------------------------------------------------------------------------------------------
+/** A walkable region cut off from the island's main one by mountains alone is given a stream out once it has this many hexes. */
+export const VALLEY_MIN_HEXES = 100;
+const flowsOutAsRiver = (t) => t.width === undefined || t.width === 'river' || t.width === 'widen' || t.width === 'riverstream';
+/**
+ * Whether a river tile is a wide river (impassable to a land army): at least two of its arms are river
+ * width — mirrors `RiverGenerator.IsWideRiver` (and the preview's `isWideRiverTile`). An in-arm is river
+ * width when the upstream tile flows out as river (a lake or creek upstream feeds a river tile at river
+ * width), the out-arm (a mouth's sea side included) when the tile itself does.
+ */
+export function isWideRiverTile(tile, riverAt) {
+    const out = flowsOutAsRiver(tile);
+    let arms = 0;
+    const ns = neighbors(tile);
+    for (const d of tile.inDirections) {
+        const up = riverAt(ns[TILE_ORIENTATIONS.indexOf(d)]);
+        if (up ? flowsOutAsRiver(up) : tile.width === undefined || tile.width === 'river')
+            arms++;
+    }
+    if ((tile.outDirection || tile.shape === 'mouth') && out)
+        arms++;
+    return arms >= 2;
+}
+/** The island's terrain as the movement rules see it (bogland laid over the seed's terrain), and the questions the valley pass asks of it. */
+function valleyGround(islandTiles, islandLand, terrainOf, bogTiles) {
+    const tilesSorted = sortedByQR(islandTiles);
+    const bogByKey = new Map();
+    const blocked = new Set();
+    for (const t of bogTiles) {
+        bogByKey.set(coordKey(t), t);
+        blocked.add(coordKey(t));
+        if (t.kind !== 'bog')
+            for (const n of neighbors(t))
+                blocked.add(coordKey(n));
+    }
+    const terrainHere = (c) => {
+        const k = coordKey(c);
+        const bog = bogByKey.get(k);
+        if (bog)
+            return bog.kind === 'lake' ? 'lake' : 'bog';
+        return islandLand.has(k) ? terrainOf(c) : 'sea';
+    };
+    const baseTerrain = (c) => (islandLand.has(coordKey(c)) ? terrainOf(c) : 'sea');
+    const analyse = (rivers) => {
+        const riverAt = new Map();
+        for (const t of rivers)
+            riverAt.set(coordKey(t), t);
+        const wide = new Set();
+        for (const t of rivers)
+            if (isWideRiverTile(t, (c) => riverAt.get(coordKey(c))))
+                wide.add(coordKey(t));
+        const walkable = (c) => {
+            const k = coordKey(c);
+            if (riverAt.has(k))
+                return !wide.has(k);
+            const t = terrainHere(c);
+            return t !== 'sea' && t !== 'lake' && t !== 'mountain';
+        };
+        const regions = [];
+        const regionOf = new Map();
+        for (const tile of tilesSorted) {
+            const k = coordKey(tile);
+            if (regionOf.has(k) || !walkable(tile))
+                continue;
+            const id = regions.length;
+            const region = [tile];
+            regionOf.set(k, id);
+            for (let i = 0; i < region.length; i++) {
+                for (const n of neighbors(region[i])) {
+                    const nk = coordKey(n);
+                    if (islandLand.has(nk) && !regionOf.has(nk) && walkable(n)) {
+                        regionOf.set(nk, id);
+                        region.push(n);
+                    }
+                }
+            }
+            regions.push(region);
+        }
+        let main = 0;
+        for (let i = 1; i < regions.length; i++)
+            if (regions[i].length > regions[main].length)
+                main = i;
+        return { riverAt, regions, regionOf, main, wide };
+    };
+    /** Closed in by mountains alone: every non-walkable hex on the region's border is a mountain without a wide river. */
+    const mountainEnclosed = (region, w, id) => {
+        for (const c of region) {
+            for (const n of neighbors(c)) {
+                const nk = coordKey(n);
+                if (w.regionOf.get(nk) === id)
+                    continue;
+                if (!islandLand.has(nk) || w.wide.has(nk) || terrainHere(n) !== 'mountain')
+                    return false;
+            }
+        }
+        return true;
+    };
+    /** The cut-off valleys: regions but the largest that mountains alone close in and that have at least `VALLEY_MIN_HEXES` hexes; largest first, then by lowest (q, r). */
+    const candidates = (w) => {
+        const found = [];
+        w.regions.forEach((region, id) => {
+            if (id !== w.main && region.length >= VALLEY_MIN_HEXES && mountainEnclosed(region, w, id)) {
+                found.push({ size: region.length, first: region[0] });
+            }
+        });
+        return found.sort((x, y) => y.size - x.size || x.first.q - y.first.q || x.first.r - y.first.r);
+    };
+    return { blocked, terrainHere, baseTerrain, analyse, mountainEnclosed, candidates };
+}
+/**
+ * The mountain-enclosed valleys of at least `VALLEY_MIN_HEXES` hexes that the given rivers and bogland leave cut off from an
+ * island's main walkable region, in the order the valley pass carves them — mirrors `RiverGenerator.ValleyCandidates`.
+ */
+export function valleyCandidates(islandTiles, terrainOf, rivers, bogTiles) {
+    const ground = valleyGround(islandTiles, new Set(islandTiles.map((c) => coordKey(c))), terrainOf, bogTiles);
+    return ground.candidates(ground.analyse(rivers));
+}
+/**
+ * Valley streams for one green island — mirrors `RiverGenerator.CarveValleyStreams`. The island's
+ * walkable land (land that is not mountain, plus every non-wide river tile) is flood-filled; every
+ * region but the largest that is closed in by mountains alone (no sea, lake or wide river on its
+ * border) and has at least VALLEY_MIN_HEXES hexes gets one stream, largest first then by lowest (q, r):
+ * from a hex of the valley across the fewest mountain hexes to the nearest reachable hex (ties: the
+ * target's (q, r), then the start's), joining the river there or, on plain land, running on to a river,
+ * a lake or the sea like any spring's stream. A carve that breaks a map rule, cannot be drawn or cuts
+ * other land off is skipped. Edits `bp` and returns the island's rivers.
+ */
+function carveValleyStreams(islandTiles, islandLand, terrainOf, seed, bogTiles, bp, startRivers, makeDrainage, stats) {
+    const { blocked, terrainHere, baseTerrain, analyse, mountainEnclosed, candidates: findCandidates } = valleyGround(islandTiles, islandLand, terrainOf, bogTiles);
+    let walk = analyse(startRivers);
+    let tiles = startRivers;
+    const candidates = findCandidates(walk);
+    if (candidates.length === 0)
+        return tiles;
+    candidates.sort((a, b) => b.size - a.size || a.first.q - b.first.q || a.first.r - b.first.r);
+    if (stats)
+        stats.valleyCandidates += candidates.length;
+    const skip = (reason) => {
+        if (stats)
+            stats[reason]++;
+    };
+    let ruleBase = -1;
+    for (const cand of candidates) {
+        const id = walk.regionOf.get(coordKey(cand.first));
+        if (id === undefined) {
+            skip('valleySkippedChanged');
+            continue;
+        }
+        if (id === walk.main) {
+            if (stats)
+                stats.valleysJoined++;
+            continue;
+        }
+        const region = walk.regions[id];
+        if (region.length < VALLEY_MIN_HEXES || !mountainEnclosed(region, walk, id)) {
+            skip('valleySkippedChanged');
+            continue;
+        }
+        const { riverAt, regionOf } = walk;
+        const mainSet = (k) => regionOf.get(k) === walk.main;
+        const pathIns = new Map();
+        for (const path of bp.paths)
+            for (let i = 1; i < path.length; i++)
+                pathIns.set(coordKey(path[i]), (pathIns.get(coordKey(path[i])) ?? 0) + 1);
+        // A river tile a new stream can join from `from`: reachable, a plain one-inflow tile, and the Y is drawable.
+        const riverTarget = (t, from) => {
+            const k = coordKey(t);
+            if (!mainSet(k) || walk.wide.has(k))
+                return false;
+            if (t.shape !== 'straight' && t.shape !== 'bend' && t.shape !== 'bend60')
+                return false;
+            if (t.inDirections.length !== 1 || !t.outDirection)
+                return false;
+            if (bp.forcedOut.has(k) || bp.bogIn.has(k) || pathIns.get(k) !== 1)
+                return false;
+            const ins = TILE_ORIENTATIONS.indexOf(t.inDirections[0]);
+            const out = TILE_ORIENTATIONS.indexOf(t.outDirection);
+            const ns = neighbors(t);
+            if (!riverAt.has(coordKey(ns[ins])) || !riverAt.has(coordKey(ns[out])))
+                return false;
+            return confluenceKind(ins, directionIndex(t, from), out) !== null;
+        };
+        // Plain land a new stream can start running on from: reachable, no river, off the bogland, not on the coast.
+        const plainTarget = (c) => {
+            const k = coordKey(c);
+            return mainSet(k) && !riverAt.has(k) && !blocked.has(k) && neighbors(c).every((n) => islandLand.has(coordKey(n)));
+        };
+        const riverNeighbours = (c) => {
+            const out = [];
+            for (const n of neighbors(c)) {
+                const t = riverAt.get(coordKey(n));
+                if (t)
+                    out.push(t);
+            }
+            return out;
+        };
+        // Mountain hexes a stream may run over: open (no river beside) or terminal (one joinable river beside, where it ends).
+        const usable = new Map();
+        const usableAt = (h) => {
+            const k = coordKey(h);
+            const known = usable.get(k);
+            if (known !== undefined)
+                return known;
+            let result = null;
+            if (islandLand.has(k) && terrainHere(h) === 'mountain' && !riverAt.has(k) && !blocked.has(k)) {
+                const rivers = riverNeighbours(h);
+                if (rivers.length === 0)
+                    result = { terminal: null };
+                else if (rivers.length === 1 && riverTarget(rivers[0], h))
+                    result = { terminal: rivers[0] };
+            }
+            usable.set(k, result);
+            return result;
+        };
+        // Starts: valley hexes off the water and the bogland with no river beside.
+        const starts = region.filter((c) => {
+            const k = coordKey(c);
+            return !riverAt.has(k) && !blocked.has(k) && terrainHere(c) !== 'mountain' && riverNeighbours(c).length === 0;
+        });
+        starts.sort((a, b) => a.q - b.q || a.r - b.r);
+        // Forward: how many mountain hexes from the nearest start, layer by layer; the first layer with a target wins.
+        const dist = new Map();
+        let layer = [];
+        for (const s of starts) {
+            for (const n of neighbors(s)) {
+                const nk = coordKey(n);
+                if (!dist.has(nk) && usableAt(n)) {
+                    dist.set(nk, 1);
+                    layer.push(n);
+                }
+            }
+        }
+        let bestK = 0;
+        let bestTarget = null;
+        for (let k = 1; layer.length > 0; k++) {
+            for (const h of layer) {
+                const u = usableAt(h);
+                const targets = u.terminal ? [{ q: u.terminal.q, r: u.terminal.r }] : neighbors(h).filter((n) => plainTarget(n));
+                for (const t of targets) {
+                    if (bestTarget === null || t.q < bestTarget.q || (t.q === bestTarget.q && t.r < bestTarget.r)) {
+                        bestK = k;
+                        bestTarget = t;
+                    }
+                }
+            }
+            if (bestTarget !== null)
+                break;
+            const next = [];
+            for (const h of layer) {
+                if (usableAt(h).terminal)
+                    continue;
+                for (const n of neighbors(h)) {
+                    const nk = coordKey(n);
+                    if (!dist.has(nk) && usableAt(n)) {
+                        dist.set(nk, k + 1);
+                        next.push(n);
+                    }
+                }
+            }
+            layer = next;
+        }
+        if (bestTarget === null) {
+            skip('valleySkippedNoPath');
+            continue;
+        }
+        // Backward from the target: the hexes of every shortest way in, then the lowest start and the lowest direction first.
+        const target = bestTarget;
+        const targetRiver = riverAt.get(coordKey(target));
+        const back = new Map();
+        let frontier = [];
+        for (const n of neighbors(target)) {
+            const u = usableAt(n);
+            if (u && (u.terminal === null ? targetRiver === undefined : u.terminal === targetRiver)) {
+                back.set(coordKey(n), 1);
+                frontier.push(n);
+            }
+        }
+        for (let k = 1; k < bestK; k++) {
+            const next = [];
+            for (const h of frontier) {
+                for (const n of neighbors(h)) {
+                    const nk = coordKey(n);
+                    const u = usableAt(n);
+                    if (!back.has(nk) && u && u.terminal === null) {
+                        back.set(nk, k + 1);
+                        next.push(n);
+                    }
+                }
+            }
+            frontier = next;
+        }
+        let start = null;
+        for (const s of starts) {
+            if (neighbors(s).some((n) => back.get(coordKey(n)) === bestK)) {
+                start = s;
+                break;
+            }
+        }
+        if (start === null) {
+            skip('valleySkippedNoPath');
+            continue;
+        }
+        const carve = [start];
+        for (let want = bestK; want >= 1; want--) {
+            const here = carve[carve.length - 1];
+            carve.push(neighbors(here).find((n) => back.get(coordKey(n)) === want));
+        }
+        // The stream: joining the river it ends on, or running on from plain land like a spring's stream.
+        let path;
+        let merged;
+        if (targetRiver) {
+            path = [...carve, target];
+            merged = true;
+        }
+        else {
+            const block = new HexSet();
+            for (const k of blocked)
+                block.add(parseKey(k));
+            for (const c of carve) {
+                block.add(c);
+                for (const n of neighbors(c))
+                    block.add(n);
+            }
+            block.delete(target);
+            const d2 = makeDrainage(block);
+            const claims2 = new Array(d2.tiles.length).fill(null);
+            for (let j = 0; j < bp.paths.length; j++)
+                commit(d2, bp.paths[j], bp.merged[j], claims2);
+            const onPath2 = new Array(d2.tiles.length).fill(false);
+            const traced = traceDrainage(d2, target, claims2, onPath2, bp.paths.length > 0, directionIndex(target, carve[carve.length - 1]));
+            if (!traced) {
+                skip('valleySkippedTrace');
+                continue;
+            }
+            path = [...carve, ...traced.path];
+            merged = traced.merged;
+        }
+        // Layout: no hex twice, nothing on the bogland, no run beside itself, and none beside a river it does not drain into.
+        const rootOf = (t) => {
+            let cur = t;
+            for (let guard = 0; cur.outDirection && guard < 100000; guard++) {
+                const next = riverAt.get(coordKey(neighbors(cur)[TILE_ORIENTATIONS.indexOf(cur.outDirection)]));
+                if (!next)
+                    break;
+                cur = next;
+            }
+            return coordKey(cur);
+        };
+        // A junction on a tile the width pass later dropped is no junction.
+        const joinTile = merged ? riverAt.get(coordKey(path[path.length - 1])) : undefined;
+        const joinedRoot = joinTile ? rootOf(joinTile) : null;
+        const at = new Map();
+        path.forEach((c, i) => at.set(coordKey(c), i));
+        const lastNew = merged ? path.length - 2 : path.length - 1;
+        let layoutOk = at.size === path.length && (!merged || joinTile !== undefined);
+        for (let i = 0; layoutOk && i <= lastNew; i++) {
+            const c = path[i];
+            const ck = coordKey(c);
+            if (riverAt.has(ck) || blocked.has(ck) || !islandLand.has(ck))
+                layoutOk = false;
+            for (const n of neighbors(c)) {
+                const nk = coordKey(n);
+                const j = at.get(nk);
+                const beside = riverAt.get(nk);
+                if (j !== undefined ? Math.abs(i - j) !== 1 : beside !== undefined && (joinedRoot === null || rootOf(beside) !== joinedRoot))
+                    layoutOk = false;
+            }
+        }
+        if (!layoutOk) {
+            skip('valleySkippedLayout');
+            continue;
+        }
+        // The width pass must keep every river and the whole stream.
+        const trial = bp.clone();
+        trial.paths.push(path);
+        trial.merged.push(merged);
+        const trialTiles = assignWidths(buildNodes(trial.paths, trial.forcedOut, trial.bogIn), seed, undefined, trial.requireRiver);
+        const expected = new Set(tiles.map((t) => coordKey(t)));
+        for (let i = 0; i <= lastNew; i++)
+            expected.add(coordKey(path[i]));
+        if (trialTiles.length !== expected.size || trialTiles.some((t) => !expected.has(coordKey(t)))) {
+            skip('valleySkippedWidths');
+            continue;
+        }
+        // Map rules (R1-R12) may not get worse.
+        if (ruleBase < 0)
+            ruleBase = totalViolations(checkBogRules(bogTiles, tiles, baseTerrain));
+        const ruleTrial = totalViolations(checkBogRules(bogTiles, trialTiles, baseTerrain));
+        if (ruleTrial > ruleBase) {
+            skip('valleySkippedRules');
+            continue;
+        }
+        // Nothing may be cut off, and the valley must be reachable now.
+        const after = analyse(trialTiles);
+        const reachable = (k) => after.regionOf.get(k) === after.main;
+        if (!region.every((c) => reachable(coordKey(c)))) {
+            skip('valleySkippedCutsOff');
+            continue;
+        }
+        let cut = false;
+        for (const [k, rid] of regionOf)
+            if (rid === walk.main && after.regionOf.has(k) && !reachable(k))
+                cut = true;
+        if (cut) {
+            skip('valleySkippedCutsOff');
+            continue;
+        }
+        bp.paths.push(path);
+        bp.merged.push(merged);
+        tiles = trialTiles;
+        walk = after;
+        ruleBase = ruleTrial;
+        if (stats) {
+            stats.valleyStreams++;
+            if (targetRiver)
+                stats.valleyStreamsIntoRivers++;
+        }
+    }
+    return tiles;
+}

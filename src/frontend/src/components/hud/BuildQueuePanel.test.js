@@ -1,0 +1,161 @@
+// @vitest-environment jsdom
+//
+// Issue #99: construction progress bars used to snap back to ~0% on every
+// live-mode poll because progress was computed relative to the *remaining*
+// time at the last poll rather than the order's real total duration. These
+// tests mount the panel against a real Pinia store, drive its `hud.queue`
+// snapshot the same way `stores/world.ts`'s poll loop does, and assert the
+// fill width only ever grows — including across a simulated refetch.
+import { createPinia, setActivePinia } from 'pinia';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mount } from '@vue/test-utils';
+import BuildQueuePanel from './BuildQueuePanel.vue';
+import { useWorldStore } from '../../stores/world';
+import { createTestI18n } from '../../test/i18n';
+import enHud from '../../i18n/locales/en/hud.json';
+import enCatalogue from '../../i18n/locales/en/catalogue.json';
+function mountPanel() {
+    return mount(BuildQueuePanel, {
+        global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] },
+    });
+}
+function order(overrides = {}) {
+    return {
+        id: 'order-1',
+        q: 1,
+        r: 2,
+        building: 'farm',
+        kind: 'build',
+        targetLevel: 1,
+        state: 'building',
+        slotCost: 1,
+        completesAtGameTime: '2026-01-01T00:00:00Z',
+        completesInSeconds: 100,
+        totalSeconds: 100,
+        ...overrides,
+    };
+}
+function fillWidth(wrapper) {
+    const style = wrapper.get('.status-progress-fill').attributes('style') ?? '';
+    const match = /width:\s*([\d.]+)%/.exec(style);
+    return match ? Number(match[1]) : NaN;
+}
+describe('BuildQueuePanel', () => {
+    beforeEach(() => {
+        setActivePinia(createPinia());
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    });
+    it('advances progress smoothly as time passes without a refetch', async () => {
+        const world = useWorldStore();
+        world.hud.queueFetchedAt = Date.now();
+        world.hud.queue = [order({ completesInSeconds: 100, totalSeconds: 100 })];
+        const wrapper = mountPanel();
+        const initial = fillWidth(wrapper);
+        vi.advanceTimersByTime(20_000);
+        world.hud.tick += 1;
+        await wrapper.vm.$nextTick();
+        const later = fillWidth(wrapper);
+        expect(later).toBeGreaterThan(initial);
+        wrapper.unmount();
+    });
+    it('never lets progress jump backward when a poll resets queueFetchedAt', async () => {
+        const world = useWorldStore();
+        world.hud.queueFetchedAt = Date.now();
+        world.hud.queue = [order({ completesInSeconds: 100, totalSeconds: 100 })];
+        const wrapper = mountPanel();
+        vi.advanceTimersByTime(60_000);
+        world.hud.tick += 1;
+        await wrapper.vm.$nextTick();
+        const beforePoll = fillWidth(wrapper);
+        expect(beforePoll).toBeGreaterThan(0);
+        // Simulate the live poll in world.ts: queueFetchedAt resets to "now" and
+        // completesInSeconds drops to the freshly observed remaining time, while
+        // totalSeconds (the order's real duration) stays the same. Before the
+        // fix, this made `elapsed` snap to 0 and progress fall back to ~0%.
+        world.hud.queueFetchedAt = Date.now();
+        world.hud.queue = [order({ completesInSeconds: 40, totalSeconds: 100 })];
+        world.hud.tick += 1;
+        await wrapper.vm.$nextTick();
+        const afterPoll = fillWidth(wrapper);
+        expect(afterPoll).toBeGreaterThanOrEqual(beforePoll);
+        wrapper.unmount();
+    });
+    it('starts a new order fresh instead of carrying over the previous one\'s progress', async () => {
+        const world = useWorldStore();
+        world.hud.queueFetchedAt = Date.now();
+        world.hud.queue = [order({ id: 'order-1', completesInSeconds: 100, totalSeconds: 100 })];
+        const wrapper = mountPanel();
+        vi.advanceTimersByTime(90_000);
+        world.hud.tick += 1;
+        await wrapper.vm.$nextTick();
+        expect(fillWidth(wrapper)).toBeGreaterThan(50);
+        world.hud.queueFetchedAt = Date.now();
+        world.hud.queue = [order({ id: 'order-2', completesInSeconds: 100, totalSeconds: 100 })];
+        world.hud.tick += 1;
+        await wrapper.vm.$nextTick();
+        expect(fillWidth(wrapper)).toBeLessThan(10);
+        wrapper.unmount();
+    });
+    // Issue #158: waiting (premium queue) orders render dim, with no progress
+    // bar and "Waiting for a slot" in place of a countdown, and the header's
+    // slot count comes from the real construction summary rather than the
+    // order count.
+    it('renders a waiting order dim with no progress bar, and shows the real slot count', async () => {
+        const world = useWorldStore();
+        world.hud.queueFetchedAt = Date.now();
+        world.hud.construction = { slots: 2, slotsUsed: 2, maxWaitingOrders: 3, waitingOrders: 1, maxOrdersPerHex: 1, towerLimit: 0, towersHeld: 0 };
+        world.hud.queue = [
+            order({ id: 'active-1', state: 'building', q: 1, r: 0 }),
+            order({
+                id: 'waiting-1',
+                state: 'waiting',
+                q: 2,
+                r: 0,
+                completesAtGameTime: null,
+                completesInSeconds: null,
+            }),
+        ];
+        const wrapper = mountPanel();
+        await wrapper.vm.$nextTick();
+        expect(wrapper.text()).toContain('2 / 2 slots');
+        const rows = wrapper.findAll('.status-row');
+        expect(rows).toHaveLength(2);
+        const waitingRow = rows[1];
+        expect(waitingRow.classes()).toContain('is-waiting');
+        expect(waitingRow.text()).toContain('Waiting for a slot');
+        expect(waitingRow.find('.status-progress').exists()).toBe(false);
+        // Still cancellable — the ✕ button is not disabled for a waiting order.
+        expect(waitingRow.get('.cancel-button').attributes('disabled')).toBeUndefined();
+        wrapper.unmount();
+    });
+    it('shows a raze row that can be cancelled like a build row', async () => {
+        const world = useWorldStore();
+        world.hud.queueFetchedAt = Date.now();
+        world.hud.queue = [order({ id: 'raze-1', kind: 'raze', targetLevel: 0 })];
+        const cancelBuildLive = vi.spyOn(world, 'cancelBuildLive').mockResolvedValue(undefined);
+        const wrapper = mountPanel();
+        await wrapper.vm.$nextTick();
+        expect(wrapper.text()).toContain('Tearing down Farm');
+        await wrapper.get('.cancel-button').trigger('click');
+        expect(cancelBuildLive).toHaveBeenCalledWith('raze-1');
+        wrapper.unmount();
+    });
+    it('shows a reserved-cost footer only when something is actually reserved', async () => {
+        const world = useWorldStore();
+        world.hud.queueFetchedAt = Date.now();
+        world.hud.queue = [order()];
+        const noReserve = mountPanel();
+        await noReserve.vm.$nextTick();
+        expect(noReserve.find('.reserved-footer').exists()).toBe(false);
+        noReserve.unmount();
+        world.hud.reserved = { wood: 100, stone: 80, food: 0, iron: 0 };
+        const withReserve = mountPanel();
+        await withReserve.vm.$nextTick();
+        const footer = withReserve.find('.reserved-footer');
+        expect(footer.exists()).toBe(true);
+        expect(footer.text()).toContain('100w');
+        expect(footer.text()).toContain('80b');
+        withReserve.unmount();
+    });
+});

@@ -1,0 +1,523 @@
+// @vitest-environment jsdom
+// Design handoff "2a" frame 5: the profile-mark nudge that replaces the old
+// forced end-of-flow nickname modal. This is HudNav's own show/hide gate
+// (showProfileNudge) — ProfileNudge.test.ts covers the nudge panel's own
+// content/actions.
+import { createPinia, setActivePinia } from 'pinia';
+import { flushPromises, mount } from '@vue/test-utils';
+import { createMemoryHistory, createRouter } from 'vue-router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import HudNav from './HudNav.vue';
+import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
+import { HUD_COMPACT_QUERY, HUD_NAV_ROOMY_QUERY } from '../../lib/breakpoints';
+import { usePlayerStore } from '../../stores/player';
+import { useAuthStore } from '../../stores/auth';
+import { useReportsStore } from '../../stores/reports';
+import { createTestI18n } from '../../test/i18n';
+import enHud from '../../i18n/locales/en/hud.json';
+import enOnboarding from '../../i18n/locales/en/onboarding.json';
+// Named the same as the real router (router/index.ts) for the routes this
+// file's tests actually care about — HudNav's `landing` v-if key off
+// `route.name`, which a bare `path` list (with no `name`) can never satisfy.
+function testRouter() {
+    return createRouter({
+        history: createMemoryHistory(),
+        routes: [
+            { path: '/', name: 'landing', component: { template: '<div />' } },
+            { path: '/leaderboards', name: 'leaderboards', component: { template: '<div />' } },
+            { path: '/reports', name: 'reports', component: { template: '<div />' } },
+            { path: '/guild', name: 'guild', component: { template: '<div />' } },
+            { path: '/docs', name: 'docs', component: { template: '<div />' } },
+            { path: '/register', name: 'register', component: { template: '<div />' } },
+            { path: '/profile', name: 'profile', component: { template: '<div />' } },
+            { path: '/settings', name: 'settings', component: { template: '<div />' } },
+            { path: '/settlement', name: 'settlement', component: { template: '<div />' } },
+        ],
+    });
+}
+async function mountHudNav(path = '/') {
+    const router = testRouter();
+    await router.push(path);
+    await router.isReady();
+    return mount(HudNav, {
+        global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })], stubs: { WorldList: true } },
+    });
+}
+// Same as mountHudNav, but also hands back the router — the account-menu
+// tests below need it to assert on navigation.
+async function mountHudNavWithRouter(path = '/settlement') {
+    const router = testRouter();
+    await router.push(path);
+    await router.isReady();
+    const wrapper = mount(HudNav, {
+        global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })], stubs: { WorldList: true } },
+    });
+    return { wrapper, router };
+}
+function foundAndOnboarded(player) {
+    player.hasFoundedSettlement = true;
+    player.onboardingComplete = true;
+}
+describe('HudNav profile nudge', () => {
+    beforeEach(() => {
+        setActivePinia(createPinia());
+    });
+    it('shows once founded and onboarded, for an anonymous player who has not dismissed it', async () => {
+        const player = usePlayerStore();
+        foundAndOnboarded(player);
+        const wrapper = await mountHudNav();
+        expect(wrapper.find('[data-testid="returning-player-trigger"]').classes()).toContain('is-nudging');
+        expect(wrapper.find('.nudge-dot').exists()).toBe(true);
+        expect(wrapper.text()).toContain('Three buildings, no jarl.');
+    });
+    it('does not show before founding', async () => {
+        const wrapper = await mountHudNav();
+        expect(wrapper.find('[data-testid="returning-player-trigger"]').classes()).not.toContain('is-nudging');
+        expect(wrapper.text()).not.toContain('Three buildings, no jarl.');
+    });
+    it('does not show before onboarding is actually complete', async () => {
+        const player = usePlayerStore();
+        player.hasFoundedSettlement = true;
+        const wrapper = await mountHudNav();
+        expect(wrapper.find('[data-testid="returning-player-trigger"]').classes()).not.toContain('is-nudging');
+    });
+    it('does not show once dismissed', async () => {
+        const player = usePlayerStore();
+        foundAndOnboarded(player);
+        player.dismissProfileNudge();
+        const wrapper = await mountHudNav();
+        expect(wrapper.find('[data-testid="returning-player-trigger"]').classes()).not.toContain('is-nudging');
+    });
+    it('does not show once a nickname is already set', async () => {
+        const player = usePlayerStore();
+        foundAndOnboarded(player);
+        player.nickname = 'Ragnar';
+        const wrapper = await mountHudNav();
+        expect(wrapper.find('[data-testid="returning-player-trigger"]').classes()).not.toContain('is-nudging');
+    });
+    it('does not show for an authenticated player, even if otherwise eligible', async () => {
+        const player = usePlayerStore();
+        foundAndOnboarded(player);
+        const auth = useAuthStore();
+        auth.user = {
+            id: 'user-1',
+            userName: 'ragnar',
+            role: 'player',
+            status: 'active',
+            displayName: null,
+            isPremium: false,
+            preferredLocale: null,
+        };
+        const wrapper = await mountHudNav();
+        // The authenticated branch renders a different avatar entirely (opens
+        // /profile, not ReturningPlayerMenu) — no nudge, no is-nudging class
+        // anywhere, and no returning-player trigger at all.
+        expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(false);
+        expect(wrapper.find('.nudge-dot').exists()).toBe(false);
+        expect(wrapper.text()).not.toContain('Three buildings, no jarl.');
+    });
+});
+function authenticate(auth) {
+    auth.user = {
+        id: 'user-1',
+        userName: 'ragnar',
+        role: 'player',
+        status: 'active',
+        displayName: null,
+        isPremium: false,
+        preferredLocale: null,
+    };
+}
+// Returning-player nav work: Leaderboards and World Map used to be reachable
+// (or, for World Map, a dead click — see the `HudNav link visibility`
+// describe block below) for an anonymous visitor too; both are now gated on
+// being logged in, World Map on top of the pre-existing founded-settlement
+// gate.
+describe('HudNav auth gating', () => {
+    beforeEach(() => {
+        setActivePinia(createPinia());
+    });
+    it('hides Leaderboards when logged out', async () => {
+        const wrapper = await mountHudNav();
+        expect(wrapper.text()).not.toContain('Leaderboards');
+    });
+    it('shows Leaderboards once authenticated, in the account menu', async () => {
+        const auth = useAuthStore();
+        authenticate(auth);
+        const wrapper = await mountHudNav();
+        await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+        expect(wrapper.find('[data-testid="account-menu"] [data-testid="menu-entry-leaderboards"]').exists()).toBe(true);
+    });
+    it('has no World map link, even for a founded, logged-in player (world mode is reached by zooming)', async () => {
+        usePlayerStore().hasFoundedSettlement = true;
+        authenticate(useAuthStore());
+        const wrapper = await mountHudNav('/settlement');
+        await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+        expect(wrapper.text()).not.toContain('World map');
+    });
+});
+// landing-page-defects.md L1: both links are guard-dead on any pre-founding
+// route (guarded routes bounce straight back to `/`, see router/index.ts) or a
+// self-link (`route.name === 'landing'`) — this is independent of
+// LandingView's own header swap (LandingView.test.ts doesn't exist; that
+// half is covered by e2e/landing.spec.ts instead, since it needs the real
+// router guard and canvas), because HudNav is reused by every other
+// pre-founding route this same bug could show up on.
+// Owner request: the "Name your jarl" trigger stays on screen after the nudge
+// is dismissed with "Later" — the same ReturningPlayerMenu everywhere, as a
+// chip on the floating landing header and on the in-game (ResourceBar) bar.
+describe('HudNav "Name your jarl" trigger', () => {
+    beforeEach(() => {
+        setActivePinia(createPinia());
+    });
+    async function mountWith(props, path = '/settlement') {
+        const router = testRouter();
+        await router.push(path);
+        await router.isReady();
+        return mount(HudNav, {
+            props,
+            global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })] },
+        });
+    }
+    for (const [where, props] of [
+        ['the floating landing header', { floating: true }],
+        ['the in-game bar', { hasResourceBar: true }],
+    ]) {
+        it(`stays as a chip on ${where} after "Later"`, async () => {
+            const player = usePlayerStore();
+            foundAndOnboarded(player);
+            player.dismissProfileNudge();
+            const wrapper = await mountWith(props);
+            const trigger = wrapper.get('[data-testid="returning-player-trigger"]');
+            expect(trigger.text()).toContain('Name your jarl');
+            expect(trigger.classes()).toContain('trigger--chip');
+            expect(wrapper.find('[data-testid="profile-nudge"]').exists()).toBe(false);
+        });
+        it(`is gone from ${where} once registered`, async () => {
+            foundAndOnboarded(usePlayerStore());
+            authenticate(useAuthStore());
+            const wrapper = await mountWith(props);
+            expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(false);
+        });
+    }
+    it('is not a chip on a plain bar (docs pages)', async () => {
+        foundAndOnboarded(usePlayerStore());
+        const wrapper = await mountWith({}, '/docs');
+        expect(wrapper.get('[data-testid="returning-player-trigger"]').classes()).not.toContain('trigger--chip');
+    });
+    describe('stepping aside on a phone', () => {
+        afterEach(() => {
+            vi.unstubAllGlobals();
+            isHudDrawerOpen.value = false;
+        });
+        function stubPhone(phone) {
+            vi.stubGlobal('matchMedia', vi.fn().mockImplementation((query) => ({
+                matches: phone && query === HUD_COMPACT_QUERY,
+                addEventListener: () => { },
+                removeEventListener: () => { },
+            })));
+        }
+        it('leaves the in-game chip while the HUD drawer is open and comes back after', async () => {
+            stubPhone(true);
+            foundAndOnboarded(usePlayerStore());
+            const wrapper = await mountWith({ hasResourceBar: true });
+            isHudDrawerOpen.value = true;
+            await flushPromises();
+            expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(false);
+            isHudDrawerOpen.value = false;
+            await flushPromises();
+            expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(true);
+        });
+        it('keeps the inline trigger on desktop while the HUD drawer is open', async () => {
+            stubPhone(false);
+            foundAndOnboarded(usePlayerStore());
+            const wrapper = await mountWith({ hasResourceBar: true });
+            isHudDrawerOpen.value = true;
+            await flushPromises();
+            expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(true);
+        });
+    });
+});
+describe('HudNav link visibility', () => {
+    beforeEach(() => {
+        setActivePinia(createPinia());
+    });
+    it('hides the Landing self-link while already on the landing route', async () => {
+        const wrapper = await mountHudNav('/');
+        expect(wrapper.text()).not.toContain('Landing');
+    });
+    it('shows the Landing link on any other route while no settlement is founded', async () => {
+        const wrapper = await mountHudNav('/docs');
+        await wrapper.find('[data-testid="returning-player-trigger"]').trigger('click');
+        expect(wrapper.find('[data-testid="menu-entry-landing"]').exists()).toBe(true);
+    });
+    // Phone screenshot: a founded player was still offered "Landing", which
+    // only reads as "start over" once there is a realm to return to.
+    it('hides the Landing link once the player has founded, on every route', async () => {
+        const player = usePlayerStore();
+        player.hasFoundedSettlement = true;
+        for (const path of ['/settlement', '/docs', '/']) {
+            const wrapper = await mountHudNav(path);
+            // Landing is an avatar-menu row now: open the menu, so a broken rule
+            // can't hide behind the closed panel.
+            await wrapper.find('[data-testid="returning-player-trigger"]').trigger('click');
+            expect(wrapper.find('[data-testid="menu-entry-landing"]').exists()).toBe(false);
+            expect(wrapper.text()).not.toContain('Landing');
+            wrapper.unmount();
+        }
+    });
+});
+// Player logout/login gate: the authenticated avatar is now a small account
+// dropdown (Profile / Log out) instead of a direct link to /profile.
+describe('HudNav account menu', () => {
+    beforeEach(() => {
+        setActivePinia(createPinia());
+        localStorage.clear();
+    });
+    it('opens on trigger click and Profile routes to /profile', async () => {
+        const auth = useAuthStore();
+        authenticate(auth);
+        const { wrapper, router } = await mountHudNavWithRouter();
+        expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
+        await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+        expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(true);
+        await wrapper.find('[data-testid="account-menu-profile"]').trigger('click');
+        await flushPromises();
+        expect(router.currentRoute.value.path).toBe('/profile');
+        // profileLocation() stashes where we came from, so ProfileModal.vue can
+        // return there on close — see lib/profileRoute.ts.
+        expect(router.options.history.state.backgroundView).toBe('/settlement');
+        // Navigating away closes the menu, same as ReturningPlayerMenu's panel.
+        expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
+    });
+    it('Settings routes to /settings as a modal over the current page', async () => {
+        const auth = useAuthStore();
+        authenticate(auth);
+        const { wrapper, router } = await mountHudNavWithRouter();
+        await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+        await wrapper.find('[data-testid="account-menu-settings"]').trigger('click');
+        await flushPromises();
+        expect(router.currentRoute.value.path).toBe('/settings');
+        expect(router.options.history.state.backgroundView).toBe('/settlement');
+        expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
+    });
+    it('Log out revokes the session, forgets the local identity, and ends with a full page load to /', async () => {
+        const auth = useAuthStore();
+        authenticate(auth);
+        localStorage.setItem('bjarnoy.refreshToken', 'refresh-1');
+        localStorage.setItem('bjarnoy.playerId', 'player-1');
+        localStorage.setItem('bjarnoy.settlementId', 'settlement-1');
+        localStorage.setItem('bjarnoy.settlementsByWorld', '{"world-1":"settlement-1"}');
+        localStorage.setItem('bjarnoy.onboardingComplete', '1');
+        localStorage.setItem('bjarnoy.profileNudgeDismissed', '1');
+        localStorage.setItem('bjarnoy.nickname', 'Ragnar');
+        localStorage.setItem('bjarnoy.worldId', 'world-1');
+        localStorage.setItem('bjarnoy.locale', 'de');
+        // jsdom's window.location doesn't support vi.spyOn directly (its
+        // `assign` isn't a plain, reconfigurable own property) — swap the whole
+        // object out for the duration of this test instead.
+        const originalLocation = window.location;
+        const assignSpy = vi.fn();
+        Object.defineProperty(window, 'location', {
+            configurable: true,
+            value: { ...originalLocation, assign: assignSpy },
+        });
+        const { wrapper } = await mountHudNavWithRouter();
+        await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+        await wrapper.find('[data-testid="account-menu-logout"]').trigger('click');
+        await flushPromises();
+        // The stored session is gone; the in-memory one stays with the page
+        // until the full load replaces it (see useLogout.ts).
+        expect(localStorage.getItem('bjarnoy.refreshToken')).toBeNull();
+        expect(auth.isAuthenticated).toBe(true);
+        for (const key of [
+            'bjarnoy.playerId',
+            'bjarnoy.settlementId',
+            'bjarnoy.settlementsByWorld',
+            'bjarnoy.onboardingComplete',
+            'bjarnoy.profileNudgeDismissed',
+            'bjarnoy.nickname',
+        ]) {
+            expect(localStorage.getItem(key), key).toBeNull();
+        }
+        expect(localStorage.getItem('bjarnoy.worldId')).toBe('world-1');
+        expect(localStorage.getItem('bjarnoy.locale')).toBe('de');
+        expect(localStorage.getItem('bjarnoy.lastAccount')).toBe('ragnar');
+        expect(assignSpy).toHaveBeenCalledWith('/');
+        Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
+    });
+});
+// After "Later" on the nudge, the top-right trigger must not fall back to
+// "I already have a realm" — the player's realm is the one on screen, what
+// they lack is a jarl (account), so the trigger keeps leading with that.
+describe('HudNav unclaimed-realm trigger label', () => {
+    beforeEach(() => {
+        setActivePinia(createPinia());
+    });
+    it('reads "Name your jarl" once the nudge is dismissed with "Later"', async () => {
+        const player = usePlayerStore();
+        foundAndOnboarded(player);
+        const wrapper = await mountHudNav();
+        await wrapper.find('[data-testid="profile-nudge-later"]').trigger('click');
+        const trigger = wrapper.find('[data-testid="returning-player-trigger"]');
+        expect(wrapper.find('[data-testid="profile-nudge"]').exists()).toBe(false);
+        expect(trigger.text()).toContain('Name your jarl');
+        expect(trigger.text()).toContain('or I already have a realm');
+    });
+    it('keeps "I already have a realm" before founding', async () => {
+        const wrapper = await mountHudNav();
+        const trigger = wrapper.find('[data-testid="returning-player-trigger"]');
+        expect(trigger.text()).toContain('I already have a realm');
+        expect(trigger.text()).not.toContain('Name your jarl');
+    });
+    it('keeps "I already have a realm" once a nickname is set', async () => {
+        const player = usePlayerStore();
+        foundAndOnboarded(player);
+        player.nickname = 'Ragnar';
+        const wrapper = await mountHudNav();
+        expect(wrapper.find('[data-testid="returning-player-trigger"]').text()).not.toContain('Name your jarl');
+    });
+});
+// The secondary destinations (Leaderboards, Messages, Reports, Alliance, Docs)
+// have no room inline next to the resource pills: they live in the avatar
+// menu, and only Settlement stays inline (plus Docs on a wide bar — see the
+// placement tests at the end of this file).
+describe('HudNav secondary entries in the avatar menu', () => {
+    const secondaryIds = ['leaderboards', 'messages', 'reports', 'guild', 'docs'];
+    beforeEach(() => {
+        setActivePinia(createPinia());
+    });
+    function inlineLinkTexts(wrapper) {
+        return wrapper.findAll('.hud-nav > .link').map((b) => b.text());
+    }
+    it('logged in: only Settlement stays inline, the rest are rows of the account menu', async () => {
+        authenticate(useAuthStore());
+        usePlayerStore().hasFoundedSettlement = true;
+        const wrapper = await mountHudNav('/settlement');
+        expect(inlineLinkTexts(wrapper)).toEqual(['Settlement']);
+        expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
+        await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+        const menu = wrapper.find('[data-testid="account-menu"]');
+        for (const id of secondaryIds)
+            expect(menu.find(`[data-testid="menu-entry-${id}"]`).exists(), id).toBe(true);
+        // Above Profile / Log out.
+        const rows = menu.findAll('[role="menuitem"]').map((b) => b.attributes('data-testid'));
+        expect(rows.indexOf('menu-entry-docs')).toBeLessThan(rows.indexOf('account-menu-profile'));
+    });
+    it('logged in: rows are real links with hrefs, so Ctrl/Cmd-click can open them in a new tab', async () => {
+        authenticate(useAuthStore());
+        usePlayerStore().hasFoundedSettlement = true;
+        const wrapper = await mountHudNav('/settlement');
+        await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+        const leaderboards = wrapper.find('[data-testid="menu-entry-leaderboards"]');
+        expect(leaderboards.element.tagName).toBe('A');
+        expect(leaderboards.attributes('href')).toBe('/leaderboards');
+        const profile = wrapper.find('[data-testid="account-menu-profile"]');
+        expect(profile.element.tagName).toBe('A');
+        expect(profile.attributes('href')).toBe('/profile');
+    });
+    it('logged in: a row navigates and closes the menu', async () => {
+        authenticate(useAuthStore());
+        usePlayerStore().hasFoundedSettlement = true;
+        const { wrapper, router } = await mountHudNavWithRouter('/settlement');
+        await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+        await wrapper.find('[data-testid="menu-entry-docs"]').trigger('click');
+        await flushPromises();
+        expect(router.currentRoute.value.name).toBe('docs');
+        expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
+    });
+    it('anonymous: Reports, Alliance and Docs are rows of the returning-player menu, not inline', async () => {
+        const wrapper = await mountHudNav('/docs');
+        expect(inlineLinkTexts(wrapper)).toEqual([]);
+        await wrapper.find('[data-testid="returning-player-trigger"]').trigger('click');
+        const menu = wrapper.find('[data-testid="returning-player-menu"]');
+        for (const id of ['reports', 'guild', 'docs'])
+            expect(menu.find(`[data-testid="menu-entry-${id}"]`).exists(), id).toBe(true);
+        for (const id of ['leaderboards', 'messages'])
+            expect(menu.find(`[data-testid="menu-entry-${id}"]`).exists(), id).toBe(false);
+        const rows = menu.findAll('[role="menuitem"]').map((b) => b.attributes('data-testid'));
+        // The menu's own account actions come first; the nav entries follow them.
+        expect(rows.indexOf('returning-player-login')).toBeLessThan(rows.indexOf('menu-entry-reports'));
+    });
+    it('anonymous: a row navigates and closes the menu', async () => {
+        const { wrapper, router } = await mountHudNavWithRouter('/');
+        await wrapper.find('[data-testid="returning-player-trigger"]').trigger('click');
+        await wrapper.find('[data-testid="menu-entry-guild"]').trigger('click');
+        await flushPromises();
+        expect(router.currentRoute.value.name).toBe('guild');
+        expect(wrapper.find('[data-testid="returning-player-menu"]').exists()).toBe(false);
+    });
+    it('shows the unread reports count on the avatar and on the Reports row', async () => {
+        authenticate(useAuthStore());
+        const reports = useReportsStore();
+        reports.items = [{ id: 'r1', occurredAt: '2026-01-01T00:00:00Z' }, { id: 'r2', occurredAt: '2026-01-02T00:00:00Z' }];
+        reports.lastSeenAt = null;
+        const wrapper = await mountHudNav('/settlement');
+        expect(wrapper.find('[data-testid="account-menu-trigger"] .badge').text()).toBe('2');
+        await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+        expect(wrapper.find('[data-testid="menu-entry-reports"] .badge').text()).toBe('2');
+    });
+    it('shows the unread reports count on the returning-player trigger too, and no badge at zero', async () => {
+        const reports = useReportsStore();
+        reports.lastSeenAt = null;
+        const wrapper = await mountHudNav('/docs');
+        expect(wrapper.find('[data-testid="returning-player-badge"]').exists()).toBe(false);
+        reports.items = [{ id: 'r1', occurredAt: '2026-01-01T00:00:00Z' }];
+        await flushPromises();
+        expect(wrapper.find('[data-testid="returning-player-trigger"] .badge').text()).toBe('1');
+    });
+});
+// Docs sits inline next to Settlement once the bar has room for it
+// (HUD_NAV_ROOMY_QUERY) and moves back into the avatar menu below that; the
+// language switcher lives in the dropdown menus, not in the bar.
+describe('HudNav Docs placement and language switcher', () => {
+    beforeEach(() => {
+        setActivePinia(createPinia());
+    });
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+    function stubWide(wide) {
+        vi.stubGlobal('matchMedia', vi.fn().mockImplementation((query) => ({
+            matches: wide && query === HUD_NAV_ROOMY_QUERY,
+            addEventListener: () => { },
+            removeEventListener: () => { },
+        })));
+    }
+    async function mountLoggedIn() {
+        authenticate(useAuthStore());
+        usePlayerStore().hasFoundedSettlement = true;
+        const wrapper = await mountHudNav('/settlement');
+        await flushPromises();
+        return wrapper;
+    }
+    it('wide bar: Docs is an inline link next to Settlement and not a menu row', async () => {
+        stubWide(true);
+        const wrapper = await mountLoggedIn();
+        expect(wrapper.findAll('.hud-nav > .link').map((b) => b.text())).toEqual(['Settlement', 'Docs']);
+        await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+        expect(wrapper.find('[data-testid="menu-entry-docs"]').exists()).toBe(false);
+    });
+    it('narrower bar: Docs moves back into the avatar menu', async () => {
+        stubWide(false);
+        const wrapper = await mountLoggedIn();
+        expect(wrapper.findAll('.hud-nav > .link').map((b) => b.text())).toEqual(['Settlement']);
+        await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+        expect(wrapper.find('[data-testid="menu-entry-docs"]').exists()).toBe(true);
+    });
+    it('logged in: the language switcher is in the account menu, above Profile, and not in the bar', async () => {
+        const wrapper = await mountLoggedIn();
+        expect(wrapper.find('.hud-nav > .locale-switcher').exists()).toBe(false);
+        await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+        const menu = wrapper.get('[data-testid="account-menu"]');
+        expect(menu.find('[data-testid="menu-locale-row"] .locale-switcher').exists()).toBe(true);
+        const html = menu.html();
+        expect(html.indexOf('menu-locale-row')).toBeLessThan(html.indexOf('account-menu-profile'));
+    });
+    it('anonymous: the language switcher is in the returning-player menu', async () => {
+        const wrapper = await mountHudNav('/docs');
+        expect(wrapper.find('.hud-nav > .locale-switcher').exists()).toBe(false);
+        await wrapper.find('[data-testid="returning-player-trigger"]').trigger('click');
+        expect(wrapper.find('[data-testid="returning-player-menu"] [data-testid="menu-locale-row"]').exists()).toBe(true);
+    });
+});

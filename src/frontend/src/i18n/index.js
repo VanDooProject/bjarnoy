@@ -1,0 +1,166 @@
+import { createI18n } from 'vue-i18n';
+import enCommon from './locales/en/common.json';
+import deCommon from './locales/de/common.json';
+import enCatalogue from './locales/en/catalogue.json';
+import deCatalogue from './locales/de/catalogue.json';
+import enLanding from './locales/en/landing.json';
+import deLanding from './locales/de/landing.json';
+import enWorlds from './locales/en/worlds.json';
+import deWorlds from './locales/de/worlds.json';
+import enOnboarding from './locales/en/onboarding.json';
+import enQuests from './locales/en/quests.json';
+import deOnboarding from './locales/de/onboarding.json';
+import deQuests from './locales/de/quests.json';
+import enDemoModeBadge from './locales/en/demoModeBadge.json';
+import deDemoModeBadge from './locales/de/demoModeBadge.json';
+import enLogin from './locales/en/login.json';
+import deLogin from './locales/de/login.json';
+import enRegister from './locales/en/register.json';
+import deRegister from './locales/de/register.json';
+import enAccountRestrictedBanner from './locales/en/accountRestrictedBanner.json';
+import deAccountRestrictedBanner from './locales/de/accountRestrictedBanner.json';
+import enHud from './locales/en/hud.json';
+import deHud from './locales/de/hud.json';
+import enApiErrors from './locales/en/apiErrors.json';
+import deApiErrors from './locales/de/apiErrors.json';
+import enGuild from './locales/en/guild.json';
+import deGuild from './locales/de/guild.json';
+import enMessages from './locales/en/messages.json';
+import deMessages from './locales/de/messages.json';
+import enProfile from './locales/en/profile.json';
+import deProfile from './locales/de/profile.json';
+import enLeaderboard from './locales/en/leaderboard.json';
+import deLeaderboard from './locales/de/leaderboard.json';
+import enReports from './locales/en/reports.json';
+import deReports from './locales/de/reports.json';
+import enSimulator from './locales/en/simulator.json';
+import deSimulator from './locales/de/simulator.json';
+import enDocs from './locales/en/docs.json';
+import deDocs from './locales/de/docs.json';
+import enShowcase from './locales/en/showcase.json';
+import deShowcase from './locales/de/showcase.json';
+import enIntro from './locales/en/intro.json';
+import deIntro from './locales/de/intro.json';
+import deAdminWorldReview from './locales/de/adminWorldReview.json';
+import deAdminWorlds from './locales/de/adminWorlds.json';
+import enAdminActivityChart from './locales/en/adminActivityChart.json';
+import enAdminActivity from './locales/en/adminActivity.json';
+import enAdminEconomy from './locales/en/adminEconomy.json';
+import enAdminIslandLab from './locales/en/adminIslandLab.json';
+import enAdminApiKeys from './locales/en/adminApiKeys.json';
+import enAdminLayout from './locales/en/adminLayout.json';
+import enAdminReports from './locales/en/adminReports.json';
+import enAdminSettlements from './locales/en/adminSettlements.json';
+import enAdminUsers from './locales/en/adminUsers.json';
+import enAdminWorldReseed from './locales/en/adminWorldReseed.json';
+import enAdminWorlds from './locales/en/adminWorlds.json';
+import enAdminWorldReview from './locales/en/adminWorldReview.json';
+import enArmyEditor from './locales/en/armyEditor.json';
+import enGarrisonForm from './locales/en/garrisonForm.json';
+import enGrantResourcesForm from './locales/en/grantResourcesForm.json';
+import enSettlementLayoutEditor from './locales/en/settlementLayoutEditor.json';
+import { datetimeFormats, numberFormats } from './formats';
+import { DEFAULT_LOCALE, detectDeviceLocale, persistLocale, } from './locale';
+const initialLocale = detectDeviceLocale();
+// Not type-parameterized against MessageSchema: vue-i18n's generics for
+// createI18n require every message/format bag to satisfy an index-signature
+// shape that a hand-written nested interface doesn't have. `useI18n<{
+// message: MessageSchema }>()` (see schema.ts) is where per-component
+// call-sites get typed `t()` keys instead.
+export const i18n = createI18n({
+    legacy: false,
+    locale: initialLocale,
+    fallbackLocale: DEFAULT_LOCALE,
+    // Fallback/missing warnings are noise once a namespace intentionally has
+    // no `de` translation yet (e.g. the admin surface for now) — the throwing
+    // `missing` handler in src/test/i18n.ts is what actually catches an
+    // unextracted key, in unit tests.
+    missingWarn: false,
+    fallbackWarn: false,
+    messages: {
+        en: {
+            common: enCommon,
+            catalogue: enCatalogue,
+            landing: enLanding,
+            worlds: enWorlds,
+            onboarding: enOnboarding,
+            quests: enQuests,
+            demoModeBadge: enDemoModeBadge,
+            login: enLogin,
+            register: enRegister,
+            accountRestrictedBanner: enAccountRestrictedBanner,
+            hud: enHud,
+            apiErrors: enApiErrors,
+            guild: enGuild,
+            messages: enMessages,
+            profile: enProfile,
+            leaderboard: enLeaderboard,
+            reports: enReports,
+            simulator: enSimulator,
+            docs: enDocs,
+            showcase: enShowcase,
+            intro: enIntro,
+            // Admin surface (en-only — German deliberately deferred; fallbackLocale
+            // below covers these, and src/test/i18n.ts skips the parity check for
+            // namespaces with no de/ file).
+            adminActivityChart: enAdminActivityChart,
+            adminActivity: enAdminActivity,
+            adminEconomy: enAdminEconomy,
+            adminIslandLab: enAdminIslandLab,
+            adminApiKeys: enAdminApiKeys,
+            adminLayout: enAdminLayout,
+            adminReports: enAdminReports,
+            adminSettlements: enAdminSettlements,
+            adminUsers: enAdminUsers,
+            adminWorldReseed: enAdminWorldReseed,
+            adminWorlds: enAdminWorlds,
+            // The world review panel (admin, but translated: en + de).
+            adminWorldReview: enAdminWorldReview,
+            armyEditor: enArmyEditor,
+            garrisonForm: enGarrisonForm,
+            grantResourcesForm: enGrantResourcesForm,
+            settlementLayoutEditor: enSettlementLayoutEditor,
+        },
+        de: {
+            common: deCommon,
+            catalogue: deCatalogue,
+            landing: deLanding,
+            worlds: deWorlds,
+            onboarding: deOnboarding,
+            quests: deQuests,
+            demoModeBadge: deDemoModeBadge,
+            login: deLogin,
+            register: deRegister,
+            accountRestrictedBanner: deAccountRestrictedBanner,
+            hud: deHud,
+            apiErrors: deApiErrors,
+            guild: deGuild,
+            messages: deMessages,
+            profile: deProfile,
+            leaderboard: deLeaderboard,
+            reports: deReports,
+            simulator: deSimulator,
+            docs: deDocs,
+            showcase: deShowcase,
+            intro: deIntro,
+            adminWorlds: deAdminWorlds,
+            adminWorldReview: deAdminWorldReview,
+        },
+    },
+    datetimeFormats,
+    numberFormats,
+});
+export function setLocale(locale) {
+    i18n.global.locale.value = locale;
+    persistLocale(locale);
+    if (typeof document !== 'undefined') {
+        document.documentElement.lang = locale;
+    }
+}
+// Apply the detected locale to <html lang> on boot (main.ts calls this once).
+export function initLocale() {
+    if (typeof document !== 'undefined') {
+        document.documentElement.lang = i18n.global.locale.value;
+    }
+}
+export { SUPPORTED_LOCALES, DEFAULT_LOCALE } from './locale';
