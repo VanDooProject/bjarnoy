@@ -217,14 +217,14 @@ public class BuildingCatalogueTests
     }
 
     [Fact]
-    public void The_great_storehouse_requires_a_level_15_storage_house_alongside_a_level_15_longhouse()
+    public void The_great_storehouse_requires_a_level_25_storage_house_alongside_a_level_15_longhouse()
     {
         var definition = BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1);
 
         Assert.Equal(15, definition.RequiredLonghouseLevel);
         var prerequisite = Assert.Single(definition.Prerequisites);
         Assert.Equal(BuildingType.StorageHouse, prerequisite.Type);
-        Assert.Equal(15, prerequisite.Level);
+        Assert.Equal(25, prerequisite.Level);
     }
 
     [Theory]
@@ -236,7 +236,7 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Meadery, BuildingType.Farm, 5)]
     [InlineData(BuildingType.DruidHut, BuildingType.TownSquare, 5)]
     [InlineData(BuildingType.Smithy, BuildingType.Barracks, 10)]
-    [InlineData(BuildingType.GreatStorehouse, BuildingType.StorageHouse, 15)]
+    [InlineData(BuildingType.GreatStorehouse, BuildingType.StorageHouse, 25)]
     [InlineData(BuildingType.Sawmill, BuildingType.Lumberjack, 10)]
     [InlineData(BuildingType.CropMill, BuildingType.Farm, 10)]
     [InlineData(BuildingType.ShrineOfUllr, BuildingType.Sawmill, 5)]
@@ -1354,19 +1354,19 @@ public class SettlementTests
     }
 
     [Fact]
-    public void A_great_storehouse_is_accepted_once_the_storage_house_reaches_level_15()
+    public void A_great_storehouse_is_accepted_once_the_storage_house_reaches_level_25()
     {
         var settlement = Found() with
         {
             Buildings =
             [
                 new PlacedBuilding(Centre, BuildingType.Longhouse, 15),
-                new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 15),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 25),
             ],
             Resources = ResourcePool.Create(
                 ResourceAmounts.Uniform(1_000_000),
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, 15), (BuildingType.StorageHouse, 15)]).ProductionPerHour,
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, 15), (BuildingType.StorageHouse, 15)]).Capacity,
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 15), (BuildingType.StorageHouse, 25)]).ProductionPerHour,
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 15), (BuildingType.StorageHouse, 25)]).Capacity,
                 T0),
         };
 
@@ -1388,7 +1388,7 @@ public class SettlementTests
             [
                 new PlacedBuilding(Centre, BuildingType.Longhouse, 15),
                 new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 0),
-                new PlacedBuilding(new HexCoord(2, 0), BuildingType.StorageHouse, 15),
+                new PlacedBuilding(new HexCoord(2, 0), BuildingType.StorageHouse, 25),
             ],
             Resources = ResourcePool.Create(
                 ResourceAmounts.Uniform(1_000_000),
@@ -1425,7 +1425,7 @@ public class SettlementTests
 
         Assert.Equal(BuildRejection.RequiredBuildingTooLow, decision.Rejection);
         Assert.Equal(BuildingType.StorageHouse, decision.MissingPrerequisite?.Type);
-        Assert.Equal(15, decision.MissingPrerequisite?.Level);
+        Assert.Equal(25, decision.MissingPrerequisite?.Level);
     }
 
     /// <summary>
@@ -1448,10 +1448,10 @@ public class SettlementTests
         {
             Buildings = buildings,
             Resources = ResourcePool.Create(
-                ResourceAmounts.Uniform(1_000_000),
+                ResourceAmounts.Uniform(100_000_000),
                 BuildingCatalogue.Totals([(BuildingType.Longhouse, level)]).ProductionPerHour,
                 // Room for the stock whatever the building costs: the test funds the settlement, storage is not what it is about.
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, level)]).Capacity + ResourceAmounts.Uniform(1_000_000),
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, level)]).Capacity + ResourceAmounts.Uniform(100_000_000),
                 T0),
         };
     }
