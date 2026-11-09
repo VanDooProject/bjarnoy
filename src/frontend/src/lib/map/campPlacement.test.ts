@@ -67,12 +67,12 @@ describe('guardRange / campCountFor', () => {
     [0, 0, 0, 0],
     [59, 0, 0, 0],
     [60, 0, 0, 1],
-    [224, 0, 0, 1],
+    [224, 0, 1, 1],
     [300, 0, 1, 1],
     [900, 1, 2, 3],
-    [4500, 3, 8, 11],
-    [24000, 16, 24, 40],
-    [40000, 16, 24, 40],
+    [4500, 3, 11, 14],
+    [24000, 16, 36, 52],
+    [40000, 16, 36, 52],
   ])('%i land tiles -> strong %i, weak %i, total %i', (tiles, strong, weak, total) => {
     expect(strongCountFor(tiles)).toBe(strong);
     expect(weakCountFor(tiles)).toBe(weak);
