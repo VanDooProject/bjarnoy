@@ -57,7 +57,7 @@ import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator'
 import type { PalisadePiece } from '../lib/map/palisadeTiles';
 import type { CartShipment, ResourceKind, Resources, Settlement, Tile, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
-import { isPendingOrder, makePendingOrder } from '../lib/hud/pendingBuild';
+import { isPendingOrder, makePendingOrder, nextUpgradeLevel } from '../lib/hud/pendingBuild';
 
 // How often live mode re-polls a settlement to pick up build-queue
 // completions and rate changes it didn't cause itself (see
@@ -854,9 +854,10 @@ export const useWorldStore = defineStore('world', {
     async upgradeBuildingLive(at: AxialCoord, cost?: Partial<Resources>) {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
       const placed = this.hud.buildings.find((b) => b.q === at.q && b.r === at.r);
-      if (!placed) throw new Error('No building on that hex');
+      const level = nextUpgradeLevel(this.hud.buildings, this.hud.queue, at);
+      if (!placed || level === null) throw new Error('No building on that hex');
       await this.queueOrderOptimistic(
-        makePendingOrder(placed.type, at, 'build', placed.level + 1),
+        makePendingOrder(placed.type, at, 'build', level),
         () => api.queueBuild(this.selectedSettlementId!, { building: placed.type, q: at.q, r: at.r }, this.ownerId ?? undefined),
         cost,
       );

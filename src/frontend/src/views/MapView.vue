@@ -49,6 +49,7 @@ import { useMediaQuery } from '../composables/useMediaQuery';
 import { hudBarHeightPx, hudRailWidthPx } from '../composables/hudBarHeight';
 import { isHudRail } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
+import { nextUpgradeLevel } from '../lib/hud/pendingBuild';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
@@ -1300,9 +1301,13 @@ async function upgrade() {
   const tile = selectedTile.value;
   // What the Upgrade card promised (read before the ring closes: the card follows the selected tile).
   const card = upgradeActionFor(tile).card;
+  const level = nextUpgradeLevel(world.hud.buildings, world.hud.queue, coord) ?? (tile.buildingLevel ?? 1) + 1;
+  // Queued behind a running order on the same hex: the queue's held row and confirmation are keyed by hex, so they
+  // would hide and animate that running order's row instead. The new order just appears in the queue.
+  const queuedBehind = world.hud.queue.some((o) => o.q === coord.q && o.r === coord.r);
   await sendOptimisticOrder(coord, () => world.upgradeBuildingLive(coord, card?.cost), {
     fallback: t('hud.ringMenu.errors.couldNotQueueUpgrade'),
-    confirmed: { name: buildingName(tile.buildingType!), level: (tile.buildingLevel ?? 1) + 1, time: card?.time ?? null },
+    confirmed: queuedBehind ? undefined : { name: buildingName(tile.buildingType!), level, time: card?.time ?? null },
   });
 }
 </script>

@@ -40,3 +40,18 @@ export function makePendingOrder(
 export function isPendingOrder(order: Pick<BuildOrderResponse, 'id'>): boolean {
   return order.id.startsWith(PENDING_ORDER_PREFIX);
 }
+
+/**
+ * The level an upgrade of the building on `at` queues: one above the highest level it already has or is already being
+ * built to (an upgrade can queue behind a running one when the waiting room has room). Null without a building there.
+ */
+export function nextUpgradeLevel(
+  buildings: { q: number; r: number; level: number }[],
+  queue: Pick<BuildOrderResponse, 'q' | 'r' | 'kind' | 'targetLevel'>[],
+  at: AxialCoord,
+): number | null {
+  const placed = buildings.find((b) => b.q === at.q && b.r === at.r);
+  if (!placed) return null;
+  const queued = queue.filter((o) => o.q === at.q && o.r === at.r && (o.kind ?? 'build') === 'build').map((o) => o.targetLevel);
+  return Math.max(placed.level, ...queued) + 1;
+}

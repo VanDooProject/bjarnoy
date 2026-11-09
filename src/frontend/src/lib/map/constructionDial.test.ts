@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BuildOrderResponse } from '../../api/types';
 import {
+  rejectDialAt,
   constructionDialsFromQueue,
   DIAL_HOVER_MS,
   DIAL_LABEL_BASE_PX,
@@ -361,4 +362,23 @@ describe('nextTapReveal', () => {
   it('switches to another tapped dial', () => expect(nextTapReveal('a', 'b')).toBe('b'));
   it('closes the revealed dial when tapped again', () => expect(nextTapReveal('a', 'a')).toBeNull());
   it('closes on a tap elsewhere', () => expect(nextTapReveal('a', null)).toBeNull());
+});
+
+describe('rejectDialAt', () => {
+  const at = { q: 1, r: 2 };
+  const other = { coord: { q: 0, r: 0 }, startMs: 0, endMs: 1000 };
+
+  it('turns the "…" dial of the refused order into a rejected one and keeps the other hexes', () => {
+    const dials = [other, { coord: at, startMs: null, endMs: null }];
+    expect(rejectDialAt(dials, at, 500)).toEqual([other, { coord: at, startMs: null, endMs: null, rejectedAtMs: 500 }]);
+  });
+
+  it('adds a rejected dial when the "…" dial is already gone', () => {
+    expect(rejectDialAt([other], at, 500)).toEqual([other, { coord: at, startMs: null, endMs: null, rejectedAtMs: 500 }]);
+  });
+
+  it('keeps a running build on the hex (an upgrade refused behind it) instead of replacing it', () => {
+    const running = { coord: at, startMs: 0, endMs: 9000 };
+    expect(rejectDialAt([other, running], at, 500)).toEqual([other, running]);
+  });
 });

@@ -61,6 +61,7 @@ import {
   nextTapReveal,
   DIAL_TAP_REVEAL_MS,
   type ConstructionDial,
+  rejectDialAt,
 } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import { atlasPageCount } from './atlasManifests';
@@ -6099,11 +6100,10 @@ export class HexMapRenderer {
   /**
    * The server refused a build that was shown optimistically: the "…" dial on
    * `coord` shakes, then shrinks and fades (`dialRejectFrame`) even though its
-   * pending order is already gone from the queue.
+   * pending order is already gone from the queue (`rejectDialAt`).
    */
   rejectConstructionDial(coord: AxialCoord) {
-    const rest = (this.constructionDials ?? []).filter((d) => d.coord.q !== coord.q || d.coord.r !== coord.r);
-    this.constructionDials = [...rest, { coord, startMs: null, endMs: null, rejectedAtMs: Date.now() }];
+    this.constructionDials = rejectDialAt(this.constructionDials ?? [], coord, Date.now());
   }
 
   /**

@@ -2390,6 +2390,20 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
       expect(store.hud.queue.map((o) => o.id)).toEqual(['upgrade-1']);
     });
 
+    it('targets the level after an upgrade already running on the hex', async () => {
+      const store = await setupWithLumberjack(2);
+      store.hud.queue = [{ ...upgradeOrder, kind: 'build', state: 'building', targetLevel: 3 }];
+      let release!: () => void;
+      queueBuild.mockReturnValue(new Promise<void>((resolve) => (release = resolve)));
+
+      const done = store.upgradeBuildingLive(at);
+      expect(store.hud.queue[1]).toMatchObject({ kind: 'build', targetLevel: 4, state: 'waiting' });
+
+      getSettlement.mockResolvedValue(settlementResponse({ queue: [upgradeOrder] }));
+      release();
+      await done;
+    });
+
     it('records the confirmed spend for the resources that really dropped', async () => {
       const store = await setupWithLumberjack(2);
       queueBuild.mockResolvedValue(undefined);
