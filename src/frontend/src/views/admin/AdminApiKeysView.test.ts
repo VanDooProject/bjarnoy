@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   adminListApiKeys: vi.fn(),
   adminListApiKeyRequests: vi.fn(),
   adminListUsers: vi.fn(),
+  adminLookupUsers: vi.fn(),
   adminApproveApiKeyRequest: vi.fn(),
   adminDenyApiKeyRequest: vi.fn(),
   adminCreateApiKey: vi.fn(),
@@ -118,6 +119,7 @@ beforeEach(() => {
   mocks.adminListApiKeys.mockResolvedValue([key()]);
   mocks.adminListApiKeyRequests.mockResolvedValue([request('ABCD-2345'), request('WXYZ-6789')]);
   mocks.adminListUsers.mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 10 });
+  mocks.adminLookupUsers.mockResolvedValue([]);
   window.confirm = vi.fn(() => true);
   Element.prototype.scrollIntoView = vi.fn();
 });
@@ -182,12 +184,11 @@ describe('AdminApiKeysView', () => {
     mocks.adminListApiKeyRequests.mockResolvedValue([
       request('ABCD-2345', { requestedAdditionalUserNames: ['Ally', 'ghost'] }),
     ]);
-    mocks.adminListUsers.mockImplementation(async ({ search }: { search: string }) => ({
-      items: search === 'Ally' ? [{ id: 'u2', userName: 'Ally', role: 'player' }] : [],
-      totalCount: 1,
-      page: 1,
-      pageSize: 10,
-    }));
+    mocks.adminLookupUsers.mockImplementation(async (q: string) =>
+      q === 'ally'
+        ? [{ userId: 'u2', userName: 'Ally', displayName: null, role: 'player', status: 'active', via: 'user', matchedName: null, worldName: null }]
+        : [],
+    );
     mocks.adminApproveApiKeyRequest.mockResolvedValue(request('ABCD-2345', { status: 'Approved' }));
     const wrapper = await mountAt('/admin/api-keys');
     await wrapper.get('[data-testid="approve-ABCD-2345"]').trigger('click');
@@ -196,6 +197,41 @@ describe('AdminApiKeysView', () => {
     await wrapper.get('form').trigger('submit');
     await flushPromises();
     expect(mocks.adminApproveApiKeyRequest.mock.calls[0][1]).toMatchObject({ additionalUserIds: ['u2'] });
+    wrapper.unmount();
+  });
+
+  it('resolves a requested owner given as a jarl name to the account that owns it', async () => {
+    mocks.adminListApiKeyRequests.mockResolvedValue([
+      request('ABCD-2345', { requestedOwnerUserName: 'Jarl-a741' }),
+    ]);
+    mocks.adminLookupUsers.mockImplementation(async (q: string) =>
+      q === 'jarl-a741'
+        ? [{ userId: 'u9', userName: 'player9', displayName: null, role: 'player', status: 'active', via: 'jarl', matchedName: 'Jarl-a741', worldName: 'Midgard' }]
+        : [],
+    );
+    mocks.adminApproveApiKeyRequest.mockResolvedValue(request('ABCD-2345', { status: 'Approved' }));
+    const wrapper = await mountAt('/admin/api-keys');
+    await wrapper.get('[data-testid="approve-ABCD-2345"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="editor-owner"]').text()).toContain('player9');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(mocks.adminApproveApiKeyRequest.mock.calls[0][1]).toMatchObject({ ownerUserId: 'u9' });
+    wrapper.unmount();
+  });
+
+  it('does not guess when two accounts share the requested jarl name', async () => {
+    mocks.adminListApiKeyRequests.mockResolvedValue([
+      request('ABCD-2345', { requestedOwnerUserName: 'Jarl-a741' }),
+    ]);
+    mocks.adminLookupUsers.mockResolvedValue([
+      { userId: 'u8', userName: 'p8', displayName: null, role: 'player', status: 'active', via: 'jarl', matchedName: 'Jarl-a741', worldName: null },
+      { userId: 'u9', userName: 'p9', displayName: null, role: 'player', status: 'active', via: 'jarl', matchedName: 'Jarl-a741', worldName: null },
+    ]);
+    const wrapper = await mountAt('/admin/api-keys');
+    await wrapper.get('[data-testid="approve-ABCD-2345"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="editor-owner"]').text()).toContain('boss');
     wrapper.unmount();
   });
 

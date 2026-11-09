@@ -492,11 +492,7 @@ public sealed class ApiKeyRequestService(
         var ownerId = overrides.OwnerUserId ?? request.OwnerUserId;
         if (ownerId is null && !string.IsNullOrWhiteSpace(request.RequestedOwnerUserName))
         {
-            var normalised = request.RequestedOwnerUserName.Trim().ToLowerInvariant();
-            ownerId = await dbContext.Users.AsNoTracking()
-                .Where(u => u.NormalizedUserName == normalised && !u.IsSystem)
-                .Select(u => (Guid?)u.Id)
-                .FirstOrDefaultAsync(cancellationToken);
+            ownerId = await ResolveAccountAsync(request.RequestedOwnerUserName, cancellationToken);
         }
 
         ownerId ??= adminUserId;
@@ -514,12 +510,14 @@ public sealed class ApiKeyRequestService(
         }
         else
         {
-            var hinted = request.RequestedAdditionalUserNames.Select(n => n.Trim().ToLowerInvariant()).ToList();
-            additional = await dbContext.Users.AsNoTracking()
-                .Where(u => hinted.Contains(u.NormalizedUserName) && !u.IsSystem)
-                .Select(u => u.Id)
-                .ToListAsync(cancellationToken);
-            additional.RemoveAll(id => id == ownerId);
+            additional = [];
+            foreach (var name in request.RequestedAdditionalUserNames)
+            {
+                if (await ResolveAccountAsync(name, cancellationToken) is { } id && id != ownerId && !additional.Contains(id))
+                {
+                    additional.Add(id);
+                }
+            }
         }
 
         var features = overrides.Features is null
@@ -694,6 +692,34 @@ public sealed class ApiKeyRequestService(
     }
 
     // ---- helpers ----
+
+    /// <summary>
+    /// Turns a name an agent gave into an account: an exact user name, else the one account that owns a settlement
+    /// whose jarl or settlement name is exactly this (the nickname a player sees in the game, like <c>Jarl-a741</c>).
+    /// Null when nothing matches, or when several accounts share that jarl name.
+    /// </summary>
+    private async Task<Guid?> ResolveAccountAsync(string name, CancellationToken cancellationToken)
+    {
+        var trimmed = name.Trim();
+        var normalised = trimmed.ToLowerInvariant();
+        var byUserName = await dbContext.Users.AsNoTracking()
+            .Where(u => u.NormalizedUserName == normalised && !u.IsSystem)
+            .Select(u => (Guid?)u.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (byUserName is not null)
+        {
+            return byUserName;
+        }
+
+        var owners = await dbContext.Settlements.AsNoTracking()
+            .Where(s => !s.Owner!.IsSystem
+                && (s.OwnerName.ToLower() == normalised || s.Name.ToLower() == normalised))
+            .Select(s => s.UserId)
+            .Distinct()
+            .Take(2)
+            .ToListAsync(cancellationToken);
+        return owners.Count == 1 ? owners[0] : null;
+    }
 
     private async Task<string> NewUserCodeAsync(CancellationToken cancellationToken)
     {

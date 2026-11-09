@@ -127,13 +127,20 @@ function selfOwner(): ScopeEditorOwner {
   };
 }
 
-/** Looks a user up by exact user name; the owner picker only knows search. */
-async function resolveOwner(userName: string | null): Promise<ScopeEditorOwner | null> {
-  if (!userName) return null;
+/**
+ * Resolves a name an agent gave to an account, the way the backend does on approval: an exact user name, else the one
+ * account whose jarl or settlement name is exactly this (e.g. the nickname `Jarl-a741`). Null when none or ambiguous.
+ */
+async function resolveOwner(name: string | null): Promise<ScopeEditorOwner | null> {
+  const wanted = name?.trim().toLowerCase();
+  if (!wanted) return null;
   try {
-    const result = await api.adminListUsers({ search: userName, pageSize: 10 });
-    const hit = result.items.find((u) => u.userName.toLowerCase() === userName.toLowerCase());
-    return hit ? { id: hit.id, userName: hit.userName, role: hit.role } : null;
+    const hits = await api.adminLookupUsers(wanted);
+    const byUser = hits.find((u) => u.userName.toLowerCase() === wanted);
+    const matches = byUser ? [byUser] : hits.filter((u) => u.matchedName?.toLowerCase() === wanted);
+    return matches.length === 1
+      ? { id: matches[0].userId, userName: matches[0].userName, role: matches[0].role }
+      : null;
   } catch {
     return null;
   }
