@@ -48,7 +48,7 @@ test.describe('pinch-to-zoom on touch', { tag: '@g3' }, () => {
     const world = await WorldMapPage.open(page);
     const centre = await world.centre();
 
-    await expect(page).toHaveURL(/\/settlement#world$/);
+    await expect(page).toHaveURL(/\/settlement#world(&.*)?$/);
     // Bounded loop rather than a fixed gap: this only needs to prove the
     // transition fires on a sustained pinch gesture, not pin the exact gap
     // it takes to cross DEFAULT_ENTER_SETTLEMENT_ZOOM.

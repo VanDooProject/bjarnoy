@@ -282,6 +282,7 @@ describe('AdminSettlementsView', () => {
         q: 1,
         r: 0,
         building: 'farm',
+        kind: 'build',
         targetLevel: 1,
         state: 'building',
         slotCost: 1,

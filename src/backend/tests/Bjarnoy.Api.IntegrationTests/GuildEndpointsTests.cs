@@ -79,36 +79,6 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
     /// straight from the database) so repeated calls against the same world
     /// never collide on a plot.
     /// </summary>
-    private async Task<AuthResponse> JoinWorldWithSettlementAsync(HttpClient client, Guid worldId)
-    {
-        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
-            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
-
-        HashSet<(int Q, int R)> taken;
-        await using (var scope = _factory.Services.CreateAsyncScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-            taken = (await db.Settlements.AsNoTracking()
-                    .Where(s => s.WorldId == worldId)
-                    .Select(s => new { s.CentreQ, s.CentreR })
-                    .ToListAsync(Ct))
-                .Select(s => (s.CentreQ, s.CentreR))
-                .ToHashSet();
-        }
-
-        var (islandId, q, r) = islands!
-            .SelectMany(i => i.StartPositions.Select(p => (i.Id, p.Q, p.R)))
-            .First(p => !taken.Contains((p.Q, p.R)));
-
-        var ownerId = Unique("owner");
-        await client.PostJsonAsync(
-            $"/api/v1/worlds/{worldId}/settlements",
-            new FoundSettlementRequest(islandId, q, r, Unique("Stad"), Unique("Jarl"), ownerId),
-            Ct);
-
-        return await RegisterAsync(client, ownerId);
-    }
-
     [Fact]
     public async Task Founding_a_guild_makes_the_founder_its_leader()
     {
@@ -192,7 +162,7 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
             await db.SaveChangesAsync(Ct);
         }
 
-        var oneTooMany = await JoinWorldWithSettlementAsync(client, worldId);
+        var oneTooMany = await JoinWorldWithSettlementAsync(worldId);
         Authorize(client, oneTooMany.AccessToken);
         var refused = await client.PostJsonAsync($"/api/v1/guilds/{guild.Id}/join", new { }, Ct);
 
@@ -231,7 +201,7 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{worldId}/guilds", new CreateGuildRequest(Unique("Hird"), "LDR", null), Ct))
             .ReadStrictAsync<GuildResponse>(Ct);
 
-        var member = await JoinWorldWithSettlementAsync(client, worldId);
+        var member = await JoinWorldWithSettlementAsync(worldId);
         Authorize(client, member.AccessToken);
         await client.PostJsonAsync($"/api/v1/guilds/{guild.Id}/join", new { }, Ct);
 
@@ -253,11 +223,11 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{worldId}/guilds", new CreateGuildRequest(Unique("Hird"), "KCK", null), Ct))
             .ReadStrictAsync<GuildResponse>(Ct);
 
-        var officer = await JoinWorldWithSettlementAsync(client, worldId);
+        var officer = await JoinWorldWithSettlementAsync(worldId);
         Authorize(client, officer.AccessToken);
         await client.PostJsonAsync($"/api/v1/guilds/{guild.Id}/join", new { }, Ct);
 
-        var member = await JoinWorldWithSettlementAsync(client, worldId);
+        var member = await JoinWorldWithSettlementAsync(worldId);
         Authorize(client, member.AccessToken);
         await client.PostJsonAsync($"/api/v1/guilds/{guild.Id}/join", new { }, Ct);
 
@@ -361,7 +331,7 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{worldId}/guilds", new CreateGuildRequest(Unique("Hird"), "TRA", null), Ct))
             .ReadStrictAsync<GuildResponse>(Ct);
 
-        var leaderB = await JoinWorldWithSettlementAsync(client, worldId);
+        var leaderB = await JoinWorldWithSettlementAsync(worldId);
         Authorize(client, leaderB.AccessToken);
         var guildB = await (await client.PostJsonAsync(
             $"/api/v1/worlds/{worldId}/guilds", new CreateGuildRequest(Unique("Hird"), "TRB", null), Ct))
@@ -396,13 +366,13 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
             .ReadStrictAsync<GuildResponse>(Ct);
 
         // A guild may hold exactly one active/pending treaty.
-        var leaderB = await JoinWorldWithSettlementAsync(client, worldId);
+        var leaderB = await JoinWorldWithSettlementAsync(worldId);
         Authorize(client, leaderB.AccessToken);
         var guildB = await (await client.PostJsonAsync(
             $"/api/v1/worlds/{worldId}/guilds", new CreateGuildRequest(Unique("Hird"), "CP2", null), Ct))
             .ReadStrictAsync<GuildResponse>(Ct);
 
-        var leaderC = await JoinWorldWithSettlementAsync(client, worldId);
+        var leaderC = await JoinWorldWithSettlementAsync(worldId);
         Authorize(client, leaderC.AccessToken);
         var guildC = await (await client.PostJsonAsync(
             $"/api/v1/worlds/{worldId}/guilds", new CreateGuildRequest(Unique("Hird"), "CP3", null), Ct))
@@ -433,7 +403,7 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
     /// A fresh player with a real settlement in the world, on a client of its own (a client already authorised as someone else would found
     /// under that account and be refused), at least the minimum distance from every settlement already standing.
     /// </summary>
-    private async Task<AuthResponse> JoinAnonymouslyAsync(Guid worldId)
+    private async Task<AuthResponse> JoinWorldWithSettlementAsync(Guid worldId)
     {
         using var fresh = Client();
         var islands = await fresh.GetFromJsonAsync<List<IslandResponse>>(
@@ -512,14 +482,14 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
         var (leaderA, worldId, _) = await RegisterWithSettlementAsync(client);
         var guildA = await FoundGuildAsync(client, leaderA, "RL1");
 
-        var mateA = await JoinAnonymouslyAsync(worldId);
+        var mateA = await JoinWorldWithSettlementAsync(worldId);
         Authorize(client, mateA.AccessToken);
         Assert.Equal(HttpStatusCode.OK, (await client.PostJsonAsync($"/api/v1/guilds/{guildA.Id}/join", new { }, Ct)).StatusCode);
 
-        var leaderB = await JoinAnonymouslyAsync(worldId);
+        var leaderB = await JoinWorldWithSettlementAsync(worldId);
         var guildB = await FoundGuildAsync(client, leaderB, "RL2");
 
-        var stranger = await JoinAnonymouslyAsync(worldId);
+        var stranger = await JoinWorldWithSettlementAsync(worldId);
 
         Authorize(client, leaderA.AccessToken);
         var proposed = await (await client.PostJsonAsync(
@@ -553,7 +523,7 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
         using var client = Client();
         var (leaderA, worldId, _) = await RegisterWithSettlementAsync(client);
         var guildA = await FoundGuildAsync(client, leaderA, "RP1");
-        var leaderB = await JoinAnonymouslyAsync(worldId);
+        var leaderB = await JoinWorldWithSettlementAsync(worldId);
         var guildB = await FoundGuildAsync(client, leaderB, "RP2");
 
         Authorize(client, leaderA.AccessToken);
@@ -571,7 +541,7 @@ public sealed class GuildEndpointsTests : IAsyncLifetime
         using var client = Client();
         var (leaderA, worldId, _) = await RegisterWithSettlementAsync(client);
         await FoundGuildAsync(client, leaderA, "RN1");
-        var loner = await JoinAnonymouslyAsync(worldId);
+        var loner = await JoinWorldWithSettlementAsync(worldId);
 
         await GatherSettlementsAsync(loner, leaderA);
         var seen = await ListAsSeenByAsync(client, loner, worldId);

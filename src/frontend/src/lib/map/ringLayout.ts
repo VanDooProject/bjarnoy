@@ -530,7 +530,8 @@ export const RING_MIN_SCALE = 0.5;
  * when it already does, otherwise the nearest spot on a `stepPx` grid over the area that does -
  * so the caller can pan the map that far instead of the ring changing shape. Only when no spot
  * of the area has room for the ring at full size does the whole ring shrink (in steps down to
- * `RING_MIN_SCALE`), keeping its shape. `maxScale` is the size the ring is drawn at when it has room
+ * `RING_MIN_SCALE`), keeping its shape. A spot with room for the inner lane as a full circle is preferred at every size;
+ * only where there is none is an arc accepted. `maxScale` is the size the ring is drawn at when it has room
  * (1 = the shapes' own size; the player's ring size setting and the desktop base size raise or lower
  * it, `lib/map/ringSize.ts`). `areaAt` gives the ring's area with the tile at a given
  * x (a landscape phone docks the card on the side away from the tile).
@@ -546,7 +547,9 @@ export function ringRoomFor(
   for (let step = 0; ; step++) {
     const scale = Math.round((maxScale - step * 0.1) * 100) / 100;
     if (scale < RING_MIN_SCALE - 1e-9) break;
-    const room = roomAtScale(x, y, areaAt, shapes, scale, stepPx);
+    // A full circle (Build / Upgrade straight above the tile) wherever the area has room for one at this size;
+    // an arc only where it has none.
+    const room = roomAtScale(x, y, areaAt, shapes, scale, stepPx, true) ?? roomAtScale(x, y, areaAt, shapes, scale, stepPx, false);
     if (room) return { ...room, scale };
   }
   return { x, y, scale: RING_MIN_SCALE };
@@ -559,12 +562,14 @@ function roomAtScale(
   shapes: RingShape[],
   scale: number,
   stepPx: number,
+  fullCircle: boolean,
 ): { x: number; y: number } | null {
   // The inner lane is what rules most spots out, and checking it alone is cheap: those shapes first.
   const ordered = [...shapes].sort((p, q) => p.lane2Count - q.lane2Count || q.lane1Count - p.lane1Count);
   const fitsAt = (px: number, py: number) => {
     const area = areaAt(px, py);
     if (px < area.left || px > area.right || py < area.top || py > area.bottom) return false;
+    if (fullCircle && isCramped(px, py, scaledArea(area, px, py, scale))) return false;
     return ordered.every((s) =>
       s.lane2Count === 0
         ? lane1Arc(s.lane1Count, px, py, scaledArea(area, px, py, scale)) !== null

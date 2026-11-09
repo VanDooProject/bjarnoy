@@ -294,6 +294,18 @@
       "unitFood": "f",
       "unitIron": "i",
       "storagePrefix": "+"
+    },
+    "razing": {
+      "title": "Abriss",
+      "intro": "Du kannst deine eigenen Gebäude abreißen – immer eine Stufe nach der anderen.",
+      "oneLevel": "Jeder Abrissauftrag nimmt genau eine Stufe weg. Willst du ein ganzes Gebäude loswerden, reißt du es Stufe für Stufe ab.",
+      "time": "Eine Stufe abzureißen dauert drei Viertel so lang wie ihr Bau und belegt genauso viele Bauplätze. Ist kein Platz frei, wartet der Auftrag wie ein Bau in der Warteschlange.",
+      "refund": "Ist der Abriss fertig, bekommst du ein Drittel der Kosten dieser Stufe zurück – so viel, wie dein Lager fasst.",
+      "works": "Bis dahin arbeitet das Gebäude ganz normal weiter.",
+      "cancel": "Einen Abriss abzubrechen kostet nichts, das Gebäude bleibt, wie es ist.",
+      "longhouse": "Das {longhouse} lässt sich nicht abreißen.",
+      "gone": "Auf Stufe 0 ist das Feld wieder frei, und alles, was dort in Ausbildung war, wird dir erstattet.",
+      "oneOrder": "Auf einem Feld läuft immer nur ein Auftrag."
     }
   },
   "tiles": {

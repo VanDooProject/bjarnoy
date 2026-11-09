@@ -454,32 +454,35 @@ if (wantStopPrefix('settlement_bog')) {
       return { site: best, placed, grassRefused, props, lakeHexes: lakeHexes.length };
     });
     console.log('Bog buildings site:', JSON.stringify(site));
-    if (!site) throw new Error('no plain bog hex with a lake half shore and a creek within reach on the bog islands');
-    const shootAt = async (at, name, wheel = 5) => {
-      await page.evaluate((target) => {
-        const fog = window.__fogDebug;
-        fog.maskUnknown = false;
-        fog.maskOutOfSight = false;
-        fog.terrainCull = false;
-        window.__settlementRenderer?.()?.panTo(target);
-      }, at);
-      await page.waitForTimeout(300);
-      await page.mouse.move(720, 450);
-      for (let i = 0; i < wheel; i++) {
-        await page.mouse.wheel(0, -300);
-        await page.waitForTimeout(120);
-      }
-      await page.waitForTimeout(400);
-      await forceRebuild(page);
-      await page.waitForTimeout(3000);
-      await shootAlways(page, name);
-    };
-    if (wantStop('settlement_bog_buildings')) await shootAt(site.site, 'settlement_bog_buildings', 3);
-    const first = (list) => list[0];
-    if (wantStop('settlement_bog_oreworks') && first(site.placed.oreworks)) await shootAt(first(site.placed.oreworks), 'settlement_bog_oreworks', 4);
-    if (wantStop('settlement_bog_clay') && first(site.placed.clay)) await shootAt(first(site.placed.clay), 'settlement_bog_clay', 4);
-    if (wantStop('settlement_bog_lakehut') && first(site.placed.lakehut)) await shootAt(first(site.placed.lakehut), 'settlement_bog_lakehut', 4);
-    if (wantStop('settlement_bog_hammer') && first(site.placed.hammer)) await shootAt(first(site.placed.hammer), 'settlement_bog_hammer', 4);
+    if (!site) {
+      console.log('Skipping the bog building stops: no plain bog hex with a lake half shore and a creek within reach');
+    } else {
+      const shootAt = async (at, name, wheel = 5) => {
+        await page.evaluate((target) => {
+          const fog = window.__fogDebug;
+          fog.maskUnknown = false;
+          fog.maskOutOfSight = false;
+          fog.terrainCull = false;
+          window.__settlementRenderer?.()?.panTo(target);
+        }, at);
+        await page.waitForTimeout(300);
+        await page.mouse.move(720, 450);
+        for (let i = 0; i < wheel; i++) {
+          await page.mouse.wheel(0, -300);
+          await page.waitForTimeout(120);
+        }
+        await page.waitForTimeout(400);
+        await forceRebuild(page);
+        await page.waitForTimeout(3000);
+        await shootAlways(page, name);
+      };
+      if (wantStop('settlement_bog_buildings')) await shootAt(site.site, 'settlement_bog_buildings', 3);
+      const first = (list) => list[0];
+      if (wantStop('settlement_bog_oreworks') && first(site.placed.oreworks)) await shootAt(first(site.placed.oreworks), 'settlement_bog_oreworks', 4);
+      if (wantStop('settlement_bog_clay') && first(site.placed.clay)) await shootAt(first(site.placed.clay), 'settlement_bog_clay', 4);
+      if (wantStop('settlement_bog_lakehut') && first(site.placed.lakehut)) await shootAt(first(site.placed.lakehut), 'settlement_bog_lakehut', 4);
+      if (wantStop('settlement_bog_hammer') && first(site.placed.hammer)) await shootAt(first(site.placed.hammer), 'settlement_bog_hammer', 4);
+    }
   }
 }
 

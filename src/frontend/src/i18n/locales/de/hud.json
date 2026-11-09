@@ -131,7 +131,6 @@
       "notEnough": "Benötigt {resources}",
       "raze": "Abreißen",
       "cantRazeLonghouse": "Das Langhaus kann nicht abgerissen werden",
-      "notWiredYet": "Noch nicht mit dem Backend verbunden",
       "trainUnits": "Einheiten ausbilden",
       "feasts": "Feste",
       "build": "Bauen",
@@ -142,7 +141,8 @@
       "noLandUnitsAtHome": "Keine Landeinheiten zu Hause",
       "noShipsAtHome": "Keine Schiffe zu Hause",
       "siege": "Belagern",
-      "noRamAtHome": "Braucht einen Rammbock zu Hause"
+      "noRamAtHome": "Braucht einen Rammbock zu Hause",
+      "hexBusy": "Auf diesem Feld läuft schon ein Auftrag"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "STF {level} · HEX {q}, {r}",
@@ -163,17 +163,25 @@
       "queueFull": "Die Warteschlange ist voll ({waiting} von {max})",
       "badgeNoResources": "Nicht genug Rohstoffe",
       "badgeNoSlot": "Kein freier Bauplatz",
-      "requiresBuilding": "Benötigt {building} Stufe {level}"
+      "requiresBuilding": "Benötigt {building} Stufe {level}",
+      "razeTitle": "Abriss auf Stufe {level}",
+      "razeTitleRemove": "Abreißen",
+      "razeSubRemove": "{building} · Stufe 1 → weg",
+      "razeBadge": "ABRISS MÖGLICH"
     },
     "tap": {
       "build": "{name} noch einmal antippen, um zu bauen",
-      "upgrade": "{name} noch einmal antippen, um auszubauen"
+      "upgrade": "{name} noch einmal antippen, um auszubauen",
+      "raze": "{name} noch einmal antippen, um abzureißen"
     },
     "errors": {
       "couldNotQueueBuild": "Der Bau konnte nicht eingereiht werden.",
-      "couldNotQueueUpgrade": "Der Ausbau konnte nicht eingereiht werden."
+      "couldNotQueueUpgrade": "Der Ausbau konnte nicht eingereiht werden.",
+      "couldNotQueueRaze": "Der Abriss konnte nicht eingereiht werden."
     },
-    "towerCampWarning": "Wilde Tiere brennen diesen Turm nieder, wenn keine Armee ihn bewacht."
+    "towerCampWarning": "Wilde Tiere brennen diesen Turm nieder, wenn keine Armee ihn bewacht.",
+    "razeTime": "Abrisszeit",
+    "refund": "Rückerstattung"
   },
   "buildQueue": {
     "title": "Bau",
@@ -183,7 +191,9 @@
     "hexSubtext": "Hex {q}-{r}",
     "cancel": "✕",
     "cancelError": "Der Auftrag konnte nicht storniert werden.",
-    "reservedFooter": "Reserviert für laufende Bauaufträge: {wood}H {stone}S {food}N {iron}E"
+    "reservedFooter": "Reserviert für laufende Bauaufträge: {wood}H {stone}S {food}N {iron}E",
+    "razeOrderName": "Abriss {name} → {level}",
+    "razeRemoveOrderName": "Abriss {name}"
   },
   "trainingQueue": {
     "title": "Ausbildung",
@@ -263,7 +273,9 @@
     "renownEtaDays": "{days} d {hours} h",
     "renownEtaHours": "{hours} h {minutes} min",
     "renownEtaMinutes": "{minutes} min",
-    "renownDemo": "Der Ruhmfortschritt braucht eine Live-Welt."
+    "renownDemo": "Der Ruhmfortschritt braucht eine Live-Welt.",
+    "razingNote": "Wird auf Stufe {level} abgerissen.",
+    "razingRemoveNote": "Wird abgerissen."
   },
   "trainingModal": {
     "subtitle": "Stufe {level} · Ausbildung {percent} % schneller",

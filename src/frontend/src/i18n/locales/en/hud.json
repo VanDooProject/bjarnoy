@@ -131,7 +131,6 @@
       "notEnough": "Needs {resources}",
       "raze": "Raze",
       "cantRazeLonghouse": "Can't raze the longhouse",
-      "notWiredYet": "Not wired to the backend yet",
       "trainUnits": "Train units",
       "feasts": "Feasts",
       "build": "Build",
@@ -142,7 +141,8 @@
       "noLandUnitsAtHome": "No land units at home",
       "noShipsAtHome": "No ships at home",
       "siege": "Siege",
-      "noRamAtHome": "Needs a battering ram at home"
+      "noRamAtHome": "Needs a battering ram at home",
+      "hexBusy": "This hex already has an order"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "LV {level} · HEX {q}, {r}",
@@ -163,17 +163,25 @@
       "queueFull": "The waiting queue is full ({waiting} of {max})",
       "badgeNoResources": "Not enough resources",
       "badgeNoSlot": "No free build slot",
-      "requiresBuilding": "Requires {building} level {level}"
+      "requiresBuilding": "Requires {building} level {level}",
+      "razeTitle": "Raze to level {level}",
+      "razeTitleRemove": "Tear down",
+      "razeSubRemove": "{building} · Level 1 → gone",
+      "razeBadge": "CAN BE RAZED"
     },
     "tap": {
       "build": "Tap {name} again to build",
-      "upgrade": "Tap {name} again to upgrade"
+      "upgrade": "Tap {name} again to upgrade",
+      "raze": "Tap {name} again to raze"
     },
     "errors": {
       "couldNotQueueBuild": "Could not queue that build.",
-      "couldNotQueueUpgrade": "Could not queue that upgrade."
+      "couldNotQueueUpgrade": "Could not queue that upgrade.",
+      "couldNotQueueRaze": "Could not queue that raze."
     },
-    "towerCampWarning": "Wild beasts will burn this tower unless an army stands guard on it."
+    "towerCampWarning": "Wild beasts will burn this tower unless an army stands guard on it.",
+    "razeTime": "Raze time",
+    "refund": "Refund"
   },
   "buildQueue": {
     "title": "Construction",
@@ -183,7 +191,9 @@
     "hexSubtext": "hex {q}-{r}",
     "cancel": "✕",
     "cancelError": "Could not cancel the order.",
-    "reservedFooter": "Reserved for queued construction: {wood}w {stone}b {food}f {iron}i"
+    "reservedFooter": "Reserved for queued construction: {wood}w {stone}b {food}f {iron}i",
+    "razeOrderName": "Razing {name} → {level}",
+    "razeRemoveOrderName": "Tearing down {name}"
   },
   "trainingQueue": {
     "title": "Training",
@@ -263,7 +273,9 @@
     "renownEtaDays": "{days} d {hours} h",
     "renownEtaHours": "{hours} h {minutes} min",
     "renownEtaMinutes": "{minutes} min",
-    "renownDemo": "Renown progress needs a live world."
+    "renownDemo": "Renown progress needs a live world.",
+    "razingNote": "Being razed to level {level}.",
+    "razingRemoveNote": "Being torn down."
   },
   "trainingModal": {
     "subtitle": "Level {level} · training {percent}% faster",

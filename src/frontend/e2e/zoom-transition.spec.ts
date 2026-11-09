@@ -37,7 +37,7 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     const world = await WorldMapPage.open(page);
     await world.moveTo(await world.centre());
 
-    await expect(page).toHaveURL(/\/settlement#world$/);
+    await expect(page).toHaveURL(/\/settlement#world(&.*)?$/);
     const zoomBefore = await cameraZoom(page);
 
     // Zoom in until the enter-settlement threshold is crossed (the shipped
@@ -69,7 +69,7 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
       await page.waitForTimeout(15);
       if (page.url().includes('#world')) break;
     }
-    await expect(page).toHaveURL(/\/settlement#world$/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/settlement#world(&.*)?$/, { timeout: 10_000 });
 
     const zoomAfterOut = await cameraZoom(page);
     expect(zoomAfterOut).toBeLessThan(zoomAfterIn);
@@ -124,7 +124,7 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     // (enabled) transition would react to...
     expect(await cameraZoom(page)).toBeGreaterThan(DEFAULT_ENTER_SETTLEMENT_ZOOM);
     // ...and yet, with the panel's checkbox unchecked, no transition fired.
-    await expect(page).toHaveURL(/\/settlement\?debug=1#world$/);
+    await expect(page).toHaveURL(/\/settlement\?debug=1#world(&.*)?$/);
   });
 
   test('leaving both map routes tears down the renderer instead of leaking a second canvas', async ({ page }) => {

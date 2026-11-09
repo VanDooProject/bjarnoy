@@ -257,6 +257,16 @@ public static class LiveFrontendTestHelpers
     }
 
     /// <summary>
+    /// Sets the map's "Smooth edges" setting (<c>lib/perf/antialiasPreference.ts</c>) to off, the way a player does: through
+    /// its own localStorage key, before the app loads. MSAA multiplies the fill cost of every frame on CI's software
+    /// renderer, and each frame the renderer is slow to produce is one more the page's animations (the ring's layer swap
+    /// waits on them) have to wait for. Same as the demo suite's <c>antialias: 'off'</c> in <c>e2e/fixtures.ts</c>; only
+    /// geometry edges change with it, so it is for tests whose assertions are DOM and game state.
+    /// </summary>
+    public static Task TurnSmoothEdgesOffAsync(IPage page) =>
+        page.AddInitScriptAsync("() => { try { window.localStorage.setItem('bjarnoy.antialias', 'off'); } catch { /* storage blocked: stays on */ } }");
+
+    /// <summary>
     /// Builds <paramref name="building"/> through the open ring menu the way a player does: the Build hub, then
     /// <paramref name="category"/>, then the building bubble. The onboarding ring is the map's own two-lane ring
     /// (<c>useBuildRing</c>), so a building is never on the first layer. Waits for each layer swap to land, as
@@ -280,6 +290,14 @@ public static class LiveFrontendTestHelpers
     }
 
     /// <summary>
+    /// How long a layer swap may take to land. The swap is only Web Animations (~0.25 s under reduced motion, under 1 s
+    /// otherwise), but they finish a frame at a time, and on CI's software renderer one frame of the map takes hundreds of
+    /// ms: swaps were seen at 4.4 and 5.5 s there, past Playwright's 5 s default. Same budget as this class's other
+    /// element waits.
+    /// </summary>
+    private const float SwapLandedTimeoutMs = 10_000;
+
+    /// <summary>
     /// Waits for the layer swap after clicking <paramref name="clicked"/> to land. On a timeout the exception carries what
     /// the page showed: a count of 0 means either the ring is gone or it is stuck mid-swap (<c>data-swapping</c> never
     /// cleared), and only the DOM state plus the timeline from <see cref="RingTimelineScript"/> can tell those apart —
@@ -289,7 +307,7 @@ public static class LiveFrontendTestHelpers
     {
         try
         {
-            await Assertions.Expect(swapped).ToHaveCountAsync(1);
+            await Assertions.Expect(swapped).ToHaveCountAsync(1, new() { Timeout = SwapLandedTimeoutMs });
         }
         catch (PlaywrightException ex)
         {

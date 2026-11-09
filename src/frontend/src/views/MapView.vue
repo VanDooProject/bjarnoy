@@ -32,7 +32,7 @@ import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
-import { WORLD_HASH } from '../lib/mapModeRoute';
+import { WORLD_HASH, isWorldHash } from '../lib/mapModeRoute';
 import { parseCameraHash, serializeCameraHash } from '../lib/mapCameraHash';
 import { useAuthStore } from '../stores/auth';
 import { apiErrorMessage } from '../i18n/apiErrors';
@@ -54,6 +54,7 @@ import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { buildingArt } from '../lib/map/buildingArt';
 import { buildingStatsAt, buildingUpgradeCost, scaleOutput, upgradeRateGain } from '../lib/map/buildingEconomy';
+import { razeBlock, razeRefund, razeSeconds } from '../lib/map/raze';
 import { formatBuildTime, formatMissingResources, longhouseLock } from '../lib/map/ringCatalogue';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
@@ -115,7 +116,7 @@ const router = useRouter();
 // from the route rather than tracked as separate local state, so a zoom
 // crossing, a nav click, browser back/forward, or a direct URL load all agree with the
 // renderer on what to show.
-const mode = computed<RenderMode>(() => (route.hash === WORLD_HASH ? 'world' : 'settlement'));
+const mode = computed<RenderMode>(() => (isWorldHash(route.hash) ? 'world' : 'settlement'));
 // World map's own sea backdrop (must match WorldMapCanvas.vue's — that
 // component is still used standalone by AdminWorldReseedView's world
 // preview, which has no settlement/ring-menu UI to merge and so keeps its
@@ -142,10 +143,10 @@ const isMobile = useIsMobile();
 const queueDrawerOpen = ref(false);
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 
-// Settlement mode keeps its camera in the URL hash (lib/mapCameraHash.ts), so a reload or a shared link
+// Both modes keep their camera in the URL hash (lib/mapCameraHash.ts), so a reload or a shared link
 // lands on the same spot. Read once, before the first camera change rewrites the hash; a missing or
 // invalid hash leaves the default framing.
-const initialCameraView = mode.value === 'settlement' ? parseCameraHash(route.hash) : null;
+const initialCameraView = parseCameraHash(route.hash);
 const CAMERA_HASH_DEBOUNCE_MS = 300;
 let cameraHashTimer: ReturnType<typeof setTimeout> | undefined;
 function onCameraChange() {
@@ -154,9 +155,9 @@ function onCameraChange() {
 }
 function writeCameraHash() {
   const renderer = canvasRef.value?.renderer;
-  if (!renderer || mode.value !== 'settlement' || route.path !== '/settlement') return;
+  if (!renderer || route.path !== '/settlement') return;
   // Not router.replace: that would run the route watchers; vue-router keeps its own state in history.state.
-  const hash = serializeCameraHash(renderer.cameraView);
+  const hash = serializeCameraHash(renderer.cameraView, mode.value === 'world');
   history.replaceState(history.state, '', `${location.pathname}${location.search}${hash}`);
 }
 onUnmounted(() => clearTimeout(cameraHashTimer));
@@ -877,6 +878,48 @@ function upgradeActionFor(tile: Tile): RingAction {
   };
 }
 
+// The Raze bubble: takes ONE level off the building (docs/design/construction-slots.md, "Razing"). Like Upgrade it says up
+// front whether it is possible and shows a card on hover; a raze costs nothing, so the card shows its time and the third of
+// the level's cost that comes back instead.
+function razeActionFor(tile: Tile): RingAction {
+  const type = tile.buildingType!;
+  const label = t('hud.ringMenu.actions.raze');
+  if (razeBlock(type, false, { state: 'ready' }) === 'longhouse') {
+    return { id: 'raze', label, disabled: true, hint: t('hud.ringMenu.actions.cantRazeLonghouse') };
+  }
+  const level = tile.buildingLevel ?? 1;
+  const definition = buildingCatalogue.byType[type]?.find((d) => d.level === level);
+  const cost = definition?.cost ?? buildingUpgradeCost(type, level);
+  const hexBusy = world.hud.queue.some((o) => o.q === tile.q && o.r === tile.r);
+  // The raze needs the slots building this level took; it costs nothing, so only slots (or the waiting room) can hold it back.
+  const availability = availabilityFor(undefined, definition, false, hexBusy);
+  const block = razeBlock(type, hexBusy, availability);
+  const blocked = block !== null;
+  const busyNote = block === 'hexBusy' ? t('hud.ringMenu.actions.hexBusy') : undefined;
+  return {
+    id: 'raze',
+    label,
+    disabled: blocked,
+    state: blocked ? 'waiting' : undefined,
+    hint: !blocked ? undefined : (busyNote ?? t('hud.ringMenu.card.badgeNoSlot')),
+    card: {
+      title: level > 1 ? t('hud.ringMenu.card.razeTitle', { level: level - 1 }) : t('hud.ringMenu.card.razeTitleRemove'),
+      sub: level > 1
+        ? t('hud.ringMenu.card.upgradeSub', { building: buildingName(type), from: level, to: level - 1 })
+        : t('hud.ringMenu.card.razeSubRemove', { building: buildingName(type) }),
+      time: definition ? formatBuildTime(razeSeconds(buildSeconds(definition.buildSeconds))) : undefined,
+      timeLabel: t('hud.ringMenu.razeTime'),
+      refund: razeRefund(cost),
+      okBadge: t('hud.ringMenu.card.razeBadge'),
+      tapHint: t('hud.ringMenu.tap.raze', { name: label }),
+      // A hex with an order on it takes no other: the card says so instead of listing slots.
+      locks: busyNote ? [busyNote] : [],
+      art: buildingArt(type, level),
+      availability: hexBusy ? undefined : availability,
+    },
+  };
+}
+
 const rootActions = computed<RingAction[]>(() => primaryActionFirst(rootActionList()));
 function rootActionList(): RingAction[] {
   const tile = selectedTile.value;
@@ -919,15 +962,7 @@ function rootActionList(): RingAction[] {
     const upgrade = upgradeActionFor(tile);
     const actions: RingAction[] = [
       upgrade,
-      {
-        id: 'raze',
-        label: t('hud.ringMenu.actions.raze'),
-        disabled: tile.buildingType === 'longhouse' || !DEMO_MODE,
-        hint:
-          tile.buildingType === 'longhouse'
-            ? t('hud.ringMenu.actions.cantRazeLonghouse')
-            : t('hud.ringMenu.actions.notWiredYet'),
-      },
+      razeActionFor(tile),
     ];
     // Training belongs to a building: every building any UnitDefinition.RequiredBuildingType
     // points at offers the action, which opens that building's own TrainingModal; a finished Town Square
@@ -1104,11 +1139,8 @@ async function onRingSelect(id: string) {
       trainModalOpen.value = true;
       return;
     case 'raze':
-      if (world.selectedSettlementId && selectedCoord.value) {
-        world.model.razeBuilding(world.selectedSettlementId, selectedCoord.value);
-        canvasRef.value?.renderer?.forceRebuild();
-      }
-      closeRing();
+      // Like upgrade: on a refusal the ring stays open and shows the rejection's message (`actionError`).
+      await raze();
       return;
     case 'send-army':
       if (selectedCoord.value) world.startDispatchAt(selectedCoord.value);
@@ -1216,6 +1248,24 @@ function describeActionError(err: unknown, fallback: string): string {
   return apiErrorMessage(err, fallback);
 }
 
+async function raze() {
+  if (!world.selectedSettlementId || !selectedCoord.value || !selectedTile.value?.buildingType) return;
+  actionError.value = null;
+  if (DEMO_MODE) {
+    world.model.razeBuilding(world.selectedSettlementId, selectedCoord.value);
+    canvasRef.value?.renderer?.forceRebuild();
+    closeRing();
+    return;
+  }
+  try {
+    await world.razeBuildingLive(selectedCoord.value);
+    closeRing();
+  } catch (err) {
+    console.error('Failed to queue raze against the backend', err);
+    actionError.value = describeActionError(err, t('hud.ringMenu.errors.couldNotQueueRaze'));
+  }
+}
+
 async function upgrade() {
   if (!world.selectedSettlementId || !selectedCoord.value || !selectedTile.value?.buildingType) return;
   actionError.value = null;
@@ -1300,7 +1350,7 @@ async function upgrade() {
       </template>
       <ExpansionPanel />
       <QuestTray v-if="!hasActiveDraft" />
-      <ArmyPanel v-if="!isMobile" />
+      <ArmyPanel v-if="!isMobile" @focus-army="onArmySelect" />
       <HexTooltip v-if="hoverInfo" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
       <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
@@ -1351,7 +1401,7 @@ async function upgrade() {
            queue drawer (mobile fleets need to be tracked here too) are
            mode-agnostic. -->
       <QueueDrawer v-if="isMobile && !hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
-      <ArmyPanel v-if="!isMobile" />
+      <ArmyPanel v-if="!isMobile" @focus-army="onArmySelect" />
       <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
           v-if="selectedTile && ringScreen"
