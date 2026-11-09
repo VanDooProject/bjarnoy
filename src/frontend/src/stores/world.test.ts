@@ -2364,6 +2364,62 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
     });
   });
 
+  describe('upgradeBuildingLive', () => {
+    const upgradeOrder = { ...realOrder, id: 'upgrade-1', targetLevel: 3 };
+
+    async function setupWithLumberjack(level: number) {
+      const store = await setup();
+      store.hud.buildings = [{ q: 3, r: -2, type: 'lumberjack', level }];
+      return store;
+    }
+
+    it('puts a pending order for the next level on the hex before the request resolves', async () => {
+      const store = await setupWithLumberjack(2);
+      let release!: () => void;
+      queueBuild.mockReturnValue(new Promise<void>((resolve) => (release = resolve)));
+
+      const done = store.upgradeBuildingLive(at);
+      expect(store.hud.queue).toHaveLength(1);
+      expect(store.hud.queue[0]).toMatchObject({ q: 3, r: -2, building: 'lumberjack', kind: 'build', targetLevel: 3, state: 'waiting' });
+      expect(store.hud.queue[0].id.startsWith('pending:')).toBe(true);
+
+      getSettlement.mockResolvedValue(settlementResponse({ wood: 400, queue: [upgradeOrder] }));
+      release();
+      await done;
+      expect(queueBuild).toHaveBeenCalledWith('settlement-1', { building: 'lumberjack', q: 3, r: -2 }, undefined);
+      expect(store.hud.queue.map((o) => o.id)).toEqual(['upgrade-1']);
+    });
+
+    it('records the confirmed spend for the resources that really dropped', async () => {
+      const store = await setupWithLumberjack(2);
+      queueBuild.mockResolvedValue(undefined);
+      getSettlement.mockResolvedValue(settlementResponse({ wood: 400, queue: [upgradeOrder] }));
+
+      await store.upgradeBuildingLive(at, { wood: 100, stone: 50 });
+
+      expect(store.hud.lastSpend?.cost).toEqual({ wood: 100 });
+    });
+
+    it('removes the pending order and rethrows on a refusal, without a spend or a refresh', async () => {
+      const store = await setupWithLumberjack(2);
+      const refusal = new Error('No free construction slot.');
+      queueBuild.mockRejectedValue(refusal);
+      getSettlement.mockClear();
+
+      await expect(store.upgradeBuildingLive(at, { wood: 100 })).rejects.toBe(refusal);
+
+      expect(store.hud.queue).toEqual([]);
+      expect(store.hud.lastSpend).toBeNull();
+      expect(getSettlement).not.toHaveBeenCalled();
+    });
+
+    it('refuses a hex without a building', async () => {
+      const store = await setup();
+      await expect(store.upgradeBuildingLive(at)).rejects.toThrow();
+      expect(queueBuild).not.toHaveBeenCalled();
+    });
+  });
+
   it('recordSpend ignores an empty cost', async () => {
     const store = await setup();
     store.recordSpend({});

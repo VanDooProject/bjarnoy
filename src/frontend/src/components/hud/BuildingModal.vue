@@ -36,7 +36,6 @@ const props = defineProps<{
   tile: Tile;
   mine: boolean;
   ownerLabel: string | null;
-  busy: boolean;
   // Issue #158: the caller (SettlementView) surfaces a queue rejection's
   // detail text here (NoFreeSlot's premium hint included) rather than this
   // modal reaching into the API layer itself.
@@ -305,7 +304,6 @@ const noFreeSlot = computed(() => world.hud.construction.slotsUsed >= world.hud.
 const noSlotNoQueue = computed(() => noFreeSlot.value && world.hud.construction.maxWaitingOrders === 0);
 
 const actionLabel = computed(() => {
-  if (props.busy) return t('hud.buildingModal.queuing');
   if (noSlotNoQueue.value) return t('hud.buildingModal.noFreeSlotPremium');
   if (noFreeSlot.value) return t('hud.buildingModal.queueBuild');
   return t('hud.buildingModal.upgradeToLevel', { level: level.value + 1 });
@@ -455,7 +453,7 @@ const actionLabel = computed(() => {
           <p v-if="error" class="desc afford-note">{{ error }}</p>
           <button
             class="primary"
-            :disabled="busy || !canAfford || noSlotNoQueue"
+            :disabled="!canAfford || noSlotNoQueue"
             @click="emit('upgrade')"
           >
             {{ actionLabel }}
