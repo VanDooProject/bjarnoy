@@ -242,6 +242,107 @@ public class ArmyTests
         Assert.Contains(position, movement.Path);
     }
 
+    private static (Army Army, Bjarnoy.Domain.Movement.Movement Movement) Outbound(HexCoord? to = null)
+    {
+        var decision = Dispatch(Found(), to ?? new HexCoord(6, 0), provisions: 45);
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        return (decision.Army!, ((ArmyLocation.InTransit)decision.Army!.Location).Movement);
+    }
+
+    [Fact]
+    public void HexesReachedBy_is_the_path_prefix_ending_at_PositionAt()
+    {
+        var (_, movement) = Outbound();
+
+        for (var i = 0; i < movement.Path.Count; i++)
+        {
+            var at = movement.DepartedAt + TimeSpan.FromHours(movement.EdgeHours[i]);
+            var reached = movement.HexesReachedBy(at);
+
+            Assert.Equal(movement.Path.Take(i + 1), reached);
+            Assert.Equal(movement.PositionAt(at), reached[^1]);
+        }
+    }
+
+    [Fact]
+    public void HexesReachedBy_is_just_the_start_before_departure_and_the_whole_path_from_arrival_on()
+    {
+        var (_, movement) = Outbound();
+
+        Assert.Equal([movement.Path[0]], movement.HexesReachedBy(movement.DepartedAt.AddSeconds(-1)));
+        Assert.Equal(movement.Path, movement.HexesReachedBy(movement.ArrivesAt));
+        Assert.Equal(movement.Path, movement.HexesReachedBy(DateTimeOffset.MaxValue));
+    }
+
+    [Fact]
+    public void Army_HexesReachedBy_follows_the_leg_while_travelling_and_is_home_otherwise()
+    {
+        var (army, movement) = Outbound();
+        var partway = movement.DepartedAt + TimeSpan.FromHours(movement.EdgeHours[3]);
+
+        Assert.Equal(movement.Path.Take(4), army.HexesReachedBy(Home, partway));
+        Assert.Equal([Home], (army with { Location = new ArmyLocation.AtHome() }).HexesReachedBy(Home, partway));
+    }
+
+    [Fact]
+    public void SettleTo_reports_the_outbound_leg_as_walked_up_to_the_turn_around()
+    {
+        var (army, movement) = Outbound();
+
+        var result = army.SettleTo(movement.TurnAroundAt.AddMinutes(1));
+
+        var walked = Assert.Single(result.Walked);
+        Assert.Same(movement, walked.Leg);
+        Assert.Equal(movement.Path, walked.Hexes);
+    }
+
+    [Fact]
+    public void SettleTo_over_the_whole_round_trip_reports_the_outbound_and_the_return_leg()
+    {
+        var (army, movement) = Outbound();
+
+        var result = army.SettleTo(movement.ReturnArrivesAt.AddMinutes(1));
+
+        Assert.True(result.ArrivedHome);
+        Assert.Equal(2, result.Walked.Count);
+        Assert.Equal(movement.Path, result.Walked[0].Hexes);
+        Assert.Equal(movement.ReturnPath, result.Walked[1].Hexes);
+    }
+
+    [Fact]
+    public void SettleTo_reports_nothing_walked_when_nothing_is_due()
+    {
+        var (army, movement) = Outbound();
+
+        Assert.Empty(army.SettleTo(movement.TurnAroundAt.AddMinutes(-1)).Walked);
+    }
+
+    [Fact]
+    public void WalkedLeg_Between_a_recall_covers_the_route_up_to_the_new_leg_and_nothing_when_the_leg_is_unchanged()
+    {
+        var (army, movement) = Outbound();
+        var now = movement.DepartedAt + TimeSpan.FromHours(movement.EdgeHours[3]);
+
+        var recalled = army.Recall(now, Home, AllGrass());
+        Assert.NotNull(recalled);
+
+        var walked = WalkedLeg.Between(army, recalled!);
+        Assert.NotNull(walked);
+        Assert.Equal(movement.Path.Take(4), walked!.Hexes);
+        Assert.Null(WalkedLeg.Between(army, army));
+        Assert.Null(WalkedLeg.Between(army with { Location = new ArmyLocation.AtHome() }, army));
+    }
+
+    [Fact]
+    public void WalkedLeg_Between_an_arrival_covers_the_whole_leg()
+    {
+        var (army, movement) = Outbound();
+
+        var walked = WalkedLeg.Between(army, army with { Location = new ArmyLocation.AtHome() });
+
+        Assert.Equal(movement.Path, walked!.Hexes);
+    }
+
     [Fact]
     public void SettleTo_leaves_an_outbound_army_unchanged_before_turn_around()
     {

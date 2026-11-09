@@ -167,17 +167,30 @@ public sealed record Movement
     /// position switches at the shared edge rather than at the hex centre. Arrival stays on
     /// <see cref="CumulativeHours"/>. See the type-level remarks for why.
     /// </summary>
-    public HexCoord PositionAt(DateTimeOffset now)
+    public HexCoord PositionAt(DateTimeOffset now) => Path[ReachedIndexAt(now)];
+
+    /// <summary>
+    /// Every hex of <see cref="Path"/> the army has stood on by <paramref name="at"/>: <c>Path[0..index]</c> where <c>index</c> is
+    /// the one <see cref="PositionAt"/> reports (so the last element is always <see cref="PositionAt"/>). At or after
+    /// <see cref="ArrivesAt"/> that is the whole path, before <see cref="DepartedAt"/> just the start hex.
+    /// </summary>
+    public IReadOnlyList<HexCoord> HexesReachedBy(DateTimeOffset at)
+    {
+        var index = ReachedIndexAt(at);
+        return [.. Path.Take(index + 1)];
+    }
+
+    private int ReachedIndexAt(DateTimeOffset now)
     {
         if (now <= DepartedAt)
         {
-            return Path[0];
+            return 0;
         }
 
         var elapsedHours = (now - DepartedAt).TotalHours;
         if (elapsedHours >= CumulativeHours[^1])
         {
-            return Path[^1];
+            return Path.Count - 1;
         }
 
         var index = 0;
@@ -191,6 +204,6 @@ public sealed record Movement
             index = i;
         }
 
-        return Path[index];
+        return index;
     }
 }
