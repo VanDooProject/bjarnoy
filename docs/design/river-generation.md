@@ -225,18 +225,24 @@ rivers, ~17 tiles long). Green islands now get a **drainage network** instead. E
 `riverGenerator.ts`; all knobs are `WorldGenerationOptions` values (admin-tunable like the rest) and TS
 constants of the same name.
 
-1. **Outlets.** `Kout = clamp(round(landTiles / OutletTilesPer), 1, MaxOutlets)` (2000, 12). Candidates are
+1. **Outlets.** An island gets one river mouth for every 2 to 4 springs (springs / 3, at least one), so bigger islands get more mouths and most rivers still meet another before the sea. A river does not run along the coast: tiles next to the shore cost extra, and so does running beside another river without joining it.
+   `Kout = clamp(round(plannedSprings / SpringsPerOutlet), 1, MaxOutlets)` (3, 12), where `plannedSprings` is
+   the same `K` step 3 uses (`RiverGenerator.PlannedSprings`). Before, `Kout` came from the land area
+   (`landTiles / 2000`), which gave islands 2.5 outlets on average, so springs near the sea had to walk a long way
+   along the shore to the next outlet. Candidates are
    coastal land tiles (touching sea) that have an interior neighbour to take flow from. Score = number of island
    tiles within hex radius 3 (bays score high, spits low) plus the `+59` hash. Farthest-point sampling: the
    first is the best score, each next maximises its distance to the outlets chosen (ties by score), stopping at
-   `Kout` or when the best is closer than `MinOutletSpacing` (25). A river ends on an outlet only **head-on**:
+   `Kout` or when the best is closer than `MinOutletSpacing` (12, was 25: at 25 the count was not reached). A river ends on an outlet only **head-on**:
    the outlet is seeded only for arrivals whose direction has open sea (not island land, not bog water, see
    `Drainage.SeaAt`) straight ahead, so every sea mouth is a delta. A candidate no interior neighbour can reach
    head-on is not an outlet.
 2. **Drainage field.** Dijkstra from all outlets over **(tile, arrival direction) states** of the island's
-   interior tiles (an interior tile does not touch the sea; only outlets are coastal, so a river never runs
-   along the shore). Entering tile `N` costs `1 + DrainageNoise * hash(+53) + ValleyNoise * valueNoise(+61,
-   wavelength ValleyScale) + MountainCost` (if a mountain): per-tile jitter plus a smooth valley field, so
+   interior tiles (an interior tile does not touch the sea; only outlets are coastal, but the interior tiles
+   right behind the coast used to be the cheapest way along the island, so the field also pulls away from the
+   shore). Entering tile `N` costs `1 + DrainageNoise * hash(+53) + ValleyNoise * valueNoise(+61,
+   wavelength ValleyScale) + MountainCost` (if a mountain) `+ ShoreCost` (6) when `N` has a coastal neighbour
+   (sea distance 2) or `ShoreCost * 0.5` when it is next to such a tile (sea distance 3): per-tile jitter plus a smooth valley field, so
    paths bend along coherent valleys instead of running ruler-straight, and go round ranges (`MountainCost`
    2) rather than across them. A turn costs `BendCost` (60 degrees, a Bend tile) or `SharpBendCost` (120
    degrees, Bend60); the 180 degree hairpin has no art and is not offered. The cheapest way on from a state is
@@ -255,7 +261,12 @@ constants of the same name.
    alone. A junction into a river-width trunk (downstream of an earlier confluence) with the wide geometry
    gets `RiverStreamBonus` (3) off, because the river-stream Y needs no widening first.
    With no junction near, the walk follows the pointers. Before stepping beside an earlier river it searches
-   again; when its next tile is an earlier river's it joins if the Y is drawable, else searches, else runs on
+   again; the walk's own pick of out-direction (`Drainage.CrowdedOut`, and `SteeredOut` when meandering) also pays
+   `WalkCrowdingCost` (1) per earlier-river neighbour of the candidate tile (0 for an earlier river's own tile,
+   which would be a join), so a river that runs on alone drifts off another one instead of running beside it;
+   the static field, `BestOut` and the `naturalCost` the searches are priced on do not include it (higher values
+   than about 2 made rivers wind labyrinths round a trunk: at 8, 48 antiparallel pairs per 1000 tiles);
+   when its next tile is an earlier river's it joins if the Y is drawable, else searches, else runs on
    alone (`SearchJunction` with `toMouth`: cheapest route to any free coastal tile, tiles beside earlier rivers
    cost `CrowdingCost` 2 each, reach `10 * MergeReach`, and the new mouth must be head-on too: sea straight
    ahead of the last step) and becomes a river of its own with a new mouth; if even that fails it is dropped
@@ -273,8 +284,22 @@ Hash offsets used by the tracer on the island seed (`worldSeed + islandIndex * 1
 candidates, `+43` legacy meander, `+47` widening pick, `+53` per-tile drainage noise, `+59` outlet score, `+61`
 valley noise, `+113` and `+127` the meander side and stretch lengths (see "Meanders and mountain entry").
 
+Measured over seeds 1-8 at radius 1000 (`river-stats.ts`; "shore run" = a river with 6+ consecutive tiles at sea
+distance 2 or less, "antiparallel" = adjacent tiles of different rivers, not linked by flow, with opposite
+out-directions):
+
+| | before | after |
+|---|---|---|
+| outlets per island with rivers | 2.5 | 3.0 |
+| rivers with a shore run | 507 of 2 608 (19.4%) | 17 of 2 632 (0.6%) |
+| antiparallel adjacent pairs (per 1000 river tiles) | 505 (6.7) | 313 (4.5) |
+| merges per island | 5.4 | 5.0 |
+| truncated + dropped (% of rivers) | 58 (2.2%) | 37 (1.4%) |
+| median spring-to-end length (steps) | 31 | 27 |
+
 Acceptance (`scripts/worldgen-preview/river-stats.ts --seeds 1-8 --radius 1000`, and
-`RiverStreamTests`): 0 inland mouths, every confluence drawable, truncated + dropped under 5% of rivers, at
+`RiverStreamTests`): 0 inland mouths, under 3% of rivers with a shore run,
+antiparallel pairs under 5.5 per 1000 river tiles, every confluence drawable, truncated + dropped under 5% of rivers, at
 least one merge per island with 4+ rivers on average, hugging adjacencies under 3% of river tiles (river-width
 Straight tiles per island are reported, not asserted).
 

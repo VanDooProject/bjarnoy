@@ -1,5 +1,6 @@
 // Acceptance statistics for the river generator over several seeds: rivers and merges per island,
-// river lengths, width shares, truncated/dropped branches, inland mouths, parallel runs.
+// river lengths, width shares, truncated/dropped branches, inland mouths, parallel runs, shore hugging
+// (rivers with a run of 6+ tiles within two tiles of the sea) and antiparallel neighbours.
 //   cd src/frontend && npx tsx ../../scripts/worldgen-preview/river-stats.ts --seeds 1-8 --radius 1000
 import { coordKey, neighbors } from '../../src/frontend/src/lib/hex/coords';
 import { emptyRiverStats, generateRivers } from '../../src/frontend/src/lib/map/riverGenerator';
@@ -26,6 +27,8 @@ let river = 0;
 let inland = 0;
 let parallel = 0;
 let landTiles = 0;
+let hugging = 0;
+let antiparallel = 0;
 const lengths: number[] = [];
 const mergesPer: { rivers: number; merges: number; land: number; outlets: number; straights: number }[] = [];
 let ms = 0;
@@ -53,6 +56,52 @@ for (let seed = from; seed <= to; seed++) {
       islandOf.set(coordKey(t), index);
     }
   });
+
+  // Sea distance of a river tile (1 = touches the sea), capped at 5.
+  const seaDistance = (c: { q: number; r: number }) => {
+    let frontier = [c];
+    const seen = new Set([coordKey(c)]);
+    for (let d = 1; d <= 4; d++) {
+      const next: { q: number; r: number }[] = [];
+      for (const f of frontier) {
+        for (const n of neighbors(f)) {
+          if (!isLand(n)) return d;
+          if (!seen.has(coordKey(n))) {
+            seen.add(coordKey(n));
+            next.push(n);
+          }
+        }
+      }
+      frontier = next;
+    }
+    return 5;
+  };
+  const ringDistance = new Map<string, number>();
+  for (const t of all.values()) ringDistance.set(coordKey(t), seaDistance(t));
+  const outIndex = (t: RiverTile) => (t.outDirection ? TILE_ORIENTATIONS.indexOf(t.outDirection) : -1);
+  for (const t of all.values()) {
+    if (t.shape !== 'spring') continue;
+    let cur: RiverTile | undefined = t;
+    let run = 0;
+    let best = 0;
+    for (let g = 0; cur && g < 1e5; g++) {
+      run = ringDistance.get(coordKey(cur))! <= 2 ? run + 1 : 0;
+      best = Math.max(best, run);
+      cur = cur.outDirection ? all.get(coordKey(neighbors(cur)[outIndex(cur)]!)) : undefined;
+    }
+    if (best >= 6) hugging++;
+  }
+  // Adjacent tiles of different rivers, not linked by flow, heading in opposite directions.
+  for (const t of all.values()) {
+    const od = outIndex(t);
+    for (const n of neighbors(t)) {
+      const o = all.get(coordKey(n));
+      if (!o || coordKey(n) <= coordKey(t)) continue;
+      const od2 = outIndex(o);
+      const linked = (od >= 0 && coordKey(neighbors(t)[od]!) === coordKey(n)) || (od2 >= 0 && coordKey(neighbors(o)[od2]!) === coordKey(t));
+      if (!linked && od >= 0 && od2 >= 0 && (od + 3) % 6 === od2) antiparallel++;
+    }
+  }
 
   const rootOf = new Map<string, string>();
   const walk = (t: RiverTile) => {
@@ -104,4 +153,6 @@ console.log(`merges-per-island histogram ${JSON.stringify(hist)}`);
 console.log(`spring->end length: mean ${avg(lengths).toFixed(1)} median ${lengths[lengths.length >> 1] ?? 0} p90 ${lengths[Math.floor(lengths.length * 0.9)] ?? 0} max ${lengths[lengths.length - 1] ?? 0}`);
 console.log(`river-tile share: river ${pct(river, tilesTotal)} widen ${pct(widen, tilesTotal)} stream ${pct(stream, tilesTotal)} of ${tilesTotal} tiles (${pct(tilesTotal, landTiles)} of land on river islands)`);
 console.log(`inland mouths ${inland}; parallel adjacent pairs ${parallel} (${((1000 * parallel) / Math.max(1, tilesTotal)).toFixed(1)}/1000 tiles); generate ${ms.toFixed(0)} ms`);
+console.log(`valley streams ${stats.valleyStreams} of ${stats.valleyCandidates} cut-off valleys (${stats.valleyStreamsIntoRivers} into a river, joined earlier ${stats.valleysJoined})`);
+console.log(`shore hugging: ${hugging} of ${lengths.length} rivers (${pct(hugging, lengths.length)}) run 6+ tiles within two tiles of the sea; antiparallel adjacent pairs ${antiparallel} (${((1000 * antiparallel) / Math.max(1, tilesTotal)).toFixed(1)}/1000 tiles)`);
 if (verbose) console.log(JSON.stringify(mergesPer));
