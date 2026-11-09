@@ -41,7 +41,7 @@ describe('applyWhatIf', () => {
     const w = applyWhatIf(live, { ...defaultWhatIf(), costGrowth: 1.5, timeGrowth: 1.5, productionGrowth: 1.1 });
     const [l1, l5] = [live.quarry[0], live.quarry[4]];
     expect(w.quarry[0].cost).toEqual(l1.cost);
-    expect(w.quarry[4].cost.wood).toBe(niceRound(l1.cost.wood * 1.5 ** 4));
+    expect(w.quarry[4].cost.wood).toBe(niceRound(55 * 1.5 ** 4));
     expect(w.quarry[4].buildSeconds).toBe(Math.round(l1.buildSeconds * 1.5 ** 4));
     // Increment-geometric: level 5 totals I1 · (1 + g + g² + g³ + g⁴).
     expect(w.quarry[4].productionPerHour.stone).toBeCloseTo(l1.productionPerHour.stone * (1 + 1.1 + 1.1 ** 2 + 1.1 ** 3 + 1.1 ** 4), 6);

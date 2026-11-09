@@ -93,7 +93,7 @@
   },
   "ringMenu": {
     "shrineLimitLock": "Your realm already has a shrine",
-    "storageHouseLock": "Needs {count} Storehouse at level {level} | Needs {count} Storehouses at level {level}",
+    "greatStorehouseLock": "Needs {count} Storehouse at level {level} | Needs {count} Storehouses at level {level}",
     "palisadeLock": {
       "branch": "A wall never branches: this hex would get three wall neighbours",
       "gateNotStraight": "A gate only stands between two opposite wall hexes, in a straight wall",

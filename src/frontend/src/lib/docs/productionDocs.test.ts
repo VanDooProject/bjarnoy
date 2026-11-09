@@ -6,7 +6,6 @@ import {
   boostTerrainsOf,
   millBoostAt,
   neighbourBoost,
-  storageHouseSteps,
 } from './productionDocs';
 import { RADIUS_BOOST_RESOURCE, buildingStatsFor, type BuildingKind } from '../map/buildingEconomy';
 import catalogue from '../../data/building-catalogue.json';
@@ -71,15 +70,6 @@ describe('productionDocs', () => {
     for (const none of ['farm', 'pumpkinfarm', 'reindeerherder', 'claybrickworks'] as const) {
       expect(boostTerrainsOf(none), none).toEqual([]);
     }
-  });
-
-  it('asks for one more storehouse at a higher level each time, up to four at level 25', () => {
-    expect(storageHouseSteps()).toEqual([
-      { nth: 2, later: false, count: 1, level: 10 },
-      { nth: 3, later: false, count: 2, level: 15 },
-      { nth: 4, later: false, count: 3, level: 20 },
-      { nth: 5, later: true, count: 4, level: 25 },
-    ]);
   });
 
   it('starts every resource at a storage floor of 500', () => {

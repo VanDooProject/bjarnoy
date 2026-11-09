@@ -1,5 +1,5 @@
 import type { BuildingDefinitionResponse, ResourceLine } from '../../api/types';
-import { costGrowthOf, niceRound } from '../map/buildingEconomy';
+import { costGrowthOf, levelOneBaseCost, niceRound, producerEarlyDiscount, type BuildingKind } from '../map/buildingEconomy';
 
 // "What if the curves were different?": regenerate every level of every
 // building type from that type's level-1 row and a handful of growth factors,
@@ -29,7 +29,7 @@ export interface WhatIfKnobs {
 export const DEFAULT_WHAT_IF: WhatIfKnobs = {
   costGrowth: 1.3,
   longhouseCostGrowth: 1.34,
-  longhouseLateCostGrowth: 1.45,
+  longhouseLateCostGrowth: 1.6,
   timeGrowth: 1.33,
   longhouseTimeGrowth: 1.33,
   productionGrowth: 1.2,
@@ -99,10 +99,14 @@ export function applyWhatIf(
     const timeGrowth = lh ? knobs.longhouseTimeGrowth : knobs.timeGrowth;
     const costScale = lh ? knobs.longhouseCostScale : knobs.producerCostScale;
     const brickFree = BRICK_FREE[type];
+    // The level-1 row already carries the producers' level-1 discount (60%) and its rounding: grow from the undiscounted base.
+    const discounted = producerEarlyDiscount(type, 1) !== 1;
+    const baseCost = discounted ? levelOneBaseCost(type as BuildingKind) : first.cost;
     out[type] = defs.map((d) => {
       const n = d.level - 1;
-      const grown = scaleLine(first.cost, costScale * costFactorAt(d.level));
-      if (brickFree) grown.stone = d.level <= brickFree.levels ? 0 : brickFree.stone * costScale * costFactorAt(d.level);
+      const discount = producerEarlyDiscount(type, d.level);
+      const grown = scaleLine(baseCost, costScale * costFactorAt(d.level) * discount);
+      if (brickFree) grown.stone = d.level <= brickFree.levels ? 0 : brickFree.stone * costScale * costFactorAt(d.level) * discount;
       return {
         ...copyDef(d),
         cost: scaleLine(grown, 1, niceRound),

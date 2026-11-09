@@ -207,16 +207,15 @@ export function ravensRings(odinLevel: number): number {
   return 2 * Math.min(Math.max(odinLevel, 0), 5);
 }
 
+/** Mirrors `BuildingCatalogue.GreatStorehouseStorageHouseLevel`: the Storage House level a Great Storehouse asks for. */
+export const GREAT_STOREHOUSE_STORAGE_HOUSE_LEVEL = 25;
+
 /**
- * Mirrors `BuildingCatalogue.AdditionalStorageHouseRequirement`: with
- * `existing` storage houses held (standing plus queued), one more needs
- * `min(existing, 4)` of them at level `min(10 + 5·(existing − 1), 25)` — 1 at
- * L10, 2 at L15, 3 at L20, then 4 at L25 (the max), after which any number
- * more is allowed. `{ count: 0, level: 0 }` for the first house.
+ * Mirrors the count rule in `Settlement.PlanBuild`: a new Great Storehouse needs one more Storage House at level 25 than
+ * the Great Storehouses already held (standing plus queued) — the n-th one needs n maxed Storage Houses.
  */
-export function additionalStorageHouseRequirement(existing: number): { count: number; level: number } {
-  if (existing < 1) return { count: 0, level: 0 };
-  return { count: Math.min(existing, 4), level: Math.min(10 + 5 * (existing - 1), 25) };
+export function greatStorehouseStorageHousesNeeded(greatStorehousesHeld: number): number {
+  return Math.max(greatStorehousesHeld, 0) + 1;
 }
 
 /** Mirrors `BuildingCatalogue.BogOreWorksIronAtLevelOne`: iron per hour a level-1 bog-ore works adds. */
@@ -345,9 +344,9 @@ export function buildingStatsFor(
     // Mirrors BuildingCatalogue.cs's Longhouse(level): Uniform(250) * level.
     case 'longhouse':
       return { output: { kind: 'storageCapacity', amount: level * 250 } };
-    // Mirrors BuildingCatalogue.cs's StorageHouse(level): 600 * (1.22^L - 1) / 0.22 per resource.
+    // Mirrors BuildingCatalogue.cs's StorageHouse(level): 300 * (1.22^L - 1) / 0.22 per resource.
     case 'storagehouse':
-      return { output: { kind: 'storageCapacity', amount: geometricCapacity(600, 1.22, level) } };
+      return { output: { kind: 'storageCapacity', amount: geometricCapacity(300, 1.22, level) } };
     // Mirrors BuildingCatalogue.cs's GreatStorehouse(level): 50000 * (1.25^L - 1) / 0.25 per resource.
     case 'greatstorehouse':
       return { output: { kind: 'storageCapacity', amount: geometricCapacity(50000, 1.25, level) } };
@@ -493,18 +492,20 @@ export function buildingStatsFor(
 /** Cost growth per level: ×1.30 unless the building has its own. Mirrors BuildingCatalogue.cs's CostFactor calls. */
 const COST_GROWTH: Partial<Record<BuildingKind, number>> = {
   longhouse: 1.34,
-  smithy: 1.291,
-  siegeworkshop: 1.233,
-  sawmill: 1.196,
-  cropmill: 1.196,
-  hammerschmiede: 1.196,
-  shrineofthor: 1.715,
-  shrineoffreyja: 1.715,
-  shrineofullr: 1.715,
-  shrineofnjord: 1.715,
-  odinstatue: 1.715,
-  greatstorehouse: 2.0,
-  druidhut: 1.368,
+  smithy: 1.486,
+  siegeworkshop: 1.379,
+  sawmill: 1.313,
+  cropmill: 1.313,
+  hammerschmiede: 1.313,
+  shrineofthor: 2.14,
+  shrineoffreyja: 2.14,
+  shrineofullr: 2.14,
+  shrineofnjord: 2.14,
+  odinstatue: 2.14,
+  storagehouse: 1.2,
+  greatstorehouse: 1.23,
+  meadery: 1.3,
+  druidhut: 1.619,
 };
 
 /** Cost growth per level of `type`. */
@@ -513,9 +514,26 @@ export function costGrowthOf(type: BuildingKind | string): number {
 }
 
 function costFactor(type: BuildingKind, level: number): number {
-  // The Longhouse grows x1.34 up to level 10 and x1.45 per level from level 11 on.
-  if (type === 'longhouse') return Math.pow(1.34, Math.min(level, 10) - 1) * Math.pow(1.45, Math.max(level - 10, 0));
-  return Math.pow(costGrowthOf(type), level - 1);
+  // The Longhouse grows x1.34 up to level 10 and x1.60 per level from level 11 on.
+  if (type === 'longhouse') return Math.pow(1.34, Math.min(level, 10) - 1) * Math.pow(1.6, Math.max(level - 10, 0));
+  return Math.pow(costGrowthOf(type), level - 1) * producerEarlyDiscount(type, level);
+}
+
+/** Mirrors `BuildingCatalogue.ProducerEarlyDiscount`: levels 1-3 of a resource producer cost 60%, 75% and 90% of the formula. */
+const EARLY_DISCOUNT_TYPES: ReadonlySet<string> = new Set([
+  'lumberjack',
+  'quarry',
+  'claybrickworks',
+  'reindeerherder',
+  'farm',
+  'pumpkinfarm',
+  'fishinghut',
+  'bogoreworks',
+]);
+const EARLY_DISCOUNT = [0.6, 0.75, 0.9] as const;
+
+export function producerEarlyDiscount(type: string, level: number): number {
+  return EARLY_DISCOUNT_TYPES.has(type) && level <= EARLY_DISCOUNT.length ? EARLY_DISCOUNT[level - 1] : 1;
 }
 
 const line = (wood: number, stone: number, food: number): ResourceLine => ({ wood, stone, food, iron: 0 });
@@ -524,7 +542,7 @@ const line = (wood: number, stone: number, food: number): ResourceLine => ({ woo
 // per-type builders. Buildings cost no iron. "hut" has no backend
 // catalogue entry — it's demo-only, see SettlementView.vue's build() doc
 // comment — so it's approximated at the Reindeer Herder cost.
-const SHRINE_COST = line(33000, 35000, 10500);
+const SHRINE_COST = line(475000, 505000, 150000);
 const BASE_COST: Record<BuildingKind, ResourceLine> = {
   hut: line(52, 36, 7),
   reindeerherder: line(52, 36, 7),
@@ -535,7 +553,7 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   quarry: line(55, 8, 33),
   claybrickworks: line(52, 10, 33),
   bogoreworks: line(42, 34, 20),
-  hammerschmiede: line(10000, 6350, 1800),
+  hammerschmiede: line(59000, 37500, 10500),
   longhouse: line(120, 100, 60),
   tower: line(140, 200, 30),
   shrineofthor: SHRINE_COST,
@@ -546,15 +564,15 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   storagehouse: line(90, 50, 0),
   greatstorehouse: line(4500, 3000, 0),
   archeryrange: line(470, 200, 58),
-  siegeworkshop: line(6400, 3200, 530),
+  siegeworkshop: line(26500, 13000, 2200),
   dockyard: line(410, 99, 33),
   barracks: line(100, 78, 43),
-  sawmill: line(7100, 10000, 1000),
-  meadery: line(720, 390, 200),
-  cropmill: line(10000, 7100, 1000),
-  smithy: line(1700, 2100, 420),
+  sawmill: line(41500, 59500, 5950),
+  meadery: line(860, 470, 230),
+  cropmill: line(59500, 41500, 5950),
+  smithy: line(4100, 5100, 1000),
   townsquare: line(120, 130, 44),
-  druidhut: line(750, 450, 550),
+  druidhut: line(1050, 640, 780),
   cartworkshop: line(680, 230, 75),
   // One wall hex, plain or gate: BuildingCatalogue.PalisadeHex.
   palisade: line(540, 150, 40),
@@ -582,6 +600,11 @@ const BRICK_FREE_LEVELS: Partial<Record<BuildingKind, number>> = {
   reindeerherder: 5,
   claybrickworks: 1,
 };
+
+/** The undiscounted level-1 cost of `type` (`BuildingCatalogue`'s base, before the producers' early-level discount). */
+export function levelOneBaseCost(type: BuildingKind): ResourceLine {
+  return { ...BASE_COST[type] };
+}
 
 /** Resource cost to build `type` at `targetLevel` (1 for a fresh build, current level + 1 for an upgrade). */
 export function buildingUpgradeCost(type: BuildingKind, targetLevel: number): ResourceLine {

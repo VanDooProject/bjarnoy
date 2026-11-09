@@ -266,7 +266,7 @@
       "shrineofnjord": "Raised to Njörd on coastal water, behind a level-10 Dockyard — the sea god's favour raises the attack of your ships (+10% at level 1, +22% at level 5). A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
       "archeryrange": "Trains the land army's bowmen on grass or sand.",
       "dockyard": "Trains ships on shallow (coastal) water.",
-      "greatstorehouse": "A late-game storage tier on grass, needing both the longhouse and this settlement's own storage house at level 15.",
+      "greatstorehouse": "A late-game storage tier on grass, needing the longhouse at level 15 and a storage house at level 25. Each further one asks for one more storage house at level 25.",
       "barracks": "Trains the land army's core line on grass or sand at the border — thralls, spearmen, axemen and berserkers. Archery Range trains the bowmen and the Siege Workshop the siege engines; they never train the same unit.",
       "sawmill": "Refines timber standing directly on a straight, gentle-bend, or tight-bend river tile — a waterwheel turning with the current, same as Crop Mill's. No Wood of its own: it boosts every Lumberjack within its level's range instead (a wider range and a bigger boost at higher levels).",
       "meadery": "Keeps bees on grass behind a level-5 Farm — skeps, a honey press and a mead cellar. No effect of its own yet: the mead is meant for a future morale boost.",
@@ -981,16 +981,8 @@
       "body": "Each resource stops growing at your storage limit, and nothing above it is kept. With no storage building the limit is {base} of each resource. These buildings raise it.",
       "capacity": "Adds, per resource",
       "cell": "Level {level}: {capacity}",
-      "levelCap": "A {storehouse} or {great} cannot be higher than your {longhouse}.",
-      "moreHeading": "More storehouses",
-      "moreBody": "You can build more than one Storehouse, but each extra one asks for more of the ones you already have.",
-      "step": {
-        "which": "Storehouse",
-        "needs": "Needs",
-        "nth": "No. {n}",
-        "later": "No. {n} and every one after",
-        "needsCell": "{count} storehouse at level {level} | {count} storehouses at level {level}"
-      },
+      "levelCap": "A {great} cannot be higher than your {longhouse}.",
+      "greatCount": "You can build any number of {storehouse}s, and their level does not depend on your longhouse. A {great} needs a {storehouse} at level 25, and every further one needs one more: the second needs two at level 25, the third three, and so on.",
       "overCap": "A cost above your storage limit can never be paid, however long you wait. Build storage before an upgrade that costs more than you can hold."
     },
     "upkeep": {

@@ -93,7 +93,7 @@
   },
   "ringMenu": {
     "shrineLimitLock": "Dein Gebiet hat bereits einen Schrein",
-    "storageHouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
+    "greatStorehouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
     "palisadeLock": {
       "branch": "Eine Mauer verzweigt sich nie: Dieses Feld hätte drei Nachbarn der Mauer",
       "gateNotStraight": "Ein Tor steht nur zwischen zwei gegenüberliegenden Mauerfeldern in einer geraden Mauer",

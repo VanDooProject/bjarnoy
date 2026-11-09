@@ -11,7 +11,7 @@
     "AlreadyQueuedOnHex": "Für dieses Feld ist bereits ein Bauauftrag eingereiht.",
     "MaxLevelReached": "Dieses Gebäude hat bereits die Höchststufe erreicht.",
     "LonghousePlacementNotAllowed": "Das Langhaus kann dort nicht platziert werden.",
-    "StorageHouseTooLow": "Baue zuerst deine Lagerhäuser aus: ein weiteres braucht 1 auf Stufe 10, 2 auf Stufe 15, 3 auf Stufe 20 oder 4 auf Stufe 25.",
+    "GreatStorehouseNeedsStorageHouses": "Baue zuerst mehr Lagerhäuser auf Stufe 25 aus: Jedes Große Lagerhaus braucht ein Lagerhaus auf Stufe 25 mehr, als du Große Lagerhäuser hast.",
     "RequiredBuildingTooLow": "Ein benötigtes Gebäude ist noch nicht hoch genug ausgebaut.",
     "ShrineGodAlreadyOnIsland": "Für diesen Gott steht bereits ein Schrein auf der Insel.",
     "SettlementAlreadyHasShrine": "Diese Siedlung hat bereits einen Schrein – pro Siedlung ist nur einer erlaubt, egal welches Gottes.",

@@ -273,45 +273,33 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     expect(model.placeBuilding(settlement.id, spots[2], 'farm')).toBe(true);
   });
 
-  it('raises the bar for each further storage house (additionalStorageHouseRequirement)', () => {
+  it('lets a settlement hold any number of storage houses and asks n maxed ones for the n-th Great Storehouse', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const spots = hexesInRadius(at, 3).filter(
       (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
     );
-    expect(spots.length).toBeGreaterThan(5);
+    expect(spots.length).toBeGreaterThan(6);
 
     settlement.level = 3; // widen the claim so the spots are reachable
     expect(model.storageHouses(settlement.id)).toEqual([]);
     const setLevel = (i: number, level: number) => {
       model.getTile(spots[i].q, spots[i].r).buildingLevel = level;
     };
-    // 1st: never refused. 2nd: needs 1 at L10.
-    expect(model.placeBuilding(settlement.id, spots[0], 'storagehouse')).toBe(true);
-    expect(model.placeBuilding(settlement.id, spots[1], 'storagehouse')).toBe(false);
-    setLevel(0, 10);
-    expect(model.placeBuilding(settlement.id, spots[1], 'storagehouse')).toBe(true);
-    // 3rd: needs 2 at L15.
-    setLevel(1, 14);
-    expect(model.placeBuilding(settlement.id, spots[2], 'storagehouse')).toBe(false);
-    setLevel(0, 15);
-    expect(model.placeBuilding(settlement.id, spots[2], 'storagehouse')).toBe(false);
-    setLevel(1, 15);
-    expect(model.placeBuilding(settlement.id, spots[2], 'storagehouse')).toBe(true);
-    // 4th: needs 3 at L20.
-    setLevel(0, 20);
-    setLevel(1, 20);
-    setLevel(2, 19);
-    expect(model.placeBuilding(settlement.id, spots[3], 'storagehouse')).toBe(false);
-    setLevel(2, 20);
-    expect(model.placeBuilding(settlement.id, spots[3], 'storagehouse')).toBe(true);
-    // 5th: needs 4 at L25, and from then on there is no limit.
-    for (const i of [0, 1, 2]) setLevel(i, 25);
-    setLevel(3, 24);
-    expect(model.placeBuilding(settlement.id, spots[4], 'storagehouse')).toBe(false);
-    setLevel(3, 25);
-    expect(model.placeBuilding(settlement.id, spots[4], 'storagehouse')).toBe(true);
-    expect(model.placeBuilding(settlement.id, spots[5], 'storagehouse')).toBe(true);
+    // Any number of storage houses, whatever their level.
+    for (const i of [0, 1, 2]) expect(model.placeBuilding(settlement.id, spots[i], 'storagehouse')).toBe(true);
+    // The 1st Great Storehouse needs 1 storage house at L25.
+    expect(model.placeBuilding(settlement.id, spots[3], 'greatstorehouse')).toBe(false);
+    setLevel(0, 25);
+    expect(model.placeBuilding(settlement.id, spots[3], 'greatstorehouse')).toBe(true);
+    // The 2nd needs 2 at L25.
+    expect(model.placeBuilding(settlement.id, spots[4], 'greatstorehouse')).toBe(false);
+    setLevel(1, 25);
+    expect(model.placeBuilding(settlement.id, spots[4], 'greatstorehouse')).toBe(true);
+    // The 3rd needs 3.
+    expect(model.placeBuilding(settlement.id, spots[5], 'greatstorehouse')).toBe(false);
+    setLevel(2, 25);
+    expect(model.placeBuilding(settlement.id, spots[5], 'greatstorehouse')).toBe(true);
   });
 
   it('lets a settlement hold only one shrine in total, of any god', () => {

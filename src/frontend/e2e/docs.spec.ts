@@ -843,7 +843,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   }) => {
     await page.goto("/docs/founding");
     await expectPlayerPage(page, "Founding settlements", "price-table");
-    await expect(page.locator('[data-settlement="2"]')).toContainText("55,000");
+    await expect(page.locator('[data-settlement="2"]')).toContainText("80,000");
     await expect(page.locator('[data-settlement="3"]')).toContainText("240 / 180 / 120 / 120");
     await expect(page.getByText("issue #447")).toHaveCount(0);
   });

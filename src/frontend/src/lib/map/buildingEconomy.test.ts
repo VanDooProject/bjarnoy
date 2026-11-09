@@ -3,7 +3,7 @@
 // server-authoritative one in BuildingCatalogue.cs.
 import { describe, expect, it } from 'vitest';
 import {
-  additionalStorageHouseRequirement,
+  greatStorehouseStorageHousesNeeded,
   ravensRings,
   wisdomBuildTimeFactor,
   BOG_ORE_WORKS_IRON_AT_LEVEL_ONE,
@@ -173,13 +173,15 @@ describe('economy curves (mirror BuildingCatalogue.cs, docs/design/economy.md)',
   });
 
   it('cost is geometric: x1.30 per level, x1.34 for the Longhouse, and never asks for iron', () => {
-    expect(buildingUpgradeCost('farm', 1)).toEqual({ wood: 57, stone: 29, food: 9, iron: 0 });
+    // Levels 1-3 of a producer cost 60%, 75% and 90% of the formula.
+    expect(buildingUpgradeCost('farm', 1)).toEqual({ wood: 34, stone: 17, food: 5, iron: 0 });
+    expect(buildingUpgradeCost('farm', 4).wood).toBe(niceRound(57 * 1.3 ** 3));
     expect(buildingUpgradeCost('farm', 5).wood).toBe(160);
     expect(buildingUpgradeCost('farm', 20).wood).toBe(8350);
     expect(buildingUpgradeCost('longhouse', 2).wood).toBe(160);
-    // The Longhouse grows x1.34 up to level 10 and x1.45 per level from level 11 on.
+    // The Longhouse grows x1.34 up to level 10 and x1.60 per level from level 11 on.
     expect(buildingUpgradeCost('longhouse', 10).wood).toBe(niceRound(120 * 1.34 ** 9));
-    expect(buildingUpgradeCost('longhouse', 12).wood).toBe(niceRound(120 * 1.34 ** 9 * 1.45 ** 2));
+    expect(buildingUpgradeCost('longhouse', 12).wood).toBe(niceRound(120 * 1.34 ** 9 * 1.6 ** 2));
     for (const type of ['tower', 'barracks', 'archeryrange', 'dockyard', 'cartworkshop'] as const) {
       expect(buildingUpgradeCost(type, 3).iron).toBe(0);
     }
@@ -191,8 +193,8 @@ describe('economy curves (mirror BuildingCatalogue.cs, docs/design/economy.md)',
       expect(buildingUpgradeCost(type, 6).stone, `${type} 6`).toBeGreaterThan(0);
     }
     expect(buildingUpgradeCost('claybrickworks', 1).stone).toBe(0);
-    expect(buildingUpgradeCost('claybrickworks', 2).stone).toBe(13);
-    expect(buildingUpgradeCost('lumberjack', 1)).toEqual({ wood: 16, stone: 0, food: 30, iron: 0 });
+    expect(buildingUpgradeCost('claybrickworks', 2).stone).toBe(10);
+    expect(buildingUpgradeCost('lumberjack', 1)).toEqual({ wood: 10, stone: 0, food: 18, iron: 0 });
   });
 
   it('niceRound steps by digits: whole below 100, 10s to 999, then 5 * 10^(digits - 3)', () => {
@@ -201,11 +203,11 @@ describe('economy curves (mirror BuildingCatalogue.cs, docs/design/economy.md)',
     ]);
   });
 
-  it('storage houses grow geometrically: 600 * (1.22^L - 1) / 0.22', () => {
+  it('storage houses grow geometrically: 300 * (1.22^L - 1) / 0.22', () => {
     const at = (level: number) =>
       (buildingStatsFor('storagehouse', level, 0).output as { amount: number }).amount;
-    expect(at(1)).toBe(600);
-    expect(at(2)).toBe(Math.round((600 * (1.22 ** 2 - 1)) / 0.22));
+    expect(at(1)).toBe(300);
+    expect(at(2)).toBe(Math.round((300 * (1.22 ** 2 - 1)) / 0.22));
   });
 
   it('per-building max levels', () => {
@@ -251,14 +253,9 @@ describe('maxTowers (mirrors BuildingCatalogue.MaxTowers)', () => {
   });
 });
 
-describe('additionalStorageHouseRequirement (mirrors BuildingCatalogue.AdditionalStorageHouseRequirement)', () => {
-  it('asks for min(n, 4) houses at min(10 + 5(n - 1), 25)', () => {
-    expect(additionalStorageHouseRequirement(0)).toEqual({ count: 0, level: 0 });
-    expect(additionalStorageHouseRequirement(1)).toEqual({ count: 1, level: 10 });
-    expect(additionalStorageHouseRequirement(2)).toEqual({ count: 2, level: 15 });
-    expect(additionalStorageHouseRequirement(3)).toEqual({ count: 3, level: 20 });
-    expect(additionalStorageHouseRequirement(4)).toEqual({ count: 4, level: 25 });
-    expect(additionalStorageHouseRequirement(9)).toEqual({ count: 4, level: 25 });
+describe('greatStorehouseStorageHousesNeeded (mirrors the count rule in Settlement.PlanBuild)', () => {
+  it('asks one more maxed Storage House than Great Storehouses held', () => {
+    expect([0, 1, 2, 5].map(greatStorehouseStorageHousesNeeded)).toEqual([1, 2, 3, 6]);
   });
 });
 
@@ -337,8 +334,8 @@ describe('bog buildings', () => {
   it('max levels and costs: bog-ore works 25 like the producers, Hammer Forge 20 like the mills', () => {
     expect(maxLevelFor('bogoreworks')).toBe(25);
     expect(maxLevelFor('hammerschmiede')).toBe(20);
-    expect(buildingUpgradeCost('bogoreworks', 1)).toEqual({ wood: 42, stone: 34, food: 20, iron: 0 });
-    expect(buildingUpgradeCost('hammerschmiede', 1)).toEqual({ wood: 10000, stone: 6350, food: 1800, iron: 0 });
+    expect(buildingUpgradeCost('bogoreworks', 1)).toEqual({ wood: 25, stone: 20, food: 12, iron: 0 });
+    expect(buildingUpgradeCost('hammerschmiede', 1)).toEqual({ wood: 59000, stone: 37500, food: 10500, iron: 0 });
   });
 });
 
