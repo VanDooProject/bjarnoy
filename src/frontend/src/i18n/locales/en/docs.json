@@ -808,7 +808,7 @@
   },
   "walls": {
     "title": "Walls",
-    "intro": "The palisade is the earth-and-timber wall of the Viking age, and above all a movement barrier: it stops land armies, not boats. It unlocks at Longhouse 7, behind a level-5 Tower, and has 3 levels. Each wall hex costs about 40 wood and 10 brick at level 1.",
+    "intro": "The palisade is the earth-and-timber wall of the Viking age, and above all a movement barrier: it stops land armies, not boats. It unlocks at Longhouse 7, behind a level-5 Tower, and has 3 levels. Each wall hex costs about 540 wood, 150 brick and 40 food at level 1.",
     "stage": "Stage",
     "camera": "Facing",
     "stages": {

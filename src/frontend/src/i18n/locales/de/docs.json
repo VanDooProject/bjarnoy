@@ -808,7 +808,7 @@
   },
   "walls": {
     "title": "Mauern",
-    "intro": "Die Palisade ist die Mauer aus Erde und Holz der Wikingerzeit und vor allem eine Bewegungssperre: Sie hält Landarmeen auf, Boote aber nicht. Sie wird mit Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet und hat 3 Stufen. Jedes Mauerfeld kostet auf Stufe 1 etwa 40 Holz und 10 Stein.",
+    "intro": "Die Palisade ist die Mauer aus Erde und Holz der Wikingerzeit und vor allem eine Bewegungssperre: Sie hält Landarmeen auf, Boote aber nicht. Sie wird mit Langhaus 7 hinter einem Turm der Stufe 5 freigeschaltet und hat 3 Stufen. Jedes Mauerfeld kostet auf Stufe 1 etwa 540 Holz, 150 Stein und 40 Nahrung.",
     "stage": "Stufe",
     "camera": "Blickrichtung",
     "stages": {

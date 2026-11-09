@@ -16,7 +16,7 @@ formula changes, re-run the lab and check all of them.
 | T1 | A new player is never waiting in the first 10 minutes | founding stock covers every build started in the first 10 min; first builds take 1–3 min |
 | T2 | Something new unlocks often, one building at a time | at most one new building per Longhouse level (LH1 excepted); no run of 3+ LH levels without an unlock before LH 18 |
 | T3 | 2nd settlement: optimising player ≈ **5 days**, average player ≈ **2 weeks** | simulator profiles `pro` / `average` (§6) |
-| T4 | A settlement is "full" (LH 30, producers maxed) after **1–2 months** | `pro` ≈ 5–6 weeks, `average` ≈ 8–9 weeks |
+| T4 | A settlement is "full" (LH 30, producers maxed) after about **3–4 months** (LH 30 now needs the Great Storehouse) | simulated: active ≈ 12 weeks (d85), 4 check-ins ≈ 17–18 weeks (d123) |
 | T5 | Later levels still pay off, but ever more slowly | producer payback grows ~8% per level (cost ×1.30 vs the level's added output ×1.20) |
 | T6 | Troops come before settling | Cart Workshop (settlers) at LH 10, after Barracks (LH 5) and Dockyard (LH 8) |
 | T7 | Territory grows through towers, not the Longhouse | Longhouse claim radius stops growing at LH 3 (§5) |
@@ -49,7 +49,9 @@ For a building with level-1 values `C₁` (cost, per resource), `P₁`
 (production/h) and `t₁` (build minutes):
 
 ```
-cost(L)       = C₁ · g_c^(L−1)           g_c = 1.30  (Longhouse 1.34)
+cost(L)       = C₁ · g_c^(L−1)           g_c = 1.30  (some buildings have their own, see below)
+cost_LH(L)    = C₁ · 1.34^(L−1)          for L ≤ 10
+cost_LH(L)    = C₁ · 1.34^9 · 1.45^(L−10)  for L > 10
 production(L) = I₁ · (g_p^L − 1) / (g_p − 1)   g_p = 1.20
 buildTime(L)  = t₁ · g_t^(L−1)           g_t = 1.33
 ```
@@ -68,10 +70,32 @@ whole number, 100–999 to the nearest 10, 1 000–9 999 to the nearest 50,
 
 | Building | C₁ wood/brick/food | I₁ /h | t₁ min |
 |---|---|---|---|
-| Producers (Lumberjack, Quarry, Clay, Herder, Farm, Fishing) | 35 / 28 / 10 | Lumberjack, Quarry, Clay, Reindeer Herder 8; Farm 12; Pumpkin Farm 13; Fishing Hut 16 | 3 |
+| Lumberjack | 16 / 49 / 30 | 8 wood | 3 |
+| Clay Brickworks | 52 / 10 / 33 | 8 brick | 3 |
+| Quarry | 55 / 8 / 33 | 8 brick | 3 |
+| Reindeer Herder | 52 / 36 / 7 | 8 food | 3 |
+| Farm | 57 / 29 / 9 | 12 food | 3 |
+| Pumpkin Farm | 55 / 33 / 8 | 13 food | 3 |
+| Fishing Hut | 49 / 39 / 7 | 16 food | 3 |
+| Bog-ore works | 42 / 34 / 20 | 4 iron | 3 |
 | Longhouse | 120 / 100 / 60 | +15 wood, +15 food per level (linear; no brick, no iron) | 1.5 |
-| Storage House | 80 / 60 / 0 | +600 capacity · 1.22^(L−1) | 2.5 |
-| Great Storehouse | 4 000 / 3 500 / 0 | +50 000 capacity · 1.25^(L−1) | 10 |
+| Storage House | 90 / 50 / 0 | +600 capacity · 1.22^(L−1) | 2.5 |
+| Great Storehouse | 4 500 / 3 000 / 0, g_c 2.0 | +50 000 capacity · 1.25^(L−1) | 10 |
+| Tower | 140 / 200 / 30 | | 8 |
+| Barracks | 100 / 78 / 43 | | |
+| Town Square | 120 / 130 / 44 | | |
+| Dockyard | 410 / 99 / 33 | | |
+| Archery Range | 470 / 200 / 58 | | |
+| Cart Workshop | 680 / 230 / 75 | | |
+| Meadery | 720 / 390 / 200 | | 4 |
+| Druid Hut | 750 / 450 / 550, g_c 1.368 | | |
+| Weaponsmith (Smithy) | 1 700 / 2 100 / 420, g_c 1.291 | | 4 |
+| Siege Workshop | 6 400 / 3 200 / 530, g_c 1.233 | | |
+| Sawmill | 7 100 / 10 000 / 1 000, g_c 1.196 | | 4 |
+| Crop Mill | 10 000 / 7 100 / 1 000, g_c 1.196 | | 4 |
+| Hammer Forge (Hammerschmiede) | 10 000 / 6 350 / 1 800, g_c 1.196 | | 4 |
+| Shrines (Thor, Freyja, Ullr, Njörd, Odin Statue) | 33 000 / 35 000 / 10 500, g_c 1.715 | | |
+| Palisade, Palisade Gate (per hex) | 540 / 150 / 40 | | 2 |
 
 - The starting buildings (Longhouse, Tower, Lumberjack, Reindeer Herder) cost no brick up to and including level 5. The Clay Brickworks costs no brick at level 1.
 - The Longhouse produces wood and food only: no brick, no iron.
@@ -84,16 +108,16 @@ catalogue; the lab shows all of them.)
 
 What this gives for a producer:
 
-(a Farm, I₁ = 12; the brick and food costs are 28/35 and 10/35 of the wood)
+(a Farm, I₁ = 12; the brick and food costs are 29/57 and 9/57 of the wood)
 
 | L | cost (wood) | output /h | build time |
 |---|---|---|---|
-| 1 | 35 | 12 | 3 min |
-| 5 | 100 | 89 | 9 min |
-| 10 | 370 | 312 | 39 min |
-| 15 | 1 400 | 864 | 2.7 h |
-| 20 | 5 100 | 2 240 | 11 h |
-| 25 | 19 000 | 5 664 | 47 h |
+| 1 | 57 | 12 | 3 min |
+| 5 | 160 | 89 | 9 min |
+| 10 | 600 | 312 | 39 min |
+| 15 | 2 250 | 864 | 2.7 h |
+| 20 | 8 350 | 2 240 | 11 h |
+| 25 | 31 000 | 5 664 | 47 h |
 
 ## 4. Max level per building
 
@@ -295,8 +319,8 @@ merging them later.
 The settlement's wall, built **one hex at a time** (`BuildingType.Palisade` 30 and
 `BuildingType.PalisadeGate` 31, wire ids `palisade` and `palisadegate`; they share
 one tech-tree card, "Palisade / Gate", in the LH 7 row). It unlocks at Longhouse 7
-behind a level-5 Tower, and has **3 levels**. Per hex it costs `C₁ = 40 wood /
-10 brick`, no food, and takes `t₁ = 2 min` at level 1, with the standard growth
+behind a level-5 Tower, and has **3 levels**. Per hex it costs `C₁ = 540 wood /
+150 brick / 40 food`, and takes `t₁ = 2 min` at level 1, with the standard growth
 (cost ×1.30 and time ×1.33 per level). It has no production, storage or claim.
 
 **Placement** (`Settlement.PlanBuild`, `Palisades/PalisadeRules.cs`; the frontend
@@ -574,7 +598,7 @@ their renown.
 - Founding stock: the starting storage nearly full — capacity (500 base +
   250 from the Longhouse) less 50, so 700 wood / 700 brick / 700 food, no
   iron.
-- Level-1 producers cost 35 / 28 / 10 (no brick for the Lumberjack and the
+- Level-1 producers cost between 16 and 57 wood, 8 and 49 brick, 7 and 33 food (each its own mix, §3; no brick for the Lumberjack and the
   Reindeer Herder, nor for the Clay Brickworks) and build in 3 min; the
   Longhouse is +15 wood and +15 food per level.
 - **Onboarding quests pay resources** (Travian's task list), so the first
@@ -696,8 +720,8 @@ them so the levels match. *Implemented:*
 
 ### Bog-ore works numbers (Economy lab)
 
-The bog-ore works follow the producer formulas (§3): cost 35 / 28 / 10 like
-the other producers, each level adds `I₁ · 1.20^(L−1)`, terrain boost +10% per
+The bog-ore works follow the producer formulas (§3): cost 42 / 34 / 20 (its own mix, §3),
+ each level adds `I₁ · 1.20^(L−1)`, terrain boost +10% per
 neighbouring bog, creek or lake hex up to +50%, storage-capped (§4). **I₁ = 4
 iron/h** (the other producers: 8 to 13). The lab places a producer that unlocks late
 (a level-1 gate above Longhouse 1) when its Longhouse level, prerequisites, a
