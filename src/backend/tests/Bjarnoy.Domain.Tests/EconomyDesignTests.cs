@@ -127,6 +127,18 @@ public class EconomyDesignTests
     }
 
     [Fact]
+    public void The_top_great_storehouse_level_fits_in_base_plus_a_maxed_longhouse_three_maxed_storage_houses_and_a_level_9_great_storehouse()
+    {
+        var storageHouse = BuildingCatalogue.Get(BuildingType.StorageHouse, BuildingCatalogue.MaxLevelFor(BuildingType.StorageHouse));
+        var longhouse = BuildingCatalogue.Get(BuildingType.Longhouse, BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse));
+        var top = BuildingCatalogue.MaxLevelFor(BuildingType.GreatStorehouse);
+        var capacity = BuildingCatalogue.BaseStorageCapacity + longhouse.StorageCapacity + 3 * storageHouse.StorageCapacity
+            + BuildingCatalogue.Get(BuildingType.GreatStorehouse, top - 1).StorageCapacity;
+
+        Assert.True(capacity.Covers(BuildingCatalogue.Get(BuildingType.GreatStorehouse, top).Cost), "the top Great Storehouse level cannot be stored");
+    }
+
+    [Fact]
     public void The_longhouse_itself_only_ever_needs_a_level_1_longhouse()
     {
         for (var level = 1; level <= BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse); level++)
@@ -208,12 +220,12 @@ public class EconomyDesignTests
         var one = BuildingCatalogue.Get(BuildingType.Farm, 1);
         var ten = BuildingCatalogue.Get(BuildingType.Farm, 10);
 
-        Assert.Equal(new ResourceAmounts(35, 28, 10, 0), one.Cost);
+        Assert.Equal(new ResourceAmounts(57, 29, 9, 0), one.Cost);
         Assert.Equal(12, one.ProductionPerHour.Food, 6);
         Assert.Equal(TimeSpan.FromMinutes(3), one.BuildDuration);
 
-        Assert.Equal(BuildingCatalogue.NiceRound(35 * Math.Pow(1.30, 9)), ten.Cost.Wood, 6);
-        Assert.Equal(BuildingCatalogue.NiceRound(28 * Math.Pow(1.30, 9)), ten.Cost.Stone, 6);
+        Assert.Equal(BuildingCatalogue.NiceRound(57 * Math.Pow(1.30, 9)), ten.Cost.Wood, 6);
+        Assert.Equal(BuildingCatalogue.NiceRound(29 * Math.Pow(1.30, 9)), ten.Cost.Stone, 6);
         Assert.Equal(TimeSpan.FromSeconds(Math.Round(180 * Math.Pow(1.33, 9))), ten.BuildDuration);
     }
 
@@ -270,15 +282,15 @@ public class EconomyDesignTests
     public void The_clay_brickworks_costs_no_brick_at_level_1_only()
     {
         Assert.Equal(0, BuildingCatalogue.Get(BuildingType.ClayBrickworks, 1).Cost.Stone);
-        Assert.Equal(BuildingCatalogue.NiceRound(28 * 1.30), BuildingCatalogue.Get(BuildingType.ClayBrickworks, 2).Cost.Stone);
+        Assert.Equal(BuildingCatalogue.NiceRound(10 * 1.30), BuildingCatalogue.Get(BuildingType.ClayBrickworks, 2).Cost.Stone);
     }
 
     [Fact]
     public void The_start_buildings_keep_their_other_resources_at_the_brick_free_levels()
     {
-        Assert.Equal(new ResourceAmounts(35, 0, 10, 0), BuildingCatalogue.Get(BuildingType.Lumberjack, 1).Cost);
+        Assert.Equal(new ResourceAmounts(16, 0, 30, 0), BuildingCatalogue.Get(BuildingType.Lumberjack, 1).Cost);
         Assert.Equal(new ResourceAmounts(120, 0, 60, 0), BuildingCatalogue.Get(BuildingType.Longhouse, 1).Cost);
-        Assert.Equal(new ResourceAmounts(120, 0, 0, 0), BuildingCatalogue.Get(BuildingType.Tower, 1).Cost);
+        Assert.Equal(new ResourceAmounts(140, 0, 30, 0), BuildingCatalogue.Get(BuildingType.Tower, 1).Cost);
     }
 
     [Fact]
@@ -321,9 +333,9 @@ public class EconomyDesignTests
     }
 
     [Fact]
-    public void The_great_storehouse_costs_4000_wood_and_3500_brick_and_holds_a_geometric_50000()
+    public void The_great_storehouse_costs_4500_wood_and_3000_brick_and_holds_a_geometric_50000()
     {
-        Assert.Equal(new ResourceAmounts(4000, 3500, 0, 0), BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1).Cost);
+        Assert.Equal(new ResourceAmounts(4500, 3000, 0, 0), BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1).Cost);
         Assert.Equal(ResourceAmounts.Uniform(50000), BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1).StorageCapacity);
     }
 
@@ -386,6 +398,45 @@ public class EconomyDesignTests
     }
 
     [Fact]
+    public void A_late_buildings_level_1_costs_between_10_and_40_percent_of_the_longhouse_upgrade_at_its_unlock_level()
+    {
+        // Excluded: Storage House, Tower, Palisade and Gate are cheap infrastructure that unlock early and is built in numbers,
+        // the Bridge has its own per-level cost table, and the Great Storehouse is priced by its storage, not by this share.
+        BuildingType[] excluded =
+        [
+            BuildingType.StorageHouse, BuildingType.Tower, BuildingType.Palisade, BuildingType.PalisadeGate,
+            BuildingType.Bridge, BuildingType.GreatStorehouse,
+        ];
+        var outside = new List<string>();
+        foreach (var type in BuildingCatalogue.AllTypes.Except(excluded).Except(Producers).Where(t => t != BuildingType.Longhouse))
+        {
+            var unlock = BuildingCatalogue.UnlockLevel(type);
+            var share = Sum(BuildingCatalogue.Get(type, 1).Cost) / Sum(BuildingCatalogue.Get(BuildingType.Longhouse, unlock).Cost);
+            if (share is < 0.10 or > 0.40)
+            {
+                outside.Add($"{type}: level 1 is {share:P0} of Longhouse {unlock}");
+            }
+        }
+
+        Assert.True(outside.Count == 0, string.Join("; ", outside));
+    }
+
+    [Fact]
+    public void Each_producers_own_resource_is_the_smallest_share_of_its_level_1_cost()
+    {
+        // The Bog-ore works produce iron, which no building costs, so there is no share to compare. Read at level 6: the start
+        // buildings and the Clay Brickworks hide their stone at level 1, and every level grows by the same factor.
+        foreach (var type in Producers.Where(t => t != BuildingType.BogOreWorks))
+        {
+            var produced = BuildingCatalogue.Get(type, 1).ProductionPerHour;
+            var cost = BuildingCatalogue.Get(type, 6).Cost;
+            var own = produced.Wood > 0 ? cost.Wood : produced.Stone > 0 ? cost.Stone : cost.Food;
+
+            Assert.True(own <= Math.Min(cost.Wood, Math.Min(cost.Stone, cost.Food)), $"{type}: own resource {own} is not the cheapest of {cost}");
+        }
+    }
+
+    [Fact]
     public void Producer_payback_time_strictly_increases_with_level()
     {
         foreach (var type in Producers)
@@ -404,10 +455,11 @@ public class EconomyDesignTests
     }
 
     [Fact]
-    public void Every_longhouse_level_can_be_afforded_from_the_storage_the_previous_level_gives_plus_two_max_storage_houses()
+    public void Every_longhouse_level_can_be_afforded_from_the_storage_the_previous_level_gives_plus_three_max_storage_houses_and_a_max_great_storehouse()
     {
         var longhouseMax = BuildingCatalogue.MaxLevelFor(BuildingType.Longhouse);
         var storageMax = BuildingCatalogue.MaxLevelFor(BuildingType.StorageHouse);
+        var greatMax = BuildingCatalogue.MaxLevelFor(BuildingType.GreatStorehouse);
 
         for (var level = 2; level <= longhouseMax; level++)
         {
@@ -417,6 +469,8 @@ public class EconomyDesignTests
                 (BuildingType.Longhouse, level - 1),
                 (BuildingType.StorageHouse, storageMax),
                 (BuildingType.StorageHouse, storageMax),
+                (BuildingType.StorageHouse, storageMax),
+                (BuildingType.GreatStorehouse, greatMax),
             ]);
 
             Assert.True(capacity.Covers(cost), $"Longhouse {level} ({cost}) does not fit in {capacity}");
@@ -477,7 +531,7 @@ public class EconomyDesignTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = buildings,
-            Resources = ResourcePool.Create(ResourceAmounts.Uniform(1_000_000), production, capacity, T0),
+            Resources = ResourcePool.Create(ResourceAmounts.Uniform(1_000_000), production, capacity + ResourceAmounts.Uniform(1_000_000), T0),
         };
     }
 

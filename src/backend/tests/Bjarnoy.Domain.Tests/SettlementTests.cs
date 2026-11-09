@@ -1450,7 +1450,8 @@ public class SettlementTests
             Resources = ResourcePool.Create(
                 ResourceAmounts.Uniform(1_000_000),
                 BuildingCatalogue.Totals([(BuildingType.Longhouse, level)]).ProductionPerHour,
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, level)]).Capacity,
+                // Room for the stock whatever the building costs: the test funds the settlement, storage is not what it is about.
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, level)]).Capacity + ResourceAmounts.Uniform(1_000_000),
                 T0),
         };
     }

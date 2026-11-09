@@ -28,7 +28,7 @@ public class BogBuildingTests
             Name = "Bjornstad",
             Centre = Origin,
             Buildings = buildings,
-            Resources = ResourcePool.Create(ResourceAmounts.Uniform(1_000_000), production, capacity, T0),
+            Resources = ResourcePool.Create(ResourceAmounts.Uniform(1_000_000), production, capacity + ResourceAmounts.Uniform(1_000_000), T0),
         };
     }
 

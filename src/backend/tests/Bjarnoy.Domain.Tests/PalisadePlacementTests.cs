@@ -31,7 +31,7 @@ public sealed class PalisadePlacementTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = buildings,
-            Resources = ResourcePool.Create(ResourceAmounts.Uniform(1_000_000), production, capacity, T0),
+            Resources = ResourcePool.Create(ResourceAmounts.Uniform(1_000_000), production, capacity + ResourceAmounts.Uniform(1_000_000), T0),
         };
     }
 
@@ -66,7 +66,7 @@ public sealed class PalisadePlacementTests
             Assert.Null(BuildingCatalogue.TryGet(type, 4));
 
             var one = BuildingCatalogue.Get(type, 1);
-            Assert.Equal(new ResourceAmounts(Wood: 40, Stone: 10, Food: 0, Iron: 0), one.Cost);
+            Assert.Equal(new ResourceAmounts(Wood: 540, Stone: 150, Food: 40, Iron: 0), one.Cost);
             Assert.Equal(TimeSpan.FromMinutes(2), one.BuildDuration);
             Assert.Equal(7, one.RequiredLonghouseLevel);
             Assert.Equal(new BuildingPrerequisite(BuildingType.Tower, 5), Assert.Single(one.Prerequisites));
@@ -89,7 +89,7 @@ public sealed class PalisadePlacementTests
         Assert.Equal(new BuildingPrerequisite(BuildingType.Tower, 5), weakTower.MissingPrerequisite);
         var ok = Plan(Walled(), BuildingType.Palisade, new HexCoord(1, 0));
         Assert.True(ok.Accepted, ok.Rejection.ToString());
-        Assert.Equal(new ResourceAmounts(Wood: 40, Stone: 10, Food: 0, Iron: 0), BuildingCatalogue.Get(BuildingType.Palisade, 1).Cost);
+        Assert.Equal(new ResourceAmounts(Wood: 540, Stone: 150, Food: 40, Iron: 0), BuildingCatalogue.Get(BuildingType.Palisade, 1).Cost);
     }
 
     [Theory]
