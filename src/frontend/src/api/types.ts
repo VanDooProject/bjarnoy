@@ -948,6 +948,18 @@ export interface ReseedWorldResponse {
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminUserContracts.cs.
 
+/** One autocomplete hit: the account, and whether it matched by user name, settlement name or jarl name. */
+export interface AdminUserLookupResponse {
+  userId: string;
+  userName: string;
+  displayName: string | null;
+  role: string;
+  status: string;
+  via: 'user' | 'settlement' | 'jarl';
+  matchedName: string | null;
+  worldName: string | null;
+}
+
 export interface AdminUserResponse {
   id: string;
   userName: string;
@@ -1853,6 +1865,8 @@ export interface ApiKeyResponse extends ApiKeyScope {
   replacedByApiKeyId: string | null;
   autoRenewUntil: string | null;
   requestsPerMinute: number;
+  /** Code (`XXXX-XXXX`) of the request this key was collected from; only the admin key list fills it in. */
+  requestUserCode?: string | null;
 }
 
 /** Create / recreate response: the only time the token is ever returned. */

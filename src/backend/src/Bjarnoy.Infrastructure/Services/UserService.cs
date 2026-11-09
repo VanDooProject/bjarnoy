@@ -25,6 +25,16 @@ public enum UserStatusChangeOutcome
 public sealed record UsersPage(
     IReadOnlyList<UserEntity> Users, IReadOnlyDictionary<Guid, int> SettlementCounts, int TotalCount);
 
+/// <summary>How a <see cref="UserService.LookupAsync"/> hit was found; the order is the ranking.</summary>
+public enum UserLookupVia
+{
+    User = 0,
+    Settlement = 1,
+    Jarl = 2,
+}
+
+public sealed record UserLookupMatch(UserEntity User, UserLookupVia Via, string? MatchedName, string? WorldName);
+
 public sealed record UserDetail(UserEntity User, IReadOnlyList<SettlementEntity> Settlements);
 
 /// <summary>
@@ -82,6 +92,68 @@ public sealed class UserService(GameDbContext dbContext, TimeProvider timeProvid
             .ConfigureAwait(false);
 
         return new UsersPage(users, counts, totalCount);
+    }
+
+    /// <summary>
+    /// Autocomplete for "pick an account": matches the user name and display name, and also the name and jarl
+    /// (<see cref="SettlementEntity.OwnerName"/>) of settlements, resolving those to the owning account.
+    /// One row per user, best match first (user, then settlement, then jarl). Needs at least two characters.
+    /// </summary>
+    public async Task<IReadOnlyList<UserLookupMatch>> LookupAsync(
+        string? query, int limit, CancellationToken cancellationToken = default)
+    {
+        var term = query?.Trim().ToLowerInvariant();
+        if (term is null || term.Length < 2 || limit < 1)
+        {
+            return [];
+        }
+
+        var matches = new Dictionary<Guid, UserLookupMatch>();
+
+        var byUser = await _dbContext.Users.AsNoTracking()
+            .Where(u => !u.IsSystem
+                && (u.NormalizedUserName.Contains(term)
+                    || (u.DisplayName != null && u.DisplayName.ToLower().Contains(term))))
+            .OrderBy(u => u.Id)
+            .Take(limit)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var user in byUser)
+        {
+            matches[user.Id] = new UserLookupMatch(user, UserLookupVia.User, null, null);
+        }
+
+        var bySettlement = await _dbContext.Settlements.AsNoTracking()
+            .Include(s => s.World)
+            .Include(s => s.Owner)
+            .Where(s => !s.Owner!.IsSystem
+                && (s.Name.ToLower().Contains(term) || s.OwnerName.ToLower().Contains(term)))
+            .OrderBy(s => s.Id)
+            .Take(limit * 3)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var settlement in bySettlement)
+        {
+            if (matches.Count >= limit)
+            {
+                break;
+            }
+
+            var via = settlement.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
+                ? UserLookupVia.Settlement
+                : UserLookupVia.Jarl;
+            var label = via == UserLookupVia.Settlement ? settlement.Name : settlement.OwnerName;
+            if (!matches.TryGetValue(settlement.UserId, out var existing))
+            {
+                matches[settlement.UserId] = new UserLookupMatch(settlement.Owner!, via, label, settlement.World?.Name);
+            }
+            else if (existing.Via == UserLookupVia.Jarl && via == UserLookupVia.Settlement)
+            {
+                matches[settlement.UserId] = existing with { Via = via, MatchedName = label, WorldName = settlement.World?.Name };
+            }
+        }
+
+        return [.. matches.Values.OrderBy(m => m.Via).Take(limit)];
     }
 
     public async Task<UserDetail?> GetUserDetailAsync(Guid id, CancellationToken cancellationToken = default)

@@ -33,6 +33,10 @@ public static class AdminUserEndpoints
             .WithName("AdminListUsers")
             .WithSummary("Lists users, paged, with optional search and status filter.");
 
+        users.MapGet("/lookup", LookupUsers)
+            .WithName("AdminLookupUsers")
+            .WithSummary("Account autocomplete: matches user names and also settlement and jarl names, resolved to the owning account.");
+
         users.MapGet("/{userId:guid}", GetUser)
             .WithName("AdminGetUser")
             .WithSummary("A user's detail, including the settlements they own.");
@@ -78,6 +82,17 @@ public static class AdminUserEndpoints
         ];
 
         return TypedResults.Ok(new PagedAdminUsersResponse(items, result.TotalCount, effectivePage, effectivePageSize));
+    }
+
+    private static async Task<Ok<IReadOnlyList<AdminUserLookupResponse>>> LookupUsers(
+        string? q,
+        int? limit,
+        UserService userService,
+        CancellationToken cancellationToken)
+    {
+        var matches = await userService.LookupAsync(q, limit is > 0 and <= 25 ? limit.Value : 10, cancellationToken);
+        IReadOnlyList<AdminUserLookupResponse> items = [.. matches.Select(AdminUserLookupResponse.From)];
+        return TypedResults.Ok(items);
     }
 
     private static async Task<Results<Ok<AdminUserDetailResponse>, NotFound>> GetUser(

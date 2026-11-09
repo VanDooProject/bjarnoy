@@ -1,4 +1,5 @@
 using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Services;
 
 namespace Bjarnoy.Api.Contracts;
 
@@ -73,6 +74,33 @@ public sealed record AdminUserDetailResponse(
             user.CreatedAt,
             user.LastLoginAt,
             [.. settlements.Select(AdminUserSettlementSummary.From)]);
+    }
+}
+
+/// <summary>One autocomplete hit of <c>GET /admin/users/lookup</c>: the account, and how it was found (<c>user</c>, <c>settlement</c> or <c>jarl</c>).</summary>
+public sealed record AdminUserLookupResponse(
+    Guid UserId,
+    string UserName,
+    string? DisplayName,
+    string Role,
+    string Status,
+    string Via,
+    string? MatchedName,
+    string? WorldName)
+{
+    public static AdminUserLookupResponse From(UserLookupMatch match)
+    {
+        ArgumentNullException.ThrowIfNull(match);
+
+        return new AdminUserLookupResponse(
+            match.User.Id,
+            match.User.UserName,
+            match.User.DisplayName,
+            match.User.Role.ToString().ToLowerInvariant(),
+            match.User.Status.ToString().ToLowerInvariant(),
+            match.Via.ToString().ToLowerInvariant(),
+            match.MatchedName,
+            match.WorldName);
     }
 }
 

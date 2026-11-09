@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, reactive, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { api } from '../../api/client';
+import UserLookupInput from './UserLookupInput.vue';
 import type {
-  AdminUserResponse,
+  AdminUserLookupResponse,
   AdminWorldResponse,
   ApiKeyAccess,
   ApiKeyFeatureInfo,
@@ -101,32 +101,12 @@ watch(ownerIsAdmin, (isAdmin) => {
   }
 });
 
-// Owner search.
-const ownerSearch = ref('');
-const ownerResults = ref<AdminUserResponse[]>([]);
-const ownerSearching = ref(false);
-
-async function searchOwners() {
-  ownerSearching.value = true;
-  try {
-    const result = await api.adminListUsers({ search: ownerSearch.value || undefined, pageSize: 10 });
-    ownerResults.value = result.items;
-  } catch {
-    ownerResults.value = [];
-  } finally {
-    ownerSearching.value = false;
-  }
-}
-
-function pickOwner(user: AdminUserResponse) {
-  form.owner = { id: user.id, userName: user.userName, role: user.role };
-  ownerResults.value = [];
-  ownerSearch.value = '';
+function pickOwner(user: AdminUserLookupResponse) {
+  form.owner = { id: user.userId, userName: user.userName, role: user.role };
 }
 
 function pickSelf() {
   form.owner = { ...props.initial.owner };
-  ownerResults.value = [];
 }
 
 function toggleWorld(id: string) {
@@ -206,27 +186,15 @@ function submit() {
         <span v-if="ownerIsAdmin" class="badge">{{ $t('adminApiKeys.editor.adminBadge') }}</span>
       </p>
       <div class="owner-search">
-        <input
-          v-model="ownerSearch"
-          type="text"
+        <UserLookupInput
           :placeholder="$t('adminApiKeys.editor.ownerSearch')"
-          data-testid="editor-owner-search"
-          @keydown.enter.prevent="searchOwners"
+          testid="editor-owner"
+          @pick="pickOwner"
         />
-        <button type="button" :disabled="ownerSearching" @click="searchOwners">
-          {{ $t('adminApiKeys.editor.searchButton') }}
-        </button>
         <button type="button" data-testid="editor-owner-self" @click="pickSelf">
           {{ $t('adminApiKeys.editor.ownerSelf') }}
         </button>
       </div>
-      <ul v-if="ownerResults.length > 0" class="owner-results">
-        <li v-for="user in ownerResults" :key="user.id">
-          <button type="button" :data-testid="`owner-pick-${user.id}`" @click="pickOwner(user)">
-            {{ user.userName }} ({{ user.role }})
-          </button>
-        </li>
-      </ul>
     </fieldset>
 
     <fieldset class="features">

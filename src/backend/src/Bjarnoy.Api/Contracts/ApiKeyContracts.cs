@@ -31,9 +31,13 @@ public sealed record ApiKeyResponse(
     DateTimeOffset? LastUsedAt,
     DateTimeOffset? RevokedAt,
     Guid? ReplacedByApiKeyId,
-    DateTimeOffset? AutoRenewUntil)
+    DateTimeOffset? AutoRenewUntil,
+    string? RequestUserCode = null)
 {
-    public static ApiKeyResponse From(ApiKeyEntity key, DateTimeOffset now)
+    /// <param name="requestUserCode">
+    /// The <c>XXXX-XXXX</c> code of the request this key was collected from; only the admin key list fills it in.
+    /// </param>
+    public static ApiKeyResponse From(ApiKeyEntity key, DateTimeOffset now, string? requestUserCode = null)
     {
         ArgumentNullException.ThrowIfNull(key);
 
@@ -56,7 +60,8 @@ public sealed record ApiKeyResponse(
             key.LastUsedAt,
             key.RevokedAt,
             key.ReplacedByApiKeyId,
-            key.AutoRenewUntil);
+            key.AutoRenewUntil,
+            requestUserCode);
     }
 }
 
