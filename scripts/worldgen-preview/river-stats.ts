@@ -2,7 +2,7 @@
 // river lengths, width shares, truncated/dropped branches, inland mouths, parallel runs, shore hugging
 // (rivers with a run of 6+ tiles within two tiles of the sea) and antiparallel neighbours.
 //   cd src/frontend && npx tsx ../../scripts/worldgen-preview/river-stats.ts --seeds 1-8 --radius 1000
-import { coordKey, neighbors } from '../../src/frontend/src/lib/hex/coords';
+import { coordKey, hexDistance, neighbors } from '../../src/frontend/src/lib/hex/coords';
 import { emptyRiverStats, generateRivers } from '../../src/frontend/src/lib/map/riverGenerator';
 import { DEFAULT_GENERATION, islandDepthAt, terrainAt } from '../../src/frontend/src/lib/map/worldGenerator';
 import { TILE_ORIENTATIONS, type RiverTile } from '../../src/frontend/src/lib/map/types';
@@ -29,6 +29,7 @@ let parallel = 0;
 let landTiles = 0;
 let hugging = 0;
 let antiparallel = 0;
+let mouthPairs = 0;
 const lengths: number[] = [];
 const mergesPer: { rivers: number; merges: number; land: number; outlets: number; straights: number }[] = [];
 let ms = 0;
@@ -103,6 +104,17 @@ for (let seed = from; seed <= to; seed++) {
     }
   }
 
+  // Sea mouths (a mouth tile touching the sea) of one island closer than 4 hexes to each other.
+  const seaMouths = new Map<number, RiverTile[]>();
+  for (const t of all.values()) {
+    if (t.shape !== 'mouth' || !neighbors(t).some((x) => !isLand(x))) continue;
+    const key = islandOf.get(coordKey(t))!;
+    seaMouths.set(key, [...(seaMouths.get(key) ?? []), t]);
+  }
+  for (const list of seaMouths.values()) {
+    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) if (hexDistance(list[i]!, list[j]!) < 4) mouthPairs++;
+  }
+
   const rootOf = new Map<string, string>();
   const walk = (t: RiverTile) => {
     let cur = t;
@@ -155,4 +167,5 @@ console.log(`river-tile share: river ${pct(river, tilesTotal)} widen ${pct(widen
 console.log(`inland mouths ${inland}; parallel adjacent pairs ${parallel} (${((1000 * parallel) / Math.max(1, tilesTotal)).toFixed(1)}/1000 tiles); generate ${ms.toFixed(0)} ms`);
 console.log(`valley streams ${stats.valleyStreams} of ${stats.valleyCandidates} cut-off valleys (${stats.valleyStreamsIntoRivers} into a river, joined earlier ${stats.valleysJoined})`);
 console.log(`shore hugging: ${hugging} of ${lengths.length} rivers (${pct(hugging, lengths.length)}) run 6+ tiles within two tiles of the sea; antiparallel adjacent pairs ${antiparallel} (${((1000 * antiparallel) / Math.max(1, tilesTotal)).toFixed(1)}/1000 tiles)`);
+console.log(`sea-mouth pairs closer than 4 hexes: ${mouthPairs}`);
 if (verbose) console.log(JSON.stringify(mergesPer));

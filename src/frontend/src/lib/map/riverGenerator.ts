@@ -80,6 +80,8 @@ export const MEANDER_MAX_STRETCH = 16;
 export const MERGE_SLACK = 6.0;
 /** Drainage cost within which a tributary looks for a trunk to join — mirrors `WorldGenerationOptions.MergeReach`. */
 export const MERGE_REACH = 20.0;
+/** Fewest hexes between a new river mouth and any other sea mouth — mirrors `WorldGenerationOptions.MinMouthSpacing`. */
+export const MIN_MOUTH_SPACING = 4;
 /** Cost a junction search takes off a wide-Y junction into a river-width trunk — mirrors `WorldGenerationOptions.RiverStreamBonus`. */
 export const RIVER_STREAM_BONUS = 3.0;
 
@@ -1169,9 +1171,19 @@ function traceDrainageWalk(
         }
       }
 
+      if (anyClaims) {
+        // Next to an existing mouth naturalCost is ~0, so the slack above rejects every junction: join the trunk
+        // upstream whatever it costs rather than end a second river beside the first one's mouth.
+        const upstream = searchJunction(drainage, path, claims, onPath, Infinity, MERGE_REACH, RIVER_STREAM_BONUS);
+        if (upstream) {
+          path.push(...upstream);
+          return { path, merged: true };
+        }
+      }
+
       // No drawable junction: run on alone to the nearest free coast (a new mouth). Head-on mouths are rarer than
       // any coastal tile, so the reach is 10x MERGE_REACH: at 3x about 2% more rivers found none and were dropped.
-      const alone = searchJunction(drainage, path, claims, onPath, Infinity, MERGE_REACH * 10.0, 0.0, true);
+      const alone = searchJunction(drainage, path, claims, onPath, Infinity, MERGE_REACH * 10.0, 0.0, true, MIN_MOUTH_SPACING);
       if (alone) {
         path.push(...alone);
         return { path, merged: false };
@@ -1199,7 +1211,17 @@ function searchJunction(
   reach: number,
   riverStreamBonus: number,
   toMouth = false,
+  minMouthSpacing = 0,
 ): AxialCoord[] | null {
+  // A new mouth keeps its distance from every existing sea mouth: all outlets (used or not) and the end of every committed river that reaches the sea.
+  const mouths: AxialCoord[] = [];
+  if (toMouth && minMouthSpacing > 0) {
+    for (let i = 0; i < drainage.tiles.length; i++) {
+      const c = claims[i];
+      if (drainage.outlet[i] || (c && c.out < 0 && !c.spring)) mouths.push(drainage.tiles[i]!);
+    }
+  }
+
   const last = path[path.length - 1]!;
   const start = drainage.index.get(coordKey(last))!;
   const startIn = path.length > 1 ? directionIndex(last, path[path.length - 2]!) : -1;
@@ -1231,6 +1253,7 @@ function searchJunction(
         if (!drainage.interior[n]) {
           // A new mouth must be head-on too: the sea straight ahead of the step.
           if (!drainage.seaAt[n * 6 + dir]) continue;
+          if (mouths.some((m) => hexDistance(drainage.tiles[n]!, m) < minMouthSpacing)) continue;
           const total = d + turn + drainage.step[n]! + drainage.edge[tile * 6 + dir]! + crowding(drainage, claims, n);
           if (!found || total < bestTotal) {
             found = true;

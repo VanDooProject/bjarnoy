@@ -285,6 +285,31 @@ public class RiverStreamTests
     }
 
     [Fact]
+    public void Sea_mouths_on_one_island_are_at_least_four_hexes_apart()
+    {
+        var mouths = 0;
+        foreach (var (seed, island, sampler) in GreenIslands())
+        {
+            var tiles = island.Tiles.ToHashSet();
+            var bog = island.BogTiles.Select(t => t.Coord).ToHashSet();
+            var sea = island.RiverTiles
+                .Where(t => t.Shape == RiverTileShape.Mouth)
+                .Where(t => HexCoord.Directions.ToArray().Any(d => !tiles.Contains(t.Coord + d) && !bog.Contains(t.Coord + d) && !sampler.IsLand(t.Coord + d)))
+                .ToList();
+            mouths += sea.Count;
+            for (var i = 0; i < sea.Count; i++)
+            {
+                for (var j = i + 1; j < sea.Count; j++)
+                {
+                    Assert.True(HexCoord.Distance(sea[i].Coord, sea[j].Coord) >= 4, $"seed {seed}: sea mouths {sea[i].Coord} and {sea[j].Coord} are {HexCoord.Distance(sea[i].Coord, sea[j].Coord)} hexes apart");
+                }
+            }
+        }
+
+        Assert.True(mouths > 20, $"only {mouths} sea mouths across the seeds");
+    }
+
+    [Fact]
     public void Truncated_branches_and_dropped_rivers_are_rare()
     {
         var stats = new RiverGenerator.RiverStats();

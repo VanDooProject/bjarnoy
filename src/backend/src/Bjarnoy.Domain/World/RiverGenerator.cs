@@ -1162,9 +1162,22 @@ internal static partial class RiverGenerator
                     }
                 }
 
+                if (anyClaims)
+                {
+                    // Next to an existing mouth naturalCost is ~0, so the slack above rejects every junction: join the trunk
+                    // upstream whatever it costs rather than end a second river beside the first one's mouth.
+                    var upstream = SearchJunction(drainage, path, claims, onPath, double.PositiveInfinity, options.MergeReach, options.RiverStreamBonus);
+                    if (upstream is not null)
+                    {
+                        path.AddRange(upstream);
+                        merged = true;
+                        return path;
+                    }
+                }
+
                 // No drawable junction: run on alone to the nearest free coast (a new mouth). Head-on mouths are rarer than
                 // any coastal tile, so the reach is 10x MergeReach: at 3x about 2% more rivers found none and were dropped.
-                var alone = SearchJunction(drainage, path, claims, onPath, double.PositiveInfinity, options.MergeReach * 10.0, 0.0, true);
+                var alone = SearchJunction(drainage, path, claims, onPath, double.PositiveInfinity, options.MergeReach * 10.0, 0.0, true, options.MinMouthSpacing);
                 if (alone is not null)
                 {
                     path.AddRange(alone);
@@ -1212,8 +1225,22 @@ internal static partial class RiverGenerator
         double limit,
         double reach,
         double riverStreamBonus,
-        bool toMouth = false)
+        bool toMouth = false,
+        int minMouthSpacing = 0)
     {
+        // A new mouth keeps its distance from every existing sea mouth: all outlets (used or not) and the end of every committed river that reaches the sea.
+        var mouths = new List<HexCoord>();
+        if (toMouth && minMouthSpacing > 0)
+        {
+            for (var i = 0; i < drainage.Tiles.Length; i++)
+            {
+                if (drainage.Outlet[i] || (claims[i] is { Out: < 0, Spring: false }))
+                {
+                    mouths.Add(drainage.Tiles[i]);
+                }
+            }
+        }
+
         var last = path[^1];
         var start = drainage.Index[last];
         var startIn = path.Count > 1 ? DirectionIndex(last, path[^2]) : -1;
@@ -1258,6 +1285,11 @@ internal static partial class RiverGenerator
                     {
                         // A new mouth must be head-on too: the sea straight ahead of the step.
                         if (!drainage.SeaAt[(n * 6) + dir])
+                        {
+                            continue;
+                        }
+
+                        if (TooCloseToMouth(drainage.Tiles[n], mouths, minMouthSpacing))
                         {
                             continue;
                         }
@@ -1327,6 +1359,19 @@ internal static partial class RiverGenerator
 
         // A shortest route in state space can, rarely, cross its own tile in another state.
         return route.Distinct().Count() == route.Count ? route : null;
+    }
+
+    private static bool TooCloseToMouth(HexCoord tile, List<HexCoord> mouths, int spacing)
+    {
+        foreach (var m in mouths)
+        {
+            if (HexCoord.Distance(tile, m) < spacing)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Extra cost of a tile beside an earlier river on a walk that is not joining it: keeps rivers that run on alone from hugging one another.</summary>

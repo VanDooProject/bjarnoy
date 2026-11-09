@@ -266,11 +266,18 @@ constants of the same name.
    which would be a join), so a river that runs on alone drifts off another one instead of running beside it;
    the static field, `BestOut` and the `naturalCost` the searches are priced on do not include it (higher values
    than about 2 made rivers wind labyrinths round a trunk: at 8, 48 antiparallel pairs per 1000 tiles);
-   when its next tile is an earlier river's it joins if the Y is drawable, else searches, else runs on
+   when its next tile is an earlier river's it joins if the Y is drawable, else searches, else searches once
+   more without the slack (limit infinite, reach still `MergeReach`; right beside an earlier mouth the walk's own
+   cost is about 0, so the slack-limited search would reject every junction upstream), else runs on
    alone (`SearchJunction` with `toMouth`: cheapest route to any free coastal tile, tiles beside earlier rivers
    cost `CrowdingCost` 2 each, reach `10 * MergeReach`, and the new mouth must be head-on too: sea straight
-   ahead of the last step) and becomes a river of its own with a new mouth; if even that fails it is dropped
-   and counted (`DroppedRivers`). Head-on coast is rarer than any coast, so the reach is 10x: at `3 * MergeReach`
+   ahead of the last step, and at least `MinMouthSpacing` (4) hexes from every existing sea mouth: every outlet
+   of the drainage, used or not, and the last tile of every committed river that ends at the sea) and becomes a
+   river of its own with a new mouth; if even that fails it is dropped and counted (`DroppedRivers`). Rivers
+   spawned by bogs and valley streams trace through the same code with the committed rivers as claims, so the
+   rule holds for them too.
+
+   > Two river mouths are never close together: a river that can't join another one runs to its own mouth at least 4 hexes from every other mouth. Head-on coast is rarer than any coast, so the reach is 10x: at `3 * MergeReach`
    about 2% more rivers found none and were dropped.
 5. Widths per "Width assignment" below.
 6. **Mill space** is reported, not enforced: the preview statistics list the river-width Straight tiles (Crop
@@ -296,6 +303,17 @@ out-directions):
 | merges per island | 5.4 | 5.0 |
 | truncated + dropped (% of rivers) | 58 (2.2%) | 37 (1.4%) |
 | median spring-to-end length (steps) | 31 | 27 |
+
+The mouth spacing rule (`MinMouthSpacing` 4 plus the slack-free junction retry), same seeds:
+
+| | before | after |
+|---|---|---|
+| sea-mouth pairs closer than 4 hexes | 180 | 0 |
+| merges per island | 5.0 | 5.7 |
+| truncated + dropped (% of rivers) | 37 (1.4%) | 35 (1.3%) |
+| rivers with a shore run | 17 of 2 632 (0.6%) | 24 of 2 635 (0.9%) |
+| antiparallel adjacent pairs (per 1000 river tiles) | 313 (4.5) | 607 (8.9) |
+| parallel adjacent pairs (per 1000 river tiles) | 15.0 | 5.0 |
 
 Acceptance (`scripts/worldgen-preview/river-stats.ts --seeds 1-8 --radius 1000`, and
 `RiverStreamTests`): 0 inland mouths, under 3% of rivers with a shore run,

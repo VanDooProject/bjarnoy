@@ -226,6 +226,9 @@ public sealed record WorldGenerationOptions
     /// <summary>Drainage cost within which a tributary looks for a trunk to join (about 1.4 per hex).</summary>
     public double MergeReach { get; init; } = 20.0;
 
+    /// <summary>Fewest hexes between a new river mouth and any other sea mouth: a river that cannot join another one runs on to a coast at least this far from every mouth.</summary>
+    public int MinMouthSpacing { get; init; } = 4;
+
     /// <summary>Drainage cost a junction search takes off a wide-Y junction into a river-width trunk (a stream joining there needs no widening first).</summary>
     public double RiverStreamBonus { get; init; } = 3.0;
 
@@ -375,6 +378,7 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfLessThan(MeanderMaxStretch, MeanderMinStretch);
         ArgumentOutOfRangeException.ThrowIfNegative(MergeSlack);
         ArgumentOutOfRangeException.ThrowIfNegative(MergeReach);
+        ArgumentOutOfRangeException.ThrowIfNegative(MinMouthSpacing);
         ArgumentOutOfRangeException.ThrowIfNegative(RiverStreamBonus);
         ArgumentOutOfRangeException.ThrowIfNegative(SharpBendPenalty);
         ArgumentOutOfRangeException.ThrowIfLessThan(BogTilesPerSite, 1);
