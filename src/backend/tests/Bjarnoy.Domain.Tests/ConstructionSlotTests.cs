@@ -35,12 +35,11 @@ public sealed class ConstructionSlotTests
 
     [Theory]
     [InlineData(1, 2)]
-    [InlineData(5, 2)]
-    [InlineData(9, 2)]
-    [InlineData(10, 3)]
-    [InlineData(14, 3)]
-    [InlineData(15, 4)]
-    [InlineData(20, 5)]
+    [InlineData(2, 2)]
+    [InlineData(3, 3)]
+    [InlineData(4, 4)]
+    [InlineData(10, 10)]
+    [InlineData(30, 30)]
     public void Construction_slots_follow_the_longhouse_level_formula(int longhouseLevel, int expectedSlots)
     {
         var settlement = Found(longhouseLevel);
@@ -56,43 +55,67 @@ public sealed class ConstructionSlotTests
         Assert.Equal(2, settlement.ConstructionSlots);
     }
 
-    [Fact]
-    public void A_longhouse_upgrade_needs_every_slot_free_and_blocks_the_rest()
+    [Theory]
+    [InlineData(2, 1)]
+    [InlineData(3, 2)]
+    [InlineData(5, 4)]
+    [InlineData(10, 9)]
+    [InlineData(30, 27)]
+    public void A_longhouse_upgrade_occupies_90_percent_of_the_slots_rounded_down(int slots, int expectedCost)
     {
-        // Longhouse level 1 has 2 slots (per the formula). A Farm build
-        // already occupies one of them.
-        var settlement = Found();
-        var farmOrder = settlement.PlanBuild(
+        Assert.Equal(expectedCost, Settlement.LonghouseSlotCost(slots));
+    }
+
+    [Fact]
+    public void A_longhouse_upgrade_needs_90_percent_of_the_slots_free_and_blocks_most_of_the_rest()
+    {
+        // Longhouse level 3 has 3 slots; an upgrade occupies floor(0.9 * 3) = 2.
+        // Two other builds occupy two slots, so only one is free.
+        var settlement = Found(3);
+        var first = settlement.PlanBuild(
             BuildingType.ReindeerHerder, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 1);
-        Assert.True(farmOrder.Accepted);
-        var withFarm = settlement.Enqueue(farmOrder.Order!, T0);
+        Assert.True(first.Accepted);
+        var withFirst = settlement.Enqueue(first.Order!, T0);
+        var second = withFirst.PlanBuild(
+            BuildingType.ReindeerHerder, new HexCoord(-1, 0), Terrain.Grass, T0.AddMinutes(1), Guid.CreateVersion7(), maxWaitingOrders: 1);
+        Assert.True(second.Accepted);
+        var withTwo = withFirst.Enqueue(second.Order!, T0.AddMinutes(1));
 
-        Assert.Equal(1, withFarm.FreeSlots);
+        Assert.Equal(1, withTwo.FreeSlots);
 
-        // A longhouse upgrade needs *every* slot, not just one — it cannot
-        // start (and has nowhere to wait since maxWaitingOrders is 0 here),
-        // even though one slot is free.
-        var upgrade = withFarm.PlanBuild(
+        // The upgrade needs two slots; it cannot start (and has nowhere to
+        // wait since maxWaitingOrders is 0 here), even though one is free.
+        var upgrade = withTwo.PlanBuild(
             BuildingType.Longhouse, Centre, Terrain.Grass, T0, Guid.CreateVersion7());
         Assert.Equal(BuildRejection.NoFreeSlot, upgrade.Rejection);
 
         // With premium queueing it goes to the waiting tail instead, and it
-        // occupies zero slots while waiting — the farm keeps building.
-        var upgradeWaiting = withFarm.PlanBuild(
+        // occupies zero slots while waiting — the other builds keep going.
+        var upgradeWaiting = withTwo.PlanBuild(
             BuildingType.Longhouse, Centre, Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
         Assert.True(upgradeWaiting.Accepted);
         Assert.True(upgradeWaiting.Order!.IsWaiting);
 
-        var queued = withFarm.Enqueue(upgradeWaiting.Order!, T0);
-        Assert.Equal(1, queued.UsedSlots);
+        var queued = withTwo.Enqueue(upgradeWaiting.Order!, T0);
+        Assert.Equal(2, queued.UsedSlots);
 
-        // Once the farm frees its slot, the longhouse upgrade (OccupiesAllSlots)
-        // must claim every slot the settlement has — not just the one that
-        // freed up — the instant it is promoted.
-        var afterFarm = queued.SettleTo(farmOrder.Order!.CompletesAt!.Value).Settlement;
-        var promotedLonghouse = Assert.Single(afterFarm.ActiveOrders, o => o.Type == BuildingType.Longhouse);
+        // Once the earlier build frees its slot, two are free: the upgrade
+        // is promoted and takes 2 of 3 slots, leaving one for the other build.
+        var afterOne = queued.SettleTo(first.Order!.CompletesAt!.Value).Settlement;
+        var promotedLonghouse = Assert.Single(afterOne.ActiveOrders, o => o.Type == BuildingType.Longhouse);
         Assert.False(promotedLonghouse.IsWaiting);
-        Assert.Equal(afterFarm.ConstructionSlots, afterFarm.UsedSlots);
+        Assert.Equal(3, afterOne.UsedSlots);
+    }
+
+    [Fact]
+    public void A_longhouse_upgrade_at_level_1_leaves_one_of_two_slots_free()
+    {
+        var settlement = Found();
+        var upgrade = settlement.PlanBuild(
+            BuildingType.Longhouse, Centre, Terrain.Grass, T0, Guid.CreateVersion7());
+        Assert.True(upgrade.Accepted);
+
+        Assert.Equal(1, settlement.Enqueue(upgrade.Order!, T0).FreeSlots);
     }
 
     [Fact]

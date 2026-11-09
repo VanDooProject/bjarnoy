@@ -1417,10 +1417,10 @@ export interface BuildingDefinitionResponse {
   /** Land terrain AND (as an exception) coastal water: the palisade's sea end. */
   alsoOnCoastalWater?: boolean;
   requiredLonghouseLevel: number;
-  /** Construction slots one order for this building occupies while building — ignored when `occupiesAllSlots` is set. */
+  /** Construction slots one order for this building occupies while building — ignored when `occupiesMostSlots` is set. */
   slotCost: number;
   /** When set, an order for this level always occupies every slot the settlement currently has (the Longhouse's rule). */
-  occupiesAllSlots: boolean;
+  occupiesMostSlots: boolean;
   /**
    * Radius (in hexes) of the claim disc this building/level contributes, or
    * 0 for a building that contributes none — see BuildingDefinition.ClaimRadius.
