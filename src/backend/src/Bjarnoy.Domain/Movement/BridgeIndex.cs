@@ -58,9 +58,9 @@ public sealed class BridgeIndex
         {
             1 => 1.0 + HexPathfinder.CausewayCrossingCost,
             2 => 1.0 + HexPathfinder.FootbridgeCrossingCost,
-            3 => HexPathfinder.LandTerrainCostOf(_terrainAt(hex)),
+            3 => 1.0 + HexPathfinder.KingsBridgeCrossingCost,
             _ => bridge.OutsideRealm || bridge.OwnerKey == ownerKey || _areFriends(bridge.OwnerKey, ownerKey)
-                ? HexPathfinder.LandTerrainCostOf(_terrainAt(hex))
+                ? 1.0 + HexPathfinder.KingsBridgeCrossingCost
                 : null,
         };
     }

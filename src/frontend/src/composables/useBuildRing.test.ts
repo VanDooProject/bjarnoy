@@ -9,6 +9,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { categoriesFor, useBuildRing } from './useBuildRing';
 import { useWorldStore } from '../stores/world';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
+import { formatBuildTime } from '../lib/map/ringCatalogue';
 import { createTestI18n } from '../test/i18n';
 import enHud from '../i18n/locales/en/hud.json';
 import enCatalogue from '../i18n/locales/en/catalogue.json';
@@ -74,6 +75,16 @@ describe('useBuildRing', () => {
       expect(building.cost).toBeDefined();
       expect(building.availability).toBeDefined();
     }
+  });
+
+  it('shows the build time at the world\'s speed', () => {
+    const { ring, select } = mountRing();
+    select(emptyHex(world, 'forest'));
+    const lumberjack = () => ring.categories.value.flatMap((c) => c.buildings).find((b) => b.id === 'lumberjack')!;
+    const base = useBuildingCatalogueStore().byType.lumberjack![0]!.buildSeconds;
+    expect(lumberjack().time).toBe(formatBuildTime(base));
+    world.worldSpeedFactor = 4;
+    expect(lumberjack().time).toBe(formatBuildTime(base / 4));
   });
 
   it('offers a forest hex the lumberjack and nothing that only fits grass', () => {
@@ -160,5 +171,26 @@ describe('useBuildRing', () => {
     expect(cropmill.locks).toContain(tooCurved);
     expect(tooCurved).not.toMatch(/\d|°|degree/i);
     expect(bend.find((b) => b.id === 'sawmill')!.locks).not.toContain(tooCurved);
+  });
+
+  it('lists the tower under defense, and only, on every ground it may stand on (plain bog moss included)', () => {
+    const tiles: Tile[] = [
+      { terrain: 'grass' },
+      { terrain: 'sand' },
+      { terrain: 'forest' },
+      { terrain: 'bog', bog: { kind: 'bog' } },
+    ] as Tile[];
+    for (const tile of tiles) {
+      const where = categoriesFor(tile).filter((c) => c.buildings.some((b) => b.type === 'tower'));
+      expect(where.map((c) => c.id), JSON.stringify(tile)).toEqual(['defense']);
+    }
+    // The bog's wall hexes stay next to it.
+    const bogDefense = categoriesFor(tiles[3]).find((c) => c.id === 'defense')!;
+    expect(bogDefense.buildings.map((b) => b.type)).toEqual(['tower', 'palisade', 'palisadegate', 'bridge']);
+    // Bog ground that is not plain moss, and sea, never offer one.
+    for (const kind of ['creek', 'half', 'shore', 'mouth', 'spring']) {
+      const ids = categoriesFor({ terrain: 'bog', bog: { kind } } as Tile).flatMap((c) => c.buildings.map((b) => b.type));
+      expect(ids, kind).not.toContain('tower');
+    }
   });
 });

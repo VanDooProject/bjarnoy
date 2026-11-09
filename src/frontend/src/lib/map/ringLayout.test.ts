@@ -13,7 +13,10 @@ import {
   CARD_H,
   CARD_W,
   HUB,
+  isCramped,
   LANE1_MAX,
+  lane1Arc,
+  scaledArea,
   layoutRing,
   NOTE_H,
   NOTE_W,
@@ -266,6 +269,18 @@ describe('ring layout on a phone', () => {
   it('leaves a tile whose ring already fits where it is', () => {
     const { area } = PHONES[2];
     expect(ringRoomFor(230, 360, () => area, SHAPES)).toEqual({ x: 230, y: 360, scale: 1 });
+  });
+
+  it('moves the map until the inner lane is a full circle with its first bubble straight up, where the screen has room for one', () => {
+    // A 1421x674 desktop window, tile low on the left: an arc would still fit here at 1.4x, but a full circle does after a pan.
+    const desktop = { left: 16, top: 76, right: 1405, bottom: 658 };
+    const shapes = ringShapes(3, [4, 5, 4, 3, 3, 3]);
+    const room = ringRoomFor(480, 450, () => desktop, shapes, 12, 1.4);
+    expect(room.scale).toBe(1.4);
+    expect(room.y).toBeLessThan(450);
+    expect(isCramped(room.x, room.y, scaledArea(desktop, room.x, room.y, room.scale))).toBe(false);
+    const first = lane1Arc(3, room.x, room.y, scaledArea(desktop, room.x, room.y, room.scale))![0];
+    expect(first.ang).toBe(-90);
   });
 
   it('draws the ring at maxScale when it fits there, and shrinks below it only where it has to', () => {

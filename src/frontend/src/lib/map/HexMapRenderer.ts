@@ -65,13 +65,14 @@ import {
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import { atlasPageCount } from './atlasManifests';
 import { attachFramePacing } from './framePacing';
-import { splitBorderEdges } from './realmBorderEdges';
+import { insetBorderCorners, splitBorderEdges } from './realmBorderEdges';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
 import { TILE_ORIENTATIONS, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
+import { ARMY_VISION_FALLOFF } from './fog/fogShader';
 import type { FogCoverageLookup } from './fog/fogCoverage';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
@@ -127,21 +128,20 @@ import { animationPreference } from '../perf/animationPreference';
 import { antialiasPreference } from '../perf/antialiasPreference';
 import { advanceClipFrame, clipTimingOf, phasedStart, sharedClockPlayback, swayPeriodOffset } from './clipPlayback';
 import { hash2 } from './worldGenerator';
+import { GUILD_REALM_COLOR, OWN_REALM_COLOR, realmColor, RIVAL_REALM_COLOR, TREATY_REALM_COLOR } from './realmColours';
 
 export type RenderMode = 'world' | 'settlement';
 
 const GOLD = 0xffc55c;
-const RIVAL = 0xe2705f;
-// Distinct from GOLD (own settlements) / RIVAL (rival settlements) — trade
+// Distinct from OWN_REALM_COLOR / RIVAL_REALM_COLOR (see realmColours.ts) — trade
 // carts belong to neither ownership axis, so they get their own color
 // rather than borrowing one that would otherwise read as an owner cue.
 const CART_COLOR = 0x8fd19e;
-// Issue #159 part B: a cool, low-saturation blue for the range tint — kept
-// distinct from GOLD (click-to-place highlight) and RIVAL/CART so it never
-// reads as any of those existing overlay meanings.
-const RANGE_TINT_COLOR = 0x5ab0e0;
+// Issue #159 part B: a neutral white wash for the range tint — it carries no
+// colour meaning, so it never reads as GOLD (click-to-place highlight), an
+// owner colour or CART.
+const RANGE_TINT_COLOR = 0xffffff;
 const RANGE_TINT_ALPHA = 0.16;
-const RANGE_OUTLINE_ALPHA = 0.55;
 const FOG_SCOUTED = 0x0b1116;
 const HOVER_FILL = 0xffffff;
 const HOVER_STROKE = 0xffe9c2;
@@ -210,14 +210,28 @@ export function worldHexFill(terrain: Terrain, wasted: boolean): number {
  */
 export const LABEL_STYLES = {
   ownerMine: new TextStyle({
-    fill: GOLD,
+    fill: OWN_REALM_COLOR,
+    fontFamily: "'Barlow', sans-serif",
+    fontWeight: '600',
+    fontSize: 12.5,
+    dropShadow: { color: 0x000000, alpha: 0.85, blur: 6, distance: 2, angle: Math.PI / 2 },
+  }),
+  ownerGuild: new TextStyle({
+    fill: GUILD_REALM_COLOR,
+    fontFamily: "'Barlow', sans-serif",
+    fontWeight: '600',
+    fontSize: 12.5,
+    dropShadow: { color: 0x000000, alpha: 0.85, blur: 6, distance: 2, angle: Math.PI / 2 },
+  }),
+  ownerTreaty: new TextStyle({
+    fill: TREATY_REALM_COLOR,
     fontFamily: "'Barlow', sans-serif",
     fontWeight: '600',
     fontSize: 12.5,
     dropShadow: { color: 0x000000, alpha: 0.85, blur: 6, distance: 2, angle: Math.PI / 2 },
   }),
   ownerRival: new TextStyle({
-    fill: RIVAL,
+    fill: RIVAL_REALM_COLOR,
     fontFamily: "'Barlow', sans-serif",
     fontWeight: '600',
     fontSize: 12.5,
@@ -229,7 +243,7 @@ export const LABEL_STYLES = {
   // index.html's Google Fonts link. The soft drop shadow is for legibility
   // over the lighter sand-coloured tiles some names sit near.
   islandMine: new TextStyle({
-    fill: GOLD,
+    fill: OWN_REALM_COLOR,
     fontFamily: "'Alegreya Sans SC', serif",
     fontWeight: 'bold',
     fontSize: 13,
@@ -586,6 +600,8 @@ export interface ArmyOverlayMovement {
   path: AxialCoord[];
   /** Game-hours to reach each hex of `path` — `MovementResponse.cumulativeHours`. Empty falls back to uniform legs. */
   cumulativeHours: number[];
+  /** Game-hours at which the army crosses the edge into each hex of `path` — `MovementResponse.edgeHours`. Empty splits each leg at its midpoint. */
+  edgeHours: number[];
   departedAtMs: number;
   arrivesAtMs: number;
 }
@@ -593,9 +609,7 @@ export interface ArmyOverlayMovement {
 /**
  * Issue #40 phase 2: one army's marker on the settlement map — its current
  * position, and whether it's the one selected in `ArmyPanel.vue` (drawn
- * bigger and gold rather than the muted blue every other army marker gets,
- * same "selected reads as gold" convention as the settlement badge/labels
- * above).
+ * bigger with a white outline; every army marker is gold).
  */
 export interface ArmyOverlayMarker {
   id: string;
@@ -1237,6 +1251,36 @@ const FOG_TERRAIN_CULL_HEXES = Math.ceil(
 // good enough for a soft visual radius, not a gameplay-precision distance.
 const ARMY_VISION_RADIUS_HEXES = 2;
 
+/**
+ * How many hex steps from an army's hex its live reveal can clear the mist: the shader fades the reveal out at
+ * `ARMY_VISION_FALLOFF` × the radius in world units, measured round, and a world unit along y is the tightest
+ * pitch (one step is TILE_H there). +1 for the hex art's own footprint, which reaches into the reveal before its
+ * centre does.
+ */
+export function armyRevealReachHexes(visionRadiusHexes: number): number {
+  return Math.ceil((ARMY_VISION_FALLOFF * visionRadiusHexes * TILE_W) / TILE_H) + 1;
+}
+
+/**
+ * The terrain cull's sources for armies in transit: a disc of `armyRevealReachHexes` around both ends of each
+ * army's current leg, so the live marker anywhere between them stays inside. Deduplicated, since consecutive armies
+ * on one road share hexes.
+ */
+export function armyCullSourcesOf(legs: readonly (readonly AxialCoord[])[], visionRadiusHexes: number): FogSource[] {
+  const radius = armyRevealReachHexes(visionRadiusHexes);
+  const seen = new Set<string>();
+  const out: FogSource[] = [];
+  for (const hexes of legs) {
+    for (const h of hexes) {
+      const key = `${h.q},${h.r}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ q: h.q, r: h.r, radius });
+    }
+  }
+  return out;
+}
+
 // --- Per-rebuild settlement pruning (see fogSourcesNear) -------------------
 //
 // isPastTerrainCull answers "how far past the nearest settlement's explored
@@ -1273,7 +1317,7 @@ interface AxialBounds {
  * the explored ring for the unexplored mist, the line-of-sight ring for the
  * scouted tint.
  */
-interface FogSource {
+export interface FogSource {
   q: number;
   r: number;
   radius: number;
@@ -1360,16 +1404,23 @@ export interface OpaqueCoverage {
 
 /**
  * Whether an unexplored hex is past the terrain cull: further than `FOG_TERRAIN_CULL_HEXES` from every current-vision
- * source and, once the server's mask is known, under provably opaque mist there (`FogCoverage.isOpaque`) — the mask
- * keeps ground explored earlier (a destroyed Longhouse, a reload) clear after its vision discs are gone.
+ * source, outside every army's live reveal (`armySources`, whose radius is already the full reach — see
+ * `armyCullSourcesOf`; the shader clears that ground between mask fetches) and, once the server's mask is known, under
+ * provably opaque mist there (`FogCoverage.isOpaque`) — the mask keeps ground explored earlier (a destroyed Longhouse,
+ * a reload) clear after its vision discs are gone.
  */
 export function isPastTerrainCullOf(
   q: number,
   r: number,
   sources: FogSource[],
   coverage: OpaqueCoverage | null,
+  armySources: FogSource[] = [],
 ): boolean {
-  return distanceBeyondSources(q, r, sources) > FOG_TERRAIN_CULL_HEXES && (!coverage || coverage.isOpaque(q, r));
+  return (
+    distanceBeyondSources(q, r, sources) > FOG_TERRAIN_CULL_HEXES &&
+    distanceBeyondSources(q, r, armySources) > 0 &&
+    (!coverage || coverage.isOpaque(q, r))
+  );
 }
 
 
@@ -1460,8 +1511,8 @@ const DRAG_CLICK_SLOP_PX = 6;
 const WHEEL_IDLE_MS = 180;
 
 // --- Army/route overlay (issues #40 phase 2, #93, #94) ---
-/** The selected army's own route colour — muted blue, distinct from the gold a draft route gets. */
-const ROUTE_COLOR = 0x5ab0e6;
+/** Army route and unselected army marker colour — gold, the UI accent ("do this next"); the owner colours stay blue/red. */
+const ROUTE_COLOR = GOLD;
 /** World-map river stroke colour — a sibling tone to ROUTE_COLOR, tuned to read against WORLD_TERRAIN_FILL's grass/forest. */
 const RIVER_COLOR = 0x4fa8d8;
 /** World-map lava stream colour (a wasted island's rivers): the glow of the lavastream art. */
@@ -1521,8 +1572,8 @@ export function worldPawHalfSize(zoom: number): number {
 
 /** An army already turned around and heading home. */
 const RETURNING_COLOR = 0x8fa3af;
-/** Attack target indicator (crossed sword + axe) — the one red in the overlay, matching RIVAL's "someone else's" reading. */
-const ATTACK_COLOR = 0xe2705f;
+/** Attack target indicator (crossed sword + axe) — the one red in the overlay, matching RIVAL_REALM_COLOR's "someone else's" reading. */
+const ATTACK_COLOR = RIVAL_REALM_COLOR;
 /** Support target indicator (shield) — friendly, so it borrows neither the attack red nor the draft gold. */
 const SUPPORT_COLOR = 0x8fd19e;
 /** On-screen pixel size of a route segment's direction arrow. */
@@ -2136,6 +2187,13 @@ export class HexMapRenderer {
   // turn-around, an army arriving — where the authoritative position can move
   // several hexes at once. Then the marker eases from where it was to where
   // it now belongs (ARMY_RESYNC_MS) instead of teleporting.
+  /**
+   * The terrain cull's army sources (`armyCullSourcesOf`), refreshed by `drawArmyOverlay` every tick. A change (an
+   * army steps onto its next leg) queues one rebuild, since the cull only runs on rebuilds.
+   */
+  private armyCullSources: FogSource[] = [];
+  private armyCullKey = '';
+  private armyCullRebuildQueued = false;
   private armyPoints = new Map<
     string,
     { x: number; y: number; leg: string; resyncFrom: { x: number; y: number } | null; resyncStartedAt: number }
@@ -2309,7 +2367,7 @@ export class HexMapRenderer {
         ? this.settlementCameraOrigin()
         : options.confineCamera
           ? this.worldConfinedCameraOrigin()
-          : { x: 0, y: 0, zoom: WORLD_DEFAULT_ZOOM };
+          : this.worldCameraOrigin();
     this.loadState = options.mode === 'settlement' ? { phase: 'terrain' } : READY_LOAD_STATE;
   }
 
@@ -2342,6 +2400,14 @@ export class HexMapRenderer {
     );
     this.confineLimits = frame.limits;
     return frame.camera;
+  }
+
+  /** World mode's resting camera: on the player's settlement (the rest of the map is unexplored mist), else the hex origin. */
+  private worldCameraOrigin(): Camera {
+    const settlement = this.settlement();
+    if (!settlement) return { x: 0, y: 0, zoom: WORLD_DEFAULT_ZOOM };
+    const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
+    return { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2, zoom: WORLD_DEFAULT_ZOOM };
   }
 
   private settlementCameraOrigin(): Camera {
@@ -2798,37 +2864,18 @@ export class HexMapRenderer {
     this.cameraAnim = { from: { ...this.camera }, to: target, startedAt: performance.now(), durationMs };
   }
 
-  /**
-   * Issue #159 part B. `points[i]`/`points[(i+1)%6]` (see `isoTopPoints`) is
-   * the edge shared with `neighbors(c)[(i+3)%6]` — verified by construction:
-   * direction 0 (`{q:1,r:0}`)'s neighbour grid-lands exactly on this hex's
-   * edge 3, and every other direction/edge pair falls out of that one by the
-   * hexagon's 180°-rotational symmetry (opposite directions/edges are
-   * `+3 mod 6` apart).
-   */
+  /** Issue #159 part B: a flat white wash over every hex in range — fill only, no outline. */
   private drawRangeOverlay() {
     this.rangeLayer.clear();
     const hexes = this.rangeOverlay;
     if (!hexes || hexes.length === 0) return;
 
-    const inSet = new Set(hexes.map(coordKey));
     const topPoints = isoTopPoints(TILE_W, TILE_H);
 
     for (const at of hexes) {
       const grid = isoGridPosition(at, TILE_W, TILE_H);
       const flat = topPoints.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
       this.rangeLayer.poly(flat).fill({ color: RANGE_TINT_COLOR, alpha: RANGE_TINT_ALPHA });
-
-      const dirs = neighbors(at);
-      for (let j = 0; j < 6; j++) {
-        if (inSet.has(coordKey(dirs[j]))) continue;
-        const a = topPoints[(j + 3) % 6];
-        const b = topPoints[(j + 4) % 6];
-        this.rangeLayer
-          .moveTo(grid.x + a.x, grid.y + a.y)
-          .lineTo(grid.x + b.x, grid.y + b.y)
-          .stroke({ width: 2, color: RANGE_TINT_COLOR, alpha: RANGE_OUTLINE_ALPHA });
-      }
     }
   }
 
@@ -3764,7 +3811,8 @@ export class HexMapRenderer {
     const { worldModel } = this.options;
     return worldModel
       .listSettlements()
-      .map((s) => ({ q: s.q, r: s.r, radius: worldModel.exploredRadius(s) + FOG_TERRAIN_CULL_HEXES }));
+      .map((s) => ({ q: s.q, r: s.r, radius: worldModel.exploredRadius(s) + FOG_TERRAIN_CULL_HEXES }))
+      .concat(this.armyCullSources);
   }
 
   /**
@@ -4278,6 +4326,19 @@ export class HexMapRenderer {
         grid.y - radiusPx <= rect.maxY;
       if (reaches) return false;
     }
+    // An army's live reveal clears ground the mask still covers.
+    for (const a of this.armyCullSources) {
+      const grid = isoGridPosition({ q: a.q, r: a.r }, TILE_W, TILE_H);
+      const radiusPx = a.radius * TILE_W;
+      if (
+        grid.x + radiusPx >= rect.minX &&
+        grid.x - radiusPx <= rect.maxX &&
+        grid.y + radiusPx >= rect.minY &&
+        grid.y - radiusPx <= rect.maxY
+      ) {
+        return false;
+      }
+    }
     return true;
   }
 
@@ -4303,7 +4364,7 @@ export class HexMapRenderer {
    * and rebuildTerrainFlat (world-map flat fill) so the two agree.
    */
   private isPastTerrainCull(q: number, r: number, fogSources: FogSource[]): boolean {
-    return isPastTerrainCullOf(q, r, fogSources, this.options.worldModel.getFogCoverage());
+    return isPastTerrainCullOf(q, r, fogSources, this.options.worldModel.getFogCoverage(), this.armyCullSources);
   }
 
   private rebuildTerrain(coords: AxialCoord[], fogActive: boolean) {
@@ -5219,8 +5280,7 @@ export class HexMapRenderer {
 
       fogPerfStats.borderedHexCount++;
       const owner = worldModel.getSettlement(tile.ownerId);
-      const mine = owner?.ownerId === playerId;
-      const color = mine ? GOLD : RIVAL;
+      const color = realmColor(owner, playerId);
 
       const grid = isoGridPosition(c, TILE_W, TILE_H);
       const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
@@ -5238,9 +5298,12 @@ export class HexMapRenderer {
 
       // Back edges (and in world mode, which has no tall art, all edges) stay in the layer under the toppings; in
       // settlement mode the front edges go to their own graphic in terrainTop so the hex's own art can't hide them.
-      const { back, front } = splitBorderEdges(outerEdgesOf(worldModel, c, tile.ownerId));
+      // Each realm draws its outline inside its own hexes (see insetBorderCorners), so touching realms show two lines side by side.
+      const owned = ownedAcrossEdges(worldModel, c, tile.ownerId);
+      const corners = insetBorderCorners(top, owned);
+      const { back, front } = splitBorderEdges(outerEdgesOf(owned));
       if (mode === 'settlement') {
-        strokeBorderEdges(this.borderLayer, top, back, color);
+        strokeBorderEdges(this.borderLayer, corners, back, color);
         if (front.length > 0) {
           let g = this.borderFrontPool[frontUsed];
           if (!g) {
@@ -5252,10 +5315,10 @@ export class HexMapRenderer {
           g.clear();
           g.visible = true;
           g.zIndex = isoDepthKey(c) + BORDER_FRONT_Z;
-          strokeBorderEdges(g, top, front, color);
+          strokeBorderEdges(g, corners, front, color);
         }
       } else {
-        strokeBorderEdges(this.borderLayer, top, [...back, ...front], color);
+        strokeBorderEdges(this.borderLayer, corners, [...back, ...front], color);
       }
     }
     hideUnusedFront();
@@ -5304,7 +5367,7 @@ export class HexMapRenderer {
           center.x, center.y + markerR,
           center.x - markerR, center.y,
         ])
-        .fill({ color: mine ? GOLD : RIVAL })
+        .fill({ color: realmColor(settlement, playerId) })
         .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
 
       // Settlers-II-style owner label under the marker. Reference styling
@@ -5313,7 +5376,15 @@ export class HexMapRenderer {
       // legibility over the water/terrain behind it — same treatment as the
       // island-name labels above, just without their uppercase/letter-spaced
       // small-caps look (owners read as plain names, not headings).
-      const ownerLabel = this.acquireLabel(mine ? LABEL_STYLES.ownerMine : LABEL_STYLES.ownerRival);
+      const ownerLabel = this.acquireLabel(
+        mine
+          ? LABEL_STYLES.ownerMine
+          : settlement.relation === 'guild'
+            ? LABEL_STYLES.ownerGuild
+            : settlement.relation === 'treaty'
+              ? LABEL_STYLES.ownerTreaty
+              : LABEL_STYLES.ownerRival,
+      );
       ownerLabel.text = settlement.ownerName;
       ownerLabel.anchor.set(0.5, 0);
       ownerLabel.position.set(center.x, center.y + 8 * this.camera.zoom + 4);
@@ -5497,7 +5568,7 @@ export class HexMapRenderer {
       }
       const top = this.toScreen({ x: grid.x + TILE_W / 2, y: topWorldY });
       const mine = settlement.ownerId === playerId;
-      const color = mine ? GOLD : RIVAL;
+      const color = realmColor(settlement, playerId);
 
       // markerLayer is a sibling of the camera-scaled `world` container (see
       // mount()), so it already draws in fixed screen pixels — `top` above
@@ -6139,12 +6210,20 @@ export class HexMapRenderer {
   private resolveArmyPoint(
     army: ArmyOverlayMarker,
     nowMs: number,
-  ): { x: number; y: number; interpolated: boolean; heading: { x: number; y: number } | null } {
+  ): {
+    x: number;
+    y: number;
+    interpolated: boolean;
+    heading: { x: number; y: number } | null;
+    /** The hexes the point lies between: both ends of the current leg, or the one hex it stands on. */
+    hexes: AxialCoord[];
+  } {
     const movement = army.movement;
     const progress = movement
       ? routeProgressAt(
           movement.path,
           movement.cumulativeHours,
+          movement.edgeHours,
           movement.departedAtMs,
           movement.arrivesAtMs,
           nowMs,
@@ -6154,14 +6233,17 @@ export class HexMapRenderer {
     let target: { x: number; y: number };
     let interpolated = false;
     let heading: { x: number; y: number } | null = null;
+    let hexes: AxialCoord[];
     if (progress && !progress.arrived) {
       const from = this.hexCenterWorld(progress.from);
       const to = this.hexCenterWorld(progress.to);
       target = lerpPoint(from, to, progress.t);
       interpolated = progress.t > 0;
       heading = { x: to.x - from.x, y: to.y - from.y };
+      hexes = [progress.from, progress.to];
     } else {
       target = this.hexCenterWorld(army.position);
+      hexes = [army.position];
     }
 
     // `leg` identifies the schedule the point above was computed from — a new
@@ -6185,7 +6267,7 @@ export class HexMapRenderer {
     state.y = point.y;
     this.armyPoints.set(army.id, state);
 
-    return { ...point, interpolated, heading };
+    return { ...point, interpolated, heading, hexes };
   }
 
   /**
@@ -6228,6 +6310,24 @@ export class HexMapRenderer {
     }
   }
 
+  /**
+   * Stores the terrain cull's army sources and, when they changed, queues one rebuild on the next frame — not inline,
+   * since this runs from inside the marker pass a rebuild itself drives.
+   */
+  private syncArmyCullSources(sources: FogSource[]) {
+    const key = sources.map((s) => `${s.q},${s.r},${s.radius}`).join(';');
+    if (key === this.armyCullKey) return;
+    this.armyCullKey = key;
+    this.armyCullSources = sources;
+    if (this.armyCullRebuildQueued) return;
+    this.armyCullRebuildQueued = true;
+    requestAnimationFrame(() => {
+      this.armyCullRebuildQueued = false;
+      if (this.destroyed) return;
+      this.rebuildAll();
+    });
+  }
+
   private drawArmyOverlay() {
     const overlay = this.armyOverlay;
     const frame: ArmyOverlayFrame = {
@@ -6237,7 +6337,10 @@ export class HexMapRenderer {
       iconsReady: this.icons !== null,
     };
     this.armyOverlayFrame = frame;
-    if (!overlay) return;
+    if (!overlay) {
+      this.syncArmyCullSources([]);
+      return;
+    }
 
     const now = Date.now();
 
@@ -6254,6 +6357,7 @@ export class HexMapRenderer {
         ? routeProgressAt(
             selected.movement.path,
             selected.movement.cumulativeHours,
+            selected.movement.edgeHours,
             selected.movement.departedAtMs,
             selected.movement.arrivesAtMs,
             now,
@@ -6349,13 +6453,17 @@ export class HexMapRenderer {
     // muted blue for everything else, grey for one already turned around and
     // heading home.
     const armyVisionPoints: { x: number; y: number }[] = [];
+    const armyVisionLegs: AxialCoord[][] = [];
     for (const army of overlay.armies) {
       const point = this.resolveArmyPoint(army, now);
       // §1c: only a travelling army grants live vision — one standing at
       // home or as a guest garrison already sits inside its settlement's own
       // explored/visible rings, same scope as the backend's own in-transit-
       // only condition (FogMaskService.GeneratePlayerMaskAsync).
-      if (army.movement && fogDebugFlags.armyVisionReveal) armyVisionPoints.push({ x: point.x, y: point.y });
+      if (army.movement && fogDebugFlags.armyVisionReveal) {
+        armyVisionPoints.push({ x: point.x, y: point.y });
+        armyVisionLegs.push(point.hexes);
+      }
       const p = this.toScreen(point);
       frame.armies.push({ id: army.id, x: p.x, y: p.y, interpolated: point.interpolated });
       const color = army.selected ? GOLD : army.returning ? RETURNING_COLOR : ROUTE_COLOR;
@@ -6368,6 +6476,9 @@ export class HexMapRenderer {
         // ship.svg's waterline sits at the sprite's vertical centre (unlike
         // the flag's pole-foot anchor), so the hull floats on the army's
         // position rather than standing on it.
+        if (army.selected) {
+          this.drawIcon('ship', p.x, p.y, { size: size + 6, color: 0xffffff, anchorX: 0.5, anchorY: 0.5, flipX });
+        }
         if (
           !this.drawIcon('ship', p.x, p.y, {
             size,
@@ -6381,12 +6492,21 @@ export class HexMapRenderer {
           this.markerLayer
             .poly([p.x - r, p.y, p.x + r * 0.4, p.y - r * 0.4, p.x + r, p.y, p.x + r * 0.4, p.y + r * 0.4])
             .fill({ color })
-            .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.9 });
+            .stroke({ width: 1.5, color: army.selected ? 0xffffff : 0x0b1116, alpha: 0.9 });
         }
         // A wake ellipse, not a ground shadow — this marker floats on water,
         // it doesn't stand on land.
         this.markerLayer.ellipse(p.x, p.y + size * 0.28, 7, 3).stroke({ width: 1.5, color: 0xbfe3f0, alpha: 0.4 });
       } else {
+        if (army.selected) {
+          this.drawIcon('flag', p.x, p.y, {
+            size: size + 6,
+            color: 0xffffff,
+            anchorX: flipX ? 1 - 22.5 / 64 : 22.5 / 64,
+            anchorY: 60 / 64,
+            flipX,
+          });
+        }
         if (
           !this.drawIcon('flag', p.x, p.y, {
             size,
@@ -6402,7 +6522,7 @@ export class HexMapRenderer {
           this.markerLayer
             .poly([p.x, p.y - r, p.x + r, p.y, p.x, p.y + r, p.x - r, p.y])
             .fill({ color })
-            .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.9 });
+            .stroke({ width: 1.5, color: army.selected ? 0xffffff : 0x0b1116, alpha: 0.9 });
         }
         // A small ground shadow anchors the banner to its point — without it
         // a pole drawn upward from the position reads as hovering above the map.
@@ -6413,9 +6533,11 @@ export class HexMapRenderer {
     // §1c: pushed every tick, independent of any mask fetch — see
     // FogMaskLayer.setArmyVisionSources's own remarks on why this stays out
     // of the cached mask texture entirely.
-    const armyVisionRadiusWorld = (ARMY_VISION_RADIUS_HEXES + Math.max(0, overlay.visionBonusRings ?? 0)) * TILE_W;
+    const armyVisionRadiusHexes = ARMY_VISION_RADIUS_HEXES + Math.max(0, overlay.visionBonusRings ?? 0);
+    const armyVisionRadiusWorld = armyVisionRadiusHexes * TILE_W;
     this.blackFogLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
     this.whiteMistLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
+    this.syncArmyCullSources(armyCullSourcesOf(armyVisionLegs, armyVisionRadiusHexes));
 
     // Armies that have gone away (arrived home and been folded back) would
     // otherwise keep their easing state forever.
@@ -6603,23 +6725,31 @@ const EDGE_FOR_DIR = [3, 2, 1, 0, 5, 4];
 /** Sort offset of a hex's front border edges in `terrainTop`: above its topping (+0 sprite, +0.5 overlay), below the next hex's. */
 const BORDER_FRONT_Z = 0.6;
 
-/** The two overlapping strokes (wide faint under thin solid) that fake the border glow, for the given corner-index edges. */
-function strokeBorderEdges(g: Graphics, top: { x: number; y: number }[], edges: readonly [number, number][], color: number) {
+/** The two overlapping strokes (wide faint under thin solid) that fake the border glow, for the given corner-index edges. `corners` are the inset border corners (`insetBorderCorners`). */
+function strokeBorderEdges(g: Graphics, corners: readonly ({ x: number; y: number } | null)[], edges: readonly [number, number][], color: number) {
   for (const edge of edges) {
-    const a = top[edge[0]];
-    const b = top[edge[1]];
+    const a = corners[edge[0]];
+    const b = corners[edge[1]];
+    if (!a || !b) continue;
     g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
     g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
   }
 }
 
-/** Corner-index pairs (into isoTopPoints()) of a claimed hex's edges that face an unclaimed/rival neighbour. */
-function outerEdgesOf(worldModel: WorldModel, c: AxialCoord, ownerId: string): [number, number][] {
-  const edges: [number, number][] = [];
+/** Per edge (corner `i` to `i + 1` of isoTopPoints()), whether the neighbour across it belongs to the same realm. */
+function ownedAcrossEdges(worldModel: WorldModel, c: AxialCoord, ownerId: string): boolean[] {
+  const owned: boolean[] = new Array(6).fill(false);
   NEIGHBOR_DIRS.forEach((d, i) => {
-    if (worldModel.getTile(c.q + d.q, c.r + d.r).ownerId === ownerId) return;
-    const edge = EDGE_FOR_DIR[i];
-    edges.push([edge, (edge + 1) % 6]);
+    owned[EDGE_FOR_DIR[i]] = worldModel.getTile(c.q + d.q, c.r + d.r).ownerId === ownerId;
+  });
+  return owned;
+}
+
+/** Corner-index pairs (into isoTopPoints()) of a claimed hex's edges that face an unclaimed/rival neighbour. */
+function outerEdgesOf(ownedAcrossEdge: readonly boolean[]): [number, number][] {
+  const edges: [number, number][] = [];
+  ownedAcrossEdge.forEach((owned, edge) => {
+    if (!owned) edges.push([edge, (edge + 1) % 6]);
   });
   return edges;
 }

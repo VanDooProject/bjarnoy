@@ -187,6 +187,13 @@ public sealed record Army
         _ => home,
     };
 
+    /// <summary>Every hex the army has stood on by <paramref name="now"/> on its active leg; just <paramref name="home"/> while it is not travelling.</summary>
+    public IReadOnlyList<HexCoord> HexesReachedBy(HexCoord home, DateTimeOffset now) => Location switch
+    {
+        ArmyLocation.InTransit inTransit => inTransit.Movement.HexesReachedBy(now),
+        _ => [home],
+    };
+
     /// <summary>
     /// The settlement side and the movement side of dispatching an army in
     /// one pure decision — mirrors <see cref="Settlement.PlanBuild"/>'s shape.
@@ -464,6 +471,7 @@ public sealed record Army
         var upkeepPerHour = stacks.Sum(s => UnitCatalogue.Get(s.Type).UpkeepPerHour * s.Count);
 
         var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var edgeHours = HexPathfinder.EdgeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         var returnPath = HexPathfinder.FindPath(routeDestination, origin, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         if (returnPath is null || returnPath.Count == 0)
@@ -472,6 +480,7 @@ public sealed record Army
         }
 
         var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnEdgeHours = HexPathfinder.EdgeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         // Every mission, Support included, needs the full round trip: a guest
         // does not burn its own provisions while hosted (Settlement.SettleTo
@@ -487,7 +496,7 @@ public sealed record Army
         }
 
         var movement = Movement.Movement.Create(
-            now, fullPath, cumulativeHours, returnPath, returnCumulativeHours, provisions, upkeepPerHour);
+            now, fullPath, cumulativeHours, edgeHours, returnPath, returnCumulativeHours, returnEdgeHours, provisions, upkeepPerHour);
 
         var army = new Army
         {
@@ -710,8 +719,10 @@ public sealed record Army
             DepartedAt = battleInstant,
             Path = movement.ReturnPath,
             CumulativeHours = movement.ReturnCumulativeHours,
+            EdgeHours = movement.ReturnEdgeHours,
             ReturnPath = movement.ReturnPath,
             ReturnCumulativeHours = movement.ReturnCumulativeHours,
+            ReturnEdgeHours = movement.ReturnEdgeHours,
             TurnAroundAt = battleInstant,
             IsReturning = true,
             // A battle-forced retreat is immune to further interception
@@ -762,8 +773,10 @@ public sealed record Army
             DepartedAt = battleInstant,
             Path = movement.ReturnPath,
             CumulativeHours = movement.ReturnCumulativeHours,
+            EdgeHours = movement.ReturnEdgeHours,
             ReturnPath = movement.ReturnPath,
             ReturnCumulativeHours = movement.ReturnCumulativeHours,
+            ReturnEdgeHours = movement.ReturnEdgeHours,
             TurnAroundAt = battleInstant,
             IsReturning = true,
             RetreatImmune = true,
@@ -1111,7 +1124,9 @@ public sealed record Army
         var speed = army.TotalSpeed;
         var upkeepPerHour = army.TotalUpkeepPerHour;
         var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var edgeHours = HexPathfinder.EdgeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnEdgeHours = HexPathfinder.EdgeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         var provisionsNow = army.ProvisionsAt(now);
         var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
@@ -1121,7 +1136,7 @@ public sealed record Army
         }
 
         var movement = Movement.Movement.Create(
-            now, path, cumulativeHours, returnPath, returnCumulativeHours, provisionsNow, upkeepPerHour);
+            now, path, cumulativeHours, edgeHours, returnPath, returnCumulativeHours, returnEdgeHours, provisionsNow, upkeepPerHour);
 
         var retargeted = army with { Location = new ArmyLocation.InTransit(movement), Provisions = provisionsNow };
         return RetargetFoundingResult.Accept(retargeted);
@@ -1162,8 +1177,10 @@ public sealed record Army
                 DepartedAt = movement.TurnAroundAt,
                 Path = movement.ReturnPath,
                 CumulativeHours = movement.ReturnCumulativeHours,
+                EdgeHours = movement.ReturnEdgeHours,
                 ReturnPath = movement.ReturnPath,
                 ReturnCumulativeHours = movement.ReturnCumulativeHours,
+                ReturnEdgeHours = movement.ReturnEdgeHours,
                 TurnAroundAt = movement.TurnAroundAt,
                 IsReturning = true,
                 // Natural provisions-driven turnaround is immune to
@@ -1178,14 +1195,17 @@ public sealed record Army
                 Provisions = provisionsAtTurnAround,
             };
 
+            var outbound = new WalkedLeg(movement, movement.TurnAroundAt);
             return now >= returning.ArrivesAt
-                ? new ArmySettleResult(turned with { Location = new ArmyLocation.AtHome() }, Changed: true, ArrivedHome: true)
-                : new ArmySettleResult(turned, Changed: true, ArrivedHome: false);
+                ? new ArmySettleResult(
+                    turned with { Location = new ArmyLocation.AtHome() }, Changed: true, ArrivedHome: true, [outbound, WalkedLeg.Full(returning)])
+                : new ArmySettleResult(turned, Changed: true, ArrivedHome: false, [outbound]);
         }
 
         if (now >= movement.ArrivesAt)
         {
-            return new ArmySettleResult(this with { Location = new ArmyLocation.AtHome() }, Changed: true, ArrivedHome: true);
+            return new ArmySettleResult(
+                this with { Location = new ArmyLocation.AtHome() }, Changed: true, ArrivedHome: true, [WalkedLeg.Full(movement)]);
         }
 
         return new ArmySettleResult(this, Changed: false, ArrivedHome: false);
@@ -1255,6 +1275,7 @@ public sealed record Army
 
         var speed = TotalSpeed;
         var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var edgeHours = HexPathfinder.EdgeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         // ProvisionsAt returns the raw Provisions field for anything other
         // than InTransit — including Supporting, which is exactly right here:
@@ -1268,8 +1289,10 @@ public sealed record Army
             DepartedAt = now,
             Path = path,
             CumulativeHours = cumulativeHours,
+            EdgeHours = edgeHours,
             ReturnPath = path,
             ReturnCumulativeHours = cumulativeHours,
+            ReturnEdgeHours = edgeHours,
             TurnAroundAt = now,
             IsReturning = true,
         };
@@ -1320,14 +1343,17 @@ public sealed record Army
 
         var speed = TotalSpeed;
         var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var edgeHours = HexPathfinder.EdgeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         var retreatMovement = new Movement.Movement
         {
             DepartedAt = battleInstant,
             Path = path,
             CumulativeHours = cumulativeHours,
+            EdgeHours = edgeHours,
             ReturnPath = path,
             ReturnCumulativeHours = cumulativeHours,
+            ReturnEdgeHours = edgeHours,
             TurnAroundAt = battleInstant,
             IsReturning = true,
             RetreatImmune = true,
@@ -1495,7 +1521,9 @@ public sealed record Army
         var speed = army.TotalSpeed;
         var upkeepPerHour = army.TotalUpkeepPerHour;
         var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var edgeHours = HexPathfinder.EdgeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnEdgeHours = HexPathfinder.EdgeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
         if (provisionsAtDeparture < totalFoodNeeded)
@@ -1504,7 +1532,7 @@ public sealed record Army
         }
 
         var newMovement = Movement.Movement.Create(
-            departedAt, fullPath, cumulativeHours, returnPath, returnCumulativeHours, provisionsAtDeparture, upkeepPerHour);
+            departedAt, fullPath, cumulativeHours, edgeHours, returnPath, returnCumulativeHours, returnEdgeHours, provisionsAtDeparture, upkeepPerHour);
 
         var ordered = army with
         {
@@ -1616,10 +1644,11 @@ public sealed record Army
         }
 
         var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, TotalSpeed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnEdgeHours = HexPathfinder.EdgeHours(returnPath, terrainAt, TotalSpeed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         var provisionsNow = provisions is { } given ? Math.Max(0, given) : ProvisionsAt(now);
 
         var movement = Movement.Movement.Create(
-            now, [coord], [0d], returnPath, returnCumulativeHours, provisionsNow, TotalUpkeepPerHour);
+            now, [coord], [0d], [0d], returnPath, returnCumulativeHours, returnEdgeHours, provisionsNow, TotalUpkeepPerHour);
 
         return this with { Location = new ArmyLocation.InTransit(movement), Provisions = provisionsNow };
     }
@@ -1631,7 +1660,55 @@ public sealed record Army
 /// into the home settlement's <see cref="Settlement.Garrison"/> and retiring
 /// the army row; see the type-level remarks on <see cref="Army"/>.
 /// </param>
-public sealed record ArmySettleResult(Army Army, bool Changed, bool ArrivedHome);
+/// <param name="Walked">
+/// The legs this settle finished, each with the instant it ended: what the army walked that the persisted
+/// <see cref="Movement.Movement"/> no longer shows once the result is stored (the outbound leg when it turned around,
+/// and the return leg too when the same call also brought it home). Empty when nothing changed.
+/// </param>
+public sealed record ArmySettleResult(Army Army, bool Changed, bool ArrivedHome, IReadOnlyList<WalkedLeg>? Walked = null)
+{
+    public IReadOnlyList<WalkedLeg> Walked { get; init; } = Walked ?? [];
+}
+
+/// <summary>
+/// A leg of an army's route up to the instant it ended (it turned around, was replaced by a new route, or arrived).
+/// <see cref="Hexes"/> are the hexes it crossed meanwhile — the ground that counts as explored by it.
+/// </summary>
+public sealed record WalkedLeg(Movement.Movement Leg, DateTimeOffset Until)
+{
+    /// <summary>The leg ran its whole path.</summary>
+    public static WalkedLeg Full(Movement.Movement leg) => new(leg, DateTimeOffset.MaxValue);
+
+    public IReadOnlyList<HexCoord> Hexes => Leg.HexesReachedBy(Until);
+
+    /// <summary>
+    /// The leg <paramref name="before"/> was travelling that <paramref name="after"/> no longer is: the whole leg when it
+    /// ended in a non-travelling state, the part up to the new leg's departure when it was replaced by another route, and
+    /// <see langword="null"/> when it is still the same leg (or <paramref name="before"/> was not travelling).
+    /// </summary>
+    public static WalkedLeg? Between(Army before, Army after)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+
+        if (before.Location is not ArmyLocation.InTransit { Movement: var old })
+        {
+            return null;
+        }
+
+        if (after.Location is not ArmyLocation.InTransit { Movement: var next })
+        {
+            return Full(old);
+        }
+
+        var sameLeg = old.DepartedAt == next.DepartedAt
+            && old.IsReturning == next.IsReturning
+            && old.Path.Count == next.Path.Count
+            && old.Path[0] == next.Path[0]
+            && old.Path[^1] == next.Path[^1];
+        return sameLeg ? null : new WalkedLeg(old, next.DepartedAt);
+    }
+}
 
 /// <param name="Army">
 /// The updated army — <see langword="null"/> when a wiped-out attacker

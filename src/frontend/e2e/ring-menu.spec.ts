@@ -181,7 +181,7 @@ test.describe('ring menu drill-down', () => {
     // app's canvas views every Playwright round trip waits out a frame (see ring.settledCentre),
     // and these eight made up a tenth of the test's time. The card is purely informational: no
     // BUILD button, locked or not. Cost, time and the gate all come from the building catalogue,
-    // so these are the backend's own numbers: 130 wood / 110 stone, 7:00, longhouse 5.
+    // so these are the backend's own numbers: 130 wood / 110 brick, 7:00, longhouse 5.
     const readCard = () =>
       barracks.evaluate((bubble) => {
         const card = document.querySelector('.ring-card');
@@ -244,7 +244,7 @@ test.describe('ring menu drill-down', () => {
     const longhouse = await settlement.centreHex();
     const buildingLevel = () => settlement.longhouseBuildingLevel();
 
-    // Longhouse's next level costs 161 wood / 134 stone / 81 food
+    // Longhouse's next level costs 161 wood / 134 brick / 81 food
     // (BuildingCatalogue.cs's 120/100/60 base * 1.34, rounded up for
     // display) and 0 iron at every level — zeroing every resource is short on exactly the first three.
     await settlement.setResources({ wood: 0, stone: 0, food: 0, iron: 0 });
@@ -264,7 +264,7 @@ test.describe('ring menu drill-down', () => {
     await expect(card).toContainText('161');
     await expect(card).toContainText('NOT ENOUGH RESOURCES');
     // Stock keeps ticking up from zero, so the shortfall shrinks while the test runs.
-    await expect(card).toContainText(/Need \d+ Wood · \d+ Stone · \d+ Food/);
+    await expect(card).toContainText(/Need \d+ Wood · \d+ Brick · \d+ Food/);
     await expect(card.locator('button')).toHaveCount(0);
 
     const levelBefore = await buildingLevel();

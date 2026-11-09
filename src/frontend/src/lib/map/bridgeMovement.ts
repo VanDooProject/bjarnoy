@@ -2,17 +2,18 @@
 // Bjarnoy.Domain's Movement/BridgeIndex.cs; the shared golden (river-pathing-golden.json) holds the two to the same routes.
 //
 // A wide river is impassable to land armies; a bridge on it (level 1 or more, a foundation does not open anything) makes it enterable:
-// level 1 (causeway) costs 1 + CAUSEWAY_CROSSING_COST, level 2 (footbridge) 1 + FOOTBRIDGE_CROSSING_COST, level 3 (king's bridge) the land
-// terrain's own cost, all for every army; level 4 (guarded bridge) the terrain's cost for its owner's armies and their friends (the same
+// level 1 (causeway) costs 1 + CAUSEWAY_CROSSING_COST, level 2 (footbridge) 1 + FOOTBRIDGE_CROSSING_COST, level 3 (king's bridge)
+// 1 + KINGS_BRIDGE_CROSSING_COST, all for every army (the ground under the river never sets the price); level 4 (guarded bridge) the same for its owner's armies and their friends (the same
 // guild, or guilds at peace, like a palisade gate) and impassable for everyone else. Streams and fleets are unaffected.
-import { coordKey, type AxialCoord } from '../hex/coords';
-import type { MovementRules, PathRestrictions } from './hexPath';
-import type { Terrain } from './types';
+import { coordKey } from '../hex/coords';
+import type { PathRestrictions } from './hexPath';
 
 /** Extra cost, on top of the base 1.0 step, of crossing a wide river over a level-1 bridge: HexPathfinder.CausewayCrossingCost. */
 export const CAUSEWAY_CROSSING_COST = 5.0;
 /** Extra cost, on top of the base 1.0 step, of crossing a wide river over a level-2 bridge: HexPathfinder.FootbridgeCrossingCost. */
 export const FOOTBRIDGE_CROSSING_COST = 3.0;
+/** Extra cost, on top of the base 1.0 step, of crossing a wide river over a level-3 or level-4 bridge: HexPathfinder.KingsBridgeCrossingCost. */
+export const KINGS_BRIDGE_CROSSING_COST = 0.5;
 /** The highest bridge level: the guarded one that only its owner and their friends cross. */
 export const GUARDED_BRIDGE_LEVEL = 4;
 
@@ -32,8 +33,6 @@ export type StandingBridges = ReadonlyMap<string, StandingBridge>;
  */
 export function bridgeCrossingCost(
   bridge: StandingBridge | undefined,
-  terrain: Terrain,
-  rules: MovementRules,
   ownerKey: string,
   friendOwners: ReadonlySet<string> = new Set(),
 ): number | null {
@@ -44,10 +43,10 @@ export function bridgeCrossingCost(
     case 2:
       return 1.0 + FOOTBRIDGE_CROSSING_COST;
     case 3:
-      return rules.land[terrain] ?? null;
+      return 1.0 + KINGS_BRIDGE_CROSSING_COST;
     default:
       return bridge.outsideRealm === true || bridge.owner === ownerKey || friendOwners.has(bridge.owner)
-        ? (rules.land[terrain] ?? null)
+        ? 1.0 + KINGS_BRIDGE_CROSSING_COST
         : null;
   }
 }
@@ -55,13 +54,11 @@ export function bridgeCrossingCost(
 /** The `bridgeCost` restriction for an army of `ownerKey`, or `undefined` when no bridge stands. */
 export function bridgeRestrictions(
   bridges: StandingBridges,
-  terrainAt: (c: AxialCoord) => Terrain,
-  rules: MovementRules,
   ownerKey: string,
   friendOwners: ReadonlySet<string> = new Set(),
 ): Pick<PathRestrictions, 'bridgeCost'> | undefined {
   if (bridges.size === 0) return undefined;
   return {
-    bridgeCost: (c) => bridgeCrossingCost(bridges.get(coordKey(c)), terrainAt(c), rules, ownerKey, friendOwners),
+    bridgeCost: (c) => bridgeCrossingCost(bridges.get(coordKey(c)), ownerKey, friendOwners),
   };
 }

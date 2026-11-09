@@ -119,8 +119,10 @@ public class WhaleRoadFleetTests
             DepartedAt = T0,
             Path = path,
             CumulativeHours = hours,
+            EdgeHours = hours,
             ReturnPath = [.. path.AsEnumerable().Reverse()],
             ReturnCumulativeHours = hours,
+            ReturnEdgeHours = hours,
             TurnAroundAt = T0.AddHours(path.Count - 1),
         };
     }

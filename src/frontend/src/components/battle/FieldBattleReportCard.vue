@@ -195,8 +195,8 @@ function powerOf(side: FieldBattleSide): number {
   letter-spacing: 0;
 }
 .you-tag {
-  color: var(--gold);
-  border-color: var(--gold);
+  color: var(--realm-own);
+  border-color: var(--realm-own);
 }
 .power {
   margin: 0 0 8px;

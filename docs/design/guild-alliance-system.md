@@ -99,6 +99,19 @@ rather than needing a separate mechanism.
   refused if the target guild is itself at its cap.
 - **Break**: `Leader` of either guild, on an `Active` treaty only.
 
+### Map colours
+
+Realm borders, settlement markers and owner names on the map show how that
+realm relates to you: your own realm is blue, realms of your guild's members
+are green, realms of guilds your guild has an active peace treaty with are
+purple, every other realm is red. Where two realms touch, both borders show
+side by side.
+
+The relation comes from the backend as `SettlementSummary.relation`
+(`mine` | `guild` | `treaty` | `rival`, see `GET /worlds/{worldId}/settlements`);
+the colours live in `src/frontend/src/lib/map/realmColours.ts` and the matching
+`--realm-*` CSS variables.
+
 ## 4. API surface (as implemented)
 
 ```

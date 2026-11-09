@@ -14,7 +14,6 @@ import { terrainName, unitName } from '../i18n/catalogueNames';
 import { ravensRings } from '../lib/map/buildingEconomy';
 import {
   ARMY_VISION_RINGS,
-  BRIDGE_GROUND_COST,
   BRIDGE_LEVELS,
   BRIDGE_UNLOCK,
   GROUND_COSTS,
@@ -140,13 +139,7 @@ const tocLinks = computed(() =>
           <tbody>
             <tr v-for="b in BRIDGE_LEVELS" :key="b.level" :data-bridge="b.name">
               <th scope="row" class="name">{{ b.level }}: {{ $t(`docs.landMovement.bridges.levels.${b.name}`) }}</th>
-              <td class="value">
-                <template v-if="b.cost !== null">{{ n(b.cost) }}</template>
-                <template v-else>
-                  {{ n(BRIDGE_GROUND_COST.min) }}–{{ n(BRIDGE_GROUND_COST.max) }}
-                  <span class="muted">{{ $t('docs.landMovement.bridges.groundCost') }}</span>
-                </template>
-              </td>
+              <td class="value">{{ n(b.cost) }}</td>
               <td>{{ $t(b.everyone ? 'docs.landMovement.bridges.everyone' : 'docs.landMovement.bridges.friends') }}</td>
             </tr>
           </tbody>

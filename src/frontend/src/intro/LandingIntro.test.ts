@@ -24,9 +24,13 @@ vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: 
   plays.push({ src: this.src, muted: this.muted });
   return Promise.resolve();
 });
+// Every intro listens for Esc on `window`: one left mounted by an earlier test would answer (and tear down) on every later Esc,
+// so the Esc tests got slower with each test before them and timed out on a loaded CI runner. Unmount them all after each test.
+const mounted: VueWrapper[] = [];
 async function mountIntro(p: Partial<Props> & { attachTo?: HTMLElement } = {}) {
   const { attachTo, ...props } = p;
   const w = mount(LandingIntro, { props: { ...base, ...props }, attachTo });
+  mounted.push(w);
   await flushPromises();
   return w;
 }
@@ -40,7 +44,10 @@ beforeEach(() => {
   vi.useFakeTimers();
   plays.length = 0;
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  for (const w of mounted.splice(0)) w.unmount();
+  vi.useRealTimers();
+});
 
 describe('LandingIntro', () => {
   it('replay with reduced motion shows the play button and runs after pressing it', async () => {
@@ -62,6 +69,19 @@ describe('LandingIntro', () => {
       expect(w.emitted('done')).toBeUndefined();
       expect(w.find('[data-testid="landing-page"]').exists()).toBe(true);
     }
+  });
+
+  it('shows the How to play link next to Log in only while the landing page is shown', async () => {
+    const w = await mountIntro({ playNow: false });
+    const link = w.get('[data-testid="landing-how-to-play"]');
+    expect(link.attributes('href')).toBe('/docs');
+    expect(link.text()).toBe('How to play');
+    expect(w.find('[data-testid="intro-login"]').exists()).toBe(true);
+    await w.get('[data-testid="landing-hear"]').trigger('click');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(w.find('[data-testid="landing-how-to-play"]').exists()).toBe(false);
+    const replay = await mountIntro({ mode: 'replay', reducedMotion: true, playNow: false });
+    expect(replay.find('[data-testid="landing-how-to-play"]').exists()).toBe(false);
   });
 
   it('keeps the hall alive behind the landing page: only its turn waits, and it starts on play', async () => {
@@ -293,6 +313,7 @@ describe('LandingIntro', () => {
 
     it('emits close at once, with no exit beat, and nothing fires afterwards', async () => {
       const w = await mountIntro();
+      expect(mounted, 'intros of earlier tests must be unmounted: they would all answer this Esc').toHaveLength(1);
       await vi.advanceTimersByTimeAsync(500);
       esc();
       await flushPromises();

@@ -81,7 +81,7 @@ public static class SettlerEndpoints
             .. entities
                 // One entry per linked realm: the switcher lists the oldest member only.
                 .Where(s => s.UserId == userId && labels[s.Id].RealmId == s.Id)
-                .Select(s => SettlementSummary.From(s, mine: true, labels[s.Id])),
+                .Select(s => SettlementSummary.From(s, mine: true, labels[s.Id], SettlementRelations.Mine)),
         ];
 
         return TypedResults.Ok(response);

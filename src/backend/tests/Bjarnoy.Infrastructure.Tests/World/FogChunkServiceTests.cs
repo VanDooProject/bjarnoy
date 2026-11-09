@@ -363,8 +363,10 @@ public class FogChunkServiceTests : IDisposable
             DepartedAt = DateTimeOffset.UnixEpoch,
             Path = [new HexPoint(20, 0)],
             CumulativeHours = [0],
+            EdgeHours = [0],
             ReturnPath = [new HexPoint(20, 0), new HexPoint(0, 0)],
             ReturnCumulativeHours = [0, 1],
+            ReturnEdgeHours = [0, 1],
             TurnAroundAt = DateTimeOffset.UnixEpoch.AddDays(3650),
             IsReturning = false,
         });
@@ -398,8 +400,10 @@ public class FogChunkServiceTests : IDisposable
             DepartedAt = DateTimeOffset.UnixEpoch,
             Path = [new HexPoint(9, 0)],
             CumulativeHours = [0],
+            EdgeHours = [0],
             ReturnPath = [new HexPoint(9, 0), new HexPoint(0, 0)],
             ReturnCumulativeHours = [0, 1],
+            ReturnEdgeHours = [0, 1],
             TurnAroundAt = DateTimeOffset.UnixEpoch.AddDays(3650),
             IsReturning = false,
         });

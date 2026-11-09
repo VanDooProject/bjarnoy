@@ -127,15 +127,19 @@ describe('the land movement example island', () => {
     it('wades through the stream, crosses the wide river on the bridge and passes the gate', () => {
       expect(onPath.has(coordKey(LAND_EXAMPLE_BRIDGE))).toBe(true);
       expect(onPath.has(coordKey(LAND_EXAMPLE_GATE))).toBe(true);
-      expect(route.steps.map((s) => s.kind)).toEqual(expect.arrayContaining(['stream', 'bridge', 'gate']));
+      expect(route.hexes.map((s) => s.kind)).toEqual(expect.arrayContaining(['stream', 'bridge', 'gate']));
       // The wide river is only ever entered on the bridge.
       const wide = route.path.filter((c) => ctx.isWideRiver(c)).map(coordKey);
       expect(wide).toEqual([coordKey(LAND_EXAMPLE_BRIDGE)]);
     });
 
-    it('costs 19.9: forest 1.3 three times, stream 9, and seven steps of ground, bridge and gate at 1', () => {
-      expect(route.steps.map((s) => s.cost)).toEqual([1.3, 1, 9, 1, 1, 1.3, 1, 1, 1.3, 1, 1]);
-      expect(route.total).toBeCloseTo(19.9);
+    it('lists the time spent on each hex: half the price on the first and the last, the full price on every hex between, 20.4 in all', () => {
+      const costs = route.hexes.map((h) => h.cost);
+      expect(route.hexes.map((h) => coordKey(h.coord))).toEqual(route.path.map(coordKey));
+      expect(costs).toHaveLength(12);
+      [0.5, 1.3, 1, 9, 1, 1, 1.3, 1.5, 1, 1.3, 1, 0.5].forEach((expected, i) => expect(costs[i], `hex ${i}`).toBeCloseTo(expected, 9));
+      expect(costs.reduce((a, b) => a + b, 0)).toBeCloseTo(route.total, 9);
+      expect(route.total).toBeCloseTo(20.4);
     });
 
     it('without the bridge wades where the two streams widen into the river, a longer and slower way', () => {

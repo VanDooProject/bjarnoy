@@ -42,10 +42,10 @@ The generator has to follow the art's map rules, or tiles are missing:
    features never touch grass or forest (a creek may touch its own river).
 
 On top of that, the economy needs one thing: **bog ground in reach of every
-start**. The Clay Brickworks on bog is the start's stone source (LH 1), and
+start**. The Clay Brickworks on bog is the start's brick source (LH 1), and
 the bog-ore works on bog are its iron source (from LH 3). A mountain
 is *not* needed at the start; where one is in reach, the Quarry is an
-alternative stone source.
+alternative brick source.
 
 Bogs are part of the living lands (not a wasted or frozen pack). A bog meets
 grass at a hex edge, like the wasteland does.

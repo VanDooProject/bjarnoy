@@ -27,6 +27,9 @@ public sealed record FoundSettlementRequest(
     [property: Required, MinLength(2), MaxLength(100)] string OwnerName,
     [property: Required, MinLength(1), MaxLength(200)] string OwnerId);
 
+/// <param name="Q">The hex whose building loses one level.</param>
+public sealed record RazeBuildingRequest(int Q, int R);
+
 public sealed record QueueBuildRequest(
     [property: Required] string Building,
     int Q,
@@ -128,6 +131,10 @@ public sealed record PlacedBuildingResponse(
 /// (<c>OccupiesAllSlots</c>); otherwise the catalogue's per-order
 /// <c>SlotCost</c> (1 for everything today).
 /// </param>
+/// <param name="Kind">
+/// <c>"build"</c> for an order that builds a level, <c>"raze"</c> for one that razes a level: then
+/// <c>TargetLevel</c> is the level the building is left at (0 = removed) and <c>SlotCost</c> is that of the razed level.
+/// </param>
 /// <param name="CompletesAtGameTime">
 /// <see langword="null"/> for a waiting order — it has not started, so there
 /// is no real completion instant yet, only <see cref="TotalSeconds"/>'s
@@ -157,7 +164,8 @@ public sealed record BuildOrderResponse(
     int SlotCost,
     DateTimeOffset? CompletesAtGameTime,
     double? CompletesInSeconds,
-    double TotalSeconds);
+    double TotalSeconds,
+    string Kind);
 
 public sealed record UnitStackResponse(string Unit, int Count);
 
@@ -264,7 +272,11 @@ public sealed record FeastOfferResponse(
 /// <param name="Completed">Whether its condition is met right now.</param>
 /// <param name="Claimed">Whether its reward was already claimed.</param>
 /// <param name="Reward">Wood, stone and food paid on claim (clamped to storage).</param>
-public sealed record QuestResponse(string Id, bool Completed, bool Claimed, ResourceLine Reward);
+/// <param name="Progress">Where the settlement stands toward the goal, or null for a quest without a counted goal.</param>
+public sealed record QuestResponse(string Id, bool Completed, bool Claimed, ResourceLine Reward, QuestProgressResponse? Progress = null);
+
+/// <summary>Counted progress toward a quest: <paramref name="Current"/> of <paramref name="Target"/> (never above the target).</summary>
+public sealed record QuestProgressResponse(int Current, int Target);
 
 /// <param name="Name">The linked realm's name: the oldest member's (<c>docs/design/economy.md</c> section 5, "A linked group is one realm").</param>
 /// <param name="Resources">
@@ -385,14 +397,15 @@ public sealed record SettlementResponse(
                 o.Type.ToWireName(),
                 o.TargetLevel,
                 o.IsWaiting ? "waiting" : "building",
-                BuildingCatalogue.Get(o.Type, o.TargetLevel).OccupiesAllSlots
+                BuildingCatalogue.Get(o.Type, o.LevelInWork).OccupiesAllSlots
                     ? domain.ConstructionSlots
-                    : BuildingCatalogue.Get(o.Type, o.TargetLevel).SlotCost,
+                    : BuildingCatalogue.Get(o.Type, o.LevelInWork).SlotCost,
                 o.CompletesAt,
                 (clock.FreezesTime || o.IsWaiting) ? null : o.RemainingAt(gameNow).TotalSeconds,
                 o.IsWaiting
                     ? o.BaseDuration.TotalSeconds * domain.BuildTimeFactor / speedFactor
-                    : (o.CompletesAt!.Value - o.StartedAt!.Value).TotalSeconds))],
+                    : (o.CompletesAt!.Value - o.StartedAt!.Value).TotalSeconds,
+                o.Kind.ToWireName()))],
             [.. domain.Garrison.Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
             [.. domain.TrainingQueue.Select(o => TrainingOrderResponse.From(o, clock, gameNow))],
             [.. domain.Runes.Select(r => new RuneInstanceResponse(
@@ -406,7 +419,8 @@ public sealed record SettlementResponse(
                     Feasts.RenownFor(domain.TownSquareLevel))
                 : null,
             [.. Bjarnoy.Domain.Settlers.Quests.All.Select(q => new QuestResponse(
-                q.Id, q.IsCompleted(domain), domain.HasClaimed(q), ResourceLine.From(q.Reward)))],
+                q.Id, q.IsCompleted(domain), domain.HasClaimed(q), ResourceLine.From(q.Reward),
+                q.Progress?.Invoke(domain) is { } p ? new QuestProgressResponse(p.Current, p.Target) : null))],
             WorldClockResponse.From(clock, gameNow),
             [.. store.Realm.SettlementIds
                 .OrderBy(other => other == entity.Id ? 0 : 1)
@@ -502,17 +516,53 @@ public sealed record BuildingDefinitionResponse(
 /// <param name="Name">The linked realm's name (the oldest member's), the same on every longhouse of the realm.</param>
 /// <param name="Mine">Whether the settlement belongs to the caller (never the owner or user id itself).</param>
 /// <param name="RealmId">The oldest member of the linked realm this settlement belongs to (itself when it stands alone).</param>
+/// <param name="Relation">How the owner stands to the caller, which picks the realm colour: <c>mine</c>, <c>guild</c> (same guild), <c>treaty</c> (guild with an active peace treaty) or <c>rival</c>.</param>
 public sealed record SettlementSummary(
-    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine, Guid RealmId)
+    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine, Guid RealmId, string Relation)
 {
-    public static SettlementSummary From(SettlementEntity s, bool mine, RealmLabel realm)
+    public static SettlementSummary From(SettlementEntity s, bool mine, RealmLabel realm, string relation)
     {
         ArgumentNullException.ThrowIfNull(s);
 
         return new SettlementSummary(
             s.Id, realm.Name, s.OwnerName, s.CentreQ, s.CentreR,
             s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
-            s.IslandId, mine, realm.RealmId);
+            s.IslandId, mine, realm.RealmId, relation);
+    }
+}
+
+/// <summary>The wire values of <see cref="SettlementSummary.Relation"/> and how a caller's relation to a settlement's owner is worked out.</summary>
+public static class SettlementRelations
+{
+    public const string Mine = "mine";
+    public const string Guild = "guild";
+    public const string Treaty = "treaty";
+    public const string Rival = "rival";
+
+    /// <summary>
+    /// A lookup from settlement to its relation for the caller: <c>mine</c> per <paramref name="isMine"/>, else <c>guild</c> or
+    /// <c>treaty</c> through <see cref="GuildRelations"/>, else <c>rival</c>. An anonymous caller (no user id) is in no guild, so
+    /// everything that is not theirs is a rival. Loads the guild data once, not per settlement.
+    /// </summary>
+    public static async Task<Func<SettlementEntity, string>> ForCallerAsync(
+        GameDbContext db, Guid worldId, Guid? callerUserId, Func<SettlementEntity, bool> isMine, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(isMine);
+        var guildRelation = callerUserId is not null
+            ? await GuildRelations.LoadAsync(db, worldId, cancellationToken)
+            : null;
+
+        return s =>
+        {
+            if (isMine(s)) return Mine;
+            if (guildRelation is null || callerUserId is not { } caller) return Rival;
+            return guildRelation(caller, s.UserId) switch
+            {
+                GuildRelation.SameGuild => Guild,
+                GuildRelation.Treaty => Treaty,
+                _ => Rival,
+            };
+        };
     }
 }
 

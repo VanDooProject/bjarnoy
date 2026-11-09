@@ -81,6 +81,13 @@ void main() {
  */
 export const MAX_ARMY_VISION_SOURCES = 8;
 
+/**
+ * How far past `uArmyVisionRadius` an army's live reveal fades out, as a multiple of it: the mist is fully clear
+ * inside the radius and back to the mask's own value at this multiple. HexMapRenderer's terrain cull reads the same
+ * number (`armyRevealReachHexes`) so it draws ground everywhere the reveal can show it.
+ */
+export const ARMY_VISION_FALLOFF = 1.5;
+
 export const FOG_FRAGMENT = `
 precision highp float;
 
@@ -288,7 +295,7 @@ float armyVisionReveal(vec2 world) {
   for (int i = 0; i < ${MAX_ARMY_VISION_SOURCES}; i++) {
     if (float(i) >= uArmyVisionCount) break;
     float dist = distance(world, uArmyVisionSources[i]);
-    reveal = max(reveal, 1.0 - smoothstep(uArmyVisionRadius, uArmyVisionRadius * 1.5, dist));
+    reveal = max(reveal, 1.0 - smoothstep(uArmyVisionRadius, uArmyVisionRadius * ${ARMY_VISION_FALLOFF.toFixed(2)}, dist));
   }
   return reveal;
 }

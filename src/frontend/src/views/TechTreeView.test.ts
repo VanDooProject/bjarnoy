@@ -56,4 +56,25 @@ describe('TechTreeView hash links', () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
     wrapper.unmount();
   });
+
+  it('has a player-facing Razing section with the longhouse rule', async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/docs/tech-tree', component: TechTreeView }] });
+    await router.push('/docs/tech-tree');
+    const wrapper = mount(TechTreeView, {
+      attachTo: document.body,
+      global: {
+        plugins: [createTestI18n({ docs: enDocs }), router],
+        stubs: { DocsPageLayout: { template: '<div><slot name="wide" /><slot /></div>' }, TechTreeGraph: true },
+      },
+    });
+    await flushPromises();
+
+    const section = wrapper.get('[data-testid="docs-razing"]');
+    expect(section.text()).toContain('one level at a time');
+    expect(section.text()).toContain('three quarters');
+    expect(section.text()).toContain('a third of that level');
+    expect(section.text()).toContain("can't be razed");
+    wrapper.unmount();
+  });
 });

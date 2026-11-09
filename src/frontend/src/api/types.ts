@@ -328,6 +328,12 @@ export interface BuildOrderResponse {
   q: number;
   r: number;
   building: string;
+  /**
+   * `'build'` for a new building or an upgrade, `'raze'` for tearing one level down (docs/design/construction-slots.md,
+   * "Razing"). Cancelling either goes through the same cancel endpoint.
+   */
+  kind: 'build' | 'raze';
+  /** The level the building has once the order completes; for a raze the level after it (0 = the building is removed). */
   targetLevel: number;
   /** `'building'` while under construction, `'waiting'` while queued behind a full set of construction slots (the premium queue) — issue #158. */
   state: 'building' | 'waiting';
@@ -414,6 +420,8 @@ export interface QuestResponse {
   completed: boolean;
   claimed: boolean;
   reward: ResourceLine;
+  /** Counted progress toward the goal; null/absent for a quest without one. */
+  progress?: { current: number; target: number } | null;
 }
 
 /** One connected claim disc of a realm, exactly as the server resolves it. */
@@ -474,6 +482,8 @@ export interface SettlementSummary {
   islandId: string;
   /** Whether the settlement belongs to the caller. */
   mine: boolean;
+  /** How the owner stands to the caller: `mine`, `guild` (same guild), `treaty` (guild with an active peace treaty) or `rival`. */
+  relation: 'mine' | 'guild' | 'treaty' | 'rival';
 }
 
 /**
@@ -937,6 +947,18 @@ export interface ReseedWorldResponse {
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminUserContracts.cs.
+
+/** One autocomplete hit: the account, and whether it matched by user name, settlement name or jarl name. */
+export interface AdminUserLookupResponse {
+  userId: string;
+  userName: string;
+  displayName: string | null;
+  role: string;
+  status: string;
+  via: 'user' | 'settlement' | 'jarl';
+  matchedName: string | null;
+  worldName: string | null;
+}
 
 export interface AdminUserResponse {
   id: string;
@@ -1538,7 +1560,10 @@ export interface FieldOrderRequest {
  *
  * `cumulativeHours` is the per-hex schedule for `path` (`[0]` is always 0,
  * same length as `path`), and `returnCumulativeHours` the same for
- * `returnPath` measured from `turnAroundAt`. Issue #94 exposed them so the
+ * `returnPath` measured from `turnAroundAt`. `edgeHours` (`returnEdgeHours`)
+ * is when the army crosses the edge into each hex (`[0]` is 0, same length,
+ * each between its two hex centres' cumulative hours): a step is billed half
+ * at the hex left and half at the hex entered. Issue #94 exposed them so the
  * map can interpolate an army's live position per leg (see
  * `lib/units/armyProgress.ts`) — legs cost wildly different amounts of time
  * on mixed terrain, so spreading the trip evenly over the path drifts away
@@ -1548,9 +1573,11 @@ export interface MovementResponse {
   departedAt: string;
   path: HexPoint[];
   cumulativeHours: number[];
+  edgeHours: number[];
   arrivesAt: string;
   returnPath: HexPoint[];
   returnCumulativeHours: number[];
+  returnEdgeHours: number[];
   turnAroundAt: string;
   returnArrivesAt: string;
   isReturning: boolean;
@@ -1838,6 +1865,8 @@ export interface ApiKeyResponse extends ApiKeyScope {
   replacedByApiKeyId: string | null;
   autoRenewUntil: string | null;
   requestsPerMinute: number;
+  /** Code (`XXXX-XXXX`) of the request this key was collected from; only the admin key list fills it in. */
+  requestUserCode?: string | null;
 }
 
 /** Create / recreate response: the only time the token is ever returned. */

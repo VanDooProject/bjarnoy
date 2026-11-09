@@ -28,6 +28,7 @@ function buildOrder(overrides: Partial<BuildOrderResponse> = {}): BuildOrderResp
     q: 1,
     r: 2,
     building: 'farm',
+    kind: 'build',
     targetLevel: 1,
     state: 'building',
     slotCost: 1,
@@ -72,9 +73,11 @@ function army(overrides: Partial<ArmyResponse> = {}): ArmyResponse {
       departedAt: '2026-01-01T00:00:00Z',
       path: [{ q: 0, r: 0 }, { q: 1, r: 1 }, { q: 2, r: 2 }],
       cumulativeHours: [0, 1, 2],
+      edgeHours: [0, 0.5, 1.5],
       arrivesAt: '2026-01-01T02:00:00Z',
       returnPath: [],
       returnCumulativeHours: [],
+      returnEdgeHours: [],
       turnAroundAt: '2026-01-01T02:00:00Z',
       returnArrivesAt: '2026-01-01T04:00:00Z',
       isReturning: false,
@@ -96,7 +99,7 @@ describe('QueueDrawer', () => {
     expect(wrapper.find('.queue-drawer').exists()).toBe(false);
   });
 
-  it('shows one row per non-empty category with the soonest remaining time and a count chip', () => {
+  it('shows one row per non-empty category with the soonest remaining time', () => {
     const world = useWorldStore();
     world.hud.queueFetchedAt = Date.now();
     world.hud.queue = [
@@ -112,11 +115,9 @@ describe('QueueDrawer', () => {
 
     const buildRow = rows.find((r) => r.classes('is-build'))!;
     expect(buildRow.get('.queue-drawer-handle-time').text()).toBe('0:50');
-    expect(buildRow.get('.queue-drawer-handle-count').text()).toBe('2');
 
     const trainRow = rows.find((r) => r.classes('is-train'))!;
     expect(trainRow.get('.queue-drawer-handle-time').text()).toBe('0:20');
-    expect(trainRow.find('.queue-drawer-handle-count').exists()).toBe(false);
   });
 
   it('shows a muted dash and no progress bar when every build order is waiting', () => {
@@ -360,7 +361,7 @@ describe('QueueDrawer', () => {
       expect(etas).toEqual(['1h 0m', '5h 0m', '—']);
     });
 
-    it('adds an army row to the handle with the soonest arrival and a count chip', () => {
+    it('adds an army row to the handle with the soonest arrival', () => {
       const world = useWorldStore();
       world.armies = [
         army({ id: 'far', movement: { ...army().movement!, arrivesAt: '2026-01-01T05:00:00Z' } }),
@@ -369,7 +370,6 @@ describe('QueueDrawer', () => {
 
       const row = mountDrawer().get('.queue-drawer-handle-row.is-army');
       expect(row.get('.queue-drawer-handle-time').text()).toBe('1h00');
-      expect(row.get('.queue-drawer-handle-count').text()).toBe('2');
     });
 
     it('shows a muted dash on the army handle row when every army is supporting', () => {
@@ -393,15 +393,41 @@ describe('QueueDrawer', () => {
       expect(recallArmy).toHaveBeenCalledWith('army-1', undefined);
     });
 
-    it('a row tap closes the drawer and emits select-army', async () => {
+    it('a single row tap selects the army and keeps the drawer open', async () => {
       const world = useWorldStore();
       world.armies = [army({ id: 'army-1' })];
 
       const wrapper = mountDrawer({ open: true });
       await wrapper.get('.army-row .status-row-click').trigger('click');
 
+      expect(world.selectedArmyId).toBe('army-1');
+      expect(wrapper.emitted('select-army')).toBeUndefined();
+      expect(wrapper.emitted('update:open')).toBeUndefined();
+    });
+
+    it('a second tap on the same row closes the drawer and emits select-army', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+
+      const wrapper = mountDrawer({ open: true });
+      const row = wrapper.get('.army-row .status-row-click');
+      await row.trigger('click');
+      await row.trigger('click');
+
       expect(wrapper.emitted('select-army')).toEqual([['army-1']]);
       expect(wrapper.emitted('update:open')).toEqual([[false]]);
+    });
+
+    it('taps on two different rows are not a double tap', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' }), army({ id: 'army-2' })];
+
+      const wrapper = mountDrawer({ open: true });
+      const rows = wrapper.findAll('.army-row .status-row-click');
+      await rows[0].trigger('click');
+      await rows[1].trigger('click');
+
+      expect(wrapper.emitted('select-army')).toBeUndefined();
     });
 
     it('build and training sections stay unaffected by the Armies section', () => {

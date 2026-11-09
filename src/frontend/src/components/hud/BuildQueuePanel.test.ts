@@ -28,6 +28,7 @@ function order(overrides: Partial<BuildOrderResponse> = {}): BuildOrderResponse 
     q: 1,
     r: 2,
     building: 'farm',
+    kind: 'build',
     targetLevel: 1,
     state: 'building',
     slotCost: 1,
@@ -153,6 +154,21 @@ describe('BuildQueuePanel', () => {
     wrapper.unmount();
   });
 
+  it('shows a raze row that can be cancelled like a build row', async () => {
+    const world = useWorldStore();
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.queue = [order({ id: 'raze-1', kind: 'raze', targetLevel: 0 })];
+    const cancelBuildLive = vi.spyOn(world, 'cancelBuildLive').mockResolvedValue(undefined);
+
+    const wrapper = mountPanel();
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.text()).toContain('Tearing down Farm');
+    await wrapper.get('.cancel-button').trigger('click');
+    expect(cancelBuildLive).toHaveBeenCalledWith('raze-1');
+    wrapper.unmount();
+  });
+
   it('shows a reserved-cost footer only when something is actually reserved', async () => {
     const world = useWorldStore();
     world.hud.queueFetchedAt = Date.now();
@@ -169,7 +185,7 @@ describe('BuildQueuePanel', () => {
     const footer = withReserve.find('.reserved-footer');
     expect(footer.exists()).toBe(true);
     expect(footer.text()).toContain('100w');
-    expect(footer.text()).toContain('80s');
+    expect(footer.text()).toContain('80b');
     withReserve.unmount();
   });
 });

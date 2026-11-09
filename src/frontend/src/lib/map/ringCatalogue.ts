@@ -28,6 +28,14 @@ export function formatBuildTime(seconds: number): string {
 }
 
 /**
+ * A catalogue `buildSeconds` as the build actually runs: times Odin's Wisdom (`wisdomFactor`), divided by the world's speed
+ * factor. Mirrors the server's `Settlement.ScaledBuildDuration`.
+ */
+export function scaledBuildSeconds(baseSeconds: number, wisdomFactor: number, speedFactor: number): number {
+  return (baseSeconds * wisdomFactor) / speedFactor;
+}
+
+/**
  * The reason a building can't be placed yet, or undefined when it can. Only
  * the longhouse gate is checked here: terrain is already filtered by which
  * categories the tile offers, and affordability is shown as a red cost chip
@@ -186,7 +194,7 @@ export function newPlacementDisabled(type: string): boolean {
 }
 
 /**
- * The exact shortfall against `cost`, e.g. "40 Wood, 15 Stone" — omits any
+ * The exact shortfall against `cost`, e.g. "40 Wood, 15 Brick" — omits any
  * resource `stock` already covers. Mirrors `trainingEconomy.ts`'s
  * `formatCostLine` (which shows the whole price), but for what's still
  * missing: a disabled Upgrade/Build bubble's hint needs to say precisely what

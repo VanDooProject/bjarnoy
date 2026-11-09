@@ -105,15 +105,13 @@ test.describe('mobile queue drawer', { tag: '@g2' }, () => {
     expect(box.height).toBeLessThanOrEqual(140);
     expect(box.x).toBeLessThanOrEqual(1);
 
-    // 2 build orders seeded above ('fast' is the soonest, 50s) -> count
-    // chip "2" and the fast order's countdown.
+    // 2 build orders seeded above ('fast' is the soonest, 50s) -> the fast
+    // order's countdown.
     const buildRow = handle.locator('.queue-drawer-handle-row.is-build');
-    await expect(buildRow.locator('.queue-drawer-handle-count')).toHaveText('2');
     await expect(buildRow.locator('.queue-drawer-handle-time')).toHaveText(/^0:\d\d$/);
 
-    // 1 training order seeded above -> no count chip, but a countdown.
+    // 1 training order seeded above -> a countdown.
     const trainRow = handle.locator('.queue-drawer-handle-row.is-train');
-    await expect(trainRow.locator('.queue-drawer-handle-count')).toHaveCount(0);
     await expect(trainRow.locator('.queue-drawer-handle-time')).not.toHaveText('');
 
     // BuildQueuePanel/TrainingQueuePanel — the desktop panels QueueDrawer

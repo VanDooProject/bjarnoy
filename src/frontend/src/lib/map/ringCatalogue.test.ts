@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
+import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, scaledBuildSeconds, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
+
+describe('scaledBuildSeconds', () => {
+  it('divides the catalogue time by the world speed factor and applies Odin\'s Wisdom', () => {
+    expect(scaledBuildSeconds(600, 1, 1)).toBe(600);
+    expect(scaledBuildSeconds(600, 1, 4)).toBe(150);
+    expect(scaledBuildSeconds(600, 0.9, 2)).toBeCloseTo(270);
+  });
+});
 
 describe('formatBuildTime', () => {
   it('renders the level-1 catalogue durations the way the design card shows them', () => {
@@ -171,7 +179,7 @@ describe('formatMissingResources', () => {
   it('lists every short resource, in wood/stone/food/iron order', () => {
     const cost = { wood: 100, stone: 50, food: 30, iron: 10 };
     const stock = { wood: 0, stone: 0, food: 0, iron: 0 };
-    expect(formatMissingResources(cost, stock)).toBe('100 Wood, 50 Stone, 30 Food, 10 Iron');
+    expect(formatMissingResources(cost, stock)).toBe('100 Wood, 50 Brick, 30 Food, 10 Iron');
   });
 
   it('is empty when the stock already covers the cost', () => {

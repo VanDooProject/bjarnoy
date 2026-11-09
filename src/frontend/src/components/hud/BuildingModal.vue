@@ -110,7 +110,7 @@ const feastOffer = computed(() => {
   return {
     townSquareLevel: ts,
     cost: { wood: each, stone: each, food: each, iron: 0 } as ResourceLine,
-    durationSeconds: FEAST_HOURS * 3600,
+    durationSeconds: (FEAST_HOURS * 3600) / world.worldSpeedFactor,
     renownGain: feastRenown(ts),
   };
 });
@@ -285,6 +285,12 @@ const waitingOrderHere = computed(() =>
   world.hud.queue.find((o) => o.q === props.tile.q && o.r === props.tile.r && o.state === 'waiting'),
 );
 
+// A raze order on this hex (building or waiting): the building keeps working until it finishes, and the hex takes no
+// upgrade meanwhile — cancelling is BuildQueuePanel's job.
+const razeOrderHere = computed(() =>
+  world.hud.queue.find((o) => o.q === props.tile.q && o.r === props.tile.r && o.kind === 'raze'),
+);
+
 // No free construction slot right now (every slot occupied by an
 // already-building order) — for a premium account (a non-zero waiting
 // queue), the action still submits, but as a waiting-queue request rather
@@ -426,7 +432,16 @@ const actionLabel = computed(() => {
           </button>
         </div>
 
-        <div v-if="mine && buildable && waitingOrderHere && !outsideRealm" class="actions">
+        <div v-if="mine && buildable && razeOrderHere && !outsideRealm" class="actions">
+          <p class="desc queued-note" data-testid="raze-note">
+            {{
+              razeOrderHere.targetLevel > 0
+                ? t('hud.buildingModal.razingNote', { level: razeOrderHere.targetLevel })
+                : t('hud.buildingModal.razingRemoveNote')
+            }}
+          </p>
+        </div>
+        <div v-else-if="mine && buildable && waitingOrderHere && !outsideRealm" class="actions">
           <p class="desc queued-note">{{ t('hud.buildingModal.queuedNote') }}</p>
         </div>
         <div v-else-if="mine && buildable && tile.buildingType && !outsideRealm" class="actions">

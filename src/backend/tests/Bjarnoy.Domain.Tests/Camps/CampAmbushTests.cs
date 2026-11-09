@@ -33,8 +33,10 @@ public class CampAmbushTests
         DepartedAt = T0,
         Path = Line(0, 20),
         CumulativeHours = Hours(21),
+        EdgeHours = Hours(21),
         ReturnPath = Line(20, 0),
         ReturnCumulativeHours = Hours(21),
+        ReturnEdgeHours = Hours(21),
         TurnAroundAt = T0.AddHours(turnAtHours),
         IsReturning = returning,
         RetreatImmune = immune,
@@ -52,6 +54,18 @@ public class CampAmbushTests
 
         Assert.NotNull(hit);
         Assert.Equal(T0.AddHours(7), hit.Value.At); // distance 3 at q = 7
+        Assert.Equal(new HexCoord(7, 0), hit.Value.Hex);
+    }
+
+    [Fact]
+    public void Ambush_happens_when_the_army_crosses_the_edge_into_the_range_not_at_the_hex_centre()
+    {
+        // Each edge is crossed half an hour before the hex centre is reached.
+        var movement = OutAndBack() with { EdgeHours = [0, .. Enumerable.Range(1, 20).Select(i => i - 0.5)] };
+
+        var hit = Find(movement, [Pristine(CampAt(10))]);
+
+        Assert.Equal(T0.AddHours(6.5), hit!.Value.At);
         Assert.Equal(new HexCoord(7, 0), hit.Value.Hex);
     }
 
@@ -152,8 +166,10 @@ public class CampAmbushTests
             DepartedAt = T0,
             Path = Line(6, 10),
             CumulativeHours = Hours(5),
+            EdgeHours = Hours(5),
             ReturnPath = Line(10, -1),
             ReturnCumulativeHours = Hours(12),
+            ReturnEdgeHours = Hours(12),
             TurnAroundAt = T0.AddHours(10),
         };
 

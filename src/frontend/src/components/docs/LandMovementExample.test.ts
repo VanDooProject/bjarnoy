@@ -42,7 +42,7 @@ function mountExample() {
 }
 
 describe('LandMovementExample', () => {
-  it('draws the pathfinder route as the selected army route and lists each step with its time', () => {
+  it('draws the pathfinder route as the selected army route and lists each hex with the time spent on it', () => {
     const wrapper = mountExample();
     const route = landExampleRoute();
 
@@ -51,14 +51,17 @@ describe('LandMovementExample', () => {
     expect(overlay.armies[0]).toMatchObject({ selected: true, isFleet: false, position: route.path[0] });
 
     const steps = wrapper.findAll('[data-testid="land-example-steps"] tbody tr');
-    expect(steps).toHaveLength(route.steps.length);
-    // Spearman: 4 hexes per hour is 15 minutes on grass, 1.3 times that in the forest; the stream costs 9 times that.
-    expect(steps[0]!.text()).toContain('Forest');
-    expect(steps[0]!.text()).toContain('19.5 min');
-    expect(steps[1]!.text()).toContain('15 min');
+    expect(steps).toHaveLength(route.hexes.length);
+    // Spearman: 4 hexes per hour is 15 minutes on grass. Time on a hex: half its price on the first and the last hex of the route, the
+    // full price between: 7.5 min on the start, 1.3 times 15 min in the forest, 9 times 15 min on the stream.
+    expect(steps[0]!.text()).toContain('Settlement');
+    expect(steps[0]!.text()).toContain('7.5 min');
+    expect(steps[1]!.text()).toContain('Forest');
+    expect(steps[1]!.text()).toContain('19.5 min');
+    expect(steps[3]!.text()).toContain('Stream');
+    expect(steps[3]!.text()).toContain('2 h 15 min');
     expect(wrapper.text()).toContain('Stream');
-    expect(wrapper.text()).toContain('2 h 15 min');
-    expect(wrapper.get('[data-testid="land-example-total"]').text()).toContain('4 h 58.5 min');
+    expect(wrapper.get('[data-testid="land-example-total"]').text()).toContain('5 h 6 min');
     wrapper.unmount();
   });
 
@@ -69,7 +72,7 @@ describe('LandMovementExample', () => {
     const rows = wrapper.findAll('[data-testid="land-example-steps"] tbody tr');
 
     await rows[2]!.trigger('mouseenter');
-    expect(setHighlight).toHaveBeenLastCalledWith(route.steps[2]!.coord);
+    expect(setHighlight).toHaveBeenLastCalledWith(route.hexes[2]!.coord);
     expect(rows[2]!.classes()).toContain('active');
     expect(wrapper.get('[data-testid="land-example-caption"]').text()).toBe(rows[2]!.findAll('td')[1]!.text());
 
@@ -82,7 +85,7 @@ describe('LandMovementExample', () => {
   it('marks the table row of the hex hovered on the map', async () => {
     const wrapper = mountExample();
     const route = landExampleRoute();
-    rendererOptions.onHoverChange!({ coord: route.steps[4]!.coord });
+    rendererOptions.onHoverChange!({ coord: route.hexes[4]!.coord });
     await wrapper.vm.$nextTick();
     const rows = wrapper.findAll('[data-testid="land-example-steps"] tbody tr');
     expect(rows.map((r) => r.classes().includes('active'))).toEqual(rows.map((_, i) => i === 4));
@@ -98,7 +101,7 @@ describe('LandMovementExample', () => {
     await rows[1]!.trigger('click');
     await wrapper.get('[data-testid="land-example-steps"] tbody').trigger('mouseleave');
     expect(rows[1]!.classes()).toContain('active');
-    expect(setHighlight).toHaveBeenLastCalledWith(route.steps[1]!.coord);
+    expect(setHighlight).toHaveBeenLastCalledWith(route.hexes[1]!.coord);
     await rows[1]!.trigger('click');
     expect(rows[1]!.classes()).not.toContain('active');
     expect(setHighlight).toHaveBeenLastCalledWith(undefined);
@@ -116,7 +119,7 @@ describe('LandMovementExample', () => {
     await wrapper.get('[data-testid="land-example-steps"] tbody').trigger('mouseleave');
     expect(rows[3]!.classes()).not.toContain('active');
     expect(rows[1]!.classes()).toContain('active');
-    expect(setHighlight).toHaveBeenLastCalledWith(route.steps[1]!.coord);
+    expect(setHighlight).toHaveBeenLastCalledWith(route.hexes[1]!.coord);
     wrapper.unmount();
   });
 });

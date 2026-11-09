@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { coordKey, type AxialCoord } from '../hex/coords';
-import { findPath, HALF_OPEN_END_COST, hoursFrom, MAX_TINT_HEXES, pathCost, reachableFrom, reachableRange, type MovementRules, type PathContext } from './hexPath';
+import { BURNT_BRIDGE_LEAVE_COST, findPath, HALF_OPEN_END_COST, hoursFrom, leaveCost, MAX_TINT_HEXES, pathCost, reachableFrom, reachableRange, timeOnHex, type MovementRules, type PathContext } from './hexPath';
 import type { Terrain } from './types';
 
 // Mirrors HexPathfinder's own cost tables (issue #159 part A/B) — kept as a
@@ -45,6 +45,7 @@ describe('hoursFrom', () => {
       { q: 3, r: -1 },
     ];
     const terrain = new Map([
+      ...grid([{ q: 0, r: 0 }], 'grass'),
       ...grid(direct, 'bog'),
       ...grid(detour, 'grass'),
       [coordKey(destination), 'grass' as Terrain],
@@ -53,8 +54,8 @@ describe('hoursFrom', () => {
     const ctx = contextFor(terrain);
     const hours = hoursFrom({ q: 0, r: 0 }, ctx, 20);
 
-    // Direct: 2 bog hexes (2.0 each) + destination (1.0) = 5.0h.
-    // Detour: 3 grass hexes (1.0 each) + destination (1.0) = 4.0h. Detour wins.
+    // Direct: steps of (1+2)/2, (2+2)/2 and (2+1)/2 = 1.5 + 2.0 + 1.5 = 5.0h.
+    // Detour: 4 grass steps of 1.0 = 4.0h. Detour wins.
     expect(hours.get(coordKey(destination))).toBeCloseTo(4.0, 10);
   });
 
@@ -67,7 +68,7 @@ describe('hoursFrom', () => {
     expect([...hours.keys()]).toEqual([coordKey({ q: 0, r: 0 })]);
   });
 
-  it('charges the stream flat crossing cost on entry, same as HexPathfinder', () => {
+  it('bills the stream flat crossing cost half wading in and half wading out, same as HexPathfinder', () => {
     const terrain = grid(
       [
         { q: 0, r: 0 },
@@ -79,7 +80,7 @@ describe('hoursFrom', () => {
     const ctx = contextFor(terrain, new Set([coordKey({ q: 1, r: 0 })]));
     const hours = hoursFrom({ q: 0, r: 0 }, ctx, 20);
 
-    // Enter the river tile (1 + 8) then the far bank (1) = 10h.
+    // (1 + 9) / 2 into the river tile and (9 + 1) / 2 onto the far bank = 10h.
     expect(hours.get(coordKey({ q: 2, r: 0 }))).toBeCloseTo(10, 10);
   });
 
@@ -95,11 +96,11 @@ describe('hoursFrom', () => {
       { q: 1, r: -1 },
       { q: 2, r: -1 },
     ];
-    const terrain = grid([b, riverTile, ...detour], 'grass');
+    const terrain = grid([a, b, riverTile, ...detour], 'grass');
     const ctx = contextFor(terrain, new Set([coordKey(riverTile)]));
     const hours = hoursFrom(a, ctx, 20);
 
-    // Direct: enter river (1 + 8 = 9) then b (1) = 10h.
+    // Direct: (1 + 9) / 2 into the river and (9 + 1) / 2 out of it = 10h.
     // Detour: two grass hexes (1 each) then b (1) = 3h. Detour wins.
     expect(hours.get(coordKey(b))).toBeCloseTo(3, 10);
   });
@@ -200,6 +201,14 @@ describe('findPath', () => {
     const path = findPath(from, to, contextFor(meadow()))!;
     expect(path.map(coordKey)).toEqual(['0,0', '1,0', '2,0', '3,0', '4,0']);
     expect(pathCost(path, contextFor(meadow()))).toBe(4);
+  });
+
+  it('splits the cost of a path into the time spent on each hex: half on the first and the last, the full price between', () => {
+    const ctx = contextFor(meadow());
+    const path = findPath(from, to, ctx)!;
+    const times = path.map((_, i) => timeOnHex(path, i, ctx));
+    expect(times).toEqual([0.5, 1, 1, 1, 0.5]);
+    expect(times.reduce((a, b) => a + b, 0)).toBe(pathCost(path, ctx));
   });
 
   it('returns null when an endpoint is sea or the sea cuts the two apart', () => {
@@ -344,7 +353,7 @@ describe('streams (the flat crossing cost over any terrain)', () => {
     expect(pathCost(path, ctx)).toBe(1 + flat + 1 + 1);
     // Forest under a stream costs the same flat 9 (not 1.3 + 8).
     const forest = contextFor(corridor('forest'), new Set(['2,0']));
-    expect(pathCost([{ q: 1, r: 0 }, { q: 2, r: 0 }], forest)).toBe(flat);
+    expect(pathCost([{ q: 1, r: 0 }, { q: 2, r: 0 }], forest)).toBe((1 + flat) / 2);
   });
 
   it('a mountain hex without a stream stays blocked, and a wide river on a mountain stays impassable', () => {
@@ -362,5 +371,54 @@ describe('streams (the flat crossing cost over any terrain)', () => {
     const pass = contextFor(corridor('mountain'), new Set(['2,0']));
     expect(hoursFrom(from, pass, 100).get('4,0')).toBeCloseTo(1 + flat + 1 + 1, 10);
     expect(hoursFrom(from, contextFor(corridor('mountain')), 100).has('4,0')).toBe(false);
+  });
+});
+
+describe('a step is billed half and half', () => {
+  const row = (...terrains: Terrain[]) => new Map(terrains.map((t, q) => [coordKey({ q, r: 0 }), t]));
+  const line = (n: number): AxialCoord[] => Array.from({ length: n }, (_, q) => ({ q, r: 0 }));
+
+  it('costs half the hex left plus half the hex entered, the same both ways', () => {
+    const ctx = contextFor(row('grass', 'forest', 'grass'));
+    expect(pathCost(line(3), ctx)).toBeCloseTo((1 + 1.3) / 2 + (1.3 + 1) / 2, 9);
+    expect(pathCost([...line(3)].reverse(), ctx)).toBeCloseTo(pathCost(line(3), ctx), 9);
+    expect(hoursFrom({ q: 0, r: 0 }, ctx, 100).get('2,0')).toBeCloseTo(2.3, 9);
+  });
+
+  it('leaves a hex at the price it is entered at, wherever entering is allowed', () => {
+    const ctx = contextFor(row('grass', 'sand', 'forest', 'bog', 'grass'), new Set(['4,0']));
+    // Grass, the hex, grass: the walk costs the hex's enter price plus the two grass halves (1.0), so enter = walk - 1.
+    const withGrass: PathContext = { ...ctx, terrainAt: (h) => (h.r === 1 ? 'grass' : ctx.terrainAt(h)), isRiver: (h) => h.r === 0 && ctx.isRiver(h) };
+    const grass = { q: 0, r: 1 };
+    for (const c of line(5)) expect(leaveCost(c, ctx)!, coordKey(c)).toBeCloseTo(pathCost([grass, c, grass], withGrass) - 1, 9);
+  });
+
+  it('leaves a palisade built under the army at the ground price, but never enters one', () => {
+    const wall = { q: 0, r: 0 };
+    const ctx: PathContext = { ...contextFor(row('forest', 'grass', 'grass')), restrictions: { blocked: (c) => c.q === 0 } };
+    expect(leaveCost(wall, ctx)).toBe(1.3);
+    const path = findPath(wall, { q: 2, r: 0 }, ctx)!;
+    expect(pathCost(path, ctx)).toBeCloseTo((1.3 + 1) / 2 + 1, 9);
+    expect(findPath({ q: 2, r: 0 }, wall, ctx)).toBeNull();
+  });
+
+  it('leaves a wide river whose bridge is gone at 12, a bridged one at the bridge price, and still cannot enter it', () => {
+    const river = { q: 0, r: 0 };
+    const base = contextFor(row('grass', 'grass', 'grass'), new Set(['0,0']), new Set(['0,0']));
+    expect(BURNT_BRIDGE_LEAVE_COST).toBe(11);
+    expect(leaveCost(river, base)).toBe(12);
+    expect(pathCost([river, { q: 1, r: 0 }], base)).toBeCloseTo((12 + 1) / 2, 9);
+    expect(findPath({ q: 2, r: 0 }, river, base)).toBeNull();
+    const bridged: PathContext = { ...base, restrictions: { bridgeCost: () => 6 } };
+    expect(leaveCost(river, bridged)).toBe(6);
+  });
+
+  it('cannot leave a plain mountain, sea or a lake: nothing is reachable from there', () => {
+    for (const t of ['mountain', 'sea', 'lake'] as Terrain[]) {
+      const ctx = contextFor(row(t, 'grass', 'grass'));
+      expect(leaveCost({ q: 0, r: 0 }, ctx), t).toBeNull();
+      expect([...reachableFrom({ q: 0, r: 0 }, ctx)], t).toEqual(['0,0']);
+      expect([...hoursFrom({ q: 0, r: 0 }, ctx, 100).keys()], t).toEqual(['0,0']);
+    }
   });
 });

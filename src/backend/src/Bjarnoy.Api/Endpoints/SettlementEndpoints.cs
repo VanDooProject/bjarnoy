@@ -75,6 +75,14 @@ public static class SettlementEndpoints
             .AddEndpointFilter<UserActivityEndpointFilter>()
             .WithConcurrencyRetry();
 
+        settlements.MapPost("/{settlementId:guid}/razes", RazeBuilding)
+            .WithName("RazeBuilding")
+            .WithSummary("Queues razing one level of a building: free, takes construction slots, pays back a third of the level's cost.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .RequireSettlementOwner()
+            .AddEndpointFilter<UserActivityEndpointFilter>()
+            .WithConcurrencyRetry();
+
         settlements.MapPost("/{settlementId:guid}/builds/{orderId:guid}/cancel", CancelBuild)
             .WithName("CancelBuild")
             .WithSummary("Cancels a still-queued build order, refunding its cost.")
@@ -350,11 +358,13 @@ public static class SettlementEndpoints
         // Every longhouse stays (the map draws them), each under its linked realm's name.
         var labels = await LinkedRealmNames.ForAsync(db, worldId, entities, cancellationToken);
 
+        var relationOf = await SettlementRelations.ForCallerAsync(db, worldId, callerUserId, IsMine, cancellationToken);
+
         IReadOnlyList<SettlementSummary> response =
         [
             .. entities
                 .Where(s => IsMine(s) || explored.Contains(new HexCoord(s.CentreQ, s.CentreR)))
-                .Select(s => SettlementSummary.From(s, IsMine(s), labels[s.Id])),
+                .Select(s => SettlementSummary.From(s, IsMine(s), labels[s.Id], relationOf(s))),
         ];
 
         return TypedResults.Ok(response);
@@ -391,7 +401,7 @@ public static class SettlementEndpoints
         if (result.Accepted)
         {
             var order = result.Order!;
-            var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
+            var definition = BuildingCatalogue.Get(order.Type, order.LevelInWork);
             var totalSeconds = order.IsWaiting
                 ? order.BaseDuration.TotalSeconds
                 : (order.CompletesAt!.Value - order.StartedAt!.Value).TotalSeconds;
@@ -405,7 +415,8 @@ public static class SettlementEndpoints
                     definition.SlotCost,
                     order.CompletesAt,
                     order.IsWaiting ? null : totalSeconds,
-                    totalSeconds));
+                    totalSeconds,
+                    order.Kind.ToWireName()));
         }
 
         var problem = new ProblemDetails
@@ -426,6 +437,57 @@ public static class SettlementEndpoints
             problem.Extensions["requiredLevel"] = missing.Level;
         }
 
+        return result.Rejection == BuildRejection.UnknownBuildingLevel
+            ? TypedResults.NotFound()
+            : TypedResults.Conflict(problem);
+    }
+
+    private static async Task<Results<Accepted<BuildOrderResponse>, NotFound, Conflict<ProblemDetails>>> RazeBuilding(
+        Guid settlementId,
+        RazeBuildingRequest request,
+        SettlementService settlements,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var result = await settlements.RazeBuildingLevelAsync(
+            settlementId, new HexCoord(request.Q, request.R), cancellationToken);
+
+        if (result.WorldPaused)
+        {
+            return TypedResults.Conflict(WorldPausedProblem());
+        }
+
+        if (result.Accepted)
+        {
+            var order = result.Order!;
+            var definition = BuildingCatalogue.Get(order.Type, order.LevelInWork);
+            var totalSeconds = order.IsWaiting
+                ? order.BaseDuration.TotalSeconds
+                : (order.CompletesAt!.Value - order.StartedAt!.Value).TotalSeconds;
+
+            return TypedResults.Accepted(
+                $"/api/v1/settlements/{settlementId}",
+                new BuildOrderResponse(
+                    order.Id, order.Coord.Q, order.Coord.R, order.Type.ToWireName(),
+                    order.TargetLevel,
+                    order.IsWaiting ? "waiting" : "building",
+                    definition.SlotCost,
+                    order.CompletesAt,
+                    order.IsWaiting ? null : totalSeconds,
+                    totalSeconds,
+                    order.Kind.ToWireName()));
+        }
+
+        var problem = new ProblemDetails
+        {
+            Title = "The raze was refused.",
+            Detail = Describe(result.Rejection),
+            Status = StatusCodes.Status409Conflict,
+        };
+        problem.Extensions["rejection"] = result.Rejection.ToString();
+
+        // UnknownBuildingLevel is how the service reports a settlement that does not exist.
         return result.Rejection == BuildRejection.UnknownBuildingLevel
             ? TypedResults.NotFound()
             : TypedResults.Conflict(problem);
@@ -833,6 +895,8 @@ public static class SettlementEndpoints
         BuildRejection.NewPlacementDisabled => "That building can no longer be built; existing ones keep working.",
         BuildRejection.BridgeNeedsWideRiver =>
             "A bridge only spans a wide river crossing: streams can be waded and other river tiles take no bridge.",
+        BuildRejection.NoBuildingOnHex => "There is no building to raze on that hex.",
+        BuildRejection.LonghouseCannotBeRazed => "The longhouse cannot be razed.",
         BuildRejection.NoFreeSlot =>
             "Every construction slot is busy. Premium settlements can queue extra builds to wait for a free slot.",
         _ => "Refused.",

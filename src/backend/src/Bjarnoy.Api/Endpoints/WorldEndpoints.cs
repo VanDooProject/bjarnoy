@@ -578,12 +578,12 @@ public static class WorldEndpoints
 
         var islandSettlementEntities = await settlements.GetForIslandAsync(suggestion.IslandId, cancellationToken);
         var labels = await LinkedRealmNames.ForAsync(db, worldId, islandSettlementEntities, cancellationToken);
+        bool IsMine(Bjarnoy.Infrastructure.Entities.SettlementEntity s) =>
+            s.OwnerId == realm.OwnerId || (callerUserId is not null && s.UserId == callerUserId);
+        var relationOf = await SettlementRelations.ForCallerAsync(db, worldId, callerUserId, IsMine, cancellationToken);
         IReadOnlyList<SettlementSummary> islandSettlements =
         [
-            .. islandSettlementEntities.Select(s => SettlementSummary.From(
-                s,
-                s.OwnerId == realm.OwnerId || (callerUserId is not null && s.UserId == callerUserId),
-                labels[s.Id])),
+            .. islandSettlementEntities.Select(s => SettlementSummary.From(s, IsMine(s), labels[s.Id], relationOf(s))),
         ];
 
         return TypedResults.Ok(new PlotSuggestionResponse(

@@ -34,6 +34,7 @@ const getWorldMembership = vi.fn();
 const dispatchArmy = vi.fn();
 const getWorldCamps = vi.fn();
 const queueBuild = vi.fn();
+const razeBuilding = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
 // reads `localStorage.getItem('bjarnoy.worldId')` at module-level state-init
@@ -90,6 +91,7 @@ async function loadStoreModule(demoMode: boolean) {
       dispatchArmy: (...args: unknown[]) => dispatchArmy(...args),
       getWorldCamps: (...args: unknown[]) => getWorldCamps(...args),
       queueBuild: (...args: unknown[]) => queueBuild(...args),
+      razeBuilding: (...args: unknown[]) => razeBuilding(...args),
     },
     ApiError: MockApiError,
     // Real implementations check `err instanceof ApiError && err.problem?.error
@@ -2163,7 +2165,7 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
 
     await store.queueBuildOptimistic('lumberjack', at, { wood: 100, stone: 50 });
 
-    // Stone stayed at 300 (a reserved waiting order spends nothing yet).
+    // Brick stayed at 300 (a reserved waiting order spends nothing yet).
     expect(store.hud.lastSpend?.cost).toEqual({ wood: 100 });
   });
 
@@ -2228,6 +2230,69 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
     warn.mockRestore();
   });
 
+  describe('razeBuildingLive', () => {
+    const razeOrder = {
+      id: 'raze-1', q: 3, r: -2, building: 'lumberjack', kind: 'raze', targetLevel: 1, state: 'building', slotCost: 1,
+      completesAtGameTime: 'x', completesInSeconds: 90, totalSeconds: 90,
+    };
+
+    async function setupWithLumberjack(level: number) {
+      const store = await setup();
+      razeBuilding.mockReset();
+      store.hud.buildings = [{ q: 3, r: -2, type: 'lumberjack', level }];
+      return store;
+    }
+
+    it('puts a pending raze order (the level after the raze) on the hex while the request runs', async () => {
+      const store = await setupWithLumberjack(2);
+      let release!: () => void;
+      razeBuilding.mockReturnValue(new Promise<void>((resolve) => (release = resolve)));
+
+      const done = store.razeBuildingLive(at);
+      expect(store.hud.queue).toHaveLength(1);
+      expect(store.hud.queue[0]).toMatchObject({ q: 3, r: -2, building: 'lumberjack', kind: 'raze', targetLevel: 1, state: 'waiting' });
+
+      getSettlement.mockResolvedValue(settlementResponse({ queue: [razeOrder] }));
+      release();
+      await done;
+      expect(razeBuilding).toHaveBeenCalledWith('settlement-1', { q: 3, r: -2 }, undefined);
+      expect(store.hud.queue.map((o) => o.id)).toEqual(['raze-1']);
+    });
+
+    it('razing level 1 targets level 0, and records no spend (a raze costs nothing)', async () => {
+      const store = await setupWithLumberjack(1);
+      let release!: () => void;
+      razeBuilding.mockReturnValue(new Promise<void>((resolve) => (release = resolve)));
+
+      const done = store.razeBuildingLive(at);
+      expect(store.hud.queue[0]).toMatchObject({ kind: 'raze', targetLevel: 0 });
+      getSettlement.mockResolvedValue(settlementResponse({ queue: [] }));
+      release();
+      await done;
+
+      expect(store.hud.lastSpend).toBeNull();
+    });
+
+    it('removes the pending order and rethrows on a refusal, without a refresh', async () => {
+      const store = await setupWithLumberjack(2);
+      const refusal = new Error('This hex already has an order.');
+      razeBuilding.mockRejectedValue(refusal);
+      getSettlement.mockClear();
+
+      await expect(store.razeBuildingLive(at)).rejects.toBe(refusal);
+
+      expect(store.hud.queue).toEqual([]);
+      expect(getSettlement).not.toHaveBeenCalled();
+    });
+
+    it('refuses a hex without a building', async () => {
+      const store = await setup();
+      razeBuilding.mockReset();
+      await expect(store.razeBuildingLive(at)).rejects.toThrow();
+      expect(razeBuilding).not.toHaveBeenCalled();
+    });
+  });
+
   it('recordSpend ignores an empty cost', async () => {
     const store = await setup();
     store.recordSpend({});
@@ -2239,8 +2304,9 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
 });
 
 describe('useWorldStore live realm membership', () => {
-  const summary = (id: string, mine: boolean, realmId = id) => ({
+  const summary = (id: string, mine: boolean, realmId = id, relation: 'guild' | 'treaty' | 'rival' = 'rival') => ({
     id, realmId, name: id, ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-1', mine,
+    relation: mine ? ('mine' as const) : relation,
   });
 
   it("registers the player's own settlements under the player id and everyone else as rivals", async () => {
@@ -2251,6 +2317,23 @@ describe('useWorldStore live realm membership', () => {
 
     expect(store.model.getSettlement('own-other')?.ownerId).toBe('player-1');
     expect(store.model.getSettlement('rival')?.ownerId).toBe('rival');
+  });
+
+  it('keeps a guild or treaty relation on the settlement and leaves rivals and own ones without', async () => {
+    const store = await loadStoreModule(false);
+    store.ownerId = 'player-1';
+
+    store.registerSettlementSummaries([
+      summary('mate', false, 'mate', 'guild'),
+      summary('partner', false, 'partner', 'treaty'),
+      summary('rival', false),
+      summary('own-other', true),
+    ]);
+
+    expect(store.model.getSettlement('mate')?.relation).toBe('guild');
+    expect(store.model.getSettlement('partner')?.relation).toBe('treaty');
+    expect(store.model.getSettlement('rival')?.relation).toBeUndefined();
+    expect(store.model.getSettlement('own-other')?.relation).toBeUndefined();
   });
 
   it("forwards the response's realm to the model", async () => {
@@ -2360,7 +2443,7 @@ describe('useWorldStore linked realms', () => {
   it('registerSettlementSummaries stores the realmId', async () => {
     const store = await loadStoreModule(false);
     store.registerSettlementSummaries([
-      { id: 'r2', realmId: 'r1', name: 'Rival', ownerName: 'Bo', q: 5, r: 5, longhouseLevel: 1, islandId: 'i', mine: false },
+      { id: 'r2', realmId: 'r1', name: 'Rival', ownerName: 'Bo', q: 5, r: 5, longhouseLevel: 1, islandId: 'i', mine: false, relation: 'rival' },
     ]);
 
     expect(store.model.getSettlement('r2')?.realmId).toBe('r1');

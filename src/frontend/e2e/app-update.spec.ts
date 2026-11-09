@@ -31,7 +31,7 @@ test.describe('lazy chunk gone after a deploy', () => {
     // The marker only disappears with a full page load.
     await page.waitForFunction(() => !(window as unknown as { __marker?: boolean }).__marker);
     // Demo mode keeps its world in memory, so the fresh load starts at the landing page.
-    await expect(page.getByRole('heading', { name: /put your longhouse somewhere/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /choose where your realm begins/i })).toBeVisible();
     expect(mapChunkRequests).toBe(1);
   });
 });

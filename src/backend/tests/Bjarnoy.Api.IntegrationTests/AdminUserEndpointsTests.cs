@@ -99,6 +99,74 @@ public sealed class AdminUserEndpointsTests(SqliteApiFixture fixture) : IClassFi
     }
 
     [Fact]
+    public async Task Lookup_finds_accounts_by_user_name_settlement_and_jarl_but_not_system_owners()
+    {
+        using var client = _fixture.CreateClient();
+        var (userName, _, userId) = await CreatePlayerAsync(client);
+        var (_, _, otherId) = await CreatePlayerAsync(client);
+        var (adminToken, _) = await CreateAdminAsync(client);
+        Authorize(client, adminToken);
+
+        var stamp = Guid.CreateVersion7().ToString("N")[..10];
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var world = await _fixture.Factory.CreateWorldAsync($"lookup-{stamp}", 21, 40, cancellationToken: Ct);
+            var islandId = (await db.Islands.FirstAsync(i => i.WorldId == world.Id, Ct)).Id;
+            db.Settlements.Add(new SettlementEntity
+            {
+                WorldId = world.Id,
+                IslandId = islandId,
+                UserId = userId,
+                Name = $"Hafenstad{stamp}",
+                OwnerName = $"Jarl Ragnvald{stamp}",
+                OwnerId = $"o-{stamp}-1",
+                CentreQ = 0,
+                CentreR = 0,
+                FoundedAt = DateTimeOffset.UnixEpoch,
+            });
+            db.Settlements.Add(new SettlementEntity
+            {
+                WorldId = world.Id,
+                IslandId = islandId,
+                UserId = SystemUserIds.Abandoned,
+                Name = $"Ruine{stamp}",
+                OwnerName = $"Verlassen{stamp}",
+                OwnerId = $"o-{stamp}-2",
+                CentreQ = 1,
+                CentreR = 1,
+                FoundedAt = DateTimeOffset.UnixEpoch,
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        async Task<IReadOnlyList<AdminUserLookupResponse>> Lookup(string q)
+        {
+            var response = await client.GetAsync($"/api/v1/admin/users/lookup?q={Uri.EscapeDataString(q)}", Ct);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            return await response.ReadStrictAsync<IReadOnlyList<AdminUserLookupResponse>>(Ct);
+        }
+
+        var byUser = await Lookup(userName.ToUpperInvariant());
+        Assert.Contains(byUser, m => m.UserId == userId && m.Via == "user");
+        Assert.DoesNotContain(byUser, m => m.UserId == otherId);
+
+        var bySettlement = await Lookup($"hafenstad{stamp}");
+        var settlementHit = Assert.Single(bySettlement);
+        Assert.Equal(userId, settlementHit.UserId);
+        Assert.Equal("settlement", settlementHit.Via);
+        Assert.Equal($"Hafenstad{stamp}", settlementHit.MatchedName);
+
+        var byJarl = await Lookup($"ragnvald{stamp}");
+        var jarlHit = Assert.Single(byJarl);
+        Assert.Equal(userId, jarlHit.UserId);
+        Assert.Equal("jarl", jarlHit.Via);
+
+        Assert.Empty(await Lookup($"verlassen{stamp}"));
+        Assert.Empty(await Lookup("x"));
+    }
+
+    [Fact]
     public async Task Admin_can_list_search_and_filter_users()
     {
         using var client = _fixture.CreateClient();

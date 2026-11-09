@@ -89,13 +89,30 @@ public sealed class ConcurrentWriteExecutor(GameDbContext dbContext, ILogger<Con
         "IX_build_orders_SettlementId_Q_R_TargetLevel",
     };
 
+    /// <summary>The primary key of the stored explored chunks: two writers inserting the same new chunk collide on it.</summary>
+    internal const string ExploredChunkPrimaryKey = "PK_player_explored_chunks";
+
+    internal static bool IsExploredChunkInsertRace(Exception exception)
+    {
+        for (var ex = exception; ex is not null; ex = ex.InnerException)
+        {
+            if (ex is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: ExploredChunkPrimaryKey })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// A lost optimistic-concurrency race, or the database refusing a
     /// transaction that a concurrent one made impossible: SQLite
     /// BUSY/LOCKED, PostgreSQL serialization failure or deadlock. Provider
     /// errors usually arrive wrapped in <see cref="DbUpdateException"/>. Also
     /// a unique violation on one of <see cref="SettlementChildUniqueIndexes"/>,
-    /// which is the same lost race seen through a different error.
+    /// which is the same lost race seen through a different error, and one on <see cref="ExploredChunkPrimaryKey"/>
+    /// (a concurrent fog read inserted the same explored chunk first; the re-run merges into its row).
     /// </summary>
     internal static bool IsRetryable(Exception exception)
     {
@@ -110,7 +127,7 @@ public sealed class ConcurrentWriteExecutor(GameDbContext dbContext, ILogger<Con
                 case PostgresException { SqlState: "40001" or "40P01" }:
                     return true;
                 case PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: { } constraint }
-                    when SettlementChildUniqueIndexes.Contains(constraint):
+                    when SettlementChildUniqueIndexes.Contains(constraint) || constraint == ExploredChunkPrimaryKey:
                     return true;
             }
         }

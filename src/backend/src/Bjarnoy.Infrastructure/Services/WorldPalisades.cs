@@ -90,20 +90,8 @@ public static class WorldPalisades
     /// </summary>
     internal static async Task<Func<Guid, Guid, bool>> FriendsAsync(GameDbContext db, Guid worldId, CancellationToken cancellationToken)
     {
-        var memberships = await db.GuildMemberships
-            .AsNoTracking()
-            .Where(m => m.Guild!.WorldId == worldId && m.Guild.DisbandedAt == null)
-            .Select(m => new { m.UserId, m.GuildId })
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-        var treaties = await db.GuildPeaceTreaties
-            .AsNoTracking()
-            .Where(t => t.Status == PeaceTreatyStatus.Active && t.ProposerGuild!.WorldId == worldId)
-            .Select(t => new { t.ProposerGuildId, t.TargetGuildId })
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-
-        var guildOf = memberships.ToDictionary(m => m.UserId, m => m.GuildId);
-        var atPeace = treaties.SelectMany(t => new[] { (t.ProposerGuildId, t.TargetGuildId), (t.TargetGuildId, t.ProposerGuildId) }).ToHashSet();
-        return (a, b) => guildOf.TryGetValue(a, out var ga) && guildOf.TryGetValue(b, out var gb) && (ga == gb || atPeace.Contains((ga, gb)));
+        var relationOf = await GuildRelations.LoadAsync(db, worldId, cancellationToken).ConfigureAwait(false);
+        return (a, b) => relationOf(a, b) != GuildRelation.None;
     }
 
     /// <summary>

@@ -94,19 +94,27 @@ public sealed record HexPointResponse(int Q, int R)
 /// Game-hours elapsed to reach each hex of <paramref name="Path"/> from its
 /// start (<c>[0]</c> is always 0, same length as <paramref name="Path"/>) —
 /// see <see cref="Movement.CumulativeHours"/>. Exposed so a frontend can
-/// interpolate an army's live position <em>per leg</em> rather than assuming a
+/// interpolate an army's live position <em>per hex</em> rather than assuming a
 /// uniform speed over the whole route: terrain makes legs cost wildly
 /// different amounts of time, so a uniform-speed guess drifts visibly away
 /// from the authoritative <c>Position</c> the backend reports (issue #94).
 /// </param>
-/// <param name="ReturnCumulativeHours">The same per-leg schedule for <paramref name="ReturnPath"/>, measured from <paramref name="TurnAroundAt"/>.</param>
+/// <param name="EdgeHours">
+/// Game-hours elapsed when the army crosses the edge into each hex of <paramref name="Path"/> (<c>[0]</c> is 0, same length) — see
+/// <see cref="Movement.EdgeHours"/>. Lies between the hex centres' <paramref name="CumulativeHours"/>; the marker moves at the speed
+/// of the hex under it, so the time from a centre to the next edge is the first half of the leg.
+/// </param>
+/// <param name="ReturnCumulativeHours">The same per-hex schedule for <paramref name="ReturnPath"/>, measured from <paramref name="TurnAroundAt"/>.</param>
+/// <param name="ReturnEdgeHours">The same edge-crossing schedule for <paramref name="ReturnPath"/>, measured from <paramref name="TurnAroundAt"/>.</param>
 public sealed record MovementResponse(
     DateTimeOffset DepartedAt,
     IReadOnlyList<HexPointResponse> Path,
     IReadOnlyList<double> CumulativeHours,
+    IReadOnlyList<double> EdgeHours,
     DateTimeOffset ArrivesAt,
     IReadOnlyList<HexPointResponse> ReturnPath,
     IReadOnlyList<double> ReturnCumulativeHours,
+    IReadOnlyList<double> ReturnEdgeHours,
     DateTimeOffset TurnAroundAt,
     DateTimeOffset ReturnArrivesAt,
     bool IsReturning)
@@ -115,9 +123,11 @@ public sealed record MovementResponse(
         movement.DepartedAt,
         [.. movement.Path.Select(HexPointResponse.From)],
         [.. movement.CumulativeHours],
+        [.. movement.EdgeHours],
         movement.ArrivesAt,
         [.. movement.ReturnPath.Select(HexPointResponse.From)],
         [.. movement.ReturnCumulativeHours],
+        [.. movement.ReturnEdgeHours],
         movement.TurnAroundAt,
         movement.ReturnArrivesAt,
         movement.IsReturning);
