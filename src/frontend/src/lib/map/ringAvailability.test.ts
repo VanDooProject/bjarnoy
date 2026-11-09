@@ -26,12 +26,14 @@ function input(overrides: Partial<RingAvailabilityInput> = {}): RingAvailability
 describe('slotsNeeded', () => {
   it('defaults to one slot and honours slotCost', () => {
     expect(slotsNeeded(undefined, 3)).toBe(1);
-    expect(slotsNeeded({ slotCost: 1, occupiesAllSlots: false }, 3)).toBe(1);
-    expect(slotsNeeded({ slotCost: 2, occupiesAllSlots: false }, 3)).toBe(2);
+    expect(slotsNeeded({ slotCost: 1, occupiesMostSlots: false }, 3)).toBe(1);
+    expect(slotsNeeded({ slotCost: 2, occupiesMostSlots: false }, 3)).toBe(2);
   });
 
-  it('takes every slot the settlement has for an occupiesAllSlots level, whatever slotCost says', () => {
-    expect(slotsNeeded({ slotCost: 1, occupiesAllSlots: true }, 4)).toBe(4);
+  it('takes 90 % of the slots (rounded down) for an occupiesMostSlots level, whatever slotCost says', () => {
+    expect(slotsNeeded({ slotCost: 1, occupiesMostSlots: true }, 2)).toBe(1);
+    expect(slotsNeeded({ slotCost: 1, occupiesMostSlots: true }, 4)).toBe(3);
+    expect(slotsNeeded({ slotCost: 1, occupiesMostSlots: true }, 10)).toBe(9);
   });
 });
 

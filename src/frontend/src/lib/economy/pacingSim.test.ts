@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   constructionSlotsFor,
+  longhouseSlotCost,
   feastCost,
   feastRenown,
   isOnline,
@@ -51,7 +52,11 @@ function tiny(): BuildingDefinitionResponse[] {
 
 describe('helpers', () => {
   it('mirrors Settlement.ConstructionSlotsFor', () => {
-    expect([1, 5, 9, 10, 14, 15, 20].map(constructionSlotsFor)).toEqual([2, 2, 2, 3, 3, 4, 5]);
+    expect([1, 2, 3, 4, 10, 30].map(constructionSlotsFor)).toEqual([2, 2, 3, 4, 10, 30]);
+  });
+
+  it('mirrors Settlement.LonghouseSlotCost', () => {
+    expect([2, 3, 5, 10, 30].map(longhouseSlotCost)).toEqual([1, 2, 4, 9, 27]);
   });
 
   it('a session covers exactly its own minutes, on every day, and may wrap past midnight', () => {
@@ -459,10 +464,10 @@ describe('feasts on the bundled catalogue (economy.md §6 tuning)', () => {
     expect(day(r.renownReachedAt)).toBeGreaterThan(day(r.lhReachedAt[10] ?? null) + 1);
   });
 
-  it('the 4-check-ins player still settles around day 13 with feasts', () => {
+  it('the 4-check-ins player settles around day 10 with feasts (one builder slot per Longhouse level)', () => {
     const r = run(PROFILE_PRESETS.checkins4, true);
-    expect(day(r.secondSettlementAt)).toBeGreaterThan(12);
-    expect(day(r.secondSettlementAt)).toBeLessThan(15);
+    expect(day(r.secondSettlementAt)).toBeGreaterThan(9);
+    expect(day(r.secondSettlementAt)).toBeLessThan(11);
   });
 
   it('feasts multiply day-30 renown by 3-6x, so the later thresholds still mean something', () => {
