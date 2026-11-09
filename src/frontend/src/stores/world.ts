@@ -532,7 +532,7 @@ export const useWorldStore = defineStore('world', {
       this.model.setWastedRevealed(world.endbossTriggered);
       this.model.setFrozenEnabled(world.frozenIslesEnabled);
       try {
-        this.islands = await api.getIslands(world.id, this.ownerId ?? undefined);
+        this.islands = await api.getIslands(world.id, this.callerOwnerId());
       } catch (err) {
         if (!isWorldNotFound(err)) throw err;
         // The world resolved a moment ago (getWorld/newestWorld, just above)
@@ -1459,6 +1459,15 @@ export const useWorldStore = defineStore('world', {
       }
     },
     /**
+     * The id that identifies the caller to the server when no settlement is loaded yet: `ownerId` once a realm is
+     * restored, joined or founded, else this browser's own player id (`stores/player.ts`). An account-less player is
+     * known to the server by that id alone (`X-Owner-Id`), and the landing page bootstraps the world before any
+     * `ownerId` is set; a read without it gets none of the camps (`GET /worlds/{id}/islands` and `/camps`).
+     */
+    callerOwnerId(): string {
+      return this.ownerId ?? usePlayerStore().id;
+    },
+    /**
      * Pulls this settlement's armies (and, issue #40 phase 4, the guest
      * armies currently supporting it) from the backend in the same tick — one
      * poll interval (`ARMY_POLL_MS`) covers both rather than a third
@@ -1477,7 +1486,7 @@ export const useWorldStore = defineStore('world', {
     async refreshCampStates() {
       if (DEMO_MODE || !this.worldId) return;
       try {
-        const states = await api.getWorldCamps(this.worldId, this.ownerId ?? undefined);
+        const states = await api.getWorldCamps(this.worldId, this.callerOwnerId());
         const added = this.model.setCamps(
           states.map((state) => ({
             family: state.family,

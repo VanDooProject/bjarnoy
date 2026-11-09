@@ -1203,7 +1203,9 @@ describe('useWorldStore bootstrapLiveWorld', () => {
   // Regression: see 'refreshCampStates' - /islands hides the camps of unseen islands from a caller it cannot identify.
   it('asks for the islands as the local player, so an account-less player gets the camps of the islands they have seen', async () => {
     const store = await loadStoreModule(false);
-    store.ownerId = 'player-1';
+    // The landing page bootstraps before any realm is known: no `ownerId` yet, the browser's player id stands in.
+    const { usePlayerStore } = await import('./player');
+    expect(store.ownerId).toBeNull();
     listWorlds.mockReset().mockResolvedValue([
       {
         id: 'world-1',
@@ -1239,7 +1241,7 @@ describe('useWorldStore bootstrapLiveWorld', () => {
 
     await store.bootstrapLiveWorld();
 
-    expect(getIslands).toHaveBeenCalledWith('world-1', 'player-1');
+    expect(getIslands).toHaveBeenCalledWith('world-1', usePlayerStore().id);
   });
 });
 
@@ -2089,7 +2091,7 @@ describe('useWorldStore refreshCampStates', () => {
 
     await store.refreshCampStates();
 
-    expect(getWorldCamps).toHaveBeenCalledWith('world-1', undefined);
+    expect(getWorldCamps).toHaveBeenCalledWith('world-1', expect.any(String));
     expect(store.model.campAt({ q: 2, r: 1 })?.empty).toBe(true);
     expect(store.campStatesVersion).toBe(1);
 
@@ -2108,6 +2110,20 @@ describe('useWorldStore refreshCampStates', () => {
     await store.refreshCampStates();
 
     expect(getWorldCamps).toHaveBeenCalledWith('world-1', 'player-1');
+  });
+
+  // The landing page bootstraps the world before it knows any settlement, so `ownerId` is still null: the browser's own
+  // player id has to identify the caller then (an account-less visitor sees the camps of their pinned island).
+  it('falls back to the browser player id while no realm is loaded yet', async () => {
+    getWorldCamps.mockReset().mockResolvedValue([]);
+    const store = await loadStoreModule(false);
+    const { usePlayerStore } = await import('./player');
+    store.worldId = 'world-1';
+    expect(store.ownerId).toBeNull();
+
+    await store.refreshCampStates();
+
+    expect(getWorldCamps).toHaveBeenCalledWith('world-1', usePlayerStore().id);
   });
 
   it('adds a camp it first learns about from the poll (a newly seen island) with its state', async () => {
