@@ -1371,7 +1371,7 @@ export const useWorldStore = defineStore('world', {
         api.listWalls(this.worldId, this.ownerId ?? undefined).catch(() => null),
       ]);
       this.registerSettlementSummaries(summaries);
-      if (walls) this.model.applyRivalWalls(walls);
+      if (walls) this.model.applyRivalBuildings(walls);
       if (this.worldMapActive) {
         this.model.claimAllTerritory();
       } else {

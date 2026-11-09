@@ -811,7 +811,7 @@ describe('useWorldStore refreshWorldSettlements (rival walls)', () => {
 
     await store.refreshWorldSettlements();
     expect(store.model.getTile(3, 1).buildingType).toBe('palisade');
-    expect(store.model.rivalWallOwner(4, 1)).toBe('user-rival');
+    expect(store.model.rivalBuildingOwner(4, 1)).toBe('user-rival');
     expect(listWalls).toHaveBeenCalledWith('world-1', undefined);
 
     await store.refreshWorldSettlements();
