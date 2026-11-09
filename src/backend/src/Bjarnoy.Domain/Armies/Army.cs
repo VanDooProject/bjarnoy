@@ -456,10 +456,13 @@ public sealed record Army
 
         for (var i = 0; i < stops.Count - 1; i++)
         {
-            var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
-            if (leg is null || leg.Count == 0)
+            var search = HexPathfinder.Search(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+            if (search.Path is not { Count: > 0 } leg)
             {
-                return DispatchDecision.Rejected(DispatchRejection.UnreachableLeg);
+                return DispatchDecision.Rejected(
+                    search.LimitReached ? DispatchRejection.RouteTooLong
+                    : isFleet ? DispatchRejection.NoSeaRoute
+                    : DispatchRejection.UnreachableLeg);
             }
 
             // Drop the joint hex: leg[0] is stops[i], already the last entry added.
@@ -473,11 +476,10 @@ public sealed record Army
         var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         var edgeHours = HexPathfinder.EdgeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
-        var returnPath = HexPathfinder.FindPath(routeDestination, origin, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
-        if (returnPath is null || returnPath.Count == 0)
-        {
-            return DispatchDecision.Rejected(DispatchRejection.UnreachableLeg);
-        }
+        // The way home is the way out walked backwards: a second search from the destination would be a fresh
+        // search with its own node budget and could give up on a trip the outbound search just planned.
+        List<HexCoord> returnPath = [.. fullPath];
+        returnPath.Reverse();
 
         var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         var returnEdgeHours = HexPathfinder.EdgeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
@@ -1362,6 +1364,11 @@ public sealed record Army
         return this with { Location = new ArmyLocation.InTransit(retreatMovement) };
     }
 
+    private static FieldOrderRejection NoRouteRejection(PathSearch search, bool isLandUnit) =>
+        search.LimitReached ? FieldOrderRejection.RouteTooLong
+        : isLandUnit ? FieldOrderRejection.UnreachableLeg
+        : FieldOrderRejection.NoSeaRoute;
+
     /// <summary>
     /// Orders an army already out in the field onward to a new destination
     /// (issue #156 phase 1) — the gap the design doc opens with: an army that
@@ -1481,10 +1488,10 @@ public sealed record Army
             fullPath = [fromHex];
             for (var i = 0; i < stops.Count - 1; i++)
             {
-                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
-                if (leg is null || leg.Count == 0)
+                var search = HexPathfinder.Search(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+                if (search.Path is not { Count: > 0 } leg)
                 {
-                    return FieldOrderResult.Rejected(FieldOrderRejection.UnreachableLeg);
+                    return FieldOrderResult.Rejected(NoRouteRejection(search, isLandUnit));
                 }
 
                 fullPath.AddRange(leg.Skip(1));
@@ -1502,20 +1509,20 @@ public sealed record Army
             fullPath = [.. movement.Path];
             for (var i = 0; i < stops.Count - 1; i++)
             {
-                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
-                if (leg is null || leg.Count == 0)
+                var search = HexPathfinder.Search(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+                if (search.Path is not { Count: > 0 } leg)
                 {
-                    return FieldOrderResult.Rejected(FieldOrderRejection.UnreachableLeg);
+                    return FieldOrderResult.Rejected(NoRouteRejection(search, isLandUnit));
                 }
 
                 fullPath.AddRange(leg.Skip(1));
             }
         }
 
-        var returnPath = HexPathfinder.FindPath(destination, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
-        if (returnPath is null || returnPath.Count == 0)
+        var returnSearch = HexPathfinder.Search(destination, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        if (returnSearch.Path is not { Count: > 0 } returnPath)
         {
-            return FieldOrderResult.Rejected(FieldOrderRejection.UnreachableLeg);
+            return FieldOrderResult.Rejected(NoRouteRejection(returnSearch, isLandUnit));
         }
 
         var speed = army.TotalSpeed;
@@ -1818,6 +1825,12 @@ public enum FieldOrderRejection
     WaypointNotLand,
     WaypointNotSea,
     UnreachableLeg,
+
+    /// <summary>A fleet's leg has no sea route (the water is cut off, or the target has no shore to land on).</summary>
+    NoSeaRoute,
+
+    /// <summary>The route search hit its node cap before reaching the destination: the trip is too long to plan.</summary>
+    RouteTooLong,
     InsufficientProvisionsForRoundTrip,
 
     /// <summary>
@@ -1933,6 +1946,12 @@ public enum DispatchRejection
 
     /// <summary>A <see cref="ArmyMission.Hunt"/> dispatch of land units named a water camp (the whale road); only fleets reach one.</summary>
     HuntRequiresFleet,
+
+    /// <summary>A fleet's leg has no sea route (the water is cut off, or the target has no shore to land on).</summary>
+    NoSeaRoute,
+
+    /// <summary>The route search hit its node cap before reaching the destination: the trip is too long to plan.</summary>
+    RouteTooLong,
 }
 
 /// <summary>The outcome of asking to dispatch an army — mirrors <see cref="BuildDecision"/>.</summary>
