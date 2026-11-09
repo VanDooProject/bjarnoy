@@ -127,6 +127,30 @@ test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
     await expect(page).toHaveURL(/\/settlement\?debug=1#world(&.*)?$/);
   });
 
+  test('opening Reports from the world map keeps the world map behind the modal', async ({ page }) => {
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
+    const world = await WorldMapPage.open(page);
+    const rendererMode = () =>
+      page.evaluate(() => {
+        // `options` is private in TS; read at runtime only, as a test probe.
+        const win = window as unknown as { __settlementRenderer?: () => { options: { mode: string } } };
+        return win.__settlementRenderer!().options.mode;
+      });
+    expect(await rendererMode()).toBe('world');
+
+    await clickHudMenuEntry(page, 'Reports');
+    await expect(page).toHaveURL(/\/reports$/);
+    await expect(page.getByTestId('reports-modal')).toBeVisible();
+    // Give a wrong mode switch the frames it would need to happen.
+    await page.waitForTimeout(500);
+    expect(await rendererMode()).toBe('world');
+    await expect(world.canvas).toHaveCount(1);
+
+    await page.keyboard.press('Escape');
+    await expect(page).toHaveURL(/\/settlement#world(&.*)?$/);
+    expect(await rendererMode()).toBe('world');
+  });
+
   test('leaving both map routes tears down the renderer instead of leaking a second canvas', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     const world = await WorldMapPage.open(page);

@@ -31,3 +31,11 @@ export function parseCameraHash(hash: string): CameraView | null {
   if (z.trim() === '' || !Number.isFinite(zoom) || zoom <= 0) return null;
   return { coord: { q: Number(q), r: Number(r) }, zoom };
 }
+
+/** World-mode zoom for "show me this spot": close enough to read a hex, below the zoom that flips to the settlement view (zoomTransition.ts). */
+export const WORLD_FOCUS_ZOOM = 0.35;
+
+/** The map route centred on `coord` in world mode — what a "show on map" link points at. */
+export function worldMapLocation(coord: AxialCoord): { path: string; hash: string } {
+  return { path: '/settlement', hash: serializeCameraHash({ coord, zoom: WORLD_FOCUS_ZOOM }, true) };
+}

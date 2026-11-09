@@ -121,7 +121,7 @@ public class FleetDepartureTests
         var settlement = Found(InlandHome);
 
         Assert.Equal(InlandHome, Army.FleetAnchor(settlement, Strait));
-        Assert.Equal(DispatchRejection.UnreachableLeg, Move(settlement, new HexCoord(6, 0)).Rejection);
+        Assert.Equal(DispatchRejection.NoSeaRoute, Move(settlement, new HexCoord(6, 0)).Rejection);
     }
 
     [Fact]

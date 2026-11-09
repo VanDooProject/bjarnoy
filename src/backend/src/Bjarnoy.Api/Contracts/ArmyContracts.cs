@@ -6,6 +6,7 @@ using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Services;
 using Movement = Bjarnoy.Domain.Movement.Movement;
 
 namespace Bjarnoy.Api.Contracts;
@@ -345,8 +346,12 @@ public sealed record FieldBattleReportResponse(
     HexPointResponse Hex,
     Guid SideAArmyId,
     Guid SideASettlementId,
+    string? SideAName,
+    string? SideAOwnerName,
     Guid SideBArmyId,
     Guid SideBSettlementId,
+    string? SideBName,
+    string? SideBOwnerName,
     string Winner,
     double SideAPower,
     double SideBPower,
@@ -356,9 +361,15 @@ public sealed record FieldBattleReportResponse(
     ResourceAmountsResponse LootTaken,
     IReadOnlyList<FieldBattleReportLineResponse> Lines)
 {
-    public static FieldBattleReportResponse From(FieldBattleReportEntity entity)
+    /// <param name="names">Settlement/owner names by settlement id (<c>FieldBattleReportService.GetSideNamesAsync</c>); a side whose settlement is gone has null names.</param>
+    public static FieldBattleReportResponse From(
+        FieldBattleReportEntity entity, IReadOnlyDictionary<Guid, FieldBattleSideName> names)
     {
         ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(names);
+
+        names.TryGetValue(entity.SideASettlementId, out var a);
+        names.TryGetValue(entity.SideBSettlementId, out var b);
 
         return new FieldBattleReportResponse(
             entity.Id,
@@ -366,8 +377,12 @@ public sealed record FieldBattleReportResponse(
             new HexPointResponse(entity.HexQ, entity.HexR),
             entity.SideAArmyId,
             entity.SideASettlementId,
+            a?.SettlementName,
+            a?.OwnerName,
             entity.SideBArmyId,
             entity.SideBSettlementId,
+            b?.SettlementName,
+            b?.OwnerName,
             ((FieldBattleWinner)entity.Winner).ToString().ToLowerInvariant(),
             entity.SideAPower,
             entity.SideBPower,
@@ -435,4 +450,39 @@ public sealed record CampReportResponse(
             report.TowerCoord is { } tower ? HexPointResponse.From(tower) : null,
             report.TowerBurned);
     }
+}
+
+/// <summary>
+/// The stretch of a foreign army's route its viewer may see (<c>docs/design/map-fog-v2.md</c> §1g), rebased to start at the hex the marker
+/// last passed: same fields and meaning as <see cref="MovementResponse"/> for that stretch alone, with no return route.
+/// </summary>
+public sealed record ForeignMovementResponse(
+    DateTimeOffset DepartedAt,
+    IReadOnlyList<HexPointResponse> Path,
+    IReadOnlyList<double> CumulativeHours,
+    IReadOnlyList<double> EdgeHours,
+    DateTimeOffset ArrivesAt);
+
+/// <summary>
+/// A marching army of another player inside the viewer's sight. Deliberately nothing but identity (to colour by its realm), kind of
+/// marker and where it is going next: no mission, target, units or provisions.
+/// </summary>
+public sealed record ForeignArmyResponse(
+    Guid Id,
+    Guid SettlementId,
+    bool IsFleet,
+    HexPointResponse Position,
+    ForeignMovementResponse Movement)
+{
+    public static ForeignArmyResponse From(ForeignArmy army) => new(
+        army.Id,
+        army.SettlementId,
+        army.IsFleet,
+        HexPointResponse.From(army.Position),
+        new ForeignMovementResponse(
+            army.Stretch.DepartedAt,
+            [.. army.Stretch.Path.Select(HexPointResponse.From)],
+            [.. army.Stretch.CumulativeHours],
+            [.. army.Stretch.EdgeHours],
+            army.Stretch.ArrivesAt));
 }

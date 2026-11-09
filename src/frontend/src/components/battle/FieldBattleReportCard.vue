@@ -8,16 +8,18 @@
 // called out with a "(you)" tag rather than a fixed attacker/defender label.
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { FieldBattleReportLine, ResourceLine } from '../../api/types';
+import type { FieldBattleReportLine, HexPoint, ResourceLine } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
 import { resourceName, unitName } from '../../i18n/catalogueNames';
 import {
   type FieldBattleSide,
+  fieldBattleOpponent,
   fieldBattleOutcomeLabel,
   groupFieldBattleLinesByUnit,
   isFieldBattleVictoryFor,
   totalFieldBattleLoot,
 } from '../../lib/units/fieldBattleReports';
+import { worldMapLocation } from '../../lib/mapCameraHash';
 
 /**
  * Everything the card needs to render — the subset of `FieldBattleReportResponse`
@@ -26,6 +28,11 @@ import {
  */
 export interface FieldBattleReportCardData {
   winner: string;
+  hex: HexPoint;
+  sideAName: string | null;
+  sideAOwnerName: string | null;
+  sideBName: string | null;
+  sideBOwnerName: string | null;
   sideAPower: number;
   sideBPower: number;
   sideAWasDefending: boolean;
@@ -50,6 +57,14 @@ const outcome = computed(() => fieldBattleOutcomeLabel(props.report, props.side)
 const loot = computed(() => totalFieldBattleLoot(props.report.lootTaken));
 const wonLoot = computed(() => props.report.winner === props.side && loot.value > 0);
 
+const opponent = computed(() => fieldBattleOpponent(props.report, props.side));
+const opponentLabel = computed(() => {
+  const { ownerName, settlementName } = opponent.value;
+  if (ownerName && settlementName) return `${ownerName} (${settlementName})`;
+  return ownerName ?? settlementName ?? t('hud.fieldBattleReport.unknownOpponent');
+});
+const mapLocation = computed(() => worldMapLocation(props.report.hex));
+
 const sideARows = computed(() => groupFieldBattleLinesByUnit(props.report.lines, 'sidea'));
 const sideBRows = computed(() => groupFieldBattleLinesByUnit(props.report.lines, 'sideb'));
 function rowsFor(side: FieldBattleSide) {
@@ -71,6 +86,15 @@ function powerOf(side: FieldBattleSide): number {
       <span class="mission-pill">{{ t('hud.fieldBattleReport.title') }}</span>
     </div>
     <p class="occurred">{{ d(new Date(occurredAt), 'long') }}</p>
+    <p class="where" data-testid="field-battle-where">
+      <span class="where-label">{{ t('hud.fieldBattleReport.opponent') }}:</span>
+      <span data-testid="field-battle-opponent">{{ opponentLabel }}</span>
+      <span class="where-sep">·</span>
+      <span class="where-label">{{ t('hud.fieldBattleReport.location') }}:</span>
+      <RouterLink :to="mapLocation" class="where-link" data-testid="field-battle-location">
+        {{ t('hud.fieldBattleReport.hexCoord', { q: report.hex.q, r: report.hex.r }) }}
+      </RouterLink>
+    </p>
 
     <div class="sides">
       <section v-for="s in (['sidea', 'sideb'] as const)" :key="s" class="side">
@@ -167,6 +191,19 @@ function powerOf(side: FieldBattleSide): number {
   margin: 4px 0 16px;
   font-size: 12px;
   color: var(--muted);
+}
+.where {
+  margin: -8px 0 16px;
+  font-size: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+.where-label {
+  color: var(--muted);
+}
+.where-link {
+  color: var(--gold);
 }
 .sides {
   display: grid;

@@ -948,6 +948,24 @@ export interface ReseedWorldResponse {
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminUserContracts.cs.
 
+/**
+ * One autocomplete hit. `kind: 'user'` is a registered account (with `userId`); `kind: 'anonymous'` is a player without
+ * an account, identified by `settlementId` (`userName` then holds the jarl name). `via` says what matched.
+ */
+export interface AdminUserLookupResponse {
+  kind: 'user' | 'anonymous';
+  userId: string | null;
+  userName: string;
+  displayName: string | null;
+  role: string | null;
+  status: string | null;
+  via: 'user' | 'settlement' | 'jarl';
+  matchedName: string | null;
+  worldName: string | null;
+  settlementId: string | null;
+  settlementName: string | null;
+}
+
 export interface AdminUserResponse {
   id: string;
   userName: string;
@@ -1412,6 +1430,25 @@ export interface BuildingDefinitionResponse {
    * level-10-only tier).
    */
   prerequisites: BuildingPrerequisiteResponse[];
+  /**
+   * The build ring's group this building is listed under (`resource`, `military`, `logistics`, `defense`, `religion`, `water`), or
+   * null for the one building the ring never lists (the longhouse). The ring is built from it (`lib/map/placementRules.ts`).
+   */
+  ringCategory: string | null;
+  /** The building's position within its ring category (ascending). */
+  ringOrder: number;
+  /** Can no longer be placed anew (the quarry); standing ones keep working. */
+  newPlacementDisabled: boolean;
+  /** Bog tile kinds the building must stand on (bog-ore works, clay brickworks: `bog`; hammer forge: `creek`). Empty: no such requirement. */
+  requiresBogKinds: string[];
+  /** Bog tile kinds a land building may also stand on (the tower and the walls: plain moss, `bog`). */
+  alsoOnBogKinds: string[];
+  /** Bog tile kinds a coastal-water building may stand on instead of coastal water (the fishing hut: `half`). */
+  lakeShoreKinds: string[];
+  /** River tile shapes the building's own hex must have (sawmill, crop mill, bridge). Empty: it never stands on a river hex. */
+  requiresRiverShapes: string[];
+  /** River art variants that disqualify an otherwise matching shape (the sawmill: `loop`). */
+  excludedRiverVariants: string[];
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/GuildContracts.cs.
@@ -1577,6 +1614,30 @@ export interface MovementResponse {
 }
 
 /**
+ * Mirrors `ForeignMovementResponse`: the short stretch of a foreign army's route its viewer may see (`docs/design/map-fog-v2.md` §1g),
+ * rebased to start at the hex the marker last passed — same fields and meaning as `MovementResponse` for that stretch alone, no return route.
+ */
+export interface ForeignMovementResponse {
+  departedAt: string;
+  path: HexPoint[];
+  cumulativeHours: number[];
+  edgeHours: number[];
+  arrivesAt: string;
+}
+
+/**
+ * Mirrors `ForeignArmyResponse` (`GET /worlds/{id}/foreign-armies`): a marching army of another player inside the viewer's sight. Only
+ * which realm it belongs to, flag or ship, where it is and its next stretch of route: no mission, target, units or provisions.
+ */
+export interface ForeignArmyResponse {
+  id: string;
+  settlementId: string;
+  isFleet: boolean;
+  position: HexPoint;
+  movement: ForeignMovementResponse;
+}
+
+/**
  * Mirrors `ArmyResponse`. `atHome`/`supporting` are mutually exclusive with
  * `movement` being non-null (an army is either in transit, at home, or a
  * guest garrison elsewhere). `position` is already resolved server-side
@@ -1705,8 +1766,13 @@ export interface FieldBattleReportResponse {
   hex: HexPoint;
   sideAArmyId: string;
   sideASettlementId: string;
+  /** Settlement/owner names of each side; null when that settlement no longer exists. */
+  sideAName: string | null;
+  sideAOwnerName: string | null;
   sideBArmyId: string;
   sideBSettlementId: string;
+  sideBName: string | null;
+  sideBOwnerName: string | null;
   winner: string;
   sideAPower: number;
   sideBPower: number;
@@ -1840,6 +1906,38 @@ export interface ApiKeyScope {
 
 export type ApiKeyStatus = 'Active' | 'Expired' | 'Revoked';
 
+/** A player without an account a key may act as (`X-Act-As: jarl:<label>`); the settlement fields come from the admin list only. */
+export interface ApiKeyAnonymousAccount {
+  id: string;
+  label: string;
+  isPrimary: boolean;
+  settlementName?: string | null;
+  worldName?: string | null;
+  /** True once that player registered: the grant no longer works. */
+  claimed?: boolean | null;
+}
+
+/** An anonymous account of an approved request; `settlementId` lets the approval form hand it back. */
+export interface ApprovedAnonymousAccount {
+  settlementId: string | null;
+  label: string;
+  isPrimary: boolean;
+}
+
+/** An anonymous account in a create / edit / approve body: an existing grant by `id`, or a new one from a settlement. */
+export interface AnonymousAccountInput {
+  id?: string;
+  settlementId?: string;
+  primary: boolean;
+}
+
+/** An account a key may act as besides its owner (picked per request with `X-Act-As`). */
+export interface ApiKeyAccount {
+  userId: string;
+  userName: string;
+  role: string;
+}
+
 export interface ApiKeyResponse extends ApiKeyScope {
   id: string;
   name: string;
@@ -1858,6 +1956,12 @@ export interface ApiKeyResponse extends ApiKeyScope {
   replacedByApiKeyId: string | null;
   autoRenewUntil: string | null;
   requestsPerMinute: number;
+  /** Code (`XXXX-XXXX`) of the request this key was collected from; only the admin key list fills it in. */
+  requestUserCode?: string | null;
+  additionalAccounts?: ApiKeyAccount[];
+  /** False for a key whose accounts are all anonymous: the owner is only the sponsor. */
+  ownerCanAct?: boolean;
+  anonymousAccounts?: ApiKeyAnonymousAccount[];
 }
 
 /** Create / recreate response: the only time the token is ever returned. */
@@ -1871,6 +1975,10 @@ export interface SaveApiKeyRequest extends ApiKeyScope {
   name: string;
   purpose?: string | null;
   ownerUserId?: string | null;
+  /** Further accounts besides the owner; omitted keeps the current ones on update. */
+  additionalUserIds?: string[];
+  anonymousAccounts?: AnonymousAccountInput[];
+  ownerCanAct?: boolean;
   expiresAt: string;
   requestsPerMinute?: number | null;
 }
@@ -1888,6 +1996,7 @@ export interface ApiKeyRequestResponse extends ApiKeyScope {
   description: string | null;
   contextUrl: string | null;
   requestedOwnerUserName: string | null;
+  requestedAdditionalUserNames: string[];
   requestsPerMinute: number | null;
   lifetimeMinutes: number;
   renewsApiKeyId: string | null;
@@ -1911,11 +2020,17 @@ export interface ApiKeyApprovedSettings extends ApiKeyScope {
   requestsPerMinute: number;
   lifetimeMinutes: number;
   autoRenewUntil: string | null;
+  additionalAccounts: ApiKeyAccount[];
+  ownerCanAct: boolean;
+  anonymousAccounts: ApprovedAnonymousAccount[];
 }
 
 /** Body of `POST /admin/api-key-requests/{id}/approve`; every field overrides the request. */
 export interface ApproveApiKeyRequestBody {
   ownerUserId?: string | null;
+  additionalUserIds?: string[];
+  anonymousAccounts?: AnonymousAccountInput[];
+  ownerCanAct?: boolean;
   features?: ApiKeyFeatureMap;
   allWorlds?: boolean;
   worldIds?: string[];

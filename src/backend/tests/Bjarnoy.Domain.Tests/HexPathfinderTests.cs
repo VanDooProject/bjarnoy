@@ -435,6 +435,27 @@ public class HexPathfinderTests
     }
 
     [Fact]
+    public void Search_tells_a_cut_off_target_apart_from_a_search_that_ran_out_of_budget()
+    {
+        var near = new HexCoord(5, 0);
+        var far = new HexCoord(250, 0);
+
+        Terrain Ringed(HexCoord target, HexCoord c) => target.Neighbours().Contains(c) ? Terrain.Mountain : Terrain.Sea;
+
+        // Close by, the whole reachable sea is explored: provably no route.
+        var cutOff = HexPathfinder.Search(new HexCoord(0, 0), near, c => Ringed(near, c), isLandUnit: false);
+        Assert.Null(cutOff.Path);
+        Assert.False(cutOff.LimitReached);
+
+        // Far out, the search stops at its node cap: unknown, reported as too long rather than as cut off.
+        var tooFar = HexPathfinder.Search(new HexCoord(0, 0), far, c => Ringed(far, c), isLandUnit: false);
+        Assert.Null(tooFar.Path);
+        Assert.True(tooFar.LimitReached);
+
+        Assert.Null(HexPathfinder.FindPath(new HexCoord(0, 0), far, c => Ringed(far, c), isLandUnit: false));
+    }
+
+    [Fact]
     public void Mountains_are_impassable_to_land_armies()
     {
         var wall = Wall(2);
@@ -627,5 +648,97 @@ public class HexPathfinderTests
         Assert.Equal([0.0, 1.0, 2.0, 3.0, 4.0], hours);
         Assert.Equal(path, found);
         Assert.Equal([0.0, 0.5, 1.5, 2.5, 3.5], HexPathfinder.EdgeHours(path, TerrainAt, 1.0, isLandUnit: false));
+    }
+
+    [Fact]
+    public void Open_sea_route_follows_the_straight_line_between_the_endpoints()
+    {
+        var from = new HexCoord(0, 0);
+        var to = new HexCoord(30, -12);
+
+        var path = HexPathfinder.FindPath(from, to, _ => Terrain.Sea, isLandUnit: false);
+
+        Assert.NotNull(path);
+        Assert.Equal(from, path![0]);
+        Assert.Equal(to, path[^1]);
+        Assert.Equal(from.DistanceTo(to) + 1, path.Count);
+        var line = StraightLine(from, to);
+        foreach (var hex in path)
+        {
+            Assert.True(line.Min(l => l.DistanceTo(hex)) <= 1, $"{hex} is more than one hex off the straight line");
+        }
+    }
+
+    [Fact]
+    public void Finds_a_route_into_a_cove_that_opens_away_from_the_start_within_the_expansion_cap()
+    {
+        // A 250-hex run to a goal inside a mountain cove (radius 40, 2 thick) whose opening faces
+        // away from the start, so the search aimed at the goal runs into the cove's near wall.
+        // Expanding every equal-f hex side by side blew through the 20,000-node cap and found no
+        // route; breaking ties toward the goal and the straight line finds the way round.
+        var from = new HexCoord(0, 0);
+        var goal = new HexCoord(250, -250);
+        const int radius = 40;
+        Terrain TerrainAt(HexCoord c)
+        {
+            var d = c.DistanceTo(goal);
+            var inRing = d == radius || d == radius + 1;
+            return inRing && c.Q <= goal.Q + 1 ? Terrain.Mountain : Terrain.Sea;
+        }
+
+        var search = HexPathfinder.Search(from, goal, TerrainAt, isLandUnit: false);
+
+        Assert.False(search.LimitReached);
+        Assert.NotNull(search.Path);
+        Assert.Equal(goal, search.Path![^1]);
+        Assert.Equal(ShortestHexCount(from, goal, TerrainAt), search.Path.Count);
+    }
+
+    /// <summary>Breadth-first hex count of the shortest route over sea (uniform cost), inside the search's own bounding box.</summary>
+    private static int ShortestHexCount(HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt)
+    {
+        var padding = Math.Max(10, from.DistanceTo(to));
+        var dist = new Dictionary<HexCoord, int> { [from] = 1 };
+        var queue = new Queue<HexCoord>([from]);
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (current == to)
+            {
+                return dist[current];
+            }
+
+            foreach (var n in current.Neighbours())
+            {
+                var inBox = n.Q >= Math.Min(from.Q, to.Q) - padding && n.Q <= Math.Max(from.Q, to.Q) + padding
+                    && n.R >= Math.Min(from.R, to.R) - padding && n.R <= Math.Max(from.R, to.R) + padding;
+                if (inBox && terrainAt(n) == Terrain.Sea && dist.TryAdd(n, dist[current] + 1))
+                {
+                    queue.Enqueue(n);
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>The standard hex line (cube lerp and round) from <paramref name="a"/> to <paramref name="b"/>.</summary>
+    private static List<HexCoord> StraightLine(HexCoord a, HexCoord b)
+    {
+        var n = a.DistanceTo(b);
+        var line = new List<HexCoord>();
+        for (var i = 0; i <= n; i++)
+        {
+            var t = (double)i / n;
+            double x = a.Q + ((b.Q - a.Q) * t), z = a.R + ((b.R - a.R) * t), y = -x - z;
+            double rx = Math.Round(x), ry = Math.Round(y), rz = Math.Round(z);
+            double dx = Math.Abs(rx - x), dy = Math.Abs(ry - y), dz = Math.Abs(rz - z);
+            if (dx > dy && dx > dz) rx = -ry - rz;
+            else if (dy > dz) ry = -rx - rz;
+            else rz = -rx - ry;
+            line.Add(new HexCoord((int)rx, (int)rz));
+        }
+
+        return line;
     }
 }

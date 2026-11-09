@@ -1,4 +1,5 @@
 {
+  "focusHome": "Zurück zu deiner Siedlung",
   "nav": {
     "settlement": "Siedlung",
     "leaderboards": "Ranglisten",
@@ -101,6 +102,9 @@
       "seaEnd": "Das Seeende braucht genau eine Landmauer daneben",
       "occupied": "Hier steht schon eine Mauer",
       "terrain": "Auf diesem Gelände kann keine Mauer stehen"
+    },
+    "riverLock": {
+      "tooCurved": "Der Fluss macht hier zu viel Kurve: Du brauchst ein geraderes Flussstück"
     },
     "bridgeLock": {
       "notWide": "Dieser Fluss ist nicht breit: Armeen waten ohnehin hindurch",
@@ -238,15 +242,7 @@
     "slotHere": "Hier einsetzen",
     "slotRuneError": "Die Rune konnte nicht eingesetzt werden — sie ist möglicherweise bereits eingesetzt, oder dieser Schrein hat keinen freien Platz.",
     "unslotRuneError": "Die Rune konnte nicht entfernt werden.",
-    "queuedNote": "In der Warteschlange — wartet auf einen Bauplatz.",
-    "upgradeCost": "Ausbaukosten",
     "notEnoughResources": "Nicht genügend Ressourcen verfügbar (einige sind eventuell für laufende Bauaufträge reserviert).",
-    "premiumRequired": "Jeder Bauplatz ist belegt, und dieses Konto hat keine Warteschlange als Rückgriff — das ist eine {premium}-Funktion.",
-    "premium": "Premium",
-    "queuing": "Wird eingereiht…",
-    "noFreeSlotPremium": "Kein freier Platz — Premium erforderlich",
-    "queueBuild": "Bau einreihen",
-    "upgradeToLevel": "Auf Stufe {level} ausbauen",
     "feastTitle": "Fest",
     "feastDesc": "Verwandle überschüssiges Holz, Stein und Essen in Ruhm. Die Kosten werden sofort bezahlt, der Ruhm kommt, wenn das Fest endet.",
     "feastCost": "Kosten",
@@ -270,9 +266,7 @@
     "renownEtaDays": "{days} d {hours} h",
     "renownEtaHours": "{hours} h {minutes} min",
     "renownEtaMinutes": "{minutes} min",
-    "renownDemo": "Der Ruhmfortschritt braucht eine Live-Welt.",
-    "razingNote": "Wird auf Stufe {level} abgerissen.",
-    "razingRemoveNote": "Wird abgerissen."
+    "renownDemo": "Der Ruhmfortschritt braucht eine Live-Welt."
   },
   "trainingModal": {
     "subtitle": "Stufe {level} · Ausbildung {percent} % schneller",
@@ -370,7 +364,9 @@
     "summaryLost": "verloren, {n} verloren",
     "summaryTied": "unentschieden, {n} verloren",
     "summaryLooted": "{n} erbeutet",
-    "hexCoord": "Hex ({q}, {r})"
+    "hexCoord": "Hex ({q}, {r})",
+    "location": "Ort",
+    "unknownOpponent": "Unbekannt"
   },
   "armyStatus": {
     "arriving": "Kommt an",
@@ -477,12 +473,18 @@
   "tradeReport": {
     "summary": "Gab {gaveAmount} {gave} für {gotAmount} {got}"
   },
+  "debugStack": {
+    "handle": "Debug",
+    "handleTitle": "Zum Verschieben ziehen, Doppelklick setzt zurück"
+  },
   "fpsMeter": {
     "title": "Bildrate",
     "fps": "fps",
     "msPerFrame": "{n} ms/Bild",
     "worstFrame": "Schlechtestes Bild (letzte {seconds} s)",
     "ms": "{n} ms",
+    "average": "Durchschnitt (letzte {n} Bilder)",
+    "fpsValue": "{n} fps",
     "ago": "vor {n} s",
     "stutters": "Bilder über {threshold} ms",
     "sparkLabel": "Die letzten {n} Bildabstände",

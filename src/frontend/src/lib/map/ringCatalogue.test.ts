@@ -377,3 +377,41 @@ describe('newPlacementDisabled', () => {
     expect(buildingAllowedOnHex('quarry', { terrain: 'mountain' })).toBe(true);
   });
 });
+
+describe('buildingAllowedOnHex — the catalogue\'s terrain per building', () => {
+  it('puts the military buildings on grass only; sand takes the tower and the walls', () => {
+    for (const type of ['siegeworkshop', 'barracks', 'archeryrange', 'smithy']) {
+      expect(buildingAllowedOnHex(type, { terrain: 'grass' }), type).toBe(true);
+      expect(buildingAllowedOnHex(type, { terrain: 'sand' }), type).toBe(false);
+    }
+    for (const type of ['tower', 'palisade', 'palisadegate']) expect(buildingAllowedOnHex(type, { terrain: 'sand' }), type).toBe(true);
+  });
+
+  it('keeps the lake Fishing Hut on a bog lake\'s half shore only', () => {
+    expect(buildingAllowedOnHex('fishinghut', { terrain: 'bog', bog: { kind: 'half' } })).toBe(true);
+    for (const kind of ['bog', 'lake', 'inlet', 'shore', 'mouth', 'creek', 'creekspring'] as const) {
+      expect(buildingAllowedOnHex('fishinghut', { terrain: 'bog', bog: { kind } }), kind).toBe(false);
+    }
+  });
+});
+
+describe('riverBuildingAllowedHere — no ordinary building on a river hex', () => {
+  it('refuses everything but the river buildings and the bridge on a river tile of any width or shape', () => {
+    for (const shape of ['straight', 'bend', 'bend60', 'spring', 'confluence', 'mouth']) {
+      for (const width of ['river', 'stream', 'widen', 'riverstream']) {
+        for (const type of ['farm', 'tower', 'storagehouse', 'palisade', 'palisadegate', 'smithy']) {
+          expect(riverBuildingAllowedHere(type, shape, 'plain', width), `${type} on ${shape}/${width}`).toBe(false);
+        }
+      }
+    }
+    expect(riverBuildingAllowedHere('farm', undefined)).toBe(true);
+    expect(riverBuildingAllowedHere('tower', undefined)).toBe(true);
+  });
+
+  it('gives a stream, a widening or a spring none of the river buildings either', () => {
+    for (const width of ['stream', 'widen', 'riverstream']) {
+      for (const type of ['sawmill', 'cropmill', 'bridge']) expect(riverBuildingAllowedHere(type, 'straight', 'plain', width), `${type}/${width}`).toBe(false);
+    }
+    expect(riverBuildingAllowedHere('sawmill', 'spring', 'plain', 'river')).toBe(false);
+  });
+});

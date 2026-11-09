@@ -149,6 +149,33 @@ describe('api.adminGetUserActivityDetail', () => {
   });
 });
 
+describe('camp reads identify the caller', () => {
+  // Regression: the server cuts the camps of /islands and /camps off to the islands the *caller* has seen, and an account-less
+  // player is identified by X-Owner-Id alone: both calls went out without it, so such a player got no camps.
+  it('sends X-Owner-Id on the islands and the camps read', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse([]));
+
+    await api.getIslands('w1', 'player-1');
+    await api.getWorldCamps('w1', 'player-1');
+
+    const [islands, camps] = vi.mocked(fetch).mock.calls;
+    expect(String(islands![0])).toContain('/worlds/w1/islands');
+    expect((islands![1]?.headers as Record<string, string>)['X-Owner-Id']).toBe('player-1');
+    expect(String(camps![0])).toContain('/worlds/w1/camps');
+    expect((camps![1]?.headers as Record<string, string>)['X-Owner-Id']).toBe('player-1');
+  });
+
+  it('sends no X-Owner-Id for a signed-in caller who passes none, and narrows the camps to an island', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse([]));
+
+    await api.getWorldCamps('w1', undefined, 'island 1');
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+    expect(String(url)).toContain('/worlds/w1/camps?islandId=island%201');
+    expect((init?.headers as Record<string, string>)['X-Owner-Id']).toBeUndefined();
+  });
+});
+
 describe('ApiError request context', () => {
   it('records method and path on an HTTP failure', async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ detail: 'nope' }, 503));

@@ -22,6 +22,53 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAccountEntity", b =>
+                {
+                    b.Property<Guid>("ApiKeyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ApiKeyId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("api_key_accounts", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAnonymousAccountEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ApiKeyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("SourceSettlementId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApiKeyId", "Label")
+                        .IsUnique();
+
+                    b.ToTable("api_key_anonymous_accounts", (string)null);
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -59,6 +106,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("OwnerCanAct")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("uuid");
@@ -108,8 +160,16 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid?>("ApiKeyId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ApprovedAdditionalUserIds")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<bool?>("ApprovedAllWorlds")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("ApprovedAnonymousAccounts")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("ApprovedFeatures")
                         .IsRequired()
@@ -118,6 +178,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<int?>("ApprovedLifetimeMinutes")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("ApprovedOwnerCanAct")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<int?>("ApprovedRequestsPerMinute")
                         .HasColumnType("integer");
@@ -182,6 +247,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<Guid?>("RenewsApiKeyId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("RequestedAdditionalUserNames")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("RequestedOwnerUserName")
                         .HasMaxLength(100)
@@ -1986,6 +2055,36 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.ToTable("worlds", (string)null);
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAccountEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", "ApiKey")
+                        .WithMany("Accounts")
+                        .HasForeignKey("ApiKeyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ApiKey");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAnonymousAccountEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", "ApiKey")
+                        .WithMany("AnonymousAccounts")
+                        .HasForeignKey("ApiKeyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ApiKey");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "CreatedByUser")
@@ -2468,6 +2567,13 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Navigation("User");
 
                     b.Navigation("World");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
+                {
+                    b.Navigation("Accounts");
+
+                    b.Navigation("AnonymousAccounts");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyEntity", b =>

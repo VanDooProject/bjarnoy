@@ -17,6 +17,53 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAccountEntity", b =>
+                {
+                    b.Property<Guid>("ApiKeyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ApiKeyId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("api_key_accounts", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAnonymousAccountEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ApiKeyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("SourceSettlementId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApiKeyId", "Label")
+                        .IsUnique();
+
+                    b.ToTable("api_key_anonymous_accounts", (string)null);
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -54,6 +101,11 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("OwnerCanAct")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
 
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("TEXT");
@@ -103,8 +155,16 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid?>("ApiKeyId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ApprovedAdditionalUserIds")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<bool?>("ApprovedAllWorlds")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("ApprovedAnonymousAccounts")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ApprovedFeatures")
                         .IsRequired()
@@ -113,6 +173,11 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<int?>("ApprovedLifetimeMinutes")
                         .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ApprovedOwnerCanAct")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
 
                     b.Property<int?>("ApprovedRequestsPerMinute")
                         .HasColumnType("INTEGER");
@@ -176,6 +241,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<Guid?>("RenewsApiKeyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestedAdditionalUserNames")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("RequestedOwnerUserName")
@@ -1981,6 +2050,36 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.ToTable("worlds", (string)null);
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAccountEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", "ApiKey")
+                        .WithMany("Accounts")
+                        .HasForeignKey("ApiKeyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ApiKey");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAnonymousAccountEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", "ApiKey")
+                        .WithMany("AnonymousAccounts")
+                        .HasForeignKey("ApiKeyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ApiKey");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "CreatedByUser")
@@ -2463,6 +2562,13 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("User");
 
                     b.Navigation("World");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
+                {
+                    b.Navigation("Accounts");
+
+                    b.Navigation("AnonymousAccounts");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyEntity", b =>

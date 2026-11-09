@@ -20,7 +20,9 @@ import {
   maxTowers,
   SHRINE_BUILDING_TYPES,
 } from '../lib/map/buildingEconomy';
+import { allPlacementRules } from '../lib/map/placementRules';
 import {
+  buildingAllowedOnHex,
   cropAllowedHere,
   formatBuildTime,
   scaledBuildSeconds,
@@ -29,6 +31,7 @@ import {
   palisadeLock,
   bridgeLock,
   riverBuildingAllowedHere,
+  riverFitLock,
   shrineLimitLock,
   storageHouseLock,
   towerLimitLock,
@@ -44,154 +47,34 @@ import type { Resources, Tile } from '../lib/map/types';
 import type { RiverVariant } from '../lib/map/worldGenerator';
 import { towerThreatAt } from '../lib/map/campRules';
 
-export type BuildableType =
-  | 'reindeerherder'
-  | 'farm'
-  | 'tower'
-  | 'fishinghut'
-  | 'pumpkinfarm'
-  | 'shrineofthor'
-  | 'shrineoffreyja'
-  | 'shrineofullr'
-  | 'shrineofnjord'
-  | 'odinstatue'
-  | 'lumberjack'
-  | 'quarry'
-  | 'storagehouse'
-  | 'archeryrange'
-  | 'dockyard'
-  | 'greatstorehouse'
-  | 'fishinghut'
-  | 'barracks'
-  | 'sawmill'
-  | 'meadery'
-  | 'townsquare'
-  | 'cropmill'
-  | 'smithy'
-  | 'druidhut'
-  | 'cartworkshop'
-  | 'claybrickworks'
-  | 'bogoreworks'
-  | 'hammerschmiede'
-  | 'palisade'
-  | 'palisadegate'
-  | 'bridge'
-  | 'siegeworkshop';
+/** A building type id (`Tile['buildingType']`). The catalogue serves the same ids as plain strings; `categoriesFor` narrows them here. */
+export type BuildableType = NonNullable<Tile['buildingType']>;
 
 export interface BuildCategory {
   id: string;
   buildings: { type: BuildableType }[];
 }
-// Mirrors BuildingCatalogue.cs's per-type AllowedTerrain: Farm/PumpkinFarm/
-// Shrine is Grass-only, Lumberjack is Forest-only, Quarry is
-// Mountain-only, and ArcheryRange is SandOrGrass. The Tower stands on grass, sand, forest and plain bog moss. Offering a building
-// the backend's own AllowedTerrain would reject is what "messed up
-// categories" on a shore (sand) tile meant — sand used to fall into the same
-// flat bucket as forest/mountain and offer Farm/Lumberjack/Quarry, none of
-// which the backend would ever accept there.
-// FishingHut, Dockyard and ShrineOfNjord aren't land-terrain buildings at all
-// (RequiresCoastalWater, on a Sea hex) — WATER_CATEGORY below is the ring
-// path to them, offered only on a coastal-water sea tile (see
-// categoriesFor), not through this land-terrain table.
-const SHRINE_CATEGORY: BuildCategory = {
-  id: 'religion',
-  buildings: [
-    { type: 'shrineofthor' },
-    { type: 'shrineoffreyja' },
-    { type: 'shrineofullr' },
-    { type: 'odinstatue' },
-  ],
-};
-// The Shrine of Njörd (a shrine on a skerry) is built
-// directly on a coastal-water hex, exactly like Fishing Hut/Dockyard
-// (BuildingDefinition.RequiresCoastalWater) — not on Grass, so they live in
-// the water category rather than the grass one below.
-const WATER_CATEGORY: BuildCategory = {
-  id: 'water',
-  buildings: [{ type: 'fishinghut' }, { type: 'dockyard' }, { type: 'shrineofnjord' }],
-};
-// The wall (docs/design/economy.md section 5): a palisade hex, or a gate on a hex that is a straight, on grass, forest, sand or plain bog moss. A wall
-// also ends on a coastal-water hex (BuildingDefinition.AlsoOnCoastalWater), the sea end, which is never a gate. Whether this particular hex
-// takes one is the wall rules' (WorldModel.palisadePlacement), shown as a lock on the bubble.
-// The bridge (same section) (`bridge`) sits in this category too: it stands on a river hex's own ground, so it is listed on every grass, forest and sand hex and
-// filtered back out per hex unless that hex is a straight or bending river (riverBuildingAllowedHere); a river that is not wide shows it
-// locked (WorldModel.bridgePlacement).
-const DEFENSE_CATEGORY: BuildCategory = {
-  id: 'defense',
-  buildings: [{ type: 'palisade' }, { type: 'palisadegate' }, { type: 'bridge' }],
-};
-// The Tower is a defence building too, and stands on grass, sand and forest; the bog ring keeps the wall-only category.
-const DEFENSE_TOWER_CATEGORY: BuildCategory = {
-  id: 'defense',
-  buildings: [{ type: 'tower' }, ...DEFENSE_CATEGORY.buildings],
-};
-const DEFENSE_SEA_CATEGORY: BuildCategory = { id: 'defense', buildings: [{ type: 'palisade' }] };
-// Bog ground offers what stands on its own bog kind (BuildingDefinition.RequiresBogKind / LakeShoreKinds, mirrored by
-// ringCatalogue.ts's buildingAllowedOnHex): plain moss takes the Clay Brickworks, the bog-ore works and the Tower, a creek the
-// Hammer Forge (with the river hammer-mill art for now: TODO(art) bog-creek Hammer Forge) and a lake's half shore the
-// Fishing Hut with its lake art. Shores, mouths and springs take nothing.
-const BOG_CATEGORIES: Record<string, BuildCategory[]> = {
-  bog: [
-    { id: 'resource', buildings: [{ type: 'claybrickworks' }, { type: 'bogoreworks' }] },
-    { id: 'military', buildings: [{ type: 'tower' }] },
-    DEFENSE_CATEGORY,
-  ],
-  creek: [{ id: 'resource', buildings: [{ type: 'hammerschmiede' }] }],
-  half: [{ id: 'water', buildings: [{ type: 'fishinghut' }] }],
-};
-const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
-  grass: [
-    {
-      id: 'resource',
-      buildings: [
-        { type: 'reindeerherder' },
-        { type: 'farm' },
-        { type: 'pumpkinfarm' },
-        // Sawmill and Crop Mill are only actually buildable on a Grass hex
-        // that is itself a river tile of the right shape
-        // (BuildingDefinition.RequiresRiverShape) — still listed here (this
-        // bucket is terrain-keyed, not hex-specific) but filtered back out
-        // per-hex when that isn't the case, rather than offered locked (see
-        // ringCategories' riverBuildingAllowedHere filter).
-        { type: 'sawmill' },
-        { type: 'cropmill' },
-        { type: 'meadery' },
-      ],
-    },
-    {
-      id: 'military',
-      buildings: [
-        { type: 'archeryrange' },
-        { type: 'siegeworkshop' },
-        { type: 'barracks' },
-        { type: 'smithy' },
-      ],
-    },
-    {
-      id: 'logistics',
-      buildings: [
-        { type: 'storagehouse' },
-        { type: 'greatstorehouse' },
-        { type: 'townsquare' },
-        { type: 'cartworkshop' },
-        { type: 'druidhut' },
-      ],
-    },
-    DEFENSE_TOWER_CATEGORY,
-    SHRINE_CATEGORY,
-  ],
-  sand: [{ id: 'military', buildings: [{ type: 'smithy' }] }, DEFENSE_TOWER_CATEGORY],
-  forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }, DEFENSE_TOWER_CATEGORY],
-  // No new quarries can be built for now (BuildingCatalogue.NewPlacementDisabled); mountains offer nothing to build.
-  mountain: [],
-};
 
+/** The ring's category order: the water buildings first (a coastal-water hex offers them before its wall end), then the land groups. */
+const CATEGORY_ORDER = ['water', 'resource', 'military', 'logistics', 'defense', 'religion'];
+
+/**
+ * The ring's categories for a hex, before locks or river and soil refinement: every building the catalogue lists in a ring category
+ * (`ringCategory`, in its `ringOrder`) that may stand on this hex (`buildingAllowedOnHex`: terrain, coastal water, bog kind), minus the
+ * ones switched off for new placement. Nothing here repeats `BuildingCatalogue.cs`: a new building, terrain or bog rule arrives with the
+ * catalogue. The river shape and curve, island soil, wall and bridge rules are per hex and filtered by `useBuildRing`.
+ */
 export function categoriesFor(tile: Tile): BuildCategory[] {
-  if (tile.terrain === 'sea') return tile.isCoastalWater ? [WATER_CATEGORY, DEFENSE_SEA_CATEGORY] : [];
-  // A bog lake is water nothing is built on (the lake Fishing Hut stands on its half shore, a bog hex).
-  if (tile.terrain === 'lake') return [];
-  if (tile.terrain === 'bog') return (tile.bog && BOG_CATEGORIES[tile.bog.kind]) || [];
-  return BUILD_CATEGORIES[tile.terrain];
+  const byCategory = new Map<string, { type: string; order: number }[]>();
+  for (const rule of allPlacementRules()) {
+    if (rule.category === null || rule.newPlacementDisabled || !buildingAllowedOnHex(rule.type, tile)) continue;
+    const list = byCategory.get(rule.category) ?? [];
+    list.push({ type: rule.type, order: rule.order });
+    byCategory.set(rule.category, list);
+  }
+  return [...byCategory.entries()]
+    .sort(([a], [b]) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b))
+    .map(([id, list]) => ({ id, buildings: list.sort((x, y) => x.order - y.order).map(({ type }) => ({ type: type as BuildableType })) }));
 }
 
 // Category tints, carried into each category's own buildings so a building
@@ -379,6 +262,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
       type === 'storagehouse' ? storageHouseLockFor() : undefined,
       isWallBuilding(type) ? palisadeLock(world.model.palisadePlacement(coord, type === 'palisadegate', queuedWalls())) : undefined,
       type === 'bridge' ? bridgeLock(world.model.bridgePlacement(coord)) : undefined,
+      riverFitLock(type, riverShapeAt(coord), riverVariantAt(coord), riverWidthAt(coord)),
       ...prerequisiteLocks(definition?.prerequisites, levels),
     ].filter((lock): lock is string => !!lock);
     return {
@@ -397,24 +281,36 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
 
 
   /** The raw placement filter for the clicked hex: category ids and building types, before locks or river/soil refinement. */
-  const placementCategories = computed<BuildCategory[]>(() => (tile.value ? categoriesFor(tile.value) : []));
-  /** Build is offered only on a hex whose terrain takes at least one category (docs/design/ui-guidelines.md, rule 1). */
-  const canBuildHere = computed(() => placementCategories.value.length > 0);
+  const placementCategories = computed<BuildCategory[]>(() => {
+    // The placement rules arrive with the catalogue: reading its (reactive) definitions makes the ring rebuild once they have loaded.
+    void buildingCatalogue.definitions;
+    return tile.value ? categoriesFor(tile.value) : [];
+  });
+  /** Build is offered only on a hex that takes at least one building (docs/design/ui-guidelines.md, rule 1). */
+  const canBuildHere = computed(() => categories.value.length > 0);
 
   /** The ring's categories for the clicked hex: the placement filter, narrowed by river shape and island soil, each building with its card. */
   const categories = computed<RingCategory[]>(() => {
     const hex = coord.value;
     if (!tile.value || !hex) return [];
     const levels = builtLevels();
-    return categoriesFor(tile.value).map((category) => ({
-      id: category.id,
-      label: t(`hud.ringMenu.categories.${category.id}`),
-      color: CATEGORY_COLORS[category.id] ?? 'var(--gold)',
-      buildings: category.buildings
-        .filter((b) => riverBuildingAllowedHere(b.type, riverShapeAt(hex), riverVariantAt(hex), riverWidthAt(hex)))
-        .filter((b) => cropAllowedHere(b.type, currentIslandSoil()))
-        .map((b) => ringBuildingFor(b.type, hex, levels)),
-    }));
+    return placementCategories.value
+      .map((category) => ({
+        id: category.id,
+        label: t(`hud.ringMenu.categories.${category.id}`),
+        color: CATEGORY_COLORS[category.id] ?? 'var(--gold)',
+        buildings: category.buildings
+          // A river building whose art doesn't fit this stretch's curve stays as an explained, disabled bubble (`riverFitLock`).
+          .filter(
+            (b) =>
+              riverBuildingAllowedHere(b.type, riverShapeAt(hex), riverVariantAt(hex), riverWidthAt(hex)) ||
+              riverFitLock(b.type, riverShapeAt(hex), riverVariantAt(hex), riverWidthAt(hex)) !== undefined,
+          )
+          .filter((b) => cropAllowedHere(b.type, currentIslandSoil()))
+          .map((b) => ringBuildingFor(b.type, hex, levels)),
+      }))
+      // A category the hex's river or soil filtered empty is not offered (a stream hex has nothing to build at all).
+      .filter((category) => category.buildings.length > 0);
   });
 
   /** Whether `id` is one of the placement filter's buildings for this hex (a ring select of it is a build, not a root action). */

@@ -7,12 +7,18 @@
 // correctly, and loot only renders for the winning viewer).
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
+import { createMemoryHistory, createRouter } from 'vue-router';
 import FieldBattleReportCard from './FieldBattleReportCard.vue';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 
 const baseReport = {
   winner: 'sidea',
+  hex: { q: 12, r: -4 },
+  sideAName: 'Alpha' as string | null,
+  sideAOwnerName: 'Ann' as string | null,
+  sideBName: 'Beta' as string | null,
+  sideBOwnerName: 'Ben' as string | null,
   sideAPower: 420,
   sideBPower: 180,
   sideAWasDefending: false,
@@ -25,14 +31,43 @@ const baseReport = {
   ],
 };
 
-function mountCard(side: 'sidea' | 'sideb' = 'sidea') {
+const router = createRouter({
+  history: createMemoryHistory(),
+  routes: [{ path: '/settlement', component: { template: '<div />' } }],
+});
+
+function mountCard(side: 'sidea' | 'sideb' = 'sidea', report: Partial<typeof baseReport> = {}) {
   return mount(FieldBattleReportCard, {
-    props: { report: baseReport, side, occurredAt: '2026-09-09T10:00:00.000Z' },
-    global: { plugins: [createTestI18n({ hud: enHud })] },
+    props: { report: { ...baseReport, ...report }, side, occurredAt: '2026-09-09T10:00:00.000Z' },
+    global: { plugins: [createTestI18n({ hud: enHud }), router] },
   });
 }
 
 describe('FieldBattleReportCard', () => {
+  it("names the opponent from the viewer's side", () => {
+    const asA = mountCard('sidea');
+    expect(asA.find('[data-testid="field-battle-opponent"]').text()).toBe('Ben (Beta)');
+    asA.unmount();
+
+    const asB = mountCard('sideb');
+    expect(asB.find('[data-testid="field-battle-opponent"]').text()).toBe('Ann (Alpha)');
+    asB.unmount();
+  });
+
+  it('says the opponent is unknown when their settlement is gone', () => {
+    const wrapper = mountCard('sidea', { sideBName: null, sideBOwnerName: null });
+    expect(wrapper.find('[data-testid="field-battle-opponent"]').text()).toBe('Unknown');
+    wrapper.unmount();
+  });
+
+  it('links the hex to the world map centred on it', () => {
+    const wrapper = mountCard('sidea');
+    const link = wrapper.find('[data-testid="field-battle-location"]');
+    expect(link.text()).toBe('Hex (12, -4)');
+    expect(link.attributes('href')).toBe('/settlement#world&q=12&r=-4&z=0.35');
+    wrapper.unmount();
+  });
+
   it("renders the viewer's own outcome, both side sections, and no siege section", () => {
     const wrapper = mountCard('sidea');
 

@@ -100,7 +100,7 @@ export function art(type: string): ArtRef {
 /**
  * The single categorisation both the dependency graph's legend and
  * TechTreeView's own page sections/table of contents draw from — mirrors
- * MapView.vue's BUILD_CATEGORIES (the ring menu's own grouping), with
+ * the catalogue's `ringCategory` (the ring menu's own grouping), with
  * shrines and water buildings split out as their own families the way the
  * ring menu already treats them, rather than folded into a generic
  * "production" bucket. One table, so a type added here shows up correctly

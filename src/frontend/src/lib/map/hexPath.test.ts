@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coordKey, type AxialCoord } from '../hex/coords';
+import { coordKey, hexDistance, type AxialCoord } from '../hex/coords';
 import { BURNT_BRIDGE_LEAVE_COST, findPath, findSeaPath, HALF_OPEN_END_COST, hoursFrom, leaveCost, MAX_TINT_HEXES, pathCost, reachableFrom, reachableRange, timeOnHex, type MovementRules, type PathContext } from './hexPath';
 import type { Terrain } from './types';
 
@@ -188,6 +188,34 @@ describe('reachableRange', () => {
 });
 
 describe('findPath', () => {
+  it('keeps an open-grass route on the straight line between the endpoints', () => {
+    const from = { q: 0, r: 0 };
+    const to = { q: 30, r: -12 };
+    const everywhere: PathContext = { ...contextFor(new Map()), terrainAt: () => 'grass' };
+
+    const path = findPath(from, to, everywhere)!;
+
+    expect(path).toHaveLength(hexDistance(from, to) + 1);
+    expect(path[0]).toEqual(from);
+    expect(path.at(-1)).toEqual(to);
+    // standard hex line: cube lerp and round
+    const n = hexDistance(from, to);
+    const line = Array.from({ length: n + 1 }, (_, k) => {
+      const t = k / n;
+      const x = from.q + (to.q - from.q) * t;
+      const z = from.r + (to.r - from.r) * t;
+      const y = -x - z;
+      let rx = Math.round(x);
+      const ry = Math.round(y);
+      let rz = Math.round(z);
+      const [dx, dy, dz] = [Math.abs(rx - x), Math.abs(ry - y), Math.abs(rz - z)];
+      if (dx > dy && dx > dz) rx = -ry - rz;
+      else if (!(dy > dz)) rz = -rx - ry;
+      return { q: rx, r: rz };
+    });
+    for (const hex of path) expect(Math.min(...line.map((l) => hexDistance(l, hex)))).toBeLessThanOrEqual(1);
+  });
+
   // A 5x3 meadow: q 0..4, r -1..1 (fits a parallelogram, everything else is sea).
   const meadow = (): Map<string, Terrain> => {
     const t = new Map<string, Terrain>();

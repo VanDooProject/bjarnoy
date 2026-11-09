@@ -10,6 +10,7 @@ import type {
   AdminSettlementLayoutResponse,
   AdminUserActivityDetailResponse,
   AdminUserDetailResponse,
+  AdminUserLookupResponse,
   AdminUserResponse,
   AdminWorldResponse,
   ApiKeyFeatureInfo,
@@ -108,6 +109,7 @@ import type {
   WorldSummaryResponse,
   CampReportResponse,
   CampStateResponse,
+  ForeignArmyResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -280,9 +282,17 @@ export const api = {
   // calls (e.g. getFogChunks/getPlotSuggestion below). 400s without it.
   getWorldMembership: (worldId: string, ownerId: string) =>
     request<WorldMembershipResponse>(`/worlds/${worldId}/membership`, { headers: ownerHeader(ownerId) }),
-  getWorldCamps: (worldId: string, islandId?: string) =>
-    request<CampStateResponse[]>(`/worlds/${worldId}/camps${islandId ? `?islandId=${encodeURIComponent(islandId)}` : ''}`),
-  getIslands: (worldId: string) => request<IslandResponse[]>(`/worlds/${worldId}/islands`),
+  // The camps of /islands and /camps are cut off to the islands the *caller* has seen, and an account-less player is
+  // identified by `X-Owner-Id` alone (CallerRealmResolver): without it the server answers no camps at all.
+  getWorldCamps: (worldId: string, ownerId?: string, islandId?: string) =>
+    request<CampStateResponse[]>(`/worlds/${worldId}/camps${islandId ? `?islandId=${encodeURIComponent(islandId)}` : ''}`, {
+      headers: ownerHeader(ownerId),
+    }),
+  getIslands: (worldId: string, ownerId?: string) =>
+    request<IslandResponse[]>(`/worlds/${worldId}/islands`, { headers: ownerHeader(ownerId) }),
+  // Cut to the *caller's* sight like /camps: an account-less player is identified by `X-Owner-Id` alone.
+  getForeignArmies: (worldId: string, ownerId?: string) =>
+    request<ForeignArmyResponse[]>(`/worlds/${worldId}/foreign-armies`, { headers: ownerHeader(ownerId) }),
   foundSettlement: (worldId: string, body: FoundSettlementRequest) =>
     request<SettlementResponse>(`/worlds/${worldId}/settlements`, {
       method: 'POST',
@@ -504,6 +514,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  adminLookupUsers: (q: string, signal?: AbortSignal) =>
+    request<AdminUserLookupResponse[]>(`/admin/users/lookup?q=${encodeURIComponent(q)}&limit=10`, { signal }),
   adminListUsers: (params?: { search?: string; status?: string; page?: number; pageSize?: number }) => {
     const query = new URLSearchParams();
     if (params?.search) query.set('search', params.search);

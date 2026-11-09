@@ -10,6 +10,29 @@ namespace Bjarnoy.Api.Contracts;
 /// <summary>One entry of <c>GET /api/v1/api-keys/features</c>.</summary>
 public sealed record ApiKeyFeatureResponse(string Id, bool WorldScoped, bool Admin, string Description);
 
+/// <summary>An account a key may act as besides its owner.</summary>
+public sealed record ApiKeyAccountResponse(Guid UserId, string UserName, string Role);
+
+/// <summary>
+/// An account-less (anonymous) settlement a key may act as, by its jarl (<c>X-Act-As: jarl:&lt;Label&gt;</c>). The client-local
+/// owner id behind it is never returned. The settlement details and <c>Claimed</c> are filled by the admin key list only.
+/// </summary>
+/// <param name="Claimed">True once that player registered an account: the grant no longer works.</param>
+public sealed record ApiKeyAnonymousAccountResponse(
+    Guid Id, string Label, bool IsPrimary, string? SettlementName, string? WorldName, bool? Claimed);
+
+/// <summary>An anonymous identity on an approved request; <c>SettlementId</c> lets the approval form hand it back unchanged.</summary>
+public sealed record ApprovedAnonymousAccountResponse(Guid? SettlementId, string Label, bool IsPrimary);
+
+/// <summary>Display details of an anonymous identity, looked up by its owner id for the admin key list.</summary>
+public sealed record AnonymousAccountInfo(string? SettlementName, string? WorldName, bool Claimed);
+
+/// <summary>
+/// An anonymous identity in a create/edit/approve body: an existing grant by <c>Id</c> (kept as is), or a new one picked
+/// from a settlement by <c>SettlementId</c> (the backend reads the owner id off that settlement).
+/// </summary>
+public sealed record AnonymousAccountInput(Guid? Id, Guid? SettlementId, bool Primary = false);
+
 /// <summary>An API key as listed and as returned from create/update/self. Never contains the secret.</summary>
 /// <param name="KeyHint">The public half of the token, <c>bjk_&lt;keyId&gt;_…</c>.</param>
 public sealed record ApiKeyResponse(
@@ -31,9 +54,20 @@ public sealed record ApiKeyResponse(
     DateTimeOffset? LastUsedAt,
     DateTimeOffset? RevokedAt,
     Guid? ReplacedByApiKeyId,
-    DateTimeOffset? AutoRenewUntil)
+    DateTimeOffset? AutoRenewUntil,
+    string? RequestUserCode = null,
+    IReadOnlyList<ApiKeyAccountResponse>? AdditionalAccounts = null,
+    bool OwnerCanAct = true,
+    IReadOnlyList<ApiKeyAnonymousAccountResponse>? AnonymousAccounts = null)
 {
-    public static ApiKeyResponse From(ApiKeyEntity key, DateTimeOffset now)
+    /// <param name="requestUserCode">
+    /// The <c>XXXX-XXXX</c> code of the request this key was collected from; only the admin key list fills it in.
+    /// </param>
+    public static ApiKeyResponse From(
+        ApiKeyEntity key,
+        DateTimeOffset now,
+        string? requestUserCode = null,
+        IReadOnlyDictionary<string, AnonymousAccountInfo>? anonymousInfo = null)
     {
         ArgumentNullException.ThrowIfNull(key);
 
@@ -56,7 +90,21 @@ public sealed record ApiKeyResponse(
             key.LastUsedAt,
             key.RevokedAt,
             key.ReplacedByApiKeyId,
-            key.AutoRenewUntil);
+            key.AutoRenewUntil,
+            requestUserCode,
+            [.. key.Accounts.Where(a => a.User is not null)
+                .OrderBy(a => a.User!.UserName, StringComparer.OrdinalIgnoreCase)
+                .Select(a => new ApiKeyAccountResponse(a.UserId, a.User!.UserName, a.User.Role.ToString().ToLowerInvariant()))],
+            key.OwnerCanAct,
+            [.. key.AnonymousAccounts
+                .OrderBy(a => a.Label, StringComparer.OrdinalIgnoreCase)
+                .Select(a =>
+                {
+                    AnonymousAccountInfo? info = null;
+                    anonymousInfo?.TryGetValue(a.OwnerId, out info);
+                    return new ApiKeyAnonymousAccountResponse(
+                        a.Id, a.Label, a.IsPrimary, info?.SettlementName, info?.WorldName, info?.Claimed);
+                })]);
     }
 }
 
@@ -67,6 +115,7 @@ public sealed record ApiKeyResponse(
 /// <param name="ExpiresAt">When the key stops working; must lie within the configured maximum lifetime from now.</param>
 /// <param name="RequestsPerMinute">Omitted: the configured default.</param>
 /// <param name="AutoRenewUntil">While in the future, renewal requests from the key are approved without an admin.</param>
+/// <param name="AdditionalUserIds">Further accounts the key may act as (via <c>X-Act-As</c>), besides the owner. Create: omitted means none. Update: omitted keeps the current ones.</param>
 public sealed record ApiKeySettingsRequest(
     string? Name,
     string? Purpose,
@@ -76,7 +125,10 @@ public sealed record ApiKeySettingsRequest(
     IReadOnlyList<Guid>? WorldIds,
     DateTimeOffset ExpiresAt,
     int? RequestsPerMinute,
-    DateTimeOffset? AutoRenewUntil = null);
+    DateTimeOffset? AutoRenewUntil = null,
+    IReadOnlyList<Guid>? AdditionalUserIds = null,
+    IReadOnlyList<AnonymousAccountInput>? AnonymousAccounts = null,
+    bool? OwnerCanAct = null);
 
 /// <summary>A freshly created key: the one and only time the token is shown.</summary>
 public sealed record ApiKeyTokenResponse(string Token, ApiKeyResponse ApiKey);
@@ -86,6 +138,7 @@ public sealed record ApiKeyTokenResponse(string Token, ApiKeyResponse ApiKey);
 /// <summary>Body of <c>POST /api/v1/api-key-requests</c> (anonymous).</summary>
 /// <param name="OwnerUserName">A hint for whom the key should act as; the approving admin decides.</param>
 /// <param name="LifetimeMinutes">How long the key should live once collected.</param>
+/// <param name="AdditionalUserNames">Hints for further accounts the key should be able to act as (<c>X-Act-As</c>); the approving admin decides.</param>
 public sealed record CreateApiKeyRequestRequest(
     string? Name,
     string? Purpose,
@@ -96,7 +149,8 @@ public sealed record CreateApiKeyRequestRequest(
     bool AllWorlds,
     IReadOnlyList<Guid>? WorldIds,
     int LifetimeMinutes,
-    int? RequestsPerMinute);
+    int? RequestsPerMinute,
+    IReadOnlyList<string>? AdditionalUserNames = null);
 
 /// <summary>Body of <c>POST /api/v1/api-key-requests/renewal</c>, called with the key to renew.</summary>
 public sealed record RenewApiKeyRequest(int? LifetimeMinutes, string? Description, string? ContextUrl);
@@ -127,7 +181,10 @@ public sealed record ApiKeyApprovalResponse(
     IReadOnlyList<Guid> WorldIds,
     int RequestsPerMinute,
     int LifetimeMinutes,
-    DateTimeOffset? AutoRenewUntil);
+    DateTimeOffset? AutoRenewUntil,
+    IReadOnlyList<ApiKeyAccountResponse> AdditionalAccounts,
+    bool OwnerCanAct,
+    IReadOnlyList<ApprovedAnonymousAccountResponse> AnonymousAccounts);
 
 /// <summary>A key request as the admin list shows it. The requested settings are the agent's ask; <c>Approved</c> is the decision.</summary>
 public sealed record ApiKeyRequestResponse(
@@ -145,6 +202,7 @@ public sealed record ApiKeyRequestResponse(
     int RequestsPerMinute,
     int LifetimeMinutes,
     string? RequestedOwnerUserName,
+    IReadOnlyList<string> RequestedAdditionalUserNames,
     Guid? RenewsApiKeyId,
     string? RequesterIp,
     string? RequesterUserAgent,
@@ -169,4 +227,7 @@ public sealed record ApproveApiKeyRequestRequest(
     IReadOnlyList<Guid>? WorldIds = null,
     int? LifetimeMinutes = null,
     int? RequestsPerMinute = null,
-    int? AutoRenewMinutes = null);
+    int? AutoRenewMinutes = null,
+    IReadOnlyList<Guid>? AdditionalUserIds = null,
+    IReadOnlyList<AnonymousAccountInput>? AnonymousAccounts = null,
+    bool? OwnerCanAct = null);

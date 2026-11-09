@@ -309,7 +309,62 @@
   "176,2": "grass",
   "176,3": "grass",
   "173,-4": "mountain",
-  "173,4": "mountain"
+  "173,4": "mountain",
+  "200,-4": "grass",
+  "200,-3": "grass",
+  "200,-2": "grass",
+  "200,-1": "grass",
+  "200,0": "grass",
+  "201,-4": "grass",
+  "201,-3": "grass",
+  "201,-2": "grass",
+  "201,-1": "grass",
+  "201,0": "grass",
+  "202,-4": "grass",
+  "202,-3": "grass",
+  "202,-2": "grass",
+  "202,-1": "grass",
+  "202,0": "grass",
+  "203,-4": "grass",
+  "203,-3": "grass",
+  "203,-2": "grass",
+  "203,-1": "grass",
+  "203,0": "grass",
+  "204,-4": "grass",
+  "204,-3": "grass",
+  "204,-2": "grass",
+  "204,-1": "grass",
+  "204,0": "grass",
+  "205,-4": "grass",
+  "205,-3": "grass",
+  "205,-2": "grass",
+  "205,-1": "grass",
+  "205,0": "grass",
+  "206,-4": "grass",
+  "206,-3": "grass",
+  "206,-2": "grass",
+  "206,-1": "grass",
+  "206,0": "grass",
+  "207,-4": "grass",
+  "207,-3": "grass",
+  "207,-2": "grass",
+  "207,-1": "grass",
+  "207,0": "grass",
+  "208,-4": "grass",
+  "208,-3": "grass",
+  "208,-2": "grass",
+  "208,-1": "grass",
+  "208,0": "grass",
+  "209,-4": "grass",
+  "209,-3": "grass",
+  "209,-2": "grass",
+  "209,-1": "grass",
+  "209,0": "grass",
+  "210,-4": "grass",
+  "210,-3": "grass",
+  "210,-2": "grass",
+  "210,-1": "grass",
+  "210,0": "grass"
  },
  "riverTiles": [
   {
@@ -1382,6 +1437,79 @@
     0,
     6.5,
     7.5
+   ]
+  },
+  {
+   "name": "open_grass_ties_follow_the_straight_line",
+   "comment": "An 11 x 5 block of plain grass: many equal-cost routes exist from (200,0) to (210,-4). Equal-f ties are broken toward the goal and then toward the straight start-to-goal line, so the route runs the line instead of hugging an edge of the block.",
+   "from": {
+    "q": 200,
+    "r": 0
+   },
+   "to": {
+    "q": 210,
+    "r": -4
+   },
+   "army": "friendly",
+   "isLandUnit": true,
+   "expectedPath": [
+    {
+     "q": 200,
+     "r": 0
+    },
+    {
+     "q": 201,
+     "r": 0
+    },
+    {
+     "q": 202,
+     "r": -1
+    },
+    {
+     "q": 203,
+     "r": -1
+    },
+    {
+     "q": 204,
+     "r": -2
+    },
+    {
+     "q": 205,
+     "r": -2
+    },
+    {
+     "q": 206,
+     "r": -2
+    },
+    {
+     "q": 207,
+     "r": -3
+    },
+    {
+     "q": 208,
+     "r": -3
+    },
+    {
+     "q": 209,
+     "r": -4
+    },
+    {
+     "q": 210,
+     "r": -4
+    }
+   ],
+   "expectedCumulativeHours": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
    ]
   }
  ],

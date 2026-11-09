@@ -27,6 +27,21 @@ async function loadStoreModule(demoMode: boolean) {
 }
 
 describe('useBuildingCatalogueStore', () => {
+  it('registers the placement rules (terrain, bog, river, ring category) once the catalogue has loaded, live or from the snapshot', async () => {
+    getBuildingCatalogue.mockReset();
+    getBuildingCatalogue.mockResolvedValue([{ ...definitionsFixture[2], allowedTerrain: ['grass'], ringCategory: 'resource', ringOrder: 1 }]);
+    const live = await loadStoreModule(false);
+    const rules = await import('../lib/map/placementRules');
+    expect(rules.placementRuleFor('farm')).toBeUndefined();
+    await live.load();
+    expect(rules.placementRuleFor('farm')).toMatchObject({ category: 'resource', order: 1, allowedTerrain: ['grass'] });
+
+    const demo = await loadStoreModule(true);
+    const demoRules = await import('../lib/map/placementRules');
+    await demo.load();
+    expect(demoRules.placementRuleFor('farm')).toBeDefined();
+  });
+
   it('loads from the live API and groups/sorts definitions by type and level', async () => {
     getBuildingCatalogue.mockReset();
     getBuildingCatalogue.mockResolvedValue(definitionsFixture);

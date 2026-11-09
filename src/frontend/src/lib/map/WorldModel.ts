@@ -2079,7 +2079,7 @@ export class WorldModel {
     if (newPlacementDisabled(type)) return false;
     // The Sawmill and Crop Mill are built directly on a river tile — only
     // certain shapes (and, for the Sawmill, only some variants — see
-    // ringCatalogue.ts's EXCLUDED_VARIANTS_BY_TYPE) have a matching river-
+    // the catalogue's excludedRiverVariants) have a matching river-
     // composite art (matches BuildingDefinition.RequiresRiverShape/
     // ExcludedRiverVariants, see riverBuildingAllowedHere). textures.ts's
     // riverBuildingArtFor reads this same own-hex river tile to pick which

@@ -15,13 +15,13 @@ internal static class CampGenerator
     public const int StrongCampTilesPer = 1500;
 
     /// <summary>One weak camp per this many land tiles (rounded), tuning default. Weak camps have no start-position distance rule.</summary>
-    public const int WeakCampTilesPer = 600;
+    public const int WeakCampTilesPer = 400;
 
     /// <summary>No island gets more strong camps than this, tuning default.</summary>
     public const int MaxStrongCampsPerIsland = 16;
 
     /// <summary>No island gets more weak camps than this, tuning default.</summary>
-    public const int MaxWeakCampsPerIsland = 24;
+    public const int MaxWeakCampsPerIsland = 36;
 
     /// <summary>An island with fewer land tiles than this gets no camp at all (islets stay camp-free), tuning default.</summary>
     public const int MinCampIslandTiles = 60;
