@@ -285,6 +285,8 @@
   `AskUserQuestion` tool, several questions in one call, recommended option first — not as a numbered prose list I have to
   answer by retyping it. Context the question needs goes into the question itself or into the chat text right before it.
   Open questions that need my own words (what something should be called, a new rule) stay in the chat
+- when an `AskUserQuestion` call comes back with questions unanswered or skipped (e.g. "User did not answer this question"),
+  ask them again with the tool once the message I sent instead is handled; a skipped question is still open, not declined
 - if u take screenshots always show the in chat to me too
 - for planning u can use a opus or fable subtask/subagent
 - artifacts that go through rounds (UX reviews, design options, motion
