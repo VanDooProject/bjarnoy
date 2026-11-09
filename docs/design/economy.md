@@ -21,6 +21,18 @@ formula changes, re-run the lab and check all of them.
 | T6 | Troops come before settling | Cart Workshop (settlers) at LH 10, after Barracks (LH 5) and Dockyard (LH 8) |
 | T7 | Territory grows through towers, not the Longhouse | Longhouse claim radius stops growing at LH 3 (§5) |
 
+### World speed
+
+Each world has a speed factor (1 = normal). It scales:
+
+- production (×)
+- build, training and feast times (÷); build times also take Odin's Wisdom
+- the decay of buildings outside the realm (÷)
+- travel time of armies and fleets (÷)
+
+It does not scale troop upkeep (at home or on the march), how much food an army carries, or fight stats: those run
+per real hour on every world. So on a fast world a full load of provisions reaches correspondingly farther.
+
 ## 2. Resources
 
 Wood, Brick, Food, Iron. (The internal key stays `stone` in the API, stores and i18n keys; the German name is Stein.)
