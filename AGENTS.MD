@@ -213,6 +213,11 @@
 # tests
 - tests need to be meaningful and not test third party stuff
 - for e2e tests increasing timeouts is usually not the fix for an issue, most of the time its wrong/broken selectors
+- no retries of test runs: don't re-run a failing test (or the suite) hoping it passes, don't enable test retries
+  (`retries` stays 0 in `playwright.config.ts`), and don't re-trigger a red CI job to get a green. A failure gets read,
+  reproduced and fixed. A pass after a re-run means the test is flaky, not that it's fine
+- the one use of repeated runs: validating a fix. Once a flake or intermittent failure is fixed, run the affected test
+  repeatedly (e.g. `--repeat-each 5`) to show it's no longer flaky. Not for diagnosing, not as a substitute for finding the cause
 - do not make rendering/behavior code branch on "are we in a test/CI
   environment" or "is this a software (non-GPU) renderer" as a way to make
   e2e tests pass faster or more reliably. That makes the code path under
