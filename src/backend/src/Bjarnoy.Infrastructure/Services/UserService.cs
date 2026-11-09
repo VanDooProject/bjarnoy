@@ -33,7 +33,18 @@ public enum UserLookupVia
     Jarl = 2,
 }
 
-public sealed record UserLookupMatch(UserEntity User, UserLookupVia Via, string? MatchedName, string? WorldName);
+/// <summary>
+/// One autocomplete hit. A registered account has <see cref="User"/>; an anonymous player (settlements owned by the
+/// Abandoned system user) has none, only <see cref="SettlementId"/> and the names, and never its client-local owner id.
+/// </summary>
+public sealed record UserLookupMatch(
+    UserEntity? User,
+    UserLookupVia Via,
+    string? MatchedName,
+    string? WorldName,
+    Guid? SettlementId = null,
+    string? JarlName = null,
+    string? SettlementName = null);
 
 public sealed record UserDetail(UserEntity User, IReadOnlyList<SettlementEntity> Settlements);
 
@@ -153,7 +164,30 @@ public sealed class UserService(GameDbContext dbContext, TimeProvider timeProvid
             }
         }
 
-        return [.. matches.Values.OrderBy(m => m.Via).Take(limit)];
+        var anonymous = new Dictionary<string, UserLookupMatch>();
+        var anonymousHits = await _dbContext.Settlements.AsNoTracking()
+            .Include(s => s.World)
+            .Where(s => s.UserId == SystemUserIds.Abandoned
+                && (s.Name.ToLower().Contains(term) || s.OwnerName.ToLower().Contains(term)))
+            .OrderBy(s => s.Id)
+            .Take(limit * 3)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var settlement in anonymousHits)
+        {
+            var via = settlement.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
+                ? UserLookupVia.Settlement
+                : UserLookupVia.Jarl;
+            var label = via == UserLookupVia.Settlement ? settlement.Name : settlement.OwnerName;
+            if (!anonymous.TryGetValue(settlement.OwnerId, out var existing)
+                || (existing.Via == UserLookupVia.Jarl && via == UserLookupVia.Settlement))
+            {
+                anonymous[settlement.OwnerId] = new UserLookupMatch(
+                    null, via, label, settlement.World?.Name, settlement.Id, settlement.OwnerName, settlement.Name);
+            }
+        }
+
+        return [.. matches.Values.Concat(anonymous.Values).OrderBy(m => m.Via).Take(limit)];
     }
 
     public async Task<UserDetail?> GetUserDetailAsync(Guid id, CancellationToken cancellationToken = default)

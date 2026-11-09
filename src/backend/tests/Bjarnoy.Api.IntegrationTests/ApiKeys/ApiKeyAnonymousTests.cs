@@ -308,4 +308,68 @@ public sealed class ApiKeyAnonymousTests : ApiKeyTestBase
         Assert.Equal(HttpStatusCode.OK, collected.StatusCode);
         Assert.Equal(["Jarl-aaaa"], (await collected.ReadStrictAsync<ApiKeyTokenResponse>(Ct)).ApiKey.AnonymousAccounts!.Select(x => x.Label));
     }
+
+    // ---- request hints ----
+
+    private async Task<ApiKeyRequestCreatedResponse> RequestAsync(HttpClient agent, string? ownerHint, params string[] additional)
+    {
+        var response = await agent.PostJsonAsync(
+            "/api/v1/api-key-requests/",
+            new CreateApiKeyRequestRequest(
+                "Agent", null, null, null, ownerHint, ApiKeyHarness.Features(("settlements", ApiKeyAccess.ReadWrite)),
+                true, null, 60, null, additional),
+            Ct);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return await response.ReadStrictAsync<ApiKeyRequestCreatedResponse>(Ct);
+    }
+
+    [Fact]
+    public async Task A_requested_owner_that_is_an_anonymous_jarl_becomes_the_primary_anonymous_account_of_a_sponsor_only_key()
+    {
+        var (admin, adminId, _) = await Harness.CreateAdminAsync();
+        var world = await Factory.CreateWorldAsync(ApiKeyHarness.Unique("w"), 21, 60, cancellationToken: Ct);
+        var (settlement, _) = await Harness.FoundAnonymousSettlementAsync(world.Id, "Jarl-a741");
+        using var agent = Factory.CreateClient();
+        var created = await RequestAsync(agent, "jarl-A741");
+
+        var approve = await admin.PostJsonAsync(
+            $"/api/v1/admin/api-key-requests/{created.Id}/approve", new ApproveApiKeyRequestRequest(), Ct);
+        Assert.Equal(HttpStatusCode.OK, approve.StatusCode);
+        var approved = (await approve.ReadStrictAsync<ApiKeyRequestResponse>(Ct)).Approved!;
+        Assert.Equal(adminId, approved.OwnerUserId);
+        Assert.False(approved.OwnerCanAct);
+        var grant = Assert.Single(approved.AnonymousAccounts);
+        Assert.Equal(settlement.Id, grant.SettlementId);
+        Assert.True(grant.IsPrimary);
+
+        var collected = await agent.PostJsonAsync(
+            $"/api/v1/api-key-requests/{created.Id}/token", new ApiKeyTokenPollRequest(created.PollSecret), Ct);
+        var token = await collected.ReadStrictAsync<ApiKeyTokenResponse>(Ct);
+        using var key = Harness.KeyClient(token.Token);
+        Assert.NotEqual(HttpStatusCode.Forbidden, (await Build(key, settlement.Id)).StatusCode);
+    }
+
+    [Fact]
+    public async Task An_ambiguous_jarl_name_is_not_guessed_but_hinted_extra_jarls_are_added()
+    {
+        var (admin, adminId, _) = await Harness.CreateAdminAsync();
+        var world = await Factory.CreateWorldAsync(ApiKeyHarness.Unique("w"), 21, 60, cancellationToken: Ct);
+        var other = await Factory.CreateWorldAsync(ApiKeyHarness.Unique("o"), 22, 60, cancellationToken: Ct);
+        var third = await Factory.CreateWorldAsync(ApiKeyHarness.Unique("t"), 23, 60, cancellationToken: Ct);
+        await Harness.FoundAnonymousSettlementAsync(world.Id, "Jarl-same");
+        await Harness.FoundAnonymousSettlementAsync(other.Id, "Jarl-same");
+        var (uniqueOne, _) = await Harness.FoundAnonymousSettlementAsync(third.Id, "Jarl-uniq");
+        using var agent = Factory.CreateClient();
+        var created = await RequestAsync(agent, "Jarl-same", "Jarl-uniq");
+
+        var approved = (await (await admin.PostJsonAsync(
+                $"/api/v1/admin/api-key-requests/{created.Id}/approve", new ApproveApiKeyRequestRequest(), Ct))
+            .ReadStrictAsync<ApiKeyRequestResponse>(Ct)).Approved!;
+
+        Assert.Equal(adminId, approved.OwnerUserId);
+        Assert.True(approved.OwnerCanAct);
+        var grant = Assert.Single(approved.AnonymousAccounts);
+        Assert.Equal(uniqueOne.Id, grant.SettlementId);
+        Assert.False(grant.IsPrimary);
+    }
 }

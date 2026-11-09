@@ -45,6 +45,9 @@ public sealed record ApiKeyRequestResult(
     IReadOnlyDictionary<string, string[]>? Errors = null,
     string? Message = null);
 
+/// <summary>A name resolved to a registered account, or to an anonymous player (by one of their settlements).</summary>
+public sealed record ResolvedAccount(Guid? UserId, Guid? AnonymousSettlementId);
+
 /// <summary>The cleaned-up input of a new key request, from <c>CreateApiKeyRequestRequest</c>.</summary>
 public sealed record NewApiKeyRequest(
     string? Name,
@@ -497,9 +500,12 @@ public sealed class ApiKeyRequestService(
         }
 
         var ownerId = overrides.OwnerUserId ?? request.OwnerUserId;
+        Guid? ownerAnonymousSettlementId = null;
         if (ownerId is null && !string.IsNullOrWhiteSpace(request.RequestedOwnerUserName))
         {
-            ownerId = await ResolveAccountAsync(request.RequestedOwnerUserName, cancellationToken);
+            var resolved = await ResolveAccountAsync(request.RequestedOwnerUserName, cancellationToken);
+            ownerId = resolved?.UserId;
+            ownerAnonymousSettlementId = resolved?.AnonymousSettlementId;
         }
 
         ownerId ??= adminUserId;
@@ -507,6 +513,7 @@ public sealed class ApiKeyRequestService(
         // Extra accounts: the admin's list; else (a renewal) the key's own, kept on the request at filing; else the
         // user names the agent hinted, where they exist.
         List<Guid> additional;
+        var hintedAnonymous = new List<Guid>();
         if (overrides.AdditionalUserIds is not null)
         {
             additional = [.. overrides.AdditionalUserIds];
@@ -520,9 +527,14 @@ public sealed class ApiKeyRequestService(
             additional = [];
             foreach (var name in request.RequestedAdditionalUserNames)
             {
-                if (await ResolveAccountAsync(name, cancellationToken) is { } id && id != ownerId && !additional.Contains(id))
+                var resolved = await ResolveAccountAsync(name, cancellationToken);
+                if (resolved?.UserId is { } id && id != ownerId && !additional.Contains(id))
                 {
                     additional.Add(id);
+                }
+                else if (resolved?.AnonymousSettlementId is { } settlementId && !hintedAnonymous.Contains(settlementId))
+                {
+                    hintedAnonymous.Add(settlementId);
                 }
             }
         }
@@ -543,11 +555,33 @@ public sealed class ApiKeyRequestService(
         };
 
         // Anonymous identities: the admin's list; else a renewal keeps the key's own (kept on the request at filing).
-        var anonymous = overrides.AnonymousAccounts is not null
-            ? [.. overrides.AnonymousAccounts]
-            : request.Kind == ApiKeyRequestKind.Renewal ? [.. request.ApprovedAnonymousAccounts] : new List<AnonymousAccountGrant>();
+        // A hinted jarl without an account becomes an anonymous account; when it is the requested owner the key acts as
+        // it by default and the approving admin is only the sponsor.
+        List<AnonymousAccountGrant> anonymous;
+        if (overrides.AnonymousAccounts is not null)
+        {
+            anonymous = [.. overrides.AnonymousAccounts];
+        }
+        else if (request.Kind == ApiKeyRequestKind.Renewal)
+        {
+            anonymous = [.. request.ApprovedAnonymousAccounts];
+        }
+        else
+        {
+            var inputs = new List<AnonymousAccountInput>();
+            if (ownerAnonymousSettlementId is { } ownerSettlement)
+            {
+                inputs.Add(new AnonymousAccountInput(null, ownerSettlement, Primary: true));
+            }
+
+            inputs.AddRange(hintedAnonymous.Select(id => new AnonymousAccountInput(null, id)));
+            anonymous = (await keyService.ResolveAnonymousAsync(inputs, [], cancellationToken)).Grants;
+        }
+
         var ownerCanAct = overrides.OwnerCanAct
-            ?? (request.Kind == ApiKeyRequestKind.Renewal ? request.ApprovedOwnerCanAct : true);
+            ?? (request.Kind == ApiKeyRequestKind.Renewal
+                ? request.ApprovedOwnerCanAct
+                : ownerAnonymousSettlementId is null || overrides.OwnerUserId is not null);
 
         var settings = new ApiKeySettings(
             request.Name, request.Purpose, ownerId.Value, features, allWorlds, worldIds,
@@ -712,31 +746,45 @@ public sealed class ApiKeyRequestService(
     // ---- helpers ----
 
     /// <summary>
-    /// Turns a name an agent gave into an account: an exact user name, else the one account that owns a settlement
-    /// whose jarl or settlement name is exactly this (the nickname a player sees in the game, like <c>Jarl-a741</c>).
-    /// Null when nothing matches, or when several accounts share that jarl name.
+    /// Turns a name an agent gave into an account: an exact user name, else the one jarl or settlement name that matches
+    /// exactly (the nickname a player sees in the game, like <c>Jarl-a741</c>), counting registered accounts and anonymous
+    /// players together. Null when nothing matches, or when several do (an ambiguous name is never guessed).
     /// </summary>
-    private async Task<Guid?> ResolveAccountAsync(string name, CancellationToken cancellationToken)
+    private async Task<ResolvedAccount?> ResolveAccountAsync(string name, CancellationToken cancellationToken)
     {
-        var trimmed = name.Trim();
-        var normalised = trimmed.ToLowerInvariant();
+        var normalised = name.Trim().ToLowerInvariant();
         var byUserName = await dbContext.Users.AsNoTracking()
             .Where(u => u.NormalizedUserName == normalised && !u.IsSystem)
             .Select(u => (Guid?)u.Id)
             .FirstOrDefaultAsync(cancellationToken);
         if (byUserName is not null)
         {
-            return byUserName;
+            return new ResolvedAccount(byUserName, null);
         }
 
-        var owners = await dbContext.Settlements.AsNoTracking()
-            .Where(s => !s.Owner!.IsSystem
-                && (s.OwnerName.ToLower() == normalised || s.Name.ToLower() == normalised))
-            .Select(s => s.UserId)
-            .Distinct()
-            .Take(2)
+        var hits = await dbContext.Settlements.AsNoTracking()
+            .Where(s => s.OwnerName.ToLower() == normalised || s.Name.ToLower() == normalised)
+            .OrderBy(s => s.Id)
+            .Select(s => new { s.Id, s.UserId, s.OwnerId })
+            .Take(50)
             .ToListAsync(cancellationToken);
-        return owners.Count == 1 ? owners[0] : null;
+        var systemIds = await dbContext.Users.AsNoTracking()
+            .Where(u => u.IsSystem)
+            .Select(u => u.Id)
+            .ToListAsync(cancellationToken);
+        var identities = hits
+            .Where(h => h.UserId == SystemUserIds.Abandoned || !systemIds.Contains(h.UserId))
+            .GroupBy(h => h.UserId == SystemUserIds.Abandoned ? "anon:" + h.OwnerId : "user:" + h.UserId)
+            .ToList();
+        if (identities.Count != 1)
+        {
+            return null;
+        }
+
+        var first = identities[0].First();
+        return first.UserId == SystemUserIds.Abandoned
+            ? new ResolvedAccount(null, first.Id)
+            : new ResolvedAccount(first.UserId, null);
     }
 
     private async Task<string> NewUserCodeAsync(CancellationToken cancellationToken)
