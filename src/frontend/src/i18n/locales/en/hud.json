@@ -102,6 +102,9 @@
       "occupied": "A wall already stands here",
       "terrain": "A wall can't stand on this terrain"
     },
+    "riverLock": {
+      "tooCurved": "This stretch of river bends too much: it needs a straighter river piece"
+    },
     "bridgeLock": {
       "notWide": "This river is no wide river: armies already wade across it",
       "wasted": "No bridge on a wasted island"

@@ -102,6 +102,9 @@
       "occupied": "Hier steht schon eine Mauer",
       "terrain": "Auf diesem Gelände kann keine Mauer stehen"
     },
+    "riverLock": {
+      "tooCurved": "Der Fluss macht hier zu viel Kurve: Du brauchst ein geraderes Flussstück"
+    },
     "bridgeLock": {
       "notWide": "Dieser Fluss ist nicht breit: Armeen waten ohnehin hindurch",
       "wasted": "Keine Brücke auf einer verwüsteten Insel"
