@@ -722,7 +722,7 @@ public static class BuildingCatalogue
         new(NiceRound(cost.Wood), NiceRound(cost.Stone), NiceRound(cost.Food), NiceRound(cost.Iron));
 
     // Level-1 costs are per building (wood / stone / food, never iron). The late buildings' growth per level is chosen so the
-    // building's top level costs about 40% (the shrines 50%) of a Longhouse 30, and its level 1 is about a quarter of the
+    // building's top level costs about 40% (the shrines, Great Storehouse and Druid Hut 50%) of a Longhouse 30, and its level 1 is about a quarter of the
     // Longhouse upgrade at the level it unlocks at.
 
     /// <summary>Total capacity of a geometric storage building: <c>c1 · (g^L − 1) / (g − 1)</c> per resource.</summary>
@@ -898,7 +898,7 @@ public static class BuildingCatalogue
     {
         Type = type,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 140, Stone: 40, Food: 10, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 540, Stone: 150, Food: 40, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(2, level),
         AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Forest, Terrain.Sand },
         AlsoOnCoastalWater = true,
@@ -944,7 +944,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.GreatStorehouse,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 4500, Stone: 3000, Food: 0, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 4500, Stone: 3000, Food: 0, Iron: 0) * CostFactor(level, 1.649),
         BuildDuration = Duration(10, level),
         // Total at this level: 50000 * (1.25^L - 1) / 0.25 per resource.
         StorageCapacity = GeometricCapacity(50000, 1.25, level),
@@ -1047,7 +1047,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.DruidHut,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 750, Stone: 450, Food: 550, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 750, Stone: 450, Food: 550, Iron: 0) * CostFactor(level, 1.368),
         BuildDuration = Duration(9, level),
         AllowedTerrain = Grass,
     };
