@@ -43,6 +43,7 @@ import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { useBuildRing, type BuildableType } from '../composables/useBuildRing';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
+import { useDraggablePosition } from '../composables/useDraggablePosition';
 import { useMediaQuery } from '../composables/useMediaQuery';
 import { hudBarHeightPx, hudRailWidthPx } from '../composables/hudBarHeight';
 import { isHudRail } from '../composables/hudSettlementBubbleState';
@@ -139,6 +140,9 @@ function onZoomModeChange(next: RenderMode) {
 // rendering toggles, nothing about game state. See useFogDebug for why this
 // is a shared composable rather than a local computed().
 const showFogDebug = useFogDebug();
+const debugStackRef = ref<HTMLElement | null>(null);
+const debugStackDrag = useDraggablePosition('debugStack', debugStackRef);
+const debugStackStyle = debugStackDrag.style;
 const isMobile = useIsMobile();
 const queueDrawerOpen = ref(false);
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
@@ -1315,7 +1319,17 @@ async function upgrade() {
       @zoom-mode-change="onZoomModeChange"
       @camera-change="onCameraChange"
     />
-    <div v-if="showFogDebug" class="fog-debug-stack">
+    <div v-if="showFogDebug" ref="debugStackRef" class="fog-debug-stack" :style="debugStackStyle">
+      <!-- Drag to move the whole stack off whatever it is covering (the garrison
+           and army panels); double-click puts it back. -->
+      <div
+        class="debug-drag-handle"
+        :title="t('hud.debugStack.handleTitle')"
+        @pointerdown="debugStackDrag.onPointerDown"
+        @dblclick="debugStackDrag.reset"
+      >
+        {{ `⠿ ${t('hud.debugStack.handle')}` }}
+      </div>
       <!-- First in the stack on purpose: it is the one panel that answers
            "is the map smooth right now", which is the question every other
            panel here exists to help explain. -->
@@ -1489,5 +1503,23 @@ async function upgrade() {
    cross-size by default, which squashes the slider rows instead of scrolling. */
 .fog-debug-stack > * {
   flex-shrink: 0;
+}
+.debug-drag-handle {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 4px 10px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: rgba(7, 15, 20, 0.85);
+  border-radius: 6px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.debug-drag-handle:active {
+  cursor: grabbing;
 }
 </style>

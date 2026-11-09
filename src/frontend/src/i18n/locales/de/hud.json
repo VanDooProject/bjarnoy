@@ -455,12 +455,18 @@
   "tradeReport": {
     "summary": "Gab {gaveAmount} {gave} für {gotAmount} {got}"
   },
+  "debugStack": {
+    "handle": "Debug",
+    "handleTitle": "Zum Verschieben ziehen, Doppelklick setzt zurück"
+  },
   "fpsMeter": {
     "title": "Bildrate",
     "fps": "fps",
     "msPerFrame": "{n} ms/Bild",
     "worstFrame": "Schlechtestes Bild (letzte {seconds} s)",
     "ms": "{n} ms",
+    "average": "Durchschnitt (letzte {n} Bilder)",
+    "fpsValue": "{n} fps",
     "ago": "vor {n} s",
     "stutters": "Bilder über {threshold} ms",
     "sparkLabel": "Die letzten {n} Bildabstände",
