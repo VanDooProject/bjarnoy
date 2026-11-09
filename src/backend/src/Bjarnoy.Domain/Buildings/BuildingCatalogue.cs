@@ -28,6 +28,11 @@ public static class BuildingCatalogue
 
     private const double LonghouseCostGrowth = 1.34;
 
+    /// <summary>Longhouse cost growth per level from level 11 on (levels 1 to 10 grow by <see cref="LonghouseCostGrowth"/>).</summary>
+    private const double LonghouseLateCostGrowth = 1.45;
+
+    private const int LonghouseLateCostFromLevel = 11;
+
     /// <summary>Cost growth per level of the five shrines.</summary>
     private const double ShrineCostGrowth = 1.715;
 
@@ -681,6 +686,12 @@ public static class BuildingCatalogue
     /// <summary>Cost multiplier for a level: 1, 1.3, 1.69, …</summary>
     private static double CostFactor(int level, double growth = CostGrowth) => Geometric(growth, level);
 
+    /// <summary>Longhouse cost multiplier: 1.34^(L-1) up to level 10, then 1.34^9 * 1.45^(L-10).</summary>
+    private static double LonghouseCostFactor(int level) =>
+        level < LonghouseLateCostFromLevel
+            ? CostFactor(level, LonghouseCostGrowth)
+            : CostFactor(LonghouseLateCostFromLevel - 1, LonghouseCostGrowth) * Math.Pow(LonghouseLateCostGrowth, level - (LonghouseLateCostFromLevel - 1));
+
     /// <summary>
     /// Build time at <paramref name="level"/>: <paramref name="baseMinutes"/> ·
     /// growth^(level−1), rounded to whole seconds.
@@ -722,7 +733,7 @@ public static class BuildingCatalogue
         new(NiceRound(cost.Wood), NiceRound(cost.Stone), NiceRound(cost.Food), NiceRound(cost.Iron));
 
     // Level-1 costs are per building (wood / stone / food, never iron). The late buildings' growth per level is chosen so the
-    // building's top level costs about 40% (the shrines, Great Storehouse and Druid Hut 50%) of a Longhouse 30, and its level 1 is about a quarter of the
+    // building's top level costs about 40% (the shrines and Druid Hut 50%, the Great Storehouse is set by what a settlement can store) of a Longhouse 30, and its level 1 is about a quarter of the
     // Longhouse upgrade at the level it unlocks at.
 
     /// <summary>Total capacity of a geometric storage building: <c>c1 · (g^L − 1) / (g − 1)</c> per resource.</summary>
@@ -756,7 +767,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.Longhouse,
         Level = level,
-        Cost = BrickFree(new ResourceAmounts(Wood: 120, Stone: 100, Food: 60, Iron: 0) * CostFactor(level, LonghouseCostGrowth), level, StartBrickFreeLevels),
+        Cost = BrickFree(new ResourceAmounts(Wood: 120, Stone: 100, Food: 60, Iron: 0) * LonghouseCostFactor(level), level, StartBrickFreeLevels),
         BuildDuration = Duration(1.5, level),
         // The anchor feeds its own settlement a little, so a new holding is
         // never completely stalled. Linear in level (unlike every other
@@ -944,7 +955,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.GreatStorehouse,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 4500, Stone: 3000, Food: 0, Iron: 0) * CostFactor(level, 1.649),
+        Cost = new ResourceAmounts(Wood: 4500, Stone: 3000, Food: 0, Iron: 0) * CostFactor(level, 2.0),
         BuildDuration = Duration(10, level),
         // Total at this level: 50000 * (1.25^L - 1) / 0.25 per resource.
         StorageCapacity = GeometricCapacity(50000, 1.25, level),
