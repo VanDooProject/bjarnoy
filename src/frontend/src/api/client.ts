@@ -109,6 +109,7 @@ import type {
   WorldSummaryResponse,
   CampReportResponse,
   CampStateResponse,
+  ForeignArmyResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -283,6 +284,7 @@ export const api = {
     request<WorldMembershipResponse>(`/worlds/${worldId}/membership`, { headers: ownerHeader(ownerId) }),
   getWorldCamps: (worldId: string, islandId?: string) =>
     request<CampStateResponse[]>(`/worlds/${worldId}/camps${islandId ? `?islandId=${encodeURIComponent(islandId)}` : ''}`),
+  getForeignArmies: (worldId: string) => request<ForeignArmyResponse[]>(`/worlds/${worldId}/foreign-armies`),
   getIslands: (worldId: string) => request<IslandResponse[]>(`/worlds/${worldId}/islands`),
   foundSettlement: (worldId: string, body: FoundSettlementRequest) =>
     request<SettlementResponse>(`/worlds/${worldId}/settlements`, {

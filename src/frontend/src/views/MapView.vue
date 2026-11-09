@@ -37,6 +37,7 @@ import { parseCameraHash, serializeCameraHash } from '../lib/mapCameraHash';
 import { useAuthStore } from '../stores/auth';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
+import { armyOverlayMovement, foreignArmyMarker } from '../lib/map/armyOverlay';
 import { useGuildStore } from '../stores/guild';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
@@ -378,23 +379,14 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
         Object.fromEntries(a.stacks.map((s) => [s.unit, s.count])),
         unitCatalogue.byType,
       ) === 'fleet',
-    // Issue #94: hand the renderer the whole frozen leg, not a position —
-    // it interpolates along it every frame (see HexMapRenderer's
-    // `resolveArmyPoint`). An `atHome`/`supporting` army has no movement at
-    // all and keeps sitting on its authoritative hex. `movement.path` is
-    // always the *active* leg, outbound or return (the backend rebuilds
-    // Movement on turn-around — see Movement.cs's own remarks), so there's
-    // no leg-picking to do here.
-    movement: a.movement
-      ? {
-          path: a.movement.path.map((p) => ({ q: p.q, r: p.r })),
-          cumulativeHours: a.movement.cumulativeHours ?? [],
-          edgeHours: a.movement.edgeHours ?? [],
-          departedAtMs: Date.parse(a.movement.departedAt),
-          arrivesAtMs: Date.parse(a.movement.arrivesAt),
-        }
-      : undefined,
+    // An `atHome`/`supporting` army has no movement at all and keeps sitting on its authoritative hex.
+    movement: a.movement ? armyOverlayMovement(a.movement) : undefined,
   }));
+  // docs/design/map-fog-v2.md §1g: other players' troops marching inside our sight, in their owner's colour (guild/treaty/rival like
+  // the realm borders). Never selected, never returning-grey, and the renderer gives them no vision of their own.
+  for (const a of world.foreignArmies) {
+    armies.push(foreignArmyMarker(a, world.model.getSettlement(a.settlementId), player.id));
+  }
   const selected = world.armies.find((a) => a.id === world.selectedArmyId);
   const route = selected?.movement
     ? selected.movement.isReturning
