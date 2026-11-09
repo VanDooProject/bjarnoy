@@ -383,4 +383,54 @@ describe('AdminSettlementsView', () => {
       vi.useRealTimers();
     }
   });
+
+  it('keeps several settlements open at once', async () => {
+    adminSearchSettlements.mockResolvedValue({
+      items: [summary(), summary({ id: 'settlement-2', name: 'Ulfheim' })],
+      totalCount: 2,
+      page: 1,
+      pageSize: 25,
+    });
+    adminGetSettlement.mockImplementation(async (id: string) =>
+      id === 'settlement-2' ? detail({ id: 'settlement-2', name: 'Ulfheim' }) : detail(),
+    );
+    adminGetSettlementLayout.mockResolvedValue(layout());
+    adminListArmies.mockResolvedValue([]);
+    getUnitCatalogue.mockResolvedValue([{ type: 'spearman' }] as UnitDefinitionResponse[]);
+
+    const wrapper = mount(AdminSettlementsView, { global });
+    await flushPromises();
+
+    for (const button of wrapper.findAll('button').filter((b) => b.text() === 'Manage')) {
+      await button.trigger('click');
+      await flushPromises();
+    }
+
+    expect(wrapper.findAll('.detail-row')).toHaveLength(2);
+
+    await wrapper.findAll('button').find((b) => b.text() === 'Close')!.trigger('click');
+    expect(wrapper.findAll('.detail-row')).toHaveLength(1);
+  });
+
+  it('zooms the hex grid with the buttons and resets it', async () => {
+    const wrapper = await openDetail();
+    const svg = wrapper.find('svg.grid');
+    const widthOf = () => Number(svg.attributes('viewBox')!.split(' ')[2]);
+    const initial = widthOf();
+
+    await wrapper.find('button[aria-label="Zoom in"]').trigger('click');
+    expect(widthOf()).toBeLessThan(initial);
+
+    await wrapper.findAll('.zoom-controls button').find((b) => b.text() === 'Reset zoom')!.trigger('click');
+    expect(widthOf()).toBeCloseTo(initial, 5);
+  });
+
+  it('zooms the hex grid with the mouse wheel', async () => {
+    const wrapper = await openDetail();
+    const svg = wrapper.find('svg.grid');
+    const initial = Number(svg.attributes('viewBox')!.split(' ')[2]);
+
+    await svg.trigger('wheel', { deltaY: -100 });
+    expect(Number(svg.attributes('viewBox')!.split(' ')[2])).toBeLessThan(initial);
+  });
 });
