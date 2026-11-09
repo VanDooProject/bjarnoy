@@ -4,7 +4,7 @@
   "seed": 11,
   "radius": 1000,
   "generation": { "islandCellSize": 260, "islandMaxReach": 0, "islandMinGap": 0, "islandLargeShare": 0.12 },
-  "window": { "q": -746, "r": 200, "size": 28 },
+  "window": { "q": -752, "r": 204, "size": 30 },
   "px": 30,
-  "routes": [{ "from": [-742, 204], "to": [-734, 204], "army": "enemy" }]
+  "routes": [{ "from": [-756, 204], "to": [-748, 204], "army": "enemy" }]
 }
