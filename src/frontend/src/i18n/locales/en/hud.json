@@ -243,14 +243,7 @@
     "slotHere": "Slot here",
     "slotRuneError": "Could not slot that rune — it may already be slotted, or this shrine has no free slot.",
     "unslotRuneError": "Could not unslot that rune.",
-    "queuedNote": "Queued — waiting for a construction slot.",
-    "upgradeCost": "Upgrade cost",
     "notEnoughResources": "Not enough resources available (some may be reserved for queued construction).",
-    "premiumRequired": "Every construction slot is busy, and this account has no waiting queue to fall back on — that's a {premium} feature.",
-    "premium": "Premium",
-    "noFreeSlotPremium": "No free slot — Premium required",
-    "queueBuild": "Queue build",
-    "upgradeToLevel": "Upgrade to level {level}",
     "feastTitle": "Feast",
     "feastDesc": "Turn surplus wood, brick and food into renown. It is paid up front and the renown arrives when the feast ends.",
     "feastCost": "Cost",
@@ -274,9 +267,7 @@
     "renownEtaDays": "{days} d {hours} h",
     "renownEtaHours": "{hours} h {minutes} min",
     "renownEtaMinutes": "{minutes} min",
-    "renownDemo": "Renown progress needs a live world.",
-    "razingNote": "Being razed to level {level}.",
-    "razingRemoveNote": "Being torn down."
+    "renownDemo": "Renown progress needs a live world."
   },
   "trainingModal": {
     "subtitle": "Level {level} · training {percent}% faster",

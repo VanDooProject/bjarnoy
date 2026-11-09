@@ -49,7 +49,7 @@ import { useMediaQuery } from '../composables/useMediaQuery';
 import { hudBarHeightPx, hudRailWidthPx } from '../composables/hudBarHeight';
 import { isHudRail } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
-import { nextUpgradeLevel } from '../lib/hud/pendingBuild';
+import { hexTakesNoOrder, nextUpgradeLevel } from '../lib/hud/pendingBuild';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
@@ -580,10 +580,9 @@ function onHover(info: HoverInfo | null) {
 // what opens BuildingModal now, rather than every click doing so.
 const selectedCoord = ref<AxialCoord | null>(null);
 const selectedTile = ref<Tile | null>(null);
-// Why the last build/upgrade attempt was rejected (NoFreeSlot's premium
-// hint included, issue #158) — surfaced in BuildingModal rather than only
-// `console.error`'d, and cleared whenever a fresh attempt starts, the modal
-// closes, or a different tile is selected.
+// Why the last demo build was rejected — shown in the ring, which stays open
+// (live orders are optimistic: a refusal shows in the chip under the hex). Cleared
+// whenever a fresh attempt starts, the ring closes, or a different tile is selected.
 const actionError = ref<string | null>(null);
 // A building's training window, separate from BuildingModal (it lists the units that building
 // trains with a quantity picker each, not a single build/upgrade action) — see the ring's
@@ -844,8 +843,9 @@ function siegeActions(tile: Tile): RingAction[] {
 function upgradeActionFor(tile: Tile): RingAction {
   const type = tile.buildingType!;
   const label = t('hud.ringMenu.actions.upgrade');
-  const level = tile.buildingLevel ?? 1;
-  const nextLevel = level + 1;
+  // Queued behind a running upgrade, this one starts from the level that one reaches.
+  const nextLevel = nextUpgradeLevel(tile.buildingLevel ?? 1, world.hud.queue, tile);
+  const level = nextLevel - 1;
   const definitions = buildingCatalogue.byType[type];
   const upgradeDefinition = definitions?.find((d) => d.level === nextLevel);
   // A catalogue that lists the building but has no further level: nothing left to upgrade to.
@@ -859,25 +859,30 @@ function upgradeActionFor(tile: Tile): RingAction {
   ].filter((lock): lock is string => !!lock);
   const hexBusy = world.hud.queue.some((o) => o.q === tile.q && o.r === tile.r);
   const availability = availabilityFor(cost, upgradeDefinition, locks.length > 0, hexBusy);
+  // A hex at its order limit (or with a raze) takes no upgrade: the card says so, like Raze's, instead of listing slots.
+  const busyNote = hexTakesNoOrder(world.hud.queue, tile, world.hud.construction.maxOrdersPerHex)
+    ? t('hud.ringMenu.actions.hexBusy')
+    : undefined;
   const stats = buildingStatsAt(type, nextLevel, tile, tileAt);
   // Production is per hour at the world's speed: the card shows the gain, and the new total next to it.
   const rate = upgradeRateGain(buildingStatsAt(type, level, tile, tileAt).output, stats.output, world.worldSpeedFactor);
   const missing = formatMissingResources(cost, world.hud.available);
-  const blocked = availability.state === 'locked' || availability.state === 'waiting';
+  const blocked = !!busyNote || availability.state === 'locked' || availability.state === 'waiting';
   return {
     id: 'upgrade',
     label,
     color: 'var(--gold)',
     disabled: blocked,
-    state: blocked ? availability.state : undefined,
+    state: !blocked ? undefined : busyNote ? 'waiting' : availability.state,
     // Read out by screen readers; sighted players get the card on hover.
     hint: !blocked
       ? undefined
-      : locks.length
-        ? locks[0]
-        : missing
-          ? t('hud.ringMenu.actions.notEnough', { resources: missing })
-          : t('hud.ringMenu.card.badgeNoSlot'),
+      : (busyNote ??
+        (locks.length
+          ? locks[0]
+          : missing
+            ? t('hud.ringMenu.actions.notEnough', { resources: missing })
+            : t('hud.ringMenu.card.badgeNoSlot'))),
     card: {
       title: t('hud.ringMenu.card.upgradeTitle', { level: nextLevel }),
       sub: t('hud.ringMenu.card.upgradeSub', { building: buildingName(type), from: level, to: nextLevel }),
@@ -891,9 +896,9 @@ function upgradeActionFor(tile: Tile): RingAction {
             ? formatModifier(stats.modifier)
             : undefined,
       givesTotal: rate ? t('hud.ringMenu.card.givesTotal', { amount: rate.total }) : undefined,
-      locks,
+      locks: busyNote ? [busyNote, ...locks] : locks,
       art: buildingArt(type, nextLevel),
-      availability,
+      availability: busyNote ? undefined : availability,
     },
   };
 }
@@ -1301,7 +1306,7 @@ async function upgrade() {
   const tile = selectedTile.value;
   // What the Upgrade card promised (read before the ring closes: the card follows the selected tile).
   const card = upgradeActionFor(tile).card;
-  const level = nextUpgradeLevel(world.hud.buildings, world.hud.queue, coord) ?? (tile.buildingLevel ?? 1) + 1;
+  const level = nextUpgradeLevel(tile.buildingLevel ?? 1, world.hud.queue, coord);
   // Queued behind a running order on the same hex: the queue's held row and confirmation are keyed by hex, so they
   // would hide and animate that running order's row instead. The new order just appears in the queue.
   const queuedBehind = world.hud.queue.some((o) => o.q === coord.q && o.r === coord.r);
@@ -1412,9 +1417,7 @@ async function upgrade() {
         :tile="selectedTile"
         :mine="modalMine"
         :owner-label="modalOwnerLabel"
-        :error="actionError"
         @close="closeModal"
-        @upgrade="upgrade"
       />
       <TrainingModal
         v-if="selectedTile?.buildingType && trainModalOpen"
