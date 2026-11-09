@@ -50,8 +50,9 @@ For a building with level-1 values `C₁` (cost, per resource), `P₁`
 
 ```
 cost(L)       = C₁ · g_c^(L−1)           g_c = 1.30  (some buildings have their own, see below)
+                                         producers: levels 1, 2, 3 are multiplied by 0.6, 0.75, 0.9
 cost_LH(L)    = C₁ · 1.34^(L−1)          for L ≤ 10
-cost_LH(L)    = C₁ · 1.34^9 · 1.45^(L−10)  for L > 10
+cost_LH(L)    = C₁ · 1.34^9 · 1.60^(L−10)  for L > 10
 production(L) = I₁ · (g_p^L − 1) / (g_p − 1)   g_p = 1.20
 buildTime(L)  = t₁ · g_t^(L−1)           g_t = 1.33
 ```
@@ -79,28 +80,38 @@ whole number, 100–999 to the nearest 10, 1 000–9 999 to the nearest 50,
 | Fishing Hut | 49 / 39 / 7 | 16 food | 3 |
 | Bog-ore works | 42 / 34 / 20 | 4 iron | 3 |
 | Longhouse | 120 / 100 / 60 | +15 wood, +15 food per level (linear; no brick, no iron) | 1.5 |
-| Storage House | 90 / 50 / 0 | +600 capacity · 1.22^(L−1) | 2.5 |
-| Great Storehouse | 4 500 / 3 000 / 0, g_c 2.0 | +50 000 capacity · 1.25^(L−1) | 10 |
+| Storage House | 90 / 50 / 0, g_c 1.20 | +300 capacity · 1.22^(L−1) | 2.5 |
+| Great Storehouse | 4 500 / 3 000 / 0, g_c 1.23 | +50 000 capacity · 1.25^(L−1) | 10 |
 | Tower | 140 / 200 / 30 | | 8 |
 | Barracks | 100 / 78 / 43 | | |
 | Town Square | 120 / 130 / 44 | | |
 | Dockyard | 410 / 99 / 33 | | |
 | Archery Range | 470 / 200 / 58 | | |
 | Cart Workshop | 680 / 230 / 75 | | |
-| Meadery | 720 / 390 / 200 | | 4 |
-| Druid Hut | 750 / 450 / 550, g_c 1.368 | | |
-| Weaponsmith (Smithy) | 1 700 / 2 100 / 420, g_c 1.291 | | 4 |
-| Siege Workshop | 6 400 / 3 200 / 530, g_c 1.233 | | |
-| Sawmill | 7 100 / 10 000 / 1 000, g_c 1.196 | | 4 |
-| Crop Mill | 10 000 / 7 100 / 1 000, g_c 1.196 | | 4 |
-| Hammer Forge (Hammerschmiede) | 10 000 / 6 350 / 1 800, g_c 1.196 | | 4 |
-| Shrines (Thor, Freyja, Ullr, Njörd, Odin Statue) | 33 000 / 35 000 / 10 500, g_c 1.715 | | |
+| Meadery | 860 / 470 / 230, g_c 1.30 | | 4 |
+| Druid Hut | 1 050 / 640 / 780, g_c 1.619 | | |
+| Weaponsmith (Smithy) | 4 100 / 5 100 / 1 000, g_c 1.486 | | 4 |
+| Siege Workshop | 26 500 / 13 000 / 2 200, g_c 1.379 | | |
+| Sawmill | 41 500 / 59 500 / 5 950, g_c 1.313 | | 4 |
+| Crop Mill | 59 500 / 41 500 / 5 950, g_c 1.313 | | 4 |
+| Hammer Forge (Hammerschmiede) | 59 000 / 37 500 / 10 500, g_c 1.313 | | 4 |
+| Shrines (Thor, Freyja, Ullr, Njörd, Odin Statue) | 475 000 / 505 000 / 150 000, g_c 2.140 | | |
 | Palisade, Palisade Gate (per hex) | 540 / 150 / 40 | | 2 |
 
 - The starting buildings (Longhouse, Tower, Lumberjack, Reindeer Herder) cost no brick up to and including level 5. The Clay Brickworks costs no brick at level 1.
 - The Longhouse produces wood and food only: no brick, no iron.
-- Each producer level adds 20% more output than the level before it, starting at 8/h for wood and brick and 12/h for food.
-- The Great Storehouse is the follow-up to the Storage House: a single level stores far more than a Storage House level (50 000 at level 1).
+- Each producer level adds 20% more output than the level before it, starting at 8/h for wood and brick.
+- The food buildings are worth different amounts, so where you build food is a choice: Reindeer Herder 8/h (the start building), Farm 12/h, Pumpkin Farm 13/h, Fishing Hut 16/h (going to the shore for fish pays off).
+- Farms are the upgrade over Reindeer Herders: once Farms unlock, it pays to build Farms instead and tear the old Herders down.
+- The Pumpkin Farm yields more than the Farm, but no mill boosts it (the Crop Mill boosts Farms only).
+- A building costs least of the resource it produces; each building has its own mix of wood, brick and food.
+- Producer levels 1–3 cost less than the formula: ×0.6, ×0.75 and ×0.9.
+- A building's level 1 costs about a quarter of the Longhouse upgrade at the level it unlocks. The late buildings (the Druid Hut and everything unlocking from Longhouse 15 on) grow so that their top level costs 40% of a Longhouse 30; the shrines and the Druid Hut 50%.
+- The Longhouse gets dearer faster from level 11, after the level the second settlement needs.
+- The Palisade is priced as a strong defensive building: 540 wood, 150 brick and 40 food per wall hex at level 1.
+- Any number of Storage Houses may be built, and their level is not capped by the Longhouse.
+- The Great Storehouse is the follow-up to the Storage House: to hold n Great Storehouses you need n Storage Houses at level 25.
+- Maxing a storage building pays: each level is a little better value than the one before, because its cost grows slower than its capacity.
 - Building costs are round numbers: below 100 exact, three digits to the nearest 10 (148 → 150), from four digits to the nearest half step of the second digit (1 458 → 1 450).
 
 (Other buildings: same formulas, `C₁`/`t₁` set per building in the
@@ -112,7 +123,7 @@ What this gives for a producer:
 
 | L | cost (wood) | output /h | build time |
 |---|---|---|---|
-| 1 | 57 | 12 | 3 min |
+| 1 | 34 | 12 | 3 min |
 | 5 | 160 | 89 | 9 min |
 | 10 | 600 | 312 | 39 min |
 | 15 | 2 250 | 864 | 2.7 h |
