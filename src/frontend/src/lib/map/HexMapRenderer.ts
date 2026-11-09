@@ -5941,6 +5941,14 @@ export class HexMapRenderer {
     this.rebuildAll();
   }
 
+  /** Re-homes the world map's camera onto the player's own realm (worldCameraOrigin). */
+  focusWorldCamera() {
+    if (!this.app) return;
+    this.camera = this.worldCameraOrigin();
+    this.applyCameraTransform();
+    this.rebuildAll();
+  }
+
   panTo(coord: AxialCoord) {
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
     this.camera = { ...this.camera, x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
