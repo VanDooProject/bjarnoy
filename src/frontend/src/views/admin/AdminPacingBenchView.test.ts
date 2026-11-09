@@ -58,8 +58,9 @@ describe('AdminPacingBenchView', () => {
     const wrapper = mountView();
     await flushPromises();
     const before = wrapper.get('[data-testid="bench-activeFeasts-10"]').text();
-    const input = wrapper.get('[data-testid="bench-longhouseCostGrowth"]');
-    await input.setValue('1.5');
+    // A steeper Longhouse build-time tail makes the early Longhouse levels take longer.
+    const input = wrapper.get('[data-testid="bench-lhShape"]');
+    await input.setValue('6');
     // Not yet: the run waits for the typing to stop.
     expect(wrapper.get('[data-testid="bench-activeFeasts-10"]').text()).toBe(before);
     await settle();
@@ -67,6 +68,8 @@ describe('AdminPacingBenchView', () => {
     expect(delta.classes()).toContain('later');
     expect(delta.text()).toMatch(/^\+\d/);
     // The Longhouse wood costs show the reference in brackets.
+    await wrapper.get('[data-testid="bench-longhouseCostGrowth"]').setValue('1.5');
+    await settle();
     expect(wrapper.get('[data-testid="bench-cost-10"]').text()).toMatch(/\(.+\)/);
 
     await wrapper.get('[data-testid="bench-pin"]').trigger('click');

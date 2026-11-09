@@ -92,12 +92,10 @@
     "costGrowth": "Cost growth (per level)",
     "longhouseCostGrowth": "Longhouse cost growth (levels 1-10)",
     "longhouseLateCostGrowth": "Longhouse cost growth (level 11 on)",
-    "timeGrowth": "Build time growth",
-    "longhouseTimeGrowth": "Longhouse build time growth",
     "productionGrowth": "Production growth",
     "producerCostScale": "Level-1 cost scale (buildings)",
     "longhouseCostScale": "Level-1 cost scale (Longhouse)",
-    "timeScale": "Level-1 time scale",
+    "timeScale": "Build time scale",
     "foundingStock": "Founding stock"
   }
 }

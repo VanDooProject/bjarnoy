@@ -1,26 +1,24 @@
 import type { BuildingDefinitionResponse, ResourceLine } from '../../api/types';
+import { DEFAULT_BUILD_TIME_KNOBS, buildSecondsOf, type BuildTimeKnobs } from './buildTimes';
 import { DEFAULT_EARLY_DISCOUNT, costGrowthOf, isEarlyDiscountType, levelOneBaseCost, niceRound, type BuildingKind } from '../map/buildingEconomy';
 
 // "What if the curves were different?": regenerate every level of every
 // building type from that type's level-1 row and a handful of growth factors,
 // next to the live catalogue. Pure; never touches its input.
 
-export interface WhatIfKnobs {
+export interface WhatIfKnobs extends BuildTimeKnobs {
   /** Cost growth per level of the standard types (×1.30); the types with their own growth (shrines, late buildings) scale by `costGrowth / 1.30`. Not the Longhouse, the Storage House or the Great Storehouse (own knobs below). */
   costGrowth: number;
   /** Longhouse cost growth per level up to level 10. */
   longhouseCostGrowth: number;
   /** Longhouse cost growth per level from level 11 on. */
   longhouseLateCostGrowth: number;
-  /** Build time growth per level. */
-  timeGrowth: number;
-  longhouseTimeGrowth: number;
   /** Growth of the per-level production increment for non-Longhouse types: level L adds `I1 · g^(L−1)` (the Longhouse stays linear: level 1 × level). */
   productionGrowth: number;
   /** Multiplies every non-Longhouse level-1 cost. */
   producerCostScale: number;
   longhouseCostScale: number;
-  /** Multiplies every level-1 build time. */
+  /** Multiplies every build time. */
   timeScale: number;
   /** Stock a new settlement starts with (used by the simulation, not the catalogue). */
   foundingStock: ResourceLine;
@@ -41,11 +39,10 @@ export interface WhatIfKnobs {
 }
 
 export const DEFAULT_WHAT_IF: WhatIfKnobs = {
+  ...DEFAULT_BUILD_TIME_KNOBS,
   costGrowth: 1.3,
   longhouseCostGrowth: 1.34,
   longhouseLateCostGrowth: 1.6,
-  timeGrowth: 1.33,
-  longhouseTimeGrowth: 1.33,
   productionGrowth: 1.2,
   producerCostScale: 1,
   longhouseCostScale: 1,
@@ -88,7 +85,7 @@ const copyDef = (d: BuildingDefinitionResponse): BuildingDefinitionResponse => (
   prerequisites: d.prerequisites.map((p) => ({ ...p })),
 });
 
-/** Types whose per-level cost and time are spelled out in the catalogue (BuildingCatalogue.BridgeLevels), not grown from level 1: copied as is. */
+/** Types whose per-level cost is spelled out in the catalogue (BuildingCatalogue.BridgeCosts), not grown from level 1: copied, only the build time follows the curve. */
 const SPELLED_OUT_TYPES: ReadonlySet<string> = new Set(['bridge']);
 
 /**
@@ -125,7 +122,7 @@ export function applyWhatIf(
   for (const [type, defs] of Object.entries(byType)) {
     const first = defs.find((d) => d.level === 1);
     if (!first || SPELLED_OUT_TYPES.has(type)) {
-      out[type] = defs.map(copyDef);
+      out[type] = defs.map((d) => ({ ...copyDef(d), buildSeconds: Math.round(buildSecondsOf(type, d.level, defs.length, knobs) * knobs.timeScale) }));
       continue;
     }
     const lh = type === 'longhouse';
@@ -142,21 +139,19 @@ export function applyWhatIf(
     const override = lh ? undefined : knobs.levelOneOutput[type];
     const liveTotal = sumLine(first.productionPerHour);
     const outputScale = override !== undefined && liveTotal > 0 ? override / liveTotal : 1;
-    const timeGrowth = lh ? knobs.longhouseTimeGrowth : knobs.timeGrowth;
     const costScale = lh ? knobs.longhouseCostScale : knobs.producerCostScale;
     const brickFree = BRICK_FREE[type];
     // The level-1 row already carries the producers' level-1 discount (60%) and its rounding: grow from the undiscounted base.
     const discounted = isEarlyDiscountType(type);
     const baseCost = discounted ? levelOneBaseCost(type as BuildingKind) : first.cost;
     out[type] = defs.map((d) => {
-      const n = d.level - 1;
       const discount = discountAt(d.level);
       const grown = scaleLine(baseCost, costScale * costFactorAt(d.level) * discount);
       if (brickFree) grown.stone = d.level <= brickFree.levels ? 0 : brickFree.stone * costScale * costFactorAt(d.level) * discount;
       return {
         ...copyDef(d),
         cost: scaleLine(grown, 1, niceRound),
-        buildSeconds: Math.round(first.buildSeconds * knobs.timeScale * timeGrowth ** n),
+        buildSeconds: Math.round(buildSecondsOf(type, d.level, defs.length, knobs) * knobs.timeScale),
         productionPerHour: scaleLine(first.productionPerHour, lh ? d.level : outputScale * productionFactor(knobs.productionGrowth, d.level)),
         storageCapacity: storage
           ? scaleLine({ wood: 1, stone: 1, food: 1, iron: 1 }, storage.capacity * productionFactor(storage.capacityGrowth, d.level))

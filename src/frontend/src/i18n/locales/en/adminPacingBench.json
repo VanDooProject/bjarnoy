@@ -8,6 +8,7 @@
     "output": "Output at level 1, per hour",
     "producerCost": "Producer cost",
     "longhouse": "Longhouse cost",
+    "buildTimes": "Build times",
     "storage": "Storage",
     "run": "Settling and run"
   },
@@ -48,7 +49,23 @@
     "greatStorehouseCapacityGrowth": "Great Storehouse capacity gain",
     "greatStorehouseCostGrowth": "Great Storehouse cost growth",
     "renownThreshold": "Renown for the 2nd settlement",
-    "horizonDays": "Simulated days"
+    "horizonDays": "Simulated days",
+    "lhKnee": "Longhouse: knee level",
+    "lhShape": "Longhouse: tail shape",
+    "lhTopHours": "Longhouse: top level, hours",
+    "prodKnee": "Producers: knee level",
+    "prodShape": "Producers: tail shape",
+    "topHerderLumber": "Herder, Lumberjack: top level, hours",
+    "topProducers": "Brickworks, Quarry, farms, Fishing Hut: top level, hours",
+    "topBogOre": "Bog-ore works: top level, hours",
+    "shKnee": "Storage House: knee level",
+    "shShape": "Storage House: tail shape",
+    "shTopHours": "Storage House: top level, hours",
+    "techShape": "Tech buildings: shape",
+    "techShapeHint": "0 is a straight line from the level-1 time to the top; above 0 bends like a log.",
+    "gsTopHours": "Great Storehouse: top level, hours",
+    "timeScale": "All build times, factor",
+    "timeScaleHint": "Multiplies every build time."
   },
   "pin": "Pin as reference",
   "reset": "Reset to live values",
@@ -97,7 +114,12 @@
     "days": "Days",
     "lhLevel": "Longhouse level",
     "perHour": "Per hour",
-    "reference": "{name} (reference)"
+    "reference": "{name} (reference)",
+    "timeTitle": "Build time per level",
+    "timeNote": "Hours at each level, one curve per group, from the build-time knobs.",
+    "timeLog": "Logarithmic scale",
+    "level": "Level",
+    "hours": "Hours"
   },
   "cost": {
     "title": "Longhouse wood cost per level",

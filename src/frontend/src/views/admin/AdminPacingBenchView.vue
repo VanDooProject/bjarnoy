@@ -20,6 +20,7 @@ import {
   type BenchProfileResult,
   type BenchResult,
 } from '../../lib/economy/pacingBench';
+import { BUILD_TIME_CURVE_GROUPS, buildMinutes } from '../../lib/economy/buildTimes';
 import { createBenchRunner } from '../../lib/economy/pacingBenchRunner';
 import { FEAST_COST_BASE, FEAST_COST_GROWTH, FEAST_HOURS, FEAST_RENOWN_BASE, FEAST_RENOWN_GROWTH } from '../../lib/economy/feasts';
 import { DEFAULT_JOIN_TIME, FOUNDING_STOCK, PROFILE_PRESETS, parseClock } from '../../lib/economy/pacingSim';
@@ -35,7 +36,7 @@ const live = computed(() => JSON.parse(JSON.stringify(catalogue.byType)) as type
 
 // --- knobs -----------------------------------------------------------------
 
-const STORE_KEY = 'bjarnoy-pacing-bench-v1';
+const STORE_KEY = 'bjarnoy-pacing-bench-v2';
 interface Reference {
   knobs: BenchKnobs;
   result: BenchResult;
@@ -57,7 +58,7 @@ interface Field {
   set: (k: BenchKnobs, v: number) => void;
 }
 interface Group {
-  id: 'producers' | 'output' | 'producerCost' | 'longhouse' | 'storage' | 'run';
+  id: 'producers' | 'output' | 'producerCost' | 'longhouse' | 'buildTimes' | 'storage' | 'run';
   fields: Field[];
 }
 
@@ -119,6 +120,25 @@ const GROUPS: Group[] = [
   {
     id: 'longhouse',
     fields: [direct('longhouseCostGrowth', 1.01, 2, 0.01), direct('longhouseBreakLevel', 1, 30, 1), direct('longhouseLateCostGrowth', 1.01, 2.5, 0.01)],
+  },
+  {
+    id: 'buildTimes',
+    fields: [
+      direct('lhKnee', 4, 29, 1),
+      direct('lhShape', -5, 10, 0.5),
+      direct('lhTopHours', 1, 100, 1),
+      direct('prodKnee', 4, 24, 1),
+      direct('prodShape', -5, 10, 0.5),
+      direct('topHerderLumber', 1, 100, 1),
+      direct('topProducers', 1, 100, 1),
+      direct('topBogOre', 1, 100, 1),
+      direct('shKnee', 4, 24, 1),
+      direct('shShape', -5, 10, 0.5),
+      direct('shTopHours', 1, 100, 1),
+      { ...direct('techShape', -5, 10, 0.5), hint: 'fields.techShapeHint' },
+      direct('gsTopHours', 1, 100, 1),
+      { ...direct('timeScale', 0.05, 10, 0.05), hint: 'fields.timeScaleHint' },
+    ],
   },
   {
     id: 'storage',
@@ -339,6 +359,20 @@ function chartSeries(pick: (r: BenchProfileResult) => number[]): EconomySeries[]
 const lhSeries = computed(() => chartSeries((r) => r.lh));
 const prodSeries = computed(() => chartSeries((r) => r.prod));
 
+// --- Build time per level ------------------------------------------------------
+
+const CURVE_COLOR = ['#5cb8ff', '#ff9f5c', '#7bd88f', '#c39bff', '#ff7a7a', '#f2d24b', '#4fd1c5', '#e879c0'];
+const logTimes = ref(false);
+/** One curve per group, in hours, from the knobs as typed (the same `buildMinutes` the what-if catalogue uses). */
+const timeSeries = computed<EconomySeries[]>(() => {
+  const k = runnable();
+  return BUILD_TIME_CURVE_GROUPS.map((g, i) => ({
+    label: g.label,
+    color: CURVE_COLOR[i % CURVE_COLOR.length],
+    points: Array.from({ length: g.max }, (_, n) => ({ x: n + 1, y: (buildMinutes(g.type, n + 1, g.max, k) * k.timeScale) / 60 })),
+  }));
+});
+
 // --- Longhouse wood cost -------------------------------------------------------
 
 const shortNumber = (v: number): string =>
@@ -495,6 +529,16 @@ const how = computed(() => {
           <h2>{{ $t('adminPacingBench.charts.prodTitle') }}</h2>
           <p class="note">{{ $t('adminPacingBench.charts.prodNote') }}</p>
           <EconomyChart :series="prodSeries" :markers="false" :x-title="$t('adminPacingBench.charts.days')" :y-title="$t('adminPacingBench.charts.perHour')" />
+        </section>
+
+        <section class="card">
+          <h2>{{ $t('adminPacingBench.charts.timeTitle') }}</h2>
+          <p class="note">{{ $t('adminPacingBench.charts.timeNote') }}</p>
+          <label class="toggle">
+            <input v-model="logTimes" type="checkbox" data-testid="bench-time-log" />
+            {{ $t('adminPacingBench.charts.timeLog') }}
+          </label>
+          <EconomyChart :series="timeSeries" integer-x :log-y="logTimes" :x-title="$t('adminPacingBench.charts.level')" :y-title="$t('adminPacingBench.charts.hours')" data-testid="bench-time-chart" />
         </section>
 
         <section class="card">
@@ -780,5 +824,12 @@ input.changed {
 .ref {
   color: var(--muted);
   white-space: nowrap;
+}
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 8px;
+  font-size: 0.9em;
 }
 </style>

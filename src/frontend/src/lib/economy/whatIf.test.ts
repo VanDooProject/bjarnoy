@@ -38,14 +38,30 @@ describe('applyWhatIf', () => {
   });
 
   it('a changed growth factor changes the curve from level 2 on, level 1 stays', () => {
-    const w = applyWhatIf(live, { ...defaultWhatIf(), costGrowth: 1.5, timeGrowth: 1.5, productionGrowth: 1.1 });
+    const w = applyWhatIf(live, { ...defaultWhatIf(), costGrowth: 1.5, productionGrowth: 1.1 });
     const [l1, l5] = [live.quarry[0], live.quarry[4]];
     expect(w.quarry[0].cost).toEqual(l1.cost);
     expect(w.quarry[4].cost.wood).toBe(niceRound(55 * 1.5 ** 4));
-    expect(w.quarry[4].buildSeconds).toBe(Math.round(l1.buildSeconds * 1.5 ** 4));
     // Increment-geometric: level 5 totals I1 · (1 + g + g² + g³ + g⁴).
     expect(w.quarry[4].productionPerHour.stone).toBeCloseTo(l1.productionPerHour.stone * (1 + 1.1 + 1.1 ** 2 + 1.1 ** 3 + 1.1 ** 4), 6);
     expect(w.quarry[4].cost.wood).toBeGreaterThan(l5.cost.wood);
+  });
+
+  it('the build-time knobs move the tail of their own group only', () => {
+    const w = applyWhatIf(live, { ...defaultWhatIf(), topProducers: 10, prodShape: 0 });
+    // Straight line from the knee (L6, 64 min) to the top (10 h at L25).
+    expect(w.quarry[9].buildSeconds).toBe(Math.round((64 + (600 - 64) * (4 / 19)) * 60));
+    expect(w.quarry[24].buildSeconds).toBe(10 * 3600);
+    expect(w.quarry[2].buildSeconds).toBe(live.quarry[2].buildSeconds);
+    expect(w.lumberjack[24].buildSeconds).toBe(live.lumberjack[24].buildSeconds);
+    expect(w.longhouse[29].buildSeconds).toBe(live.longhouse[29].buildSeconds);
+  });
+
+  it('the Great Storehouse top and the tech shape move the tech curves', () => {
+    const w = applyWhatIf(live, { ...defaultWhatIf(), gsTopHours: 20, techShape: 3 });
+    expect(w.greatstorehouse[9].buildSeconds).toBe(20 * 3600);
+    expect(w.barracks[9].buildSeconds).toBeGreaterThan(live.barracks[9].buildSeconds);
+    expect(w.barracks[0].buildSeconds).toBe(live.barracks[0].buildSeconds);
   });
 
   it('the Longhouse has its own growth factors and stays linear in production', () => {
