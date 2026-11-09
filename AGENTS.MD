@@ -84,6 +84,8 @@
   files too; a bare `vue-tsc --noEmit` does not), `npm run test:unit` for what you touched, and `npm run build`. Backend:
   `dotnet build Bjarnoy.slnx` and the test projects the change touches. A file-path argument to eslint is not the project
   lint (it ignores non-`.vue` files); use `npm run lint`
+- run `npm ci` in `src/frontend` before `vue-tsc`/lint on a fresh checkout, and stage explicit paths (`git add <files>`), never
+  `git add -A` over `src`: a type-check without installed deps can emit `.js` files next to the sources, and they get committed
 - **after every push**, check the PR's CI yourself (`get_check_runs` on the PR) — don't report "pushed" and stop, and don't wait
   for me to ask. Read the log of every failed job (`get_job_logs`), reproduce the failure locally, fix, push, check again
 - iterate until the `build` checks (frontend `build`, Docker `build`, `build-and-test`, lint) are green. Other jobs (e2e, aspire-e2e)
