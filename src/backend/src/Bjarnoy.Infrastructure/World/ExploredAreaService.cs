@@ -103,12 +103,11 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerId);
 
-        var radius = await _dbContext.Worlds
-            .Where(w => w.Id == worldId)
-            .Select(w => (int?)w.Radius)
-            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        var world = await _dbContext.Worlds
+            .AsNoTracking()
+            .FirstOrDefaultAsync(w => w.Id == worldId, cancellationToken).ConfigureAwait(false);
 
-        if (radius is null)
+        if (world is null)
         {
             return null;
         }
@@ -131,7 +130,9 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
                 && a.Settlement.WorldId == worldId && a.Settlement.OwnerId == ownerId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
+        // Row timestamps below are bookkeeping and stay wall time; army movement times are game time.
         var now = _timeProvider.GetUtcNow();
+        var gameNow = world.ToClock().ToGameTime(now);
         var sources = new List<FogVisionSource>();
         var discs = new List<ExploredDisc>();
         var ravensBySettlement = new Dictionary<Guid, int>();
@@ -178,7 +179,7 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             var home = new HexCoord(armyEntity.Settlement!.CentreQ, armyEntity.Settlement.CentreR);
             // The army's origin settlement's Ravens widen its walked-ground reveal too.
             var armyRadius = FogVisionRadii.ArmyVisionRadius(ravensBySettlement.GetValueOrDefault(armyEntity.SettlementId));
-            foreach (var hex in armyEntity.ToDomain().HexesReachedBy(home, now))
+            foreach (var hex in armyEntity.ToDomain().HexesReachedBy(home, gameNow))
             {
                 armyHexes.Add((hex, armyRadius));
             }
@@ -190,7 +191,7 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             ? await MergeAndSaveAsync(worldId, ownerId, discs, now, cancellationToken).ConfigureAwait(false)
             : new Dictionary<FogChunkCoord, ExploredChunkData>();
 
-        return new ExploredArea(worldId, ownerId, radius.Value, settlements, sources, discs, merged);
+        return new ExploredArea(worldId, ownerId, world.Radius, settlements, sources, discs, merged);
     }
 
     /// <summary>
