@@ -13,6 +13,26 @@ public sealed record ApiKeyFeatureResponse(string Id, bool WorldScoped, bool Adm
 /// <summary>An account a key may act as besides its owner.</summary>
 public sealed record ApiKeyAccountResponse(Guid UserId, string UserName, string Role);
 
+/// <summary>
+/// An account-less (anonymous) settlement a key may act as, by its jarl (<c>X-Act-As: jarl:&lt;Label&gt;</c>). The client-local
+/// owner id behind it is never returned. The settlement details and <c>Claimed</c> are filled by the admin key list only.
+/// </summary>
+/// <param name="Claimed">True once that player registered an account: the grant no longer works.</param>
+public sealed record ApiKeyAnonymousAccountResponse(
+    Guid Id, string Label, bool IsPrimary, string? SettlementName, string? WorldName, bool? Claimed);
+
+/// <summary>An anonymous identity on an approved request; <c>SettlementId</c> lets the approval form hand it back unchanged.</summary>
+public sealed record ApprovedAnonymousAccountResponse(Guid? SettlementId, string Label, bool IsPrimary);
+
+/// <summary>Display details of an anonymous identity, looked up by its owner id for the admin key list.</summary>
+public sealed record AnonymousAccountInfo(string? SettlementName, string? WorldName, bool Claimed);
+
+/// <summary>
+/// An anonymous identity in a create/edit/approve body: an existing grant by <c>Id</c> (kept as is), or a new one picked
+/// from a settlement by <c>SettlementId</c> (the backend reads the owner id off that settlement).
+/// </summary>
+public sealed record AnonymousAccountInput(Guid? Id, Guid? SettlementId, bool Primary = false);
+
 /// <summary>An API key as listed and as returned from create/update/self. Never contains the secret.</summary>
 /// <param name="KeyHint">The public half of the token, <c>bjk_&lt;keyId&gt;_…</c>.</param>
 public sealed record ApiKeyResponse(
@@ -36,12 +56,18 @@ public sealed record ApiKeyResponse(
     Guid? ReplacedByApiKeyId,
     DateTimeOffset? AutoRenewUntil,
     string? RequestUserCode = null,
-    IReadOnlyList<ApiKeyAccountResponse>? AdditionalAccounts = null)
+    IReadOnlyList<ApiKeyAccountResponse>? AdditionalAccounts = null,
+    bool OwnerCanAct = true,
+    IReadOnlyList<ApiKeyAnonymousAccountResponse>? AnonymousAccounts = null)
 {
     /// <param name="requestUserCode">
     /// The <c>XXXX-XXXX</c> code of the request this key was collected from; only the admin key list fills it in.
     /// </param>
-    public static ApiKeyResponse From(ApiKeyEntity key, DateTimeOffset now, string? requestUserCode = null)
+    public static ApiKeyResponse From(
+        ApiKeyEntity key,
+        DateTimeOffset now,
+        string? requestUserCode = null,
+        IReadOnlyDictionary<string, AnonymousAccountInfo>? anonymousInfo = null)
     {
         ArgumentNullException.ThrowIfNull(key);
 
@@ -68,7 +94,17 @@ public sealed record ApiKeyResponse(
             requestUserCode,
             [.. key.Accounts.Where(a => a.User is not null)
                 .OrderBy(a => a.User!.UserName, StringComparer.OrdinalIgnoreCase)
-                .Select(a => new ApiKeyAccountResponse(a.UserId, a.User!.UserName, a.User.Role.ToString().ToLowerInvariant()))]);
+                .Select(a => new ApiKeyAccountResponse(a.UserId, a.User!.UserName, a.User.Role.ToString().ToLowerInvariant()))],
+            key.OwnerCanAct,
+            [.. key.AnonymousAccounts
+                .OrderBy(a => a.Label, StringComparer.OrdinalIgnoreCase)
+                .Select(a =>
+                {
+                    AnonymousAccountInfo? info = null;
+                    anonymousInfo?.TryGetValue(a.OwnerId, out info);
+                    return new ApiKeyAnonymousAccountResponse(
+                        a.Id, a.Label, a.IsPrimary, info?.SettlementName, info?.WorldName, info?.Claimed);
+                })]);
     }
 }
 
@@ -90,7 +126,9 @@ public sealed record ApiKeySettingsRequest(
     DateTimeOffset ExpiresAt,
     int? RequestsPerMinute,
     DateTimeOffset? AutoRenewUntil = null,
-    IReadOnlyList<Guid>? AdditionalUserIds = null);
+    IReadOnlyList<Guid>? AdditionalUserIds = null,
+    IReadOnlyList<AnonymousAccountInput>? AnonymousAccounts = null,
+    bool? OwnerCanAct = null);
 
 /// <summary>A freshly created key: the one and only time the token is shown.</summary>
 public sealed record ApiKeyTokenResponse(string Token, ApiKeyResponse ApiKey);
@@ -144,7 +182,9 @@ public sealed record ApiKeyApprovalResponse(
     int RequestsPerMinute,
     int LifetimeMinutes,
     DateTimeOffset? AutoRenewUntil,
-    IReadOnlyList<ApiKeyAccountResponse> AdditionalAccounts);
+    IReadOnlyList<ApiKeyAccountResponse> AdditionalAccounts,
+    bool OwnerCanAct,
+    IReadOnlyList<ApprovedAnonymousAccountResponse> AnonymousAccounts);
 
 /// <summary>A key request as the admin list shows it. The requested settings are the agent's ask; <c>Approved</c> is the decision.</summary>
 public sealed record ApiKeyRequestResponse(
@@ -188,4 +228,6 @@ public sealed record ApproveApiKeyRequestRequest(
     int? LifetimeMinutes = null,
     int? RequestsPerMinute = null,
     int? AutoRenewMinutes = null,
-    IReadOnlyList<Guid>? AdditionalUserIds = null);
+    IReadOnlyList<Guid>? AdditionalUserIds = null,
+    IReadOnlyList<AnonymousAccountInput>? AnonymousAccounts = null,
+    bool? OwnerCanAct = null);

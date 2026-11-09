@@ -81,6 +81,7 @@ public static class AdminApiKeyEndpoints
 
     private static async Task<IResult> ListKeys(
         bool? includeInactive,
+        ApiKeyService keys,
         GameDbContext dbContext,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
@@ -90,7 +91,9 @@ public static class AdminApiKeyEndpoints
             .Include(k => k.OwnerUser)
             .Include(k => k.CreatedByUser)
             .Include(k => k.Accounts).ThenInclude(a => a.User)
+            .Include(k => k.AnonymousAccounts)
             .ToListAsync(cancellationToken);
+        var anonymousInfo = await keys.AnonymousInfoAsync(all, cancellationToken);
         var codes = (await dbContext.ApiKeyRequests.AsNoTracking()
                 .Where(r => r.ApiKeyId != null)
                 .Select(r => new { ApiKeyId = r.ApiKeyId!.Value, r.UserCode })
@@ -99,7 +102,7 @@ public static class AdminApiKeyEndpoints
         return Results.Ok(all
             .Where(k => includeInactive == true || k.GetStatus(now) == ApiKeyStatus.Active)
             .OrderByDescending(k => k.CreatedAt)
-            .Select(k => ApiKeyResponse.From(k, now, codes.GetValueOrDefault(k.Id)))
+            .Select(k => ApiKeyResponse.From(k, now, codes.GetValueOrDefault(k.Id), anonymousInfo))
             .ToList());
     }
 
@@ -115,8 +118,15 @@ public static class AdminApiKeyEndpoints
         ArgumentNullException.ThrowIfNull(body);
 
         var adminId = AdminId(user);
+        var (anonymous, anonymousErrors) = await keys.ResolveAnonymousAsync(body.AnonymousAccounts ?? [], [], cancellationToken);
+        if (anonymousErrors.Count > 0)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]> { ["anonymousAccounts"] = [.. anonymousErrors] });
+        }
+
         var settings = ToSettings(
-            body, body.OwnerUserId ?? adminId, options.Value.DefaultRequestsPerMinute, body.AutoRenewUntil, body.AdditionalUserIds ?? []);
+            body, body.OwnerUserId ?? adminId, options.Value.DefaultRequestsPerMinute, body.AutoRenewUntil,
+            body.AdditionalUserIds ?? [], anonymous, body.OwnerCanAct ?? true);
         var validation = await keys.ValidateAsync(settings, excludeKeyId: null, cancellationToken);
         if (!validation.IsValid)
         {
@@ -156,10 +166,28 @@ public static class AdminApiKeyEndpoints
         }
 
         // An omitted owner, quota or auto-renew window keeps the current one: the editor only sends what it shows.
+        List<AnonymousAccountGrant> anonymous;
+        if (body.AnonymousAccounts is null)
+        {
+            anonymous = [.. key.AnonymousAccounts.Select(ToGrant)];
+        }
+        else
+        {
+            var (resolved, anonymousErrors) = await keys.ResolveAnonymousAsync(body.AnonymousAccounts, key.AnonymousAccounts, cancellationToken);
+            if (anonymousErrors.Count > 0)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["anonymousAccounts"] = [.. anonymousErrors] });
+            }
+
+            anonymous = resolved;
+        }
+
         var settings = ToSettings(
             body, body.OwnerUserId ?? key.OwnerUserId, body.RequestsPerMinute ?? key.RequestsPerMinute,
             body.AutoRenewUntil ?? key.AutoRenewUntil,
-            body.AdditionalUserIds ?? [.. key.Accounts.Select(a => a.UserId)]);
+            body.AdditionalUserIds ?? [.. key.Accounts.Select(a => a.UserId)],
+            anonymous,
+            body.OwnerCanAct ?? key.OwnerCanAct);
         var validation = await keys.ValidateAsync(settings, key.Id, cancellationToken);
         if (!validation.IsValid)
         {
@@ -180,6 +208,28 @@ public static class AdminApiKeyEndpoints
         foreach (var id in wanted.Where(id => key.Accounts.All(a => a.UserId != id)))
         {
             key.Accounts.Add(new ApiKeyAccountEntity { ApiKeyId = key.Id, UserId = id });
+        }
+
+        key.OwnerCanAct = settings.OwnerCanAct;
+        key.AnonymousAccounts.RemoveAll(a => anonymous.All(g => g.OwnerId != a.OwnerId));
+        foreach (var grant in anonymous)
+        {
+            var row = key.AnonymousAccounts.FirstOrDefault(a => a.OwnerId == grant.OwnerId);
+            if (row is null)
+            {
+                key.AnonymousAccounts.Add(new ApiKeyAnonymousAccountEntity
+                {
+                    ApiKeyId = key.Id,
+                    OwnerId = grant.OwnerId,
+                    Label = grant.Label,
+                    IsPrimary = grant.IsPrimary,
+                    SourceSettlementId = grant.SourceSettlementId,
+                });
+            }
+            else
+            {
+                row.IsPrimary = grant.IsPrimary;
+            }
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -214,7 +264,8 @@ public static class AdminApiKeyEndpoints
             (old.ExpiresAt - old.CreatedAt).TotalMinutes, 1, options.Value.MaxLifetime.TotalMinutes));
         var settings = new ApiKeySettings(
             old.Name, old.Purpose, old.OwnerUserId, old.Features, old.AllWorlds, old.WorldIds,
-            now + lifetime, old.RequestsPerMinute, old.AutoRenewUntil, [.. old.Accounts.Select(a => a.UserId)]);
+            now + lifetime, old.RequestsPerMinute, old.AutoRenewUntil, [.. old.Accounts.Select(a => a.UserId)],
+            [.. old.AnonymousAccounts.Select(ToGrant)], old.OwnerCanAct);
         var validation = await keys.ValidateAsync(settings, old.Id, cancellationToken);
         if (!validation.IsValid)
         {
@@ -280,6 +331,7 @@ public static class AdminApiKeyEndpoints
         Guid requestId,
         ClaimsPrincipal user,
         ApiKeyRequestService requests,
+        ApiKeyService keys,
         HttpRequest httpRequest,
         CancellationToken cancellationToken)
     {
@@ -290,12 +342,25 @@ public static class AdminApiKeyEndpoints
         }
 
         body ??= new ApproveApiKeyRequestRequest();
+        IReadOnlyList<AnonymousAccountGrant>? anonymousOverride = null;
+        if (body.AnonymousAccounts is not null)
+        {
+            var (resolved, anonymousErrors) = await keys.ResolveAnonymousAsync(body.AnonymousAccounts, [], cancellationToken);
+            if (anonymousErrors.Count > 0)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["anonymousAccounts"] = [.. anonymousErrors] });
+            }
+
+            anonymousOverride = resolved;
+        }
+
         var result = await requests.ApproveAsync(
             requestId,
             AdminId(user),
             new ApprovalOverrides(
                 body.OwnerUserId, body.Features, body.AllWorlds, body.WorldIds,
-                body.LifetimeMinutes, body.RequestsPerMinute, body.AutoRenewMinutes, body.AdditionalUserIds),
+                body.LifetimeMinutes, body.RequestsPerMinute, body.AutoRenewMinutes, body.AdditionalUserIds,
+                anonymousOverride, body.OwnerCanAct),
             cancellationToken);
         return await ToDecisionResultAsync(result, requests, cancellationToken);
     }
@@ -329,12 +394,17 @@ public static class AdminApiKeyEndpoints
         }
     }
 
+    private static AnonymousAccountGrant ToGrant(ApiKeyAnonymousAccountEntity a) =>
+        new(a.OwnerId, a.Label, a.IsPrimary, a.SourceSettlementId);
+
     private static ApiKeySettings ToSettings(
         ApiKeySettingsRequest body,
         Guid ownerUserId,
         int requestsPerMinute,
         DateTimeOffset? autoRenewUntil,
-        IReadOnlyList<Guid> additionalUserIds) =>
+        IReadOnlyList<Guid> additionalUserIds,
+        IReadOnlyList<AnonymousAccountGrant> anonymousAccounts,
+        bool ownerCanAct) =>
         new(
             body.Name ?? string.Empty,
             body.Purpose,
@@ -345,5 +415,7 @@ public static class AdminApiKeyEndpoints
             body.ExpiresAt,
             body.RequestsPerMinute ?? requestsPerMinute,
             autoRenewUntil,
-            additionalUserIds);
+            additionalUserIds,
+            anonymousAccounts,
+            ownerCanAct);
 }

@@ -68,7 +68,9 @@ public sealed record ApprovalOverrides(
     int? LifetimeMinutes,
     int? RequestsPerMinute,
     int? AutoRenewMinutes,
-    IReadOnlyList<Guid>? AdditionalUserIds = null);
+    IReadOnlyList<Guid>? AdditionalUserIds = null,
+    IReadOnlyList<AnonymousAccountGrant>? AnonymousAccounts = null,
+    bool? OwnerCanAct = null);
 
 /// <summary>
 /// The device-flow style request lifecycle for API keys: an agent asks anonymously, an admin approves or denies with
@@ -239,6 +241,7 @@ public sealed class ApiKeyRequestService(
         var now = timeProvider.GetUtcNow();
         var key = await dbContext.ApiKeys.AsNoTracking()
             .Include(k => k.Accounts)
+            .Include(k => k.AnonymousAccounts)
             .FirstOrDefaultAsync(k => k.Id == apiKeyId, cancellationToken);
         if (key is null || key.GetStatus(now) != ApiKeyStatus.Active)
         {
@@ -304,6 +307,8 @@ public sealed class ApiKeyRequestService(
             RenewsApiKeyId = key.Id,
             OwnerUserId = key.OwnerUserId,
             ApprovedAdditionalUserIds = [.. key.Accounts.Select(a => a.UserId)],
+            ApprovedAnonymousAccounts = [.. key.AnonymousAccounts.Select(a => new AnonymousAccountGrant(a.OwnerId, a.Label, a.IsPrimary, a.SourceSettlementId))],
+            ApprovedOwnerCanAct = key.OwnerCanAct,
             AutoRenewUntil = key.AutoRenewUntil,
             RequesterIp = requesterIp,
             RequesterUserAgent = TrimUserAgent(userAgent),
@@ -388,7 +393,9 @@ public sealed class ApiKeyRequestService(
             expiresAt,
             request.ApprovedRequestsPerMinute ?? request.RequestsPerMinute,
             request.AutoRenewUntil,
-            request.ApprovedAdditionalUserIds);
+            request.ApprovedAdditionalUserIds,
+            request.ApprovedAnonymousAccounts,
+            request.ApprovedOwnerCanAct);
         var validation = await keyService.ValidateAsync(settings, request.RenewsApiKeyId, cancellationToken);
         if (!validation.IsValid)
         {
@@ -535,9 +542,16 @@ public sealed class ApiKeyRequestService(
             int minutes => now + TimeSpan.FromMinutes(minutes),
         };
 
+        // Anonymous identities: the admin's list; else a renewal keeps the key's own (kept on the request at filing).
+        var anonymous = overrides.AnonymousAccounts is not null
+            ? [.. overrides.AnonymousAccounts]
+            : request.Kind == ApiKeyRequestKind.Renewal ? [.. request.ApprovedAnonymousAccounts] : new List<AnonymousAccountGrant>();
+        var ownerCanAct = overrides.OwnerCanAct
+            ?? (request.Kind == ApiKeyRequestKind.Renewal ? request.ApprovedOwnerCanAct : true);
+
         var settings = new ApiKeySettings(
             request.Name, request.Purpose, ownerId.Value, features, allWorlds, worldIds,
-            now + TimeSpan.FromMinutes(Math.Max(lifetime, 0)), rpm, autoRenewUntil, additional);
+            now + TimeSpan.FromMinutes(Math.Max(lifetime, 0)), rpm, autoRenewUntil, additional, anonymous, ownerCanAct);
         var validation = await keyService.ValidateAsync(settings, request.RenewsApiKeyId, cancellationToken);
         var errors = new Dictionary<string, string[]>(validation.Errors);
         if (lifetime < 1)
@@ -560,6 +574,8 @@ public sealed class ApiKeyRequestService(
         request.DecidedByUserId = adminUserId;
         request.OwnerUserId = ownerId;
         request.ApprovedAdditionalUserIds = additional;
+        request.ApprovedAnonymousAccounts = anonymous;
+        request.ApprovedOwnerCanAct = ownerCanAct;
         request.ApprovedFeatures = features;
         request.ApprovedAllWorlds = allWorlds;
         request.ApprovedWorldIds = worldIds;
@@ -686,7 +702,9 @@ public sealed class ApiKeyRequestService(
                         [.. r.ApprovedAdditionalUserIds
                             .Where(users.ContainsKey)
                             .Select(id => new ApiKeyAccountResponse(
-                                id, users[id].UserName, users[id].Role.ToString().ToLowerInvariant()))])
+                                id, users[id].UserName, users[id].Role.ToString().ToLowerInvariant()))],
+                        r.ApprovedOwnerCanAct,
+                        [.. r.ApprovedAnonymousAccounts.Select(a => new ApprovedAnonymousAccountResponse(a.SourceSettlementId, a.Label, a.IsPrimary))])
                     : null)),
         ];
     }

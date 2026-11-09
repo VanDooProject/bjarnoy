@@ -1,3 +1,4 @@
+using Bjarnoy.Api.Contracts;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -20,7 +21,9 @@ public sealed record ApiKeySettings(
     DateTimeOffset ExpiresAt,
     int RequestsPerMinute,
     DateTimeOffset? AutoRenewUntil,
-    IReadOnlyList<Guid>? AdditionalUserIds = null);
+    IReadOnlyList<Guid>? AdditionalUserIds = null,
+    IReadOnlyList<AnonymousAccountGrant>? AnonymousAccounts = null,
+    bool OwnerCanAct = true);
 
 /// <summary>The outcome of <see cref="ApiKeyService.ValidateAsync"/>: field errors, empty when the settings are valid.</summary>
 public sealed record ApiKeyValidation(IReadOnlyDictionary<string, string[]> Errors)
@@ -139,7 +142,14 @@ public sealed class ApiKeyService(
             errors["ownerUserId"] = [$"This user already has {_options.MaxActiveKeysPerOwner} active API keys."];
         }
 
+        var anonymous = settings.AnonymousAccounts ?? [];
         var additional = settings.AdditionalUserIds ?? [];
+        var anonymousErrors = await ValidateAnonymousAsync(settings, anonymous, additional.Count, cancellationToken);
+        if (anonymousErrors.Count > 0)
+        {
+            errors["anonymousAccounts"] = [.. anonymousErrors];
+        }
+
         if (additional.Count > MaxAdditionalAccounts)
         {
             errors["additionalUserIds"] = [$"A key may act as at most {MaxAdditionalAccounts} further accounts."];
@@ -155,6 +165,146 @@ public sealed class ApiKeyService(
         }
 
         return new ApiKeyValidation(errors);
+    }
+
+    private async Task<List<string>> ValidateAnonymousAsync(
+        ApiKeySettings settings, IReadOnlyList<AnonymousAccountGrant> anonymous, int additionalCount, CancellationToken cancellationToken)
+    {
+        var errors = new List<string>();
+        if (anonymous.Count + additionalCount > MaxAdditionalAccounts)
+        {
+            errors.Add($"A key may act as at most {MaxAdditionalAccounts} further accounts in total.");
+        }
+
+        if (anonymous.Select(a => a.Label).Distinct(StringComparer.OrdinalIgnoreCase).Count() != anonymous.Count
+            || anonymous.Select(a => a.OwnerId).Distinct().Count() != anonymous.Count)
+        {
+            errors.Add("An anonymous account may be listed only once, and its jarl names must differ.");
+        }
+
+        if (anonymous.Count(a => a.IsPrimary) > 1)
+        {
+            errors.Add("Only one anonymous account can be the primary one.");
+        }
+
+        if (!settings.OwnerCanAct)
+        {
+            if (anonymous.Count == 0)
+            {
+                errors.Add("A key whose owner cannot act needs at least one anonymous account.");
+            }
+
+            if (settings.Features.Keys.Any(f => ApiKeyFeature.Find(f)?.Admin == true))
+            {
+                errors.Add("admin.* features need a key whose owner can act, and an anonymous account has no admin rights.");
+            }
+        }
+
+        var ownerIds = anonymous.Select(a => a.OwnerId).ToList();
+        if (ownerIds.Count > 0)
+        {
+            var anonymousNow = await dbContext.Settlements.AsNoTracking()
+                .Where(s => s.UserId == SystemUserIds.Abandoned && ownerIds.Contains(s.OwnerId))
+                .Select(s => s.OwnerId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+            foreach (var missing in anonymous.Where(a => !anonymousNow.Contains(a.OwnerId)))
+            {
+                errors.Add($"{missing.Label} is not an anonymous player any more.");
+            }
+        }
+
+        return errors;
+    }
+
+    /// <summary>
+    /// Turns the anonymous accounts of a body into stored grants: an <c>Id</c> keeps an existing grant of
+    /// <paramref name="existing"/>, a <c>SettlementId</c> picks a new identity from that settlement (its owner id, and its
+    /// jarl name as label, plus the settlement name when two would collide). Errors name what could not be resolved.
+    /// </summary>
+    public async Task<(List<AnonymousAccountGrant> Grants, List<string> Errors)> ResolveAnonymousAsync(
+        IReadOnlyList<AnonymousAccountInput> inputs,
+        IReadOnlyCollection<ApiKeyAnonymousAccountEntity> existing,
+        CancellationToken cancellationToken)
+    {
+        var grants = new List<AnonymousAccountGrant>();
+        var errors = new List<string>();
+        var settlementIds = inputs.Where(i => i.Id is null && i.SettlementId is not null).Select(i => i.SettlementId!.Value).ToList();
+        var settlements = settlementIds.Count == 0
+            ? []
+            : await dbContext.Settlements.AsNoTracking()
+                .Where(s => settlementIds.Contains(s.Id))
+                .ToDictionaryAsync(s => s.Id, cancellationToken);
+
+        foreach (var input in inputs)
+        {
+            if (input.Id is { } id)
+            {
+                var row = existing.FirstOrDefault(e => e.Id == id);
+                if (row is null)
+                {
+                    errors.Add($"Unknown anonymous account {id}.");
+                }
+                else
+                {
+                    grants.Add(new AnonymousAccountGrant(row.OwnerId, row.Label, input.Primary, row.SourceSettlementId));
+                }
+            }
+            else if (input.SettlementId is { } settlementId && settlements.TryGetValue(settlementId, out var settlement))
+            {
+                if (settlement.UserId != SystemUserIds.Abandoned)
+                {
+                    errors.Add($"{settlement.OwnerName} has an account; add the account instead.");
+                    continue;
+                }
+
+                grants.Add(new AnonymousAccountGrant(settlement.OwnerId, settlement.OwnerName, input.Primary, settlement.Id));
+            }
+            else
+            {
+                errors.Add("Each anonymous account needs the id of an existing grant or of a settlement.");
+            }
+        }
+
+        // Two jarls with the same nickname are told apart by their settlement name, so X-Act-As stays unambiguous.
+        var duplicated = grants.GroupBy(g => g.Label, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (duplicated.Count > 0)
+        {
+            var names = await dbContext.Settlements.AsNoTracking()
+                .Where(s => grants.Select(g => g.SourceSettlementId).Contains(s.Id))
+                .ToDictionaryAsync(s => s.Id, s => s.Name, cancellationToken);
+            grants = [.. grants.Select(g => duplicated.Contains(g.Label) && g.SourceSettlementId is { } sid && names.TryGetValue(sid, out var n)
+                ? g with { Label = $"{g.Label} ({n})" }
+                : g)];
+        }
+
+        return (grants, errors);
+    }
+
+    /// <summary>Settlement name, world and whether it was claimed since, per owner id, for the admin key list.</summary>
+    public async Task<Dictionary<string, AnonymousAccountInfo>> AnonymousInfoAsync(
+        IEnumerable<ApiKeyEntity> keys, CancellationToken cancellationToken)
+    {
+        var ownerIds = keys.SelectMany(k => k.AnonymousAccounts).Select(a => a.OwnerId).Distinct().ToList();
+        if (ownerIds.Count == 0)
+        {
+            return [];
+        }
+
+        var settlements = await dbContext.Settlements.AsNoTracking()
+            .Include(s => s.World)
+            .Where(s => ownerIds.Contains(s.OwnerId))
+            .OrderBy(s => s.Id)
+            .ToListAsync(cancellationToken);
+        return ownerIds.ToDictionary(
+            id => id,
+            id =>
+            {
+                var own = settlements.Where(s => s.OwnerId == id).ToList();
+                var anonymousOne = own.FirstOrDefault(s => s.UserId == SystemUserIds.Abandoned);
+                var shown = anonymousOne ?? own.FirstOrDefault();
+                return new AnonymousAccountInfo(shown?.Name, shown?.World?.Name, anonymousOne is null);
+            });
     }
 
     private async Task<List<string>> ValidateAdditionalAsync(
@@ -253,6 +403,14 @@ public sealed class ApiKeyService(
             AutoRenewUntil = settings.AutoRenewUntil,
             Purpose = string.IsNullOrWhiteSpace(settings.Purpose) ? null : settings.Purpose.Trim(),
             Accounts = [.. (settings.AdditionalUserIds ?? []).Distinct().Select(id => new ApiKeyAccountEntity { UserId = id })],
+            OwnerCanAct = settings.OwnerCanAct,
+            AnonymousAccounts = [.. (settings.AnonymousAccounts ?? []).Select(g => new ApiKeyAnonymousAccountEntity
+            {
+                OwnerId = g.OwnerId,
+                Label = g.Label,
+                IsPrimary = g.IsPrimary,
+                SourceSettlementId = g.SourceSettlementId,
+            })],
         };
         dbContext.ApiKeys.Add(key);
         return (key, token);
@@ -265,6 +423,7 @@ public sealed class ApiKeyService(
             .Include(k => k.OwnerUser)
             .Include(k => k.CreatedByUser)
             .Include(k => k.Accounts).ThenInclude(a => a.User)
+            .Include(k => k.AnonymousAccounts)
             .AsQueryable();
         if (!track)
         {

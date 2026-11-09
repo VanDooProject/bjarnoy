@@ -160,4 +160,152 @@ public sealed class ApiKeyAnonymousTests : ApiKeyTestBase
         var stored = await Harness.WithDbAsync(db => db.Settlements.SingleAsync(s => s.Id == founded.Id, Ct));
         Assert.Equal(ownerId, stored.OwnerId);
     }
+
+    // ---- admin API ----
+
+    private Task<HttpResponseMessage> PostKey(
+        HttpClient admin,
+        Guid ownerId,
+        Dictionary<string, ApiKeyAccess> features,
+        IReadOnlyList<AnonymousAccountInput>? anonymous,
+        bool? ownerCanAct = null) =>
+        admin.PostJsonAsync(
+            "/api/v1/admin/api-keys",
+            new ApiKeySettingsRequest(
+                ApiKeyHarness.Unique("key"), null, ownerId, features, true, null,
+                Factory.Time.GetUtcNow().AddHours(1), null, null, null, anonymous, ownerCanAct),
+            Ct);
+
+    [Fact]
+    public async Task An_admin_grants_an_anonymous_jarl_by_settlement_and_the_owner_id_never_leaves_the_backend()
+    {
+        var (admin, adminId, _) = await Harness.CreateAdminAsync();
+        var world = await Factory.CreateWorldAsync(ApiKeyHarness.Unique("w"), 21, 60, cancellationToken: Ct);
+        var (settlement, ownerId) = await Harness.FoundAnonymousSettlementAsync(world.Id, "Jarl-aae5");
+
+        var response = await PostKey(
+            admin, adminId, ApiKeyHarness.Features(("settlements", ApiKeyAccess.ReadWrite)),
+            [new AnonymousAccountInput(null, settlement.Id, true)]);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var raw = await response.Content.ReadAsStringAsync(Ct);
+        Assert.DoesNotContain(ownerId, raw);
+        var created = System.Text.Json.JsonSerializer.Deserialize<ApiKeyTokenResponse>(raw, SqliteApiFixture.StrictJson)!;
+        var account = Assert.Single(created.ApiKey.AnonymousAccounts!);
+        Assert.Equal("Jarl-aae5", account.Label);
+        Assert.True(account.IsPrimary);
+
+        using var client = Harness.KeyClient(created.Token);
+        ActAs(client, "jarl:Jarl-aae5");
+        Assert.NotEqual(HttpStatusCode.Forbidden, (await Build(client, settlement.Id)).StatusCode);
+
+        var listed = await (await admin.GetAsync("/api/v1/admin/api-keys", Ct)).ReadStrictAsync<List<ApiKeyResponse>>(Ct);
+        var listedAccount = Assert.Single(Assert.Single(listed, k => k.Id == created.ApiKey.Id).AnonymousAccounts!);
+        Assert.Equal(world.Name, listedAccount.WorldName);
+        Assert.False(listedAccount.Claimed);
+    }
+
+    [Fact]
+    public async Task Granting_validates_account_holders_owner_can_act_and_admin_features()
+    {
+        var (admin, adminId, _) = await Harness.CreateAdminAsync();
+        var (_, playerId, _) = await Harness.CreatePlayerAsync();
+        var world = await Factory.CreateWorldAsync(ApiKeyHarness.Unique("w"), 21, 60, cancellationToken: Ct);
+        var (anonymous, _) = await Harness.FoundAnonymousSettlementAsync(world.Id, "Jarl-aae5");
+        var claimedWorld = await Factory.CreateWorldAsync(ApiKeyHarness.Unique("c"), 22, 60, cancellationToken: Ct);
+        var (claimed, _) = await Harness.FoundAnonymousSettlementAsync(claimedWorld.Id, "Jarl-ccc3");
+        await Harness.WithDbAsync(async db =>
+        {
+            (await db.Settlements.SingleAsync(s => s.Id == claimed.Id, Ct)).UserId = playerId;
+            await db.SaveChangesAsync(Ct);
+            return 0;
+        });
+        var features = ApiKeyHarness.Features(("settlements", ApiKeyAccess.Read));
+
+        // A settlement that has an account is added as that account, not as an anonymous one.
+        Assert.Equal(HttpStatusCode.BadRequest, (await PostKey(admin, adminId, features, [new(null, claimed.Id)])).StatusCode);
+        // A sponsor-only key needs an anonymous account and cannot hold admin features.
+        Assert.Equal(HttpStatusCode.BadRequest, (await PostKey(admin, adminId, features, [], ownerCanAct: false)).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.BadRequest,
+            (await PostKey(admin, adminId, ApiKeyHarness.Features(("admin.users", ApiKeyAccess.Read)), [new(null, anonymous.Id)], ownerCanAct: false)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await PostKey(admin, adminId, features, [new(null, anonymous.Id)], ownerCanAct: false)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Two_jarls_with_the_same_nickname_get_distinct_labels_from_their_settlement_names()
+    {
+        var (admin, adminId, _) = await Harness.CreateAdminAsync();
+        var world = await Factory.CreateWorldAsync(ApiKeyHarness.Unique("w"), 21, 60, cancellationToken: Ct);
+        var other = await Factory.CreateWorldAsync(ApiKeyHarness.Unique("o"), 22, 60, cancellationToken: Ct);
+        var (a, _) = await Harness.FoundAnonymousSettlementAsync(world.Id, "Jarl-aae5");
+        var (b, _) = await Harness.FoundAnonymousSettlementAsync(other.Id, "Jarl-aae5");
+
+        var response = await PostKey(
+            admin, adminId, ApiKeyHarness.Features(("settlements", ApiKeyAccess.Read)),
+            [new(null, a.Id), new(null, b.Id)]);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var labels = (await response.ReadStrictAsync<ApiKeyTokenResponse>(Ct)).ApiKey.AnonymousAccounts!.Select(x => x.Label).ToList();
+        Assert.Equal(2, labels.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.All(labels, l => Assert.StartsWith("Jarl-aae5 (", l));
+    }
+
+    [Fact]
+    public async Task Editing_keeps_replaces_or_clears_anonymous_accounts_and_recreate_and_renewal_carry_them()
+    {
+        var (admin, adminId, _) = await Harness.CreateAdminAsync();
+        var world = await Factory.CreateWorldAsync(ApiKeyHarness.Unique("w"), 21, 60, cancellationToken: Ct);
+        var other = await Factory.CreateWorldAsync(ApiKeyHarness.Unique("o"), 22, 60, cancellationToken: Ct);
+        var (a, _) = await Harness.FoundAnonymousSettlementAsync(world.Id, "Jarl-aaaa");
+        var (b, _) = await Harness.FoundAnonymousSettlementAsync(other.Id, "Jarl-bbbb");
+        var features = ApiKeyHarness.Features(("settlements", ApiKeyAccess.Read));
+        var created = await (await PostKey(admin, adminId, features, [new(null, a.Id)])).ReadStrictAsync<ApiKeyTokenResponse>(Ct);
+
+        async Task<ApiKeyResponse> Edit(IReadOnlyList<AnonymousAccountInput>? anonymous)
+        {
+            var response = await admin.PutAsJsonAsync(
+                $"/api/v1/admin/api-keys/{created.ApiKey.Id}",
+                new ApiKeySettingsRequest(
+                    "k", null, null, features, true, null, Factory.Time.GetUtcNow().AddHours(1),
+                    null, null, null, anonymous, null),
+                SqliteApiFixture.StrictJson,
+                Ct);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            return await response.ReadStrictAsync<ApiKeyResponse>(Ct);
+        }
+
+        Assert.Equal(["Jarl-aaaa"], (await Edit(null)).AnonymousAccounts!.Select(x => x.Label));
+        Assert.Equal(["Jarl-bbbb"], (await Edit([new(null, b.Id)])).AnonymousAccounts!.Select(x => x.Label));
+        Assert.Empty((await Edit([])).AnonymousAccounts!);
+        Assert.Equal(["Jarl-bbbb"], (await Edit([new(null, b.Id)])).AnonymousAccounts!.Select(x => x.Label));
+
+        var recreated = await (await admin.PostAsync($"/api/v1/admin/api-keys/{created.ApiKey.Id}/recreate", null, Ct))
+            .ReadStrictAsync<ApiKeyTokenResponse>(Ct);
+        Assert.Equal(["Jarl-bbbb"], recreated.ApiKey.AnonymousAccounts!.Select(x => x.Label));
+    }
+
+    [Fact]
+    public async Task A_renewal_keeps_the_anonymous_accounts_of_the_key_it_replaces()
+    {
+        var (admin, adminId, _) = await Harness.CreateAdminAsync();
+        var world = await Factory.CreateWorldAsync(ApiKeyHarness.Unique("w"), 21, 60, cancellationToken: Ct);
+        var (a, _) = await Harness.FoundAnonymousSettlementAsync(world.Id, "Jarl-aaaa");
+        var response = await admin.PostJsonAsync(
+            "/api/v1/admin/api-keys",
+            new ApiKeySettingsRequest(
+                "k", null, adminId, ApiKeyHarness.Features(("settlements", ApiKeyAccess.Read)), true, null,
+                Factory.Time.GetUtcNow().AddHours(1), null, Factory.Time.GetUtcNow().AddDays(1), null, [new(null, a.Id)], null),
+            Ct);
+        var created = await response.ReadStrictAsync<ApiKeyTokenResponse>(Ct);
+        using var keyClient = Harness.KeyClient(created.Token);
+
+        var renewal = await keyClient.PostJsonAsync("/api/v1/api-key-requests/renewal", new RenewApiKeyRequest(null, null, null), Ct);
+        var requested = await renewal.ReadStrictAsync<ApiKeyRequestCreatedResponse>(Ct);
+        using var anon = Factory.CreateClient();
+        var collected = await anon.PostJsonAsync(
+            $"/api/v1/api-key-requests/{requested.Id}/token", new ApiKeyTokenPollRequest(requested.PollSecret), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, collected.StatusCode);
+        Assert.Equal(["Jarl-aaaa"], (await collected.ReadStrictAsync<ApiKeyTokenResponse>(Ct)).ApiKey.AnonymousAccounts!.Select(x => x.Label));
+    }
 }
