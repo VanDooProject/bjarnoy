@@ -1188,6 +1188,10 @@ public sealed record Settlement
     /// (the fishing hut) cares; <paramref name="terrain"/> alone can't say,
     /// since it reports plain <see cref="Terrain.Sea"/> either way.
     /// </param>
+    /// <param name="isInlandLakeShore">
+    /// Whether <paramref name="coord"/> is an inland-lake hex with a land neighbour (<see cref="World.TerrainSampler.IsInlandLakeShore"/>).
+    /// Only a <see cref="BuildingDefinition.AlsoOnInlandLakeShore"/> building (the fishing hut) cares.
+    /// </param>
     /// <param name="maxWaitingOrders">
     /// How many orders may sit in the waiting queue at once — 0 for
     /// non-premium/anonymous play, <see cref="MaxWaitingOrders"/> for premium
@@ -1305,7 +1309,8 @@ public sealed record Settlement
         bool onWastedIsland = false,
         World.IEndgameSiteIndex? endgameSites = null,
         ConnectedRealm? realm = null,
-        bool onRiverTile = false)
+        bool onRiverTile = false,
+        bool isInlandLakeShore = false)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
         var connected = realm ?? ConnectedRealm.Resolve([AsRealmSettlement()]);
@@ -1378,7 +1383,7 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.NewPlacementDisabled);
         }
 
-        if (!definition.AllowsHex(terrain, isCoastalWater, bogKindAt))
+        if (!definition.AllowsHex(terrain, isCoastalWater, bogKindAt, isInlandLakeShore))
         {
             return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
         }
@@ -1951,7 +1956,8 @@ public sealed record Settlement
         World.IGiantIndex? giants = null,
         World.BogTileKind? bogKindAt = null,
         Palisades.PalisadeLayout? palisades = null,
-        ConnectedRealm? realm = null)
+        ConnectedRealm? realm = null,
+        bool isInlandLakeShore = false)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
         if (giantIndex.TryGetGiant(coord, out _))
@@ -1984,7 +1990,7 @@ public sealed record Settlement
             return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.LonghouseIsFixed);
         }
 
-        if (!definition.AllowsHex(terrain, isCoastalWater, bogKindAt))
+        if (!definition.AllowsHex(terrain, isCoastalWater, bogKindAt, isInlandLakeShore))
         {
             return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.TerrainNotAllowed);
         }

@@ -901,7 +901,8 @@ public sealed class SettlementService(
         var result = session.View(settlementId).PlaceBuilding(
             coord, type, level, sampler.TerrainAt(coord), sampler.IsCoastalWater(coord),
             session.Now, session.SpeedFactor, session.GuestStacksOf(settlementId), sampler.TerrainAt, placeGiants, bogKind,
-            realm: session.Store.Realm);
+            realm: session.Store.Realm,
+            isInlandLakeShore: sampler.IsInlandLakeShore(coord));
 
         if (!result.Accepted)
         {
@@ -1107,7 +1108,8 @@ public sealed class SettlementService(
             isWideRiverAt: bridgeSite.IsWide,
             onWastedIsland: bridgeSite.OnWastedIsland,
             realm: session.Store.Realm,
-            onRiverTile: onRiverTile);
+            onRiverTile: onRiverTile,
+            isInlandLakeShore: sampler.IsInlandLakeShore(coord));
 
         if (!decision.Accepted)
         {

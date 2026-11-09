@@ -524,6 +524,21 @@ public class BogGenerationTests
     }
 
     [Fact]
+    public void An_inland_lake_is_water_that_is_not_coastal_water_but_its_shore_is_an_inland_lake_shore()
+    {
+        var lake = new HexCoord(5000, 5000);
+        var bank = lake.Neighbours()[0];
+        var sampler = new TerrainSampler(TestWorlds.Options(1)).WithBogOverlay(
+            new Dictionary<HexCoord, Terrain> { [lake] = Terrain.InlandLake, [bank] = Terrain.Grass });
+
+        Assert.Equal(Terrain.InlandLake, sampler.TerrainAt(lake));
+        Assert.False(sampler.IsCoastalWater(lake));
+        Assert.True(sampler.IsInlandLakeShore(lake));
+        // A land hex is never an inland-lake shore.
+        Assert.False(sampler.IsInlandLakeShore(bank));
+    }
+
+    [Fact]
     public void Bog_costs_twice_grass_and_a_lake_is_impassable_to_armies_and_ships()
     {
         Assert.Equal(2.0, HexPathfinder.LandTerrainCostByName["bog"]);

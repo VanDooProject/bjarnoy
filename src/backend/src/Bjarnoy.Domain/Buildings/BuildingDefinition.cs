@@ -94,6 +94,12 @@ public sealed record BuildingDefinition
     public bool AlsoOnCoastalWater { get; init; }
 
     /// <summary>
+    /// Alongside <see cref="RequiresCoastalWater"/>: this building may also stand on an inland-lake hex (<see cref="Terrain.InlandLake"/>)
+    /// that has a land neighbour (<see cref="World.TerrainSampler.IsInlandLakeShore"/>). The Fishing Hut.
+    /// </summary>
+    public bool AlsoOnInlandLakeShore { get; init; }
+
+    /// <summary>
     /// Alongside <see cref="AllowedTerrain"/>: bog tile kinds (<see cref="World.BogTileKind"/>) this building may also stand on. The
     /// palisade's plain moss (<see cref="World.BogTileKind.Bog"/>; never a shore, mouth, creek or lake). <see langword="null"/> means no bog.
     /// </summary>
@@ -195,15 +201,16 @@ public sealed record BuildingDefinition
 
     /// <summary>
     /// Whether this building may stand on one hex, from everything that can decide it: the terrain, whether it is coastal water,
-    /// and the bog kind of the hex (<see langword="null"/> when it is not a bog tile, or the caller cannot say). River shape
+    /// whether it is an inland-lake shore, and the bog kind of the hex (<see langword="null"/> when it is not a bog tile, or the caller cannot say). River shape
     /// rules are separate (<see cref="RequiresRiverShape"/>).
     /// </summary>
-    public bool AllowsHex(Terrain terrain, bool isCoastalWater, World.BogTileKind? bogKind)
+    public bool AllowsHex(Terrain terrain, bool isCoastalWater, World.BogTileKind? bogKind, bool isInlandLakeShore = false)
     {
         bool terrainOk;
         if (RequiresCoastalWater)
         {
             terrainOk = isCoastalWater
+                || (AlsoOnInlandLakeShore && isInlandLakeShore && terrain == Terrain.InlandLake)
                 || (terrain == Terrain.Bog && bogKind is { } shore && LakeShoreKinds?.Contains(shore) == true);
         }
         else
