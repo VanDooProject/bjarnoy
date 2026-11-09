@@ -908,7 +908,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             [new BuildingPrerequisiteResponse("smithy", 5)],
             levelOne.Single(d => d.Type == "shrineofthor").Prerequisites);
         Assert.Equal(
-            [new BuildingPrerequisiteResponse("storagehouse", 15)],
+            [new BuildingPrerequisiteResponse("storagehouse", 25)],
             levelOne.Single(d => d.Type == "greatstorehouse").Prerequisites);
 
         // Prerequisites gate placement, so they sit on level 1 only — the
