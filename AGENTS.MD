@@ -133,6 +133,10 @@
   independent PR for just that fix: branch off latest `main` (not off the
   PR branch that surfaced it), fix + test it there, open its own PR, drive
   it to green, then squash-merge it via GitHub
+- exception to "CI green before squash-merge": a PR may be squash-merged with a red job when the only failure is **one single
+  test** that is a known flake or pre-existing failure on `main` AND an open session or PR is already working on that fix
+  (confirmed via the dedupe check, say which one). Everything else is green. Two or more failing tests, or any failure the
+  PR's diff could have caused, means wait for the fix. No re-running the job to get there
 - afterwards, update the original PR by merging `main` back into its branch
   so it picks up the fix (see "squash always means GitHub's squash-merge"
   above for how the merge lands on `main`)
