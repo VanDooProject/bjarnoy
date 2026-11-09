@@ -1062,7 +1062,7 @@ public sealed class SettlementService(
         var maxWaitingOrders = (session.Anchor.Owner?.IsPremium ?? false) ? Settlement.MaxWaitingOrders : 0;
 
         var terrain = sampler.TerrainAt(coord);
-        var riverShapeAt = await RiverShapeAtAsync(booking.WorldId, coord, cancellationToken)
+        var (riverShapeAt, onRiverTile) = await RiverSiteAsync(booking.WorldId, coord, cancellationToken)
             .ConfigureAwait(false);
         // A bridge is the one building that stands on a wide river: it needs the raw tile (a stream's shape too, so PlanBuild can name
         // the stream), whether the tile is wide, and whether its island is a wasted one.
@@ -1106,7 +1106,8 @@ public sealed class SettlementService(
                 : null,
             isWideRiverAt: bridgeSite.IsWide,
             onWastedIsland: bridgeSite.OnWastedIsland,
-            realm: session.Store.Realm);
+            realm: session.Store.Realm,
+            onRiverTile: onRiverTile);
 
         if (!decision.Accepted)
         {
@@ -1124,6 +1125,57 @@ public sealed class SettlementService(
         _logger.LogInformation(
             "Settlement {Id} queued {Type} level {Level} at {Coord} (booked on {BookingId}), completing {CompletesAt}.",
             settlementId, type, decision.Order!.TargetLevel, coord, bookingId, decision.Order.CompletesAt);
+
+        return new BuildResult(BuildRejection.None, decision.Order);
+    }
+
+    /// <summary>
+    /// Queues a raze of one level of the building on <paramref name="coord"/> (<c>docs/design/construction-slots.md</c>,
+    /// "Razing"): free, takes construction slots and goes through the queue like a build.
+    /// </summary>
+    public async Task<BuildResult> RazeBuildingLevelAsync(
+        Guid settlementId,
+        HexCoord coord,
+        CancellationToken cancellationToken = default)
+    {
+        // Settled first, like QueueBuildAsync: a build that finished a minute ago must free its slot and count for the level
+        // the raze takes off.
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        if (session is null)
+        {
+            return new BuildResult(BuildRejection.UnknownBuildingLevel);
+        }
+
+        if (!session.Clock.AllowsCommands)
+        {
+            return new BuildResult(BuildRejection.None, null, WorldPaused: true);
+        }
+
+        var now = session.Now;
+
+        // Booked on the linked-realm member that holds the building, so the raze runs on the member whose hex it is.
+        var bookingId = session.Store.BookingMemberFor(settlementId, coord);
+        var booked = session.View(bookingId);
+
+        // Same premium waiting-room gate as a build.
+        var maxWaitingOrders = (session.Anchor.Owner?.IsPremium ?? false) ? Settlement.MaxWaitingOrders : 0;
+
+        var decision = booked.PlanRaze(
+            coord, now, Guid.CreateVersion7(), session.SpeedFactor, maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex);
+
+        if (!decision.Accepted)
+        {
+            await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
+            return new BuildResult(decision.Rejection);
+        }
+
+        session.Apply(bookingId, booked.Enqueue(decision.Order!, now));
+        session.WriteBack();
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Settlement {Id} queued a raze of {Type} level {Level} at {Coord} (booked on {BookingId}), completing {CompletesAt}.",
+            settlementId, decision.Order!.Type, decision.Order.LevelInWork, coord, bookingId, decision.Order.CompletesAt);
 
         return new BuildResult(BuildRejection.None, decision.Order);
     }
@@ -1468,15 +1520,15 @@ public sealed class SettlementService(
         (await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false)).TerrainAt;
 
     /// <summary>
-    /// The shape of the river tile standing on <paramref name="coord"/>
-    /// itself, or <see langword="null"/> if there is none there — the
-    /// Sawmill's buildability rule (see
-    /// <see cref="BuildingDefinition.RequiresRiverShape"/>: it's built
-    /// directly on a river tile). Rivers are generated once per island and
-    /// persisted (<see cref="IslandEntity.RiverTiles"/>), not derivable from
-    /// the seed the way plain terrain is, so this needs a query.
+    /// What the river on <paramref name="coord"/> itself means for a build there: the shape of the river tile when it is a full-width
+    /// river (<see langword="null"/> otherwise: the Sawmill's buildability rule, see
+    /// <see cref="BuildingDefinition.RequiresRiverShape"/>: it's built directly on a river tile, and only a river-width tile has the art),
+    /// and whether any river tile of any width stands there (<see cref="Settlement.PlanBuild"/>'s <c>onRiverTile</c>: a stream or a
+    /// widening takes no building at all). Rivers are generated once per island and persisted (<see cref="IslandEntity.RiverTiles"/>), not
+    /// derivable from the seed the way plain terrain is, so this needs a query.
     /// </summary>
-    private async Task<RiverTileShape?> RiverShapeAtAsync(Guid worldId, HexCoord coord, CancellationToken cancellationToken)
+    private async Task<(RiverTileShape? BuildableShape, bool OnRiverTile)> RiverSiteAsync(
+        Guid worldId, HexCoord coord, CancellationToken cancellationToken)
     {
         var riverTileLists = await _dbContext.Islands
             .Where(i => i.WorldId == worldId)
@@ -1488,13 +1540,11 @@ public sealed class SettlementService(
         {
             if (tile.Q == coord.Q && tile.R == coord.R)
             {
-                // Stream and widening tiles are not buildable river: the Sawmill/Crop
-                // Mill art is river width, so a stream hex reads as "no river here".
-                return tile.Width == (int)RiverWidth.River ? (RiverTileShape)tile.Shape : null;
+                return (tile.Width == (int)RiverWidth.River ? (RiverTileShape)tile.Shape : null, true);
             }
         }
 
-        return null;
+        return (null, false);
     }
 
     /// <summary>
@@ -1567,7 +1617,7 @@ public sealed class SettlementService(
     /// <summary>
     /// Every giant across every island of <paramref name="worldId"/> (the
     /// territory rule), built into one lookup — mirrors
-    /// <see cref="RiverShapeAtAsync"/>'s own whole-world scan, and
+    /// <see cref="RiverSiteAsync"/>'s own whole-world scan, and
     /// <c>ArmyService.LoadGiantIndexAsync</c> for the same reason.
     /// </summary>
     public Task<IGiantIndex> LoadGiantIndexAsync(Guid worldId, CancellationToken cancellationToken = default) =>

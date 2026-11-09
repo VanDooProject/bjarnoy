@@ -103,12 +103,11 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerId);
 
-        var radius = await _dbContext.Worlds
-            .Where(w => w.Id == worldId)
-            .Select(w => (int?)w.Radius)
-            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        var world = await _dbContext.Worlds
+            .AsNoTracking()
+            .FirstOrDefaultAsync(w => w.Id == worldId, cancellationToken).ConfigureAwait(false);
 
-        if (radius is null)
+        if (world is null)
         {
             return null;
         }
@@ -131,7 +130,9 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
                 && a.Settlement.WorldId == worldId && a.Settlement.OwnerId == ownerId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
+        // Row timestamps below are bookkeeping and stay wall time; army movement times are game time.
         var now = _timeProvider.GetUtcNow();
+        var gameNow = world.ToClock().ToGameTime(now);
         var sources = new List<FogVisionSource>();
         var discs = new List<ExploredDisc>();
         var ravensBySettlement = new Dictionary<Guid, int>();
@@ -169,20 +170,28 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             }
         }
 
+        // Every hex an army has crossed on its active leg counts, not only the one it stands on: a poll that comes
+        // late (server restart, closed browser) must not leave gaps in the trail. Hexes are deduped per radius, so
+        // overlapping armies of one realm cost one disc per hex.
+        var armyHexes = new HashSet<(HexCoord Hex, int Radius)>();
         foreach (var armyEntity in travellingArmies)
         {
             var home = new HexCoord(armyEntity.Settlement!.CentreQ, armyEntity.Settlement.CentreR);
-            var position = armyEntity.ToDomain().PositionAt(home, now);
             // The army's origin settlement's Ravens widen its walked-ground reveal too.
-            var armyRavens = ravensBySettlement.GetValueOrDefault(armyEntity.SettlementId);
-            discs.Add(new ExploredDisc(position, FogVisionRadii.ArmyVisionRadius(armyRavens)));
+            var armyRadius = FogVisionRadii.ArmyVisionRadius(ravensBySettlement.GetValueOrDefault(armyEntity.SettlementId));
+            foreach (var hex in armyEntity.ToDomain().HexesReachedBy(home, gameNow))
+            {
+                armyHexes.Add((hex, armyRadius));
+            }
         }
+
+        discs.AddRange(armyHexes.Select(h => new ExploredDisc(h.Hex, h.Radius)));
 
         var merged = persist
             ? await MergeAndSaveAsync(worldId, ownerId, discs, now, cancellationToken).ConfigureAwait(false)
             : new Dictionary<FogChunkCoord, ExploredChunkData>();
 
-        return new ExploredArea(worldId, ownerId, radius.Value, settlements, sources, discs, merged);
+        return new ExploredArea(worldId, ownerId, world.Radius, settlements, sources, discs, merged);
     }
 
     /// <summary>
@@ -330,20 +339,121 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
     }
 
     /// <summary>
-    /// ORs the discs' hexes into the stored chunks and saves what grew.
+    /// ORs <paramref name="discs"/> into the owner's stored chunks and saves what grew (see <see cref="StageDiscsAsync"/>).
     /// Returns the post-merge state of every touched chunk.
     /// </summary>
+    public Task<Dictionary<FogChunkCoord, ExploredChunkData>> MergeDiscsAsync(
+        Guid worldId, string ownerId, IReadOnlyList<ExploredDisc> discs, CancellationToken cancellationToken = default)
+        => MergeAndSaveAsync(worldId, ownerId, discs, _timeProvider.GetUtcNow(), cancellationToken);
+
+    /// <summary>
+    /// Like <see cref="MergeDiscsAsync"/> but only tracks the grown or new chunk rows on the context — the caller's own
+    /// <c>SaveChanges</c> (inside its unit of work) persists them together with its other changes. A concurrent first insert
+    /// of the same chunk then surfaces as a unique violation that <see cref="ConcurrentWriteExecutor"/> retries.
+    /// </summary>
+    public async Task<Dictionary<FogChunkCoord, ExploredChunkData>> StageDiscsAsync(
+        Guid worldId, string ownerId, IReadOnlyList<ExploredDisc> discs, CancellationToken cancellationToken = default)
+        => (await StageAsync(worldId, ownerId, discs, _timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false)).Merged;
+
+    /// <summary>
+    /// Stages the ground every given army walked on the legs it finished (<see cref="ArmyEntity.WalkedLegs"/>, filled by
+    /// <see cref="ArmyEntity.ApplyDomain"/> and <see cref="ArmyEntity.RecordWalkedToEnd"/>) as explored, at the army vision
+    /// radius incl. its origin settlement's Ravens, and clears the lists. Call it right before the save that persists those armies.
+    /// </summary>
+    public async Task StageWalkedLegsAsync(IEnumerable<ArmyEntity> armies, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(armies);
+
+        var walking = armies.Where(a => a.WalkedLegs.Count > 0).ToList();
+        if (walking.Count == 0)
+        {
+            return;
+        }
+
+        var settlementIds = walking.Select(a => a.SettlementId).Distinct().ToList();
+        var settlements = await _dbContext.Settlements
+            .AsNoTracking()
+            .Include(s => s.Buildings)
+            .Where(s => settlementIds.Contains(s.Id))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var byOwner = new Dictionary<(Guid WorldId, string OwnerId), HashSet<(HexCoord Hex, int Radius)>>();
+        foreach (var army in walking)
+        {
+            var settlement = settlements.FirstOrDefault(s => s.Id == army.SettlementId);
+            if (settlement is not null)
+            {
+                var radius = FogVisionRadii.ArmyVisionRadius(settlement.ToDomain().VisionBonusRings);
+                var key = (settlement.WorldId, settlement.OwnerId);
+                if (!byOwner.TryGetValue(key, out var hexes))
+                {
+                    byOwner[key] = hexes = [];
+                }
+
+                foreach (var hex in army.WalkedLegs.SelectMany(l => l.Hexes))
+                {
+                    hexes.Add((hex, radius));
+                }
+            }
+
+            army.WalkedLegs.Clear();
+        }
+
+        foreach (var ((worldId, ownerId), hexes) in byOwner)
+        {
+            await StageDiscsAsync(worldId, ownerId, [.. hexes.Select(h => new ExploredDisc(h.Hex, h.Radius))], cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
     private async Task<Dictionary<FogChunkCoord, ExploredChunkData>> MergeAndSaveAsync(
         Guid worldId,
         string ownerId,
-        List<ExploredDisc> discs,
+        IReadOnlyList<ExploredDisc> discs,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var (merged, inserting) = await StageAsync(worldId, ownerId, discs, now, cancellationToken).ConfigureAwait(false);
+
+        if (!_dbContext.ChangeTracker.HasChanges())
+        {
+            return merged;
+        }
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (inserting && !_dbContext.UnitOfWorkActive
+            && (ConcurrentWriteExecutor.IsExploredChunkInsertRace(ex) || !ConcurrentWriteExecutor.IsRetryable(ex)))
+        {
+            // Two concurrent fog requests for a new player both saw no row
+            // for a chunk and both inserted; the primary key let one win.
+            // The loser's bits are the same ground (the store only ever
+            // grows and both were computed from the same inputs), so
+            // dropping this save loses nothing — the next poll merges into
+            // the winner's row. `merged` above is what this request reports.
+            foreach (var entry in _dbContext.ChangeTracker.Entries<PlayerExploredChunkEntity>().ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+        }
+
+        return merged;
+    }
+
+    /// <summary>ORs the discs' hexes into the tracked chunk rows (adding rows where there are none); nothing is saved.</summary>
+    private async Task<(Dictionary<FogChunkCoord, ExploredChunkData> Merged, bool Inserting)> StageAsync(
+        Guid worldId,
+        string ownerId,
+        IReadOnlyList<ExploredDisc> discs,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         var merged = new Dictionary<FogChunkCoord, ExploredChunkData>();
         if (discs.Count == 0)
         {
-            return merged;
+            return (merged, false);
         }
 
         var wanted = PersistedExploredBitset.GroupByChunk(
@@ -381,30 +491,7 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             row.UpdatedAt = now;
         }
 
-        if (!_dbContext.ChangeTracker.HasChanges())
-        {
-            return merged;
-        }
-
-        try
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (DbUpdateException ex) when (inserting && !ConcurrentWriteExecutor.IsRetryable(ex))
-        {
-            // Two concurrent fog requests for a new player both saw no row
-            // for a chunk and both inserted; the primary key let one win.
-            // The loser's bits are the same ground (the store only ever
-            // grows and both were computed from the same inputs), so
-            // dropping this save loses nothing — the next poll merges into
-            // the winner's row. `merged` above is what this request reports.
-            foreach (var entry in _dbContext.ChangeTracker.Entries<PlayerExploredChunkEntity>().ToList())
-            {
-                entry.State = EntityState.Detached;
-            }
-        }
-
-        return merged;
+        return (merged, inserting);
     }
 
     private async Task<Dictionary<FogChunkCoord, PlayerExploredChunkEntity>> LoadChunkRowsAsync(

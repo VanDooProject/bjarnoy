@@ -117,14 +117,29 @@ on every member's settlement change. Both are needed.
 ### 1c. Option C — live layer, never cached, composited in the shader
 
 **Implemented.** `fogShader.ts`'s `uArmyVisionSources`/`uArmyVisionCount`/
-`uArmyVisionRadius` uniforms, uploaded every tick by `HexMapRenderer` from
+`uArmyHexSize`/`uArmyRamp` uniforms, uploaded every tick by `HexMapRenderer` from
 its own already-computed live army render positions (`resolveArmyPoint`,
-reused as-is), composited as a multiplicative reveal on the ramp values —
-never written into `uMask`/`uMaskPrev`, exactly as designed below. The
+reused as-is), composited as a `min()` of the troop's own ramps with the
+mask's ramp values — never written into `uMask`/`uMaskPrev`, exactly as designed below. The
 vision radius is a single flat constant (`ArmyVisionRadiusHexes`, backend;
 `ARMY_VISION_RADIUS_HEXES`, frontend) rather than per-unit-type, since no
 unit anywhere in `UnitCatalogue` carries a vision stat to draw a different
 number from.
+
+**Edge shaping.** The troop writes its own pair of ramps in the mask's own
+units (0 at the troop, 1 far away, one per channel) and takes the `min()`
+with the mask's R/G before `edgeBand`/`tierAlpha` run, so the edge noise,
+softness and wisps act on it exactly as on the village's edge. Distance is
+hex-euclidean (world offset divided by a per-axis hex size, matching
+`demoFogMask.ts`'s `ringDistance`/`hexEuclideanDistance`), so the clearing is
+a flat ellipse on screen like the village's, not a world-unit circle. The
+ramps are narrower than the village's 14/2 margins, so the edge is the
+village look at a smaller scale: with R the army vision radius, the black
+(out-of-sight) ramp starts at R−0.25 and fades over 2 hexes, the white
+(unknown) ramp starts at R+0.75 and fades over 6 hexes
+(`ARMY_FOG_*_OFFSET`/`_MARGIN` in `FogMaskLayer.ts`). With R=2 the black
+fades in over 1.95–3.45 hexes, the white over 2.99–5.27, and wisps reach
+about 7.55.
 
 Live army-granted vision — the rest of this section is the original design.
 
@@ -260,12 +275,14 @@ alongside B and C, not an extension of either:
   OR-ed into over time, never cleared by a settlement leveling or an army
   moving on. A real table/blob, not a derived value: `PlayerExploredEntity`
   or similar, keyed `(playerId, worldId, chunkCoord) → byte[]`.
-- **Growth.** Whenever an army's live position (§1c) enters a hex not yet
-  in that player's persisted set for the relevant chunk, that hex gets
-  OR-ed in — same trigger as the live-vision uniform array update, just
-  also written back instead of only driving the per-frame shader
-  composite. Settlement founding/leveling still OR-in the current
-  `exploredRadius` ring the same way it always has.
+- **Growth.** Every hex an army walks counts as explored, together with
+  its vision radius around each hex of the route. This holds whether or
+  not anyone was watching: a server restart or a closed browser leaves no
+  gap. The persisted set is filled from the army's route and the clock
+  (all hexes reached so far on the current leg, and each finished leg
+  when it ends), not from the live position at the moment of a fog read.
+  Settlement founding/leveling still OR-in the current `exploredRadius`
+  ring the same way it always has.
 - **Composition.** The static mask a player/guild sees is now: persisted
   explored history (this section) **OR** current settlement rings
   (Option B) **OR** current live-army radius (Option C, still shader-only

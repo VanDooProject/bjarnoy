@@ -214,6 +214,7 @@ public class SettlementEntity
                     Id = o.Id,
                     Type = Merged(o.Type),
                     TargetLevel = o.TargetLevel,
+                    Kind = o.Kind,
                     Coord = new HexCoord(o.Q, o.R),
                     QueuedAt = o.QueuedAt,
                     BaseDuration = o.BaseDuration,
@@ -355,6 +356,7 @@ public class SettlementEntity
                     SettlementId = Id,
                     Type = order.Type,
                     TargetLevel = order.TargetLevel,
+                    Kind = order.Kind,
                     Q = order.Coord.Q,
                     R = order.Coord.R,
                     QueuedAt = order.QueuedAt,
@@ -508,6 +510,9 @@ public class BuildOrderEntity
     public BuildingType Type { get; set; }
 
     public int TargetLevel { get; set; }
+
+    /// <summary>Whether the order builds a level or razes one — <see cref="BuildOrder.Kind"/>.</summary>
+    public BuildOrderKind Kind { get; set; }
 
     /// <summary>When the player ordered it — <see cref="BuildOrder.QueuedAt"/>.</summary>
     public DateTimeOffset QueuedAt { get; set; }

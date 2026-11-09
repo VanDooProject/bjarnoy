@@ -71,7 +71,7 @@ import { TILE_ORIENTATIONS, type IslandLabel, type RiverTile, type Settlement, t
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
-import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
+import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP, armyFogClearReachHexes } from './fog/FogMaskLayer';
 import type { FogCoverageLookup } from './fog/fogCoverage';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
@@ -332,7 +332,7 @@ export interface FogDebugFlags {
   drift: boolean;
   /** Bypasses the warp entirely and renders the mask texture unmodified — useful for inspecting the raw fetched mask (chunk seams, once §3's chunking lands) without the shader's own distortion on top. */
   showRawMask: boolean;
-  /** Dumps the mask channels right after §1c's army-vision reveal has been multiplied in, still bypassing warp/edge-noise/tier compositing — the complement to showRawMask (which returns before that reveal is applied), for inspecting what's actually driving fog once troop vision is accounted for. */
+  /** Dumps the mask channels right after §1c's army-vision reveal has been min()'d in, still bypassing warp/edge-noise/tier compositing — the complement to showRawMask (which returns before that reveal is applied), for inspecting what's actually driving fog once troop vision is accounted for. */
   showEffectiveMask: boolean;
   /** Turns off the realm-border wash + outer-edge glow/stroke drawn on every owned hex — survives unchanged from v1 (§4 doesn't touch what it gates, only when it redraws). */
   realmBorders: boolean;
@@ -1245,10 +1245,44 @@ const FOG_TERRAIN_CULL_HEXES = Math.ceil(
 // FogVisionRadii.ArmyVisionRadiusHexes (used there for §1e's persisted-
 // history growth trigger; used here for the real-time shader reveal itself,
 // see fogShader.ts's own remarks on why the two stay out of sync-free of
-// each other despite sharing this one number). TILE_W approximates "one hex"
-// in world-space distance the same way NOISE_SCALE (FogMaskLayer.ts) does —
-// good enough for a soft visual radius, not a gameplay-precision distance.
+// each other despite sharing this one number). The shader measures it as
+// hex-euclidean distance via ARMY_HEX_SIZE below, not in world units.
 const ARMY_VISION_RADIUS_HEXES = 2;
+// World units per hex step along x and y for the troop fog's hex-euclidean
+// metric (fogShader.ts's uArmyHexSize). The world layout (isoGridPosition)
+// has a column pitch of 0.75*TILE_W, a row pitch of TILE_H and odd columns
+// offset by TILE_H/2, so a neighbour step is (0.75W, +-H/2) or (0, H);
+// dividing by (W*sqrt(3)/2, H) makes every neighbour distance exactly 1.
+const ARMY_HEX_SIZE = { x: (TILE_W * Math.sqrt(3)) / 2, y: TILE_H };
+
+/**
+ * How many hex steps from an army's hex its live fog can show the ground. The fog measures hex-euclidean distance
+ * (`armyFogClearReachHexes`), and a hex-euclidean distance d is at most d × 2/√3 steps (the corner directions are the
+ * long way round). +1 for the hex art's own footprint, which reaches into the clearing before its centre does.
+ */
+export function armyRevealReachHexes(visionRadiusHexes: number): number {
+  return Math.ceil((armyFogClearReachHexes(visionRadiusHexes) * 2) / Math.sqrt(3)) + 1;
+}
+
+/**
+ * The terrain cull's sources for armies in transit: a disc of `armyRevealReachHexes` around both ends of each
+ * army's current leg, so the live marker anywhere between them stays inside. Deduplicated, since consecutive armies
+ * on one road share hexes.
+ */
+export function armyCullSourcesOf(legs: readonly (readonly AxialCoord[])[], visionRadiusHexes: number): FogSource[] {
+  const radius = armyRevealReachHexes(visionRadiusHexes);
+  const seen = new Set<string>();
+  const out: FogSource[] = [];
+  for (const hexes of legs) {
+    for (const h of hexes) {
+      const key = `${h.q},${h.r}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ q: h.q, r: h.r, radius });
+    }
+  }
+  return out;
+}
 
 // --- Per-rebuild settlement pruning (see fogSourcesNear) -------------------
 //
@@ -1286,7 +1320,7 @@ interface AxialBounds {
  * the explored ring for the unexplored mist, the line-of-sight ring for the
  * scouted tint.
  */
-interface FogSource {
+export interface FogSource {
   q: number;
   r: number;
   radius: number;
@@ -1373,16 +1407,23 @@ export interface OpaqueCoverage {
 
 /**
  * Whether an unexplored hex is past the terrain cull: further than `FOG_TERRAIN_CULL_HEXES` from every current-vision
- * source and, once the server's mask is known, under provably opaque mist there (`FogCoverage.isOpaque`) — the mask
- * keeps ground explored earlier (a destroyed Longhouse, a reload) clear after its vision discs are gone.
+ * source, outside every army's live reveal (`armySources`, whose radius is already the full reach — see
+ * `armyCullSourcesOf`; the shader clears that ground between mask fetches) and, once the server's mask is known, under
+ * provably opaque mist there (`FogCoverage.isOpaque`) — the mask keeps ground explored earlier (a destroyed Longhouse,
+ * a reload) clear after its vision discs are gone.
  */
 export function isPastTerrainCullOf(
   q: number,
   r: number,
   sources: FogSource[],
   coverage: OpaqueCoverage | null,
+  armySources: FogSource[] = [],
 ): boolean {
-  return distanceBeyondSources(q, r, sources) > FOG_TERRAIN_CULL_HEXES && (!coverage || coverage.isOpaque(q, r));
+  return (
+    distanceBeyondSources(q, r, sources) > FOG_TERRAIN_CULL_HEXES &&
+    distanceBeyondSources(q, r, armySources) > 0 &&
+    (!coverage || coverage.isOpaque(q, r))
+  );
 }
 
 
@@ -2149,6 +2190,13 @@ export class HexMapRenderer {
   // turn-around, an army arriving — where the authoritative position can move
   // several hexes at once. Then the marker eases from where it was to where
   // it now belongs (ARMY_RESYNC_MS) instead of teleporting.
+  /**
+   * The terrain cull's army sources (`armyCullSourcesOf`), refreshed by `drawArmyOverlay` every tick. A change (an
+   * army steps onto its next leg) queues one rebuild, since the cull only runs on rebuilds.
+   */
+  private armyCullSources: FogSource[] = [];
+  private armyCullKey = '';
+  private armyCullRebuildQueued = false;
   private armyPoints = new Map<
     string,
     { x: number; y: number; leg: string; resyncFrom: { x: number; y: number } | null; resyncStartedAt: number }
@@ -2322,7 +2370,7 @@ export class HexMapRenderer {
         ? this.settlementCameraOrigin()
         : options.confineCamera
           ? this.worldConfinedCameraOrigin()
-          : { x: 0, y: 0, zoom: WORLD_DEFAULT_ZOOM };
+          : this.worldCameraOrigin();
     this.loadState = options.mode === 'settlement' ? { phase: 'terrain' } : READY_LOAD_STATE;
   }
 
@@ -2355,6 +2403,14 @@ export class HexMapRenderer {
     );
     this.confineLimits = frame.limits;
     return frame.camera;
+  }
+
+  /** World mode's resting camera: on the player's settlement (the rest of the map is unexplored mist), else the hex origin. */
+  private worldCameraOrigin(): Camera {
+    const settlement = this.settlement();
+    if (!settlement) return { x: 0, y: 0, zoom: WORLD_DEFAULT_ZOOM };
+    const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
+    return { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2, zoom: WORLD_DEFAULT_ZOOM };
   }
 
   private settlementCameraOrigin(): Camera {
@@ -3758,7 +3814,8 @@ export class HexMapRenderer {
     const { worldModel } = this.options;
     return worldModel
       .listSettlements()
-      .map((s) => ({ q: s.q, r: s.r, radius: worldModel.exploredRadius(s) + FOG_TERRAIN_CULL_HEXES }));
+      .map((s) => ({ q: s.q, r: s.r, radius: worldModel.exploredRadius(s) + FOG_TERRAIN_CULL_HEXES }))
+      .concat(this.armyCullSources);
   }
 
   /**
@@ -4272,6 +4329,19 @@ export class HexMapRenderer {
         grid.y - radiusPx <= rect.maxY;
       if (reaches) return false;
     }
+    // An army's live reveal clears ground the mask still covers.
+    for (const a of this.armyCullSources) {
+      const grid = isoGridPosition({ q: a.q, r: a.r }, TILE_W, TILE_H);
+      const radiusPx = a.radius * TILE_W;
+      if (
+        grid.x + radiusPx >= rect.minX &&
+        grid.x - radiusPx <= rect.maxX &&
+        grid.y + radiusPx >= rect.minY &&
+        grid.y - radiusPx <= rect.maxY
+      ) {
+        return false;
+      }
+    }
     return true;
   }
 
@@ -4297,7 +4367,7 @@ export class HexMapRenderer {
    * and rebuildTerrainFlat (world-map flat fill) so the two agree.
    */
   private isPastTerrainCull(q: number, r: number, fogSources: FogSource[]): boolean {
-    return isPastTerrainCullOf(q, r, fogSources, this.options.worldModel.getFogCoverage());
+    return isPastTerrainCullOf(q, r, fogSources, this.options.worldModel.getFogCoverage(), this.armyCullSources);
   }
 
   private rebuildTerrain(coords: AxialCoord[], fogActive: boolean) {
@@ -6143,7 +6213,14 @@ export class HexMapRenderer {
   private resolveArmyPoint(
     army: ArmyOverlayMarker,
     nowMs: number,
-  ): { x: number; y: number; interpolated: boolean; heading: { x: number; y: number } | null } {
+  ): {
+    x: number;
+    y: number;
+    interpolated: boolean;
+    heading: { x: number; y: number } | null;
+    /** The hexes the point lies between: both ends of the current leg, or the one hex it stands on. */
+    hexes: AxialCoord[];
+  } {
     const movement = army.movement;
     const progress = movement
       ? routeProgressAt(
@@ -6159,14 +6236,17 @@ export class HexMapRenderer {
     let target: { x: number; y: number };
     let interpolated = false;
     let heading: { x: number; y: number } | null = null;
+    let hexes: AxialCoord[];
     if (progress && !progress.arrived) {
       const from = this.hexCenterWorld(progress.from);
       const to = this.hexCenterWorld(progress.to);
       target = lerpPoint(from, to, progress.t);
       interpolated = progress.t > 0;
       heading = { x: to.x - from.x, y: to.y - from.y };
+      hexes = [progress.from, progress.to];
     } else {
       target = this.hexCenterWorld(army.position);
+      hexes = [army.position];
     }
 
     // `leg` identifies the schedule the point above was computed from — a new
@@ -6190,7 +6270,7 @@ export class HexMapRenderer {
     state.y = point.y;
     this.armyPoints.set(army.id, state);
 
-    return { ...point, interpolated, heading };
+    return { ...point, interpolated, heading, hexes };
   }
 
   /**
@@ -6233,6 +6313,24 @@ export class HexMapRenderer {
     }
   }
 
+  /**
+   * Stores the terrain cull's army sources and, when they changed, queues one rebuild on the next frame — not inline,
+   * since this runs from inside the marker pass a rebuild itself drives.
+   */
+  private syncArmyCullSources(sources: FogSource[]) {
+    const key = sources.map((s) => `${s.q},${s.r},${s.radius}`).join(';');
+    if (key === this.armyCullKey) return;
+    this.armyCullKey = key;
+    this.armyCullSources = sources;
+    if (this.armyCullRebuildQueued) return;
+    this.armyCullRebuildQueued = true;
+    requestAnimationFrame(() => {
+      this.armyCullRebuildQueued = false;
+      if (this.destroyed) return;
+      this.rebuildAll();
+    });
+  }
+
   private drawArmyOverlay() {
     const overlay = this.armyOverlay;
     const frame: ArmyOverlayFrame = {
@@ -6242,7 +6340,10 @@ export class HexMapRenderer {
       iconsReady: this.icons !== null,
     };
     this.armyOverlayFrame = frame;
-    if (!overlay) return;
+    if (!overlay) {
+      this.syncArmyCullSources([]);
+      return;
+    }
 
     const now = Date.now();
 
@@ -6355,13 +6456,17 @@ export class HexMapRenderer {
     // muted blue for everything else, grey for one already turned around and
     // heading home.
     const armyVisionPoints: { x: number; y: number }[] = [];
+    const armyVisionLegs: AxialCoord[][] = [];
     for (const army of overlay.armies) {
       const point = this.resolveArmyPoint(army, now);
       // §1c: only a travelling army grants live vision — one standing at
       // home or as a guest garrison already sits inside its settlement's own
       // explored/visible rings, same scope as the backend's own in-transit-
       // only condition (FogMaskService.GeneratePlayerMaskAsync).
-      if (army.movement && fogDebugFlags.armyVisionReveal) armyVisionPoints.push({ x: point.x, y: point.y });
+      if (army.movement && fogDebugFlags.armyVisionReveal) {
+        armyVisionPoints.push({ x: point.x, y: point.y });
+        armyVisionLegs.push(point.hexes);
+      }
       const p = this.toScreen(point);
       frame.armies.push({ id: army.id, x: p.x, y: p.y, interpolated: point.interpolated });
       const color = army.selected ? GOLD : army.returning ? RETURNING_COLOR : ROUTE_COLOR;
@@ -6431,9 +6536,10 @@ export class HexMapRenderer {
     // §1c: pushed every tick, independent of any mask fetch — see
     // FogMaskLayer.setArmyVisionSources's own remarks on why this stays out
     // of the cached mask texture entirely.
-    const armyVisionRadiusWorld = (ARMY_VISION_RADIUS_HEXES + Math.max(0, overlay.visionBonusRings ?? 0)) * TILE_W;
-    this.blackFogLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
-    this.whiteMistLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
+    const armyVisionRadiusHexes = ARMY_VISION_RADIUS_HEXES + Math.max(0, overlay.visionBonusRings ?? 0);
+    this.blackFogLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusHexes, ARMY_HEX_SIZE);
+    this.whiteMistLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusHexes, ARMY_HEX_SIZE);
+    this.syncArmyCullSources(armyCullSourcesOf(armyVisionLegs, armyVisionRadiusHexes));
 
     // Armies that have gone away (arrived home and been folded back) would
     // otherwise keep their easing state forever.
@@ -6517,8 +6623,8 @@ export class HexMapRenderer {
       this.syncSpriteLayer(this.terrainTop, new Map());
       this.syncBogEdgeGraphics([], []);
       this.topAnimState.clear();
-      this.blackFogLayer.setArmyVisionSources([], 0);
-      this.whiteMistLayer.setArmyVisionSources([], 0);
+      this.blackFogLayer.setArmyVisionSources([], 0, ARMY_HEX_SIZE);
+      this.whiteMistLayer.setArmyVisionSources([], 0, ARMY_HEX_SIZE);
     } else {
       // Leaving world mode: drop its flat-fill polygons (rebuildTerrain's
       // settlement branch never calls rebuildTerrainFlat, so terrainFlat is

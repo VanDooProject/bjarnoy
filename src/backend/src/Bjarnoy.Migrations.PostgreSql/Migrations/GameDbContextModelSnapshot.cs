@@ -22,6 +22,21 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAccountEntity", b =>
+                {
+                    b.Property<Guid>("ApiKeyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ApiKeyId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("api_key_accounts", (string)null);
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -108,6 +123,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid?>("ApiKeyId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ApprovedAdditionalUserIds")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<bool?>("ApprovedAllWorlds")
                         .HasColumnType("boolean");
 
@@ -182,6 +201,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<Guid?>("RenewsApiKeyId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("RequestedAdditionalUserNames")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("RequestedOwnerUserName")
                         .HasMaxLength(100)
@@ -468,6 +491,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<DateTimeOffset?>("CompletesAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Q")
                         .HasColumnType("integer");
@@ -1983,6 +2009,25 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.ToTable("worlds", (string)null);
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAccountEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", "ApiKey")
+                        .WithMany("Accounts")
+                        .HasForeignKey("ApiKeyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ApiKey");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "CreatedByUser")
@@ -2465,6 +2510,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Navigation("User");
 
                     b.Navigation("World");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
+                {
+                    b.Navigation("Accounts");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyEntity", b =>

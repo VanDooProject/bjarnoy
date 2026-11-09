@@ -89,11 +89,17 @@ public static class AdminApiKeyEndpoints
         var all = await dbContext.ApiKeys.AsNoTracking()
             .Include(k => k.OwnerUser)
             .Include(k => k.CreatedByUser)
+            .Include(k => k.Accounts).ThenInclude(a => a.User)
             .ToListAsync(cancellationToken);
+        var codes = (await dbContext.ApiKeyRequests.AsNoTracking()
+                .Where(r => r.ApiKeyId != null)
+                .Select(r => new { ApiKeyId = r.ApiKeyId!.Value, r.UserCode })
+                .ToListAsync(cancellationToken))
+            .ToDictionary(r => r.ApiKeyId, r => r.UserCode);
         return Results.Ok(all
             .Where(k => includeInactive == true || k.GetStatus(now) == ApiKeyStatus.Active)
             .OrderByDescending(k => k.CreatedAt)
-            .Select(k => ApiKeyResponse.From(k, now))
+            .Select(k => ApiKeyResponse.From(k, now, codes.GetValueOrDefault(k.Id)))
             .ToList());
     }
 
@@ -109,7 +115,8 @@ public static class AdminApiKeyEndpoints
         ArgumentNullException.ThrowIfNull(body);
 
         var adminId = AdminId(user);
-        var settings = ToSettings(body, body.OwnerUserId ?? adminId, options.Value.DefaultRequestsPerMinute, body.AutoRenewUntil);
+        var settings = ToSettings(
+            body, body.OwnerUserId ?? adminId, options.Value.DefaultRequestsPerMinute, body.AutoRenewUntil, body.AdditionalUserIds ?? []);
         var validation = await keys.ValidateAsync(settings, excludeKeyId: null, cancellationToken);
         if (!validation.IsValid)
         {
@@ -151,7 +158,8 @@ public static class AdminApiKeyEndpoints
         // An omitted owner, quota or auto-renew window keeps the current one: the editor only sends what it shows.
         var settings = ToSettings(
             body, body.OwnerUserId ?? key.OwnerUserId, body.RequestsPerMinute ?? key.RequestsPerMinute,
-            body.AutoRenewUntil ?? key.AutoRenewUntil);
+            body.AutoRenewUntil ?? key.AutoRenewUntil,
+            body.AdditionalUserIds ?? [.. key.Accounts.Select(a => a.UserId)]);
         var validation = await keys.ValidateAsync(settings, key.Id, cancellationToken);
         if (!validation.IsValid)
         {
@@ -167,6 +175,13 @@ public static class AdminApiKeyEndpoints
         key.ExpiresAt = settings.ExpiresAt;
         key.RequestsPerMinute = settings.RequestsPerMinute;
         key.AutoRenewUntil = settings.AutoRenewUntil;
+        var wanted = (settings.AdditionalUserIds ?? []).Distinct().ToHashSet();
+        key.Accounts.RemoveAll(a => !wanted.Contains(a.UserId));
+        foreach (var id in wanted.Where(id => key.Accounts.All(a => a.UserId != id)))
+        {
+            key.Accounts.Add(new ApiKeyAccountEntity { ApiKeyId = key.Id, UserId = id });
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
         keys.LogCreated("updated", key, AdminId(user));
 
@@ -199,7 +214,7 @@ public static class AdminApiKeyEndpoints
             (old.ExpiresAt - old.CreatedAt).TotalMinutes, 1, options.Value.MaxLifetime.TotalMinutes));
         var settings = new ApiKeySettings(
             old.Name, old.Purpose, old.OwnerUserId, old.Features, old.AllWorlds, old.WorldIds,
-            now + lifetime, old.RequestsPerMinute, old.AutoRenewUntil);
+            now + lifetime, old.RequestsPerMinute, old.AutoRenewUntil, [.. old.Accounts.Select(a => a.UserId)]);
         var validation = await keys.ValidateAsync(settings, old.Id, cancellationToken);
         if (!validation.IsValid)
         {
@@ -280,7 +295,7 @@ public static class AdminApiKeyEndpoints
             AdminId(user),
             new ApprovalOverrides(
                 body.OwnerUserId, body.Features, body.AllWorlds, body.WorldIds,
-                body.LifetimeMinutes, body.RequestsPerMinute, body.AutoRenewMinutes),
+                body.LifetimeMinutes, body.RequestsPerMinute, body.AutoRenewMinutes, body.AdditionalUserIds),
             cancellationToken);
         return await ToDecisionResultAsync(result, requests, cancellationToken);
     }
@@ -315,7 +330,11 @@ public static class AdminApiKeyEndpoints
     }
 
     private static ApiKeySettings ToSettings(
-        ApiKeySettingsRequest body, Guid ownerUserId, int requestsPerMinute, DateTimeOffset? autoRenewUntil) =>
+        ApiKeySettingsRequest body,
+        Guid ownerUserId,
+        int requestsPerMinute,
+        DateTimeOffset? autoRenewUntil,
+        IReadOnlyList<Guid> additionalUserIds) =>
         new(
             body.Name ?? string.Empty,
             body.Purpose,
@@ -325,5 +344,6 @@ public static class AdminApiKeyEndpoints
             body.WorldIds ?? [],
             body.ExpiresAt,
             body.RequestsPerMinute ?? requestsPerMinute,
-            autoRenewUntil);
+            autoRenewUntil,
+            additionalUserIds);
 }

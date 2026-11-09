@@ -10,6 +10,7 @@ import type {
   AdminSettlementLayoutResponse,
   AdminUserActivityDetailResponse,
   AdminUserDetailResponse,
+  AdminUserLookupResponse,
   AdminUserResponse,
   AdminWorldResponse,
   ApiKeyFeatureInfo,
@@ -318,6 +319,14 @@ export const api = {
       body: JSON.stringify(body),
       headers: ownerHeader(ownerId),
     }),
+  // Razes one level of the building on a hex (docs/design/construction-slots.md, "Razing"): an order like a build, cancellable
+  // through cancelBuild. Same ownership proof as queueBuild.
+  razeBuilding: (settlementId: string, body: { q: number; r: number }, ownerId?: string) =>
+    request<unknown>(`/settlements/${settlementId}/razes`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
+    }),
   slotRune: (settlementId: string, runeId: string, body: SlotRuneRequest, ownerId?: string) =>
     request<SettlementResponse>(`/settlements/${settlementId}/runes/${runeId}/slot`, {
       method: 'POST',
@@ -496,6 +505,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  adminLookupUsers: (q: string, signal?: AbortSignal) =>
+    request<AdminUserLookupResponse[]>(`/admin/users/lookup?q=${encodeURIComponent(q)}&limit=10`, { signal }),
   adminListUsers: (params?: { search?: string; status?: string; page?: number; pageSize?: number }) => {
     const query = new URLSearchParams();
     if (params?.search) query.set('search', params.search);

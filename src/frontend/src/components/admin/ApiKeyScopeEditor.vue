@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, reactive, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { api } from '../../api/client';
+import UserLookupInput from './UserLookupInput.vue';
 import type {
-  AdminUserResponse,
+  AdminUserLookupResponse,
   AdminWorldResponse,
   ApiKeyAccess,
   ApiKeyFeatureInfo,
@@ -31,6 +31,8 @@ export interface ScopeEditorInitial {
   name?: string;
   purpose?: string | null;
   owner: ScopeEditorOwner;
+  /** Further accounts the key may act as (`X-Act-As`). */
+  additionalAccounts?: ScopeEditorOwner[];
   features?: ApiKeyFeatureMap;
   allWorlds?: boolean;
   worldIds?: string[];
@@ -72,6 +74,7 @@ const form = reactive({
   name: props.initial.name ?? '',
   purpose: props.initial.purpose ?? '',
   owner: { ...props.initial.owner } as ScopeEditorOwner,
+  additional: (props.initial.additionalAccounts ?? []).map((a) => ({ ...a })) as ScopeEditorOwner[],
   features: { ...(props.initial.features ?? {}) } as ApiKeyFeatureMap,
   allWorlds: props.initial.allWorlds ?? false,
   worldIds: [...(props.initial.worldIds ?? [])],
@@ -101,32 +104,25 @@ watch(ownerIsAdmin, (isAdmin) => {
   }
 });
 
-// Owner search.
-const ownerSearch = ref('');
-const ownerResults = ref<AdminUserResponse[]>([]);
-const ownerSearching = ref(false);
-
-async function searchOwners() {
-  ownerSearching.value = true;
-  try {
-    const result = await api.adminListUsers({ search: ownerSearch.value || undefined, pageSize: 10 });
-    ownerResults.value = result.items;
-  } catch {
-    ownerResults.value = [];
-  } finally {
-    ownerSearching.value = false;
-  }
+function pickOwner(user: AdminUserLookupResponse) {
+  form.owner = { id: user.userId, userName: user.userName, role: user.role };
+  // The owner is already an account of the key: it never also sits in the extra list.
+  form.additional = form.additional.filter((a) => a.id !== user.userId);
 }
 
-function pickOwner(user: AdminUserResponse) {
-  form.owner = { id: user.id, userName: user.userName, role: user.role };
-  ownerResults.value = [];
-  ownerSearch.value = '';
+function addAccount(user: AdminUserLookupResponse) {
+  if (user.userId === form.owner.id || form.additional.some((a) => a.id === user.userId)) return;
+  form.additional.push({ id: user.userId, userName: user.userName, role: user.role });
 }
+
+function removeAccount(id: string) {
+  form.additional = form.additional.filter((a) => a.id !== id);
+}
+
+const takenAccountIds = computed(() => [form.owner.id, ...form.additional.map((a) => a.id)]);
 
 function pickSelf() {
   form.owner = { ...props.initial.owner };
-  ownerResults.value = [];
 }
 
 function toggleWorld(id: string) {
@@ -167,6 +163,7 @@ function submit() {
       name: form.name.trim(),
       purpose: form.purpose.trim() || null,
       ownerUserId: form.owner.id,
+      additionalUserIds: form.additional.map((a) => a.id),
       ...scope,
       expiresAt: new Date(form.expiresAtLocal).toISOString(),
       requestsPerMinute: rpm,
@@ -176,6 +173,7 @@ function submit() {
     const renew = form.autoRenewMinutes ? Number(form.autoRenewMinutes) : null;
     const body: ApproveApiKeyRequestBody = {
       ownerUserId: form.owner.id,
+      additionalUserIds: form.additional.map((a) => a.id),
       ...scope,
       lifetimeMinutes: Number(form.lifetimeMinutes),
       requestsPerMinute: rpm,
@@ -206,27 +204,40 @@ function submit() {
         <span v-if="ownerIsAdmin" class="badge">{{ $t('adminApiKeys.editor.adminBadge') }}</span>
       </p>
       <div class="owner-search">
-        <input
-          v-model="ownerSearch"
-          type="text"
+        <UserLookupInput
           :placeholder="$t('adminApiKeys.editor.ownerSearch')"
-          data-testid="editor-owner-search"
-          @keydown.enter.prevent="searchOwners"
+          testid="editor-owner"
+          @pick="pickOwner"
         />
-        <button type="button" :disabled="ownerSearching" @click="searchOwners">
-          {{ $t('adminApiKeys.editor.searchButton') }}
-        </button>
         <button type="button" data-testid="editor-owner-self" @click="pickSelf">
           {{ $t('adminApiKeys.editor.ownerSelf') }}
         </button>
       </div>
-      <ul v-if="ownerResults.length > 0" class="owner-results">
-        <li v-for="user in ownerResults" :key="user.id">
-          <button type="button" :data-testid="`owner-pick-${user.id}`" @click="pickOwner(user)">
-            {{ user.userName }} ({{ user.role }})
+    </fieldset>
+
+    <fieldset class="accounts">
+      <legend>{{ $t('adminApiKeys.editor.accounts') }}</legend>
+      <p class="muted">{{ $t('adminApiKeys.editor.accountsHint') }}</p>
+      <ul v-if="form.additional.length > 0" class="chips" data-testid="editor-accounts">
+        <li v-for="account in form.additional" :key="account.id" class="chip">
+          {{ account.userName }}
+          <span v-if="account.role.toLowerCase() === 'admin'" class="badge">{{ $t('adminApiKeys.editor.adminBadge') }}</span>
+          <button
+            type="button"
+            :aria-label="$t('adminApiKeys.editor.removeAccount', { name: account.userName })"
+            :data-testid="`account-remove-${account.id}`"
+            @click="removeAccount(account.id)"
+          >
+            ×
           </button>
         </li>
       </ul>
+      <UserLookupInput
+        :placeholder="$t('adminApiKeys.editor.accountSearch')"
+        :exclude="takenAccountIds"
+        testid="editor-account"
+        @pick="addAccount"
+      />
     </fieldset>
 
     <fieldset class="features">
@@ -388,6 +399,32 @@ tr.disabled {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 16px;
+}
+.chips {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  font-size: 14px;
+}
+.chip button {
+  padding: 0 8px;
+  line-height: 1.4;
+}
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 8px;
 }
 .owner-current {
   margin: 0 0 8px;

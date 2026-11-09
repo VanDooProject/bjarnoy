@@ -29,6 +29,7 @@ import {
   palisadeLock,
   bridgeLock,
   riverBuildingAllowedHere,
+  riverFitLock,
   shrineLimitLock,
   storageHouseLock,
   towerLimitLock,
@@ -120,7 +121,7 @@ const DEFENSE_CATEGORY: BuildCategory = {
   id: 'defense',
   buildings: [{ type: 'palisade' }, { type: 'palisadegate' }, { type: 'bridge' }],
 };
-// The Tower is a defence building too, and stands on grass, sand and forest; the bog ring keeps the wall-only category.
+// The Tower is a defence building too, and stands on grass, sand, forest and plain bog moss.
 const DEFENSE_TOWER_CATEGORY: BuildCategory = {
   id: 'defense',
   buildings: [{ type: 'tower' }, ...DEFENSE_CATEGORY.buildings],
@@ -133,8 +134,7 @@ const DEFENSE_SEA_CATEGORY: BuildCategory = { id: 'defense', buildings: [{ type:
 const BOG_CATEGORIES: Record<string, BuildCategory[]> = {
   bog: [
     { id: 'resource', buildings: [{ type: 'claybrickworks' }, { type: 'bogoreworks' }] },
-    { id: 'military', buildings: [{ type: 'tower' }] },
-    DEFENSE_CATEGORY,
+    DEFENSE_TOWER_CATEGORY,
   ],
   creek: [{ id: 'resource', buildings: [{ type: 'hammerschmiede' }] }],
   half: [{ id: 'water', buildings: [{ type: 'fishinghut' }] }],
@@ -180,7 +180,8 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
     DEFENSE_TOWER_CATEGORY,
     SHRINE_CATEGORY,
   ],
-  sand: [{ id: 'military', buildings: [{ type: 'smithy' }] }, DEFENSE_TOWER_CATEGORY],
+  // Sand takes only the tower and the walls.
+  sand: [DEFENSE_TOWER_CATEGORY],
   forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }, DEFENSE_TOWER_CATEGORY],
   // No new quarries can be built for now (BuildingCatalogue.NewPlacementDisabled); mountains offer nothing to build.
   mountain: [],
@@ -308,7 +309,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
   // Wall orders still in the queue (live mode only; demo places instantly): the server counts them as wall hexes when it judges the next one.
   function queuedWalls(): { q: number; r: number; gate: boolean }[] {
     return world.hud.queue
-      .filter((order) => isWallBuilding(order.building))
+      .filter((order) => order.kind !== 'raze' && isWallBuilding(order.building))
       .map((order) => ({ q: order.q, r: order.r, gate: order.building === 'palisadegate' }));
   }
 
@@ -379,6 +380,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
       type === 'storagehouse' ? storageHouseLockFor() : undefined,
       isWallBuilding(type) ? palisadeLock(world.model.palisadePlacement(coord, type === 'palisadegate', queuedWalls())) : undefined,
       type === 'bridge' ? bridgeLock(world.model.bridgePlacement(coord)) : undefined,
+      riverFitLock(type, riverShapeAt(coord), riverVariantAt(coord), riverWidthAt(coord)),
       ...prerequisiteLocks(definition?.prerequisites, levels),
     ].filter((lock): lock is string => !!lock);
     return {
@@ -398,23 +400,31 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
 
   /** The raw placement filter for the clicked hex: category ids and building types, before locks or river/soil refinement. */
   const placementCategories = computed<BuildCategory[]>(() => (tile.value ? categoriesFor(tile.value) : []));
-  /** Build is offered only on a hex whose terrain takes at least one category (docs/design/ui-guidelines.md, rule 1). */
-  const canBuildHere = computed(() => placementCategories.value.length > 0);
+  /** Build is offered only on a hex that takes at least one building (docs/design/ui-guidelines.md, rule 1). */
+  const canBuildHere = computed(() => categories.value.length > 0);
 
   /** The ring's categories for the clicked hex: the placement filter, narrowed by river shape and island soil, each building with its card. */
   const categories = computed<RingCategory[]>(() => {
     const hex = coord.value;
     if (!tile.value || !hex) return [];
     const levels = builtLevels();
-    return categoriesFor(tile.value).map((category) => ({
-      id: category.id,
-      label: t(`hud.ringMenu.categories.${category.id}`),
-      color: CATEGORY_COLORS[category.id] ?? 'var(--gold)',
-      buildings: category.buildings
-        .filter((b) => riverBuildingAllowedHere(b.type, riverShapeAt(hex), riverVariantAt(hex), riverWidthAt(hex)))
-        .filter((b) => cropAllowedHere(b.type, currentIslandSoil()))
-        .map((b) => ringBuildingFor(b.type, hex, levels)),
-    }));
+    return categoriesFor(tile.value)
+      .map((category) => ({
+        id: category.id,
+        label: t(`hud.ringMenu.categories.${category.id}`),
+        color: CATEGORY_COLORS[category.id] ?? 'var(--gold)',
+        buildings: category.buildings
+          // A river building whose art doesn't fit this stretch's curve stays as an explained, disabled bubble (`riverFitLock`).
+          .filter(
+            (b) =>
+              riverBuildingAllowedHere(b.type, riverShapeAt(hex), riverVariantAt(hex), riverWidthAt(hex)) ||
+              riverFitLock(b.type, riverShapeAt(hex), riverVariantAt(hex), riverWidthAt(hex)) !== undefined,
+          )
+          .filter((b) => cropAllowedHere(b.type, currentIslandSoil()))
+          .map((b) => ringBuildingFor(b.type, hex, levels)),
+      }))
+      // A category the hex's river or soil filtered empty is not offered (a stream hex has nothing to build at all).
+      .filter((category) => category.buildings.length > 0);
   });
 
   /** Whether `id` is one of the placement filter's buildings for this hex (a ring select of it is a build, not a root action). */

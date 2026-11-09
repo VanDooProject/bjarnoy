@@ -34,6 +34,12 @@ public sealed class ApiKeyScopeMiddleware(RequestDelegate next)
             return;
         }
 
+        if (context.Items.TryGetValue(ApiKeyContext.ForbiddenItemKey, out var forbidden))
+        {
+            await Refuse(context, StatusCodes.Status403Forbidden, forbidden as string ?? "Account not allowed for this API key.");
+            return;
+        }
+
         if (context.Items.TryGetValue(ApiKeyContext.FailureItemKey, out var failure))
         {
             await Refuse(context, StatusCodes.Status401Unauthorized, failure as string ?? "Invalid API key.");

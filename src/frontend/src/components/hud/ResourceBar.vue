@@ -562,6 +562,21 @@ watch([pills, population, stage, isExpanded, isCompact, isRail, locale], () => v
   width: 16px;
   height: 16px;
 }
+/* The full desktop row has two text lines per pill (stock, rate), so the
+   icon can match their height; the one-line compact and the expanded
+   drawer pills keep the smaller sizes. */
+.resource-bar:not(.compact):not(.expanded) .resource-icon {
+  width: 28px;
+  height: 28px;
+}
+/* Tighter spacing pays for the bigger icons, so the full row still fits
+   at the same window widths as with 16px icons. */
+.resource-bar:not(.compact):not(.expanded) .resource {
+  gap: 6px;
+}
+.resource-bar:not(.compact):not(.expanded) .resource + .resource {
+  padding-left: 16px;
+}
 .numbers {
   display: flex;
   flex-direction: column;

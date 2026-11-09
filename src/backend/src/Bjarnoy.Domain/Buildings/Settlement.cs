@@ -304,7 +304,7 @@ public sealed record Settlement
 
     private static int EffectiveSlotCost(BuildOrder order, int constructionSlots)
     {
-        var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
+        var definition = BuildingCatalogue.Get(order.Type, order.LevelInWork);
         return definition.OccupiesAllSlots ? constructionSlots : definition.SlotCost;
     }
 
@@ -325,7 +325,7 @@ public sealed record Settlement
     /// Derived, never stored.
     /// </summary>
     public ResourceAmounts ReservedResources =>
-        GroupWaitingOrders.Aggregate(ResourceAmounts.Zero, (sum, o) => sum + BuildingCatalogue.Get(o.Type, o.TargetLevel).Cost);
+        GroupWaitingOrders.Aggregate(ResourceAmounts.Zero, (sum, o) => sum + o.Cost);
 
     /// <summary>
     /// What is actually free to spend at <paramref name="now"/> — the settled
@@ -596,7 +596,20 @@ public sealed record Settlement
                 eventTime = order.CompletesAt!.Value;
 
                 var index = buildings.FindIndex(b => b.Coord == order.Coord);
-                if (index >= 0)
+                if (order.IsRaze)
+                {
+                    // A raze takes one level off; at 0 the building is gone. A hex that is no longer standing (destroyed
+                    // meanwhile) has nothing to lower. Never raises: a siege may already have taken the level lower.
+                    if (index >= 0 && order.TargetLevel >= 1)
+                    {
+                        buildings[index] = buildings[index] with { Level = Math.Min(buildings[index].Level, order.TargetLevel) };
+                    }
+                    else if (index >= 0)
+                    {
+                        buildings.RemoveAt(index);
+                    }
+                }
+                else if (index >= 0)
                 {
                     buildings[index] = buildings[index] with { Type = order.Type, Level = order.TargetLevel };
                 }
@@ -627,6 +640,25 @@ public sealed record Settlement
             // hour.
             var (production, capacity) = BoostedTotals(buildings, Runes, terrainAt);
             resources = resources.WithRate(ApplyUpkeep(production * speedFactor, garrison, guestPool), capacity, eventTime);
+
+            // A finished raze pays its refund after the re-rate, so it is capped by the storage left standing.
+            if (takeBuild && dueBuild!.IsRaze)
+            {
+                // A member of a linked realm leaves the refund to LinkedStore, which pays it into the pooled stock.
+                if (Linked is null)
+                {
+                    resources = resources.Deposit(dueBuild.Refund, eventTime);
+                }
+
+                if (dueBuild.TargetLevel == 0)
+                {
+                    // Queued training of the removed building is refunded in full, as for a destroyed building.
+                    var cleared = (this with { Buildings = buildings, Queue = queue, TrainingQueue = trainingQueue, Resources = resources })
+                        .CancelTrainingAt(new HashSet<HexCoord> { dueBuild.Coord }, eventTime);
+                    trainingQueue = cleared.TrainingQueue.ToList();
+                    resources = cleared.Resources;
+                }
+            }
 
             // A build completion (or, harmlessly, a training one) may have
             // freed a construction slot — promote at this same instant, so
@@ -803,8 +835,7 @@ public sealed record Settlement
             return null;
         }
 
-        var definition = BuildingCatalogue.Get(candidate.Type, candidate.TargetLevel);
-        var slotCost = definition.OccupiesAllSlots ? constructionSlots : definition.SlotCost;
+        var slotCost = EffectiveSlotCost(candidate, constructionSlots);
 
         // Head-of-line blocking: the waiting queue is FIFO, not a pool a smaller order can jump.
         return slotCost > free ? null : candidate;
@@ -838,8 +869,7 @@ public sealed record Settlement
         }
 
         var order = Queue[index];
-        var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
-        if (!Resources.TrySpend(definition.Cost, now, out var paid))
+        if (!Resources.TrySpend(order.Cost, now, out var paid))
         {
             return null;
         }
@@ -849,7 +879,7 @@ public sealed record Settlement
         queue[index] = started;
 
         var buildings = Buildings.ToList();
-        if (!buildings.Any(b => b.Coord == started.Coord))
+        if (!order.IsRaze && !buildings.Any(b => b.Coord == started.Coord))
         {
             buildings.Add(new PlacedBuilding(started.Coord, started.Type, Level: 0));
         }
@@ -902,7 +932,7 @@ public sealed record Settlement
 
         foreach (var order in waitingFifo)
         {
-            var candidateTotal = running + BuildingCatalogue.Get(order.Type, order.TargetLevel).Cost;
+            var candidateTotal = running + order.Cost;
             if (!stock.Covers(candidateTotal))
             {
                 break;
@@ -1245,6 +1275,11 @@ public sealed record Settlement
     /// <see cref="BuildingType.Bridge"/> cares: streams are already passable, so it is refused there
     /// (<see cref="BuildRejection.BridgeNeedsWideRiver"/>).
     /// </param>
+    /// <param name="onRiverTile">
+    /// Whether any river tile (of any width) stands on <paramref name="coord"/>. Every building but the river ones
+    /// (<see cref="BuildingDefinition.RequiresRiverShape"/>), the bridge and the walls is refused there
+    /// (<see cref="BuildRejection.TerrainNotAllowed"/>).
+    /// </param>
     /// <param name="onWastedIsland">
     /// Whether <paramref name="coord"/> lies on a wasted (lava) island, where no bridge is built. Only a <see cref="BuildingType.Bridge"/> cares.
     /// </param>
@@ -1269,7 +1304,8 @@ public sealed record Settlement
         bool isWideRiverAt = false,
         bool onWastedIsland = false,
         World.IEndgameSiteIndex? endgameSites = null,
-        ConnectedRealm? realm = null)
+        ConnectedRealm? realm = null,
+        bool onRiverTile = false)
     {
         var giantIndex = giants ?? World.GiantIndex.Empty;
         var connected = realm ?? ConnectedRealm.Resolve([AsRealmSettlement()]);
@@ -1296,7 +1332,7 @@ public sealed record Settlement
 
         // Queue is already in FIFO/plan order — see PromoteWaitingOrders' remarks.
         var ordersOnHex = Queue.Where(o => o.Coord == coord).ToList();
-        if (ordersOnHex.Count >= maxOrdersPerHex)
+        if (ordersOnHex.Count >= maxOrdersPerHex || ordersOnHex.Any(o => o.IsRaze))
         {
             return BuildDecision.Rejected(BuildRejection.AlreadyQueuedOnHex);
         }
@@ -1343,6 +1379,14 @@ public sealed record Settlement
         }
 
         if (!definition.AllowsHex(terrain, isCoastalWater, bogKindAt))
+        {
+            return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
+        }
+
+        // A river hex (any width or shape: stream, widening, spring, confluence, mouth, bend, straight) takes no ordinary building: only the
+        // river buildings (RequiresRiverShape, checked below) and the bridge stand on one. A wall keeps its own, more specific refusal.
+        if (onRiverTile && definition.RequiresRiverShape is null
+            && type is not (BuildingType.Bridge or BuildingType.Palisade or BuildingType.PalisadeGate))
         {
             return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
         }
@@ -1501,7 +1545,87 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.NotEnoughResources);
         }
 
-        var slotCost = definition.OccupiesAllSlots ? ConstructionSlots : definition.SlotCost;
+        return StartOrQueue(
+            new BuildOrder
+            {
+                Id = orderId,
+                Type = type,
+                TargetLevel = targetLevel,
+                Coord = coord,
+                QueuedAt = now,
+                BaseDuration = definition.BuildDuration,
+            },
+            definition,
+            earlierOnHexUnfinished: ordersOnHex.Count > 0,
+            now, speedFactor, maxWaitingOrders);
+    }
+
+    /// <summary>
+    /// Asks to raze one level of the building on <paramref name="coord"/> (<c>docs/design/construction-slots.md</c>, "Razing"):
+    /// the level takes <see cref="BuildingCatalogue.RazeTimeFactor"/> of its build time and as many construction slots as
+    /// building it took, costs nothing, and goes through the queue like a build. The building keeps working at its current
+    /// level until the order completes (<see cref="SettleTo"/>).
+    /// </summary>
+    public BuildDecision PlanRaze(
+        HexCoord coord,
+        DateTimeOffset now,
+        Guid orderId,
+        double speedFactor = 1.0,
+        int maxWaitingOrders = 0,
+        int maxOrdersPerHex = 1)
+    {
+        var existing = Buildings.FirstOrDefault(b => b.Coord == coord);
+        if (!Buildings.Any(b => b.Coord == coord) || existing.Level < 1)
+        {
+            return BuildDecision.Rejected(BuildRejection.NoBuildingOnHex);
+        }
+
+        if (existing.Type == BuildingType.Longhouse)
+        {
+            return BuildDecision.Rejected(BuildRejection.LonghouseCannotBeRazed);
+        }
+
+        // A raze is an order on its hex like any other: the maxOrdersPerHex rule applies, and a raze never stacks behind a
+        // queued order (the level it would lower is not known yet).
+        var ordersOnHex = Queue.Where(o => o.Coord == coord).ToList();
+        if (ordersOnHex.Count > 0 || ordersOnHex.Count >= maxOrdersPerHex)
+        {
+            return BuildDecision.Rejected(BuildRejection.AlreadyQueuedOnHex);
+        }
+
+        var definition = BuildingCatalogue.Get(existing.Type, existing.Level);
+        var baseDuration = TimeSpan.FromTicks((long)(definition.BuildDuration.Ticks * BuildingCatalogue.RazeTimeFactor));
+
+        return StartOrQueue(
+            new BuildOrder
+            {
+                Id = orderId,
+                Type = existing.Type,
+                TargetLevel = existing.Level - 1,
+                Kind = BuildOrderKind.Raze,
+                Coord = coord,
+                QueuedAt = now,
+                BaseDuration = baseDuration,
+            },
+            definition,
+            earlierOnHexUnfinished: false,
+            now, speedFactor, maxWaitingOrders);
+    }
+
+    /// <summary>
+    /// The slot logic shared by <see cref="PlanBuild"/> and <see cref="PlanRaze"/>: the order starts now when its slot cost
+    /// (<paramref name="slotDefinition"/>, the level in work) fits the free slots, waits in the premium queue when there is room
+    /// for it, and is refused otherwise.
+    /// </summary>
+    private BuildDecision StartOrQueue(
+        BuildOrder draft,
+        BuildingDefinition slotDefinition,
+        bool earlierOnHexUnfinished,
+        DateTimeOffset now,
+        double speedFactor,
+        int maxWaitingOrders)
+    {
+        var slotCost = slotDefinition.OccupiesAllSlots ? ConstructionSlots : slotDefinition.SlotCost;
 
         // A stacked order (maxOrdersPerHex > 1) can only ever start once
         // every earlier order already queued on this same hex is done — an
@@ -1510,7 +1634,6 @@ public sealed record Settlement
         // alone are not enough: two levels of the same hex must never be
         // "under construction" at once, or completion order (and hence the
         // level a hex ends up at) stops being deterministic.
-        var earlierOnHexUnfinished = ordersOnHex.Count > 0;
         var fitsNow = !earlierOnHexUnfinished && slotCost <= FreeSlots;
 
         if (!fitsNow && GroupWaitingOrders.Count() >= maxWaitingOrders)
@@ -1520,32 +1643,14 @@ public sealed record Settlement
 
         if (fitsNow)
         {
-            var duration = ScaledBuildDuration(definition.BuildDuration, speedFactor);
-
-            return BuildDecision.Accept(new BuildOrder
+            return BuildDecision.Accept(draft with
             {
-                Id = orderId,
-                Type = type,
-                TargetLevel = targetLevel,
-                Coord = coord,
-                QueuedAt = now,
-                BaseDuration = definition.BuildDuration,
                 StartedAt = now,
-                CompletesAt = now + duration,
+                CompletesAt = now + ScaledBuildDuration(draft.BaseDuration, speedFactor),
             });
         }
 
-        return BuildDecision.Accept(new BuildOrder
-        {
-            Id = orderId,
-            Type = type,
-            TargetLevel = targetLevel,
-            Coord = coord,
-            QueuedAt = now,
-            BaseDuration = definition.BuildDuration,
-            StartedAt = null,
-            CompletesAt = null,
-        });
+        return BuildDecision.Accept(draft with { StartedAt = null, CompletesAt = null });
     }
 
     /// <summary>
@@ -1616,15 +1721,14 @@ public sealed record Settlement
             return this with { Queue = [.. Queue, order] };
         }
 
-        var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
-        if (!Resources.TrySpend(definition.Cost, now, out var paid))
+        if (!Resources.TrySpend(order.Cost, now, out var paid))
         {
             throw new InvalidOperationException(
                 "Cannot enqueue a build that is not affordable; call PlanBuild first.");
         }
 
         var buildings = Buildings;
-        if (!buildings.Any(b => b.Coord == order.Coord))
+        if (!order.IsRaze && !buildings.Any(b => b.Coord == order.Coord))
         {
             buildings = [.. buildings, new PlacedBuilding(order.Coord, order.Type, Level: 0)];
         }
@@ -1661,10 +1765,10 @@ public sealed record Settlement
             return CancelBuildResult.Accept(this with { Queue = [.. Queue.Where(o => o.Id != orderId)] });
         }
 
-        var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
-        var refunded = Resources.Deposit(definition.Cost, now);
+        // A raze cost nothing, so there is nothing to refund, and the building it was lowering stays as it is.
+        var refunded = Resources.Deposit(order.Cost, now);
 
-        var buildings = order.TargetLevel == 1
+        var buildings = !order.IsRaze && order.TargetLevel == 1
             ? Buildings.Where(b => b.Coord != order.Coord).ToList()
             : Buildings;
 
@@ -1777,8 +1881,7 @@ public sealed record Settlement
 
                 if (order.IsWaiting)
                 {
-                    var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
-                    if (!resources.TrySpend(definition.Cost, now, out var paid))
+                    if (!resources.TrySpend(order.Cost, now, out var paid))
                     {
                         // Defensive only: reserved resources should already
                         // cover this. Leave it waiting rather than starting
@@ -1787,7 +1890,7 @@ public sealed record Settlement
                     }
 
                     resources = paid;
-                    if (!buildings.Any(b => b.Coord == order.Coord))
+                    if (!order.IsRaze && !buildings.Any(b => b.Coord == order.Coord))
                     {
                         buildings.Add(new PlacedBuilding(order.Coord, order.Type, Level: 0));
                     }

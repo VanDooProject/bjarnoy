@@ -157,9 +157,8 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // as forest/mountain and offer Farm/Lumberjack/Quarry — none of which
     // the backend's AllowedTerrain would ever accept on sand (Farm is
     // Grass-only, Lumberjack Forest-only, Quarry Mountain-only and now
-    // closed to new placement altogether). Sand only
-    // carries Tower (SandOrGrass) — shrines are Grass-only now, so they no
-    // longer appear here.
+    // closed to new placement altogether). Sand takes only the Tower and the
+    // walls: every other building, the military ones included, is Grass-only.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
 
@@ -175,8 +174,8 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
 
     await expect(settlement.ring.categoryBubbles.first()).toBeVisible();
     const categoryLabels = await settlement.ring.categoryBubbles.allTextContents();
-    // The Weaponsmith (military), and the Tower and the wall (Defence: grass, forest and sand take a palisade and a gate).
-    expect(new Set(categoryLabels)).toEqual(new Set(['Military', 'Defence']));
+    // Only the Tower and the wall (Defence: grass, forest and sand take a palisade and a gate).
+    expect(new Set(categoryLabels)).toEqual(new Set(['Defence']));
 
     for (const label of categoryLabels) {
       await settlement.ring.openCategory(label);

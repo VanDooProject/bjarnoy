@@ -259,6 +259,16 @@ play.
   the same for bog-ore works. A river or creek running through a claim is a
   trade: fewer producer hexes, and a much stronger boost on the ones that are
   left.
+- **Which ground takes what.** Sand takes only towers and walls. Every other
+  ordinary building (Smithy, Archery Range, Barracks, Siege Workshop and the
+  rest) stands on grass only. A stream, a widening or a river spring takes no
+  building. A full-width river hex takes only what has art for its shape:
+  the Sawmill on a straight or a bend (not the hairpin loop), the Crop Mill on
+  a straight only, and the bridge on a wide straight or bend. A bog creek
+  takes only the Hammer Forge. Walls never stand on rivers, streams or creeks.
+  Where a river hex takes a river building in general but this stretch bends
+  too much for it, the ring shows the building disabled with the hint that it
+  needs a straighter river piece (no degrees: players don't read them).
 
 ### Shrines
 

@@ -12,6 +12,7 @@ public sealed record ApiKeyContext(
     string KeyId,
     string Name,
     Guid OwnerUserId,
+    Guid ActingUserId,
     IReadOnlyDictionary<string, ApiKeyAccess> Features,
     bool AllWorlds,
     IReadOnlySet<Guid> WorldIds,
@@ -21,6 +22,9 @@ public sealed record ApiKeyContext(
 
     /// <summary>Set (to a reason) when a request presented an API key that failed authentication.</summary>
     internal const string FailureItemKey = "bjarnoy:api_key_failure";
+
+    /// <summary>Set (to a reason) when <c>X-Act-As</c> named an account the key may not act as: a 403, not a 401.</summary>
+    internal const string ForbiddenItemKey = "bjarnoy:api_key_forbidden";
 
     /// <summary>The level this key has for <paramref name="feature"/>; <see cref="ApiKeyAccess.None"/> when absent.</summary>
     public ApiKeyAccess AccessTo(string feature) =>

@@ -32,6 +32,12 @@ public static class BuildingCatalogue
 
     private const double BuildTimeGrowth = 1.33;
 
+    /// <summary>A raze takes this share of the razed level's build time (<c>docs/design/construction-slots.md</c>, "Razing").</summary>
+    public const double RazeTimeFactor = 0.75;
+
+    /// <summary>A finished raze pays back one this-th of the razed level's cost, rounded down per resource.</summary>
+    public const double RazeRefundDivisor = 3.0;
+
     /// <summary>
     /// The highest level <paramref name="type"/> can be built to
     /// (<c>docs/design/economy.md</c> §4): Longhouse 30; resource producers and
@@ -395,7 +401,7 @@ public static class BuildingCatalogue
             // effects not yet designed); the military line's capstone and the
             // feeder of the Shrine of Thor.
             BuildingType.Smithy =>
-                Producer(type, level, SandOrGrass, ResourceAmounts.Zero, SmallBuildingCost, 4),
+                Producer(type, level, Grass, ResourceAmounts.Zero, SmallBuildingCost, 4),
             BuildingType.DruidHut => DruidHut(level),
             BuildingType.CartWorkshop => CartWorkshop(level),
             // The start's stone source: on plain bog moss (the landing spots guarantee bog in reach), not on grass.
@@ -573,7 +579,6 @@ public static class BuildingCatalogue
     private static readonly IReadOnlySet<Terrain> Forest = new HashSet<Terrain> { Terrain.Forest };
     private static readonly IReadOnlySet<Terrain> Ridge = new HashSet<Terrain> { Terrain.Mountain };
     private static readonly IReadOnlySet<Terrain> Grass = new HashSet<Terrain> { Terrain.Grass };
-    private static readonly IReadOnlySet<Terrain> SandOrGrass = new HashSet<Terrain> { Terrain.Sand, Terrain.Grass };
     private static readonly IReadOnlySet<Terrain> Sea = new HashSet<Terrain> { Terrain.Sea };
     private static readonly IReadOnlySet<Terrain> Bog = new HashSet<Terrain> { Terrain.Bog };
 
@@ -931,7 +936,7 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 140, Stone: 100, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(7, level),
-        AllowedTerrain = SandOrGrass,
+        AllowedTerrain = Grass,
         // The deepest tier of the early military line (Tower -> Barracks ->
         // Archery Range), behind a level-5 Barracks.
     };
@@ -981,7 +986,7 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 130, Stone: 110, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(7, level),
-        AllowedTerrain = SandOrGrass,
+        AllowedTerrain = Grass,
         // The middle rung of the military line: needs a level-3 Tower
         // standing first (see PrerequisiteTable) and gates Archery Range in
         // turn, so raising an army is a mid-game commitment rather than

@@ -57,8 +57,17 @@ const highlightedCode = computed(() => {
   return value ? value.trim().toUpperCase() : null;
 });
 
+function matchesCode(code: string | null | undefined): boolean {
+  return highlightedCode.value !== null && !!code && code.toUpperCase() === highlightedCode.value;
+}
+
 function isHighlighted(request: ApiKeyRequestResponse): boolean {
-  return highlightedCode.value !== null && request.userCode.toUpperCase() === highlightedCode.value;
+  return matchesCode(request.userCode);
+}
+
+// A request that was collected is no longer listed under Requests: its link opens the key it became.
+function isKeyHighlighted(key: ApiKeyResponse): boolean {
+  return matchesCode(key.requestUserCode);
 }
 
 async function scrollToHighlighted() {
@@ -88,11 +97,26 @@ async function load() {
   } finally {
     loading.value = false;
   }
+  await revealHighlightedKey();
   await scrollToHighlighted();
 }
 
+/** The linked request's key may be expired or revoked, which the key list hides by default. */
+async function revealHighlightedKey() {
+  const code = highlightedCode.value;
+  if (!code || includeInactive.value) return;
+  const open = requests.value.some((r) => isHighlighted(r));
+  if (open || keys.value.some((k) => isKeyHighlighted(k))) return;
+  includeInactive.value = true;
+  try {
+    await loadKeys();
+  } catch {
+    loadError.value = t('adminApiKeys.loadError');
+  }
+}
+
 onMounted(load);
-watch(highlightedCode, () => void scrollToHighlighted());
+watch(highlightedCode, () => void revealHighlightedKey().then(scrollToHighlighted));
 watch(includeInactive, () => void loadKeys().catch(() => (loadError.value = t('adminApiKeys.loadError'))));
 
 function selfOwner(): ScopeEditorOwner {
@@ -113,6 +137,10 @@ async function resolveOwner(userName: string | null): Promise<ScopeEditorOwner |
   } catch {
     return null;
   }
+}
+
+function toEditorAccount(a: { userId: string; userName: string; role: string }): ScopeEditorOwner {
+  return { id: a.userId, userName: a.userName, role: a.role };
 }
 
 function openNew() {
@@ -143,6 +171,7 @@ async function openEdit(key: ApiKeyResponse) {
       name: key.name,
       purpose: key.purpose,
       owner,
+      additionalAccounts: (key.additionalAccounts ?? []).map(toEditorAccount),
       features: key.features,
       allWorlds: key.allWorlds,
       worldIds: key.worldIds,
@@ -156,11 +185,18 @@ async function openApprove(request: ApiKeyRequestResponse) {
   actionError.value = null;
   editorError.value = null;
   const owner = (await resolveOwner(request.requestedOwnerUserName)) ?? selfOwner();
+  // Pre-fill the further accounts: what was approved already (a renewal), else the names the agent hinted.
+  const hinted = request.approved
+    ? request.approved.additionalAccounts.map(toEditorAccount)
+    : (await Promise.all(request.requestedAdditionalUserNames.map(resolveOwner))).filter(
+        (a): a is ScopeEditorOwner => a !== null && a.id !== owner.id,
+      );
   editor.value = {
     kind: 'approve',
     request,
     initial: {
       owner,
+      additionalAccounts: hinted,
       features: request.features,
       allWorlds: request.allWorlds,
       worldIds: request.worldIds,
@@ -333,6 +369,10 @@ const openRequests = computed(() =>
               <dt>{{ $t('adminApiKeys.requests.owner') }}</dt>
               <dd>{{ request.requestedOwnerUserName }}</dd>
             </template>
+            <template v-if="request.requestedAdditionalUserNames.length > 0">
+              <dt>{{ $t('adminApiKeys.requests.accounts') }}</dt>
+              <dd>{{ request.requestedAdditionalUserNames.join(', ') }}</dd>
+            </template>
             <dt>{{ $t('adminApiKeys.requests.features') }}</dt>
             <dd>{{ featureSummary(request.features) }}</dd>
             <dt>{{ $t('adminApiKeys.requests.worlds') }}</dt>
@@ -393,7 +433,9 @@ const openRequests = computed(() =>
             <tr>
               <th>{{ $t('adminApiKeys.keys.columns.name') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.hint') }}</th>
+              <th>{{ $t('adminApiKeys.keys.columns.request') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.owner') }}</th>
+              <th>{{ $t('adminApiKeys.keys.columns.accounts') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.createdBy') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.status') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.expires') }}</th>
@@ -404,10 +446,20 @@ const openRequests = computed(() =>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="key in keys" :key="key.id" :data-testid="`key-${key.id}`">
+            <tr
+              v-for="key in keys"
+              :key="key.id"
+              :class="{ highlight: isKeyHighlighted(key) }"
+              :data-highlighted="isKeyHighlighted(key) ? 'true' : 'false'"
+              :data-testid="`key-${key.id}`"
+            >
               <td>{{ key.name }}</td>
               <td><code>{{ key.keyHint }}</code></td>
+              <td>
+                <code v-if="key.requestUserCode" :data-testid="`key-request-${key.id}`">{{ key.requestUserCode }}</code>
+              </td>
               <td>{{ key.ownerUserName }}</td>
+              <td class="summary">{{ (key.additionalAccounts ?? []).map((a) => a.userName).join(', ') }}</td>
               <td>{{ key.createdByUserName ?? '' }}</td>
               <td>
                 <span :class="['status', key.status.toLowerCase()]">
@@ -531,6 +583,9 @@ section {
   max-width: 260px;
   overflow-wrap: anywhere;
   font-size: 12px;
+}
+.table tr.highlight td {
+  background: color-mix(in srgb, var(--gold) 18%, transparent);
 }
 .status.revoked,
 .status.expired {

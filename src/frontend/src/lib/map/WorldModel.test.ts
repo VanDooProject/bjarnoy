@@ -16,6 +16,11 @@ import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } f
 import type { BogTile, RiverTile, Settlement } from './types';
 import { JOTNAR_OWNER_KEY } from './endgamePlacement';
 
+// A free grass hex with no river on it: the ground every ordinary building stands on (`LAND_TERRAIN_BY_TYPE`, `riverBuildingAllowedHere`).
+function isEmptyGrass(model: WorldModel, c: AxialCoord): boolean {
+  return model.getTile(c.q, c.r).terrain === 'grass' && !model.getTile(c.q, c.r).buildingType && !model.getRiverTile(c.q, c.r);
+}
+
 function foundLandedSettlement(model: WorldModel) {
   const at = model.findLandfall({ q: 0, r: 0 });
   if (!at) throw new Error('no land found near origin for this seed — pick a different test seed');
@@ -209,18 +214,17 @@ describe('WorldModel.listPlacedBuildings', () => {
 
     const radius = model.borderRadius(settlement);
     const spots = hexesInRadius(at, radius).filter(
-      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => (c.q !== at.q || c.r !== at.r) && isEmptyGrass(model, c),
     );
     if (spots.length < 2) throw new Error('not enough empty land in claim radius — pick a different test seed');
 
-    // Lumberjack first, farm second — the reverse of the checklist's own
-    // visual order, proving the list reflects what's built, not a fixed step.
-    expect(model.placeBuilding(settlement.id, spots[0], 'lumberjack')).toBe(true);
-    expect(new Set(model.listPlacedBuildings(settlement.id))).toEqual(new Set(['longhouse', 'lumberjack']));
+    // Storage house first, farm second — proving the list reflects what's built, in any order, not a fixed step.
+    expect(model.placeBuilding(settlement.id, spots[0], 'storagehouse')).toBe(true);
+    expect(new Set(model.listPlacedBuildings(settlement.id))).toEqual(new Set(['longhouse', 'storagehouse']));
 
     expect(model.placeBuilding(settlement.id, spots[1], 'farm')).toBe(true);
     expect(new Set(model.listPlacedBuildings(settlement.id))).toEqual(
-      new Set(['longhouse', 'lumberjack', 'farm']),
+      new Set(['longhouse', 'storagehouse', 'farm']),
     );
   });
 
@@ -252,7 +256,7 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const spots = hexesInRadius(at, 3).filter(
-      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => (c.q !== at.q || c.r !== at.r) && isEmptyGrass(model, c),
     );
     expect(spots.length).toBeGreaterThan(3);
 
@@ -277,7 +281,7 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const spots = hexesInRadius(at, 3).filter(
-      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => (c.q !== at.q || c.r !== at.r) && isEmptyGrass(model, c),
     );
     expect(spots.length).toBeGreaterThan(5);
 
@@ -318,7 +322,7 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const spots = hexesInRadius(at, 3).filter(
-      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => (c.q !== at.q || c.r !== at.r) && isEmptyGrass(model, c),
     );
     settlement.level = 3;
 
@@ -336,7 +340,7 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const spots = hexesInRadius(at, 3).filter(
-      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => (c.q !== at.q || c.r !== at.r) && isEmptyGrass(model, c),
     );
     settlement.level = 3;
     const before = model.visionDiscsFor(settlement)[0].radius;
@@ -510,6 +514,37 @@ describe('WorldModel realm shrinks when a tower falls', () => {
 
     expect(outer.some(owned)).toBe(false);
     expect(owned(at)).toBe(true);
+  });
+
+  it('demo razeBuilding takes one level: a level-2 tower keeps standing at level 1 and releases only its outer ring', () => {
+    const { model, settlement, edge, snap, owned, exclusive } = setup();
+    snap([{ q: edge.q, r: edge.r, type: 'tower', level: 2 }]);
+    const ring2 = exclusive(edge, 2).filter((c) => hexDistance(edge, c) === 2);
+    const inner = exclusive(edge, 1);
+    expect(ring2.some(owned)).toBe(true);
+
+    expect(model.razeBuilding(settlement.id, edge)).toBe(true);
+
+    const tile = model.getTile(edge.q, edge.r);
+    expect(tile.buildingType).toBe('tower');
+    expect(tile.buildingLevel).toBe(1);
+    expect(ring2.some(owned)).toBe(false);
+    expect(inner.every(owned)).toBe(true);
+  });
+
+  it('demo razeBuilding removes the building only at level 1 and never touches the longhouse', () => {
+    const { model, settlement, at, snap } = setup();
+    const farm = hexRing(at, 1)[0];
+    snap([{ q: farm.q, r: farm.r, type: 'farm', level: 2 }]);
+
+    expect(model.razeBuilding(settlement.id, farm)).toBe(true);
+    expect(model.getTile(farm.q, farm.r)).toMatchObject({ buildingType: 'farm', buildingLevel: 1 });
+    expect(model.razeBuilding(settlement.id, farm)).toBe(true);
+    expect(model.getTile(farm.q, farm.r).buildingType).toBeUndefined();
+
+    expect(model.getTile(at.q, at.r).buildingType).toBe('longhouse');
+    expect(model.razeBuilding(settlement.id, at)).toBe(false);
+    expect(model.getTile(at.q, at.r).buildingType).toBe('longhouse');
   });
 
   it('explored ground stays explored after the realm shrinks', () => {
@@ -953,7 +988,7 @@ describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
     model.setIslands([{ id: 'isl-wheat', name: 'Wheatisle', q: centre.q, r: centre.r }]);
 
     const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
-      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => isEmptyGrass(model, c),
     );
     if (!spot) throw new Error('no empty land near founding — pick a different test seed');
 
@@ -968,7 +1003,7 @@ describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
     model.setIslands([{ id: 'isl-pumpkin', name: 'Pumpkinisle', q: centre.q, r: centre.r }]);
 
     const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
-      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => isEmptyGrass(model, c),
     );
     if (!spot) throw new Error('no empty land near founding — pick a different test seed');
 
@@ -983,7 +1018,7 @@ describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
     model.setIslands([{ id: 'isl-wheat', name: 'Wheatisle', q: centre.q, r: centre.r }]);
 
     const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
-      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => isEmptyGrass(model, c),
     );
     if (!spot) throw new Error('no empty land near founding — pick a different test seed');
 
@@ -995,7 +1030,7 @@ describe('WorldModel.placeBuilding — PumpkinFarm soil gate', () => {
     const { settlement, at } = foundLandedSettlement(model);
 
     const spot = hexesInRadius(at, model.borderRadius(settlement)).find(
-      (c) => model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => isEmptyGrass(model, c),
     );
     if (!spot) throw new Error('no empty land near founding — pick a different test seed');
 
@@ -2754,7 +2789,7 @@ describe('WorldModel chained towers', () => {
     expect(model.connectedTowerCount(settlement.id)).toBe(0);
 
     const spot = hexesInRadius(at, 3).find(
-      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => (c.q !== at.q || c.r !== at.r) && isEmptyGrass(model, c),
     )!;
     expect(model.placeBuilding(settlement.id, spot, 'tower')).toBe(true);
     expect(model.connectedTowerCount(settlement.id)).toBe(1);
@@ -2763,7 +2798,7 @@ describe('WorldModel chained towers', () => {
     snap(settlement, [spot, along(3), along(5), along(7)]);
     expect(model.connectedTowerCount(settlement.id)).toBe(4);
     const another = hexesInRadius(at, 3).find(
-      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+      (c) => (c.q !== at.q || c.r !== at.r) && isEmptyGrass(model, c),
     )!;
     expect(model.placeBuilding(settlement.id, another, 'tower')).toBe(false);
   });

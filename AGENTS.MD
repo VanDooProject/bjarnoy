@@ -70,6 +70,11 @@
 
 # bugs
 - when fixing a bug add tests so we can make sure they don't come back; these tests can also be used to reproduce the bug first
+- a session for resolving a bug reviews its own fix automatically, without being asked: once the fix and its tests are done,
+  hand the diff to an Opus subagent (`Agent` tool, `model: opus`) for review, and address what it finds
+- if the review is good (no open blocking findings after the fixes) and everything is done and CI is green on the current
+  head, squash-merge the PR via GitHub without waiting for a further go-ahead (squash rules above). If the review is not
+  good, or CI is red, don't merge: fix it, or tell me what blocks
 
 # driving red CI to green
 - reproduce each failing CI test locally and iterate on it there until it
@@ -94,18 +99,22 @@
   own diff (confirmed pre-existing, e.g. it also fails on `main` at the
   PR's own base commit), do not fix it inside that PR — it stays scoped to
   its own change
-- before starting any fix work for it, **ask me first** — don't just spin
-  up a fix on your own initiative for an unrelated failure, test flake, or
-  CI issue you stumbled into. Tell me what's failing and why you think
-  it's unrelated, and wait for a go-ahead
-- once I say go: check for an existing open PR (and existing branches)
-  already fixing that same test/CI issue before starting — search open PRs
-  by title/branch/linked test name. If one already exists, don't start a
-  duplicate fix; either help drive the existing one or say so. This matters
-  most when multiple agents/sessions could be working in parallel — two
-  agents racing to fix the same known-broken test wastes work and risks
-  conflicting fixes
-- if no existing PR covers it, you're allowed to spin off a new,
+- this applies to any new failure, flake or test issue you didn't cause,
+  not only ones found while driving a PR to green. **First** check whether
+  something already covers it: open PRs and branches (title, branch, test
+  name) and open/related sessions (`list_sessions`, `list_events` on the
+  ones that look related). Two agents racing to fix the same known-broken
+  test wastes work and risks conflicting fixes
+- if one covers it, don't start a fix and don't ask me about one: add what
+  you found (repro steps, failing test names, logs, suspected root cause)
+  to that PR as a comment, or to that session via `send_message`, so the
+  agent already working on it can fix it faster. Then say which PR or
+  session has it
+- only if nothing covers it: log it (`TaskCreate`, `[BUG]`/`[FLAKE]`/`[TEST]`),
+  and **ask me before starting any fix work** — don't spin up a fix on your
+  own initiative. Tell me what's failing and why you think it's unrelated,
+  and wait for a go-ahead
+- once I say go, and nothing covers it, you're allowed to spin off a new,
   independent PR for just that fix: branch off latest `main` (not off the
   PR branch that surfaced it), fix + test it there, open its own PR, drive
   it to green, then squash-merge it via GitHub

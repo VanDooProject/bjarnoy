@@ -50,6 +50,7 @@
     "context": "Context",
     "requester": "Requester",
     "owner": "Requested owner",
+    "accounts": "Requested further accounts",
     "features": "Features",
     "worlds": "Worlds",
     "lifetime": "Lifetime",
@@ -69,7 +70,9 @@
     "columns": {
       "name": "Name",
       "hint": "Key",
+      "request": "Request",
       "owner": "Owner",
+      "accounts": "Further accounts",
       "createdBy": "Created by",
       "status": "Status",
       "expires": "Expires",
@@ -79,14 +82,24 @@
       "actions": "Actions"
     }
   },
+  "lookup": {
+    "via": {
+      "user": "{name}",
+      "settlement": "settlement {name}",
+      "jarl": "jarl {name}"
+    }
+  },
   "editor": {
     "name": "Name",
     "purpose": "Purpose",
     "owner": "Owner (the key acts as this user)",
     "adminBadge": "admin",
-    "ownerSearch": "Search users",
-    "searchButton": "Search",
+    "ownerSearch": "Search user, settlement or jarl",
     "ownerSelf": "Me",
+    "accounts": "Further accounts (optional)",
+    "accountsHint": "The key may also act as these accounts: a request picks one with the X-Act-As header, otherwise it acts as the owner.",
+    "accountSearch": "Add account: search user, settlement or jarl",
+    "removeAccount": "Remove {name}",
     "features": "Features",
     "feature": "Feature",
     "worldScoped": "world-scoped",

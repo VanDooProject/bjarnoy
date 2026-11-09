@@ -187,6 +187,13 @@ public sealed record Army
         _ => home,
     };
 
+    /// <summary>Every hex the army has stood on by <paramref name="now"/> on its active leg; just <paramref name="home"/> while it is not travelling.</summary>
+    public IReadOnlyList<HexCoord> HexesReachedBy(HexCoord home, DateTimeOffset now) => Location switch
+    {
+        ArmyLocation.InTransit inTransit => inTransit.Movement.HexesReachedBy(now),
+        _ => [home],
+    };
+
     /// <summary>
     /// The settlement side and the movement side of dispatching an army in
     /// one pure decision — mirrors <see cref="Settlement.PlanBuild"/>'s shape.
@@ -1188,14 +1195,17 @@ public sealed record Army
                 Provisions = provisionsAtTurnAround,
             };
 
+            var outbound = new WalkedLeg(movement, movement.TurnAroundAt);
             return now >= returning.ArrivesAt
-                ? new ArmySettleResult(turned with { Location = new ArmyLocation.AtHome() }, Changed: true, ArrivedHome: true)
-                : new ArmySettleResult(turned, Changed: true, ArrivedHome: false);
+                ? new ArmySettleResult(
+                    turned with { Location = new ArmyLocation.AtHome() }, Changed: true, ArrivedHome: true, [outbound, WalkedLeg.Full(returning)])
+                : new ArmySettleResult(turned, Changed: true, ArrivedHome: false, [outbound]);
         }
 
         if (now >= movement.ArrivesAt)
         {
-            return new ArmySettleResult(this with { Location = new ArmyLocation.AtHome() }, Changed: true, ArrivedHome: true);
+            return new ArmySettleResult(
+                this with { Location = new ArmyLocation.AtHome() }, Changed: true, ArrivedHome: true, [WalkedLeg.Full(movement)]);
         }
 
         return new ArmySettleResult(this, Changed: false, ArrivedHome: false);
@@ -1650,7 +1660,55 @@ public sealed record Army
 /// into the home settlement's <see cref="Settlement.Garrison"/> and retiring
 /// the army row; see the type-level remarks on <see cref="Army"/>.
 /// </param>
-public sealed record ArmySettleResult(Army Army, bool Changed, bool ArrivedHome);
+/// <param name="Walked">
+/// The legs this settle finished, each with the instant it ended: what the army walked that the persisted
+/// <see cref="Movement.Movement"/> no longer shows once the result is stored (the outbound leg when it turned around,
+/// and the return leg too when the same call also brought it home). Empty when nothing changed.
+/// </param>
+public sealed record ArmySettleResult(Army Army, bool Changed, bool ArrivedHome, IReadOnlyList<WalkedLeg>? Walked = null)
+{
+    public IReadOnlyList<WalkedLeg> Walked { get; init; } = Walked ?? [];
+}
+
+/// <summary>
+/// A leg of an army's route up to the instant it ended (it turned around, was replaced by a new route, or arrived).
+/// <see cref="Hexes"/> are the hexes it crossed meanwhile — the ground that counts as explored by it.
+/// </summary>
+public sealed record WalkedLeg(Movement.Movement Leg, DateTimeOffset Until)
+{
+    /// <summary>The leg ran its whole path.</summary>
+    public static WalkedLeg Full(Movement.Movement leg) => new(leg, DateTimeOffset.MaxValue);
+
+    public IReadOnlyList<HexCoord> Hexes => Leg.HexesReachedBy(Until);
+
+    /// <summary>
+    /// The leg <paramref name="before"/> was travelling that <paramref name="after"/> no longer is: the whole leg when it
+    /// ended in a non-travelling state, the part up to the new leg's departure when it was replaced by another route, and
+    /// <see langword="null"/> when it is still the same leg (or <paramref name="before"/> was not travelling).
+    /// </summary>
+    public static WalkedLeg? Between(Army before, Army after)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+
+        if (before.Location is not ArmyLocation.InTransit { Movement: var old })
+        {
+            return null;
+        }
+
+        if (after.Location is not ArmyLocation.InTransit { Movement: var next })
+        {
+            return Full(old);
+        }
+
+        var sameLeg = old.DepartedAt == next.DepartedAt
+            && old.IsReturning == next.IsReturning
+            && old.Path.Count == next.Path.Count
+            && old.Path[0] == next.Path[0]
+            && old.Path[^1] == next.Path[^1];
+        return sameLeg ? null : new WalkedLeg(old, next.DepartedAt);
+    }
+}
 
 /// <param name="Army">
 /// The updated army — <see langword="null"/> when a wiped-out attacker
