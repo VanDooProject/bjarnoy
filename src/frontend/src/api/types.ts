@@ -1609,6 +1609,30 @@ export interface MovementResponse {
 }
 
 /**
+ * Mirrors `ForeignMovementResponse`: the short stretch of a foreign army's route its viewer may see (`docs/design/map-fog-v2.md` §1g),
+ * rebased to start at the hex the marker last passed — same fields and meaning as `MovementResponse` for that stretch alone, no return route.
+ */
+export interface ForeignMovementResponse {
+  departedAt: string;
+  path: HexPoint[];
+  cumulativeHours: number[];
+  edgeHours: number[];
+  arrivesAt: string;
+}
+
+/**
+ * Mirrors `ForeignArmyResponse` (`GET /worlds/{id}/foreign-armies`): a marching army of another player inside the viewer's sight. Only
+ * which realm it belongs to, flag or ship, where it is and its next stretch of route: no mission, target, units or provisions.
+ */
+export interface ForeignArmyResponse {
+  id: string;
+  settlementId: string;
+  isFleet: boolean;
+  position: HexPoint;
+  movement: ForeignMovementResponse;
+}
+
+/**
  * Mirrors `ArmyResponse`. `atHome`/`supporting` are mutually exclusive with
  * `movement` being non-null (an army is either in transit, at home, or a
  * guest garrison elsewhere). `position` is already resolved server-side

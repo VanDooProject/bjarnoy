@@ -240,6 +240,7 @@ const tocLinks = computed(() =>
         <template #odin><BuildingLink type="odinstatue" /></template>
         <template #bonus>{{ ravensRings(1) }}</template>
       </i18n-t>
+      <p class="text">{{ $t('docs.landMovement.sight.others') }}</p>
     </section>
   </DocsPageLayout>
 </template>

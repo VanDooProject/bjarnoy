@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  armyMarkerColor,
+  grantsArmyVision,
+  type ArmyOverlayMarker,
   previewGroundCoords,
   attentionPulseFrame,
   clampAnimationDeltaMs,
@@ -1206,5 +1209,33 @@ describe('worldCampMarkers', () => {
   it('keeps the paw readable when zoomed far out and bounded when zoomed in', () => {
     expect(worldPawHalfSize(0.01)).toBeGreaterThanOrEqual(8);
     expect(worldPawHalfSize(100)).toBeLessThanOrEqual(14);
+  });
+});
+
+describe('foreign army markers', () => {
+  const own: ArmyOverlayMarker = {
+    id: 'own',
+    position: { q: 0, r: 0 },
+    selected: false,
+    returning: false,
+    isFleet: false,
+    movement: { path: [{ q: 0, r: 0 }], cumulativeHours: [0], edgeHours: [0], departedAtMs: 0, arrivesAtMs: 1 },
+  };
+  const foreign: ArmyOverlayMarker = { ...own, id: 'foreign', foreign: true, color: 0x4fd17a };
+
+  it('draws a foreign army in its owner colour, never the gold/returning colours of our own', () => {
+    expect(armyMarkerColor(foreign)).toBe(0x4fd17a);
+    expect(armyMarkerColor({ ...foreign, returning: true })).toBe(0x4fd17a);
+    expect(armyMarkerColor(own)).not.toBe(armyMarkerColor({ ...own, returning: true }));
+  });
+
+  it('reads as a rival when the foreign marker carries no colour', () => {
+    expect(armyMarkerColor({ ...foreign, color: undefined })).toBe(0xe2705f);
+  });
+
+  it('lifts our fog only for our own marching armies, never for a foreign one', () => {
+    expect(grantsArmyVision(own)).toBe(true);
+    expect(grantsArmyVision({ ...own, movement: undefined })).toBe(false);
+    expect(grantsArmyVision(foreign)).toBe(false);
   });
 });

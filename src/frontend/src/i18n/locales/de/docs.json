@@ -1249,7 +1249,8 @@
     },
     "sight": {
       "heading": "Was eine Armee sieht",
-      "body": "Eine marschierende Armee deckt {rings} Ringe der Karte um sich auf, dazu {bonus} weitere für jede Stufe der {odin}."
+      "body": "Eine marschierende Armee deckt {rings} Ringe der Karte um sich auf, dazu {bonus} weitere für jede Stufe der {odin}.",
+      "others": "Marschieren Truppen anderer Spieler durch dein Sichtfeld, siehst du sie in der Farbe ihres Besitzers über die Karte ziehen. Wohin sie wollen und was sie tragen, bleibt dir verborgen."
     },
     "bridges": {
       "heading": "Brücken über breite Flüsse",

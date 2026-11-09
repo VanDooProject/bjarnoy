@@ -16,6 +16,7 @@ import type {
   TrainingOrderResponse,
   FeastOfferResponse,
   FeastResponse,
+  ForeignArmyResponse,
   QuestResponse,
   RenownResponse,
   UnitStackResponse,
@@ -299,6 +300,9 @@ export const useWorldStore = defineStore('world', {
     // often than the owner's own army list does. Always empty in demo mode.
     guestArmies: [] as GuestArmySummary[],
     guestArmiesFetchedAt: 0,
+    // Other players' marching armies inside our sight (`GET /worlds/{id}/foreign-armies`), refetched with `armies`. Drawn as
+    // markers in their owner's colour, never selectable; always empty in demo mode.
+    foreignArmies: [] as ForeignArmyResponse[],
     // The army currently shown selected in ArmyPanel.vue — its live route is
     // drawn on the map (HexMapRenderer.setArmyOverlay) while selected. Not a
     // computed getter: selection persists across `refreshArmies` polls by id.
@@ -1267,6 +1271,7 @@ export const useWorldStore = defineStore('world', {
       this.armies = [];
       this.armiesFetchedAt = 0;
       this.guestArmies = [];
+      this.foreignArmies = [];
       this.guestArmiesFetchedAt = 0;
       this.selectedArmyId = null;
       this.dispatchDraft = null;
@@ -1503,6 +1508,18 @@ export const useWorldStore = defineStore('world', {
         console.warn('camp states refresh failed', err);
       }
     },
+    /**
+     * Live mode: fetches the other players' armies marching inside our sight (`GET /worlds/{id}/foreign-armies`). Never throws: a failed
+     * fetch leaves the previous list. A no-op in demo mode.
+     */
+    async refreshForeignArmies() {
+      if (DEMO_MODE || !this.worldId) return;
+      try {
+        this.foreignArmies = await api.getForeignArmies(this.worldId, this.callerOwnerId());
+      } catch (err) {
+        console.warn('foreign armies refresh failed', err);
+      }
+    },
     async refreshArmies() {
       if (DEMO_MODE || !this.selectedSettlementId) return;
       const [summaries, guests] = await Promise.all([
@@ -1520,6 +1537,7 @@ export const useWorldStore = defineStore('world', {
       this.guestArmiesFetchedAt = Date.now();
       // Hunts, ambushes and regrowth change camps; piggy-back the camp refresh on the army poll.
       await this.refreshCampStates();
+      await this.refreshForeignArmies();
       // An army that arrived home (and was folded back/deleted — see the
       // `armies` state comment) simply stops appearing in the list; drop a
       // selection that's no longer valid rather than leaving the map overlay
