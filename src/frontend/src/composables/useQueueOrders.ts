@@ -7,6 +7,7 @@ import { computed, type ComputedRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import { buildingName, unitName } from '../i18n/catalogueNames';
+import type { BuildOrderResponse } from '../api/types';
 import { useWorldStore } from '../stores/world';
 import { formatCountdown, formatCountdownShort } from '../lib/hud/countdown';
 import { isPendingOrder } from '../lib/hud/pendingBuild';
@@ -36,6 +37,14 @@ export function useBuildOrders(): ComputedRef<BuildOrderRow[]> {
   const world = useWorldStore();
   const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
   const lastProgress = new Map<string, number>();
+
+  // A raze down to level 0 removes the building, so it has no target level to name.
+  function orderName(q: BuildOrderResponse, label: string): string {
+    if (q.kind !== 'raze') return t('hud.buildQueue.orderName', { name: label, level: q.targetLevel });
+    return q.targetLevel > 0
+      ? t('hud.buildQueue.razeOrderName', { name: label, level: q.targetLevel })
+      : t('hud.buildQueue.razeRemoveOrderName', { name: label });
+  }
 
   return computed(() => {
     void world.hud.tick; // reactive dependency so the countdown ticks every second
@@ -67,7 +76,7 @@ export function useBuildOrders(): ComputedRef<BuildOrderRow[]> {
       const done = remainingNow !== null && remainingNow <= 0.5;
       return {
         key: q.id,
-        name: t('hud.buildQueue.orderName', { name: label, level: q.targetLevel }),
+        name: orderName(q, label),
         remaining: waiting ? t('hud.buildQueue.waitingForSlot') : remainingNow === null ? '—' : formatCountdown(remainingNow),
         remainingSeconds: waiting ? null : remainingNow,
         progress,

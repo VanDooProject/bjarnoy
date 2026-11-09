@@ -1421,6 +1421,89 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
 
+    // ---------------------------------------------------------------- razing
+
+    private Task<HttpResponseMessage> RazeAsync(HttpClient client, Guid settlementId, int q, int r) =>
+        client.PostJsonAsync($"/api/v1/settlements/{settlementId}/razes", new RazeBuildingRequest(q, r), Ct);
+
+    [Fact]
+    public async Task A_razed_building_keeps_working_until_the_raze_finishes_then_is_gone_and_pays_a_third_back()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        var built = await QueueFarmAsync(client, settlement);
+        Assert.NotNull(built);
+        _factory.Time.Advance(TimeSpan.FromHours(2));
+
+        var standing = await GetAsync(client, settlement.Id);
+        Assert.Contains(standing!.Buildings, b => b.Q == built!.Q && b.R == built.R && b.Level == 1);
+        var woodBefore = standing.Resources.Stock.Wood;
+
+        var response = await RazeAsync(client, settlement.Id, built!.Q, built.R);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var order = await response.ReadStrictAsync<BuildOrderResponse>(Ct);
+        Assert.Equal("raze", order.Kind);
+        Assert.Equal(0, order.TargetLevel);
+        Assert.Equal("building", order.State);
+
+        // Free, and the building stands at its level while the order runs.
+        var during = await GetAsync(client, settlement.Id);
+        var queued = Assert.Single(during!.Queue);
+        Assert.Equal("raze", queued.Kind);
+        Assert.Contains(during.Buildings, b => b.Q == built.Q && b.R == built.R && b.Level == 1);
+        Assert.True(during.Resources.Stock.Wood >= woodBefore);
+
+        _factory.Time.Advance(TimeSpan.FromHours(2));
+        var after = await GetAsync(client, settlement.Id);
+
+        Assert.Empty(after!.Queue);
+        Assert.DoesNotContain(after.Buildings, b => b.Q == built.Q && b.R == built.R);
+        Assert.True(after.Resources.RatePerHour.Food < during.Resources.RatePerHour.Food);
+    }
+
+    [Fact]
+    public async Task Razing_the_longhouse_or_an_empty_hex_is_a_409_with_a_machine_readable_rejection()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+
+        var longhouse = await RazeAsync(client, settlement.Id, settlement.Q, settlement.R);
+        Assert.Equal(HttpStatusCode.Conflict, longhouse.StatusCode);
+        Assert.Equal("LonghouseCannotBeRazed", await longhouse.RejectionAsync(Ct));
+
+        var empty = await RazeAsync(client, settlement.Id, settlement.Q + 1, settlement.R);
+        Assert.Equal(HttpStatusCode.Conflict, empty.StatusCode);
+        Assert.Equal("NoBuildingOnHex", await empty.RejectionAsync(Ct));
+    }
+
+    [Fact]
+    public async Task A_hex_with_a_raze_queued_refuses_a_second_one_and_cancelling_the_raze_leaves_the_building()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        var built = await QueueFarmAsync(client, settlement);
+        Assert.NotNull(built);
+        _factory.Time.Advance(TimeSpan.FromHours(2));
+
+        var woodBefore = (await GetAsync(client, settlement.Id))!.Resources.Stock.Wood;
+        var first = await RazeAsync(client, settlement.Id, built!.Q, built.R);
+        Assert.Equal(HttpStatusCode.Accepted, first.StatusCode);
+        var order = await first.ReadStrictAsync<BuildOrderResponse>(Ct);
+
+        var second = await RazeAsync(client, settlement.Id, built.Q, built.R);
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        Assert.Equal("AlreadyQueuedOnHex", await second.RejectionAsync(Ct));
+
+        var cancel = await client.PostAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds/{order.Id}/cancel", content: null, Ct);
+        Assert.Equal(HttpStatusCode.NoContent, cancel.StatusCode);
+
+        var after = await GetAsync(client, settlement.Id);
+        Assert.Empty(after!.Queue);
+        Assert.Contains(after.Buildings, b => b.Q == built.Q && b.R == built.R && b.Level == 1);
+        Assert.Equal(woodBefore, after.Resources.Stock.Wood, 0);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private async Task<BuildOrderResponse?> QueueFarmAsync(

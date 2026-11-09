@@ -89,7 +89,7 @@ export async function gotoWorldMap(page: Page): Promise<void> {
   await page.evaluate(() => {
     window.location.hash = 'world';
   });
-  await page.waitForURL('**/settlement#world');
+  await page.waitForURL(/\/settlement#world(&.*)?$/);
   await waitForMapReady(page);
 }
 

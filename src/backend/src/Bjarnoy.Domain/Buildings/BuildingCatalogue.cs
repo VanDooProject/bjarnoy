@@ -47,6 +47,12 @@ public static class BuildingCatalogue
 
     private const double BuildTimeGrowth = 1.33;
 
+    /// <summary>A raze takes this share of the razed level's build time (<c>docs/design/construction-slots.md</c>, "Razing").</summary>
+    public const double RazeTimeFactor = 0.75;
+
+    /// <summary>A finished raze pays back one this-th of the razed level's cost, rounded down per resource.</summary>
+    public const double RazeRefundDivisor = 3.0;
+
     /// <summary>
     /// The highest level <paramref name="type"/> can be built to
     /// (<c>docs/design/economy.md</c> §4): Longhouse 30; resource producers and

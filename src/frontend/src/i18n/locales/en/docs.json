@@ -294,6 +294,18 @@
       "unitFood": "f",
       "unitIron": "i",
       "storagePrefix": "+"
+    },
+    "razing": {
+      "title": "Razing",
+      "intro": "You can raze your own buildings, one level at a time.",
+      "oneLevel": "Each raze order takes off one level. To clear a whole building, raze it level by level.",
+      "time": "Razing a level takes three quarters of the time it took to build that level, and it needs the same number of construction slots. Like a build, it waits in the queue when no slot is free.",
+      "refund": "When it finishes, you get a third of that level's cost back, as much as your storage can hold.",
+      "works": "The building keeps working until the raze is done.",
+      "cancel": "Cancelling a raze costs nothing, and the building stays as it is.",
+      "longhouse": "The {longhouse} can't be razed.",
+      "gone": "At level 0 the hex is free again, and any training queued there is refunded.",
+      "oneOrder": "A hex takes one order at a time."
     }
   },
   "tiles": {

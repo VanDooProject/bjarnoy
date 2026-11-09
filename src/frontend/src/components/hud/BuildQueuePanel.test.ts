@@ -28,6 +28,7 @@ function order(overrides: Partial<BuildOrderResponse> = {}): BuildOrderResponse 
     q: 1,
     r: 2,
     building: 'farm',
+    kind: 'build',
     targetLevel: 1,
     state: 'building',
     slotCost: 1,
@@ -150,6 +151,21 @@ describe('BuildQueuePanel', () => {
     // Still cancellable — the ✕ button is not disabled for a waiting order.
     expect(waitingRow.get('.cancel-button').attributes('disabled')).toBeUndefined();
 
+    wrapper.unmount();
+  });
+
+  it('shows a raze row that can be cancelled like a build row', async () => {
+    const world = useWorldStore();
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.queue = [order({ id: 'raze-1', kind: 'raze', targetLevel: 0 })];
+    const cancelBuildLive = vi.spyOn(world, 'cancelBuildLive').mockResolvedValue(undefined);
+
+    const wrapper = mountPanel();
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.text()).toContain('Tearing down Farm');
+    await wrapper.get('.cancel-button').trigger('click');
+    expect(cancelBuildLive).toHaveBeenCalledWith('raze-1');
     wrapper.unmount();
   });
 

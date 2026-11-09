@@ -118,6 +118,24 @@ shipped switched off:
   the schema change for this tier, done once, now, while it still refuses exact duplicates (the
   concurrent-double-queue race on one hex).
 
+## Razing
+
+A player can raze their own buildings, one level at a time.
+
+- Every raze order removes exactly one level. Razing a whole building means razing it level by level down to 0, each level
+  its own order; at level 0 the building is gone and its hex is free again.
+- Razing a level takes 75% of that level's build time (`BuildingCatalogue.RazeTimeFactor`), scaled by the world speed and
+  Odin's Wisdom the same way a build is.
+- A raze takes as many construction slots as building that level took (`SlotCost`), and goes through the queue like a build:
+  it waits in the premium queue when no slot is free. It costs nothing, so a waiting raze reserves nothing.
+- When the raze finishes you get back a third of that level's cost (rounded down per resource), capped by your storage.
+- The building keeps working at its current level until the raze finishes.
+- Cancelling a raze is free and leaves the building as it is.
+- When a raze takes a building to level 0, its queued training is cancelled and refunded in full, as for a destroyed building.
+- The Longhouse cannot be razed.
+- A raze is an order on its hex: while one is queued, the hex takes no other order (and vice versa), the same `maxOrdersPerHex`
+  rule as for builds.
+
 ## API contract
 
 - `ResourcesResponse` gains `reserved`/`available` — they live on the resources contract, not a

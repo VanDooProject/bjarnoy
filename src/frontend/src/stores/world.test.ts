@@ -34,6 +34,7 @@ const getWorldMembership = vi.fn();
 const dispatchArmy = vi.fn();
 const getWorldCamps = vi.fn();
 const queueBuild = vi.fn();
+const razeBuilding = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
 // reads `localStorage.getItem('bjarnoy.worldId')` at module-level state-init
@@ -90,6 +91,7 @@ async function loadStoreModule(demoMode: boolean) {
       dispatchArmy: (...args: unknown[]) => dispatchArmy(...args),
       getWorldCamps: (...args: unknown[]) => getWorldCamps(...args),
       queueBuild: (...args: unknown[]) => queueBuild(...args),
+      razeBuilding: (...args: unknown[]) => razeBuilding(...args),
     },
     ApiError: MockApiError,
     // Real implementations check `err instanceof ApiError && err.problem?.error
@@ -2226,6 +2228,69 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
     await expect(store.queueBuildOptimistic('lumberjack', at)).resolves.toBeUndefined();
     expect(store.hud.queue).toEqual([]);
     warn.mockRestore();
+  });
+
+  describe('razeBuildingLive', () => {
+    const razeOrder = {
+      id: 'raze-1', q: 3, r: -2, building: 'lumberjack', kind: 'raze', targetLevel: 1, state: 'building', slotCost: 1,
+      completesAtGameTime: 'x', completesInSeconds: 90, totalSeconds: 90,
+    };
+
+    async function setupWithLumberjack(level: number) {
+      const store = await setup();
+      razeBuilding.mockReset();
+      store.hud.buildings = [{ q: 3, r: -2, type: 'lumberjack', level }];
+      return store;
+    }
+
+    it('puts a pending raze order (the level after the raze) on the hex while the request runs', async () => {
+      const store = await setupWithLumberjack(2);
+      let release!: () => void;
+      razeBuilding.mockReturnValue(new Promise<void>((resolve) => (release = resolve)));
+
+      const done = store.razeBuildingLive(at);
+      expect(store.hud.queue).toHaveLength(1);
+      expect(store.hud.queue[0]).toMatchObject({ q: 3, r: -2, building: 'lumberjack', kind: 'raze', targetLevel: 1, state: 'waiting' });
+
+      getSettlement.mockResolvedValue(settlementResponse({ queue: [razeOrder] }));
+      release();
+      await done;
+      expect(razeBuilding).toHaveBeenCalledWith('settlement-1', { q: 3, r: -2 }, undefined);
+      expect(store.hud.queue.map((o) => o.id)).toEqual(['raze-1']);
+    });
+
+    it('razing level 1 targets level 0, and records no spend (a raze costs nothing)', async () => {
+      const store = await setupWithLumberjack(1);
+      let release!: () => void;
+      razeBuilding.mockReturnValue(new Promise<void>((resolve) => (release = resolve)));
+
+      const done = store.razeBuildingLive(at);
+      expect(store.hud.queue[0]).toMatchObject({ kind: 'raze', targetLevel: 0 });
+      getSettlement.mockResolvedValue(settlementResponse({ queue: [] }));
+      release();
+      await done;
+
+      expect(store.hud.lastSpend).toBeNull();
+    });
+
+    it('removes the pending order and rethrows on a refusal, without a refresh', async () => {
+      const store = await setupWithLumberjack(2);
+      const refusal = new Error('This hex already has an order.');
+      razeBuilding.mockRejectedValue(refusal);
+      getSettlement.mockClear();
+
+      await expect(store.razeBuildingLive(at)).rejects.toBe(refusal);
+
+      expect(store.hud.queue).toEqual([]);
+      expect(getSettlement).not.toHaveBeenCalled();
+    });
+
+    it('refuses a hex without a building', async () => {
+      const store = await setup();
+      razeBuilding.mockReset();
+      await expect(store.razeBuildingLive(at)).rejects.toThrow();
+      expect(razeBuilding).not.toHaveBeenCalled();
+    });
   });
 
   it('recordSpend ignores an empty cost', async () => {

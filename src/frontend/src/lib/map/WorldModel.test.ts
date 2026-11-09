@@ -500,6 +500,37 @@ describe('WorldModel realm shrinks when a tower falls', () => {
     expect(owned(at)).toBe(true);
   });
 
+  it('demo razeBuilding takes one level: a level-2 tower keeps standing at level 1 and releases only its outer ring', () => {
+    const { model, settlement, edge, snap, owned, exclusive } = setup();
+    snap([{ q: edge.q, r: edge.r, type: 'tower', level: 2 }]);
+    const ring2 = exclusive(edge, 2).filter((c) => hexDistance(edge, c) === 2);
+    const inner = exclusive(edge, 1);
+    expect(ring2.some(owned)).toBe(true);
+
+    expect(model.razeBuilding(settlement.id, edge)).toBe(true);
+
+    const tile = model.getTile(edge.q, edge.r);
+    expect(tile.buildingType).toBe('tower');
+    expect(tile.buildingLevel).toBe(1);
+    expect(ring2.some(owned)).toBe(false);
+    expect(inner.every(owned)).toBe(true);
+  });
+
+  it('demo razeBuilding removes the building only at level 1 and never touches the longhouse', () => {
+    const { model, settlement, at, snap } = setup();
+    const farm = hexRing(at, 1)[0];
+    snap([{ q: farm.q, r: farm.r, type: 'farm', level: 2 }]);
+
+    expect(model.razeBuilding(settlement.id, farm)).toBe(true);
+    expect(model.getTile(farm.q, farm.r)).toMatchObject({ buildingType: 'farm', buildingLevel: 1 });
+    expect(model.razeBuilding(settlement.id, farm)).toBe(true);
+    expect(model.getTile(farm.q, farm.r).buildingType).toBeUndefined();
+
+    expect(model.getTile(at.q, at.r).buildingType).toBe('longhouse');
+    expect(model.razeBuilding(settlement.id, at)).toBe(false);
+    expect(model.getTile(at.q, at.r).buildingType).toBe('longhouse');
+  });
+
   it('explored ground stays explored after the realm shrinks', () => {
     const { model, edge, snap, exclusive } = setup();
     snap([{ q: edge.q, r: edge.r, type: 'tower', level: 3 }]);

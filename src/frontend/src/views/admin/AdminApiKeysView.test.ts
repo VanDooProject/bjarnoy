@@ -130,6 +130,26 @@ describe('AdminApiKeysView', () => {
     wrapper.unmount();
   });
 
+  it('shows the request code on a key and opens that key for ?request=<code>', async () => {
+    mocks.adminListApiKeys.mockResolvedValue([{ ...key(), requestUserCode: 'DONE-2345' }]);
+    const wrapper = await mountAt('/admin/api-keys?request=done-2345');
+    expect(wrapper.get('[data-testid="key-request-k1"]').text()).toBe('DONE-2345');
+    expect(wrapper.get('[data-testid="key-k1"]').attributes('data-highlighted')).toBe('true');
+    expect(wrapper.findAll('[data-testid^="request-"][data-highlighted="true"]')).toHaveLength(0);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('includes revoked and expired keys when the linked request became one of them', async () => {
+    mocks.adminListApiKeys.mockImplementation(async (includeInactive: boolean) =>
+      includeInactive ? [{ ...key(), status: 'Revoked', requestUserCode: 'DONE-2345' }] : [],
+    );
+    const wrapper = await mountAt('/admin/api-keys?request=DONE-2345');
+    expect(mocks.adminListApiKeys).toHaveBeenLastCalledWith(true);
+    expect(wrapper.get('[data-testid="key-k1"]').attributes('data-highlighted')).toBe('true');
+    wrapper.unmount();
+  });
+
   it('highlights nothing without the query parameter', async () => {
     const wrapper = await mountAt('/admin/api-keys');
     expect(wrapper.findAll('[data-highlighted="true"]')).toHaveLength(0);
