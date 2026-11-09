@@ -23,7 +23,7 @@ import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
 import type { PalisadePiece } from './palisadeTiles';
 import { campHexBuildable } from './campRules';
 import type { CampStateResponse } from '../../api/types';
-import { longhouseDiscs, type ClaimDisc } from './shoreline';
+import { claimDiscs, longhouseDiscs, type ClaimDisc } from './shoreline';
 import type { FogCoverageLookup } from './fog/fogCoverage';
 import { claimsWithGiants } from './territory';
 import { realmFromDiscs, resolveRealm, type ConnectedRealm } from './realmChain';
@@ -366,6 +366,15 @@ export class WorldModel {
    * `applyServerSnapshot` (live mode) and `placeBuilding` (demo mode).
    */
   private settlementTowers = new Map<string, { q: number; r: number; level: number }[]>();
+  /**
+   * The standing towers the server delivered per rival settlement (`applyRivalBuildings`). Kept apart from `settlementTowers` on
+   * purpose: those feed the chain rule, vision and exploring, none of which a rival's towers take part in for the player. A
+   * rival's claim is its Longhouse disc plus the full disc of every tower listed here (`claimDiscsFor`), no chain check.
+   */
+  private rivalTowers = new Map<string, { q: number; r: number; level: number }[]>();
+  /** Bumped whenever something a rival's claim depends on changes; `rivalClaimOwners` is rebuilt lazily when it lags behind. */
+  private rivalClaimRevision = 0;
+  private rivalClaimCache: { revision: number; owners: Map<string, string> } | null = null;
   /**
    * The settlements the chain rule resolves together locally (`realmChain.ts`): one player's settlements on one island, keyed
    * by `realmGroupKey`. Kept up to date by `registerSettlement`, the only place a settlement enters the model. Demo mode (and
@@ -1169,6 +1178,7 @@ export class WorldModel {
     const previous = this.settlements.get(settlement.id);
     if (previous) this.realmGroups.get(realmGroupKey(previous))?.delete(previous.id);
     this.settlements.set(settlement.id, settlement);
+    this.rivalClaimRevision++;
     const key = realmGroupKey(settlement);
     const group = this.realmGroups.get(key) ?? new Map<string, Settlement>();
     group.set(settlement.id, settlement);
@@ -1193,7 +1203,7 @@ export class WorldModel {
     this.syncClaim(settlement);
     // Only the player's own settlements explore: a rival's vision ring is the rival's, the player sees it through the server's fog
     // coverage alone (`setFogCoverage`). A rival keeps its own id as `ownerId`, which never equals the player's account id.
-    if (settlement.ownerId === settlement.id) return;
+    if (this.isRivalSettlement(settlement)) return;
     for (const c of this.exploredHexesFor(settlement)) {
       this.explored.add(coordKey(c));
     }
@@ -1417,7 +1427,26 @@ export class WorldModel {
    * this settlement's full claimed territory. A cut-off tower claims nothing.
    */
   private claimDiscsFor(settlement: Settlement) {
+    // A rival's claim is its Longhouse plus every tower the server delivered, whether or not the chain connects it: the client
+    // cannot resolve another player's realm and draws what the server showed it.
+    if (this.isRivalSettlement(settlement)) {
+      return claimDiscs({ q: settlement.q, r: settlement.r }, settlement.level, this.rivalTowers.get(settlement.id) ?? []);
+    }
     return this.realmOf(settlement).discsOf(settlement.id);
+  }
+
+  /**
+   * Whether this settlement is another player's (a guild member's or treaty partner's included): its id is its own `ownerId`,
+   * where the player's own settlements carry the account id.
+   */
+  private isRivalSettlement(settlement: Settlement): boolean {
+    return settlement.ownerId === settlement.id;
+  }
+
+  /** `isRivalSettlement` by id; false for an unknown id. */
+  isRivalRealm(settlementId: string): boolean {
+    const settlement = this.settlements.get(settlementId);
+    return settlement !== undefined && this.isRivalSettlement(settlement);
   }
 
   /** `claimDiscsFor` by id — the discs of this settlement's claim that count (connected towers only); empty for an unknown id. */
@@ -1557,6 +1586,7 @@ export class WorldModel {
       else tile.ownerId = undefined;
     }
     this.claimedKeys.set(id, owned);
+    this.rivalClaimRevision++;
   }
 
   /** Marks everything the realm's vision reaches as explored (nothing ever leaves `explored`), for every settlement of the realm. */
@@ -1885,9 +1915,15 @@ export class WorldModel {
     for (const keys of this.renderedBuildingCoords.values()) for (const key of keys) ownRendered.add(key);
 
     const next = new Map<string, { settlementId: string; ownerUserId: string | null }>();
+    const towers = new Map<string, { q: number; r: number; level: number }[]>();
     for (const building of buildings) {
       const key = coordKey({ q: building.q, r: building.r });
       if (ownRendered.has(key)) continue;
+      if (building.type === 'tower' && building.level >= 1) {
+        const list = towers.get(building.settlementId) ?? [];
+        list.push({ q: building.q, r: building.r, level: building.level });
+        towers.set(building.settlementId, list);
+      }
       const tile = this.getTile(building.q, building.r);
       tile.ownerId = building.settlementId;
       tile.buildingType = building.type as Tile['buildingType'];
@@ -1907,7 +1943,38 @@ export class WorldModel {
     }
 
     this.rivalBuildings = next;
+    this.rivalTowers = towers;
+    this.rivalClaimRevision++;
     this.wallRevision++;
+  }
+
+  /**
+   * The settlement whose realm border is drawn on this hex, ignoring the fog: for the player's own settlements the tile's owner
+   * as `syncClaim` left it; for a rival the owner by claim only (`rivalClaimOwners`), so a rival building standing outside every
+   * claim disc of its realm gets no border of its own.
+   */
+  realmBorderOwnerAt(q: number, r: number): string | undefined {
+    const ownerId = this.getTile(q, r).ownerId;
+    if (ownerId !== undefined && !this.isRivalRealm(ownerId)) return ownerId;
+    return this.rivalClaimOwners().get(coordKey({ q, r }));
+  }
+
+  /**
+   * Every hex inside a rival's claim, with the settlement that wins it: where discs of two rivals overlap the oldest one does.
+   * Settlement ids are UUIDv7, which sort by creation time, so the oldest is the smallest id.
+   */
+  private rivalClaimOwners(): Map<string, string> {
+    if (this.rivalClaimCache?.revision === this.rivalClaimRevision) return this.rivalClaimCache.owners;
+    const owners = new Map<string, string>();
+    const rivals = [...this.settlements.values()].filter((s) => this.isRivalSettlement(s)).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    for (const rivalSettlement of rivals) {
+      for (const c of this.claimedHexes(rivalSettlement)) {
+        const key = coordKey(c);
+        if (!owners.has(key)) owners.set(key, rivalSettlement.id);
+      }
+    }
+    this.rivalClaimCache = { revision: this.rivalClaimRevision, owners };
+    return owners;
   }
 
   /**
@@ -2500,6 +2567,7 @@ export class WorldModel {
     }
     tile.giant = { family, anchor, part, orientation };
     this.giantAnchorByHex.set(coordKey(coord), anchor);
+    this.rivalClaimRevision++;
   }
 
   /**
