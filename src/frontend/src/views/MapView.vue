@@ -844,8 +844,9 @@ function siegeActions(tile: Tile): RingAction[] {
 function upgradeActionFor(tile: Tile): RingAction {
   const type = tile.buildingType!;
   const label = t('hud.ringMenu.actions.upgrade');
-  const level = tile.buildingLevel ?? 1;
-  const nextLevel = level + 1;
+  // Queued behind a running upgrade, this one starts from the level that one reaches.
+  const nextLevel = nextUpgradeLevel(tile.buildingLevel ?? 1, world.hud.queue, tile);
+  const level = nextLevel - 1;
   const definitions = buildingCatalogue.byType[type];
   const upgradeDefinition = definitions?.find((d) => d.level === nextLevel);
   // A catalogue that lists the building but has no further level: nothing left to upgrade to.
@@ -1301,7 +1302,7 @@ async function upgrade() {
   const tile = selectedTile.value;
   // What the Upgrade card promised (read before the ring closes: the card follows the selected tile).
   const card = upgradeActionFor(tile).card;
-  const level = nextUpgradeLevel(world.hud.buildings, world.hud.queue, coord) ?? (tile.buildingLevel ?? 1) + 1;
+  const level = nextUpgradeLevel(tile.buildingLevel ?? 1, world.hud.queue, coord);
   // Queued behind a running order on the same hex: the queue's held row and confirmation are keyed by hex, so they
   // would hide and animate that running order's row instead. The new order just appears in the queue.
   const queuedBehind = world.hud.queue.some((o) => o.q === coord.q && o.r === coord.r);

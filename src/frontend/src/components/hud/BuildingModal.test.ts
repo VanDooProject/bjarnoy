@@ -220,6 +220,18 @@ describe('BuildingModal actions', () => {
     await button.trigger('click');
     expect(wrapper.emitted('upgrade')).toHaveLength(1);
   });
+
+  it('offers the level after an upgrade already running on the hex, at that level\'s cost', () => {
+    const world = useWorldStore();
+    rich(world);
+    world.hud.queue = [{
+      id: 'order-1', q: 1, r: 1, building: 'farm', kind: 'build', targetLevel: 3, state: 'building', slotCost: 1,
+      completesAtGameTime: null, completesInSeconds: 60, totalSeconds: 60,
+    }];
+    const wrapper = mountModal({ q: 1, r: 1, terrain: 'grass', buildingType: 'farm', buildingLevel: 2 } as Tile);
+
+    expect(wrapper.get('button.primary').text()).toContain('Upgrade to level 4');
+  });
 });
 
 describe('BuildingModal outside the realm', () => {

@@ -31,6 +31,7 @@ const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' }
 import { buildingArtOnTile, terrainArt } from '../../lib/map/buildingArt';
 import { tileIsBuildable } from '../../lib/map/ringCatalogue';
 import AtlasSprite from '../AtlasSprite.vue';
+import { nextUpgradeLevel } from '../../lib/hud/pendingBuild';
 
 const props = defineProps<{
   tile: Tile;
@@ -250,7 +251,8 @@ const currentStats = computed(() =>
 
 // Only an existing building has an action here (upgrade); a fresh build
 // is placed from the ring menu, so an empty tile has no cost to show.
-const upgradeLevel = computed(() => level.value + 1);
+// Queued behind a running upgrade, this one is for the level after it (the order the server creates).
+const upgradeLevel = computed(() => nextUpgradeLevel(level.value, world.hud.queue, props.tile));
 const upgradeCost = computed<ResourceLine>(() =>
   props.tile.buildingType
     ? buildingUpgradeCost(props.tile.buildingType, upgradeLevel.value)
@@ -306,7 +308,7 @@ const noSlotNoQueue = computed(() => noFreeSlot.value && world.hud.construction.
 const actionLabel = computed(() => {
   if (noSlotNoQueue.value) return t('hud.buildingModal.noFreeSlotPremium');
   if (noFreeSlot.value) return t('hud.buildingModal.queueBuild');
-  return t('hud.buildingModal.upgradeToLevel', { level: level.value + 1 });
+  return t('hud.buildingModal.upgradeToLevel', { level: upgradeLevel.value });
 });
 </script>
 

@@ -854,10 +854,9 @@ export const useWorldStore = defineStore('world', {
     async upgradeBuildingLive(at: AxialCoord, cost?: Partial<Resources>) {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
       const placed = this.hud.buildings.find((b) => b.q === at.q && b.r === at.r);
-      const level = nextUpgradeLevel(this.hud.buildings, this.hud.queue, at);
-      if (!placed || level === null) throw new Error('No building on that hex');
+      if (!placed) throw new Error('No building on that hex');
       await this.queueOrderOptimistic(
-        makePendingOrder(placed.type, at, 'build', level),
+        makePendingOrder(placed.type, at, 'build', nextUpgradeLevel(placed.level, this.hud.queue, at)),
         () => api.queueBuild(this.selectedSettlementId!, { building: placed.type, q: at.q, r: at.r }, this.ownerId ?? undefined),
         cost,
       );
