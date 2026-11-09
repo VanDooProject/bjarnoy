@@ -39,7 +39,7 @@ function army(overrides: Partial<ArmyResponse> = {}): ArmyResponse {
   };
 }
 
-describe('ArmyPanel row double-click', () => {
+describe('ArmyPanel row double tap', () => {
   beforeEach(() => setActivePinia(createPinia()));
 
   it('emits focus-army with the row\'s army id', async () => {
@@ -50,7 +50,9 @@ describe('ArmyPanel row double-click', () => {
     });
     const rows = wrapper.findAll('.army-row');
     expect(rows).toHaveLength(2);
-    await rows[1].trigger('dblclick');
+    await rows[1].trigger('click');
+    await rows[1].trigger('click');
     expect(wrapper.emitted('focus-army')).toEqual([['army-2']]);
+    expect(world.selectedArmyId).toBe('army-2');
   });
 });
