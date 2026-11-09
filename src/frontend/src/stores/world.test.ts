@@ -13,7 +13,7 @@ const getArmy = vi.fn();
 const getSettlementGuests = vi.fn();
 const recallArmy = vi.fn();
 const listSettlements = vi.fn();
-const listWalls = vi.fn();
+const listRivalBuildings = vi.fn();
 const foundSettlement = vi.fn();
 const getTradeBoard = vi.fn();
 const getMyTradeOffers = vi.fn();
@@ -73,8 +73,8 @@ async function loadStoreModule(demoMode: boolean) {
       getSettlementGuests: (...args: unknown[]) => getSettlementGuests(...args),
       recallArmy: (...args: unknown[]) => recallArmy(...args),
       listSettlements: (...args: unknown[]) => listSettlements(...args),
-      // Unconfigured, the rival walls read is an empty world.
-      listWalls: async (...args: unknown[]) => (await listWalls(...args)) ?? [],
+      // Unconfigured, the rival buildings read is an empty world.
+      listRivalBuildings: async (...args: unknown[]) => (await listRivalBuildings(...args)) ?? [],
       foundSettlement: (...args: unknown[]) => foundSettlement(...args),
       getTradeBoard: (...args: unknown[]) => getTradeBoard(...args),
       getMyTradeOffers: (...args: unknown[]) => getMyTradeOffers(...args),
@@ -762,8 +762,8 @@ describe('useWorldStore refreshPlotSuggestion (L7: 409 recovery)', () => {
 describe('useWorldStore refreshWorldSettlements (island-scoped painting)', () => {
   it('paints only same-island rivals once a plot suggestion pins the current island', async () => {
     listSettlements.mockReset().mockResolvedValue([
-      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-near' },
-      { id: 'rival-far', name: 'Far realm', ownerName: 'Bjorn', q: 40, r: 40, longhouseLevel: 1, islandId: 'island-far' },
+      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 0, r: 0, labelQ: 0, labelR: 0, longhouseLevel: 1, islandId: 'island-near' },
+      { id: 'rival-far', name: 'Far realm', ownerName: 'Bjorn', q: 40, r: 40, labelQ: 40, labelR: 40, longhouseLevel: 1, islandId: 'island-far' },
     ]);
 
     const store = await loadStoreModule(false);
@@ -784,8 +784,8 @@ describe('useWorldStore refreshWorldSettlements (island-scoped painting)', () =>
 
   it('paints every rival once the world map is active', async () => {
     listSettlements.mockReset().mockResolvedValue([
-      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-near' },
-      { id: 'rival-far', name: 'Far realm', ownerName: 'Bjorn', q: 40, r: 40, longhouseLevel: 1, islandId: 'island-far' },
+      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 0, r: 0, labelQ: 0, labelR: 0, longhouseLevel: 1, islandId: 'island-near' },
+      { id: 'rival-far', name: 'Far realm', ownerName: 'Bjorn', q: 40, r: 40, labelQ: 40, labelR: 40, longhouseLevel: 1, islandId: 'island-far' },
     ]);
 
     const store = await loadStoreModule(false);
@@ -799,26 +799,63 @@ describe('useWorldStore refreshWorldSettlements (island-scoped painting)', () =>
   });
 });
 
-describe('useWorldStore refreshWorldSettlements (rival walls)', () => {
-  const wall = (q: number, r: number, ownerUserId: string | null = 'user-rival') => ({
-    q, r, type: 'palisade' as const, level: 2, settlementId: 'rival-near', ownerUserId,
+describe('useWorldStore refreshWorldSettlements (rival buildings)', () => {
+  const wall = (q: number, r: number, ownerUserId: string | null = 'user-rival', type = 'palisade') => ({
+    q, r, type, level: 2, settlementId: 'rival-near', ownerUserId,
   });
 
-  it('hands the fetched rival walls to the model on every refresh, replacing the previous set', async () => {
+  it('hands the fetched rival buildings to the model on every refresh, replacing the previous set', async () => {
     listSettlements.mockReset().mockResolvedValue([]);
-    listWalls.mockReset().mockResolvedValueOnce([wall(3, 1), wall(4, 1)]).mockResolvedValueOnce([wall(4, 1)]);
+    listRivalBuildings.mockReset().mockResolvedValueOnce([wall(3, 1), wall(4, 1)]).mockResolvedValueOnce([wall(4, 1)]);
 
     const store = await loadStoreModule(false);
     store.worldId = 'world-1';
 
     await store.refreshWorldSettlements();
     expect(store.model.getTile(3, 1).buildingType).toBe('palisade');
-    expect(store.model.rivalWallOwner(4, 1)).toBe('user-rival');
-    expect(listWalls).toHaveBeenCalledWith('world-1', undefined);
+    expect(store.model.rivalBuildingOwner(4, 1)).toBe('user-rival');
+    expect(listRivalBuildings).toHaveBeenCalledWith('world-1', undefined);
 
     await store.refreshWorldSettlements();
     expect(store.model.getTile(3, 1).buildingType).toBeUndefined();
     expect(store.model.getTile(4, 1).buildingType).toBe('palisade');
+  });
+
+  it('draws a rival\'s non-wall buildings too, next to its longhouse', async () => {
+    listSettlements.mockReset().mockResolvedValue([
+      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 0, r: 0, labelQ: 0, labelR: 0, longhouseLevel: 1, islandId: 'island-near' },
+    ]);
+    listRivalBuildings.mockReset().mockResolvedValue([wall(3, 1, 'user-rival', 'tower'), wall(4, 1, 'user-rival', 'farm')]);
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.setWorldMapActive(true);
+    await store.refreshWorldSettlements();
+
+    expect(store.model.getTile(3, 1)).toMatchObject({ buildingType: 'tower', ownerId: 'rival-near' });
+    expect(store.model.getTile(4, 1)).toMatchObject({ buildingType: 'farm', ownerId: 'rival-near' });
+  });
+
+  // A rival whose centre is unexplored but one of whose buildings is explored is listed by the server with its label on that
+  // building's hex: the client registers it and labels it there, while the centre stays hidden by the fog.
+  it('registers a rival seen through one building and anchors its label on that hex', async () => {
+    listSettlements.mockReset().mockResolvedValue([
+      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 30, r: 0, labelQ: 24, labelR: 0, longhouseLevel: 5, islandId: 'island-near', mine: false, relation: 'rival', realmId: 'rival-near' },
+    ]);
+    listRivalBuildings.mockReset().mockResolvedValue([wall(24, 0, 'user-rival', 'tower')]);
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.setWorldMapActive(true);
+    store.model.setFogCoverage({ isExplored: (q: number, r: number) => q === 24 && r === 0 } as never);
+    await store.refreshWorldSettlements();
+
+    const rival = store.model.getSettlement('rival-near')!;
+    expect(rival).toBeDefined();
+    expect(store.model.labelHexOf(rival)).toEqual({ q: 24, r: 0 });
+    expect(store.model.isExplored(24, 0)).toBe(true);
+    expect(store.model.isExplored(30, 0)).toBe(false);
+    expect(store.model.getTile(24, 0).buildingType).toBe('tower');
   });
 
   // Regression: startHudSync runs this poll next to refreshLiveSettlement; its
@@ -842,9 +879,9 @@ describe('useWorldStore refreshWorldSettlements (rival walls)', () => {
       trainingQueue: [],
     });
     listSettlements.mockReset().mockResolvedValue([
-      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 6, r: 0, longhouseLevel: 7, islandId: 'island-home' },
+      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 6, r: 0, labelQ: 6, labelR: 0, longhouseLevel: 7, islandId: 'island-home' },
     ]);
-    listWalls.mockReset().mockResolvedValue([]);
+    listRivalBuildings.mockReset().mockResolvedValue([]);
 
     const store = await loadStoreModule(false);
     store.worldId = 'world-1';
@@ -874,9 +911,9 @@ describe('useWorldStore refreshWorldSettlements (rival walls)', () => {
 
   it('keeps the settlements refresh and the last wall set when the walls read fails', async () => {
     listSettlements.mockReset().mockResolvedValue([
-      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-near' },
+      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 0, r: 0, labelQ: 0, labelR: 0, longhouseLevel: 1, islandId: 'island-near' },
     ]);
-    listWalls.mockReset().mockResolvedValueOnce([wall(3, 1)]).mockRejectedValueOnce(new Error('boom'));
+    listRivalBuildings.mockReset().mockResolvedValueOnce([wall(3, 1)]).mockRejectedValueOnce(new Error('boom'));
 
     const store = await loadStoreModule(false);
     store.worldId = 'world-1';
@@ -2492,7 +2529,7 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
 
 describe('useWorldStore live realm membership', () => {
   const summary = (id: string, mine: boolean, realmId = id, relation: 'guild' | 'treaty' | 'rival' = 'rival') => ({
-    id, realmId, name: id, ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-1', mine,
+    id, realmId, name: id, ownerName: 'Astrid', q: 0, r: 0, labelQ: 0, labelR: 0, longhouseLevel: 1, islandId: 'island-1', mine,
     relation: mine ? ('mine' as const) : relation,
   });
 
@@ -2630,7 +2667,7 @@ describe('useWorldStore linked realms', () => {
   it('registerSettlementSummaries stores the realmId', async () => {
     const store = await loadStoreModule(false);
     store.registerSettlementSummaries([
-      { id: 'r2', realmId: 'r1', name: 'Rival', ownerName: 'Bo', q: 5, r: 5, longhouseLevel: 1, islandId: 'i', mine: false, relation: 'rival' },
+      { id: 'r2', realmId: 'r1', name: 'Rival', ownerName: 'Bo', q: 5, r: 5, labelQ: 5, labelR: 5, longhouseLevel: 1, islandId: 'i', mine: false, relation: 'rival' },
     ]);
 
     expect(store.model.getSettlement('r2')?.realmId).toBe('r1');

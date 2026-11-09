@@ -820,7 +820,7 @@ function siegeActions(tile: Tile): RingAction[] {
   if (
     DEMO_MODE
     || !tile.ownerId
-    || !isHostileWallTile(tile, world.model.rivalWallOwner(tile.q, tile.r), player.id, guild.friendlyUserIds)
+    || !isHostileWallTile(tile, world.model.rivalBuildingOwner(tile.q, tile.r), player.id, guild.friendlyUserIds)
   ) {
     return [];
   }

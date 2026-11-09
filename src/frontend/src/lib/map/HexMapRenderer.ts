@@ -5353,9 +5353,11 @@ export class HexMapRenderer {
 
     for (const settlement of worldModel.listSettlements()) {
       // Don't reveal a settlement (yours or a rival's) over ground nobody
-      // has scouted — same "hidden until explored" rule as its hex.
-      if (fogActive && !worldModel.isExplored(settlement.q, settlement.r)) continue;
-      const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
+      // has scouted — same "hidden until explored" rule as the hex it is drawn on, which for a rival seen only through
+      // one of its buildings is that building's hex (`labelHexOf`), not the centre.
+      const labelHex = worldModel.labelHexOf(settlement);
+      if (fogActive && !worldModel.isExplored(labelHex.q, labelHex.r)) continue;
+      const grid = isoGridPosition(labelHex, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
       // Reference draws settlements as a diamond (prototypes/worldmap/Viking
       // Realm.dc.html's `world.marks`: `<polygon points="0,-8 8,0 0,8 -8,0">`),
@@ -5554,9 +5556,11 @@ export class HexMapRenderer {
     const { worldModel, playerId } = this.options;
 
     for (const settlement of worldModel.listSettlements()) {
-      // Don't reveal a rival's name over ground you haven't scouted.
-      if (!worldModel.isExplored(settlement.q, settlement.r)) continue;
-      const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
+      // Don't reveal a rival's name over ground you haven't scouted: the badge sits on the hex the server picked (`labelHexOf`),
+      // the centre when it is explored, else the explored building closest to it.
+      const labelHex = worldModel.labelHexOf(settlement);
+      if (!worldModel.isExplored(labelHex.q, labelHex.r)) continue;
+      const grid = isoGridPosition(labelHex, TILE_W, TILE_H);
       // Issue #16 follow-up: the badge floated above the longhouse's own
       // tile, which sits in the *middle* of the settlement's claimed hexes,
       // not its northmost edge — the reference has it clear above the whole
@@ -5577,7 +5581,7 @@ export class HexMapRenderer {
       // bare topmost tile's own vertex (0 < TILE_TOPFACE_Y_OFFSET / 2) and
       // most of a neighbouring forest tile's canopy, while sitting closer.
       let topWorldY = grid.y - TILE_TOPFACE_Y_OFFSET / 2; // this hex's own ceiling
-      for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, worldModel.borderRadius(settlement))) {
+      for (const c of hexesInRadius(labelHex, worldModel.borderRadius(settlement))) {
         const tileGrid = isoGridPosition(c, TILE_W, TILE_H);
         //topWorldY = Math.min(topWorldY, tileGrid.y - TILE_TOPFACE_Y_OFFSET / 4);
         topWorldY = Math.min(topWorldY, tileGrid.y);

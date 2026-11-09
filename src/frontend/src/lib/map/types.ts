@@ -480,6 +480,12 @@ export interface Settlement {
   islandId?: string;
   /** Live mode: how the owner stands to the player when not the player (`guild` = same guild, `treaty` = guild with an active peace treaty). Absent = own or rival, decided by `ownerId`. */
   relation?: 'guild' | 'treaty';
+  /**
+   * Live mode: the hex the server says the label goes on (the centre for an own settlement and a rival whose centre is explored,
+   * else the explored building of a rival closest to its centre). Absent (demo, docs examples) = the centre. Read through
+   * `WorldModel.labelHexOf`.
+   */
+  labelAt?: { q: number; r: number };
 }
 
 /**

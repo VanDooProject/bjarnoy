@@ -548,17 +548,20 @@ public sealed record BuildingDefinitionResponse(
 /// <param name="Mine">Whether the settlement belongs to the caller (never the owner or user id itself).</param>
 /// <param name="RealmId">The oldest member of the linked realm this settlement belongs to (itself when it stands alone).</param>
 /// <param name="Relation">How the owner stands to the caller, which picks the realm colour: <c>mine</c>, <c>guild</c> (same guild), <c>treaty</c> (guild with an active peace treaty) or <c>rival</c>.</param>
+/// <param name="LabelQ">Axial q of the hex the client puts the settlement's label on, decided here: the centre for the caller's own settlements and for a rival whose centre is explored, else the explored building of a rival closest to its centre.</param>
+/// <param name="LabelR">Axial r of the label hex, see <paramref name="LabelQ"/>.</param>
 public sealed record SettlementSummary(
-    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine, Guid RealmId, string Relation)
+    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine, Guid RealmId, string Relation,
+    int LabelQ, int LabelR)
 {
-    public static SettlementSummary From(SettlementEntity s, bool mine, RealmLabel realm, string relation)
+    public static SettlementSummary From(SettlementEntity s, bool mine, RealmLabel realm, string relation, HexCoord label)
     {
         ArgumentNullException.ThrowIfNull(s);
 
         return new SettlementSummary(
             s.Id, realm.Name, s.OwnerName, s.CentreQ, s.CentreR,
             s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
-            s.IslandId, mine, realm.RealmId, relation);
+            s.IslandId, mine, realm.RealmId, relation, label.Q, label.R);
     }
 }
 
@@ -601,7 +604,8 @@ public static class SettlementRelations
 /// <c>GET /settlements/{id}/view</c>'s fog-gated read: what a rival's
 /// explored ground on the world map earns them — identity, position and
 /// <paramref name="Buildings"/> only (and only the ones standing on a hex
-/// they've actually explored). Deliberately missing everything
+/// they've actually explored; the read exists once the centre or any
+/// standing building's hex is explored). Deliberately missing everything
 /// <see cref="SettlementResponse"/> carries beyond that: no stock, rates,
 /// construction queue, garrison, training queue or runes — none of that is
 /// something a rival's own map view could ever have told them, so none of it

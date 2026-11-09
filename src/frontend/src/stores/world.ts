@@ -1366,19 +1366,21 @@ export const useWorldStore = defineStore('world', {
           realmId: summary.realmId,
           islandId: summary.islandId,
           relation: summary.relation === 'guild' || summary.relation === 'treaty' ? summary.relation : undefined,
+          labelAt: { q: summary.labelQ, r: summary.labelR },
         });
       }
     },
     async refreshWorldSettlements() {
       if (DEMO_MODE || !this.worldId) return;
-      // Rival walls ride the same cadence: the settlement list is data-only, so this is the only way the client learns where another
-      // player's palisades stand (to draw them, offer Siege on them and route around them). A failed walls read keeps the last set.
-      const [summaries, walls] = await Promise.all([
+      // Rival buildings ride the same cadence: the settlement list is data-only, so this is the only way the client learns which
+      // buildings of another player stand on explored ground (to draw them, offer Siege on their walls and route around them).
+      // A failed read keeps the last set.
+      const [summaries, rivalBuildings] = await Promise.all([
         api.listSettlements(this.worldId, this.ownerId ?? undefined),
-        api.listWalls(this.worldId, this.ownerId ?? undefined).catch(() => null),
+        api.listRivalBuildings(this.worldId, this.ownerId ?? undefined).catch(() => null),
       ]);
       this.registerSettlementSummaries(summaries);
-      if (walls) this.model.applyRivalWalls(walls);
+      if (rivalBuildings) this.model.applyRivalBuildings(rivalBuildings);
       if (this.worldMapActive) {
         this.model.claimAllTerritory();
       } else {
