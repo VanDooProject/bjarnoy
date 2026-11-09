@@ -98,7 +98,7 @@ public class ArmySupportTests
     public void Support_dispatch_is_rejected_when_provisions_fall_short_of_the_round_trip()
     {
         var settlement = Found(garrison: [new UnitStack(UnitType.Spearman, 10)]);
-        var provisions = (2.0 * 10.0) - 0.01;
+        var provisions = (2.0 * 10 * UnitCatalogue.Get(UnitType.Spearman).UpkeepPerHour) - 0.01; // 2 h round trip for 10 Spearmen
 
         var decision = DispatchSupport(settlement, Guid.CreateVersion7(), provisions);
 

@@ -361,19 +361,19 @@ public sealed class LinkedStoreTests
         var catapultUpkeep = UnitCatalogue.Get(UnitType.Catapult).UpkeepPerHour;
         Assert.True(catapultUpkeep > thrallUpkeep);
 
-        IReadOnlyList<UnitStack> guestsA = [new UnitStack(UnitType.Catapult, 5)];
-        var a = Member(CentreA, new ResourceAmounts(0, 0, 10, 0), garrison: [new UnitStack(UnitType.Thrall, 20)], guests: guestsA);
-        var b = Member(CentreB, new ResourceAmounts(0, 0, 10, 0), garrison: [new UnitStack(UnitType.Catapult, 10)]);
+        IReadOnlyList<UnitStack> guestsA = [new UnitStack(UnitType.Catapult, 10)];
+        var a = Member(CentreA, new ResourceAmounts(0, 0, 10, 0), garrison: [new UnitStack(UnitType.Thrall, 80)], guests: guestsA);
+        var b = Member(CentreB, new ResourceAmounts(0, 0, 10, 0), garrison: [new UnitStack(UnitType.Catapult, 20)]);
         var store = Store([guestsA, []], a, b);
 
         var gross = Rate(a with { Garrison = [] }).Food + Rate(b with { Garrison = [] }).Food;
-        var upkeep = (20 * thrallUpkeep) + (15 * catapultUpkeep);
+        var upkeep = (80 * thrallUpkeep) + (30 * catapultUpkeep);
         Assert.True(upkeep > gross);
         var kills = (int)Math.Ceiling((upkeep - gross) / catapultUpkeep);
 
         store.SettleTo(T0.AddHours(2));
 
-        var split = ProportionalAllocator.Allocate(kills, [0, 5, 10, 0]);
+        var split = ProportionalAllocator.Allocate(kills, [0, 10, 20, 0]);
         var outcomeA = store.Outcome(a.Id);
         var outcomeB = store.Outcome(b.Id);
         Assert.Empty(outcomeA.Deaths);
@@ -383,7 +383,7 @@ public sealed class LinkedStoreTests
         Assert.Equal(kills, split.Sum());
 
         // The cheap units are all still there, and the pooled food rate is no longer negative.
-        Assert.Equal(20, outcomeA.Settlement.Garrison.Single(g => g.Type == UnitType.Thrall).Count);
+        Assert.Equal(80, outcomeA.Settlement.Garrison.Single(g => g.Type == UnitType.Thrall).Count);
         var foodRate = outcomeA.Settlement.Resources.RatePerHour.Food + outcomeB.Settlement.Resources.RatePerHour.Food;
         Assert.True(foodRate >= -1e-9, $"food rate {foodRate}");
         Assert.True(outcomeB.Changed);

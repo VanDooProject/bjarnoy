@@ -253,7 +253,7 @@ public class UnitCatalogueTests
         Assert.True(ram.Speed < catapult.Speed);
         Assert.Equal(catapult.SiegePower, ram.SiegePower);
         Assert.Equal(0, ram.CarryCapacity);
-        Assert.Equal(3, ram.UpkeepPerHour);
+        Assert.Equal(1.5, ram.UpkeepPerHour);
         Assert.Equal(new ResourceAmounts(Wood: 400, Stone: 100, Food: 40, Iron: 150), ram.TrainingCost);
         Assert.Equal(TimeSpan.FromHours(1), ram.TrainingDuration);
         Assert.Equal(UnitType.Berserker, ram.RequiredUnitType);
