@@ -70,6 +70,11 @@
 
 # bugs
 - when fixing a bug add tests so we can make sure they don't come back; these tests can also be used to reproduce the bug first
+- a session for resolving a bug reviews its own fix automatically, without being asked: once the fix and its tests are done,
+  hand the diff to an Opus subagent (`Agent` tool, `model: opus`) for review, and address what it finds
+- if the review is good (no open blocking findings after the fixes) and everything is done and CI is green on the current
+  head, squash-merge the PR via GitHub without waiting for a further go-ahead (squash rules above). If the review is not
+  good, or CI is red, don't merge: fix it, or tell me what blocks
 
 # driving red CI to green
 - reproduce each failing CI test locally and iterate on it there until it
