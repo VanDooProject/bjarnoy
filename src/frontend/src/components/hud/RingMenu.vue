@@ -1049,7 +1049,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         </template>
         <template v-if="cardView.gives">
           <dt>{{ t('hud.ringMenu.gives') }}</dt>
-          <dd class="nowrap">
+          <dd>
             {{ cardView.gives }}<span v-if="cardView.givesTotal" class="gives-total" data-testid="ring-card-total"> · {{ cardView.givesTotal }}</span>
           </dd>
         </template>
@@ -1324,22 +1324,24 @@ function onBackdropPointerDown(e: PointerEvent) {
      click on the bubble itself. The card carries no button of its own. */
   pointer-events: none;
   overflow: hidden;
-  border-radius: 11px;
-  background: rgba(10, 20, 27, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.6);
+  /* Same look as the map's hover tooltip (HexTooltip.vue): .panel colours,
+     square edges, the light shadow. */
+  border-radius: 0;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
   color: var(--text);
 }
 .card-art {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  background: radial-gradient(90% 80% at 50% 40%, #1a3d4d, #0d1f29);
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--panel-border);
 }
 .card-art-img {
-  width: 50px;
-  max-height: 78px;
+  width: 40px;
+  max-height: 64px;
   object-fit: contain;
   flex: none;
 }
@@ -1350,24 +1352,24 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .card-name {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .card-sub {
   margin-top: 2px;
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 400;
   color: var(--muted);
 }
 .card-badge {
-  margin-top: 6px;
-  font-size: 9px;
+  margin-top: 4px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--food);
 }
 .card-warning {
-  margin: 8px 12px 0;
-  font-size: 10px;
+  margin: 8px 14px 0;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--gold);
 }
@@ -1382,12 +1384,12 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .card-rows {
   margin: 0;
-  padding: 11px 12px 0;
+  padding: 8px 14px 0;
   display: grid;
-  grid-template-columns: auto 1fr;
-  row-gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr);
+  row-gap: 4px;
   column-gap: 10px;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 .card-rows dt {
   color: var(--muted);
@@ -1398,16 +1400,16 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .card-rows dd {
   margin: 0;
-  font-weight: 600;
+  color: var(--text);
+  font-weight: 500;
   text-align: right;
 }
-.card-rows dd.nowrap {
-  white-space: nowrap;
-}
+/* Four resources must not run past the card's edge: the chips wrap instead. */
 .card-rows dd.cost {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 2px 10px;
 }
 .chip {
   display: inline-flex;
@@ -1422,12 +1424,12 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .card-tap-hint {
   margin: 0;
-  padding: 9px 12px 11px;
+  padding: 8px 14px 10px;
   display: flex;
   align-items: center;
   gap: 7px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 10.5px;
+  border-top: 1px solid var(--panel-border);
+  font-size: 12px;
   font-weight: 600;
   color: var(--gold);
 }
@@ -1523,14 +1525,11 @@ html[data-hud-motion='reduced'] .ring-bubble.glow {
 /* Phone layout: the card docks to a screen edge (lib/map/ringDock.ts). The
    --hud-inset-* variables come from MapView's root and keep it clear of the
    HUD bar wherever it is docked; env() keeps it clear of notches. */
-.ring-card.docked {
-  border-radius: 12px;
-}
 .ring-card.docked-bottom {
   left: calc(8px + env(safe-area-inset-left, 0px));
   right: calc(8px + env(safe-area-inset-right, 0px));
   bottom: calc(var(--hud-inset-bottom, 0px) + 8px + env(safe-area-inset-bottom, 0px));
-  max-height: 236px;
+  max-height: 260px;
 }
 .ring-card.docked-left,
 .ring-card.docked-right {
@@ -1547,11 +1546,11 @@ html[data-hud-motion='reduced'] .ring-bubble.glow {
 .card-status {
   list-style: none;
   margin: 0;
-  padding: 10px 12px 11px;
+  padding: 8px 14px 10px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  font-size: 10.5px;
+  gap: 4px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
 }

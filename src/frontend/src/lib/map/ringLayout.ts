@@ -50,13 +50,13 @@ export const BUB1 = 52;
 export const BUB2 = 46;
 /** Hub (the tile itself) diameter. */
 export const HUB = 66;
-export const CARD_W = 200;
+export const CARD_W = 240;
 /**
  * Measured, not nominal: with the build-slots row and a status footer the
  * rendered card is ~180-240px tall (230 for a locked building with one line
  * of reasons); a lower figure here makes every clearance test optimistic.
  */
-export const CARD_H = 240;
+export const CARD_H = 260;
 /**
  * The ring's error note (a rejected build's message)
  * — a short muted explanation, not the full building-detail card, so it
