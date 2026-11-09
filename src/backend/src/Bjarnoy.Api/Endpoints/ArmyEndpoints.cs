@@ -515,9 +515,10 @@ public static class ArmyEndpoints
         CancellationToken cancellationToken)
     {
         var report = await reports.GetAsync(reportId, cancellationToken);
-        return report is null
-            ? TypedResults.NotFound()
-            : TypedResults.Ok(FieldBattleReportResponse.From(report));
+        if (report is null) return TypedResults.NotFound();
+
+        var names = await reports.GetSideNamesAsync([report], cancellationToken);
+        return TypedResults.Ok(FieldBattleReportResponse.From(report, names));
     }
 
     private static async Task<Ok<IReadOnlyList<FieldBattleReportResponse>>> ListFieldReportsForSettlement(
@@ -526,7 +527,8 @@ public static class ArmyEndpoints
         CancellationToken cancellationToken)
     {
         var entities = await reports.GetForSettlementAsync(settlementId, cancellationToken);
-        IReadOnlyList<FieldBattleReportResponse> response = [.. entities.Select(FieldBattleReportResponse.From)];
+        var names = await reports.GetSideNamesAsync(entities, cancellationToken);
+        IReadOnlyList<FieldBattleReportResponse> response = [.. entities.Select(e => FieldBattleReportResponse.From(e, names))];
         return TypedResults.Ok(response);
     }
 
