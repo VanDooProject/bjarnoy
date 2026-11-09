@@ -257,8 +257,9 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
 
     // The single tap lands on the row's left end and the double tap below on
     // its centre, further apart than DOUBLE_TAP_SLOP_PX: the spec runs the two
-    // gestures within one double-tap window (DOUBLE_TAP_MS), so at the same
-    // point the double tap's first click would pair with this tap instead.
+    // gestures back to back, often within one double-tap window (DOUBLE_TAP_MS),
+    // so at the same point the double tap's first click could pair with this
+    // tap instead.
     // The drawer would then close a click early and the double tap's second
     // click would land on the map underneath, opening a ring menu whose
     // make-room pan moves the camera off the army.
@@ -273,7 +274,6 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await rowButton.dblclick();
 
     await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'true');
-    await expect(new RingMenuComponent(page).bubbles).toHaveCount(0);
     await expect.poll(async () => (await demoWorld(page)).selectedArmyId).toBe('army-1');
     await expect
       .poll(async () => {
@@ -284,5 +284,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
         return Math.hypot(after.x - canvasCentre.x, after.y - canvasCentre.y);
       })
       .toBeLessThan(40);
+    // Checked once the camera has settled: no click of the double tap reached the map underneath.
+    await expect(new RingMenuComponent(page).bubbles).toHaveCount(0);
   });
 });
