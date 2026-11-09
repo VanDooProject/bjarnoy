@@ -57,6 +57,7 @@ public class OnboardingHappyPathTests(AppHostFixture fixture)
         // check. Emulating the media feature stills it without touching app
         // code or the DOM under test.
         var page = await browser.NewPageAsync(new BrowserNewPageOptions { ReducedMotion = ReducedMotion.Reduce });
+        await LiveFrontendTestHelpers.TurnSmoothEdgesOffAsync(page);
         var consoleErrors = page.CollectConsoleErrors();
 
         await LiveFrontendTestHelpers.FoundStartingSettlementAsync(page, frontendUrl);
