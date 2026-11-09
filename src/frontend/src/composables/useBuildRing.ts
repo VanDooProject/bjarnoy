@@ -120,7 +120,7 @@ const DEFENSE_CATEGORY: BuildCategory = {
   id: 'defense',
   buildings: [{ type: 'palisade' }, { type: 'palisadegate' }, { type: 'bridge' }],
 };
-// The Tower is a defence building too, and stands on grass, sand and forest; the bog ring keeps the wall-only category.
+// The Tower is a defence building too, and stands on grass, sand, forest and plain bog moss.
 const DEFENSE_TOWER_CATEGORY: BuildCategory = {
   id: 'defense',
   buildings: [{ type: 'tower' }, ...DEFENSE_CATEGORY.buildings],
@@ -133,8 +133,7 @@ const DEFENSE_SEA_CATEGORY: BuildCategory = { id: 'defense', buildings: [{ type:
 const BOG_CATEGORIES: Record<string, BuildCategory[]> = {
   bog: [
     { id: 'resource', buildings: [{ type: 'claybrickworks' }, { type: 'bogoreworks' }] },
-    { id: 'military', buildings: [{ type: 'tower' }] },
-    DEFENSE_CATEGORY,
+    DEFENSE_TOWER_CATEGORY,
   ],
   creek: [{ id: 'resource', buildings: [{ type: 'hammerschmiede' }] }],
   half: [{ id: 'water', buildings: [{ type: 'fishinghut' }] }],
