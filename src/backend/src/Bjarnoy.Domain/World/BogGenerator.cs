@@ -257,7 +257,7 @@ internal sealed class BogGenerator
     /// <summary>
     /// Finds enclosed sea pockets (sea not connected to the open sea: the inside of an O-shaped island),
     /// builds each one's lake and bog ring on scratch state and keeps the ones that satisfy every rule
-    /// (a pocket whose ring would touch the open sea, sand, a mountain shore or another bog is left as sea).
+    /// (a pocket whose ring would touch the open sea, sand, a mountain shore or another bog becomes an inland lake, as does a pocket outside the size limits).
     /// </summary>
     public void FindPockets()
     {
