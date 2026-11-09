@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { newPlacementDisabled } from '../lib/map/ringCatalogue';
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
@@ -179,7 +178,7 @@ const buildingsByTile = computed(() => {
       .filter((type) => {
         const def = catalogue.byType[type]?.[0];
         // A building that can no longer be placed (the Quarry) is no longer something to build on this ground.
-        if (!def || newPlacementDisabled(type)) return false;
+        if (!def || def.newPlacementDisabled) return false;
         if (tile.coastal) return def.requiresCoastalWater;
         if (def.requiresCoastalWater || tile.terrain === null) return false;
         return def.allowedTerrain.length === 0 || def.allowedTerrain.includes(tile.terrain);
