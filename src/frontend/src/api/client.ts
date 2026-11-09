@@ -88,7 +88,6 @@ import type {
   SettlementViewResponse,
   SlotRuneRequest,
   SettlementSummary,
-  WorldWall,
   RivalBuilding,
   ShipmentResponse,
   SimulatorRequest,
@@ -296,13 +295,8 @@ export const api = {
   // anonymous caller with no realm at all) just gets an empty list back.
   listSettlements: (worldId: string, ownerId?: string) =>
     request<SettlementSummary[]>(`/worlds/${worldId}/settlements`, { headers: ownerHeader(ownerId) }),
-  // Every standing palisade/gate hex of the rival settlements the caller has explored (their own walls excluded) — same fog rule
-  // and X-Owner-Id handling as `listSettlements`, so the live client can draw, hit-test and route around other players' walls.
-  // Every standing building of the rival settlements on hexes the caller has explored (their own settlements left out, all types).
   listRivalBuildings: (worldId: string, ownerId?: string) =>
     request<RivalBuilding[]>(`/worlds/${worldId}/rival-buildings`, { headers: ownerHeader(ownerId) }),
-  listWalls: (worldId: string, ownerId?: string) =>
-    request<WorldWall[]>(`/worlds/${worldId}/walls`, { headers: ownerHeader(ownerId) }),
   // `ownerId` becomes the `X-Owner-Id` header the backend's ownership
   // filter reads for an anonymous (unclaimed) settlement — see
   // SettlementOwnershipEndpointFilter. Harmless to omit or send stale for a

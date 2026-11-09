@@ -199,6 +199,17 @@ describe('WorldModel.registerSettlement / claimTerritory', () => {
     expect(model.isExplored(1, 0)).toBe(true);
   });
 
+  it('labels a settlement on the hex the server gave, on its centre without one', () => {
+    const model = new WorldModel();
+    const empty = { wood: 0, stone: 0, food: 0, iron: 0 };
+    const base = { ownerName: 'X', name: 'X', level: 1, resources: empty, rates: empty, foundedAt: 0, islandId: 'i' };
+    const seen = model.registerSettlement({ ...base, id: 'a', ownerId: 'a', q: 10, r: 4, labelAt: { q: 7, r: 4 } });
+    const plain = model.registerSettlement({ ...base, id: 'b', ownerId: 'b', q: 20, r: 4 });
+
+    expect(model.labelHexOf(seen)).toEqual({ q: 7, r: 4 });
+    expect(model.labelHexOf(plain)).toEqual({ q: 20, r: 4 });
+  });
+
   it('claimTerritory draws a rival longhouse at the level its summary reports', () => {
     const model = new WorldModel();
     const rival = model.registerSettlement({

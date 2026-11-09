@@ -1213,6 +1213,11 @@ export class WorldModel {
     }
   }
 
+  /** The hex a settlement's marker and label are drawn on: the server's `labelAt` when it gave one, else the centre. */
+  labelHexOf(settlement: Settlement): AxialCoord {
+    return settlement.labelAt ?? { q: settlement.q, r: settlement.r };
+  }
+
   getSettlement(id: string): Settlement | undefined {
     return this.settlements.get(id);
   }
