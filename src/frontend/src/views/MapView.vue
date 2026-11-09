@@ -342,7 +342,7 @@ watch(mode, (m) => {
 // this covers the map already being mounted behind a modal. `flush: 'post'` runs it after the `mode` watcher above has
 // switched the renderer's mode.
 watch(
-  () => route.hash,
+  () => route.value.hash,
   (hash) => {
     const view = parseCameraHash(hash);
     if (view) canvasRef.value?.renderer?.restoreCameraView(view.coord, view.zoom);
