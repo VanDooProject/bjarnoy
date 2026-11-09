@@ -70,6 +70,28 @@
 
 # bugs
 - when fixing a bug add tests so we can make sure they don't come back; these tests can also be used to reproduce the bug first
+- a session for resolving a bug reviews its own fix automatically, without being asked: once the fix and its tests are done,
+  hand the diff to an Opus subagent (`Agent` tool, `model: opus`) for review, and address what it finds
+- if the review is good (no open blocking findings after the fixes) and everything is done and CI is green on the current
+  head, squash-merge the PR via GitHub without waiting for a further go-ahead (squash rules above). If the review is not
+  good, or CI is red, don't merge: fix it, or tell me what blocks
+
+# SONNET: check before and after every push (explicit, not optional)
+- Sonnet has repeatedly pushed code that CI rejected on lint or type errors it never ran locally. The rules below are for
+  Sonnet (any session running as Sonnet, including Sonnet subagents); stronger models follow them too, but Sonnet must not skip them
+- **before every push**, run locally what CI's `build` job runs, in `src/frontend`: `npm run lint` (eslint over `src/**/*.vue`,
+  including `@intlify/vue-i18n/no-raw-text`: no literal text/symbols in templates), `npx vue-tsc -b` (type-checks the test
+  files too; a bare `vue-tsc --noEmit` does not), `npm run test:unit` for what you touched, and `npm run build`. Backend:
+  `dotnet build Bjarnoy.slnx` and the test projects the change touches. A file-path argument to eslint is not the project
+  lint (it ignores non-`.vue` files); use `npm run lint`
+- run `npm ci` in `src/frontend` before `vue-tsc`/lint on a fresh checkout, and stage explicit paths (`git add <files>`), never
+  `git add -A` over `src`: a type-check without installed deps can emit `.js` files next to the sources, and they get committed
+- **after every push**, check the PR's CI yourself (`get_check_runs` on the PR) — don't report "pushed" and stop, and don't wait
+  for me to ask. Read the log of every failed job (`get_job_logs`), reproduce the failure locally, fix, push, check again
+- iterate until the `build` checks (frontend `build`, Docker `build`, `build-and-test`, lint) are green. Other jobs (e2e, aspire-e2e)
+  that are still queued/running are reported as such; a red one gets the same read-log, reproduce, fix loop. Failures that are
+  provably unrelated to the PR follow the "unrelated/pre-existing CI failures" rules below instead
+- when reporting, state what CI says (job names and conclusions), not what was run locally. Never write "CI should be fine"
 
 # driving red CI to green
 - reproduce each failing CI test locally and iterate on it there until it
@@ -113,6 +135,10 @@
   independent PR for just that fix: branch off latest `main` (not off the
   PR branch that surfaced it), fix + test it there, open its own PR, drive
   it to green, then squash-merge it via GitHub
+- exception to "CI green before squash-merge": a PR may be squash-merged with a red job when the only failure is **one single
+  test** that is a known flake or pre-existing failure on `main` AND an open session or PR is already working on that fix
+  (confirmed via the dedupe check, say which one). Everything else is green. Two or more failing tests, or any failure the
+  PR's diff could have caused, means wait for the fix. No re-running the job to get there
 - afterwards, update the original PR by merging `main` back into its branch
   so it picks up the fix (see "squash always means GitHub's squash-merge"
   above for how the merge lands on `main`)
@@ -193,6 +219,11 @@
 # tests
 - tests need to be meaningful and not test third party stuff
 - for e2e tests increasing timeouts is usually not the fix for an issue, most of the time its wrong/broken selectors
+- no retries of test runs: don't re-run a failing test (or the suite) hoping it passes, don't enable test retries
+  (`retries` stays 0 in `playwright.config.ts`), and don't re-trigger a red CI job to get a green. A failure gets read,
+  reproduced and fixed. A pass after a re-run means the test is flaky, not that it's fine
+- the one use of repeated runs: validating a fix. Once a flake or intermittent failure is fixed, run the affected test
+  repeatedly (e.g. `--repeat-each 5`) to show it's no longer flaky. Not for diagnosing, not as a substitute for finding the cause
 - do not make rendering/behavior code branch on "are we in a test/CI
   environment" or "is this a software (non-GPU) renderer" as a way to make
   e2e tests pass faster or more reliably. That makes the code path under
@@ -289,6 +320,9 @@
   `AskUserQuestion` tool, several questions in one call, recommended option first — not as a numbered prose list I have to
   answer by retyping it. Context the question needs goes into the question itself or into the chat text right before it.
   Open questions that need my own words (what something should be called, a new rule) stay in the chat
+- that holds everywhere a choice comes up, not only mid-task: the open questions at the end of a plan or report, the
+  `user decision` rows of the state table, a list of recommended options. Ask them with `AskUserQuestion` in the same turn,
+  before handing back; writing "recommended option first" in prose instead is the thing this rule forbids
 - if u take screenshots always show the in chat to me too
 - for planning u can use a opus or fable subtask/subagent
 - artifacts that go through rounds (UX reviews, design options, motion
@@ -462,8 +496,10 @@
   - for waiting on CI, tests or subagents add the expected time in brackets, e.g. `CI (~5 min)`
 - keep it to the rows that matter: no prose recap, no finished work that needs nothing further, and
   say `nothing open` instead of an empty table
-- for every row waiting on `user decision` or `user action`, add a short line after the table with the question (or the exact steps) and the options (recommended one first), so I can answer without scrolling back
-  — when the question is new or has changed; a question already asked and still unchanged is not written again
+- for every row waiting on `user action`, add a short line after the table with the exact steps, so I can act without
+  scrolling back. A row waiting on `user decision` gets a one-line pointer to the question, and the question itself goes
+  through `AskUserQuestion` (see "## CLAUDE") in the same turn — when it is new or has changed; a question already asked and
+  still unchanged is neither written nor asked again
 - example:
 
   | what | state | waiting on |
@@ -473,7 +509,7 @@
   | AGENTS.MD state table | open work | - |
   | gate rule golden case | waiting | user decision |
 
-  user decision: gate rule golden case - keep the old threshold (recommended) or switch to the new one?
+  user decision: gate rule golden case - threshold question asked via `AskUserQuestion`
 
 # screenshot helpers
 - `scripts/screenshot-helpers/flow.mjs` drives the demo-mode onboarding path

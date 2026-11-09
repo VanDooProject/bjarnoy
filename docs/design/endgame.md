@@ -83,7 +83,7 @@ the ground + 3 like palisade ends. A breached wall hex (level 0) is passable.
   (bridges included) but **cannot damage a wall**.
 - **Ram** (new `UnitType.Ram`, class Siege): the same siege power (40, the same `SiegeResolver.LevelsDestroyed`),
   more staying power, slower. Attack 10, **defense 30** (catapult 10), **speed 1.0** (catapult 1.5), carry 0,
-  upkeep 3, cost wood 400 / brick 100 / food 40 / iron 150, 1 h, Longhouse 20, after the Berserker. Trained at
+  upkeep 1.5, cost wood 400 / brick 100 / food 40 / iron 150, 1 h, Longhouse 20, after the Berserker. Trained at
   the new **Siege Workshop** (`BuildingType.SiegeWorkshop` 33, 20 levels, Longhouse 18, behind a level-3
   Archery Range). The ram is the **wall breaker**: it damages walls and towers, nothing else.
 - Which engine hits which building is data: `UnitDefinition.SiegeTargets` (walls / towers / buildings), asked

@@ -13,6 +13,35 @@ export type FogTier = 'outOfSight' | 'unknown';
 /** How long a newly-set mask texture takes to fully cross-fade in (§2.6). */
 const REVEAL_FADE_MS = 600;
 
+/** One live army's fog reveal: its world-space point and its own vision radius in hexes (`ArmyResponse.visionRadius`). */
+export interface ArmyVisionSource {
+  x: number;
+  y: number;
+  radiusHexes: number;
+}
+
+/**
+ * The troop's own fog ramps (fogShader.ts's armyRamps), in hexes. Offsets are
+ * relative to the army vision radius R. The black (out-of-sight) ramp starts
+ * a quarter hex inside the sight radius — pulled in so the dark band reads
+ * before the white — and fades over 2 hexes; the white (unknown) ramp starts
+ * 0.75 hex past it and fades over 6 hexes, versus the village's 14, so the
+ * troop's edge is the village look at a smaller scale.
+ */
+export const ARMY_FOG_BLACK_OFFSET = -0.25;
+export const ARMY_FOG_BLACK_MARGIN = 2;
+export const ARMY_FOG_WHITE_OFFSET = 0.75;
+export const ARMY_FOG_WHITE_MARGIN = 6;
+
+/**
+ * How far from a troop, in hex-euclidean distance, its fog can show the ground: past
+ * `FOG_MIST_OPAQUE_AT_RAMP` of the troop's own white ramp the edge noise is shut off and the mist is fully opaque
+ * (the same bound the settlement terrain cull uses). HexMapRenderer's terrain cull draws ground out to here.
+ */
+export function armyFogClearReachHexes(visionRadiusHexes: number): number {
+  return visionRadiusHexes + ARMY_FOG_WHITE_OFFSET + ARMY_FOG_WHITE_MARGIN * FOG_MIST_OPAQUE_AT_RAMP;
+}
+
 // --- Vision-edge shaping (fogShader.ts's tierAlpha) ------------------------
 //
 // Everything below is in *ramp units*: 0 is the tier's own ring, 1 is the
@@ -209,8 +238,19 @@ export class FogMaskLayer {
         type: 'vec2<f32>',
         size: MAX_ARMY_VISION_SOURCES,
       },
+      // One vision radius (hexes) per source slot, same index as `uArmyVisionSources`; `size` for the same reason as above.
+      uArmyVisionRadii: {
+        value: new Float32Array(MAX_ARMY_VISION_SOURCES),
+        type: 'f32',
+        size: MAX_ARMY_VISION_SOURCES,
+      },
       uArmyVisionCount: { value: 0, type: 'f32' },
-      uArmyVisionRadius: { value: 0, type: 'f32' },
+      uArmyHexSize: { value: new Float32Array([1, 1]), type: 'vec2<f32>' },
+      // Offsets and margins relative to each source's own radius (the ARMY_FOG_* constants): fixed, set once.
+      uArmyRamp: {
+        value: new Float32Array([ARMY_FOG_BLACK_OFFSET, ARMY_FOG_BLACK_MARGIN, ARMY_FOG_WHITE_OFFSET, ARMY_FOG_WHITE_MARGIN]),
+        type: 'vec4<f32>',
+      },
     });
 
     const shader = new Shader({
@@ -255,21 +295,29 @@ export class FogMaskLayer {
    * §1c: uploads this frame's live army vision sources — world-space points,
    * already resolved by HexMapRenderer from its own army render-position
    * tracking (the same continuous, resync-eased position the army overlay
-   * itself draws from) — plus the shared radius (world units) they reveal
-   * within. Called every tick alongside `tick()`, never gated on a mask
+   * itself draws from), each with its own vision radius in hexes, plus the
+   * world-unit size of one hex step (`hexSize`, which makes the shader's
+   * distance hex-euclidean). The shader turns each radius R into the troop's
+   * two ramps (black from R + ARMY_FOG_BLACK_OFFSET over ARMY_FOG_BLACK_MARGIN
+   * hexes, white from R + ARMY_FOG_WHITE_OFFSET over ARMY_FOG_WHITE_MARGIN
+   * hexes) and min()s them with the mask. Called every tick alongside `tick()`, never gated on a mask
    * fetch: this is the whole point of keeping §1c out of the cached texture
    * (see fogShader.ts's header). Silently truncates past
    * `MAX_ARMY_VISION_SOURCES` — see that constant's own comment.
    */
-  setArmyVisionSources(points: readonly { x: number; y: number }[], radiusWorldUnits: number): void {
-    const sources = this.uniforms.uniforms.uArmyVisionSources as Float32Array;
-    const count = Math.min(points.length, MAX_ARMY_VISION_SOURCES);
+  setArmyVisionSources(sources: readonly ArmyVisionSource[], hexSize: { x: number; y: number }): void {
+    const points = this.uniforms.uniforms.uArmyVisionSources as Float32Array;
+    const radii = this.uniforms.uniforms.uArmyVisionRadii as Float32Array;
+    const count = Math.min(sources.length, MAX_ARMY_VISION_SOURCES);
     for (let i = 0; i < count; i++) {
-      sources[i * 2] = points[i].x;
-      sources[(i * 2) + 1] = points[i].y;
+      points[i * 2] = sources[i].x;
+      points[(i * 2) + 1] = sources[i].y;
+      radii[i] = sources[i].radiusHexes;
     }
     this.uniforms.uniforms.uArmyVisionCount = count;
-    this.uniforms.uniforms.uArmyVisionRadius = radiusWorldUnits;
+    const size = this.uniforms.uniforms.uArmyHexSize as Float32Array;
+    size[0] = hexSize.x;
+    size[1] = hexSize.y;
   }
 
   /**
@@ -310,7 +358,7 @@ export class FogMaskLayer {
    * `showRawMask` bypasses the edge shaping and tier compositing entirely,
    * rendering the fetched mask texture unmodified. `showEffectiveMask` is
    * its complement: it dumps the mask channels after the §1c army-vision
-   * reveal has been multiplied in (still ahead of edge shaping/tier
+   * army-vision ramps have been min()'d in (still ahead of edge shaping/tier
    * compositing), so troop-driven vision shows up where showRawMask can't.
    */
   setDebug(opts: { warpEnabled: boolean; showRawMask: boolean; showEffectiveMask: boolean }): void {

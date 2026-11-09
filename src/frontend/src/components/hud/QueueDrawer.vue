@@ -29,7 +29,7 @@ import { peek, pulseHandle, slideDrawer } from '../../lib/hud/queueMotion';
 import axeIconUrl from '../../assets/icons/axe.svg?url';
 import swordIconUrl from '../../assets/icons/sword.svg?url';
 import flagIconUrl from '../../assets/icons/flag.svg?url';
-import { isDoubleTap, type Tap } from '../../lib/map/doubleTap';
+import { useArmyRowTap } from '../../composables/useArmyRowTap';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -158,25 +158,13 @@ function beginFieldOrder(armyId: string) {
   close();
   world.startFieldOrder(armyId);
 }
-// A single tap toggles the army's selection (route on the map) and leaves
-// the drawer open; a double tap (the shared isDoubleTap rule, same as the
-// map's double-tap zoom) closes it and has the map focus the army.
-let lastArmyTap: { armyId: string; tap: Tap } | null = null;
-function selectArmy(armyId: string, event: MouseEvent) {
-  const tap: Tap = { at: { x: event.clientX, y: event.clientY }, timeMs: event.timeStamp };
-  if (lastArmyTap && lastArmyTap.armyId === armyId && isDoubleTap(lastArmyTap.tap, tap)) {
-    lastArmyTap = null;
-    close();
-    emit('select-army', armyId);
-    return;
-  }
-  lastArmyTap = { armyId, tap };
-  if (world.selectedArmyId === armyId) {
-    world.clearSelectedArmy();
-  } else {
-    world.selectArmy(armyId);
-  }
-}
+// Row tap behaviour (select / delayed deselect / double tap) is shared with
+// ArmyPanel in useArmyRowTap; a double tap closes the drawer and has the map
+// focus the army.
+const selectArmy = useArmyRowTap((armyId) => {
+  close();
+  emit('select-army', armyId);
+});
 
 const hasAnything = computed(
   () =>

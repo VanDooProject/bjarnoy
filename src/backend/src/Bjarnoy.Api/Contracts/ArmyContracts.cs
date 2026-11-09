@@ -6,6 +6,7 @@ using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Services;
 using Movement = Bjarnoy.Domain.Movement.Movement;
 
 namespace Bjarnoy.Api.Contracts;
@@ -70,17 +71,34 @@ public sealed record DispatchArmyRequest(
 public sealed record RetargetFoundingRequest([property: Required] HexPointRequest Target);
 
 /// <summary>
-/// Sends an army already out in the field onward to a new hex (issue #156
-/// phase 1) — "move on" when it is standing at its current destination,
-/// "append goal" when it is still travelling there. See
-/// <see cref="Army.PlanFieldOrder"/> for the exact rules, including which of
-/// the two this becomes and when waypoints require a premium account.
+/// Sends an army already out in the field onward (issue #156) — "move on" when it is standing at its current
+/// destination, "append goal" when it is still travelling there — on a move, attack, support, hunt or raid, against the
+/// same targets and with the same checks as a dispatch from home. A standing army can send only part of itself. See
+/// <see cref="Army.PlanFieldOrder"/> for the exact rules, including when waypoints and continuing a march require a premium
+/// account.
 /// </summary>
 /// <param name="Waypoints">Ordered intermediate hexes; empty/omitted for a direct route.</param>
-/// <param name="Destination">The new hex to head for.</param>
+/// <param name="Destination">
+/// Required for <c>"move"</c> (the default) and <c>"hunt"</c> (the camp's hex); ignored for
+/// <c>"attack"</c>/<c>"support"</c>/<c>"raid"</c>, whose destination is always the target settlement's own hex.
+/// </param>
+/// <param name="Mission">
+/// <c>"move"</c> (the default), <c>"attack"</c>, <c>"support"</c>, <c>"hunt"</c> or <c>"raid"</c>; <c>"found"</c> is refused
+/// (founding from the field is a retarget).
+/// </param>
+/// <param name="TargetSettlementId">Required for <c>"attack"</c>/<c>"support"</c>/<c>"raid"</c>.</param>
+/// <param name="TargetBuildingCoord">Only for <c>"attack"</c>/<c>"raid"</c>; required when the army that leaves is a fleet.</param>
+/// <param name="Units">
+/// What leaves, for a standing army. Omitted: the whole army goes. Naming only part of it splits the army: the units listed
+/// leave as a new army (the response), the rest keep standing where they are.
+/// </param>
 public sealed record FieldOrderRequest(
     IReadOnlyList<HexPointRequest>? Waypoints,
-    [property: Required] HexPointRequest Destination);
+    HexPointRequest? Destination,
+    string? Mission = null,
+    Guid? TargetSettlementId = null,
+    HexPointRequest? TargetBuildingCoord = null,
+    IReadOnlyList<UnitCountRequest>? Units = null);
 
 public sealed record ArmyUnitStackResponse(string Unit, int Count);
 
@@ -133,6 +151,10 @@ public sealed record MovementResponse(
         movement.IsReturning);
 }
 
+/// <param name="VisionRadius">
+/// Rings of the map the army sees around itself while it travels: the highest <c>VisionRadius</c> among its unit types plus its
+/// home settlement's Odin's Ravens (<see cref="FogVisionRadii.ArmyVisionRadius"/>). The client's live fog layer draws it as is.
+/// </param>
 /// <param name="AtHome">True when the army is standing in its home settlement — <paramref name="Movement"/> is then null.</param>
 /// <param name="Supporting">
 /// True when the army is currently a guest garrison at
@@ -156,6 +178,7 @@ public sealed record ArmyResponse(
     double Provisions,
     double TotalSpeed,
     double TotalUpkeepPerHour,
+    int VisionRadius,
     IReadOnlyList<ArmyUnitStackResponse> Stacks,
     MovementResponse? Movement)
 {
@@ -188,6 +211,7 @@ public sealed record ArmyResponse(
             domain.ProvisionsAt(gameNow),
             domain.TotalSpeed,
             domain.TotalUpkeepPerHour,
+            FogVisionRadii.ArmyVisionRadius(domain.Stacks, entity.Settlement.ToDomain().VisionBonusRings),
             [.. domain.Stacks.Select(s => new ArmyUnitStackResponse(s.Type.ToWireName(), s.Count))],
             movement is null ? null : MovementResponse.From(movement));
     }
@@ -328,8 +352,12 @@ public sealed record FieldBattleReportResponse(
     HexPointResponse Hex,
     Guid SideAArmyId,
     Guid SideASettlementId,
+    string? SideAName,
+    string? SideAOwnerName,
     Guid SideBArmyId,
     Guid SideBSettlementId,
+    string? SideBName,
+    string? SideBOwnerName,
     string Winner,
     double SideAPower,
     double SideBPower,
@@ -339,9 +367,15 @@ public sealed record FieldBattleReportResponse(
     ResourceAmountsResponse LootTaken,
     IReadOnlyList<FieldBattleReportLineResponse> Lines)
 {
-    public static FieldBattleReportResponse From(FieldBattleReportEntity entity)
+    /// <param name="names">Settlement/owner names by settlement id (<c>FieldBattleReportService.GetSideNamesAsync</c>); a side whose settlement is gone has null names.</param>
+    public static FieldBattleReportResponse From(
+        FieldBattleReportEntity entity, IReadOnlyDictionary<Guid, FieldBattleSideName> names)
     {
         ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(names);
+
+        names.TryGetValue(entity.SideASettlementId, out var a);
+        names.TryGetValue(entity.SideBSettlementId, out var b);
 
         return new FieldBattleReportResponse(
             entity.Id,
@@ -349,8 +383,12 @@ public sealed record FieldBattleReportResponse(
             new HexPointResponse(entity.HexQ, entity.HexR),
             entity.SideAArmyId,
             entity.SideASettlementId,
+            a?.SettlementName,
+            a?.OwnerName,
             entity.SideBArmyId,
             entity.SideBSettlementId,
+            b?.SettlementName,
+            b?.OwnerName,
             ((FieldBattleWinner)entity.Winner).ToString().ToLowerInvariant(),
             entity.SideAPower,
             entity.SideBPower,
@@ -418,4 +456,39 @@ public sealed record CampReportResponse(
             report.TowerCoord is { } tower ? HexPointResponse.From(tower) : null,
             report.TowerBurned);
     }
+}
+
+/// <summary>
+/// The stretch of a foreign army's route its viewer may see (<c>docs/design/map-fog-v2.md</c> §1g), rebased to start at the hex the marker
+/// last passed: same fields and meaning as <see cref="MovementResponse"/> for that stretch alone, with no return route.
+/// </summary>
+public sealed record ForeignMovementResponse(
+    DateTimeOffset DepartedAt,
+    IReadOnlyList<HexPointResponse> Path,
+    IReadOnlyList<double> CumulativeHours,
+    IReadOnlyList<double> EdgeHours,
+    DateTimeOffset ArrivesAt);
+
+/// <summary>
+/// A marching army of another player inside the viewer's sight. Deliberately nothing but identity (to colour by its realm), kind of
+/// marker and where it is going next: no mission, target, units or provisions.
+/// </summary>
+public sealed record ForeignArmyResponse(
+    Guid Id,
+    Guid SettlementId,
+    bool IsFleet,
+    HexPointResponse Position,
+    ForeignMovementResponse Movement)
+{
+    public static ForeignArmyResponse From(ForeignArmy army) => new(
+        army.Id,
+        army.SettlementId,
+        army.IsFleet,
+        HexPointResponse.From(army.Position),
+        new ForeignMovementResponse(
+            army.Stretch.DepartedAt,
+            [.. army.Stretch.Path.Select(HexPointResponse.From)],
+            [.. army.Stretch.CumulativeHours],
+            [.. army.Stretch.EdgeHours],
+            army.Stretch.ArrivesAt));
 }

@@ -13,7 +13,6 @@ import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { terrainName, unitName } from '../i18n/catalogueNames';
 import { ravensRings } from '../lib/map/buildingEconomy';
 import {
-  ARMY_VISION_RINGS,
   BRIDGE_LEVELS,
   BRIDGE_UNLOCK,
   GROUND_COSTS,
@@ -60,7 +59,7 @@ const slowest = computed(() => {
 });
 
 const tocLinks = computed(() =>
-  ['example', 'cost', 'bridges', 'pace', 'food', 'road', 'sight'].map((id) => ({ href: `#${id}`, label: t(`docs.landMovement.toc.${id}`) })),
+  ['example', 'cost', 'bridges', 'pace', 'food', 'road', 'sendOut', 'sight'].map((id) => ({ href: `#${id}`, label: t(`docs.landMovement.toc.${id}`) })),
 );
 </script>
 
@@ -210,7 +209,7 @@ const tocLinks = computed(() =>
           <tbody>
             <tr v-for="row in unitRows" :key="row.type" :data-unit="row.type">
               <th scope="row" class="name">{{ unitName(row.type) }}</th>
-              <td class="value">{{ row.upkeep }}</td>
+              <td class="value">{{ n(row.upkeep) }}</td>
               <td class="value">{{ row.food }}</td>
             </tr>
           </tbody>
@@ -233,13 +232,23 @@ const tocLinks = computed(() =>
       </ul>
     </section>
 
+    <section id="sendOut" class="block">
+      <h2>{{ $t('docs.landMovement.sendOut.heading') }}</h2>
+      <ul class="rules">
+        <li>{{ $t('docs.landMovement.sendOut.orders') }}</li>
+        <li>{{ $t('docs.landMovement.sendOut.split') }}</li>
+        <li>{{ $t('docs.landMovement.sendOut.reach') }}</li>
+        <li>{{ $t('docs.landMovement.sendOut.support') }}</li>
+      </ul>
+    </section>
+
     <section id="sight" class="block">
       <h2>{{ $t('docs.landMovement.sight.heading') }}</h2>
       <i18n-t keypath="docs.landMovement.sight.body" tag="p" class="text" scope="global">
-        <template #rings>{{ ARMY_VISION_RINGS }}</template>
         <template #odin><BuildingLink type="odinstatue" /></template>
         <template #bonus>{{ ravensRings(1) }}</template>
       </i18n-t>
+      <p class="text">{{ $t('docs.landMovement.sight.others') }}</p>
     </section>
   </DocsPageLayout>
 </template>

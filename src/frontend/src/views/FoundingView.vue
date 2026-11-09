@@ -132,7 +132,7 @@ const tocLinks = computed(() =>
               <td>{{ settlerFacts.defense }}</td>
               <td>{{ settlerFacts.speed }}</td>
               <td>{{ settlerFacts.food }}</td>
-              <td>{{ settlerFacts.upkeep }}</td>
+              <td>{{ n(settlerFacts.upkeep) }}</td>
               <td>{{ $t('docs.founding.more.settler.minutes', { n: settlerFacts.minutes }) }}</td>
               <td>{{ settlerFacts.longhouse }}</td>
             </tr>

@@ -170,6 +170,33 @@ public sealed record Movement
     public HexCoord PositionAt(DateTimeOffset now) => Path[ReachedIndexAt(now)];
 
     /// <summary>
+    /// The index of the hex centre the marker has last passed at <paramref name="now"/> — the start of the leg a client interpolates
+    /// along (centre to next centre), as opposed to <see cref="ReachedIndexAt"/>, which switches at the shared edge. Never behind
+    /// <c>ReachedIndexAt - 1</c> and never ahead of it.
+    /// </summary>
+    public int CentreIndexAt(DateTimeOffset now)
+    {
+        if (now <= DepartedAt)
+        {
+            return 0;
+        }
+
+        var elapsedHours = (now - DepartedAt).TotalHours;
+        if (elapsedHours >= CumulativeHours[^1])
+        {
+            return Path.Count - 1;
+        }
+
+        var index = 0;
+        for (var i = 1; i < CumulativeHours.Count && CumulativeHours[i] <= elapsedHours; i++)
+        {
+            index = i;
+        }
+
+        return index;
+    }
+
+    /// <summary>
     /// Every hex of <see cref="Path"/> the army has stood on by <paramref name="at"/>: <c>Path[0..index]</c> where <c>index</c> is
     /// the one <see cref="PositionAt"/> reports (so the last element is always <see cref="PositionAt"/>). At or after
     /// <see cref="ArrivesAt"/> that is the whole path, before <see cref="DepartedAt"/> just the start hex.
@@ -180,7 +207,8 @@ public sealed record Movement
         return [.. Path.Take(index + 1)];
     }
 
-    private int ReachedIndexAt(DateTimeOffset now)
+    /// <summary>The index into <see cref="Path"/> of the hex <see cref="PositionAt"/> reports (the last edge crossed).</summary>
+    public int ReachedIndexAt(DateTimeOffset now)
     {
         if (now <= DepartedAt)
         {

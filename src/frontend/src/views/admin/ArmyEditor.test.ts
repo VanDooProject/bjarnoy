@@ -34,6 +34,7 @@ function army(overrides: Partial<AdminArmyResponse['army']> = {}): AdminArmyResp
       position: { q: 3, r: 4 },
       provisions: 120.4,
       totalSpeed: 3,
+      visionRadius: 2,
       totalUpkeepPerHour: 2,
       stacks: [{ unit: 'thrall', count: 5 }],
       movement: {

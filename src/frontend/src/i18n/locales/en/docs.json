@@ -264,15 +264,15 @@
       "shrineoffreyja": "Raised to Freyja on grass — its favour boosts Food production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
       "shrineofullr": "Raised to Ullr on grass — its favour boosts Wood production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
       "shrineofnjord": "Raised to Njörd on coastal water, behind a level-10 Dockyard — the sea god's favour raises the attack of your ships (+10% at level 1, +22% at level 5). A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
-      "archeryrange": "Trains the land army's bowmen on grass or sand.",
+      "archeryrange": "Trains the land army's bowmen on grass.",
       "dockyard": "Trains ships on shallow (coastal) water.",
       "greatstorehouse": "A late-game storage tier on grass, needing the longhouse at level 15 and a storage house at level 25. Each further one asks for one more storage house at level 25.",
-      "barracks": "Trains the land army's core line on grass or sand at the border — thralls, spearmen, axemen and berserkers. Archery Range trains the bowmen and the Siege Workshop the siege engines; they never train the same unit.",
+      "barracks": "Trains the land army's core line on grass at the border — thralls, spearmen, axemen and berserkers. Archery Range trains the bowmen and the Siege Workshop the siege engines; they never train the same unit.",
       "sawmill": "Refines timber standing directly on a straight, gentle-bend, or tight-bend river tile — a waterwheel turning with the current, same as Crop Mill's. No Wood of its own: it boosts every Lumberjack within its level's range instead (a wider range and a bigger boost at higher levels).",
       "meadery": "Keeps bees on grass behind a level-5 Farm — skeps, a honey press and a mead cellar. No effect of its own yet: the mead is meant for a future morale boost.",
       "townsquare": "The village's own market square on grass — no effect of its own yet, but a future prerequisite or boost.",
       "cropmill": "Grinds a level-10 Farm's grain on a straight river tile — a millstone under the open sky, its waterwheel turning with the current. No Food of its own: it boosts every Farm within its level's range instead (a wider range and a bigger boost at higher levels) — not Pumpkin Farm, a different crop a mill doesn't grind.",
-      "smithy": "The settlement's forge, with an anvil, on grass or sand behind a level-10 Barracks — the military line's capstone and the feeder of the Shrine of Thor. It produces nothing: it is where troops will be upgraded, a mechanic still to come.",
+      "smithy": "The settlement's forge, with an anvil, on grass behind a level-10 Barracks — the military line's capstone and the feeder of the Shrine of Thor. It produces nothing: it is where troops will be upgraded, a mechanic still to come.",
       "druidhut": "A turf-roofed roundhouse on grass behind a Town Square, with a ring of runestones — no effect of its own yet, but meant for a future favour or rune mechanic.",
       "cartworkshop": "Builds the settlement's carts on grass behind a Town Square — trains provisioners and settlers. No storage of its own.",
       "claybrickworks": "Digs and fires clay on bog moss — a pit, a drying rack and a kiln turning red earth into bricks where no mountain stands.",
@@ -1166,6 +1166,7 @@
       "pace": "Pace",
       "food": "Food",
       "road": "On the road",
+      "sendOut": "Sending armies out",
       "sight": "Sight",
       "bridges": "Bridges"
     },
@@ -1239,9 +1240,17 @@
       "enemies": "Hostile armies that meet on the road fight a field battle. Armies of the same owner or guild never fight each other.",
       "orders": "Every order has one destination for free. Waypoints along the way are a premium feature."
     },
+    "sendOut": {
+      "heading": "Sending an army that is already out",
+      "orders": "Tap Send army here, Attack, Support or Hunt on a hex and pick the army to send: your garrison or an army that is already out. A standing army can move, attack, support or hunt. An army still on the march can be redirected with Premium.",
+      "split": "You can send only part of a standing army. The rest keeps standing where it is. An army on the march always goes whole.",
+      "reach": "An army only goes if it can get there and still has the food for the way home. The ones that cannot stay in the list, greyed out, with the reason.",
+      "support": "An army that is supporting another settlement has to be recalled first."
+    },
     "sight": {
       "heading": "What an army sees",
-      "body": "A travelling army uncovers {rings} rings of the map around it, plus {bonus} more for each level of the {odin}."
+      "body": "How far a travelling army sees depends on who is in it: it sees as far as its best-sighted unit, plus {bonus} more rings for each level of the {odin}. Thralls see 3 rings, most troops 2, siege engines only 1. A fleet sees furthest: 6 rings with a Karve, 4 with a Longship.",
+      "others": "You also see other players' troops that march inside your sight, in their owner's colour, as they move. You do not see where they are going or what they carry."
     },
     "bridges": {
       "heading": "Bridges over wide rivers",

@@ -2,6 +2,20 @@
 
 Rules for the words in the game's UI (en and de).
 
+## Check every description for player value
+
+Before a sentence goes into the UI or the player docs, ask: what does the player do differently after reading it? A
+sentence that only describes how the game or the code works, or that states something the player sees anyway, is noise
+for them. It can be useful for the dev docs and for the implementation, but not for the player. Cut it, or move it to the
+dev docs (`docs/design/`) or into a `DocsAdminNote`.
+
+Example (player docs, what an army sees), both sentences cut:
+
+- "You see other realms' buildings on any ground you have uncovered, even while their Longhouse is still in the mist."
+  The "even while ..." clause describes an implementation detail (which hex the server checks).
+- "A realm's name appears over the nearest building you can see." Where the label is anchored is an implementation
+  detail; the player just reads the name.
+
 ## Rejected copy
 
 Lines that were rejected as cringe. Don't reuse them or write in their style.

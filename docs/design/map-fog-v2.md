@@ -117,14 +117,32 @@ on every member's settlement change. Both are needed.
 ### 1c. Option C — live layer, never cached, composited in the shader
 
 **Implemented.** `fogShader.ts`'s `uArmyVisionSources`/`uArmyVisionCount`/
-`uArmyVisionRadius` uniforms, uploaded every tick by `HexMapRenderer` from
+`uArmyHexSize`/`uArmyRamp` uniforms, uploaded every tick by `HexMapRenderer` from
 its own already-computed live army render positions (`resolveArmyPoint`,
-reused as-is), composited as a multiplicative reveal on the ramp values —
-never written into `uMask`/`uMaskPrev`, exactly as designed below. The
-vision radius is a single flat constant (`ArmyVisionRadiusHexes`, backend;
-`ARMY_VISION_RADIUS_HEXES`, frontend) rather than per-unit-type, since no
-unit anywhere in `UnitCatalogue` carries a vision stat to draw a different
-number from.
+reused as-is), composited as a `min()` of the troop's own ramps with the
+mask's ramp values — never written into `uMask`/`uMaskPrev`, exactly as designed below. The uniforms are `uArmyVisionSources` (x, y), `uArmyVisionRadii` (one radius in hexes per source), `uArmyVisionCount`,
+`uArmyHexSize` and `uArmyRamp`; the ramp offsets and margins are relative to each source's own radius. Vision is a
+per-unit-type stat (`UnitDefinition.VisionRadius`, in rings): Thrall 3; Spearman, Axeman, Bowman, Berserker,
+Provisioner and Settler 2; Catapult and Ram 1; Karve 6; Longship 4. Faster units see a little more (scouts), stronger
+ones less. An army or fleet sees as far as the highest value among the unit types actually in it (count above zero),
+plus the Ravens' rings of its home settlement (additive). The backend computes this once
+(`FogVisionRadii.ArmyVisionRadius`) and uses it for the live disc, the persisted walked-ground reveal and
+`ArmyResponse.visionRadius`. The client draws that field as is and computes nothing itself.
+
+**Edge shaping.** The troop writes its own pair of ramps in the mask's own
+units (0 at the troop, 1 far away, one per channel) and takes the `min()`
+with the mask's R/G before `edgeBand`/`tierAlpha` run, so the edge noise,
+softness and wisps act on it exactly as on the village's edge. Distance is
+hex-euclidean (world offset divided by a per-axis hex size, matching
+`demoFogMask.ts`'s `ringDistance`/`hexEuclideanDistance`), so the clearing is
+a flat ellipse on screen like the village's, not a world-unit circle. The
+ramps are narrower than the village's 14/2 margins, so the edge is the
+village look at a smaller scale: with R the army vision radius, the black
+(out-of-sight) ramp starts at R−0.25 and fades over 2 hexes, the white
+(unknown) ramp starts at R+0.75 and fades over 6 hexes
+(`ARMY_FOG_*_OFFSET`/`_MARGIN` in `FogMaskLayer.ts`). With R=2 the black
+fades in over 1.95–3.45 hexes, the white over 2.99–5.27, and wisps reach
+about 7.55.
 
 Live army-granted vision — the rest of this section is the original design.
 
@@ -352,7 +370,23 @@ and treats as out of scope: whether the settlement-listing endpoints
 *other* callers use (world map view, guild rosters, etc., for an
 authenticated player who has already founded) are properly scoped. That's
 an existing-endpoint audit; the landing-page fix above is scoped narrowly
-to the one genuinely pre-authentication, current-state-exposing path.
+to the one genuinely pre-authentication, current-state-exposing path. (Since resolved for rival settlements: see §1g.)
+
+### 1g. Rival settlements: per-hex gate
+
+A rival settlement is delivered to a player as soon as its Longhouse centre or any of its standing buildings lies in the
+player's explored area. What is delivered is decided hex by hex: a rival building is only sent when its own hex is explored,
+so nothing about an unexplored hex (type, level) leaves the server. The summary of a visible rival is full: name, owner,
+relation, Longhouse position and level. Its label sits on the Longhouse when that hex is explored, otherwise on the explored
+standing building closest to it (ties go to the lower q, then r). A foundation (level 0) alone does not make a rival visible.
+
+### 1g. Foreign troops
+
+Troops of other players (and camp beasts) marching inside your sight are shown on the map in their owner's colour, as
+a flag or ship. Sight is your settlements' and towers' visible rings and the vision of your own marching armies. You see
+only a short stretch of their route ahead of them, inside your sight (+1 hex): the marker moves along it, but the route
+itself is not drawn, and you see neither the stretch behind them nor their mission, target or units. Troops standing at
+home or as a guest garrison are not shown.
 
 ## 2. Rendering mechanics — inlined (closes the "original plan" gap)
 

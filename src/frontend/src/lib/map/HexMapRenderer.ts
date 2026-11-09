@@ -48,6 +48,9 @@ import {
   DIAL_FINISH_MS,
   dialFinishFrame,
   dialRejectFrame,
+  hexPerimeterSegment,
+  pendingDotFrame,
+  DIAL_PENDING_SWEEP_MS,
   DIAL_REJECT_MS,
   polylinePartial,
   retainFinishingDials,
@@ -61,6 +64,7 @@ import {
   nextTapReveal,
   DIAL_TAP_REVEAL_MS,
   type ConstructionDial,
+  rejectDialAt,
 } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import { atlasPageCount } from './atlasManifests';
@@ -71,8 +75,7 @@ import { TILE_ORIENTATIONS, type IslandLabel, type RiverTile, type Settlement, t
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
-import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
-import { ARMY_VISION_FALLOFF } from './fog/fogShader';
+import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP, armyFogClearReachHexes, type ArmyVisionSource } from './fog/FogMaskLayer';
 import type { FogCoverageLookup } from './fog/fogCoverage';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
@@ -128,11 +131,17 @@ import { animationPreference } from '../perf/animationPreference';
 import { antialiasPreference } from '../perf/antialiasPreference';
 import { advanceClipFrame, clipTimingOf, phasedStart, sharedClockPlayback, swayPeriodOffset } from './clipPlayback';
 import { hash2 } from './worldGenerator';
-import { GUILD_REALM_COLOR, OWN_REALM_COLOR, realmColor, RIVAL_REALM_COLOR, TREATY_REALM_COLOR } from './realmColours';
+import { OWN_REALM_COLOR, realmColor, RIVAL_REALM_COLOR } from './realmColours';
+import { layoutRealmPill, REALM_PILL, type RealmPillLayout } from './realmPill';
 
 export type RenderMode = 'world' | 'settlement';
 
 const GOLD = 0xffc55c;
+/** The send picker (ArmyOverlayMarker.pick): how faded an army that cannot go is drawn, the radius of the ring round a marker and of its tap target. */
+const PICK_FADED_ALPHA = 0.35;
+const PICK_RING_RADIUS = 24;
+/** The furthest `frameHexes` zooms out, so the markers it frames stay tappable. */
+const MIN_FRAME_ZOOM = 0.3;
 // Distinct from OWN_REALM_COLOR / RIVAL_REALM_COLOR (see realmColours.ts) — trade
 // carts belong to neither ownership axis, so they get their own color
 // rather than borrowing one that would otherwise read as an owner cue.
@@ -209,33 +218,12 @@ export function worldHexFill(terrain: Terrain, wasted: boolean): number {
  * alone, so the cache hits and a label is rasterised once.
  */
 export const LABEL_STYLES = {
-  ownerMine: new TextStyle({
-    fill: OWN_REALM_COLOR,
+  // Realm-pill name (world-map owner label): the dark plate gives the contrast, so no drop shadow.
+  ownerName: new TextStyle({
+    fill: 0xe8f0f5,
     fontFamily: "'Barlow', sans-serif",
     fontWeight: '600',
     fontSize: 12.5,
-    dropShadow: { color: 0x000000, alpha: 0.85, blur: 6, distance: 2, angle: Math.PI / 2 },
-  }),
-  ownerGuild: new TextStyle({
-    fill: GUILD_REALM_COLOR,
-    fontFamily: "'Barlow', sans-serif",
-    fontWeight: '600',
-    fontSize: 12.5,
-    dropShadow: { color: 0x000000, alpha: 0.85, blur: 6, distance: 2, angle: Math.PI / 2 },
-  }),
-  ownerTreaty: new TextStyle({
-    fill: TREATY_REALM_COLOR,
-    fontFamily: "'Barlow', sans-serif",
-    fontWeight: '600',
-    fontSize: 12.5,
-    dropShadow: { color: 0x000000, alpha: 0.85, blur: 6, distance: 2, angle: Math.PI / 2 },
-  }),
-  ownerRival: new TextStyle({
-    fill: RIVAL_REALM_COLOR,
-    fontFamily: "'Barlow', sans-serif",
-    fontWeight: '600',
-    fontSize: 12.5,
-    dropShadow: { color: 0x000000, alpha: 0.85, blur: 6, distance: 2, angle: Math.PI / 2 },
   }),
   // Reference (prototypes/worldmap/Viking Realm.dc.html's island labels) sets
   // island names in 'Alegreya Sans SC' — a display small-caps face, distinct
@@ -259,7 +247,7 @@ export const LABEL_STYLES = {
     dropShadow: { color: 0x000000, alpha: 0.6, blur: 3, distance: 1, angle: Math.PI / 2 },
   }),
   cart: new TextStyle({ fill: CART_COLOR, fontFamily: 'sans-serif', fontWeight: 'normal', fontSize: 11 }),
-  badgeName: new TextStyle({ fill: 0xe8f0f5, fontFamily: 'sans-serif', fontWeight: 'bold', fontSize: 13 }),
+  badgeName: new TextStyle({ fill: 0xf4f8fa, fontFamily: "'Barlow', sans-serif", fontWeight: '700', fontSize: 15 }),
   dialTime: new TextStyle({
     fill: 0xffffff,
     fontFamily: "'Barlow', sans-serif",
@@ -267,7 +255,7 @@ export const LABEL_STYLES = {
     fontSize: 12,
     dropShadow: { color: 0x000000, alpha: 0.9, blur: 2, distance: 1, angle: Math.PI / 2 },
   }),
-  badgeSuffix: new TextStyle({ fill: 0xe8f0f5, fontFamily: 'sans-serif', fontWeight: '400', fontSize: 12 }),
+  badgeSuffix: new TextStyle({ fill: 0xb9c8d1, fontFamily: "'Barlow', sans-serif", fontWeight: '600', fontSize: 13 }),
 } as const;
 
 const WORLD_PROTOTYPE_HEX_W = 40;
@@ -333,7 +321,7 @@ export interface FogDebugFlags {
   drift: boolean;
   /** Bypasses the warp entirely and renders the mask texture unmodified — useful for inspecting the raw fetched mask (chunk seams, once §3's chunking lands) without the shader's own distortion on top. */
   showRawMask: boolean;
-  /** Dumps the mask channels right after §1c's army-vision reveal has been multiplied in, still bypassing warp/edge-noise/tier compositing — the complement to showRawMask (which returns before that reveal is applied), for inspecting what's actually driving fog once troop vision is accounted for. */
+  /** Dumps the mask channels right after §1c's army-vision reveal has been min()'d in, still bypassing warp/edge-noise/tier compositing — the complement to showRawMask (which returns before that reveal is applied), for inspecting what's actually driving fog once troop vision is accounted for. */
   showEffectiveMask: boolean;
   /** Turns off the realm-border wash + outer-edge glow/stroke drawn on every owned hex — survives unchanged from v1 (§4 doesn't touch what it gates, only when it redraws). */
   realmBorders: boolean;
@@ -341,7 +329,7 @@ export interface FogDebugFlags {
   terrainCull: boolean;
   /** Open-water wave squiggles stop being culled past FOG_TERRAIN_CULL_HEXES — off places and animates a wave on every open-water grid point in the viewport, including the ones under opaque mist. */
   waveCull: boolean;
-  /** §1c's live, client-computed army vision reveal (armyVisionPoints/setArmyVisionSources below) — off stops feeding any army position into the shader between mask fetches, so fog only ever reflects the last backend-authoritative mask. Useful for telling a client-side interpolation/reveal bug apart from a backend mask bug. */
+  /** §1c's live, client-computed army vision reveal (armyVisionEntryOf/setArmyVisionSources below) — off stops feeding any army position into the shader between mask fetches, so fog only ever reflects the last backend-authoritative mask. Useful for telling a client-side interpolation/reveal bug apart from a backend mask bug. */
   armyVisionReveal: boolean;
 }
 /**
@@ -559,6 +547,11 @@ export interface HexMapRendererOptions {
   // did nothing at all — see the pointerup early-return this replaces).
   onWaypointTap?: (index: number) => void;
   /**
+   * A tap landed on an army's marker while the send picker is open (some `ArmyOverlayMarker.pick` is set): the army's id and the
+   * marker's canvas position, so the host can show a hint beside it. The tap does not reach the tile below.
+   */
+  onArmyTap?: (armyId: string, screen: { x: number; y: number }) => void;
+  /**
    * docs/design/zoom-transition.md: fired when a wheel/pinch zoom step
    * crosses the enter-settlement or exit-to-world threshold
    * (zoomTransition.ts's transitionForZoom). The renderer has already
@@ -629,8 +622,50 @@ export interface ArmyOverlayMarker {
    * (docs/design/ship-movement.md §4).
    */
   isFleet: boolean;
+  /**
+   * Rings this army sees around itself while marching (`ArmyResponse.visionRadius`, computed by the backend: its best-sighted unit type plus
+   * its home settlement's Odin's Ravens). Drawn as is by the live fog. A `foreign` army grants no vision, so its value is never read.
+   */
+  visionRadius: number;
+  /**
+   * The send picker is open (SendArmyPicker.vue): `eligible` armies get a dashed gold ring and can be tapped (`onArmyTap`),
+   * the `selected` one a solid ring, `ineligible` ones are drawn faded (a tap still reports them, so the reason can be shown).
+   * Absent while no picker is open, and then markers are not hit-tested at all.
+   */
+  pick?: 'eligible' | 'selected' | 'ineligible';
   /** Issue #94: present only while in transit — the renderer interpolates along it every frame. */
   movement?: ArmyOverlayMovement;
+  /**
+   * A marching army of another player inside our sight (docs/design/map-fog-v2.md §1g). Drawn in `color`, never selected, and it grants no
+   * live fog vision (that is only our own armies'). Its `movement` is the short stretch we may see, not the full leg.
+   */
+  foreign?: boolean;
+  /** The marker's colour for a `foreign` army: its owner's realm colour (`realmColor`). Own armies ignore it. */
+  color?: number;
+}
+
+/** Whether `army` lifts our fog live: only our own armies on the march (a foreign army's sight is its owner's). */
+export function grantsArmyVision(army: ArmyOverlayMarker): boolean {
+  return !!army.movement && !army.foreign;
+}
+
+/**
+ * The live fog reveal of one army at its resolved render point (`x`, `y` world units; `hexes` the hexes it lies between): a source with the
+ * army's own vision radius, or null when it lifts no fog (`grantsArmyVision`). The one place a marker becomes a vision source, so the shader
+ * and the terrain cull always see the same radius.
+ */
+export function armyVisionEntryOf(
+  army: ArmyOverlayMarker,
+  point: { x: number; y: number; hexes: AxialCoord[] },
+): { x: number; y: number; radiusHexes: number; hexes: AxialCoord[] } | null {
+  if (!grantsArmyVision(army)) return null;
+  return { x: point.x, y: point.y, radiusHexes: army.visionRadius, hexes: point.hexes };
+}
+
+/** A foreign army wears its owner's realm colour; ours is gold when selected, grey once turned around, blue otherwise. */
+export function armyMarkerColor(army: ArmyOverlayMarker): number {
+  if (army.foreign) return army.color ?? RIVAL_REALM_COLOR;
+  return army.selected ? GOLD : army.returning ? RETURNING_COLOR : ROUTE_COLOR;
 }
 
 /** Issue #93: what an army is being sent *at*, marked on the target settlement's own hex. */
@@ -656,13 +691,6 @@ export interface ArmyOverlayData {
   draftWaypoints: AxialCoord[];
   /** Issue #93: attack/support target indicators. Optional — an empty list draws nothing. */
   targets?: ArmyOverlayTarget[];
-  /**
-   * Odin's Ravens: extra rings added to the live army-vision radius
-   * (`ARMY_VISION_RADIUS_HEXES`) — mirrors the backend's
-   * `FogVisionRadii.ArmyVisionRadius(bonusRings)`. These are all the selected
-   * settlement's own armies, so one number covers them.
-   */
-  visionBonusRings?: number;
 }
 
 /**
@@ -949,8 +977,11 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
 
 // Construction progress dial (see `constructionDial.ts`): drawn in screen space
 // by `drawConstructionDials` (scaled with the map, grows on hover) over a building under construction — white track, yellow elapsed arc,
-// remaining time inside.
+// remaining time inside. A queued order draws `#position` on the plain track, a pending one an orbiting sweep and dots,
+// a refused one a red flash and cross.
 const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
+// Refused-build dial: red outline, flash and rings.
+const CONSTRUCTION_DIAL_REJECT_COLOR = 0xff4d3d;
 // Dial height above the tile centre: half a tile, so the dial's middle sits on
 // the hex's upper edge and the dial overlaps its own tile instead of floating
 // above it.
@@ -1242,23 +1273,20 @@ const STEPS_PER_HEX_UNIT = 2 / Math.sqrt(3);
 const FOG_TERRAIN_CULL_HEXES = Math.ceil(
   FOG_RAMP_MARGIN_HEXES * FOG_MIST_OPAQUE_AT_RAMP * STEPS_PER_HEX_UNIT,
 );
-// §1c's live army-vision radius, in hexes — mirrors the backend's
-// FogVisionRadii.ArmyVisionRadiusHexes (used there for §1e's persisted-
-// history growth trigger; used here for the real-time shader reveal itself,
-// see fogShader.ts's own remarks on why the two stay out of sync-free of
-// each other despite sharing this one number). TILE_W approximates "one hex"
-// in world-space distance the same way NOISE_SCALE (FogMaskLayer.ts) does —
-// good enough for a soft visual radius, not a gameplay-precision distance.
-const ARMY_VISION_RADIUS_HEXES = 2;
+// World units per hex step along x and y for the troop fog's hex-euclidean
+// metric (fogShader.ts's uArmyHexSize). The world layout (isoGridPosition)
+// has a column pitch of 0.75*TILE_W, a row pitch of TILE_H and odd columns
+// offset by TILE_H/2, so a neighbour step is (0.75W, +-H/2) or (0, H);
+// dividing by (W*sqrt(3)/2, H) makes every neighbour distance exactly 1.
+const ARMY_HEX_SIZE = { x: (TILE_W * Math.sqrt(3)) / 2, y: TILE_H };
 
 /**
- * How many hex steps from an army's hex its live reveal can clear the mist: the shader fades the reveal out at
- * `ARMY_VISION_FALLOFF` × the radius in world units, measured round, and a world unit along y is the tightest
- * pitch (one step is TILE_H there). +1 for the hex art's own footprint, which reaches into the reveal before its
- * centre does.
+ * How many hex steps from an army's hex its live fog can show the ground. The fog measures hex-euclidean distance
+ * (`armyFogClearReachHexes`), and a hex-euclidean distance d is at most d × 2/√3 steps (the corner directions are the
+ * long way round). +1 for the hex art's own footprint, which reaches into the clearing before its centre does.
  */
 export function armyRevealReachHexes(visionRadiusHexes: number): number {
-  return Math.ceil((ARMY_VISION_FALLOFF * visionRadiusHexes * TILE_W) / TILE_H) + 1;
+  return Math.ceil((armyFogClearReachHexes(visionRadiusHexes) * 2) / Math.sqrt(3)) + 1;
 }
 
 /**
@@ -1266,19 +1294,20 @@ export function armyRevealReachHexes(visionRadiusHexes: number): number {
  * army's current leg, so the live marker anywhere between them stays inside. Deduplicated, since consecutive armies
  * on one road share hexes.
  */
-export function armyCullSourcesOf(legs: readonly (readonly AxialCoord[])[], visionRadiusHexes: number): FogSource[] {
-  const radius = armyRevealReachHexes(visionRadiusHexes);
-  const seen = new Set<string>();
-  const out: FogSource[] = [];
-  for (const hexes of legs) {
+export function armyCullSourcesOf(
+  armies: readonly { hexes: readonly AxialCoord[]; visionRadiusHexes: number }[],
+): FogSource[] {
+  const bySpot = new Map<string, FogSource>();
+  for (const { hexes, visionRadiusHexes } of armies) {
+    const radius = armyRevealReachHexes(visionRadiusHexes);
     for (const h of hexes) {
       const key = `${h.q},${h.r}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ q: h.q, r: h.r, radius });
+      const seen = bySpot.get(key);
+      if (!seen) bySpot.set(key, { q: h.q, r: h.r, radius });
+      else if (radius > seen.radius) seen.radius = radius;
     }
   }
-  return out;
+  return [...bySpot.values()];
 }
 
 // --- Per-rebuild settlement pruning (see fogSourcesNear) -------------------
@@ -3664,6 +3693,12 @@ export class HexMapRenderer {
     // Touch/pen has no hover: a tap on a construction dial reveals it instead
     // of reaching the tile below. Mouse clicks always go to the tile.
     if (e.pointerType !== 'mouse' && this.handleDialTap(screen)) return;
+    // While the send picker is open an army's marker is a button: the tap picks (or explains) that army instead of the tile below.
+    const armyId = this.pickedArmyAt(screen);
+    if (armyId) {
+      this.options.onArmyTap?.(armyId, screen);
+      return;
+    }
     const world = screenToWorld(this.camera, screen, this.viewport);
     const coord = isoPixelToAxial(world, TILE_W, TILE_H);
     const tile = this.options.worldModel.getTile(coord.q, coord.r);
@@ -3674,6 +3709,26 @@ export class HexMapRenderer {
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
     const anchor = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET });
     this.options.onHexClick?.(coord, tile, anchor);
+  }
+
+  /** Where a marker's body is on screen: a land army's flag stands on its point, so its body sits above it; a ship floats on it. */
+  private armyHitCentre(p: { x: number; y: number }, isFleet: boolean): { x: number; y: number } {
+    return { x: p.x, y: isFleet ? p.y : p.y - 14 };
+  }
+
+  /** The id of the army marker under canvas point `screen`, nearest first; only while the send picker marks armies (`pick`). */
+  private pickedArmyAt(screen: { x: number; y: number }): string | null {
+    const overlay = this.armyOverlay;
+    if (!overlay || !overlay.armies.some((a) => a.pick)) return null;
+    let best: { id: string; distance: number } | null = null;
+    for (const placed of this.armyOverlayFrame.armies) {
+      const army = overlay.armies.find((a) => a.id === placed.id);
+      if (!army?.pick) continue;
+      const c = this.armyHitCentre(placed, army.isFleet);
+      const distance = Math.hypot(screen.x - c.x, screen.y - c.y);
+      if (distance <= PICK_RING_RADIUS + 4 && (!best || distance < best.distance)) best = { id: army.id, distance };
+    }
+    return best?.id ?? null;
   }
 
   /**
@@ -5351,11 +5406,12 @@ export class HexMapRenderer {
 
     for (const settlement of worldModel.listSettlements()) {
       // Don't reveal a settlement (yours or a rival's) over ground nobody
-      // has scouted — same "hidden until explored" rule as its hex.
-      if (fogActive && !worldModel.isExplored(settlement.q, settlement.r)) continue;
-      const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
+      // has scouted — same "hidden until explored" rule as the hex it is drawn on, which for a rival seen only through
+      // one of its buildings is that building's hex (`labelHexOf`), not the centre.
+      const labelHex = worldModel.labelHexOf(settlement);
+      if (fogActive && !worldModel.isExplored(labelHex.q, labelHex.r)) continue;
+      const grid = isoGridPosition(labelHex, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
-      const mine = settlement.ownerId === playerId;
       // Reference draws settlements as a diamond (prototypes/worldmap/Viking
       // Realm.dc.html's `world.marks`: `<polygon points="0,-8 8,0 0,8 -8,0">`),
       // not a plain dot.
@@ -5370,24 +5426,15 @@ export class HexMapRenderer {
         .fill({ color: realmColor(settlement, playerId) })
         .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
 
-      // Settlers-II-style owner label under the marker. Reference styling
-      // (prototypes/worldmap/Viking Realm.dc.html's `world.owners`):
-      // `font:600 12.5px Barlow,sans-serif` plus a soft drop shadow for
-      // legibility over the water/terrain behind it — same treatment as the
-      // island-name labels above, just without their uppercase/letter-spaced
-      // small-caps look (owners read as plain names, not headings).
-      const ownerLabel = this.acquireLabel(
-        mine
-          ? LABEL_STYLES.ownerMine
-          : settlement.relation === 'guild'
-            ? LABEL_STYLES.ownerGuild
-            : settlement.relation === 'treaty'
-              ? LABEL_STYLES.ownerTreaty
-              : LABEL_STYLES.ownerRival,
-      );
+      // Settlers-II-style owner label under the marker: the shared realm pill
+      // (see drawRealmPill) in its small size, so the name stays readable over
+      // water and terrain without a drop shadow.
+      const ownerLabel = this.acquireLabel(LABEL_STYLES.ownerName);
       ownerLabel.text = settlement.ownerName;
-      ownerLabel.anchor.set(0.5, 0);
-      ownerLabel.position.set(center.x, center.y + 8 * this.camera.zoom + 4);
+      ownerLabel.anchor.set(0, 0.5);
+      const pill = layoutRealmPill(REALM_PILL.owner, 1, [ownerLabel.width], center.x, center.y + markerR + 4);
+      this.drawRealmPill(pill, realmColor(settlement, playerId), 'diamond', 1);
+      ownerLabel.position.set(pill.labelXs[0], pill.labelY);
       ownerLabel.visible = true;
     }
 
@@ -5527,20 +5574,46 @@ export class HexMapRenderer {
     for (const toe of toes) g.circle(toe.x, toe.y, toeR).fill({ color });
   }
 
+  /**
+   * The one realm pill both name labels use (settlement badge: 'hex' mark;
+   * world-map owner label: 'diamond'): soft shadow, dark plate bordered in the
+   * realm colour, then the mark. The text is positioned by the caller from
+   * `layout.labelXs` / `labelY`.
+   */
+  private drawRealmPill(layout: RealmPillLayout, color: number, mark: 'hex' | 'diamond', alpha: number) {
+    const g = this.markerLayer;
+    const k = layout.h / REALM_PILL.badge.height;
+    for (const dy of [2 * k, 3.5 * k]) {
+      g.roundRect(layout.x - 1, layout.y + dy - 1, layout.w + 2, layout.h + 2, layout.radius + 1).fill({
+        color: 0x000000,
+        alpha: 0.22 * alpha,
+      });
+    }
+    g.roundRect(layout.x, layout.y, layout.w, layout.h, layout.radius)
+      .fill({ color: 0x08121a, alpha: 0.95 * alpha })
+      .stroke({ width: layout.border, color, alpha: 0.9 * alpha });
+    const { markX: x, markY: y, markR: r } = layout;
+    // Hex: the same pointy-top hexagon TopBar's logo badge and ResourceBar's icons use.
+    const points = mark === 'hex' ? hexPoints(x, y, r) : [x, y - r, x + r, y, x, y + r, x - r, y];
+    g.poly(points).fill({ color, alpha });
+  }
+
   // zip 9's settlement view floats a name badge over the longhouse hex
   // itself — a dot + settlement name in a dark rounded pill, bordered in
   // the owner's colour (Viking Realm.dc.html's `labels`: "HAFRSVIK" over
-  // yours, "DRAUGRVIK" over a rival's) — distinct from the HUD's top-bar
-  // chip. Recomputed every tick (via the same rebuildMarkers() call world
+  // yours, "DRAUGRVIK" over a rival's), drawn as the shared realm pill —
+  // distinct from the HUD's top-bar chip. Recomputed every tick (via the same rebuildMarkers() call world
   // mode uses for its own labels), not just on cull rebuilds, so it stays
   // glued to the hex while the camera pans.
   private rebuildSettlementLabels() {
     const { worldModel, playerId } = this.options;
 
     for (const settlement of worldModel.listSettlements()) {
-      // Don't reveal a rival's name over ground you haven't scouted.
-      if (!worldModel.isExplored(settlement.q, settlement.r)) continue;
-      const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
+      // Don't reveal a rival's name over ground you haven't scouted: the badge sits on the hex the server picked (`labelHexOf`),
+      // the centre when it is explored, else the explored building closest to it.
+      const labelHex = worldModel.labelHexOf(settlement);
+      if (!worldModel.isExplored(labelHex.q, labelHex.r)) continue;
+      const grid = isoGridPosition(labelHex, TILE_W, TILE_H);
       // Issue #16 follow-up: the badge floated above the longhouse's own
       // tile, which sits in the *middle* of the settlement's claimed hexes,
       // not its northmost edge — the reference has it clear above the whole
@@ -5561,7 +5634,7 @@ export class HexMapRenderer {
       // bare topmost tile's own vertex (0 < TILE_TOPFACE_Y_OFFSET / 2) and
       // most of a neighbouring forest tile's canopy, while sitting closer.
       let topWorldY = grid.y - TILE_TOPFACE_Y_OFFSET / 2; // this hex's own ceiling
-      for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, worldModel.borderRadius(settlement))) {
+      for (const c of hexesInRadius(labelHex, worldModel.borderRadius(settlement))) {
         const tileGrid = isoGridPosition(c, TILE_W, TILE_H);
         //topWorldY = Math.min(topWorldY, tileGrid.y - TILE_TOPFACE_Y_OFFSET / 4);
         topWorldY = Math.min(topWorldY, tileGrid.y);
@@ -5580,10 +5653,10 @@ export class HexMapRenderer {
       // reads as undersized once you've zoomed in close to the (now much
       // larger) hex art around it.
       // Issue #16 "settlement badge": "above longhouse also showing its
-      // level" — mockup reads "Bjornstad  you · Lv 4", with "you · Lv 4" in
-      // a visibly lighter/dimmer weight than the bold settlement name, not
-      // one uniform run of text. Two pooled labels side by side, rather
-      // than one, since Pixi's Text has no per-run rich styling.
+      // level" — "Bjornstad  you · Lv 4", the suffix in a lighter colour and
+      // weight than the bold settlement name (both at full alpha). Two pooled
+      // labels side by side, rather than one, since Pixi's Text has no
+      // per-run rich styling.
       const zoomScale = Math.max(1, this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM);
       // Scaled rather than re-sized: a changing `fontSize` re-rasterises the
       // glyphs (see LABEL_STYLES), while `scale` is a transform on the texture
@@ -5595,24 +5668,22 @@ export class HexMapRenderer {
 
       const suffixLabel = this.acquireLabel(LABEL_STYLES.badgeSuffix, zoomScale);
       suffixLabel.text = mine ? `you · Lv ${settlement.level}` : `Lv ${settlement.level}`;
-      suffixLabel.alpha = 0.6;
       suffixLabel.anchor.set(0, 0.5);
 
-      const dotR = 4 * zoomScale;
-      const padX = 12 * zoomScale;
-      const gap = 8 * zoomScale;
-      const nameGap = 6 * zoomScale;
-      const pillH = 26 * zoomScale;
-      const pillW = padX * 2 + dotR * 2 + gap + nameLabel.width + nameGap + suffixLabel.width;
-      const pillX = top.x - pillW / 2;
       // `top` is already clear of every claimed tile's tallest possible art
       // (see above), so this only needs a small breathing-room margin.
-      const pillY = top.y - 10 * zoomScale - pillH;
+      const pill = layoutRealmPill(
+        REALM_PILL.badge,
+        zoomScale,
+        [nameLabel.width, suffixLabel.width],
+        top.x,
+        top.y - 10 * zoomScale - REALM_PILL.badge.height * zoomScale,
+      );
 
       // Beneath an open ring menu the badge fades out instead of showing through the bubbles.
       const occluded =
         this.markerOcclusion !== null &&
-        circleIntersectsRect(this.markerOcclusion, { x: pillX, y: pillY, w: pillW, h: pillH });
+        circleIntersectsRect(this.markerOcclusion, { x: pill.x, y: pill.y, w: pill.w, h: pill.h });
       const dtMs = this.app ? clampAnimationDeltaMs(this.app.ticker.deltaMS) : 0;
       const vis = markerFadeStep(
         this.badgeVisibility.get(settlement.id) ?? 1,
@@ -5628,20 +5699,11 @@ export class HexMapRenderer {
         continue;
       }
       nameLabel.alpha = vis;
-      suffixLabel.alpha = 0.6 * vis;
+      suffixLabel.alpha = vis;
 
-      this.markerLayer
-        .roundRect(pillX, pillY, pillW, pillH, pillH / 2)
-        .fill({ color: 0x08121a, alpha: 0.8 * vis })
-        .stroke({ width: 1, color, alpha: 0.9 * vis });
-      // Reference mockup: a small hex (not a round dot), matching the same
-      // pointy-top hexagon TopBar's logo badge and ResourceBar's icons use
-      // elsewhere in the HUD, not the isometric tile's own hex shape.
-      this.markerLayer
-        .poly(hexPoints(pillX + padX + dotR, pillY + pillH / 2, dotR))
-        .fill({ color, alpha: vis });
-      nameLabel.position.set(pillX + padX + dotR * 2 + gap, pillY + pillH / 2);
-      suffixLabel.position.set(nameLabel.x + nameLabel.width + nameGap, pillY + pillH / 2);
+      this.drawRealmPill(pill, color, 'hex', vis);
+      nameLabel.position.set(pill.labelXs[0], pill.labelY);
+      suffixLabel.position.set(pill.labelXs[1], pill.labelY);
       nameLabel.visible = true;
       suffixLabel.visible = true;
     }
@@ -5682,8 +5744,8 @@ export class HexMapRenderer {
     if (this.tapRevealKey !== null && nowMs - this.tapRevealAtMs >= DIAL_TAP_REVEAL_MS) this.tapRevealKey = null;
     const placed = live.map((dial) => {
       const anchor = this.dialScreenPoint(dial.coord);
-      // A refused build's "…" dial shakes, then shrinks and fades (dialRejectFrame).
-      const reject = dial.rejectedAtMs !== undefined ? dialRejectFrame(nowMs - dial.rejectedAtMs) : null;
+      // A refused build's dial shakes, flashes red with a cross, then shrinks and fades (dialRejectFrame).
+      const reject = dial.rejectedAtMs !== undefined ? dialRejectFrame(nowMs - dial.rejectedAtMs, reduced) : null;
       const key = coordKey(dial.coord);
       seen.add(key);
       const cx = anchor.x + (reject?.offsetX ?? 0);
@@ -5746,15 +5808,54 @@ export class HexMapRenderer {
         continue;
       }
 
-      g.poly(hexPoints(cx, cy, r))
-        .fill({ color: 0x08121a, alpha: 0.85 * dAlpha })
-        .stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.3 * dAlpha, join: 'round' });
-      strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
+      if (reject) {
+        const a = reject.alpha * vis;
+        for (const ring of reject.rings) {
+          g.poly(hexPoints(cx, cy, r * ring.scale)).stroke({
+            width: 3 * zs,
+            color: CONSTRUCTION_DIAL_REJECT_COLOR,
+            alpha: ring.alpha * a,
+            join: 'round',
+          });
+        }
+        g.poly(hexPoints(cx, cy, r)).fill({ color: 0x08121a, alpha: 0.85 * a });
+        g.poly(hexPoints(cx, cy, r)).fill({ color: CONSTRUCTION_DIAL_REJECT_COLOR, alpha: 0.7 * reject.flash * a });
+        strokePath(hexPerimeterPath(cx, cy, r, 1), 6 * zs, CONSTRUCTION_DIAL_REJECT_COLOR, a);
+        const h = 0.34 * r;
+        const cross = reject.cross;
+        strokePath(polylinePartial([{ x: cx - h, y: cy - h }, { x: cx + h, y: cy + h }], cross * 2), 5 * zs, 0xffffff, a);
+        strokePath(polylinePartial([{ x: cx + h, y: cy - h }, { x: cx - h, y: cy + h }], cross * 2 - 1), 5 * zs, 0xffffff, a);
+        continue;
+      }
+
+      const queued = dial.state === 'queued';
+      g.poly(hexPoints(cx, cy, r)).fill({ color: 0x08121a, alpha: 0.85 * dAlpha });
+      g.poly(hexPoints(cx, cy, r)).stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.3 * dAlpha, join: 'round' });
+      if (dial.state === 'pending') {
+        if (reduced) {
+          for (let k = 0; k < 3; k++) {
+            strokePath(hexPerimeterSegment(cx, cy, r, k / 3, k / 3 + 1 / 12), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
+          }
+        } else {
+          const head = (nowMs % DIAL_PENDING_SWEEP_MS) / DIAL_PENDING_SWEEP_MS;
+          strokePath(hexPerimeterSegment(cx, cy, r, head, head + 1 / 6), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
+        }
+      } else if (!queued) {
+        strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
+      }
       if (!showLabel) continue;
-      const label = this.acquireLabel(LABEL_STYLES.dialTime, zs * 1.2 * (reject?.scale ?? 1));
+      if (dial.state === 'pending') {
+        const s = 0.1 * r;
+        for (let i = 0; i < 3; i++) {
+          const dot = pendingDotFrame(nowMs, i, reduced);
+          g.circle(cx + (i - 1) * 3.2 * s, cy - dot.lift * s, s).fill({ color: 0xffffff, alpha: dot.alpha * dAlpha });
+        }
+        continue;
+      }
+      const label = this.acquireLabel(LABEL_STYLES.dialTime, zs * 1.2);
       label.alpha = dAlpha;
-      label.text = remaining === null ? '…' : formatCountdownShort(remaining);
-      label.tint = remaining !== null && remaining <= 60 ? CONSTRUCTION_DIAL_ELAPSED_COLOR : 0xffffff;
+      label.text = queued ? `#${dial.queuePosition}` : remaining === null ? '…' : formatCountdownShort(remaining);
+      label.tint = !queued && remaining !== null && remaining <= 60 ? CONSTRUCTION_DIAL_ELAPSED_COLOR : 0xffffff;
       label.anchor.set(0.5);
       label.position.set(cx, cy);
       label.visible = true;
@@ -5936,11 +6037,61 @@ export class HexMapRenderer {
     this.rebuildAll();
   }
 
+  /** Re-homes the world map's camera onto the player's own realm (worldCameraOrigin). */
+  focusWorldCamera() {
+    if (!this.app) return;
+    this.camera = this.worldCameraOrigin();
+    this.applyCameraTransform();
+    this.rebuildAll();
+  }
+
   panTo(coord: AxialCoord) {
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
     this.camera = { ...this.camera, x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
     this.applyCameraTransform();
     this.rebuildAll();
+  }
+
+  /**
+   * Frames `coords` in the part of the canvas that stays visible: the camera centres on them and zooms to fit with `marginPx` to
+   * spare, never closer than the settlement default or further out than a readable `MIN_FRAME_ZOOM`. `bottomInsetPx` is what a
+   * sheet covers at the bottom. Eased over `durationMs`, at once when that is 0. False when the camera cannot move.
+   */
+  frameHexes(coords: AxialCoord[], opts: { bottomInsetPx?: number; marginPx?: number; durationMs?: number } = {}): boolean {
+    if (!this.app || this.lockCamera || coords.length === 0 || this.viewport.width === 0) return false;
+    const margin = opts.marginPx ?? 48;
+    const bottom = Math.max(0, opts.bottomInsetPx ?? 0);
+    const points = coords.map((c) => {
+      const g = isoGridPosition(c, TILE_W, TILE_H);
+      return { x: g.x + TILE_W / 2, y: g.y + TILE_CENTER_Y_OFFSET };
+    });
+    const minX = Math.min(...points.map((p) => p.x));
+    const maxX = Math.max(...points.map((p) => p.x));
+    const minY = Math.min(...points.map((p) => p.y));
+    const maxY = Math.max(...points.map((p) => p.y));
+    const availW = Math.max(1, this.viewport.width - margin * 2);
+    const availH = Math.max(1, this.viewport.height - bottom - margin * 2);
+    const fit = Math.min(availW / Math.max(1, maxX - minX), availH / Math.max(1, maxY - minY));
+    // Zooms out only as far as needed to fit everything, never in past the player's own zoom.
+    const zoom = Math.min(this.camera.zoom, Math.max(MIN_FRAME_ZOOM, fit));
+    // The visible area is the top (height - bottom) px: its centre sits `bottom / 2` px above the canvas centre.
+    const to = this.clampCamera({
+      ...this.camera,
+      zoom,
+      x: (minX + maxX) / 2,
+      y: (minY + maxY) / 2 + bottom / 2 / zoom,
+    });
+    this.cameraTouched = true;
+    this.idleDrift = false;
+    if ((opts.durationMs ?? 0) > 0) {
+      this.animateCameraTo(to, opts.durationMs!);
+    } else {
+      this.cameraAnim = null;
+      this.camera = to;
+      this.applyCameraTransform();
+      this.rebuildAll();
+    }
+    return true;
   }
 
   /**
@@ -6096,11 +6247,10 @@ export class HexMapRenderer {
   /**
    * The server refused a build that was shown optimistically: the "…" dial on
    * `coord` shakes, then shrinks and fades (`dialRejectFrame`) even though its
-   * pending order is already gone from the queue.
+   * pending order is already gone from the queue (`rejectDialAt`).
    */
   rejectConstructionDial(coord: AxialCoord) {
-    const rest = (this.constructionDials ?? []).filter((d) => d.coord.q !== coord.q || d.coord.r !== coord.r);
-    this.constructionDials = [...rest, { coord, startMs: null, endMs: null, rejectedAtMs: Date.now() }];
+    this.constructionDials = rejectDialAt(this.constructionDials ?? [], coord, Date.now());
   }
 
   /**
@@ -6452,21 +6602,23 @@ export class HexMapRenderer {
     // authoritative hex while standing. Gold for the one currently selected,
     // muted blue for everything else, grey for one already turned around and
     // heading home.
-    const armyVisionPoints: { x: number; y: number }[] = [];
-    const armyVisionLegs: AxialCoord[][] = [];
+    const armyVisionSources: ArmyVisionSource[] = [];
+    const armyVisionLegs: { hexes: AxialCoord[]; visionRadiusHexes: number }[] = [];
     for (const army of overlay.armies) {
       const point = this.resolveArmyPoint(army, now);
       // §1c: only a travelling army grants live vision — one standing at
       // home or as a guest garrison already sits inside its settlement's own
       // explored/visible rings, same scope as the backend's own in-transit-
       // only condition (FogMaskService.GeneratePlayerMaskAsync).
-      if (army.movement && fogDebugFlags.armyVisionReveal) {
-        armyVisionPoints.push({ x: point.x, y: point.y });
-        armyVisionLegs.push(point.hexes);
+      // A foreign army's sight is its owner's, not ours: no live fog reveal from it.
+      const vision = fogDebugFlags.armyVisionReveal ? armyVisionEntryOf(army, point) : null;
+      if (vision) {
+        armyVisionSources.push({ x: vision.x, y: vision.y, radiusHexes: vision.radiusHexes });
+        armyVisionLegs.push({ hexes: vision.hexes, visionRadiusHexes: vision.radiusHexes });
       }
       const p = this.toScreen(point);
       frame.armies.push({ id: army.id, x: p.x, y: p.y, interpolated: point.interpolated });
-      const color = army.selected ? GOLD : army.returning ? RETURNING_COLOR : ROUTE_COLOR;
+      const color = armyMarkerColor(army);
       const size = army.selected ? 40 : 32;
       // Both markers are authored pointing right (+x) — see the icon set's
       // README — so a plain heading-sign flip orients either one with no
@@ -6483,6 +6635,7 @@ export class HexMapRenderer {
           !this.drawIcon('ship', p.x, p.y, {
             size,
             color,
+            alpha: army.pick === 'ineligible' ? PICK_FADED_ALPHA : 1,
             anchorX: 0.5,
             anchorY: 0.5,
             flipX,
@@ -6511,6 +6664,7 @@ export class HexMapRenderer {
           !this.drawIcon('flag', p.x, p.y, {
             size,
             color,
+            alpha: army.pick === 'ineligible' ? PICK_FADED_ALPHA : 1,
             // The pole's foot, not the sprite's centre, is what stands on the
             // army's position (see flag.svg's own geometry).
             anchorX: flipX ? 1 - 22.5 / 64 : 22.5 / 64,
@@ -6528,16 +6682,31 @@ export class HexMapRenderer {
         // a pole drawn upward from the position reads as hovering above the map.
         this.markerLayer.ellipse(p.x, p.y, 7, 3).fill({ color: 0x0b1116, alpha: 0.35 });
       }
+      // The send picker's cue: a ring says "tap me" (dashed) or "this one" (solid). Static, so there is no motion to gate.
+      if (army.pick === 'eligible' || army.pick === 'selected') {
+        const c = this.armyHitCentre(p, army.isFleet);
+        if (army.pick === 'selected') {
+          this.markerLayer.circle(c.x, c.y, PICK_RING_RADIUS).stroke({ width: 2.5, color: GOLD, alpha: 1 });
+        } else {
+          const dashes = 14;
+          for (let i = 0; i < dashes; i++) {
+            const a0 = (i / dashes) * Math.PI * 2;
+            const a1 = ((i + 0.55) / dashes) * Math.PI * 2;
+            this.markerLayer
+              .moveTo(c.x + Math.cos(a0) * PICK_RING_RADIUS, c.y + Math.sin(a0) * PICK_RING_RADIUS)
+              .arc(c.x, c.y, PICK_RING_RADIUS, a0, a1);
+          }
+          this.markerLayer.stroke({ width: 2, color: GOLD, alpha: 0.95 });
+        }
+      }
     }
 
     // §1c: pushed every tick, independent of any mask fetch — see
     // FogMaskLayer.setArmyVisionSources's own remarks on why this stays out
     // of the cached mask texture entirely.
-    const armyVisionRadiusHexes = ARMY_VISION_RADIUS_HEXES + Math.max(0, overlay.visionBonusRings ?? 0);
-    const armyVisionRadiusWorld = armyVisionRadiusHexes * TILE_W;
-    this.blackFogLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
-    this.whiteMistLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
-    this.syncArmyCullSources(armyCullSourcesOf(armyVisionLegs, armyVisionRadiusHexes));
+    this.blackFogLayer.setArmyVisionSources(armyVisionSources, ARMY_HEX_SIZE);
+    this.whiteMistLayer.setArmyVisionSources(armyVisionSources, ARMY_HEX_SIZE);
+    this.syncArmyCullSources(armyCullSourcesOf(armyVisionLegs));
 
     // Armies that have gone away (arrived home and been folded back) would
     // otherwise keep their easing state forever.
@@ -6621,8 +6790,8 @@ export class HexMapRenderer {
       this.syncSpriteLayer(this.terrainTop, new Map());
       this.syncBogEdgeGraphics([], []);
       this.topAnimState.clear();
-      this.blackFogLayer.setArmyVisionSources([], 0);
-      this.whiteMistLayer.setArmyVisionSources([], 0);
+      this.blackFogLayer.setArmyVisionSources([], ARMY_HEX_SIZE);
+      this.whiteMistLayer.setArmyVisionSources([], ARMY_HEX_SIZE);
     } else {
       // Leaving world mode: drop its flat-fill polygons (rebuildTerrain's
       // settlement branch never calls rebuildTerrainFlat, so terrainFlat is

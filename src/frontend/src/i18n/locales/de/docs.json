@@ -262,15 +262,15 @@
       "shrineoffreyja": "Für Freyja auf Gras errichtet. Ihre Gunst steigert die Nahrungsproduktion. Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
       "shrineofullr": "Für Ullr auf Gras errichtet. Seine Gunst steigert die Holzproduktion. Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
       "shrineofnjord": "Für Njörd auf Küstenwasser errichtet, hinter einer Werft der Stufe 10. Die Gunst des Meeresgottes stärkt den Angriff deiner Schiffe (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
-      "archeryrange": "Bildet auf Gras oder Sand die Bogenschützen der Landarmee aus.",
+      "archeryrange": "Bildet auf Gras die Bogenschützen der Landarmee aus.",
       "dockyard": "Bildet auf flachem (Küsten-)Wasser Schiffe aus.",
       "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras. Du brauchst dafür ein Langhaus auf Stufe 15 und ein Lagerhaus auf Stufe 25. Jedes weitere verlangt ein zusätzliches Lagerhaus auf Stufe 25.",
-      "barracks": "Bildet auf Gras oder Sand an der Grenze die Kernlinie der Landarmee aus – Thralls, Speerkämpfer, Axtkämpfer und Berserker. Die Bogenschützen bildet der Schießplatz aus, die Belagerungswaffen die Belagerungswerkstatt. Keine Einheit lässt sich an zwei Gebäuden ausbilden.",
+      "barracks": "Bildet auf Gras an der Grenze die Kernlinie der Landarmee aus – Thralls, Speerkämpfer, Axtkämpfer und Berserker. Die Bogenschützen bildet der Schießplatz aus, die Belagerungswaffen die Belagerungswerkstatt. Keine Einheit lässt sich an zwei Gebäuden ausbilden.",
       "sawmill": "Verarbeitet Holz direkt auf einem geraden, sanft gebogenen oder eng gebogenen Flussfeld – ein Wasserrad, das sich mit der Strömung dreht, wie bei der Getreidemühle. Sie liefert kein eigenes Holz, sondern steigert jeden Holzfäller im Umkreis ihrer Stufe. Mit steigender Stufe wachsen Reichweite und Bonus.",
       "meadery": "Züchtet Bienen auf Gras hinter einem Bauernhof der Stufe 5 – Bienenkörbe, eine Honigpresse und ein Metkeller. Sie hat noch keine eigene Wirkung, der Met ist für einen künftigen Moralbonus gedacht.",
       "townsquare": "Der eigene Marktplatz des Dorfes auf Gras. Er hat noch keine eigene Wirkung, ist aber als künftige Voraussetzung oder künftiger Bonus vorgesehen.",
       "cropmill": "Mahlt auf einem geraden Flussfeld das Getreide eines Bauernhofs, der bis Stufe 10 ausgebaut ist – ein Mühlstein unter freiem Himmel, dessen Wasserrad sich mit der Strömung dreht. Sie erzeugt keine eigene Nahrung, sondern steigert jeden Bauernhof im Umkreis ihrer Stufe. Mit steigender Stufe wachsen Reichweite und Bonus. Die Kürbisfarm profitiert nicht davon: Kürbisse sind eine andere Feldfrucht, die eine Mühle nicht mahlt.",
-      "smithy": "Die Schmiede der Siedlung mit Amboss, auf Gras oder Sand hinter einer Kaserne der Stufe 10. Sie ist der Gipfelpunkt der Militärlinie und Voraussetzung für den Schrein des Thor. Sie erzeugt nichts: Hier sollen später einmal Truppen aufgewertet werden, die Mechanik dafür kommt noch.",
+      "smithy": "Die Schmiede der Siedlung mit Amboss, auf Gras hinter einer Kaserne der Stufe 10. Sie ist der Gipfelpunkt der Militärlinie und Voraussetzung für den Schrein des Thor. Sie erzeugt nichts: Hier sollen später einmal Truppen aufgewertet werden, die Mechanik dafür kommt noch.",
       "druidhut": "Ein Rundhaus mit Rasendach auf Gras hinter einem Dorfplatz, umgeben von einem Ring aus Runensteinen. Es hat noch keine eigene Wirkung, ist aber für eine künftige Gunst- oder Runenmechanik gedacht.",
       "cartworkshop": "Baut auf Gras hinter einem Dorfplatz die Karren der Siedlung. Sie bildet Furiere und Siedler aus. Eigene Lagerkapazität hat sie nicht.",
       "claybrickworks": "Gräbt und brennt Lehm auf Moorboden. Eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht.",
@@ -1166,6 +1166,7 @@
       "pace": "Tempo",
       "food": "Nahrung",
       "road": "Unterwegs",
+      "sendOut": "Armeen losschicken",
       "sight": "Sicht",
       "bridges": "Brücken"
     },
@@ -1239,9 +1240,17 @@
       "enemies": "Feindliche Armeen, die sich auf der Straße treffen, kämpfen eine Feldschlacht. Armeen desselben Besitzers oder derselben Gilde kämpfen nie gegeneinander.",
       "orders": "Jeder Befehl hat ein Ziel gratis. Wegpunkte unterwegs sind eine Premium-Funktion."
     },
+    "sendOut": {
+      "heading": "Eine Armee losschicken, die schon unterwegs ist",
+      "orders": "Tippe auf einem Feld auf „Armee hierher entsenden“, „Angreifen“, „Unterstützen“ oder „Jagen“ und wähle die Armee, die losziehen soll: deine Garnison oder eine Armee, die schon draußen ist. Eine stehende Armee kann ziehen, angreifen, unterstützen oder jagen. Eine marschierende Armee leitest du mit Premium um.",
+      "split": "Von einer stehenden Armee kannst du nur einen Teil losschicken. Der Rest bleibt, wo er steht. Eine marschierende Armee zieht immer komplett los.",
+      "reach": "Eine Armee zieht nur los, wenn sie das Ziel erreicht und danach noch genug Proviant für den Rückweg hat. Alle anderen siehst du ausgegraut in der Liste, zusammen mit dem Grund.",
+      "support": "Eine Armee, die eine andere Siedlung unterstützt, musst du erst zurückrufen."
+    },
     "sight": {
       "heading": "Was eine Armee sieht",
-      "body": "Eine marschierende Armee deckt {rings} Ringe der Karte um sich auf, dazu {bonus} weitere für jede Stufe der {odin}."
+      "body": "Wie weit eine marschierende Armee sieht, hängt davon ab, wer mitzieht: Sie sieht so weit wie ihre aufmerksamste Einheit, dazu {bonus} weitere Ringe für jede Stufe der {odin}. Thralls sehen 3 Ringe weit, die meisten Truppen 2, Belagerungswaffen nur 1. Eine Flotte sieht am weitesten: 6 Ringe mit einem Karve, 4 mit einem Langschiff.",
+      "others": "Marschieren Truppen anderer Spieler durch dein Sichtfeld, siehst du sie in der Farbe ihres Besitzers über die Karte ziehen. Wohin sie wollen und was sie tragen, bleibt dir verborgen."
     },
     "bridges": {
       "heading": "Brücken über breite Flüsse",

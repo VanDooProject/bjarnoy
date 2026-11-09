@@ -21,6 +21,7 @@ function army(overrides: Partial<ArmyResponse> = {}): ArmyResponse {
     position: { q: 1, r: 1 },
     provisions: 10,
     totalSpeed: 4,
+    visionRadius: 2,
     totalUpkeepPerHour: 2,
     stacks: [{ unit: 'spearman', count: 10 }],
     movement: {

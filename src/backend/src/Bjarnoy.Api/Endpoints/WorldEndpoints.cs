@@ -60,9 +60,19 @@ public static class WorldEndpoints
             .WithSummary("The live state (garrison, calm, clears, loot left) at the world's game time of every wildlife camp on an island the caller has seen part of, optionally for one island.")
             .RequireCallerRealm();
 
+        worlds.MapGet("/{worldId:guid}/foreign-armies", GetForeignArmies)
+            .WithName("GetWorldForeignArmies")
+            .WithSummary("The marching armies of other players inside the caller's sight, each with only the short stretch of its route ahead.")
+            .RequireCallerRealm();
+
         worlds.MapGet("/{worldId:guid}/walls", GetWalls)
             .WithName("GetWorldWalls")
-            .WithSummary("Every standing palisade/gate hex of the rival settlements the caller has explored (their own walls excluded).")
+            .WithSummary("Every standing palisade/gate hex of rival settlements that lies on a hex the caller has explored (their own walls excluded).")
+            .RequireCallerRealm();
+
+        worlds.MapGet("/{worldId:guid}/rival-buildings", GetRivalBuildings)
+            .WithName("GetWorldRivalBuildings")
+            .WithSummary("Every standing building of rival settlements that lies on a hex the caller has explored, of any type (their own buildings excluded).")
             .RequireCallerRealm();
 
         worlds.MapGet("/{worldId:guid}/tiles", GetTiles)
@@ -319,15 +329,45 @@ public static class WorldEndpoints
     }
 
     /// <summary>
+    /// The marching armies of other players inside the caller's sight (<see cref="ForeignArmyService"/>, <c>docs/design/map-fog-v2.md</c> §1g).
+    /// A caller that does not resolve to a realm sees none.
+    /// </summary>
+    private static async Task<Results<Ok<IReadOnlyList<ForeignArmyResponse>>, NotFound<ProblemDetails>>> GetForeignArmies(
+        Guid worldId,
+        HttpContext httpContext,
+        WorldService worlds,
+        ForeignArmyService foreignArmies,
+        RealmDirectory realms,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var world = await worlds.GetWorldAsync(worldId, cancellationToken);
+        if (world is null)
+        {
+            return TypedResults.NotFound(WorldNotFoundProblem());
+        }
+
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<ForeignArmyResponse>>([]);
+        }
+
+        var now = world.ToClock().ToGameTime(timeProvider.GetUtcNow());
+        var seen = await foreignArmies.GetAsync(worldId, realm.OwnerId!, now, cancellationToken);
+        return TypedResults.Ok<IReadOnlyList<ForeignArmyResponse>>([.. seen.Select(ForeignArmyResponse.From)]);
+    }
+
+    /// <summary>
     /// The standing wall hexes (level 1 or more) of the world's rival settlements, so a live client can draw, hit-test and plan routes
-    /// around walls it never fetched a settlement for. Gated exactly like <c>GET /worlds/{id}/settlements</c> (<c>SettlementEndpoints.ListForWorld</c>):
-    /// a settlement's walls are listed only when its centre hex is in the caller's explored area, and the caller's own settlements are
-    /// left out (their walls already ship in their own settlement read). No resolvable realm or world answers an empty list.
+    /// around walls it never fetched a settlement for. A wall is listed when its own hex is in the caller's explored area, whether or not
+    /// its settlement's centre is (<see cref="RivalVisibility"/>); the caller's own settlements are left out (their walls already ship in
+    /// their own settlement read). No resolvable realm or world answers an empty list.
     /// </summary>
     private static async Task<Ok<IReadOnlyList<WallResponse>>> GetWalls(
         Guid worldId,
         HttpContext httpContext,
-        GameDbContext db,
+        SettlementService settlements,
         ExploredAreaService exploredArea,
         RealmDirectory realms,
         CancellationToken cancellationToken)
@@ -344,25 +384,64 @@ public static class WorldEndpoints
             return TypedResults.Ok<IReadOnlyList<WallResponse>>([]);
         }
 
-        var idClaim = httpContext.User.Identity?.IsAuthenticated == true
-            ? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
-            : null;
-        var callerUserId = Guid.TryParse(idClaim, out var parsedUserId) ? parsedUserId : (Guid?)null;
-
-        var rows = (await WorldPalisades.ListStandingAsync(db, worldId, cancellationToken))
-            .Where(w => w.OwnerId != realm.OwnerId && !(callerUserId is not null && w.UserId == callerUserId))
-            .ToList();
-
-        var explored = await exploredArea.ExploredAmongAsync(
-            area, rows.Select(w => new HexCoord(w.CentreQ, w.CentreR)).Distinct(), cancellationToken);
+        var callerUserId = RivalVisibility.CallerUserId(httpContext.User);
+        var sights = await RivalVisibility.ForAsync(
+            exploredArea, area, await settlements.GetForWorldAsync(worldId, cancellationToken),
+            s => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId), cancellationToken);
 
         IReadOnlyList<WallResponse> response =
         [
-            .. rows
-                .Where(w => explored.Contains(new HexCoord(w.CentreQ, w.CentreR)))
-                .Select(w => new WallResponse(
-                    w.Q, w.R, w.Type.ToWireName(), w.Level, w.SettlementId,
-                    w.UserId == SystemUserIds.Abandoned ? null : w.UserId, w.OutsideRealm)),
+            .. sights.SelectMany(sight => sight.ExploredStandingBuildings
+                .Where(b => b.Type is BuildingType.Palisade or BuildingType.PalisadeGate)
+                .OrderBy(b => b.Q).ThenBy(b => b.R)
+                .Select(b => new WallResponse(
+                    b.Q, b.R, b.Type.ToWireName(), b.Level, sight.Settlement.Id,
+                    sight.Settlement.UserId == SystemUserIds.Abandoned ? null : sight.Settlement.UserId,
+                    b.OutsideRealmSince is not null))),
+        ];
+
+        return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// Every standing building (level 1 or more, any type) of the world's rival settlements that stands on a hex the caller has explored,
+    /// one row per hex, so a live client can draw what it sees of a rival it never fetched a settlement for. Gated per hex like
+    /// <see cref="GetWalls"/> (<see cref="RivalVisibility"/>): nothing about an unexplored hex is sent; the caller's own buildings are left
+    /// out. No resolvable realm or world answers an empty list.
+    /// </summary>
+    private static async Task<Ok<IReadOnlyList<RivalBuildingResponse>>> GetRivalBuildings(
+        Guid worldId,
+        HttpContext httpContext,
+        SettlementService settlements,
+        ExploredAreaService exploredArea,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<RivalBuildingResponse>>([]);
+        }
+
+        var area = await exploredArea.GetAsync(worldId, realm.OwnerId!, persist: false, cancellationToken);
+        if (area is null)
+        {
+            return TypedResults.Ok<IReadOnlyList<RivalBuildingResponse>>([]);
+        }
+
+        var callerUserId = RivalVisibility.CallerUserId(httpContext.User);
+        var sights = await RivalVisibility.ForAsync(
+            exploredArea, area, await settlements.GetForWorldAsync(worldId, cancellationToken),
+            s => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId), cancellationToken);
+
+        IReadOnlyList<RivalBuildingResponse> response =
+        [
+            .. sights.SelectMany(sight => sight.ExploredStandingBuildings
+                .OrderBy(b => b.Q).ThenBy(b => b.R)
+                .Select(b => new RivalBuildingResponse(
+                    b.Q, b.R, b.Type.ToWireName(), b.Level, sight.Settlement.Id,
+                    sight.Settlement.UserId == SystemUserIds.Abandoned ? null : sight.Settlement.UserId,
+                    b.OutsideRealmSince is not null))),
         ];
 
         return TypedResults.Ok(response);
@@ -583,7 +662,7 @@ public static class WorldEndpoints
         var relationOf = await SettlementRelations.ForCallerAsync(db, worldId, callerUserId, IsMine, cancellationToken);
         IReadOnlyList<SettlementSummary> islandSettlements =
         [
-            .. islandSettlementEntities.Select(s => SettlementSummary.From(s, IsMine(s), labels[s.Id], relationOf(s))),
+            .. islandSettlementEntities.Select(s => SettlementSummary.From(s, IsMine(s), labels[s.Id], relationOf(s), new HexCoord(s.CentreQ, s.CentreR))),
         ];
 
         return TypedResults.Ok(new PlotSuggestionResponse(

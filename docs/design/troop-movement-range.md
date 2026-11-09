@@ -29,6 +29,15 @@ Where it lives:
   on its own provisions with nobody feeding it, so it now takes the same
   round-trip check as everything else (§4).
 
+**Reach.** A full load of provisions is `FoodCarryCapacity` per unit, burned at `UpkeepPerHour` per unit
+(`UnitCatalogue`). The round trip costs twice the outbound hours, so the one-way reach of a single unit type on a
+full load, on plain ground or sea at world speed x1, is
+
+> reach (hexes) = `FoodCarryCapacity` / (2 x `UpkeepPerHour`) x `Speed`
+
+Targets: Karve 1600 hexes (600 / 3 x 8), Longship 800 (320 / 4 x 10), foot units at least 160 (Bowman and Axeman 160,
+Berserker 160, Spearman 192, Thrall 200, Settler 320); lighter units reach further.
+
 So "range" means *how far an army can go and still get back*. Everything below keeps
 that rule rather than inventing a second one.
 
@@ -68,10 +77,23 @@ figure loaded at departure, and the rebuilt `Movement` recomputes `TurnAroundAt`
 the remainder. Provisions only ever decrease, so chained hops cannot be gamed: an army
 may walk outward indefinitely as long as it can still afford the way home.
 
-Attack/Raid orders from the field are in scope and reuse `PlanDispatch`'s existing
-target-settlement, shoreline and catapult-building validation. Attacking *other armies*
-in the open field is not — it needs a target type, army-vs-army resolution and
-interception semantics of its own.
+- A field order carries a mission: Move, Attack, Support or Hunt, against the same targets
+  and with the same checks as a dispatch from home (`PlanDispatch`'s target-settlement,
+  shoreline, catapult-building and camp validation). Its premium gate is the one in the
+  table: a standing army's order is free and waypoints are premium; an order for an army
+  still marching is premium.
+- A field order to a standing army can take only part of it: the chosen units leave as a
+  new army, and the rest keep standing where they are. The provisions are split by upkeep
+  share, so the part that stays keeps its turn-around time. A marching army always moves
+  whole.
+- The part that leaves must be able to reach the target and afford the way home from
+  there with its share of the provisions. The UI does not let the player pick an army (or
+  a split) that cannot.
+- An army supporting another settlement can't take a field order. It has to be recalled
+  first.
+
+Attacking *other armies* in the open field is not in scope — it needs a target type,
+army-vs-army resolution and interception semantics of its own.
 
 ## 4. Guests must be able to walk home (implemented)
 

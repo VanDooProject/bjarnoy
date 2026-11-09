@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   fieldBattleLossCount,
+  fieldBattleOpponent,
   fieldBattleOutcomeLabel,
   fieldBattleSideFor,
   fieldBattleSummaryLine,
@@ -124,5 +125,21 @@ describe('isFieldBattleReportUnread', () => {
 
   it('a report after the last-seen timestamp is unread', () => {
     expect(isFieldBattleReportUnread(later, '2026-08-29T11:00:00.000Z')).toBe(true);
+  });
+});
+
+describe('fieldBattleOpponent', () => {
+  const named = { sideAName: 'Alpha', sideAOwnerName: 'Ann', sideBName: 'Beta', sideBOwnerName: 'Ben' };
+
+  it("returns the other side's owner and settlement name", () => {
+    expect(fieldBattleOpponent(named, 'sidea')).toEqual({ ownerName: 'Ben', settlementName: 'Beta' });
+    expect(fieldBattleOpponent(named, 'sideb')).toEqual({ ownerName: 'Ann', settlementName: 'Alpha' });
+  });
+
+  it('is null for a side whose settlement is gone', () => {
+    expect(fieldBattleOpponent({ ...named, sideBName: null, sideBOwnerName: null }, 'sidea')).toEqual({
+      ownerName: null,
+      settlementName: null,
+    });
   });
 });

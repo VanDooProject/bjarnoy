@@ -275,6 +275,18 @@ public static class HexPathfinder
         HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt, bool isLandUnit,
         Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null,
         Func<HexCoord, bool>? blocked = null, Func<HexCoord, bool>? friendlyGate = null,
+        Func<HexCoord, bool>? halfOpen = null, Func<HexCoord, double?>? bridgeCost = null) =>
+        Search(from, to, terrainAt, isLandUnit, isRiver, isWideRiver, blocked, friendlyGate, halfOpen, bridgeCost).Path;
+
+    /// <summary>
+    /// <see cref="FindPath"/> with the reason for a missing route: <see cref="PathSearch.LimitReached"/> is
+    /// <see langword="true"/> when the search gave up at <see cref="MaxExpandedNodes"/> instead of proving that
+    /// no route exists, i.e. the trip is too long to plan rather than cut off.
+    /// </summary>
+    public static PathSearch Search(
+        HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt, bool isLandUnit,
+        Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null,
+        Func<HexCoord, bool>? blocked = null, Func<HexCoord, bool>? friendlyGate = null,
         Func<HexCoord, bool>? halfOpen = null, Func<HexCoord, double?>? bridgeCost = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
@@ -288,12 +300,12 @@ public static class HexPathfinder
         // endpoints are deliberately exempt from the sea-only rule.
         if (isLandUnit && (!costTable.ContainsKey(terrainAt(from)) || !costTable.ContainsKey(terrainAt(to))))
         {
-            return null;
+            return new PathSearch(null, false);
         }
 
         if (from == to)
         {
-            return [from];
+            return new PathSearch([from], false);
         }
 
         // A bounding box around the two endpoints, padded generously — the
@@ -307,12 +319,12 @@ public static class HexPathfinder
 
         bool InBounds(HexCoord c) => c.Q >= qMin && c.Q <= qMax && c.R >= rMin && c.R <= rMax;
 
-        var open = new PriorityQueue<HexCoord, double>();
+        var open = new PriorityQueue<HexCoord, OpenKey>();
         var gScore = new Dictionary<HexCoord, double> { [from] = 0 };
         var cameFrom = new Dictionary<HexCoord, HexCoord>();
         var closed = new HashSet<HexCoord>();
 
-        open.Enqueue(from, Heuristic(from, to));
+        open.Enqueue(from, OpenKey.For(from, 0, from, to));
         var expanded = 0;
 
         while (open.TryDequeue(out var current, out _))
@@ -324,12 +336,12 @@ public static class HexPathfinder
 
             if (current == to)
             {
-                return Reconstruct(cameFrom, current);
+                return new PathSearch(Reconstruct(cameFrom, current), false);
             }
 
             if (++expanded > MaxExpandedNodes)
             {
-                return null;
+                return new PathSearch(null, true);
             }
 
             foreach (var neighbour in current.Neighbours())
@@ -381,11 +393,11 @@ public static class HexPathfinder
 
                 gScore[neighbour] = tentativeG;
                 cameFrom[neighbour] = current;
-                open.Enqueue(neighbour, tentativeG + Heuristic(neighbour, to));
+                open.Enqueue(neighbour, OpenKey.For(neighbour, tentativeG, from, to));
             }
         }
 
-        return null;
+        return new PathSearch(null, false);
     }
 
     /// <summary>
@@ -395,6 +407,36 @@ public static class HexPathfinder
     /// distance never overestimates the cheapest possible route.
     /// </summary>
     private static double Heuristic(HexCoord a, HexCoord b) => a.DistanceTo(b);
+
+    /// <summary>
+    /// Open-set order, ascending: f = g + h, then h (of two equal-f hexes the one further along
+    /// the route goes first, which stops a uniform-cost sea from expanding every tied hex side by
+    /// side), then the hex's distance from the straight start-to-goal line (axial cross product,
+    /// so open-water routes follow that line), then q and r so the order never depends on heap
+    /// internals. The TS twin (<c>findPath</c> in hexPath.ts) uses the same order.
+    /// </summary>
+    private readonly record struct OpenKey(double F, double H, long LineDeviation, int Q, int R) : IComparable<OpenKey>
+    {
+        public static OpenKey For(HexCoord n, double g, HexCoord from, HexCoord to)
+        {
+            double h = Heuristic(n, to);
+            long deviation = Math.Abs(
+                ((long)(n.Q - from.Q) * (to.R - from.R)) - ((long)(n.R - from.R) * (to.Q - from.Q)));
+            return new OpenKey(g + h, h, deviation, n.Q, n.R);
+        }
+
+        public int CompareTo(OpenKey other)
+        {
+            int c = F.CompareTo(other.F);
+            if (c != 0) return c;
+            c = H.CompareTo(other.H);
+            if (c != 0) return c;
+            c = LineDeviation.CompareTo(other.LineDeviation);
+            if (c != 0) return c;
+            c = Q.CompareTo(other.Q);
+            return c != 0 ? c : R.CompareTo(other.R);
+        }
+    }
 
     private static IReadOnlyList<HexCoord> Reconstruct(Dictionary<HexCoord, HexCoord> cameFrom, HexCoord current)
     {
@@ -530,3 +572,10 @@ public static class HexPathfinder
         return (hours, edges);
     }
 }
+
+/// <summary>The outcome of <see cref="HexPathfinder.Search"/>: the route, or why there is none.</summary>
+/// <param name="Path">The route, or <see langword="null"/> when none was found.</param>
+/// <param name="LimitReached">
+/// <see langword="true"/> when the search stopped at the node cap, so a route may exist but is too long to plan.
+/// </param>
+public readonly record struct PathSearch(IReadOnlyList<HexCoord>? Path, bool LimitReached);

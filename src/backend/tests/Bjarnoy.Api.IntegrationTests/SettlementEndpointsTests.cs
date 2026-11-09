@@ -890,6 +890,33 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_building_catalogue_reports_where_each_building_sits_in_the_ring_and_its_bog_and_river_rules()
+    {
+        using var client = Client();
+
+        var catalogue = await client.GetFromJsonAsync<List<BuildingDefinitionResponse>>(
+            "/api/v1/buildings?level=1", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.NotNull(catalogue);
+        BuildingDefinitionResponse Of(string type) => catalogue.Single(d => d.Type == type);
+
+        Assert.Null(Of("longhouse").RingCategory);
+        Assert.Equal("defense", Of("tower").RingCategory);
+        Assert.Equal(["bog"], Of("tower").AlsoOnBogKinds);
+        Assert.Equal("military", Of("smithy").RingCategory);
+        Assert.Equal(["grass"], Of("smithy").AllowedTerrain);
+        Assert.Equal(["creek"], Of("hammerschmiede").RequiresBogKinds);
+        Assert.Equal(["half"], Of("fishinghut").LakeShoreKinds);
+        Assert.Equal(["bend", "bend60", "straight"], Of("sawmill").RequiresRiverShapes);
+        Assert.Equal(["loop"], Of("sawmill").ExcludedRiverVariants);
+        Assert.Equal(["straight"], Of("cropmill").RequiresRiverShapes);
+        Assert.True(Of("quarry").NewPlacementDisabled);
+        Assert.False(Of("farm").NewPlacementDisabled);
+        Assert.True(Of("palisade").AlsoOnCoastalWater);
+        Assert.False(Of("palisadegate").AlsoOnCoastalWater);
+    }
+
+    [Fact]
     public async Task The_building_catalogue_reports_cross_building_prerequisites()
     {
         using var client = Client();

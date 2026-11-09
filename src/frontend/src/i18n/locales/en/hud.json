@@ -1,4 +1,5 @@
 {
+  "focusHome": "Back to your settlement",
   "nav": {
     "settlement": "Settlement",
     "leaderboards": "Leaderboards",
@@ -102,6 +103,9 @@
       "occupied": "A wall already stands here",
       "terrain": "A wall can't stand on this terrain"
     },
+    "riverLock": {
+      "tooCurved": "This stretch of river bends too much: it needs a straighter river piece"
+    },
     "bridgeLock": {
       "notWide": "This river is no wide river: armies already wade across it",
       "wasted": "No bridge on a wasted island"
@@ -126,7 +130,7 @@
       "sendArmyHere": "Send army here",
       "attack": "Attack",
       "support": "Support",
-      "noUnitsAtHome": "No units at home",
+      "noArmyCanGo": "No army can go",
       "upgrade": "Upgrade",
       "notEnough": "Needs {resources}",
       "raze": "Raze",
@@ -138,8 +142,6 @@
       "hunt": "Hunt",
       "campOccupied": "Occupied by wild beasts",
       "maxLevel": "Max level",
-      "noLandUnitsAtHome": "No land units at home",
-      "noShipsAtHome": "No ships at home",
       "siege": "Siege",
       "noRamAtHome": "Needs a battering ram at home",
       "hexBusy": "This hex already has an order"
@@ -240,15 +242,7 @@
     "slotHere": "Slot here",
     "slotRuneError": "Could not slot that rune — it may already be slotted, or this shrine has no free slot.",
     "unslotRuneError": "Could not unslot that rune.",
-    "queuedNote": "Queued — waiting for a construction slot.",
-    "upgradeCost": "Upgrade cost",
     "notEnoughResources": "Not enough resources available (some may be reserved for queued construction).",
-    "premiumRequired": "Every construction slot is busy, and this account has no waiting queue to fall back on — that's a {premium} feature.",
-    "premium": "Premium",
-    "queuing": "Queuing…",
-    "noFreeSlotPremium": "No free slot — Premium required",
-    "queueBuild": "Queue build",
-    "upgradeToLevel": "Upgrade to level {level}",
     "feastTitle": "Feast",
     "feastDesc": "Turn surplus wood, brick and food into renown. It is paid up front and the renown arrives when the feast ends.",
     "feastCost": "Cost",
@@ -272,9 +266,7 @@
     "renownEtaDays": "{days} d {hours} h",
     "renownEtaHours": "{hours} h {minutes} min",
     "renownEtaMinutes": "{minutes} min",
-    "renownDemo": "Renown progress needs a live world.",
-    "razingNote": "Being razed to level {level}.",
-    "razingRemoveNote": "Being torn down."
+    "renownDemo": "Renown progress needs a live world."
   },
   "trainingModal": {
     "subtitle": "Level {level} · training {percent}% faster",
@@ -372,7 +364,9 @@
     "summaryLost": "lost, {n} lost",
     "summaryTied": "tied, {n} lost",
     "summaryLooted": "{n} looted",
-    "hexCoord": "Hex ({q}, {r})"
+    "hexCoord": "Hex ({q}, {r})",
+    "location": "Location",
+    "unknownOpponent": "Unknown"
   },
   "armyStatus": {
     "arriving": "Arriving",
@@ -449,8 +443,39 @@
     "decrement": "−",
     "increment": "+"
   },
+  "sendPicker": {
+    "title": "{mission} → {target}",
+    "close": "Close",
+    "hex": "Hex ({q}, {r})",
+    "home": "Home",
+    "garrison": "Garrison",
+    "units": "{count} unit | {count} units",
+    "standingAt": "Standing at ({q}, {r})",
+    "marchingTo": "Marching to ({q}, {r})",
+    "etaMinutes": "{minutes} min",
+    "etaHours": "{hours} h {minutes} min",
+    "wholeArmy": "Whole army moves.",
+    "splits": "Splits: {go} go, {stay} keep standing.",
+    "pickOne": "Pick at least one unit.",
+    "reasons": {
+      "noUnitsAtHome": "No units at home",
+      "noLandUnits": "No land units",
+      "noShips": "No ships",
+      "supportingNamed": "Supporting {name}, recall it first",
+      "supporting": "Supporting, recall it first",
+      "returning": "Returning home",
+      "notOrderable": "On a mission, can't take new orders",
+      "premium": "Premium: redirect while marching",
+      "unreachable": "Can't get there",
+      "noFood": "Not enough food for the way home"
+    }
+  },
   "tradeReport": {
     "summary": "Gave {gaveAmount} {gave} for {gotAmount} {got}"
+  },
+  "debugStack": {
+    "handle": "debug",
+    "handleTitle": "Drag to move, double-click to reset"
   },
   "fpsMeter": {
     "title": "Frame rate",
@@ -458,6 +483,8 @@
     "msPerFrame": "{n} ms/frame",
     "worstFrame": "Worst frame (last {seconds} s)",
     "ms": "{n} ms",
+    "average": "Average (last {n} frames)",
+    "fpsValue": "{n} fps",
     "ago": "{n} s ago",
     "stutters": "Frames over {threshold} ms",
     "sparkLabel": "Last {n} frame intervals",

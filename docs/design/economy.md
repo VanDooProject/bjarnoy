@@ -21,6 +21,18 @@ formula changes, re-run the lab and check all of them.
 | T6 | Troops come before settling | Cart Workshop (settlers) at LH 10, after Barracks (LH 5) and Dockyard (LH 8) |
 | T7 | Territory grows through towers, not the Longhouse | Longhouse claim radius stops growing at LH 3 (§5) |
 
+### World speed
+
+Each world has a speed factor (1 = normal). It scales:
+
+- production (×)
+- build, training and feast times (÷); build times also take Odin's Wisdom
+- the decay of buildings outside the realm (÷)
+- travel time of armies and fleets (÷)
+
+It does not scale troop upkeep (at home or on the march), how much food an army carries, or fight stats: those run
+per real hour on every world. So on a fast world a full load of provisions reaches correspondingly farther.
+
 ## 2. Resources
 
 Wood, Brick, Food, Iron. (The internal key stays `stone` in the API, stores and i18n keys; the German name is Stein.)
@@ -310,6 +322,16 @@ play.
   the same for bog-ore works. A river or creek running through a claim is a
   trade: fewer producer hexes, and a much stronger boost on the ones that are
   left.
+- **Which ground takes what.** Sand takes only towers and walls. Every other
+  ordinary building (Smithy, Archery Range, Barracks, Siege Workshop and the
+  rest) stands on grass only. A stream, a widening or a river spring takes no
+  building. A full-width river hex takes only what has art for its shape:
+  the Sawmill on a straight or a bend (not the hairpin loop), the Crop Mill on
+  a straight only, and the bridge on a wide straight or bend. A bog creek
+  takes only the Hammer Forge. Walls never stand on rivers, streams or creeks.
+  Where a river hex takes a river building in general but this stretch bends
+  too much for it, the ring shows the building disabled with the hint that it
+  needs a straighter river piece (no degrees: players don't read them).
 
 ### Shrines
 

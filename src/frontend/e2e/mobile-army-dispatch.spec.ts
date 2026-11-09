@@ -4,6 +4,7 @@ import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 import { RingMenuComponent } from './pages/RingMenuComponent';
 import { gotoWorldMap, layoutOverflow, loginTestUser } from './helpers';
+import { DOUBLE_TAP_SLOP_PX } from '../src/lib/map/doubleTap';
 
 /**
  * Issue: mobile army dispatch. Phones (<=768px) get no ArmyPanel — a 260px
@@ -71,6 +72,8 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect(ring.action('Send army here')).toBeVisible();
 
     await ring.action('Send army here').click();
+    // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
+    await page.locator('.send-picker [data-source="home"] .send-row-head').click();
 
     const sheet = page.locator('.dispatch-sheet');
     await expect(sheet).toBeVisible();
@@ -150,6 +153,8 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect(ring.action('Attack')).toBeVisible();
 
     await ring.action('Attack').click();
+    // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
+    await page.locator('.send-picker [data-source="home"] .send-row-head').click();
 
     await expect(page.locator('.dispatch-sheet')).toBeVisible();
     const draft = await demoWorld(page).then((w) => w.dispatchDraft);
@@ -183,6 +188,8 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     const hex = await settlement.findHex();
     await settlement.clickHex(hex);
     await ring.action('Send army here').click();
+    // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
+    await page.locator('.send-picker [data-source="home"] .send-row-head').click();
 
     const sheet = page.locator('.dispatch-sheet');
     await expect(sheet).toBeVisible();
@@ -254,12 +261,23 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect(armyRow).toBeVisible();
     await expect(armyRow.locator('.status-row-time')).not.toHaveText('—');
 
-    await armyRow.locator('.status-row-click').click();
+    // The single tap lands on the row's left end and the double tap below on
+    // its centre, further apart than DOUBLE_TAP_SLOP_PX: the spec runs the two
+    // gestures back to back, often within one double-tap window (DOUBLE_TAP_MS),
+    // so at the same point the double tap's first click could pair with this
+    // tap instead.
+    // The drawer would then close a click early and the double tap's second
+    // click would land on the map underneath, opening a ring menu whose
+    // make-room pan moves the camera off the army.
+    const rowButton = armyRow.locator('.status-row-click');
+    const rowBox = (await rowButton.boundingBox())!;
+    expect(rowBox.width / 2 - 8).toBeGreaterThan(DOUBLE_TAP_SLOP_PX);
+    await rowButton.click({ position: { x: 8, y: rowBox.height / 2 } });
 
     await expect.poll(async () => (await demoWorld(page)).selectedArmyId).toBe('army-1');
     await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'false');
 
-    await armyRow.locator('.status-row-click').dblclick();
+    await rowButton.dblclick();
 
     await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'true');
     await expect.poll(async () => (await demoWorld(page)).selectedArmyId).toBe('army-1');
@@ -272,5 +290,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
         return Math.hypot(after.x - canvasCentre.x, after.y - canvasCentre.y);
       })
       .toBeLessThan(40);
+    // Checked once the camera has settled: no click of the double tap reached the map underneath.
+    await expect(new RingMenuComponent(page).bubbles).toHaveCount(0);
   });
 });

@@ -56,7 +56,7 @@ describe('FoundingView', () => {
   it('describes the Settler from the unit catalogue and the Cart Workshop from the building catalogue', async () => {
     const wrapper = await mountPage();
 
-    expect(wrapper.get('[data-testid=settler-table] tbody tr').findAll('td').map((td) => td.text())).toEqual(['3', '4', '40', '1', '24 min', '10']);
+    expect(wrapper.get('[data-testid=settler-table] tbody tr').findAll('td').map((td) => td.text())).toEqual(['3', '4', '40', '0.25', '24 min', '10']);
     const more = wrapper.get('#more').text();
     expect(more).toContain('5 settlers');
     expect(more).toContain('Cart Workshop');

@@ -12,15 +12,20 @@ public sealed record ApiKeyContext(
     string KeyId,
     string Name,
     Guid OwnerUserId,
+    Guid? ActingUserId,
     IReadOnlyDictionary<string, ApiKeyAccess> Features,
     bool AllWorlds,
     IReadOnlySet<Guid> WorldIds,
-    int RequestsPerMinute)
+    int RequestsPerMinute,
+    string? ActingAnonymousOwnerId = null)
 {
     internal const string ItemKey = "bjarnoy:api_key_context";
 
     /// <summary>Set (to a reason) when a request presented an API key that failed authentication.</summary>
     internal const string FailureItemKey = "bjarnoy:api_key_failure";
+
+    /// <summary>Set (to a reason) when <c>X-Act-As</c> named an account the key may not act as: a 403, not a 401.</summary>
+    internal const string ForbiddenItemKey = "bjarnoy:api_key_forbidden";
 
     /// <summary>The level this key has for <paramref name="feature"/>; <see cref="ApiKeyAccess.None"/> when absent.</summary>
     public ApiKeyAccess AccessTo(string feature) =>
@@ -36,9 +41,15 @@ public static class ApiKeyClaims
     public const string ApiKeyId = "bjarnoy:api_key_id";
     public const string ApiKeyName = "bjarnoy:api_key_name";
 
+    /// <summary>Present on a key principal acting as an account-less settlement: it has no user id and no role.</summary>
+    public const string Anonymous = "bjarnoy:api_key_anonymous";
+
     /// <summary>True when the request was authenticated with an API key rather than a user's JWT.</summary>
     public static bool IsApiKey(this ClaimsPrincipal user) =>
         user.Identity?.IsAuthenticated == true && user.HasClaim(c => c.Type == ApiKeyId);
+
+    /// <summary>True for a key principal acting as an account-less (anonymous) settlement.</summary>
+    public static bool IsAnonymousApiKey(this ClaimsPrincipal user) => user.HasClaim(c => c.Type == Anonymous);
 
     /// <summary>The key's database id, or null for a non-key principal.</summary>
     public static Guid? GetApiKeyId(this ClaimsPrincipal user) =>

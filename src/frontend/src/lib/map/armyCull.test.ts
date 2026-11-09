@@ -1,17 +1,18 @@
 // The terrain cull and an army's live fog reveal have to agree.
 //
 // Between mask fetches the fog shader clears a disc around every army in
-// transit (fogShader.ts `armyVisionReveal`). The terrain cull used to know only
+// transit (fogShader.ts `armyRamps`). The terrain cull used to know only
 // settlements and the server mask, so a marching army cleared the mist over
 // ground that was never drawn and the bare canvas showed through: the 'edge of
 // the world' next to the troops.
 import { describe, expect, it } from 'vitest';
 import {
   armyCullSourcesOf,
+  armyRevealReachHexes,
   isPastTerrainCullOf,
   type FogSource,
 } from './HexMapRenderer';
-import { ARMY_VISION_FALLOFF } from './fog/fogShader';
+import { armyFogClearReachHexes } from './fog/FogMaskLayer';
 import { isoGridPosition } from '../hex/geometry';
 import { hexDistance, type AxialCoord } from '../hex/coords';
 import { TILE_ART_TOPFACE_H_FRAC } from './textures';
@@ -34,12 +35,14 @@ function revealedHexes(
   const a = world(from);
   const b = world(to);
   const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-  const reach = ARMY_VISION_FALLOFF * radiusHexes * TILE_W;
+  // The fog's own metric: world offset over one hex step along each axis (HexMapRenderer's ARMY_HEX_SIZE).
+  const reach = armyFogClearReachHexes(radiusHexes);
+  const hx = (TILE_W * Math.sqrt(3)) / 2;
   const out: AxialCoord[] = [];
   for (let q = from.q - 20; q <= from.q + 20; q++) {
     for (let r = from.r - 20; r <= from.r + 20; r++) {
       const c = world({ q, r });
-      if (Math.hypot(c.x - p.x, c.y - p.y) < reach) out.push({ q, r });
+      if (Math.hypot((c.x - p.x) / hx, (c.y - p.y) / TILE_H) < reach) out.push({ q, r });
     }
   }
   return out;
@@ -69,7 +72,7 @@ describe('army terrain cull sources', () => {
   for (const radiusHexes of [2, 3, 4]) {
     it(`keeps every hex the reveal reaches drawn (radius ${radiusHexes})`, () => {
       for (const [from, to] of legs) {
-        const sources = armyCullSourcesOf([[from, to]], radiusHexes);
+        const sources = armyCullSourcesOf([{ hexes: [from, to], visionRadiusHexes: radiusHexes }]);
         for (const t of [0, 0.25, 0.5, 0.75, 1]) {
           for (const hex of revealedHexes(from, to, t, radiusHexes)) {
             expect(
@@ -83,48 +86,75 @@ describe('army terrain cull sources', () => {
   }
 
   it('culls a hex under opaque mist without an army, keeps it with one', () => {
-    const army = armyCullSourcesOf(
-      [
-        [
+    const army = armyCullSourcesOf([
+      {
+        hexes: [
           { q: 40, r: 0 },
           { q: 41, r: 0 },
         ],
-      ],
-      2,
-    );
+        visionRadiusHexes: 2,
+      },
+    ]);
     const settlement: FogSource[] = [{ q: 0, r: 0, radius: 5 }];
     expect(isPastTerrainCullOf(42, 0, settlement, allOpaque)).toBe(true);
     expect(isPastTerrainCullOf(42, 0, settlement, allOpaque, army)).toBe(false);
   });
 
   it('still culls far from every army', () => {
-    const army = armyCullSourcesOf(
-      [
-        [
+    const army = armyCullSourcesOf([
+      {
+        hexes: [
           { q: 40, r: 0 },
           { q: 41, r: 0 },
         ],
-      ],
-      2,
-    );
+        visionRadiusHexes: 2,
+      },
+    ]);
     expect(isPastTerrainCullOf(80, 0, [], allOpaque, army)).toBe(true);
   });
 
   it('shares hexes between armies on one road', () => {
-    const sources = armyCullSourcesOf(
-      [
-        [
+    const sources = armyCullSourcesOf([
+      {
+        hexes: [
           { q: 0, r: 0 },
           { q: 1, r: 0 },
         ],
-        [
+        visionRadiusHexes: 2,
+      },
+      {
+        hexes: [
           { q: 1, r: 0 },
           { q: 2, r: 0 },
         ],
-      ],
-      2,
-    );
+        visionRadiusHexes: 2,
+      },
+    ]);
     expect(sources.map((s) => `${s.q},${s.r}`)).toEqual(['0,0', '1,0', '2,0']);
     expect(hexDistance(sources[0], sources[2])).toBe(2);
+  });
+
+  it('gives every army the reach of its own vision radius, the larger one where two share a hex', () => {
+    const sources = armyCullSourcesOf([
+      {
+        hexes: [
+          { q: 0, r: 0 },
+          { q: 1, r: 0 },
+        ],
+        visionRadiusHexes: 1,
+      },
+      {
+        hexes: [
+          { q: 1, r: 0 },
+          { q: 2, r: 0 },
+        ],
+        visionRadiusHexes: 6,
+      },
+    ]);
+    const bySpot = Object.fromEntries(sources.map((s) => [`${s.q},${s.r}`, s.radius]));
+    expect(bySpot['0,0']).toBe(armyRevealReachHexes(1));
+    expect(bySpot['2,0']).toBe(armyRevealReachHexes(6));
+    expect(bySpot['1,0']).toBe(armyRevealReachHexes(6));
+    expect(armyRevealReachHexes(6)).toBeGreaterThan(armyRevealReachHexes(1));
   });
 });

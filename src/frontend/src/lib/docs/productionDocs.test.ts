@@ -3,6 +3,7 @@ import {
   BASE_STORAGE,
   MILLS,
   PRODUCER_TYPES,
+  buildableProducerTypes,
   boostTerrainsOf,
   millBoostAt,
   neighbourBoost,
@@ -13,6 +14,14 @@ import catalogue from '../../data/building-catalogue.json';
 const level1 = (type: string) => catalogue.data.find((d) => d.type === type && d.level === 1)!;
 
 describe('productionDocs', () => {
+  it('leaves out the producers the loaded catalogue switches off for new placement (the Quarry), and none before it says so', () => {
+    const byType = Object.fromEntries(PRODUCER_TYPES.map((type) => [type, [level1(type)]]));
+    expect(buildableProducerTypes(byType)).not.toContain('quarry');
+    expect(buildableProducerTypes(byType)).toHaveLength(PRODUCER_TYPES.length - 1);
+    // Not loaded yet: nothing is known to be disabled.
+    expect(buildableProducerTypes({})).toEqual([...PRODUCER_TYPES]);
+  });
+
   it('lists producers that the catalogue gives exactly one resource each, at the tabled level-1 rates', () => {
     const rates = Object.fromEntries(
       PRODUCER_TYPES.map((type) => {

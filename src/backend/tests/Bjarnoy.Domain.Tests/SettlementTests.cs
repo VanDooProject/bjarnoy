@@ -171,12 +171,12 @@ public class BuildingCatalogueTests
     [Theory]
     [InlineData(BuildingType.ArcheryRange)]
     [InlineData(BuildingType.Barracks)]
-    public void The_archery_range_siege_workshop_and_barracks_are_gated_to_grass_or_sand(BuildingType type)
+    public void The_archery_range_siege_workshop_and_barracks_are_gated_to_grass(BuildingType type)
     {
         var definition = BuildingCatalogue.Get(type, 1);
 
         Assert.True(definition.AllowsTerrain(Terrain.Grass));
-        Assert.True(definition.AllowsTerrain(Terrain.Sand));
+        Assert.False(definition.AllowsTerrain(Terrain.Sand));
         Assert.False(definition.AllowsTerrain(Terrain.Mountain));
         Assert.False(definition.AllowsTerrain(Terrain.Forest));
         Assert.False(definition.AllowsTerrain(Terrain.Sea));
@@ -636,11 +636,11 @@ public class BuildingCatalogueTests
     }
 
     [Fact]
-    public void Smithy_allows_sand_or_grass_like_the_other_border_buildings()
+    public void Smithy_allows_grass_only()
     {
         var definition = BuildingCatalogue.Get(BuildingType.Smithy, 1);
         Assert.True(definition.AllowsTerrain(Terrain.Grass));
-        Assert.True(definition.AllowsTerrain(Terrain.Sand));
+        Assert.False(definition.AllowsTerrain(Terrain.Sand));
         Assert.False(definition.AllowsTerrain(Terrain.Forest));
         Assert.False(definition.AllowsTerrain(Terrain.Mountain));
     }
@@ -1774,6 +1774,34 @@ public class SettlementTests
         var settlement = FoundAtLonghouseLevel(5);
 
         var decision = settlement.PlanBuild(BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.StorageHouse)]
+    [InlineData(BuildingType.Tower)]
+    public void An_ordinary_building_is_refused_on_any_river_tile(BuildingType type)
+    {
+        // A river hex (a stream or a widening, which have no building art, included) takes only the river buildings and the bridge.
+        var settlement = FoundAtLonghouseLevel(20);
+
+        var onRiver = settlement.PlanBuild(type, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), onRiverTile: true);
+        var dry = settlement.PlanBuild(type, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, onRiver.Rejection);
+        Assert.True(dry.Accepted, $"expected accept off the river, got {dry.Rejection}");
+    }
+
+    [Fact]
+    public void A_sawmill_is_refused_on_a_stream_hex_that_is_a_river_tile_without_river_width()
+    {
+        // The service hands PlanBuild no shape for a stream or widening tile (only a river-width one has the art), but flags the river.
+        var settlement = FoundAtLonghouseLevel(20, (BuildingType.Lumberjack, 10));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            riverShapeAt: null, onRiverTile: true);
 
         Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
     }

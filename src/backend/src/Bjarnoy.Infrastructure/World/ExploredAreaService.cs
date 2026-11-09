@@ -1,4 +1,5 @@
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -26,6 +27,10 @@ public readonly record struct ExploredDisc(HexCoord Centre, int Radius);
 /// directly by <see cref="ExploredAreaService.ExploredAmongAsync"/>, so nothing
 /// ever materialises "the explored set" of a world.
 /// </param>
+/// <param name="LiveArmyDiscs">
+/// The ground each in-transit army of the owner sees right now: the disc around its current hex (not the trail it walked).
+/// Together with the settlement and tower sources' visible rings this is <see cref="SightDiscs"/>.
+/// </param>
 /// <param name="MergedChunks">
 /// When the area was loaded with <c>persist: true</c>: the post-merge state of
 /// every chunk the <paramref name="Discs"/> touch — what the database holds
@@ -39,8 +44,19 @@ public sealed record ExploredArea(
     IReadOnlyList<SettlementEntity> Settlements,
     IReadOnlyList<FogVisionSource> VisionSources,
     IReadOnlyList<ExploredDisc> Discs,
+    IReadOnlyList<ExploredDisc> LiveArmyDiscs,
     IReadOnlyDictionary<FogChunkCoord, ExploredChunkData> MergedChunks)
 {
+    /// <summary>
+    /// What the owner sees right now (<c>docs/design/map-fog-v2.md</c> §1g): the visible rings of the settlement and tower sources plus
+    /// the live disc of every marching army.
+    /// </summary>
+    public IReadOnlyList<SightDisc> SightDiscs =>
+    [
+        .. VisionSources.Select(v => new SightDisc(v.Coord, v.VisibleRadius)),
+        .. LiveArmyDiscs.Select(d => new SightDisc(d.Centre, d.Radius)),
+    ];
+
     public MaskBounds Bounds => FogMaskLayout.WorldBounds(WorldRadius);
 
     /// <summary>Whether <paramref name="hex"/> lies inside one of the owner's current discs (no persisted history consulted).</summary>
@@ -62,8 +78,9 @@ public sealed record ExploredArea(
 /// The shared source of truth behind a player's fog of war: which ground in a
 /// world they have actually explored, per <c>docs/design/map-fog-v2.md</c>
 /// §1e. Every fog-gated read — the fog chunks (<see cref="FogChunkService"/>),
-/// <c>GET /settlements/{id}/view</c> and <c>GET /worlds/{worldId}/settlements</c>
-/// — shares this one computation of "which hexes has this owner explored"
+/// <c>GET /settlements/{id}/view</c>, <c>GET /worlds/{worldId}/settlements</c>
+/// and the world's rival walls and buildings (per hex: a rival hex is delivered only
+/// when that hex itself is explored) — shares this one computation of "which hexes has this owner explored"
 /// rather than reimplementing it, which would both duplicate the ring/tower/
 /// army-vision logic and risk the readings of "explored" drifting apart.
 /// </summary>
@@ -73,7 +90,7 @@ public sealed record ExploredArea(
 /// chunks (<see cref="PlayerExploredChunkEntity"/>, <see cref="PersistedExploredBitset"/>),
 /// one row per touched chunk, a fully explored chunk stored as a flag — OR
 /// the discs they explore from right now (settlement and tower rings,
-/// in-transit armies at <see cref="FogVisionRadii.ArmyVisionRadiusHexes"/>).
+/// in-transit armies at <see cref="FogVisionRadii.ArmyVisionRadius"/>).
 /// Nothing here iterates the world or builds a set of it: writes group the
 /// current discs' hexes by chunk and touch only those rows, reads fetch only
 /// the chunks asked for.
@@ -103,12 +120,11 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerId);
 
-        var radius = await _dbContext.Worlds
-            .Where(w => w.Id == worldId)
-            .Select(w => (int?)w.Radius)
-            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        var world = await _dbContext.Worlds
+            .AsNoTracking()
+            .FirstOrDefaultAsync(w => w.Id == worldId, cancellationToken).ConfigureAwait(false);
 
-        if (radius is null)
+        if (world is null)
         {
             return null;
         }
@@ -131,7 +147,9 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
                 && a.Settlement.WorldId == worldId && a.Settlement.OwnerId == ownerId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
+        // Row timestamps below are bookkeeping and stay wall time; army movement times are game time.
         var now = _timeProvider.GetUtcNow();
+        var gameNow = world.ToClock().ToGameTime(now);
         var sources = new List<FogVisionSource>();
         var discs = new List<ExploredDisc>();
         var ravensBySettlement = new Dictionary<Guid, int>();
@@ -173,15 +191,21 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
         // late (server restart, closed browser) must not leave gaps in the trail. Hexes are deduped per radius, so
         // overlapping armies of one realm cost one disc per hex.
         var armyHexes = new HashSet<(HexCoord Hex, int Radius)>();
+        var liveArmyDiscs = new List<ExploredDisc>();
         foreach (var armyEntity in travellingArmies)
         {
             var home = new HexCoord(armyEntity.Settlement!.CentreQ, armyEntity.Settlement.CentreR);
             // The army's origin settlement's Ravens widen its walked-ground reveal too.
-            var armyRadius = FogVisionRadii.ArmyVisionRadius(ravensBySettlement.GetValueOrDefault(armyEntity.SettlementId));
-            foreach (var hex in armyEntity.ToDomain().HexesReachedBy(home, now))
+            var domainArmy = armyEntity.ToDomain();
+            var armyRadius = FogVisionRadii.ArmyVisionRadius(domainArmy.Stacks, ravensBySettlement.GetValueOrDefault(armyEntity.SettlementId));
+            var reached = domainArmy.HexesReachedBy(home, gameNow);
+            foreach (var hex in reached)
             {
                 armyHexes.Add((hex, armyRadius));
             }
+
+            // The last hex reached is where the army stands now: what it sees right now.
+            liveArmyDiscs.Add(new ExploredDisc(reached[^1], armyRadius));
         }
 
         discs.AddRange(armyHexes.Select(h => new ExploredDisc(h.Hex, h.Radius)));
@@ -190,7 +214,7 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             ? await MergeAndSaveAsync(worldId, ownerId, discs, now, cancellationToken).ConfigureAwait(false)
             : new Dictionary<FogChunkCoord, ExploredChunkData>();
 
-        return new ExploredArea(worldId, ownerId, radius.Value, settlements, sources, discs, merged);
+        return new ExploredArea(worldId, ownerId, world.Radius, settlements, sources, discs, liveArmyDiscs, merged);
     }
 
     /// <summary>
@@ -382,7 +406,8 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             var settlement = settlements.FirstOrDefault(s => s.Id == army.SettlementId);
             if (settlement is not null)
             {
-                var radius = FogVisionRadii.ArmyVisionRadius(settlement.ToDomain().VisionBonusRings);
+                var radius = FogVisionRadii.ArmyVisionRadius(
+                    army.Stacks.Select(s => new UnitStack(s.UnitType, s.Count)), settlement.ToDomain().VisionBonusRings);
                 var key = (settlement.WorldId, settlement.OwnerId);
                 if (!byOwner.TryGetValue(key, out var hexes))
                 {

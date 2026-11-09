@@ -17,6 +17,7 @@ import type {
 import type { MessageSchema } from '../../i18n/schema';
 import { useAuthStore } from '../../stores/auth';
 import ApiKeyScopeEditor, {
+  type ScopeEditorAnonymous,
   type ScopeEditorInitial,
   type ScopeEditorOwner,
 } from '../../components/admin/ApiKeyScopeEditor.vue';
@@ -50,6 +51,7 @@ const editorError = ref<string | null>(null);
 const actionError = ref<string | null>(null);
 const revealed = ref<ApiKeyTokenResponse | null>(null);
 const copied = ref(false);
+const hintNotes = ref<Record<string, string[]>>({});
 
 const highlightedCode = computed(() => {
   const raw = route.query.request;
@@ -127,16 +129,53 @@ function selfOwner(): ScopeEditorOwner {
   };
 }
 
-/** Looks a user up by exact user name; the owner picker only knows search. */
-async function resolveOwner(userName: string | null): Promise<ScopeEditorOwner | null> {
-  if (!userName) return null;
+type ResolvedHint =
+  | { kind: 'user'; owner: ScopeEditorOwner }
+  | { kind: 'anonymous'; account: ScopeEditorAnonymous }
+  | { kind: 'ambiguous'; count: number }
+  | null;
+
+/**
+ * Resolves a name an agent gave, the way the backend does on approval: an exact user name, else the one account or
+ * account-less player whose jarl or settlement name is exactly this (e.g. the nickname `Jarl-a741`). Several matches are
+ * reported as ambiguous, never guessed; null when nothing matches.
+ */
+async function resolveHint(name: string | null): Promise<ResolvedHint> {
+  const wanted = name?.trim().toLowerCase();
+  if (!wanted) return null;
   try {
-    const result = await api.adminListUsers({ search: userName, pageSize: 10 });
-    const hit = result.items.find((u) => u.userName.toLowerCase() === userName.toLowerCase());
-    return hit ? { id: hit.id, userName: hit.userName, role: hit.role } : null;
+    const hits = await api.adminLookupUsers(wanted);
+    const byUser = hits.find((u) => u.kind === 'user' && u.userName.toLowerCase() === wanted);
+    const matches = byUser ? [byUser] : hits.filter((u) => u.matchedName?.toLowerCase() === wanted);
+    if (matches.length > 1) return { kind: 'ambiguous', count: matches.length };
+    const hit = matches[0];
+    if (!hit) return null;
+    if (hit.kind === 'anonymous') {
+      return {
+        kind: 'anonymous',
+        account: {
+          settlementId: hit.settlementId ?? undefined,
+          label: hit.userName,
+          primary: false,
+          settlementName: hit.settlementName,
+          worldName: hit.worldName,
+        },
+      };
+    }
+    return { kind: 'user', owner: { id: hit.userId as string, userName: hit.userName, role: hit.role as string } };
   } catch {
     return null;
   }
+}
+
+/** Looks a user up by exact user name (an existing key's owner). */
+async function resolveOwner(userName: string | null): Promise<ScopeEditorOwner | null> {
+  const hint = await resolveHint(userName);
+  return hint?.kind === 'user' ? hint.owner : null;
+}
+
+function toEditorAccount(a: { userId: string; userName: string; role: string }): ScopeEditorOwner {
+  return { id: a.userId, userName: a.userName, role: a.role };
 }
 
 function openNew() {
@@ -167,6 +206,16 @@ async function openEdit(key: ApiKeyResponse) {
       name: key.name,
       purpose: key.purpose,
       owner,
+      additionalAccounts: (key.additionalAccounts ?? []).map(toEditorAccount),
+      anonymousAccounts: (key.anonymousAccounts ?? []).map((a) => ({
+        id: a.id,
+        label: a.label,
+        primary: a.isPrimary,
+        settlementName: a.settlementName,
+        worldName: a.worldName,
+        claimed: a.claimed,
+      })),
+      ownerCanAct: key.ownerCanAct ?? true,
       features: key.features,
       allWorlds: key.allWorlds,
       worldIds: key.worldIds,
@@ -179,12 +228,50 @@ async function openEdit(key: ApiKeyResponse) {
 async function openApprove(request: ApiKeyRequestResponse) {
   actionError.value = null;
   editorError.value = null;
-  const owner = (await resolveOwner(request.requestedOwnerUserName)) ?? selfOwner();
+  const notes: string[] = [];
+  const ownerHint = await resolveHint(request.requestedOwnerUserName);
+  let owner = selfOwner();
+  const anonymous: ScopeEditorAnonymous[] = [];
+  let ownerCanAct = true;
+  if (ownerHint?.kind === 'user') owner = ownerHint.owner;
+  else if (ownerHint?.kind === 'anonymous') {
+    // A player without an account: the key acts as them and the approving admin is only the sponsor.
+    anonymous.push({ ...ownerHint.account, primary: true });
+    ownerCanAct = false;
+  } else if (ownerHint?.kind === 'ambiguous') {
+    notes.push(t('adminApiKeys.requests.ambiguous', { name: request.requestedOwnerUserName ?? '', n: ownerHint.count }));
+  }
+
+  const additional: ScopeEditorOwner[] = [];
+  if (request.approved) {
+    additional.push(...request.approved.additionalAccounts.map(toEditorAccount));
+    anonymous.length = 0;
+    anonymous.push(
+      ...request.approved.anonymousAccounts.map((a) => ({
+        settlementId: a.settlementId ?? undefined,
+        label: a.label,
+        primary: a.isPrimary,
+      })),
+    );
+    ownerCanAct = request.approved.ownerCanAct;
+  } else {
+    for (const name of request.requestedAdditionalUserNames) {
+      const hint = await resolveHint(name);
+      if (hint?.kind === 'user' && hint.owner.id !== owner.id) additional.push(hint.owner);
+      else if (hint?.kind === 'anonymous') anonymous.push(hint.account);
+      else if (hint?.kind === 'ambiguous') notes.push(t('adminApiKeys.requests.ambiguous', { name, n: hint.count }));
+    }
+  }
+
+  hintNotes.value = { ...hintNotes.value, [request.id]: notes };
   editor.value = {
     kind: 'approve',
     request,
     initial: {
       owner,
+      additionalAccounts: additional,
+      anonymousAccounts: anonymous,
+      ownerCanAct,
       features: request.features,
       allWorlds: request.allWorlds,
       worldIds: request.worldIds,
@@ -357,6 +444,14 @@ const openRequests = computed(() =>
               <dt>{{ $t('adminApiKeys.requests.owner') }}</dt>
               <dd>{{ request.requestedOwnerUserName }}</dd>
             </template>
+            <template v-if="request.requestedAdditionalUserNames.length > 0">
+              <dt>{{ $t('adminApiKeys.requests.accounts') }}</dt>
+              <dd>{{ request.requestedAdditionalUserNames.join(', ') }}</dd>
+            </template>
+            <template v-if="(hintNotes[request.id] ?? []).length > 0">
+              <dt />
+              <dd class="error" data-testid="hint-notes">{{ hintNotes[request.id].join(' ') }}</dd>
+            </template>
             <dt>{{ $t('adminApiKeys.requests.features') }}</dt>
             <dd>{{ featureSummary(request.features) }}</dd>
             <dt>{{ $t('adminApiKeys.requests.worlds') }}</dt>
@@ -419,6 +514,7 @@ const openRequests = computed(() =>
               <th>{{ $t('adminApiKeys.keys.columns.hint') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.request') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.owner') }}</th>
+              <th>{{ $t('adminApiKeys.keys.columns.accounts') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.createdBy') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.status') }}</th>
               <th>{{ $t('adminApiKeys.keys.columns.expires') }}</th>
@@ -442,6 +538,14 @@ const openRequests = computed(() =>
                 <code v-if="key.requestUserCode" :data-testid="`key-request-${key.id}`">{{ key.requestUserCode }}</code>
               </td>
               <td>{{ key.ownerUserName }}</td>
+              <td class="summary">
+                {{
+                  [
+                    ...(key.additionalAccounts ?? []).map((a) => a.userName),
+                    ...(key.anonymousAccounts ?? []).map((a) => `${a.label} (${$t('adminApiKeys.editor.anonymousBadge')}${a.claimed ? ', ' + $t('adminApiKeys.keys.claimed') : ''})`),
+                  ].join(', ')
+                }}
+              </td>
               <td>{{ key.createdByUserName ?? '' }}</td>
               <td>
                 <span :class="['status', key.status.toLowerCase()]">
