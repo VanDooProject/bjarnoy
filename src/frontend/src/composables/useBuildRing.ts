@@ -47,8 +47,8 @@ import type { Resources, Tile } from '../lib/map/types';
 import type { RiverVariant } from '../lib/map/worldGenerator';
 import { towerThreatAt } from '../lib/map/campRules';
 
-/** A building type id as the catalogue names it (`BuildingDefinitionResponse.type`). */
-export type BuildableType = string;
+/** A building type id (`Tile['buildingType']`). The catalogue serves the same ids as plain strings; `categoriesFor` narrows them here. */
+export type BuildableType = NonNullable<Tile['buildingType']>;
 
 export interface BuildCategory {
   id: string;
@@ -74,7 +74,7 @@ export function categoriesFor(tile: Tile): BuildCategory[] {
   }
   return [...byCategory.entries()]
     .sort(([a], [b]) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b))
-    .map(([id, list]) => ({ id, buildings: list.sort((x, y) => x.order - y.order).map(({ type }) => ({ type })) }));
+    .map(([id, list]) => ({ id, buildings: list.sort((x, y) => x.order - y.order).map(({ type }) => ({ type: type as BuildableType })) }));
 }
 
 // Category tints, carried into each category's own buildings so a building

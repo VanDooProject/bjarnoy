@@ -28,6 +28,14 @@ export function def(type: string, level: number, o: DefOpts = {}): BuildingDefin
     occupiesAllSlots: o.occupiesAllSlots ?? type === 'longhouse',
     claimRadius: 0,
     prerequisites: o.prereqs ?? [],
+    ringCategory: null,
+    ringOrder: 0,
+    newPlacementDisabled: false,
+    requiresBogKinds: [],
+    alsoOnBogKinds: [],
+    lakeShoreKinds: [],
+    requiresRiverShapes: [],
+    excludedRiverVariants: [],
   };
 }
 
