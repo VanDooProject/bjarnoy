@@ -320,6 +320,9 @@
   `AskUserQuestion` tool, several questions in one call, recommended option first — not as a numbered prose list I have to
   answer by retyping it. Context the question needs goes into the question itself or into the chat text right before it.
   Open questions that need my own words (what something should be called, a new rule) stay in the chat
+- that holds everywhere a choice comes up, not only mid-task: the open questions at the end of a plan or report, the
+  `user decision` rows of the state table, a list of recommended options. Ask them with `AskUserQuestion` in the same turn,
+  before handing back; writing "recommended option first" in prose instead is the thing this rule forbids
 - if u take screenshots always show the in chat to me too
 - for planning u can use a opus or fable subtask/subagent
 - artifacts that go through rounds (UX reviews, design options, motion
@@ -493,8 +496,10 @@
   - for waiting on CI, tests or subagents add the expected time in brackets, e.g. `CI (~5 min)`
 - keep it to the rows that matter: no prose recap, no finished work that needs nothing further, and
   say `nothing open` instead of an empty table
-- for every row waiting on `user decision` or `user action`, add a short line after the table with the question (or the exact steps) and the options (recommended one first), so I can answer without scrolling back
-  — when the question is new or has changed; a question already asked and still unchanged is not written again
+- for every row waiting on `user action`, add a short line after the table with the exact steps, so I can act without
+  scrolling back. A row waiting on `user decision` gets a one-line pointer to the question, and the question itself goes
+  through `AskUserQuestion` (see "## CLAUDE") in the same turn — when it is new or has changed; a question already asked and
+  still unchanged is neither written nor asked again
 - example:
 
   | what | state | waiting on |
@@ -504,7 +509,7 @@
   | AGENTS.MD state table | open work | - |
   | gate rule golden case | waiting | user decision |
 
-  user decision: gate rule golden case - keep the old threshold (recommended) or switch to the new one?
+  user decision: gate rule golden case - threshold question asked via `AskUserQuestion`
 
 # screenshot helpers
 - `scripts/screenshot-helpers/flow.mjs` drives the demo-mode onboarding path

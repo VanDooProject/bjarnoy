@@ -29,6 +29,15 @@ Where it lives:
   on its own provisions with nobody feeding it, so it now takes the same
   round-trip check as everything else (§4).
 
+**Reach.** A full load of provisions is `FoodCarryCapacity` per unit, burned at `UpkeepPerHour` per unit
+(`UnitCatalogue`). The round trip costs twice the outbound hours, so the one-way reach of a single unit type on a
+full load, on plain ground or sea at world speed x1, is
+
+> reach (hexes) = `FoodCarryCapacity` / (2 x `UpkeepPerHour`) x `Speed`
+
+Targets: Karve 1600 hexes (600 / 3 x 8), Longship 800 (320 / 4 x 10), foot units at least 160 (Bowman and Axeman 160,
+Berserker 160, Spearman 192, Thrall 200, Settler 320); lighter units reach further.
+
 So "range" means *how far an army can go and still get back*. Everything below keeps
 that rule rather than inventing a second one.
 
