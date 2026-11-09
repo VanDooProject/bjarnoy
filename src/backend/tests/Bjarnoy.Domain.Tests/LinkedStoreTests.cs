@@ -84,6 +84,47 @@ public sealed class LinkedStoreTests
     private static Settlement With(Settlement s, params PlacedBuilding[] more) =>
         s with { Buildings = [.. s.Buildings, .. more] };
 
+    // ------------------------------------------------------------------ raze
+
+    [Fact]
+    public void A_finished_raze_in_a_linked_realm_pays_its_refund_into_the_pooled_stock()
+    {
+        var farmHex = new HexCoord(1, 0);
+        var farm = new PlacedBuilding(farmHex, BuildingType.Farm, 3);
+        var raze = new BuildOrder
+        {
+            Id = Guid.CreateVersion7(),
+            Type = BuildingType.Farm,
+            TargetLevel = 2,
+            Kind = BuildOrderKind.Raze,
+            Coord = farmHex,
+            QueuedAt = T0,
+            BaseDuration = TimeSpan.FromMinutes(10),
+            StartedAt = T0,
+            CompletesAt = T0.AddMinutes(10),
+        };
+        var stock = ResourceAmounts.Uniform(50);
+
+        var withRaze = Member(CentreA, stock, extra: [farm], queue: [raze]);
+        var baseline = Member(CentreA, stock, extra: [farm]);
+        var b = Member(CentreB, stock);
+        var b2 = Member(CentreB, stock);
+
+        var razing = Store(withRaze, b);
+        var plain = Store(baseline, b2);
+        var at = T0.AddMinutes(10);
+        razing.SettleTo(at);
+        plain.SettleTo(at);
+
+        Assert.Single(razing.Outcome(withRaze.Id).Completed);
+        Assert.Equal(2, razing.Outcome(withRaze.Id).Settlement.Buildings.Single(x => x.Coord == farmHex).Level);
+
+        var cost = BuildingCatalogue.Get(BuildingType.Farm, 3).Cost;
+        var refund = new ResourceAmounts(Math.Floor(cost.Wood / 3), Math.Floor(cost.Stone / 3), Math.Floor(cost.Food / 3), Math.Floor(cost.Iron / 3));
+        Assert.True(refund.Wood > 0);
+        AssertNear(Pooled(plain, at, baseline, b2) + refund, Pooled(razing, at, withRaze, b));
+    }
+
     // ------------------------------------------------------------------ shares
 
     [Fact]

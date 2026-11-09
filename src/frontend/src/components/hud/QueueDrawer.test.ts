@@ -28,6 +28,7 @@ function buildOrder(overrides: Partial<BuildOrderResponse> = {}): BuildOrderResp
     q: 1,
     r: 2,
     building: 'farm',
+    kind: 'build',
     targetLevel: 1,
     state: 'building',
     slotCost: 1,

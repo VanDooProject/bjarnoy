@@ -54,6 +54,7 @@ import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { buildingArt } from '../lib/map/buildingArt';
 import { buildingStatsAt, buildingUpgradeCost, scaleOutput, upgradeRateGain } from '../lib/map/buildingEconomy';
+import { razeBlock, razeRefund, razeSeconds } from '../lib/map/raze';
 import { formatBuildTime, formatMissingResources, longhouseLock } from '../lib/map/ringCatalogue';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
@@ -877,6 +878,48 @@ function upgradeActionFor(tile: Tile): RingAction {
   };
 }
 
+// The Raze bubble: takes ONE level off the building (docs/design/construction-slots.md, "Razing"). Like Upgrade it says up
+// front whether it is possible and shows a card on hover; a raze costs nothing, so the card shows its time and the third of
+// the level's cost that comes back instead.
+function razeActionFor(tile: Tile): RingAction {
+  const type = tile.buildingType!;
+  const label = t('hud.ringMenu.actions.raze');
+  if (razeBlock(type, false, { state: 'ready' }) === 'longhouse') {
+    return { id: 'raze', label, disabled: true, hint: t('hud.ringMenu.actions.cantRazeLonghouse') };
+  }
+  const level = tile.buildingLevel ?? 1;
+  const definition = buildingCatalogue.byType[type]?.find((d) => d.level === level);
+  const cost = definition?.cost ?? buildingUpgradeCost(type, level);
+  const hexBusy = world.hud.queue.some((o) => o.q === tile.q && o.r === tile.r);
+  // The raze needs the slots building this level took; it costs nothing, so only slots (or the waiting room) can hold it back.
+  const availability = availabilityFor(undefined, definition, false, hexBusy);
+  const block = razeBlock(type, hexBusy, availability);
+  const blocked = block !== null;
+  const busyNote = block === 'hexBusy' ? t('hud.ringMenu.actions.hexBusy') : undefined;
+  return {
+    id: 'raze',
+    label,
+    disabled: blocked,
+    state: blocked ? 'waiting' : undefined,
+    hint: !blocked ? undefined : (busyNote ?? t('hud.ringMenu.card.badgeNoSlot')),
+    card: {
+      title: level > 1 ? t('hud.ringMenu.card.razeTitle', { level: level - 1 }) : t('hud.ringMenu.card.razeTitleRemove'),
+      sub: level > 1
+        ? t('hud.ringMenu.card.upgradeSub', { building: buildingName(type), from: level, to: level - 1 })
+        : t('hud.ringMenu.card.razeSubRemove', { building: buildingName(type) }),
+      time: definition ? formatBuildTime(razeSeconds(buildSeconds(definition.buildSeconds))) : undefined,
+      timeLabel: t('hud.ringMenu.razeTime'),
+      refund: razeRefund(cost),
+      okBadge: t('hud.ringMenu.card.razeBadge'),
+      tapHint: t('hud.ringMenu.tap.raze', { name: label }),
+      // A hex with an order on it takes no other: the card says so instead of listing slots.
+      locks: busyNote ? [busyNote] : [],
+      art: buildingArt(type, level),
+      availability: hexBusy ? undefined : availability,
+    },
+  };
+}
+
 const rootActions = computed<RingAction[]>(() => primaryActionFirst(rootActionList()));
 function rootActionList(): RingAction[] {
   const tile = selectedTile.value;
@@ -919,15 +962,7 @@ function rootActionList(): RingAction[] {
     const upgrade = upgradeActionFor(tile);
     const actions: RingAction[] = [
       upgrade,
-      {
-        id: 'raze',
-        label: t('hud.ringMenu.actions.raze'),
-        disabled: tile.buildingType === 'longhouse' || !DEMO_MODE,
-        hint:
-          tile.buildingType === 'longhouse'
-            ? t('hud.ringMenu.actions.cantRazeLonghouse')
-            : t('hud.ringMenu.actions.notWiredYet'),
-      },
+      razeActionFor(tile),
     ];
     // Training belongs to a building: every building any UnitDefinition.RequiredBuildingType
     // points at offers the action, which opens that building's own TrainingModal; a finished Town Square
@@ -1104,11 +1139,8 @@ async function onRingSelect(id: string) {
       trainModalOpen.value = true;
       return;
     case 'raze':
-      if (world.selectedSettlementId && selectedCoord.value) {
-        world.model.razeBuilding(world.selectedSettlementId, selectedCoord.value);
-        canvasRef.value?.renderer?.forceRebuild();
-      }
-      closeRing();
+      // Like upgrade: on a refusal the ring stays open and shows the rejection's message (`actionError`).
+      await raze();
       return;
     case 'send-army':
       if (selectedCoord.value) world.startDispatchAt(selectedCoord.value);
@@ -1214,6 +1246,24 @@ function closeTrainModal() {
 
 function describeActionError(err: unknown, fallback: string): string {
   return apiErrorMessage(err, fallback);
+}
+
+async function raze() {
+  if (!world.selectedSettlementId || !selectedCoord.value || !selectedTile.value?.buildingType) return;
+  actionError.value = null;
+  if (DEMO_MODE) {
+    world.model.razeBuilding(world.selectedSettlementId, selectedCoord.value);
+    canvasRef.value?.renderer?.forceRebuild();
+    closeRing();
+    return;
+  }
+  try {
+    await world.razeBuildingLive(selectedCoord.value);
+    closeRing();
+  } catch (err) {
+    console.error('Failed to queue raze against the backend', err);
+    actionError.value = describeActionError(err, t('hud.ringMenu.errors.couldNotQueueRaze'));
+  }
 }
 
 async function upgrade() {

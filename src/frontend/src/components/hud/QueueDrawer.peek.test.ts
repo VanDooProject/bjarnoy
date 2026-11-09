@@ -19,7 +19,7 @@ import { announceConfirmedBuild, confirmedBuild } from '../../composables/buildF
 
 function order(id: string, q: number): BuildOrderResponse {
   return {
-    id, q, r: 0, building: 'farm', targetLevel: 1, state: 'building', slotCost: 1,
+    id, q, r: 0, building: 'farm', kind: 'build', targetLevel: 1, state: 'building', slotCost: 1,
     completesAtGameTime: 'x', completesInSeconds: 100, totalSeconds: 100,
   };
 }
