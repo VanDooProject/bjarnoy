@@ -35,6 +35,7 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
     attack: 0,
     defense: 0,
     speed: 1,
+    visionRadius: 2,
     carryCapacity: 0,
     foodCarryCapacity: 10,
     cargoSlots: 0,

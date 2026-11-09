@@ -37,6 +37,7 @@ public static class UnitCatalogue
         [UnitType.Thrall] = new UnitDefinition
         {
             Type = UnitType.Thrall,
+            VisionRadius = 3,
             Class = UnitClass.Civilian,
             Attack = 0,
             Defense = 2,
@@ -53,6 +54,7 @@ public static class UnitCatalogue
         [UnitType.Spearman] = new UnitDefinition
         {
             Type = UnitType.Spearman,
+            VisionRadius = 2,
             Class = UnitClass.Infantry,
             Attack = 15,
             Defense = 35,
@@ -69,6 +71,7 @@ public static class UnitCatalogue
         [UnitType.Axeman] = new UnitDefinition
         {
             Type = UnitType.Axeman,
+            VisionRadius = 2,
             Class = UnitClass.Infantry,
             Attack = 40,
             Defense = 15,
@@ -85,6 +88,7 @@ public static class UnitCatalogue
         [UnitType.Bowman] = new UnitDefinition
         {
             Type = UnitType.Bowman,
+            VisionRadius = 2,
             Class = UnitClass.Infantry,
             Attack = 30,
             Defense = 30,
@@ -101,6 +105,7 @@ public static class UnitCatalogue
         [UnitType.Berserker] = new UnitDefinition
         {
             Type = UnitType.Berserker,
+            VisionRadius = 2,
             Class = UnitClass.Infantry,
             Attack = 70,
             Defense = 20,
@@ -118,6 +123,7 @@ public static class UnitCatalogue
         [UnitType.Provisioner] = new UnitDefinition
         {
             Type = UnitType.Provisioner,
+            VisionRadius = 2,
             Class = UnitClass.Civilian,
             Attack = 0,
             Defense = 5,
@@ -134,6 +140,7 @@ public static class UnitCatalogue
         [UnitType.Settler] = new UnitDefinition
         {
             Type = UnitType.Settler,
+            VisionRadius = 2,
             Class = UnitClass.Civilian,
             Attack = 0,
             Defense = 3,
@@ -158,6 +165,7 @@ public static class UnitCatalogue
         [UnitType.Catapult] = new UnitDefinition
         {
             Type = UnitType.Catapult,
+            VisionRadius = 1,
             Class = UnitClass.Siege,
             Attack = 10,
             Defense = 10,
@@ -183,6 +191,7 @@ public static class UnitCatalogue
         [UnitType.Ram] = new UnitDefinition
         {
             Type = UnitType.Ram,
+            VisionRadius = 1,
             Class = UnitClass.Siege,
             Attack = 10,
             Defense = 30,
@@ -204,6 +213,7 @@ public static class UnitCatalogue
         [UnitType.Karve] = new UnitDefinition
         {
             Type = UnitType.Karve,
+            VisionRadius = 6,
             Class = UnitClass.Ship,
             Attack = 5,
             Defense = 30,
@@ -224,6 +234,7 @@ public static class UnitCatalogue
         [UnitType.Longship] = new UnitDefinition
         {
             Type = UnitType.Longship,
+            VisionRadius = 4,
             Class = UnitClass.Ship,
             Attack = 60,
             Defense = 40,

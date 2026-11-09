@@ -31,10 +31,9 @@ describe('FogMaskLayer army vision sources', () => {
 
     layer.setArmyVisionSources(
       [
-        { x: 11, y: 22 },
-        { x: 33, y: 44 },
+        { x: 11, y: 22, radiusHexes: 6 },
+        { x: 33, y: 44, radiusHexes: 1 },
       ],
-      2,
       { x: 3, y: 4 },
     );
 
@@ -42,23 +41,50 @@ describe('FogMaskLayer army vision sources', () => {
     expect(Array.from(uniforms.uArmyVisionSources as Float32Array).slice(0, 4)).toEqual([11, 22, 33, 44]);
     expect(uniforms.uArmyVisionCount).toBe(2);
     expect(Array.from(uniforms.uArmyHexSize as Float32Array)).toEqual([3, 4]);
-    expect(Array.from(uniforms.uArmyRamp as Float32Array)).toEqual([1.75, 2, 2.75, 6]);
   });
 
-  it('shifts both ramp starts with the vision radius, margins unchanged', () => {
+  it('uploads one radius per source, in the same slot order', () => {
     const layer = new FogMaskLayer('unknown', COLORS);
 
-    layer.setArmyVisionSources([{ x: 0, y: 0 }], 3, { x: 1, y: 1 });
+    layer.setArmyVisionSources(
+      [
+        { x: 0, y: 0, radiusHexes: 6 },
+        { x: 1, y: 1, radiusHexes: 1 },
+        { x: 2, y: 2, radiusHexes: 3 },
+      ],
+      { x: 1, y: 1 },
+    );
 
-    expect(Array.from(fogUniformsOf(layer).uniforms.uArmyRamp as Float32Array)).toEqual([2.75, 2, 3.75, 6]);  });
+    const radii = fogUniformsOf(layer).uniforms.uArmyVisionRadii as Float32Array;
+    expect(Array.from(radii).slice(0, 3)).toEqual([6, 1, 3]);
+  });
+
+  it('declares one radius slot per source slot', () => {
+    const layer = new FogMaskLayer('unknown', COLORS);
+
+    expect(fogUniformsOf(layer).uniformStructures.uArmyVisionRadii.size).toBe(MAX_ARMY_VISION_SOURCES);
+  });
+
+  // The ramps are per source now: the uniform only carries the offsets and margins relative to a source's own radius, so
+  // it no longer moves with any one army's vision.
+  it('keeps the ramp offsets and margins relative to each source radius', () => {
+    const layer = new FogMaskLayer('unknown', COLORS);
+    const ramp = () => Array.from(fogUniformsOf(layer).uniforms.uArmyRamp as Float32Array);
+    const before = ramp();
+
+    layer.setArmyVisionSources([{ x: 0, y: 0, radiusHexes: 3 }], { x: 1, y: 1 });
+
+    expect(before).toEqual([-0.25, 2, 0.75, 6]);
+    expect(ramp()).toEqual(before);
+  });
 
   // The shader loops to uArmyVisionCount, so a count past the array length
   // would read slots that were never written — the same (0, 0) disc again.
   it('clamps the count to the array length', () => {
     const layer = new FogMaskLayer('unknown', COLORS);
-    const points = Array.from({ length: MAX_ARMY_VISION_SOURCES + 3 }, (_, i) => ({ x: i, y: i }));
+    const points = Array.from({ length: MAX_ARMY_VISION_SOURCES + 3 }, (_, i) => ({ x: i, y: i, radiusHexes: 2 }));
 
-    layer.setArmyVisionSources(points, 2, { x: 1, y: 1 });
+    layer.setArmyVisionSources(points, { x: 1, y: 1 });
 
     expect(fogUniformsOf(layer).uniforms.uArmyVisionCount).toBe(MAX_ARMY_VISION_SOURCES);
   });

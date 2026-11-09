@@ -1257,7 +1257,7 @@
     },
     "sight": {
       "heading": "What an army sees",
-      "body": "A travelling army uncovers {rings} rings of the map around it, plus {bonus} more for each level of the {odin}.",
+      "body": "How far a travelling army sees depends on who is in it: it sees as far as its best-sighted unit, plus {bonus} more rings for each level of the {odin}. Thralls see 3 rings, most troops 2, siege engines only 1. A fleet sees furthest: 6 rings with a Karve, 4 with a Longship.",
       "others": "You also see other players' troops that march inside your sight, in their owner's colour, as they move. You do not see where they are going or what they carry."
     },
     "bridges": {

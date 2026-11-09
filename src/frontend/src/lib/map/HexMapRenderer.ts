@@ -75,7 +75,7 @@ import { TILE_ORIENTATIONS, type IslandLabel, type RiverTile, type Settlement, t
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
-import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP, armyFogClearReachHexes } from './fog/FogMaskLayer';
+import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP, armyFogClearReachHexes, type ArmyVisionSource } from './fog/FogMaskLayer';
 import type { FogCoverageLookup } from './fog/fogCoverage';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
@@ -329,7 +329,7 @@ export interface FogDebugFlags {
   terrainCull: boolean;
   /** Open-water wave squiggles stop being culled past FOG_TERRAIN_CULL_HEXES — off places and animates a wave on every open-water grid point in the viewport, including the ones under opaque mist. */
   waveCull: boolean;
-  /** §1c's live, client-computed army vision reveal (armyVisionPoints/setArmyVisionSources below) — off stops feeding any army position into the shader between mask fetches, so fog only ever reflects the last backend-authoritative mask. Useful for telling a client-side interpolation/reveal bug apart from a backend mask bug. */
+  /** §1c's live, client-computed army vision reveal (armyVisionEntryOf/setArmyVisionSources below) — off stops feeding any army position into the shader between mask fetches, so fog only ever reflects the last backend-authoritative mask. Useful for telling a client-side interpolation/reveal bug apart from a backend mask bug. */
   armyVisionReveal: boolean;
 }
 /**
@@ -623,6 +623,11 @@ export interface ArmyOverlayMarker {
    */
   isFleet: boolean;
   /**
+   * Rings this army sees around itself while marching (`ArmyResponse.visionRadius`, computed by the backend: its best-sighted unit type plus
+   * its home settlement's Odin's Ravens). Drawn as is by the live fog. A `foreign` army grants no vision, so its value is never read.
+   */
+  visionRadius: number;
+  /**
    * The send picker is open (SendArmyPicker.vue): `eligible` armies get a dashed gold ring and can be tapped (`onArmyTap`),
    * the `selected` one a solid ring, `ineligible` ones are drawn faded (a tap still reports them, so the reason can be shown).
    * Absent while no picker is open, and then markers are not hit-tested at all.
@@ -642,6 +647,19 @@ export interface ArmyOverlayMarker {
 /** Whether `army` lifts our fog live: only our own armies on the march (a foreign army's sight is its owner's). */
 export function grantsArmyVision(army: ArmyOverlayMarker): boolean {
   return !!army.movement && !army.foreign;
+}
+
+/**
+ * The live fog reveal of one army at its resolved render point (`x`, `y` world units; `hexes` the hexes it lies between): a source with the
+ * army's own vision radius, or null when it lifts no fog (`grantsArmyVision`). The one place a marker becomes a vision source, so the shader
+ * and the terrain cull always see the same radius.
+ */
+export function armyVisionEntryOf(
+  army: ArmyOverlayMarker,
+  point: { x: number; y: number; hexes: AxialCoord[] },
+): { x: number; y: number; radiusHexes: number; hexes: AxialCoord[] } | null {
+  if (!grantsArmyVision(army)) return null;
+  return { x: point.x, y: point.y, radiusHexes: army.visionRadius, hexes: point.hexes };
 }
 
 /** A foreign army wears its owner's realm colour; ours is gold when selected, grey once turned around, blue otherwise. */
@@ -673,13 +691,6 @@ export interface ArmyOverlayData {
   draftWaypoints: AxialCoord[];
   /** Issue #93: attack/support target indicators. Optional — an empty list draws nothing. */
   targets?: ArmyOverlayTarget[];
-  /**
-   * Odin's Ravens: extra rings added to the live army-vision radius
-   * (`ARMY_VISION_RADIUS_HEXES`) — mirrors the backend's
-   * `FogVisionRadii.ArmyVisionRadius(bonusRings)`. These are all the selected
-   * settlement's own armies, so one number covers them.
-   */
-  visionBonusRings?: number;
 }
 
 /**
@@ -1262,13 +1273,6 @@ const STEPS_PER_HEX_UNIT = 2 / Math.sqrt(3);
 const FOG_TERRAIN_CULL_HEXES = Math.ceil(
   FOG_RAMP_MARGIN_HEXES * FOG_MIST_OPAQUE_AT_RAMP * STEPS_PER_HEX_UNIT,
 );
-// §1c's live army-vision radius, in hexes — mirrors the backend's
-// FogVisionRadii.ArmyVisionRadiusHexes (used there for §1e's persisted-
-// history growth trigger; used here for the real-time shader reveal itself,
-// see fogShader.ts's own remarks on why the two stay out of sync-free of
-// each other despite sharing this one number). The shader measures it as
-// hex-euclidean distance via ARMY_HEX_SIZE below, not in world units.
-const ARMY_VISION_RADIUS_HEXES = 2;
 // World units per hex step along x and y for the troop fog's hex-euclidean
 // metric (fogShader.ts's uArmyHexSize). The world layout (isoGridPosition)
 // has a column pitch of 0.75*TILE_W, a row pitch of TILE_H and odd columns
@@ -1290,19 +1294,20 @@ export function armyRevealReachHexes(visionRadiusHexes: number): number {
  * army's current leg, so the live marker anywhere between them stays inside. Deduplicated, since consecutive armies
  * on one road share hexes.
  */
-export function armyCullSourcesOf(legs: readonly (readonly AxialCoord[])[], visionRadiusHexes: number): FogSource[] {
-  const radius = armyRevealReachHexes(visionRadiusHexes);
-  const seen = new Set<string>();
-  const out: FogSource[] = [];
-  for (const hexes of legs) {
+export function armyCullSourcesOf(
+  armies: readonly { hexes: readonly AxialCoord[]; visionRadiusHexes: number }[],
+): FogSource[] {
+  const bySpot = new Map<string, FogSource>();
+  for (const { hexes, visionRadiusHexes } of armies) {
+    const radius = armyRevealReachHexes(visionRadiusHexes);
     for (const h of hexes) {
       const key = `${h.q},${h.r}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ q: h.q, r: h.r, radius });
+      const seen = bySpot.get(key);
+      if (!seen) bySpot.set(key, { q: h.q, r: h.r, radius });
+      else if (radius > seen.radius) seen.radius = radius;
     }
   }
-  return out;
+  return [...bySpot.values()];
 }
 
 // --- Per-rebuild settlement pruning (see fogSourcesNear) -------------------
@@ -6597,8 +6602,8 @@ export class HexMapRenderer {
     // authoritative hex while standing. Gold for the one currently selected,
     // muted blue for everything else, grey for one already turned around and
     // heading home.
-    const armyVisionPoints: { x: number; y: number }[] = [];
-    const armyVisionLegs: AxialCoord[][] = [];
+    const armyVisionSources: ArmyVisionSource[] = [];
+    const armyVisionLegs: { hexes: AxialCoord[]; visionRadiusHexes: number }[] = [];
     for (const army of overlay.armies) {
       const point = this.resolveArmyPoint(army, now);
       // §1c: only a travelling army grants live vision — one standing at
@@ -6606,9 +6611,10 @@ export class HexMapRenderer {
       // explored/visible rings, same scope as the backend's own in-transit-
       // only condition (FogMaskService.GeneratePlayerMaskAsync).
       // A foreign army's sight is its owner's, not ours: no live fog reveal from it.
-      if (grantsArmyVision(army) && fogDebugFlags.armyVisionReveal) {
-        armyVisionPoints.push({ x: point.x, y: point.y });
-        armyVisionLegs.push(point.hexes);
+      const vision = fogDebugFlags.armyVisionReveal ? armyVisionEntryOf(army, point) : null;
+      if (vision) {
+        armyVisionSources.push({ x: vision.x, y: vision.y, radiusHexes: vision.radiusHexes });
+        armyVisionLegs.push({ hexes: vision.hexes, visionRadiusHexes: vision.radiusHexes });
       }
       const p = this.toScreen(point);
       frame.armies.push({ id: army.id, x: p.x, y: p.y, interpolated: point.interpolated });
@@ -6698,10 +6704,9 @@ export class HexMapRenderer {
     // §1c: pushed every tick, independent of any mask fetch — see
     // FogMaskLayer.setArmyVisionSources's own remarks on why this stays out
     // of the cached mask texture entirely.
-    const armyVisionRadiusHexes = ARMY_VISION_RADIUS_HEXES + Math.max(0, overlay.visionBonusRings ?? 0);
-    this.blackFogLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusHexes, ARMY_HEX_SIZE);
-    this.whiteMistLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusHexes, ARMY_HEX_SIZE);
-    this.syncArmyCullSources(armyCullSourcesOf(armyVisionLegs, armyVisionRadiusHexes));
+    this.blackFogLayer.setArmyVisionSources(armyVisionSources, ARMY_HEX_SIZE);
+    this.whiteMistLayer.setArmyVisionSources(armyVisionSources, ARMY_HEX_SIZE);
+    this.syncArmyCullSources(armyCullSourcesOf(armyVisionLegs));
 
     // Armies that have gone away (arrived home and been folded back) would
     // otherwise keep their easing state forever.
@@ -6785,8 +6790,8 @@ export class HexMapRenderer {
       this.syncSpriteLayer(this.terrainTop, new Map());
       this.syncBogEdgeGraphics([], []);
       this.topAnimState.clear();
-      this.blackFogLayer.setArmyVisionSources([], 0, ARMY_HEX_SIZE);
-      this.whiteMistLayer.setArmyVisionSources([], 0, ARMY_HEX_SIZE);
+      this.blackFogLayer.setArmyVisionSources([], ARMY_HEX_SIZE);
+      this.whiteMistLayer.setArmyVisionSources([], ARMY_HEX_SIZE);
     } else {
       // Leaving world mode: drop its flat-fill polygons (rebuildTerrain's
       // settlement branch never calls rebuildTerrainFlat, so terrainFlat is
