@@ -530,7 +530,12 @@ const EARLY_DISCOUNT_TYPES: ReadonlySet<string> = new Set([
   'fishinghut',
   'bogoreworks',
 ]);
-const EARLY_DISCOUNT = [0.6, 0.75, 0.9] as const;
+/** The early-level price factors of the producers (levels 1-3). */
+export const DEFAULT_EARLY_DISCOUNT: readonly [number, number, number] = [0.6, 0.75, 0.9];
+const EARLY_DISCOUNT = DEFAULT_EARLY_DISCOUNT;
+
+/** Whether `type` is a resource producer whose first levels are discounted. */
+export const isEarlyDiscountType = (type: string): boolean => EARLY_DISCOUNT_TYPES.has(type);
 
 export function producerEarlyDiscount(type: string, level: number): number {
   return EARLY_DISCOUNT_TYPES.has(type) && level <= EARLY_DISCOUNT.length ? EARLY_DISCOUNT[level - 1] : 1;

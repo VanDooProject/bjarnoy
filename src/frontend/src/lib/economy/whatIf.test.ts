@@ -21,7 +21,7 @@ describe('applyWhatIf', () => {
         expect(lineNear(n.cost, d.cost), `${type} ${d.level} cost`).toBe(true);
         expect(lineNear(n.productionPerHour, d.productionPerHour), `${type} ${d.level} production`).toBe(true);
         expect(Math.abs(n.buildSeconds - d.buildSeconds), `${type} ${d.level} time`).toBeLessThanOrEqual(1);
-        expect(n.storageCapacity).toEqual(d.storageCapacity);
+        expect(lineNear(n.storageCapacity, d.storageCapacity), `${type} ${d.level} storage`).toBe(true);
         expect(n.requiredLonghouseLevel).toBe(d.requiredLonghouseLevel);
         expect(n.prerequisites).toEqual(d.prerequisites);
       }
@@ -69,5 +69,66 @@ describe('applyWhatIf', () => {
     expect(w.longhouse[3].cost.wood).toBe(niceRound(120 * 1.34 ** 3 * 0.5));
     expect(Math.abs(w.farm[3].buildSeconds - live.farm[3].buildSeconds * 3)).toBeLessThanOrEqual(3);
     expect(w.farm[3].productionPerHour).toEqual(live.farm[3].productionPerHour);
+  });
+
+  it('the bench knobs, at the live values, still reproduce the live catalogue', () => {
+    const knobs = {
+      ...defaultWhatIf(),
+      levelOneOutput: Object.fromEntries(
+        ['lumberjack', 'claybrickworks', 'reindeerherder', 'farm', 'pumpkinfarm', 'fishinghut', 'bogoreworks'].map((t) => {
+          const p = live[t][0].productionPerHour;
+          return [t, p.wood + p.stone + p.food + p.iron];
+        }),
+      ),
+    };
+    const w = applyWhatIf(live, knobs);
+    for (const [type, defs] of Object.entries(live)) {
+      for (const d of defs) {
+        const n = w[type].find((x) => x.level === d.level)!;
+        expect(lineNear(n.cost, d.cost), `${type} ${d.level} cost`).toBe(true);
+        expect(lineNear(n.productionPerHour, d.productionPerHour), `${type} ${d.level} production`).toBe(true);
+        expect(lineNear(n.storageCapacity, d.storageCapacity), `${type} ${d.level} storage`).toBe(true);
+      }
+    }
+  });
+
+  it('level-1 output replaces the live row and the growth still applies from it', () => {
+    const w = applyWhatIf(live, { ...defaultWhatIf(), levelOneOutput: { farm: 20 }, productionGrowth: 1.5 });
+    expect(w.farm[0].productionPerHour.food).toBeCloseTo(20, 6);
+    expect(w.farm[2].productionPerHour.food).toBeCloseTo(20 * (1 + 1.5 + 1.5 ** 2), 6);
+    expect(w.lumberjack[0].productionPerHour.wood).toBeCloseTo(live.lumberjack[0].productionPerHour.wood, 6);
+  });
+
+  it('the early price factors replace the 60/75/90% of levels 1-3 and leave level 4 alone', () => {
+    const w = applyWhatIf(live, { ...defaultWhatIf(), producerEarlyDiscount: [1, 1, 0.5] });
+    expect(w.farm[0].cost.wood).toBe(niceRound(57));
+    expect(w.farm[2].cost.wood).toBe(niceRound(57 * 1.3 ** 2 * 0.5));
+    expect(w.farm[3].cost).toEqual(live.farm[3].cost);
+    expect(w.longhouse[2].cost).toEqual(live.longhouse[2].cost);
+  });
+
+  it('the Longhouse break level moves where the late growth starts', () => {
+    const w = applyWhatIf(live, { ...defaultWhatIf(), longhouseBreakLevel: 5 });
+    expect(w.longhouse[4].cost.food).toBe(live.longhouse[4].cost.food);
+    expect(w.longhouse[5].cost.stone).toBe(niceRound(100 * 1.34 ** 4 * 1.6));
+    expect(w.longhouse[5].cost.stone).toBeGreaterThan(live.longhouse[5].cost.stone);
+  });
+
+  it('storage knobs set capacity and cost of the two storage types and are independent of the standard cost growth', () => {
+    const w = applyWhatIf(live, {
+      ...defaultWhatIf(),
+      costGrowth: 2,
+      storageHouseCapacity: 100,
+      storageHouseCapacityGrowth: 1.5,
+      storageHouseCostGrowth: 1.1,
+      greatStorehouseCapacity: 1000,
+      greatStorehouseCapacityGrowth: 2,
+      greatStorehouseCostGrowth: 1.5,
+    });
+    expect(w.storagehouse[2].storageCapacity.iron).toBeCloseTo(100 * (1 + 1.5 + 1.5 ** 2), 6);
+    expect(w.storagehouse[2].cost.wood).toBe(niceRound(90 * 1.1 ** 2));
+    expect(w.greatstorehouse[1].storageCapacity.wood).toBeCloseTo(3000, 6);
+    expect(w.greatstorehouse[1].cost.wood).toBe(niceRound(4500 * 1.5));
+    expect(w.greatstorehouse[0].prerequisites).toEqual(live.greatstorehouse[0].prerequisites);
   });
 });
