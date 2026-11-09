@@ -65,6 +65,11 @@ public static class WorldEndpoints
             .WithSummary("Every standing palisade/gate hex of rival settlements that lies on a hex the caller has explored (their own walls excluded).")
             .RequireCallerRealm();
 
+        worlds.MapGet("/{worldId:guid}/rival-buildings", GetRivalBuildings)
+            .WithName("GetWorldRivalBuildings")
+            .WithSummary("Every standing building of rival settlements that lies on a hex the caller has explored, of any type (their own buildings excluded).")
+            .RequireCallerRealm();
+
         worlds.MapGet("/{worldId:guid}/tiles", GetTiles)
             .WithName("GetWorldTiles")
             .WithSummary("Returns the terrain of an axial rectangle of hexes.");
@@ -355,6 +360,50 @@ public static class WorldEndpoints
                 .Where(b => b.Type is BuildingType.Palisade or BuildingType.PalisadeGate)
                 .OrderBy(b => b.Q).ThenBy(b => b.R)
                 .Select(b => new WallResponse(
+                    b.Q, b.R, b.Type.ToWireName(), b.Level, sight.Settlement.Id,
+                    sight.Settlement.UserId == SystemUserIds.Abandoned ? null : sight.Settlement.UserId,
+                    b.OutsideRealmSince is not null))),
+        ];
+
+        return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// Every standing building (level 1 or more, any type) of the world's rival settlements that stands on a hex the caller has explored,
+    /// one row per hex, so a live client can draw what it sees of a rival it never fetched a settlement for. Gated per hex like
+    /// <see cref="GetWalls"/> (<see cref="RivalVisibility"/>): nothing about an unexplored hex is sent; the caller's own buildings are left
+    /// out. No resolvable realm or world answers an empty list.
+    /// </summary>
+    private static async Task<Ok<IReadOnlyList<RivalBuildingResponse>>> GetRivalBuildings(
+        Guid worldId,
+        HttpContext httpContext,
+        SettlementService settlements,
+        ExploredAreaService exploredArea,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<RivalBuildingResponse>>([]);
+        }
+
+        var area = await exploredArea.GetAsync(worldId, realm.OwnerId!, persist: false, cancellationToken);
+        if (area is null)
+        {
+            return TypedResults.Ok<IReadOnlyList<RivalBuildingResponse>>([]);
+        }
+
+        var callerUserId = RivalVisibility.CallerUserId(httpContext.User);
+        var sights = await RivalVisibility.ForAsync(
+            exploredArea, area, await settlements.GetForWorldAsync(worldId, cancellationToken),
+            s => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId), cancellationToken);
+
+        IReadOnlyList<RivalBuildingResponse> response =
+        [
+            .. sights.SelectMany(sight => sight.ExploredStandingBuildings
+                .OrderBy(b => b.Q).ThenBy(b => b.R)
+                .Select(b => new RivalBuildingResponse(
                     b.Q, b.R, b.Type.ToWireName(), b.Level, sight.Settlement.Id,
                     sight.Settlement.UserId == SystemUserIds.Abandoned ? null : sight.Settlement.UserId,
                     b.OutsideRealmSince is not null))),
