@@ -62,7 +62,7 @@ public static class WorldEndpoints
 
         worlds.MapGet("/{worldId:guid}/walls", GetWalls)
             .WithName("GetWorldWalls")
-            .WithSummary("Every standing palisade/gate hex of the rival settlements the caller has explored (their own walls excluded).")
+            .WithSummary("Every standing palisade/gate hex of rival settlements that lies on a hex the caller has explored (their own walls excluded).")
             .RequireCallerRealm();
 
         worlds.MapGet("/{worldId:guid}/tiles", GetTiles)
@@ -320,14 +320,14 @@ public static class WorldEndpoints
 
     /// <summary>
     /// The standing wall hexes (level 1 or more) of the world's rival settlements, so a live client can draw, hit-test and plan routes
-    /// around walls it never fetched a settlement for. Gated exactly like <c>GET /worlds/{id}/settlements</c> (<c>SettlementEndpoints.ListForWorld</c>):
-    /// a settlement's walls are listed only when its centre hex is in the caller's explored area, and the caller's own settlements are
-    /// left out (their walls already ship in their own settlement read). No resolvable realm or world answers an empty list.
+    /// around walls it never fetched a settlement for. A wall is listed when its own hex is in the caller's explored area, whether or not
+    /// its settlement's centre is (<see cref="RivalVisibility"/>); the caller's own settlements are left out (their walls already ship in
+    /// their own settlement read). No resolvable realm or world answers an empty list.
     /// </summary>
     private static async Task<Ok<IReadOnlyList<WallResponse>>> GetWalls(
         Guid worldId,
         HttpContext httpContext,
-        GameDbContext db,
+        SettlementService settlements,
         ExploredAreaService exploredArea,
         RealmDirectory realms,
         CancellationToken cancellationToken)
@@ -344,25 +344,20 @@ public static class WorldEndpoints
             return TypedResults.Ok<IReadOnlyList<WallResponse>>([]);
         }
 
-        var idClaim = httpContext.User.Identity?.IsAuthenticated == true
-            ? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
-            : null;
-        var callerUserId = Guid.TryParse(idClaim, out var parsedUserId) ? parsedUserId : (Guid?)null;
-
-        var rows = (await WorldPalisades.ListStandingAsync(db, worldId, cancellationToken))
-            .Where(w => w.OwnerId != realm.OwnerId && !(callerUserId is not null && w.UserId == callerUserId))
-            .ToList();
-
-        var explored = await exploredArea.ExploredAmongAsync(
-            area, rows.Select(w => new HexCoord(w.CentreQ, w.CentreR)).Distinct(), cancellationToken);
+        var callerUserId = RivalVisibility.CallerUserId(httpContext.User);
+        var sights = await RivalVisibility.ForAsync(
+            exploredArea, area, await settlements.GetForWorldAsync(worldId, cancellationToken),
+            s => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId), cancellationToken);
 
         IReadOnlyList<WallResponse> response =
         [
-            .. rows
-                .Where(w => explored.Contains(new HexCoord(w.CentreQ, w.CentreR)))
-                .Select(w => new WallResponse(
-                    w.Q, w.R, w.Type.ToWireName(), w.Level, w.SettlementId,
-                    w.UserId == SystemUserIds.Abandoned ? null : w.UserId, w.OutsideRealm)),
+            .. sights.SelectMany(sight => sight.ExploredStandingBuildings
+                .Where(b => b.Type is BuildingType.Palisade or BuildingType.PalisadeGate)
+                .OrderBy(b => b.Q).ThenBy(b => b.R)
+                .Select(b => new WallResponse(
+                    b.Q, b.R, b.Type.ToWireName(), b.Level, sight.Settlement.Id,
+                    sight.Settlement.UserId == SystemUserIds.Abandoned ? null : sight.Settlement.UserId,
+                    b.OutsideRealmSince is not null))),
         ];
 
         return TypedResults.Ok(response);
@@ -583,7 +578,7 @@ public static class WorldEndpoints
         var relationOf = await SettlementRelations.ForCallerAsync(db, worldId, callerUserId, IsMine, cancellationToken);
         IReadOnlyList<SettlementSummary> islandSettlements =
         [
-            .. islandSettlementEntities.Select(s => SettlementSummary.From(s, IsMine(s), labels[s.Id], relationOf(s))),
+            .. islandSettlementEntities.Select(s => SettlementSummary.From(s, IsMine(s), labels[s.Id], relationOf(s), new HexCoord(s.CentreQ, s.CentreR))),
         ];
 
         return TypedResults.Ok(new PlotSuggestionResponse(

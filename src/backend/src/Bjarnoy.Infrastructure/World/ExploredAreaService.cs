@@ -62,8 +62,9 @@ public sealed record ExploredArea(
 /// The shared source of truth behind a player's fog of war: which ground in a
 /// world they have actually explored, per <c>docs/design/map-fog-v2.md</c>
 /// §1e. Every fog-gated read — the fog chunks (<see cref="FogChunkService"/>),
-/// <c>GET /settlements/{id}/view</c> and <c>GET /worlds/{worldId}/settlements</c>
-/// — shares this one computation of "which hexes has this owner explored"
+/// <c>GET /settlements/{id}/view</c>, <c>GET /worlds/{worldId}/settlements</c>
+/// and the world's rival walls and buildings (per hex: a rival hex is delivered only
+/// when that hex itself is explored) — shares this one computation of "which hexes has this owner explored"
 /// rather than reimplementing it, which would both duplicate the ring/tower/
 /// army-vision logic and risk the readings of "explored" drifting apart.
 /// </summary>
