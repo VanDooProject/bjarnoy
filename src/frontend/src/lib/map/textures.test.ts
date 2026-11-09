@@ -447,6 +447,55 @@ describe('classifyFamilyFrames', () => {
       expect(result.top?.SE).toEqual(['vikinghut_SE_level000', 'vikinghut_SE_level001']);
     });
   });
+
+  // The packer also emits the family's shared, unsuffixed `<family>_<O>_base`. Where leveled bases exist (the dockyard's differ per
+  // level), it must not take index 0: that is level 0's slot (the construction site), and the level1 atlas's copy would stay there
+  // once the static atlas brings the real `level000_base` (mergeKeyedArrays keeps the earlier load's entry).
+  describe('shared base next to leveled bases', () => {
+    it('leaves index 0 for level000_base instead of filling it with the unsuffixed base', () => {
+      const level1Only = classifyFamilyFrames(
+        [frame('dockyard_SE_base', 'base'), frame('dockyard_SE_level001_base', 'base'), frame('dockyard_SE_level001', 'top')],
+        { sparse: true },
+      );
+
+      expect(level1Only.baseIndexed?.SE).toEqual([undefined, 'dockyard_SE_level001_base']);
+    });
+
+    it('still reads the unsuffixed base as the family base when no leveled base exists', () => {
+      const result = classifyFamilyFrames([frame('farm_SE_base', 'base'), frame('farm_SE_level001', 'top')], { sparse: true });
+
+      expect(result.base?.SE).toBe('farm_SE_base');
+      expect(result.baseIndexed).toBeUndefined();
+    });
+
+    it('keeps a terrain\'s plain base at index 0 beside its variants', () => {
+      const result = classifyFamilyFrames([frame('grasstile_SE_base', 'base'), frame('grasstile_SE_variant000_base', 'base')]);
+
+      expect(result.baseIndexed?.SE).toEqual(['grasstile_SE_base', 'grasstile_SE_variant000_base']);
+    });
+
+    it('draws the construction base for a level 0 dockyard once buildings-level1 and buildings-static are merged', () => {
+      const level1 = classifyFamilyFrames(
+        [frame('dockyard_SE_base', 'base'), frame('dockyard_SE_level001_base', 'base'), frame('dockyard_SE_level001', 'top')],
+        { sparse: true },
+      );
+      const statics = classifyFamilyFrames(
+        [
+          frame('dockyard_SE_level000_base', 'base'),
+          frame('dockyard_SE_level002_base', 'base'),
+          frame('dockyard_SE_level000', 'top'),
+          frame('dockyard_SE_level002', 'top'),
+        ],
+        { sparse: true },
+      );
+      const wrap = (c: typeof level1) =>
+        ({ base: {}, baseIndexed: { dockyard: c.baseIndexed }, top: { dockyard: c.top }, animTop: {}, wastedCoastalBase: emptyOrientationArrayMap(), wastedCoastalTop: emptyOrientationArrayMap(), lavaRiverBase: {}, lavaRiverTop: {}, giants: {}, giantAnims: {} }) as unknown as TileTextures;
+
+      const merged = mergeTileTextures(wrap(level1), wrap(statics));
+
+      expect(merged.baseIndexed.dockyard?.SE).toEqual(['dockyard_SE_level000_base', 'dockyard_SE_level001_base', 'dockyard_SE_level002_base']);
+    });
+  });
 });
 
 describe('classifyFamilyClips', () => {
