@@ -225,9 +225,9 @@ public static class SettlementEndpoints
 
     /// <summary>
     /// The rival-safe counterpart to <see cref="Get"/>: identity, position and
-    /// buildings only, and only once the caller has explored the settlement's
-    /// centre hex or the hex of one of its standing buildings (<see cref="RivalVisibility"/>); the buildings
-    /// returned are exactly the ones on explored hexes — see <see cref="SettlementViewResponse"/>.
+    /// buildings only, and only once the caller sees the settlement's centre hex, the hex of one of its standing buildings or a hex of
+    /// the claim disc of its Longhouse or a tower (<see cref="RivalVisibility"/>); the buildings returned are the ones on visible hexes plus
+    /// its towers and Longhouse whose claim disc reaches visible ground — see <see cref="SettlementViewResponse"/>.
     /// Resolves the caller's realm the same way the per-world reads in
     /// <see cref="WorldEndpoints"/> do (<see cref="CallerRealmResolver"/>): no
     /// realm at all is refused rather than answered with an empty view, since
@@ -278,14 +278,14 @@ public static class SettlementEndpoints
         }
         else
         {
-            var sights = await RivalVisibility.ForAsync(exploredArea, area, [entity], _ => false, cancellationToken);
+            var sights = await RivalVisibility.ForAsync(exploredArea, area, [entity], _ => false, withLabels: false, cancellationToken);
             if (sights.Count == 0)
             {
-                // Never reveal that a settlement with no explored hex even exists.
+                // Never reveal that a settlement with nothing in sight even exists.
                 return TypedResults.NotFound(SettlementNotFoundProblem());
             }
 
-            visibleBuildings = sights[0].ExploredBuildings;
+            visibleBuildings = sights[0].VisibleBuildings;
         }
 
         IReadOnlyList<PlacedBuildingResponse> buildings =
@@ -314,9 +314,9 @@ public static class SettlementEndpoints
     /// ask. Otherwise: the caller's own settlements (every realm they hold,
     /// not just their primary one — settler-convoy foundings can leave a
     /// player with several) plus every rival settlement whose centre hex or any
-    /// standing building's hex is in their explored area (<see cref="ExploredAreaService"/>,
-    /// <see cref="RivalVisibility"/>) — exactly what their own fog mask/world map already shows them. A listed
-    /// rival's summary is complete; its <c>LabelQ</c>/<c>LabelR</c> say which explored hex to label it on.
+    /// standing building's hex is in their visible area, or has a visible hex inside the claim disc of its Longhouse or one of its
+    /// towers (<see cref="ExploredAreaService"/>, <see cref="RivalVisibility"/>) — what their own fog mask/world map already shows them.
+    /// A listed rival's summary is complete; its <c>LabelQ</c>/<c>LabelR</c> say which visible hex to label it on.
     /// </summary>
     private static async Task<Ok<IReadOnlyList<SettlementSummary>>> ListForWorld(
         Guid worldId,
@@ -345,8 +345,8 @@ public static class SettlementEndpoints
 
         bool IsMine(SettlementEntity s) => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId);
 
-        var sights = await RivalVisibility.ForAsync(exploredArea, area, entities, IsMine, cancellationToken);
-        var labelHexOf = sights.ToDictionary(sight => sight.Settlement.Id, sight => sight.LabelHex);
+        var sights = await RivalVisibility.ForAsync(exploredArea, area, entities, IsMine, withLabels: true, cancellationToken);
+        var labelHexOf = sights.ToDictionary(sight => sight.Settlement.Id, sight => sight.LabelHex!.Value);
 
         // Every visible longhouse stays (the map draws them), each under its linked realm's name.
         var labels = await LinkedRealmNames.ForAsync(db, worldId, entities, cancellationToken);

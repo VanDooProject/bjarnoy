@@ -548,7 +548,7 @@ public sealed record BuildingDefinitionResponse(
 /// <param name="Mine">Whether the settlement belongs to the caller (never the owner or user id itself).</param>
 /// <param name="RealmId">The oldest member of the linked realm this settlement belongs to (itself when it stands alone).</param>
 /// <param name="Relation">How the owner stands to the caller, which picks the realm colour: <c>mine</c>, <c>guild</c> (same guild), <c>treaty</c> (guild with an active peace treaty) or <c>rival</c>.</param>
-/// <param name="LabelQ">Axial q of the hex the client puts the settlement's label on, decided here: the centre for the caller's own settlements and for a rival whose centre is explored, else the explored building of a rival closest to its centre.</param>
+/// <param name="LabelQ">Axial q of the hex the client puts the settlement's label on, decided here: the centre for the caller's own settlements and for a rival whose centre is visible, else the visible hex (a standing building's or one inside its claim) of a rival closest to its centre.</param>
 /// <param name="LabelR">Axial r of the label hex, see <paramref name="LabelQ"/>.</param>
 public sealed record SettlementSummary(
     Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId, bool Mine, Guid RealmId, string Relation,
@@ -602,10 +602,9 @@ public static class SettlementRelations
 
 /// <summary>
 /// <c>GET /settlements/{id}/view</c>'s fog-gated read: what a rival's
-/// explored ground on the world map earns them — identity, position and
-/// <paramref name="Buildings"/> only (and only the ones standing on a hex
-/// they've actually explored; the read exists once the centre or any
-/// standing building's hex is explored). Deliberately missing everything
+/// visible ground on the world map earns them — identity, position and
+/// <paramref name="Buildings"/> only (the ones standing on a hex they see, plus the towers and Longhouse whose claim disc reaches
+/// ground they see; the read exists once the centre, a standing building's hex or a hex of a claim disc is visible). Deliberately missing everything
 /// <see cref="SettlementResponse"/> carries beyond that: no stock, rates,
 /// construction queue, garrison, training queue or runes — none of that is
 /// something a rival's own map view could ever have told them, so none of it

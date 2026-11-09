@@ -643,7 +643,7 @@ public sealed record WallResponse(
     int Q, int R, string Type, int Level, Guid SettlementId, Guid? OwnerUserId, bool OutsideRealm = false);
 
 /// <summary>
-/// One standing building of another player's settlement on a hex the caller has explored (<c>GET /worlds/{id}/rival-buildings</c>).
+/// One standing building of another player's settlement on a hex the caller sees, or a tower or Longhouse whose claim disc reaches ground they see (<c>GET /worlds/{id}/rival-buildings</c>).
 /// </summary>
 /// <param name="Type">The building's wire name.</param>
 /// <param name="SettlementId">The settlement the building belongs to.</param>
