@@ -49,6 +49,7 @@ import { useMediaQuery } from '../composables/useMediaQuery';
 import { hudBarHeightPx, hudRailWidthPx } from '../composables/hudBarHeight';
 import { isHudRail } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
+import { nextUpgradeLevel } from '../lib/hud/pendingBuild';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
@@ -526,7 +527,7 @@ watch(
 );
 
 // Live mode: `refreshLiveSettlement` (the poll loop, and the immediate
-// re-fetch after queueBuildLive/cancelBuildLive/upgrade) writes completed
+// re-fetch after queueBuildOptimistic/cancelBuildLive/upgrade) writes completed
 // levels and new/removed foundation stubs straight into `world.model`'s
 // tiles, but the renderer only ever redraws sprites on a real camera pan/
 // zoom (`cameraMovedEnough`) — nothing tied a data refresh to a redraw, so
@@ -579,7 +580,6 @@ function onHover(info: HoverInfo | null) {
 // what opens BuildingModal now, rather than every click doing so.
 const selectedCoord = ref<AxialCoord | null>(null);
 const selectedTile = ref<Tile | null>(null);
-const modalBusy = ref(false);
 // Why the last build/upgrade attempt was rejected (NoFreeSlot's premium
 // hint included, issue #158) — surfaced in BuildingModal rather than only
 // `console.error`'d, and cleared whenever a fresh attempt starts, the modal
@@ -1144,9 +1144,7 @@ async function onRingSelect(id: string) {
   }
   switch (id) {
     case 'upgrade':
-      // upgrade() already closes on success (both branches); on failure it
-      // leaves selectedTile/ringScreen alone, so the ring stays open and
-      // shows the rejection's message (`actionError`, passed as `error`).
+      // Optimistic like a new build: the ring closes at once, a refusal shows under the hex.
       await upgrade();
       return;
     case 'feasts':
@@ -1159,7 +1157,7 @@ async function onRingSelect(id: string) {
       trainModalOpen.value = true;
       return;
     case 'raze':
-      // Like upgrade: on a refusal the ring stays open and shows the rejection's message (`actionError`).
+      // Optimistic too: a raze costs nothing, so there is no spend and no confirmation animation.
       await raze();
       return;
     case 'send-army':
@@ -1215,27 +1213,35 @@ async function buildFromRing(type: BuildableType) {
     closeRing();
     return;
   }
+  await sendOptimisticOrder(coord, () => world.queueBuildOptimistic(type, coord, cost), {
+    fallback: t('hud.ringMenu.errors.couldNotQueueBuild'),
+    confirmed: { name: entry?.label ?? buildingName(type), level: 1, time: entry?.time ?? null },
+  });
+}
+
+// The live half shared by build, upgrade and raze: the ring (or modal) closes at once, the store's optimistic pending
+// order puts the "…" dial on the hex, and only a refusal undoes it — the dial shakes and fades and a chip under the hex
+// carries the server's message. With `confirmed`, the queue row is held back until the confirmation animation reveals
+// it (Q1/Q5, BuildQueuePanel).
+async function sendOptimisticOrder(
+  coord: AxialCoord,
+  send: () => Promise<void>,
+  opts: { fallback: string; confirmed?: { name: string; level: number; time: string | null } },
+) {
   const renderer = canvasRef.value?.renderer;
-  closeRing();
-  // Hold the new queue row back until the confirmation animation reveals it (Q1/Q5, BuildQueuePanel).
-  holdBuildRow(coord);
+  closeModal();
+  if (opts.confirmed) holdBuildRow(coord);
   try {
-    await world.queueBuildOptimistic(type, coord, cost);
+    await send();
   } catch (err) {
-    releaseBuildRow(coord);
-    console.error('Failed to queue building against the backend', err);
+    if (opts.confirmed) releaseBuildRow(coord);
+    console.error('Failed to queue an order against the backend', err);
     // Surface the rejection's detail (NoFreeSlot's premium hint included, issue #158).
     renderer?.rejectConstructionDial(coord);
-    showBuildRefusal(coord, describeActionError(err, t('hud.ringMenu.errors.couldNotQueueBuild')));
+    showBuildRefusal(coord, describeActionError(err, opts.fallback));
     return;
   }
-  announceConfirmedBuild({
-    coord,
-    name: entry?.label ?? buildingName(type),
-    level: 1,
-    time: entry?.time ?? null,
-    from: renderer?.dialScreenPoint(coord) ?? null,
-  });
+  if (opts.confirmed) announceConfirmedBuild({ coord, ...opts.confirmed, from: renderer?.dialScreenPoint(coord) ?? null });
 }
 
 const BUILD_REFUSAL_MS = 2500;
@@ -1255,7 +1261,6 @@ onUnmounted(() => {
 
 function closeModal() {
   closeRing();
-  modalBusy.value = false;
   actionError.value = null;
 }
 
@@ -1277,13 +1282,10 @@ async function raze() {
     closeRing();
     return;
   }
-  try {
-    await world.razeBuildingLive(selectedCoord.value);
-    closeRing();
-  } catch (err) {
-    console.error('Failed to queue raze against the backend', err);
-    actionError.value = describeActionError(err, t('hud.ringMenu.errors.couldNotQueueRaze'));
-  }
+  const coord = selectedCoord.value;
+  await sendOptimisticOrder(coord, () => world.razeBuildingLive(coord), {
+    fallback: t('hud.ringMenu.errors.couldNotQueueRaze'),
+  });
 }
 
 async function upgrade() {
@@ -1295,16 +1297,18 @@ async function upgrade() {
     closeModal();
     return;
   }
-  modalBusy.value = true;
-  actionError.value = null;
-  try {
-    await world.queueBuildLive(selectedTile.value.buildingType, selectedCoord.value);
-    closeModal();
-  } catch (err) {
-    console.error('Failed to queue upgrade against the backend', err);
-    actionError.value = describeActionError(err, t('hud.ringMenu.errors.couldNotQueueUpgrade'));
-    modalBusy.value = false;
-  }
+  const coord = selectedCoord.value;
+  const tile = selectedTile.value;
+  // What the Upgrade card promised (read before the ring closes: the card follows the selected tile).
+  const card = upgradeActionFor(tile).card;
+  const level = nextUpgradeLevel(world.hud.buildings, world.hud.queue, coord) ?? (tile.buildingLevel ?? 1) + 1;
+  // Queued behind a running order on the same hex: the queue's held row and confirmation are keyed by hex, so they
+  // would hide and animate that running order's row instead. The new order just appears in the queue.
+  const queuedBehind = world.hud.queue.some((o) => o.q === coord.q && o.r === coord.r);
+  await sendOptimisticOrder(coord, () => world.upgradeBuildingLive(coord, card?.cost), {
+    fallback: t('hud.ringMenu.errors.couldNotQueueUpgrade'),
+    confirmed: queuedBehind ? undefined : { name: buildingName(tile.buildingType!), level, time: card?.time ?? null },
+  });
 }
 </script>
 
@@ -1408,7 +1412,6 @@ async function upgrade() {
         :tile="selectedTile"
         :mine="modalMine"
         :owner-label="modalOwnerLabel"
-        :busy="modalBusy"
         :error="actionError"
         @close="closeModal"
         @upgrade="upgrade"

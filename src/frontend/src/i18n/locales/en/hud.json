@@ -248,7 +248,6 @@
     "notEnoughResources": "Not enough resources available (some may be reserved for queued construction).",
     "premiumRequired": "Every construction slot is busy, and this account has no waiting queue to fall back on — that's a {premium} feature.",
     "premium": "Premium",
-    "queuing": "Queuing…",
     "noFreeSlotPremium": "No free slot — Premium required",
     "queueBuild": "Queue build",
     "upgradeToLevel": "Upgrade to level {level}",

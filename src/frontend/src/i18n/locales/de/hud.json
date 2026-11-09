@@ -248,7 +248,6 @@
     "notEnoughResources": "Nicht genügend Ressourcen verfügbar (einige sind eventuell für laufende Bauaufträge reserviert).",
     "premiumRequired": "Jeder Bauplatz ist belegt, und dieses Konto hat keine Warteschlange als Rückgriff — das ist eine {premium}-Funktion.",
     "premium": "Premium",
-    "queuing": "Wird eingereiht…",
     "noFreeSlotPremium": "Kein freier Platz — Premium erforderlich",
     "queueBuild": "Bau einreihen",
     "upgradeToLevel": "Auf Stufe {level} ausbauen",

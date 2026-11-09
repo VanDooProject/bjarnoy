@@ -35,7 +35,7 @@ const townSquare = (level = 3): Tile => ({ q: 2, r: 1, terrain: 'grass', buildin
 
 function mountModal(tile: Tile = townSquare()) {
   return mount(BuildingModal, {
-    props: { tile, mine: true, ownerLabel: null, busy: false },
+    props: { tile, mine: true, ownerLabel: null },
     global: {
       plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue, apiErrors: enApiErrors })],
       stubs: { AtlasSprite: true },

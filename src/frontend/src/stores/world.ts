@@ -57,7 +57,7 @@ import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator'
 import type { PalisadePiece } from '../lib/map/palisadeTiles';
 import type { CartShipment, ResourceKind, Resources, Settlement, Tile, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
-import { isPendingOrder, makePendingOrder } from '../lib/hud/pendingBuild';
+import { isPendingOrder, makePendingOrder, nextUpgradeLevel } from '../lib/hud/pendingBuild';
 
 // How often live mode re-polls a settlement to pick up build-queue
 // completions and rate changes it didn't cause itself (see
@@ -385,7 +385,7 @@ export const useWorldStore = defineStore('world', {
     // `bootstrapLiveWorld` runs again anyway.
     worldName: null as string | null,
     // The founding/restoring browser's stable local id (`usePlayerStore().id`),
-    // remembered here once known so `queueBuildLive`/`trainUnitsLive` can send
+    // remembered here once known so `queueBuildOptimistic`/`trainUnitsLive` can send
     // it as the `X-Owner-Id` header the backend's ownership check reads for an
     // anonymous (unclaimed) settlement — see SettlementOwnershipEndpointFilter
     // and docs/codebase-gap-analysis.md. Unused in demo mode.
@@ -825,24 +825,7 @@ export const useWorldStore = defineStore('world', {
       }
     },
     /**
-     * Live mode: queues a building against the backend rather than placing
-     * it locally and instantly (`WorldModel.placeBuilding`). The building
-     * only appears once its build order completes and the next poll
-     * (`refreshLiveSettlement`) picks it up — matching how the backend's
-     * build queue actually works (docs/tech/backend.md, "Everything is
-     * lazy"). Throws `ApiError` on rejection (e.g. not enough resources, or
-     * 403 if `this.ownerId` doesn't match the settlement's owner — see
-     * SettlementOwnershipEndpointFilter); callers decide how to surface that.
-     */
-    async queueBuildLive(building: string, at: AxialCoord) {
-      if (!this.selectedSettlementId) throw new Error('No settlement selected');
-      await api.queueBuild(
-        this.selectedSettlementId, { building, q: at.q, r: at.r }, this.ownerId ?? undefined,
-      );
-      await this.refreshLiveSettlement();
-    },
-    /**
-     * W3: `queueBuildLive` with an optimistic client-only order. A pending
+     * W3: queues a new building with an optimistic client-only order. A pending
      * entry goes into `hud.queue` first, so the construction dial on `at`
      * shows "…" at once, then the request runs and a refresh replaces the
      * pending entry with the real order (or, on a refusal, the entry is
@@ -851,22 +834,33 @@ export const useWorldStore = defineStore('world', {
      * `refreshLiveSettlement`). With `cost`, a confirmed build also records
      * `hud.lastSpend` for the resource bar's tick-down, limited to the
      * resources whose stock really dropped (a reserved, waiting order does
-     * not spend yet).
+     * not spend yet). Throws `ApiError` on rejection (e.g. not enough
+     * resources, or 403 if `this.ownerId` doesn't match the settlement's
+     * owner, see SettlementOwnershipEndpointFilter).
      */
     async queueBuildOptimistic(building: string, at: AxialCoord, cost?: Partial<Resources>) {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
-      const before = { ...this.hud.resources };
       await this.queueOrderOptimistic(
         makePendingOrder(building, at),
         () => api.queueBuild(this.selectedSettlementId!, { building, q: at.q, r: at.r }, this.ownerId ?? undefined),
+        cost,
       );
-      if (cost) {
-        const spent: Partial<Resources> = {};
-        for (const kind of Object.keys(cost) as (keyof Resources)[]) {
-          if ((cost[kind] ?? 0) > 0 && this.hud.resources[kind] < before[kind]) spent[kind] = cost[kind];
-        }
-        this.recordSpend(spent);
-      }
+    },
+    /**
+     * Upgrades the building on `at` by one level: the same optimistic pending order as `queueBuildOptimistic` (targeting
+     * the next level), so the hex shows its "…" dial at once and a refusal removes it again. With `cost`, a confirmed
+     * upgrade records the spend the same way. Throws `ApiError` on rejection.
+     */
+    async upgradeBuildingLive(at: AxialCoord, cost?: Partial<Resources>) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      const placed = this.hud.buildings.find((b) => b.q === at.q && b.r === at.r);
+      const level = nextUpgradeLevel(this.hud.buildings, this.hud.queue, at);
+      if (!placed || level === null) throw new Error('No building on that hex');
+      await this.queueOrderOptimistic(
+        makePendingOrder(placed.type, at, 'build', level),
+        () => api.queueBuild(this.selectedSettlementId!, { building: placed.type, q: at.q, r: at.r }, this.ownerId ?? undefined),
+        cost,
+      );
     },
     /**
      * Razes one level of the building on `at` (docs/design/construction-slots.md, "Razing"): the same optimistic pending order
@@ -884,9 +878,11 @@ export const useWorldStore = defineStore('world', {
     },
     /**
      * The optimistic round trip shared by builds and razes: `pending` goes into `hud.queue`, `send` runs, a refusal removes it
-     * again and rethrows, a confirmation refreshes (the refresh swaps in the real order) and then drops the stand-in.
+     * again and rethrows, a confirmation refreshes (the refresh swaps in the real order) and then drops the stand-in. With
+     * `cost`, a confirmation records the spend for the resources whose stock really dropped.
      */
-    async queueOrderOptimistic(pending: BuildOrderResponse, send: () => Promise<unknown>) {
+    async queueOrderOptimistic(pending: BuildOrderResponse, send: () => Promise<unknown>, cost?: Partial<Resources>) {
+      const before = { ...this.hud.resources };
       this.hud.queue = [...this.hud.queue, pending];
       try {
         await send();
@@ -902,6 +898,13 @@ export const useWorldStore = defineStore('world', {
         console.warn('Refresh after a confirmed order failed; the next poll will catch up', err);
       } finally {
         this.hud.queue = this.hud.queue.filter((o) => o.id !== pending.id);
+      }
+      if (cost) {
+        const spent: Partial<Resources> = {};
+        for (const kind of Object.keys(cost) as (keyof Resources)[]) {
+          if ((cost[kind] ?? 0) > 0 && this.hud.resources[kind] < before[kind]) spent[kind] = cost[kind];
+        }
+        this.recordSpend(spent);
       }
     },
     /** X8: announces a confirmed spend; the resource bar counts the affected pills down. Empty costs are ignored. */
@@ -923,7 +926,7 @@ export const useWorldStore = defineStore('world', {
     },
     /**
      * Live mode: queues a training batch against the backend, charging its
-     * cost immediately — mirrors `queueBuildLive` above, including the
+     * cost immediately — mirrors `queueBuildOptimistic` above, including the
      * ownership header. The building at `at` trains it (`split: 'here'`) or the
      * order is spread over every building of its type. Throws `ApiError` on
      * rejection (e.g. not enough resources, that building's parts full,
@@ -1049,7 +1052,7 @@ export const useWorldStore = defineStore('world', {
      * then refreshes the settlement so the boosted rate and the rune's new
      * `slottedAtQ`/`slottedAtR` show immediately. Throws `ApiError` on
      * rejection (e.g. no shrine there, or its slots are full); callers
-     * decide how to surface that — mirrors `queueBuildLive`.
+     * decide how to surface that — mirrors `queueBuildOptimistic`.
      */
     async slotRuneLive(runeId: string, at: AxialCoord) {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
