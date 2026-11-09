@@ -219,7 +219,7 @@ const rows = computed(() =>
               <span v-else class="outcome trade-outcome">{{ $t('reports.trade.trade') }}</span>
               <span class="mission-pill">{{ row.mission }}</span>
               <span class="when">{{ row.when }}</span>
-              <span class="chevron" aria-hidden="true">▾</span>
+              <span class="chevron" aria-hidden="true" />
             </div>
             <div class="row-summary">{{ row.summary }}</div>
           </button>
@@ -362,11 +362,18 @@ h1 {
   border-color: var(--gold);
 }
 .chevron {
-  color: var(--muted);
+  width: 7px;
+  height: 7px;
+  margin: 0 4px 3px 2px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
   transition: transform 0.15s;
 }
 .row.open .chevron {
-  transform: rotate(180deg);
+  margin-bottom: 0;
+  margin-top: 3px;
+  transform: rotate(225deg);
 }
 /* The expanded report sits directly under its row, the cards' own top margin dropped. */
 .row-body {
