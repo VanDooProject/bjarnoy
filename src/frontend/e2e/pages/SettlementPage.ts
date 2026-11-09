@@ -419,6 +419,15 @@ export class SettlementPage {
     }, caps);
   }
 
+  /**
+   * Funds the settlement for a late building: raises the storage caps and fills the stock to `amount` of wood, stone and food
+   * (stock is clamped to capacity, so the cap goes first).
+   */
+  async fund(amount: number): Promise<void> {
+    await this.setStorageCaps({ wood: amount, stone: amount, food: amount, iron: amount });
+    await this.setResources({ wood: amount, stone: amount, food: amount, iron: 0 });
+  }
+
   /** The HUD's current resource read-out. */
   hudResources(): Promise<{ wood: number; iron: number }> {
     return this.page.evaluate(
