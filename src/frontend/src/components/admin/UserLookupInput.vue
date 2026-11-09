@@ -118,7 +118,7 @@ onBeforeUnmount(cancelPending);
         <strong>{{ user.userName }}</strong>
         <span class="role">({{ user.role }})</span>
         <span v-if="user.via !== 'user'" class="via">
-          {{ user.via === 'jarl' ? 'jarl' : 'settlement' }} {{ user.matchedName }}<template v-if="user.worldName">
+          {{ $t(`adminApiKeys.lookup.via.${user.via}`, { name: user.matchedName ?? '' }) }}<template v-if="user.worldName">
             · {{ user.worldName }}</template>
         </span>
         <span v-else-if="user.displayName" class="via">{{ user.displayName }}</span>

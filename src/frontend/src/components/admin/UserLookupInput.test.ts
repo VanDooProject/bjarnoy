@@ -3,12 +3,16 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import UserLookupInput from './UserLookupInput.vue';
 import type { AdminUserLookupResponse } from '../../api/types';
+import { createTestI18n } from '../../test/i18n';
+import adminApiKeys from '../../i18n/locales/en/adminApiKeys.json';
 
 const { adminLookupUsers } = vi.hoisted(() => ({ adminLookupUsers: vi.fn() }));
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
   return { ...actual, api: { adminLookupUsers } };
 });
+
+const global = { plugins: [createTestI18n({ adminApiKeys })] };
 
 function hit(id: string, overrides: Partial<AdminUserLookupResponse> = {}): AdminUserLookupResponse {
   return {
@@ -39,7 +43,7 @@ afterEach(() => vi.useRealTimers());
 describe('UserLookupInput', () => {
   it('searches as you type, debounced, and not below two characters', async () => {
     adminLookupUsers.mockResolvedValue([hit('1')]);
-    const wrapper = mount(UserLookupInput);
+    const wrapper = mount(UserLookupInput, { global });
     await type(wrapper, 'a');
     expect(adminLookupUsers).not.toHaveBeenCalled();
 
@@ -53,7 +57,7 @@ describe('UserLookupInput', () => {
 
   it('says which settlement or jarl matched', async () => {
     adminLookupUsers.mockResolvedValue([hit('1', { via: 'jarl', matchedName: 'Ragnvald', worldName: 'Midgard' })]);
-    const wrapper = mount(UserLookupInput);
+    const wrapper = mount(UserLookupInput, { global });
     await type(wrapper, 'ragn');
     expect(wrapper.get('[data-testid="user-lookup-pick-1"]').text()).toContain('jarl Ragnvald');
     expect(wrapper.get('[data-testid="user-lookup-pick-1"]').text()).toContain('Midgard');
@@ -61,7 +65,7 @@ describe('UserLookupInput', () => {
 
   it('picks with the keyboard and hides accounts listed in exclude', async () => {
     adminLookupUsers.mockResolvedValue([hit('1'), hit('2'), hit('3')]);
-    const wrapper = mount(UserLookupInput, { props: { exclude: ['1'] } });
+    const wrapper = mount(UserLookupInput, { global, props: { exclude: ['1'] } });
     await type(wrapper, 'user');
     expect(wrapper.find('[data-testid="user-lookup-pick-1"]').exists()).toBe(false);
 
@@ -77,7 +81,7 @@ describe('UserLookupInput', () => {
     adminLookupUsers
       .mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)))
       .mockResolvedValueOnce([hit('new')]);
-    const wrapper = mount(UserLookupInput);
+    const wrapper = mount(UserLookupInput, { global });
     await type(wrapper, 'old');
     await type(wrapper, 'newer');
     resolveFirst([hit('old')]);

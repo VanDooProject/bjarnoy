@@ -80,6 +80,13 @@
       "actions": "Actions"
     }
   },
+  "lookup": {
+    "via": {
+      "user": "{name}",
+      "settlement": "settlement {name}",
+      "jarl": "jarl {name}"
+    }
+  },
   "editor": {
     "name": "Name",
     "purpose": "Purpose",
