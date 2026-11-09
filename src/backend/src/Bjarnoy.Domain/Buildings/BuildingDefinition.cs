@@ -68,6 +68,15 @@ public sealed record BuildingDefinition
     public IReadOnlySet<Terrain> AllowedTerrain { get; init; } = new HashSet<Terrain>();
 
     /// <summary>
+    /// The build ring's category this building is offered under (<see cref="BuildingRingCategory"/>); <see langword="null"/> for the
+    /// buildings the ring never lists (the Longhouse, which only founding places). Served to the client, which builds its ring from it.
+    /// </summary>
+    public BuildingRingCategory? RingCategory { get; init; }
+
+    /// <summary>Where the building sits within its <see cref="RingCategory"/> in the ring (ascending).</summary>
+    public int RingOrder { get; init; }
+
+    /// <summary>
     /// Placed on shallow (coastal) water rather than land — a sea hex with at
     /// least one land neighbour (<see cref="World.TerrainSampler.IsCoastalWater"/>).
     /// A settlement's <see cref="Buildings.Settlement.PlanBuild"/> checks this
@@ -222,4 +231,15 @@ public sealed record BuildingDefinition
 
         return AllowedTerrain.Count == 0 || AllowedTerrain.Contains(terrain);
     }
+}
+
+/// <summary>The build ring's groups; the wire name is the lower-cased member name.</summary>
+public enum BuildingRingCategory
+{
+    Resource,
+    Military,
+    Logistics,
+    Defense,
+    Religion,
+    Water,
 }
