@@ -28,6 +28,9 @@ public static class BuildingCatalogue
 
     private const double LonghouseCostGrowth = 1.34;
 
+    /// <summary>Cost growth per level of the five shrines.</summary>
+    private const double ShrineCostGrowth = 1.715;
+
     /// <summary>Production multiplier per level.</summary>
     private const double ProductionGrowth = 1.20;
 
@@ -328,15 +331,15 @@ public static class BuildingCatalogue
         var definition = type switch
         {
             BuildingType.Longhouse => Longhouse(level),
-            BuildingType.Lumberjack => Producer(type, level, Forest, new ResourceAmounts(Wood: 8, 0, 0, 0), brickFreeLevels: StartBrickFreeLevels),
-            BuildingType.Quarry => Producer(type, level, Ridge, new ResourceAmounts(0, Stone: 8, 0, 0)),
+            BuildingType.Lumberjack => Producer(type, level, Forest, new ResourceAmounts(Wood: 8, 0, 0, 0), new ResourceAmounts(Wood: 16, Stone: 49, Food: 30, Iron: 0), brickFreeLevels: StartBrickFreeLevels),
+            BuildingType.Quarry => Producer(type, level, Ridge, new ResourceAmounts(0, Stone: 8, 0, 0), new ResourceAmounts(Wood: 55, Stone: 8, Food: 33, Iron: 0)),
             // The starting food building: any grass, any island, LH 1. No
             // terrain boost, like Farm (a herd is not a concentrating resource).
-            BuildingType.ReindeerHerder => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 8, 0), brickFreeLevels: StartBrickFreeLevels),
+            BuildingType.ReindeerHerder => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 8, 0), new ResourceAmounts(Wood: 52, Stone: 36, Food: 7, Iron: 0), brickFreeLevels: StartBrickFreeLevels),
             // Buildable on any island regardless of soil, from LH 4 behind a
             // level-3 Reindeer Herder (it and PumpkinFarm are one tech-tree
             // card, split into two types only by their soil rule).
-            BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 12, 0)),
+            BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 12, 0), new ResourceAmounts(Wood: 57, Stone: 29, Food: 9, Iron: 0)),
             BuildingType.StorageHouse => StorageHouse(level),
             BuildingType.Tower => Tower(level),
             BuildingType.FishingHut => FishingHut(level),
@@ -347,7 +350,7 @@ public static class BuildingCatalogue
             // Yields more than Farm: an indirect fertility signal via the
             // production curve rather than a separate bonus multiplier —
             // that's what makes a Pumpkin-soil island "more fertile".
-            BuildingType.PumpkinFarm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 13, 0)),
+            BuildingType.PumpkinFarm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 13, 0), new ResourceAmounts(Wood: 55, Stone: 33, Food: 8, Iron: 0)),
             BuildingType.ShrineOfThor => Shrine(type, level),
             BuildingType.ShrineOfFreyja => Shrine(type, level),
             BuildingType.ShrineOfUllr => Shrine(type, level),
@@ -371,7 +374,7 @@ public static class BuildingCatalogue
             // percentage of that Lumberjack's own production, applied in
             // Totals(IEnumerable{PlacedBuilding}, Func{HexCoord,Terrain}?).
             BuildingType.Sawmill =>
-                Producer(type, level, Grass, ResourceAmounts.Zero, SmallBuildingCost, 4)
+                Producer(type, level, Grass, ResourceAmounts.Zero, new ResourceAmounts(Wood: 7100, Stone: 10000, Food: 1000, Iron: 0), 4, growth: 1.196)
                     with
                     {
                         RequiresRiverShape = SawmillRiverShapes,
@@ -380,7 +383,7 @@ public static class BuildingCatalogue
             // No production of its own yet — its mead is meant for a future
             // morale-boost mechanic, buildable now so it has a place in the
             // tech tree ahead of that mechanic landing.
-            BuildingType.Meadery => Producer(type, level, Grass, ResourceAmounts.Zero, SmallBuildingCost, 4),
+            BuildingType.Meadery => Producer(type, level, Grass, ResourceAmounts.Zero, new ResourceAmounts(Wood: 720, Stone: 390, Food: 200, Iron: 0), 4),
             BuildingType.TownSquare => TownSquare(level),
             // Same shape as Sawmill: behind a level-10 Farm at LH 20.
             //
@@ -389,30 +392,30 @@ public static class BuildingCatalogue
             // grinds grain, and PumpkinFarm is a different crop (see
             // RadiusBoostTargets).
             BuildingType.CropMill =>
-                Producer(type, level, Grass, ResourceAmounts.Zero, SmallBuildingCost, 4)
+                Producer(type, level, Grass, ResourceAmounts.Zero, new ResourceAmounts(Wood: 10000, Stone: 7100, Food: 1000, Iron: 0), 4, growth: 1.196)
                     with { RequiresRiverShape = CropMillRiverShapes },
             // The Weaponsmith (display name; the type stays Smithy). No
             // production of its own — a troop-upgrade building only (costs and
             // effects not yet designed); the military line's capstone and the
             // feeder of the Shrine of Thor.
             BuildingType.Smithy =>
-                Producer(type, level, SandOrGrass, ResourceAmounts.Zero, SmallBuildingCost, 4),
+                Producer(type, level, SandOrGrass, ResourceAmounts.Zero, new ResourceAmounts(Wood: 1700, Stone: 2100, Food: 420, Iron: 0), 4, growth: 1.291),
             BuildingType.DruidHut => DruidHut(level),
             BuildingType.CartWorkshop => CartWorkshop(level),
             // The start's stone source: on plain bog moss (the landing spots guarantee bog in reach), not on grass.
             BuildingType.ClayBrickworks =>
-                Producer(type, level, Bog, new ResourceAmounts(0, Stone: 8, 0, 0), brickFreeLevels: 1)
+                Producer(type, level, Bog, new ResourceAmounts(0, Stone: 8, 0, 0), new ResourceAmounts(Wood: 52, Stone: 10, Food: 33, Iron: 0), brickFreeLevels: 1)
                     with { RequiresBogKind = PlainBogOnly },
             // Iron, on plain bog moss only (not a shore, mouth, creek or lake). Its own P1 is tuned in the Economy lab
             // (docs/design/economy.md section 8); terrain boost in Boosts, the Hammerschmiede's radius boost below.
             BuildingType.BogOreWorks =>
-                Producer(type, level, Bog, new ResourceAmounts(0, 0, 0, Iron: BogOreWorksIronAtLevelOne))
+                Producer(type, level, Bog, new ResourceAmounts(0, 0, 0, Iron: BogOreWorksIronAtLevelOne), new ResourceAmounts(Wood: 42, Stone: 34, Food: 20, Iron: 0))
                     with { RequiresBogKind = PlainBogOnly },
             // A hammer mill on a bog creek. Like the Sawmill it produces nothing and raises the producers within its range
             // (RadiusBoostTargets): the bog-ore works. TODO(art): bog-creek Hammerschmiede - for now the frontend draws the
             // river hammer mill on the creek.
             BuildingType.Hammerschmiede =>
-                Producer(type, level, Bog, ResourceAmounts.Zero, SmallBuildingCost, 4)
+                Producer(type, level, Bog, ResourceAmounts.Zero, new ResourceAmounts(Wood: 10000, Stone: 6350, Food: 1800, Iron: 0), 4, growth: 1.196)
                     with { RequiresBogKind = CreekOnly },
             _ => null,
         };
@@ -718,10 +721,9 @@ public static class BuildingCatalogue
     public static ResourceAmounts NiceRound(ResourceAmounts cost) =>
         new(NiceRound(cost.Wood), NiceRound(cost.Stone), NiceRound(cost.Food), NiceRound(cost.Iron));
 
-    /// <summary>Level-1 cost of the small utility buildings (Sawmill, Crop Mill, Weaponsmith, Meadery).</summary>
-    private static readonly ResourceAmounts SmallBuildingCost = new(Wood: 100, Stone: 80, Food: 0, Iron: 0);
-
-    private static readonly ResourceAmounts LevelOneProducerCost = new(Wood: 35, Stone: 28, Food: 10, Iron: 0);
+    // Level-1 costs are per building (wood / stone / food, never iron). The late buildings' growth per level is chosen so the
+    // building's top level costs about 40% (the shrines 50%) of a Longhouse 30, and its level 1 is about a quarter of the
+    // Longhouse upgrade at the level it unlocks at.
 
     /// <summary>Total capacity of a geometric storage building: <c>c1 · (g^L − 1) / (g − 1)</c> per resource.</summary>
     private static ResourceAmounts GeometricCapacity(double c1, double growth, int level) =>
@@ -732,13 +734,14 @@ public static class BuildingCatalogue
         int level,
         IReadOnlySet<Terrain> terrain,
         ResourceAmounts perHourAtLevelOne,
-        ResourceAmounts? costAtLevelOne = null,
+        ResourceAmounts costAtLevelOne,
         double minutesAtLevelOne = 3,
-        int brickFreeLevels = 0) => new()
+        int brickFreeLevels = 0,
+        double growth = CostGrowth) => new()
         {
             Type = type,
             Level = level,
-            Cost = BrickFree((costAtLevelOne ?? LevelOneProducerCost) * CostFactor(level), level, brickFreeLevels),
+            Cost = BrickFree(costAtLevelOne * CostFactor(level, growth), level, brickFreeLevels),
             BuildDuration = Duration(minutesAtLevelOne, level),
             // Increment-geometric in level (each level adds x1.20 more than the last), the level's total.
             ProductionPerHour = ProductionFor(perHourAtLevelOne, level),
@@ -778,7 +781,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.StorageHouse,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 80, Stone: 60, Food: 0, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 90, Stone: 50, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(2.5, level),
         // Total at this level: 600 * (1.22^L - 1) / 0.22 per resource.
         StorageCapacity = GeometricCapacity(600, 1.22, level),
@@ -789,7 +792,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.Tower,
         Level = level,
-        Cost = BrickFree(new ResourceAmounts(Wood: 120, Stone: 200, Food: 0, Iron: 0) * CostFactor(level), level, StartBrickFreeLevels),
+        Cost = BrickFree(new ResourceAmounts(Wood: 140, Stone: 200, Food: 30, Iron: 0) * CostFactor(level), level, StartBrickFreeLevels),
         BuildDuration = Duration(8, level),
         // Stands on grass, sand, forest or plain bog moss (the palisade's rule); the tower replaces the tile under it.
         AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Sand, Terrain.Forest },
@@ -815,7 +818,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.FishingHut,
         Level = level,
-        Cost = LevelOneProducerCost * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 49, Stone: 39, Food: 7, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(3, level),
         ProductionPerHour = ProductionFor(new ResourceAmounts(0, 0, Food: 16, 0), level),
         RequiresCoastalWater = true,
@@ -877,7 +880,7 @@ public static class BuildingCatalogue
     {
         Type = type,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 180, Stone: 140, Food: 60, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 33000, Stone: 35000, Food: 10500, Iron: 0) * CostFactor(level, ShrineCostGrowth),
         BuildDuration = Duration(12, level),
         AllowedTerrain = type == BuildingType.ShrineOfNjord ? new HashSet<Terrain>() : Grass,
         RequiresCoastalWater = type == BuildingType.ShrineOfNjord,
@@ -895,7 +898,7 @@ public static class BuildingCatalogue
     {
         Type = type,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 40, Stone: 10, Food: 0, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 140, Stone: 40, Food: 10, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(2, level),
         AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Forest, Terrain.Sand },
         AlsoOnCoastalWater = true,
@@ -941,7 +944,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.GreatStorehouse,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 4000, Stone: 3500, Food: 0, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 4500, Stone: 3000, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(10, level),
         // Total at this level: 50000 * (1.25^L - 1) / 0.25 per resource.
         StorageCapacity = GeometricCapacity(50000, 1.25, level),
@@ -960,7 +963,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.ArcheryRange,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 140, Stone: 100, Food: 0, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 470, Stone: 200, Food: 58, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(7, level),
         AllowedTerrain = SandOrGrass,
         // The deepest tier of the early military line (Tower -> Barracks ->
@@ -976,7 +979,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.SiegeWorkshop,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 220, Stone: 160, Food: 0, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 6400, Stone: 3200, Food: 530, Iron: 0) * CostFactor(level, 1.233),
         BuildDuration = Duration(10, level),
         AllowedTerrain = Grass,
     };
@@ -992,7 +995,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.Dockyard,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 200, Stone: 120, Food: 0, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 410, Stone: 99, Food: 33, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(9, level),
         RequiresCoastalWater = true,
     };
@@ -1010,7 +1013,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.Barracks,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 130, Stone: 110, Food: 0, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 100, Stone: 78, Food: 43, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(7, level),
         AllowedTerrain = SandOrGrass,
         // The middle rung of the military line: needs a level-3 Tower
@@ -1029,7 +1032,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.TownSquare,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 160, Stone: 140, Food: 40, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 120, Stone: 130, Food: 44, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(8, level),
         AllowedTerrain = Grass,
     };
@@ -1044,7 +1047,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.DruidHut,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 160, Stone: 110, Food: 80, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 750, Stone: 450, Food: 550, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(9, level),
         AllowedTerrain = Grass,
     };
@@ -1062,7 +1065,7 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.CartWorkshop,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 150, Stone: 110, Food: 0, Iron: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 680, Stone: 230, Food: 75, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(7, level),
         AllowedTerrain = Grass,
     };
