@@ -65,6 +65,7 @@ function resetWhatIf() {
 const WHAT_IF_FIELDS = [
   'costGrowth',
   'longhouseCostGrowth',
+  'longhouseLateCostGrowth',
   'timeGrowth',
   'longhouseTimeGrowth',
   'productionGrowth',

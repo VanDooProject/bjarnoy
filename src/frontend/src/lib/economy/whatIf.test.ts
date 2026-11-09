@@ -58,14 +58,14 @@ describe('applyWhatIf', () => {
   it('keeps the start buildings brick-free for their first levels, whatever the knobs', () => {
     const w = applyWhatIf(live, { ...defaultWhatIf(), producerCostScale: 2, costGrowth: 1.5 });
     for (const level of [1, 5]) expect(w.lumberjack[level - 1].cost.stone, `lumberjack ${level}`).toBe(0);
-    expect(w.lumberjack[5].cost.stone).toBe(niceRound(28 * 2 * 1.5 ** 5));
+    expect(w.lumberjack[5].cost.stone).toBe(niceRound(49 * 2 * 1.5 ** 5));
     expect(w.claybrickworks[0].cost.stone).toBe(0);
     expect(w.claybrickworks[1].cost.stone).toBeGreaterThan(0);
   });
 
   it('level-1 multipliers scale whole curves and only their own group', () => {
     const w = applyWhatIf(live, { ...defaultWhatIf(), producerCostScale: 2, longhouseCostScale: 0.5, timeScale: 3 });
-    expect(w.farm[3].cost.wood).toBe(niceRound(35 * 1.3 ** 3 * 2));
+    expect(w.farm[3].cost.wood).toBe(niceRound(57 * 1.3 ** 3 * 2));
     expect(w.longhouse[3].cost.wood).toBe(niceRound(120 * 1.34 ** 3 * 0.5));
     expect(Math.abs(w.farm[3].buildSeconds - live.farm[3].buildSeconds * 3)).toBeLessThanOrEqual(3);
     expect(w.farm[3].productionPerHour).toEqual(live.farm[3].productionPerHour);

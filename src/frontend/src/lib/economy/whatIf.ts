@@ -1,14 +1,17 @@
 import type { BuildingDefinitionResponse, ResourceLine } from '../../api/types';
-import { niceRound } from '../map/buildingEconomy';
+import { costGrowthOf, niceRound } from '../map/buildingEconomy';
 
 // "What if the curves were different?": regenerate every level of every
 // building type from that type's level-1 row and a handful of growth factors,
 // next to the live catalogue. Pure; never touches its input.
 
 export interface WhatIfKnobs {
-  /** Cost growth per level, every type but the Longhouse. */
+  /** Cost growth per level of the standard types (×1.30); the types with their own growth (shrines, late buildings) scale by `costGrowth / 1.30`. Not the Longhouse. */
   costGrowth: number;
+  /** Longhouse cost growth per level up to level 10. */
   longhouseCostGrowth: number;
+  /** Longhouse cost growth per level from level 11 on. */
+  longhouseLateCostGrowth: number;
   /** Build time growth per level. */
   timeGrowth: number;
   longhouseTimeGrowth: number;
@@ -26,6 +29,7 @@ export interface WhatIfKnobs {
 export const DEFAULT_WHAT_IF: WhatIfKnobs = {
   costGrowth: 1.3,
   longhouseCostGrowth: 1.34,
+  longhouseLateCostGrowth: 1.45,
   timeGrowth: 1.33,
   longhouseTimeGrowth: 1.33,
   productionGrowth: 1.2,
@@ -66,9 +70,9 @@ const SPELLED_OUT_TYPES: ReadonlySet<string> = new Set(['bridge']);
 const BRICK_FREE: Readonly<Record<string, { levels: number; stone: number }>> = {
   longhouse: { levels: 5, stone: 100 },
   tower: { levels: 5, stone: 200 },
-  lumberjack: { levels: 5, stone: 28 },
-  reindeerherder: { levels: 5, stone: 28 },
-  claybrickworks: { levels: 1, stone: 28 },
+  lumberjack: { levels: 5, stone: 49 },
+  reindeerherder: { levels: 5, stone: 36 },
+  claybrickworks: { levels: 1, stone: 10 },
 };
 
 /** `BuildingCatalogue.ProductionFor`: the level total of an increment-geometric series, `I1 · (g^L − 1) / (g − 1)`. */
@@ -88,14 +92,17 @@ export function applyWhatIf(
       continue;
     }
     const lh = type === 'longhouse';
-    const costGrowth = lh ? knobs.longhouseCostGrowth : knobs.costGrowth;
+    const costGrowth = lh ? knobs.longhouseCostGrowth : costGrowthOf(type) * (knobs.costGrowth / DEFAULT_WHAT_IF.costGrowth);
+    // The Longhouse grows by its own factor up to level 10 and by the late one from level 11 on (`BuildingCatalogue.LonghouseCostFactor`).
+    const costFactorAt = (level: number): number =>
+      lh ? costGrowth ** Math.min(level - 1, 9) * knobs.longhouseLateCostGrowth ** Math.max(level - 10, 0) : costGrowth ** (level - 1);
     const timeGrowth = lh ? knobs.longhouseTimeGrowth : knobs.timeGrowth;
     const costScale = lh ? knobs.longhouseCostScale : knobs.producerCostScale;
     const brickFree = BRICK_FREE[type];
     out[type] = defs.map((d) => {
       const n = d.level - 1;
-      const grown = scaleLine(first.cost, costScale * costGrowth ** n);
-      if (brickFree) grown.stone = d.level <= brickFree.levels ? 0 : brickFree.stone * costScale * costGrowth ** n;
+      const grown = scaleLine(first.cost, costScale * costFactorAt(d.level));
+      if (brickFree) grown.stone = d.level <= brickFree.levels ? 0 : brickFree.stone * costScale * costFactorAt(d.level);
       return {
         ...copyDef(d),
         cost: scaleLine(grown, 1, niceRound),

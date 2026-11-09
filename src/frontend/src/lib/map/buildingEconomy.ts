@@ -490,53 +490,77 @@ export function buildingStatsFor(
   }
 }
 
-/** Cost growth per level: ×1.30 for every building, ×1.34 for the Longhouse. Mirrors BuildingCatalogue.cs's CostFactor. */
-function costFactor(type: BuildingKind, level: number): number {
-  return Math.pow(type === 'longhouse' ? 1.34 : 1.3, level - 1);
+/** Cost growth per level: ×1.30 unless the building has its own. Mirrors BuildingCatalogue.cs's CostFactor calls. */
+const COST_GROWTH: Partial<Record<BuildingKind, number>> = {
+  longhouse: 1.34,
+  smithy: 1.291,
+  siegeworkshop: 1.233,
+  sawmill: 1.196,
+  cropmill: 1.196,
+  hammerschmiede: 1.196,
+  shrineofthor: 1.715,
+  shrineoffreyja: 1.715,
+  shrineofullr: 1.715,
+  shrineofnjord: 1.715,
+  odinstatue: 1.715,
+  greatstorehouse: 2.0,
+  druidhut: 1.368,
+};
+
+/** Cost growth per level of `type`. */
+export function costGrowthOf(type: BuildingKind | string): number {
+  return (COST_GROWTH as Partial<Record<string, number>>)[type] ?? 1.3;
 }
+
+function costFactor(type: BuildingKind, level: number): number {
+  // The Longhouse grows x1.34 up to level 10 and x1.45 per level from level 11 on.
+  if (type === 'longhouse') return Math.pow(1.34, Math.min(level, 10) - 1) * Math.pow(1.45, Math.max(level - 10, 0));
+  return Math.pow(costGrowthOf(type), level - 1);
+}
+
+const line = (wood: number, stone: number, food: number): ResourceLine => ({ wood, stone, food, iron: 0 });
 
 // Base (level-1) resource cost per type, mirroring BuildingCatalogue.cs's
 // per-type builders. Buildings cost no iron. "hut" has no backend
 // catalogue entry — it's demo-only, see SettlementView.vue's build() doc
-// comment — so it's approximated at the producer cost.
-const PRODUCER_COST: ResourceLine = { wood: 35, stone: 28, food: 10, iron: 0 };
-const SMALL_BUILDING_COST: ResourceLine = { wood: 100, stone: 80, food: 0, iron: 0 };
+// comment — so it's approximated at the Reindeer Herder cost.
+const SHRINE_COST = line(33000, 35000, 10500);
 const BASE_COST: Record<BuildingKind, ResourceLine> = {
-  hut: PRODUCER_COST,
-  reindeerherder: PRODUCER_COST,
-  farm: PRODUCER_COST,
-  pumpkinfarm: PRODUCER_COST,
-  fishinghut: PRODUCER_COST,
-  lumberjack: PRODUCER_COST,
-  quarry: PRODUCER_COST,
-  claybrickworks: PRODUCER_COST,
-  bogoreworks: PRODUCER_COST,
-  hammerschmiede: SMALL_BUILDING_COST,
-  longhouse: { wood: 120, stone: 100, food: 60, iron: 0 },
-  tower: { wood: 120, stone: 200, food: 0, iron: 0 },
-  shrineofthor: { wood: 180, stone: 140, food: 60, iron: 0 },
-  shrineoffreyja: { wood: 180, stone: 140, food: 60, iron: 0 },
-  shrineofullr: { wood: 180, stone: 140, food: 60, iron: 0 },
-  shrineofnjord: { wood: 180, stone: 140, food: 60, iron: 0 },
-  odinstatue: { wood: 180, stone: 140, food: 60, iron: 0 },
-  storagehouse: { wood: 80, stone: 60, food: 0, iron: 0 },
-  greatstorehouse: { wood: 4000, stone: 3500, food: 0, iron: 0 },
-  archeryrange: { wood: 140, stone: 100, food: 0, iron: 0 },
-  siegeworkshop: { wood: 220, stone: 160, food: 0, iron: 0 },
-  dockyard: { wood: 200, stone: 120, food: 0, iron: 0 },
-  barracks: { wood: 130, stone: 110, food: 0, iron: 0 },
-  sawmill: SMALL_BUILDING_COST,
-  meadery: SMALL_BUILDING_COST,
-  cropmill: SMALL_BUILDING_COST,
-  smithy: SMALL_BUILDING_COST,
-  townsquare: { wood: 160, stone: 140, food: 40, iron: 0 },
-  druidhut: { wood: 160, stone: 110, food: 80, iron: 0 },
-  cartworkshop: { wood: 150, stone: 110, food: 0, iron: 0 },
+  hut: line(52, 36, 7),
+  reindeerherder: line(52, 36, 7),
+  farm: line(57, 29, 9),
+  pumpkinfarm: line(55, 33, 8),
+  fishinghut: line(49, 39, 7),
+  lumberjack: line(16, 49, 30),
+  quarry: line(55, 8, 33),
+  claybrickworks: line(52, 10, 33),
+  bogoreworks: line(42, 34, 20),
+  hammerschmiede: line(10000, 6350, 1800),
+  longhouse: line(120, 100, 60),
+  tower: line(140, 200, 30),
+  shrineofthor: SHRINE_COST,
+  shrineoffreyja: SHRINE_COST,
+  shrineofullr: SHRINE_COST,
+  shrineofnjord: SHRINE_COST,
+  odinstatue: SHRINE_COST,
+  storagehouse: line(90, 50, 0),
+  greatstorehouse: line(4500, 3000, 0),
+  archeryrange: line(470, 200, 58),
+  siegeworkshop: line(6400, 3200, 530),
+  dockyard: line(410, 99, 33),
+  barracks: line(100, 78, 43),
+  sawmill: line(7100, 10000, 1000),
+  meadery: line(720, 390, 200),
+  cropmill: line(10000, 7100, 1000),
+  smithy: line(1700, 2100, 420),
+  townsquare: line(120, 130, 44),
+  druidhut: line(750, 450, 550),
+  cartworkshop: line(680, 230, 75),
   // One wall hex, plain or gate: BuildingCatalogue.PalisadeHex.
-  palisade: { wood: 40, stone: 10, food: 0, iron: 0 },
-  palisadegate: { wood: 40, stone: 10, food: 0, iron: 0 },
+  palisade: line(540, 150, 40),
+  palisadegate: line(540, 150, 40),
   // Level 1 of BuildingCatalogue.BridgeLevels (the catalogue holds every level's own cost; demo mode raises it level by level).
-  bridge: { wood: 120, stone: 0, food: 20, iron: 0 },
+  bridge: line(120, 0, 20),
 };
 
 /**
