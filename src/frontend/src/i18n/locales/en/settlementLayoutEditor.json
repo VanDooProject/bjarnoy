@@ -10,6 +10,8 @@
   "gridAriaLabel": "Settlement hexes",
   "zoomIn": "Zoom in",
   "zoomOut": "Zoom out",
+  "zoomInSymbol": "+",
+  "zoomOutSymbol": "−",
   "zoomReset": "Reset zoom",
   "pickHex": "Pick a hex to edit it.",
   "empty": "Empty",

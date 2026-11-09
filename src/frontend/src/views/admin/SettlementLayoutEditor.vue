@@ -313,8 +313,8 @@ async function instantBuild() {
     <div v-else-if="layout" class="grid-and-form">
       <div class="grid-wrap">
       <div class="zoom-controls">
-        <button type="button" :disabled="zoom >= MAX_ZOOM" :aria-label="$t('settlementLayoutEditor.zoomIn')" @click="zoomTo(zoom * 1.5)">+</button>
-        <button type="button" :disabled="zoom <= MIN_ZOOM" :aria-label="$t('settlementLayoutEditor.zoomOut')" @click="zoomTo(zoom / 1.5)">−</button>
+        <button type="button" :disabled="zoom >= MAX_ZOOM" :aria-label="$t('settlementLayoutEditor.zoomIn')" @click="zoomTo(zoom * 1.5)">{{ $t('settlementLayoutEditor.zoomInSymbol') }}</button>
+        <button type="button" :disabled="zoom <= MIN_ZOOM" :aria-label="$t('settlementLayoutEditor.zoomOut')" @click="zoomTo(zoom / 1.5)">{{ $t('settlementLayoutEditor.zoomOutSymbol') }}</button>
         <button type="button" :disabled="zoom === 1" @click="resetZoom">{{ $t('settlementLayoutEditor.zoomReset') }}</button>
       </div>
       <svg
