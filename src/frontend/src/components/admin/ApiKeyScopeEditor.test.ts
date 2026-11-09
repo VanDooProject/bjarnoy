@@ -12,6 +12,12 @@ vi.mock('../../api/client', async (importOriginal) => {
   return { ...actual, api: { adminLookupUsers } };
 });
 
+// Real timers here: Vue drops click events stamped earlier than a handler's (fake-clock) attach time.
+const sleep = async (ms: number) => {
+  await new Promise((r) => setTimeout(r, ms));
+  await flushPromises();
+};
+
 const global = { plugins: [createTestI18n({ adminApiKeys })] };
 
 const features: ApiKeyFeatureInfo[] = [
@@ -90,6 +96,7 @@ describe('ApiKeyScopeEditor', () => {
     await wrapper.get('form').trigger('submit');
     expect(wrapper.emitted('submit')![0][0]).toEqual({
       ownerUserId: 'a1',
+      additionalUserIds: [],
       features: { chat: 'Read' },
       allWorlds: false,
       worldIds: [],
@@ -120,5 +127,49 @@ describe('ApiKeyScopeEditor', () => {
     const body = wrapper.emitted('submit')![0][0] as SaveApiKeyRequest;
     expect(body.ownerUserId).toBe('p1');
     expect(body.features).toEqual({ chat: 'Read' });
+  });
+
+  it('adds and removes further accounts, never lists the owner there, and submits their ids', async () => {
+    adminLookupUsers.mockResolvedValue([
+      { userId: 'p1', userName: 'player', displayName: null, role: 'player', status: 'active', via: 'user', matchedName: null, worldName: null },
+      { userId: 'p2', userName: 'ally', displayName: null, role: 'player', status: 'active', via: 'user', matchedName: null, worldName: null },
+    ]);
+    const wrapper = mountEditor('key', { name: 'k', features: { chat: 'Read' } });
+
+    for (const id of ['p1', 'p2']) {
+      await wrapper.get('[data-testid="editor-account-input"]').setValue(`user ${id}`);
+      await sleep(300);
+      await wrapper.get(`[data-testid="editor-account-pick-${id}"]`).trigger('mousedown');
+    }
+    expect(wrapper.get('[data-testid="editor-accounts"]').text()).toContain('player');
+    expect(wrapper.get('[data-testid="editor-accounts"]').text()).toContain('ally');
+
+    await wrapper.get('[data-testid="account-remove-p1"]').trigger('click');
+    await wrapper.get('form').trigger('submit');
+    const body = wrapper.emitted('submit')![0][0] as SaveApiKeyRequest;
+    expect(body.additionalUserIds).toEqual(['p2']);
+  });
+
+  it('drops an account from the further list when it becomes the owner', async () => {
+    vi.useFakeTimers();
+    adminLookupUsers.mockResolvedValue([
+      { userId: 'p2', userName: 'ally', displayName: null, role: 'player', status: 'active', via: 'user', matchedName: null, worldName: null },
+    ]);
+    const wrapper = mountEditor('key', {
+      name: 'k',
+      features: { chat: 'Read' },
+      additionalAccounts: [{ id: 'p2', userName: 'ally', role: 'player' }],
+    });
+    // The extra account is excluded from its own picker, so make it the owner through the owner picker.
+    await wrapper.get('[data-testid="editor-owner-input"]').setValue('ally');
+    await vi.advanceTimersByTimeAsync(300);
+    await flushPromises();
+    await wrapper.get('[data-testid="editor-owner-pick-p2"]').trigger('mousedown');
+    vi.useRealTimers();
+
+    await wrapper.get('form').trigger('submit');
+    const body = wrapper.emitted('submit')![0][0] as SaveApiKeyRequest;
+    expect(body.ownerUserId).toBe('p2');
+    expect(body.additionalUserIds).toEqual([]);
   });
 });

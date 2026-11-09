@@ -15,15 +15,19 @@ without re-deriving the onboarding flow every time.
 
 ## Flow this script drives
 
+A fresh visitor first sees the landing intro; `flow.mjs` presses "Go to the map"
+(once — a second press while it is still loading disarms it) and waits for the
+intro to close, shooting the intro page as `landing_intro`.
+
 Demo mode has no login and no separate world-map click-through before
-founding (zip 6a): landing (`/`) already *is* the village-view preview —
+founding (zip 6a): behind the intro, landing (`/`) already *is* the village-view preview —
 clicking anywhere on it founds a settlement at the nearest good landfall
 (the same deterministic starter plot `flow.mjs`/`e2e/helpers.ts` both use),
 then the view flips into the settlement view in place, no remount and no
 nickname modal blocking it (design handoff "2a").
 
 `flow.mjs` walks this whole path in one run (it's cheaper than restarting the
-browser per screen) and drops a screenshot at each stop: `landing`,
+browser per screen) and drops a screenshot at each stop: `landing_intro` (the intro page), `landing` (the village view behind it),
 `landfall` (right after founding, still in preview framing), `settlement`
 (after switching to the Settlement tab), `settlement_panned` (camera dragged
 outward — checks fog continuity/gradient past the default view),

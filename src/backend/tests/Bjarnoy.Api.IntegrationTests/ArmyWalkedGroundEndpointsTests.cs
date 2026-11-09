@@ -213,4 +213,31 @@ public sealed class ArmyWalkedGroundEndpointsTests : IAsyncLifetime
         var route = army.Path.Concat(army.ReturnPath).Select(p => new HexCoord(p.Q, p.R));
         Assert.Empty(await UnexploredFarHexesAsync(scene, route));
     }
+
+    [Fact]
+    public async Task A_fog_read_in_a_paused_world_explores_only_what_the_army_reached_in_game_time()
+    {
+        var scene = await DispatchedSceneAsync();
+        var army = await LoadArmyAsync(scene.Settlement.Id);
+
+        // Pause the world right after dispatch: game time stands still while wall time runs on.
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var world = await db.Worlds.SingleAsync(w => w.Id == scene.WorldId, Ct);
+            world.ApplyClock(world.ToClock().Pause(_factory.Time.GetUtcNow()));
+            await db.SaveChangesAsync(Ct);
+        }
+
+        // Wall time passes far beyond the army's whole outbound route.
+        AdvanceToHexIndex(army, army.Path.Count - 1);
+
+        await PollFogAsync(scene);
+
+        var route = army.Path.Select(p => new HexCoord(p.Q, p.R));
+        var home = new HexCoord(scene.Settlement.Q, scene.Settlement.R);
+        var farRoute = route.Where(h => h.DistanceTo(home) > HomeSafeDistance + 2).ToList();
+        Assert.NotEmpty(farRoute);
+        Assert.Equal(farRoute.Distinct().Count(), (await UnexploredFarHexesAsync(scene, farRoute)).Count);
+    }
 }

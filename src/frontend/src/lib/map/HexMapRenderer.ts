@@ -71,8 +71,7 @@ import { TILE_ORIENTATIONS, type IslandLabel, type RiverTile, type Settlement, t
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
-import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
-import { ARMY_VISION_FALLOFF } from './fog/fogShader';
+import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP, armyFogClearReachHexes } from './fog/FogMaskLayer';
 import type { FogCoverageLookup } from './fog/fogCoverage';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
@@ -333,7 +332,7 @@ export interface FogDebugFlags {
   drift: boolean;
   /** Bypasses the warp entirely and renders the mask texture unmodified — useful for inspecting the raw fetched mask (chunk seams, once §3's chunking lands) without the shader's own distortion on top. */
   showRawMask: boolean;
-  /** Dumps the mask channels right after §1c's army-vision reveal has been multiplied in, still bypassing warp/edge-noise/tier compositing — the complement to showRawMask (which returns before that reveal is applied), for inspecting what's actually driving fog once troop vision is accounted for. */
+  /** Dumps the mask channels right after §1c's army-vision reveal has been min()'d in, still bypassing warp/edge-noise/tier compositing — the complement to showRawMask (which returns before that reveal is applied), for inspecting what's actually driving fog once troop vision is accounted for. */
   showEffectiveMask: boolean;
   /** Turns off the realm-border wash + outer-edge glow/stroke drawn on every owned hex — survives unchanged from v1 (§4 doesn't touch what it gates, only when it redraws). */
   realmBorders: boolean;
@@ -1246,19 +1245,23 @@ const FOG_TERRAIN_CULL_HEXES = Math.ceil(
 // FogVisionRadii.ArmyVisionRadiusHexes (used there for §1e's persisted-
 // history growth trigger; used here for the real-time shader reveal itself,
 // see fogShader.ts's own remarks on why the two stay out of sync-free of
-// each other despite sharing this one number). TILE_W approximates "one hex"
-// in world-space distance the same way NOISE_SCALE (FogMaskLayer.ts) does —
-// good enough for a soft visual radius, not a gameplay-precision distance.
+// each other despite sharing this one number). The shader measures it as
+// hex-euclidean distance via ARMY_HEX_SIZE below, not in world units.
 const ARMY_VISION_RADIUS_HEXES = 2;
+// World units per hex step along x and y for the troop fog's hex-euclidean
+// metric (fogShader.ts's uArmyHexSize). The world layout (isoGridPosition)
+// has a column pitch of 0.75*TILE_W, a row pitch of TILE_H and odd columns
+// offset by TILE_H/2, so a neighbour step is (0.75W, +-H/2) or (0, H);
+// dividing by (W*sqrt(3)/2, H) makes every neighbour distance exactly 1.
+const ARMY_HEX_SIZE = { x: (TILE_W * Math.sqrt(3)) / 2, y: TILE_H };
 
 /**
- * How many hex steps from an army's hex its live reveal can clear the mist: the shader fades the reveal out at
- * `ARMY_VISION_FALLOFF` × the radius in world units, measured round, and a world unit along y is the tightest
- * pitch (one step is TILE_H there). +1 for the hex art's own footprint, which reaches into the reveal before its
- * centre does.
+ * How many hex steps from an army's hex its live fog can show the ground. The fog measures hex-euclidean distance
+ * (`armyFogClearReachHexes`), and a hex-euclidean distance d is at most d × 2/√3 steps (the corner directions are the
+ * long way round). +1 for the hex art's own footprint, which reaches into the clearing before its centre does.
  */
 export function armyRevealReachHexes(visionRadiusHexes: number): number {
-  return Math.ceil((ARMY_VISION_FALLOFF * visionRadiusHexes * TILE_W) / TILE_H) + 1;
+  return Math.ceil((armyFogClearReachHexes(visionRadiusHexes) * 2) / Math.sqrt(3)) + 1;
 }
 
 /**
@@ -6534,9 +6537,8 @@ export class HexMapRenderer {
     // FogMaskLayer.setArmyVisionSources's own remarks on why this stays out
     // of the cached mask texture entirely.
     const armyVisionRadiusHexes = ARMY_VISION_RADIUS_HEXES + Math.max(0, overlay.visionBonusRings ?? 0);
-    const armyVisionRadiusWorld = armyVisionRadiusHexes * TILE_W;
-    this.blackFogLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
-    this.whiteMistLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
+    this.blackFogLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusHexes, ARMY_HEX_SIZE);
+    this.whiteMistLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusHexes, ARMY_HEX_SIZE);
     this.syncArmyCullSources(armyCullSourcesOf(armyVisionLegs, armyVisionRadiusHexes));
 
     // Armies that have gone away (arrived home and been folded back) would
@@ -6621,8 +6623,8 @@ export class HexMapRenderer {
       this.syncSpriteLayer(this.terrainTop, new Map());
       this.syncBogEdgeGraphics([], []);
       this.topAnimState.clear();
-      this.blackFogLayer.setArmyVisionSources([], 0);
-      this.whiteMistLayer.setArmyVisionSources([], 0);
+      this.blackFogLayer.setArmyVisionSources([], 0, ARMY_HEX_SIZE);
+      this.whiteMistLayer.setArmyVisionSources([], 0, ARMY_HEX_SIZE);
     } else {
       // Leaving world mode: drop its flat-fill polygons (rebuildTerrain's
       // settlement branch never calls rebuildTerrainFlat, so terrainFlat is

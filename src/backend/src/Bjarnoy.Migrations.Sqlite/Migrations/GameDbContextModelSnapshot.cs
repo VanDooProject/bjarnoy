@@ -17,6 +17,21 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAccountEntity", b =>
+                {
+                    b.Property<Guid>("ApiKeyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ApiKeyId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("api_key_accounts", (string)null);
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -103,6 +118,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid?>("ApiKeyId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ApprovedAdditionalUserIds")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<bool?>("ApprovedAllWorlds")
                         .HasColumnType("INTEGER");
 
@@ -176,6 +195,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<Guid?>("RenewsApiKeyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestedAdditionalUserNames")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("RequestedOwnerUserName")
@@ -1981,6 +2004,25 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.ToTable("worlds", (string)null);
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyAccountEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", "ApiKey")
+                        .WithMany("Accounts")
+                        .HasForeignKey("ApiKeyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ApiKey");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "CreatedByUser")
@@ -2463,6 +2505,11 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("User");
 
                     b.Navigation("World");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ApiKeyEntity", b =>
+                {
+                    b.Navigation("Accounts");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyEntity", b =>

@@ -1,7 +1,7 @@
 // The terrain cull and an army's live fog reveal have to agree.
 //
 // Between mask fetches the fog shader clears a disc around every army in
-// transit (fogShader.ts `armyVisionReveal`). The terrain cull used to know only
+// transit (fogShader.ts `armyRamps`). The terrain cull used to know only
 // settlements and the server mask, so a marching army cleared the mist over
 // ground that was never drawn and the bare canvas showed through: the 'edge of
 // the world' next to the troops.
@@ -11,7 +11,7 @@ import {
   isPastTerrainCullOf,
   type FogSource,
 } from './HexMapRenderer';
-import { ARMY_VISION_FALLOFF } from './fog/fogShader';
+import { armyFogClearReachHexes } from './fog/FogMaskLayer';
 import { isoGridPosition } from '../hex/geometry';
 import { hexDistance, type AxialCoord } from '../hex/coords';
 import { TILE_ART_TOPFACE_H_FRAC } from './textures';
@@ -34,12 +34,14 @@ function revealedHexes(
   const a = world(from);
   const b = world(to);
   const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-  const reach = ARMY_VISION_FALLOFF * radiusHexes * TILE_W;
+  // The fog's own metric: world offset over one hex step along each axis (HexMapRenderer's ARMY_HEX_SIZE).
+  const reach = armyFogClearReachHexes(radiusHexes);
+  const hx = (TILE_W * Math.sqrt(3)) / 2;
   const out: AxialCoord[] = [];
   for (let q = from.q - 20; q <= from.q + 20; q++) {
     for (let r = from.r - 20; r <= from.r + 20; r++) {
       const c = world({ q, r });
-      if (Math.hypot(c.x - p.x, c.y - p.y) < reach) out.push({ q, r });
+      if (Math.hypot((c.x - p.x) / hx, (c.y - p.y) / TILE_H) < reach) out.push({ q, r });
     }
   }
   return out;

@@ -72,6 +72,13 @@ public class ApiKeyEntity
 
     public UserEntity? OwnerUser { get; set; }
 
+    /// <summary>
+    /// Further accounts the key may act as, besides <see cref="OwnerUserId"/> (which stays the primary one and the
+    /// default). A request picks one with the <c>X-Act-As</c> header; each request is evaluated as exactly that one
+    /// account, never as a union. The owner is not repeated here.
+    /// </summary>
+    public List<ApiKeyAccountEntity> Accounts { get; set; } = [];
+
     /// <summary>The admin who created the key, or who approved the request that became it.</summary>
     public Guid CreatedByUserId { get; set; }
 
@@ -118,6 +125,18 @@ public class ApiKeyEntity
         RevokedAt is not null ? ApiKeyStatus.Revoked
         : ExpiresAt <= now ? ApiKeyStatus.Expired
         : ApiKeyStatus.Active;
+}
+
+/// <summary>One extra account an <see cref="ApiKeyEntity"/> may act as; composite key (<see cref="ApiKeyId"/>, <see cref="UserId"/>).</summary>
+public class ApiKeyAccountEntity
+{
+    public Guid ApiKeyId { get; set; }
+
+    public ApiKeyEntity? ApiKey { get; set; }
+
+    public Guid UserId { get; set; }
+
+    public UserEntity? User { get; set; }
 }
 
 /// <summary>Whether an <see cref="ApiKeyRequestEntity"/> asks for a brand new key or for a successor of an existing one.</summary>
@@ -203,6 +222,9 @@ public class ApiKeyRequestEntity
     /// <summary>A hint for whom the key should act as; the approving admin decides.</summary>
     public string? RequestedOwnerUserName { get; set; }
 
+    /// <summary>User names the agent asked for besides <see cref="RequestedOwnerUserName"/> (hints only).</summary>
+    public List<string> RequestedAdditionalUserNames { get; set; } = [];
+
     /// <summary>For a <see cref="ApiKeyRequestKind.Renewal"/>, the key that is revoked when the successor is collected.</summary>
     public Guid? RenewsApiKeyId { get; set; }
 
@@ -230,6 +252,9 @@ public class ApiKeyRequestEntity
 
     /// <summary>The features the admin approved (empty until approved; replaces <see cref="Features"/> at pickup).</summary>
     public Dictionary<string, ApiKeyAccess> ApprovedFeatures { get; set; } = [];
+
+    /// <summary>The extra accounts the admin approved (empty until approved); becomes <see cref="ApiKeyEntity.Accounts"/> at pickup.</summary>
+    public List<Guid> ApprovedAdditionalUserIds { get; set; } = [];
 
     public bool? ApprovedAllWorlds { get; set; }
 

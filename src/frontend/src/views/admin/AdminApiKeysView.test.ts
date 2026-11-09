@@ -38,6 +38,7 @@ function request(code: string, overrides: Partial<ApiKeyRequestResponse> = {}): 
     description: null,
     contextUrl: null,
     requestedOwnerUserName: null,
+    requestedAdditionalUserNames: [],
     requestsPerMinute: null,
     lifetimeMinutes: 60,
     renewsApiKeyId: null,
@@ -166,6 +167,7 @@ describe('AdminApiKeysView', () => {
     await flushPromises();
     expect(mocks.adminApproveApiKeyRequest).toHaveBeenCalledWith('id-ABCD-2345', {
       ownerUserId: 'a1',
+      additionalUserIds: [],
       features: { chat: 'Read' },
       allWorlds: false,
       worldIds: [],
@@ -173,6 +175,27 @@ describe('AdminApiKeysView', () => {
       requestsPerMinute: null,
       autoRenewMinutes: null,
     });
+    wrapper.unmount();
+  });
+
+  it('prefills the approval with the further accounts the agent hinted, where they exist', async () => {
+    mocks.adminListApiKeyRequests.mockResolvedValue([
+      request('ABCD-2345', { requestedAdditionalUserNames: ['Ally', 'ghost'] }),
+    ]);
+    mocks.adminListUsers.mockImplementation(async ({ search }: { search: string }) => ({
+      items: search === 'Ally' ? [{ id: 'u2', userName: 'Ally', role: 'player' }] : [],
+      totalCount: 1,
+      page: 1,
+      pageSize: 10,
+    }));
+    mocks.adminApproveApiKeyRequest.mockResolvedValue(request('ABCD-2345', { status: 'Approved' }));
+    const wrapper = await mountAt('/admin/api-keys');
+    await wrapper.get('[data-testid="approve-ABCD-2345"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="editor-accounts"]').text()).toContain('Ally');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(mocks.adminApproveApiKeyRequest.mock.calls[0][1]).toMatchObject({ additionalUserIds: ['u2'] });
     wrapper.unmount();
   });
 
