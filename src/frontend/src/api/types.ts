@@ -948,6 +948,18 @@ export interface ReseedWorldResponse {
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminUserContracts.cs.
 
+/** One autocomplete hit: the account, and whether it matched by user name, settlement name or jarl name. */
+export interface AdminUserLookupResponse {
+  userId: string;
+  userName: string;
+  displayName: string | null;
+  role: string;
+  status: string;
+  via: 'user' | 'settlement' | 'jarl';
+  matchedName: string | null;
+  worldName: string | null;
+}
+
 export interface AdminUserResponse {
   id: string;
   userName: string;

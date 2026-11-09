@@ -10,6 +10,7 @@ import type {
   AdminSettlementLayoutResponse,
   AdminUserActivityDetailResponse,
   AdminUserDetailResponse,
+  AdminUserLookupResponse,
   AdminUserResponse,
   AdminWorldResponse,
   ApiKeyFeatureInfo,
@@ -504,6 +505,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  adminLookupUsers: (q: string, signal?: AbortSignal) =>
+    request<AdminUserLookupResponse[]>(`/admin/users/lookup?q=${encodeURIComponent(q)}&limit=10`, { signal }),
   adminListUsers: (params?: { search?: string; status?: string; page?: number; pageSize?: number }) => {
     const query = new URLSearchParams();
     if (params?.search) query.set('search', params.search);
