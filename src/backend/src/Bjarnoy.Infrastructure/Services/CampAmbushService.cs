@@ -104,6 +104,12 @@ public sealed class CampAmbushService(
 
         if (plan.ArmySurvivors.Sum(s => s.Count) <= 0)
         {
+            // Destroyed where the ambush caught it, not at the end of its route.
+            if (domain.Location is ArmyLocation.InTransit { Movement: var ambushed })
+            {
+                armyEntity.WalkedLegs.Add(new WalkedLeg(ambushed, ambush.At));
+            }
+
             _dbContext.Armies.Remove(armyEntity);
             return CampAmbushOutcome.ArmyDestroyed;
         }

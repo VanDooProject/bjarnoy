@@ -29,6 +29,7 @@ import DispatchSlots from './DispatchSlots.vue';
 import { useDispatchUnitPicker } from '../../composables/useDispatchUnitPicker';
 import { useArmyRows } from '../../composables/useArmyRows';
 
+const emit = defineEmits<{ 'focus-army': [armyId: string] }>();
 const world = useWorldStore();
 const auth = useAuthStore();
 const catalogue = useUnitCatalogueStore();
@@ -224,6 +225,7 @@ async function confirmFieldOrderClick() {
           class="status-row army-row"
           :class="{ 'is-selected': row.selected }"
           @click="toggleSelect(row.id)"
+          @dblclick="emit('focus-army', row.id)"
         >
           <div class="status-row-top">
             <span class="status-row-name">{{ row.composition }}</span>

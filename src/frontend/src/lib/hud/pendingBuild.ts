@@ -11,15 +11,24 @@ export const PENDING_ORDER_PREFIX = 'pending:';
 
 let sequence = 0;
 
-/** A `waiting`-state order with no timing: exactly what `constructionDialsFromQueue` renders as "…". */
-export function makePendingOrder(building: string, at: AxialCoord): BuildOrderResponse {
+/**
+ * A `waiting`-state order with no timing: exactly what `constructionDialsFromQueue` renders as "…". A raze stand-in carries
+ * the level the building has after the raze.
+ */
+export function makePendingOrder(
+  building: string,
+  at: AxialCoord,
+  kind: BuildOrderResponse['kind'] = 'build',
+  targetLevel = 1,
+): BuildOrderResponse {
   sequence += 1;
   return {
     id: `${PENDING_ORDER_PREFIX}${sequence}`,
     q: at.q,
     r: at.r,
     building,
-    targetLevel: 1,
+    kind,
+    targetLevel,
     state: 'waiting',
     slotCost: 1,
     completesAtGameTime: null,

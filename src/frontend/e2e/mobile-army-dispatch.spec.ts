@@ -171,7 +171,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await gotoWorldMap(page);
     await page.mouse.click(centre.x, centre.y);
 
-    await expect(page).toHaveURL(/\/settlement#world$/);
+    await expect(page).toHaveURL(/\/settlement#world(&.*)?$/);
     // Only the army action: Build/Upgrade/Info open settlement-only modals.
     await expect(ring.action('Send army here')).toBeVisible();
     await expect(ring.bubbles).toHaveCount(1);
@@ -203,7 +203,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     expect(overflow.offscreen).toEqual([]);
   });
 
-  test('QueueDrawer lists a seeded army with its ETA; a row tap closes the drawer, selects it and centres the camera', async ({ page }) => {
+  test('QueueDrawer lists a seeded army with its ETA; a row tap selects it and keeps the drawer open; a double tap closes the drawer and centres the camera', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.found(page);
 
@@ -261,6 +261,11 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect(armyRow.locator('.status-row-time')).not.toHaveText('—');
 
     await armyRow.locator('.status-row-click').click();
+
+    await expect.poll(async () => (await demoWorld(page)).selectedArmyId).toBe('army-1');
+    await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'false');
+
+    await armyRow.locator('.status-row-click').dblclick();
 
     await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'true');
     await expect.poll(async () => (await demoWorld(page)).selectedArmyId).toBe('army-1');

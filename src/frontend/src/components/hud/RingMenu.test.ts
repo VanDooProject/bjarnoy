@@ -284,6 +284,36 @@ describe('RingMenu', () => {
     expect(wrapper.find('[data-testid="ring-hint"]').exists()).toBe(false);
   });
 
+  it('shows a raze card: raze time and refund chips instead of a cost, and its own badge', async () => {
+    const wrapper = ring({
+      actions: [
+        {
+          id: 'raze',
+          label: 'Raze',
+          card: {
+            title: 'Raze to level 1',
+            sub: 'Farm · Level 2 → 1',
+            time: '3:00',
+            timeLabel: 'Raze time',
+            refund: { wood: 33, stone: 26 },
+            okBadge: 'CAN BE RAZED',
+            availability: availability({ cost: undefined, slotsNeeded: 1 }),
+          },
+        },
+      ],
+    });
+    await bubble(wrapper, 'Raze').trigger('mouseenter');
+
+    const card = wrapper.get('.ring-card');
+    expect(card.text()).toContain('Raze to level 1');
+    expect(card.text()).toContain('Raze time');
+    expect(card.text()).toContain('3:00');
+    expect(card.text()).toContain('CAN BE RAZED');
+    expect(card.text()).not.toContain('BUILDABLE HERE');
+    expect(card.text()).not.toContain('Cost');
+    expect(wrapper.get('[data-testid="ring-card-refund"]').findAll('b').map((b) => b.text())).toEqual(['33', '26']);
+  });
+
   it('explains a disabled action in a hint chip on hover, with aria kept and no native disabled attribute', async () => {
     // A native `disabled` button doesn't fire mouse events in most browsers,
     // so hover (and with it the chip) would never show. aria-disabled keeps
