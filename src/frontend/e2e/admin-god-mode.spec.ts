@@ -82,6 +82,7 @@ function armyEntry(overrides: { stacks?: { unit: string; count: number }[]; posi
     worldId: 'world-1',
     settlementName: 'Bjornstad',
     ownerName: 'Ragnar',
+    loot: { wood: 0, stone: 0, food: 0, iron: 0 },
     army: {
       id: ARMY_ID,
       settlementId: SETTLEMENT_ID,
