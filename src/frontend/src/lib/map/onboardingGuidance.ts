@@ -33,7 +33,9 @@ const TOTAL_STEPS = 1 + GUIDED_BUILD_TYPES.length;
 
 /**
  * Derives the checklist purely from what's actually standing
- * (`WorldModel.listPlacedBuildings`, surfaced as `hud.placedBuildingTypes`)
+ * (`WorldModel.listPlacedBuildings`, surfaced as `hud.placedBuildingTypes`;
+ * live mode includes a confirmed order's level-0 foundation, so a step ticks
+ * once the server accepts its build order)
  * rather than a separately tracked step counter that could drift from the
  * real build order. The ring only requires the clicked tile's terrain to
  * match a guided type (grass -> reindeerherder, forest -> lumberjack), so the player
@@ -84,9 +86,10 @@ export function nextGuidedType(placedTypes: readonly Tile['buildingType'][]): Gu
 export type GuidedQueueOrder = Pick<BuildOrderResponse, 'q' | 'r' | 'building' | 'kind'>;
 
 /**
- * The building types the pointer treats as done: those standing (`placedTypes`) plus those with a build order in
- * `queue`. Once the player has queued the guided building the pointer moves on to the next one instead of waiting for
- * the construction to finish. Feed this to `nextGuidedType` for the pointer's step.
+ * The building types the pointer treats as done: those standing (`placedTypes`, a confirmed order's level-0 foundation
+ * included) plus those with a build order in `queue`, the optimistic one the server has not answered yet included. So
+ * the pointer moves on at the click. The checklist reads `placedTypes` only (`deriveOnboardingGuidance`): a refused
+ * order must not tick a step or complete the onboarding. Feed this to `nextGuidedType` for the pointer's step.
  */
 export function guidedTypesStarted(
   placedTypes: readonly Tile['buildingType'][],

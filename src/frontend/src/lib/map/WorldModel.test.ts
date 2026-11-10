@@ -3043,9 +3043,30 @@ describe('WorldModel.hexTakesBuilding — the onboarding pointer target', () => 
     expect(model.placeBuilding(settlement.id, target, 'reindeerherder')).toBe(true);
     expect(model.hexTakesBuilding(target, 'reindeerherder')).toBe(false);
   });
-  // Live mode: queueing a build only adds an order to `hud.queue` (no `tile.buildingType` until it completes). The
-  // pointer used to keep counting the queued Reindeer Herder as not placed and its hex as free, so it stayed on that hex
-  // and the ring there offered the herder again (the server refuses that with AlreadyQueuedOnHex).
+  // Once the server confirms a new building it sends it as a level-0 foundation in the settlement snapshot: the checklist
+  // counts it as placed (onboarding ticks and completes on queue) and the pointer no longer aims at its hex.
+  it('counts a level-0 foundation from the server as placed and never aims at its hex', () => {
+    const model = new WorldModel(SEED);
+    const { settlement } = foundLandedSettlement(model);
+    const herderHex = pointerTarget(model, settlement, 'reindeerherder')!;
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.capacity!,
+      buildings: [
+        { q: settlement.q, r: settlement.r, type: 'longhouse', level: 1 },
+        { q: herderHex.q, r: herderHex.r, type: 'reindeerherder', level: 0 },
+      ],
+    });
+    const placed = model.listPlacedBuildings(settlement.id);
+    expect(placed).toContain('reindeerherder');
+    expect(nextGuidedType(placed)).toBe('lumberjack');
+    expect(pointerTarget(model, settlement, 'reindeerherder')).not.toEqual(herderHex);
+  });
+
+  // Until the server answers, a queued build is only an optimistic order in `hud.queue` (no foundation on the tile yet).
+  // The pointer used to count it as not placed and its hex as free for that wait, so it stayed on the herder's hex.
   it('moves on to the Lumberjack once the Reindeer Herder is queued, and never aims at the queued hex', () => {
     const model = new WorldModel(SEED);
     const { settlement } = foundLandedSettlement(model);

@@ -525,8 +525,9 @@ function withinBuildableRange(coord: AxialCoord): boolean {
 // here" / "One more — the {terrain}") aims at. `guidedBuildTarget`
 // (onboardingGuidance.ts) holds the rule; this supplies this settlement's
 // centre/claim radius, the real WorldModel and the realm check.
-// The pointer's progress: standing guided buildings plus queued ones (`guidedTypesStarted`), so it moves on as soon
-// as the player queues the guided building, not when its construction finishes.
+
+// The pointer's progress: standing guided buildings plus queued ones (`guidedTypesStarted`), so it moves on at the
+// click, before the server has answered the order. The checklist above reads confirmed buildings only.
 const pointerStartedTypes = computed(() => guidedTypesStarted(world.hud.placedBuildingTypes, world.hud.queue));
 const pointerGuidedType = computed(() => nextGuidedType(pointerStartedTypes.value));
 
