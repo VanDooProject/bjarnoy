@@ -9,7 +9,7 @@ export interface DefOpts {
   storage?: number;
   reqLh?: number;
   prereqs?: BuildingPrerequisiteResponse[];
-  occupiesAllSlots?: boolean;
+  occupiesMostSlots?: boolean;
 }
 
 /** Hand-made catalogue row for tests. */
@@ -25,7 +25,7 @@ export function def(type: string, level: number, o: DefOpts = {}): BuildingDefin
     requiresCoastalWater: false,
     requiredLonghouseLevel: o.reqLh ?? 1,
     slotCost: 1,
-    occupiesAllSlots: o.occupiesAllSlots ?? type === 'longhouse',
+    occupiesMostSlots: o.occupiesMostSlots ?? type === 'longhouse',
     claimRadius: 0,
     prerequisites: o.prereqs ?? [],
     ringCategory: null,

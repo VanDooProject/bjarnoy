@@ -46,8 +46,8 @@ public sealed class LinkedSettlementContextTests
     {
         var s = Found(10);
 
-        Assert.Equal(3, s.OwnConstructionSlots);
-        Assert.Equal(3, s.ConstructionSlots);
+        Assert.Equal(10, s.OwnConstructionSlots);
+        Assert.Equal(10, s.ConstructionSlots);
     }
 
     [Fact]
@@ -62,14 +62,14 @@ public sealed class LinkedSettlementContextTests
     }
 
     [Fact]
-    public void A_longhouse_upgrade_occupies_every_slot_of_the_group()
+    public void A_longhouse_upgrade_occupies_90_percent_of_the_slots_of_the_group()
     {
         var upgrade = Order(BuildingType.Longhouse, Centre, level: 2);
         var s = Found() with { Linked = Context(slots: 2, queue: [upgrade]) };
 
         Assert.Equal(4, s.ConstructionSlots);
-        Assert.Equal(4, s.UsedSlots);
-        Assert.Equal(0, s.FreeSlots);
+        Assert.Equal(3, s.UsedSlots);
+        Assert.Equal(1, s.FreeSlots);
     }
 
     [Fact]
@@ -303,8 +303,8 @@ public sealed class LinkedSettlementContextTests
         Assert.Null(Settlement.NextPromotable([.. busy, first], 2));
 
         var upgrade = Order(BuildingType.Longhouse, Centre, level: 2, waiting: true);
-        var oneBusy = Order(BuildingType.Farm, new HexCoord(8, 0));
-        Assert.Null(Settlement.NextPromotable([oneBusy, upgrade, other], 2));
+        var twoBusy = new[] { Order(BuildingType.Farm, new HexCoord(8, 0)), Order(BuildingType.Farm, new HexCoord(9, 0)) };
+        Assert.Null(Settlement.NextPromotable([.. twoBusy, upgrade, other], 3));
     }
 
     [Fact]

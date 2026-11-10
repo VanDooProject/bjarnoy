@@ -858,10 +858,24 @@ export function classifyFamilyFrames<T>(frames: FamilyFrame<T>[], opts?: { spars
   const baseByOrientation = emptyOrientationMap<Map<number, T>>(() => new Map());
   const topByOrientation = emptyOrientationMap<Map<number, T>>(() => new Map());
 
+  // The packer's shared `<family>_<O>_base` carries no level or variant. It is the family's base only where no leveled base exists:
+  // a family with per-level bases (the dockyard's) owns index 0 through `level000_base`, and a shared base parked there would never
+  // be replaced by it, because a later load fills only the holes of an earlier one (`mergeIndexedArray`).
+  const sharedBase = emptyOrientationMap<T | undefined>(() => undefined);
+  const hasLeveledBase = emptyOrientationMap(() => false);
   for (const { name, layer, value } of frames) {
     const orientation = orientationOf(name);
-    const index = explicitIndexOf(name) ?? 0;
-    (layer === 'top' ? topByOrientation : baseByOrientation)[orientation].set(index, value);
+    const explicit = explicitIndexOf(name);
+    if (layer !== 'top' && explicit === null) {
+      sharedBase[orientation] = value;
+      continue;
+    }
+    if (layer !== 'top' && LEVEL_RE.test(name)) hasLeveledBase[orientation] = true;
+    (layer === 'top' ? topByOrientation : baseByOrientation)[orientation].set(explicit ?? 0, value);
+  }
+  for (const orientation of TILE_ORIENTATIONS) {
+    const shared = sharedBase[orientation];
+    if (shared !== undefined && !hasLeveledBase[orientation]) baseByOrientation[orientation].set(0, shared);
   }
 
   const toIndexedMap = (byOrientation: OrientationMap<Map<number, T>>): OrientationMap<T[]> => {
@@ -889,7 +903,8 @@ export function classifyFamilyFrames<T>(frames: FamilyFrame<T>[], opts?: { spars
     result.top = toIndexedMap(topByOrientation);
   }
   if (hasAny(baseByOrientation)) {
-    const isIndexed = TILE_ORIENTATIONS.some((o) => baseByOrientation[o].size > 1);
+    // A leveled base marks the base as indexed even when only one rung has loaded (the buildings-level1 atlas alone holds just `level001_base`).
+    const isIndexed = TILE_ORIENTATIONS.some((o) => baseByOrientation[o].size > 1 || hasLeveledBase[o]);
     if (isIndexed) {
       result.baseIndexed = toIndexedMap(baseByOrientation);
     } else {
