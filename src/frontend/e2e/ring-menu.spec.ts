@@ -715,9 +715,10 @@ test.describe('ring menu and armies in the field', () => {
     });
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
-    // With the route checks this was one task of ~8 s; without them the open stays far below a second.
+    // With the route checks this was one task of ~7 s; without them the open is a fraction of a second. 3 s leaves room for a
+    // software-rendered CI frame and still fails the regression.
     const longest = await page.evaluate(() => Math.max(0, ...(window as unknown as { __longTasks: number[] }).__longTasks));
-    expect(longest, 'a main-thread task while opening the ring took this long (ms)').toBeLessThan(1_000);
+    expect(longest, 'a main-thread task while opening the ring took this long (ms)').toBeLessThan(3_000);
     // No fleet can reach the hex, and the bubble is still enabled: whether an army can go is the picker's question.
     const send = settlement.ring.action('Send army here').first();
     await expect(send).toBeVisible();

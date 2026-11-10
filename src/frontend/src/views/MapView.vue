@@ -905,7 +905,7 @@ function huntActions(tile: Tile): RingAction[] {
 // Siege another player's palisade or gate (endgame "Breaching walls"): offered on a standing wall hex of a settlement that is
 // neither the player's own nor a friend's (same guild, or a guild at peace), live mode only. It opens an Attack on the wall owner's
 // settlement with the wall hex as the preferred target building. Walls fall to battering rams only, so one must be at home; without
-// one the bubble stays but is disabled with a hint, like the other army actions.
+// one the bubble stays but is disabled with a hint (a garrison check, no route search).
 function siegeActions(tile: Tile): RingAction[] {
   if (
     DEMO_MODE
