@@ -39,7 +39,7 @@ import { useRingMaxScale } from '../composables/useRingMaxScale';
 import { buildingStatsAt, scaleOutput } from '../lib/map/buildingEconomy';
 import {
   deriveOnboardingGuidance,
-  findGuidedTarget,
+  guidedBuildTarget,
   guidedRingStep,
   nextGuidedType,
   snapToOfferedPlot,
@@ -529,25 +529,17 @@ function withinBuildableRange(coord: AxialCoord): boolean {
 
 // Design handoff "2a": the nearest still-buildable hex for whichever guided
 // building isn't placed yet — what the map pointer (frames 2/4, "Now build
-// here" / "One more — the {terrain}") aims at. `findGuidedTarget` itself is
-// pure (onboardingGuidance.ts); this just supplies it with this settlement's
-// centre/claim radius and a terrain/buildability lookup against the real
-// WorldModel, mirroring onHexClick's own buildable-tile rule above.
+// here" / "One more — the {terrain}") aims at. `guidedBuildTarget`
+// (onboardingGuidance.ts) holds the rule; this supplies this settlement's
+// centre/claim radius, the real WorldModel and the realm check.
 const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
   if (!player.hasFoundedSettlement || !world.selectedSettlementId) return null;
   const settlement = world.model.getSettlement(world.selectedSettlementId);
   if (!settlement) return null;
   const type = nextGuidedType(world.hud.placedBuildingTypes);
   if (!type) return null;
-  return findGuidedTarget(
-    { q: settlement.q, r: settlement.r },
-    claimRadiusForLevel(settlement.level),
-    type,
-    (c) => world.model.getTile(c.q, c.r).terrain,
-    (c) => {
-      const tile = world.model.getTile(c.q, c.r);
-      return world.isRealmSettlement(tile.ownerId) && !tile.buildingType;
-    },
+  return guidedBuildTarget(world.model, { q: settlement.q, r: settlement.r }, claimRadiusForLevel(settlement.level), type, (owner) =>
+    world.isRealmSettlement(owner),
   );
 });
 
