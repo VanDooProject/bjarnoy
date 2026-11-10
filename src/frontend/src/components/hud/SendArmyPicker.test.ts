@@ -2,7 +2,7 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
-import { mount } from '@vue/test-utils';
+import { mount, type VueWrapper } from '@vue/test-utils';
 import SendArmyPicker from './SendArmyPicker.vue';
 import { useWorldStore } from '../../stores/world';
 import { useAuthStore } from '../../stores/auth';
@@ -71,12 +71,16 @@ const inOneHour = () => new Date(Date.now() + 3_600_000).toISOString();
 
 /** Lets the route queue run its background searches to the end and the rows re-render with the answers. */
 async function routesArrive() {
-  await new Promise((resolve) => setTimeout(resolve, 30));
+  // The queue works on 0 ms timers: wait on the DOM until no row is still checking, not on a wall-clock guess.
+  await vi.waitFor(() => expect(mounted?.text()).not.toContain('Checking the route'));
   await nextTick();
 }
 
+let mounted: VueWrapper | null = null;
 function mountPicker() {
-  return mount(SendArmyPicker, { global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] } });
+  const wrapper = mount(SendArmyPicker, { global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] } });
+  mounted = wrapper;
+  return wrapper;
 }
 
 function setup(armies: ArmyResponse[], garrison = [{ unit: 'spearman', count: 8 }], premium = false) {

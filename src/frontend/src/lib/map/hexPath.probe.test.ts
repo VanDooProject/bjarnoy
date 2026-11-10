@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { coordKey, hexDistance, neighbors, type AxialCoord } from '../hex/coords';
-import { findPath, findPathSteps, findSeaPath, findSeaPathSteps, hoursFrom, REVERSE_PROBE_NODES, SLICE_EXPANSIONS, type PathContext } from './hexPath';
+import { BURNT_BRIDGE_LEAVE_COST, findPath, findPathSteps, findSeaPath, findSeaPathSteps, hoursFrom, pathCost, REVERSE_PROBE_NODES, SLICE_EXPANSIONS, type PathContext } from './hexPath';
 import type { Terrain } from './types';
 
 // The fail-fast reverse probe and the sliced search must never change an answer: compared against an independent breadth-first search
@@ -142,14 +142,119 @@ describe('findPath with the reverse probe', () => {
         const from = pick();
         const to = pick();
         if (terrainAt(from) !== 'grass' || terrainAt(to) !== 'grass') continue;
+        // The search stays inside the endpoints' box (padded by at least 10); only compare where the whole map (radius 7) is inside it.
+        const pad = Math.max(10, hexDistance(from, to));
+        if (Math.min(from.q, to.q) - pad > -radius || Math.max(from.q, to.q) + pad < radius) continue;
+        if (Math.min(from.r, to.r) - pad > -radius || Math.max(from.r, to.r) + pad < radius) continue;
         const reach = hoursFrom(from, ctx, 10_000);
         const path = findPath(from, to, ctx);
-        // The fill is unboxed, the search is not: a route that needs a detour beyond the box counts as none for the search only.
+        // The map fits the box, so the search and the unboxed fill agree: a null (probe or search) means the fill cannot reach `to`.
         if (path) {
-          expect(path.length - 1).toBeGreaterThan(-1);
           expect(reach.get(coordKey(to))).toBeCloseTo(path.length - 1, 9);
           found++;
-        } else if (!reach.has(coordKey(to))) nulls++;
+        } else {
+          expect(reach.has(coordKey(to))).toBe(false);
+          nulls++;
+        }
+      }
+    }
+    expect(found).toBeGreaterThan(20);
+    expect(nulls).toBeGreaterThan(5);
+  });
+});
+
+describe('findPath with the reverse probe on direction-dependent edges', () => {
+  // A palisade hex can be left but not entered; a wide river without a bridge likewise (leaving costs 1 + BURNT_BRIDGE_LEAVE_COST).
+  // Reference: Dijkstra written out here over the same prices, not through hexPath's own search.
+  type Kind = 'grass' | 'palisade' | 'wide' | 'sea';
+  function scenario(kindAt: (c: AxialCoord) => Kind): PathContext {
+    return {
+      terrainAt: (c) => (kindAt(c) === 'sea' ? 'sea' : 'grass'),
+      isRiver: (c) => kindAt(c) === 'wide',
+      isWideRiver: (c) => kindAt(c) === 'wide',
+      rules: { land: { grass: 1 }, riverCrossingCost: 8 },
+      hexesPerHour: 1,
+      restrictions: { blocked: (c) => kindAt(c) === 'palisade', friendlyGate: () => false },
+    };
+  }
+  function enter(kind: Kind): number | null {
+    return kind === 'grass' ? 1 : null;
+  }
+  function leave(kind: Kind): number | null {
+    return kind === 'grass' ? 1 : kind === 'palisade' ? 1 : kind === 'wide' ? 1 + BURNT_BRIDGE_LEAVE_COST : null;
+  }
+  function dijkstra(from: AxialCoord, to: AxialCoord, kindAt: (c: AxialCoord) => Kind, radius: number): number | null {
+    const dist = new Map<string, number>([[coordKey(from), 0]]);
+    const done = new Set<string>();
+    for (;;) {
+      let best: string | null = null;
+      for (const [k, d] of dist) if (!done.has(k) && (best === null || d < dist.get(best)!)) best = k;
+      if (best === null) return null;
+      done.add(best);
+      const [q, r] = best.split(',').map(Number) as [number, number];
+      const cur = { q, r };
+      if (q === to.q && r === to.r) return dist.get(best)!;
+      const l = leave(kindAt(cur));
+      if (l === null) continue;
+      for (const n of neighbors(cur)) {
+        if (Math.abs(n.q) > radius || Math.abs(n.r) > radius) continue;
+        const e = enter(kindAt(n));
+        if (e === null) continue;
+        const nd = dist.get(best)! + (l + e) / 2;
+        if (nd < (dist.get(coordKey(n)) ?? Infinity)) dist.set(coordKey(n), nd);
+      }
+    }
+  }
+
+  it('a start on a palisade hex can leave it, a goal on one cannot be entered', () => {
+    const kindAt = (c: AxialCoord): Kind => (Math.abs(c.q) > 5 || Math.abs(c.r) > 5 ? 'sea' : c.q === 0 && c.r === 0 ? 'palisade' : c.q === 3 && c.r === 0 ? 'palisade' : 'grass');
+    const ctx = scenario(kindAt);
+    expect(findPath({ q: 0, r: 0 }, { q: 2, r: 0 }, ctx)).not.toBeNull();
+    expect(findPath({ q: 2, r: 0 }, { q: 3, r: 0 }, ctx)).toBeNull();
+  });
+
+  it('a start on a wide river with a burnt bridge can leave it, a goal on one cannot be entered', () => {
+    const kindAt = (c: AxialCoord): Kind => (Math.abs(c.q) > 5 || Math.abs(c.r) > 5 ? 'sea' : c.q === 0 && c.r === 0 ? 'wide' : c.q === 3 && c.r === 0 ? 'wide' : 'grass');
+    const ctx = scenario(kindAt);
+    const path = findPath({ q: 0, r: 0 }, { q: 2, r: 0 }, ctx);
+    expect(path).not.toBeNull();
+    expect(pathCost(path!, ctx)).toBeCloseTo(dijkstra({ q: 0, r: 0 }, { q: 2, r: 0 }, kindAt, 5)!, 9);
+    expect(findPath({ q: 2, r: 0 }, { q: 3, r: 0 }, ctx)).toBeNull();
+  });
+
+  it('matches an independent Dijkstra (null or cost) on random maps with palisades and burnt wide rivers, starts often standing on one', () => {
+    let nulls = 0;
+    let found = 0;
+    const radius = 7;
+    for (let seed = 1; seed <= 80; seed++) {
+      const rand = rng(seed * 31);
+      const kinds = new Map<string, Kind>();
+      for (let q = -radius; q <= radius; q++) {
+        for (let r = -radius; r <= radius; r++) {
+          const x = rand();
+          kinds.set(`${q},${r}`, x < 0.12 ? 'sea' : x < 0.3 ? 'palisade' : x < 0.42 ? 'wide' : 'grass');
+        }
+      }
+      const kindAt = (c: AxialCoord): Kind => kinds.get(coordKey(c)) ?? 'sea';
+      const ctx = scenario(kindAt);
+      const pick = (): AxialCoord => ({ q: Math.floor(rand() * (2 * radius + 1)) - radius, r: Math.floor(rand() * (2 * radius + 1)) - radius });
+      for (let i = 0; i < 6; i++) {
+        const from = pick();
+        const to = pick();
+        if (kindAt(from) === 'sea' || kindAt(to) === 'sea') continue;
+        const pad = Math.max(10, hexDistance(from, to));
+        if (Math.min(from.q, to.q) - pad > -radius || Math.max(from.q, to.q) + pad < radius) continue;
+        if (Math.min(from.r, to.r) - pad > -radius || Math.max(from.r, to.r) + pad < radius) continue;
+        const expected = from.q === to.q && from.r === to.r ? 0 : dijkstra(from, to, kindAt, radius);
+        const path = findPath(from, to, ctx);
+        if (expected === null) {
+          expect(path).toBeNull();
+          nulls++;
+        } else {
+          expect(path).not.toBeNull();
+          expect(pathCost(path!, ctx)).toBeCloseTo(expected, 9);
+          found++;
+        }
       }
     }
     expect(found).toBeGreaterThan(20);

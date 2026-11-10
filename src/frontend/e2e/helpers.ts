@@ -650,12 +650,16 @@ export async function bubbleNearestPointerTip(
 }
 
 /**
- * Puts five standing fleets on the open sea ~300 hexes from the settlement (demo mode has no army simulation, so they go straight
+ * Puts five standing fleets on five different hexes of the open sea, up to ~300 hexes from the settlement (demo mode has no army simulation, so they go straight
  * into the store) and returns an empty, inland grass hex of the realm: no fleet can ever reach it, so every route search for it fails.
- * `screen` is that hex's centre on the settlement canvas.
+ * `screen` is that hex's centre on the settlement canvas. The fleets' home (where a leg must be able to return to) is the settlement, an
+ * inland hex no fleet can reach, unless `homeAt` names another (a coastal hex of the realm).
  */
-export async function putFleetsFarAtSea(page: Page): Promise<{ hex: { q: number; r: number }; screen: { x: number; y: number } }> {
-  return page.evaluate(() => {
+export async function putFleetsFarAtSea(
+  page: Page,
+  homeAt?: { q: number; r: number },
+): Promise<{ hex: { q: number; r: number }; screen: { x: number; y: number } }> {
+  return page.evaluate((homeOverride) => {
     const win = window as unknown as {
       __demoWorld: () => { model: any; selectedSettlementId: string; armies: unknown[] };
       __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
@@ -664,19 +668,17 @@ export async function putFleetsFarAtSea(page: Page): Promise<{ hex: { q: number;
     const home = world.model.getSettlement(world.selectedSettlementId);
     const sides = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]] as const;
     const isSea = (q: number, r: number) => world.model.getTile(q, r).terrain === 'sea';
-    let sea: { q: number; r: number } | null = null;
-    for (let d = 300; d > 50 && !sea; d -= 5) {
+    // One far open-sea hex per fleet, all different: every fleet is its own route search (its own cache key).
+    const seas: Array<{ q: number; r: number }> = [];
+    for (let d = 300; d > 50 && seas.length < 5; d -= 5) {
       for (const [dq, dr] of sides) {
         const at = { q: home.q + dq * d, r: home.r + dr * d };
-        if (isSea(at.q, at.r) && sides.every(([a, b]) => isSea(at.q + a, at.r + b))) {
-          sea = at;
-          break;
-        }
+        if (seas.length < 5 && isSea(at.q, at.r) && sides.every(([a, b]) => isSea(at.q + a, at.r + b))) seas.push(at);
       }
     }
-    if (!sea) throw new Error('no open sea far from home');
+    if (seas.length < 5) throw new Error('no five open-sea hexes far from home');
     const arrived = new Date(Date.now() - 60_000).toISOString();
-    world.armies = Array.from({ length: 5 }, (_, i) => ({
+    world.armies = seas.map((sea, i) => ({
       id: `fleet-${i}`,
       settlementId: world.selectedSettlementId,
       mission: 'move',
@@ -689,7 +691,7 @@ export async function putFleetsFarAtSea(page: Page): Promise<{ hex: { q: number;
       totalUpkeepPerHour: 1,
       visionRadius: 4,
       stacks: [{ unit: 'longship', count: 1 }],
-      movement: { path: [{ q: home.q, r: home.r }, sea], isReturning: false, departedAt: arrived, arrivesAt: arrived },
+      movement: { path: [homeOverride ?? { q: home.q, r: home.r }, sea], isReturning: false, departedAt: arrived, arrivesAt: arrived },
     }));
     for (let dq = -3; dq <= 3; dq++) {
       for (let dr = -3; dr <= 3; dr++) {
@@ -701,7 +703,7 @@ export async function putFleetsFarAtSea(page: Page): Promise<{ hex: { q: number;
       }
     }
     throw new Error('no empty inland grass hex in the realm');
-  });
+  }, homeAt);
 }
 
 /** Starts recording main-thread long tasks (durations in ms) from now on; read the worst one with `longestTask`. */

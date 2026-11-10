@@ -60,7 +60,18 @@ function run(): void {
   const deadline = performance.now() + SLICE_MS;
   while (queue.length > 0 && performance.now() < deadline) {
     const head = queue[0]!;
-    const step = head.job.next();
+    let step: IteratorResult<void, RouteResult | null>;
+    try {
+      step = head.job.next();
+    } catch {
+      // A throwing search must not wedge the queue: drop it and answer "no route" for its key.
+      if (myEpoch !== epoch) return;
+      queue.shift();
+      queued.delete(head.key);
+      cache.set(head.key, null);
+      routeCacheVersion.value++;
+      continue;
+    }
     if (myEpoch !== epoch) return;
     if (step.done) {
       queue.shift();

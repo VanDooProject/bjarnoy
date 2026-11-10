@@ -550,6 +550,8 @@ const PICKER_FRAME_MS = 300;
 const pickerFrameKey = computed(() => {
   const picker = world.sendPicker;
   if (!picker) return null;
+  // Frame once, when every army's route is known: no moving camera as the rows resolve one by one.
+  if (sendPicker.rows.value.some((r) => r.kind === 'field' && r.block === 'pending')) return null;
   const ids = sendPicker.rows.value.filter((r) => r.kind === 'field' && r.ok).map((r) => r.id);
   return `${picker.coord.q},${picker.coord.r}|${ids.sort().join(',')}`;
 });
@@ -582,6 +584,7 @@ function onArmyTap(armyId: string, screen: { x: number; y: number }) {
     world.selectSendSource(armyId);
     return;
   }
+  if (row.block === 'pending') return;
   const text = sendBlockText(row, sendPicker.target.value);
   if (!text) return;
   armyHint.value = { x: Math.min(Math.max(screen.x, 110), Math.max(110, stage.value.w - 110)), y: Math.max(48, screen.y - 34), text };
@@ -597,12 +600,12 @@ watch(
 watch(
   () => {
     const id = world.sendPicker?.selectedId;
-    if (!id || id === 'home') return false;
+    if (!id || id === 'home') return null;
     const row = sendPicker.rows.value.find((r) => r.id === id);
-    return !!row && !row.ok && row.block !== 'pending';
+    return row ? (row.ok ? 'ok' : (row.block ?? null)) : null;
   },
-  (cannotGo) => {
-    if (cannotGo) world.selectSendSource(null);
+  (state, previous) => {
+    if (previous === 'pending' && state && state !== 'ok' && state !== 'pending') world.selectSendSource(null);
   },
 );
 onUnmounted(() => armyHintTimer && clearTimeout(armyHintTimer));

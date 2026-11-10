@@ -24,7 +24,7 @@ function clearRoutesWithPicker(world: ReturnType<typeof useWorldStore>) {
   cacheClearers.add(world);
   effectScope(true).run(() => {
     watch(
-      () => !!world.sendPicker,
+      () => (world.sendPicker ? `${world.sendPicker.coord.q},${world.sendPicker.coord.r}|${world.sendPicker.mission}` : null),
       () => clearRouteCache(),
       { flush: 'sync' },
     );

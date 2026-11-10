@@ -86,6 +86,20 @@ describe('routeQueue', () => {
     expect(routeOrQueue('queued', job(0, null))).toBeUndefined();
   });
 
+  it('drops a search that throws, answers null for it and carries on with the rest of the queue', async () => {
+    const before = routeCacheVersion.value;
+    const boom = function* (): RouteJob {
+      yield;
+      throw new Error('boom');
+    };
+    routeOrQueue('boom', boom);
+    routeOrQueue('after', job(1, RESULT));
+    await vi.runAllTimersAsync();
+    expect(routeOrQueue('boom', job(0, RESULT))).toBeNull();
+    expect(routeOrQueue('after', job(0, null))).toEqual(RESULT);
+    expect(routeCacheVersion.value).toBe(before + 2);
+  });
+
   it('keys a route by both ends and the fleet flag', () => {
     const a = { q: 1, r: 2 };
     const b = { q: 3, r: 4 };
