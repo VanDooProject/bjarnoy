@@ -196,18 +196,15 @@ describe('ReturningPlayerMenu landing entries', () => {
     return mounted;
   }
 
-  it('has no Docs, Start page or Play intro row by default', async () => {
+  it('has no Start page or Play intro row by default, and never a Docs row ("How to play" floats beside the trigger)', async () => {
     const { wrapper } = await openMenu({});
-    expect(wrapper.find('[data-testid="returning-player-docs"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="returning-player-start-page"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="returning-player-play-intro"]').exists()).toBe(false);
   });
 
-  it('links to /docs', async () => {
-    const { wrapper, router } = await openMenu({ landingEntries: true });
-    await wrapper.find('[data-testid="returning-player-docs"]').trigger('click');
-    await flushPromises();
-    expect(router.currentRoute.value.path).toBe('/docs');
+  it('has no Docs row among the landing entries', async () => {
+    const { wrapper } = await openMenu({ landingEntries: true });
+    expect(wrapper.find('[data-testid="returning-player-docs"]').exists()).toBe(false);
   });
 
   it('plays the intro and closes the menu', async () => {

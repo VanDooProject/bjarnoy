@@ -107,6 +107,7 @@ public sealed class LinkedStore
         do
         {
             var next = target;
+            var razeRefunds = new List<(Slot Slot, BuildOrder Order)>();
             if (++iterations <= MaxIterations)
             {
                 foreach (var slot in _slots)
@@ -147,6 +148,11 @@ public sealed class LinkedStore
                 slot.Settlement = result.Settlement;
                 slot.Changed |= result.Changed;
                 slot.Completed.AddRange(result.Completed);
+                if (slot.Settlement.Linked is not null)
+                {
+                    razeRefunds.AddRange(result.Completed.Where(o => o.IsRaze).Select(o => (slot, o)));
+                }
+
                 slot.CompletedTraining.AddRange(result.TrainingCompleted);
                 slot.Deaths.AddRange(result.Deaths);
                 slot.GuestDeaths.AddRange(result.GuestDeaths);
@@ -154,6 +160,14 @@ public sealed class LinkedStore
 
             Cursor = next;
             Normalize(next);
+
+            // A finished raze pays its refund into the pooled stock, capped by the pool's capacity after the level dropped.
+            foreach (var (slot, order) in razeRefunds)
+            {
+                var view = PooledViewAt(slot, next);
+                ApplyCore(slot, view with { Resources = view.Resources.Deposit(order.Refund, next) }, next);
+                Normalize(next);
+            }
         }
         while (Cursor < target);
     }

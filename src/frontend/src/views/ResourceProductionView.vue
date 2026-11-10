@@ -11,13 +11,12 @@ import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { resourceName, terrainName } from '../i18n/catalogueNames';
 import { buildingStatsFor, maxLevelFor, type BuildingKind } from '../lib/map/buildingEconomy';
 import { prerequisitesOf } from '../lib/techtree/nodes';
-import { newPlacementDisabled } from '../lib/map/ringCatalogue';
 import {
   BASE_STORAGE,
   MILLS,
   MILL_LEVELS,
   PRODUCER_LEVELS,
-  BUILDABLE_PRODUCER_TYPES,
+  buildableProducerTypes,
   boostTerrainsOf,
   millBoostAt,
   neighbourBoost,
@@ -35,7 +34,7 @@ onMounted(() => catalogue.load());
 const RESOURCES = ['wood', 'stone', 'food', 'iron'] as const;
 type Resource = (typeof RESOURCES)[number];
 
-const loaded = computed(() => BUILDABLE_PRODUCER_TYPES.every((p) => catalogue.byType[p]?.length) && !!catalogue.byType.longhouse?.length);
+const loaded = computed(() => buildableProducerTypes(catalogue.byType).every((p) => catalogue.byType[p]?.length) && !!catalogue.byType.longhouse?.length);
 
 // --- helpers -----------------------------------------------------------------------------------------------------
 
@@ -64,7 +63,7 @@ function unlockOf(type: string) {
 // --- producers ---------------------------------------------------------------------------------------------------
 
 const producerRows = computed(() =>
-  BUILDABLE_PRODUCER_TYPES.map((type) => {
+  buildableProducerTypes(catalogue.byType).map((type) => {
     const resource = RESOURCES.find((r) => (definitionAt(type, 1)?.productionPerHour[r] ?? 0) > 0) as Resource;
     return {
       type,
@@ -94,12 +93,14 @@ const farmPerHour = computed(() => Math.round(definitionAt('farm', 1)?.productio
 // --- neighbour boost ---------------------------------------------------------------------------------------------
 
 const boost = neighbourBoost();
-const boostRows = (['lumberjack', 'quarry', 'fishinghut', 'bogoreworks'] as const)
-  .filter((type) => !newPlacementDisabled(type))
-  .map((type) => ({
-  type,
-  terrains: boostTerrainsOf(type as BuildingKind).map(terrainName).join(', '),
-}));
+const boostRows = computed(() =>
+  (['lumberjack', 'quarry', 'fishinghut', 'bogoreworks'] as const)
+    .filter((type) => catalogue.byType[type]?.[0]?.newPlacementDisabled !== true)
+    .map((type) => ({
+      type,
+      terrains: boostTerrainsOf(type as BuildingKind).map(terrainName).join(', '),
+    })),
+);
 
 // --- mills -------------------------------------------------------------------------------------------------------
 

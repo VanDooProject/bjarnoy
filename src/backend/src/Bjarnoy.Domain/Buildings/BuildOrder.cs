@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Buildings;
@@ -17,8 +18,36 @@ public sealed record BuildOrder
 
     public required BuildingType Type { get; init; }
 
-    /// <summary>The level this order produces when it completes.</summary>
+    /// <summary>
+    /// The level the building stands at once this order completes: one above the standing level for a build, one below it for a raze
+    /// (0 = the building is removed).
+    /// </summary>
     public required int TargetLevel { get; init; }
+
+    /// <summary>Whether this order builds a level or razes one.</summary>
+    public BuildOrderKind Kind { get; init; } = BuildOrderKind.Build;
+
+    /// <summary>True for a raze order (<see cref="BuildOrderKind.Raze"/>).</summary>
+    public bool IsRaze => Kind == BuildOrderKind.Raze;
+
+    /// <summary>
+    /// The catalogue level this order works on: the level being built, or the level being razed. Its definition gives the
+    /// slot cost, the duration and the refund.
+    /// </summary>
+    public int LevelInWork => IsRaze ? TargetLevel + 1 : TargetLevel;
+
+    /// <summary>What this order costs up front: the level's cost for a build, nothing for a raze.</summary>
+    public ResourceAmounts Cost => IsRaze ? ResourceAmounts.Zero : BuildingCatalogue.Get(Type, TargetLevel).Cost;
+
+    /// <summary>What finishing a raze pays back: a third of the razed level's cost, rounded down per resource. Zero for a build.</summary>
+    public ResourceAmounts Refund => IsRaze ? RefundOf(BuildingCatalogue.Get(Type, LevelInWork).Cost) : ResourceAmounts.Zero;
+
+    // Divides rather than multiplies by 1/3: 300 * (1.0 / 3) is 99.99999999999999 and would floor to 99.
+    private static ResourceAmounts RefundOf(ResourceAmounts cost) => new ResourceAmounts(
+        cost.Wood / BuildingCatalogue.RazeRefundDivisor,
+        cost.Stone / BuildingCatalogue.RazeRefundDivisor,
+        cost.Food / BuildingCatalogue.RazeRefundDivisor,
+        cost.Iron / BuildingCatalogue.RazeRefundDivisor).Floor();
 
     /// <summary>The hex the building stands on.</summary>
     public required HexCoord Coord { get; init; }
@@ -68,6 +97,23 @@ public sealed record BuildOrder
         var remaining = c - now;
         return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
     }
+}
+
+/// <summary>What a <see cref="BuildOrder"/> does to its hex.</summary>
+public enum BuildOrderKind
+{
+    Build = 0,
+    Raze = 1,
+}
+
+public static class BuildOrderKindExtensions
+{
+    /// <summary>The lowercase wire name (<c>"build"</c> / <c>"raze"</c>).</summary>
+    public static string ToWireName(this BuildOrderKind kind) => kind switch
+    {
+        BuildOrderKind.Raze => "raze",
+        _ => "build",
+    };
 }
 
 /// <summary>Why a build was refused.</summary>
@@ -169,6 +215,12 @@ public enum BuildRejection
     /// breached wall counts: the hex stays taken.
     /// </summary>
     HexOccupiedByEndgameSite,
+
+    /// <summary>A raze was ordered on a hex with no building (nothing stands there, or only a level-0 foundation).</summary>
+    NoBuildingOnHex,
+
+    /// <summary>A raze was ordered on the Longhouse, which can never be razed.</summary>
+    LonghouseCannotBeRazed,
 }
 
 /// <summary>The outcome of asking to build something.</summary>

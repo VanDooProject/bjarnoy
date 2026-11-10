@@ -50,7 +50,7 @@ export function gamePathContext(
     hexesPerHour,
     restrictions: mergeRestrictions(
       palisadeRestrictions(world.standingPalisadeWalls?.() ?? new Map(), terrainAt, isWideRiver, ownerKey ?? '', friendOwners),
-      bridgeRestrictions(world.standingBridges?.() ?? new Map(), terrainAt, rules, ownerKey ?? '', friendOwners),
+      bridgeRestrictions(world.standingBridges?.() ?? new Map(), ownerKey ?? '', friendOwners),
     ),
   };
 }

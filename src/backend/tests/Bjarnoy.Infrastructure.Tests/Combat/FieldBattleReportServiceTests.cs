@@ -102,4 +102,33 @@ public sealed class FieldBattleReportServiceTests : IDisposable
         Assert.Equal(newer.Id, results[0].Id);
         Assert.Equal(older.Id, results[1].Id);
     }
+
+    [Fact]
+    public async Task GetSideNamesAsync_names_both_sides_and_skips_a_settlement_that_is_gone()
+    {
+        var world = new WorldEntity { Name = "Test", MaxPlayers = 100 };
+        var user = new UserEntity { UserName = "u", NormalizedUserName = "U", PasswordHash = "hash" };
+        var island = new IslandEntity
+        {
+            WorldId = world.Id, Index = 0, Name = "Isle", CentreQ = 0, CentreR = 0, StartPositions = [new HexPoint(0, 0)],
+        };
+        SettlementEntity Settle(string name, string owner, int centreQ) => new()
+        {
+            WorldId = world.Id, IslandId = island.Id, Name = name, OwnerName = owner,
+            OwnerId = user.Id.ToString(), UserId = user.Id, CentreQ = centreQ, CentreR = 0,
+        };
+        var alpha = Settle("Alpha", "Ann", 0);
+        var beta = Settle("Beta", "Ben", 5);
+        _dbContext.AddRange(world, user, island, alpha, beta);
+        var report = MakeReport(alpha.Id, beta.Id);
+        var orphan = MakeReport(alpha.Id, Guid.NewGuid());
+        _dbContext.FieldBattleReports.AddRange(report, orphan);
+        await _dbContext.SaveChangesAsync(Ct);
+
+        var names = await new FieldBattleReportService(_dbContext).GetSideNamesAsync([report, orphan], Ct);
+
+        Assert.Equal(new FieldBattleSideName("Alpha", "Ann"), names[alpha.Id]);
+        Assert.Equal(new FieldBattleSideName("Beta", "Ben"), names[beta.Id]);
+        Assert.Equal(2, names.Count);
+    }
 }

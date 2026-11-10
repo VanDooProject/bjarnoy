@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [vue(), waterDryMasksPlugin()],
   test: {
     environment: 'node',
-    setupFiles: ['./src/test/atlasManifestsSetup.ts'],
+    setupFiles: ['./src/test/atlasManifestsSetup.ts', './src/test/placementRulesSetup.ts'],
     include: ['src/**/*.test.ts', '../../scripts/worldgen-preview/*.test.ts'],
   },
 });

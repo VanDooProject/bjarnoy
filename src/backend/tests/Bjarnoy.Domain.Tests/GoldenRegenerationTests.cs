@@ -347,10 +347,10 @@ public class GoldenRegenerationTests
                 .ThenBy(c => c.Island.TileCount).ThenBy(c => c.Seed).First()),
             // The docs Utgard example (src/frontend/src/lib/docs/utgardIslandExample.json is a copy of this scenario): a real, mid-sized
             // island with both wall lines, three or more towers (one of them between the two lines), a lava stream, preferably a shore end.
-            ("docs_utgard_example", candidates.Where(IsDocsUtgardExample)
-                .OrderByDescending(c => c.Island.UtgardWalls.Any(w => w.Piece == Palisades.PalisadePiece.EndCoast))
-                .ThenBy(c => c.Island.TileCount).ThenBy(c => c.Seed).FirstOrDefault()
-                ?? throw new InvalidOperationException("no island fits the docs Utgard example in seeds 1-40")),
+            // Pinned to world seed 9, island 69, the island the docs page was drawn on: the camp density rules move the camps and
+            // so the towers of every wasted island, and with them which island this filter picks.
+            ("docs_utgard_example", candidates.Where(c => c.Seed == 9 && c.Island.Index == 69 && IsDocsUtgardExample(c)).FirstOrDefault()
+                ?? throw new InvalidOperationException("the pinned docs Utgard example island (seed 9, island 69) no longer fits")),
         };
 
         var options = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };

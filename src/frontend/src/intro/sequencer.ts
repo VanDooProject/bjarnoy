@@ -18,6 +18,8 @@ export interface IntroState {
   seq: number;
   /** Landing: the hold has run its shortest time and the tiles are not loaded yet, so the playhead waits at its end. */
   waiting: boolean;
+  /** The sequencer was closed: nothing moves any more, so the host stops its playhead loop. */
+  closed: boolean;
 }
 
 export interface IntroClock {
@@ -123,6 +125,7 @@ export class IntroSequencer {
       offsetMs: this.entryOffset,
       seq: this.seq,
       waiting,
+      closed: this.closed,
     };
   }
 
@@ -227,10 +230,12 @@ export class IntroSequencer {
     if (wasPaused) this.pause();
   }
 
-  /** Stops for good, at once: no timer fires and no state is emitted afterwards. */
+  /** Stops for good, at once: no timer fires; the one state emitted afterwards is the final one with `closed: true`. */
   close(): void {
-    this.closed = true;
+    if (this.closed) return;
     this.clear();
+    this.closed = true;
+    this.opts.onChange({ ...this.state });
   }
 
   dispose(): void {

@@ -136,7 +136,7 @@
       },
       "production": {
         "title": "Resource production",
-        "description": "Where wood, stone, food and iron come from, and how mills raise them."
+        "description": "Where wood, brick, food and iron come from, and how mills raise them."
       },
       "shrines": {
         "title": "Shrines",
@@ -262,27 +262,27 @@
       "pumpkinfarm": "A second harvest for grass — pumpkins alongside the plain fields, yielding more than Farm. Only buildable on a Pumpkin-soil island (the game picks each island's soil, not the player) — the bonus crop a \"more fertile\" island unlocks.",
       "shrineofthor": "Raised to Thor on grass, behind a level-5 Smithy — the war god's favour raises the attack of your land units (+10% at level 1, +22% at level 5). A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
       "shrineoffreyja": "Raised to Freyja on grass — its favour boosts Food production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
-      "shrineofullr": "Raised to Ullr on grass — its favour boosts Wood production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
+      "shrineofullr": "Raised to Ullr in the forest — its favour boosts Wood production. A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
       "shrineofnjord": "Raised to Njörd on coastal water, behind a level-10 Dockyard — the sea god's favour raises the attack of your ships (+10% at level 1, +22% at level 5). A settlement holds only one shrine in total, of any god, and each god has at most one shrine on an island.",
-      "archeryrange": "Trains the land army's bowmen on grass or sand.",
+      "archeryrange": "Trains the land army's bowmen on grass.",
       "dockyard": "Trains ships on shallow (coastal) water.",
       "greatstorehouse": "A late-game storage tier on grass, needing both the longhouse and this settlement's own storage house at level 15.",
-      "barracks": "Trains the land army's core line on grass or sand at the border — thralls, spearmen, axemen and berserkers. Archery Range trains the bowmen and the Siege Workshop the siege engines; they never train the same unit.",
+      "barracks": "Trains the land army's core line on grass at the border — thralls, spearmen, axemen and berserkers. Archery Range trains the bowmen and the Siege Workshop the siege engines; they never train the same unit.",
       "sawmill": "Refines timber standing directly on a straight, gentle-bend, or tight-bend river tile — a waterwheel turning with the current, same as Crop Mill's. No Wood of its own: it boosts every Lumberjack within its level's range instead (a wider range and a bigger boost at higher levels).",
       "meadery": "Keeps bees on grass behind a level-5 Farm — skeps, a honey press and a mead cellar. No effect of its own yet: the mead is meant for a future morale boost.",
       "townsquare": "The village's own market square on grass — no effect of its own yet, but a future prerequisite or boost.",
       "cropmill": "Grinds a level-10 Farm's grain on a straight river tile — a millstone under the open sky, its waterwheel turning with the current. No Food of its own: it boosts every Farm within its level's range instead (a wider range and a bigger boost at higher levels) — not Pumpkin Farm, a different crop a mill doesn't grind.",
-      "smithy": "The settlement's forge, with an anvil, on grass or sand behind a level-10 Barracks — the military line's capstone and the feeder of the Shrine of Thor. It produces nothing: it is where troops will be upgraded, a mechanic still to come.",
-      "druidhut": "A turf-roofed roundhouse on grass behind a Town Square, with a ring of runestones — no effect of its own yet, but meant for a future favour or rune mechanic.",
+      "smithy": "The settlement's forge, with an anvil, on grass behind a level-10 Barracks — the military line's capstone and the feeder of the Shrine of Thor. It produces nothing: it is where troops will be upgraded, a mechanic still to come.",
+      "druidhut": "A turf-roofed roundhouse in the forest behind a Town Square, with a ring of runestones — no effect of its own yet, but meant for a future favour or rune mechanic.",
       "cartworkshop": "Builds the settlement's carts on grass behind a Town Square — trains provisioners and settlers. No storage of its own.",
-      "claybrickworks": "Digs and fires clay on bog moss — a pit, a drying rack and a kiln turning red earth into stone where no mountain stands.",
+      "claybrickworks": "Digs and fires clay on bog moss — a pit, a drying rack and a kiln turning red earth into bricks where no mountain stands.",
       "bogoreworks": "The iron producer, on plain bog moss (not a shore, creek or lake), behind a level-3 Clay Brickworks: from a few diggings in the seeps to a bloomery smelting the ore. Every bog, creek or lake hex next to it adds 10% to its output, up to +50%.",
       "hammerschmiede": "A water-powered hammer mill on a bog creek, behind a level-10 bog-ore works. No iron of its own: it raises every bog-ore works within its level's range instead (a wider range and a bigger boost at higher levels)."
     },
     "table": {
       "level": "Level",
       "wood": "Wood",
-      "stone": "Stone",
+      "stone": "Brick",
       "food": "Food",
       "iron": "Iron",
       "buildTime": "Build time",
@@ -290,10 +290,22 @@
       "storage": "Storage",
       "requiresLonghouse": "Requires longhouse",
       "unitWood": "w",
-      "unitStone": "s",
+      "unitStone": "b",
       "unitFood": "f",
       "unitIron": "i",
       "storagePrefix": "+"
+    },
+    "razing": {
+      "title": "Razing",
+      "intro": "You can raze your own buildings, one level at a time.",
+      "oneLevel": "Each raze order takes off one level. To clear a whole building, raze it level by level.",
+      "time": "Razing a level takes three quarters of the time it took to build that level, and it needs the same number of construction slots. Like a build, it waits in the queue when no slot is free.",
+      "refund": "When it finishes, you get a third of that level's cost back, as much as your storage can hold.",
+      "works": "The building keeps working until the raze is done.",
+      "cancel": "Cancelling a raze costs nothing, and the building stays as it is.",
+      "longhouse": "The {longhouse} can't be razed.",
+      "gone": "At level 0 the hex is free again, and any training queued there is refunded.",
+      "oneOrder": "A hex takes one order at a time."
     }
   },
   "tiles": {
@@ -440,7 +452,7 @@
         "assault": "Send an army to assault a watchtower or Utgard. The jötnar you kill stay dead; the garrison only regrows slowly, so a guild can wear it down over several attacks.",
         "grace": "A watchtower with no jötnar left is taken: it goes quiet and stays empty for 1 hour, then the garrison starts to regrow.",
         "holding": "An army standing on a site holds it. Every hour the jötnar that regrew come out and fight it in a full battle. While the army wins, the site stays down.",
-        "loot": "A holding army takes loot every hour (300 at a watchtower, 1,000 at Utgard: 40% iron, 30% food, 30% stone) until its carry capacity is full. What it cannot carry is lost.",
+        "loot": "A holding army takes loot every hour (300 at a watchtower, 1,000 at Utgard: 40% iron, 30% food, 30% brick) until its carry capacity is full. What it cannot carry is lost.",
         "aggression": "Sites with jötnar ambush armies that come into their guard range and burn player towers inside it unless an army defends them. After a fight a site is calm for 1 hour.",
         "walls": "Utgard stands inside one or two rings of walls, if the island has room. They bend with the land instead of running in a circle: the inner ring at level 2, the outer one at level 1. They block land armies, and their gates never open for players.",
         "breaching": "Walls are breached by an Attack with rams that names the wall: only rams damage a wall, one level per won strike. At level 0 the wall is breached and armies can pass. Utgard's walls have no settlement to attack, so they are assaulted directly.",
@@ -588,7 +600,7 @@
     "loot": {
       "label": "Loot",
       "food": "Food",
-      "stone": "Stone",
+      "stone": "Brick",
       "wood": "Wood",
       "iron": "Iron",
       "more": "{kind} ++",
@@ -755,7 +767,7 @@
       },
       "claybrickworks": {
         "name": "Clay Brickworks",
-        "body": "Clay dug from the bog and fired into bricks: a new player's first source of stone. It stands on plain bog moss instead of grass."
+        "body": "Clay dug from the bog and fired into bricks: a new player's first source of bricks. It stands on plain bog moss instead of grass."
       }
     },
     "rules": {
@@ -808,7 +820,7 @@
   },
   "walls": {
     "title": "Walls",
-    "intro": "The palisade is the earth-and-timber wall of the Viking age, and above all a movement barrier: it stops land armies, not boats. It unlocks at Longhouse 7, behind a level-5 Tower, and has 3 levels. Each wall hex costs about 40 wood and 10 stone at level 1.",
+    "intro": "The palisade is the earth-and-timber wall of the Viking age, and above all a movement barrier: it stops land armies, not boats. It unlocks at Longhouse 7, behind a level-5 Tower, and has 3 levels. Each wall hex costs about 40 wood and 10 brick at level 1.",
     "stage": "Stage",
     "camera": "Facing",
     "stages": {
@@ -925,7 +937,7 @@
   },
   "production": {
     "title": "Resource production",
-    "intro": "Where wood, stone, food and iron come from, and how mills raise them.",
+    "intro": "Where wood, brick, food and iron come from, and how mills raise them.",
     "toc": {
       "producers": "Producers",
       "boost": "Neighbour boost",
@@ -951,7 +963,7 @@
         "claybrickworks": "Plain bog moss only",
         "bogoreworks": "Plain bog moss only, not shore, creek or lake"
       },
-      "longhouse": "The Longhouse is the exception: it adds the same fixed amount every level ({amounts} an hour: wood / stone / food / iron) instead of growing by 20%.",
+      "longhouse": "The Longhouse is the exception: it adds the same fixed amount every level ({amounts} an hour: wood / brick / food / iron) instead of growing by 20%.",
       "soil": "Every island has either wheat or pumpkin soil, about half of them each. A {pumpkin} fits only pumpkin soil and makes {pumpkinRate} food at level 1 where a {farm} makes {farmRate}; a {farm} fits any island."
     },
     "boost": {
@@ -1075,10 +1087,10 @@
       },
       "nth": "Settlement no. {n}",
       "when": "The renown is checked when the settlers set out.",
-      "feasts": "A feast at the {square} earns renown on top of that. It runs {hours} hours, costs the same amount of wood, stone and food, and grows with the square's level.",
+      "feasts": "A feast at the {square} earns renown on top of that. It runs {hours} hours, costs the same amount of wood, brick and food, and grows with the square's level.",
       "feast": {
         "level": "Town Square level",
-        "cost": "Cost (each of wood, stone, food)",
+        "cost": "Cost (each of wood, brick, food)",
         "renown": "Renown gained"
       }
     },
@@ -1091,7 +1103,7 @@
     },
     "new": {
       "heading": "A new settlement",
-      "body": "It starts with a level 1 {longhouse}. Its claim reaches {claim1} hexes, {claim2} from level 2, and its stores hold {stock} each of wood, stone and food, and no iron.",
+      "body": "It starts with a level 1 {longhouse}. Its claim reaches {claim1} hexes, {claim2} from level 2, and its stores hold {stock} each of wood, brick and food, and no iron.",
       "garrison": "Every unit that travelled with the settlers, other than the settlers themselves, stays as its garrison."
     },
     "adminNote": {
@@ -1100,7 +1112,7 @@
   },
   "realm": {
     "title": "Extending the realm",
-    "intro": "The ground you hold is your realm, drawn on the map with a gold border. The longhouse claims the first rings round itself; beyond them your realm only grows through towers at its border.",
+    "intro": "The ground you hold is your realm, drawn on the map with a blue border. Other realms show their own colour: green for members of your guild, purple for guilds at peace with yours, red for everyone else. Where two realms meet, you see both borders side by side. The longhouse claims the first rings round itself; beyond them your realm only grows through towers at its border.",
     "claim": {
       "heading": "Your longhouse's claim",
       "body": "The {longhouse} claims every hex up to {level1} hexes away from it at level 1, and up to {level2} hexes from level 2 on. That is as far as it reaches: higher longhouse levels do not move the border any further.",
@@ -1118,7 +1130,7 @@
     },
     "example": {
       "heading": "An example",
-      "alt": "An example island with the longhouse near its middle, the gold border round the ground it claims, and the towers that push the border out.",
+      "alt": "An example island with the longhouse near its middle, the blue border round the ground it claims, and the towers that push the border out.",
       "step": "Step",
       "steps": {
         "1": "Step 1: a level-2 longhouse on its own. Its claim reaches 3 hexes out, and that is where the border stops.",
@@ -1161,6 +1173,7 @@
       "pace": "Pace",
       "food": "Food",
       "road": "On the road",
+      "sendOut": "Sending armies out",
       "sight": "Sight",
       "bridges": "Bridges"
     },
@@ -1173,7 +1186,7 @@
       "columns": {
         "step": "#",
         "hex": "Hex",
-        "time": "Time"
+        "time": "Time on the hex"
       },
       "names": {
         "settlement": "Settlement",
@@ -1188,7 +1201,7 @@
     },
     "cost": {
       "heading": "What a hex costs",
-      "body": "Every hex an army enters has a cost set by its ground. An army needs the cost divided by its speed, in hours, to cross the hex, so a hex of cost 2 takes twice as long as grass.",
+      "body": "Every hex has a cost set by its ground. An army needs the cost divided by its speed, in hours, to cross the hex, so a hex of cost 2 takes twice as long as grass. A step to the next hex is paid half for the hex you leave and half for the hex you enter, so your army always moves at the speed of the ground it is on.",
       "summary": "Grass is the quickest ground. Sand and forest slow an army down a little, bog a lot. A stream can be waded, but it costs far more than any ground. A wide river only opens over a bridge, and mountains, lakes and the sea cannot be entered at all.",
       "columns": {
         "ground": "Ground",
@@ -1234,9 +1247,17 @@
       "enemies": "Hostile armies that meet on the road fight a field battle. Armies of the same owner or guild never fight each other.",
       "orders": "Every order has one destination for free. Waypoints along the way are a premium feature."
     },
+    "sendOut": {
+      "heading": "Sending an army that is already out",
+      "orders": "Tap Send army here, Attack, Support or Hunt on a hex and pick the army to send: your garrison or an army that is already out. A standing army can move, attack, support or hunt. An army still on the march can be redirected with Premium. While you pick, tap another hex to aim at that one instead.",
+      "split": "You can send only part of a standing army. The rest keeps standing where it is. An army on the march always goes whole.",
+      "reach": "An army only goes if it can get there and still has the food for the way home. The ones that cannot stay in the list, greyed out, with the reason.",
+      "support": "An army that is supporting another settlement has to be recalled first."
+    },
     "sight": {
       "heading": "What an army sees",
-      "body": "A travelling army uncovers {rings} rings of the map around it, plus {bonus} more for each level of the {odin}."
+      "body": "How far a travelling army sees depends on who is in it: it sees as far as its best-sighted unit, plus {bonus} more rings for each level of the {odin}. Thralls see 3 rings, most troops 2, siege engines only 1. A fleet sees furthest: 6 rings with a Karve, 4 with a Longship.",
+      "others": "You also see other players' troops that march inside your sight, in their owner's colour, as they move. You do not see where they are going or what they carry."
     },
     "bridges": {
       "heading": "Bridges over wide rivers",
@@ -1252,12 +1273,11 @@
         "kings": "King's bridge",
         "guarded": "Guarded bridge"
       },
-      "groundCost": "as the ground under it",
       "everyone": "Every army, its owner’s included",
       "friends": "Its owner’s armies and their friends’: the same guild, or a guild at peace with it. Every other army is stopped as if there were no bridge.",
       "rules": {
         "where": "A bridge fits on a straight or bending wide river hex, whatever ground lies under it. It does not fit on a spring, a fork or a mouth, on a stream (armies wade streams anyway) or on a wasted island.",
-        "site": "A building site does not open the river. Only a finished bridge, level 1 or more, counts. Each level makes the crossing quicker, up to the king’s bridge, where armies cross as fast as over the ground itself.",
+        "site": "A building site does not open the river. Only a finished bridge, level 1 or more, counts. Each level makes the crossing quicker, up to the king’s bridge, which armies cross a little slower than grass, whatever ground lies under the river.",
         "guarded": "The guarded bridge works like a wall gate: it lets through its owner’s armies and their friends’ and stops everyone else. Outside its owner's realm it has no function and is open to every army.",
         "siege": "Catapults can burn a bridge down (rams cannot), one level per won siege, however many catapults survive. A guarded bridge therefore falls to the king’s bridge first and is then open to everyone, attackers included. A causeway burnt down once is gone, and the river is shut again.",
         "walls": "A bridge does not change walls: a wall that runs up to a wide river is sealed there, with or without a bridge. See {walls}.",

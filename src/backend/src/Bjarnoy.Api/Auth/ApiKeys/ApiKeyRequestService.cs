@@ -45,6 +45,9 @@ public sealed record ApiKeyRequestResult(
     IReadOnlyDictionary<string, string[]>? Errors = null,
     string? Message = null);
 
+/// <summary>A name resolved to a registered account, or to an anonymous player (by one of their settlements).</summary>
+public sealed record ResolvedAccount(Guid? UserId, Guid? AnonymousSettlementId);
+
 /// <summary>The cleaned-up input of a new key request, from <c>CreateApiKeyRequestRequest</c>.</summary>
 public sealed record NewApiKeyRequest(
     string? Name,
@@ -56,7 +59,8 @@ public sealed record NewApiKeyRequest(
     bool AllWorlds,
     IReadOnlyList<Guid>? WorldIds,
     int LifetimeMinutes,
-    int? RequestsPerMinute);
+    int? RequestsPerMinute,
+    IReadOnlyList<string>? AdditionalUserNames = null);
 
 /// <summary>Admin overrides applied when approving; any null keeps what the request asked for.</summary>
 public sealed record ApprovalOverrides(
@@ -66,7 +70,10 @@ public sealed record ApprovalOverrides(
     IReadOnlyList<Guid>? WorldIds,
     int? LifetimeMinutes,
     int? RequestsPerMinute,
-    int? AutoRenewMinutes);
+    int? AutoRenewMinutes,
+    IReadOnlyList<Guid>? AdditionalUserIds = null,
+    IReadOnlyList<AnonymousAccountGrant>? AnonymousAccounts = null,
+    bool? OwnerCanAct = null);
 
 /// <summary>
 /// The device-flow style request lifecycle for API keys: an agent asks anonymously, an admin approves or denies with
@@ -116,6 +123,17 @@ public sealed class ApiKeyRequestService(
         RequireText(errors, "purpose", input.Purpose, 500, required: false);
         RequireText(errors, "description", input.Description, 1000, required: false);
         RequireText(errors, "ownerUserName", input.OwnerUserName, 100, required: false);
+        var additionalNames = (input.AdditionalUserNames ?? [])
+            .Select(n => n?.Trim() ?? string.Empty)
+            .Where(n => n.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (additionalNames.Count > ApiKeyService.MaxAdditionalAccounts || additionalNames.Any(n => n.Length > 100))
+        {
+            errors["additionalUserNames"] =
+                [$"At most {ApiKeyService.MaxAdditionalAccounts} names of at most 100 characters each."];
+        }
+
         ValidateContextUrl(errors, input.ContextUrl);
 
         var featureErrors = ApiKeyService.ValidateFeatures(features);
@@ -187,6 +205,7 @@ public sealed class ApiKeyRequestService(
             Description = Clean(input.Description),
             ContextUrl = Clean(input.ContextUrl),
             RequestedOwnerUserName = Clean(input.OwnerUserName),
+            RequestedAdditionalUserNames = additionalNames,
             Features = features,
             AllWorlds = input.AllWorlds,
             WorldIds = worldIds,
@@ -223,7 +242,10 @@ public sealed class ApiKeyRequestService(
         CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
-        var key = await dbContext.ApiKeys.AsNoTracking().FirstOrDefaultAsync(k => k.Id == apiKeyId, cancellationToken);
+        var key = await dbContext.ApiKeys.AsNoTracking()
+            .Include(k => k.Accounts)
+            .Include(k => k.AnonymousAccounts)
+            .FirstOrDefaultAsync(k => k.Id == apiKeyId, cancellationToken);
         if (key is null || key.GetStatus(now) != ApiKeyStatus.Active)
         {
             return new ApiKeyRequestResult(ApiKeyRequestOutcome.NotFound);
@@ -287,6 +309,9 @@ public sealed class ApiKeyRequestService(
             LifetimeMinutes = lifetime,
             RenewsApiKeyId = key.Id,
             OwnerUserId = key.OwnerUserId,
+            ApprovedAdditionalUserIds = [.. key.Accounts.Select(a => a.UserId)],
+            ApprovedAnonymousAccounts = [.. key.AnonymousAccounts.Select(a => new AnonymousAccountGrant(a.OwnerId, a.Label, a.IsPrimary, a.SourceSettlementId))],
+            ApprovedOwnerCanAct = key.OwnerCanAct,
             AutoRenewUntil = key.AutoRenewUntil,
             RequesterIp = requesterIp,
             RequesterUserAgent = TrimUserAgent(userAgent),
@@ -370,7 +395,10 @@ public sealed class ApiKeyRequestService(
             request.ApprovedWorldIds,
             expiresAt,
             request.ApprovedRequestsPerMinute ?? request.RequestsPerMinute,
-            request.AutoRenewUntil);
+            request.AutoRenewUntil,
+            request.ApprovedAdditionalUserIds,
+            request.ApprovedAnonymousAccounts,
+            request.ApprovedOwnerCanAct);
         var validation = await keyService.ValidateAsync(settings, request.RenewsApiKeyId, cancellationToken);
         if (!validation.IsValid)
         {
@@ -472,16 +500,44 @@ public sealed class ApiKeyRequestService(
         }
 
         var ownerId = overrides.OwnerUserId ?? request.OwnerUserId;
+        Guid? ownerAnonymousSettlementId = null;
         if (ownerId is null && !string.IsNullOrWhiteSpace(request.RequestedOwnerUserName))
         {
-            var normalised = request.RequestedOwnerUserName.Trim().ToLowerInvariant();
-            ownerId = await dbContext.Users.AsNoTracking()
-                .Where(u => u.NormalizedUserName == normalised && !u.IsSystem)
-                .Select(u => (Guid?)u.Id)
-                .FirstOrDefaultAsync(cancellationToken);
+            var resolved = await ResolveAccountAsync(request.RequestedOwnerUserName, cancellationToken);
+            ownerId = resolved?.UserId;
+            ownerAnonymousSettlementId = resolved?.AnonymousSettlementId;
         }
 
         ownerId ??= adminUserId;
+
+        // Extra accounts: the admin's list; else (a renewal) the key's own, kept on the request at filing; else the
+        // user names the agent hinted, where they exist.
+        List<Guid> additional;
+        var hintedAnonymous = new List<Guid>();
+        if (overrides.AdditionalUserIds is not null)
+        {
+            additional = [.. overrides.AdditionalUserIds];
+        }
+        else if (request.Kind == ApiKeyRequestKind.Renewal)
+        {
+            additional = [.. request.ApprovedAdditionalUserIds];
+        }
+        else
+        {
+            additional = [];
+            foreach (var name in request.RequestedAdditionalUserNames)
+            {
+                var resolved = await ResolveAccountAsync(name, cancellationToken);
+                if (resolved?.UserId is { } id && id != ownerId && !additional.Contains(id))
+                {
+                    additional.Add(id);
+                }
+                else if (resolved?.AnonymousSettlementId is { } settlementId && !hintedAnonymous.Contains(settlementId))
+                {
+                    hintedAnonymous.Add(settlementId);
+                }
+            }
+        }
 
         var features = overrides.Features is null
             ? new Dictionary<string, ApiKeyAccess>(request.Features)
@@ -498,9 +554,38 @@ public sealed class ApiKeyRequestService(
             int minutes => now + TimeSpan.FromMinutes(minutes),
         };
 
+        // Anonymous identities: the admin's list; else a renewal keeps the key's own (kept on the request at filing).
+        // A hinted jarl without an account becomes an anonymous account; when it is the requested owner the key acts as
+        // it by default and the approving admin is only the sponsor.
+        List<AnonymousAccountGrant> anonymous;
+        if (overrides.AnonymousAccounts is not null)
+        {
+            anonymous = [.. overrides.AnonymousAccounts];
+        }
+        else if (request.Kind == ApiKeyRequestKind.Renewal)
+        {
+            anonymous = [.. request.ApprovedAnonymousAccounts];
+        }
+        else
+        {
+            var inputs = new List<AnonymousAccountInput>();
+            if (ownerAnonymousSettlementId is { } ownerSettlement)
+            {
+                inputs.Add(new AnonymousAccountInput(null, ownerSettlement, Primary: true));
+            }
+
+            inputs.AddRange(hintedAnonymous.Select(id => new AnonymousAccountInput(null, id)));
+            anonymous = (await keyService.ResolveAnonymousAsync(inputs, [], cancellationToken)).Grants;
+        }
+
+        var ownerCanAct = overrides.OwnerCanAct
+            ?? (request.Kind == ApiKeyRequestKind.Renewal
+                ? request.ApprovedOwnerCanAct
+                : ownerAnonymousSettlementId is null || overrides.OwnerUserId is not null);
+
         var settings = new ApiKeySettings(
             request.Name, request.Purpose, ownerId.Value, features, allWorlds, worldIds,
-            now + TimeSpan.FromMinutes(Math.Max(lifetime, 0)), rpm, autoRenewUntil);
+            now + TimeSpan.FromMinutes(Math.Max(lifetime, 0)), rpm, autoRenewUntil, additional, anonymous, ownerCanAct);
         var validation = await keyService.ValidateAsync(settings, request.RenewsApiKeyId, cancellationToken);
         var errors = new Dictionary<string, string[]>(validation.Errors);
         if (lifetime < 1)
@@ -522,6 +607,9 @@ public sealed class ApiKeyRequestService(
         request.DecidedAt = now;
         request.DecidedByUserId = adminUserId;
         request.OwnerUserId = ownerId;
+        request.ApprovedAdditionalUserIds = additional;
+        request.ApprovedAnonymousAccounts = anonymous;
+        request.ApprovedOwnerCanAct = ownerCanAct;
         request.ApprovedFeatures = features;
         request.ApprovedAllWorlds = allWorlds;
         request.ApprovedWorldIds = worldIds;
@@ -600,9 +688,11 @@ public sealed class ApiKeyRequestService(
             .OfType<Guid>()
             .Distinct()
             .ToList();
-        var names = await dbContext.Users.AsNoTracking()
+        userIds.AddRange(requests.SelectMany(r => r.ApprovedAdditionalUserIds));
+        var users = await dbContext.Users.AsNoTracking()
             .Where(u => userIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, u => u.UserName, cancellationToken);
+            .ToDictionaryAsync(u => u.Id, cancellationToken);
+        var names = users.ToDictionary(kv => kv.Key, kv => kv.Value.UserName);
         var now = timeProvider.GetUtcNow();
 
         return
@@ -622,6 +712,7 @@ public sealed class ApiKeyRequestService(
                 r.RequestsPerMinute,
                 r.LifetimeMinutes,
                 r.RequestedOwnerUserName,
+                [.. r.RequestedAdditionalUserNames],
                 r.RenewsApiKeyId,
                 r.RequesterIp,
                 r.RequesterUserAgent,
@@ -641,12 +732,60 @@ public sealed class ApiKeyRequestService(
                         [.. r.ApprovedWorldIds],
                         r.ApprovedRequestsPerMinute ?? r.RequestsPerMinute,
                         r.ApprovedLifetimeMinutes ?? r.LifetimeMinutes,
-                        r.AutoRenewUntil)
+                        r.AutoRenewUntil,
+                        [.. r.ApprovedAdditionalUserIds
+                            .Where(users.ContainsKey)
+                            .Select(id => new ApiKeyAccountResponse(
+                                id, users[id].UserName, users[id].Role.ToString().ToLowerInvariant()))],
+                        r.ApprovedOwnerCanAct,
+                        [.. r.ApprovedAnonymousAccounts.Select(a => new ApprovedAnonymousAccountResponse(a.SourceSettlementId, a.Label, a.IsPrimary))])
                     : null)),
         ];
     }
 
     // ---- helpers ----
+
+    /// <summary>
+    /// Turns a name an agent gave into an account: an exact user name, else the one jarl or settlement name that matches
+    /// exactly (the nickname a player sees in the game, like <c>Jarl-a741</c>), counting registered accounts and anonymous
+    /// players together. Null when nothing matches, or when several do (an ambiguous name is never guessed).
+    /// </summary>
+    private async Task<ResolvedAccount?> ResolveAccountAsync(string name, CancellationToken cancellationToken)
+    {
+        var normalised = name.Trim().ToLowerInvariant();
+        var byUserName = await dbContext.Users.AsNoTracking()
+            .Where(u => u.NormalizedUserName == normalised && !u.IsSystem)
+            .Select(u => (Guid?)u.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (byUserName is not null)
+        {
+            return new ResolvedAccount(byUserName, null);
+        }
+
+        var hits = await dbContext.Settlements.AsNoTracking()
+            .Where(s => s.OwnerName.ToLower() == normalised || s.Name.ToLower() == normalised)
+            .OrderBy(s => s.Id)
+            .Select(s => new { s.Id, s.UserId, s.OwnerId })
+            .Take(50)
+            .ToListAsync(cancellationToken);
+        var systemIds = await dbContext.Users.AsNoTracking()
+            .Where(u => u.IsSystem)
+            .Select(u => u.Id)
+            .ToListAsync(cancellationToken);
+        var identities = hits
+            .Where(h => h.UserId == SystemUserIds.Abandoned || !systemIds.Contains(h.UserId))
+            .GroupBy(h => h.UserId == SystemUserIds.Abandoned ? "anon:" + h.OwnerId : "user:" + h.UserId)
+            .ToList();
+        if (identities.Count != 1)
+        {
+            return null;
+        }
+
+        var first = identities[0].First();
+        return first.UserId == SystemUserIds.Abandoned
+            ? new ResolvedAccount(null, first.Id)
+            : new ResolvedAccount(first.UserId, null);
+    }
 
     private async Task<string> NewUserCodeAsync(CancellationToken cancellationToken)
     {

@@ -121,7 +121,7 @@ public class FleetDepartureTests
         var settlement = Found(InlandHome);
 
         Assert.Equal(InlandHome, Army.FleetAnchor(settlement, Strait));
-        Assert.Equal(DispatchRejection.UnreachableLeg, Move(settlement, new HexCoord(6, 0)).Rejection);
+        Assert.Equal(DispatchRejection.NoSeaRoute, Move(settlement, new HexCoord(6, 0)).Rejection);
     }
 
     [Fact]
@@ -184,7 +184,7 @@ public class FleetDepartureTests
         var path = new[] { Dock, new HexCoord(4, 0), new HexCoord(5, 0), new HexCoord(6, 0) };
         var returnPath = path.Reverse().ToArray();
         var hours = new[] { 0.0, 1, 2, 3 };
-        var movement = Bjarnoy.Domain.Movement.Movement.Create(T0, path, hours, returnPath, hours, 100, 1);
+        var movement = Bjarnoy.Domain.Movement.Movement.Create(T0, path, hours, hours, returnPath, hours, hours, 100, 1);
         var convoy = new Army
         {
             Id = Guid.CreateVersion7(),
@@ -226,7 +226,7 @@ public class FleetDepartureTests
         var path = new[] { Dock, new HexCoord(4, 0), new HexCoord(5, 0), new HexCoord(6, 0), new HexCoord(7, 0), new HexCoord(8, 0), CoastalTarget };
         var returnPath = path.Reverse().ToArray();
         var hours = Enumerable.Range(0, path.Length).Select(i => (double)i).ToArray();
-        var movement = Bjarnoy.Domain.Movement.Movement.Create(T0, path, hours, returnPath, hours, 100, 1);
+        var movement = Bjarnoy.Domain.Movement.Movement.Create(T0, path, hours, hours, returnPath, hours, hours, 100, 1);
         var convoy = new Army
         {
             Id = Guid.CreateVersion7(),

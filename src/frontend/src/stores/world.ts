@@ -16,6 +16,7 @@ import type {
   TrainingOrderResponse,
   FeastOfferResponse,
   FeastResponse,
+  ForeignArmyResponse,
   QuestResponse,
   RenownResponse,
   UnitStackResponse,
@@ -32,7 +33,12 @@ import {
   buildFieldOrderRequest,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
+  isFieldOrderMidMarch,
+  isHuntUnit,
 } from '../lib/units/armyDispatch';
+import { isWaterCampFamily } from '../lib/map/campPlacement';
+import { useUnitCatalogueStore } from './unitCatalogue';
+import { stackCounts } from '../lib/units/fieldOrderFeasibility';
 import { DemoTradeError, WorldModel } from '../lib/map/WorldModel';
 import { evaluateDemoQuests, questBit } from '../lib/quests';
 import { useConnectionStatusStore } from './connectionStatus';
@@ -57,7 +63,7 @@ import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator'
 import type { PalisadePiece } from '../lib/map/palisadeTiles';
 import type { CartShipment, ResourceKind, Resources, Settlement, Tile, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
-import { isPendingOrder, makePendingOrder } from '../lib/hud/pendingBuild';
+import { isPendingOrder, makePendingOrder, nextUpgradeLevel } from '../lib/hud/pendingBuild';
 
 // How often live mode re-polls a settlement to pick up build-queue
 // completions and rate changes it didn't cause itself (see
@@ -299,6 +305,9 @@ export const useWorldStore = defineStore('world', {
     // often than the owner's own army list does. Always empty in demo mode.
     guestArmies: [] as GuestArmySummary[],
     guestArmiesFetchedAt: 0,
+    // Other players' marching armies inside our sight (`GET /worlds/{id}/foreign-armies`), refetched with `armies`. Drawn as
+    // markers in their owner's colour, never selectable; always empty in demo mode.
+    foreignArmies: [] as ForeignArmyResponse[],
     // The army currently shown selected in ArmyPanel.vue — its live route is
     // drawn on the map (HexMapRenderer.setArmyOverlay) while selected. Not a
     // computed getter: selection persists across `refreshArmies` polls by id.
@@ -348,6 +357,24 @@ export const useWorldStore = defineStore('world', {
       route: AxialCoord[];
       submitting: boolean;
       error: string | null;
+      // What the order is for. The ArmyPanel "Move on"/"Append goal" flow is a plain 'move'; the send picker (`sendPicker`) also
+      // sends a field army to attack, support or hunt. An attack/support names its target settlement and its route only holds
+      // waypoints (the server derives the destination); a move/hunt route ends on the destination (a hunt's: the camp's hex).
+      mission: 'move' | 'attack' | 'support' | 'hunt';
+      targetSettlementId: string | null;
+      // A fleet's attack must name the shore building it sails to, a land attack may prefer one for its siege engines.
+      targetBuildingCoord: AxialCoord | null;
+      // The units that leave: a standing army can be split. `null` sends the whole army (always, for one still marching).
+      units: Record<string, number> | null;
+    } | null,
+    // The "Send army here" / Attack / Support / Hunt source picker (SendArmyPicker.vue): which target the player tapped in the ring
+    // menu and which source (`'home'` or a field army's id) is selected. Selecting a field army composes its order in
+    // `fieldOrderDraft`; selecting home hands over to a dispatch draft, which closes the picker. `null` while no picker is open.
+    sendPicker: null as {
+      mission: 'move' | 'attack' | 'support' | 'hunt';
+      coord: AxialCoord;
+      targetSettlementId: string | null;
+      selectedId: string | null;
     } | null,
     // The target settlement's own placed buildings, fetched on demand once an
     // Attack dispatch's target is chosen (issue #40 phase 5) — this is what
@@ -385,7 +412,7 @@ export const useWorldStore = defineStore('world', {
     // `bootstrapLiveWorld` runs again anyway.
     worldName: null as string | null,
     // The founding/restoring browser's stable local id (`usePlayerStore().id`),
-    // remembered here once known so `queueBuildLive`/`trainUnitsLive` can send
+    // remembered here once known so `queueBuildOptimistic`/`trainUnitsLive` can send
     // it as the `X-Owner-Id` header the backend's ownership check reads for an
     // anonymous (unclaimed) settlement — see SettlementOwnershipEndpointFilter
     // and docs/codebase-gap-analysis.md. Unused in demo mode.
@@ -532,7 +559,7 @@ export const useWorldStore = defineStore('world', {
       this.model.setWastedRevealed(world.endbossTriggered);
       this.model.setFrozenEnabled(world.frozenIslesEnabled);
       try {
-        this.islands = await api.getIslands(world.id);
+        this.islands = await api.getIslands(world.id, this.callerOwnerId());
       } catch (err) {
         if (!isWorldNotFound(err)) throw err;
         // The world resolved a moment ago (getWorld/newestWorld, just above)
@@ -825,24 +852,7 @@ export const useWorldStore = defineStore('world', {
       }
     },
     /**
-     * Live mode: queues a building against the backend rather than placing
-     * it locally and instantly (`WorldModel.placeBuilding`). The building
-     * only appears once its build order completes and the next poll
-     * (`refreshLiveSettlement`) picks it up — matching how the backend's
-     * build queue actually works (docs/tech/backend.md, "Everything is
-     * lazy"). Throws `ApiError` on rejection (e.g. not enough resources, or
-     * 403 if `this.ownerId` doesn't match the settlement's owner — see
-     * SettlementOwnershipEndpointFilter); callers decide how to surface that.
-     */
-    async queueBuildLive(building: string, at: AxialCoord) {
-      if (!this.selectedSettlementId) throw new Error('No settlement selected');
-      await api.queueBuild(
-        this.selectedSettlementId, { building, q: at.q, r: at.r }, this.ownerId ?? undefined,
-      );
-      await this.refreshLiveSettlement();
-    },
-    /**
-     * W3: `queueBuildLive` with an optimistic client-only order. A pending
+     * W3: queues a new building with an optimistic client-only order. A pending
      * entry goes into `hud.queue` first, so the construction dial on `at`
      * shows "…" at once, then the request runs and a refresh replaces the
      * pending entry with the real order (or, on a refusal, the entry is
@@ -851,27 +861,67 @@ export const useWorldStore = defineStore('world', {
      * `refreshLiveSettlement`). With `cost`, a confirmed build also records
      * `hud.lastSpend` for the resource bar's tick-down, limited to the
      * resources whose stock really dropped (a reserved, waiting order does
-     * not spend yet).
+     * not spend yet). Throws `ApiError` on rejection (e.g. not enough
+     * resources, or 403 if `this.ownerId` doesn't match the settlement's
+     * owner, see SettlementOwnershipEndpointFilter).
      */
     async queueBuildOptimistic(building: string, at: AxialCoord, cost?: Partial<Resources>) {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
-      const pending = makePendingOrder(building, at);
+      await this.queueOrderOptimistic(
+        makePendingOrder(building, at),
+        () => api.queueBuild(this.selectedSettlementId!, { building, q: at.q, r: at.r }, this.ownerId ?? undefined),
+        cost,
+      );
+    },
+    /**
+     * Upgrades the building on `at` by one level: the same optimistic pending order as `queueBuildOptimistic` (targeting
+     * the next level), so the hex shows its "…" dial at once and a refusal removes it again. With `cost`, a confirmed
+     * upgrade records the spend the same way. Throws `ApiError` on rejection.
+     */
+    async upgradeBuildingLive(at: AxialCoord, cost?: Partial<Resources>) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      const placed = this.hud.buildings.find((b) => b.q === at.q && b.r === at.r);
+      if (!placed) throw new Error('No building on that hex');
+      await this.queueOrderOptimistic(
+        makePendingOrder(placed.type, at, 'build', nextUpgradeLevel(placed.level, this.hud.queue, at)),
+        () => api.queueBuild(this.selectedSettlementId!, { building: placed.type, q: at.q, r: at.r }, this.ownerId ?? undefined),
+        cost,
+      );
+    },
+    /**
+     * Razes one level of the building on `at` (docs/design/construction-slots.md, "Razing"): the same optimistic pending order
+     * as `queueBuildOptimistic`, so the hex shows its "…" dial at once and a refusal removes it again. A raze costs nothing,
+     * so no spend is recorded. Throws `ApiError` on rejection.
+     */
+    async razeBuildingLive(at: AxialCoord) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      const placed = this.hud.buildings.find((b) => b.q === at.q && b.r === at.r);
+      if (!placed) throw new Error('No building on that hex');
+      await this.queueOrderOptimistic(
+        makePendingOrder(placed.type, at, 'raze', Math.max(0, placed.level - 1)),
+        () => api.razeBuilding(this.selectedSettlementId!, { q: at.q, r: at.r }, this.ownerId ?? undefined),
+      );
+    },
+    /**
+     * The optimistic round trip shared by builds and razes: `pending` goes into `hud.queue`, `send` runs, a refusal removes it
+     * again and rethrows, a confirmation refreshes (the refresh swaps in the real order) and then drops the stand-in. With
+     * `cost`, a confirmation records the spend for the resources whose stock really dropped.
+     */
+    async queueOrderOptimistic(pending: BuildOrderResponse, send: () => Promise<unknown>, cost?: Partial<Resources>) {
       const before = { ...this.hud.resources };
       this.hud.queue = [...this.hud.queue, pending];
       try {
-        await api.queueBuild(
-          this.selectedSettlementId, { building, q: at.q, r: at.r }, this.ownerId ?? undefined,
-        );
+        await send();
       } catch (err) {
         this.hud.queue = this.hud.queue.filter((o) => o.id !== pending.id);
         throw err;
       }
       // Confirmed. The refresh swaps the pending entry for the real order; a
-      // failed refresh must not read as a refused build, the poll catches up.
+      // failed refresh must not read as a refused order, the poll catches up.
       try {
         await this.refreshLiveSettlement();
       } catch (err) {
-        console.warn('Refresh after a confirmed build failed; the next poll will catch up', err);
+        console.warn('Refresh after a confirmed order failed; the next poll will catch up', err);
       } finally {
         this.hud.queue = this.hud.queue.filter((o) => o.id !== pending.id);
       }
@@ -902,7 +952,7 @@ export const useWorldStore = defineStore('world', {
     },
     /**
      * Live mode: queues a training batch against the backend, charging its
-     * cost immediately — mirrors `queueBuildLive` above, including the
+     * cost immediately — mirrors `queueBuildOptimistic` above, including the
      * ownership header. The building at `at` trains it (`split: 'here'`) or the
      * order is spread over every building of its type. Throws `ApiError` on
      * rejection (e.g. not enough resources, that building's parts full,
@@ -1028,7 +1078,7 @@ export const useWorldStore = defineStore('world', {
      * then refreshes the settlement so the boosted rate and the rune's new
      * `slottedAtQ`/`slottedAtR` show immediately. Throws `ApiError` on
      * rejection (e.g. no shrine there, or its slots are full); callers
-     * decide how to surface that — mirrors `queueBuildLive`.
+     * decide how to surface that — mirrors `queueBuildOptimistic`.
      */
     async slotRuneLive(runeId: string, at: AxialCoord) {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
@@ -1244,10 +1294,12 @@ export const useWorldStore = defineStore('world', {
       this.armies = [];
       this.armiesFetchedAt = 0;
       this.guestArmies = [];
+      this.foreignArmies = [];
       this.guestArmiesFetchedAt = 0;
       this.selectedArmyId = null;
       this.dispatchDraft = null;
       this.fieldOrderDraft = null;
+      this.sendPicker = null;
       this.dispatchTargetBuildings = null;
       this.dispatchTargetBuildingsFor = null;
       this.dispatchTargetBuildingsError = false;
@@ -1337,19 +1389,22 @@ export const useWorldStore = defineStore('world', {
           foundedAt: Date.now(),
           realmId: summary.realmId,
           islandId: summary.islandId,
+          relation: summary.relation === 'guild' || summary.relation === 'treaty' ? summary.relation : undefined,
+          labelAt: { q: summary.labelQ, r: summary.labelR },
         });
       }
     },
     async refreshWorldSettlements() {
       if (DEMO_MODE || !this.worldId) return;
-      // Rival walls ride the same cadence: the settlement list is data-only, so this is the only way the client learns where another
-      // player's palisades stand (to draw them, offer Siege on them and route around them). A failed walls read keeps the last set.
-      const [summaries, walls] = await Promise.all([
+      // Rival buildings ride the same cadence: the settlement list is data-only, so this is the only way the client learns which
+      // buildings of another player stand on explored ground (to draw them, offer Siege on their walls and route around them).
+      // A failed read keeps the last set.
+      const [summaries, rivalBuildings] = await Promise.all([
         api.listSettlements(this.worldId, this.ownerId ?? undefined),
-        api.listWalls(this.worldId, this.ownerId ?? undefined).catch(() => null),
+        api.listRivalBuildings(this.worldId, this.ownerId ?? undefined).catch(() => null),
       ]);
       this.registerSettlementSummaries(summaries);
-      if (walls) this.model.applyRivalWalls(walls);
+      if (rivalBuildings) this.model.applyRivalBuildings(rivalBuildings);
       if (this.worldMapActive) {
         this.model.claimAllTerritory();
       } else {
@@ -1437,6 +1492,15 @@ export const useWorldStore = defineStore('world', {
       }
     },
     /**
+     * The id that identifies the caller to the server when no settlement is loaded yet: `ownerId` once a realm is
+     * restored, joined or founded, else this browser's own player id (`stores/player.ts`). An account-less player is
+     * known to the server by that id alone (`X-Owner-Id`), and the landing page bootstraps the world before any
+     * `ownerId` is set; a read without it gets none of the camps (`GET /worlds/{id}/islands` and `/camps`).
+     */
+    callerOwnerId(): string {
+      return this.ownerId ?? usePlayerStore().id;
+    },
+    /**
      * Pulls this settlement's armies (and, issue #40 phase 4, the guest
      * armies currently supporting it) from the backend in the same tick — one
      * poll interval (`ARMY_POLL_MS`) covers both rather than a third
@@ -1455,7 +1519,7 @@ export const useWorldStore = defineStore('world', {
     async refreshCampStates() {
       if (DEMO_MODE || !this.worldId) return;
       try {
-        const states = await api.getWorldCamps(this.worldId);
+        const states = await api.getWorldCamps(this.worldId, this.callerOwnerId());
         const added = this.model.setCamps(
           states.map((state) => ({
             family: state.family,
@@ -1468,6 +1532,18 @@ export const useWorldStore = defineStore('world', {
         if (added || updated) this.campStatesVersion += 1;
       } catch (err) {
         console.warn('camp states refresh failed', err);
+      }
+    },
+    /**
+     * Live mode: fetches the other players' armies marching inside our sight (`GET /worlds/{id}/foreign-armies`). Never throws: a failed
+     * fetch leaves the previous list. A no-op in demo mode.
+     */
+    async refreshForeignArmies() {
+      if (DEMO_MODE || !this.worldId) return;
+      try {
+        this.foreignArmies = await api.getForeignArmies(this.worldId, this.callerOwnerId());
+      } catch (err) {
+        console.warn('foreign armies refresh failed', err);
       }
     },
     async refreshArmies() {
@@ -1487,6 +1563,7 @@ export const useWorldStore = defineStore('world', {
       this.guestArmiesFetchedAt = Date.now();
       // Hunts, ambushes and regrowth change camps; piggy-back the camp refresh on the army poll.
       await this.refreshCampStates();
+      await this.refreshForeignArmies();
       // An army that arrived home (and was folded back/deleted — see the
       // `armies` state comment) simply stops appearing in the list; drop a
       // selection that's no longer valid rather than leaving the map overlay
@@ -1522,10 +1599,143 @@ export const useWorldStore = defineStore('world', {
      */
     startFieldOrder(armyId: string) {
       this.dispatchDraft = null;
-      this.fieldOrderDraft = { armyId, route: [], submitting: false, error: null };
+      this.sendPicker = null;
+      this.fieldOrderDraft = {
+        armyId,
+        route: [],
+        submitting: false,
+        error: null,
+        mission: 'move',
+        targetSettlementId: null,
+        targetBuildingCoord: null,
+        units: null,
+      };
     },
     cancelFieldOrder() {
       this.fieldOrderDraft = null;
+    },
+    /**
+     * The ring's army bubbles (Send army here, Attack, Support, Hunt) open the source picker aimed at the tapped target: `coord` is
+     * the hex (a settlement's own for Attack/Support, the camp's for Hunt). Any draft in progress is dropped first, the picker
+     * and the click-to-plot flows share the canvas.
+     */
+    openSendPicker(
+      coord: AxialCoord,
+      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string } = {},
+    ) {
+      this.dispatchDraft = null;
+      this.fieldOrderDraft = null;
+      this.sendPicker = {
+        mission: opts.mission ?? 'move',
+        coord: { q: coord.q, r: coord.r },
+        targetSettlementId: opts.targetSettlementId ?? null,
+        selectedId: null,
+      };
+    },
+    /**
+     * A tap on the map while the picker is open aims it at that hex instead: the mission and target settlement are the tapped
+     * hex's own (the caller picks them like the ring's bubble would). `keepSelected` (the caller knows whether the selected army
+     * can go to the new target) keeps that army and re-composes its order for the new target with the units the player had
+     * picked; otherwise the selection and its order are dropped.
+     */
+    retargetSendPicker(
+      coord: AxialCoord,
+      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string } = {},
+      keepSelected = true,
+    ) {
+      const picker = this.sendPicker;
+      if (!picker) return;
+      picker.mission = opts.mission ?? 'move';
+      picker.coord = { q: coord.q, r: coord.r };
+      picker.targetSettlementId = opts.targetSettlementId ?? null;
+      const id = picker.selectedId;
+      if (!id) return;
+      if (!keepSelected) {
+        this.selectSendSource(null);
+        return;
+      }
+      const units = this.fieldOrderDraft?.armyId === id ? this.fieldOrderDraft.units : null;
+      this.selectSendSource(id);
+      const draft = this.fieldOrderDraft;
+      if (units && draft?.units) {
+        draft.units = { ...units };
+        if (picker.mission === 'hunt') this.dropNonHuntUnits();
+      }
+    },
+    /** Closes the picker and drops the field order it was composing. */
+    closeSendPicker() {
+      this.sendPicker = null;
+      this.fieldOrderDraft = null;
+    },
+    /**
+     * Picks a source in the open picker: `null` unselects, `'home'` hands over to the dispatch flow for the home garrison (the
+     * picker closes, the dispatch draft is prefilled with the same mission and target the ring used to start), a field army's id
+     * composes its order in `fieldOrderDraft` — a standing army with every unit selected (the player trims it to split), a
+     * marching one whole.
+     */
+    selectSendSource(id: string | null) {
+      const picker = this.sendPicker;
+      if (!picker) return;
+      if (id === null) {
+        picker.selectedId = null;
+        this.fieldOrderDraft = null;
+        return;
+      }
+      if (id === 'home') {
+        this.sendPicker = null;
+        this.fieldOrderDraft = null;
+        this.startDispatchAt(
+          picker.coord,
+          picker.mission === 'move'
+            ? {}
+            : picker.mission === 'hunt'
+              ? { mission: 'hunt' }
+              : { mission: picker.mission, targetSettlementId: picker.targetSettlementId ?? undefined },
+        );
+        return;
+      }
+      const army = this.armies.find((a) => a.id === id);
+      if (!army) return;
+      picker.selectedId = id;
+      const standing = !isFieldOrderMidMarch(army, Date.now());
+      this.fieldOrderDraft = {
+        armyId: id,
+        route: picker.mission === 'move' || picker.mission === 'hunt' ? [{ q: picker.coord.q, r: picker.coord.r }] : [],
+        submitting: false,
+        error: null,
+        mission: picker.mission,
+        targetSettlementId: picker.targetSettlementId,
+        targetBuildingCoord: null,
+        units: standing ? stackCounts(army.stacks) : null,
+      };
+      if (picker.mission === 'hunt') this.dropNonHuntUnits();
+      if (picker.mission === 'attack' && picker.targetSettlementId) void this.loadDispatchTargetBuildings(picker.targetSettlementId);
+    },
+    /**
+     * A hunt takes land units against a land camp, and against a camp at sea the ships and their passengers: the units of the
+     * other class in the picker's field order are unselected.
+     */
+    dropNonHuntUnits() {
+      const draft = this.fieldOrderDraft;
+      const picker = this.sendPicker;
+      if (!draft?.units || !picker) return;
+      const camp = this.model.campAt(picker.coord);
+      const atSea = !!camp && isWaterCampFamily(camp.family);
+      const byType = useUnitCatalogueStore().byType;
+      for (const unit of Object.keys(draft.units)) if (!isHuntUnit(unit, byType, atSea)) draft.units[unit] = 0;
+    },
+    /** Sets how many of one unit of the selected field army leave (a standing army's split), clamped to what the army holds. */
+    setFieldOrderUnitCount(unit: string, count: number) {
+      const draft = this.fieldOrderDraft;
+      const army = draft ? this.armies.find((a) => a.id === draft.armyId) : undefined;
+      if (!draft?.units || !army) return;
+      const max = army.stacks.find((s) => s.unit === unit)?.count ?? 0;
+      draft.units[unit] = Math.min(max, Math.max(0, Math.floor(count)));
+    },
+    /** The preferred or required target building of whichever order is being composed (dispatch from home, or a field order). */
+    setActiveTargetBuilding(coord: { q: number; r: number } | null) {
+      if (this.dispatchDraft) this.setDispatchTargetBuilding(coord);
+      else if (this.fieldOrderDraft) this.fieldOrderDraft.targetBuildingCoord = coord;
     },
     /**
      * A standing army's first click is the free "move on" destination — the
@@ -1572,9 +1782,23 @@ export const useWorldStore = defineStore('world', {
     async confirmFieldOrder() {
       const draft = this.fieldOrderDraft;
       if (!draft) return;
-      const request = buildFieldOrderRequest(draft.route);
+      const army = this.armies.find((a) => a.id === draft.armyId);
+      // Every unit selected is the whole army: leave `units` out, so a stale stack count can never turn it into a split.
+      const whole = !draft.units || !army || army.stacks.every((s) => (draft.units![s.unit] ?? 0) >= s.count);
+      const request = buildFieldOrderRequest(draft.route, {
+        mission: draft.mission,
+        targetSettlementId: draft.targetSettlementId,
+        targetBuildingCoord: draft.targetBuildingCoord,
+        units: whole ? null : draft.units,
+      });
       if (!request) {
-        draft.error = i18n.global.t('common.errors.clickMapForDestination');
+        if (draft.units && Object.values(draft.units).every((c) => c <= 0)) {
+          draft.error = i18n.global.t('common.errors.selectAtLeastOneUnit');
+        } else if ((draft.mission === 'attack' || draft.mission === 'support') && !draft.targetSettlementId) {
+          draft.error = i18n.global.t('common.errors.chooseSettlementFor', { mission: draft.mission });
+        } else {
+          draft.error = i18n.global.t('common.errors.clickMapForDestination');
+        }
         return;
       }
       draft.submitting = true;
@@ -1582,6 +1806,7 @@ export const useWorldStore = defineStore('world', {
       try {
         await api.fieldOrderArmy(draft.armyId, request, this.ownerId ?? undefined);
         this.fieldOrderDraft = null;
+        this.sendPicker = null;
         await this.refreshArmies();
       } catch (err) {
         draft.error = apiErrorMessage(err, i18n.global.t('common.errors.fieldOrderFailed'));
@@ -1835,7 +2060,11 @@ export const useWorldStore = defineStore('world', {
       this.hud.claimedHexes = this.model.claimedHexCount(settlement.id);
       if (DEMO_MODE) {
         this.hud.quests = evaluateDemoQuests(
-          { level: settlement.level, counts: this.model.countPlacedBuildingsByType(settlement.id) },
+          {
+            level: settlement.level,
+            counts: this.model.countPlacedBuildingsByType(settlement.id),
+            towerLevel: this.model.highestBuildingLevel(settlement.id, 'tower'),
+          },
           this.demoClaimedQuests,
         );
       }

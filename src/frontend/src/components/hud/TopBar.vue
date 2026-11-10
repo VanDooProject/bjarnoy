@@ -79,6 +79,10 @@ const slots = useSlots();
 onMounted(() => { isHudBarMounted.value = true; });
 onBeforeUnmount(() => { isHudBarMounted.value = false; });
 
+/** Only the real settlement's name takes you back to it; a page that names itself via `title` has nothing to go back to. */
+const emit = defineEmits<{ (e: 'focus-home'): void }>();
+const nameTappable = computed(() => !props.title && !!world.hud.settlementName);
+
 const settlementName = computed(() => props.title || world.hud.settlementName || null);
 
 const islandName = computed(() => {
@@ -488,7 +492,8 @@ const backdropStyle = computed(() => {
         </svg>
       </span>
       <div class="titles" v-if="settlementName && !props.hideTitle">
-        <span class="name">{{ settlementName }}</span>
+        <button v-if="nameTappable" type="button" class="name name-btn" :title="t('hud.focusHome')" @click="emit('focus-home')">{{ settlementName }}</button>
+        <span v-else class="name">{{ settlementName }}</span>
         <span v-if="caption" class="caption">{{ caption }}</span>
       </div>
     </div>
@@ -562,7 +567,7 @@ const backdropStyle = computed(() => {
         <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" />
       </svg>
     </span>
-    <span class="bubble-name">{{ settlementName }}</span>
+    <button type="button" class="bubble-name name-btn" :title="t('hud.focusHome')" @click="emit('focus-home')">{{ settlementName }}</button>
     <span class="bubble-meta">{{ t('hud.realmPanel.levelHexesShort', { level: world.hud.level, count: claimedHexes }) }}</span>
   </div>
   <div
@@ -699,6 +704,16 @@ const backdropStyle = computed(() => {
   font-weight: 700;
   font-size: 17px;
   color: var(--text);
+}
+.name-btn {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
 }
 .caption {
   font-size: 11px;

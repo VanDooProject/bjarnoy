@@ -9,6 +9,9 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import PlayIntroButton from '../intro/PlayIntroButton.vue';
+import FeatureList from '../intro/FeatureList.vue';
+import ImpressumLink from '../intro/ImpressumLink.vue';
+import type { IntroLocale } from '../intro/introText';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
 import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
@@ -17,6 +20,7 @@ import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import ReturningPlayerMenu from '../components/hud/ReturningPlayerMenu.vue';
+import HudNavLink from '../components/hud/HudNavLink.vue';
 import MotionPrompt from '../components/onboarding/MotionPrompt.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import QueueDrawer from '../components/hud/QueueDrawer.vue';
@@ -32,10 +36,10 @@ import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
 import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
 import { useRingMaxScale } from '../composables/useRingMaxScale';
-import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount } from '../lib/map/buildingEconomy';
+import { buildingStatsAt, scaleOutput } from '../lib/map/buildingEconomy';
 import {
   deriveOnboardingGuidance,
-  findGuidedTarget,
+  guidedBuildTarget,
   guidedRingStep,
   nextGuidedType,
   snapToOfferedPlot,
@@ -62,7 +66,12 @@ import { isHudBarAtBottom, isHudRail } from '../composables/hudSettlementBubbleS
 import { HUD_COMPACT_QUERY, TOUCH_QUERY } from '../lib/breakpoints';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 
-const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, d, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+// The feature list and the Impressum link read the intro's own texts, which take a plain locale.
+// the game's name is not translated
+const WORDMARK = 'BJARNØY';
+const introLocale = computed<IntroLocale>(() => (String(locale.value).startsWith('de') ? 'de' : 'en'));
+const docsHref = computed(() => router.resolve('/docs').href);
 
 const world = useWorldStore();
 const player = usePlayerStore();
@@ -73,7 +82,7 @@ const router = useRouter();
 // (`player.lastAccount`, set by logging out — see stores/player.ts's
 // `forgetLocalIdentity`) but the visitor is currently anonymous and hasn't
 // founded anything on it yet. Shows ReturningLoginPanel in place of the
-// founding hero/guidance instead of silently letting them start a brand new
+// founding column/guidance instead of silently letting them start a brand new
 // throwaway realm on top of a real account they just logged out of.
 // `hasFoundedSettlement` still wins once true — an anonymous founding that
 // happened in the same tab (or session) before the visitor got around to
@@ -101,37 +110,22 @@ let invalidClickTimer: ReturnType<typeof setTimeout> | undefined;
 const PREVIEW_POLL_MS = 20000;
 let previewPollHandle: ReturnType<typeof setInterval> | undefined;
 
-// landing-page-defects.md L4 point 3: the pre-founding preview camera used
-// to bias right by a bare `0.16` template literal, with no traceable
-// relationship to the thing it was working around — the `.hero` copy block
-// (see this file's own <style> block below: `left: 56px; max-width: 520px`).
-// `screenBiasX` is already a *fraction of viewport width*, not a pixel
-// count (see HexMapRenderer's `biasedCenterX`/`previewFitZoom`), so its
-// value alone can't be read off the hero's pixel geometry directly without
-// picking some reference viewport width to divide by.
-//
-// A first attempt at this used 1920 (a common desktop width) as that
-// reference and landed within half a point of the original hand-tuned 0.16
-// — but that was the wrong choice, caught by a direct pixel comparison of
-// before/after screenshots at 1440x900 (scripts/screenshot-helpers/
-// flow.mjs's own capture size): since clearance in *pixels* past the hero
-// column scales with the actual viewport width for a fixed bias fraction,
-// picking a reference wider than the viewport actually being framed
-// under-shoots the real clearance needed — 0.16 left only ~515px clear at
-// 1440px wide, short of the ~600px the hero column's own box (576px) plus a
-// gutter needs. 1440 is used as the reference instead: the narrowest
-// viewport this framing is actually verified against, so the guarantee it
-// buys (the preview island's own worst-case crop, a full
-// WorldModel.PREVIEW_ISLAND_RADIUS disc, clearing the hero column and not
-// touching the right edge — see HexMapRenderer.test.ts's own regression
-// test for the exact numbers) holds at 1440 and only gets more comfortable
-// at any wider viewport, rather than being a hand-tuned constant re-derived
-// from an untested guess at "big enough".
-const HERO_REFERENCE_VIEWPORT_WIDTH_PX = 1440;
-const HERO_RIGHT_EDGE_PX = 56 + 520; // `.hero`'s own left + max-width, below
-const HERO_MIN_GUTTER_PX = 40; // breathing room past the hero's own edge before the island may start
+// The pre-founding preview camera biases right so the island clears the left
+// column (`.founding-col`, see this file's <style> block: `left: 64px; width:
+// 440px`). `screenBiasX` is a *fraction of viewport width* (see
+// HexMapRenderer's `biasedCenterX`/`previewFitZoom`), so it can only be read
+// off the column's pixel geometry against some reference viewport width.
+// 1440 is that reference: the narrowest viewport this framing is verified
+// against. For a fixed fraction the clearance in pixels grows with the
+// viewport, so the guarantee (the preview island's worst-case crop, a full
+// WorldModel.PREVIEW_ISLAND_RADIUS disc, clears the column and does not touch
+// the right edge, see HexMapRenderer.test.ts) holds at 1440 and only gets more
+// comfortable at any wider viewport.
+const COLUMN_REFERENCE_VIEWPORT_WIDTH_PX = 1440;
+const COLUMN_RIGHT_EDGE_PX = 64 + 440; // `.founding-col`'s own left + width, below
+const COLUMN_MIN_GUTTER_PX = 40; // breathing room past the column's edge before the island may start
 const LANDING_PREVIEW_SCREEN_BIAS_X =
-  (HERO_RIGHT_EDGE_PX + HERO_MIN_GUTTER_PX) / (2 * HERO_REFERENCE_VIEWPORT_WIDTH_PX);
+  (COLUMN_RIGHT_EDGE_PX + COLUMN_MIN_GUTTER_PX) / (2 * COLUMN_REFERENCE_VIEWPORT_WIDTH_PX);
 
 // L7 (landing-page-defects.md): the backend already has a settlement for
 // this owner that the browser doesn't know about — most often L6b (founding
@@ -239,7 +233,7 @@ const {
     }
     if (result.kind === 'noPlotAvailable') {
       // L7: every start position in the world is taken or held. There's
-      // nothing to preview or click — fall back to the `joinBlocked` hero
+      // nothing to preview or click — fall back to the `joinBlocked` column
       // (below) instead of a blank canvas.
       noPlotAvailable.value = true;
       return;
@@ -312,7 +306,7 @@ onUnmounted(() => {
 // every start position across every island is currently taken or held.
 // Distinct from the admin-set gates below (this is organic exhaustion, not a
 // world setting), but reads the same to a visitor: nothing to click, so it
-// folds into the same `joinBlocked` hero instead of leaving the canvas blank
+// folds into the same `joinBlocked` column instead of leaving the canvas blank
 // (`onMounted`/`refreshPreview` set this rather than a plain reload fixing
 // it, since a stale world can genuinely run out).
 const noPlotAvailable = ref(false);
@@ -391,7 +385,7 @@ const ringScreen = ref<RingPlacement | null>(null);
 const ringCoord = ref<AxialCoord | null>(null);
 const ringTile = ref<Tile | null>(null);
 const ringError = ref<string | null>(null);
-const { categories: ringCategories, canBuildHere, offersBuilding, placeBuildingDemo } = useBuildRing(ringTile, ringCoord);
+const { categories: ringCategories, buildAction, offersBuilding, placeBuildingDemo } = useBuildRing(ringTile, ringCoord);
 // Every ring bubble's screen spot (the Build hub, categories, buildings), keyed by id - from RingMenu's own
 // `layout` emit, so the pointer aims at exactly where the bubble is actually drawn.
 // Every bubble as a circle (RingMenu's `bubbles` emit): the spots the pointer aims at, and the circles it keeps clear of.
@@ -416,23 +410,25 @@ const isTouch = useMediaQuery(TOUCH_QUERY);
 // is unmounted entirely rather than merely hidden, so nothing else on
 // screen competes with the tutorial. It comes back the moment onboarding
 // finishes (`guidance.complete`), when the completion banner hands off to
-// the full game. Desktop, and the pre-founding hero/"I already have a
-// realm" bar, are unaffected — this only ever swaps the *founded*-branch
+// the full game. Desktop, and the pre-founding column/floating
+// "I already have a realm" menu, are unaffected — this only ever swaps the *founded*-branch
 // TopBar below.
 const hideBarForTutorial = computed(
   () => isCompactHudLanding.value && player.hasFoundedSettlement && !guidance.value.complete,
 );
-// The bar's *effective* edge (TopBar publishes it), not the raw preference:
-// the pre-founding bar has no drawer and always sits at the top, so a saved
-// 'bottom' preference must not move the intro text or overlays up under it.
+// The bar's *effective* edge (TopBar publishes it), not the raw preference.
 const hudBarAtBottomLanding = computed(() => isCompactHudLanding.value && isHudBarAtBottom.value);
 // While the bar is unmounted for the tutorial there is no bar height to
 // clear at all — `hudBarHeightPx` resets to its 64px *default* (not 0) when
 // TopBar unmounts (see its own onBeforeUnmount), so this can't just rely on
 // that ref alone without re-introducing a stale 64px gap under nothing.
-const hudInsetTopPxLanding = computed(() =>
-  hideBarForTutorial.value || hudBarAtBottomLanding.value ? 0 : hudBarHeightPx.value,
-);
+//
+// Before founding there is no bar at all (the floating top-right group is
+// small chrome, not a band), so nothing is reserved at the top then.
+const hudInsetTopPxLanding = computed(() => {
+  if (!player.hasFoundedSettlement) return 0;
+  return hideBarForTutorial.value || hudBarAtBottomLanding.value ? 0 : hudBarHeightPx.value;
+});
 // Landscape rail mode (TopBar.vue): no top band (hudBarHeightPx is 0 there),
 // the rail's width goes into `--hud-inset-left` instead.
 const hudInsetLeftPxLanding = computed(() =>
@@ -461,10 +457,9 @@ watch(isHudDrawerOpen, (open) => {
   if (open) queueDrawerOpen.value = false;
 });
 
-// Root of the ring: Build, offered only on a hex that takes something (the map's rule; no dead button).
-const ringActions = computed<RingAction[]>(() =>
-  canBuildHere.value ? [{ id: 'build', label: t('hud.ringMenu.actions.build') }] : [],
-);
+// Root of the ring: the map's own Build bubble (offered only on a hex that takes something; locked on a guarded camp, giant or
+// endgame site with the reason).
+const ringActions = computed<RingAction[]>(() => (buildAction.value ? [buildAction.value] : []));
 
 // The hub names the tile the menu is anchored to: its bare terrain plus the hex coordinate.
 const ringTerrainLabel = computed(() => (ringTile.value ? terrainName(ringTile.value.terrain) : ''));
@@ -534,25 +529,17 @@ function withinBuildableRange(coord: AxialCoord): boolean {
 
 // Design handoff "2a": the nearest still-buildable hex for whichever guided
 // building isn't placed yet — what the map pointer (frames 2/4, "Now build
-// here" / "One more — the {terrain}") aims at. `findGuidedTarget` itself is
-// pure (onboardingGuidance.ts); this just supplies it with this settlement's
-// centre/claim radius and a terrain/buildability lookup against the real
-// WorldModel, mirroring onHexClick's own buildable-tile rule above.
+// here" / "One more — the {terrain}") aims at. `guidedBuildTarget`
+// (onboardingGuidance.ts) holds the rule; this supplies this settlement's
+// centre/claim radius, the real WorldModel and the realm check.
 const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
   if (!player.hasFoundedSettlement || !world.selectedSettlementId) return null;
   const settlement = world.model.getSettlement(world.selectedSettlementId);
   if (!settlement) return null;
   const type = nextGuidedType(world.hud.placedBuildingTypes);
   if (!type) return null;
-  return findGuidedTarget(
-    { q: settlement.q, r: settlement.r },
-    claimRadiusForLevel(settlement.level),
-    type,
-    (c) => world.model.getTile(c.q, c.r).terrain,
-    (c) => {
-      const tile = world.model.getTile(c.q, c.r);
-      return world.isRealmSettlement(tile.ownerId) && !tile.buildingType;
-    },
+  return guidedBuildTarget(world.model, { q: settlement.q, r: settlement.r }, claimRadiusForLevel(settlement.level), type, (owner) =>
+    world.isRealmSettlement(owner),
   );
 });
 
@@ -574,10 +561,13 @@ const showLandfallBanner = computed(
 // and "Click this plot" over an empty canvas point at nothing.
 const mapDrawn = computed(() => (canvasRef.value?.loadState.phase ?? 'terrain') !== 'terrain');
 
-/** The open ring's next guided step, with its label; null when the next guided building isn't offered on this hex. */
+/**
+ * The open ring's next guided step, with its label; null when the next guided building isn't offered on this hex, or Build is
+ * locked there (a guarded camp, a giant, an endgame site): the pointer then goes back to the guided hex.
+ */
 function ringStepTarget(): { id: string; spot: { x: number; y: number }; label: string } | null {
   const type = nextGuidedType(world.hud.placedBuildingTypes);
-  if (!type) return null;
+  if (!type || buildAction.value?.disabled) return null;
   const step = guidedRingStep(type, ringCategories.value, ringLaneSpots.value);
   if (!step) return null;
   if (step.kind === 'building') {
@@ -594,7 +584,7 @@ const pointerNudge = ref(0);
 const pointerTarget = computed(() => {
   if (joinBlocked.value) return null;
   // Player logout/login gate: ReturningLoginPanel replaces the founding
-  // hero, so "click this plot" guidance pointing at a plot the gate is
+  // column, so "click this plot" guidance pointing at a plot the gate is
   // covering would be actively misleading.
   if (showReturningLoginGate.value) return null;
   const ringStep = ringScreen.value ? ringStepTarget() : null;
@@ -717,11 +707,9 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
 const resourceTicks = ref<ResourceTick[]>([]);
 let tickIdSeq = 0;
 function fireResourceTick(type: 'reindeerherder' | 'lumberjack', coord: AxialCoord) {
-  const boostTerrain = BOOST_TERRAIN[type];
-  const neighbours = boostTerrain
-    ? matchingNeighbourCount(coord, boostTerrain, (q, r) => world.model.getTile(q, r))
-    : 0;
-  const output = buildingStatsFor(type, 1, neighbours).output;
+  // The same output, at the world's speed, as the hover card shows for this building.
+  const stats = buildingStatsAt(type, 1, coord, (q, r) => world.model.getTile(q, r));
+  const output = stats.output && scaleOutput(stats.output, world.worldSpeedFactor);
   const screen = canvasRef.value?.renderer?.hexCenterScreen(coord);
   if (!screen || output?.kind !== 'resourceRate') return;
   resourceTicks.value.push({ id: ++tickIdSeq, resource: output.resource, amount: output.amount, ...screen });
@@ -808,7 +796,7 @@ async function foundHere(coord: AxialCoord) {
     // long while yet.)
     // The canvas was mounted in preview mode (no settlementId yet) — flip it
     // into a real settlement view in place, same camera, no remount. Also
-    // drops screenBiasX back to 0: the hero text (the only reason to bias
+    // drops screenBiasX back to 0: the left column (the only reason to bias
     // the village off-centre) is hidden the moment a settlement exists, so
     // the fogged view goes back to exactly SettlementView's own centred
     // zoomForFogMargin camera — otherwise the bias pushes one edge of the
@@ -923,6 +911,7 @@ watch(
 <template>
   <div
     class="landing"
+    :class="{ 'landing--pre': !player.hasFoundedSettlement }"
     :style="{
       '--hud-inset-top': hudInsetTopPxLanding + 'px',
       '--hud-inset-bottom': hudInsetBottomPxLanding + 'px',
@@ -946,7 +935,7 @@ watch(
       :screen-bias-x="isMobile ? 0 : LANDING_PREVIEW_SCREEN_BIAS_X"
       :lock-camera="!player.hasFoundedSettlement"
       hide-settlement-badge
-      background="radial-gradient(120% 100% at 68% 42%, #16414f 0%, #0d2530 55%, #0b1116 100%)"
+      background="radial-gradient(120% 100% at 68% 42%, #3b4148 0%, #262b30 55%, #15181b 100%)"
       @hex-click="onHexClick"
     />
     <!-- landing-page-defects.md L1: a visitor with no settlement yet gets a
@@ -979,70 +968,46 @@ watch(
         <MobileHudDrawer @close="close" />
       </template>
     </TopBar>
-    <!-- Finding #9: no `#drawer` slot here on purpose — this pre-founding
-         bar has no HudNav (see the comment above) and must not get a grip
-         or an empty drawer. TopBar.vue's own `hasDrawerSlot` (useSlots)
-         gates the whole grip/drag/drawer trio on a `#drawer` slot actually
-         being provided, not on `docked`/route context, so simply not
-         passing one here is enough.
-         Mobile tutorial focus: `v-else` alone would render THIS bar (the
-         pre-founding one, "Bjarnoy" + the returning-player menu) whenever the founded
-         branch's `v-if` above is false for ANY reason — including
-         `hideBarForTutorial`, which is exactly the state that must render no
-         bar at all. `v-else-if="!player.hasFoundedSettlement"` keeps this
-         branch scoped to its own original condition. -->
-    <TopBar v-else-if="!player.hasFoundedSettlement" title="Bjarnoy">
+    <!-- Before founding there is no header band: the floating group at the top right holds "How to play" and the
+         returning-player menu (log in, other worlds, settings, start page). No `#drawer`, no HudNav: nothing here
+         is a dead click for someone who has not founded anything (docs/design/zip-brainstorms.md:44). -->
+    <div v-if="!player.hasFoundedSettlement" class="topright">
+      <HudNavLink :href="docsHref" class="howto" data-testid="map-how-to-play" @navigate="router.push('/docs')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1z" />
+          <path d="M12 6v14" />
+        </svg>
+        {{ t('intro.howToPlay') }}
+      </HudNavLink>
       <ReturningPlayerMenu landing-entries>
         <!-- One-time offer to turn animations on when the device asks for reduced motion. -->
         <template #nudge><MotionPrompt /></template>
       </ReturningPlayerMenu>
-    </TopBar>
+    </div>
 
     <!-- Once a settlement exists, fog is on screen and the camera is
-         mid-transition — the hero copy would either sit unreadably over
+         mid-transition — the left column would either sit unreadably over
          moving mist or (once centred, no more screenBiasX) right behind
-         the village itself. The progress tray below already carries
+         the village itself. The progress stepper below already carries
          onboarding status, so it's the only thing left on screen. -->
-    <!-- Player logout/login gate: replaces the founding hero entirely while
+    <!-- Player logout/login gate: replaces the founding column entirely while
          this device remembers a real account that's currently logged out —
          see `showReturningLoginGate`'s own comment above. -->
     <ReturningLoginPanel v-if="showReturningLoginGate" />
-    <div v-else-if="!player.hasFoundedSettlement && joinBlocked" class="hero">
-      <div class="eyebrow">{{ t('landing.hero.eyebrow') }}</div>
-      <h1>{{ t('landing.hero.notOpenTitle') }}</h1>
-      <p class="lede">{{ joinBlockedMessage }}</p>
+    <div v-else-if="!player.hasFoundedSettlement" class="founding-col" :class="{ 'founding-col--blocked': joinBlocked }">
+      <h1 class="wordmark">{{ WORDMARK }}</h1>
+      <template v-if="joinBlocked">
+        <h2 class="heading">{{ t('landing.hero.notOpenTitle') }}</h2>
+        <p class="blocked-msg">{{ joinBlockedMessage }}</p>
+      </template>
+      <template v-else>
+        <h2 class="heading">{{ t('landing.hero.choose') }}</h2>
+        <p v-if="founding" class="status">{{ t('landing.hero.makingLandfall') }}</p>
+        <p v-else-if="invalidClickMessage" class="status">{{ invalidClickMessage }}</p>
+        <FeatureList class="features" :locale="introLocale" id-prefix="map" />
+      </template>
     </div>
-    <div v-else-if="!player.hasFoundedSettlement" class="hero hero--founding">
-      <div class="eyebrow">{{ t('landing.hero.eyebrow') }}</div>
-      <h1>{{ t('landing.hero.title') }}</h1>
-      <p class="lede">
-        {{ t('landing.hero.lede') }}
-      </p>
-      <!-- landing-page-defects.md L3: this used to render
-           `nearbyStartCoords.length` as "N plots free on this island" — a
-           number that was really `min(actually free, AlternativeCount + 1)`
-           (PlotReservationService.GetOrRefreshAsync capped `alternatives` at
-           `AlternativeCount`), and mostly pointed at hexes the locked
-           pre-founding preview crop never draws (its alternatives weren't
-           distance-ordered — now fixed in that same service). Dropped the
-           count entirely per the plan's preferred fix and restored the
-           mockup's own sub-line instead (docs/design/img/
-           but_building_on_map.png: "No account · Nothing to install ·
-           Leaves in one click"), moved out of the removed footer. -->
-      <p class="signup-facts">
-        <span class="plot-count-dot" />
-        <span>{{ t('landing.hero.noAccount') }}</span>
-        <!-- Decorative divider, not copy — a CSS-generated glyph (below)
-             rather than raw template text, so @intlify/vue-i18n/no-raw-text
-             (every visible string must come from i18n) doesn't flag it. -->
-        <span class="signup-facts-sep" aria-hidden="true"></span>
-        <span>{{ t('landing.hero.nothingToInstall') }}</span>
-        <span class="signup-facts-sep signup-facts-third" aria-hidden="true"></span>
-        <span class="signup-facts-third">{{ t('landing.hero.leavesInOneClick') }}</span>
-      </p>
-      <p v-if="founding" class="status">{{ t('landing.hero.makingLandfall') }}</p>
-      <p v-else-if="invalidClickMessage" class="status">{{ invalidClickMessage }}</p>
-    </div>
+    <ImpressumLink v-if="!player.hasFoundedSettlement" class="impressum" :locale="introLocale" testid="map-impressum" />
 
     <GuidancePointer
       v-if="pointerTarget && mapDrawn"
@@ -1055,7 +1020,7 @@ watch(
       :tip-gap="pointerTarget.tipGap"
       :scale="pointerTarget.scale"
       :avoid="pointerTarget.mode === 'screen' ? ringBubbles : undefined"
-      clear-below-selector=".hero--founding, [data-testid='onboarding-banner'].landfall"
+      clear-below-selector=".founding-col, [data-testid='onboarding-banner'].landfall"
       :nudge="pointerNudge"
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
@@ -1071,13 +1036,15 @@ watch(
          strip of screen near the bottom — the tray steps aside while the
          ring is open and reappears the moment it closes. Desktop has room
          for both at once and keeps showing it. -->
-    <OnboardingChecklist
-      v-if="!joinBlocked && !guidance.complete && !showReturningLoginGate && !(isCompactHudLanding && ringScreen)"
-      :guidance="guidance"
-      :has-founded="player.hasFoundedSettlement"
-      :can-focus="!!pointerTarget && mapDrawn"
-      @focus="pointerNudge++"
-    />
+    <!-- The stepper fades out when it goes; after the last step it stays a moment first so the finishing wave plays. -->
+    <Transition :name="guidance.complete ? 'steps-done' : 'steps'">
+      <OnboardingChecklist
+        v-if="!joinBlocked && !guidance.complete && !showReturningLoginGate && !(isCompactHudLanding && ringScreen)"
+        :guidance="guidance"
+        :can-focus="!!pointerTarget && mapDrawn"
+        @focus="pointerNudge++"
+      />
+    </Transition>
 
     <template v-if="player.hasFoundedSettlement">
       <QueueDrawer v-if="isMobile" v-model:open="queueDrawerOpen" @select="onQueueSelect" />
@@ -1121,143 +1088,223 @@ watch(
   height: 100dvh;
   overflow: hidden;
 }
-.hero {
+/* pre-founding page shell behind the canvas: the same neutral fog grey as the canvas background */
+.landing--pre {
+  background: #15181b;
+}
+
+/* top right: "How to play" left of the returning-player menu, vertically centred with its trigger */
+.topright {
   position: absolute;
-  left: 56px;
-  top: 30%;
-  max-width: 520px;
-  z-index: 5;
-  pointer-events: none;
-}
-.eyebrow {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--gold);
-}
-h1 {
-  margin: 18px 0 0;
-  font-size: clamp(32px, 4.5vw, 56px);
-  line-height: 1.05;
-  letter-spacing: -0.02em;
-  color: var(--text);
-}
-.lede {
-  margin: 18px 0 0;
-  font-size: 17px;
-  line-height: 1.5;
-  color: var(--muted);
-  max-width: 42ch;
-}
-.status {
-  margin-top: 14px;
-  font-size: 14px;
-  color: var(--gold);
-}
-.signup-facts {
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  z-index: 16;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 22px 0 0;
-  font-size: 14px;
+  gap: 18px;
+}
+.howto {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #f4f1ea;
+  font-size: 15px;
+  text-decoration: none;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
+}
+.howto:hover,
+.howto:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* left column: wordmark, heading, the three features. Desktop base. */
+.founding-col {
+  position: absolute;
+  left: 64px;
+  top: 18.75vh;
+  width: 440px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  pointer-events: none;
+}
+.wordmark {
+  margin: 0;
+  font-size: 58px;
+  font-weight: 300;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  color: #f4f1ea;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.8);
+}
+.heading {
+  margin: 14px 0 0;
+  font-size: 21px;
+  font-weight: 300;
+  color: #e6e1d6;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
+}
+.blocked-msg {
+  margin: 10px 0 0;
+  max-width: 42ch;
+  font-size: 15px;
+  line-height: 1.45;
   color: var(--muted);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
 }
-.plot-count-dot {
-  width: 12px;
-  height: 12px;
-  flex: none;
-  background: var(--gold);
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+.status {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--gold);
 }
-.signup-facts-sep::before {
-  content: '|';
-  color: var(--muted-2);
+.features {
+  margin-top: 26px;
+  padding-left: 22px;
+  border-left: 1px solid rgba(255, 195, 92, 0.25);
+  --fl-gap: 18px;
+  --fl-col-gap: 12px;
+  --fl-icon: 28px;
+  --fl-title: 16.5px;
+  --fl-text: 14px;
+  --fl-text-color: #a9bccb;
 }
-/* Mobile-readiness audit findings e/g: the hero's fixed `left: 56px` /
-   `top: 30%` / `max-width: 520px` column was
-   sized for the desktop side-by-side layout (hero column next to the
-   preview island). On a narrow screen there's no side-by-side room — the
-   hero has to span full-width below the mobile header instead of a fixed
-   left offset. */
-@media (max-width: 768px), (max-height: 500px) {
-  .hero {
-    left: 20px;
-    right: 20px;
-    /* Clears the demo-mode badge that tucks just under the bar. */
-    top: calc(var(--hud-inset-top, 64px) + 36px);
-    max-width: none;
+.features :deep(b),
+.features :deep(span) {
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+}
+.impressum {
+  position: absolute;
+  left: 24px;
+  bottom: 18px;
+  z-index: 5;
+  font-size: 13px;
+  --legal-color: #8d99a0;
+}
+
+/* portrait phones: wordmark centred near the top, features as titles in one row, Impressum centred at the bottom */
+@media (max-width: 640px) {
+  .founding-col {
+    left: 0;
+    right: 0;
+    top: 74px;
+    width: auto;
+    align-items: center;
+    text-align: center;
   }
-  h1 {
-    font-size: 28px;
+  .wordmark {
+    font-size: 38px;
+    text-indent: 0.18em;
+  }
+  .heading {
     margin-top: 8px;
+    font-size: 15px;
   }
-  .lede {
+  .blocked-msg {
+    margin-top: 8px;
+    padding: 0 24px;
     font-size: 14px;
+  }
+  .status {
     margin-top: 8px;
+    font-size: 13px;
   }
-  /* Minimal founding hero on phones: the eyebrow and the lede paragraph
-     pushed the copy down into the preview island (and, at 320px, under
-     the "click this plot" chip). The chip and the checklist tray already
-     say what to do, so a phone keeps just the title and the one-line
-     facts. The join-blocked hero keeps its lede — there it's the message. */
-  .hero--founding .eyebrow,
-  .hero--founding .lede {
-    display: none;
+  .features {
+    flex-direction: row;
+    justify-content: center;
+    margin-top: 12px;
+    padding-left: 0;
+    border-left: 0;
+    --fl-gap: 14px;
+    --fl-col-gap: 6px;
+    --fl-icon: 18px;
+    --fl-title: 13px;
+    --fl-align: center;
+    --fl-text-display: none;
   }
-  .hero--founding h1 {
-    font-size: 22px;
-    margin-top: 0;
-  }
-  .signup-facts {
-    font-size: 12px;
-    margin-top: 6px;
-    gap: 6px;
-  }
-  .hero--founding .signup-facts {
-    flex-wrap: nowrap;
-    white-space: nowrap;
-  }
-  /* The checklist tray (OnboardingChecklist's root, which carries this
-     view's scope attribute) docks at the bottom edge. */
-  .landing > .tray {
-    bottom: calc(12px + var(--hud-inset-bottom, 0px) + env(safe-area-inset-bottom, 0px));
+  .impressum {
+    left: 0;
+    right: 0;
+    bottom: 12px;
+    text-align: center;
+    font-size: 11.5px;
   }
 }
-/* The facts line stays on one row on phones; below 360px the third fact
-   no longer fits, so it drops rather than wrapping behind a dangling "|". */
-@media (max-width: 359px) {
-  .hero--founding .signup-facts-third {
-    display: none;
-  }
-}
-/* Short-landscape phones (finding b/g companion): the checklist tray is
-   docked bottom-right there (OnboardingChecklist.vue). */
+
+/* landscape phones: compact left column on a soft dark backdrop, links top right */
 @media (max-height: 500px) {
-  /* Short landscape phones get the same minimal founding hero, kept to a
-     narrow left column so it stays clear of the island on the right. */
-  .hero--founding {
-    left: 20px;
-    top: calc(var(--hud-inset-top, 64px) + 20px);
-    max-width: 280px;
+  .topright {
+    gap: 14px;
   }
-  .hero--founding .eyebrow,
-  .hero--founding .lede {
-    display: none;
+  .howto {
+    font-size: 14px;
   }
-  .hero--founding h1 {
-    font-size: 22px;
-    margin-top: 0;
+  .founding-col {
+    left: max(22px, env(safe-area-inset-left));
+    right: auto;
+    top: 20px;
+    width: 250px;
+    align-items: flex-start;
+    text-align: left;
   }
-  .hero--founding .signup-facts {
-    font-size: 12px;
+  .founding-col::before {
+    content: '';
+    position: absolute;
+    inset: -16px -22px;
+    z-index: -1;
+    background: radial-gradient(closest-side, rgba(20, 22, 24, 0.9), rgba(20, 22, 24, 0.6) 70%, transparent);
+  }
+  .wordmark {
+    font-size: 28px;
+    text-indent: 0;
+  }
+  .heading {
     margin-top: 6px;
-    gap: 6px;
-    /* The phone rules above keep the facts on one line; in this 280px
-       column that line would run out across the island instead. */
-    flex-wrap: wrap;
-    white-space: normal;
+    font-size: 13px;
   }
+  .blocked-msg {
+    margin-top: 6px;
+    padding: 0;
+    font-size: 12.5px;
+  }
+  .status {
+    margin-top: 6px;
+    font-size: 12px;
+  }
+  .features {
+    flex-direction: column;
+    justify-content: flex-start;
+    margin-top: 10px;
+    --fl-gap: 7px;
+    --fl-col-gap: 8px;
+    --fl-icon: 18px;
+    --fl-title: 13px;
+    --fl-text-display: none;
+  }
+  .impressum {
+    left: max(22px, env(safe-area-inset-left));
+    right: auto;
+    bottom: 10px;
+    text-align: left;
+    font-size: 11.5px;
+  }
+}
+
+/* the stepper's leave: a plain fade (150ms with reduced motion, see OnboardingChecklist); after the last step it waits for the finishing wave */
+.steps-leave-active,
+.steps-done-leave-active {
+  transition: opacity 300ms ease;
+}
+.steps-done-leave-active {
+  transition-delay: 1.3s;
+}
+.steps-leave-to,
+.steps-done-leave-to {
+  opacity: 0;
+}
+html[data-hud-motion='reduced'] .steps-leave-active,
+html[data-hud-motion='reduced'] .steps-done-leave-active {
+  transition: opacity 150ms ease;
 }
 </style>

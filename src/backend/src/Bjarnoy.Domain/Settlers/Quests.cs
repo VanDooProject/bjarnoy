@@ -12,10 +12,26 @@ namespace Bjarnoy.Domain.Settlers;
 /// <param name="Bit">The quest's bit in <see cref="Settlement.ClaimedQuests"/> — never renumber.</param>
 /// <param name="Reward">Wood, stone and food (no iron) paid on claim.</param>
 /// <param name="IsCompleted">Whether the (settled) settlement meets the quest's condition.</param>
-public sealed record Quest(string Id, int Bit, ResourceAmounts Reward, Func<Settlement, bool> IsCompleted)
+/// <param name="Progress">
+/// Where the settlement stands toward the quest as (current, target), or <see langword="null"/> for a quest
+/// without a counted goal. Current is clamped to the target but not below 0.
+/// </param>
+public sealed record Quest(
+    string Id,
+    int Bit,
+    ResourceAmounts Reward,
+    Func<Settlement, bool> IsCompleted,
+    Func<Settlement, QuestProgress>? Progress = null)
 {
     /// <summary>This quest's bit in the claimed mask.</summary>
     public int Mask => 1 << Bit;
+}
+
+/// <summary>How far a settlement is toward a quest's goal; <see cref="Current"/> never exceeds <see cref="Target"/>.</summary>
+public readonly record struct QuestProgress(int Current, int Target)
+{
+    /// <summary>Progress of <paramref name="current"/> toward <paramref name="target"/>, clamped to the target.</summary>
+    public static QuestProgress Of(int current, int target) => new(Math.Min(current, target), target);
 }
 
 /// <summary>The onboarding quest list, in the order the tutorial presents it.</summary>
@@ -26,14 +42,22 @@ public static class Quests
     /// <summary>All quests in presentation order.</summary>
     public static IReadOnlyList<Quest> All { get; } =
     [
-        new("producers3", 0, new ResourceAmounts(150, 120, 80, 0), s => s.ProducerCount >= 3),
-        new("longhouse2", 1, new ResourceAmounts(250, 200, 150, 0), s => s.LonghouseLevel >= 2),
+        new("producers3", 0, new ResourceAmounts(150, 120, 80, 0), s => s.ProducerCount >= 3,
+            s => QuestProgress.Of(s.ProducerCount, 3)),
+        new("longhouse2", 1, new ResourceAmounts(250, 200, 150, 0), s => s.LonghouseLevel >= 2,
+            s => QuestProgress.Of(s.LonghouseLevel, 2)),
         new("storagehouse1", 2, new ResourceAmounts(200, 200, 200, 0),
             s => s.Buildings.Any(b => b.Type == BuildingType.StorageHouse)),
-        new("producers6", 3, new ResourceAmounts(200, 150, 100, 0), s => s.ProducerCount >= 6),
-        new("longhouse3", 4, new ResourceAmounts(400, 300, 200, 0), s => s.LonghouseLevel >= 3),
-        new("longhouse5", 5, new ResourceAmounts(800, 600, 400, 0), s => s.LonghouseLevel >= 5),
-        new("spearmen5", SpearmenBit, new ResourceAmounts(500, 400, 300, 0), s => s.TroopsTrained || s.FightingLandUnitCount >= 5),
+        new("producers6", 3, new ResourceAmounts(200, 150, 100, 0), s => s.ProducerCount >= 6,
+            s => QuestProgress.Of(s.ProducerCount, 6)),
+        new("longhouse3", 4, new ResourceAmounts(400, 300, 200, 0), s => s.LonghouseLevel >= 3,
+            s => QuestProgress.Of(s.LonghouseLevel, 3)),
+        new("tower3", 8, new ResourceAmounts(400, 300, 200, 0), s => s.TowerLevel >= 3,
+            s => QuestProgress.Of(s.TowerLevel, 3)),
+        new("longhouse5", 5, new ResourceAmounts(800, 600, 400, 0), s => s.LonghouseLevel >= 5,
+            s => QuestProgress.Of(s.LonghouseLevel, 5)),
+        new("spearmen5", SpearmenBit, new ResourceAmounts(500, 400, 300, 0), s => s.TroopsTrained || s.FightingLandUnitCount >= 5,
+            s => s.TroopsTrained ? new QuestProgress(5, 5) : QuestProgress.Of(s.FightingLandUnitCount, 5)),
         // Unlocked once the troops were trained (the stored latch); claims never gate it.
         new("hunt1", 7, new ResourceAmounts(400, 300, 300, 0),
             s => s.TroopsTrained && s.HuntStarted),

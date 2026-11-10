@@ -51,7 +51,7 @@ function loop(): void {
   frame = requestAnimationFrame(loop);
 }
 // The playhead only needs frames while it moves.
-const running = computed(() => !props.state.paused && !props.state.waiting && (props.state.phase === 'playing' || props.state.phase === 'exiting'));
+const running = computed(() => !props.state.closed && !props.state.paused && !props.state.waiting && (props.state.phase === 'playing' || props.state.phase === 'exiting'));
 watch(
   () => props.state,
   () => sync(),

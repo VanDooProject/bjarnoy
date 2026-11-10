@@ -29,6 +29,15 @@ Where it lives:
   on its own provisions with nobody feeding it, so it now takes the same
   round-trip check as everything else (§4).
 
+**Reach.** A full load of provisions is `FoodCarryCapacity` per unit, burned at `UpkeepPerHour` per unit
+(`UnitCatalogue`). The round trip costs twice the outbound hours, so the one-way reach of a single unit type on a
+full load, on plain ground or sea at world speed x1, is
+
+> reach (hexes) = `FoodCarryCapacity` / (2 x `UpkeepPerHour`) x `Speed`
+
+Targets: Karve 1600 hexes (600 / 3 x 8), Longship 800 (320 / 4 x 10), foot units at least 160 (Bowman and Axeman 160,
+Berserker 160, Spearman 192, Thrall 200, Settler 320); lighter units reach further.
+
 So "range" means *how far an army can go and still get back*. Everything below keeps
 that rule rather than inventing a second one.
 
@@ -68,10 +77,23 @@ figure loaded at departure, and the rebuilt `Movement` recomputes `TurnAroundAt`
 the remainder. Provisions only ever decrease, so chained hops cannot be gamed: an army
 may walk outward indefinitely as long as it can still afford the way home.
 
-Attack/Raid orders from the field are in scope and reuse `PlanDispatch`'s existing
-target-settlement, shoreline and catapult-building validation. Attacking *other armies*
-in the open field is not — it needs a target type, army-vs-army resolution and
-interception semantics of its own.
+- A field order carries a mission: Move, Attack, Support or Hunt, against the same targets
+  and with the same checks as a dispatch from home (`PlanDispatch`'s target-settlement,
+  shoreline, catapult-building and camp validation). Its premium gate is the one in the
+  table: a standing army's order is free and waypoints are premium; an order for an army
+  still marching is premium.
+- A field order to a standing army can take only part of it: the chosen units leave as a
+  new army, and the rest keep standing where they are. The provisions are split by upkeep
+  share, so the part that stays keeps its turn-around time. A marching army always moves
+  whole.
+- The part that leaves must be able to reach the target and afford the way home from
+  there with its share of the provisions. The UI does not let the player pick an army (or
+  a split) that cannot.
+- An army supporting another settlement can't take a field order. It has to be recalled
+  first.
+
+Attacking *other armies* in the open field is not in scope — it needs a target type,
+army-vs-army resolution and interception semantics of its own.
 
 ## 4. Guests must be able to walk home (implemented)
 
@@ -105,11 +127,20 @@ The rules for **land armies** (fleets are unchanged):
 | Stream (any river tile that is not wide) | walkable at a **flat `1.0 + RiverCrossingCost` (= 9)** over *any* land terrain, mountains included |
 | Anything else | its terrain cost (grass 1.0, sand 1.1, forest 1.3, bog 2.0) |
 
+**A step is billed half and half.** A step runs from one hex's centre to the next. The
+half up to the shared edge is billed at half the price of the hex the army leaves, the
+half from the edge to the centre at half the price of the hex it enters. So an army spends
+exactly as long on each hex as that hex's price says, and its marker moves at the speed of
+the hex under it. An army counts as standing on a hex from the moment it crosses that
+hex's edge. Leaving a hex the army could no longer enter is billed at the price it had
+before: a palisade built under the army at its ground (or stream) price, a wide river
+whose bridge burnt under it at `1.0 + BurntBridgeLeaveCost` (= 12).
+
 A river tile is **wide** when at least two of its arms are river width
 (`RiverGenerator.IsWideRiver`, mirrored by `isWideRiverTile` in `riverGenerator.ts`): a
 `river` run and a `riverstream` Y (a stream joining a river) are wide; a stream run, a
-`widen` tile and a stream-stream confluence are streams. A stream is charged on entry
-only (never on exit), so stopping and restarting a march mid-stream never pays it twice.
+`widen` tile and a stream-stream confluence are streams. A stream is billed like any
+hex, half wading in and half wading out, so stopping on it and marching on pays it once.
 Because the flat cost replaces the terrain cost, every step still costs at least 1.0 and
 the A* heuristic (plain hex distance) stays admissible.
 
@@ -123,6 +154,17 @@ Consequences:
   `RetargetFoundingRejection.TargetNotReachable`) and the message "No land route: mountains
   and wide rivers can't be crossed."; the client maps the same codes to `apiErrors.rejections`
   in every locale and shows the text in the dispatch draft.
+- **The search is capped.** `HexPathfinder` expands at most 250,000 nodes per search (the TS
+  twin `MAX_EXPANDED_NODES` in `hexPath.ts` matches); a long sea route that detours around land
+  can need ~100,000 (a 534-hex fleet route against a 345-hex straight distance took 93,000,
+  ~50 ms). Past the cap the search reports `LimitReached` and the order is refused as
+  `RouteTooLong`.
+- **Route planning is rate-limited per player.** The endpoints that run the search (dispatch,
+  recall, field orders, founding retarget, sending a guest home) share one sliding-window limit
+  of 30 requests per minute per player (user id; the owner id without an account); the next one
+  gets a 429 with `Retry-After` and the rejection `RouteRateLimited`, shown to the player as
+  "Too many marching orders at once.". Configured under `RoutePlanningRateLimit`
+  (`PermitLimit`, `WindowSeconds`, `Segments`).
 - **Armies already marching keep their stored paths.** Nothing re-routes them; the rules
   only apply to routes planned from now on (a recall or retreat from where an army stands
   is planned afresh, so an army standing on a mountain can still leave it).
@@ -141,12 +183,12 @@ Consequences:
   ignore bridges. The bridge's price replaces the impassable verdict, and every price stays
   at least 1.0 so the heuristic stays admissible:
 
-  | Bridge level | Price of entering the hex |
+  | Bridge level | Price of the hex |
   | --- | --- |
   | 1, causeway | `1.0 + CausewayCrossingCost` (= 6), slower than any ground |
   | 2, footbridge | `1.0 + FootbridgeCrossingCost` (= 4), slower than the ground, quicker than the causeway |
-  | 3, king's bridge | the terrain cost, every army |
-  | 4, guarded bridge | the terrain cost for the owner's armies and their friends (the gate rule), impassable for everyone else |
+  | 3, king's bridge | `1.0 + KingsBridgeCrossingCost` (= 1.5), every army |
+  | 4, guarded bridge | `1.0 + KingsBridgeCrossingCost` (= 1.5) for the owner's armies and their friends (the gate rule), impassable for everyone else |
 
   `docs/design/economy.md` section 5 has the placement and burning rules.
 

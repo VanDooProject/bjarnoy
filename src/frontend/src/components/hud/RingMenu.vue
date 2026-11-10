@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ResourceIcon from '../ResourceIcon.vue';
 // Issue #16 "ring menu on click of tile", second pass — the "2a" design
 // (Claude Design's `Tile Menu 2a`, chosen over four other directions).
 //
@@ -84,6 +85,14 @@ export interface RingCard {
   cost?: { wood?: number; stone?: number; food?: number; iron?: number };
   /** Formatted build duration, e.g. "4:00" (BuildingCatalogue's BuildDuration). */
   time?: string;
+  /** Label of the `time` row when it is not a build time (a raze: "Raze time"). */
+  timeLabel?: string;
+  /** Resources the action pays back when it completes (a raze), rendered as chips under "Refund". */
+  refund?: { wood?: number; stone?: number; food?: number; iron?: number };
+  /** Touch: what a second tap on this root action does ("Tap Raze again to raze"); defaults to the upgrade wording. */
+  tapHint?: string;
+  /** The badge shown while nothing blocks the action; defaults to "buildable here" (a raze: "can be razed"). */
+  okBadge?: string;
   /** One-line summary of what it produces. */
   gives?: string;
   /** For an upgrade, the building's new total next to the gain in `gives` ("90 total"); shown on wide screens only. */
@@ -421,8 +430,8 @@ const footprint = computed(() => {
 });
 watch(footprint, (circle) => emit('footprint', circle), { immediate: true });
 
-const RESOURCE_COLORS = { wood: 'var(--wood)', stone: 'var(--stone)', food: 'var(--food)', iron: 'var(--iron)' } as const;
 const RESOURCE_KEYS = ['wood', 'stone', 'food', 'iron'] as const;
+type ResourceKey = (typeof RESOURCE_KEYS)[number];
 
 /** A building's own fields as the card shape the hover card renders. */
 function cardOf(b: RingBuilding): RingCard {
@@ -464,8 +473,10 @@ interface CardView {
   sub?: string;
   art?: ArtRef;
   badge?: { text: string; tone: 'ok' | Tone };
-  chips: { key: string; color: string; amount: number; short: boolean }[];
+  chips: { key: ResourceKey; amount: number; short: boolean }[];
   time?: string;
+  timeLabel?: string;
+  refundChips: { key: ResourceKey; amount: number }[];
   gives?: string;
   givesTotal?: string;
   warning?: string;
@@ -487,7 +498,6 @@ const cardView = computed<CardView | null>(() => {
   const locks = card.locks ?? [];
   const chips = RESOURCE_KEYS.filter((key) => !!card.cost?.[key]).map((key) => ({
     key,
-    color: RESOURCE_COLORS[key],
     // Upgrade costs scale by a fractional factor; show what the player has to have, rounded up.
     amount: Math.ceil(card.cost![key]!),
     short: a ? !!a.shortfall[key] : !!props.stock && card.cost![key]! > props.stock[key],
@@ -523,7 +533,7 @@ const cardView = computed<CardView | null>(() => {
   if (locks.length) badge = { text: locks[0].toUpperCase(), tone: 'lock' };
   else if (resourcesShort) badge = { text: t('hud.ringMenu.card.badgeNoResources').toUpperCase(), tone: 'wait' };
   else if (a?.state === 'waiting') badge = { text: t('hud.ringMenu.card.badgeNoSlot').toUpperCase(), tone: 'wait' };
-  else badge = { text: t('hud.ringMenu.buildableHere'), tone: 'ok' };
+  else badge = { text: card.okBadge ?? t('hud.ringMenu.buildableHere'), tone: 'ok' };
 
   return {
     title: card.title,
@@ -532,6 +542,8 @@ const cardView = computed<CardView | null>(() => {
     badge,
     chips,
     time: card.time,
+    timeLabel: card.timeLabel,
+    refundChips: RESOURCE_KEYS.filter((key) => !!card.refund?.[key]).map((key) => ({ key, amount: Math.floor(card.refund![key]!) })),
     gives: card.gives,
     givesTotal: card.givesTotal,
     warning: card.warning,
@@ -555,7 +567,7 @@ const tapHint = computed<string | undefined>(() => {
   }
   const item = hoveredLane1Index.value === null ? null : laneItems.value[hoveredLane1Index.value];
   if (!item || item.id !== id || item.disabled) return undefined;
-  return t('hud.ringMenu.tap.upgrade', { name: item.label });
+  return item.card?.tapHint ?? t('hud.ringMenu.tap.upgrade', { name: item.label });
 });
 
 /** Whether the card (floating or docked) is on screen. */
@@ -1031,14 +1043,23 @@ function onBackdropPointerDown(e: PointerEvent) {
           <dt>{{ t('hud.ringMenu.cost') }}</dt>
           <dd class="cost">
             <span v-for="chip in cardView.chips" :key="chip.key" class="chip">
-              <i :style="{ background: chip.color }" />
+              <ResourceIcon :kind="chip.key" :size="12" />
               <b :class="{ short: chip.short }">{{ chip.amount }}</b>
             </span>
           </dd>
         </template>
         <template v-if="cardView.time">
-          <dt>{{ t('hud.ringMenu.buildTime') }}</dt>
+          <dt>{{ cardView.timeLabel ?? t('hud.ringMenu.buildTime') }}</dt>
           <dd>{{ cardView.time }}</dd>
+        </template>
+        <template v-if="cardView.refundChips.length">
+          <dt>{{ t('hud.ringMenu.refund') }}</dt>
+          <dd class="cost" data-testid="ring-card-refund">
+            <span v-for="chip in cardView.refundChips" :key="chip.key" class="chip">
+              <ResourceIcon :kind="chip.key" :size="12" />
+              <b>{{ chip.amount }}</b>
+            </span>
+          </dd>
         </template>
         <template v-if="cardView.gives">
           <dt>{{ t('hud.ringMenu.gives') }}</dt>
@@ -1406,12 +1427,6 @@ function onBackdropPointerDown(e: PointerEvent) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-}
-.chip i {
-  width: 8px;
-  height: 8px;
-  flex: none;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
 }
 .chip b.short {
   color: var(--rival);

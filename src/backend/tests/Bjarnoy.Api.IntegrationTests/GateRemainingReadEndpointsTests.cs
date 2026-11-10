@@ -218,6 +218,7 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
             DepartedAt = now,
             Path = [new HexPoint(0, 0)],
             CumulativeHours = [0],
+            EdgeHours = [0],
             IsReturning = false,
             Stacks = [new ArmyUnitStackEntity { UnitType = UnitType.Spearman, Count = 5 }],
         };
@@ -297,8 +298,10 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
             DepartedAt = now,
             Path = [new HexPoint(0, 0), new HexPoint(5, 0)],
             CumulativeHours = [0, 10],
+            EdgeHours = [0, 10],
             ReturnPath = [new HexPoint(5, 0), new HexPoint(0, 0)],
             ReturnCumulativeHours = [0, 10],
+            ReturnEdgeHours = [0, 10],
             TurnAroundAt = now + TimeSpan.FromHours(100),
             IsReturning = false,
             Stacks = [new ArmyUnitStackEntity { UnitType = UnitType.Spearman, Count = 5 }],

@@ -64,6 +64,9 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
     public DbSet<ApiKeyEntity> ApiKeys => Set<ApiKeyEntity>();
 
     public DbSet<ApiKeyRequestEntity> ApiKeyRequests => Set<ApiKeyRequestEntity>();
+    public DbSet<ApiKeyAccountEntity> ApiKeyAccounts => Set<ApiKeyAccountEntity>();
+
+    public DbSet<ApiKeyAnonymousAccountEntity> ApiKeyAnonymousAccounts => Set<ApiKeyAnonymousAccountEntity>();
 
     public DbSet<GuildEntity> Guilds => Set<GuildEntity>();
 
@@ -507,6 +510,14 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .HasConversion(new DoubleListConverter())
                 .Metadata.SetValueComparer(DoubleListConverter.Comparer);
 
+            army.Property(a => a.EdgeHours)
+                .HasConversion(new DoubleListConverter())
+                .Metadata.SetValueComparer(DoubleListConverter.Comparer);
+
+            army.Property(a => a.ReturnEdgeHours)
+                .HasConversion(new DoubleListConverter())
+                .Metadata.SetValueComparer(DoubleListConverter.Comparer);
+
             // Restrict rather than cascade: nothing should delete a
             // settlement out from under an army still travelling. In
             // practice settlements are never deleted today, but the intent
@@ -775,6 +786,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             key.Property(k => k.KeyId).HasMaxLength(16).IsRequired();
             key.Property(k => k.SecretHash).HasMaxLength(64).IsRequired();
             key.Property(k => k.Purpose).HasMaxLength(500);
+            key.Property(k => k.OwnerCanAct).HasDefaultValue(true);
 
             // Same list-column convention as the island hex lists: one text column, a converter and a comparer so
             // in-place edits of the collection are seen by change tracking.
@@ -802,6 +814,37 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .WithMany()
                 .HasForeignKey(k => k.CreatedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Extra accounts a key may act as (the owner is not a row here). Rows die with the key; the account is
+        // Restrict for the same audit-trail reason as the owner.
+        modelBuilder.Entity<ApiKeyAccountEntity>(account =>
+        {
+            account.ToTable("api_key_accounts");
+            account.HasKey(a => new { a.ApiKeyId, a.UserId });
+            account.HasIndex(a => a.UserId);
+            account.HasOne(a => a.ApiKey)
+                .WithMany(k => k.Accounts)
+                .HasForeignKey(a => a.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+            account.HasOne(a => a.User)
+                .WithMany()
+                .HasForeignKey(a => a.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ApiKeyAnonymousAccountEntity>(anon =>
+        {
+            anon.ToTable("api_key_anonymous_accounts");
+            anon.HasKey(a => a.Id);
+            anon.Property(a => a.Id).ValueGeneratedNever();
+            anon.Property(a => a.OwnerId).HasMaxLength(200).IsRequired();
+            anon.Property(a => a.Label).HasMaxLength(100).IsRequired();
+            anon.HasIndex(a => new { a.ApiKeyId, a.Label }).IsUnique();
+            anon.HasOne(a => a.ApiKey)
+                .WithMany(k => k.AnonymousAccounts)
+                .HasForeignKey(a => a.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ApiKeyRequestEntity>(request =>
@@ -843,6 +886,19 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .IsRequired()
                 .HasConversion(new GuidListConverter())
                 .Metadata.SetValueComparer(GuidListConverter.Comparer);
+            request.Property(r => r.ApprovedAdditionalUserIds)
+                .IsRequired()
+                .HasConversion(new GuidListConverter())
+                .Metadata.SetValueComparer(GuidListConverter.Comparer);
+            request.Property(r => r.ApprovedAnonymousAccounts)
+                .IsRequired()
+                .HasConversion(new AnonymousAccountGrantListConverter())
+                .Metadata.SetValueComparer(AnonymousAccountGrantListConverter.Comparer);
+            request.Property(r => r.ApprovedOwnerCanAct).HasDefaultValue(true);
+            request.Property(r => r.RequestedAdditionalUserNames)
+                .IsRequired()
+                .HasConversion(new StringListConverter())
+                .Metadata.SetValueComparer(StringListConverter.Comparer);
 
             // Admins find a request by the code the agent shows them.
             request.HasIndex(r => r.UserCode).IsUnique();

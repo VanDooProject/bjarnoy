@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   adminListApiKeys: vi.fn(),
   adminListApiKeyRequests: vi.fn(),
   adminListUsers: vi.fn(),
+  adminLookupUsers: vi.fn(),
   adminApproveApiKeyRequest: vi.fn(),
   adminDenyApiKeyRequest: vi.fn(),
   adminCreateApiKey: vi.fn(),
@@ -38,6 +39,7 @@ function request(code: string, overrides: Partial<ApiKeyRequestResponse> = {}): 
     description: null,
     contextUrl: null,
     requestedOwnerUserName: null,
+    requestedAdditionalUserNames: [],
     requestsPerMinute: null,
     lifetimeMinutes: 60,
     renewsApiKeyId: null,
@@ -117,6 +119,7 @@ beforeEach(() => {
   mocks.adminListApiKeys.mockResolvedValue([key()]);
   mocks.adminListApiKeyRequests.mockResolvedValue([request('ABCD-2345'), request('WXYZ-6789')]);
   mocks.adminListUsers.mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 10 });
+  mocks.adminLookupUsers.mockResolvedValue([]);
   window.confirm = vi.fn(() => true);
   Element.prototype.scrollIntoView = vi.fn();
 });
@@ -127,6 +130,26 @@ describe('AdminApiKeysView', () => {
     expect(wrapper.get('[data-testid="request-WXYZ-6789"]').attributes('data-highlighted')).toBe('true');
     expect(wrapper.get('[data-testid="request-ABCD-2345"]').attributes('data-highlighted')).toBe('false');
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('shows the request code on a key and opens that key for ?request=<code>', async () => {
+    mocks.adminListApiKeys.mockResolvedValue([{ ...key(), requestUserCode: 'DONE-2345' }]);
+    const wrapper = await mountAt('/admin/api-keys?request=done-2345');
+    expect(wrapper.get('[data-testid="key-request-k1"]').text()).toBe('DONE-2345');
+    expect(wrapper.get('[data-testid="key-k1"]').attributes('data-highlighted')).toBe('true');
+    expect(wrapper.findAll('[data-testid^="request-"][data-highlighted="true"]')).toHaveLength(0);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('includes revoked and expired keys when the linked request became one of them', async () => {
+    mocks.adminListApiKeys.mockImplementation(async (includeInactive: boolean) =>
+      includeInactive ? [{ ...key(), status: 'Revoked', requestUserCode: 'DONE-2345' }] : [],
+    );
+    const wrapper = await mountAt('/admin/api-keys?request=DONE-2345');
+    expect(mocks.adminListApiKeys).toHaveBeenLastCalledWith(true);
+    expect(wrapper.get('[data-testid="key-k1"]').attributes('data-highlighted')).toBe('true');
     wrapper.unmount();
   });
 
@@ -146,6 +169,9 @@ describe('AdminApiKeysView', () => {
     await flushPromises();
     expect(mocks.adminApproveApiKeyRequest).toHaveBeenCalledWith('id-ABCD-2345', {
       ownerUserId: 'a1',
+      additionalUserIds: [],
+      anonymousAccounts: [],
+      ownerCanAct: true,
       features: { chat: 'Read' },
       allWorlds: false,
       worldIds: [],
@@ -153,6 +179,97 @@ describe('AdminApiKeysView', () => {
       requestsPerMinute: null,
       autoRenewMinutes: null,
     });
+    wrapper.unmount();
+  });
+
+  it('prefills the approval with the further accounts the agent hinted, where they exist', async () => {
+    mocks.adminListApiKeyRequests.mockResolvedValue([
+      request('ABCD-2345', { requestedAdditionalUserNames: ['Ally', 'ghost'] }),
+    ]);
+    mocks.adminLookupUsers.mockImplementation(async (q: string) =>
+      q === 'ally'
+        ? [{ kind: 'user', settlementId: null, settlementName: null, userId: 'u2', userName: 'Ally', displayName: null, role: 'player', status: 'active', via: 'user', matchedName: null, worldName: null }]
+        : [],
+    );
+    mocks.adminApproveApiKeyRequest.mockResolvedValue(request('ABCD-2345', { status: 'Approved' }));
+    const wrapper = await mountAt('/admin/api-keys');
+    await wrapper.get('[data-testid="approve-ABCD-2345"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="editor-accounts"]').text()).toContain('Ally');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(mocks.adminApproveApiKeyRequest.mock.calls[0][1]).toMatchObject({ additionalUserIds: ['u2'] });
+    wrapper.unmount();
+  });
+
+  it('resolves a requested owner given as a jarl name to the account that owns it', async () => {
+    mocks.adminListApiKeyRequests.mockResolvedValue([
+      request('ABCD-2345', { requestedOwnerUserName: 'Jarl-a741' }),
+    ]);
+    mocks.adminLookupUsers.mockImplementation(async (q: string) =>
+      q === 'jarl-a741'
+        ? [{ kind: 'user', settlementId: null, settlementName: null, userId: 'u9', userName: 'player9', displayName: null, role: 'player', status: 'active', via: 'jarl', matchedName: 'Jarl-a741', worldName: 'Midgard' }]
+        : [],
+    );
+    mocks.adminApproveApiKeyRequest.mockResolvedValue(request('ABCD-2345', { status: 'Approved' }));
+    const wrapper = await mountAt('/admin/api-keys');
+    await wrapper.get('[data-testid="approve-ABCD-2345"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="editor-owner"]').text()).toContain('player9');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(mocks.adminApproveApiKeyRequest.mock.calls[0][1]).toMatchObject({ ownerUserId: 'u9' });
+    wrapper.unmount();
+  });
+
+  it('does not guess when two accounts share the requested jarl name', async () => {
+    mocks.adminListApiKeyRequests.mockResolvedValue([
+      request('ABCD-2345', { requestedOwnerUserName: 'Jarl-a741' }),
+    ]);
+    mocks.adminLookupUsers.mockResolvedValue([
+      { kind: 'user', settlementId: null, settlementName: null, userId: 'u8', userName: 'p8', displayName: null, role: 'player', status: 'active', via: 'jarl', matchedName: 'Jarl-a741', worldName: null },
+      { kind: 'user', settlementId: null, settlementName: null, userId: 'u9', userName: 'p9', displayName: null, role: 'player', status: 'active', via: 'jarl', matchedName: 'Jarl-a741', worldName: null },
+    ]);
+    const wrapper = await mountAt('/admin/api-keys');
+    await wrapper.get('[data-testid="approve-ABCD-2345"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="editor-owner"]').text()).toContain('boss');
+    wrapper.unmount();
+  });
+
+  it('turns a requested owner that is a player without an account into a sponsor-only key', async () => {
+    mocks.adminListApiKeyRequests.mockResolvedValue([
+      request('ABCD-2345', { requestedOwnerUserName: 'Jarl-a741' }),
+    ]);
+    mocks.adminLookupUsers.mockResolvedValue([
+      { kind: 'anonymous', userId: null, userName: 'Jarl-a741', displayName: null, role: null, status: null, via: 'jarl', matchedName: 'Jarl-a741', worldName: 'Midgard', settlementId: 's7', settlementName: 'Hedeby' },
+    ]);
+    mocks.adminApproveApiKeyRequest.mockResolvedValue(request('ABCD-2345', { status: 'Approved' }));
+    const wrapper = await mountAt('/admin/api-keys');
+    await wrapper.get('[data-testid="approve-ABCD-2345"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="anonymous-s7"]').text()).toContain('Jarl-a741');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(mocks.adminApproveApiKeyRequest.mock.calls[0][1]).toMatchObject({
+      ownerUserId: 'a1',
+      ownerCanAct: false,
+      anonymousAccounts: [{ settlementId: 's7', primary: true }],
+    });
+    wrapper.unmount();
+  });
+
+  it('says so when a requested jarl name matches several players', async () => {
+    mocks.adminListApiKeyRequests.mockResolvedValue([
+      request('ABCD-2345', { requestedOwnerUserName: 'Jarl-a741' }),
+    ]);
+    const anon = (id: string) => ({ kind: 'anonymous', userId: null, userName: 'Jarl-a741', displayName: null, role: null, status: null, via: 'jarl', matchedName: 'Jarl-a741', worldName: null, settlementId: id, settlementName: null });
+    mocks.adminLookupUsers.mockResolvedValue([anon('s1'), anon('s2')]);
+    const wrapper = await mountAt('/admin/api-keys');
+    await wrapper.get('[data-testid="approve-ABCD-2345"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="hint-notes"]').text()).toContain('matches 2 players');
+    expect(wrapper.find('[data-testid^="anonymous-s"]').exists()).toBe(false);
     wrapper.unmount();
   });
 

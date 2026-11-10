@@ -10,7 +10,6 @@ import {
   radiusBoostRange,
   type BuildingKind,
 } from '../map/buildingEconomy';
-import { newPlacementDisabled } from '../map/ringCatalogue';
 
 /** The producers in the order the table lists them; the Longhouse (four resources) has its own row. */
 export const PRODUCER_TYPES = [
@@ -25,8 +24,13 @@ export const PRODUCER_TYPES = [
 ] as const;
 export type ProducerType = (typeof PRODUCER_TYPES)[number];
 
-/** The producers a player can still place: a type whose new placement is disabled (the Quarry) stays out of the docs. */
-export const BUILDABLE_PRODUCER_TYPES: readonly ProducerType[] = PRODUCER_TYPES.filter((type) => !newPlacementDisabled(type));
+/**
+ * The producers a player can still place: a type whose new placement the catalogue disables (`newPlacementDisabled`: the Quarry) stays
+ * out of the docs. Read from the loaded catalogue, so call it where the catalogue is a reactive dependency, never at import time.
+ */
+export function buildableProducerTypes(byType: Record<string, readonly { newPlacementDisabled: boolean }[] | undefined>): ProducerType[] {
+  return PRODUCER_TYPES.filter((type) => byType[type]?.[0]?.newPlacementDisabled !== true);
+}
 
 /** The levels the producer table spells out. */
 export const PRODUCER_LEVELS = [1, 10] as const;

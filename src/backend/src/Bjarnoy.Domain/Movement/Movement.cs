@@ -50,10 +50,20 @@ public sealed record Movement
     /// </summary>
     public required IReadOnlyList<double> CumulativeHours { get; init; }
 
+    /// <summary>
+    /// Game-hours elapsed when the army crosses the edge into <c>Path[i]</c> (<c>EdgeHours[0]</c> is 0), see
+    /// <see cref="HexPathfinder.EdgeHours"/>. Always between <c>CumulativeHours[i-1]</c> and <c>CumulativeHours[i]</c>. Same length as
+    /// <see cref="Path"/>.
+    /// </summary>
+    public required IReadOnlyList<double> EdgeHours { get; init; }
+
     /// <summary>The precomputed homeward route from this leg's destination.</summary>
     public required IReadOnlyList<HexCoord> ReturnPath { get; init; }
 
     public required IReadOnlyList<double> ReturnCumulativeHours { get; init; }
+
+    /// <summary>The edge-crossing schedule of <see cref="ReturnPath"/>, see <see cref="EdgeHours"/>.</summary>
+    public required IReadOnlyList<double> ReturnEdgeHours { get; init; }
 
     /// <summary>
     /// The instant remaining provisions exactly cover the precomputed return
@@ -109,14 +119,18 @@ public sealed record Movement
         DateTimeOffset departedAt,
         IReadOnlyList<HexCoord> path,
         IReadOnlyList<double> cumulativeHours,
+        IReadOnlyList<double> edgeHours,
         IReadOnlyList<HexCoord> returnPath,
         IReadOnlyList<double> returnCumulativeHours,
+        IReadOnlyList<double> returnEdgeHours,
         double provisionsAtDeparture,
         double upkeepPerHour)
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(cumulativeHours);
+        ArgumentNullException.ThrowIfNull(edgeHours);
         ArgumentNullException.ThrowIfNull(returnPath);
+        ArgumentNullException.ThrowIfNull(returnEdgeHours);
         ArgumentNullException.ThrowIfNull(returnCumulativeHours);
 
         var arrivesAt = departedAt + TimeSpan.FromHours(cumulativeHours[^1]);
@@ -138,35 +152,79 @@ public sealed record Movement
             DepartedAt = departedAt,
             Path = path,
             CumulativeHours = cumulativeHours,
+            EdgeHours = edgeHours,
             ReturnPath = returnPath,
             ReturnCumulativeHours = returnCumulativeHours,
+            ReturnEdgeHours = returnEdgeHours,
             TurnAroundAt = arrivesAt + TimeSpan.FromHours(standingHours),
             IsReturning = false,
         };
     }
 
     /// <summary>
-    /// The hex reached by <paramref name="now"/> — the last hex whose
-    /// cumulative hour has passed, not a fractional point between two hexes.
-    /// See the type-level remarks for why.
+    /// The hex the army stands on at <paramref name="now"/> — the last hex whose edge
+    /// (<see cref="EdgeHours"/>) it has crossed, not a fractional point between two hexes, so the
+    /// position switches at the shared edge rather than at the hex centre. Arrival stays on
+    /// <see cref="CumulativeHours"/>. See the type-level remarks for why.
     /// </summary>
-    public HexCoord PositionAt(DateTimeOffset now)
+    public HexCoord PositionAt(DateTimeOffset now) => Path[ReachedIndexAt(now)];
+
+    /// <summary>
+    /// The index of the hex centre the marker has last passed at <paramref name="now"/> — the start of the leg a client interpolates
+    /// along (centre to next centre), as opposed to <see cref="ReachedIndexAt"/>, which switches at the shared edge. Never behind
+    /// <c>ReachedIndexAt - 1</c> and never ahead of it.
+    /// </summary>
+    public int CentreIndexAt(DateTimeOffset now)
     {
         if (now <= DepartedAt)
         {
-            return Path[0];
+            return 0;
         }
 
         var elapsedHours = (now - DepartedAt).TotalHours;
         if (elapsedHours >= CumulativeHours[^1])
         {
-            return Path[^1];
+            return Path.Count - 1;
         }
 
         var index = 0;
-        for (var i = 1; i < CumulativeHours.Count; i++)
+        for (var i = 1; i < CumulativeHours.Count && CumulativeHours[i] <= elapsedHours; i++)
         {
-            if (CumulativeHours[i] > elapsedHours)
+            index = i;
+        }
+
+        return index;
+    }
+
+    /// <summary>
+    /// Every hex of <see cref="Path"/> the army has stood on by <paramref name="at"/>: <c>Path[0..index]</c> where <c>index</c> is
+    /// the one <see cref="PositionAt"/> reports (so the last element is always <see cref="PositionAt"/>). At or after
+    /// <see cref="ArrivesAt"/> that is the whole path, before <see cref="DepartedAt"/> just the start hex.
+    /// </summary>
+    public IReadOnlyList<HexCoord> HexesReachedBy(DateTimeOffset at)
+    {
+        var index = ReachedIndexAt(at);
+        return [.. Path.Take(index + 1)];
+    }
+
+    /// <summary>The index into <see cref="Path"/> of the hex <see cref="PositionAt"/> reports (the last edge crossed).</summary>
+    public int ReachedIndexAt(DateTimeOffset now)
+    {
+        if (now <= DepartedAt)
+        {
+            return 0;
+        }
+
+        var elapsedHours = (now - DepartedAt).TotalHours;
+        if (elapsedHours >= CumulativeHours[^1])
+        {
+            return Path.Count - 1;
+        }
+
+        var index = 0;
+        for (var i = 1; i < EdgeHours.Count; i++)
+        {
+            if (EdgeHours[i] > elapsedHours)
             {
                 break;
             }
@@ -174,6 +232,6 @@ public sealed record Movement
             index = i;
         }
 
-        return Path[index];
+        return index;
     }
 }

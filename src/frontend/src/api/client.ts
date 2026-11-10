@@ -10,6 +10,7 @@ import type {
   AdminSettlementLayoutResponse,
   AdminUserActivityDetailResponse,
   AdminUserDetailResponse,
+  AdminUserLookupResponse,
   AdminUserResponse,
   AdminWorldResponse,
   ApiKeyFeatureInfo,
@@ -87,7 +88,7 @@ import type {
   SettlementViewResponse,
   SlotRuneRequest,
   SettlementSummary,
-  WorldWall,
+  RivalBuilding,
   ShipmentResponse,
   SimulatorRequest,
   SimulatorResponse,
@@ -108,6 +109,7 @@ import type {
   WorldSummaryResponse,
   CampReportResponse,
   CampStateResponse,
+  ForeignArmyResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -280,9 +282,17 @@ export const api = {
   // calls (e.g. getFogChunks/getPlotSuggestion below). 400s without it.
   getWorldMembership: (worldId: string, ownerId: string) =>
     request<WorldMembershipResponse>(`/worlds/${worldId}/membership`, { headers: ownerHeader(ownerId) }),
-  getWorldCamps: (worldId: string, islandId?: string) =>
-    request<CampStateResponse[]>(`/worlds/${worldId}/camps${islandId ? `?islandId=${encodeURIComponent(islandId)}` : ''}`),
-  getIslands: (worldId: string) => request<IslandResponse[]>(`/worlds/${worldId}/islands`),
+  // The camps of /islands and /camps are cut off to the islands the *caller* has seen, and an account-less player is
+  // identified by `X-Owner-Id` alone (CallerRealmResolver): without it the server answers no camps at all.
+  getWorldCamps: (worldId: string, ownerId?: string, islandId?: string) =>
+    request<CampStateResponse[]>(`/worlds/${worldId}/camps${islandId ? `?islandId=${encodeURIComponent(islandId)}` : ''}`, {
+      headers: ownerHeader(ownerId),
+    }),
+  getIslands: (worldId: string, ownerId?: string) =>
+    request<IslandResponse[]>(`/worlds/${worldId}/islands`, { headers: ownerHeader(ownerId) }),
+  // Cut to the *caller's* sight like /camps: an account-less player is identified by `X-Owner-Id` alone.
+  getForeignArmies: (worldId: string, ownerId?: string) =>
+    request<ForeignArmyResponse[]>(`/worlds/${worldId}/foreign-armies`, { headers: ownerHeader(ownerId) }),
   foundSettlement: (worldId: string, body: FoundSettlementRequest) =>
     request<SettlementResponse>(`/worlds/${worldId}/settlements`, {
       method: 'POST',
@@ -294,10 +304,8 @@ export const api = {
   // anonymous caller with no realm at all) just gets an empty list back.
   listSettlements: (worldId: string, ownerId?: string) =>
     request<SettlementSummary[]>(`/worlds/${worldId}/settlements`, { headers: ownerHeader(ownerId) }),
-  // Every standing palisade/gate hex of the rival settlements the caller has explored (their own walls excluded) — same fog rule
-  // and X-Owner-Id handling as `listSettlements`, so the live client can draw, hit-test and route around other players' walls.
-  listWalls: (worldId: string, ownerId?: string) =>
-    request<WorldWall[]>(`/worlds/${worldId}/walls`, { headers: ownerHeader(ownerId) }),
+  listRivalBuildings: (worldId: string, ownerId?: string) =>
+    request<RivalBuilding[]>(`/worlds/${worldId}/rival-buildings`, { headers: ownerHeader(ownerId) }),
   // `ownerId` becomes the `X-Owner-Id` header the backend's ownership
   // filter reads for an anonymous (unclaimed) settlement — see
   // SettlementOwnershipEndpointFilter. Harmless to omit or send stale for a
@@ -314,6 +322,14 @@ export const api = {
     request<SettlementViewResponse>(`/settlements/${settlementId}/view`, { headers: ownerHeader(ownerId) }),
   queueBuild: (settlementId: string, body: QueueBuildRequest, ownerId?: string) =>
     request<unknown>(`/settlements/${settlementId}/builds`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
+    }),
+  // Razes one level of the building on a hex (docs/design/construction-slots.md, "Razing"): an order like a build, cancellable
+  // through cancelBuild. Same ownership proof as queueBuild.
+  razeBuilding: (settlementId: string, body: { q: number; r: number }, ownerId?: string) =>
+    request<unknown>(`/settlements/${settlementId}/razes`, {
       method: 'POST',
       body: JSON.stringify(body),
       headers: ownerHeader(ownerId),
@@ -496,6 +512,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  adminLookupUsers: (q: string, signal?: AbortSignal) =>
+    request<AdminUserLookupResponse[]>(`/admin/users/lookup?q=${encodeURIComponent(q)}&limit=10`, { signal }),
   adminListUsers: (params?: { search?: string; status?: string; page?: number; pageSize?: number }) => {
     const query = new URLSearchParams();
     if (params?.search) query.set('search', params.search);

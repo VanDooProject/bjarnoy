@@ -21,6 +21,7 @@ const playing: IntroState = {
   offsetMs: 0,
   seq: 0,
   waiting: false,
+  closed: false,
 };
 
 let position = 0;
@@ -64,6 +65,16 @@ afterEach(() => {
 });
 
 describe('IntroTimeline', () => {
+  it('stops its playhead frame loop once the intro is closed', async () => {
+    const raf = vi.spyOn(globalThis, 'requestAnimationFrame');
+    const w = mountBar();
+    expect(raf).toHaveBeenCalled();
+    await w.setProps({ state: { ...playing, closed: true } });
+    raf.mockClear();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(raf).not.toHaveBeenCalled();
+  });
+
   it('draws one segment per chapter, as wide as the chapter is long, with the played part filled', async () => {
     position = fire.durMs + prophecy.durMs / 2;
     const w = mountBar({ state: { ...playing, beat: 'prophecy' } });

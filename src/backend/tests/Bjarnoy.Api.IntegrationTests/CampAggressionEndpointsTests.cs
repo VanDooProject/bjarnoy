@@ -252,8 +252,10 @@ public sealed class CampAggressionEndpointsTests : IAsyncLifetime
             DepartedAt = GameNow() - TimeSpan.FromHours(1.5),
             Path = [home, new HexPoint(hex.Q, hex.R)],
             CumulativeHours = [0, 0.5],
+            EdgeHours = [0, 0.5],
             ReturnPath = [new HexPoint(hex.Q, hex.R), home],
             ReturnCumulativeHours = [0, 0.5],
+            ReturnEdgeHours = [0, 0.5],
             TurnAroundAt = GameNow() + TimeSpan.FromHours(24),
             Stacks = [new ArmyUnitStackEntity { UnitType = UnitType.Axeman, Count = count }],
         };

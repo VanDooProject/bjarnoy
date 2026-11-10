@@ -4,13 +4,46 @@ import { evaluateDemoQuests, questBit, rewardOverflows } from './quests';
 const done = (list: ReturnType<typeof evaluateDemoQuests>) => list.filter((q) => q.completed).map((q) => q.id);
 
 describe('demo quests', () => {
-  it('lists the eight quests in tutorial order', () => {
+  it('lists the nine quests in tutorial order', () => {
     const list = evaluateDemoQuests({ level: 1, counts: { longhouse: 1 } }, 0);
     expect(list.map((q) => q.id)).toEqual([
-      'producers3', 'longhouse2', 'storagehouse1', 'producers6', 'longhouse3', 'longhouse5', 'spearmen5', 'hunt1',
+      'producers3', 'longhouse2', 'storagehouse1', 'producers6', 'longhouse3', 'tower3', 'longhouse5', 'spearmen5', 'hunt1',
     ]);
     expect(list.every((q) => !q.completed && !q.claimed)).toBe(true);
     expect(list[1].reward).toEqual({ wood: 250, stone: 200, food: 150, iron: 0 });
+  });
+
+  it('gives every quest its own explicit bit, tower3 on bit 8, without renumbering the old ones', () => {
+    const ids = ['producers3', 'longhouse2', 'storagehouse1', 'producers6', 'longhouse3', 'longhouse5', 'spearmen5', 'hunt1'];
+    expect(ids.map(questBit)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(questBit('tower3')).toBe(8);
+    expect(questBit('nope')).toBe(-1);
+    const list = evaluateDemoQuests({ level: 1, counts: {} }, 1 << 8);
+    expect(list.filter((q) => q.claimed).map((q) => q.id)).toEqual(['tower3']);
+  });
+
+  it('completes the tower quest from a Tower at level 3', () => {
+    const base = { level: 1, counts: { tower: 1 } };
+    expect(done(evaluateDemoQuests({ ...base, towerLevel: 2 }, 0))).not.toContain('tower3');
+    const list = evaluateDemoQuests({ ...base, towerLevel: 3 }, 0);
+    expect(done(list)).toEqual(['tower3']);
+    expect(list.find((q) => q.id === 'tower3')?.reward).toEqual({ wood: 400, stone: 300, food: 200, iron: 0 });
+  });
+
+  it('reports counted progress clamped to the target, and none for hunt and storage house', () => {
+    const p = (state: Parameters<typeof evaluateDemoQuests>[0], id: string) =>
+      evaluateDemoQuests(state, 0).find((q) => q.id === id)?.progress;
+    expect(p({ level: 1, counts: { farm: 2 } }, 'producers3')).toEqual({ current: 2, target: 3 });
+    expect(p({ level: 1, counts: { farm: 9 } }, 'producers3')).toEqual({ current: 3, target: 3 });
+    expect(p({ level: 1, counts: { farm: 4 } }, 'producers6')).toEqual({ current: 4, target: 6 });
+    expect(p({ level: 1, counts: {} }, 'longhouse2')).toEqual({ current: 1, target: 2 });
+    expect(p({ level: 7, counts: {} }, 'longhouse5')).toEqual({ current: 5, target: 5 });
+    expect(p({ level: 1, counts: {} }, 'tower3')).toEqual({ current: 0, target: 3 });
+    expect(p({ level: 1, counts: {}, towerLevel: 2 }, 'tower3')).toEqual({ current: 2, target: 3 });
+    expect(p({ level: 1, counts: {}, fightingLandUnits: 3 }, 'spearmen5')).toEqual({ current: 3, target: 5 });
+    expect(p({ level: 1, counts: {}, troopsTrained: true }, 'spearmen5')).toEqual({ current: 5, target: 5 });
+    expect(p({ level: 1, counts: {} }, 'hunt1')).toBeNull();
+    expect(p({ level: 1, counts: {} }, 'storagehouse1')).toBeNull();
   });
 
   it('counts only resource producers toward the producer quests', () => {
@@ -55,5 +88,15 @@ describe('demo quests', () => {
     const reward = { wood: 250, stone: 200, food: 150, iron: 0 };
     expect(rewardOverflows(reward, { wood: 250, stone: 300, food: 350, iron: 0 }, cap)).toBe(false);
     expect(rewardOverflows(reward, { wood: 251, stone: 0, food: 0, iron: 0 }, cap)).toBe(true);
+  });
+});
+
+describe('quest hints', () => {
+  // The Quarry can't be placed any more (newPlacementDisabled); a hint that sends players to build one is a dead end.
+  it('never tell the player to build a Quarry', async () => {
+    const en = (await import('../i18n/locales/en/quests.json')).default;
+    const de = (await import('../i18n/locales/de/quests.json')).default;
+    const hints = [...Object.values(en.items), ...Object.values(de.items)].map((item) => item.hint);
+    expect(hints.filter((h) => /quarr|steinbr/i.test(h))).toEqual([]);
   });
 });

@@ -284,6 +284,36 @@ describe('RingMenu', () => {
     expect(wrapper.find('[data-testid="ring-hint"]').exists()).toBe(false);
   });
 
+  it('shows a raze card: raze time and refund chips instead of a cost, and its own badge', async () => {
+    const wrapper = ring({
+      actions: [
+        {
+          id: 'raze',
+          label: 'Raze',
+          card: {
+            title: 'Raze to level 1',
+            sub: 'Farm · Level 2 → 1',
+            time: '3:00',
+            timeLabel: 'Raze time',
+            refund: { wood: 33, stone: 26 },
+            okBadge: 'CAN BE RAZED',
+            availability: availability({ cost: undefined, slotsNeeded: 1 }),
+          },
+        },
+      ],
+    });
+    await bubble(wrapper, 'Raze').trigger('mouseenter');
+
+    const card = wrapper.get('.ring-card');
+    expect(card.text()).toContain('Raze to level 1');
+    expect(card.text()).toContain('Raze time');
+    expect(card.text()).toContain('3:00');
+    expect(card.text()).toContain('CAN BE RAZED');
+    expect(card.text()).not.toContain('BUILDABLE HERE');
+    expect(card.text()).not.toContain('Cost');
+    expect(wrapper.get('[data-testid="ring-card-refund"]').findAll('b').map((b) => b.text())).toEqual(['33', '26']);
+  });
+
   it('explains a disabled action in a hint chip on hover, with aria kept and no native disabled attribute', async () => {
     // A native `disabled` button doesn't fire mouse events in most browsers,
     // so hover (and with it the chip) would never show. aria-disabled keeps
@@ -540,9 +570,9 @@ describe('RingMenu', () => {
     });
 
     it('shows the new total next to an upgrade’s gain', async () => {
-      const wrapper = ringWith({ gives: '+15 Stone/h', givesTotal: '90 total' });
+      const wrapper = ringWith({ gives: '+15 Brick/h', givesTotal: '90 total' });
       await hoverHut(wrapper);
-      expect(wrapper.get('.ring-card').text()).toContain('+15 Stone/h');
+      expect(wrapper.get('.ring-card').text()).toContain('+15 Brick/h');
       expect(wrapper.get('[data-testid="ring-card-total"]').text()).toBe('· 90 total');
     });
 
@@ -617,7 +647,7 @@ describe('RingMenu', () => {
       expect(card.text()).toContain('Level 1 → 2');
       expect(card.text()).toContain('161');
       expect(card.text()).toContain('15:00');
-      expect(card.text()).toContain('Need 161 Wood · 134 Stone · 81 Food');
+      expect(card.text()).toContain('Need 161 Wood · 134 Brick · 81 Food');
 
       await upgrade.trigger('mouseleave');
       expect(wrapper.find('.ring-card').exists()).toBe(false);
@@ -961,9 +991,9 @@ describe('RingMenu', () => {
     });
 
     it('shows the new total next to an upgrade’s gain', async () => {
-      const wrapper = ringWith({ gives: '+15 Stone/h', givesTotal: '90 total' });
+      const wrapper = ringWith({ gives: '+15 Brick/h', givesTotal: '90 total' });
       await hoverHut(wrapper);
-      expect(wrapper.get('.ring-card').text()).toContain('+15 Stone/h');
+      expect(wrapper.get('.ring-card').text()).toContain('+15 Brick/h');
       expect(wrapper.get('[data-testid="ring-card-total"]').text()).toBe('· 90 total');
     });
 
@@ -1038,7 +1068,7 @@ describe('RingMenu', () => {
       expect(card.text()).toContain('Level 1 → 2');
       expect(card.text()).toContain('161');
       expect(card.text()).toContain('15:00');
-      expect(card.text()).toContain('Need 161 Wood · 134 Stone · 81 Food');
+      expect(card.text()).toContain('Need 161 Wood · 134 Brick · 81 Food');
 
       await upgrade.trigger('mouseleave');
       expect(wrapper.find('.ring-card').exists()).toBe(false);
@@ -1112,7 +1142,7 @@ describe('RingMenu', () => {
       // No "2" badge either.
       expect(hut.find('[data-testid="ring-arm-badge"]').exists()).toBe(false);
       expect(wrapper.find('[data-testid="ring-tap-hint"]').exists()).toBe(false);
-      expect(wrapper.get('[data-testid="ring-card-status"]').text()).toContain('Need 100 Wood · 80 Stone');
+      expect(wrapper.get('[data-testid="ring-card-status"]').text()).toContain('Need 100 Wood · 80 Brick');
       await hut.trigger('touchstart');
       await hut.trigger('click');
       expect(wrapper.emitted('select')).toBeUndefined();

@@ -18,11 +18,10 @@ can't be used as a raid-proof vault.
 ## The slot formula
 
 ```
-Settlement.ConstructionSlots = 2 + max(0, (longhouseLevel − 5) / 5)
+Settlement.ConstructionSlots = max(2, longhouseLevel)
 ```
 
-2 slots at longhouse level 1–9, 3 at level 10, 4 at level 15, 5 at level 20 — the formula deliberately
-outlives today's `BuildingCatalogue.MaxLevel` of 10. A razed settlement (`LonghouseLevel == 0`) still reports
+2 slots at longhouse level 1–2, then one more per level: 3 at level 3, 10 at level 10, 30 at level 30. A razed settlement (`LonghouseLevel == 0`) still reports
 2 slots — harmless, since every building needs `RequiredLonghouseLevel >= 1` and nothing can be queued on a
 razed settlement anyway.
 
@@ -55,8 +54,8 @@ determinism the whole lazy model rests on.
 
 ## Multi-slot buildings
 
-`BuildingDefinition.SlotCost` (default 1) and `BuildingDefinition.OccupiesAllSlots`. The Longhouse sets
-`OccupiesAllSlots = true`: its effective cost is `settlement.ConstructionSlots`, not a fixed number, so a
+`BuildingDefinition.SlotCost` (default 1) and `BuildingDefinition.OccupiesMostSlots`. The Longhouse sets
+`OccupiesMostSlots = true`: its effective cost is `settlement.ConstructionSlots`, not a fixed number, so a
 Longhouse upgrade can only start with **every** slot free, and blocks everything queued behind it while it
 runs — the issue's original request ("longhouse upgrades should block all other construction"), for free
 from the same mechanism that gives multi-slot buildings their cost.
@@ -118,6 +117,24 @@ shipped switched off:
   the schema change for this tier, done once, now, while it still refuses exact duplicates (the
   concurrent-double-queue race on one hex).
 
+## Razing
+
+A player can raze their own buildings, one level at a time.
+
+- Every raze order removes exactly one level. Razing a whole building means razing it level by level down to 0, each level
+  its own order; at level 0 the building is gone and its hex is free again.
+- Razing a level takes 75% of that level's build time (`BuildingCatalogue.RazeTimeFactor`), scaled by the world speed and
+  Odin's Wisdom the same way a build is.
+- A raze takes as many construction slots as building that level took (`SlotCost`), and goes through the queue like a build:
+  it waits in the premium queue when no slot is free. It costs nothing, so a waiting raze reserves nothing.
+- When the raze finishes you get back a third of that level's cost (rounded down per resource), capped by your storage.
+- The building keeps working at its current level until the raze finishes.
+- Cancelling a raze is free and leaves the building as it is.
+- When a raze takes a building to level 0, its queued training is cancelled and refunded in full, as for a destroyed building.
+- The Longhouse cannot be razed.
+- A raze is an order on its hex: while one is queued, the hex takes no other order (and vice versa), the same `maxOrdersPerHex`
+  rule as for builds.
+
 ## API contract
 
 - `ResourcesResponse` gains `reserved`/`available` — they live on the resources contract, not a
@@ -128,7 +145,7 @@ shipped switched off:
 - `BuildOrderResponse` gains `state` (`"building"` / `"waiting"`) and `slotCost`; `completesAtGameTime` is
   `null` for a waiting order (it hasn't started, so there's no real completion instant yet — `totalSeconds`
   is an estimate in that case, since the real duration is only fixed at promotion).
-- `BuildingDefinitionResponse` gains `slotCost`/`occupiesAllSlots`.
+- `BuildingDefinitionResponse` gains `slotCost`/`occupiesMostSlots`.
 - `Describe(BuildRejection)` covers the new `NoFreeSlot` ("Every construction slot is busy" + a premium
   hint), and every `NotEnoughResources` text (build/train/trade/dispatch/guild-fee) gained a "may be reserved
   for queued construction" clause. `QueueBuild`'s 409 now also sets `ProblemDetails.Extensions["rejection"]`,

@@ -84,6 +84,47 @@ public sealed class LinkedStoreTests
     private static Settlement With(Settlement s, params PlacedBuilding[] more) =>
         s with { Buildings = [.. s.Buildings, .. more] };
 
+    // ------------------------------------------------------------------ raze
+
+    [Fact]
+    public void A_finished_raze_in_a_linked_realm_pays_its_refund_into_the_pooled_stock()
+    {
+        var farmHex = new HexCoord(1, 0);
+        var farm = new PlacedBuilding(farmHex, BuildingType.Farm, 3);
+        var raze = new BuildOrder
+        {
+            Id = Guid.CreateVersion7(),
+            Type = BuildingType.Farm,
+            TargetLevel = 2,
+            Kind = BuildOrderKind.Raze,
+            Coord = farmHex,
+            QueuedAt = T0,
+            BaseDuration = TimeSpan.FromMinutes(10),
+            StartedAt = T0,
+            CompletesAt = T0.AddMinutes(10),
+        };
+        var stock = ResourceAmounts.Uniform(50);
+
+        var withRaze = Member(CentreA, stock, extra: [farm], queue: [raze]);
+        var baseline = Member(CentreA, stock, extra: [farm]);
+        var b = Member(CentreB, stock);
+        var b2 = Member(CentreB, stock);
+
+        var razing = Store(withRaze, b);
+        var plain = Store(baseline, b2);
+        var at = T0.AddMinutes(10);
+        razing.SettleTo(at);
+        plain.SettleTo(at);
+
+        Assert.Single(razing.Outcome(withRaze.Id).Completed);
+        Assert.Equal(2, razing.Outcome(withRaze.Id).Settlement.Buildings.Single(x => x.Coord == farmHex).Level);
+
+        var cost = BuildingCatalogue.Get(BuildingType.Farm, 3).Cost;
+        var refund = new ResourceAmounts(Math.Floor(cost.Wood / 3), Math.Floor(cost.Stone / 3), Math.Floor(cost.Food / 3), Math.Floor(cost.Iron / 3));
+        Assert.True(refund.Wood > 0);
+        AssertNear(Pooled(plain, at, baseline, b2) + refund, Pooled(razing, at, withRaze, b));
+    }
+
     // ------------------------------------------------------------------ shares
 
     [Fact]
@@ -233,22 +274,24 @@ public sealed class LinkedStoreTests
     }
 
     [Fact]
-    public void A_longhouse_upgrade_occupies_every_slot_of_the_group()
+    public void A_longhouse_upgrade_occupies_90_percent_of_the_slots_of_the_group()
     {
-        var busyB = Order(BuildingType.Farm, new HexCoord(5, 0));
+        var busyB = new[] { Order(BuildingType.Farm, new HexCoord(5, 0)), Order(BuildingType.Farm, new HexCoord(6, 0)) };
         var upgrade = Order(BuildingType.Longhouse, CentreA, level: 2, waiting: true, queuedSeconds: 1);
         var behind = Order(BuildingType.Farm, new HexCoord(-1, 0), waiting: true, queuedSeconds: 2);
-        var a = Member(CentreA, ResourceAmounts.Uniform(10_000), queue: [upgrade, behind]);
-        var b = Member(CentreB, ResourceAmounts.Uniform(10_000), queue: [busyB]);
+        var behindToo = Order(BuildingType.Farm, new HexCoord(-1, 1), waiting: true, queuedSeconds: 3);
+        var a = Member(CentreA, ResourceAmounts.Uniform(10_000), queue: [upgrade, behind, behindToo]);
+        var b = Member(CentreB, ResourceAmounts.Uniform(10_000), queue: busyB);
         var store = Store(a, b);
 
-        // B's order holds a slot, so the upgrade (all 4) and the order behind it wait.
+        // The group has 4 slots and the upgrade needs 3; B's two orders leave only 2 free, so everything waits.
         Assert.True(store.Outcome(a.Id).Settlement.Queue.All(o => o.IsWaiting));
 
         store.SettleTo(T0.AddMinutes(11));
         var queueA = store.Outcome(a.Id).Settlement.Queue;
         Assert.Equal(T0.AddMinutes(10), queueA.Single(o => o.Id == upgrade.Id).StartedAt);
-        Assert.True(queueA.Single(o => o.Id == behind.Id).IsWaiting, "the upgrade holds every slot of the group");
+        Assert.False(queueA.Single(o => o.Id == behind.Id).IsWaiting, "the slot the upgrade leaves free goes to the next order");
+        Assert.True(queueA.Single(o => o.Id == behindToo.Id).IsWaiting, "the upgrade and one farm fill the group's 4 slots");
     }
 
     [Fact]
@@ -320,19 +363,19 @@ public sealed class LinkedStoreTests
         var catapultUpkeep = UnitCatalogue.Get(UnitType.Catapult).UpkeepPerHour;
         Assert.True(catapultUpkeep > thrallUpkeep);
 
-        IReadOnlyList<UnitStack> guestsA = [new UnitStack(UnitType.Catapult, 5)];
-        var a = Member(CentreA, new ResourceAmounts(0, 0, 10, 0), garrison: [new UnitStack(UnitType.Thrall, 20)], guests: guestsA);
-        var b = Member(CentreB, new ResourceAmounts(0, 0, 10, 0), garrison: [new UnitStack(UnitType.Catapult, 10)]);
+        IReadOnlyList<UnitStack> guestsA = [new UnitStack(UnitType.Catapult, 10)];
+        var a = Member(CentreA, new ResourceAmounts(0, 0, 10, 0), garrison: [new UnitStack(UnitType.Thrall, 80)], guests: guestsA);
+        var b = Member(CentreB, new ResourceAmounts(0, 0, 10, 0), garrison: [new UnitStack(UnitType.Catapult, 20)]);
         var store = Store([guestsA, []], a, b);
 
         var gross = Rate(a with { Garrison = [] }).Food + Rate(b with { Garrison = [] }).Food;
-        var upkeep = (20 * thrallUpkeep) + (15 * catapultUpkeep);
+        var upkeep = (80 * thrallUpkeep) + (30 * catapultUpkeep);
         Assert.True(upkeep > gross);
         var kills = (int)Math.Ceiling((upkeep - gross) / catapultUpkeep);
 
         store.SettleTo(T0.AddHours(2));
 
-        var split = ProportionalAllocator.Allocate(kills, [0, 5, 10, 0]);
+        var split = ProportionalAllocator.Allocate(kills, [0, 10, 20, 0]);
         var outcomeA = store.Outcome(a.Id);
         var outcomeB = store.Outcome(b.Id);
         Assert.Empty(outcomeA.Deaths);
@@ -342,7 +385,7 @@ public sealed class LinkedStoreTests
         Assert.Equal(kills, split.Sum());
 
         // The cheap units are all still there, and the pooled food rate is no longer negative.
-        Assert.Equal(20, outcomeA.Settlement.Garrison.Single(g => g.Type == UnitType.Thrall).Count);
+        Assert.Equal(80, outcomeA.Settlement.Garrison.Single(g => g.Type == UnitType.Thrall).Count);
         var foodRate = outcomeA.Settlement.Resources.RatePerHour.Food + outcomeB.Settlement.Resources.RatePerHour.Food;
         Assert.True(foodRate >= -1e-9, $"food rate {foodRate}");
         Assert.True(outcomeB.Changed);

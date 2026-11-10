@@ -231,7 +231,7 @@ for (const size of SCREEN_SIZES) {
         // The founding hero and the guided-onboarding UI must not reappear
         // underneath the gate — a visitor who just logged out of a real account
         // must not be nudged toward starting a throwaway new realm on top of it.
-        await expect(page.getByRole('heading', { name: /put your longhouse somewhere/i })).toHaveCount(0);
+        await expect(page.getByRole('heading', { name: /choose where your realm begins/i })).toHaveCount(0);
         await expect(settlement.guidancePointer).toHaveCount(0);
         await expect(settlement.checklist).toHaveCount(0);
 
@@ -282,7 +282,7 @@ for (const size of SCREEN_SIZES) {
         // which is exactly what
         // Bjarnoy.AppHost.Tests/OnboardingHappyPathTests.cs (the companion
         // real-backend test for this same flow) asserts instead.
-        await expect(page.getByRole('heading', { name: /put your longhouse somewhere/i })).toBeVisible();
+        await expect(page.getByRole('heading', { name: /choose where your realm begins/i })).toBeVisible();
         await expect(page.getByTestId('returning-player-trigger')).toBeVisible();
         await expect(settlement.accountMenuTrigger).toHaveCount(0);
       },

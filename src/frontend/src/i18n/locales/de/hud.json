@@ -1,4 +1,5 @@
 {
+  "focusHome": "Zurück zu deiner Siedlung",
   "nav": {
     "settlement": "Siedlung",
     "leaderboards": "Ranglisten",
@@ -94,6 +95,12 @@
   "ringMenu": {
     "shrineLimitLock": "Dein Gebiet hat bereits einen Schrein",
     "storageHouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
+    "occupiedLock": {
+      "giant": "Von einem Riesenwahrzeichen belegt",
+      "camp": "Hier hausen wilde Tiere – räum erst ihr Lager",
+      "fenrirBrood": "Fenrirs Brut wächst immer nach – hier kannst du nichts bauen",
+      "endgameSite": "Hier steht eine Utgardmauer oder ein Jötunn-Wachturm"
+    },
     "palisadeLock": {
       "branch": "Eine Mauer verzweigt sich nie: Dieses Feld hätte drei Nachbarn der Mauer",
       "gateNotStraight": "Ein Tor steht nur zwischen zwei gegenüberliegenden Mauerfeldern in einer geraden Mauer",
@@ -101,6 +108,9 @@
       "seaEnd": "Das Seeende braucht genau eine Landmauer daneben",
       "occupied": "Hier steht schon eine Mauer",
       "terrain": "Auf diesem Gelände kann keine Mauer stehen"
+    },
+    "riverLock": {
+      "tooCurved": "Der Fluss macht hier zu viel Kurve: Du brauchst ein geraderes Flussstück"
     },
     "bridgeLock": {
       "notWide": "Dieser Fluss ist nicht breit: Armeen waten ohnehin hindurch",
@@ -126,23 +136,19 @@
       "sendArmyHere": "Armee hierher entsenden",
       "attack": "Angreifen",
       "support": "Unterstützen",
-      "noUnitsAtHome": "Keine Einheiten daheim",
+      "noArmyCanGo": "Keine Armee kann losziehen",
       "upgrade": "Ausbauen",
       "notEnough": "Benötigt {resources}",
       "raze": "Abreißen",
       "cantRazeLonghouse": "Das Langhaus kann nicht abgerissen werden",
-      "notWiredYet": "Noch nicht mit dem Backend verbunden",
       "trainUnits": "Einheiten ausbilden",
       "feasts": "Feste",
       "build": "Bauen",
-      "giantOccupied": "Von einem Riesenwahrzeichen belegt",
       "hunt": "Jagen",
-      "campOccupied": "Von wilden Tieren belegt",
       "maxLevel": "Höchste Stufe",
-      "noLandUnitsAtHome": "Keine Landeinheiten zu Hause",
-      "noShipsAtHome": "Keine Schiffe zu Hause",
       "siege": "Belagern",
-      "noRamAtHome": "Braucht einen Rammbock zu Hause"
+      "noRamAtHome": "Braucht einen Rammbock zu Hause",
+      "hexBusy": "Auf diesem Feld läuft schon ein Auftrag"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "STF {level} · HEX {q}, {r}",
@@ -162,17 +168,25 @@
       "queueFull": "Die Warteschlange ist voll ({waiting} von {max})",
       "badgeNoResources": "Nicht genug Rohstoffe",
       "badgeNoSlot": "Kein freier Bauplatz",
-      "requiresBuilding": "Benötigt {building} Stufe {level}"
+      "requiresBuilding": "Benötigt {building} Stufe {level}",
+      "razeTitle": "Abriss auf Stufe {level}",
+      "razeTitleRemove": "Abreißen",
+      "razeSubRemove": "{building} · Stufe 1 → weg",
+      "razeBadge": "ABRISS MÖGLICH"
     },
     "tap": {
       "build": "{name} noch einmal antippen, um zu bauen",
-      "upgrade": "{name} noch einmal antippen, um auszubauen"
+      "upgrade": "{name} noch einmal antippen, um auszubauen",
+      "raze": "{name} noch einmal antippen, um abzureißen"
     },
     "errors": {
       "couldNotQueueBuild": "Der Bau konnte nicht eingereiht werden.",
-      "couldNotQueueUpgrade": "Der Ausbau konnte nicht eingereiht werden."
+      "couldNotQueueUpgrade": "Der Ausbau konnte nicht eingereiht werden.",
+      "couldNotQueueRaze": "Der Abriss konnte nicht eingereiht werden."
     },
-    "towerCampWarning": "Wilde Tiere brennen diesen Turm nieder, wenn keine Armee ihn bewacht."
+    "towerCampWarning": "Wilde Tiere brennen diesen Turm nieder, wenn keine Armee ihn bewacht.",
+    "razeTime": "Abrisszeit",
+    "refund": "Rückerstattung"
   },
   "buildQueue": {
     "title": "Bau",
@@ -182,7 +196,9 @@
     "hexSubtext": "Hex {q}-{r}",
     "cancel": "✕",
     "cancelError": "Der Auftrag konnte nicht storniert werden.",
-    "reservedFooter": "Reserviert für laufende Bauaufträge: {wood}H {stone}S {food}N {iron}E"
+    "reservedFooter": "Reserviert für laufende Bauaufträge: {wood}H {stone}S {food}N {iron}E",
+    "razeOrderName": "Abriss {name} → {level}",
+    "razeRemoveOrderName": "Abriss {name}"
   },
   "trainingQueue": {
     "title": "Ausbildung",
@@ -230,15 +246,7 @@
     "slotHere": "Hier einsetzen",
     "slotRuneError": "Die Rune konnte nicht eingesetzt werden — sie ist möglicherweise bereits eingesetzt, oder dieser Schrein hat keinen freien Platz.",
     "unslotRuneError": "Die Rune konnte nicht entfernt werden.",
-    "queuedNote": "In der Warteschlange — wartet auf einen Bauplatz.",
-    "upgradeCost": "Ausbaukosten",
     "notEnoughResources": "Nicht genügend Ressourcen verfügbar (einige sind eventuell für laufende Bauaufträge reserviert).",
-    "premiumRequired": "Jeder Bauplatz ist belegt, und dieses Konto hat keine Warteschlange als Rückgriff — das ist eine {premium}-Funktion.",
-    "premium": "Premium",
-    "queuing": "Wird eingereiht…",
-    "noFreeSlotPremium": "Kein freier Platz — Premium erforderlich",
-    "queueBuild": "Bau einreihen",
-    "upgradeToLevel": "Auf Stufe {level} ausbauen",
     "feastTitle": "Fest",
     "feastDesc": "Verwandle überschüssiges Holz, Stein und Essen in Ruhm. Die Kosten werden sofort bezahlt, der Ruhm kommt, wenn das Fest endet.",
     "feastCost": "Kosten",
@@ -360,7 +368,9 @@
     "summaryLost": "verloren, {n} verloren",
     "summaryTied": "unentschieden, {n} verloren",
     "summaryLooted": "{n} erbeutet",
-    "hexCoord": "Hex ({q}, {r})"
+    "hexCoord": "Hex ({q}, {r})",
+    "location": "Ort",
+    "unknownOpponent": "Unbekannt"
   },
   "armyStatus": {
     "arriving": "Kommt an",
@@ -437,8 +447,39 @@
     "decrement": "−",
     "increment": "+"
   },
+  "sendPicker": {
+    "title": "{mission} → {target}",
+    "close": "Schließen",
+    "hex": "Feld ({q}, {r})",
+    "home": "Zu Hause",
+    "garrison": "Garnison",
+    "units": "{count} Einheit | {count} Einheiten",
+    "standingAt": "Steht bei ({q}, {r})",
+    "marchingTo": "Marschiert nach ({q}, {r})",
+    "etaMinutes": "{minutes} Min.",
+    "etaHours": "{hours} Std. {minutes} Min.",
+    "wholeArmy": "Die ganze Armee zieht los.",
+    "splits": "Geteilt: {go} ziehen los, {stay} bleiben stehen.",
+    "pickOne": "Wähle mindestens eine Einheit.",
+    "reasons": {
+      "noUnitsAtHome": "Keine Einheiten zu Hause",
+      "noLandUnits": "Keine Landeinheiten",
+      "noShips": "Keine Schiffe",
+      "supportingNamed": "Unterstützt {name}, ruf sie erst zurück",
+      "supporting": "Unterstützt eine Siedlung, ruf sie erst zurück",
+      "returning": "Kehrt gerade heim",
+      "notOrderable": "Ist auf einem Auftrag und nimmt keine neuen Befehle an",
+      "premium": "Premium: Umleiten während des Marschs",
+      "unreachable": "Kommt dort nicht hin",
+      "noFood": "Proviant reicht nicht für den Rückweg"
+    }
+  },
   "tradeReport": {
     "summary": "Gab {gaveAmount} {gave} für {gotAmount} {got}"
+  },
+  "debugStack": {
+    "handle": "Debug",
+    "handleTitle": "Zum Verschieben ziehen, Doppelklick setzt zurück"
   },
   "fpsMeter": {
     "title": "Bildrate",
@@ -446,6 +487,8 @@
     "msPerFrame": "{n} ms/Bild",
     "worstFrame": "Schlechtestes Bild (letzte {seconds} s)",
     "ms": "{n} ms",
+    "average": "Durchschnitt (letzte {n} Bilder)",
+    "fpsValue": "{n} fps",
     "ago": "vor {n} s",
     "stutters": "Bilder über {threshold} ms",
     "sparkLabel": "Die letzten {n} Bildabstände",

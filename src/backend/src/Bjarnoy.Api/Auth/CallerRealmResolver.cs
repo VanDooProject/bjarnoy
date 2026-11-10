@@ -102,7 +102,7 @@ internal static class CallerRealmResolver
             }
         }
 
-        var headerOwnerId = httpContext.Request.Headers[OwnershipGate.OwnerIdHeaderName].ToString();
+        var headerOwnerId = OwnershipGate.CallerOwnerId(httpContext);
         if (string.IsNullOrEmpty(headerOwnerId))
         {
             return CallerRealmResult.MissingHeader;

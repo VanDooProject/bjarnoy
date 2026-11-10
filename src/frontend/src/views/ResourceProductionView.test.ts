@@ -14,6 +14,7 @@ import buildingCatalogue from '../data/building-catalogue.json';
 import unitCatalogue from '../data/unit-catalogue.json';
 import type { BuildingDefinitionResponse, UnitDefinitionResponse, UserResponse } from '../api/types';
 import { createTestI18n } from '../test/i18n';
+import { setPlacementRules } from '../lib/map/placementRules';
 import enDocs from '../i18n/locales/en/docs.json';
 
 async function mountPage() {
@@ -42,6 +43,18 @@ beforeEach(() => {
 });
 
 describe('ResourceProductionView', () => {
+  it('reads the switched-off Quarry from the loaded catalogue, not from the placement registry (empty until a catalogue loads, as on a direct visit)', async () => {
+    setPlacementRules([]);
+    try {
+      const wrapper = await mountPage();
+      expect(wrapper.findAll('[data-testid=producers-table] tbody tr')).toHaveLength(8);
+      expect(wrapper.find('[data-producer=quarry]').exists()).toBe(false);
+      expect(wrapper.find('[data-boost=quarry]').exists()).toBe(false);
+    } finally {
+      setPlacementRules(buildingCatalogue.data as BuildingDefinitionResponse[]);
+    }
+  });
+
   it('lists the producers a player can still place (no Quarry) and the Longhouse with their level 1 and level 10 output', async () => {
     const wrapper = await mountPage();
 
@@ -60,7 +73,7 @@ describe('ResourceProductionView', () => {
     expect(cells('lumberjack').slice(0, 3)).toEqual(['Wood', '40', '206']);
     expect(cells('pumpkinfarm').slice(0, 3)).toEqual(['Food', '44', '227']);
     expect(cells('bogoreworks').slice(0, 3)).toEqual(['Iron', '20', '103']);
-    expect(cells('longhouse').slice(0, 3)).toEqual(['Wood / Stone / Food / Iron', '15 / 12 / 15 / 2', '150 / 120 / 150 / 20']);
+    expect(cells('longhouse').slice(0, 3)).toEqual(['Wood / Brick / Food / Iron', '15 / 12 / 15 / 2', '150 / 120 / 150 / 20']);
     wrapper.unmount();
   });
 

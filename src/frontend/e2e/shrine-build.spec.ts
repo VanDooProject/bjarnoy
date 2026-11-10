@@ -33,7 +33,7 @@ test('building a shrine from the ring menu places it without a rendering error',
 
   // Same approach as settlement-interactions.spec.ts's build test: ask the
   // model for a real empty, owned, grass hex (grass is what carries the new
-  // "Shrines" category — see BUILD_CATEGORIES in SettlementView.vue) rather
+  // "Shrines" category — the catalogue's ringCategory) rather
   // than guess a pixel offset that only happens to land on one at whatever
   // zoom/camera framing this run's settlement got.
   const target = await settlement.findHex({ terrain: 'grass' });

@@ -71,8 +71,8 @@ public sealed class BridgeMovementTests
     [Theory]
     [InlineData(1, 3 + 6.0)] // three grass steps plus the span
     [InlineData(2, 3 + 4.0)]
-    [InlineData(3, 3 + 1.0)]
-    [InlineData(4, 3 + 1.0)]
+    [InlineData(3, 3 + 1.5)]
+    [InlineData(4, 3 + 1.5)]
     public void Each_level_prices_the_crossing_for_the_owner_and_for_a_stranger_alike_up_to_level_3(int level, double expected)
     {
         var terrain = Strip();
@@ -102,13 +102,16 @@ public sealed class BridgeMovementTests
     }
 
     [Fact]
-    public void A_kings_bridge_costs_the_terrain_under_it()
+    public void A_kings_and_a_guarded_bridge_cost_1_5_whatever_the_ground_under_the_river()
     {
         var terrain = Strip();
-        terrain[Span] = Terrain.Forest;
-        Assert.Equal(1.3, Index(terrain, 3).CrossingCost(Span, Stranger));
-        terrain[Span] = Terrain.Sand;
-        Assert.Equal(1.1, Index(terrain, 3).CrossingCost(Span, Stranger));
+        foreach (var ground in new[] { Terrain.Grass, Terrain.Sand, Terrain.Forest })
+        {
+            terrain[Span] = ground;
+            Assert.Equal(1.0 + HexPathfinder.KingsBridgeCrossingCost, Index(terrain, 3).CrossingCost(Span, Stranger));
+            Assert.Equal(1.5, Index(terrain, 3).CrossingCost(Span, Stranger));
+            Assert.Equal(1.5, Index(terrain, 4).CrossingCost(Span, Owner));
+        }
     }
 
     [Fact]
