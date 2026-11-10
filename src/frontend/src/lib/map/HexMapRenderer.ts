@@ -32,6 +32,7 @@
 // instead of slicing across their canopy. Fog-of-war dimming sits above
 // everything, since a scouted-but-not-currently-visible hex needs to dim
 // its whole tile, props included.
+import { frameCameraFor } from './frameCamera';
 import {
   circleIntersectsRect,
   circlesIntersect,
@@ -6237,34 +6238,28 @@ export class HexMapRenderer {
   }
 
   /**
-   * Frames `coords` in the part of the canvas that stays visible: the camera centres on them and zooms to fit with `marginPx` to
-   * spare, never closer than the settlement default or further out than a readable `MIN_FRAME_ZOOM`. `bottomInsetPx` is what a
-   * sheet covers at the bottom. Eased over `durationMs`, at once when that is 0. False when the camera cannot move.
+   * Brings `coords` into the part of the canvas that stays visible (`bottomInsetPx` is what a sheet covers at the bottom), with
+   * `marginPx` to spare: the camera stays put when they are all there already, and otherwise pans only by what sticks out and
+   * zooms out only as far as they need, never in and never past a readable `MIN_FRAME_ZOOM` (see `frameCameraFor`). Eased over
+   * `durationMs`, at once when that is 0. False when the camera cannot move.
    */
   frameHexes(coords: AxialCoord[], opts: { bottomInsetPx?: number; marginPx?: number; durationMs?: number } = {}): boolean {
     if (!this.app || this.lockCamera || coords.length === 0 || this.viewport.width === 0) return false;
-    const margin = opts.marginPx ?? 48;
-    const bottom = Math.max(0, opts.bottomInsetPx ?? 0);
     const points = coords.map((c) => {
       const g = isoGridPosition(c, TILE_W, TILE_H);
       return { x: g.x + TILE_W / 2, y: g.y + TILE_CENTER_Y_OFFSET };
     });
-    const minX = Math.min(...points.map((p) => p.x));
-    const maxX = Math.max(...points.map((p) => p.x));
-    const minY = Math.min(...points.map((p) => p.y));
-    const maxY = Math.max(...points.map((p) => p.y));
-    const availW = Math.max(1, this.viewport.width - margin * 2);
-    const availH = Math.max(1, this.viewport.height - bottom - margin * 2);
-    const fit = Math.min(availW / Math.max(1, maxX - minX), availH / Math.max(1, maxY - minY));
-    // Zooms out only as far as needed to fit everything, never in past the player's own zoom.
-    const zoom = Math.min(this.camera.zoom, Math.max(MIN_FRAME_ZOOM, fit));
-    // The visible area is the top (height - bottom) px: its centre sits `bottom / 2` px above the canvas centre.
-    const to = this.clampCamera({
-      ...this.camera,
-      zoom,
-      x: (minX + maxX) / 2,
-      y: (minY + maxY) / 2 + bottom / 2 / zoom,
+    const framed = frameCameraFor(this.camera, this.viewport, points, {
+      margin: opts.marginPx ?? 48,
+      bottomInset: opts.bottomInsetPx ?? 0,
+      minZoom: Math.min(MIN_FRAME_ZOOM, this.camera.zoom),
     });
+    // Everything is on screen already: the camera stays where the player left it (and stops drifting off it).
+    if (!framed) {
+      this.idleDrift = false;
+      return true;
+    }
+    const to = this.clampCamera({ ...this.camera, ...framed });
     this.cameraTouched = true;
     this.idleDrift = false;
     if ((opts.durationMs ?? 0) > 0) {
