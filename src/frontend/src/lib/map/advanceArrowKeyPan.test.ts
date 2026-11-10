@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advanceArrowKeyPan, KEY_STEP_PX, type ArrowKey, type ArrowKeyState } from './HexMapRenderer';
+import { advanceArrowKeyPan, KEY_REPEAT_PAIR_MS, KEY_STEP_PX, pressArrowKey, type ArrowKey, type ArrowKeyState } from './HexMapRenderer';
 
 /** Runs the pan in `px`-sized frames until no key is left (or `maxFrames`), returning the summed offset. */
 function run(keys: Map<ArrowKey, ArrowKeyState>, px: number, maxFrames = 1000) {
@@ -52,5 +52,44 @@ describe('advanceArrowKeyPan', () => {
       ['ArrowRight', { down: true, owedPx: 0 }],
     ]);
     expect(advanceArrowKeyPan(opposite, 10)).toBeNull();
+  });
+});
+
+describe('pressArrowKey', () => {
+  it('adds one step per press, also while earlier steps are still owed', () => {
+    const keys = new Map<ArrowKey, ArrowKeyState>();
+    pressArrowKey(keys, 'ArrowRight', 0, false, undefined);
+    keys.get('ArrowRight')!.down = false;
+    pressArrowKey(keys, 'ArrowRight', 80, false, 60);
+    expect(keys.get('ArrowRight')).toEqual({ down: true, owedPx: 2 * KEY_STEP_PX });
+  });
+
+  it('keeps a key down through auto-repeat sent as keyup+keydown pairs, without adding steps', () => {
+    const keys = new Map<ArrowKey, ArrowKeyState>();
+    pressArrowKey(keys, 'ArrowDown', 0, false, undefined);
+    // Held past its step: the step is used up and the key keeps panning.
+    advanceArrowKeyPan(keys, KEY_STEP_PX);
+    for (let t = 500; t < 2000; t += 33) {
+      keys.get('ArrowDown')!.down = false; // the pair's keyup at t
+      advanceArrowKeyPan(keys, 1); // a frame between the two events must not drop the key
+      pressArrowKey(keys, 'ArrowDown', t + 1, false, t);
+      expect(keys.get('ArrowDown')).toEqual({ down: true, owedPx: 0 });
+    }
+    // The same with the repeat flag set, after the key was dropped.
+    keys.clear();
+    pressArrowKey(keys, 'ArrowDown', 3000, true, 2999);
+    expect(keys.get('ArrowDown')).toEqual({ down: true, owedPx: 0 });
+  });
+
+  it('counts a keydown later than the repeat window after its keyup as a new press', () => {
+    const keys = new Map<ArrowKey, ArrowKeyState>();
+    pressArrowKey(keys, 'ArrowUp', 100 + KEY_REPEAT_PAIR_MS, false, 100);
+    expect(keys.get('ArrowUp')!.owedPx).toBe(KEY_STEP_PX);
+  });
+
+  it('ignores a keydown for a key that is already down', () => {
+    const keys = new Map<ArrowKey, ArrowKeyState>([['ArrowLeft', { down: true, owedPx: 40 }]]);
+    pressArrowKey(keys, 'ArrowLeft', 10, false, undefined);
+    expect(keys.get('ArrowLeft')).toEqual({ down: true, owedPx: 40 });
   });
 });

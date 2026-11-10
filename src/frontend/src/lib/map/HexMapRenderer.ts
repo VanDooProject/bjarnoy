@@ -1656,8 +1656,13 @@ const ARROW_KEY_PAN = new Map<ArrowKey, [number, number]>([
 const KEY_PAN_SPEED = 700;
 /** Screen px one arrow-key press pans, however short: quick presses add one step each. A press held longer keeps panning. */
 export const KEY_STEP_PX = 100;
-/** Longest wall-clock gap one tick pans for: a frame after a stall catches up, a tab coming back does not jump. */
-const KEY_PAN_MAX_DT_MS = 250;
+/**
+ * Longest wall-clock gap one tick pans for: a slow (paced, see framePacing.ts) frame still pans its full time, a frame
+ * after a longer stall does not jump. A hidden or covered map stops the ticker, so its gap never reaches a tick.
+ */
+const KEY_PAN_MAX_DT_MS = 1000;
+/** A keydown this soon after the same key's keyup is auto-repeat (some platforms send repeats as keyup+keydown pairs). */
+export const KEY_REPEAT_PAIR_MS = 20;
 /** Keys that zoom the map one `zoomStep` (`=` is `+` without Shift on US layouts). */
 const ZOOM_KEYS = new Map<string, 1 | -1>([
   ['+', 1],
@@ -1670,6 +1675,28 @@ export interface ArrowKeyState {
   down: boolean;
   /** Screen px of press steps (`KEY_STEP_PX` per press) not panned yet. */
   owedPx: number;
+}
+
+/**
+ * An arrow keydown at `now` (event time): a new press makes the key down and adds one `KEY_STEP_PX`; auto-repeat
+ * (`repeat`, or a keydown within `KEY_REPEAT_PAIR_MS` of the key's own keyup at `upAt`) only keeps it down.
+ */
+export function pressArrowKey(
+  keys: Map<ArrowKey, ArrowKeyState>,
+  key: ArrowKey,
+  now: number,
+  repeat: boolean,
+  upAt: number | undefined,
+): void {
+  const state = keys.get(key);
+  if (state?.down) return;
+  const step = repeat || (upAt !== undefined && now - upAt < KEY_REPEAT_PAIR_MS) ? 0 : KEY_STEP_PX;
+  if (state) {
+    state.down = true;
+    state.owedPx += step;
+  } else {
+    keys.set(key, { down: true, owedPx: step });
+  }
 }
 
 /**
@@ -3551,6 +3578,8 @@ export class HexMapRenderer {
   private heldArrowKeys = new Map<ArrowKey, ArrowKeyState>();
   /** Wall-clock time the arrow-key pan last advanced to (its own clock, not the ticker's capped delta). */
   private keyPanAt = 0;
+  /** Event time of each arrow key's last keyup, to tell auto-repeat pairs from new presses (`pressArrowKey`). */
+  private arrowKeyUpAt = new Map<ArrowKey, number>();
   /** Whether the current arrow-key pan moved the camera, so its end owes a rebuild. */
   private keyPanMoved = false;
 
@@ -3558,7 +3587,7 @@ export class HexMapRenderer {
   private keyDrivesMap(e: KeyboardEvent): boolean {
     if (e.ctrlKey || e.metaKey || e.altKey || isTypingTarget(e.target)) return false;
     // A host that lets the page scroll keeps the keys for the page; a locked or menu-covered map does not move.
-    return !this.lockCamera && !this.interactionLocked && !this.options.allowPageScroll;
+    return !this.lockCamera && !this.interactionLocked && !this.covered && !this.options.allowPageScroll;
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
@@ -3566,26 +3595,22 @@ export class HexMapRenderer {
     if (zoom !== undefined) {
       if (!this.keyDrivesMap(e)) return;
       e.preventDefault();
-      this.zoomStep(zoom);
+      // One step per press, like the zoom buttons: auto-repeat would jump the zoom at the OS repeat rate.
+      if (!e.repeat) this.zoomStep(zoom);
       return;
     }
     const key = e.key as ArrowKey;
     if (!ARROW_KEY_PAN.has(key) || e.shiftKey || !this.keyDrivesMap(e)) return;
     e.preventDefault();
-    const state = this.heldArrowKeys.get(key);
-    // Auto-repeat: a held key already pans continuously.
-    if (e.repeat || state?.down) return;
     if (this.heldArrowKeys.size === 0) this.keyPanAt = performance.now();
-    if (state) {
-      state.down = true;
-      state.owedPx += KEY_STEP_PX;
-    } else {
-      this.heldArrowKeys.set(key, { down: true, owedPx: KEY_STEP_PX });
-    }
+    pressArrowKey(this.heldArrowKeys, key, e.timeStamp, e.repeat, this.arrowKeyUpAt.get(key));
   };
 
   private onKeyUp = (e: KeyboardEvent) => {
-    const state = this.heldArrowKeys.get(e.key as ArrowKey);
+    const key = e.key as ArrowKey;
+    if (!ARROW_KEY_PAN.has(key)) return;
+    this.arrowKeyUpAt.set(key, e.timeStamp);
+    const state = this.heldArrowKeys.get(key);
     if (state) state.down = false;
   };
 
