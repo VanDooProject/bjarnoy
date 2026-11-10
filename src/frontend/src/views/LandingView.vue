@@ -39,7 +39,7 @@ import { useRingMaxScale } from '../composables/useRingMaxScale';
 import { buildingStatsAt, scaleOutput } from '../lib/map/buildingEconomy';
 import {
   deriveOnboardingGuidance,
-  findGuidedTarget,
+  guidedBuildTarget,
   guidedRingStep,
   nextGuidedType,
   snapToOfferedPlot,
@@ -385,7 +385,7 @@ const ringScreen = ref<RingPlacement | null>(null);
 const ringCoord = ref<AxialCoord | null>(null);
 const ringTile = ref<Tile | null>(null);
 const ringError = ref<string | null>(null);
-const { categories: ringCategories, canBuildHere, offersBuilding, placeBuildingDemo } = useBuildRing(ringTile, ringCoord);
+const { categories: ringCategories, buildAction, offersBuilding, placeBuildingDemo } = useBuildRing(ringTile, ringCoord);
 // Every ring bubble's screen spot (the Build hub, categories, buildings), keyed by id - from RingMenu's own
 // `layout` emit, so the pointer aims at exactly where the bubble is actually drawn.
 // Every bubble as a circle (RingMenu's `bubbles` emit): the spots the pointer aims at, and the circles it keeps clear of.
@@ -457,10 +457,9 @@ watch(isHudDrawerOpen, (open) => {
   if (open) queueDrawerOpen.value = false;
 });
 
-// Root of the ring: Build, offered only on a hex that takes something (the map's rule; no dead button).
-const ringActions = computed<RingAction[]>(() =>
-  canBuildHere.value ? [{ id: 'build', label: t('hud.ringMenu.actions.build') }] : [],
-);
+// Root of the ring: the map's own Build bubble (offered only on a hex that takes something; locked on a guarded camp, giant or
+// endgame site with the reason).
+const ringActions = computed<RingAction[]>(() => (buildAction.value ? [buildAction.value] : []));
 
 // The hub names the tile the menu is anchored to: its bare terrain plus the hex coordinate.
 const ringTerrainLabel = computed(() => (ringTile.value ? terrainName(ringTile.value.terrain) : ''));
@@ -530,25 +529,17 @@ function withinBuildableRange(coord: AxialCoord): boolean {
 
 // Design handoff "2a": the nearest still-buildable hex for whichever guided
 // building isn't placed yet — what the map pointer (frames 2/4, "Now build
-// here" / "One more — the {terrain}") aims at. `findGuidedTarget` itself is
-// pure (onboardingGuidance.ts); this just supplies it with this settlement's
-// centre/claim radius and a terrain/buildability lookup against the real
-// WorldModel, mirroring onHexClick's own buildable-tile rule above.
+// here" / "One more — the {terrain}") aims at. `guidedBuildTarget`
+// (onboardingGuidance.ts) holds the rule; this supplies this settlement's
+// centre/claim radius, the real WorldModel and the realm check.
 const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
   if (!player.hasFoundedSettlement || !world.selectedSettlementId) return null;
   const settlement = world.model.getSettlement(world.selectedSettlementId);
   if (!settlement) return null;
   const type = nextGuidedType(world.hud.placedBuildingTypes);
   if (!type) return null;
-  return findGuidedTarget(
-    { q: settlement.q, r: settlement.r },
-    claimRadiusForLevel(settlement.level),
-    type,
-    (c) => world.model.getTile(c.q, c.r).terrain,
-    (c) => {
-      const tile = world.model.getTile(c.q, c.r);
-      return world.isRealmSettlement(tile.ownerId) && !tile.buildingType;
-    },
+  return guidedBuildTarget(world.model, { q: settlement.q, r: settlement.r }, claimRadiusForLevel(settlement.level), type, (owner) =>
+    world.isRealmSettlement(owner),
   );
 });
 
@@ -570,10 +561,13 @@ const showLandfallBanner = computed(
 // and "Click this plot" over an empty canvas point at nothing.
 const mapDrawn = computed(() => (canvasRef.value?.loadState.phase ?? 'terrain') !== 'terrain');
 
-/** The open ring's next guided step, with its label; null when the next guided building isn't offered on this hex. */
+/**
+ * The open ring's next guided step, with its label; null when the next guided building isn't offered on this hex, or Build is
+ * locked there (a guarded camp, a giant, an endgame site): the pointer then goes back to the guided hex.
+ */
 function ringStepTarget(): { id: string; spot: { x: number; y: number }; label: string } | null {
   const type = nextGuidedType(world.hud.placedBuildingTypes);
-  if (!type) return null;
+  if (!type || buildAction.value?.disabled) return null;
   const step = guidedRingStep(type, ringCategories.value, ringLaneSpots.value);
   if (!step) return null;
   if (step.kind === 'building') {

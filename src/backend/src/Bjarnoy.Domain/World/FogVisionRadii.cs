@@ -28,6 +28,33 @@ public static class FogVisionRadii
     public const int ScoutRingHexes = 3;
 
     /// <summary>
+    /// The ramp value at which the client's fog mist is fully opaque (the point the edge noise has shut off). Mirrors the frontend's
+    /// <c>FOG_MIST_OPAQUE_AT_RAMP</c> (<c>src/frontend/src/lib/map/fog/fogRamp.ts</c>); <c>FogVisionRadiiTests</c> pins the number.
+    /// </summary>
+    public const double MistOpaqueAtRamp = 0.8;
+
+    /// <summary>
+    /// How far past a settlement's or tower's <see cref="ExploredRadius"/> (straight-line distance) the ground is still visible
+    /// through the mist: the unknown ramp's width times <see cref="MistOpaqueAtRamp"/> (11.2 hexes).
+    /// </summary>
+    public const double SourceMistOpaqueMargin = FogMaskOptions.DefaultUnknownMarginHexes * MistOpaqueAtRamp;
+
+    /// <summary>Where a marching army's own white fog ramp starts, past its vision radius. Mirrors the frontend's <c>ARMY_FOG_WHITE_OFFSET</c> (<c>fogRamp.ts</c>).</summary>
+    public const double ArmyFogWhiteOffsetHexes = 0.75;
+
+    /// <summary>The army white ramp's width in hexes. Mirrors the frontend's <c>ARMY_FOG_WHITE_MARGIN</c> (<c>fogRamp.ts</c>).</summary>
+    public const int ArmyFogWhiteMarginHexes = 6;
+
+    /// <summary>
+    /// How far past a marching army's vision radius (straight-line distance) the ground is still visible through the mist:
+    /// <see cref="ArmyFogWhiteOffsetHexes"/> plus the white ramp's width times <see cref="MistOpaqueAtRamp"/> (5.55 hexes).
+    /// </summary>
+    public const double ArmyMistOpaqueMargin = ArmyFogWhiteOffsetHexes + (ArmyFogWhiteMarginHexes * MistOpaqueAtRamp);
+
+    /// <summary>Slack for comparing a euclidean distance against the margins above (they are sums of binary fractions).</summary>
+    public const double ReachEpsilon = 1e-9;
+
+    /// <summary>
     /// The settlement's realm-border radius, in hexes. Mirrors the
     /// frontend's <c>borderRadius(settlement)</c>.
     /// </summary>

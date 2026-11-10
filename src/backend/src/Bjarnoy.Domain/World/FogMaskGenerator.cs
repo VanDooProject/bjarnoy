@@ -30,7 +30,13 @@ public sealed record FogMaskOptions
     /// not fail anywhere, it just quietly puts the live and demo fog edges
     /// at different distances from the realm.
     /// </summary>
-    public int UnknownMarginHexes { get; init; } = 14;
+    public int UnknownMarginHexes { get; init; } = DefaultUnknownMarginHexes;
+
+    /// <summary>
+    /// The default <see cref="UnknownMarginHexes"/>, and the one number <see cref="FogVisionRadii.SourceMistOpaqueMargin"/> (how far
+    /// past a source the fog is fully opaque, which decides what rival data a read delivers) derives from.
+    /// </summary>
+    public const int DefaultUnknownMarginHexes = 14;
 
     /// <summary>Ramp width, in hexes, of the G (out-of-sight) channel.</summary>
     public int OutOfSightMarginHexes { get; init; } = 2;
@@ -101,17 +107,16 @@ public static class FogMaskGenerator
 
     /// <summary>
     /// Start of the fringe ramp baked around explored ground, in hexes from
-    /// the nearest explored hex. Must equal the frontend's
-    /// <c>ARMY_FOG_WHITE_OFFSET</c> (<c>fogRamp.ts</c>): the fringe is the
-    /// troop's own live ramp, so a stored trail reads like the live clearing.
+    /// the nearest explored hex: the troop's own live white ramp
+    /// (<see cref="FogVisionRadii.ArmyFogWhiteOffsetHexes"/>), so a stored trail reads like the live clearing.
     /// </summary>
-    public const double TrailFringeOffsetHexes = 0.75;
+    public const double TrailFringeOffsetHexes = FogVisionRadii.ArmyFogWhiteOffsetHexes;
 
     /// <summary>
-    /// Width of the fringe ramp, in hexes. Must equal the frontend's
-    /// <c>ARMY_FOG_WHITE_MARGIN</c> (<c>fogRamp.ts</c>).
+    /// Width of the fringe ramp, in hexes: the troop's
+    /// <see cref="FogVisionRadii.ArmyFogWhiteMarginHexes"/>.
     /// </summary>
-    public const double TrailFringeMarginHexes = 6;
+    public const double TrailFringeMarginHexes = FogVisionRadii.ArmyFogWhiteMarginHexes;
 
     /// <summary>
     /// Steps (<see cref="HexCoord.WithinRadius"/> radius) from an explored hex

@@ -212,6 +212,7 @@ play.
   bog shore, creek, spring or lake). It replaces the tile it stands on; its
   art keeps that ground round it, so each ground has its own version of the
   tower.
+- **The Druid Hut and the Shrine of Ullr stand in the forest** (not on grass); the other land shrines stand on grass.
 - **Towers have to be chained to a longhouse.** A tower claims its ground only
   while it is connected: it stands on ground claimed by one of your
   longhouses, or by a tower that is itself connected. All of your longhouses

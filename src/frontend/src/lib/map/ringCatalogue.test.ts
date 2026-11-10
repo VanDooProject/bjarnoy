@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, cropAllowedHere, formatBuildTime, formatMissingResources, scaledBuildSeconds, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
+import { buildingAllowedOnHex, newPlacementDisabled, isBogBoundBuilding, isLakeShoreHut, isWaterOnlyBuilding, tileIsBuildable, hexOccupant, cropAllowedHere, formatBuildTime, formatMissingResources, scaledBuildSeconds, isWallBuilding, bridgeLock, longhouseLock, palisadeLock, riverBuildingAllowedHere, shrineLimitLock, storageHouseLock, towerLimitLock } from './ringCatalogue';
 
 describe('scaledBuildSeconds', () => {
   it('divides the catalogue time by the world speed factor and applies Odin\'s Wisdom', () => {
@@ -413,5 +413,25 @@ describe('riverBuildingAllowedHere — no ordinary building on a river hex', () 
       for (const type of ['sawmill', 'cropmill', 'bridge']) expect(riverBuildingAllowedHere(type, 'straight', 'plain', width), `${type}/${width}`).toBe(false);
     }
     expect(riverBuildingAllowedHere('sawmill', 'spring', 'plain', 'river')).toBe(false);
+  });
+});
+
+describe('hexOccupant', () => {
+  const camp = (family: string, empty?: boolean) => ({ camp: { family, empty } });
+  it('names what holds a hex against every building', () => {
+    expect(hexOccupant({})).toBeUndefined();
+    expect(hexOccupant({ giant: {} })).toBe('giant');
+    expect(hexOccupant(camp('wolfden'))).toBe('camp');
+    expect(hexOccupant(camp('wolfden', true))).toBeUndefined();
+    expect(hexOccupant(camp('fenrirbrood'))).toBe('fenrirBrood');
+    expect(hexOccupant(camp('fenrirbrood', true))).toBe('fenrirBrood');
+    expect(hexOccupant({ utgardWall: {} })).toBe('endgameSite');
+    expect(hexOccupant({ jotunTower: {} })).toBe('endgameSite');
+  });
+
+  it('keeps the building modal off an empty giant or endgame hex, but not off a building standing there', () => {
+    expect(tileIsBuildable({ terrain: 'grass', giant: {} })).toBe(false);
+    expect(tileIsBuildable({ terrain: 'grass', jotunTower: {} })).toBe(false);
+    expect(tileIsBuildable({ terrain: 'grass', camp: { family: 'wolfden', empty: true }, buildingType: 'farm' })).toBe(true);
   });
 });

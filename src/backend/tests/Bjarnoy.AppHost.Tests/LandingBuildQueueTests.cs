@@ -77,17 +77,11 @@ public class LandingBuildQueueTests(AppHostFixture fixture)
             $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
         var settlement = Assert.Single(settlements!);
 
-        // A grass neighbour of the settlement's own centre — guaranteed to
-        // exist (WorldGenerator only picks a start position with at least
-        // one adjacent forest and two more adjacent grass hexes) and within
-        // ClaimRadius 2 at level 1, so the backend accepts a Reindeer Herder there.
+        // The nearest grass hex of the level-1 claim the backend accepts a Reindeer
+        // Herder on (FindGuidedBuildHexAsync: not a river or camp hex).
         var centre = new HexCoord(settlement.Q, settlement.R);
-        var chunk = await apiClient.GetFromJsonAsync<TileChunkResponse>(
-            $"/api/v1/worlds/{world.Id}/tiles?qMin={centre.Q - 1}&qMax={centre.Q + 1}"
-            + $"&rMin={centre.R - 1}&rMax={centre.R + 1}",
-            cancellationToken);
-        var grassTile = chunk!.Tiles.First(t =>
-            t.Terrain == "grass" && centre.DistanceTo(new HexCoord(t.Q, t.R)) == 1);
+        var grassTile = await LiveFrontendTestHelpers.FindGuidedBuildHexAsync(
+            apiClient, world.Id, centre, "grass", cancellationToken);
 
         // --- Admin: speed the world way up so a real Reindeer Herder's 3-minute build
         // timer (BuildingCatalogue.Producer, level 1) resolves in seconds —
@@ -138,7 +132,7 @@ public class LandingBuildQueueTests(AppHostFixture fixture)
             $"/api/v1/settlements/{settlement.Id}/builds",
             new QueueBuildRequest("reindeerherder", grassTile.Q, grassTile.R),
             cancellationToken);
-        queued.EnsureSuccessStatusCode();
+        await LiveFrontendTestHelpers.EnsureSuccessWithBodyAsync(queued, cancellationToken);
 
         // startHudSync()'s own LIVE_POLL_MS (4s) poll — already running on
         // the landing page since founding — is what's expected to pick this

@@ -221,9 +221,10 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
 
         // Level 1 -> ExploredRadius = 5 around the caller's own settlement.
         // The rival's centre (and its extra "near" building) sits exactly at
-        // that boundary; its "far" building sits well past it.
+        // that boundary; its "far" building sits well past the visible area (explored radius 5 + 11.2 hexes where the mist is still
+        // see-through = 16 along the q axis).
         var nearQ = settlement.Q + 5;
-        var farQ = settlement.Q + 9;
+        var farQ = settlement.Q + 20;
         var rivalId = await PlantRivalAsync(
             worldId, settlement.IslandId, Unique("rival-owner"), "Skoll",
             nearQ, settlement.R,
@@ -426,7 +427,7 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task View_of_a_rival_with_only_a_building_explored_returns_just_the_explored_buildings()
+    public async Task View_of_a_rival_with_only_a_building_explored_returns_that_building_and_its_longhouse_whose_claim_reaches_it()
     {
         using var client = Client();
         var (_, _, _, rivalId, centre, seenFarm, hiddenFarm) = await SetUpRivalSeenThroughABuildingAsync(client);
@@ -436,10 +437,11 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.ReadStrictAsync<SettlementViewResponse>(Ct);
         Assert.Equal((centre.Q, centre.R), (body.Q, body.R));
-        var building = Assert.Single(body.Buildings);
-        Assert.Equal((seenFarm.Q, seenFarm.R), (building.Q, building.R));
+        // The explored farm, and the Longhouse (§1h: sent as soon as a hex of its claim disc is visible, wherever it stands).
+        Assert.Equivalent(
+            new[] { (seenFarm.Q, seenFarm.R), (centre.Q, centre.R) },
+            body.Buildings.Select(b => (b.Q, b.R)).ToArray());
         Assert.DoesNotContain(body.Buildings, b => b.Q == hiddenFarm.Q && b.R == hiddenFarm.R);
-        Assert.DoesNotContain(body.Buildings, b => b.Q == centre.Q && b.R == centre.R);
     }
 
     // ------------------------------------------------------- GET /worlds/{worldId}/plot-suggestion

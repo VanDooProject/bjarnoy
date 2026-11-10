@@ -28,7 +28,7 @@ const world = useWorldStore();
 const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 import { buildingArtOnTile, terrainArt } from '../../lib/map/buildingArt';
-import { tileIsBuildable } from '../../lib/map/ringCatalogue';
+import { hexOccupantLock, tileIsBuildable } from '../../lib/map/ringCatalogue';
 import AtlasSprite from '../AtlasSprite.vue';
 
 const props = defineProps<{
@@ -210,6 +210,8 @@ const art = computed(() => {
 // this modal's own `build` flow offers water as a target), so it can't be
 // mistaken for turning open water buildable from empty.
 const buildable = computed(() => tileIsBuildable(props.tile));
+// An empty hex a giant, a guarded camp or an endgame site holds says why, in the ring's own words — not "open water".
+const occupiedLock = computed(() => (props.tile.buildingType ? undefined : hexOccupantLock(props.tile)));
 
 const name = computed(() =>
   props.tile.buildingType ? buildingName(props.tile.buildingType) : terrainName(props.tile.terrain),
@@ -265,6 +267,7 @@ const currentStats = computed(() =>
           {{ t('hud.buildingModal.descHeldByOther') }}
         </p>
         <p v-else-if="!mine" class="desc">{{ t('hud.buildingModal.descOutsideBorder') }}</p>
+        <p v-else-if="occupiedLock" class="desc" data-testid="occupied-lock">{{ occupiedLock }}</p>
         <p v-else-if="!buildable" class="desc">{{ t('hud.buildingModal.descOpenWater') }}</p>
         <p v-else class="desc">
           {{ tile.buildingType ? t('hud.buildingModal.descUpgrade') : t('hud.buildingModal.descBuildEmpty') }}
