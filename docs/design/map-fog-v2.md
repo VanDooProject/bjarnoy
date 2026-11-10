@@ -377,7 +377,8 @@ to the one genuinely pre-authentication, current-state-exposing path. (Since res
 A rival settlement is delivered as soon as you can see any of it through the fog: its Longhouse centre or one of its
 standing buildings lies where your fog is not fully opaque, or such ground lies inside the claim disc of its Longhouse or of
 one of its towers. A building is only sent when its own hex lies in that area; a Longhouse or tower is sent as soon as any
-hex of its claim disc does, wherever it stands itself. The realm border is drawn from the full discs of the Longhouse and
+hex of its claim disc does, wherever it stands itself. A building under construction is shown as a construction site
+(level 0) when its hex lies in that area. The realm border is drawn from the full discs of the Longhouse and
 every tower sent, without the chain rule, and clipped by fog. "Not fully opaque" reaches 11.2 hexes (straight-line
 distance) past the explored ring of each of your settlements and towers and 5.55 hexes past the vision of each of your
 marching armies; explored ground without current vision has no such margin. The label rule stays: on the Longhouse when its

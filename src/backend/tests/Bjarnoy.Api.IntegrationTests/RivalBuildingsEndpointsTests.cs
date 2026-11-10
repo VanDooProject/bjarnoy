@@ -11,8 +11,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Bjarnoy.Api.IntegrationTests;
 
 /// <summary>
-/// <c>GET /worlds/{id}/rival-buildings</c>: every standing building of another player's settlement that stands on a hex the caller has
-/// explored, whatever its type. A hex the caller has not explored is never listed, and the caller's own buildings are left out.
+/// <c>GET /worlds/{id}/rival-buildings</c>: every building of another player's settlement, standing or under construction (level 0), that
+/// stands on a hex the caller has explored, whatever its type. A hex the caller has not explored is never listed, and the caller's own buildings are left out.
 /// </summary>
 public sealed class RivalBuildingsEndpointsTests : IAsyncLifetime
 {
@@ -111,18 +111,33 @@ public sealed class RivalBuildingsEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Lists_the_rivals_centre_longhouse_when_the_centre_is_explored_and_skips_a_foundation()
+    public async Task Lists_the_rivals_centre_longhouse_when_the_centre_is_explored()
     {
         var (worldId, own, _, client) = await SetUpAsync();
         using var _ = client;
-        await PlantAsync(
-            worldId, own.IslandId, SystemUserIds.Abandoned, own.Q + 5, own.R,
-            (own.Q + 4, own.R, BuildingType.Farm, 0));
+        await PlantAsync(worldId, own.IslandId, SystemUserIds.Abandoned, own.Q + 5, own.R);
 
         var building = Assert.Single((await BuildingsAsync(client, worldId))!);
 
         Assert.Equal((own.Q + 5, own.R, "longhouse", 1), (building.Q, building.R, building.Type, building.Level));
         Assert.Null(building.OwnerUserId);
+    }
+
+    [Fact]
+    public async Task Lists_a_rivals_building_under_construction_as_level_0()
+    {
+        var (worldId, own, _, client) = await SetUpAsync();
+        using var _ = client;
+        await PlantAsync(
+            worldId, own.IslandId, SystemUserIds.Abandoned, own.Q + 5, own.R,
+            (own.Q + 4, own.R, BuildingType.Farm, 0),
+            (own.Q + 4, own.R + 1, BuildingType.Palisade, 0));
+
+        var buildings = (await BuildingsAsync(client, worldId))!;
+
+        Assert.Equal(
+            [(own.Q + 4, own.R, "farm", 0), (own.Q + 4, own.R + 1, "palisade", 0), (own.Q + 5, own.R, "longhouse", 1)],
+            buildings.OrderBy(b => b.Q).ThenBy(b => b.R).Select(b => (b.Q, b.R, b.Type, b.Level)).ToArray());
     }
 
     [Fact]
