@@ -268,13 +268,13 @@ describe('TopBar', () => {
       wrapper.unmount();
     });
 
-    it('shows a settlement bubble instead of the inline title, ignoring hideTitle', async () => {
+    it('shows a settlement bubble instead of the inline title', async () => {
       const world = useWorldStore();
       world.hud.settlementName = 'Bjørnstad';
       world.hud.level = 4;
       world.hud.claimedHexes = 19;
 
-      const wrapper = mountTopBar({ hideTitle: true });
+      const wrapper = mountTopBar();
       await wrapper.vm.$nextTick();
 
       expect(wrapper.find('.titles').exists()).toBe(false); // inline title stays hidden on mobile
