@@ -886,7 +886,8 @@ public static class BuildingCatalogue
     /// favour (<see cref="ShrineCatalogue.Favour"/>) is a percentage bonus,
     /// folded into <see cref="Settlement.CurrentTotals"/> instead of summed
     /// here alongside the additive totals. Grass-only, like Farm/PumpkinFarm —
-    /// except the Shrine of Njörd, whose art is a shrine on a skerry standing
+    /// except the Shrine of Ullr, the god of the hunt, which stands in the
+    /// forest (a grove shrine), and the Shrine of Njörd, whose art is a shrine on a skerry standing
     /// in the shallows: it is built directly on a coastal-water hex
     /// (<see cref="BuildingDefinition.RequiresCoastalWater"/>, the hex under it
     /// stays plain <see cref="World.Terrain.Sea"/>) like FishingHut/Dockyard
@@ -900,7 +901,12 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 180, Stone: 140, Food: 60, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(12, level),
-        AllowedTerrain = type == BuildingType.ShrineOfNjord ? new HashSet<Terrain>() : Grass,
+        AllowedTerrain = type switch
+        {
+            BuildingType.ShrineOfNjord => new HashSet<Terrain>(),
+            BuildingType.ShrineOfUllr => Forest,
+            _ => Grass,
+        },
         RequiresCoastalWater = type == BuildingType.ShrineOfNjord,
     };
 
@@ -1068,7 +1074,8 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 160, Stone: 110, Food: 80, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(9, level),
-        AllowedTerrain = Grass,
+        // A sacred grove: the druid hut stands in the forest, not on grass.
+        AllowedTerrain = Forest,
     };
 
     /// <summary>
