@@ -92,8 +92,9 @@ export const GUIDED_BUILD_TERRAIN: Record<GuidedBuildType, Terrain> = {
  * The nearest still-buildable hex for the next guided building — what the
  * map pointer (GuidancePointer.vue) aims at for the "now build here" /
  * "one more — the {terrain}" steps. `isBuildable` should already cover
- * ownership/emptiness (the caller mirrors LandingView's own onHexClick
- * rules); this adds the terrain filter and picks the closest match to
+ * ownership and whether the hex takes the building at all (the caller uses
+ * `WorldModel.hexTakesBuilding`: emptiness, river, camp, ...); this adds the
+ * terrain filter and picks the closest match to
  * `center` so the pointer suggests a hex right next to the longhouse
  * rather than an arbitrary one out at the edge of the claim. Terrain and
  * buildability are injected as callbacks (not a WorldModel import) so this

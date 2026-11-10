@@ -533,7 +533,9 @@ function withinBuildableRange(coord: AxialCoord): boolean {
 // here" / "One more — the {terrain}") aims at. `findGuidedTarget` itself is
 // pure (onboardingGuidance.ts); this just supplies it with this settlement's
 // centre/claim radius and a terrain/buildability lookup against the real
-// WorldModel, mirroring onHexClick's own buildable-tile rule above.
+// WorldModel: a realm hex that the guided building can stand on
+// (`WorldModel.hexTakesBuilding`, the per-hex rules placing it uses, so never
+// a river or guarded camp hex the ring offers nothing for).
 const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
   if (!player.hasFoundedSettlement || !world.selectedSettlementId) return null;
   const settlement = world.model.getSettlement(world.selectedSettlementId);
@@ -547,7 +549,7 @@ const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
     (c) => world.model.getTile(c.q, c.r).terrain,
     (c) => {
       const tile = world.model.getTile(c.q, c.r);
-      return world.isRealmSettlement(tile.ownerId) && !tile.buildingType;
+      return world.isRealmSettlement(tile.ownerId) && world.model.hexTakesBuilding(c, type);
     },
   );
 });
