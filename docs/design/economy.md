@@ -498,6 +498,10 @@ A new settlement needs:
    (`Renown.cs`), never spent. Thresholds: **55 000** for the 2nd, then
    ×2 per settlement.
 
+Ships and land escorts may travel with the settlers, overland and by sea. With a ship in it the convoy is a fleet: it
+sails from the Dockyard and lands on a land hex next to the sea. Every unit but the settlers stays as the new settlement's
+garrison.
+
 **Feasts (Town Square)** are what lets a strong player settle early:
 Travian's celebrations.
 
