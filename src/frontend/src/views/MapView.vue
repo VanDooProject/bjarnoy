@@ -890,12 +890,13 @@ function retargetSendPicker(coord: AxialCoord, tile: Tile) {
   const picker = world.sendPicker;
   if (!picker) return;
   const mission = picker.mission === 'hunt' && isHuntableCamp(tile) ? 'hunt' : sendMissionAt(tile);
+  const selected = picker.selectedId;
+  const canGo = !!selected && !!sendSources.evaluate(sendSources.targetAt(mission, coord)).find((r) => r.id === selected)?.ok;
   world.retargetSendPicker(
     coord,
     mission === 'move' ? {} : mission === 'hunt' ? { mission } : { mission, targetSettlementId: tile.ownerId ?? undefined },
+    canGo,
   );
-  const selected = picker.selectedId;
-  if (selected && !sendPicker.rows.value.find((r) => r.id === selected)?.ok) world.selectSendSource(null);
 }
 
 // Hunt a wildlife camp: offered on a camp tile that is still on the map, live mode only
@@ -1192,7 +1193,7 @@ function roomForRing(screen: { x: number; y: number }): RingPlacement {
 // the pin was dragged onto (snapping happens there, against the same
 // isoPixelToAxial a click uses); this just writes it into the draft.
 function onWaypointMove(index: number, coord: AxialCoord) {
-  if (world.sendPicker) return; // the picker's target is fixed
+  if (world.sendPicker) return; // the picker's target moves by a tap on the map (retargetSendPicker), not by dragging its pin
   if (world.fieldOrderDraft) {
     world.moveFieldOrderWaypoint(index, coord);
     return;

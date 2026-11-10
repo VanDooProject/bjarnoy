@@ -2803,6 +2803,21 @@ describe('useWorldStore send picker', () => {
     expect(store.fieldOrderDraft).toMatchObject({ armyId: 'a', mission: 'attack', targetSettlementId: 'enemy-1', route: [] });
   });
 
+  it('a retarget keeps the units the player picked, or drops the army when it cannot go', async () => {
+    const store = await loadStoreModule(true);
+    store.armies = [army('a')] as never;
+    store.openSendPicker({ q: 3, r: -2 });
+    store.selectSendSource('a');
+    store.setFieldOrderUnitCount('spearman', 2);
+
+    store.retargetSendPicker({ q: 7, r: 0 });
+    expect(store.fieldOrderDraft).toMatchObject({ armyId: 'a', route: [{ q: 7, r: 0 }], units: { spearman: 2, archer: 4 } });
+
+    store.retargetSendPicker({ q: 9, r: 0 }, {}, false);
+    expect(store.sendPicker).toMatchObject({ coord: { q: 9, r: 0 }, selectedId: null });
+    expect(store.fieldOrderDraft).toBeNull();
+  });
+
   it('a retarget with no army selected only moves the target', async () => {
     const store = await loadStoreModule(true);
     store.openSendPicker({ q: 3, r: -2 }, { mission: 'hunt' });

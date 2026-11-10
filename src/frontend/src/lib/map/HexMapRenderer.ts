@@ -6499,7 +6499,8 @@ export class HexMapRenderer {
     this.notifyFogViewport();
   }
 
-  // Where the fetched fog mask sits (setFogMask): the loaded part of the map. Null before the first fetch and in demo mode.
+  // Where the current fog mask sits (setFogMask; demo mode's covers the demo world): the loaded part of the map. Null before
+  // the first mask arrives.
   private fogMaskBounds: MaskBounds | null = null;
   // The whole world's mask bounds (setWorldMaskBounds): the fog window is clamped to them, past them there is nothing to load.
   private worldMaskBounds: MaskBounds | null = null;
