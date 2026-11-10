@@ -324,7 +324,8 @@ public static class ArmyEndpoints
     /// <summary>
     /// The 409 body for a recall that was understood but cannot happen, or
     /// null when it did not conflict — the one place the texts are written,
-    /// for <see cref="Recall"/> and <see cref="SendGuestHome"/>.
+    /// for <see cref="Recall"/> and <see cref="SendGuestHome"/>. Carries the
+    /// outcome as the <c>rejection</c> code the frontend translates.
     /// </summary>
     private static ProblemDetails? RecallConflict(RecallResult result) => result.Outcome switch
     {
@@ -333,12 +334,14 @@ public static class ArmyEndpoints
             Title = "Nothing to recall.",
             Detail = "The army is already heading home.",
             Status = StatusCodes.Status409Conflict,
+            Extensions = { ["rejection"] = nameof(RecallOutcome.NothingToRecall) },
         },
         RecallOutcome.NoRouteHome => new ProblemDetails
         {
             Title = "No route home.",
             Detail = "The army cannot be recalled: no route home exists from where it currently is.",
             Status = StatusCodes.Status409Conflict,
+            Extensions = { ["rejection"] = nameof(RecallOutcome.NoRouteHome) },
         },
         _ => null,
     };

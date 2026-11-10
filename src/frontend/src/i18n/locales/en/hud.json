@@ -390,6 +390,7 @@
     "appendGoal": "Append goal",
     "moveOn": "Move on",
     "recalling": "Recalling…",
+    "recallFailed": "Recall failed.",
     "recall": "Recall",
     "fieldOrderInstructions": "Click hexes on the map to plot where this army should go next — the last click is the new destination. {count} {hexWord} plotted.",
     "hexWord": "hex | hexes",

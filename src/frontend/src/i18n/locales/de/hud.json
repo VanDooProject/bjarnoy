@@ -390,6 +390,7 @@
     "appendGoal": "Ziel anhängen",
     "moveOn": "Weiterziehen",
     "recalling": "Wird zurückgerufen…",
+    "recallFailed": "Rückruf fehlgeschlagen.",
     "recall": "Zurückrufen",
     "fieldOrderInstructions": "Klicke auf Hexfelder, um festzulegen, wohin diese Armee als Nächstes ziehen soll — der letzte Klick ist das neue Ziel. {count} {hexWord} geplant.",
     "hexWord": "Hexfeld | Hexfelder",
