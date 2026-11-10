@@ -147,8 +147,13 @@ describe('SendArmyPicker', () => {
   });
 
   it('the send button is disabled when the leaving part cannot afford the way home', async () => {
-    // 10 spearmen eat 10 food/h; 6 + 4 hexes of walking at speed 2 is 5 h = 50 food, but only 20 is left.
-    setup([army('stand', { provisions: 20 })]);
+    // The army stands at (10, 0), the picker targets (4, 0) and the way home ends at (0, 0): 6 + 4 hexes, all plain ground.
+    // The food it needs is that walk at the spearman's catalogue speed times the stack's catalogue upkeep; leave a bit less.
+    const spearman = (unitSnapshot.data as UnitDefinitionResponse[]).find((u) => u.type === 'spearman')!;
+    const count = 10;
+    const walkHours = (6 + 4) / spearman.speed;
+    const neededFood = walkHours * spearman.upkeepPerHour * count;
+    setup([army('stand', { provisions: neededFood - 1 })]);
 
     const wrapper = mountPicker();
 
