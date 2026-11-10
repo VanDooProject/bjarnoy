@@ -30,14 +30,6 @@ import { HUD_COMPACT_QUERY, HUD_RAIL_QUERY } from '../../lib/breakpoints';
 import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{
-  /**
-   * docs/design/zoom-transition.md: settlement mode already floats the
-   * settlement's own name badge over the longhouse hex itself
-   * (HexMapRenderer.rebuildSettlementLabels) — showing it again here too, plus
-   * the island caption, is redundant clutter once you've zoomed all the way
-   * in. World mode has no such in-scene badge, so the title stays there.
-   */
-  hideTitle?: boolean;
   /** Overrides the settlement name — for a page with no settlement of its own (the docs). */
   title?: string;
   /** Overrides the island/longhouse caption. Only shown when there is a title to sit under. */
@@ -146,10 +138,7 @@ const barPosition = computed(() => (props.docked || isChipLayout.value ? 'top' :
 // floats as its own bubble instead — same idea, and the same vertical slot,
 // as DemoModeBadge.vue's bubble (tucked below a top-docked bar, or near the
 // top itself when the bar has moved to the bottom), just left-aligned and
-// always shown regardless of `hideTitle` (that prop only exists to avoid
-// clutter next to the in-scene canvas label on a desktop-sized settlement
-// view — on mobile there's no such redundancy concern, and the bar's own
-// space is too tight to show it any other way).
+// always shown (the bar's own space is too tight to show it inline).
 //
 // Finding #10: only ever the *real* in-game settlement, never a page that
 // named itself via `title` (a docs page, or the pre-founding landing's
@@ -491,7 +480,7 @@ const backdropStyle = computed(() => {
           <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" />
         </svg>
       </span>
-      <div class="titles" v-if="settlementName && !props.hideTitle">
+      <div class="titles" v-if="settlementName">
         <button v-if="nameTappable" type="button" class="name name-btn" :title="t('hud.focusHome')" @click="emit('focus-home')">{{ settlementName }}</button>
         <span v-else class="name">{{ settlementName }}</span>
         <span v-if="caption" class="caption">{{ caption }}</span>

@@ -1439,7 +1439,7 @@ async function upgrade() {
          top-bar gradient) keeps the logo/resources/nav readable regardless
          of what's under them. -->
     <div class="hud-scrim" :class="{ 'hud-scrim--bottom': hudBarAtBottom }" />
-    <TopBar :hide-title="mode === 'settlement'" @focus-home="onFocusHome">
+    <TopBar @focus-home="onFocusHome">
       <ResourceBar :ring-open="ringOpen" />
       <HudNav has-resource-bar />
       <template #drawer="{ close }">
