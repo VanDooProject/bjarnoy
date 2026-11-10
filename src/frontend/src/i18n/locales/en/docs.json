@@ -362,6 +362,11 @@
         "lore": "Still plain sea underneath — the same terrain as the open water beyond it — but close enough to the shore for a dock.",
         "generation": "A sea hex with at least one land neighbour: the ring hugging every island."
       },
+      "inlandLake": {
+        "title": "Inland lake",
+        "lore": "Water an island encloses on all sides. It looks like the sea, but no ship can get there. You can build a Fishing Hut on it next to the shore; Dockyards and fleets can't use it.",
+        "generation": "Water an island encloses, not connected to the open sea, that the bog did not turn into a bog lake."
+      },
       "sand": {
         "title": "Sand",
         "lore": "An island's beach: the ring of land along its coast.",
@@ -781,7 +786,7 @@
       "boats": "Boats appear on a lake only where a lake Fishing Hut or a bog-ore works stands beside it, and not for every building: each one has an even chance, a small lake holds one boat at most, a big lake one per twelve water tiles, and boats and weirs keep three tiles apart.",
       "landing": "Every landing spot offered to a new player has bog in reach, because the Clay Brickworks and the bog-ore works both need it.",
       "river": "A river always runs through the lake: it enters by one creek mouth and leaves by another. Now and then a second river is sunk into the lake, or a creek spring in the bog starts a river of its own.",
-      "inland": "Bog never touches the sea or the beach. Where an island wraps around a pocket of sea, that pocket becomes a bog lake with a ring of bog, and the rivers nearby run into it."
+      "inland": "Bog never touches the sea or the beach."
     },
     "margins": {
       "heading": "Bog margins (not used)",

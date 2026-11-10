@@ -362,6 +362,11 @@
         "lore": "Darunter ist es schlichtes Meer, dasselbe Gelände wie das offene Wasser dahinter – aber nah genug am Ufer für einen Steg.",
         "generation": "Ein Meeresfeld mit mindestens einem Nachbarn an Land: der Ring, der jede Insel umschließt."
       },
+      "inlandLake": {
+        "title": "Binnensee",
+        "lore": "Wasser, das eine Insel ganz umschließt. Er sieht aus wie das Meer, aber kein Schiff kommt hin. Am Ufer kannst du eine Fischerhütte darauf bauen – Werft und Flotten können ihn nicht nutzen.",
+        "generation": "Wasser, das eine Insel umschließt und das nicht mit dem offenen Meer verbunden ist, wenn das Moor daraus keinen Moorsee gemacht hat."
+      },
       "sand": {
         "title": "Sand",
         "lore": "Der Strand einer Insel: der Landring an ihrer Küste.",
@@ -781,7 +786,7 @@
       "boats": "Boote erscheinen auf einem See nur dort, wo eine Seefischerhütte oder eine Raseneisenerz-Grube am Ufer steht, und auch dann nicht bei jedem Gebäude: Jedes hat eine Chance von 50 %. Ein kleiner See trägt höchstens ein Boot, ein großer eines je zwölf Wasserfelder. Boote und Reusen halten drei Felder Abstand zueinander.",
       "landing": "Von jedem Landeplatz, der einem neuen Spieler angeboten wird, ist Moor in Reichweite, denn Ziegelei und Raseneisenerz-Grube brauchen es beide.",
       "river": "Durch den See fließt immer ein Fluss: Er kommt durch eine Bachmündung herein und verlässt den See durch eine andere. Manchmal mündet ein zweiter Fluss in den See, oder eine Bachquelle im Moor lässt einen eigenen Fluss entstehen.",
-      "inland": "Moor berührt nie das Meer oder den Strand. Wo eine Insel eine Meeresbucht umschließt, wird diese Bucht zu einem Moorsee mit einem Moorring, und die Flüsse in der Nähe münden in ihn."
+      "inland": "Moor grenzt nie ans Meer oder an den Strand."
     },
     "margins": {
       "heading": "Moorränder (nicht verwendet)",

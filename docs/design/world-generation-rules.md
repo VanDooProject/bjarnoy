@@ -29,8 +29,7 @@ the requirement list for the whole overhaul, delivered in several PRs; each sect
   260-hex cells before the density change), the rest B; large islands clear their neighbouring cells.*
 - "Nice islands but not many - could be twice as much": about **twice the islands** at the same island sizes,
   without fusing them into blobs. *Implemented (island-density PR), see [Island density](#island-density).*
-- O-shaped islands are fine. An enclosed inner water pocket, not connected to the open sea, is filled with
-  bog and a lake, and rivers sink into it. *Implemented (bog PR): a pocket too thin or touching open sea stays sea.*
+- O-shaped islands are fine. Water an island encloses, not connected to the open sea, never stays sea. It becomes a bog lake with a bog ring (rivers sink into it, see [bog](bog.md)) when that ring fits the bog rules: it touches no sand, no mountain and no open sea. Otherwise it becomes an **inland lake**. An inland lake is drawn with the coastal-water art, but no ship sails on it and no fleet can reach it. Land beside it is not shoreline: no Dockyard, Shrine of Njörd, wall sea end or fleet landing. Only the Fishing Hut can stand on an inland-lake hex beside land, as on coastal water.
 - Islands are never cut off at cell ("chunk") borders or at the world edge: an island that could cross the
   world radius is not generated. *Implemented: the reach clamp keeps every island inside the block of cells a
   hex scans (`ScanSpan` rings: 5x5 at the default 150-hex cells, 3x3 on legacy worlds), and an island whose
