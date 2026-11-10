@@ -470,7 +470,7 @@ shuts the river again.
 A new settlement needs:
 
 1. a Cart Workshop (LH 10, Town Square 3), so troops come first (T6);
-2. 5 Settlers (the settler cost doubles per settlement already held);
+2. 5 Settlers, at the same price for every settlement;
 3. **renown**: +1 per building level per hour, across all settlements
    (`Renown.cs`), never spent. Thresholds: **55 000** for the 2nd, then
    ×2 per settlement.

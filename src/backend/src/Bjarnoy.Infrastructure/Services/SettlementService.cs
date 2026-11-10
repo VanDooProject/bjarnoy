@@ -546,9 +546,8 @@ public sealed class SettlementService(
 
     /// <summary>
     /// How many settlements <paramref name="userId"/> already holds in
-    /// <paramref name="worldId"/> — the "existing settlement count" both
-    /// <c>Settlers.RenownThresholds.AllowsAnotherSettlement</c> and
-    /// <c>Settlers.Founding.CostMultiplier</c> scale against (issue #55 §3/§4).
+    /// <paramref name="worldId"/> — the "existing settlement count"
+    /// <c>Settlers.RenownThresholds.AllowsAnotherSettlement</c> scales against (issue #55 §3).
     /// </summary>
     public Task<int> GetSettlementCountAsync(Guid userId, Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Settlements.CountAsync(s => s.UserId == userId && s.WorldId == worldId, cancellationToken);
@@ -1243,20 +1242,9 @@ public sealed class SettlementService(
             .Where(coord => Territory.Claims(discs, coord, trainGiants))
             .Any(sampler.IsShoreline);
 
-        // Settler training escalates per settlement the owning player
-        // already holds (issue #55 §4) — every other unit type trains at the
-        // catalogue's flat cost (multiplier 1.0).
-        var costMultiplier = 1.0;
-        if (unitType == UnitType.Settler)
-        {
-            var existingSettlementCount = await GetSettlementCountAsync(settlement.UserId, settlement.WorldId, cancellationToken)
-                .ConfigureAwait(false);
-            costMultiplier = Founding.CostMultiplier(existingSettlementCount);
-        }
-
         var decision = settled.PlanTrain(
             unitType, count, now, Guid.CreateVersion7, buildingCoord, split, settlement.Owner?.IsPremium ?? false,
-            hasShoreline, costMultiplier, session.SpeedFactor);
+            hasShoreline, session.SpeedFactor);
 
         if (!decision.Accepted)
         {
