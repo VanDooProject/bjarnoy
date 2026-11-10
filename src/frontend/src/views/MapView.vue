@@ -67,7 +67,6 @@ import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
 import { useRingMaxScale } from '../composables/useRingMaxScale';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
-import { campHexBuildable } from '../lib/map/campRules';
 import { isHostileWallTile, siegeAttackOptions } from '../lib/map/siegeRules';
 import {
   breachesWalls,
@@ -824,7 +823,7 @@ function onRingOutsidePointerDown(e: PointerEvent) {
 // The build ring's model (placement filter, locks, costs, art) is shared with the onboarding ring (LandingView).
 const {
   categories: buildCategories,
-  canBuildHere,
+  buildAction,
   offersBuilding,
   placeBuildingDemo,
   builtLevels,
@@ -1079,30 +1078,11 @@ function rootActionList(): RingAction[] {
     return actions;
   }
   if (isMineTile.value) {
-    // A giant hex is never buildable, claimed or not — its own art fully
-    // occupies the ground there (mirrors WorldModel.placeBuilding's own
-    // `tile.giant` refusal).
-    const blockedByGiant = !!tile.giant;
-    // A wildlife camp hex is buildable only once the camp is cleared (never Fenrir's brood) —
-    // mirrors WorldModel.placeBuilding / the server's HexOccupiedByCamp rule.
-    const blockedByCamp = !!tile.camp && !tile.buildingType && !campHexBuildable(tile.camp);
     // A hex that offers no category at all (bog shore, mouth or spring, a mountain while quarries are off, a lake, open water)
-    // has no Build action — nothing in the ring that could only fail (docs/design/ui-guidelines.md, rule 1).
+    // has no Build action — nothing in the ring that could only fail (docs/design/ui-guidelines.md, rule 1). A giant, a guarded
+    // camp or an endgame site keeps Build, locked with the reason (useBuildRing's buildAction, shared with the onboarding ring).
     return [
-      ...(canBuildHere.value
-        ? [
-            {
-              id: 'build',
-              label: t('hud.ringMenu.actions.build'),
-              disabled: blockedByGiant || blockedByCamp,
-              hint: blockedByGiant
-                ? t('hud.ringMenu.actions.giantOccupied')
-                : blockedByCamp
-                  ? t('hud.ringMenu.actions.campOccupied')
-                  : undefined,
-            },
-          ]
-        : []),
+      ...(buildAction.value ? [buildAction.value] : []),
       ...huntActions(tile),
       sendArmyAction(tile),
     ];

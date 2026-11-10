@@ -1055,10 +1055,12 @@ public class ArmyTests
     [Fact]
     public void FieldOrder_split_caps_each_parts_food_and_moves_the_excess_to_the_other_part()
     {
-        // 1 provisioner (carries 150) and 4 spearmen (carry 10 each), all the food shared by upkeep (4 of 5 would leave).
+        // 1 provisioner and 4 spearmen share the food by upkeep (4 of 5 would leave), with more food on board than the
+        // spearmen's share fits into their own carry capacity.
+        var spearmenCarry = 4 * UnitCatalogue.Get(UnitType.Spearman).FoodCarryCapacity;
         var army = StandingWith(
             [new UnitStack(UnitType.Provisioner, 1), new UnitStack(UnitType.Spearman, 4)],
-            [new UnitStack(UnitType.Provisioner, 1), new UnitStack(UnitType.Spearman, 4)], provisions: 100);
+            [new UnitStack(UnitType.Provisioner, 1), new UnitStack(UnitType.Spearman, 4)], provisions: 150);
         var now = ArrivedAt(army);
         var foodNow = army.ProvisionsAt(now);
 
@@ -1067,14 +1069,15 @@ public class ArmyTests
             requestedUnits: [new UnitStack(UnitType.Spearman, 4)], splitArmyId: Guid.CreateVersion7());
 
         Assert.True(result.Accepted, $"expected accept, got {result.Rejection}");
-        // The spearmen's 4/5 share is over their 40 carry capacity: they take 40, the provisioner keeps the rest.
-        Assert.Equal(40, result.Army!.Provisions, precision: 9);
+        Assert.True(foodNow * 4 / 5 > spearmenCarry, "setup: the spearmen's 4/5 share must exceed their carry capacity");
+        // The spearmen's 4/5 share is over their carry capacity: they take that much, the provisioner keeps the rest.
+        Assert.Equal(spearmenCarry, result.Army!.Provisions, precision: 9);
         var remainder = result.Remainder!;
-        Assert.Equal(foodNow - 40, remainder.ProvisionsAt(now), precision: 9);
+        Assert.Equal(foodNow - spearmenCarry, remainder.ProvisionsAt(now), precision: 9);
 
         // The remainder's movement was rebuilt from its new food: it turns around when that food just covers the way home.
         var m = MovementOf(remainder);
-        var expectedTurn = now + TimeSpan.FromHours((foodNow - 40) / remainder.TotalUpkeepPerHour - m.ReturnCumulativeHours[^1]);
+        var expectedTurn = now + TimeSpan.FromHours((foodNow - spearmenCarry) / remainder.TotalUpkeepPerHour - m.ReturnCumulativeHours[^1]);
         Assert.True(Math.Abs((m.TurnAroundAt - expectedTurn).TotalMilliseconds) < 1, "turn-around must follow the remainder's food");
         Assert.Equal(m.DepartedAt, MovementOf(army).DepartedAt);
     }
@@ -1083,7 +1086,8 @@ public class ArmyTests
     public void FieldOrder_split_drops_the_food_neither_part_can_carry()
     {
         var army = StandingWith([new UnitStack(UnitType.Spearman, 10)], [new UnitStack(UnitType.Spearman, 8)], provisions: 80);
-        // More food than the whole army can carry (admin edits can do this): 3 spearmen carry 30, 5 carry 50.
+        // More food than the whole army can carry (admin edits can do this): each part keeps only what its spearmen carry.
+        var spearmanCarry = UnitCatalogue.Get(UnitType.Spearman).FoodCarryCapacity;
         var overloaded = army with { Provisions = 1000 };
         var now = ArrivedAt(army);
 
@@ -1092,8 +1096,8 @@ public class ArmyTests
             requestedUnits: [new UnitStack(UnitType.Spearman, 3)], splitArmyId: Guid.CreateVersion7());
 
         Assert.True(result.Accepted, $"expected accept, got {result.Rejection}");
-        Assert.Equal(30, result.Army!.Provisions, precision: 9);
-        Assert.Equal(50, result.Remainder!.ProvisionsAt(now), precision: 9);
+        Assert.Equal(3 * spearmanCarry, result.Army!.Provisions, precision: 9);
+        Assert.Equal(5 * spearmanCarry, result.Remainder!.ProvisionsAt(now), precision: 9);
     }
 
     [Fact]
@@ -1152,11 +1156,11 @@ public class ArmyTests
     [Fact]
     public void FieldOrder_split_is_checked_against_the_leaving_partss_own_food_for_the_round_trip()
     {
-        // 1 provisioner carries most of the food; 4 spearmen can carry 40 at most. A far target the whole army can
-        // afford (it burns 5 an hour on the provisioner's food) is out of reach for the spearmen alone.
+        // The provisioner carries the food; a catapult carries none of its own (food capacity 0) but burns 1.5 an hour. A far
+        // target the whole army can afford on the provisioner's food is out of reach for the catapult alone.
         var army = StandingWith(
-            [new UnitStack(UnitType.Provisioner, 1), new UnitStack(UnitType.Spearman, 4)],
-            [new UnitStack(UnitType.Provisioner, 1), new UnitStack(UnitType.Spearman, 4)], provisions: 100);
+            [new UnitStack(UnitType.Provisioner, 1), new UnitStack(UnitType.Catapult, 1)],
+            [new UnitStack(UnitType.Provisioner, 1), new UnitStack(UnitType.Catapult, 1)], provisions: 100);
         var now = ArrivedAt(army);
         var far = new HexCoord(30, 0);
 
@@ -1165,7 +1169,7 @@ public class ArmyTests
 
         var split = Army.PlanFieldOrder(
             army, [], far, Home, now, AllGrass(), isPremium: false,
-            requestedUnits: [new UnitStack(UnitType.Spearman, 4)], splitArmyId: Guid.CreateVersion7());
+            requestedUnits: [new UnitStack(UnitType.Catapult, 1)], splitArmyId: Guid.CreateVersion7());
         Assert.Equal(FieldOrderRejection.InsufficientProvisionsForRoundTrip, split.Rejection);
     }
 

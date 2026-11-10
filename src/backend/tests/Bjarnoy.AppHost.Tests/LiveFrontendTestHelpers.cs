@@ -4,6 +4,7 @@ using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
 using Bjarnoy.Api.Contracts;
+using Bjarnoy.Domain.World;
 using Microsoft.Playwright;
 
 namespace Bjarnoy.AppHost.Tests;
@@ -396,5 +397,58 @@ public static class LiveFrontendTestHelpers
             new AuthenticationHeaderValue("Bearer", adminAuth.AccessToken);
 
         return adminHttpClient;
+    }
+
+    /// <summary>
+    /// The hex nearest <paramref name="centre"/> within the level-1 claim (radius 2) where a guided building of
+    /// <paramref name="terrain"/> ("grass" for the Reindeer Herder, "forest" for the Lumberjack) can actually be queued:
+    /// that terrain, not a river hex and not a camp hex — the two refusals of <c>Settlement.PlanBuild</c> a plain terrain
+    /// check misses. A start position only promises one forest and two grass neighbours by terrain; about one start in
+    /// twenty has a river or a camp on the first of them, and every test of a run shares the run's one random-seed world,
+    /// so a "first grass neighbour" pick failed all guided-build tests of such a run together (409 on the queue POST, or
+    /// no Reindeer Herder in the ring). <paramref name="apiClient"/> must carry the founder's <c>X-Owner-Id</c>: camps
+    /// ship only for an island the caller has seen.
+    /// </summary>
+    public static async Task<HexCoord> FindGuidedBuildHexAsync(
+        HttpClient apiClient, Guid worldId, HexCoord centre, string terrain, CancellationToken cancellationToken)
+    {
+        const int claimRadius = 2;
+        var chunk = await apiClient.GetFromJsonAsync<TileChunkResponse>(
+            $"/api/v1/worlds/{worldId}/tiles?qMin={centre.Q - claimRadius}&qMax={centre.Q + claimRadius}"
+            + $"&rMin={centre.R - claimRadius}&rMax={centre.R + claimRadius}",
+            cancellationToken);
+        var islands = await apiClient.GetFromJsonAsync<IslandResponse[]>(
+            $"/api/v1/worlds/{worldId}/islands", cancellationToken);
+        var island = islands!.Single(i => i.StartPositions.Any(p => p.Q == centre.Q && p.R == centre.R));
+        var blocked = island.RiverTiles.Select(t => new HexCoord(t.Q, t.R))
+            .Concat(island.Camps.Select(c => new HexCoord(c.Q, c.R)))
+            .ToHashSet();
+
+        return chunk!.Tiles
+            .Select(t => (Coord: new HexCoord(t.Q, t.R), t.Terrain))
+            .Where(t => t.Terrain == terrain && !blocked.Contains(t.Coord))
+            .Select(t => t.Coord)
+            .Where(c => centre.DistanceTo(c) is >= 1 and <= claimRadius)
+            .OrderBy(c => centre.DistanceTo(c))
+            .ThenBy(c => c.Q)
+            .ThenBy(c => c.R)
+            .First();
+    }
+
+    /// <summary>
+    /// <see cref="HttpResponseMessage.EnsureSuccessStatusCode"/> with the response body in the failure: a refused build
+    /// answers 409 with a ProblemDetails whose <c>rejection</c> names the rule, and the bare status code hides it.
+    /// </summary>
+    public static async Task EnsureSuccessWithBodyAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new HttpRequestException(
+                $"{(int)response.StatusCode} ({response.StatusCode}) from {response.RequestMessage?.Method} "
+                + $"{response.RequestMessage?.RequestUri}: {body}",
+                null,
+                response.StatusCode);
+        }
     }
 }

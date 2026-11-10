@@ -94,7 +94,7 @@ describe('useBuildRing limit hints in live mode', () => {
 
   it('locks every shrine when one is queued anywhere in the realm', () => {
     world.hud.queue = [queued('odinstatue', 9, 9)];
-    expect(lockOf('shrineofullr')).toContain(enHud.ringMenu.shrineLimitLock);
+    expect(lockOf('shrineofthor')).toContain(enHud.ringMenu.shrineLimitLock);
   });
 
   it('leaves the shrines open when the realm holds none', () => {
