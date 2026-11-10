@@ -1632,6 +1632,22 @@ export const useWorldStore = defineStore('world', {
         selectedId: null,
       };
     },
+    /**
+     * A tap on the map while the picker is open aims it at that hex instead: the mission and target settlement are the tapped
+     * hex's own (the caller picks them like the ring's bubble would). A selected army is kept and its order re-composed for the
+     * new target; the caller drops it if it can't go there.
+     */
+    retargetSendPicker(
+      coord: AxialCoord,
+      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string } = {},
+    ) {
+      const picker = this.sendPicker;
+      if (!picker) return;
+      picker.mission = opts.mission ?? 'move';
+      picker.coord = { q: coord.q, r: coord.r };
+      picker.targetSettlementId = opts.targetSettlementId ?? null;
+      if (picker.selectedId) this.selectSendSource(picker.selectedId);
+    },
     /** Closes the picker and drops the field order it was composing. */
     closeSendPicker() {
       this.sendPicker = null;

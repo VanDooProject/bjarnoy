@@ -1250,7 +1250,7 @@
     },
     "sendOut": {
       "heading": "Eine Armee losschicken, die schon unterwegs ist",
-      "orders": "Tippe auf einem Feld auf „Armee hierher entsenden“, „Angreifen“, „Unterstützen“ oder „Jagen“ und wähle die Armee, die losziehen soll: deine Garnison oder eine Armee, die schon draußen ist. Eine stehende Armee kann ziehen, angreifen, unterstützen oder jagen. Eine marschierende Armee leitest du mit Premium um.",
+      "orders": "Tippe auf einem Feld auf „Armee hierher entsenden“, „Angreifen“, „Unterstützen“ oder „Jagen“ und wähle die Armee, die losziehen soll: deine Garnison oder eine Armee, die schon draußen ist. Eine stehende Armee kann ziehen, angreifen, unterstützen oder jagen. Eine marschierende Armee leitest du mit Premium um. Willst du lieber woandershin, tippst du währenddessen einfach auf ein anderes Feld.",
       "split": "Von einer stehenden Armee kannst du nur einen Teil losschicken. Der Rest bleibt, wo er steht. Eine marschierende Armee zieht immer komplett los.",
       "reach": "Eine Armee zieht nur los, wenn sie das Ziel erreicht und danach noch genug Proviant für den Rückweg hat. Alle anderen siehst du ausgegraut in der Liste, zusammen mit dem Grund.",
       "support": "Eine Armee, die eine andere Siedlung unterstützt, musst du erst zurückrufen."

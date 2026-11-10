@@ -31,11 +31,15 @@ interface DemoWindow {
  * which fails ("object reference chain is too long") once the model holds
  * enough tiles.
  */
-function demoWorld(page: Page): Promise<{ dispatchDraft: any; selectedArmyId: string | null }> {
+function demoWorld(page: Page): Promise<{ dispatchDraft: any; sendPicker: any; selectedArmyId: string | null }> {
   return page.evaluate(() => {
     const world = (window as unknown as DemoWindow).__demoWorld();
     return JSON.parse(
-      JSON.stringify({ dispatchDraft: world.dispatchDraft ?? null, selectedArmyId: world.selectedArmyId ?? null }),
+      JSON.stringify({
+        dispatchDraft: world.dispatchDraft ?? null,
+        sendPicker: world.sendPicker ?? null,
+        selectedArmyId: world.selectedArmyId ?? null,
+      }),
     );
   });
 }
@@ -120,6 +124,39 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
 
     await settlement.clickHex(first);
     await expect(ring.action('Send army here')).toBeVisible();
+  });
+
+  test('with the send picker open, a tap on the map moves its target there instead of opening the ring', async ({ page }) => {
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+    await seedGarrison(page);
+    const ring = new RingMenuComponent(page);
+
+    const first = await settlement.findHex();
+    await settlement.clickHex(first);
+    await ring.action('Send army here').click();
+    await expect(page.locator('.send-picker')).toBeVisible();
+    await expect.poll(async () => (await demoWorld(page)).sendPicker?.coord).toEqual(first.hex);
+
+    // A hex near the first one that sits on screen above the picker sheet (it covers the lower half on a phone).
+    const second = await page.evaluate((from) => {
+      const renderer = (window as unknown as DemoWindow).__settlementRenderer();
+      for (const [dq, dr] of [[1, -2], [2, -2], [-1, -1], [2, -3], [0, -2], [1, -1]]) {
+        const at = { q: from.q + dq!, r: from.r + dr! };
+        const screen = renderer.hexCenterScreen(at);
+        if (screen.x > 40 && screen.x < window.innerWidth - 40 && screen.y > 80 && screen.y < window.innerHeight * 0.45) {
+          return { hex: at, screen };
+        }
+      }
+      return null;
+    }, first.hex);
+    expect(second).not.toBeNull();
+    await settlement.clickHex(second!);
+
+    await expect.poll(async () => (await demoWorld(page)).sendPicker?.coord).toEqual(second!.hex);
+    expect((await demoWorld(page)).sendPicker?.mission).toBe('move');
+    await expect(ring.bubbles).toHaveCount(0);
+    await expect(page.locator('.send-picker')).toBeVisible();
   });
 
   test('tapping a rival-owned tile starts an Attack draft targeting it', async ({ page }) => {
