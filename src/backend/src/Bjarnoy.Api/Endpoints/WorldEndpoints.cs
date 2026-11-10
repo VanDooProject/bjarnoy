@@ -360,8 +360,8 @@ public static class WorldEndpoints
 
     /// <summary>
     /// The standing wall hexes (level 1 or more) of the world's rival settlements, so a live client can draw, hit-test and plan routes
-    /// around walls it never fetched a settlement for. A wall is listed when its own hex is in the caller's explored area, whether or not
-    /// its settlement's centre is (<see cref="RivalVisibility"/>); the caller's own settlements are left out (their walls already ship in
+    /// around walls it never fetched a settlement for. A wall is listed when its own hex is in the caller's visible area (explored ground plus where the fog is not yet
+    /// fully opaque), whether or not its settlement's centre is (<see cref="RivalVisibility"/>); the caller's own settlements are left out (their walls already ship in
     /// their own settlement read). No resolvable realm or world answers an empty list.
     /// </summary>
     private static async Task<Ok<IReadOnlyList<WallResponse>>> GetWalls(
@@ -387,11 +387,11 @@ public static class WorldEndpoints
         var callerUserId = RivalVisibility.CallerUserId(httpContext.User);
         var sights = await RivalVisibility.ForAsync(
             exploredArea, area, await settlements.GetForWorldAsync(worldId, cancellationToken),
-            s => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId), cancellationToken);
+            s => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId), withLabels: false, cancellationToken);
 
         IReadOnlyList<WallResponse> response =
         [
-            .. sights.SelectMany(sight => sight.ExploredStandingBuildings
+            .. sights.SelectMany(sight => sight.VisibleStandingBuildings
                 .Where(b => b.Type is BuildingType.Palisade or BuildingType.PalisadeGate)
                 .OrderBy(b => b.Q).ThenBy(b => b.R)
                 .Select(b => new WallResponse(
@@ -404,10 +404,11 @@ public static class WorldEndpoints
     }
 
     /// <summary>
-    /// Every standing building (level 1 or more, any type) of the world's rival settlements that stands on a hex the caller has explored,
-    /// one row per hex, so a live client can draw what it sees of a rival it never fetched a settlement for. Gated per hex like
-    /// <see cref="GetWalls"/> (<see cref="RivalVisibility"/>): nothing about an unexplored hex is sent; the caller's own buildings are left
-    /// out. No resolvable realm or world answers an empty list.
+    /// Every standing building (level 1 or more, any type) of the world's rival settlements that stands on a hex in the caller's
+    /// visible area, one row per hex, so a live client can draw what it sees of a rival it never fetched a settlement for. Gated per hex
+    /// like <see cref="GetWalls"/> (<see cref="RivalVisibility"/>): nothing about a hex out of sight is sent, with one exception: a
+    /// rival's towers and Longhouse are sent when any hex of their claim disc is visible, wherever they stand themselves (the client
+    /// draws the realm border from those discs). The caller's own buildings are left out. No resolvable realm or world answers an empty list.
     /// </summary>
     private static async Task<Ok<IReadOnlyList<RivalBuildingResponse>>> GetRivalBuildings(
         Guid worldId,
@@ -432,11 +433,11 @@ public static class WorldEndpoints
         var callerUserId = RivalVisibility.CallerUserId(httpContext.User);
         var sights = await RivalVisibility.ForAsync(
             exploredArea, area, await settlements.GetForWorldAsync(worldId, cancellationToken),
-            s => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId), cancellationToken);
+            s => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId), withLabels: false, cancellationToken);
 
         IReadOnlyList<RivalBuildingResponse> response =
         [
-            .. sights.SelectMany(sight => sight.ExploredStandingBuildings
+            .. sights.SelectMany(sight => sight.VisibleStandingBuildings
                 .OrderBy(b => b.Q).ThenBy(b => b.R)
                 .Select(b => new RivalBuildingResponse(
                     b.Q, b.R, b.Type.ToWireName(), b.Level, sight.Settlement.Id,
