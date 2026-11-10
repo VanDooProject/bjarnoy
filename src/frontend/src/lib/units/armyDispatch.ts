@@ -24,8 +24,9 @@ export function routeToWaypointsAndDestination(
   return { waypoints, destination: { q: destination.q, r: destination.r } };
 }
 
-/** Builds a `move`-mission `DispatchArmyRequest` from a unit-count map, a clicked route, and provisions. */
-export function buildMoveDispatchRequest(
+/** Shared body of the move-shaped dispatches: the last clicked hex is the destination, every hex before it a waypoint. */
+function buildRouteDispatchRequest(
+  mission: 'move' | 'found',
   unitCounts: Record<string, number>,
   route: AxialCoord[],
   provisions: number,
@@ -41,9 +42,51 @@ export function buildMoveDispatchRequest(
     waypoints: waypoints.length > 0 ? waypoints : undefined,
     destination,
     provisions,
-    mission: 'move',
+    mission,
   };
 }
+
+/** Builds a `move`-mission `DispatchArmyRequest` from a unit-count map, a clicked route, and provisions. */
+export function buildMoveDispatchRequest(
+  unitCounts: Record<string, number>,
+  route: AxialCoord[],
+  provisions: number,
+): DispatchArmyRequest | null {
+  return buildRouteDispatchRequest('move', unitCounts, route, provisions);
+}
+
+/**
+ * Builds a `found`-mission `DispatchArmyRequest`: shaped exactly like a move (the route's last hex is where the
+ * settlement is founded). The server checks the five settlers, renown and spacing.
+ */
+export function buildFoundDispatchRequest(
+  unitCounts: Record<string, number>,
+  route: AxialCoord[],
+  provisions: number,
+): DispatchArmyRequest | null {
+  return buildRouteDispatchRequest('found', unitCounts, route, provisions);
+}
+
+/** Whether the clicked route's last hex is the destination: a move walks there, a founding settles there. */
+export function isRouteDestination(mission: string | undefined, index: number, routeLength: number): boolean {
+  return (mission === 'move' || mission === 'found') && index === routeLength - 1;
+}
+
+/**
+ * Whether a dispatch draft has what its mission needs to aim at: a target settlement (attack/support), a camp (hunt),
+ * or a plotted route (move/found — the last click is the destination).
+ */
+export function dispatchHasDestination(draft: {
+  mission: string;
+  targetSettlementId: string | null;
+  targetCamp: AxialCoord | null;
+  route: ReadonlyArray<AxialCoord>;
+}): boolean {
+  if (draft.mission === 'attack' || draft.mission === 'support') return !!draft.targetSettlementId;
+  if (draft.mission === 'hunt') return !!draft.targetCamp;
+  return draft.route.length > 0;
+}
+
 
 /**
  * Builds an `attack`-mission `DispatchArmyRequest` from a unit-count map, a

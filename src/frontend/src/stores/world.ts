@@ -31,11 +31,14 @@ import {
   buildAttackDispatchRequest,
   buildHuntDispatchRequest,
   buildFieldOrderRequest,
+  buildFoundDispatchRequest,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
   isFieldOrderMidMarch,
   isHuntUnit,
+  maxAffordableProvisions,
 } from '../lib/units/armyDispatch';
+import { SETTLERS_PER_FOUNDING } from '../lib/founding';
 import { isWaterCampFamily } from '../lib/map/campPlacement';
 import { useUnitCatalogueStore } from './unitCatalogue';
 import { stackCounts } from '../lib/units/fieldOrderFeasibility';
@@ -334,7 +337,8 @@ export const useWorldStore = defineStore('world', {
       // phase 4) is shaped identically to 'attack' — a target settlement plus
       // optional waypoints — see `buildSupportDispatchRequest`.
       // 'hunt' targets a wildlife camp's hex (`targetCamp`); the route holds only intermediate waypoints.
-      mission: 'move' | 'attack' | 'support' | 'hunt';
+      // 'found' is move-shaped (the route's last hex is where the settlement is founded) and carries the fixed five settlers.
+      mission: 'move' | 'attack' | 'support' | 'hunt' | 'found';
       targetSettlementId: string | null;
       targetCamp: { q: number; r: number } | null;
       // Issue #40 phase 5: the coordinate of a building within the target
@@ -1805,16 +1809,26 @@ export const useWorldStore = defineStore('world', {
      * dispatch already aimed at `coord` — a Move destination, or an Attack/
      * Support against whatever settlement owns that tile — instead of the
      * blank draft `startDispatch` leaves for ArmyPanel's own tabs/target list
-     * to fill in. Units are still picked manually (no default selection);
+     * to fill in. Units are still picked manually (no default selection), except a founding, which carries its fixed five settlers;
      * this only sets the mission and destination the tap already implied.
      */
     startDispatchAt(
       coord: AxialCoord,
-      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string; targetBuildingCoord?: AxialCoord } = {},
+      opts: { mission?: 'attack' | 'support' | 'hunt' | 'found'; targetSettlementId?: string; targetBuildingCoord?: AxialCoord } = {},
     ) {
       this.startDispatch();
       if (!this.dispatchDraft) return;
-      if (opts.mission === 'hunt') {
+      if (opts.mission === 'found') {
+        // The ring's "Send settlers" / "Land here": the tapped hex is the destination, five settlers go.
+        this.dispatchDraft.mission = 'found';
+        this.addWaypoint(coord);
+        this.dispatchDraft.unitCounts = { settler: SETTLERS_PER_FOUNDING };
+        this.dispatchDraft.provisions = maxAffordableProvisions(
+          this.dispatchDraft.unitCounts,
+          useUnitCatalogueStore().byType,
+          this.hud.available.food,
+        );
+      } else if (opts.mission === 'hunt') {
         this.dispatchDraft.mission = 'hunt';
         this.dispatchDraft.targetCamp = { q: coord.q, r: coord.r };
       } else if (opts.mission && opts.targetSettlementId) {
@@ -1972,11 +1986,13 @@ export const useWorldStore = defineStore('world', {
             ? buildSupportDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetSettlementId)
             : draft.mission === 'hunt'
               ? buildHuntDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetCamp)
-              : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
+              : draft.mission === 'found'
+                ? buildFoundDispatchRequest(draft.unitCounts, draft.route, draft.provisions)
+                : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
       if (!request) {
         if (Object.values(draft.unitCounts).every((c) => c <= 0)) {
           draft.error = i18n.global.t('common.errors.selectAtLeastOneUnit');
-        } else if (draft.mission === 'move' && draft.route.length === 0) {
+        } else if ((draft.mission === 'move' || draft.mission === 'found') && draft.route.length === 0) {
           draft.error = i18n.global.t('common.errors.clickMapForDestination');
         } else if (draft.mission === 'hunt' && !draft.targetCamp) {
           draft.error = i18n.global.t('common.errors.chooseCampToHunt');

@@ -334,6 +334,32 @@ describe('useWorldStore startDispatchAt', () => {
     expect(store.dispatchDraft?.targetSettlementId).toBeNull();
   });
 
+  it('starts a Found draft: the tapped hex is the destination and five settlers are loaded', async () => {
+    const store = await loadStoreModule(true);
+
+    store.startDispatchAt({ q: 4, r: -1 }, { mission: 'found' });
+
+    expect(store.dispatchDraft?.mission).toBe('found');
+    expect(store.dispatchDraft?.route).toEqual([{ q: 4, r: -1 }]);
+    expect(store.dispatchDraft?.unitCounts).toEqual({ settler: 5 });
+    expect(store.dispatchDraft?.targetSettlementId).toBeNull();
+  });
+
+  it('sends a Found draft as a found-mission dispatch to the tapped hex', async () => {
+    const store = await loadStoreModule(false);
+    dispatchArmy.mockReset().mockResolvedValue({});
+    store.selectedSettlementId = 'home-1';
+    store.startDispatchAt({ q: 4, r: -1 }, { mission: 'found' });
+
+    await store.confirmDispatch();
+
+    expect(dispatchArmy).toHaveBeenCalledWith(
+      'home-1',
+      expect.objectContaining({ mission: 'found', destination: { q: 4, r: -1 }, units: [{ unit: 'settler', count: 5 }] }),
+      undefined,
+    );
+  });
+
   it('switching the mission drops a hunt target', async () => {
     const store = await loadStoreModule(true);
     store.startDispatchAt({ q: 7, r: -3 }, { mission: 'hunt' });

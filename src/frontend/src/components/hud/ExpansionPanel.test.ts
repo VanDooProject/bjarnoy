@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 //
-// The founding convoy is 5 settlers; the backend rejects provisions above
-// their combined foodCarryCapacity (ProvisionsExceedCarryCapacity), so the
-// form must default to and be capped at that total.
+// The panel shows renown, the settler count and the convoys. Sending settlers out is the map ring's job, so there is
+// no founding form here, and the renown it shows is the world store's (the ring reads the same figure).
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -36,7 +35,6 @@ vi.mock('../../api/client', async (importOriginal) => {
 });
 
 const definitions = unitCatalogue.data as UnitDefinitionResponse[];
-const settlerCarry = definitions.find((d) => d.type === 'settler')!.foodCarryCapacity;
 
 async function mountPanel() {
   setActivePinia(createPinia());
@@ -52,7 +50,7 @@ async function mountPanel() {
   return wrapper;
 }
 
-describe('ExpansionPanel provisions', () => {
+describe('ExpansionPanel', () => {
   beforeEach(() => {
     Object.values(api).forEach((f) => f.mockReset());
     api.getRenown.mockResolvedValue({ total: 99, settlementCount: 1, requiredForNextSettlement: 10, canFoundAnother: true });
@@ -63,27 +61,18 @@ describe('ExpansionPanel provisions', () => {
     api.trainUnits.mockResolvedValue({ orders: [] });
   });
 
-  it('defaults to the five settlers combined carry capacity and shows it as the max', async () => {
+  it('has no founding form: the ring sends settlers', async () => {
     const wrapper = await mountPanel();
-    const input = wrapper.find<HTMLInputElement>('input[aria-label="Provisions"]');
-    expect(settlerCarry).toBeGreaterThan(0);
-    expect(input.element.value).toBe(String(settlerCarry * 5));
-    expect(input.attributes('max')).toBe(String(settlerCarry * 5));
-    expect(wrapper.text()).toContain(`max ${settlerCarry * 5}`);
+    expect(wrapper.find('input[aria-label="Target Q"]').exists()).toBe(false);
+    expect(wrapper.find('input[aria-label="Provisions"]').exists()).toBe(false);
+    expect(wrapper.find('.expansion-form').exists()).toBe(false);
   });
 
-  it('clamps a value above the carry capacity before dispatching', async () => {
+  it('loads renown into the world store and shows it from there', async () => {
     const wrapper = await mountPanel();
-    const input = wrapper.find<HTMLInputElement>('input[aria-label="Provisions"]');
-    input.element.value = '500';
-    await input.trigger('input');
-    expect(input.element.value).toBe(String(settlerCarry * 5));
-    await wrapper.find('.expansion-form button.expansion-button').trigger('click');
-    await flushPromises();
-    expect(api.dispatchArmy).toHaveBeenCalledWith(
-      's1',
-      expect.objectContaining({ provisions: settlerCarry * 5, mission: 'found' }),
-    );
+    expect(api.getRenown).toHaveBeenCalledWith('w1');
+    expect(useWorldStore().hud.renown?.total).toBe(99);
+    expect(wrapper.text()).toContain('99');
   });
 
   it('trains the five settlers in a cart workshop, and cannot without one', async () => {

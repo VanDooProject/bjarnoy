@@ -1071,6 +1071,7 @@
         "longhouse": "Langhaus-Stufe",
         "minutes": "{n} Min."
       },
+      "send": "Zum Losschicken tippst du auf ein freies Feld und wählst „Siedler entsenden“, an der Küste „Hier landen“.",
       "provisions": "Jeder Siedler trägt {food} Nahrung, alle fünf zusammen {total}. Nimm genug für Hin- und Rückweg mit.",
       "ambush": "Unterwegs können starke Wildtierlager deine Siedler überfallen (siehe {camps}). Wie schnell sie über das jeweilige Gelände kommen, steht auf der Seite {movement}.",
       "campsLink": "Wildtierlager",
