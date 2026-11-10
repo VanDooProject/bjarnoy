@@ -1654,38 +1654,77 @@ const ARROW_KEY_PAN = new Map<ArrowKey, [number, number]>([
 ]);
 /** Arrow-key pan speed in screen px per second. */
 const KEY_PAN_SPEED = 700;
-/** Shortest pan one arrow-key press gives: a tap released before the next frame still pans this long. */
-export const KEY_TAP_MIN_MS = 120;
+/** Screen px one arrow-key press pans, however short: quick presses add one step each. A press held longer keeps panning. */
+export const KEY_STEP_PX = 100;
+/**
+ * Longest wall-clock gap one tick pans for: a slow (paced, see framePacing.ts) frame still pans its full time, a frame
+ * after a longer stall does not jump. A hidden or covered map stops the ticker, so its gap never reaches a tick.
+ */
+const KEY_PAN_MAX_DT_MS = 1000;
+/** A keydown this soon after the same key's keyup is auto-repeat (some platforms send repeats as keyup+keydown pairs). */
+export const KEY_REPEAT_PAIR_MS = 20;
+/** Keys that zoom the map one `zoomStep` (`=` is `+` without Shift on US layouts). */
+const ZOOM_KEYS = new Map<string, 1 | -1>([
+  ['+', 1],
+  ['=', 1],
+  ['-', -1],
+]);
 
-/** An arrow key that is held, or was let go but still owes the rest of its `KEY_TAP_MIN_MS`. */
-export interface HeldArrowKey {
-  pressedAt: number;
-  released: boolean;
-  /** Whether a tick has panned with it yet; a released key is only dropped after it has. */
-  applied: boolean;
+/** An arrow key that is down, or let go with part of its press steps still to pan. */
+export interface ArrowKeyState {
+  down: boolean;
+  /** Screen px of press steps (`KEY_STEP_PX` per press) not panned yet. */
+  owedPx: number;
 }
 
 /**
- * The unit screen direction the arrow keys pan at `now` (null when none, or opposite keys cancel). Drops (mutates
- * `keys`) the released keys that have panned at least once and for `KEY_TAP_MIN_MS`, so a press and release inside
- * one frame still moves the camera.
+ * An arrow keydown at `now` (event time): a new press makes the key down and adds one `KEY_STEP_PX`; auto-repeat
+ * (`repeat`, or a keydown within `KEY_REPEAT_PAIR_MS` of the key's own keyup at `upAt`) only keeps it down.
  */
-export function arrowKeyPanDirection(keys: Map<ArrowKey, HeldArrowKey>, now: number): { x: number; y: number } | null {
+export function pressArrowKey(
+  keys: Map<ArrowKey, ArrowKeyState>,
+  key: ArrowKey,
+  now: number,
+  repeat: boolean,
+  upAt: number | undefined,
+): void {
+  const state = keys.get(key);
+  if (state?.down) return;
+  const step = repeat || (upAt !== undefined && now - upAt < KEY_REPEAT_PAIR_MS) ? 0 : KEY_STEP_PX;
+  if (state) {
+    state.down = true;
+    state.owedPx += step;
+  } else {
+    keys.set(key, { down: true, owedPx: step });
+  }
+}
+
+/**
+ * Advances the arrow-key pan by up to `px` screen px of travel and returns the screen offset to pan by (null when it
+ * does not move). A key pans while it is down or still owes part of its steps; the travel is taken off every moving
+ * key's steps, and only the steps that are left are travelled once no key is down, so each press pans exactly
+ * `KEY_STEP_PX` unless it is held longer. Drops (mutates `keys`) the keys that are up with nothing owed.
+ */
+export function advanceArrowKeyPan(keys: Map<ArrowKey, ArrowKeyState>, px: number): { x: number; y: number } | null {
   let dx = 0;
   let dy = 0;
-  for (const [key, held] of keys) {
-    if (held.released && held.applied && now - held.pressedAt >= KEY_TAP_MIN_MS) {
-      keys.delete(key);
-      continue;
-    }
-    held.applied = true;
+  let anyDown = false;
+  let maxOwed = 0;
+  for (const [key, state] of keys) {
     const [kx, ky] = ARROW_KEY_PAN.get(key)!;
     dx += kx;
     dy += ky;
+    anyDown ||= state.down;
+    maxOwed = Math.max(maxOwed, state.owedPx);
   }
-  if (dx === 0 && dy === 0) return null;
+  const travel = anyDown ? px : Math.min(px, maxOwed);
+  for (const [key, state] of keys) {
+    state.owedPx = Math.max(0, state.owedPx - travel);
+    if (!state.down && state.owedPx === 0) keys.delete(key);
+  }
+  if ((dx === 0 && dy === 0) || travel === 0) return null;
   const len = Math.hypot(dx, dy);
-  return { x: dx / len, y: dy / len };
+  return { x: (dx / len) * travel, y: (dy / len) * travel };
 }
 
 /** Whether a key event's target is somewhere the user types or navigates with the arrows (input, select, dialog, ...). */
@@ -3535,36 +3574,55 @@ export class HexMapRenderer {
 
   private getTile = (q: number, r: number): Tile => this.options.worldModel.getTile(q, r);
 
-  /** Arrow keys held or still finishing a tap; they pan the camera each tick (see `tickKeyPan`). */
-  private heldArrowKeys = new Map<ArrowKey, HeldArrowKey>();
+  /** Arrow keys down or still panning their press steps (see `advanceArrowKeyPan`, `tickKeyPan`). */
+  private heldArrowKeys = new Map<ArrowKey, ArrowKeyState>();
+  /** Wall-clock time the arrow-key pan last advanced to (its own clock, not the ticker's capped delta). */
+  private keyPanAt = 0;
+  /** Event time of each arrow key's last keyup, to tell auto-repeat pairs from new presses (`pressArrowKey`). */
+  private arrowKeyUpAt = new Map<ArrowKey, number>();
   /** Whether the current arrow-key pan moved the camera, so its end owes a rebuild. */
   private keyPanMoved = false;
 
+  /** Whether a key event may drive the map: no Ctrl/Meta/Alt, not typing, camera free, and not a page-scrolling host. */
+  private keyDrivesMap(e: KeyboardEvent): boolean {
+    if (e.ctrlKey || e.metaKey || e.altKey || isTypingTarget(e.target)) return false;
+    // A host that lets the page scroll keeps the keys for the page; a locked or menu-covered map does not move.
+    return !this.lockCamera && !this.interactionLocked && !this.covered && !this.options.allowPageScroll;
+  }
+
   private onKeyDown = (e: KeyboardEvent) => {
+    const zoom = ZOOM_KEYS.get(e.key);
+    if (zoom !== undefined) {
+      if (!this.keyDrivesMap(e)) return;
+      e.preventDefault();
+      // One step per press, like the zoom buttons: auto-repeat would jump the zoom at the OS repeat rate.
+      if (!e.repeat) this.zoomStep(zoom);
+      return;
+    }
     const key = e.key as ArrowKey;
-    if (!ARROW_KEY_PAN.has(key)) return;
-    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || isTypingTarget(e.target)) return;
-    // A host that lets the page scroll keeps the arrow keys for that; a locked or menu-covered map does not pan.
-    if (this.lockCamera || this.interactionLocked || this.options.allowPageScroll) return;
+    if (!ARROW_KEY_PAN.has(key) || e.shiftKey || !this.keyDrivesMap(e)) return;
     e.preventDefault();
-    const held = this.heldArrowKeys.get(key);
-    if (held && !held.released) return; // auto-repeat
-    this.heldArrowKeys.set(key, { pressedAt: performance.now(), released: false, applied: false });
+    if (this.heldArrowKeys.size === 0) this.keyPanAt = performance.now();
+    pressArrowKey(this.heldArrowKeys, key, e.timeStamp, e.repeat, this.arrowKeyUpAt.get(key));
   };
 
   private onKeyUp = (e: KeyboardEvent) => {
-    const held = this.heldArrowKeys.get(e.key as ArrowKey);
-    if (held) held.released = true;
+    const key = e.key as ArrowKey;
+    if (!ARROW_KEY_PAN.has(key)) return;
+    this.arrowKeyUpAt.set(key, e.timeStamp);
+    const state = this.heldArrowKeys.get(key);
+    if (state) state.down = false;
   };
 
-  /** Window blur: no keyup arrives for the keys held, so let them all go (they still finish a tap). */
+  /** Window blur: no keyup arrives for the keys held, so let them all go (they still finish their steps). */
   private clearHeldKeys = () => {
-    for (const held of this.heldArrowKeys.values()) held.released = true;
+    for (const state of this.heldArrowKeys.values()) state.down = false;
   };
 
   /**
-   * Pans by `KEY_PAN_SPEED` screen px/s along the held arrow keys, through the same clamp the drag uses. Like a drag,
-   * the pan defers the full rebuild and the water bake (keyPanning) and ends with one up-to-date rebuild.
+   * Pans at `KEY_PAN_SPEED` screen px/s of wall-clock time along the arrow keys (`advanceArrowKeyPan`), through the
+   * same clamp the drag uses. Like a drag, the pan defers the full rebuild and the water bake (keyPanning) and ends with
+   * one up-to-date rebuild.
    */
   private tickKeyPan() {
     if (this.heldArrowKeys.size === 0) return;
@@ -3573,15 +3631,17 @@ export class HexMapRenderer {
       this.endKeyPan();
       return;
     }
-    const dir = arrowKeyPanDirection(this.heldArrowKeys, performance.now());
-    if (dir) {
-      const px = (KEY_PAN_SPEED * clampAnimationDeltaMs(this.app!.ticker.deltaMS)) / 1000;
+    const now = performance.now();
+    const dt = Math.min(KEY_PAN_MAX_DT_MS, Math.max(0, now - this.keyPanAt));
+    this.keyPanAt = now;
+    const offset = advanceArrowKeyPan(this.heldArrowKeys, (KEY_PAN_SPEED * dt) / 1000);
+    if (offset) {
       this.idleDrift = false;
       this.cameraAnim = null;
       this.camera = this.clampCamera({
         ...this.camera,
-        x: this.camera.x + (dir.x * px) / this.camera.zoom,
-        y: this.camera.y + (dir.y * px) / this.camera.zoom,
+        x: this.camera.x + offset.x / this.camera.zoom,
+        y: this.camera.y + offset.y / this.camera.zoom,
       });
       this.keyPanMoved = true;
       this.cameraTouched = true;
