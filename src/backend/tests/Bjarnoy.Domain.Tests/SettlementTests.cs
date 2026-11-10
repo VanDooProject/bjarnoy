@@ -144,8 +144,9 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.ShrineOfThor, Terrain.Mountain, false)]
     [InlineData(BuildingType.ShrineOfFreyja, Terrain.Grass, true)]
     [InlineData(BuildingType.ShrineOfFreyja, Terrain.Sand, false)]
-    [InlineData(BuildingType.ShrineOfUllr, Terrain.Grass, true)]
-    [InlineData(BuildingType.ShrineOfUllr, Terrain.Forest, false)]
+    [InlineData(BuildingType.ShrineOfUllr, Terrain.Forest, true)]
+    [InlineData(BuildingType.ShrineOfUllr, Terrain.Grass, false)]
+    [InlineData(BuildingType.ShrineOfUllr, Terrain.Sand, false)]
     public void Producers_are_gated_to_their_terrain(BuildingType type, Terrain terrain, bool allowed)
     {
         // This is the rule the legacy AllowedTiles list encoded by holding a
@@ -620,7 +621,8 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Meadery, Terrain.Grass)]
     [InlineData(BuildingType.TownSquare, Terrain.Grass)]
     [InlineData(BuildingType.CropMill, Terrain.Grass)]
-    [InlineData(BuildingType.DruidHut, Terrain.Grass)]
+    [InlineData(BuildingType.DruidHut, Terrain.Forest)]
+    [InlineData(BuildingType.ShrineOfUllr, Terrain.Forest)]
     [InlineData(BuildingType.CartWorkshop, Terrain.Grass)]
     [InlineData(BuildingType.ClayBrickworks, Terrain.Bog)]
     [InlineData(BuildingType.BogOreWorks, Terrain.Bog)]
