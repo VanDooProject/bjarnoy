@@ -143,18 +143,31 @@ describe('TrainingQueuePanel', () => {
       wrapper.unmount();
     });
 
-    it('shows the rejection message when the server refuses', async () => {
+    it('shows the translated rejection, not the server\'s English detail, when the server refuses', async () => {
       const world = useWorldStore();
       seedGuests(world, 'a1');
       vi.spyOn(api, 'sendGuestHome').mockRejectedValue(
-        new ApiError(409, { title: 'No route home.', detail: 'No route home exists.', status: 409 }),
+        new ApiError(409, { title: 'No route home.', detail: 'No route home exists.', status: 409, rejection: 'NoRouteHome' }),
       );
 
       const wrapper = mountPanel();
       await wrapper.get('.guest-send-home').trigger('click');
       await vi.waitFor(() => expect(wrapper.find('.error-note').exists()).toBe(true));
 
-      expect(wrapper.get('.error-note').text()).toBe('No route home exists.');
+      expect(wrapper.get('.error-note').text()).toBe('No route home from where the army is now.');
+      wrapper.unmount();
+    });
+
+    it('shows the generic send-home error for a refusal without a rejection code (e.g. a 429)', async () => {
+      const world = useWorldStore();
+      seedGuests(world, 'a1');
+      vi.spyOn(api, 'sendGuestHome').mockRejectedValue(new ApiError(429, undefined));
+
+      const wrapper = mountPanel();
+      await wrapper.get('.guest-send-home').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('.error-note').exists()).toBe(true));
+
+      expect(wrapper.get('.error-note').text()).toBe("Couldn't send the army home.");
       wrapper.unmount();
     });
   });

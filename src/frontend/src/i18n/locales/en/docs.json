@@ -1070,8 +1070,10 @@
         "upkeep": "Upkeep per hour",
         "time": "Training time",
         "longhouse": "Longhouse level",
+        "cost": "Cost per settler",
         "minutes": "{n} min"
       },
+      "order": "Costs are {resources}.",
       "send": "To send them, tap a free hex on the map and choose Send settlers, or Land here on the coast.",
       "escorts": "You can send escorts along with the settlers. They stay at the new settlement as its garrison.",
       "provisions": "Each settler carries {food} food, {total} for all five. Load enough for the way there and back.",
@@ -1090,15 +1092,12 @@
     },
     "renown": {
       "heading": "Renown and price",
-      "body": "Every settlement after the first has a price in renown and in settlers. Your buildings earn renown in all your settlements together: 1 per building level per hour, and it never decays. Each settlement you hold doubles the renown asked for the next one and the price of its settlers.",
+      "body": "Every settlement after the first has a price in renown and in settlers. Your buildings earn renown in all your settlements together: 1 per building level per hour, and it never decays. Each settlement you hold doubles the renown asked for the next one. Settlers always cost the same.",
       "columns": {
         "next": "You found",
-        "renown": "Renown needed",
-        "perSettler": "Cost per settler",
-        "total": "Cost of {count} settlers"
+        "renown": "Renown needed"
       },
       "nth": "Settlement no. {n}",
-      "order": "Costs are {resources}.",
       "when": "The renown is checked when the settlers set out.",
       "feasts": "A feast at the {square} earns renown on top of that. It runs {hours} hours, costs the same amount of wood, brick and food, and grows with the square's level.",
       "feast": {
@@ -1263,7 +1262,7 @@
     },
     "sendOut": {
       "heading": "Sending an army that is already out",
-      "orders": "Tap Send army here, Attack, Support or Hunt on a hex and pick the army to send: your garrison or an army that is already out. A standing army can move, attack, support or hunt. An army still on the march can be redirected with Premium.",
+      "orders": "Tap Send army here, Attack, Support or Hunt on a hex and pick the army to send: your garrison or an army that is already out. A standing army can move, attack, support or hunt. An army still on the march can be redirected with Premium. While you pick, tap another hex to aim at that one instead.",
       "split": "You can send only part of a standing army. The rest keeps standing where it is. An army on the march always goes whole.",
       "reach": "An army only goes if it can get there and still has the food for the way home. The ones that cannot stay in the list, greyed out, with the reason.",
       "support": "An army that is supporting another settlement has to be recalled first."

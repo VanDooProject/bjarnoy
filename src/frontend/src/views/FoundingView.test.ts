@@ -42,21 +42,20 @@ beforeEach(() => {
 });
 
 describe('FoundingView', () => {
-  it('prices the 2nd to 5th settlement: renown, and settler cost doubling with each settlement held', async () => {
+  it('asks renown for the 2nd to 5th settlement, doubling with each settlement held', async () => {
     const wrapper = await mountPage();
 
     const row = (n: number) => wrapper.get(`[data-settlement="${n}"]`).findAll('th, td').map((c) => c.text());
-    expect(row(2)).toEqual(['Settlement no. 2', '55,000', '120 / 90 / 60 / 60', '600 / 450 / 300 / 300']);
-    expect(row(3)).toEqual(['Settlement no. 3', '110,000', '240 / 180 / 120 / 120', '1,200 / 900 / 600 / 600']);
-    expect(row(5)[1]).toBe('440,000');
-    expect(row(5)[2]).toBe('960 / 720 / 480 / 480');
+    expect(row(2)).toEqual(['Settlement no. 2', '55,000']);
+    expect(row(3)).toEqual(['Settlement no. 3', '110,000']);
+    expect(row(5)).toEqual(['Settlement no. 5', '440,000']);
     wrapper.unmount();
   });
 
   it('describes the Settler from the unit catalogue and the Cart Workshop from the building catalogue', async () => {
     const wrapper = await mountPage();
 
-    expect(wrapper.get('[data-testid=settler-table] tbody tr').findAll('td').map((td) => td.text())).toEqual(['3', '4', '40', '0.25', '24 min', '10']);
+    expect(wrapper.get('[data-testid=settler-table] tbody tr').findAll('td').map((td) => td.text())).toEqual(['3', '4', '40', '0.25', '24 min', '10', '120 / 90 / 60 / 60']);
     const more = wrapper.get('#more').text();
     expect(more).toContain('5 settlers');
     expect(more).toContain('Cart Workshop');

@@ -153,10 +153,10 @@ public static class UnitCatalogue
             FoodCarryCapacity = 40,
             CargoSlots = 1,
             UpkeepPerHour = 0.25,
-            // Base cost before Bjarnoy.Domain.Settlers.SettlerCostScaling's
-            // per-existing-settlement multiplier (issue #55 §4) — deliberately
-            // steep even at the base rate, mirroring Travian's settlers being
-            // one of the most expensive units in the game.
+            // Flat price, the same for every settlement a player holds (only the
+            // renown asked for the next settlement escalates) — deliberately
+            // steep, mirroring Travian's settlers being one of the most
+            // expensive units in the game.
             TrainingCost = new ResourceAmounts(Wood: 120, Stone: 90, Food: 60, Iron: 60),
             TrainingDuration = TimeSpan.FromMinutes(24),
             RequiredLonghouseLevel = 10,

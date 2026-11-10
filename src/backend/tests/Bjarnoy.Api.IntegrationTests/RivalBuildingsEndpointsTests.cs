@@ -90,7 +90,7 @@ public sealed class RivalBuildingsEndpointsTests : IAsyncLifetime
         client.GetFromJsonAsync<List<RivalBuildingResponse>>($"/api/v1/worlds/{worldId}/rival-buildings", SqliteApiFixture.StrictJson, Ct);
 
     [Fact]
-    public async Task Lists_only_the_explored_hexes_of_a_rival_with_type_level_and_owner()
+    public async Task Lists_only_the_visible_hexes_of_a_rival_and_its_longhouse_whose_claim_reaches_them_with_type_level_and_owner()
     {
         var (worldId, own, owner, client) = await SetUpAsync();
         using var _ = client;
@@ -102,11 +102,12 @@ public sealed class RivalBuildingsEndpointsTests : IAsyncLifetime
             (own.Q + 21, own.R, BuildingType.Farm, 1));
         await _factory.SeedExploredHexesAsync(worldId, owner, [seen], Ct);
 
-        var building = Assert.Single((await BuildingsAsync(client, worldId))!);
+        var buildings = (await BuildingsAsync(client, worldId))!;
 
+        // The farm on the explored hex, plus the Longhouse next to it: its claim disc (radius 2) holds the explored hex.
         Assert.Equal(
-            (seen.Q, seen.R, "farm", 2, rivalId, (Guid?)rivalUser, false),
-            (building.Q, building.R, building.Type, building.Level, building.SettlementId, building.OwnerUserId, building.OutsideRealm));
+            [(seen.Q, seen.R, "farm", 2, rivalId, (Guid?)rivalUser, false), (own.Q + 20, own.R, "longhouse", 1, rivalId, (Guid?)rivalUser, false)],
+            buildings.OrderBy(b => b.Q).Select(b => (b.Q, b.R, b.Type, b.Level, b.SettlementId, b.OwnerUserId, b.OutsideRealm)).ToArray());
     }
 
     [Fact]

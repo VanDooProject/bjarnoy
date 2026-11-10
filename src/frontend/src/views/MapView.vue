@@ -855,31 +855,50 @@ const isMineTile = computed(
 // water) is a plain Move with `route = [coord]`. Enabled on every viewport —
 // on desktop, starting a draft this way just pre-fills ArmyPanel's existing
 // dispatch form, same as picking a mission tab and a target there by hand.
-function sendArmyAction(tile: Tile): RingAction {
+function sendMissionAt(tile: Tile): 'move' | 'attack' | 'support' {
   const ownerSettlementId = tile.ownerId;
-  const ownerIsSelf = ownerSettlementId
-    ? world.model.getSettlement(ownerSettlementId)?.ownerId === player.id
-    : false;
-  let id: 'send-army' | 'attack' | 'support' = 'send-army';
-  let label = t('hud.ringMenu.actions.sendArmyHere');
-  if (ownerSettlementId && !ownerIsSelf) {
-    id = 'attack';
-    label = t('hud.ringMenu.actions.attack');
-  } else if (ownerSettlementId && !world.isRealmSettlement(ownerSettlementId)) {
-    id = 'support';
-    label = t('hud.ringMenu.actions.support');
-  }
-  const canGo = anySendSourceCanGo(
-    sendSources.evaluate(sendSources.targetAt(id === 'send-army' ? 'move' : id, { q: tile.q, r: tile.r })),
+  if (!ownerSettlementId) return 'move';
+  if (world.model.getSettlement(ownerSettlementId)?.ownerId !== player.id) return 'attack';
+  return world.isRealmSettlement(ownerSettlementId) ? 'move' : 'support';
+}
+function sendArmyAction(tile: Tile): RingAction {
+  const mission = sendMissionAt(tile);
+  const id = mission === 'move' ? 'send-army' : mission;
+  const label = t(
+    mission === 'attack' ? 'hud.ringMenu.actions.attack' : mission === 'support' ? 'hud.ringMenu.actions.support' : 'hud.ringMenu.actions.sendArmyHere',
   );
+  const canGo = anySendSourceCanGo(sendSources.evaluate(sendSources.targetAt(mission, { q: tile.q, r: tile.r })));
   return { id, label, disabled: !canGo, hint: canGo ? undefined : t('hud.ringMenu.actions.noArmyCanGo') };
+}
+
+/** Whether the ring offers Hunt on this tile (huntActions): a wildlife camp still on the map, live mode only. */
+function isHuntableCamp(tile: Tile): boolean {
+  return !DEMO_MODE && !!tile.camp && !tile.camp.removed && !tile.buildingType;
+}
+
+/**
+ * A tap on the ground while the send picker is open aims it at the tapped hex, with the mission the ring's bubble would give
+ * that hex; a picker that is hunting keeps hunting when the new hex is a camp too. An army that was selected stays selected
+ * when it can go to the new target, else it is dropped.
+ */
+function retargetSendPicker(coord: AxialCoord, tile: Tile) {
+  const picker = world.sendPicker;
+  if (!picker) return;
+  const mission = picker.mission === 'hunt' && isHuntableCamp(tile) ? 'hunt' : sendMissionAt(tile);
+  const selected = picker.selectedId;
+  const canGo = !!selected && !!sendSources.evaluate(sendSources.targetAt(mission, coord)).find((r) => r.id === selected)?.ok;
+  world.retargetSendPicker(
+    coord,
+    mission === 'move' ? {} : mission === 'hunt' ? { mission } : { mission, targetSettlementId: tile.ownerId ?? undefined },
+    canGo,
+  );
 }
 
 // Hunt a wildlife camp: offered on a camp tile that is still on the map, live mode only
 // (the demo has no army simulation, so no camp fights). A land camp needs land units, a camp at sea (the whale road)
 // ships — the other class cannot hunt it. Enabled when the home garrison or an army in the field can go.
 function huntActions(tile: Tile): RingAction[] {
-  if (DEMO_MODE || !tile.camp || tile.camp.removed || tile.buildingType) return [];
+  if (!isHuntableCamp(tile)) return [];
   const canGo = anySendSourceCanGo(sendSources.evaluate(sendSources.targetAt('hunt', { q: tile.q, r: tile.r })));
   return [
     {
@@ -1146,9 +1165,10 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
     world.addWaypoint(coord);
     return;
   }
-  // The send picker is open: the target is fixed and the armies are picked by their markers (onArmyTap), so a tap on the ground does nothing.
+  // The send picker is open: the armies are picked by their markers (onArmyTap), a tap on the ground moves the target there.
   if (world.sendPicker) {
     armyHint.value = null;
+    retargetSendPicker(coord, tile);
     return;
   }
   // Issue #156 phase 1: a field order being composed (ArmyPanel's "Move
@@ -1183,7 +1203,7 @@ function roomForRing(screen: { x: number; y: number }): RingPlacement {
 // the pin was dragged onto (snapping happens there, against the same
 // isoPixelToAxial a click uses); this just writes it into the draft.
 function onWaypointMove(index: number, coord: AxialCoord) {
-  if (world.sendPicker) return; // the picker's target is fixed
+  if (world.sendPicker) return; // the picker's target moves by a tap on the map (retargetSendPicker), not by dragging its pin
   if (world.fieldOrderDraft) {
     world.moveFieldOrderWaypoint(index, coord);
     return;
