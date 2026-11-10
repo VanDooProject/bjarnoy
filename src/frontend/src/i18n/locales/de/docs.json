@@ -364,7 +364,7 @@
       },
       "inlandLake": {
         "title": "Binnensee",
-        "lore": "Wasser, das eine Insel ganz umschließt. Er sieht aus wie das Meer, aber kein Schiff kommt hin. Am Ufer kannst du eine Fischerhütte darauf bauen – Werft und Flotten können ihn nicht nutzen.",
+        "lore": "Ein Binnensee ist Wasser, das eine Insel ganz umschließt. Er sieht aus wie das Meer, aber kein Schiff kommt hin. Am Ufer kannst du eine Fischerhütte darauf bauen – Werft und Flotten können ihn nicht nutzen.",
         "generation": "Wasser, das eine Insel umschließt und das nicht mit dem offenen Meer verbunden ist, wenn das Moor daraus keinen Moorsee gemacht hat."
       },
       "sand": {
