@@ -1,7 +1,7 @@
 // The sources (home garrison and field armies) that can be sent at a target, evaluated against the live world: the pathfinder the
 // range tint uses (`gamePathContext`) plus the shared rules in lib/units/sendSources.ts. Used by the source picker (the rows) and by
 // MapView (which markers are tappable) so both read one answer. Not by the ring menu: opening a ring runs no route search.
-import { computed } from 'vue';
+import { computed, effectScope, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import { useWorldStore } from '../stores/world';
@@ -9,14 +9,31 @@ import { useAuthStore } from '../stores/auth';
 import { useGuildStore } from '../stores/guild';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import type { AxialCoord } from '../lib/hex/coords';
-import { findPath, findSeaPath, pathCost } from '../lib/map/hexPath';
+import { findPathSteps, findSeaPathSteps, pathCost } from '../lib/map/hexPath';
+import { clearRouteCache, routeCacheVersion, routeKey, routeOrQueue, type RouteJob } from '../lib/map/routeQueue';
 import { gamePathContext } from '../lib/map/movementContext';
 import { isWaterCampFamily } from '../lib/map/campPlacement';
 import { fieldOrderFeasibility, type FeasibilityArmy, type FeasibilityEnv, type SendMission } from '../lib/units/fieldOrderFeasibility';
 import { evaluateSendSources, type SendSource, type SendTarget } from '../lib/units/sendSources';
 
+// Cached routes live while a send picker is open: the terrain, the walls and the armies move on, so each opening searches afresh.
+// One watcher per store, whoever asks first installs it.
+const cacheClearers = new WeakSet<object>();
+function clearRoutesWithPicker(world: ReturnType<typeof useWorldStore>) {
+  if (cacheClearers.has(world)) return;
+  cacheClearers.add(world);
+  effectScope(true).run(() => {
+    watch(
+      () => !!world.sendPicker,
+      () => clearRouteCache(),
+      { flush: 'sync' },
+    );
+  });
+}
+
 export function useSendSources() {
   const world = useWorldStore();
+  clearRoutesWithPicker(world);
   const auth = useAuthStore();
   const guild = useGuildStore();
   const catalogue = useUnitCatalogueStore();
@@ -37,20 +54,26 @@ export function useSendSources() {
       home?.ownerId,
       guild.friendlyUserIds,
     );
+    function* routeJob(from: AxialCoord, to: AxialCoord, fleet: boolean): RouteJob {
+      const path = yield* (fleet ? findSeaPathSteps(from, to, (c) => world.model.getTile(c.q, c.r).terrain) : findPathSteps(from, to, ctx));
+      if (!path) return null;
+      const cost = fleet ? path.length - 1 : pathCost(path, ctx);
+      return Number.isFinite(cost) ? { path, cost } : null;
+    }
     return {
       byType: catalogue.byType,
       worldSpeedFactor: world.worldSpeedFactor,
       now: Date.now(),
       route: (from, to, fleet) => {
-        const path = fleet ? findSeaPath(from, to, (c) => world.model.getTile(c.q, c.r).terrain) : findPath(from, to, ctx);
-        if (!path) return null;
-        const cost = fleet ? path.length - 1 : pathCost(path, ctx);
-        return Number.isFinite(cost) ? { path, cost } : null;
+        // Searched in the background, a slice at a time (lib/map/routeQueue.ts): 'pending' until the answer is cached.
+        const found = routeOrQueue(routeKey(from, to, fleet), () => routeJob(from, to, fleet));
+        return found === undefined ? 'pending' : found;
       },
     };
   }
 
   function evaluate(target: SendTarget) {
+    void routeCacheVersion.value; // re-run when a background route search finishes
     return evaluateSendSources({
       target,
       garrison: world.hud.garrison,
@@ -63,6 +86,7 @@ export function useSendSources() {
 
   /** The verdict for sending only `units` of a field army (the picker's steppers), re-run on every change. */
   function verdictFor(army: FeasibilityArmy, target: SendTarget, units?: Record<string, number>) {
+    void routeCacheVersion.value;
     return fieldOrderFeasibility(army, target.coord, target.mission, env(), units);
   }
 
@@ -102,6 +126,8 @@ export function useSendBlockText() {
         return t('hud.sendPicker.reasons.unreachable');
       case 'noFood':
         return t('hud.sendPicker.reasons.noFood');
+      case 'pending':
+        return t('hud.sendPicker.reasons.checking');
       default:
         return '';
     }

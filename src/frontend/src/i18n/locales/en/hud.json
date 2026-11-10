@@ -471,7 +471,8 @@
       "notOrderable": "On a mission, can't take new orders",
       "premium": "Premium: redirect while marching",
       "unreachable": "Can't get there",
-      "noFood": "Not enough food for the way home"
+      "noFood": "Not enough food for the way home",
+      "checking": "Checking the route…"
     }
   },
   "tradeReport": {

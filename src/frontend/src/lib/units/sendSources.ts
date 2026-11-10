@@ -14,7 +14,8 @@ export type SourceBlock =
   | 'notOrderable'
   | 'premium'
   | 'unreachable'
-  | 'noFood';
+  | 'noFood'
+  | 'pending';
 
 export interface SendTarget {
   mission: SendMission;
@@ -83,6 +84,7 @@ export function evaluateSendSources(input: SendSourceInput): SendSource[] {
       if (army.movement?.isReturning) return blocked('returning');
       if (!canFieldOrderArmy(army)) return blocked('notOrderable');
       const verdict = fieldOrderFeasibility(army, target.coord, target.mission, env);
+      // The premium gate wins over a route still being searched; the verdict only fills in the travel time.
       if (!base.standing && !isPremium) return blocked('premium', verdict);
       if (!verdict.ok) return blocked(verdict.reason, verdict);
       return { ...base, ok: true, locked: false, travelMinutes: verdict.travelMinutes, verdict };

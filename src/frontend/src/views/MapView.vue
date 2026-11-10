@@ -593,6 +593,18 @@ watch(
     if (!picker) armyHint.value = null;
   },
 );
+// The selected army was kept while its route was being searched (or the target moved): once its row settles on "cannot go", drop it.
+watch(
+  () => {
+    const id = world.sendPicker?.selectedId;
+    if (!id || id === 'home') return false;
+    const row = sendPicker.rows.value.find((r) => r.id === id);
+    return !!row && !row.ok && row.block !== 'pending';
+  },
+  (cannotGo) => {
+    if (cannotGo) world.selectSendSource(null);
+  },
+);
 onUnmounted(() => armyHintTimer && clearTimeout(armyHintTimer));
 
 // Construction progress dials over buildings still being built; the renderer
@@ -885,7 +897,9 @@ function retargetSendPicker(coord: AxialCoord, tile: Tile) {
   if (!picker) return;
   const mission = picker.mission === 'hunt' && isHuntableCamp(tile) ? 'hunt' : sendMissionAt(tile);
   const selected = picker.selectedId;
-  const canGo = !!selected && !!sendSources.evaluate(sendSources.targetAt(mission, coord)).find((r) => r.id === selected)?.ok;
+  // A route still being searched keeps the army too: the watch on the selected row drops it once the search says it cannot go.
+  const selectedRow = selected ? sendSources.evaluate(sendSources.targetAt(mission, coord)).find((r) => r.id === selected) : undefined;
+  const canGo = !!selectedRow && (selectedRow.ok || selectedRow.block === 'pending');
   world.retargetSendPicker(
     coord,
     mission === 'move' ? {} : mission === 'hunt' ? { mission } : { mission, targetSettlementId: tile.ownerId ?? undefined },
