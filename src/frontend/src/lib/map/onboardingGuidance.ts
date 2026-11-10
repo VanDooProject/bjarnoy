@@ -121,6 +121,33 @@ export function findGuidedTarget(
   return best;
 }
 
+/** What `guidedBuildTarget` reads from the world: `WorldModel` satisfies it. */
+export interface GuidedTargetWorld {
+  getTile(q: number, r: number): Pick<Tile, 'terrain' | 'ownerId'>;
+  hexTakesBuilding(at: AxialCoord, type: GuidedBuildType): boolean;
+}
+
+/**
+ * The hex the map pointer aims at for `type`: the nearest hex within `radius` of `center` that is the player's realm
+ * (`isRealm` on the tile's owner) and takes the building (`WorldModel.hexTakesBuilding`: the per-hex rules placing it uses,
+ * so never a river or guarded camp hex the ring offers nothing for). LandingView and its tests both use this.
+ */
+export function guidedBuildTarget(
+  world: GuidedTargetWorld,
+  center: AxialCoord,
+  radius: number,
+  type: GuidedBuildType,
+  isRealm: (ownerId: string | undefined) => boolean,
+): AxialCoord | null {
+  return findGuidedTarget(
+    center,
+    radius,
+    type,
+    (c) => world.getTile(c.q, c.r).terrain,
+    (c) => isRealm(world.getTile(c.q, c.r).ownerId) && world.hexTakesBuilding(c, type),
+  );
+}
+
 /**
  * landing-page-defects.md L6a: a live-mode click that misses every offered
  * plot (`world.startPositionAt` returned null) but lands within one hex of

@@ -15,7 +15,8 @@ import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADI
 import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } from './worldGenerator';
 import type { BogTile, RiverTile, Settlement } from './types';
 import { JOTNAR_OWNER_KEY } from './endgamePlacement';
-import { findGuidedTarget, GUIDED_BUILD_TERRAIN, type GuidedBuildType } from './onboardingGuidance';
+import { claimRadiusForLevel } from './shoreline';
+import { guidedBuildTarget, GUIDED_BUILD_TERRAIN, type GuidedBuildType } from './onboardingGuidance';
 
 // A free grass hex with no river on it: the ground every ordinary building stands on (the catalogue's `allowedTerrain`, `riverBuildingAllowedHere`).
 function isEmptyGrass(model: WorldModel, c: AxialCoord): boolean {
@@ -2979,20 +2980,14 @@ describe('WorldModel destroyed Longhouse vision', () => {
   });
 });
 
-// The onboarding pointer (LandingView's nextGuidedTargetCoord) aims at the nearest realm hex `hexTakesBuilding` accepts. It used
+// The onboarding pointer (LandingView's nextGuidedTargetCoord, via `guidedBuildTarget`) aims at the nearest realm hex `hexTakesBuilding` accepts. It used
 // to check only ownership and emptiness, so on a start whose nearest grass/forest hex is a river or guarded-camp hex (the world
 // generator promises the terrain only) it pointed at a hex where the ring offers neither the Reindeer Herder nor the Lumberjack.
 describe('WorldModel.hexTakesBuilding — the onboarding pointer target', () => {
   const SEED = 20260825;
 
   function pointerTarget(model: WorldModel, settlement: Settlement, type: GuidedBuildType): AxialCoord | null {
-    return findGuidedTarget(
-      { q: settlement.q, r: settlement.r },
-      model.borderRadius(settlement),
-      type,
-      (c) => model.getTile(c.q, c.r).terrain,
-      (c) => model.getTile(c.q, c.r).ownerId === settlement.id && model.hexTakesBuilding(c, type),
-    );
+    return guidedBuildTarget(model, { q: settlement.q, r: settlement.r }, claimRadiusForLevel(settlement.level), type, (owner) => owner === settlement.id);
   }
 
   it.each(['reindeerherder', 'lumberjack'] as const)('the %s target skips a river hex and lands where it can be built', (type) => {
