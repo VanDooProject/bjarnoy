@@ -15,6 +15,8 @@ import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADI
 import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } from './worldGenerator';
 import type { BogTile, RiverTile, Settlement } from './types';
 import { JOTNAR_OWNER_KEY } from './endgamePlacement';
+import { claimRadiusForLevel } from './shoreline';
+import { guidedBuildTarget, GUIDED_BUILD_TERRAIN, type GuidedBuildType } from './onboardingGuidance';
 
 // A free grass hex with no river on it: the ground every ordinary building stands on (the catalogue's `allowedTerrain`, `riverBuildingAllowedHere`).
 function isEmptyGrass(model: WorldModel, c: AxialCoord): boolean {
@@ -2975,5 +2977,62 @@ describe('WorldModel destroyed Longhouse vision', () => {
     snapTowers(model, razed, [chained, lone]);
 
     expect(model.visionDiscsFor(razed).map((d) => `${d.q},${d.r}`)).toEqual([`${chained.q},${chained.r}`]);
+  });
+});
+
+// The onboarding pointer (LandingView's nextGuidedTargetCoord, via `guidedBuildTarget`) aims at the nearest realm hex `hexTakesBuilding` accepts. It used
+// to check only ownership and emptiness, so on a start whose nearest grass/forest hex is a river or guarded-camp hex (the world
+// generator promises the terrain only) it pointed at a hex where the ring offers neither the Reindeer Herder nor the Lumberjack.
+describe('WorldModel.hexTakesBuilding — the onboarding pointer target', () => {
+  const SEED = 20260825;
+
+  function pointerTarget(model: WorldModel, settlement: Settlement, type: GuidedBuildType): AxialCoord | null {
+    return guidedBuildTarget(model, { q: settlement.q, r: settlement.r }, claimRadiusForLevel(settlement.level), type, (owner) => owner === settlement.id);
+  }
+
+  it.each(['reindeerherder', 'lumberjack'] as const)('the %s target skips a river hex and lands where it can be built', (type) => {
+    const control = new WorldModel(SEED);
+    const { settlement: controlSettlement } = foundLandedSettlement(control);
+    const nearest = pointerTarget(control, controlSettlement, type);
+    expect(nearest).not.toBeNull();
+    expect(control.getTile(nearest!.q, nearest!.r).terrain).toBe(GUIDED_BUILD_TERRAIN[type]);
+
+    const model = new WorldModel(SEED);
+    const { settlement } = foundLandedSettlement(model);
+    model.setRiverTiles([riverTile(nearest!, 'straight')]);
+    expect(model.hexTakesBuilding(nearest!, type)).toBe(false);
+    expect(model.placeBuilding(settlement.id, nearest!, type)).toBe(false);
+
+    const target = pointerTarget(model, settlement, type);
+    expect(target).not.toBeNull();
+    expect(target).not.toEqual(nearest);
+    expect(model.placeBuilding(settlement.id, target!, type)).toBe(true);
+  });
+
+  it('the reindeer herder target skips a guarded camp hex, and takes a cleared one', () => {
+    const control = new WorldModel(SEED);
+    const { settlement: controlSettlement } = foundLandedSettlement(control);
+    const nearest = pointerTarget(control, controlSettlement, 'reindeerherder')!;
+
+    const model = new WorldModel(SEED);
+    const { settlement } = foundLandedSettlement(model);
+    model.setCamps([{ family: 'wolfden', coord: nearest, level: 2, orientation: 'SE' }]);
+    expect(model.hexTakesBuilding(nearest, 'reindeerherder')).toBe(false);
+    const target = pointerTarget(model, settlement, 'reindeerherder');
+    expect(target).not.toBeNull();
+    expect(target).not.toEqual(nearest);
+    expect(model.placeBuilding(settlement.id, target!, 'reindeerherder')).toBe(true);
+
+    model.getTile(nearest.q, nearest.r).camp!.empty = true;
+    expect(model.hexTakesBuilding(nearest, 'reindeerherder')).toBe(true);
+    expect(pointerTarget(model, settlement, 'reindeerherder')).toEqual(nearest);
+  });
+
+  it('refuses a hex with a building already on it', () => {
+    const model = new WorldModel(SEED);
+    const { settlement } = foundLandedSettlement(model);
+    const target = pointerTarget(model, settlement, 'reindeerherder')!;
+    expect(model.placeBuilding(settlement.id, target, 'reindeerherder')).toBe(true);
+    expect(model.hexTakesBuilding(target, 'reindeerherder')).toBe(false);
   });
 });

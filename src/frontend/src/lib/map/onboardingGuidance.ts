@@ -92,8 +92,9 @@ export const GUIDED_BUILD_TERRAIN: Record<GuidedBuildType, Terrain> = {
  * The nearest still-buildable hex for the next guided building — what the
  * map pointer (GuidancePointer.vue) aims at for the "now build here" /
  * "one more — the {terrain}" steps. `isBuildable` should already cover
- * ownership/emptiness (the caller mirrors LandingView's own onHexClick
- * rules); this adds the terrain filter and picks the closest match to
+ * ownership and whether the hex takes the building at all (the caller uses
+ * `WorldModel.hexTakesBuilding`: emptiness, river, camp, ...); this adds the
+ * terrain filter and picks the closest match to
  * `center` so the pointer suggests a hex right next to the longhouse
  * rather than an arbitrary one out at the edge of the claim. Terrain and
  * buildability are injected as callbacks (not a WorldModel import) so this
@@ -118,6 +119,33 @@ export function findGuidedTarget(
     }
   }
   return best;
+}
+
+/** What `guidedBuildTarget` reads from the world: `WorldModel` satisfies it. */
+export interface GuidedTargetWorld {
+  getTile(q: number, r: number): Pick<Tile, 'terrain' | 'ownerId'>;
+  hexTakesBuilding(at: AxialCoord, type: GuidedBuildType): boolean;
+}
+
+/**
+ * The hex the map pointer aims at for `type`: the nearest hex within `radius` of `center` that is the player's realm
+ * (`isRealm` on the tile's owner) and takes the building (`WorldModel.hexTakesBuilding`: the per-hex rules placing it uses,
+ * so never a river or guarded camp hex the ring offers nothing for). LandingView and its tests both use this.
+ */
+export function guidedBuildTarget(
+  world: GuidedTargetWorld,
+  center: AxialCoord,
+  radius: number,
+  type: GuidedBuildType,
+  isRealm: (ownerId: string | undefined) => boolean,
+): AxialCoord | null {
+  return findGuidedTarget(
+    center,
+    radius,
+    type,
+    (c) => world.getTile(c.q, c.r).terrain,
+    (c) => isRealm(world.getTile(c.q, c.r).ownerId) && world.hexTakesBuilding(c, type),
+  );
 }
 
 /**

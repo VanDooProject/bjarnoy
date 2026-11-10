@@ -2049,23 +2049,20 @@ export class WorldModel {
     return result;
   }
 
-  placeBuilding(settlementId: string, at: AxialCoord, type: Tile['buildingType']): boolean {
-    const settlement = this.settlements.get(settlementId);
-    if (!settlement) return false;
-    // A settlement gets its one longhouse from founding (foundSettlement
-    // above), never from placing a building — matches the backend rule in
-    // Settlement.PlanBuild (BuildRejection.LonghousePlacementNotAllowed).
-    if (type === 'longhouse') return false;
-    if (!this.claims(settlement, at)) {
-      return false;
-    }
+  /**
+   * Whether the hex itself takes a new `type`, whoever builds there: the per-hex refusals of `placeBuilding` (giant, guarded
+   * camp, endgame site, terrain/coastal water/bog kind, a building already standing, a type switched off for new placement,
+   * and the river rule). Leaves out who may build (claim, island soil, tower/shrine/storage limits, wall shapes), which
+   * `placeBuilding` adds. The onboarding pointer (LandingView) aims only at hexes this accepts, so it never points at a hex
+   * the ring offers nothing for.
+   */
+  hexTakesBuilding(at: AxialCoord, type: NonNullable<Tile['buildingType']>): boolean {
     const tile = this.getTile(at.q, at.r);
     // A giant hex is never buildable, claimed or not — the giant's own art
     // fully occupies the ground there (matches the backend's own rule; see
-    // `Tile.giant`'s doc comment and `Territory`'s own remarks). Checked
-    // even though `claims` above already excludes an *unclaimed* giant hex,
-    // since a giant whose whole 7-hex footprint *is* fully enclosed reads as
-    // claimed but must still refuse building on it.
+    // `Tile.giant`'s doc comment and `Territory`'s own remarks). A giant
+    // whose whole 7-hex footprint is fully enclosed reads as claimed but
+    // must still refuse building on it.
     if (tile.giant) return false;
     // A wildlife camp hex is not buildable while the camp stands guarded; a cleared
     // (empty) camp is, except Fenrir's brood (matches BuildRejection.HexOccupiedByCamp).
@@ -2078,21 +2075,33 @@ export class WorldModel {
     // BuildingDefinition.RequiresCoastalWater).
     // The bog buildings stand only on their own bog kinds (plain moss, creek), the Fishing Hut also on a lake's half
     // shore, and nothing stands on a lake or on bog it has no business on (matches BuildingDefinition.AllowsHex).
-    if (!type || !buildingAllowedOnHex(type, tile)) return false;
+    if (!buildingAllowedOnHex(type, tile)) return false;
     if (tile.buildingType) return false;
     // A type switched off for placement (the Quarry) is never placed anew (matches BuildRejection.NewPlacementDisabled).
     if (newPlacementDisabled(type)) return false;
-    // The Sawmill and Crop Mill are built directly on a river tile — only
-    // certain shapes (and, for the Sawmill, only some variants — see
-    // the catalogue's excludedRiverVariants) have a matching river-
-    // composite art (matches BuildingDefinition.RequiresRiverShape/
-    // ExcludedRiverVariants, see riverBuildingAllowedHere). textures.ts's
-    // riverBuildingArtFor reads this same own-hex river tile to pick which
-    // composite (and orientation) to render.
+    // No ordinary building stands on a river hex; the Sawmill and Crop Mill
+    // are built directly on one, and only certain shapes (and, for the
+    // Sawmill, only some variants — see the catalogue's excludedRiverVariants)
+    // have a matching river-composite art (matches Settlement.PlanBuild's
+    // onRiverTile and BuildingDefinition.RequiresRiverShape/ExcludedRiverVariants,
+    // see riverBuildingAllowedHere). textures.ts's riverBuildingArtFor reads
+    // this same own-hex river tile to pick which composite (and orientation) to render.
     const riverAtHex = this.getRiverTile(at.q, at.r);
-    if (type && !riverBuildingAllowedHere(type, riverAtHex?.shape, riverAtHex ? this.riverVariantAt(at, riverAtHex.shape) : undefined, riverAtHex?.width)) {
+    return riverBuildingAllowedHere(type, riverAtHex?.shape, riverAtHex ? this.riverVariantAt(at, riverAtHex.shape) : undefined, riverAtHex?.width);
+  }
+
+  placeBuilding(settlementId: string, at: AxialCoord, type: Tile['buildingType']): boolean {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return false;
+    // A settlement gets its one longhouse from founding (foundSettlement
+    // above), never from placing a building — matches the backend rule in
+    // Settlement.PlanBuild (BuildRejection.LonghousePlacementNotAllowed).
+    if (type === 'longhouse') return false;
+    if (!this.claims(settlement, at)) {
       return false;
     }
+    if (!type || !this.hexTakesBuilding(at, type)) return false;
+    const tile = this.getTile(at.q, at.r);
     // PumpkinFarm is only buildable on a Pumpkin-soil island (matches
     // BuildRejection.WrongCropForIslandSoil) — Farm has no such gate.
     if (type && !cropAllowedHere(type, this.soilForSettlement(settlementId))) {
