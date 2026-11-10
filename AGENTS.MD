@@ -358,6 +358,10 @@
   bullet below.)
 - Blender is installable the same way (`sudo apt-get install -y blender`)
   for anything touching 3D/tile-art asset work.
+- **short version (vendored art, needed for `npm run build`/vite/tests): not a plain `git clone`.** `add_repo`
+  (`VanDooProject/bg_assets_hextile`, read) → `git clone --depth 1` as it instructs → check out the sha from
+  `git ls-tree HEAD src/frontend/vendor/bg_assets_hextile` → copy `hextiles/ atlas/ README.md` into
+  `src/frontend/vendor/bg_assets_hextile/`. Details below.
 - `src/frontend/vendor/bg_assets_hextile` is a gitignored submodule
   checkout of the private `VanDooProject/bg_assets_hextile` repo — without
   it populated, the terrain/building texture atlases fail to load
