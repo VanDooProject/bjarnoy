@@ -35,7 +35,8 @@ per real hour on every world. So on a fast world a full load of provisions reach
 
 ## 2. Resources
 
-Wood, Brick, Food, Iron. (The internal key stays `stone` in the API, stores and i18n keys; the German name is Stein.)
+Wood, Brick, Food, Iron. Brick (made from clay) is the resource. The code still calls it `stone` internally (API, stores, i18n
+keys); it can be renamed to brick or clay when we work on those parts. The German name is Stein.
 
 - **Wood** — Lumberjack (forest).
 - **Brick** — the **Clay Brickworks** on bog ground is the start's brick

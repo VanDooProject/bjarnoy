@@ -48,7 +48,7 @@ settlement's stock. What does not fit under the stock cap is wasted.
 
 ## 1b. Looting food refills provisions
 
-When an army wins a fight (raid, camp, siege tick) and the target has food,
+When an army wins a fight (raid, camp) and the target has food,
 the army first refills its provisions to the full `FoodCarryCapacity` from the
 target's food. This food is taken on top of the loot: it does not use the
 army's loot capacity (`CarryCapacity`). The loot is then taken as before, up
