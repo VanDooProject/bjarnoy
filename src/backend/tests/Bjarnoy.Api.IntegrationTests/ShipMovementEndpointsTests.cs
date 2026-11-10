@@ -8,6 +8,7 @@ using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -596,5 +597,12 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         var recall = await recalled.ReadStrictAsync<ArmyResponse>(Ct);
         Assert.True(recall.Movement!.IsReturning);
         Assert.Equal(new HexPointResponse(barracks.Q, barracks.R), recall.Movement.Path[^1]);
+
+        // A second recall of the now-returning army is refused with a code the frontend can translate.
+        var again = await client.PostAsync($"/api/v1/armies/{army.Id}/recall", null, Ct);
+        Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+        var problem = await again.Content.ReadFromJsonAsync<ProblemDetails>(SqliteApiFixture.StrictJson, Ct);
+        Assert.NotNull(problem);
+        Assert.Equal("NothingToRecall", problem.Extensions["rejection"]?.ToString());
     }
 }

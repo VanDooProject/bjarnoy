@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cameraSeesOnly, frameCameraFor, type FrameCamera } from './frameCamera';
+import { exploredShare, frameCameraFor, type FrameCamera } from './frameCamera';
 
 const viewport = { width: 400, height: 800 };
 const opts = { margin: 40, bottomInset: 0, minZoom: 0.3 };
@@ -66,27 +66,28 @@ describe('frameCameraFor', () => {
   });
 });
 
-describe('cameraSeesOnly', () => {
+describe('exploredShare', () => {
   // At zoom 1 the 400 x 800 viewport shows world x 800..1200 and y 600..1400 round the centre (1000, 1000).
   const camera = { x: 1000, y: 1000, zoom: 1 };
-  const loaded = { minX: 700, maxX: 1300, minY: 500, maxY: 1500 };
+  const exploredLeftOf1000 = (x: number) => x < 1000;
 
-  it('holds while the whole view is inside the loaded area', () => {
-    expect(cameraSeesOnly(camera, viewport, loaded)).toBe(true);
+  it('is the share of the view that is explored', () => {
+    expect(exploredShare(camera, viewport, exploredLeftOf1000)).toBe(0.5);
+    expect(exploredShare(camera, viewport, () => true)).toBe(1);
+    expect(exploredShare(camera, viewport, () => false)).toBe(0);
   });
 
-  it('fails once any edge of the view leaves it: a pan or a zoom-out past it', () => {
-    expect(cameraSeesOnly({ ...camera, x: 1150 }, viewport, loaded)).toBe(false);
-    expect(cameraSeesOnly({ ...camera, zoom: 0.5 }, viewport, loaded)).toBe(false);
+  it('drops when the camera pans or zooms out into the mist', () => {
+    expect(exploredShare({ ...camera, x: 1100 }, viewport, exploredLeftOf1000)).toBeLessThan(0.5);
+    const island = (x: number, y: number) => Math.abs(x - 1000) < 200 && Math.abs(y - 1000) < 400;
+    expect(exploredShare(camera, viewport, island)).toBe(1);
+    expect(exploredShare({ ...camera, zoom: 0.5 }, viewport, island)).toBeCloseTo(0.25);
   });
 
   it('does not count what a bottom sheet covers', () => {
-    // y 1000 + 400 = 1400 at the bottom edge; with 300 px of sheet the visible part ends at 1100.
-    expect(cameraSeesOnly({ ...camera, y: 1300 }, viewport, loaded)).toBe(false);
-    expect(cameraSeesOnly({ ...camera, y: 1300 }, viewport, loaded, 300)).toBe(true);
-  });
-
-  it('an open side (the world edge) never fails', () => {
-    expect(cameraSeesOnly({ ...camera, x: 5000 }, viewport, { ...loaded, maxX: Infinity })).toBe(true);
+    // Explored only below world y 1100: under a sheet covering the bottom 300 px, nothing of it is seen.
+    const below = (_x: number, y: number) => y > 1100;
+    expect(exploredShare(camera, viewport, below)).toBeGreaterThan(0);
+    expect(exploredShare(camera, viewport, below, 300)).toBe(0);
   });
 });

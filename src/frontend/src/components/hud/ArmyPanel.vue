@@ -19,6 +19,8 @@ import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
 import { missionName, unitName } from '../../i18n/catalogueNames';
 import {
+  dispatchHasDestination,
+  isRouteDestination,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
 import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
@@ -29,6 +31,7 @@ import DispatchSlots from './DispatchSlots.vue';
 import { useDispatchUnitPicker } from '../../composables/useDispatchUnitPicker';
 import { useArmyRows } from '../../composables/useArmyRows';
 import { useArmyRowTap } from '../../composables/useArmyRowTap';
+import { useArmyRecall } from '../../composables/useArmyRecall';
 
 const emit = defineEmits<{ 'focus-army': [armyId: string] }>();
 const world = useWorldStore();
@@ -81,7 +84,7 @@ const routeRows = computed(() =>
   (draft.value?.route ?? []).map((c, i) => ({
     index: i,
     label: `${i + 1}. (${c.q}, ${c.r})`,
-    isDestination: draft.value?.mission === 'move' && i === (draft.value?.route.length ?? 0) - 1,
+    isDestination: isRouteDestination(draft.value?.mission, i, draft.value?.route.length ?? 0),
   })),
 );
 const hasUnitsSelected = computed(() =>
@@ -91,13 +94,7 @@ const hasUnitsSelected = computed(() =>
 // an attack/support dispatch needs a target settlement instead — a route is
 // optional waypoints along the way (see buildAttackDispatchRequest's own
 // comment; buildSupportDispatchRequest mirrors it exactly).
-const hasDestination = computed(() =>
-  draft.value?.mission === 'attack' || draft.value?.mission === 'support'
-    ? !!draft.value.targetSettlementId
-    : draft.value?.mission === 'hunt'
-      ? !!draft.value.targetCamp
-      : routeLength.value > 0,
-);
+const hasDestination = computed(() => !!draft.value && dispatchHasDestination(draft.value));
 const canConfirm = computed(
   () => hasUnitsSelected.value && hasDestination.value && picker.selectionSendable.value && !buildingPicker.isMissingRequiredPick.value && !draft.value?.submitting,
 );
@@ -166,16 +163,7 @@ const armyRows = useArmyRows();
 // Click selects / deselects the row's army; a double click focuses it on the map.
 const onRowClick = useArmyRowTap((armyId) => emit('focus-army', armyId));
 
-const recallingId = ref<string | null>(null);
-const recalling = computed(() => (id: string) => recallingId.value === id);
-async function recall(armyId: string) {
-  recallingId.value = armyId;
-  try {
-    await world.recallArmyLive(armyId);
-  } finally {
-    recallingId.value = null;
-  }
-}
+const { isRecalling, recall, refusalFor } = useArmyRecall();
 
 // Issue #156 phase 1: field-order composing — a separate, lighter draft from
 // the dispatch one above (no unit picker, just a plotted route against an
@@ -242,12 +230,13 @@ async function confirmFieldOrderClick() {
             <button
               v-if="row.canRecall"
               class="recall"
-              :disabled="recalling(row.id)"
+              :disabled="isRecalling(row.id)"
               @click.stop="recall(row.id)"
             >
-              {{ recalling(row.id) ? t('hud.armyPanel.recalling') : t('hud.armyPanel.recall') }}
+              {{ isRecalling(row.id) ? t('hud.armyPanel.recalling') : t('hud.armyPanel.recall') }}
             </button>
           </div>
+          <p v-if="refusalFor(row.id)" class="status-subtext error-note recall-refusal">{{ refusalFor(row.id) }}</p>
         </div>
       </div>
       <div v-else class="status-subtext garrison-empty">{{ t('hud.armyPanel.noArmies') }}</div>
@@ -357,6 +346,13 @@ async function confirmFieldOrderClick() {
           >
             {{ missionName('hunt') }}
           </button>
+          <button
+            v-if="draft.mission === 'found'"
+            type="button"
+            class="mission-tab active"
+          >
+            {{ missionName('found') }}
+          </button>
         </div>
 
         <template v-if="draft.mission === 'hunt'">
@@ -365,6 +361,9 @@ async function confirmFieldOrderClick() {
           </p>
           <HuntTargetSummary :target="draft.targetCamp" :unit-counts="draft.unitCounts" />
         </template>
+        <p v-else-if="draft.mission === 'found'" class="status-subtext instructions">
+          {{ t('hud.armyPanel.foundInstructions') }}
+        </p>
         <p v-else-if="draft.mission === 'move'" class="status-subtext instructions">
           {{ t('hud.armyPanel.dispatchInstructions', {
             count: routeLength,

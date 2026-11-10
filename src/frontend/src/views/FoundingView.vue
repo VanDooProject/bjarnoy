@@ -129,6 +129,7 @@ const tocLinks = computed(() =>
         </table>
       </div>
       <p class="muted">{{ $t('docs.founding.more.order', { resources: RESOURCES.map(resourceName).join(' / ') }) }}</p>
+      <p class="text">{{ $t('docs.founding.more.send') }}</p>
       <p class="text">{{ $t('docs.founding.more.provisions', { food: settlerFacts?.food ?? 0, total: settlerFacts?.carried ?? 0 }) }}</p>
       <i18n-t keypath="docs.founding.more.ambush" tag="p" class="text" scope="global">
         <template #camps>

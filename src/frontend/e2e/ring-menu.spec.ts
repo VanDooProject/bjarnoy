@@ -533,6 +533,20 @@ test.describe('ring menu availability', () => {
     await settlement.ring.hover(raze);
     await expect(page.getByTestId('ring-hint')).toHaveText("Can't raze the longhouse");
   });
+
+  test('an unclaimed hex offers Send settlers and says how many settlers are missing', { tag: '@g2' }, async ({ page }) => {
+    // The bubble used to be locked with "You have no settlers available yet" whatever the garrison held.
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+    const target = await settlement.findHex({ unclaimed: true, terrain: 'grass', reach: 6 });
+
+    await settlement.clickHex(target);
+    const send = settlement.ring.action('Send settlers').first();
+    await expect(send).toHaveClass(/disabled/);
+    await expect(send).toHaveAttribute('aria-description', '0 / 5 settlers at home');
+    await settlement.ring.hover(send);
+    await expect(page.getByTestId('ring-hint')).toHaveText('0 / 5 settlers at home');
+  });
 });
 
 // The design handoff's remaining open question: touch has no hover, so
