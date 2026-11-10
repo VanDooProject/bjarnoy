@@ -391,8 +391,8 @@ engines can damage; if there are none, no siege happens. Rams and catapults are 
 
 **Troops on ships.** Ships carry land units in slots (`ShipCargo`); every mission a fleet can take can carry them, and a
 dispatch whose passengers need more slots than its ships have is refused (`InsufficientShipCapacity`). A fleet moves at the
-speed of its slowest ship; passengers do not slow it. Passengers eat from the fleet's provisions. They fight from on board and
-do not go ashore (`skirmish/conquest.md`). When ships are lost, the
+speed of its slowest ship; passengers do not slow it. Passengers eat from the fleet's provisions. They do not take part in the ship
+fight; in the land fight they fight from on board. They go ashore only at a beach camp or a home dock (`skirmish/conquest.md`). When ships are lost, the
 passengers beyond what the surviving ships can carry drown, the units that take the most slots first. Starting values, to be tuned:
 
 | Ship | Slots |
