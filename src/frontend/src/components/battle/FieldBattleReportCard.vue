@@ -19,7 +19,9 @@ import {
   isFieldBattleVictoryFor,
   totalFieldBattleLoot,
 } from '../../lib/units/fieldBattleReports';
-import { worldMapLocation } from '../../lib/mapCameraHash';
+import { useRouter } from 'vue-router';
+import { useMapFocus } from '../../composables/useMapFocus';
+import { closeModalRoute } from '../../lib/modalRoute';
 
 /**
  * Everything the card needs to render — the subset of `FieldBattleReportResponse`
@@ -63,7 +65,13 @@ const opponentLabel = computed(() => {
   if (ownerName && settlementName) return `${ownerName} (${settlementName})`;
   return ownerName ?? settlementName ?? t('hud.fieldBattleReport.unknownOpponent');
 });
-const mapLocation = computed(() => worldMapLocation(props.report.hex));
+const router = useRouter();
+const mapFocus = useMapFocus();
+// Back to the map as it was (same mode, same zoom), centred on where the battle was fought.
+function showOnMap() {
+  mapFocus.request(props.report.hex);
+  closeModalRoute(router);
+}
 
 const sideARows = computed(() => groupFieldBattleLinesByUnit(props.report.lines, 'sidea'));
 const sideBRows = computed(() => groupFieldBattleLinesByUnit(props.report.lines, 'sideb'));
@@ -91,9 +99,15 @@ function powerOf(side: FieldBattleSide): number {
       <span data-testid="field-battle-opponent">{{ opponentLabel }}</span>
       <span class="where-sep">·</span>
       <span class="where-label">{{ t('hud.fieldBattleReport.location') }}:</span>
-      <RouterLink :to="mapLocation" class="where-link" data-testid="field-battle-location">
+      <button
+        type="button"
+        class="where-link"
+        data-testid="field-battle-location"
+        :title="t('hud.fieldBattleReport.showOnMap')"
+        @click="showOnMap"
+      >
         {{ t('hud.fieldBattleReport.hexCoord', { q: report.hex.q, r: report.hex.r }) }}
-      </RouterLink>
+      </button>
     </p>
 
     <div class="sides">
@@ -203,7 +217,13 @@ function powerOf(side: FieldBattleSide): number {
   color: var(--muted);
 }
 .where-link {
+  padding: 0;
+  background: none;
+  border: 0;
+  font: inherit;
   color: var(--gold);
+  text-decoration: underline;
+  cursor: pointer;
 }
 .sides {
   display: grid;

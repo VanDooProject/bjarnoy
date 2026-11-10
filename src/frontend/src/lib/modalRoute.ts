@@ -62,3 +62,20 @@ export function reportsLocation(router: Router, reportId?: string): RouteLocatio
 export function settingsLocation(router: Router): RouteLocationRaw {
   return modalLocation(router, '/settings');
 }
+
+/**
+ * Leaves the open modal route for the page it was opened over: back in history when that is really the entry we came from
+ * (scroll position and all), otherwise a replace with the stashed `backgroundView` (a direct load, a reload, a link opened in
+ * a new tab), or `/settlement` when there is none. The one implementation every modal close uses (RouteModal.vue's ×, Escape,
+ * backdrop and mobile chevron, and anything that closes the modal on purpose, e.g. a report's "show on map" link).
+ */
+export function closeModalRoute(router: Router): void {
+  // Via the router's own history object, not the global `window.history`, so it works against a memory history in tests too.
+  const state = router.options.history.state as { backgroundView?: unknown; back?: unknown };
+  const backgroundView = typeof state.backgroundView === 'string' ? state.backgroundView : null;
+  if (backgroundView && state.back === backgroundView) {
+    router.back();
+  } else {
+    void router.replace(backgroundView ?? '/settlement');
+  }
+}

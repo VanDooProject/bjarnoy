@@ -5,6 +5,7 @@ import type { MessageSchema } from '../i18n/schema';
 import { buildingName, terrainName } from '../i18n/catalogueNames';
 import { useRouter } from 'vue-router';
 import { useDisplayedRoute } from '../composables/useDisplayedRoute';
+import { useMapFocus } from '../composables/useMapFocus';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
 import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
@@ -351,17 +352,17 @@ watch(mode, (m) => {
   zoomDrivenTransition = false;
 });
 
-// A navigation that carries a camera anchor (e.g. a report's "show on map" link: `/settlement#world&q=..&r=..&z=..`)
-// moves the camera there. The anchor is also read once at setup (`initialCameraView`) for a reload or a fresh mount;
-// this covers the map already being mounted behind a modal. `flush: 'post'` runs it after the `mode` watcher above has
-// switched the renderer's mode.
+// "Show on map" requests (a report's location link, composables/useMapFocus.ts): centre and flash the hex, keeping the mode and
+// zoom the map is in. Also fulfilled when the renderer only appears after the request was raised.
+const mapFocus = useMapFocus();
 watch(
-  () => route.value.hash,
-  (hash) => {
-    const view = parseCameraHash(hash);
-    if (view) canvasRef.value?.renderer?.restoreCameraView(view.coord, view.zoom);
+  [mapFocus.pending, () => canvasRef.value?.renderer],
+  ([request, renderer]) => {
+    if (!request || !renderer) return;
+    onQueueSelect(request.coord);
+    mapFocus.clear();
   },
-  { flush: 'post' },
+  { immediate: true },
 );
 
 // Fog v2 (map-fog-v2.md §3): pushes a freshly fetched mask bitmap into the

@@ -366,6 +366,7 @@
     "summaryTied": "unentschieden, {n} verloren",
     "summaryLooted": "{n} erbeutet",
     "hexCoord": "Hex ({q}, {r})",
+    "showOnMap": "Auf der Karte zeigen",
     "location": "Ort",
     "unknownOpponent": "Unbekannt"
   },
