@@ -10,18 +10,20 @@
 // to read correctly through the same shader — not a byte-for-byte port (see
 // fogMaskLayout.ts's own note on that being deliberately out of scope here).
 import type { AxialCoord } from '../../hex/coords';
-import { hexEuclideanDistance } from '../../hex/coords';
+import { hexEuclideanDistance, hexesInRadius, neighbors } from '../../hex/coords';
 import { FOG_SCOUT_RING } from '../WorldModel';
 import type { WorldModel } from '../WorldModel';
 import {
   diagonalNeighboursForInterpolation,
   isHexTexel,
   toHex,
+  toTexel,
   maskBounds,
   type MaskBounds,
   type MaskTexel,
 } from './fogMaskLayout';
 import { FogCoverage } from './fogCoverage';
+import { ARMY_FOG_WHITE_MARGIN, ARMY_FOG_WHITE_OFFSET } from './fogRamp';
 
 // Mirrors FogMaskOptions' defaults (UnknownMarginHexes / OutOfSightMarginHexes)
 // — UNKNOWN_MARGIN_HEXES also matches HexMapRenderer's own
@@ -107,6 +109,68 @@ function ringDistance(sources: Array<{ q: number; r: number; radius: number }>, 
   return min === Infinity ? Infinity : Math.max(0, min);
 }
 
+const STEPS_PER_EUCLIDEAN_UNIT = 2 / Math.sqrt(3);
+const TRAIL_FRINGE_CAP_HEXES = ARMY_FOG_WHITE_OFFSET + ARMY_FOG_WHITE_MARGIN;
+/** Step radius from an explored hex to the farthest hex its fringe can change (mirrors FogMaskGenerator.TrailFringeReachSteps). */
+export const TRAIL_FRINGE_REACH_STEPS = Math.ceil(TRAIL_FRINGE_CAP_HEXES * STEPS_PER_EUCLIDEAN_UNIT);
+
+/** The troop's white ramp as a 0..255 value for a distance from explored ground. */
+function trailRamp(distance: number): number {
+  if (!Number.isFinite(distance)) return 255;
+  const t = Math.min(1, Math.max(0, (distance - ARMY_FOG_WHITE_OFFSET) / ARMY_FOG_WHITE_MARGIN));
+  return Math.round(255 * t);
+}
+
+/**
+ * Per hex texel index within reach of explored ground, the euclidean distance to the nearest explored hex. Only explored
+ * hexes with an unexplored neighbour can be nearest, so only those are stamped; they may lie outside the bounds (up to
+ * the fringe reach). Mirrors FogMaskGenerator.TrailFringeDistances.
+ */
+function trailFringeDistances(
+  bounds: MaskBounds,
+  isExplored: (q: number, r: number) => boolean,
+  indexOf: (texel: MaskTexel) => number,
+): Map<number, number> {
+  const distance = new Map<number, number>();
+  const steps = TRAIL_FRINGE_REACH_STEPS;
+  const cache = new Map<string, boolean>();
+  const explored = (q: number, r: number): boolean => {
+    const k = `${q},${r}`;
+    let value = cache.get(k);
+    if (value === undefined) {
+      value = isExplored(q, r);
+      cache.set(k, value);
+    }
+    return value;
+  };
+
+  for (let v = bounds.minV - 2 * steps; v < bounds.maxV + 2 * steps; v++) {
+    for (let u = bounds.minU - steps; u < bounds.maxU + steps; u++) {
+      const texel = { u, v };
+      if (!isHexTexel(texel)) continue;
+      const hex = toHex(texel);
+      if (!explored(hex.q, hex.r) || !neighbors(hex).some((n) => !explored(n.q, n.r))) continue;
+      for (const target of hexesInRadius(hex, steps)) {
+        const targetTexel = toTexel(target);
+        if (
+          targetTexel.u < bounds.minU ||
+          targetTexel.u >= bounds.maxU ||
+          targetTexel.v < bounds.minV ||
+          targetTexel.v >= bounds.maxV
+        ) {
+          continue;
+        }
+        const d = hexEuclideanDistance(target, hex);
+        if (d > TRAIL_FRINGE_CAP_HEXES) continue;
+        const i = indexOf(targetTexel);
+        const existing = distance.get(i);
+        if (existing === undefined || d < existing) distance.set(i, d);
+      }
+    }
+  }
+  return distance;
+}
+
 interface DemoFogMaskCell {
   unknown: number;
   outOfSight: number;
@@ -141,13 +205,21 @@ function generateCells(model: WorldModel, bounds: MaskBounds): DemoFogMaskCell[]
     model.visionDiscsFor(s).map((d) => ({ q: d.q, r: d.r, radius: d.radius + 1 })),
   );
 
+  const trailDistance = trailFringeDistances(bounds, (q, r) => model.isExplored(q, r), indexOf);
+
   // Pass 1: real hexes. `isExplored` still gates the unknown channel — that
   // is WorldModel's own monotonic explored set (hex-counted, as gameplay
   // reach always is), and no rendering metric should be able to fog a hex
-  // the player has actually scouted. Only the *ramp past* it is round.
+  // the player has actually scouted. Only the *ramp past* it is round. Beside explored ground the source ramp
+  // is capped by the troop's own ramp (the trail fringe), so explored history has no hard edge.
   for (const texel of hexTexels) {
     const hex = toHex(texel);
-    const unknown = model.isExplored(hex.q, hex.r) ? 0 : ramp(ringDistance(exploredSources, hex), UNKNOWN_MARGIN_HEXES);
+    const unknown = model.isExplored(hex.q, hex.r)
+      ? 0
+      : Math.min(
+          ramp(ringDistance(exploredSources, hex), UNKNOWN_MARGIN_HEXES),
+          trailRamp(trailDistance.get(indexOf(texel)) ?? Infinity),
+        );
     const outOfSight = ramp(ringDistance(visibleSources, hex), OUT_OF_SIGHT_MARGIN_HEXES);
     cells[indexOf(texel)] = { unknown, outOfSight, noise: noiseSeed(hex) };
   }

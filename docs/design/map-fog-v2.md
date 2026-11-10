@@ -309,6 +309,16 @@ alongside B and C, not an extension of either:
   without touching what that player personally OR-ed into their own
   record.
 
+**Trail fringe.** Explored history has no hard edge. Every unexplored hex
+within 6.75 hexes (euclidean) of explored ground gets the troop's own ramp
+in R: `trailRamp = round(255 * clamp((d - 0.75) / 6, 0, 1))` (offset 0.75,
+margin 6, `d` = distance to the nearest explored hex), and the baked value
+is `min(sourceRamp, trailRamp)`. A stored army trail therefore reads as the
+same soft path as the troop's live clearing. Constants:
+`FogMaskGenerator.TrailFringeOffsetHexes` / `TrailFringeMarginHexes`, equal to
+the frontend's `ARMY_FOG_WHITE_OFFSET` / `ARMY_FOG_WHITE_MARGIN`. The reach
+(8 steps) stays inside the one-chunk history ring of §3.
+
 ### 1f. What fog is protecting — current state, not terrain shape
 
 The same review flagged that `GET /api/v1/worlds/{id}/tiles` has no

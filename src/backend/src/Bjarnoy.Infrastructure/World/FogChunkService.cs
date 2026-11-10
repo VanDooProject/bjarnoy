@@ -126,7 +126,9 @@ public sealed class FogChunkService(GameDbContext dbContext, IMemoryCache cache,
         var (worldMin, worldMax) = FogChunkLayout.WorldChunkRange(area.WorldRadius);
 
         // History for the requested rectangle plus its one-chunk ring (the
-        // interpolation border reads a texel into each neighbour), with this
+        // interpolation border reads a texel into each neighbour, and the
+        // explored-ground fringe reaches FogMaskGenerator.TrailFringeReachSteps
+        // texels in u / twice that in v, well inside one 64-texel chunk), with this
         // request's own just-merged chunks laid over it.
         var history = await _exploredArea.LoadRectAsync(
             worldId,

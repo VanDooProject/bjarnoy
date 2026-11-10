@@ -6,7 +6,7 @@
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, UniformGroup } from 'pixi.js';
 import { noiseLatticeTexture } from '../shaderNoise';
 import { FOG_FRAGMENT, FOG_VERTEX, MAX_ARMY_VISION_SOURCES } from './fogShader';
-import { FOG_MIST_OPAQUE_AT_RAMP, NOISE_REACH } from './fogRamp';
+import { ARMY_FOG_WHITE_MARGIN, ARMY_FOG_WHITE_OFFSET, FOG_MIST_OPAQUE_AT_RAMP, NOISE_REACH } from './fogRamp';
 
 export type FogTier = 'outOfSight' | 'unknown';
 
@@ -30,8 +30,7 @@ export interface ArmyVisionSource {
  */
 export const ARMY_FOG_BLACK_OFFSET = -0.25;
 export const ARMY_FOG_BLACK_MARGIN = 2;
-export const ARMY_FOG_WHITE_OFFSET = 0.75;
-export const ARMY_FOG_WHITE_MARGIN = 6;
+export { ARMY_FOG_WHITE_OFFSET, ARMY_FOG_WHITE_MARGIN };
 
 /**
  * How far from a troop, in hex-euclidean distance, its fog can show the ground: past

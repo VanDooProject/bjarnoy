@@ -30,3 +30,12 @@ export const NOISE_REACH: [number, number] = [0.55, 0.7];
  * renderer that waste measured about 30ms a frame.
  */
 export const FOG_MIST_OPAQUE_AT_RAMP = NOISE_REACH[0] + EDGE_NOISE_FADE_RAMP;
+
+/**
+ * The troop's white (unknown) ramp, in hexes past its vision radius: starts `ARMY_FOG_WHITE_OFFSET` out and fades over
+ * `ARMY_FOG_WHITE_MARGIN` (fogShader.ts's armyRamps). The server bakes the same ramp around explored ground
+ * (`FogMaskGenerator.TrailFringeOffsetHexes` / `TrailFringeMarginHexes`, which must equal these), so a stored trail reads
+ * like the live clearing.
+ */
+export const ARMY_FOG_WHITE_OFFSET = 0.75;
+export const ARMY_FOG_WHITE_MARGIN = 6;

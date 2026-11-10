@@ -182,6 +182,100 @@ public class FogMaskGeneratorTests
         Assert.Equal(0, mask[FogMaskLayout.ToTexel(farHex)].Unknown);
     }
 
+    private static byte ExpectedTrailRamp(double distance) =>
+        (byte)Math.Round(255.0 * Math.Clamp((distance - 0.75) / 6, 0, 1));
+
+    [Fact]
+    public void Explored_ground_far_from_any_source_gets_the_troops_ramp_as_a_fringe()
+    {
+        var bounds = FogMaskLayout.WorldBounds(14);
+        var explored = new HashSet<HexCoord> { new(0, 0) };
+
+        var mask = FogMaskGenerator.Generate(bounds, [], explored, Options);
+
+        Assert.Equal(0, mask[FogMaskLayout.ToTexel(new HexCoord(0, 0))].Unknown);
+        Assert.Equal(11, mask[FogMaskLayout.ToTexel(new HexCoord(1, 0))].Unknown); // d = 1: round(255 * 0.25 / 6)
+        Assert.Equal(ExpectedTrailRamp(3), mask[FogMaskLayout.ToTexel(new HexCoord(3, 0))].Unknown);
+        Assert.Equal(96, mask[FogMaskLayout.ToTexel(new HexCoord(3, 0))].Unknown); // round(255 * 2.25 / 6)
+        Assert.Equal(255, mask[FogMaskLayout.ToTexel(new HexCoord(7, 0))].Unknown);
+        Assert.Equal(255, mask[FogMaskLayout.ToTexel(new HexCoord(12, 0))].Unknown);
+    }
+
+    [Fact]
+    public void Fringe_measures_from_the_nearest_explored_hex_of_a_line()
+    {
+        var bounds = FogMaskLayout.WorldBounds(14);
+        var explored = new HashSet<HexCoord>();
+        for (var q = -5; q <= 5; q++)
+        {
+            explored.Add(new HexCoord(q, 0));
+        }
+
+        var mask = FogMaskGenerator.Generate(bounds, [], explored, Options);
+
+        foreach (var hex in explored)
+        {
+            Assert.Equal(0, mask[FogMaskLayout.ToTexel(hex)].Unknown);
+        }
+
+        // Straight above the middle of the line: nearest explored hex decides.
+        var probe = new HexCoord(0, 2);
+        var nearest = explored.Min(e => HexCoord.EuclideanDistance(probe, e));
+        Assert.Equal(ExpectedTrailRamp(nearest), mask[FogMaskLayout.ToTexel(probe)].Unknown);
+        Assert.NotEqual(255, mask[FogMaskLayout.ToTexel(probe)].Unknown);
+    }
+
+    [Fact]
+    public void Fringe_and_source_ramp_combine_by_minimum()
+    {
+        var source = new FogVisionSource(new HexCoord(0, 0), ExploredRadius: 1, VisibleRadius: 0);
+        var bounds = FogMaskLayout.WorldBounds(14);
+        var explored = new HashSet<HexCoord> { new(9, 0) };
+
+        var mask = FogMaskGenerator.Generate(bounds, [source], explored, Options);
+
+        // Between them, at (6,0): source ramp d = 6 - 1 = 5 >= margin 4 -> 255, fringe d = 3 -> 96.
+        Assert.Equal(96, mask[FogMaskLayout.ToTexel(new HexCoord(6, 0))].Unknown);
+        // At (3,0): source ramp d = 2 -> 128, fringe d = 6 -> 223: the source wins.
+        Assert.Equal(128, mask[FogMaskLayout.ToTexel(new HexCoord(3, 0))].Unknown);
+    }
+
+    [Fact]
+    public void Fringe_from_explored_ground_just_outside_the_window_reaches_into_it_without_a_seam()
+    {
+        var worldBounds = FogMaskLayout.WorldBounds(20);
+        var explored = new HashSet<HexCoord> { new(0, 0) };
+        var whole = FogMaskGenerator.Generate(worldBounds, [], explored, Options);
+
+        // A window that does not contain (0,0) but whose west edge is within the fringe reach of it.
+        var originTexel = FogMaskLayout.ToTexel(new HexCoord(0, 0));
+        var window = new MaskBounds(originTexel.U + 2, originTexel.V - 8, originTexel.U + 12, originTexel.V + 8);
+        Assert.False(window.Contains(originTexel));
+
+        var windowed = FogMaskGenerator.GenerateWindow(window, [], explored.Contains, Options);
+
+        var fringeSeen = false;
+        for (var v = window.MinV; v < window.MaxV; v++)
+        {
+            for (var u = window.MinU; u < window.MaxU; u++)
+            {
+                var texel = new MaskTexel(u, v);
+                Assert.Equal(whole[texel], windowed[texel]);
+                fringeSeen |= windowed[texel].Unknown is > 0 and < 255;
+            }
+        }
+
+        Assert.True(fringeSeen);
+    }
+
+    [Fact]
+    public void Fringe_reach_fits_inside_the_one_chunk_history_ring()
+    {
+        // FogChunkService loads history for the requested chunks plus one chunk on every side; the
+        // fringe (and the one-texel interpolation border) must not need explored hexes beyond that.
+        Assert.True((2 * FogMaskGenerator.TrailFringeReachSteps) + 1 <= FogChunkLayout.ChunkSize);
+    }
+
     [Fact]
     public void Persisted_history_does_not_affect_the_out_of_sight_channel()
     {
