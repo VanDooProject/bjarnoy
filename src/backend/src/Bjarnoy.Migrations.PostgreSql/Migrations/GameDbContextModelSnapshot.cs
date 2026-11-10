@@ -1043,6 +1043,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("Index")
                         .HasColumnType("integer");
 
+                    b.Property<string>("InlandLakeTiles")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<bool>("IsWasted")
                         .HasColumnType("boolean");
 

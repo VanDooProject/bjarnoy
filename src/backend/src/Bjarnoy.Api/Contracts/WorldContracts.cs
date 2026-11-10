@@ -258,7 +258,8 @@ public sealed record IslandResponse(
     IReadOnlyList<CampResponse> Camps,
     IReadOnlyList<BogTileResponse> BogTiles,
     IReadOnlyList<UtgardWallResponse> UtgardWalls,
-    IReadOnlyList<JotunTowerResponse> JotunTowers)
+    IReadOnlyList<JotunTowerResponse> JotunTowers,
+    IReadOnlyList<TileCoordinate> InlandLakeTiles)
 {
     /// <param name="island">The stored island.</param>
     /// <param name="includeCamps">Whether the island's camps ship; false answers an empty list (the island is not one the caller has seen).</param>
@@ -280,7 +281,8 @@ public sealed record IslandResponse(
             [.. (includeCamps ? island.Camps : []).Select(CampResponse.From)],
             [.. island.BogTiles.Select(BogTileResponse.From)],
             [.. island.UtgardWalls.Select(UtgardWallResponse.From)],
-            [.. island.JotunTowers.Select(JotunTowerResponse.From)]);
+            [.. island.JotunTowers.Select(JotunTowerResponse.From)],
+            [.. island.InlandLakeTiles.Select(p => new TileCoordinate(p.Q, p.R))]);
     }
 }
 
