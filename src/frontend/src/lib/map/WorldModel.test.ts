@@ -16,7 +16,15 @@ import { DEFAULT_GENERATION, enumerateIslands, soilAt, springMountainShapeAt } f
 import type { BogTile, RiverTile, Settlement } from './types';
 import { JOTNAR_OWNER_KEY } from './endgamePlacement';
 import { claimRadiusForLevel } from './shoreline';
-import { guidedBuildTarget, GUIDED_BUILD_TERRAIN, type GuidedBuildType } from './onboardingGuidance';
+import {
+  guidedBuildTarget,
+  guidedTypesStarted,
+  GUIDED_BUILD_TERRAIN,
+  nextGuidedType,
+  type GuidedBuildType,
+  type GuidedQueueOrder,
+} from './onboardingGuidance';
+import { makePendingOrder } from '../hud/pendingBuild';
 
 // A free grass hex with no river on it: the ground every ordinary building stands on (the catalogue's `allowedTerrain`, `riverBuildingAllowedHere`).
 function isEmptyGrass(model: WorldModel, c: AxialCoord): boolean {
@@ -2986,8 +2994,8 @@ describe('WorldModel destroyed Longhouse vision', () => {
 describe('WorldModel.hexTakesBuilding — the onboarding pointer target', () => {
   const SEED = 20260825;
 
-  function pointerTarget(model: WorldModel, settlement: Settlement, type: GuidedBuildType): AxialCoord | null {
-    return guidedBuildTarget(model, { q: settlement.q, r: settlement.r }, claimRadiusForLevel(settlement.level), type, (owner) => owner === settlement.id);
+  function pointerTarget(model: WorldModel, settlement: Settlement, type: GuidedBuildType, queue: readonly GuidedQueueOrder[] = []): AxialCoord | null {
+    return guidedBuildTarget(model, { q: settlement.q, r: settlement.r }, claimRadiusForLevel(settlement.level), type, (owner) => owner === settlement.id, queue);
   }
 
   it.each(['reindeerherder', 'lumberjack'] as const)('the %s target skips a river hex and lands where it can be built', (type) => {
@@ -3034,5 +3042,24 @@ describe('WorldModel.hexTakesBuilding — the onboarding pointer target', () => 
     const target = pointerTarget(model, settlement, 'reindeerherder')!;
     expect(model.placeBuilding(settlement.id, target, 'reindeerherder')).toBe(true);
     expect(model.hexTakesBuilding(target, 'reindeerherder')).toBe(false);
+  });
+  // Live mode: queueing a build only adds an order to `hud.queue` (no `tile.buildingType` until it completes). The
+  // pointer used to keep counting the queued Reindeer Herder as not placed and its hex as free, so it stayed on that hex
+  // and the ring there offered the herder again (the server refuses that with AlreadyQueuedOnHex).
+  it('moves on to the Lumberjack once the Reindeer Herder is queued, and never aims at the queued hex', () => {
+    const model = new WorldModel(SEED);
+    const { settlement } = foundLandedSettlement(model);
+    const placed = model.listPlacedBuildings(settlement.id);
+    const herderHex = pointerTarget(model, settlement, 'reindeerherder')!;
+    expect(nextGuidedType(guidedTypesStarted(placed, []))).toBe('reindeerherder');
+
+    const queue = [makePendingOrder('reindeerherder', herderHex)];
+    expect(nextGuidedType(guidedTypesStarted(placed, queue))).toBe('lumberjack');
+    const herderAgain = pointerTarget(model, settlement, 'reindeerherder', queue);
+    expect(herderAgain).not.toBeNull();
+    expect(herderAgain).not.toEqual(herderHex);
+
+    queue.push(makePendingOrder('lumberjack', pointerTarget(model, settlement, 'lumberjack', queue)!));
+    expect(nextGuidedType(guidedTypesStarted(placed, queue))).toBeNull();
   });
 });

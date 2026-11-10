@@ -4,6 +4,7 @@
 // "what step are we on / what's done" contract can be asserted directly,
 // the same way ringLayout.ts's geometry is tested apart from RingMenu.vue.
 import { hexDistance, hexesInRadius, type AxialCoord } from '../hex/coords';
+import type { BuildOrderResponse } from '../../api/types';
 import type { Terrain, Tile } from './types';
 
 /** The two buildings the onboarding guides the player toward (highlighted in the map's build ring, never enforced there). */
@@ -79,6 +80,22 @@ export function nextGuidedType(placedTypes: readonly Tile['buildingType'][]): Gu
   return GUIDED_BUILD_TYPES.find((type) => !placed.has(type)) ?? null;
 }
 
+/** The fields of a build-queue order (`hud.queue`, optimistic pending orders included) the pointer reads. */
+export type GuidedQueueOrder = Pick<BuildOrderResponse, 'q' | 'r' | 'building' | 'kind'>;
+
+/**
+ * The building types the pointer treats as done: those standing (`placedTypes`) plus those with a build order in
+ * `queue`. Once the player has queued the guided building the pointer moves on to the next one instead of waiting for
+ * the construction to finish. Feed this to `nextGuidedType` for the pointer's step.
+ */
+export function guidedTypesStarted(
+  placedTypes: readonly Tile['buildingType'][],
+  queue: readonly GuidedQueueOrder[],
+): Tile['buildingType'][] {
+  const queued = queue.filter((o) => (o.kind ?? 'build') === 'build').map((o) => o.building as Tile['buildingType']);
+  return [...placedTypes, ...queued];
+}
+
 /**
  * The terrain each guided building stands on - only used to pick the hex the map pointer aims at and to name that
  * terrain in its label. It never enables or disables a ring entry: the ring offers what the map's placement filter does.
@@ -129,8 +146,9 @@ export interface GuidedTargetWorld {
 
 /**
  * The hex the map pointer aims at for `type`: the nearest hex within `radius` of `center` that is the player's realm
- * (`isRealm` on the tile's owner) and takes the building (`WorldModel.hexTakesBuilding`: the per-hex rules placing it uses,
- * so never a river or guarded camp hex the ring offers nothing for). LandingView and its tests both use this.
+ * (`isRealm` on the tile's owner), holds no order in `queue` (a queued building's hex is taken, though nothing stands on
+ * it yet) and takes the building (`WorldModel.hexTakesBuilding`: the per-hex rules placing it uses, so never a river or
+ * guarded camp hex the ring offers nothing for). LandingView and its tests both use this.
  */
 export function guidedBuildTarget(
   world: GuidedTargetWorld,
@@ -138,13 +156,17 @@ export function guidedBuildTarget(
   radius: number,
   type: GuidedBuildType,
   isRealm: (ownerId: string | undefined) => boolean,
+  queue: readonly GuidedQueueOrder[],
 ): AxialCoord | null {
   return findGuidedTarget(
     center,
     radius,
     type,
     (c) => world.getTile(c.q, c.r).terrain,
-    (c) => isRealm(world.getTile(c.q, c.r).ownerId) && world.hexTakesBuilding(c, type),
+    (c) =>
+      isRealm(world.getTile(c.q, c.r).ownerId) &&
+      !queue.some((o) => o.q === c.q && o.r === c.r) &&
+      world.hexTakesBuilding(c, type),
   );
 }
 

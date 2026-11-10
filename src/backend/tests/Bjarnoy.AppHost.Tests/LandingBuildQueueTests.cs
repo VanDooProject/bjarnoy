@@ -148,6 +148,12 @@ public class LandingBuildQueueTests(AppHostFixture fixture)
         await Assertions.Expect(statusCard.GetByText("Construction")).ToBeVisibleAsync();
         await Assertions.Expect(page.Locator(".status-row-time")).ToBeVisibleAsync();
 
+        // The guidance pointer moves on as soon as the guided building is queued, not when it finishes: while the
+        // Reindeer Herder is still under construction it already asks for the Lumberjack. It used to stay on the
+        // herder's hex ("Now build here"), where the ring offered the herder again and the server refused it with
+        // AlreadyQueuedOnHex.
+        await Assertions.Expect(page.GetByTestId("guidance-pointer")).ToContainTextAsync("One more");
+
         var settlementAfterQueue = await apiClient.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlement.Id}", cancellationToken);
         var order = Assert.Single(settlementAfterQueue!.Queue);

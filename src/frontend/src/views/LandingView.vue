@@ -41,6 +41,7 @@ import { buildingStatsAt, scaleOutput } from '../lib/map/buildingEconomy';
 import {
   deriveOnboardingGuidance,
   guidedBuildTarget,
+  guidedTypesStarted,
   guidedRingStep,
   nextGuidedType,
   snapToOfferedPlot,
@@ -524,14 +525,24 @@ function withinBuildableRange(coord: AxialCoord): boolean {
 // here" / "One more — the {terrain}") aims at. `guidedBuildTarget`
 // (onboardingGuidance.ts) holds the rule; this supplies this settlement's
 // centre/claim radius, the real WorldModel and the realm check.
+// The pointer's progress: standing guided buildings plus queued ones (`guidedTypesStarted`), so it moves on as soon
+// as the player queues the guided building, not when its construction finishes.
+const pointerStartedTypes = computed(() => guidedTypesStarted(world.hud.placedBuildingTypes, world.hud.queue));
+const pointerGuidedType = computed(() => nextGuidedType(pointerStartedTypes.value));
+
 const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
   if (!player.hasFoundedSettlement || !world.selectedSettlementId) return null;
   const settlement = world.model.getSettlement(world.selectedSettlementId);
   if (!settlement) return null;
-  const type = nextGuidedType(world.hud.placedBuildingTypes);
+  const type = pointerGuidedType.value;
   if (!type) return null;
-  return guidedBuildTarget(world.model, { q: settlement.q, r: settlement.r }, claimRadiusForLevel(settlement.level), type, (owner) =>
-    world.isRealmSettlement(owner),
+  return guidedBuildTarget(
+    world.model,
+    { q: settlement.q, r: settlement.r },
+    claimRadiusForLevel(settlement.level),
+    type,
+    (owner) => world.isRealmSettlement(owner),
+    world.hud.queue,
   );
 });
 
@@ -558,7 +569,7 @@ const mapDrawn = computed(() => (canvasRef.value?.loadState.phase ?? 'terrain') 
  * locked there (a guarded camp, a giant, an endgame site): the pointer then goes back to the guided hex.
  */
 function ringStepTarget(): { id: string; spot: { x: number; y: number }; label: string } | null {
-  const type = nextGuidedType(world.hud.placedBuildingTypes);
+  const type = pointerGuidedType.value;
   if (!type || buildAction.value?.disabled) return null;
   const step = guidedRingStep(type, ringCategories.value, ringLaneSpots.value);
   if (!step) return null;
@@ -613,8 +624,8 @@ const pointerTarget = computed(() => {
   // Right after founding (only the longhouse is down) vs. one guided
   // building already placed — matches the mockup's frame 2 vs. frame 4
   // copy/angle.
-  const oneDone = world.hud.placedBuildingTypes.length > 1;
-  const remainingType = nextGuidedType(world.hud.placedBuildingTypes);
+  const oneDone = pointerStartedTypes.value.length > 1;
+  const remainingType = pointerGuidedType.value;
   return {
     mode: 'hex' as const,
     coord: nextGuidedTargetCoord.value,
