@@ -41,6 +41,20 @@ Berserker 160, Spearman 192, Thrall 200, Settler 320); lighter units reach furth
 So "range" means *how far an army can go and still get back*. Everything below keeps
 that rule rather than inventing a second one.
 
+## 1a. Leftover provisions go home
+
+When an army reaches home, its leftover provisions are deposited into the
+settlement's stock. What does not fit under the stock cap is wasted.
+
+## 1b. Looting food refills provisions
+
+When an army wins a fight (raid, camp, siege tick) and the target has food,
+the army first refills its provisions to the full `FoodCarryCapacity` from the
+target's food. This food is taken on top of the loot: it does not use the
+army's loot capacity (`CarryCapacity`). The loot is then taken as before, up
+to that capacity, from what the target has left. Loot is never eaten as
+provisions.
+
 ## 2. The gap
 
 An army that has reached its destination is `ArmyLocation.InTransit` with
