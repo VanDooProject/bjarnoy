@@ -24,6 +24,7 @@ function army(overrides: Partial<AdminArmyResponse['army']> = {}): AdminArmyResp
     worldId: 'world-1',
     settlementName: 'Bjornstad',
     ownerName: 'Ragnar',
+    loot: { wood: 37.6, stone: 0, food: 0, iron: 0 },
     army: {
       id: 'army-1',
       settlementId: 'settlement-1',
@@ -78,6 +79,19 @@ describe('ArmyEditor', () => {
     expect(adminListArmies).toHaveBeenCalledWith({ settlementId: 'settlement-1' });
     expect(wrapper.text()).toContain('5x thrall');
     expect(wrapper.text()).toContain('(3, 4)');
+  });
+
+  it('shows each army as a table row with its carried wood and food', async () => {
+    adminListArmies.mockResolvedValue([army()]);
+
+    const wrapper = mount(ArmyEditor, { props: { settlementId: 'settlement-1' }, global });
+    await flushPromises();
+
+    const headers = wrapper.findAll('th').map((h) => h.text());
+    expect(headers).toEqual(expect.arrayContaining(['Mission', 'Units', 'Wood', 'Food', 'Position']));
+    const row = wrapper.find('tr.summary');
+    expect(row.find('.wood').text()).toBe('38');
+    expect(row.find('.food').text()).toBe('120');
   });
 
   it('says so when a settlement has no armies in the field', async () => {

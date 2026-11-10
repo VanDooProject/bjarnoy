@@ -541,7 +541,8 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
 
         var listed = await client.GetFromJsonAsync<List<AdminArmyResponse>>(
             $"/api/v1/admin/armies?worldId={worldId}", SqliteApiFixture.StrictJson, Ct);
-        Assert.Single(listed!, a => a.Army.Id == armyId);
+        var plantedEntry = Assert.Single(listed!, a => a.Army.Id == armyId);
+        Assert.Equal(0, plantedEntry.Loot.Wood);
 
         var retimed = await client.PatchJsonAsync(
             $"/api/v1/admin/armies/{armyId}", new AdminEditArmyRequest(ArriveInMinutes: 0), Ct);

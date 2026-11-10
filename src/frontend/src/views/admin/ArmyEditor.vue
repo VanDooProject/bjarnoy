@@ -120,75 +120,93 @@ async function save(entry: AdminArmyResponse, options: { move: boolean; retime: 
     <p v-else-if="loadError" class="error">{{ loadError }}</p>
     <p v-else-if="armies.length === 0" class="hint">{{ $t('armyEditor.empty') }}</p>
 
-    <ul v-else class="armies">
-      <li v-for="entry in armies" :key="entry.army.id" class="army">
-        <div class="summary">
-          <span class="mission">{{ entry.army.mission }}</span>
-          <span class="units">
+    <table v-else class="armies">
+      <thead>
+        <tr>
+          <th>{{ $t('armyEditor.col.mission') }}</th>
+          <th>{{ $t('armyEditor.col.units') }}</th>
+          <th class="num">{{ $t('armyEditor.col.wood') }}</th>
+          <th class="num">{{ $t('armyEditor.col.food') }}</th>
+          <th>{{ $t('armyEditor.col.position') }}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody v-for="entry in armies" :key="entry.army.id" class="army">
+        <tr class="summary">
+          <td class="mission">{{ entry.army.mission }}</td>
+          <td class="units">
             {{ entry.army.stacks.map((s) => `${s.count}x ${s.unit}`).join(', ') || $t('armyEditor.unitsEmpty') }}
-          </span>
-          <span class="position">({{ entry.army.position.q }}, {{ entry.army.position.r }}) — {{ where(entry) }}</span>
-          <button type="button" @click="toggle(entry)">
-            {{ openId === entry.army.id ? $t('armyEditor.close') : $t('armyEditor.edit') }}
-          </button>
-        </div>
-
-        <div v-if="openId === entry.army.id && drafts[entry.army.id]" class="edit">
-          <div class="stacks">
-            <label v-for="(stack, index) in drafts[entry.army.id].stacks" :key="stack.unit">
-              {{ stack.unit }}
-              <input v-model.number="drafts[entry.army.id].stacks[index].count" type="number" min="0" step="1" />
-            </label>
-            <label>
-              {{ $t('armyEditor.provisions') }}
-              <input v-model.number="drafts[entry.army.id].provisions" type="number" min="0" step="1" />
-            </label>
-          </div>
-
-          <div class="controls">
-            <label>
-              {{ $t('armyEditor.arriveInMinutes') }}
-              <input v-model="drafts[entry.army.id].arriveInMinutes" type="number" min="0" step="1" />
-            </label>
-            <button
-              type="button"
-              :disabled="drafts[entry.army.id].saving"
-              @click="save(entry, { move: false, retime: true })"
-            >
-              {{ $t('armyEditor.speedUp') }}
+          </td>
+          <td class="num wood">{{ Math.round(entry.loot.wood) }}</td>
+          <td class="num food">{{ Math.round(entry.army.provisions) }}</td>
+          <td class="position">({{ entry.army.position.q }}, {{ entry.army.position.r }}) — {{ where(entry) }}</td>
+          <td>
+            <button type="button" @click="toggle(entry)">
+              {{ openId === entry.army.id ? $t('armyEditor.close') : $t('armyEditor.edit') }}
             </button>
-          </div>
+          </td>
+        </tr>
 
-          <div class="controls">
-            <label>
-              {{ $t('armyEditor.coordQ') }}
-              <input v-model="drafts[entry.army.id].q" type="number" step="1" />
-            </label>
-            <label>
-              {{ $t('armyEditor.coordR') }}
-              <input v-model="drafts[entry.army.id].r" type="number" step="1" />
-            </label>
-            <button
-              type="button"
-              :disabled="drafts[entry.army.id].saving"
-              @click="save(entry, { move: true, retime: false })"
-            >
-              {{ $t('armyEditor.moveHere') }}
-            </button>
-          </div>
+        <tr v-if="openId === entry.army.id && drafts[entry.army.id]" class="edit-row">
+          <td colspan="6">
+            <div class="edit">
+              <div class="stacks">
+                <label v-for="(stack, index) in drafts[entry.army.id].stacks" :key="stack.unit">
+                  {{ stack.unit }}
+                  <input v-model.number="drafts[entry.army.id].stacks[index].count" type="number" min="0" step="1" />
+                </label>
+                <label>
+                  {{ $t('armyEditor.provisions') }}
+                  <input v-model.number="drafts[entry.army.id].provisions" type="number" min="0" step="1" />
+                </label>
+              </div>
 
-          <button
-            type="button"
-            :disabled="drafts[entry.army.id].saving"
-            @click="save(entry, { move: false, retime: false })"
-          >
-            {{ drafts[entry.army.id].saving ? $t('armyEditor.saving') : $t('armyEditor.saveUnitsAndFood') }}
-          </button>
+              <div class="controls">
+                <label>
+                  {{ $t('armyEditor.arriveInMinutes') }}
+                  <input v-model="drafts[entry.army.id].arriveInMinutes" type="number" min="0" step="1" />
+                </label>
+                <button
+                  type="button"
+                  :disabled="drafts[entry.army.id].saving"
+                  @click="save(entry, { move: false, retime: true })"
+                >
+                  {{ $t('armyEditor.speedUp') }}
+                </button>
+              </div>
 
-          <p v-if="drafts[entry.army.id].error" class="error">{{ drafts[entry.army.id].error }}</p>
-        </div>
-      </li>
-    </ul>
+              <div class="controls">
+                <label>
+                  {{ $t('armyEditor.coordQ') }}
+                  <input v-model="drafts[entry.army.id].q" type="number" step="1" />
+                </label>
+                <label>
+                  {{ $t('armyEditor.coordR') }}
+                  <input v-model="drafts[entry.army.id].r" type="number" step="1" />
+                </label>
+                <button
+                  type="button"
+                  :disabled="drafts[entry.army.id].saving"
+                  @click="save(entry, { move: true, retime: false })"
+                >
+                  {{ $t('armyEditor.moveHere') }}
+                </button>
+              </div>
+
+              <button
+                type="button"
+                :disabled="drafts[entry.army.id].saving"
+                @click="save(entry, { move: false, retime: false })"
+              >
+                {{ drafts[entry.army.id].saving ? $t('armyEditor.saving') : $t('armyEditor.saveUnitsAndFood') }}
+              </button>
+
+              <p v-if="drafts[entry.army.id].error" class="error">{{ drafts[entry.army.id].error }}</p>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
   </section>
 </template>
 
@@ -203,25 +221,33 @@ async function save(entry: AdminArmyResponse, options: { move: boolean; retime: 
   color: var(--muted);
 }
 .armies {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.summary {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  width: 100%;
+  border-collapse: collapse;
   font-size: 13px;
-  flex-wrap: wrap;
+}
+.armies th,
+.armies td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--panel-border);
+  vertical-align: middle;
+}
+.armies th {
+  color: var(--muted);
+  font-weight: 600;
+}
+.armies .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .mission {
   font-weight: 600;
 }
 .position {
   color: var(--muted);
+}
+.edit-row td {
+  padding: 0;
 }
 .edit {
   display: flex;
