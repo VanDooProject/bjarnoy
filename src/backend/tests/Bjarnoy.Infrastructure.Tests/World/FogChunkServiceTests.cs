@@ -725,25 +725,65 @@ public class FogChunkServiceTests : IDisposable
         Assert.DoesNotContain(new HexCoord(38, 0), visible);
     }
 
-    [Fact]
-    public async Task Stored_explored_ground_without_a_current_source_gets_no_widening()
+    private async Task<(ExploredAreaService Service, ExploredArea Area)> StoreAsync(params HexCoord[] explored)
     {
         var worldId = AddWorld(150);
         AddSettlement(worldId, "player-1", 0, 0, level: 1);
-        var old = new HexCoord(-100, 40);
-        var oldChunk = FogChunkLayout.ChunkOf(old);
-        _dbContext.PlayerExploredChunks.Add(new PlayerExploredChunkEntity
+        foreach (var (chunk, hexes) in PersistedExploredBitset.GroupByChunk(explored))
         {
-            WorldId = worldId, OwnerId = "player-1", ChunkU = oldChunk.U, ChunkV = oldChunk.V,
-            Bits = PersistedExploredBitset.Encode(oldChunk, [old]).Bits,
-        });
+            _dbContext.PlayerExploredChunks.Add(new PlayerExploredChunkEntity
+            {
+                WorldId = worldId, OwnerId = "player-1", ChunkU = chunk.U, ChunkV = chunk.V,
+                Bits = PersistedExploredBitset.Encode(chunk, hexes).Bits,
+            });
+        }
+
         await _dbContext.SaveChangesAsync(Ct);
         var service = new ExploredAreaService(_dbContext, TimeProvider.System);
-        var area = await service.GetAsync(worldId, "player-1", persist: false, Ct);
+        return (service, (await service.GetAsync(worldId, "player-1", persist: false, Ct))!);
+    }
 
-        var visible = await service.VisibleAmongAsync(area!, [old, new HexCoord(old.Q + 1, old.R)], Ct);
+    [Fact]
+    public async Task Stored_explored_ground_without_a_current_source_is_visible_as_far_as_a_marching_armys_mist_margin_straight_line()
+    {
+        var old = new HexCoord(-100, 40);
+        var (service, area) = await StoreAsync(old);
+        HexCoord[] candidates =
+        [
+            old, new HexCoord(old.Q + 1, old.R), new HexCoord(old.Q + 5, old.R), new HexCoord(old.Q + 6, old.R),
+            new HexCoord(old.Q - 3, old.R + 6), new HexCoord(old.Q + 3, old.R + 4), new HexCoord(old.Q, old.R + 7),
+        ];
 
-        Assert.Equal([old], visible);
+        var visible = await service.VisibleAmongAsync(area, candidates, Ct);
+
+        // 5.55 straight-line hexes: (-3, 6) is 5.2 away, (3, 4) 6.1, (6, 0) 6.0, (0, 7) 6.06.
+        Assert.Equal(
+            candidates.Where(c => HexCoord.EuclideanDistance(c, old) <= FogVisionRadii.ArmyMistOpaqueMargin).ToHashSet(),
+            visible);
+        Assert.Contains(new HexCoord(old.Q - 3, old.R + 6), visible);
+        Assert.DoesNotContain(new HexCoord(old.Q + 3, old.R + 4), visible);
+    }
+
+    [Fact]
+    public async Task The_margin_around_stored_ground_reaches_across_a_chunk_seam_into_a_chunk_without_a_stored_row()
+    {
+        // Texel column 63 of chunk -2: three hexes on lies in chunk -1, where nothing is stored.
+        var edge = new HexCoord(-65, 40);
+        var across = new HexCoord(-62, 40);
+        var (service, area) = await StoreAsync(edge);
+        Assert.NotEqual(FogChunkLayout.ChunkOf(edge), FogChunkLayout.ChunkOf(across));
+
+        Assert.Contains(across, await service.VisibleAmongAsync(area, [across], Ct));
+        Assert.DoesNotContain(new HexCoord(-58, 40), await service.VisibleAmongAsync(area, [new HexCoord(-58, 40)], Ct));
+        Assert.Equal([across], await service.FirstVisibleAmongAsync(area, [[new HexCoord(-58, 40), across]], Ct));
+    }
+
+    [Fact]
+    public async Task A_candidate_whose_neighbourhood_touches_no_stored_chunk_is_not_visible()
+    {
+        var (service, area) = await StoreAsync(new HexCoord(-100, 40));
+
+        Assert.Empty(await service.VisibleAmongAsync(area, [new HexCoord(100, -40), new HexCoord(-100, 80)], Ct));
     }
 
     [Fact]
@@ -766,11 +806,12 @@ public class FogChunkServiceTests : IDisposable
             area!,
             [
                 [new HexCoord(60, 0), new HexCoord(16, 0), new HexCoord(3, 0)],
-                [new HexCoord(60, 0), new HexCoord(-101, 40), old],
+                [new HexCoord(60, 0), new HexCoord(-107, 40), new HexCoord(-101, 40), old],
                 [new HexCoord(60, 0), new HexCoord(61, 0)],
             ],
             Ct);
 
-        Assert.Equal([new HexCoord(16, 0), old, null], first);
+        // (-107, 40) is 7 hexes from the stored hex and out; (-101, 40) is 1 away and in, before the stored hex itself.
+        Assert.Equal([new HexCoord(16, 0), new HexCoord(-101, 40), null], first);
     }
 }

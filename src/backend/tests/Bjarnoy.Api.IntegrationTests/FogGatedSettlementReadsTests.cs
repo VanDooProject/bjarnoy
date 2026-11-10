@@ -366,7 +366,7 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
 
         var centre = new HexCoord(own.Q + 20, own.R);
         var seenFarm = new HexCoord(own.Q + 19, own.R);
-        var hiddenFarm = new HexCoord(own.Q + 21, own.R);
+        var hiddenFarm = new HexCoord(own.Q + 26, own.R);
         var rivalId = await PlantRivalAsync(
             worldId, own.IslandId, Unique("rival-owner"), "Skoll", centre.Q, centre.R,
             extraBuildings: [(seenFarm.Q, seenFarm.R), (hiddenFarm.Q, hiddenFarm.R)]);
@@ -375,7 +375,7 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task World_list_shows_a_rival_with_only_a_building_explored_in_full_with_the_label_on_that_building()
+    public async Task World_list_shows_a_rival_next_to_one_explored_building_with_the_label_on_its_longhouse()
     {
         using var client = Client();
         var (worldId, _, _, rivalId, centre, seenFarm, _) = await SetUpRivalSeenThroughABuildingAsync(client);
@@ -386,7 +386,8 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
         var rival = Assert.Single(response!, s => s.Id == rivalId);
         Assert.Equal((centre.Q, centre.R), (rival.Q, rival.R));
         Assert.Equal(1, rival.LonghouseLevel);
-        Assert.Equal((seenFarm.Q, seenFarm.R), (rival.LabelQ, rival.LabelR));
+        // The centre lies inside the explored farm's fringe, so it is visible itself and carries the label.
+        Assert.Equal((centre.Q, centre.R), (rival.LabelQ, rival.LabelR));
     }
 
     [Fact]
@@ -427,7 +428,7 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task View_of_a_rival_with_only_a_building_explored_returns_that_building_and_its_longhouse_whose_claim_reaches_it()
+    public async Task View_of_a_rival_next_to_one_explored_building_returns_that_building_and_its_longhouse_and_not_a_building_beyond_the_fringe()
     {
         using var client = Client();
         var (_, _, _, rivalId, centre, seenFarm, hiddenFarm) = await SetUpRivalSeenThroughABuildingAsync(client);
@@ -437,7 +438,7 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.ReadStrictAsync<SettlementViewResponse>(Ct);
         Assert.Equal((centre.Q, centre.R), (body.Q, body.R));
-        // The explored farm, and the Longhouse (§1h: sent as soon as a hex of its claim disc is visible, wherever it stands).
+        // The explored farm and the Longhouse next to it (§1h: inside the 5.55-hex fringe of stored ground); the farm 7 hexes on is not.
         Assert.Equivalent(
             new[] { (seenFarm.Q, seenFarm.R), (centre.Q, centre.R) },
             body.Buildings.Select(b => (b.Q, b.R)).ToArray());

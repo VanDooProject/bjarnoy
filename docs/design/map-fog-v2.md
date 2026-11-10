@@ -390,7 +390,8 @@ one of its towers. A building is only sent when its own hex lies in that area; a
 hex of its claim disc does, wherever it stands itself. The realm border is drawn from the full discs of the Longhouse and
 every tower sent, without the chain rule, and clipped by fog. "Not fully opaque" reaches 11.2 hexes (straight-line
 distance) past the explored ring of each of your settlements and towers and 5.55 hexes past the vision of each of your
-marching armies; explored ground without current vision has no such margin. The label rule stays: on the Longhouse when its
+marching armies. Stored explored ground gets the same 5.55 hexes as a marching army's vision, because the fog fades out
+from it the same way (the mask bakes that fringe around it). The label rule stays: on the Longhouse when its
 hex is explored, otherwise on the nearest visible hex of the realm.
 
 ### 1g. Foreign troops

@@ -99,12 +99,12 @@ public sealed class RivalBuildingsEndpointsTests : IAsyncLifetime
         var rivalId = await PlantAsync(
             worldId, own.IslandId, rivalUser, own.Q + 20, own.R,
             (seen.Q, seen.R, BuildingType.Farm, 2),
-            (own.Q + 21, own.R, BuildingType.Farm, 1));
+            (own.Q + 26, own.R, BuildingType.Farm, 1));
         await _factory.SeedExploredHexesAsync(worldId, owner, [seen], Ct);
 
         var buildings = (await BuildingsAsync(client, worldId))!;
 
-        // The farm on the explored hex, plus the Longhouse next to it: its claim disc (radius 2) holds the explored hex.
+        // The farm on the explored hex, plus the Longhouse next to it (inside its 5.55-hex fringe); the farm 7 hexes on stays hidden.
         Assert.Equal(
             [(seen.Q, seen.R, "farm", 2, rivalId, (Guid?)rivalUser, false), (own.Q + 20, own.R, "longhouse", 1, rivalId, (Guid?)rivalUser, false)],
             buildings.OrderBy(b => b.Q).Select(b => (b.Q, b.R, b.Type, b.Level, b.SettlementId, b.OwnerUserId, b.OutsideRealm)).ToArray());

@@ -103,7 +103,7 @@ public static class FogMaskGenerator
     /// see <see cref="MultiSourceDistance"/>'s remarks on why the enumeration
     /// ring is widened by it.
     /// </summary>
-    private const double StepsPerEuclideanUnit = 1.1547005383792517;
+    private const double StepsPerEuclideanUnit = HexOffsets.StepsPerEuclideanUnit;
 
     /// <summary>
     /// Start of the fringe ramp baked around explored ground, in hexes from
@@ -126,7 +126,7 @@ public static class FogMaskGenerator
     /// one-chunk history ring <c>FogChunkService</c> loads.
     /// </summary>
     public static readonly int TrailFringeReachSteps =
-        (int)Math.Ceiling((TrailFringeOffsetHexes + TrailFringeMarginHexes) * StepsPerEuclideanUnit);
+        HexOffsets.ReachSteps(TrailFringeOffsetHexes + TrailFringeMarginHexes);
 
     public static FogMaskBuffer Generate(
         MaskBounds bounds,
@@ -411,18 +411,8 @@ public static class FogMaskGenerator
 
     private static (int Du, int Dv, double D)[] BuildTrailFringeOffsets()
     {
-        var cap = TrailFringeOffsetHexes + TrailFringeMarginHexes;
-        var list = new List<(int, int, double)>();
-        foreach (var offset in HexCoord.Origin.WithinRadius(TrailFringeReachSteps))
-        {
-            var d = HexCoord.EuclideanDistance(offset, HexCoord.Origin);
-            if (d <= cap)
-            {
-                list.Add((offset.Q, (2 * offset.R) + offset.Q, d));
-            }
-        }
-
-        return [.. list];
+        return [.. HexOffsets.Within(TrailFringeOffsetHexes + TrailFringeMarginHexes)
+            .Select(o => (o.Offset.Q, (2 * o.Offset.R) + o.Offset.Q, o.Distance))];
     }
 
     /// <summary>
