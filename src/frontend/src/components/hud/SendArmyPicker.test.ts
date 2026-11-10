@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { nextTick } from 'vue';
+import { mount, type VueWrapper } from '@vue/test-utils';
 import SendArmyPicker from './SendArmyPicker.vue';
 import { useWorldStore } from '../../stores/world';
 import { useAuthStore } from '../../stores/auth';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import unitSnapshot from '../../data/unit-catalogue.json';
 import type { ArmyResponse, UnitDefinitionResponse } from '../../api/types';
+import { clearRouteCache } from '../../lib/map/routeQueue';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
@@ -17,9 +19,16 @@ vi.mock('../../config', async (importOriginal) => {
   return { ...actual, DEMO_MODE: false };
 });
 // The pathfinder is the map's own and has its suites; here every hex is plain ground, a route costs its hex distance.
+// The searches are sliced generators the route queue works off in the background, so the rows start out pending (see `routesArrive`).
 vi.mock('../../lib/map/hexPath', () => ({
-  findPath: (from: { q: number; r: number }, to: { q: number; r: number }) => [from, to],
-  findSeaPath: (from: { q: number; r: number }, to: { q: number; r: number }) => [from, to],
+  findPathSteps: function* (from: { q: number; r: number }, to: { q: number; r: number }) {
+    yield;
+    return [from, to];
+  },
+  findSeaPathSteps: function* (from: { q: number; r: number }, to: { q: number; r: number }) {
+    yield;
+    return [from, to];
+  },
   pathCost: (path: { q: number; r: number }[]) => Math.abs(path[1]!.q - path[0]!.q) + Math.abs(path[1]!.r - path[0]!.r),
 }));
 vi.mock('../../lib/map/movementContext', () => ({ gamePathContext: () => ({}) }));
@@ -60,8 +69,18 @@ function army(id: string, overrides: Partial<ArmyResponse> = {}, arrivesAt = '20
 
 const inOneHour = () => new Date(Date.now() + 3_600_000).toISOString();
 
+/** Lets the route queue run its background searches to the end and the rows re-render with the answers. */
+async function routesArrive() {
+  // The queue works on 0 ms timers: wait on the DOM until no row is still checking, not on a wall-clock guess.
+  await vi.waitFor(() => expect(mounted?.text()).not.toContain('Checking the route'));
+  await nextTick();
+}
+
+let mounted: VueWrapper | null = null;
 function mountPicker() {
-  return mount(SendArmyPicker, { global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] } });
+  const wrapper = mount(SendArmyPicker, { global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] } });
+  mounted = wrapper;
+  return wrapper;
 }
 
 function setup(armies: ArmyResponse[], garrison = [{ unit: 'spearman', count: 8 }], premium = false) {
@@ -78,6 +97,7 @@ function setup(armies: ArmyResponse[], garrison = [{ unit: 'spearman', count: 8 
 describe('SendArmyPicker', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    clearRouteCache();
   });
 
   it('lists home first, then the armies, and dims the ones that cannot go with the reason', async () => {
@@ -86,6 +106,7 @@ describe('SendArmyPicker', () => {
     setup([returning, army('stand'), army('sup', { supporting: true, movement: null })]);
 
     const wrapper = mountPicker();
+    await routesArrive();
 
     const rows = wrapper.findAll('.send-row');
     expect(rows.map((r) => r.attributes('data-source'))).toEqual(['home', 'stand', 'ret', 'sup']);
@@ -100,6 +121,7 @@ describe('SendArmyPicker', () => {
     const world = setup([army('march', {}, inOneHour())]);
 
     const wrapper = mountPicker();
+    await routesArrive();
     const row = wrapper.get('[data-source="march"]');
 
     expect(row.text()).toContain('Premium: redirect while marching');
@@ -112,6 +134,7 @@ describe('SendArmyPicker', () => {
     setup([army('march', {}, inOneHour())], [], true);
 
     const wrapper = mountPicker();
+    await routesArrive();
     await wrapper.get('[data-source="march"] .send-row-head').trigger('click');
 
     expect(wrapper.find('.send-stepper').exists()).toBe(false);
@@ -122,6 +145,7 @@ describe('SendArmyPicker', () => {
     const world = setup([army('stand')]);
 
     const wrapper = mountPicker();
+    await routesArrive();
     await wrapper.get('[data-source="stand"] .send-row-head').trigger('click');
     expect(wrapper.get('[data-testid="split-note"]').text()).toBe('Whole army moves.');
     expect(wrapper.get('.send-go').text()).toMatch(/^Move · 10 units · \d+ (min|h)/);
@@ -137,6 +161,7 @@ describe('SendArmyPicker', () => {
   it('the split note counts the units that go and the ones that keep standing', async () => {
     const world = setup([army('stand')]);
     const wrapper = mountPicker();
+    await routesArrive();
     await wrapper.get('[data-source="stand"] .send-row-head').trigger('click');
 
     world.setFieldOrderUnitCount('spearman', 4);
@@ -156,15 +181,37 @@ describe('SendArmyPicker', () => {
     setup([army('stand', { provisions: neededFood - 1 })]);
 
     const wrapper = mountPicker();
+    await routesArrive();
 
     expect(wrapper.get('[data-source="stand"]').text()).toContain('Not enough food for the way home');
     expect((wrapper.get('[data-source="stand"] .send-row-head').element as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('shows a row whose route is still being searched as checking, then selectable once the route is in', async () => {
+    const world = setup([army('stand')]);
+
+    const wrapper = mountPicker();
+    const row = wrapper.get('[data-source="stand"]');
+
+    expect(row.classes()).toContain('is-off');
+    expect(row.text()).toContain('Checking the route…');
+    expect(row.text()).not.toContain("Can't get there");
+    expect((row.get('.send-row-head').element as HTMLButtonElement).disabled).toBe(true);
+
+    await routesArrive();
+
+    expect(row.classes()).not.toContain('is-off');
+    expect(row.text()).not.toContain('Checking the route…');
+    expect(row.get('.send-row-eta').text()).toMatch(/\d+ (min|h)/);
+    await row.get('.send-row-head').trigger('click');
+    expect(world.sendPicker?.selectedId).toBe('stand');
   });
 
   it('the home row hands over to the dispatch form for the garrison', async () => {
     const world = setup([army('stand')]);
 
     const wrapper = mountPicker();
+    await routesArrive();
     await wrapper.get('[data-source="home"] .send-row-head').trigger('click');
 
     expect(world.sendPicker).toBeNull();
@@ -174,6 +221,7 @@ describe('SendArmyPicker', () => {
   it('closing drops the order being composed', async () => {
     const world = setup([army('stand')]);
     const wrapper = mountPicker();
+    await routesArrive();
     await wrapper.get('[data-source="stand"] .send-row-head').trigger('click');
 
     await wrapper.get('.send-picker-close').trigger('click');

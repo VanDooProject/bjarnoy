@@ -138,7 +138,6 @@
       "sendArmyHere": "Armee hierher entsenden",
       "attack": "Angreifen",
       "support": "Unterstützen",
-      "noArmyCanGo": "Keine Armee kann losziehen",
       "upgrade": "Ausbauen",
       "notEnough": "Benötigt {resources}",
       "raze": "Abreißen",
@@ -471,7 +470,8 @@
       "notOrderable": "Ist auf einem Auftrag und nimmt keine neuen Befehle an",
       "premium": "Premium: Umleiten während des Marschs",
       "unreachable": "Kommt dort nicht hin",
-      "noFood": "Proviant reicht nicht für den Rückweg"
+      "noFood": "Proviant reicht nicht für den Rückweg",
+      "checking": "Route wird geprüft …"
     }
   },
   "tradeReport": {

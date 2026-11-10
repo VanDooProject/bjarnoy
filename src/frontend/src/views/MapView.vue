@@ -79,7 +79,6 @@ import {
 import { reachableRange } from '../lib/map/hexPath';
 import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
-import { anySendSourceCanGo } from '../lib/units/sendSources';
 import { useSendBlockText, useSendPickerRows, useSendSources } from '../composables/useSendSources';
 import { motionEnabled } from '../lib/motion';
 import MobileDispatchSheet from '../components/hud/MobileDispatchSheet.vue';
@@ -552,6 +551,8 @@ const PICKER_FRAME_MS = 300;
 const pickerFrameKey = computed(() => {
   const picker = world.sendPicker;
   if (!picker) return null;
+  // Frame once, when every army's route is known: no moving camera as the rows resolve one by one.
+  if (sendPicker.rows.value.some((r) => r.kind === 'field' && r.block === 'pending')) return null;
   const ids = sendPicker.rows.value.filter((r) => r.kind === 'field' && r.ok).map((r) => r.id);
   return `${picker.coord.q},${picker.coord.r}|${ids.sort().join(',')}`;
 });
@@ -584,6 +585,7 @@ function onArmyTap(armyId: string, screen: { x: number; y: number }) {
     world.selectSendSource(armyId);
     return;
   }
+  if (row.block === 'pending') return;
   const text = sendBlockText(row, sendPicker.target.value);
   if (!text) return;
   armyHint.value = { x: Math.min(Math.max(screen.x, 110), Math.max(110, stage.value.w - 110)), y: Math.max(48, screen.y - 34), text };
@@ -593,6 +595,18 @@ watch(
   () => world.sendPicker,
   (picker) => {
     if (!picker) armyHint.value = null;
+  },
+);
+// The selected army was kept while its route was being searched (or the target moved): once its row settles on "cannot go", drop it.
+watch(
+  () => {
+    const id = world.sendPicker?.selectedId;
+    if (!id || id === 'home') return null;
+    const row = sendPicker.rows.value.find((r) => r.id === id);
+    return row ? (row.ok ? 'ok' : (row.block ?? null)) : null;
+  },
+  (state, previous) => {
+    if (previous === 'pending' && state && state !== 'ok' && state !== 'pending') world.selectSendSource(null);
   },
 );
 onUnmounted(() => armyHintTimer && clearTimeout(armyHintTimer));
@@ -852,7 +866,9 @@ const isMineTile = computed(
 // tile: another player's settlement reads "Attack" and targets it directly;
 // the player's own *other* settlement (multi-settlement accounts) reads
 // "Support"; anything else (own current settlement, unclaimed ground, open
-// water) is a plain Move with `route = [coord]`. Enabled on every viewport —
+// water) is a plain Move with `route = [coord]`. Always enabled, so opening a
+// ring runs no route search: the send picker it opens lists which armies can
+// go and why the others cannot. Enabled on every viewport —
 // on desktop, starting a draft this way just pre-fills ArmyPanel's existing
 // dispatch form, same as picking a mission tab and a target there by hand.
 function sendMissionAt(tile: Tile): 'move' | 'attack' | 'support' {
@@ -867,8 +883,7 @@ function sendArmyAction(tile: Tile): RingAction {
   const label = t(
     mission === 'attack' ? 'hud.ringMenu.actions.attack' : mission === 'support' ? 'hud.ringMenu.actions.support' : 'hud.ringMenu.actions.sendArmyHere',
   );
-  const canGo = anySendSourceCanGo(sendSources.evaluate(sendSources.targetAt(mission, { q: tile.q, r: tile.r })));
-  return { id, label, disabled: !canGo, hint: canGo ? undefined : t('hud.ringMenu.actions.noArmyCanGo') };
+  return { id, label };
 }
 
 /** Whether the ring offers Hunt on this tile (huntActions): a wildlife camp still on the map, live mode only. */
@@ -886,7 +901,9 @@ function retargetSendPicker(coord: AxialCoord, tile: Tile) {
   if (!picker) return;
   const mission = picker.mission === 'hunt' && isHuntableCamp(tile) ? 'hunt' : sendMissionAt(tile);
   const selected = picker.selectedId;
-  const canGo = !!selected && !!sendSources.evaluate(sendSources.targetAt(mission, coord)).find((r) => r.id === selected)?.ok;
+  // A route still being searched keeps the army too: the watch on the selected row drops it once the search says it cannot go.
+  const selectedRow = selected ? sendSources.evaluate(sendSources.targetAt(mission, coord)).find((r) => r.id === selected) : undefined;
+  const canGo = !!selectedRow && (selectedRow.ok || selectedRow.block === 'pending');
   world.retargetSendPicker(
     coord,
     mission === 'move' ? {} : mission === 'hunt' ? { mission } : { mission, targetSettlementId: tile.ownerId ?? undefined },
@@ -896,25 +913,17 @@ function retargetSendPicker(coord: AxialCoord, tile: Tile) {
 
 // Hunt a wildlife camp: offered on a camp tile that is still on the map, live mode only
 // (the demo has no army simulation, so no camp fights). A land camp needs land units, a camp at sea (the whale road)
-// ships — the other class cannot hunt it. Enabled when the home garrison or an army in the field can go.
+// ships — the other class cannot hunt it. Like the send bubble it is never greyed out: which armies can go is the
+// picker's question (its rows run the route search), opening the ring runs none.
 function huntActions(tile: Tile): RingAction[] {
   if (!isHuntableCamp(tile)) return [];
-  const canGo = anySendSourceCanGo(sendSources.evaluate(sendSources.targetAt('hunt', { q: tile.q, r: tile.r })));
-  return [
-    {
-      id: 'hunt',
-      label: t('hud.ringMenu.actions.hunt'),
-      color: 'var(--rival)',
-      disabled: !canGo,
-      hint: canGo ? undefined : t('hud.ringMenu.actions.noArmyCanGo'),
-    },
-  ];
+  return [{ id: 'hunt', label: t('hud.ringMenu.actions.hunt'), color: 'var(--rival)' }];
 }
 
 // Siege another player's palisade or gate (endgame "Breaching walls"): offered on a standing wall hex of a settlement that is
 // neither the player's own nor a friend's (same guild, or a guild at peace), live mode only. It opens an Attack on the wall owner's
 // settlement with the wall hex as the preferred target building. Walls fall to battering rams only, so one must be at home; without
-// one the bubble stays but is disabled with a hint, like the other army actions.
+// one the bubble stays but is disabled with a hint (a garrison check, no route search).
 function siegeActions(tile: Tile): RingAction[] {
   if (
     DEMO_MODE

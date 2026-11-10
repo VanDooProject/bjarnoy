@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ArmyResponse, UnitDefinitionResponse } from '../../api/types';
 import type { FeasibilityEnv } from './fieldOrderFeasibility';
-import { anySendSourceCanGo, evaluateSendSources, type SendTarget } from './sendSources';
+import { evaluateSendSources, type SendTarget } from './sendSources';
 
 function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): UnitDefinitionResponse {
   return {
@@ -73,14 +73,14 @@ function army(overrides: Partial<ArmyResponse> & { id: string }): ArmyResponse {
 const target: SendTarget = { mission: 'move', coord: { q: 4, r: 0 }, campAtSea: false };
 const homeGarrison = [{ unit: 'spearman', count: 8 }];
 
-function run(armies: ArmyResponse[], opts: { garrison?: typeof homeGarrison; isPremium?: boolean; target?: SendTarget } = {}) {
+function run(armies: ArmyResponse[], opts: { garrison?: typeof homeGarrison; isPremium?: boolean; target?: SendTarget; env?: FeasibilityEnv } = {}) {
   return evaluateSendSources({
     target: opts.target ?? target,
     garrison: opts.garrison ?? homeGarrison,
     armies,
     isPremium: opts.isPremium ?? false,
     byType,
-    env,
+    env: opts.env ?? env,
   });
 }
 
@@ -136,6 +136,32 @@ describe('evaluateSendSources', () => {
     expect(premium).toMatchObject({ ok: true, locked: false, standing: false });
   });
 
+  it('a standing army whose route is still being searched is blocked as pending, not locked and not unreachable', () => {
+    const pending: FeasibilityEnv = { ...env, route: () => 'pending' };
+
+    const row = run([army({ id: 'a' })], { env: pending })[1]!;
+
+    expect(row).toMatchObject({ ok: false, block: 'pending', locked: false, travelMinutes: null });
+  });
+
+  it('pending rows sort after the ones that can go, behind them by id', () => {
+    const pending: FeasibilityEnv = { ...env, route: (from, to) => (from.q === 10 ? 'pending' : { path: [from, to], cost: 3 }) };
+    const ready = army({ id: 'z-ready' });
+    ready.movement!.path = [{ q: 0, r: 0 }, { q: 4, r: 4 }];
+    ready.position = { q: 4, r: 4 };
+
+    expect(run([army({ id: 'a' }), ready], { env: pending }).map((r) => r.id)).toEqual(['home', 'z-ready', 'a']);
+  });
+
+  it('the premium lock wins over a pending route', () => {
+    const pending: FeasibilityEnv = { ...env, route: () => 'pending' };
+    const marching = army({ id: 'a' });
+    marching.movement!.arrivesAt = '2026-11-09T15:00:00Z';
+
+    expect(run([marching], { env: pending })[1]).toMatchObject({ ok: false, block: 'premium', locked: true });
+    expect(run([marching], { env: pending, isPremium: true })[1]).toMatchObject({ ok: false, block: 'pending', locked: false });
+  });
+
   it('a standing army is free', () => {
     expect(run([army({ id: 'a' })])[1]).toMatchObject({ ok: true, standing: true });
   });
@@ -170,23 +196,5 @@ describe('evaluateSendSources', () => {
 
   it('an army at home (folded back) is not a field source', () => {
     expect(run([army({ id: 'a', atHome: true, movement: null })]).map((r) => r.id)).toEqual(['home']);
-  });
-});
-
-describe('anySendSourceCanGo', () => {
-  it('is true when only a field army can go', () => {
-    expect(anySendSourceCanGo(run([army({ id: 'a' })], { garrison: [] }))).toBe(true);
-  });
-
-  it('is true when only home can go', () => {
-    expect(anySendSourceCanGo(run([]))).toBe(true);
-  });
-
-  it('is false when nothing can go: empty garrison, supporting and returning armies', () => {
-    const returning = army({ id: 'r' });
-    returning.movement!.isReturning = true;
-    const rows = run([returning, army({ id: 's', supporting: true, movement: null })], { garrison: [] });
-
-    expect(anySendSourceCanGo(rows)).toBe(false);
   });
 });
