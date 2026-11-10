@@ -1328,6 +1328,91 @@ describe('useWorldStore bootstrapLiveWorld', () => {
 
     expect(getIslands).toHaveBeenCalledWith('world-1', usePlayerStore().id);
   });
+
+  // Regression: a visitor's browser remembered a world that is no longer listed (hidden by an admin). `getWorld`
+  // still answered for it, so the landing page bootstrapped into it, got NoPlotAvailable and showed "Not open yet"
+  // while the newest world was open.
+  function worldResponse(id: string) {
+    return {
+      id,
+      name: id,
+      seed: 1,
+      radius: 30,
+      maxPlayers: 100,
+      status: 'active',
+      islandCount: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'none',
+      startsAt: null,
+      endbossTriggered: false,
+      frozenIslesEnabled: false,
+      speedFactor: 1,
+      generation: generationResponse(),
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    };
+  }
+  const listedNewest = {
+    id: 'world-new',
+    name: 'world-new',
+    status: 'active',
+    joinable: true,
+    joinableReason: 'none',
+    playerCount: 0,
+    maxPlayers: 100,
+    freeSlots: 100,
+    startsAt: null,
+  };
+
+  it('moves a visitor without a settlement off a remembered world that is no longer listed', async () => {
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-old';
+    listWorlds.mockReset().mockResolvedValue([listedNewest]);
+    getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
+    getIslands.mockReset().mockResolvedValue([]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(store.worldId).toBe('world-new');
+  });
+
+  it('keeps a remembered world that is still listed, even when a newer one exists', async () => {
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-old';
+    listWorlds.mockReset().mockResolvedValue([{ ...listedNewest, id: 'world-old', name: 'world-old' }, listedNewest]);
+    getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
+    getIslands.mockReset().mockResolvedValue([]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(store.worldId).toBe('world-old');
+  });
+
+  it('lists the worlds once when it moves off an unlisted remembered world', async () => {
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-old';
+    listWorlds.mockReset().mockResolvedValue([listedNewest]);
+    getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
+    getIslands.mockReset().mockResolvedValue([]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(listWorlds).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a remembered unlisted world for a player who has a settlement there', async () => {
+    const store = await loadStoreModule(false);
+    const { usePlayerStore } = await import('./player');
+    usePlayerStore().foundSettlement('settlement-1');
+    store.worldId = 'world-old';
+    listWorlds.mockReset().mockResolvedValue([listedNewest]);
+    getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
+    getIslands.mockReset().mockResolvedValue([]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(store.worldId).toBe('world-old');
+  });
 });
 
 describe('useWorldStore restoreLiveSettlement', () => {

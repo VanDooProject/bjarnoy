@@ -8,6 +8,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
+import { useJoinBlockedLabel } from '../composables/useJoinBlockedLabel';
 import PlayIntroButton from '../intro/PlayIntroButton.vue';
 import FeatureList from '../intro/FeatureList.vue';
 import ImpressumLink from '../intro/ImpressumLink.vue';
@@ -66,7 +67,8 @@ import { isHudBarAtBottom, isHudRail } from '../composables/hudSettlementBubbleS
 import { HUD_COMPACT_QUERY, TOUCH_QUERY } from '../lib/breakpoints';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 
-const { t, d, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const joinBlockedLabel = useJoinBlockedLabel();
 // The feature list and the Impressum link read the intro's own texts, which take a plain locale.
 // the game's name is not translated
 const WORDMARK = 'BJARNØY';
@@ -322,17 +324,7 @@ const joinBlockedMessage = computed(() => {
   if (noPlotAvailable.value) {
     return t('landing.joinBlocked.noPlotAvailable');
   }
-  if (world.worldJoinableReason === 'NotStartedYet' && world.worldStartsAt) {
-    const startsAt = new Date(world.worldStartsAt);
-    return t('landing.joinBlocked.opensAt', { date: d(startsAt, 'long') });
-  }
-  if (world.worldJoinableReason === 'JoinsClosed') {
-    return t('landing.joinBlocked.joinsClosed');
-  }
-  if (world.worldJoinableReason === 'NoWorldYet') {
-    return t('landing.joinBlocked.noWorldYet');
-  }
-  return t('landing.joinBlocked.notAcceptingPlayers');
+  return joinBlockedLabel(world.worldJoinableReason, world.worldStartsAt);
 });
 
 // Guided checklist (design handoff "2a"): derived purely from what's
