@@ -39,10 +39,10 @@ public static class FogVisionRadii
     /// </summary>
     public const double SourceMistOpaqueMargin = FogMaskOptions.DefaultUnknownMarginHexes * MistOpaqueAtRamp;
 
-    /// <summary>Where a marching army's own white fog ramp starts, past its vision radius. Mirrors the frontend's <c>ARMY_FOG_WHITE_OFFSET</c> (<c>FogMaskLayer.ts</c>).</summary>
+    /// <summary>Where a marching army's own white fog ramp starts, past its vision radius. Mirrors the frontend's <c>ARMY_FOG_WHITE_OFFSET</c> (<c>fogRamp.ts</c>).</summary>
     public const double ArmyFogWhiteOffsetHexes = 0.75;
 
-    /// <summary>The army white ramp's width in hexes. Mirrors the frontend's <c>ARMY_FOG_WHITE_MARGIN</c> (<c>FogMaskLayer.ts</c>).</summary>
+    /// <summary>The army white ramp's width in hexes. Mirrors the frontend's <c>ARMY_FOG_WHITE_MARGIN</c> (<c>fogRamp.ts</c>).</summary>
     public const int ArmyFogWhiteMarginHexes = 6;
 
     /// <summary>

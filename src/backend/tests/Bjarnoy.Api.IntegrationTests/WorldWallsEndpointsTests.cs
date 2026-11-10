@@ -160,7 +160,7 @@ public sealed class WorldWallsEndpointsTests : IAsyncLifetime
         await PlantAsync(
             worldId, own.IslandId, SystemUserIds.Abandoned, own.Q + 20, own.R,
             (seen.Q, seen.R, BuildingType.Palisade, 1),
-            (own.Q + 21, own.R, BuildingType.Palisade, 1));
+            (own.Q + 26, own.R, BuildingType.Palisade, 1));
         await _factory.SeedExploredHexesAsync(worldId, owner, [seen], Ct);
 
         var wall = Assert.Single((await WallsAsync(client, worldId))!);
