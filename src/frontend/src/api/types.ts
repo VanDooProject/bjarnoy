@@ -1124,6 +1124,8 @@ export interface AdminArmyResponse {
   worldId: string;
   settlementName: string;
   ownerName: string;
+  /** Loot the army carries home and has not deposited yet. */
+  loot: ResourceLine;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/ChatContracts.cs.
