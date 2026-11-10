@@ -5,6 +5,8 @@ import type { MessageSchema } from '../i18n/schema';
 import { buildingName, terrainName } from '../i18n/catalogueNames';
 import { useRouter } from 'vue-router';
 import { useDisplayedRoute } from '../composables/useDisplayedRoute';
+import { useMapFocus } from '../composables/useMapFocus';
+import { isModalRouteName } from '../lib/modalRoute';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
 import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
@@ -351,9 +353,9 @@ watch(mode, (m) => {
   zoomDrivenTransition = false;
 });
 
-// A navigation that carries a camera anchor (e.g. a report's "show on map" link: `/settlement#world&q=..&r=..&z=..`)
-// moves the camera there. The anchor is also read once at setup (`initialCameraView`) for a reload or a fresh mount;
-// this covers the map already being mounted behind a modal. `flush: 'post'` runs it after the `mode` watcher above has
+// A navigation that carries a camera anchor (a followed link or back/forward to `/settlement#q=..&r=..&z=..`, world mode
+// behind `#world&`) moves the camera there. The anchor is also read once at setup (`initialCameraView`) for a reload or a
+// fresh mount; this covers the map already being mounted. `flush: 'post'` runs it after the `mode` watcher above has
 // switched the renderer's mode.
 watch(
   () => route.value.hash,
@@ -362,6 +364,21 @@ watch(
     if (view) canvasRef.value?.renderer?.restoreCameraView(view.coord, view.zoom);
   },
   { flush: 'post' },
+);
+
+// "Show on map" requests (a report's location link, composables/useMapFocus.ts): centre and flash the hex, keeping the mode and
+// zoom the map is in. Applied only once the modal is closed and after the hash watcher above (`flush: 'post'`, defined later):
+// closing a modal pops history back to the entry whose URL still holds the camera from before it opened, and that restore must
+// not undo this pan. Also fulfilled when the renderer only appears after the request was raised.
+const mapFocus = useMapFocus();
+watch(
+  [mapFocus.pending, () => canvasRef.value?.renderer, () => isModalRouteName(router.currentRoute.value.name)],
+  ([request, renderer, modalOpen]) => {
+    if (!request || !renderer || modalOpen) return;
+    onQueueSelect(request.coord);
+    mapFocus.clear();
+  },
+  { immediate: true, flush: 'post' },
 );
 
 // Fog v2 (map-fog-v2.md §3): pushes a freshly fetched mask bitmap into the

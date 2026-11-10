@@ -366,6 +366,7 @@
     "summaryTied": "tied, {n} lost",
     "summaryLooted": "{n} looted",
     "hexCoord": "Hex ({q}, {r})",
+    "showOnMap": "Show on map",
     "location": "Location",
     "unknownOpponent": "Unknown"
   },
