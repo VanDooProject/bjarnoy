@@ -914,6 +914,8 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.False(Of("farm").NewPlacementDisabled);
         Assert.True(Of("palisade").AlsoOnCoastalWater);
         Assert.False(Of("palisadegate").AlsoOnCoastalWater);
+        Assert.True(Of("fishinghut").AlsoOnInlandLakeShore);
+        Assert.False(Of("farm").AlsoOnInlandLakeShore);
     }
 
     [Fact]

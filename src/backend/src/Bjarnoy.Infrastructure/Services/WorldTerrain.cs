@@ -8,9 +8,9 @@ namespace Bjarnoy.Infrastructure.Services;
 
 /// <summary>
 /// The terrain the game rules see: the seed's terrain with every island's persisted bogland and inland lakes laid over it (bog
-/// moss, bog lakes and inland lakes are placed per island by <see cref="BogGenerator"/>, not derivable from the seed). A wasted
-/// island's inland lakes count only once the island is revealed, like the rest of its terrain. Everything that decides where an
-/// army walks, where a ship sails or what may be built asks a sampler from here.
+/// moss, bog lakes and inland lakes are placed per island by <see cref="BogGenerator"/>, not derivable from the seed). The overlay
+/// holds the inland lakes of green islands only: a wasted island's terrain, its lakes included, stays sea to the rules, revealed or
+/// not. Everything that decides where an army walks, where a ship sails or what may be built asks a sampler from here.
 /// </summary>
 /// <remarks>
 /// The overlay of a world is loaded once and kept (a world's bog only changes when it is reseeded, which calls

@@ -5,7 +5,7 @@
 // the edge — this also exercises the border-rendering code path
 // (HexMapRenderer's outerEdgesOf) against a non-convex shape, not just the
 // perfect hexagon every other settlement in the demo produces.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { hexDistance, hexesInRadius, hexRing, neighbors, type AxialCoord } from '../hex/coords';
 import { giantCoverage } from './giantTiles';
 import { guardRange, placeCamps } from './campPlacement';
@@ -2181,6 +2181,33 @@ describe('WorldModel inland lakes', () => {
       }
     }
     expect(found).toBeGreaterThan(0);
+  }, 60_000);
+
+  it('adds a demo island’s inland lakes only after giants and camps are placed, which see that water as sea like the backend', () => {
+    let lakesSeen = 0;
+    for (const seed of [1, 2, 3, 4]) {
+      const model = new WorldModel(seed);
+      const events: string[] = [];
+      const lakeHexes = (island: { q: number; r: number }) =>
+        hexesInRadius(island, 30).filter((c) => model.terrainOf(c.q, c.r) === 'inlandlake');
+      let current = { q: 0, r: 0 };
+      for (const hook of ['setGiants', 'setCamps'] as const) {
+        const original = model[hook].bind(model) as (...args: unknown[]) => unknown;
+        vi.spyOn(model, hook).mockImplementation((...args: unknown[]) => {
+          events.push(`${hook}:${lakeHexes(current).length}`);
+          return original(...args) as never;
+        });
+      }
+      for (const island of enumerateIslands({ seed, generation: model.generation }, 400).slice(0, 4)) {
+        current = island;
+        events.length = 0;
+        model.placeGiantsForIsland(island, seed);
+        // Generation saw enclosed water as sea: no inland lake existed yet when giants and camps were set.
+        expect(events.every((e) => e.endsWith(':0')), events.join(',')).toBe(true);
+        lakesSeen += lakeHexes(island).length;
+      }
+    }
+    expect(lakesSeen).toBeGreaterThan(0);
   }, 60_000);
 });
 

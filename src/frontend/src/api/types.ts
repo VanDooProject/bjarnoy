@@ -1418,6 +1418,8 @@ export interface BuildingDefinitionResponse {
   requiresCoastalWater: boolean;
   /** Land terrain AND (as an exception) coastal water: the palisade's sea end. */
   alsoOnCoastalWater?: boolean;
+  /** Also stands on an inland-lake hex beside land (the fishing hut) — see BuildingDefinition.AlsoOnInlandLakeShore. */
+  alsoOnInlandLakeShore?: boolean;
   requiredLonghouseLevel: number;
   /** Construction slots one order for this building occupies while building — ignored when `occupiesAllSlots` is set. */
   slotCost: number;

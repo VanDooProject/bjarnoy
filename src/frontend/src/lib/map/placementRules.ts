@@ -15,6 +15,8 @@ export interface PlacementRule {
   allowedTerrain: readonly string[];
   requiresCoastalWater: boolean;
   alsoOnCoastalWater: boolean;
+  /** Also stands on an inland-lake hex beside land (the Fishing Hut). */
+  alsoOnInlandLakeShore: boolean;
   requiresBogKinds: readonly string[];
   alsoOnBogKinds: readonly string[];
   lakeShoreKinds: readonly string[];
@@ -35,6 +37,7 @@ const DEMO_ONLY_RULES: readonly PlacementRule[] = [
     allowedTerrain: ['grass'],
     requiresCoastalWater: false,
     alsoOnCoastalWater: false,
+    alsoOnInlandLakeShore: false,
     requiresBogKinds: [],
     alsoOnBogKinds: [],
     lakeShoreKinds: [],
@@ -59,6 +62,7 @@ export function setPlacementRules(definitions: readonly BuildingDefinitionRespon
       allowedTerrain: d.allowedTerrain,
       requiresCoastalWater: d.requiresCoastalWater,
       alsoOnCoastalWater: d.alsoOnCoastalWater ?? false,
+      alsoOnInlandLakeShore: d.alsoOnInlandLakeShore ?? false,
       requiresBogKinds: d.requiresBogKinds,
       alsoOnBogKinds: d.alsoOnBogKinds,
       lakeShoreKinds: d.lakeShoreKinds,

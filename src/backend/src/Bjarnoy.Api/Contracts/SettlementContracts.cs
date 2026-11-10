@@ -467,6 +467,9 @@ public sealed record BuildingPrerequisiteResponse(string Type, int Level);
 /// The building stands on land (<paramref name="AllowedTerrain"/>) <em>and</em>, as an exception, on a coastal-water hex: the palisade's
 /// sea end. Unlike <paramref name="RequiresCoastalWater"/> it does not replace the land terrain.
 /// </param>
+/// <param name="AlsoOnInlandLakeShore">
+/// The building also stands on an inland-lake hex that has land beside it (the Fishing Hut); nothing else stands on an inland lake.
+/// </param>
 /// <param name="RingCategory">
 /// The build ring's group this building is listed under (<c>resource</c>, <c>military</c>, <c>logistics</c>, <c>defense</c>, <c>religion</c>,
 /// <c>water</c>), or null when the ring never lists it (the Longhouse); the client builds its ring from this, so no client table repeats it.
@@ -495,6 +498,7 @@ public sealed record BuildingDefinitionResponse(
     IReadOnlyList<string> AllowedTerrain,
     bool RequiresCoastalWater,
     bool AlsoOnCoastalWater,
+    bool AlsoOnInlandLakeShore,
     int RequiredLonghouseLevel,
     int SlotCost,
     bool OccupiesAllSlots,
@@ -523,6 +527,7 @@ public sealed record BuildingDefinitionResponse(
             [.. definition.AllowedTerrain.Select(t => t.ToWireName()).Order(StringComparer.Ordinal)],
             definition.RequiresCoastalWater,
             definition.AlsoOnCoastalWater,
+            definition.AlsoOnInlandLakeShore,
             definition.RequiredLonghouseLevel,
             definition.SlotCost,
             definition.OccupiesAllSlots,

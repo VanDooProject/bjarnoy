@@ -324,12 +324,12 @@ export class BogGenerator {
 
   // ---------------------------------------------------------------- pockets
 
-  /** Finds enclosed sea pockets and turns the ones that satisfy every rule into lakes with a bog ring — mirrors `FindPockets`. */
   /** The inland-lake hexes, sorted by (q, r). */
   inlandLakeTiles(): AxialCoord[] {
     return sorted(this.inlandLake);
   }
 
+  /** Finds enclosed sea pockets and turns the ones that satisfy every rule into lakes with a bog ring — mirrors `FindPockets`. */
   findPockets(): void {
     if (this.islandTiles.length === 0) return;
     for (const comp of enclosedWaterPockets(this.islandTiles, this.isLand)) {

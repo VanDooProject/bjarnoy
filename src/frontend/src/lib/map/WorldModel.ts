@@ -2363,14 +2363,14 @@ export class WorldModel {
     // giants and camps below see it: no giant stands on a bog or a lake, and only plain moss holds a bog camp.
     this.addBogTiles(bogTiles);
     // Water the island encloses that the bog did not fill: a green island's come out of the river pipeline; a wasted island
-    // has no bog, so every pocket is one (mirrors `WorldGenerator`'s wasted branch). Only counted once revealed.
+    // has no bog, so every pocket is one (mirrors `WorldGenerator`'s wasted branch). Added as terrain only after generation below:
+    // the backend's giant, camp and endgame generators see that water as sea (its overlay holds bog only), so this must too.
     const inlandLakes = wasted
       ? enclosedWaterTiles(
           islandTiles,
           (c) => terrainAt(c.q, c.r, world) !== 'sea' || wastedTerrainAt(c.q, c.r, world) !== 'sea',
         )
       : greenInlandLakes;
-    this.addInlandLakeTiles(inlandLakes, wasted);
     const plainBog = new Set(bogTiles.filter((t) => t.kind === 'bog').map((t) => coordKey(t)));
     const riverKeys = new Set(riverTiles.map((t) => coordKey(t)));
     const isRiver = (c: AxialCoord) => riverKeys.has(coordKey(c));
@@ -2448,6 +2448,7 @@ export class WorldModel {
         sites.towers.map((coord) => ({ coord, orientation: this.getTile(coord.q, coord.r).orientation ?? 'SE', level: 2 })),
       );
     }
+    this.addInlandLakeTiles(inlandLakes, wasted);
   }
 
   /**
