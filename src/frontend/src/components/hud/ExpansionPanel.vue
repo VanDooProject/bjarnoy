@@ -24,6 +24,7 @@ import { apiErrorMessage } from '../../i18n/apiErrors';
 import { DEMO_MODE } from '../../config';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { useUnsavedInput } from '../../composables/useUnsavedInput';
+import { useArmyRecall } from '../../composables/useArmyRecall';
 import { SETTLERS_PER_FOUNDING } from '../../lib/founding';
 import { trainingBuildingsOfType } from '../../lib/units/trainingEconomy';
 import type { ArmySummary, SettlementResponse } from '../../api/types';
@@ -40,6 +41,7 @@ const settlement = ref<SettlementResponse | null>(null);
 const convoys = ref<ArmySummary[]>([]);
 const error = ref<string | null>(null);
 const busy = ref(false);
+const { isRecalling, recall: recallArmy, refusalFor } = useArmyRecall();
 
 const settlerCount = computed(
   () => settlement.value?.garrison.find((g) => g.unit === 'settler')?.count ?? 0,
@@ -107,16 +109,8 @@ async function trainSettlers() {
 }
 
 async function recall(armyId: string) {
-  busy.value = true;
-  error.value = null;
-  try {
-    await api.recallArmy(armyId);
-    await refresh();
-  } catch (e) {
-    error.value = apiErrorMessage(e, t('hud.expansionPanel.recallFailed'));
-  } finally {
-    busy.value = false;
-  }
+  await recallArmy(armyId);
+  await refresh();
 }
 
 function beginRetarget(armyId: string) {
@@ -205,7 +199,12 @@ watch(visible, (isVisible) => {
           <span class="status-row-time">{{ c.position.q }}, {{ c.position.r }}</span>
         </div>
         <div class="expansion-form-row">
-          <button type="button" class="expansion-button-small" :disabled="busy" @click="recall(c.id)">
+          <button
+            type="button"
+            class="expansion-button-small"
+            :disabled="busy || isRecalling(c.id)"
+            @click="recall(c.id)"
+          >
             {{ t('hud.expansionPanel.recall') }}
           </button>
           <button
@@ -217,6 +216,7 @@ watch(visible, (isVisible) => {
             {{ t('hud.expansionPanel.retarget') }}
           </button>
         </div>
+        <p v-if="refusalFor(c.id)" class="expansion-error recall-refusal">{{ refusalFor(c.id) }}</p>
         <div v-if="retargetFor === c.id" class="expansion-form-row">
           <input v-model.number="destQ" type="number" aria-label="New target Q" />
           <input v-model.number="destR" type="number" aria-label="New target R" />
