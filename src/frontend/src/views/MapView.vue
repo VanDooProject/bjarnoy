@@ -78,7 +78,6 @@ import {
 import { reachableRange } from '../lib/map/hexPath';
 import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
-import { anySendSourceCanGo } from '../lib/units/sendSources';
 import { useSendBlockText, useSendPickerRows, useSendSources } from '../composables/useSendSources';
 import { motionEnabled } from '../lib/motion';
 import MobileDispatchSheet from '../components/hud/MobileDispatchSheet.vue';
@@ -851,7 +850,9 @@ const isMineTile = computed(
 // tile: another player's settlement reads "Attack" and targets it directly;
 // the player's own *other* settlement (multi-settlement accounts) reads
 // "Support"; anything else (own current settlement, unclaimed ground, open
-// water) is a plain Move with `route = [coord]`. Enabled on every viewport —
+// water) is a plain Move with `route = [coord]`. Always enabled, so opening a
+// ring runs no route search: the send picker it opens lists which armies can
+// go and why the others cannot. Enabled on every viewport —
 // on desktop, starting a draft this way just pre-fills ArmyPanel's existing
 // dispatch form, same as picking a mission tab and a target there by hand.
 function sendMissionAt(tile: Tile): 'move' | 'attack' | 'support' {
@@ -866,8 +867,7 @@ function sendArmyAction(tile: Tile): RingAction {
   const label = t(
     mission === 'attack' ? 'hud.ringMenu.actions.attack' : mission === 'support' ? 'hud.ringMenu.actions.support' : 'hud.ringMenu.actions.sendArmyHere',
   );
-  const canGo = anySendSourceCanGo(sendSources.evaluate(sendSources.targetAt(mission, { q: tile.q, r: tile.r })));
-  return { id, label, disabled: !canGo, hint: canGo ? undefined : t('hud.ringMenu.actions.noArmyCanGo') };
+  return { id, label };
 }
 
 /** Whether the ring offers Hunt on this tile (huntActions): a wildlife camp still on the map, live mode only. */
@@ -895,19 +895,11 @@ function retargetSendPicker(coord: AxialCoord, tile: Tile) {
 
 // Hunt a wildlife camp: offered on a camp tile that is still on the map, live mode only
 // (the demo has no army simulation, so no camp fights). A land camp needs land units, a camp at sea (the whale road)
-// ships — the other class cannot hunt it. Enabled when the home garrison or an army in the field can go.
+// ships — the other class cannot hunt it. Like the send bubble it is never greyed out: which armies can go is the
+// picker's question (its rows run the route search), opening the ring runs none.
 function huntActions(tile: Tile): RingAction[] {
   if (!isHuntableCamp(tile)) return [];
-  const canGo = anySendSourceCanGo(sendSources.evaluate(sendSources.targetAt('hunt', { q: tile.q, r: tile.r })));
-  return [
-    {
-      id: 'hunt',
-      label: t('hud.ringMenu.actions.hunt'),
-      color: 'var(--rival)',
-      disabled: !canGo,
-      hint: canGo ? undefined : t('hud.ringMenu.actions.noArmyCanGo'),
-    },
-  ];
+  return [{ id: 'hunt', label: t('hud.ringMenu.actions.hunt'), color: 'var(--rival)' }];
 }
 
 // Siege another player's palisade or gate (endgame "Breaching walls"): offered on a standing wall hex of a settlement that is

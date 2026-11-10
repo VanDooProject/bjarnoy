@@ -1,6 +1,6 @@
 // The sources (home garrison and field armies) that can be sent at a target, evaluated against the live world: the pathfinder the
-// range tint uses (`gamePathContext`) plus the shared rules in lib/units/sendSources.ts. Used by the ring menu (is the bubble
-// enabled?), by the source picker (the rows) and by MapView (which markers are tappable) so all read one answer.
+// range tint uses (`gamePathContext`) plus the shared rules in lib/units/sendSources.ts. Used by the source picker (the rows) and by
+// MapView (which markers are tappable) so both read one answer. Not by the ring menu: opening a ring runs no route search.
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';

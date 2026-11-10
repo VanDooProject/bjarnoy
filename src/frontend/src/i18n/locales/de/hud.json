@@ -136,7 +136,6 @@
       "sendArmyHere": "Armee hierher entsenden",
       "attack": "Angreifen",
       "support": "Unterstützen",
-      "noArmyCanGo": "Keine Armee kann losziehen",
       "upgrade": "Ausbauen",
       "notEnough": "Benötigt {resources}",
       "raze": "Abreißen",

@@ -136,7 +136,6 @@
       "sendArmyHere": "Send army here",
       "attack": "Attack",
       "support": "Support",
-      "noArmyCanGo": "No army can go",
       "upgrade": "Upgrade",
       "notEnough": "Needs {resources}",
       "raze": "Raze",

@@ -641,3 +641,86 @@ test.describe('ring menu touch build', { tag: '@g1' }, () => {
     await expect.poll(countBuildings, { timeout: 5_000 }).toBe(before + 1);
   });
 });
+
+// The ring's Send army / Attack / Support / Hunt bubbles only open the send picker: opening a ring runs no route search. It used
+// to run one per army in the field (two per army, up to eight for a hunt) to grey the bubble out, and a search that finds no route
+// runs to the 250,000-hex cap: with a few fleets out the page froze for seconds on every open and every armies refresh.
+test.describe('ring menu and armies in the field', () => {
+  test('opening a ring with far-away fleets out does not stall the page, and Send army here stays enabled', { tag: '@g3' }, async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+    // An inland hex of the realm (no sea beside it: no fleet can reach it, so every search would run to the cap), and fleets
+    // standing on the open sea far away; demo mode has no army simulation, so they are put into the store directly.
+    const target = await page.evaluate(() => {
+      const win = window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string; armies: unknown[] };
+        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
+      };
+      const world = win.__demoWorld();
+      const home = world.model.getSettlement(world.selectedSettlementId);
+      const sides = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]] as const;
+      const isSea = (q: number, r: number) => world.model.getTile(q, r).terrain === 'sea';
+      let sea: { q: number; r: number } | null = null;
+      for (let d = 300; d > 50 && !sea; d -= 5) {
+        for (const [dq, dr] of sides) {
+          const at = { q: home.q + dq * d, r: home.r + dr * d };
+          if (isSea(at.q, at.r) && sides.every(([a, b]) => isSea(at.q + a, at.r + b))) {
+            sea = at;
+            break;
+          }
+        }
+      }
+      if (!sea) throw new Error('no open sea far from home');
+      const arrived = new Date(Date.now() - 60_000).toISOString();
+      world.armies = Array.from({ length: 5 }, (_, i) => ({
+        id: `fleet-${i}`,
+        settlementId: world.selectedSettlementId,
+        mission: 'move',
+        targetSettlementId: null,
+        atHome: false,
+        supporting: false,
+        position: sea,
+        provisions: 1_000_000,
+        totalSpeed: 10,
+        totalUpkeepPerHour: 1,
+        visionRadius: 4,
+        stacks: [{ unit: 'longship', count: 1 }],
+        movement: { path: [{ q: home.q, r: home.r }, sea], isReturning: false, departedAt: arrived, arrivesAt: arrived },
+      }));
+      for (let dq = -3; dq <= 3; dq++) {
+        for (let dr = -3; dr <= 3; dr++) {
+          const at = { q: home.q + dq, r: home.r + dr };
+          const tile = world.model.getTile(at.q, at.r);
+          if (tile.ownerId !== world.selectedSettlementId || tile.buildingType || tile.terrain !== 'grass') continue;
+          if (sides.some(([a, b]) => isSea(at.q + a, at.r + b))) continue;
+          return { hex: at, screen: win.__settlementRenderer().hexCenterScreen(at) };
+        }
+      }
+      throw new Error('no empty inland grass hex in the realm');
+    });
+    await page.evaluate(() => {
+      const win = window as unknown as { __longTasks: number[] };
+      win.__longTasks = [];
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) win.__longTasks.push(entry.duration);
+      }).observe({ type: 'longtask' });
+    });
+
+    await settlement.clickHex(target);
+    await settlement.ring.waitForOpen();
+    // An armies refresh while the ring is open (what the live poll does) re-renders the ring's actions.
+    await page.evaluate(() => {
+      const world = (window as unknown as { __demoWorld: () => { armies: object[] } }).__demoWorld();
+      world.armies = world.armies.map((a) => ({ ...a }));
+    });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+    // With the route checks this was one task of ~8 s; without them the open stays far below a second.
+    const longest = await page.evaluate(() => Math.max(0, ...(window as unknown as { __longTasks: number[] }).__longTasks));
+    expect(longest, 'a main-thread task while opening the ring took this long (ms)').toBeLessThan(1_000);
+    // No fleet can reach the hex, and the bubble is still enabled: whether an army can go is the picker's question.
+    const send = settlement.ring.action('Send army here').first();
+    await expect(send).toBeVisible();
+    await expect(send).not.toHaveClass(/disabled|locked/);
+  });
+});

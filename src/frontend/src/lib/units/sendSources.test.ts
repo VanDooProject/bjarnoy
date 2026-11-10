@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ArmyResponse, UnitDefinitionResponse } from '../../api/types';
 import type { FeasibilityEnv } from './fieldOrderFeasibility';
-import { anySendSourceCanGo, evaluateSendSources, type SendTarget } from './sendSources';
+import { evaluateSendSources, type SendTarget } from './sendSources';
 
 function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): UnitDefinitionResponse {
   return {
@@ -170,23 +170,5 @@ describe('evaluateSendSources', () => {
 
   it('an army at home (folded back) is not a field source', () => {
     expect(run([army({ id: 'a', atHome: true, movement: null })]).map((r) => r.id)).toEqual(['home']);
-  });
-});
-
-describe('anySendSourceCanGo', () => {
-  it('is true when only a field army can go', () => {
-    expect(anySendSourceCanGo(run([army({ id: 'a' })], { garrison: [] }))).toBe(true);
-  });
-
-  it('is true when only home can go', () => {
-    expect(anySendSourceCanGo(run([]))).toBe(true);
-  });
-
-  it('is false when nothing can go: empty garrison, supporting and returning armies', () => {
-    const returning = army({ id: 'r' });
-    returning.movement!.isReturning = true;
-    const rows = run([returning, army({ id: 's', supporting: true, movement: null })], { garrison: [] });
-
-    expect(anySendSourceCanGo(rows)).toBe(false);
   });
 });
