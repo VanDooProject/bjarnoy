@@ -125,8 +125,8 @@ async function save(entry: AdminArmyResponse, options: { move: boolean; retime: 
         <tr>
           <th>{{ $t('armyEditor.col.mission') }}</th>
           <th>{{ $t('armyEditor.col.units') }}</th>
-          <th class="num">{{ $t('armyEditor.col.wood') }}</th>
-          <th class="num">{{ $t('armyEditor.col.food') }}</th>
+          <th class="num">{{ $t('armyEditor.col.provisions') }}</th>
+          <th>{{ $t('armyEditor.col.loot') }}</th>
           <th>{{ $t('armyEditor.col.position') }}</th>
           <th></th>
         </tr>
@@ -137,8 +137,17 @@ async function save(entry: AdminArmyResponse, options: { move: boolean; retime: 
           <td class="units">
             {{ entry.army.stacks.map((s) => `${s.count}x ${s.unit}`).join(', ') || $t('armyEditor.unitsEmpty') }}
           </td>
-          <td class="num wood">{{ Math.round(entry.loot.wood) }}</td>
-          <td class="num food">{{ Math.round(entry.army.provisions) }}</td>
+          <td class="num provisions">{{ Math.round(entry.army.provisions) }}</td>
+          <td class="loot">
+            {{
+              $t('armyEditor.lootLine', {
+                wood: Math.round(entry.loot.wood),
+                stone: Math.round(entry.loot.stone),
+                food: Math.round(entry.loot.food),
+                iron: Math.round(entry.loot.iron),
+              })
+            }}
+          </td>
           <td class="position">({{ entry.army.position.q }}, {{ entry.army.position.r }}) — {{ where(entry) }}</td>
           <td>
             <button type="button" @click="toggle(entry)">
