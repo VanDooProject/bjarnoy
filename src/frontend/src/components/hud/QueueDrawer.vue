@@ -30,6 +30,7 @@ import axeIconUrl from '../../assets/icons/axe.svg?url';
 import swordIconUrl from '../../assets/icons/sword.svg?url';
 import flagIconUrl from '../../assets/icons/flag.svg?url';
 import { useArmyRowTap } from '../../composables/useArmyRowTap';
+import { useArmyRecall } from '../../composables/useArmyRecall';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -145,15 +146,7 @@ const reservedTotal = computed(() => {
 // supporting army (no active ETA) sorts last.
 const armyRows = useArmyRows();
 const sortedArmyRows = computed(() => sortArmyRowsByEta(armyRows.value));
-const recallingId = ref<string | null>(null);
-async function recall(armyId: string) {
-  recallingId.value = armyId;
-  try {
-    await world.recallArmyLive(armyId);
-  } finally {
-    recallingId.value = null;
-  }
-}
+const { recallingId, recall, refusalFor } = useArmyRecall();
 function beginFieldOrder(armyId: string) {
   close();
   world.startFieldOrder(armyId);
@@ -481,6 +474,7 @@ function onDrawerLeave(el: Element, done: () => void) {
                   {{ recallingId === row.id ? t('hud.armyPanel.recalling') : t('hud.armyPanel.recall') }}
                 </button>
               </div>
+              <p v-if="refusalFor(row.id)" class="status-subtext error recall-refusal">{{ refusalFor(row.id) }}</p>
             </div>
           </template>
 

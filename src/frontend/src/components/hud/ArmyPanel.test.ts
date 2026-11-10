@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import ArmyPanel from './ArmyPanel.vue';
 import { useWorldStore } from '../../stores/world';
@@ -8,6 +8,13 @@ import type { ArmyResponse } from '../../api/types';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
+import { ApiError } from '../../api/client';
+
+const { recallArmy } = vi.hoisted(() => ({ recallArmy: vi.fn() }));
+vi.mock('../../api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/client')>();
+  return { ...actual, api: { ...actual.api, recallArmy } };
+});
 
 function army(overrides: Partial<ArmyResponse> = {}): ArmyResponse {
   return {
@@ -55,5 +62,46 @@ describe('ArmyPanel row double tap', () => {
     await rows[1].trigger('click');
     expect(wrapper.emitted('focus-army')).toEqual([['army-2']]);
     expect(world.selectedArmyId).toBe('army-2');
+  });
+});
+
+describe('ArmyPanel recall refusal', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    recallArmy.mockReset();
+  });
+
+  function mountPanel() {
+    return mount(ArmyPanel, {
+      global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] },
+    });
+  }
+
+  it('a refused recall (409) shows the translated rejection on the clicked row', async () => {
+    const world = useWorldStore();
+    world.armies = [army({ id: 'army-1' }), army({ id: 'army-2' })];
+    recallArmy.mockRejectedValue(
+      new ApiError(409, { title: 'No route home.', detail: 'No route home exists.', status: 409, rejection: 'NoRouteHome' }),
+    );
+
+    const wrapper = mountPanel();
+    await wrapper.findAll('.army-row')[0].get('.recall').trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(true));
+
+    expect(wrapper.findAll('.recall-refusal')).toHaveLength(1);
+    expect(wrapper.findAll('.army-row')[0].get('.recall-refusal').text()).toBe('No route home from where the army is now.');
+    expect(wrapper.get('.recall').attributes('disabled')).toBeUndefined();
+  });
+
+  it('a recall refused without a rejection code (429) shows the generic recall error', async () => {
+    const world = useWorldStore();
+    world.armies = [army({ id: 'army-1' })];
+    recallArmy.mockRejectedValue(new ApiError(429, undefined));
+
+    const wrapper = mountPanel();
+    await wrapper.get('.army-row .recall').trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(true));
+
+    expect(wrapper.get('.recall-refusal').text()).toBe('Recall failed.');
   });
 });
