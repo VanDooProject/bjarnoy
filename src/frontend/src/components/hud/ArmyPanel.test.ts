@@ -90,7 +90,41 @@ describe('ArmyPanel recall refusal', () => {
 
     expect(wrapper.findAll('.recall-refusal')).toHaveLength(1);
     expect(wrapper.findAll('.army-row')[0].get('.recall-refusal').text()).toBe('No route home from where the army is now.');
-    expect(wrapper.get('.recall').attributes('disabled')).toBeUndefined();
+  });
+
+  it('drops the refusal once the army has moved on (e.g. the next poll shows it already returning)', async () => {
+    const world = useWorldStore();
+    world.armies = [army({ id: 'army-1' })];
+    recallArmy.mockRejectedValue(
+      new ApiError(409, { title: 'Nothing to recall.', status: 409, rejection: 'NothingToRecall' }),
+    );
+
+    const wrapper = mountPanel();
+    await wrapper.get('.army-row .recall').trigger('click');
+    await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(true));
+
+    world.armies = [army({ id: 'army-1', movement: { ...army().movement!, isReturning: true } })];
+    await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(false));
+  });
+
+  it('keeps a second row pending while the first row\'s recall finishes', async () => {
+    const world = useWorldStore();
+    world.armies = [army({ id: 'army-1' }), army({ id: 'army-2' })];
+    let finishFirst!: () => void;
+    recallArmy
+      .mockReturnValueOnce(new Promise<void>((resolve) => { finishFirst = resolve; }))
+      .mockReturnValueOnce(new Promise<void>(() => {}));
+    vi.spyOn(world, 'refreshArmies').mockResolvedValue(undefined);
+
+    const wrapper = mountPanel();
+    await wrapper.findAll('.army-row')[0].get('.recall').trigger('click');
+    await wrapper.findAll('.army-row')[1].get('.recall').trigger('click');
+    finishFirst();
+
+    await vi.waitFor(() =>
+      expect(wrapper.findAll('.army-row')[0].get('.recall').attributes('disabled')).toBeUndefined(),
+    );
+    expect(wrapper.findAll('.army-row')[1].get('.recall').attributes('disabled')).toBeDefined();
   });
 
   it('a recall refused without a rejection code (429) shows the generic recall error', async () => {

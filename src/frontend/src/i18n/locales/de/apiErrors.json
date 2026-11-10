@@ -52,7 +52,7 @@
     "NoSeaRoute": "Kein Seeweg: Dorthin kommen deine Schiffe übers Wasser nicht.",
     "RouteTooLong": "Die Reise ist zu weit. Wähle ein näheres Ziel.",
     "NothingToRecall": "Die Armee ist schon auf dem Heimweg.",
-    "NoRouteHome": "Von ihrem jetzigen Standort führt kein Weg nach Hause.",
+    "NoRouteHome": "Von ihrem jetzigen Standort aus findet die Armee keinen Weg nach Hause.",
     "TargetNotReachable": "Kein Landweg: Berge und breite Flüsse lassen sich nicht überqueren.",
     "InsufficientProvisionsForRoundTrip": "Nicht genug Vorräte für die Hin- und Rückreise.",
     "TargetSettlementRequired": "Für diese Mission wird eine Zielsiedlung benötigt.",

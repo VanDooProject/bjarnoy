@@ -167,8 +167,7 @@ const armyRows = useArmyRows();
 // Click selects / deselects the row's army; a double click focuses it on the map.
 const onRowClick = useArmyRowTap((armyId) => emit('focus-army', armyId));
 
-const { recallingId, recall, refusalFor } = useArmyRecall();
-const recalling = computed(() => (id: string) => recallingId.value === id);
+const { isRecalling, recall, refusalFor } = useArmyRecall();
 
 // Issue #156 phase 1: field-order composing — a separate, lighter draft from
 // the dispatch one above (no unit picker, just a plotted route against an
@@ -235,10 +234,10 @@ async function confirmFieldOrderClick() {
             <button
               v-if="row.canRecall"
               class="recall"
-              :disabled="recalling(row.id)"
+              :disabled="isRecalling(row.id)"
               @click.stop="recall(row.id)"
             >
-              {{ recalling(row.id) ? t('hud.armyPanel.recalling') : t('hud.armyPanel.recall') }}
+              {{ isRecalling(row.id) ? t('hud.armyPanel.recalling') : t('hud.armyPanel.recall') }}
             </button>
           </div>
           <p v-if="refusalFor(row.id)" class="status-subtext error-note recall-refusal">{{ refusalFor(row.id) }}</p>
