@@ -14,6 +14,8 @@ on:
       - 'src/shared/**'
       - 'src/frontend/**'
       - '.github/workflows/aspire-e2e.yml'
+      # markdown-only changes don't need CI
+      - '!**/*.md'
 
 jobs:
   aspire-e2e:

@@ -12,6 +12,8 @@ on:
       - 'src/backend/**'
       - 'src/shared/**'
       - '.github/workflows/backend-ci.yml'
+      # markdown-only changes don't need CI
+      - '!**/*.md'
 
 defaults:
   run:
