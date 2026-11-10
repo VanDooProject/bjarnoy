@@ -1923,6 +1923,8 @@ export const useWorldStore = defineStore('world', {
     },
     setDispatchUnitCount(unit: string, count: number) {
       if (!this.dispatchDraft) return;
+      // A founding convoy's settlers are fixed at five; only its ships and escorts are picked.
+      if (this.dispatchDraft.mission === 'found' && unit === 'settler') return;
       this.dispatchDraft.unitCounts[unit] = Math.max(0, Math.floor(count));
     },
     setDispatchProvisions(provisions: number) {

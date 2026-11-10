@@ -360,6 +360,24 @@ describe('useWorldStore startDispatchAt', () => {
     );
   });
 
+  it('keeps a Found draft\'s settlers at five but lets ships and escorts be added to the dispatch', async () => {
+    const store = await loadStoreModule(false);
+    dispatchArmy.mockReset().mockResolvedValue({});
+    store.selectedSettlementId = 'home-1';
+    store.startDispatchAt({ q: 4, r: -1 }, { mission: 'found' });
+
+    store.setDispatchUnitCount('settler', 2);
+    store.setDispatchUnitCount('karve', 1);
+    store.setDispatchUnitCount('spearman', 3);
+    expect(store.dispatchDraft?.unitCounts).toEqual({ settler: 5, karve: 1, spearman: 3 });
+
+    await store.confirmDispatch();
+    const request = dispatchArmy.mock.calls[0][1] as { units: { unit: string; count: number }[] };
+    expect(request.units).toEqual(
+      expect.arrayContaining([{ unit: 'settler', count: 5 }, { unit: 'karve', count: 1 }, { unit: 'spearman', count: 3 }]),
+    );
+  });
+
   it('switching the mission drops a hunt target', async () => {
     const store = await loadStoreModule(true);
     store.startDispatchAt({ q: 7, r: -3 }, { mission: 'hunt' });

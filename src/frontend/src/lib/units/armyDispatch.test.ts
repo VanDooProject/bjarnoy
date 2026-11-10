@@ -120,6 +120,14 @@ describe('buildFoundDispatchRequest', () => {
     });
   });
 
+  it('carries ships and land escorts next to the settlers', () => {
+    const request = buildFoundDispatchRequest({ settler: 5, karve: 1, spearman: 4 }, [{ q: 2, r: 0 }], 12);
+    expect(request?.units).toEqual(
+      expect.arrayContaining([{ unit: 'settler', count: 5 }, { unit: 'karve', count: 1 }, { unit: 'spearman', count: 4 }]),
+    );
+    expect(request?.units).toHaveLength(3);
+  });
+
   it('matches the move request except for the mission', () => {
     const route = [{ q: 1, r: 1 }, { q: 2, r: 2 }];
     const counts = { settler: 5, karve: 1 };

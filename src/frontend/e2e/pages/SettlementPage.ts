@@ -48,6 +48,11 @@ export interface HexQuery {
   /** A hex no settlement claims (the ring's Send settlers / Land here) instead of one of the realm's own. */
   unclaimed?: boolean;
   /**
+   * `true`: only a shoreline hex (land with an open-sea neighbour, where the ring offers Land here); `false`: never one
+   * (the ring offers Send settlers). Unset: either.
+   */
+  shoreline?: boolean;
+  /**
    * Of the matching hexes, the one drawn closest to this canvas point rather
    * than the first in scan order — for a spec that needs the ring opened at a
    * particular part of the screen (e.g. low on a phone, above the docked card).
@@ -206,6 +211,12 @@ export class SettlementPage {
           if (q.terrain !== undefined && tile.terrain !== q.terrain) continue;
           if (q.notTerrain !== undefined && tile.terrain === q.notTerrain) continue;
           if (q.coastalWater && !tile.isCoastalWater) continue;
+          if (q.shoreline !== undefined) {
+            const sides = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+            const land = tile.terrain !== 'sea' && tile.terrain !== 'lake';
+            const shore = land && sides.some(([sq, sr]) => world.model.terrainOf(at.q + sq, at.r + sr) === 'sea');
+            if (shore !== q.shoreline) continue;
+          }
           if (q.nearest) {
             const screen = renderer.hexCenterScreen(at);
             const d = Math.hypot(screen.x - q.nearest.x, screen.y - q.nearest.y);

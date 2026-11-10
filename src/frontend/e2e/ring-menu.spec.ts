@@ -538,7 +538,7 @@ test.describe('ring menu availability', () => {
     // The bubble used to be locked with "You have no settlers available yet" whatever the garrison held.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
-    const target = await settlement.findHex({ unclaimed: true, terrain: 'grass', reach: 6 });
+    const target = await settlement.findHex({ unclaimed: true, terrain: 'grass', shoreline: false, reach: 6 });
 
     await settlement.clickHex(target);
     const send = settlement.ring.action('Send settlers').first();

@@ -402,7 +402,7 @@
     "cancel": "Cancel",
     "sending": "Sending…",
     "confirmOrder": "Confirm order",
-    "foundInstructions": "The last hex of the route is where the settlement is founded. Five settlers go.",
+    "foundInstructions": "The last hex of the route is where the settlement is founded. Five settlers go, and you can add ships and escorts. With ships the convoy sails and lands on the last hex.",
     "dispatchInstructions": "Click hexes on the map to plot a route — the last click is the destination. {count} {hexWord} plotted.",
     "targetInstructions": "Choose a settlement to {mission}, then optionally click hexes on the map to plot a route there. {count} {waypointWord} plotted.",
     "waypointWord": "waypoint | waypoints",
