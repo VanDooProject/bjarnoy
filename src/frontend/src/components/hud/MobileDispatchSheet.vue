@@ -23,6 +23,8 @@ import DispatchSlots from './DispatchSlots.vue';
 import { useDispatchUnitPicker } from '../../composables/useDispatchUnitPicker';
 import { campName, missionName, unitName } from '../../i18n/catalogueNames';
 import {
+  dispatchHasDestination,
+  isRouteDestination,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
 import DispatchTargetBuildingPicker from './DispatchTargetBuildingPicker.vue';
@@ -97,19 +99,13 @@ const routeRows = computed(() =>
   (draft.value?.route ?? []).map((c, i) => ({
     index: i,
     label: `${i + 1}. (${c.q}, ${c.r})`,
-    isDestination: draft.value?.mission === 'move' && i === (draft.value?.route.length ?? 0) - 1,
+    isDestination: isRouteDestination(draft.value?.mission, i, draft.value?.route.length ?? 0),
   })),
 );
 const hasUnitsSelected = computed(() =>
   !!draft.value && Object.values(draft.value.unitCounts).some((c) => c > 0),
 );
-const hasDestination = computed(() =>
-  draft.value?.mission === 'attack' || draft.value?.mission === 'support'
-    ? !!draft.value.targetSettlementId
-    : draft.value?.mission === 'hunt'
-      ? !!draft.value.targetCamp
-      : routeLength.value > 0,
-);
+const hasDestination = computed(() => !!draft.value && dispatchHasDestination(draft.value));
 const canConfirm = computed(
   () => !DEMO_MODE && hasUnitsSelected.value && hasDestination.value && picker.selectionSendable.value && !buildingPicker.isMissingRequiredPick.value && !draft.value?.submitting,
 );
@@ -247,9 +243,15 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
           <button v-if="draft.mission === 'hunt'" type="button" class="mission-tab attack active">
             {{ missionName('hunt') }}
           </button>
+          <button v-if="draft.mission === 'found'" type="button" class="mission-tab active">
+            {{ missionName('found') }}
+          </button>
         </div>
 
         <HuntTargetSummary v-if="draft.mission === 'hunt'" :target="draft.targetCamp" :unit-counts="draft.unitCounts" />
+        <p v-else-if="draft.mission === 'found'" class="status-subtext instructions">
+          {{ t('hud.armyPanel.foundInstructions') }}
+        </p>
         <template v-else-if="draft.mission !== 'move'">
           <div v-if="selectedTarget" class="target-selected">
             <span>{{ t('hud.armyPanel.target') }} <strong>{{ selectedTarget.name }}</strong> ({{ selectedTarget.ownerName }})</span>

@@ -8,6 +8,9 @@ import {
   garrisonCanHunt,
   isHuntUnit,
   buildMoveDispatchRequest,
+  buildFoundDispatchRequest,
+  dispatchHasDestination,
+  isRouteDestination,
   buildSupportDispatchRequest,
   canFieldOrderArmy,
   classifyUnitSelection,
@@ -99,6 +102,57 @@ describe('buildMoveDispatchRequest', () => {
     expect(request?.destination).toEqual({ q: 2, r: 0 });
   });
 });
+
+describe('buildFoundDispatchRequest', () => {
+  it('returns null without units or without a route', () => {
+    expect(buildFoundDispatchRequest({ settler: 0 }, [{ q: 1, r: 1 }], 10)).toBeNull();
+    expect(buildFoundDispatchRequest({ settler: 5 }, [], 10)).toBeNull();
+  });
+
+  it('is a move-shaped request with mission found: last hex is the destination', () => {
+    const route = [{ q: 0, r: 0 }, { q: 3, r: -1 }];
+    expect(buildFoundDispatchRequest({ settler: 5, karve: 0 }, route, 40)).toEqual({
+      units: [{ unit: 'settler', count: 5 }],
+      waypoints: [{ q: 0, r: 0 }],
+      destination: { q: 3, r: -1 },
+      provisions: 40,
+      mission: 'found',
+    });
+  });
+
+  it('matches the move request except for the mission', () => {
+    const route = [{ q: 1, r: 1 }, { q: 2, r: 2 }];
+    const counts = { settler: 5, karve: 1 };
+    expect({ ...buildFoundDispatchRequest(counts, route, 7), mission: 'move' }).toEqual(
+      buildMoveDispatchRequest(counts, route, 7),
+    );
+  });
+});
+
+describe('isRouteDestination', () => {
+  it('marks the last hex of a move or found route only', () => {
+    expect(isRouteDestination('move', 1, 2)).toBe(true);
+    expect(isRouteDestination('found', 1, 2)).toBe(true);
+    expect(isRouteDestination('found', 0, 2)).toBe(false);
+    expect(isRouteDestination('attack', 1, 2)).toBe(false);
+    expect(isRouteDestination('hunt', 1, 2)).toBe(false);
+  });
+});
+
+describe('dispatchHasDestination', () => {
+  const base = { targetSettlementId: null, targetCamp: null, route: [] };
+  it('needs a route for move and found', () => {
+    expect(dispatchHasDestination({ ...base, mission: 'found' })).toBe(false);
+    expect(dispatchHasDestination({ ...base, mission: 'found', route: [{ q: 1, r: 0 }] })).toBe(true);
+    expect(dispatchHasDestination({ ...base, mission: 'move', route: [{ q: 1, r: 0 }] })).toBe(true);
+  });
+  it('needs a target settlement for attack and support, a camp for hunt', () => {
+    expect(dispatchHasDestination({ ...base, mission: 'attack', route: [{ q: 1, r: 0 }] })).toBe(false);
+    expect(dispatchHasDestination({ ...base, mission: 'support', targetSettlementId: 's1' })).toBe(true);
+    expect(dispatchHasDestination({ ...base, mission: 'hunt', targetCamp: { q: 0, r: 0 } })).toBe(true);
+  });
+});
+
 
 describe('buildAttackDispatchRequest', () => {
   it('returns null when no units are selected', () => {

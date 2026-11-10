@@ -1071,6 +1071,7 @@
         "longhouse": "Longhouse level",
         "minutes": "{n} min"
       },
+      "send": "To send them, tap a free hex on the map and choose Send settlers, or Land here on the coast.",
       "provisions": "Each settler carries {food} food, {total} for all five. Load enough for the way there and back.",
       "ambush": "On the way, overland settlers can be ambushed by strong wildlife camps (see {camps}). How fast they cross each ground is on the {movement} page.",
       "campsLink": "Wildlife camps",

@@ -19,6 +19,8 @@ import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
 import { missionName, unitName } from '../../i18n/catalogueNames';
 import {
+  dispatchHasDestination,
+  isRouteDestination,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
 import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
@@ -82,7 +84,7 @@ const routeRows = computed(() =>
   (draft.value?.route ?? []).map((c, i) => ({
     index: i,
     label: `${i + 1}. (${c.q}, ${c.r})`,
-    isDestination: draft.value?.mission === 'move' && i === (draft.value?.route.length ?? 0) - 1,
+    isDestination: isRouteDestination(draft.value?.mission, i, draft.value?.route.length ?? 0),
   })),
 );
 const hasUnitsSelected = computed(() =>
@@ -92,13 +94,7 @@ const hasUnitsSelected = computed(() =>
 // an attack/support dispatch needs a target settlement instead — a route is
 // optional waypoints along the way (see buildAttackDispatchRequest's own
 // comment; buildSupportDispatchRequest mirrors it exactly).
-const hasDestination = computed(() =>
-  draft.value?.mission === 'attack' || draft.value?.mission === 'support'
-    ? !!draft.value.targetSettlementId
-    : draft.value?.mission === 'hunt'
-      ? !!draft.value.targetCamp
-      : routeLength.value > 0,
-);
+const hasDestination = computed(() => !!draft.value && dispatchHasDestination(draft.value));
 const canConfirm = computed(
   () => hasUnitsSelected.value && hasDestination.value && picker.selectionSendable.value && !buildingPicker.isMissingRequiredPick.value && !draft.value?.submitting,
 );
@@ -350,6 +346,13 @@ async function confirmFieldOrderClick() {
           >
             {{ missionName('hunt') }}
           </button>
+          <button
+            v-if="draft.mission === 'found'"
+            type="button"
+            class="mission-tab active"
+          >
+            {{ missionName('found') }}
+          </button>
         </div>
 
         <template v-if="draft.mission === 'hunt'">
@@ -358,6 +361,9 @@ async function confirmFieldOrderClick() {
           </p>
           <HuntTargetSummary :target="draft.targetCamp" :unit-counts="draft.unitCounts" />
         </template>
+        <p v-else-if="draft.mission === 'found'" class="status-subtext instructions">
+          {{ t('hud.armyPanel.foundInstructions') }}
+        </p>
         <p v-else-if="draft.mission === 'move'" class="status-subtext instructions">
           {{ t('hud.armyPanel.dispatchInstructions', {
             count: routeLength,

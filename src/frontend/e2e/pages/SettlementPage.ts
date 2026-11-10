@@ -45,6 +45,8 @@ export interface HexQuery {
    * spec gets back — is unchanged.
    */
   reach?: number;
+  /** A hex no settlement claims (the ring's Send settlers / Land here) instead of one of the realm's own. */
+  unclaimed?: boolean;
   /**
    * Of the matching hexes, the one drawn closest to this canvas point rather
    * than the first in scan order — for a spec that needs the ring opened at a
@@ -199,7 +201,7 @@ export class SettlementPage {
           if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
           const at = { q: settlement.q + dq, r: settlement.r + dr };
           const tile = world.model.getTile(at.q, at.r);
-          if (tile.ownerId !== world.selectedSettlementId) continue;
+          if (q.unclaimed ? tile.ownerId : tile.ownerId !== world.selectedSettlementId) continue;
           if (tile.buildingType) continue;
           if (q.terrain !== undefined && tile.terrain !== q.terrain) continue;
           if (q.notTerrain !== undefined && tile.terrain === q.notTerrain) continue;
@@ -225,7 +227,7 @@ export class SettlementPage {
         return { hex: best.hex, screen: best.screen };
       }
       throw new Error(
-        `no empty, owned hex matching ${JSON.stringify(q)} found inside the realm — pick a different demo seed`,
+        `no empty ${q.unclaimed ? 'unclaimed' : 'owned'} hex matching ${JSON.stringify(q)} found inside the realm — pick a different demo seed`,
       );
     }, query);
   }

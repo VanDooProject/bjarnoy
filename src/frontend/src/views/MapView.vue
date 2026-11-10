@@ -25,6 +25,7 @@ import TrainingModal from '../components/hud/TrainingModal.vue';
 import BuildRefusalChip from '../components/hud/BuildRefusalChip.vue';
 import { announceConfirmedBuild, holdBuildRow, releaseBuildRow } from '../composables/buildFeedback';
 import RingMenuHost from '../components/hud/RingMenuHost.vue';
+import { foundingLock, type FoundingLock } from '../lib/founding';
 import RingMenu, { type RingAction, type RingCategory } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
@@ -1043,6 +1044,20 @@ function razeActionFor(tile: Tile): RingAction {
 }
 
 const rootActions = computed<RingAction[]>(() => primaryActionFirst(rootActionList()));
+// Settlers standing in the selected settlement's garrison (a founding convoy takes exactly SETTLERS_PER_FOUNDING of them).
+function settlersAtHome(): number {
+  return world.hud.garrison.find((g) => g.unit === 'settler')?.count ?? 0;
+}
+function foundingLockHint(lock: FoundingLock): string {
+  switch (lock.reason) {
+    case 'settlers':
+      return t('hud.ringMenu.actions.foundNeedsSettlers', { have: lock.have, need: lock.need });
+    case 'renown':
+      return t('hud.ringMenu.actions.foundNeedsRenown', { total: Math.floor(lock.total), required: Math.round(lock.required) });
+    case 'renownUnknown':
+      return t('hud.ringMenu.actions.foundRenownUnknown');
+  }
+}
 function rootActionList(): RingAction[] {
   const tile = selectedTile.value;
   if (!tile) return [];
@@ -1059,12 +1074,13 @@ function rootActionList(): RingAction[] {
   }
   if (isUnclaimedTile.value) {
     const onCoast = tile.terrain === 'sand';
+    const lock = foundingLock(settlersAtHome(), world.hud.renown);
     return [
       {
         id: onCoast ? 'land-here' : 'send-settlers',
         label: onCoast ? t('hud.ringMenu.actions.landHere') : t('hud.ringMenu.actions.sendSettlers'),
-        disabled: true,
-        hint: t('hud.ringMenu.actions.noSettlersYet'),
+        disabled: lock !== null,
+        hint: lock ? foundingLockHint(lock) : undefined,
       },
       ...huntActions(tile),
       sendArmyAction(tile),
@@ -1253,6 +1269,12 @@ async function onRingSelect(id: string) {
       return;
     case 'send-army':
       if (selectedCoord.value) world.openSendPicker(selectedCoord.value);
+      closeRing();
+      return;
+    case 'send-settlers':
+    case 'land-here':
+      // Same dispatch draft the Hunt / Siege bubbles use: the hex is the destination, five settlers go.
+      if (selectedCoord.value) world.startDispatchAt(selectedCoord.value, { mission: 'found' });
       closeRing();
       return;
     case 'hunt':
