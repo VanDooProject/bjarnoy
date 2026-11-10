@@ -51,6 +51,7 @@
     "UnreachableLeg": "Kein Landweg: Berge und breite Flüsse lassen sich nicht überqueren.",
     "NoSeaRoute": "Kein Seeweg: Dorthin kommen deine Schiffe übers Wasser nicht.",
     "RouteTooLong": "Die Reise ist zu weit. Wähle ein näheres Ziel.",
+    "RouteRateLimited": "Zu viele Marschbefehle auf einmal. Warte kurz und versuch es dann noch mal.",
     "TargetNotReachable": "Kein Landweg: Berge und breite Flüsse lassen sich nicht überqueren.",
     "InsufficientProvisionsForRoundTrip": "Nicht genug Vorräte für die Hin- und Rückreise.",
     "TargetSettlementRequired": "Für diese Mission wird eine Zielsiedlung benötigt.",

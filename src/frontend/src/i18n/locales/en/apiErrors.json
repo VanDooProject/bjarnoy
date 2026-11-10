@@ -51,6 +51,7 @@
     "UnreachableLeg": "No land route: mountains and wide rivers can't be crossed.",
     "NoSeaRoute": "No sea route: the ships can't reach that by water.",
     "RouteTooLong": "That trip is too long. Choose a closer destination.",
+    "RouteRateLimited": "Too many marching orders at once. Wait a moment and try again.",
     "TargetNotReachable": "No land route: mountains and wide rivers can't be crossed.",
     "InsufficientProvisionsForRoundTrip": "Not enough provisions for the round trip.",
     "TargetSettlementRequired": "A target settlement is required for that mission.",
