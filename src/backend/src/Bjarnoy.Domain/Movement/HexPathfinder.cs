@@ -200,10 +200,12 @@ public static class HexPathfinder
     /// without this, "no route exists" (e.g. an island cut off by sea) would
     /// otherwise search forever outward looking for one. Combined with the
     /// bounding box in <see cref="FindPath"/>, this is a belt-and-braces
-    /// bound, not the primary defence — a plausible in-game dispatch is at
-    /// most a few hundred hexes.
+    /// bound, not the primary defence. A plausible dispatch is a few hundred
+    /// hexes, but a long sea route that has to detour around land can need
+    /// ~100k expansions (a 534-hex fleet route against a 345-hex straight
+    /// distance took 93k), so the cap sits well above that.
     /// </summary>
-    private const int MaxExpandedNodes = 20_000;
+    private const int MaxExpandedNodes = 250_000;
 
     /// <summary>
     /// Finds the cheapest route from <paramref name="from"/> to
