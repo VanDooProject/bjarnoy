@@ -1,6 +1,6 @@
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { describe, expect, it } from 'vitest';
-import { closeModalRoute, isModalRouteName, modalLocation, reportsLocation, settingsLocation } from './modalRoute';
+import { backgroundViewPath, closeModalRoute, isModalRouteName, modalLocation, reportsLocation, settingsLocation } from './modalRoute';
 
 function testRouter() {
   return createRouter({
@@ -154,5 +154,21 @@ describe('closeModalRoute', () => {
     closeModalRoute(router);
     await new Promise((r) => setTimeout(r, 0));
     expect(router.currentRoute.value.path).toBe('/settlement');
+  });
+});
+
+describe('backgroundViewPath', () => {
+  it('is the path of the stashed background view, without its hash', async () => {
+    const router = testRouter();
+    await router.push({ path: '/reports', state: { backgroundView: '/settlement#world&q=1&r=2&z=0.30' } });
+
+    expect(backgroundViewPath(router)).toBe('/settlement');
+  });
+
+  it('is null on a direct load', async () => {
+    const router = testRouter();
+    await router.push('/reports');
+
+    expect(backgroundViewPath(router)).toBeNull();
   });
 });

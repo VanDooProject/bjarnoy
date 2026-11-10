@@ -36,6 +36,7 @@ const router = createRouter({
   history: createMemoryHistory(),
   routes: [
     { path: '/settlement', component: { template: '<div />' } },
+    { path: '/docs', component: { template: '<div />' } },
     { path: '/reports/:reportId', component: { template: '<div />' } },
   ],
 });
@@ -64,21 +65,35 @@ describe('FieldBattleReportCard', () => {
     wrapper.unmount();
   });
 
-  it('the hex link closes the modal back to the map and asks it to centre on the hex, without picking a mode or zoom', async () => {
+  it('the hex link goes back to the map it was opened over and asks it to centre on the hex', async () => {
     const map = useMapFocus();
     map.clear();
-    await router.push('/settlement');
+    await router.push('/settlement#world&q=1&r=2&z=0.30');
     await router.push({ path: '/reports/r1', state: { backgroundView: '/settlement#world&q=1&r=2&z=0.30' } });
     const wrapper = mountCard('sidea');
 
-    const link = wrapper.find('[data-testid="field-battle-location"]');
-    expect(link.text()).toBe('Hex (12, -4)');
-    await link.trigger('click');
+    await wrapper.find('[data-testid="field-battle-location"]').trigger('click');
     await flushPromises();
 
     expect(map.pending.value?.coord).toEqual({ q: 12, r: -4 });
-    // Back to the page the modal was opened over, not to a view of the link's own choosing.
+    // Back in history to the page the modal was opened over: the link picks no mode or zoom of its own.
+    expect(router.currentRoute.value.fullPath).toBe('/settlement#world&q=1&r=2&z=0.30');
+    map.clear();
+    wrapper.unmount();
+  });
+
+  it('a report opened over a page without a map goes to the map instead of leaving the request waiting', async () => {
+    const map = useMapFocus();
+    map.clear();
+    await router.push('/docs');
+    await router.push({ path: '/reports/r1', state: { backgroundView: '/docs' } });
+    const wrapper = mountCard('sidea');
+
+    await wrapper.find('[data-testid="field-battle-location"]').trigger('click');
+    await flushPromises();
+
     expect(router.currentRoute.value.path).toBe('/settlement');
+    expect(map.pending.value?.coord).toEqual({ q: 12, r: -4 });
     map.clear();
     wrapper.unmount();
   });

@@ -6,6 +6,7 @@ import { buildingName, terrainName } from '../i18n/catalogueNames';
 import { useRouter } from 'vue-router';
 import { useDisplayedRoute } from '../composables/useDisplayedRoute';
 import { useMapFocus } from '../composables/useMapFocus';
+import { isModalRouteName } from '../lib/modalRoute';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
 import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
@@ -366,16 +367,18 @@ watch(
 );
 
 // "Show on map" requests (a report's location link, composables/useMapFocus.ts): centre and flash the hex, keeping the mode and
-// zoom the map is in. Also fulfilled when the renderer only appears after the request was raised.
+// zoom the map is in. Applied only once the modal is closed and after the hash watcher above (`flush: 'post'`, defined later):
+// closing a modal pops history back to the entry whose URL still holds the camera from before it opened, and that restore must
+// not undo this pan. Also fulfilled when the renderer only appears after the request was raised.
 const mapFocus = useMapFocus();
 watch(
-  [mapFocus.pending, () => canvasRef.value?.renderer],
-  ([request, renderer]) => {
-    if (!request || !renderer) return;
+  [mapFocus.pending, () => canvasRef.value?.renderer, () => isModalRouteName(router.currentRoute.value.name)],
+  ([request, renderer, modalOpen]) => {
+    if (!request || !renderer || modalOpen) return;
     onQueueSelect(request.coord);
     mapFocus.clear();
   },
-  { immediate: true },
+  { immediate: true, flush: 'post' },
 );
 
 // Fog v2 (map-fog-v2.md §3): pushes a freshly fetched mask bitmap into the

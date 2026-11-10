@@ -79,3 +79,10 @@ export function closeModalRoute(router: Router): void {
     void router.replace(backgroundView ?? '/settlement');
   }
 }
+
+/** The path (no hash or query) of the page the open modal route sits over, or null when there is none (a direct load). */
+export function backgroundViewPath(router: Router): string | null {
+  const state = router.options.history.state as { backgroundView?: unknown };
+  if (typeof state.backgroundView !== 'string') return null;
+  return router.resolve(state.backgroundView).path;
+}

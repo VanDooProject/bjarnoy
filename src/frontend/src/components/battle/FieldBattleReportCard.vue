@@ -21,7 +21,7 @@ import {
 } from '../../lib/units/fieldBattleReports';
 import { useRouter } from 'vue-router';
 import { useMapFocus } from '../../composables/useMapFocus';
-import { closeModalRoute } from '../../lib/modalRoute';
+import { backgroundViewPath, closeModalRoute } from '../../lib/modalRoute';
 
 /**
  * Everything the card needs to render — the subset of `FieldBattleReportResponse`
@@ -67,10 +67,14 @@ const opponentLabel = computed(() => {
 });
 const router = useRouter();
 const mapFocus = useMapFocus();
-// Back to the map as it was (same mode, same zoom), centred on where the battle was fought.
+// Back to the map as it was (same mode, same zoom), centred on where the battle was fought. A report opened over a page
+// without a map (the docs) has no map to go back to, so it goes to the map instead; a request must never wait for a later
+// visit.
 function showOnMap() {
   mapFocus.request(props.report.hex);
-  closeModalRoute(router);
+  const background = backgroundViewPath(router);
+  if (background === null || background === '/settlement') closeModalRoute(router);
+  else void router.replace('/settlement');
 }
 
 const sideARows = computed(() => groupFieldBattleLinesByUnit(props.report.lines, 'sidea'));
