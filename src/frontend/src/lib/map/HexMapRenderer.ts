@@ -3537,6 +3537,8 @@ export class HexMapRenderer {
 
   /** Arrow keys held or still finishing a tap; they pan the camera each tick (see `tickKeyPan`). */
   private heldArrowKeys = new Map<ArrowKey, HeldArrowKey>();
+  /** Whether the current arrow-key pan moved the camera, so its end owes a rebuild. */
+  private keyPanMoved = false;
 
   private onKeyDown = (e: KeyboardEvent) => {
     const key = e.key as ArrowKey;
@@ -3568,7 +3570,7 @@ export class HexMapRenderer {
     if (this.heldArrowKeys.size === 0) return;
     if (this.lockCamera || this.interactionLocked) {
       this.heldArrowKeys.clear();
-      this.rebuildAll();
+      this.endKeyPan();
       return;
     }
     const dir = arrowKeyPanDirection(this.heldArrowKeys, performance.now());
@@ -3581,11 +3583,18 @@ export class HexMapRenderer {
         x: this.camera.x + (dir.x * px) / this.camera.zoom,
         y: this.camera.y + (dir.y * px) / this.camera.zoom,
       });
+      this.keyPanMoved = true;
       this.cameraTouched = true;
       this.applyCameraTransform();
       this.scheduleCull();
     }
-    if (this.heldArrowKeys.size === 0) this.rebuildAll();
+    if (this.heldArrowKeys.size === 0) this.endKeyPan();
+  }
+
+  /** The end of an arrow-key pan: one up-to-date rebuild (deferred during the pan) when it moved the camera. */
+  private endKeyPan() {
+    if (this.keyPanMoved) this.rebuildAll();
+    this.keyPanMoved = false;
   }
 
   private onWheel = (e: WheelEvent) => {
@@ -3865,9 +3874,9 @@ export class HexMapRenderer {
 
   /**
    * True while the camera is mid-gesture — a pointer drag, an animated
-   * transition (tickCameraAnim) or a wheel/pinch zoom (see noteZoomActivity)
-   * — i.e. while more camera movement is expected imminently and any rebuild
-   * done right now is about to be superseded. Each of the three ends with a
+   * transition (tickCameraAnim), a wheel/pinch zoom (see noteZoomActivity) or
+   * an arrow-key pan (tickKeyPan) — i.e. while more camera movement is expected
+   * imminently and any rebuild done right now is about to be superseded. Each ends with a
    * forced, fully up-to-date rebuild, so work skipped while this is true is
    * never work lost.
    */
@@ -3887,7 +3896,7 @@ export class HexMapRenderer {
       this.cullQueued = false;
       if (this.destroyed) return;
       // Any ongoing camera gesture (see isInteracting: a drag, the founding
-      // transition's animation, or a wheel/pinch zoom) can cross
+      // transition's animation, a wheel/pinch zoom or an arrow-key pan) can cross
       // cameraMovedEnough's threshold on almost every rAF — each pointermove,
       // animation step or wheel event nudges the camera or its zoom further —
       // and a rebuild re-syncs every visible terrain/border sprite, real
@@ -3898,7 +3907,8 @@ export class HexMapRenderer {
       // firing on every threshold-crossing frame. Each gesture still ends
       // with one forced, fully up-to-date rebuild — onPointerUp's when a drag
       // is released, tickCameraAnim's forceRebuild() when the animation
-      // completes, and noteZoomActivity's idle timer once zooming settles.
+      // completes, noteZoomActivity's idle timer once zooming settles, and
+      // tickKeyPan's when the last arrow key is let go.
       if (this.isInteracting && performance.now() - this.lastRebuildAtMs < DRAG_REBUILD_THROTTLE_MS) {
         return;
       }
