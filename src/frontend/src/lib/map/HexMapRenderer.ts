@@ -1644,7 +1644,7 @@ export function isWaypointTap(startCoordKey: string, lastCoordKey: string, moved
 /** One zoom-button step (`zoomStep`). */
 const ZOOM_STEP = 1.25;
 
-type ArrowKey = 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown';
+export type ArrowKey = 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown';
 /** Camera direction per arrow key (screen axes: +x right, +y down). */
 const ARROW_KEY_PAN = new Map<ArrowKey, [number, number]>([
   ['ArrowLeft', [-1, 0]],
@@ -1654,6 +1654,39 @@ const ARROW_KEY_PAN = new Map<ArrowKey, [number, number]>([
 ]);
 /** Arrow-key pan speed in screen px per second. */
 const KEY_PAN_SPEED = 700;
+/** Shortest pan one arrow-key press gives: a tap released before the next frame still pans this long. */
+export const KEY_TAP_MIN_MS = 120;
+
+/** An arrow key that is held, or was let go but still owes the rest of its `KEY_TAP_MIN_MS`. */
+export interface HeldArrowKey {
+  pressedAt: number;
+  released: boolean;
+  /** Whether a tick has panned with it yet; a released key is only dropped after it has. */
+  applied: boolean;
+}
+
+/**
+ * The unit screen direction the arrow keys pan at `now` (null when none, or opposite keys cancel). Drops (mutates
+ * `keys`) the released keys that have panned at least once and for `KEY_TAP_MIN_MS`, so a press and release inside
+ * one frame still moves the camera.
+ */
+export function arrowKeyPanDirection(keys: Map<ArrowKey, HeldArrowKey>, now: number): { x: number; y: number } | null {
+  let dx = 0;
+  let dy = 0;
+  for (const [key, held] of keys) {
+    if (held.released && held.applied && now - held.pressedAt >= KEY_TAP_MIN_MS) {
+      keys.delete(key);
+      continue;
+    }
+    held.applied = true;
+    const [kx, ky] = ARROW_KEY_PAN.get(key)!;
+    dx += kx;
+    dy += ky;
+  }
+  if (dx === 0 && dy === 0) return null;
+  const len = Math.hypot(dx, dy);
+  return { x: dx / len, y: dy / len };
+}
 
 /** Whether a key event's target is somewhere the user types or navigates with the arrows (input, select, dialog, ...). */
 export function isTypingTarget(t: EventTarget | null): boolean {
@@ -2821,6 +2854,16 @@ export class HexMapRenderer {
     // zero the moment the player first opens a settlement. Dropped while the
     // tab is hidden by animationPreference.feedFrame itself.
     animationPreference.feedFrame(performance.now(), this.app!.ticker.deltaMS);
+    // Every camera move of this tick comes before the markers: they are drawn in screen pixels from this.camera, so
+    // drawing them first would leave them a frame behind the world (a pointer drag moves the camera before the tick).
+    if (this.idleDrift) {
+      this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
+      this.applyCameraTransform();
+      this.scheduleCull();
+    }
+    this.tickKeyPan();
+    this.tickCameraAnim();
+    this.tickDoubleTapZoom();
     this.rebuildMarkers();
     // Issue #16 "ring menu": the settlement name badge (rebuildSettlementLabels,
     // below) floats right where the ring's own bubbles/track need to sit — it
@@ -2847,17 +2890,9 @@ export class HexMapRenderer {
     // The settle path for a bake a gesture deferred (see waterMaskDirty). One
     // check per frame, and it can only ever do work on the first frame after
     // the gesture that owes it ends.
-    if (this.waterMaskDirty && !this.dragging && !this.wheeling) this.maybeBakeWaterMask();
+    if (this.waterMaskDirty && !this.dragging && !this.wheeling && !this.keyPanning) this.maybeBakeWaterMask();
     this.waterLayer.tick(this.mapAnimMs);
     this.bogLakeLayer.tick(this.animClockMs);
-    if (this.idleDrift) {
-      this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
-      this.applyCameraTransform();
-      this.scheduleCull();
-    }
-    this.tickKeyPan();
-    this.tickCameraAnim();
-    this.tickDoubleTapZoom();
     const now = performance.now();
     // isFogActive() mirrors rebuildTerrain's/rebuildBorders' own bypass: no
     // settlement yet (settlement-mode preview) or the local player hasn't
@@ -3500,8 +3535,10 @@ export class HexMapRenderer {
 
   private getTile = (q: number, r: number): Tile => this.options.worldModel.getTile(q, r);
 
-  /** Arrow keys currently held; they pan the camera each tick (see `tickKeyPan`). */
-  private heldArrowKeys = new Set<ArrowKey>();
+  /** Arrow keys held or still finishing a tap; they pan the camera each tick (see `tickKeyPan`). */
+  private heldArrowKeys = new Map<ArrowKey, HeldArrowKey>();
+  /** Whether the current arrow-key pan moved the camera, so its end owes a rebuild. */
+  private keyPanMoved = false;
 
   private onKeyDown = (e: KeyboardEvent) => {
     const key = e.key as ArrowKey;
@@ -3510,44 +3547,54 @@ export class HexMapRenderer {
     // A host that lets the page scroll keeps the arrow keys for that; a locked or menu-covered map does not pan.
     if (this.lockCamera || this.interactionLocked || this.options.allowPageScroll) return;
     e.preventDefault();
-    this.heldArrowKeys.add(key);
+    const held = this.heldArrowKeys.get(key);
+    if (held && !held.released) return; // auto-repeat
+    this.heldArrowKeys.set(key, { pressedAt: performance.now(), released: false, applied: false });
   };
 
   private onKeyUp = (e: KeyboardEvent) => {
-    this.heldArrowKeys.delete(e.key as ArrowKey);
+    const held = this.heldArrowKeys.get(e.key as ArrowKey);
+    if (held) held.released = true;
   };
 
+  /** Window blur: no keyup arrives for the keys held, so let them all go (they still finish a tap). */
   private clearHeldKeys = () => {
-    this.heldArrowKeys.clear();
+    for (const held of this.heldArrowKeys.values()) held.released = true;
   };
 
-  /** Pans by `KEY_PAN_SPEED` screen px/s along the held arrow keys, through the same clamp the drag uses. */
+  /**
+   * Pans by `KEY_PAN_SPEED` screen px/s along the held arrow keys, through the same clamp the drag uses. Like a drag,
+   * the pan defers the full rebuild and the water bake (keyPanning) and ends with one up-to-date rebuild.
+   */
   private tickKeyPan() {
     if (this.heldArrowKeys.size === 0) return;
     if (this.lockCamera || this.interactionLocked) {
       this.heldArrowKeys.clear();
+      this.endKeyPan();
       return;
     }
-    let dx = 0;
-    let dy = 0;
-    for (const key of this.heldArrowKeys) {
-      const [kx, ky] = ARROW_KEY_PAN.get(key)!;
-      dx += kx;
-      dy += ky;
+    const dir = arrowKeyPanDirection(this.heldArrowKeys, performance.now());
+    if (dir) {
+      const px = (KEY_PAN_SPEED * clampAnimationDeltaMs(this.app!.ticker.deltaMS)) / 1000;
+      this.idleDrift = false;
+      this.cameraAnim = null;
+      this.camera = this.clampCamera({
+        ...this.camera,
+        x: this.camera.x + (dir.x * px) / this.camera.zoom,
+        y: this.camera.y + (dir.y * px) / this.camera.zoom,
+      });
+      this.keyPanMoved = true;
+      this.cameraTouched = true;
+      this.applyCameraTransform();
+      this.scheduleCull();
     }
-    if (dx === 0 && dy === 0) return;
-    const len = Math.hypot(dx, dy);
-    const px = (KEY_PAN_SPEED * clampAnimationDeltaMs(this.app!.ticker.deltaMS)) / 1000;
-    this.idleDrift = false;
-    this.cameraAnim = null;
-    this.camera = this.clampCamera({
-      ...this.camera,
-      x: this.camera.x + ((dx / len) * px) / this.camera.zoom,
-      y: this.camera.y + ((dy / len) * px) / this.camera.zoom,
-    });
-    this.cameraTouched = true;
-    this.applyCameraTransform();
-    this.scheduleCull();
+    if (this.heldArrowKeys.size === 0) this.endKeyPan();
+  }
+
+  /** The end of an arrow-key pan: one up-to-date rebuild (deferred during the pan) when it moved the camera. */
+  private endKeyPan() {
+    if (this.keyPanMoved) this.rebuildAll();
+    this.keyPanMoved = false;
   }
 
   private onWheel = (e: WheelEvent) => {
@@ -3827,14 +3874,19 @@ export class HexMapRenderer {
 
   /**
    * True while the camera is mid-gesture — a pointer drag, an animated
-   * transition (tickCameraAnim) or a wheel/pinch zoom (see noteZoomActivity)
-   * — i.e. while more camera movement is expected imminently and any rebuild
-   * done right now is about to be superseded. Each of the three ends with a
+   * transition (tickCameraAnim), a wheel/pinch zoom (see noteZoomActivity) or
+   * an arrow-key pan (tickKeyPan) — i.e. while more camera movement is expected
+   * imminently and any rebuild done right now is about to be superseded. Each ends with a
    * forced, fully up-to-date rebuild, so work skipped while this is true is
    * never work lost.
    */
   private get isInteracting(): boolean {
-    return this.dragging || !!this.cameraAnim || this.wheeling;
+    return this.dragging || !!this.cameraAnim || this.wheeling || this.keyPanning;
+  }
+
+  /** Arrow keys are panning the camera: a gesture like a drag (see isInteracting), ended by tickKeyPan's rebuild. */
+  private get keyPanning(): boolean {
+    return this.heldArrowKeys.size > 0;
   }
 
   private scheduleCull() {
@@ -3844,7 +3896,7 @@ export class HexMapRenderer {
       this.cullQueued = false;
       if (this.destroyed) return;
       // Any ongoing camera gesture (see isInteracting: a drag, the founding
-      // transition's animation, or a wheel/pinch zoom) can cross
+      // transition's animation, a wheel/pinch zoom or an arrow-key pan) can cross
       // cameraMovedEnough's threshold on almost every rAF — each pointermove,
       // animation step or wheel event nudges the camera or its zoom further —
       // and a rebuild re-syncs every visible terrain/border sprite, real
@@ -3855,7 +3907,8 @@ export class HexMapRenderer {
       // firing on every threshold-crossing frame. Each gesture still ends
       // with one forced, fully up-to-date rebuild — onPointerUp's when a drag
       // is released, tickCameraAnim's forceRebuild() when the animation
-      // completes, and noteZoomActivity's idle timer once zooming settles.
+      // completes, noteZoomActivity's idle timer once zooming settles, and
+      // tickKeyPan's when the last arrow key is let go.
       if (this.isInteracting && performance.now() - this.lastRebuildAtMs < DRAG_REBUILD_THROTTLE_MS) {
         return;
       }
@@ -4279,7 +4332,7 @@ export class HexMapRenderer {
     // A camera *animation* (the founding transition) is not a gesture in this
     // sense — it is a fixed, short move, so deferring its bake would only
     // withhold the water for the length of the ease.
-    if (this.dragging || this.wheeling) {
+    if (this.dragging || this.wheeling || this.keyPanning) {
       this.waterMaskDirty = true;
       return;
     }
