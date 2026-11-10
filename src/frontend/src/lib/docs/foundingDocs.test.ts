@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   MINIMUM_SPACING,
-  settlerCostMultiplier,
   feastCost,
   feastRenown,
   foundingStock,
@@ -12,11 +11,6 @@ import catalogue from '../../data/building-catalogue.json';
 import units from '../../data/unit-catalogue.json';
 
 describe('foundingDocs', () => {
-  it('doubles the settler price with every settlement already held', () => {
-    expect([1, 2, 3, 4].map(settlerCostMultiplier)).toEqual([1, 2, 4, 8]);
-    expect(settlerCostMultiplier(0)).toBe(1);
-  });
-
   it('asks 55,000 renown for the 2nd settlement and doubles it from there', () => {
     expect([1, 2, 3, 4, 5].map(renownRequired)).toEqual([0, 55_000, 110_000, 220_000, 440_000]);
   });

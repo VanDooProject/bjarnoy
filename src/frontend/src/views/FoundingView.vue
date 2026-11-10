@@ -14,7 +14,6 @@ import { prerequisitesOf } from '../lib/techtree/nodes';
 import {
   FEAST_HOURS,
   MINIMUM_SPACING,
-  settlerCostMultiplier,
   feastCost,
   feastRenown,
   foundingStock,
@@ -60,21 +59,9 @@ const settlerFacts = computed(() => {
   };
 });
 
-/** One row per settlement you could found next: what you hold, the renown asked and what the settlers cost. */
+/** One row per settlement you could found next: what you hold and the renown asked. */
 const priceRows = computed(() => {
-  const c = settler.value;
-  if (!c) return [];
-  return [1, 2, 3, 4].map((held) => {
-    const factor = settlerCostMultiplier(held);
-    return {
-      held,
-      number: held + 1,
-      factor,
-      renown: renownRequired(held + 1),
-      perSettler: RESOURCES.map((r) => n(c.trainingCost[r] * factor)).join(' / '),
-      total: RESOURCES.map((r) => n(c.trainingCost[r] * factor * SETTLERS_PER_FOUNDING)).join(' / '),
-    };
-  });
+  return [1, 2, 3, 4].map((held) => ({ held, number: held + 1, renown: renownRequired(held + 1) }));
 });
 
 const feast = [1, 10, 20].map((level) => ({ level, cost: feastCost(level), renown: feastRenown(level) }));
@@ -125,6 +112,7 @@ const tocLinks = computed(() =>
               <th>{{ $t('docs.founding.more.settler.upkeep') }}</th>
               <th>{{ $t('docs.founding.more.settler.time') }}</th>
               <th>{{ $t('docs.founding.more.settler.longhouse') }}</th>
+              <th>{{ $t('docs.founding.more.settler.cost') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -135,10 +123,12 @@ const tocLinks = computed(() =>
               <td>{{ n(settlerFacts.upkeep) }}</td>
               <td>{{ $t('docs.founding.more.settler.minutes', { n: settlerFacts.minutes }) }}</td>
               <td>{{ settlerFacts.longhouse }}</td>
+              <td class="value">{{ settlerFacts.cost }}</td>
             </tr>
           </tbody>
         </table>
       </div>
+      <p class="muted">{{ $t('docs.founding.more.order', { resources: RESOURCES.map(resourceName).join(' / ') }) }}</p>
       <p class="text">{{ $t('docs.founding.more.send') }}</p>
       <p class="text">{{ $t('docs.founding.more.provisions', { food: settlerFacts?.food ?? 0, total: settlerFacts?.carried ?? 0 }) }}</p>
       <i18n-t keypath="docs.founding.more.ambush" tag="p" class="text" scope="global">
@@ -160,21 +150,16 @@ const tocLinks = computed(() =>
             <tr>
               <th>{{ $t('docs.founding.renown.columns.next') }}</th>
               <th>{{ $t('docs.founding.renown.columns.renown') }}</th>
-              <th>{{ $t('docs.founding.renown.columns.perSettler') }}</th>
-              <th>{{ $t('docs.founding.renown.columns.total', { count: SETTLERS_PER_FOUNDING }) }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in priceRows" :key="row.held" :data-settlement="row.number">
               <th scope="row" class="name">{{ $t('docs.founding.renown.nth', { n: row.number }) }}</th>
               <td class="value">{{ n(row.renown) }}</td>
-              <td class="value">{{ row.perSettler }}</td>
-              <td class="value">{{ row.total }}</td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="muted">{{ $t('docs.founding.renown.order', { resources: RESOURCES.map(resourceName).join(' / ') }) }}</p>
       <p class="text">{{ $t('docs.founding.renown.when') }}</p>
       <i18n-t keypath="docs.founding.renown.feasts" tag="p" class="text" scope="global">
         <template #square><BuildingLink type="townsquare" /></template>

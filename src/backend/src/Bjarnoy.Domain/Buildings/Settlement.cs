@@ -2284,7 +2284,7 @@ public sealed record Settlement
         {
             if (coords.Contains(order.BuildingCoord))
             {
-                resources = resources.Deposit(UnitCatalogue.Get(order.UnitType).TrainingCost * order.Count * order.CostMultiplier, now);
+                resources = resources.Deposit(UnitCatalogue.Get(order.UnitType).TrainingCost * order.Count, now);
             }
             else
             {
@@ -2566,15 +2566,6 @@ public sealed record Settlement
     /// independent of any future Shipyard building); ignored for every other
     /// class.
     /// </param>
-    /// <param name="costMultiplier">
-    /// Multiplies the catalogue's flat per-unit cost (issue #55 §4: settlers
-    /// cost more the more settlements the player already holds — see
-    /// <see cref="Settlers.Founding.CostMultiplier"/>). 1.0 for every ordinary
-    /// unit; the caller (<c>SettlementService.TrainUnitsAsync</c>) is the one
-    /// that knows how many settlements the owning player holds, so it
-    /// computes this rather than <see cref="Settlement"/> reaching outside
-    /// its own aggregate for it.
-    /// </param>
     /// <param name="speedFactor">
     /// The world's current <c>SpeedFactor</c> — divides per-unit training
     /// duration, the same way <see cref="PlanBuild"/> already divides build
@@ -2591,7 +2582,7 @@ public sealed record Settlement
     public TrainDecision PlanTrain(
         UnitType type, int count, DateTimeOffset now, Func<Guid> newOrderId, HexCoord buildingCoord,
         TrainingSplit split = TrainingSplit.Here, bool isPremium = false, bool hasShoreline = false,
-        double costMultiplier = 1.0, double speedFactor = 1.0)
+        double speedFactor = 1.0)
     {
         if (count <= 0)
         {
@@ -2647,7 +2638,7 @@ public sealed record Settlement
             return TrainDecision.Rejected(TrainRejection.TrainingQueueFull);
         }
 
-        var totalCost = definition.TrainingCost * count * costMultiplier;
+        var totalCost = definition.TrainingCost * count;
         // Issue #158 stage 1c: a reservation earmarked for the waiting build
         // queue must be unspendable on anything else, training included.
         if (!CanAffordAvailable(totalCost, now))
@@ -2670,12 +2661,11 @@ public sealed record Settlement
             Count = share.Units,
             StartedAt = share.Slot.Start,
             PerUnitDuration = share.Slot.UnitTime,
-            CostMultiplier = costMultiplier,
         })]);
     }
 
     /// <summary>
-    /// Pays for <paramref name="orders"/> (the parts of one <see cref="PlanTrain"/> decision; cost × units × <see cref="TrainingOrder.CostMultiplier"/>,
+    /// Pays for <paramref name="orders"/> (the parts of one <see cref="PlanTrain"/> decision; cost × units,
     /// charged once) and appends them to the training queue.
     /// </summary>
     public Settlement EnqueueTraining(IReadOnlyList<TrainingOrder> orders, DateTimeOffset now)
@@ -2683,8 +2673,8 @@ public sealed record Settlement
         ArgumentNullException.ThrowIfNull(orders);
 
         var totalCost = orders
-            .GroupBy(o => (o.UnitType, o.CostMultiplier))
-            .Aggregate(ResourceAmounts.Zero, (sum, g) => sum + UnitCatalogue.Get(g.Key.UnitType).TrainingCost * g.Sum(o => o.Count) * g.Key.CostMultiplier);
+            .GroupBy(o => o.UnitType)
+            .Aggregate(ResourceAmounts.Zero, (sum, g) => sum + UnitCatalogue.Get(g.Key).TrainingCost * g.Sum(o => o.Count));
         if (!TrySpendAvailable(totalCost, now, out var paid))
         {
             throw new InvalidOperationException(

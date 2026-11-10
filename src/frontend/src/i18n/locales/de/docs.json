@@ -1069,8 +1069,10 @@
         "upkeep": "Unterhalt pro Stunde",
         "time": "Ausbildungszeit",
         "longhouse": "Langhaus-Stufe",
+        "cost": "Kosten pro Siedler",
         "minutes": "{n} Min."
       },
+      "order": "Die Kosten sind {resources}.",
       "send": "Zum Losschicken tippst du auf ein freies Feld und wählst „Siedler entsenden“, an der Küste „Hier landen“.",
       "provisions": "Jeder Siedler trägt {food} Nahrung, alle fünf zusammen {total}. Nimm genug für Hin- und Rückweg mit.",
       "ambush": "Unterwegs können starke Wildtierlager deine Siedler überfallen (siehe {camps}). Wie schnell sie über das jeweilige Gelände kommen, steht auf der Seite {movement}.",
@@ -1079,15 +1081,12 @@
     },
     "renown": {
       "heading": "Ruhm und Preis",
-      "body": "Jede Siedlung nach der ersten kostet Ruhm und Siedler. Ruhm sammelst du mit den Gebäuden aller deiner Siedlungen zusammen: 1 pro Gebäudestufe und Stunde, und er verfällt nie. Mit jeder Siedlung, die du besitzt, verdoppelt sich der Ruhm, der für die nächste verlangt wird, und ebenso der Preis ihrer Siedler.",
+      "body": "Jede Siedlung nach der ersten kostet Ruhm und Siedler. Ruhm sammelst du mit den Gebäuden aller deiner Siedlungen zusammen: 1 pro Gebäudestufe und Stunde, und er verfällt nie. Mit jeder Siedlung, die du besitzt, verdoppelt sich der Ruhm, der für die nächste verlangt wird. Siedler kosten immer gleich viel.",
       "columns": {
         "next": "Du gründest",
-        "renown": "Nötiger Ruhm",
-        "perSettler": "Kosten pro Siedler",
-        "total": "Kosten für {count} Siedler"
+        "renown": "Nötiger Ruhm"
       },
       "nth": "Siedlung Nr. {n}",
-      "order": "Die Kosten sind {resources}.",
       "when": "Der Ruhm wird geprüft, wenn die Siedler aufbrechen.",
       "feasts": "Ein Fest auf dem {square} bringt zusätzlich Ruhm. Es dauert {hours} Stunden, kostet gleich viel Holz, Stein und Nahrung und wird mit der Stufe des Platzes größer.",
       "feast": {
