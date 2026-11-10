@@ -41,6 +41,10 @@ the same path used when any army's destination is an enemy or allied settlement.
 A fleet cannot use a foreign dock as a passive waypoint; reaching it always means
 attack or support, never a free stop.
 
+**Sand.** Fleets can enter sand, but only a hex with a beach camp or a wildlife camp. They cannot travel over it: from a sand
+hex a fleet can only leave again. Entering sand costs 2, leaving it costs 2, water costs 1. Docks stand in the water, not on
+sand. Who garrisons where: [garrison.md](garrison.md).
+
 ## 3. Refuel is not a separate mechanic
 
 There is no refuel event, no per-dock stockpile, and no special-case code path.
