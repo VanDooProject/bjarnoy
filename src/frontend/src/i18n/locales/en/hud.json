@@ -95,6 +95,12 @@
   "ringMenu": {
     "shrineLimitLock": "Your realm already has a shrine",
     "storageHouseLock": "Needs {count} Storehouse at level {level} | Needs {count} Storehouses at level {level}",
+    "occupiedLock": {
+      "giant": "Occupied by a giant landmark",
+      "camp": "Wild beasts hold this hex: clear their camp first",
+      "fenrirBrood": "Fenrir's brood always regrows, nothing can be built here",
+      "endgameSite": "An Utgard wall or a Jötunn watchtower stands here"
+    },
     "palisadeLock": {
       "branch": "A wall never branches: this hex would get three wall neighbours",
       "gateNotStraight": "A gate only stands between two opposite wall hexes, in a straight wall",
@@ -138,9 +144,7 @@
       "trainUnits": "Train units",
       "feasts": "Feasts",
       "build": "Build",
-      "giantOccupied": "Occupied by a giant landmark",
       "hunt": "Hunt",
-      "campOccupied": "Occupied by wild beasts",
       "maxLevel": "Max level",
       "siege": "Siege",
       "noRamAtHome": "Needs a battering ram at home",

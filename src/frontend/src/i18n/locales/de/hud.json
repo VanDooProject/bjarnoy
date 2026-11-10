@@ -95,6 +95,12 @@
   "ringMenu": {
     "shrineLimitLock": "Dein Gebiet hat bereits einen Schrein",
     "storageHouseLock": "Benötigt {count} Lagerhaus auf Stufe {level} | Benötigt {count} Lagerhäuser auf Stufe {level}",
+    "occupiedLock": {
+      "giant": "Von einem Riesenwahrzeichen belegt",
+      "camp": "Hier hausen wilde Tiere – räum erst ihr Lager",
+      "fenrirBrood": "Fenrirs Brut wächst immer nach – hier kannst du nichts bauen",
+      "endgameSite": "Hier steht eine Utgardmauer oder ein Jötunn-Wachturm"
+    },
     "palisadeLock": {
       "branch": "Eine Mauer verzweigt sich nie: Dieses Feld hätte drei Nachbarn der Mauer",
       "gateNotStraight": "Ein Tor steht nur zwischen zwei gegenüberliegenden Mauerfeldern in einer geraden Mauer",
@@ -138,9 +144,7 @@
       "trainUnits": "Einheiten ausbilden",
       "feasts": "Feste",
       "build": "Bauen",
-      "giantOccupied": "Von einem Riesenwahrzeichen belegt",
       "hunt": "Jagen",
-      "campOccupied": "Von wilden Tieren belegt",
       "maxLevel": "Höchste Stufe",
       "siege": "Belagern",
       "noRamAtHome": "Braucht einen Rammbock zu Hause",

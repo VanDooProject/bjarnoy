@@ -12,7 +12,7 @@ import {
   ravensRings,
   wisdomBuildTimeFactor,
 } from './buildingEconomy';
-import { buildingAllowedOnHex, cropAllowedHere, newPlacementDisabled, riverBuildingAllowedHere } from './ringCatalogue';
+import { buildingAllowedOnHex, cropAllowedHere, hexOccupant, newPlacementDisabled, riverBuildingAllowedHere } from './ringCatalogue';
 import { canPlacePalisade, type PalisadeRefusal, type WallSet } from './palisadeTiles';
 import type { PalisadeWalls } from './palisadeMovement';
 import type { StandingBridges } from './bridgeMovement';
@@ -21,7 +21,6 @@ import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './g
 import { campGuardRange, isStrongCampFamily, placeCamps, placeWhaleRoads, StartPositionMargin } from './campPlacement';
 import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
 import type { PalisadePiece } from './palisadeTiles';
-import { campHexBuildable } from './campRules';
 import type { CampStateResponse } from '../../api/types';
 import { longhouseDiscs, type ClaimDisc } from './shoreline';
 import type { FogCoverageLookup } from './fog/fogCoverage';
@@ -2060,18 +2059,10 @@ export class WorldModel {
       return false;
     }
     const tile = this.getTile(at.q, at.r);
-    // A giant hex is never buildable, claimed or not — the giant's own art
-    // fully occupies the ground there (matches the backend's own rule; see
-    // `Tile.giant`'s doc comment and `Territory`'s own remarks). Checked
-    // even though `claims` above already excludes an *unclaimed* giant hex,
-    // since a giant whose whole 7-hex footprint *is* fully enclosed reads as
-    // claimed but must still refuse building on it.
-    if (tile.giant) return false;
-    // A wildlife camp hex is not buildable while the camp stands guarded; a cleared
-    // (empty) camp is, except Fenrir's brood (matches BuildRejection.HexOccupiedByCamp).
-    if (tile.camp && !campHexBuildable(tile.camp)) return false;
-    // An Utgard wall (rubble included) or a Jötun watchtower is never buildable (matches BuildRejection.HexOccupiedByEndgameSite).
-    if (tile.utgardWall || tile.jotunTower) return false;
+    // A giant (even one whose whole 7-hex footprint reads as claimed), a wildlife camp until it is cleared (never Fenrir's brood),
+    // an Utgard wall (rubble included) or a Jötunn watchtower holds the hex against every building — the same rule the ring's
+    // Build lock reads (`hexOccupant`; matches BuildRejection.HexOccupiedByCamp / HexOccupiedByEndgameSite).
+    if (hexOccupant(tile)) return false;
     // Every other building needs dry land; the fishing hut, dockyard and
     // Shrine of Njörd are the exceptions, and *only* stand on the coastal ring of
     // the sea, not open water and not land either (matches
