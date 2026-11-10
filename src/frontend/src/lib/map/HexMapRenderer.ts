@@ -1500,6 +1500,23 @@ function fogSourcesNear(
 }
 
 /**
+ * Whether a hex is drawn clear of the white mist right now, from the same sources the fog shader reads: the loaded mask
+ * (`coverage`; outside its window everything is white) and the live reveal round every army (`armySources`, cleared between
+ * mask fetches). Before the first mask arrives the client's own `explored` set stands in for it. The send picker's framing
+ * compares how much of the view this is before and after a move.
+ */
+export function isDrawnClearOf(
+  q: number,
+  r: number,
+  coverage: { isExplored(q: number, r: number): boolean } | null,
+  exploredBeforeMask: (q: number, r: number) => boolean,
+  armySources: FogSource[],
+): boolean {
+  if (distanceBeyondSources(q, r, armySources) <= 0) return true;
+  return coverage ? coverage.isExplored(q, r) : exploredBeforeMask(q, r);
+}
+
+/**
  * WorldModel.distanceBeyondExplored's answer, against a list already pruned
  * to the settlements that can affect the current viewport. Identical result
  * for every hex the fog tiers actually discriminate at (see
@@ -6264,9 +6281,10 @@ export class HexMapRenderer {
     // A move that would show more white mist (unexplored or not yet loaded ground) than the player sees now is not made at all.
     if (this.isFogActive()) {
       const { worldModel } = this.options;
+      const coverage = worldModel.getFogCoverage();
       const explored = (x: number, y: number) => {
         const c = isoPixelToAxial({ x, y }, TILE_W, TILE_H);
-        return worldModel.isExplored(c.q, c.r);
+        return isDrawnClearOf(c.q, c.r, coverage, (q, r) => worldModel.isExplored(q, r), this.armyCullSources);
       };
       const inset = opts.bottomInsetPx ?? 0;
       if (exploredShare(to, this.viewport, explored, inset) < exploredShare(this.camera, this.viewport, explored, inset)) return false;
