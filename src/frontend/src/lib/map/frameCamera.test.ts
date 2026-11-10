@@ -43,6 +43,22 @@ describe('frameCameraFor', () => {
     expect(screenOf(to, { x: 1000, y: 1200 }).y).toBeCloseTo(800 - 400 - 40);
   });
 
+  it('pans the other way for a point off the left and top edges', () => {
+    const to = frameCameraFor(camera, viewport, [{ x: 1000, y: 1000 }, { x: 800, y: 500 }], opts)!;
+    expect(to.zoom).toBe(1);
+    const s = screenOf(to, { x: 800, y: 500 });
+    expect(s.x).toBeCloseTo(40);
+    expect(s.y).toBeCloseTo(40);
+  });
+
+  it('zooms out and pans together when the points sit off to one side', () => {
+    const points = [{ x: 1100, y: 1000 }, { x: 2000, y: 1000 }];
+    const to = frameCameraFor(camera, viewport, points, opts)!;
+    expect(to.zoom).toBeCloseTo(320 / 900);
+    expect(screenOf(to, points[0]!).x).toBeCloseTo(40);
+    expect(screenOf(to, points[1]!).x).toBeCloseTo(360);
+  });
+
   it('centres points that do not fit even at the furthest zoom', () => {
     const to = frameCameraFor(camera, viewport, [{ x: 0, y: 1000 }, { x: 4000, y: 1000 }], opts)!;
     expect(to.zoom).toBe(0.3);

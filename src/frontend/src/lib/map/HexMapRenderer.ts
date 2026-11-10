@@ -6194,8 +6194,11 @@ export class HexMapRenderer {
       bottomInset: opts.bottomInsetPx ?? 0,
       minZoom: Math.min(MIN_FRAME_ZOOM, this.camera.zoom),
     });
-    // Everything is on screen already: the camera stays where the player left it.
-    if (!framed) return true;
+    // Everything is on screen already: the camera stays where the player left it (and stops drifting off it).
+    if (!framed) {
+      this.idleDrift = false;
+      return true;
+    }
     const to = this.clampCamera({ ...this.camera, ...framed });
     this.cameraTouched = true;
     this.idleDrift = false;
