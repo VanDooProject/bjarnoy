@@ -2787,6 +2787,47 @@ describe('useWorldStore send picker', () => {
     expect(store.fieldOrderDraft).toMatchObject({ mission: 'attack', targetSettlementId: 'enemy-1', route: [] });
   });
 
+  it('a retarget moves the target and re-composes the selected army\'s order for it', async () => {
+    getSettlementView.mockReset().mockResolvedValue({ buildings: [] });
+    const store = await loadStoreModule(true);
+    store.armies = [army('a')] as never;
+    store.openSendPicker({ q: 3, r: -2 });
+    store.selectSendSource('a');
+
+    store.retargetSendPicker({ q: 7, r: 0 });
+    expect(store.sendPicker).toEqual({ mission: 'move', coord: { q: 7, r: 0 }, targetSettlementId: null, selectedId: 'a' });
+    expect(store.fieldOrderDraft).toMatchObject({ armyId: 'a', mission: 'move', route: [{ q: 7, r: 0 }] });
+
+    store.retargetSendPicker({ q: 5, r: 1 }, { mission: 'attack', targetSettlementId: 'enemy-1' });
+    expect(store.sendPicker).toMatchObject({ mission: 'attack', coord: { q: 5, r: 1 }, targetSettlementId: 'enemy-1' });
+    expect(store.fieldOrderDraft).toMatchObject({ armyId: 'a', mission: 'attack', targetSettlementId: 'enemy-1', route: [] });
+  });
+
+  it('a retarget keeps the units the player picked, or drops the army when it cannot go', async () => {
+    const store = await loadStoreModule(true);
+    store.armies = [army('a')] as never;
+    store.openSendPicker({ q: 3, r: -2 });
+    store.selectSendSource('a');
+    store.setFieldOrderUnitCount('spearman', 2);
+
+    store.retargetSendPicker({ q: 7, r: 0 });
+    expect(store.fieldOrderDraft).toMatchObject({ armyId: 'a', route: [{ q: 7, r: 0 }], units: { spearman: 2, archer: 4 } });
+
+    store.retargetSendPicker({ q: 9, r: 0 }, {}, false);
+    expect(store.sendPicker).toMatchObject({ coord: { q: 9, r: 0 }, selectedId: null });
+    expect(store.fieldOrderDraft).toBeNull();
+  });
+
+  it('a retarget with no army selected only moves the target', async () => {
+    const store = await loadStoreModule(true);
+    store.openSendPicker({ q: 3, r: -2 }, { mission: 'hunt' });
+
+    store.retargetSendPicker({ q: 1, r: 1 });
+
+    expect(store.sendPicker).toEqual({ mission: 'move', coord: { q: 1, r: 1 }, targetSettlementId: null, selectedId: null });
+    expect(store.fieldOrderDraft).toBeNull();
+  });
+
   it('unselecting drops the field order but keeps the picker open', async () => {
     const store = await loadStoreModule(true);
     store.armies = [army('a')] as never;

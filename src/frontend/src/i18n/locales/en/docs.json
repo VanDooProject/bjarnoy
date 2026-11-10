@@ -1250,7 +1250,7 @@
     },
     "sendOut": {
       "heading": "Sending an army that is already out",
-      "orders": "Tap Send army here, Attack, Support or Hunt on a hex and pick the army to send: your garrison or an army that is already out. A standing army can move, attack, support or hunt. An army still on the march can be redirected with Premium.",
+      "orders": "Tap Send army here, Attack, Support or Hunt on a hex and pick the army to send: your garrison or an army that is already out. A standing army can move, attack, support or hunt. An army still on the march can be redirected with Premium. While you pick, tap another hex to aim at that one instead.",
       "split": "You can send only part of a standing army. The rest keeps standing where it is. An army on the march always goes whole.",
       "reach": "An army only goes if it can get there and still has the food for the way home. The ones that cannot stay in the list, greyed out, with the reason.",
       "support": "An army that is supporting another settlement has to be recalled first."

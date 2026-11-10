@@ -32,7 +32,7 @@
 // instead of slicing across their canopy. Fog-of-war dimming sits above
 // everything, since a scouted-but-not-currently-visible hex needs to dim
 // its whole tile, props included.
-import { frameCameraFor } from './frameCamera';
+import { cameraSeesOnly, frameCameraFor, type WorldRect } from './frameCamera';
 import {
   circleIntersectsRect,
   circlesIntersect,
@@ -6241,7 +6241,8 @@ export class HexMapRenderer {
    * Brings `coords` into the part of the canvas that stays visible (`bottomInsetPx` is what a sheet covers at the bottom), with
    * `marginPx` to spare: the camera stays put when they are all there already, and otherwise pans only by what sticks out and
    * zooms out only as far as they need, never in and never past a readable `MIN_FRAME_ZOOM` (see `frameCameraFor`). Eased over
-   * `durationMs`, at once when that is 0. False when the camera cannot move.
+   * `durationMs`, at once when that is 0. A move that would show ground outside the loaded fog window is not made at all. False
+   * when the camera cannot move or that move is refused.
    */
   frameHexes(coords: AxialCoord[], opts: { bottomInsetPx?: number; marginPx?: number; durationMs?: number } = {}): boolean {
     if (!this.app || this.lockCamera || coords.length === 0 || this.viewport.width === 0) return false;
@@ -6260,6 +6261,9 @@ export class HexMapRenderer {
       return true;
     }
     const to = this.clampCamera({ ...this.camera, ...framed });
+    // A move that would show ground past the loaded fog window (pure fog until it is fetched) is not made at all.
+    const loaded = this.loadedWorldRect();
+    if (loaded && !cameraSeesOnly(to, this.viewport, loaded, opts.bottomInsetPx ?? 0)) return false;
     this.cameraTouched = true;
     this.idleDrift = false;
     if ((opts.durationMs ?? 0) > 0) {
@@ -6460,6 +6464,7 @@ export class HexMapRenderer {
    */
   setFogMask(bounds: MaskBounds, bitmap: ImageBitmap | null, coverage: FogCoverageLookup) {
     if (!bitmap) return;
+    this.fogMaskBounds = bounds;
 
     const { worldModel } = this.options;
     const previousSignature = worldModel.getFogCoverage()?.signature;
@@ -6492,6 +6497,34 @@ export class HexMapRenderer {
     this.fogViewportListener = listener;
     this.lastFogViewportRange = null;
     this.notifyFogViewport();
+  }
+
+  // Where the current fog mask sits (setFogMask; demo mode's covers the demo world): the loaded part of the map. Null before
+  // the first mask arrives.
+  private fogMaskBounds: MaskBounds | null = null;
+  // The whole world's mask bounds (setWorldMaskBounds): the fog window is clamped to them, past them there is nothing to load.
+  private worldMaskBounds: MaskBounds | null = null;
+
+  /** The world's own mask bounds, so `frameHexes` does not count the ground past the world's edge as unloaded. */
+  setWorldMaskBounds(bounds: MaskBounds | null) {
+    this.worldMaskBounds = bounds;
+  }
+
+  /**
+   * The loaded fog window in world space (inverse of notifyFogViewport's texel maths), open on every side where it reaches the
+   * world's edge; null while no mask is loaded.
+   */
+  private loadedWorldRect(): WorldRect | null {
+    const b = this.fogMaskBounds;
+    if (!b || !this.isFogActive()) return null;
+    const w = this.worldMaskBounds;
+    const colPitch = 0.75 * TILE_W;
+    return {
+      minX: w && b.minU <= w.minU ? -Infinity : b.minU * colPitch,
+      maxX: w && b.maxU >= w.maxU ? Infinity : b.maxU * colPitch,
+      minY: w && b.minV <= w.minV ? -Infinity : (b.minV * TILE_H) / 2,
+      maxY: w && b.maxV >= w.maxV ? Infinity : (b.maxV * TILE_H) / 2,
+    };
   }
 
   private fogViewportListener: ((range: ChunkRange) => void) | null = null;

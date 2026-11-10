@@ -55,3 +55,27 @@ export function frameCameraFor(
   // Moving the content right on screen by dx means the camera centre moves left by dx / zoom in world px.
   return { x: camera.x - dx / zoom, y: camera.y - dy / zoom, zoom };
 }
+
+/** A world-space rectangle (the part of the map the client has loaded, e.g. the fetched fog-mask window). */
+export interface WorldRect {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+/**
+ * Whether everything the camera shows above a bottom sheet lies inside `area`. The picker's framing moves only when this holds
+ * for where it would end up: a move that would show ground outside `area` (unloaded, pure fog) is not made at all, not shortened.
+ */
+export function cameraSeesOnly(
+  camera: FrameCamera,
+  viewport: { width: number; height: number },
+  area: WorldRect,
+  bottomInset = 0,
+): boolean {
+  const halfW = viewport.width / 2 / camera.zoom;
+  const top = camera.y - viewport.height / 2 / camera.zoom;
+  const bottom = camera.y + (viewport.height / 2 - Math.max(0, bottomInset)) / camera.zoom;
+  return camera.x - halfW >= area.minX && camera.x + halfW <= area.maxX && top >= area.minY && bottom <= area.maxY;
+}

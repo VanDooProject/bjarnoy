@@ -1632,6 +1632,36 @@ export const useWorldStore = defineStore('world', {
         selectedId: null,
       };
     },
+    /**
+     * A tap on the map while the picker is open aims it at that hex instead: the mission and target settlement are the tapped
+     * hex's own (the caller picks them like the ring's bubble would). `keepSelected` (the caller knows whether the selected army
+     * can go to the new target) keeps that army and re-composes its order for the new target with the units the player had
+     * picked; otherwise the selection and its order are dropped.
+     */
+    retargetSendPicker(
+      coord: AxialCoord,
+      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string } = {},
+      keepSelected = true,
+    ) {
+      const picker = this.sendPicker;
+      if (!picker) return;
+      picker.mission = opts.mission ?? 'move';
+      picker.coord = { q: coord.q, r: coord.r };
+      picker.targetSettlementId = opts.targetSettlementId ?? null;
+      const id = picker.selectedId;
+      if (!id) return;
+      if (!keepSelected) {
+        this.selectSendSource(null);
+        return;
+      }
+      const units = this.fieldOrderDraft?.armyId === id ? this.fieldOrderDraft.units : null;
+      this.selectSendSource(id);
+      const draft = this.fieldOrderDraft;
+      if (units && draft?.units) {
+        draft.units = { ...units };
+        if (picker.mission === 'hunt') this.dropNonHuntUnits();
+      }
+    },
     /** Closes the picker and drops the field order it was composing. */
     closeSendPicker() {
       this.sendPicker = null;
@@ -1678,16 +1708,21 @@ export const useWorldStore = defineStore('world', {
         targetBuildingCoord: null,
         units: standing ? stackCounts(army.stacks) : null,
       };
-      // A hunt takes land units against a land camp, and against a camp at sea the ships and their passengers: the units of
-      // the other class start out unselected.
-      const draft = this.fieldOrderDraft;
-      if (picker.mission === 'hunt' && draft?.units) {
-        const camp = this.model.campAt(picker.coord);
-        const atSea = !!camp && isWaterCampFamily(camp.family);
-        const byType = useUnitCatalogueStore().byType;
-        for (const unit of Object.keys(draft.units)) if (!isHuntUnit(unit, byType, atSea)) draft.units[unit] = 0;
-      }
+      if (picker.mission === 'hunt') this.dropNonHuntUnits();
       if (picker.mission === 'attack' && picker.targetSettlementId) void this.loadDispatchTargetBuildings(picker.targetSettlementId);
+    },
+    /**
+     * A hunt takes land units against a land camp, and against a camp at sea the ships and their passengers: the units of the
+     * other class in the picker's field order are unselected.
+     */
+    dropNonHuntUnits() {
+      const draft = this.fieldOrderDraft;
+      const picker = this.sendPicker;
+      if (!draft?.units || !picker) return;
+      const camp = this.model.campAt(picker.coord);
+      const atSea = !!camp && isWaterCampFamily(camp.family);
+      const byType = useUnitCatalogueStore().byType;
+      for (const unit of Object.keys(draft.units)) if (!isHuntUnit(unit, byType, atSea)) draft.units[unit] = 0;
     },
     /** Sets how many of one unit of the selected field army leave (a standing army's split), clamped to what the army holds. */
     setFieldOrderUnitCount(unit: string, count: number) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frameCameraFor, type FrameCamera } from './frameCamera';
+import { cameraSeesOnly, frameCameraFor, type FrameCamera } from './frameCamera';
 
 const viewport = { width: 400, height: 800 };
 const opts = { margin: 40, bottomInset: 0, minZoom: 0.3 };
@@ -63,5 +63,30 @@ describe('frameCameraFor', () => {
     const to = frameCameraFor(camera, viewport, [{ x: 0, y: 1000 }, { x: 4000, y: 1000 }], opts)!;
     expect(to.zoom).toBe(0.3);
     expect(to.x).toBeCloseTo(2000);
+  });
+});
+
+describe('cameraSeesOnly', () => {
+  // At zoom 1 the 400 x 800 viewport shows world x 800..1200 and y 600..1400 round the centre (1000, 1000).
+  const camera = { x: 1000, y: 1000, zoom: 1 };
+  const loaded = { minX: 700, maxX: 1300, minY: 500, maxY: 1500 };
+
+  it('holds while the whole view is inside the loaded area', () => {
+    expect(cameraSeesOnly(camera, viewport, loaded)).toBe(true);
+  });
+
+  it('fails once any edge of the view leaves it: a pan or a zoom-out past it', () => {
+    expect(cameraSeesOnly({ ...camera, x: 1150 }, viewport, loaded)).toBe(false);
+    expect(cameraSeesOnly({ ...camera, zoom: 0.5 }, viewport, loaded)).toBe(false);
+  });
+
+  it('does not count what a bottom sheet covers', () => {
+    // y 1000 + 400 = 1400 at the bottom edge; with 300 px of sheet the visible part ends at 1100.
+    expect(cameraSeesOnly({ ...camera, y: 1300 }, viewport, loaded)).toBe(false);
+    expect(cameraSeesOnly({ ...camera, y: 1300 }, viewport, loaded, 300)).toBe(true);
+  });
+
+  it('an open side (the world edge) never fails', () => {
+    expect(cameraSeesOnly({ ...camera, x: 5000 }, viewport, { ...loaded, maxX: Infinity })).toBe(true);
   });
 });
