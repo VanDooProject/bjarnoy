@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  armyMarkerColor,
+  armyVisionEntryOf,
+  grantsArmyVision,
+  type ArmyOverlayMarker,
   previewGroundCoords,
   attentionPulseFrame,
   clampAnimationDeltaMs,
@@ -728,6 +732,7 @@ describe('startTextureLoad', () => {
     return {
       loadTerrain: async () => FAKE_TEXTURES,
       loadIcons: async () => null,
+      buildingPageTotals: { level1: 0, buildings: 3 },
       loadBuildings: async () => FAKE_TEXTURES,
       merge: (base) => base,
       isDestroyed: () => false,
@@ -821,6 +826,53 @@ describe('startTextureLoad', () => {
     });
     expect(events).toEqual(['load full', 'merge full', 'rebuild']);
     warn.mockRestore();
+  });
+
+  it("reports the 'buildings' phase as level-1 then static pages with one constant total and a non-decreasing count", async () => {
+    const states: MapLoadState[] = [];
+    const deps = fakeDeps({
+      mode: 'settlement',
+      buildingPageTotals: { level1: 2, buildings: 3 },
+      loadLevel1: async (onProgress) => {
+        onProgress(1, 2);
+        onProgress(2, 2);
+        return FAKE_TEXTURES;
+      },
+      loadBuildings: async (onProgress) => {
+        onProgress(1, 3);
+        onProgress(2, 3);
+        onProgress(3, 3);
+        return FAKE_TEXTURES;
+      },
+      emit: (state) => states.push(state),
+    });
+    await startTextureLoad(deps).done;
+
+    const pages = states.filter((s) => s.phase === 'buildings' && s.pages).map((s) => s.pages!);
+    expect(pages).toEqual([1, 2, 3, 4, 5].map((loaded) => ({ loaded, total: 5 })));
+    const progress = states.filter((s) => s.phase === 'buildings' && s.pages).map((s) => s.progress);
+    expect(progress).toEqual([1 / 5, 2 / 5, 3 / 5, 4 / 5, 1]);
+  });
+
+  it("counts level 1 as done when it failed or had no pages, so static continues from the level-1 total", async () => {
+    const states: MapLoadState[] = [];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await startTextureLoad(
+      fakeDeps({
+        mode: 'settlement',
+        buildingPageTotals: { level1: 2, buildings: 3 },
+        loadLevel1: async () => {
+          throw new Error('missing');
+        },
+        loadBuildings: async (onProgress) => {
+          onProgress(1, 3);
+          return FAKE_TEXTURES;
+        },
+        emit: (state) => states.push(state),
+      }),
+    ).done;
+    warn.mockRestore();
+    expect(states.filter((s) => s.pages).map((s) => s.pages)).toEqual([{ loaded: 3, total: 5 }]);
   });
 
   it('goes straight to ready in world mode, even though the same terrain/building loads still run in the background', async () => {
@@ -1158,5 +1210,50 @@ describe('worldCampMarkers', () => {
   it('keeps the paw readable when zoomed far out and bounded when zoomed in', () => {
     expect(worldPawHalfSize(0.01)).toBeGreaterThanOrEqual(8);
     expect(worldPawHalfSize(100)).toBeLessThanOrEqual(14);
+  });
+});
+
+describe('foreign army markers', () => {
+  const own: ArmyOverlayMarker = {
+    id: 'own',
+    position: { q: 0, r: 0 },
+    selected: false,
+    returning: false,
+    isFleet: false,
+    visionRadius: 2,
+    movement: { path: [{ q: 0, r: 0 }], cumulativeHours: [0], edgeHours: [0], departedAtMs: 0, arrivesAtMs: 1 },
+  };
+  const foreign: ArmyOverlayMarker = { ...own, id: 'foreign', foreign: true, color: 0x4fd17a };
+
+  it('draws a foreign army in its owner colour, never the gold/returning colours of our own', () => {
+    expect(armyMarkerColor(foreign)).toBe(0x4fd17a);
+    expect(armyMarkerColor({ ...foreign, returning: true })).toBe(0x4fd17a);
+    expect(armyMarkerColor(own)).not.toBe(armyMarkerColor({ ...own, returning: true }));
+  });
+
+  it('reads as a rival when the foreign marker carries no colour', () => {
+    expect(armyMarkerColor({ ...foreign, color: undefined })).toBe(0xe2705f);
+  });
+
+  it('lifts our fog only for our own marching armies, never for a foreign one', () => {
+    expect(grantsArmyVision(own)).toBe(true);
+    expect(grantsArmyVision({ ...own, movement: undefined })).toBe(false);
+    expect(grantsArmyVision(foreign)).toBe(false);
+  });
+
+  it('gives every marching army a vision source with its own radius, taken from the army as the backend sent it', () => {
+    const fleet = { ...own, id: 'fleet', isFleet: true, visionRadius: 16 };
+    const catapults = { ...own, id: 'catapults', visionRadius: 1 };
+    const point = { x: 10, y: 20, hexes: [{ q: 1, r: 2 }, { q: 2, r: 2 }] };
+
+    expect(armyVisionEntryOf(fleet, point)).toEqual({ x: 10, y: 20, radiusHexes: 16, hexes: point.hexes });
+    expect(armyVisionEntryOf(catapults, point)).toEqual({ x: 10, y: 20, radiusHexes: 1, hexes: point.hexes });
+  });
+
+  it('gives no vision source to an army that is not marching or is foreign', () => {
+    const point = { x: 0, y: 0, hexes: [{ q: 0, r: 0 }] };
+
+    expect(armyVisionEntryOf({ ...own, movement: undefined }, point)).toBeNull();
+    expect(armyVisionEntryOf(foreign, point)).toBeNull();
   });
 });

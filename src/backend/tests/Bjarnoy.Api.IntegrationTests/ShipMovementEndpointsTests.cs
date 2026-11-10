@@ -147,8 +147,10 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
             DepartedAt = departedAt,
             Path = [new HexPoint(0, 0), new HexPoint(10, 0)],
             CumulativeHours = [0, 1],
+            EdgeHours = [0, 1],
             ReturnPath = [new HexPoint(10, 0), new HexPoint(0, 0)],
             ReturnCumulativeHours = [0, 1],
+            ReturnEdgeHours = [0, 1],
             TurnAroundAt = departedAt + TimeSpan.FromHours(100),
             IsReturning = false,
             Stacks = [new ArmyUnitStackEntity { UnitType = unitType, Count = count }],
@@ -401,6 +403,8 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         Assert.Equal(2, byType["axeman"].CargoSlots);
         Assert.Equal(10, byType["ram"].CargoSlots);
         Assert.Equal(0, byType["ram"].ShipSlots);
+        Assert.Equal(6, byType["karve"].VisionRadius);
+        Assert.Equal(1, byType["ram"].VisionRadius);
     }
 
     [Fact]
@@ -424,6 +428,8 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
             attacker.Buildings.Add(new PlacedBuildingEntity { SettlementId = attacker.Id, Q = dock.Q, R = dock.R, Type = BuildingType.Dockyard, Level = 1 });
             attacker.Garrison.Add(new UnitStackEntity { SettlementId = attacker.Id, UnitType = UnitType.Karve, Count = 1 });
             attacker.Garrison.Add(new UnitStackEntity { SettlementId = attacker.Id, UnitType = UnitType.Spearman, Count = 20 });
+            // Odin's Ravens at level 5 (10 rings) widen what the fleet sees.
+            attacker.Buildings.Add(new PlacedBuildingEntity { SettlementId = attacker.Id, Q = attackerCentre.Q + 1, R = attackerCentre.R, Type = BuildingType.OdinStatue, Level = 5 });
             attacker.StockFood = 100_000;
             attacker.CapacityFood = 100_000;
 
@@ -454,6 +460,8 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         Assert.Contains(army.Stacks, s => s.Unit == "spearman" && s.Count == 10);
         // The fleet moves at the Karve's speed, not the spearmen's.
         Assert.Equal(UnitCatalogue.Get(UnitType.Karve).Speed, army.TotalSpeed);
+        // It sees as far as the Karve (6 rings, the spearmen see 2) plus the 10 rings of Odin's Ravens.
+        Assert.Equal(6 + 10, army.VisionRadius);
     }
 
     [Fact]

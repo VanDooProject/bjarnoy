@@ -105,6 +105,16 @@ export function fieldBattleSideFor(
   return null;
 }
 
+/** Who `viewerSide` fought: the other side's owner and settlement name, `null` for a part that is not known. */
+export function fieldBattleOpponent(
+  report: Pick<FieldBattleReportResponse, 'sideAName' | 'sideAOwnerName' | 'sideBName' | 'sideBOwnerName'>,
+  viewerSide: FieldBattleSide,
+): { ownerName: string | null; settlementName: string | null } {
+  return otherFieldBattleSide(viewerSide) === 'sidea'
+    ? { ownerName: report.sideAOwnerName, settlementName: report.sideAName }
+    : { ownerName: report.sideBOwnerName, settlementName: report.sideBName };
+}
+
 /** A report counts as unread if it happened after `lastSeenIso` (or nothing has been seen yet). */
 export function isFieldBattleReportUnread(report: { occurredAt: string }, lastSeenIso: string | null): boolean {
   if (!lastSeenIso) return true;

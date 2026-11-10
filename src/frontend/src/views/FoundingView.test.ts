@@ -56,7 +56,7 @@ describe('FoundingView', () => {
   it('describes the Settler from the unit catalogue and the Cart Workshop from the building catalogue', async () => {
     const wrapper = await mountPage();
 
-    expect(wrapper.get('[data-testid=settler-table] tbody tr').findAll('td').map((td) => td.text())).toEqual(['3', '4', '40', '1', '24 min', '10']);
+    expect(wrapper.get('[data-testid=settler-table] tbody tr').findAll('td').map((td) => td.text())).toEqual(['3', '4', '40', '0.25', '24 min', '10']);
     const more = wrapper.get('#more').text();
     expect(more).toContain('5 settlers');
     expect(more).toContain('Cart Workshop');
@@ -72,7 +72,7 @@ describe('FoundingView', () => {
     expect(wrapper.get('#where').text()).toContain('At least 15 hexes beyond the claim border');
     const fresh = wrapper.get('#new').text();
     expect(fresh).toContain('Its claim reaches 2 hexes, 3 from level 2');
-    expect(fresh).toContain('hold 700 each of wood, stone and food, and no iron');
+    expect(fresh).toContain('hold 700 each of wood, brick and food, and no iron');
     wrapper.unmount();
   });
 

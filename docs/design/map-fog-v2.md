@@ -117,14 +117,32 @@ on every member's settlement change. Both are needed.
 ### 1c. Option C — live layer, never cached, composited in the shader
 
 **Implemented.** `fogShader.ts`'s `uArmyVisionSources`/`uArmyVisionCount`/
-`uArmyVisionRadius` uniforms, uploaded every tick by `HexMapRenderer` from
+`uArmyHexSize`/`uArmyRamp` uniforms, uploaded every tick by `HexMapRenderer` from
 its own already-computed live army render positions (`resolveArmyPoint`,
-reused as-is), composited as a multiplicative reveal on the ramp values —
-never written into `uMask`/`uMaskPrev`, exactly as designed below. The
-vision radius is a single flat constant (`ArmyVisionRadiusHexes`, backend;
-`ARMY_VISION_RADIUS_HEXES`, frontend) rather than per-unit-type, since no
-unit anywhere in `UnitCatalogue` carries a vision stat to draw a different
-number from.
+reused as-is), composited as a `min()` of the troop's own ramps with the
+mask's ramp values — never written into `uMask`/`uMaskPrev`, exactly as designed below. The uniforms are `uArmyVisionSources` (x, y), `uArmyVisionRadii` (one radius in hexes per source), `uArmyVisionCount`,
+`uArmyHexSize` and `uArmyRamp`; the ramp offsets and margins are relative to each source's own radius. Vision is a
+per-unit-type stat (`UnitDefinition.VisionRadius`, in rings): Thrall 3; Spearman, Axeman, Bowman, Berserker,
+Provisioner and Settler 2; Catapult and Ram 1; Karve 6; Longship 4. Faster units see a little more (scouts), stronger
+ones less. An army or fleet sees as far as the highest value among the unit types actually in it (count above zero),
+plus the Ravens' rings of its home settlement (additive). The backend computes this once
+(`FogVisionRadii.ArmyVisionRadius`) and uses it for the live disc, the persisted walked-ground reveal and
+`ArmyResponse.visionRadius`. The client draws that field as is and computes nothing itself.
+
+**Edge shaping.** The troop writes its own pair of ramps in the mask's own
+units (0 at the troop, 1 far away, one per channel) and takes the `min()`
+with the mask's R/G before `edgeBand`/`tierAlpha` run, so the edge noise,
+softness and wisps act on it exactly as on the village's edge. Distance is
+hex-euclidean (world offset divided by a per-axis hex size, matching
+`demoFogMask.ts`'s `ringDistance`/`hexEuclideanDistance`), so the clearing is
+a flat ellipse on screen like the village's, not a world-unit circle. The
+ramps are narrower than the village's 14/2 margins, so the edge is the
+village look at a smaller scale: with R the army vision radius, the black
+(out-of-sight) ramp starts at R−0.25 and fades over 2 hexes, the white
+(unknown) ramp starts at R+0.75 and fades over 6 hexes
+(`ARMY_FOG_*_OFFSET`/`_MARGIN` in `FogMaskLayer.ts`). With R=2 the black
+fades in over 1.95–3.45 hexes, the white over 2.99–5.27, and wisps reach
+about 7.55.
 
 Live army-granted vision — the rest of this section is the original design.
 
@@ -260,12 +278,14 @@ alongside B and C, not an extension of either:
   OR-ed into over time, never cleared by a settlement leveling or an army
   moving on. A real table/blob, not a derived value: `PlayerExploredEntity`
   or similar, keyed `(playerId, worldId, chunkCoord) → byte[]`.
-- **Growth.** Whenever an army's live position (§1c) enters a hex not yet
-  in that player's persisted set for the relevant chunk, that hex gets
-  OR-ed in — same trigger as the live-vision uniform array update, just
-  also written back instead of only driving the per-frame shader
-  composite. Settlement founding/leveling still OR-in the current
-  `exploredRadius` ring the same way it always has.
+- **Growth.** Every hex an army walks counts as explored, together with
+  its vision radius around each hex of the route. This holds whether or
+  not anyone was watching: a server restart or a closed browser leaves no
+  gap. The persisted set is filled from the army's route and the clock
+  (all hexes reached so far on the current leg, and each finished leg
+  when it ends), not from the live position at the moment of a fog read.
+  Settlement founding/leveling still OR-in the current `exploredRadius`
+  ring the same way it always has.
 - **Composition.** The static mask a player/guild sees is now: persisted
   explored history (this section) **OR** current settlement rings
   (Option B) **OR** current live-army radius (Option C, still shader-only
@@ -350,7 +370,26 @@ and treats as out of scope: whether the settlement-listing endpoints
 *other* callers use (world map view, guild rosters, etc., for an
 authenticated player who has already founded) are properly scoped. That's
 an existing-endpoint audit; the landing-page fix above is scoped narrowly
-to the one genuinely pre-authentication, current-state-exposing path.
+to the one genuinely pre-authentication, current-state-exposing path. (Since resolved for rival settlements: see §1h.)
+
+### 1h. Rival settlements: fog gate
+
+A rival settlement is delivered as soon as you can see any of it through the fog: its Longhouse centre or one of its
+standing buildings lies where your fog is not fully opaque, or such ground lies inside the claim disc of its Longhouse or of
+one of its towers. A building is only sent when its own hex lies in that area; a Longhouse or tower is sent as soon as any
+hex of its claim disc does, wherever it stands itself. The realm border is drawn from the full discs of the Longhouse and
+every tower sent, without the chain rule, and clipped by fog. "Not fully opaque" reaches 11.2 hexes (straight-line
+distance) past the explored ring of each of your settlements and towers and 5.55 hexes past the vision of each of your
+marching armies; explored ground without current vision has no such margin. The label rule stays: on the Longhouse when its
+hex is explored, otherwise on the nearest visible hex of the realm.
+
+### 1g. Foreign troops
+
+Troops of other players (and camp beasts) marching inside your sight are shown on the map in their owner's colour, as
+a flag or ship. Sight is your settlements' and towers' visible rings and the vision of your own marching armies. You see
+only a short stretch of their route ahead of them, inside your sight (+1 hex): the marker moves along it, but the route
+itself is not drawn, and you see neither the stretch behind them nor their mission, target or units. Troops standing at
+home or as a guest garrison are not shown.
 
 ## 2. Rendering mechanics — inlined (closes the "original plan" gap)
 

@@ -164,7 +164,7 @@ public enum BuildingType
 
     /// <summary>
     /// No production or storage of its own yet — its ring of runestones is
-    /// meant for a future favour/rune mechanic. Placed on grass, behind a
+    /// meant for a future favour/rune mechanic. Placed in the forest, behind a
     /// standing <see cref="TownSquare"/>.
     /// </summary>
     DruidHut = 23,

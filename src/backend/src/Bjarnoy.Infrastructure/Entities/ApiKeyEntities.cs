@@ -72,6 +72,25 @@ public class ApiKeyEntity
 
     public UserEntity? OwnerUser { get; set; }
 
+    /// <summary>
+    /// Further accounts the key may act as, besides <see cref="OwnerUserId"/> (which stays the primary one and the
+    /// default). A request picks one with the <c>X-Act-As</c> header; each request is evaluated as exactly that one
+    /// account, never as a union. The owner is not repeated here.
+    /// </summary>
+    public List<ApiKeyAccountEntity> Accounts { get; set; } = [];
+
+    /// <summary>
+    /// Account-less (anonymous) settlements the key may act as, picked with <c>X-Act-As: jarl:&lt;label&gt;</c>. Such a
+    /// player has no user account, only a client-local owner id; see <see cref="ApiKeyAnonymousAccountEntity"/>.
+    /// </summary>
+    public List<ApiKeyAnonymousAccountEntity> AnonymousAccounts { get; set; } = [];
+
+    /// <summary>
+    /// False for a key whose accounts are all anonymous: <see cref="OwnerUserId"/> is then only the sponsor (audit and
+    /// the key cap) and cannot be acted as; a request without <c>X-Act-As</c> acts as the primary anonymous account.
+    /// </summary>
+    public bool OwnerCanAct { get; set; } = true;
+
     /// <summary>The admin who created the key, or who approved the request that became it.</summary>
     public Guid CreatedByUserId { get; set; }
 
@@ -119,6 +138,48 @@ public class ApiKeyEntity
         : ExpiresAt <= now ? ApiKeyStatus.Expired
         : ApiKeyStatus.Active;
 }
+
+/// <summary>One extra account an <see cref="ApiKeyEntity"/> may act as; composite key (<see cref="ApiKeyId"/>, <see cref="UserId"/>).</summary>
+public class ApiKeyAccountEntity
+{
+    public Guid ApiKeyId { get; set; }
+
+    public ApiKeyEntity? ApiKey { get; set; }
+
+    public Guid UserId { get; set; }
+
+    public UserEntity? User { get; set; }
+}
+
+/// <summary>
+/// An account-less settlement identity an <see cref="ApiKeyEntity"/> may act as. Anonymous players prove ownership
+/// with the client-local <see cref="OwnerId"/> (<c>SettlementEntity.OwnerId</c>), so that is what is stored; it spans
+/// worlds and survives a reseed. Never serialised to API responses. If the player later registers, their settlements
+/// leave the Abandoned system user and this row stops working (the key answers 403 until an admin adds the new account).
+/// </summary>
+public class ApiKeyAnonymousAccountEntity
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+
+    public Guid ApiKeyId { get; set; }
+
+    public ApiKeyEntity? ApiKey { get; set; }
+
+    /// <summary>The client-local owner id the settlements of this player carry.</summary>
+    public required string OwnerId { get; set; }
+
+    /// <summary>What the agent sends after <c>jarl:</c> in <c>X-Act-As</c>: the jarl name, unique per key (case-insensitive).</summary>
+    public required string Label { get; set; }
+
+    /// <summary>The account a request acts as when it names none and <see cref="ApiKeyEntity.OwnerCanAct"/> is false.</summary>
+    public bool IsPrimary { get; set; }
+
+    /// <summary>The settlement the admin picked this identity from; informational, no foreign key.</summary>
+    public Guid? SourceSettlementId { get; set; }
+}
+
+/// <summary>An anonymous identity as an approved request carries it until the key is collected.</summary>
+public sealed record AnonymousAccountGrant(string OwnerId, string Label, bool IsPrimary, Guid? SourceSettlementId);
 
 /// <summary>Whether an <see cref="ApiKeyRequestEntity"/> asks for a brand new key or for a successor of an existing one.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -203,6 +264,9 @@ public class ApiKeyRequestEntity
     /// <summary>A hint for whom the key should act as; the approving admin decides.</summary>
     public string? RequestedOwnerUserName { get; set; }
 
+    /// <summary>User names the agent asked for besides <see cref="RequestedOwnerUserName"/> (hints only).</summary>
+    public List<string> RequestedAdditionalUserNames { get; set; } = [];
+
     /// <summary>For a <see cref="ApiKeyRequestKind.Renewal"/>, the key that is revoked when the successor is collected.</summary>
     public Guid? RenewsApiKeyId { get; set; }
 
@@ -230,6 +294,15 @@ public class ApiKeyRequestEntity
 
     /// <summary>The features the admin approved (empty until approved; replaces <see cref="Features"/> at pickup).</summary>
     public Dictionary<string, ApiKeyAccess> ApprovedFeatures { get; set; } = [];
+
+    /// <summary>The extra accounts the admin approved (empty until approved); becomes <see cref="ApiKeyEntity.Accounts"/> at pickup.</summary>
+    public List<Guid> ApprovedAdditionalUserIds { get; set; } = [];
+
+    /// <summary>The anonymous identities the admin approved (empty until approved); become <see cref="ApiKeyEntity.AnonymousAccounts"/> at pickup.</summary>
+    public List<AnonymousAccountGrant> ApprovedAnonymousAccounts { get; set; } = [];
+
+    /// <summary>False when the owner is only the sponsor of an all-anonymous key (see <see cref="ApiKeyEntity.OwnerCanAct"/>).</summary>
+    public bool ApprovedOwnerCanAct { get; set; } = true;
 
     public bool? ApprovedAllWorlds { get; set; }
 

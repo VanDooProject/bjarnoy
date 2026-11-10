@@ -71,11 +71,12 @@ const OAR_X = [584, 680, 776, 872, 968, 1064];
         <linearGradient :id="id('g-sky')" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset=".55" stop-color="#fff" stop-opacity=".8"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
         <linearGradient :id="id('g-band')" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
         <linearGradient :id="id('g-fg')" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".4" stop-color="#fff"/><stop offset="1" stop-color="#fff"/></linearGradient>
-        <mask :id="id('m-sky')"  maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600"><rect x="0" y="0"    width="1600" height="900" :fill="url('g-sky')"/></mask>
-        <mask :id="id('m-hz')"   maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600"><rect x="0" y="700"  width="1600" height="280" :fill="url('g-band')"/></mask>
-        <mask :id="id('m-low')"  maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600"><rect x="0" y="880"  width="1600" height="300" :fill="url('g-band')"/></mask>
-        <mask :id="id('m-bank')" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600"><rect x="0" y="520"  width="1600" height="560" :fill="url('g-band')"/></mask>
-        <mask :id="id('m-fg')"   maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600"><rect x="0" y="1120" width="1600" height="480" :fill="url('g-fg')"/></mask>
+        <!-- each mask region is its band and no more: a mask region is rastered whole -->
+        <mask :id="id('m-sky')"  maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="900"><rect x="0" y="0"    width="1600" height="900" :fill="url('g-sky')"/></mask>
+        <mask :id="id('m-hz')"   maskUnits="userSpaceOnUse" x="0" y="700" width="1600" height="280"><rect x="0" y="700"  width="1600" height="280" :fill="url('g-band')"/></mask>
+        <mask :id="id('m-low')"  maskUnits="userSpaceOnUse" x="0" y="880" width="1600" height="300"><rect x="0" y="880"  width="1600" height="300" :fill="url('g-band')"/></mask>
+        <mask :id="id('m-bank')" maskUnits="userSpaceOnUse" x="0" y="520" width="1600" height="560"><rect x="0" y="520"  width="1600" height="560" :fill="url('g-band')"/></mask>
+        <mask :id="id('m-fg')"   maskUnits="userSpaceOnUse" x="0" y="1120" width="1600" height="480"><rect x="0" y="1120" width="1600" height="480" :fill="url('g-fg')"/></mask>
                 <!-- one settlement strip, 1600 wide -->
         <g :id="id('isles-strip')">
           <!-- island 1 -->
@@ -209,7 +210,8 @@ const OAR_X = [584, 680, 776, 872, 968, 1064];
 @keyframes b5-x2048 { to { transform: translateX(-2048px); } }
 @keyframes b5-breath-hz  { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
 @keyframes b5-breath-low { 0%,100% { opacity: .45; } 50% { opacity: .85; } }
-@keyframes b5-bank { 0%,32% { opacity: 0; } 50% { opacity: .7; } 68%,100% { opacity: 0; } }
+/* hidden while it is out of sight (two thirds of its period): an invisible layer is still rastered */
+@keyframes b5-bank { 0%,32% { opacity: 0; visibility: hidden; } 50% { opacity: .7; visibility: visible; } 68%,100% { opacity: 0; visibility: hidden; } }
 
 /* ravens: always a pair; they cross every 2 loops, height and spacing drift on their own periods */
 .b5 .ravens  { animation: b5-cross calc(var(--b5-loop) * 2) linear -1.2s infinite backwards; }
@@ -250,7 +252,8 @@ const OAR_X = [584, 680, 776, 872, 968, 1064];
    --lf-coast  coast slide-in time      --lf-ship      ship rows onto the beach
    --lf-fog-at fog starts closing       --lf-fog-time  fog start -> solid (how fast it thickens) */
 .b5 .lf-coast   { opacity: 0; transform: translateX(420px); }
-.b5 .lf-mist, .b5 .lf-curtain { opacity: 0; }
+/* hidden, not only transparent, until the landfall fades them in: an invisible layer is still rastered */
+.b5 .lf-mist, .b5 .lf-curtain { opacity: 0; visibility: hidden; }
 .b5.b5-landfall .lf-coast   { animation: b5-lf-coast   var(--lf-coast, 3.6s) linear forwards; }
 .b5.b5-landfall .lf-hz      { animation: b5-lf-out     var(--lf-coast, 3.6s) ease-out forwards; }
 .b5.b5-landfall .lf-ship    { animation: b5-lf-ship    var(--lf-ship, 5s) cubic-bezier(.45,0,.4,1) forwards; }
@@ -259,5 +262,5 @@ const OAR_X = [584, 680, 776, 872, 968, 1064];
 @keyframes b5-lf-coast    { 0% { opacity: 0; transform: translateX(420px); animation-timing-function: cubic-bezier(.2,.7,.3,1); } 14% { opacity: 1; } 100% { opacity: 1; transform: translateX(0); } }
 @keyframes b5-lf-out      { 0% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes b5-lf-ship     { 0% { transform: translateX(0); } 100% { transform: translateX(170px); } }
-@keyframes b5-lf-fade     { from { opacity: 0; } to { opacity: 1; } }
+@keyframes b5-lf-fade     { from { opacity: 0; visibility: visible; } to { opacity: 1; visibility: visible; } }
 </style>

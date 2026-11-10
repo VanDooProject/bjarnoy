@@ -207,7 +207,14 @@ the same argument `shoreline.ts` already makes for computing coastal-ness
 client-side with no round trip. So:
 
 1. For each texel, world position → hex via **`isoPixelToAxial`**
-   (`lib/hex/geometry.ts:65`) → `WorldModel.isLand`. Write A and the B seed.
+   (`lib/hex/geometry.ts:65`) → `WorldModel.isLandOrLake`. Write A and the B seed.
+
+   A bog lake counts as land here: it is drawn by its own art, so the sea's
+   shader (foam above all) stops at the sea's coast. The bake worker only knows
+   the seed, and a pocket lake (an enclosed sea pocket the bog turned into a
+   lake) is sea to the seed, so the renderer sends those hexes with every
+   request (`WorldModel.seaBogHexKeys`, `BakeRequest.landHexes`) and rebakes
+   when the bog changes (`WorldModel.waterMaskRevision`).
 
    This must be `isoPixelToAxial`, and **not** anything derived from sprite
    bounds. `isoPixelToAxial` is defined in terms of the `isoTopPoints`

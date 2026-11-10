@@ -120,6 +120,10 @@
    ("Visual language") so the real app matches the design brainstorms. */
 :root {
   --gold: #ffc55c;
+  /* Realm colours: own, same guild, guild with a peace treaty (any other realm is --rival). Mirror lib/map/realmColours.ts — keep in sync. */
+  --realm-own: #3f7fe8;
+  --realm-guild: #4fd17a;
+  --realm-treaty: #9b5cf0;
   --rival: #e2705f;
   --shell: #0b1116;
   --panel-bg: rgba(10, 20, 27, 0.92);
@@ -128,10 +132,14 @@
   --muted: #8fa3af;
   --muted-2: #7d909c;
 
-  --wood: #c98b4b;
-  --stone: #9aa7ad;
-  --food: #8fc35a;
-  --iron: #6f8fa8;
+  /* Resource palette: lightness steps evenly (brick darkest, iron lightest) so
+     the resources stay apart in grey and for colour-blind players; each also
+     has its own pictogram (`ResourceIcon.vue`). */
+  --wood: #c47a36;
+  --stone: #a84a32;
+  --food: #9ed05f;
+  --iron: #cbd5dc;
+  --pop: #6fb0e0;
   /* Shrines have no resource of their own to borrow a colour from, but the
      ring menu tints each build category and its buildings by category — see
      `Tile Menu 2a`. */

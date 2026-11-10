@@ -9,6 +9,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { categoriesFor, useBuildRing } from './useBuildRing';
 import { useWorldStore } from '../stores/world';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
+import { formatBuildTime } from '../lib/map/ringCatalogue';
 import { createTestI18n } from '../test/i18n';
 import enHud from '../i18n/locales/en/hud.json';
 import enCatalogue from '../i18n/locales/en/catalogue.json';
@@ -76,6 +77,16 @@ describe('useBuildRing', () => {
     }
   });
 
+  it('shows the build time at the world\'s speed', () => {
+    const { ring, select } = mountRing();
+    select(emptyHex(world, 'forest'));
+    const lumberjack = () => ring.categories.value.flatMap((c) => c.buildings).find((b) => b.id === 'lumberjack')!;
+    const base = useBuildingCatalogueStore().byType.lumberjack![0]!.buildSeconds;
+    expect(lumberjack().time).toBe(formatBuildTime(base));
+    world.worldSpeedFactor = 4;
+    expect(lumberjack().time).toBe(formatBuildTime(base / 4));
+  });
+
   it('offers a forest hex the lumberjack and nothing that only fits grass', () => {
     const { ring, select } = mountRing();
     select(emptyHex(world, 'forest'));
@@ -113,11 +124,120 @@ describe('useBuildRing', () => {
     expect(ring.placeBuildingDemo('reindeerherder', hex)).toBe(false);
   });
 
+  // The landing bug: the onboarding ring offered buildings on a guarded camp hex in the claim, and placing then failed
+  // (couldNotQueueBuild in demo, HexOccupiedByCamp live). Build stays shown there, locked until the camp is cleared.
+  describe('Build on a hex something holds', () => {
+    const guarded = { family: 'wolfden', level: 1, orientation: 'NE', strong: false, guardRange: 1 } as const;
+    function selectWith(extra: Partial<Tile>) {
+      const mounted = mountRing();
+      const hex = emptyHex(world, 'grass');
+      mounted.select(hex);
+      mounted.tile.value = { ...mounted.tile.value!, ...extra };
+      return { ...mounted, hex };
+    }
+
+    it('is offered and unlocked on a free grass hex', () => {
+      const { ring } = selectWith({});
+      expect(ring.buildAction.value).toEqual({ id: 'build', label: 'Build', disabled: false, hint: undefined });
+    });
+
+    it('is locked on a guarded camp hex with "clear their camp first"', () => {
+      const { ring } = selectWith({ camp: { ...guarded } });
+      expect(ring.buildAction.value).toMatchObject({ id: 'build', disabled: true, hint: 'Wild beasts hold this hex: clear their camp first' });
+    });
+
+    it('is unlocked on a cleared camp hex', () => {
+      const { ring } = selectWith({ camp: { ...guarded, empty: true } });
+      expect(ring.buildAction.value).toMatchObject({ disabled: false, hint: undefined });
+    });
+
+    it("stays locked on Fenrir's brood, cleared or not", () => {
+      for (const empty of [false, true]) {
+        const { ring } = selectWith({ camp: { ...guarded, family: 'fenrirbrood', empty } });
+        expect(ring.buildAction.value).toMatchObject({ disabled: true, hint: "Fenrir's brood always regrows: nothing can be built here" });
+      }
+    });
+
+    it('is locked on a giant hex and on an Utgard wall or Jötunn watchtower', () => {
+      const giant = selectWith({ giant: { family: 'giantmountain', anchor: { q: 0, r: 0 }, part: 'C', orientation: 'NE' } });
+      expect(giant.ring.buildAction.value).toMatchObject({ disabled: true, hint: 'Occupied by a giant landmark' });
+      const tower = selectWith({ jotunTower: { orientation: 'NE', level: 2 } });
+      expect(tower.ring.buildAction.value).toMatchObject({ disabled: true, hint: 'An Utgard wall or a Jötunn watchtower stands here' });
+    });
+
+    it('is not offered at all where the ground takes nothing, camp or not', () => {
+      const { ring } = selectWith({ terrain: 'lake', camp: { ...guarded } });
+      expect(ring.buildAction.value).toBeUndefined();
+    });
+  });
+
   it('keys the placement filter by terrain', () => {
     // Mountains offer nothing while quarries are off: no Build action at all.
     expect(categoriesFor({ terrain: 'mountain' } as Tile)).toEqual([]);
     expect(categoriesFor({ terrain: 'lake' } as Tile)).toEqual([]);
     expect(categoriesFor({ terrain: 'sea', isCoastalWater: false } as Tile)).toEqual([]);
     expect(categoriesFor({ terrain: 'sea', isCoastalWater: true } as Tile).map((c) => c.id)).toEqual(['water', 'defense']);
+  });
+
+  it('offers sand only the tower and the walls, and a lake\'s half shore only the Fishing Hut', () => {
+    const sand = categoriesFor({ terrain: 'sand' } as Tile);
+    expect(sand.map((c) => c.id)).toEqual(['defense']);
+    expect(sand[0].buildings.map((b) => b.type)).toEqual(['tower', 'palisade', 'palisadegate', 'bridge']);
+    const half = categoriesFor({ terrain: 'bog', bog: { kind: 'half' } } as Tile);
+    expect(half.map((c) => c.id)).toEqual(['water']);
+    expect(half[0].buildings.map((b) => b.type)).toEqual(['fishinghut']);
+  });
+
+  it('offers nothing to build on a stream, a widening or a spring hex, and only the river buildings on a river-width straight', () => {
+    const hex = emptyHex(world, 'grass');
+    // The model's river map is not reactive: each case gets its own ring, as a fresh selection does.
+    const ringOn = (shape: 'straight' | 'spring' | 'bend', width?: 'stream' | 'widen' | 'river') => {
+      if (width) world.model.setRiverTiles([{ q: hex.q, r: hex.r, shape, inDirections: [], outDirection: null, width }]);
+      else world.model.setRiverTiles([]);
+      const { ring, select } = mountRing();
+      select(hex);
+      return ring;
+    };
+    expect(ringOn('straight').canBuildHere.value).toBe(true);
+
+    for (const [shape, width] of [['straight', 'stream'], ['straight', 'widen'], ['spring', 'stream'], ['bend', 'stream'], ['spring', 'river']] as const) {
+      const ring = ringOn(shape, width);
+      expect(ring.categories.value, `${shape}/${width}`).toEqual([]);
+      expect(ring.canBuildHere.value, `${shape}/${width}`).toBe(false);
+    }
+
+    // A river-width straight takes the river buildings and the bridge, no ordinary building (not a farm, a tower, a wall piece).
+    const types = ringOn('straight', 'river').categories.value.flatMap((c) => c.buildings.map((b) => b.id));
+    expect(types.every((id) => ['sawmill', 'cropmill', 'bridge'].includes(id))).toBe(true);
+    expect(types).toContain('sawmill');
+
+    // On a bend the Crop Mill stays as a disabled bubble that says (without degrees) it needs a straighter piece; the Sawmill is free.
+    const bend = ringOn('bend', 'river').categories.value.flatMap((c) => c.buildings);
+    const cropmill = bend.find((b) => b.id === 'cropmill')!;
+    const tooCurved = (enHud as unknown as { ringMenu: { riverLock: { tooCurved: string } } }).ringMenu.riverLock.tooCurved;
+    expect(cropmill.locks).toContain(tooCurved);
+    expect(tooCurved).not.toMatch(/\d|°|degree/i);
+    expect(bend.find((b) => b.id === 'sawmill')!.locks).not.toContain(tooCurved);
+  });
+
+  it('lists the tower under defense, and only, on every ground it may stand on (plain bog moss included)', () => {
+    const tiles: Tile[] = [
+      { terrain: 'grass' },
+      { terrain: 'sand' },
+      { terrain: 'forest' },
+      { terrain: 'bog', bog: { kind: 'bog' } },
+    ] as Tile[];
+    for (const tile of tiles) {
+      const where = categoriesFor(tile).filter((c) => c.buildings.some((b) => b.type === 'tower'));
+      expect(where.map((c) => c.id), JSON.stringify(tile)).toEqual(['defense']);
+    }
+    // The bog's wall hexes stay next to it.
+    const bogDefense = categoriesFor(tiles[3]).find((c) => c.id === 'defense')!;
+    expect(bogDefense.buildings.map((b) => b.type)).toEqual(['tower', 'palisade', 'palisadegate']);
+    // Bog ground that is not plain moss, and sea, never offer one.
+    for (const kind of ['creek', 'half', 'shore', 'mouth', 'spring']) {
+      const ids = categoriesFor({ terrain: 'bog', bog: { kind } } as Tile).flatMap((c) => c.buildings.map((b) => b.type));
+      expect(ids, kind).not.toContain('tower');
+    }
   });
 });

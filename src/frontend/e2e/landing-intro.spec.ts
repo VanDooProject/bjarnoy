@@ -471,17 +471,45 @@ test.describe('landing intro', { tag: '@g3' }, () => {
       await page.goto('/');
 
       await expect(landingPage(page)).toBeVisible();
-      await expect(page.getByRole('heading', { name: 'BJARNØY' })).toBeVisible();
+      await expect(landingPage(page).getByRole('heading', { name: 'BJARNØY' })).toBeVisible();
       await expect(page.getByText('A saga of the north, played together.')).toBeVisible();
       await expect(page.getByTestId('landing-hear')).toBeVisible();
       await expect(page.getByTestId('landing-muted')).toBeVisible();
       await expect(page.getByTestId('intro-login')).toBeVisible();
+      await expect(page.getByTestId('landing-how-to-play')).toHaveAttribute('href', '/docs');
+      await expect(page.getByTestId('landing-impressum')).toHaveAttribute('href', '/impressum');
       await expect(page.getByTestId('intro-narration')).toHaveCount(0);
       await expect(page.getByTestId('intro-controls')).toHaveCount(0);
       await expect(intro(page)).toHaveAttribute('data-phase', 'waitingForPlay');
       await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
       await runFake(page, 20_000);
       await expect(intro(page)).toHaveAttribute('data-phase', 'waitingForPlay');
+      release();
+    });
+
+    // The desktop column and list are laid out in the hall scene's units (a 1600×1600 SVG that slices to cover the
+    // window), so on a big screen they grow with the scene and keep their spot beside the skald and the fire.
+    test('on desktop the title and the feature list scale and move with the hall scene', async ({ page }) => {
+      test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+      await freezeClock(page);
+      const release = await holdAtlases(page);
+      const measure = async (width: number, height: number) => {
+        await page.setViewportSize({ width, height });
+        await page.goto('/');
+        await expect(landingPage(page)).toBeVisible();
+        const title = landingPage(page).getByRole('heading', { name: 'BJARNØY' });
+        const fontSize = await title.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+        const list = await landingPage(page).locator('.usps').boundingBox();
+        return { fontSize, listLeft: list!.x };
+      };
+      const small = await measure(1280, 800);
+      const big = await measure(2000, 1060);
+      // one scene unit is max(width, height) / 1600: 0.8 px at 1280×800, 1.25 px at 2000×1060
+      expect(small.fontSize).toBeCloseTo(95 * 0.8, 0);
+      expect(big.fontSize).toBeCloseTo(95 * 1.25, 0);
+      // the list starts at scene x = 1072, measured from the screen centre
+      expect(small.listLeft).toBeCloseTo(640 + (1072 - 800) * 0.8, 0);
+      expect(big.listLeft).toBeCloseTo(1000 + (1072 - 800) * 1.25, 0);
       release();
     });
 
@@ -633,5 +661,35 @@ test.describe('landing intro', { tag: '@g3' }, () => {
     await page.goto('/#no-intro');
     await expect(page.locator('canvas')).toBeVisible();
     await expect(page.getByTestId('play-intro')).toBeHidden();
+  });
+
+  test('phones play the intro from the landing menu', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto('/#no-intro');
+    await expect(page.locator('canvas')).toBeVisible();
+    await page.getByTestId('returning-player-trigger').click();
+    await page.getByTestId('returning-player-play-intro').click();
+    await expect(intro(page)).toHaveAttribute('data-phase', 'playing');
+    await expect(intro(page)).toHaveAttribute('data-beat', 'fire');
+  });
+
+  test('desktop menus leave the play intro row to the button', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await page.goto('/#no-intro');
+    await expect(page.locator('canvas')).toBeVisible();
+    await page.getByTestId('returning-player-trigger').click();
+    await expect(page.getByTestId('returning-player-start-page')).toBeVisible();
+    await expect(page.getByTestId('returning-player-play-intro')).toBeHidden();
+  });
+
+  test('the landing menu opens the start page again', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    await page.goto('/#no-intro');
+    await expect(page.locator('canvas')).toBeVisible();
+    await page.getByTestId('returning-player-trigger').click();
+    await page.getByTestId('returning-player-start-page').click();
+    await expect(intro(page)).toHaveAttribute('data-phase', 'waitingForPlay');
+    await expect(landingPage(page)).toBeVisible();
   });
 });

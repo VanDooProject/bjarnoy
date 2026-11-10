@@ -260,18 +260,18 @@
       "pumpkinfarm": "Eine zweite Ernte für Gras: Kürbisse neben den gewöhnlichen Feldern, ertragreicher als der Bauernhof. Sie lässt sich nur auf einer Insel mit Kürbisboden bauen (den Boden jeder Insel bestimmt das Spiel, nicht du). Das ist der Bonus, den eine „fruchtbarere“ Insel freischaltet.",
       "shrineofthor": "Für Thor auf Gras errichtet, hinter einer Waffenschmiede der Stufe 5. Die Gunst des Kriegsgottes stärkt den Angriff deiner Landeinheiten (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
       "shrineoffreyja": "Für Freyja auf Gras errichtet. Ihre Gunst steigert die Nahrungsproduktion. Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
-      "shrineofullr": "Für Ullr auf Gras errichtet. Seine Gunst steigert die Holzproduktion. Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
+      "shrineofullr": "Für Ullr im Wald errichtet. Seine Gunst steigert die Holzproduktion. Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
       "shrineofnjord": "Für Njörd auf Küstenwasser errichtet, hinter einer Werft der Stufe 10. Die Gunst des Meeresgottes stärkt den Angriff deiner Schiffe (+10 % auf Stufe 1, +22 % auf Stufe 5). Eine Siedlung kann insgesamt nur einen Schrein haben, gleich welches Gottes, und jeder Gott höchstens einen Schrein pro Insel.",
-      "archeryrange": "Bildet auf Gras oder Sand die Bogenschützen der Landarmee aus.",
+      "archeryrange": "Bildet auf Gras die Bogenschützen der Landarmee aus.",
       "dockyard": "Bildet auf flachem (Küsten-)Wasser Schiffe aus.",
       "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras. Sie setzt voraus, dass sowohl das Langhaus als auch das Lagerhaus dieser Siedlung auf Stufe 15 stehen.",
-      "barracks": "Bildet auf Gras oder Sand an der Grenze die Kernlinie der Landarmee aus – Thralls, Speerkämpfer, Axtkämpfer und Berserker. Die Bogenschützen bildet der Schießplatz aus, die Belagerungswaffen die Belagerungswerkstatt. Keine Einheit lässt sich an zwei Gebäuden ausbilden.",
+      "barracks": "Bildet auf Gras an der Grenze die Kernlinie der Landarmee aus – Thralls, Speerkämpfer, Axtkämpfer und Berserker. Die Bogenschützen bildet der Schießplatz aus, die Belagerungswaffen die Belagerungswerkstatt. Keine Einheit lässt sich an zwei Gebäuden ausbilden.",
       "sawmill": "Verarbeitet Holz direkt auf einem geraden, sanft gebogenen oder eng gebogenen Flussfeld – ein Wasserrad, das sich mit der Strömung dreht, wie bei der Getreidemühle. Sie liefert kein eigenes Holz, sondern steigert jeden Holzfäller im Umkreis ihrer Stufe. Mit steigender Stufe wachsen Reichweite und Bonus.",
       "meadery": "Züchtet Bienen auf Gras hinter einem Bauernhof der Stufe 5 – Bienenkörbe, eine Honigpresse und ein Metkeller. Sie hat noch keine eigene Wirkung, der Met ist für einen künftigen Moralbonus gedacht.",
       "townsquare": "Der eigene Marktplatz des Dorfes auf Gras. Er hat noch keine eigene Wirkung, ist aber als künftige Voraussetzung oder künftiger Bonus vorgesehen.",
       "cropmill": "Mahlt auf einem geraden Flussfeld das Getreide eines Bauernhofs, der bis Stufe 10 ausgebaut ist – ein Mühlstein unter freiem Himmel, dessen Wasserrad sich mit der Strömung dreht. Sie erzeugt keine eigene Nahrung, sondern steigert jeden Bauernhof im Umkreis ihrer Stufe. Mit steigender Stufe wachsen Reichweite und Bonus. Die Kürbisfarm profitiert nicht davon: Kürbisse sind eine andere Feldfrucht, die eine Mühle nicht mahlt.",
-      "smithy": "Die Schmiede der Siedlung mit Amboss, auf Gras oder Sand hinter einer Kaserne der Stufe 10. Sie ist der Gipfelpunkt der Militärlinie und Voraussetzung für den Schrein des Thor. Sie erzeugt nichts: Hier sollen später einmal Truppen aufgewertet werden, die Mechanik dafür kommt noch.",
-      "druidhut": "Ein Rundhaus mit Rasendach auf Gras hinter einem Dorfplatz, umgeben von einem Ring aus Runensteinen. Es hat noch keine eigene Wirkung, ist aber für eine künftige Gunst- oder Runenmechanik gedacht.",
+      "smithy": "Die Schmiede der Siedlung mit Amboss, auf Gras hinter einer Kaserne der Stufe 10. Sie ist der Gipfelpunkt der Militärlinie und Voraussetzung für den Schrein des Thor. Sie erzeugt nichts: Hier sollen später einmal Truppen aufgewertet werden, die Mechanik dafür kommt noch.",
+      "druidhut": "Ein Rundhaus mit Rasendach im Wald hinter einem Dorfplatz, umgeben von einem Ring aus Runensteinen. Es hat noch keine eigene Wirkung, ist aber für eine künftige Gunst- oder Runenmechanik gedacht.",
       "cartworkshop": "Baut auf Gras hinter einem Dorfplatz die Karren der Siedlung. Sie bildet Furiere und Siedler aus. Eigene Lagerkapazität hat sie nicht.",
       "claybrickworks": "Gräbt und brennt Lehm auf Moorboden. Eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht.",
       "bogoreworks": "Der Eisenproduzent auf einfachem Moorboden (nicht auf Ufer, Bach oder See), hinter einer Ziegelei der Stufe 3: von ein paar Gruben an den Quellen bis zum Rennofen, der das Erz verhüttet. Jedes angrenzende Moor-, Bach- oder Seefeld steigert die Ausbeute um 10 %, bis zu +50 %.",
@@ -294,6 +294,18 @@
       "unitFood": "f",
       "unitIron": "i",
       "storagePrefix": "+"
+    },
+    "razing": {
+      "title": "Abriss",
+      "intro": "Du kannst deine eigenen Gebäude abreißen – immer eine Stufe nach der anderen.",
+      "oneLevel": "Jeder Abrissauftrag nimmt genau eine Stufe weg. Willst du ein ganzes Gebäude loswerden, reißt du es Stufe für Stufe ab.",
+      "time": "Eine Stufe abzureißen dauert drei Viertel so lang wie ihr Bau und belegt genauso viele Bauplätze. Ist kein Platz frei, wartet der Auftrag wie ein Bau in der Warteschlange.",
+      "refund": "Ist der Abriss fertig, bekommst du ein Drittel der Kosten dieser Stufe zurück – so viel, wie dein Lager fasst.",
+      "works": "Bis dahin arbeitet das Gebäude ganz normal weiter.",
+      "cancel": "Einen Abriss abzubrechen kostet nichts, das Gebäude bleibt, wie es ist.",
+      "longhouse": "Das {longhouse} lässt sich nicht abreißen.",
+      "gone": "Auf Stufe 0 ist das Feld wieder frei, und alles, was dort in Ausbildung war, wird dir erstattet.",
+      "oneOrder": "Auf einem Feld läuft immer nur ein Auftrag."
     }
   },
   "tiles": {
@@ -1101,7 +1113,7 @@
   },
   "realm": {
     "title": "Das Gebiet erweitern",
-    "intro": "Das Land, das du hältst, ist dein Gebiet; auf der Karte zieht sich eine goldene Grenze darum. Das Langhaus beansprucht die ersten Ringe um sich herum. Darüber hinaus wächst dein Gebiet nur durch Wachtürme an seiner Grenze.",
+    "intro": "Alles Land, das du beanspruchst, ist dein Gebiet. Auf der Karte umgibt es eine blaue Grenze. Andere Gebiete erkennst du an ihrer Farbe: Grün gehört Mitgliedern deiner Gilde, Lila Gilden mit Friedensvertrag und Rot allen anderen. Wo zwei Gebiete aneinanderstoßen, siehst du beide Grenzen nebeneinander. Das Langhaus beansprucht die ersten Ringe um sich herum. Darüber hinaus wächst dein Gebiet nur durch Wachtürme an seiner Grenze.",
     "claim": {
       "heading": "Der Anspruch deines Langhauses",
       "body": "Dein {longhouse} beansprucht auf Stufe 1 alle Felder im Umkreis von {level1}, ab Stufe 2 im Umkreis von {level2}. Weiter reicht es nie: Höhere Langhaus-Stufen schieben die Grenze nicht weiter hinaus.",
@@ -1119,7 +1131,7 @@
     },
     "example": {
       "heading": "Ein Beispiel",
-      "alt": "Eine Beispielinsel mit dem Langhaus nahe der Mitte, der goldenen Grenze um das beanspruchte Land und den Wachtürmen, die die Grenze hinausschieben.",
+      "alt": "Eine Beispielinsel mit dem Langhaus nahe der Mitte, der blauen Grenze um das beanspruchte Land und den Wachtürmen, die die Grenze hinausschieben.",
       "step": "Schritt",
       "steps": {
         "1": "Schritt 1: ein Langhaus der Stufe 2 allein. Sein Anspruch reicht 3 Felder weit, dort endet die Grenze.",
@@ -1162,6 +1174,7 @@
       "pace": "Tempo",
       "food": "Nahrung",
       "road": "Unterwegs",
+      "sendOut": "Armeen losschicken",
       "sight": "Sicht",
       "bridges": "Brücken"
     },
@@ -1174,7 +1187,7 @@
       "columns": {
         "step": "#",
         "hex": "Feld",
-        "time": "Zeit"
+        "time": "Zeit auf dem Feld"
       },
       "names": {
         "settlement": "Siedlung",
@@ -1189,7 +1202,7 @@
     },
     "cost": {
       "heading": "Was ein Feld kostet",
-      "body": "Jedes Feld, das eine Armee betritt, hat Kosten, die vom Gelände abhängen. Die Armee braucht für das Feld die Kosten geteilt durch ihr Tempo in Stunden. Ein Feld mit Kosten 2 dauert also doppelt so lang wie Gras.",
+      "body": "Jedes Feld hat Kosten, die vom Gelände abhängen. Für ein Feld braucht deine Armee die Kosten geteilt durch ihr Tempo in Stunden – ein Feld mit Kosten 2 dauert also doppelt so lang wie Gras. Ein Schritt zum Nachbarfeld kostet zur Hälfte das Feld, das du verlässt, und zur Hälfte das Feld, das du betrittst. So zieht deine Armee immer im Tempo des Geländes, auf dem sie gerade steht.",
       "summary": "Gras ist das schnellste Gelände. Sand und Wald bremsen eine Armee etwas, Moor deutlich. Einen Bach kannst du durchwaten, er kostet aber weit mehr als jedes Gelände. Ein breiter Fluss öffnet sich nur über eine Brücke, und Berge, Seen und das Meer kannst du gar nicht betreten.",
       "columns": {
         "ground": "Gelände",
@@ -1235,9 +1248,17 @@
       "enemies": "Feindliche Armeen, die sich auf der Straße treffen, kämpfen eine Feldschlacht. Armeen desselben Besitzers oder derselben Gilde kämpfen nie gegeneinander.",
       "orders": "Jeder Befehl hat ein Ziel gratis. Wegpunkte unterwegs sind eine Premium-Funktion."
     },
+    "sendOut": {
+      "heading": "Eine Armee losschicken, die schon unterwegs ist",
+      "orders": "Tippe auf einem Feld auf „Armee hierher entsenden“, „Angreifen“, „Unterstützen“ oder „Jagen“ und wähle die Armee, die losziehen soll: deine Garnison oder eine Armee, die schon draußen ist. Eine stehende Armee kann ziehen, angreifen, unterstützen oder jagen. Eine marschierende Armee leitest du mit Premium um. Willst du lieber woandershin, tippst du währenddessen einfach auf ein anderes Feld.",
+      "split": "Von einer stehenden Armee kannst du nur einen Teil losschicken. Der Rest bleibt, wo er steht. Eine marschierende Armee zieht immer komplett los.",
+      "reach": "Eine Armee zieht nur los, wenn sie das Ziel erreicht und danach noch genug Proviant für den Rückweg hat. Alle anderen siehst du ausgegraut in der Liste, zusammen mit dem Grund.",
+      "support": "Eine Armee, die eine andere Siedlung unterstützt, musst du erst zurückrufen."
+    },
     "sight": {
       "heading": "Was eine Armee sieht",
-      "body": "Eine marschierende Armee deckt {rings} Ringe der Karte um sich auf, dazu {bonus} weitere für jede Stufe der {odin}."
+      "body": "Wie weit eine marschierende Armee sieht, hängt davon ab, wer mitzieht: Sie sieht so weit wie ihre aufmerksamste Einheit, dazu {bonus} weitere Ringe für jede Stufe der {odin}. Thralls sehen 3 Ringe weit, die meisten Truppen 2, Belagerungswaffen nur 1. Eine Flotte sieht am weitesten: 6 Ringe mit einem Karve, 4 mit einem Langschiff.",
+      "others": "Marschieren Truppen anderer Spieler durch dein Sichtfeld, siehst du sie in der Farbe ihres Besitzers über die Karte ziehen. Wohin sie wollen und was sie tragen, bleibt dir verborgen."
     },
     "bridges": {
       "heading": "Brücken über breite Flüsse",
@@ -1253,12 +1274,11 @@
         "kings": "Königsbrücke",
         "guarded": "Wehrbrücke"
       },
-      "groundCost": "wie das Gelände darunter",
       "everyone": "Jede Armee, auch die des Besitzers",
       "friends": "Die Armeen des Besitzers und seiner Freunde, also derselben Gilde oder einer Gilde im Frieden mit ihr. Jede andere Armee wird aufgehalten, als gäbe es keine Brücke.",
       "rules": {
         "where": "Eine Brücke passt auf ein gerades oder gebogenes Feld eines breiten Flusses, egal welches Gelände darunter liegt. Auf einer Quelle, einer Gabelung oder einer Mündung kannst du keine bauen, auf einem Bach auch nicht (den durchwaten Armeen ohnehin), und auf einer öden Insel ebenso wenig.",
-        "site": "Eine Baustelle öffnet den Fluss nicht. Erst eine fertige Brücke ab Stufe 1 zählt. Mit jeder Stufe geht die Überquerung schneller, bis die Armeen bei der Königsbrücke so schnell hinüberkommen wie über das Gelände selbst.",
+        "site": "Eine Baustelle öffnet den Fluss nicht. Erst eine fertige Brücke ab Stufe 1 zählt. Mit jeder Stufe geht die Überquerung schneller. Über die Königsbrücke kommen Armeen etwas langsamer als über Gras, egal welches Gelände unter dem Fluss liegt.",
         "guarded": "Die Wehrbrücke verhält sich wie ein Mauertor: Sie lässt die Armeen ihres Besitzers und seiner Freunde durch und hält alle anderen auf. Liegt sie außerhalb des Reichs ihres Besitzers, hat sie keine Wirkung und steht jeder Armee offen.",
         "siege": "Katapulte (Rammböcke nicht) können eine Brücke niederbrennen, und zwar eine Stufe pro gewonnener Belagerung, egal wie viele Katapulte überleben. Eine Wehrbrücke fällt dabei zuerst zur Königsbrücke zurück und steht danach allen offen, auch den Angreifern. Ein Damm, der einmal niedergebrannt ist, ist weg, und der Fluss ist wieder dicht.",
         "walls": "Brücken ändern nichts an Mauern: Eine Mauer, die bis an einen breiten Fluss reicht, ist dort verschlossen, ob mit oder ohne Brücke. Mehr dazu unter {walls}.",

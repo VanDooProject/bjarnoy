@@ -328,6 +328,12 @@ export interface BuildOrderResponse {
   q: number;
   r: number;
   building: string;
+  /**
+   * `'build'` for a new building or an upgrade, `'raze'` for tearing one level down (docs/design/construction-slots.md,
+   * "Razing"). Cancelling either goes through the same cancel endpoint.
+   */
+  kind: 'build' | 'raze';
+  /** The level the building has once the order completes; for a raze the level after it (0 = the building is removed). */
   targetLevel: number;
   /** `'building'` while under construction, `'waiting'` while queued behind a full set of construction slots (the premium queue) — issue #158. */
   state: 'building' | 'waiting';
@@ -414,6 +420,8 @@ export interface QuestResponse {
   completed: boolean;
   claimed: boolean;
   reward: ResourceLine;
+  /** Counted progress toward the goal; null/absent for a quest without one. */
+  progress?: { current: number; target: number } | null;
 }
 
 /** One connected claim disc of a realm, exactly as the server resolves it. */
@@ -474,20 +482,29 @@ export interface SettlementSummary {
   islandId: string;
   /** Whether the settlement belongs to the caller. */
   mine: boolean;
+  /** How the owner stands to the caller: `mine`, `guild` (same guild), `treaty` (guild with an active peace treaty) or `rival`. */
+  relation: 'mine' | 'guild' | 'treaty' | 'rival';
+  /**
+   * The hex the label goes on, decided by the server: the centre for the caller's own settlements and for a rival whose centre is
+   * explored, else the explored standing building of a rival closest to its centre.
+   */
+  labelQ: number;
+  labelR: number;
 }
 
 /**
- * Mirrors `WallResponse` (`GET /worlds/{id}/walls`): one standing wall hex of another player's settlement, fog-gated like
- * the settlement list. `ownerUserId` is null for an anonymous settlement.
+ * Mirrors `RivalBuildingResponse` (`GET /worlds/{id}/rival-buildings`): one standing building of another player's settlement on a
+ * hex the caller has explored (every building type, the caller's own settlements left out). `ownerUserId` is null for an anonymous
+ * settlement.
  */
-export interface WorldWall {
+export interface RivalBuilding {
   q: number;
   r: number;
-  type: 'palisade' | 'palisadegate';
+  type: string;
   level: number;
   settlementId: string;
   ownerUserId: string | null;
-  /** The wall's hex lies outside its owner's realm: a gate there has no function and is open to every army. */
+  /** The building's hex lies outside its owner's realm: a gate there has no function and is open to every army. */
   outsideRealm?: boolean;
 }
 
@@ -938,6 +955,24 @@ export interface ReseedWorldResponse {
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminUserContracts.cs.
 
+/**
+ * One autocomplete hit. `kind: 'user'` is a registered account (with `userId`); `kind: 'anonymous'` is a player without
+ * an account, identified by `settlementId` (`userName` then holds the jarl name). `via` says what matched.
+ */
+export interface AdminUserLookupResponse {
+  kind: 'user' | 'anonymous';
+  userId: string | null;
+  userName: string;
+  displayName: string | null;
+  role: string | null;
+  status: string | null;
+  via: 'user' | 'settlement' | 'jarl';
+  matchedName: string | null;
+  worldName: string | null;
+  settlementId: string | null;
+  settlementName: string | null;
+}
+
 export interface AdminUserResponse {
   id: string;
   userName: string;
@@ -1382,10 +1417,10 @@ export interface BuildingDefinitionResponse {
   /** Land terrain AND (as an exception) coastal water: the palisade's sea end. */
   alsoOnCoastalWater?: boolean;
   requiredLonghouseLevel: number;
-  /** Construction slots one order for this building occupies while building — ignored when `occupiesAllSlots` is set. */
+  /** Construction slots one order for this building occupies while building — ignored when `occupiesMostSlots` is set. */
   slotCost: number;
   /** When set, an order for this level always occupies every slot the settlement currently has (the Longhouse's rule). */
-  occupiesAllSlots: boolean;
+  occupiesMostSlots: boolean;
   /**
    * Radius (in hexes) of the claim disc this building/level contributes, or
    * 0 for a building that contributes none — see BuildingDefinition.ClaimRadius.
@@ -1402,6 +1437,25 @@ export interface BuildingDefinitionResponse {
    * level-10-only tier).
    */
   prerequisites: BuildingPrerequisiteResponse[];
+  /**
+   * The build ring's group this building is listed under (`resource`, `military`, `logistics`, `defense`, `religion`, `water`), or
+   * null for the one building the ring never lists (the longhouse). The ring is built from it (`lib/map/placementRules.ts`).
+   */
+  ringCategory: string | null;
+  /** The building's position within its ring category (ascending). */
+  ringOrder: number;
+  /** Can no longer be placed anew (the quarry); standing ones keep working. */
+  newPlacementDisabled: boolean;
+  /** Bog tile kinds the building must stand on (bog-ore works, clay brickworks: `bog`; hammer forge: `creek`). Empty: no such requirement. */
+  requiresBogKinds: string[];
+  /** Bog tile kinds a land building may also stand on (the tower and the walls: plain moss, `bog`). */
+  alsoOnBogKinds: string[];
+  /** Bog tile kinds a coastal-water building may stand on instead of coastal water (the fishing hut: `half`). */
+  lakeShoreKinds: string[];
+  /** River tile shapes the building's own hex must have (sawmill, crop mill, bridge). Empty: it never stands on a river hex. */
+  requiresRiverShapes: string[];
+  /** River art variants that disqualify an otherwise matching shape (the sawmill: `loop`). */
+  excludedRiverVariants: string[];
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/GuildContracts.cs.
@@ -1523,13 +1577,18 @@ export interface DispatchArmyRequest {
 }
 
 /**
- * Sends an army already out in the field onward to a new hex (issue #156
- * phase 1) — "move on" when it's standing at its destination, "append goal"
- * when it's still travelling. Mirrors `FieldOrderRequest`.
+ * Sends an army already out in the field onward (issue #156 phase 1) — "move on" when it's standing at its destination, "append
+ * goal" when it's still travelling — on any mission, and a standing army optionally only in part. Mirrors `FieldOrderRequest`.
+ * `destination` is required for move and hunt (the camp's hex); an attack or support derives it from `targetSettlementId`.
+ * `units` omitted sends the whole army; fewer split it (a standing army only).
  */
 export interface FieldOrderRequest {
   waypoints?: HexPoint[];
-  destination: HexPoint;
+  destination?: HexPoint;
+  mission?: 'move' | 'attack' | 'support' | 'hunt';
+  targetSettlementId?: string;
+  targetBuildingCoord?: HexPoint;
+  units?: { unit: string; count: number }[];
 }
 
 /**
@@ -1538,7 +1597,10 @@ export interface FieldOrderRequest {
  *
  * `cumulativeHours` is the per-hex schedule for `path` (`[0]` is always 0,
  * same length as `path`), and `returnCumulativeHours` the same for
- * `returnPath` measured from `turnAroundAt`. Issue #94 exposed them so the
+ * `returnPath` measured from `turnAroundAt`. `edgeHours` (`returnEdgeHours`)
+ * is when the army crosses the edge into each hex (`[0]` is 0, same length,
+ * each between its two hex centres' cumulative hours): a step is billed half
+ * at the hex left and half at the hex entered. Issue #94 exposed them so the
  * map can interpolate an army's live position per leg (see
  * `lib/units/armyProgress.ts`) — legs cost wildly different amounts of time
  * on mixed terrain, so spreading the trip evenly over the path drifts away
@@ -1548,12 +1610,38 @@ export interface MovementResponse {
   departedAt: string;
   path: HexPoint[];
   cumulativeHours: number[];
+  edgeHours: number[];
   arrivesAt: string;
   returnPath: HexPoint[];
   returnCumulativeHours: number[];
+  returnEdgeHours: number[];
   turnAroundAt: string;
   returnArrivesAt: string;
   isReturning: boolean;
+}
+
+/**
+ * Mirrors `ForeignMovementResponse`: the short stretch of a foreign army's route its viewer may see (`docs/design/map-fog-v2.md` §1g),
+ * rebased to start at the hex the marker last passed — same fields and meaning as `MovementResponse` for that stretch alone, no return route.
+ */
+export interface ForeignMovementResponse {
+  departedAt: string;
+  path: HexPoint[];
+  cumulativeHours: number[];
+  edgeHours: number[];
+  arrivesAt: string;
+}
+
+/**
+ * Mirrors `ForeignArmyResponse` (`GET /worlds/{id}/foreign-armies`): a marching army of another player inside the viewer's sight. Only
+ * which realm it belongs to, flag or ship, where it is and its next stretch of route: no mission, target, units or provisions.
+ */
+export interface ForeignArmyResponse {
+  id: string;
+  settlementId: string;
+  isFleet: boolean;
+  position: HexPoint;
+  movement: ForeignMovementResponse;
 }
 
 /**
@@ -1576,6 +1664,8 @@ export interface ArmyResponse {
   provisions: number;
   totalSpeed: number;
   totalUpkeepPerHour: number;
+  /** Rings of the map the army sees around itself while it travels: its best-sighted unit type plus the home settlement's Odin's Ravens (`ArmyResponse.VisionRadius`). The live fog layer draws it as is. */
+  visionRadius: number;
   stacks: ArmyUnitStackResponse[];
   movement: MovementResponse | null;
 }
@@ -1685,8 +1775,13 @@ export interface FieldBattleReportResponse {
   hex: HexPoint;
   sideAArmyId: string;
   sideASettlementId: string;
+  /** Settlement/owner names of each side; null when that settlement no longer exists. */
+  sideAName: string | null;
+  sideAOwnerName: string | null;
   sideBArmyId: string;
   sideBSettlementId: string;
+  sideBName: string | null;
+  sideBOwnerName: string | null;
   winner: string;
   sideAPower: number;
   sideBPower: number;
@@ -1757,6 +1852,8 @@ export interface UnitDefinitionResponse {
   defense: number;
   /** Hexes per hour. Unused by anything this phase builds (army movement is a later phase). */
   speed: number;
+  /** Rings of the map an army sees around itself while it travels, as far as its best-sighted unit type (`UnitDefinition.VisionRadius`). */
+  visionRadius: number;
   carryCapacity: number;
   foodCarryCapacity: number;
   /** Slots this unit takes aboard a ship (0 for ships). */
@@ -1820,6 +1917,38 @@ export interface ApiKeyScope {
 
 export type ApiKeyStatus = 'Active' | 'Expired' | 'Revoked';
 
+/** A player without an account a key may act as (`X-Act-As: jarl:<label>`); the settlement fields come from the admin list only. */
+export interface ApiKeyAnonymousAccount {
+  id: string;
+  label: string;
+  isPrimary: boolean;
+  settlementName?: string | null;
+  worldName?: string | null;
+  /** True once that player registered: the grant no longer works. */
+  claimed?: boolean | null;
+}
+
+/** An anonymous account of an approved request; `settlementId` lets the approval form hand it back. */
+export interface ApprovedAnonymousAccount {
+  settlementId: string | null;
+  label: string;
+  isPrimary: boolean;
+}
+
+/** An anonymous account in a create / edit / approve body: an existing grant by `id`, or a new one from a settlement. */
+export interface AnonymousAccountInput {
+  id?: string;
+  settlementId?: string;
+  primary: boolean;
+}
+
+/** An account a key may act as besides its owner (picked per request with `X-Act-As`). */
+export interface ApiKeyAccount {
+  userId: string;
+  userName: string;
+  role: string;
+}
+
 export interface ApiKeyResponse extends ApiKeyScope {
   id: string;
   name: string;
@@ -1838,6 +1967,12 @@ export interface ApiKeyResponse extends ApiKeyScope {
   replacedByApiKeyId: string | null;
   autoRenewUntil: string | null;
   requestsPerMinute: number;
+  /** Code (`XXXX-XXXX`) of the request this key was collected from; only the admin key list fills it in. */
+  requestUserCode?: string | null;
+  additionalAccounts?: ApiKeyAccount[];
+  /** False for a key whose accounts are all anonymous: the owner is only the sponsor. */
+  ownerCanAct?: boolean;
+  anonymousAccounts?: ApiKeyAnonymousAccount[];
 }
 
 /** Create / recreate response: the only time the token is ever returned. */
@@ -1851,6 +1986,10 @@ export interface SaveApiKeyRequest extends ApiKeyScope {
   name: string;
   purpose?: string | null;
   ownerUserId?: string | null;
+  /** Further accounts besides the owner; omitted keeps the current ones on update. */
+  additionalUserIds?: string[];
+  anonymousAccounts?: AnonymousAccountInput[];
+  ownerCanAct?: boolean;
   expiresAt: string;
   requestsPerMinute?: number | null;
 }
@@ -1868,6 +2007,7 @@ export interface ApiKeyRequestResponse extends ApiKeyScope {
   description: string | null;
   contextUrl: string | null;
   requestedOwnerUserName: string | null;
+  requestedAdditionalUserNames: string[];
   requestsPerMinute: number | null;
   lifetimeMinutes: number;
   renewsApiKeyId: string | null;
@@ -1891,11 +2031,17 @@ export interface ApiKeyApprovedSettings extends ApiKeyScope {
   requestsPerMinute: number;
   lifetimeMinutes: number;
   autoRenewUntil: string | null;
+  additionalAccounts: ApiKeyAccount[];
+  ownerCanAct: boolean;
+  anonymousAccounts: ApprovedAnonymousAccount[];
 }
 
 /** Body of `POST /admin/api-key-requests/{id}/approve`; every field overrides the request. */
 export interface ApproveApiKeyRequestBody {
   ownerUserId?: string | null;
+  additionalUserIds?: string[];
+  anonymousAccounts?: AnonymousAccountInput[];
+  ownerCanAct?: boolean;
   features?: ApiKeyFeatureMap;
   allWorlds?: boolean;
   worldIds?: string[];

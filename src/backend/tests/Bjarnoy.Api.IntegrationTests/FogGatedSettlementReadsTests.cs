@@ -221,9 +221,10 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
 
         // Level 1 -> ExploredRadius = 5 around the caller's own settlement.
         // The rival's centre (and its extra "near" building) sits exactly at
-        // that boundary; its "far" building sits well past it.
+        // that boundary; its "far" building sits well past the visible area (explored radius 5 + 11.2 hexes where the mist is still
+        // see-through = 16 along the q axis).
         var nearQ = settlement.Q + 5;
-        var farQ = settlement.Q + 9;
+        var farQ = settlement.Q + 20;
         var rivalId = await PlantRivalAsync(
             worldId, settlement.IslandId, Unique("rival-owner"), "Skoll",
             nearQ, settlement.R,
@@ -347,6 +348,100 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
         Assert.Contains(settlement.Id, ids);
         Assert.Contains(nearRivalId, ids);
         Assert.DoesNotContain(farRivalId, ids);
+    }
+
+    // ---------------------------------- rivals seen through a building hex only (centre unexplored)
+
+    /// <summary>
+    /// A rival whose centre is far out of sight but one of whose buildings stands on explored ground: <c>(centreQ, centreR)</c> is the
+    /// centre, the explored farm is one hex towards the caller, and a second, unexplored farm sits on the far side.
+    /// </summary>
+    private async Task<(Guid WorldId, string Owner, SettlementResponse Own, Guid RivalId, HexCoord Centre, HexCoord SeenFarm, HexCoord HiddenFarm)>
+        SetUpRivalSeenThroughABuildingAsync(HttpClient client)
+    {
+        var worldId = await CreateWorldAsync(client);
+        var owner = Unique("owner");
+        client.DefaultRequestHeaders.Add("X-Owner-Id", owner);
+        var own = await FoundAsync(client, worldId, owner);
+
+        var centre = new HexCoord(own.Q + 20, own.R);
+        var seenFarm = new HexCoord(own.Q + 19, own.R);
+        var hiddenFarm = new HexCoord(own.Q + 21, own.R);
+        var rivalId = await PlantRivalAsync(
+            worldId, own.IslandId, Unique("rival-owner"), "Skoll", centre.Q, centre.R,
+            extraBuildings: [(seenFarm.Q, seenFarm.R), (hiddenFarm.Q, hiddenFarm.R)]);
+        await _factory.SeedExploredHexesAsync(worldId, owner, [seenFarm], Ct);
+        return (worldId, owner, own, rivalId, centre, seenFarm, hiddenFarm);
+    }
+
+    [Fact]
+    public async Task World_list_shows_a_rival_with_only_a_building_explored_in_full_with_the_label_on_that_building()
+    {
+        using var client = Client();
+        var (worldId, _, _, rivalId, centre, seenFarm, _) = await SetUpRivalSeenThroughABuildingAsync(client);
+
+        var response = await client.GetFromJsonAsync<List<SettlementSummary>>(
+            $"/api/v1/worlds/{worldId}/settlements", SqliteApiFixture.StrictJson, Ct);
+
+        var rival = Assert.Single(response!, s => s.Id == rivalId);
+        Assert.Equal((centre.Q, centre.R), (rival.Q, rival.R));
+        Assert.Equal(1, rival.LonghouseLevel);
+        Assert.Equal((seenFarm.Q, seenFarm.R), (rival.LabelQ, rival.LabelR));
+    }
+
+    [Fact]
+    public async Task World_list_labels_own_and_centre_explored_settlements_on_their_centre()
+    {
+        using var client = Client();
+        var worldId = await CreateWorldAsync(client);
+        var owner = Unique("owner");
+        client.DefaultRequestHeaders.Add("X-Owner-Id", owner);
+        var own = await FoundAsync(client, worldId, owner);
+        var nearRivalId = await PlantRivalAsync(
+            worldId, own.IslandId, Unique("near-rival"), "Near", own.Q + 5, own.R, extraBuildings: [(own.Q + 4, own.R)]);
+
+        var response = await client.GetFromJsonAsync<List<SettlementSummary>>(
+            $"/api/v1/worlds/{worldId}/settlements", SqliteApiFixture.StrictJson, Ct);
+
+        var mine = Assert.Single(response!, s => s.Id == own.Id);
+        Assert.Equal((own.Q, own.R), (mine.LabelQ, mine.LabelR));
+        var near = Assert.Single(response!, s => s.Id == nearRivalId);
+        Assert.Equal((own.Q + 5, own.R), (near.LabelQ, near.LabelR));
+    }
+
+    [Fact]
+    public async Task World_list_hides_a_rival_with_nothing_explored_even_when_it_has_buildings()
+    {
+        using var client = Client();
+        var worldId = await CreateWorldAsync(client);
+        var owner = Unique("owner");
+        client.DefaultRequestHeaders.Add("X-Owner-Id", owner);
+        var own = await FoundAsync(client, worldId, owner);
+        var rivalId = await PlantRivalAsync(
+            worldId, own.IslandId, Unique("far-rival"), "Far", own.Q + 20, own.R, extraBuildings: [(own.Q + 19, own.R)]);
+
+        var response = await client.GetFromJsonAsync<List<SettlementSummary>>(
+            $"/api/v1/worlds/{worldId}/settlements", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.DoesNotContain(response!, s => s.Id == rivalId);
+    }
+
+    [Fact]
+    public async Task View_of_a_rival_with_only_a_building_explored_returns_that_building_and_its_longhouse_whose_claim_reaches_it()
+    {
+        using var client = Client();
+        var (_, _, _, rivalId, centre, seenFarm, hiddenFarm) = await SetUpRivalSeenThroughABuildingAsync(client);
+
+        var response = await client.GetAsync($"/api/v1/settlements/{rivalId}/view", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.ReadStrictAsync<SettlementViewResponse>(Ct);
+        Assert.Equal((centre.Q, centre.R), (body.Q, body.R));
+        // The explored farm, and the Longhouse (§1h: sent as soon as a hex of its claim disc is visible, wherever it stands).
+        Assert.Equivalent(
+            new[] { (seenFarm.Q, seenFarm.R), (centre.Q, centre.R) },
+            body.Buildings.Select(b => (b.Q, b.R)).ToArray());
+        Assert.DoesNotContain(body.Buildings, b => b.Q == hiddenFarm.Q && b.R == hiddenFarm.R);
     }
 
     // ------------------------------------------------------- GET /worlds/{worldId}/plot-suggestion

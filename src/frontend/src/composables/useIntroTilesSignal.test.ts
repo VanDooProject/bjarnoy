@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { nextTick, ref } from 'vue';
+import { atlasPageCount } from '../lib/map/atlasManifests';
 import { introLoad } from '../intro/introLoad';
 import { introSignal } from '../intro/introSignal';
 import type { MapLoadState } from '../lib/map/HexMapRenderer';
@@ -60,24 +61,49 @@ describe('useIntroTilesSignal', () => {
     expect(introSignal.tilesLoaded).toBe(true);
   });
 
+  it('reports the full page totals up front, before any phase reports progress', () => {
+    setup();
+    expect(introLoad.terrain).toEqual({ loaded: 0, total: atlasPageCount('terrain') });
+    expect(introLoad.buildings).toEqual({
+      loaded: 0,
+      total: atlasPageCount('buildings-level1') + atlasPageCount('buildings-static'),
+    });
+    expect(atlasPageCount('terrain')).toBeGreaterThan(0);
+  });
+
+  it('counts a phase that reported no pages as fully loaded once it moved on', async () => {
+    const s = setup();
+    const terrainTotal = atlasPageCount('terrain');
+    s.loadState.value = { phase: 'terrain' };
+    s.loadState.value = { phase: 'buildings' };
+    await nextTick();
+    expect(introLoad.terrain).toEqual({ loaded: terrainTotal, total: terrainTotal });
+    s.loadState.value = { phase: 'ready' };
+    await nextTick();
+    const buildingsTotal = atlasPageCount('buildings-level1') + atlasPageCount('buildings-static');
+    expect(introLoad.buildings).toEqual({ loaded: buildingsTotal, total: buildingsTotal });
+  });
+
   it('reports terrain and building page counts, completing each group when its phase ends', async () => {
     const s = setup();
-    s.loadState.value = { phase: 'terrain', progress: 0.5, pages: { loaded: 1, total: 2 } };
+    const terrainTotal = atlasPageCount('terrain');
+    const buildingsTotal = atlasPageCount('buildings-level1') + atlasPageCount('buildings-static');
+    s.loadState.value = { phase: 'terrain', progress: 1 / terrainTotal, pages: { loaded: 1, total: terrainTotal } };
     await nextTick();
-    expect(introLoad.terrain).toEqual({ loaded: 1, total: 2 });
-    expect(introLoad.buildings).toBeNull();
+    expect(introLoad.terrain).toEqual({ loaded: 1, total: terrainTotal });
+    expect(introLoad.buildings).toEqual({ loaded: 0, total: buildingsTotal });
 
     s.loadState.value = { phase: 'buildings' };
     await nextTick();
-    expect(introLoad.terrain).toEqual({ loaded: 2, total: 2 });
+    expect(introLoad.terrain).toEqual({ loaded: terrainTotal, total: terrainTotal });
 
-    s.loadState.value = { phase: 'buildings', progress: 1 / 3, pages: { loaded: 1, total: 3 } };
+    s.loadState.value = { phase: 'buildings', progress: 1 / buildingsTotal, pages: { loaded: 1, total: buildingsTotal } };
     await nextTick();
-    expect(introLoad.buildings).toEqual({ loaded: 1, total: 3 });
+    expect(introLoad.buildings).toEqual({ loaded: 1, total: buildingsTotal });
 
     s.loadState.value = { phase: 'ready' };
     await nextTick();
-    expect(introLoad.buildings).toEqual({ loaded: 3, total: 3 });
+    expect(introLoad.buildings).toEqual({ loaded: buildingsTotal, total: buildingsTotal });
   });
 
   it('reports the animation page count', async () => {

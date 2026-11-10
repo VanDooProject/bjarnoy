@@ -155,9 +155,12 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     page,
   }) => {
     await page.goto("/docs/wasted-lands");
+    // The page's first `.atlas-sprite` is the header art icon, `display: none`
+    // from 700px up on a backdrop page (DocsHeaderArt): waiting on it only
+    // passed when the poll landed before it rendered. Wait on a body sprite.
     // The turning island is an admin note, so a player's page starts at the
     // pairs; wait for its first art before measuring the page.
-    await page.locator(".wasted-lands .atlas-sprite").first().waitFor();
+    await page.locator(".wasted-lands .giant-box .atlas-sprite").first().waitFor();
 
     const view = new ScrollableView(page, ".wasted-lands");
     const { scrollHeight, clientHeight } = await view.metrics();
@@ -242,7 +245,10 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
   // box's full width while max-height squeezed it, stretching it sideways.
   test("wasted lands art keeps each frame aspect ratio", async ({ page }) => {
     await page.goto("/docs/wasted-lands");
-    await page.locator(".wasted-lands .atlas-sprite").first().waitFor();
+    // The page's first `.atlas-sprite` is the header art icon, `display: none`
+    // from 700px up on a backdrop page (DocsHeaderArt): waiting on it only
+    // passed when the poll landed before it rendered. Wait on a body sprite.
+    await page.locator(".wasted-lands .giant-box .atlas-sprite").first().waitFor();
 
     const sprites = page.locator(".wasted-lands .atlas-sprite");
     expect(await sprites.count()).toBeGreaterThan(0);
@@ -884,8 +890,8 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     // at phone width (expectPlayerPage resized the viewport already).
     const example = page.getByTestId("land-example");
     await expect(example.locator("canvas")).toBeVisible();
-    await expect(example.getByTestId("land-example-steps").locator("tbody tr")).toHaveCount(11);
-    await expect(example.getByTestId("land-example-total")).toContainText("4 h 58.5 min");
+    await expect(example.getByTestId("land-example-steps").locator("tbody tr")).toHaveCount(12);
+    await expect(example.getByTestId("land-example-total")).toContainText("5 h 6 min");
     const box = await example.locator("canvas").boundingBox();
     expect(box!.x + box!.width).toBeLessThanOrEqual(390);
     const overflow = await page.evaluate(

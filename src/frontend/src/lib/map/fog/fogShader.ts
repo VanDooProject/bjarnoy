@@ -20,12 +20,18 @@
 // frame from HexMapRenderer's already-computed live army render positions
 // (FogMaskLayer.setArmyVisionSources) — never written into `uMask`/`uMaskPrev`
 // themselves, so an army in transit never busts the server's cached PNG (see
-// FogMaskService's own remarks on why §1c stays shader-only). Composites as a
-// straight multiplicative reveal on the ramp values (`armyReveal` below,
-// applied to both m.r and m.g before tierAlpha) rather than through
-// edgeBand()'s noise displacement — this is a real-time visibility bonus, not
-// part of the organic edge's cloud texture, so it gets its own simple radial
-// falloff instead of inheriting the vision edge's noise machinery.
+// FogMaskService's own remarks on why §1c stays shader-only). The troop writes
+// its own pair of ramps (`armyRamps` below) in the mask's own units — 0 at the
+// troop, 1 far away, one ramp per channel — and takes the min() with the
+// mask's R/G before edgeBand()/tierAlpha run, so the troop's clearing is shaped
+// by exactly the same edge window, noise displacement, softness and wisps as
+// the village's. Only the ramp widths differ: the troop's margins are much
+// narrower than the village's 14/2, so its edge is the village look at a
+// smaller scale. Distance is hex-euclidean (world offset divided by
+// uArmyHexSize, so every neighbouring hex is exactly 1 away), the same metric
+// as demoFogMask.ts's ringDistance/hexEuclideanDistance, so the clearing is
+// the same flat ellipse on screen as the village's rather than a world-unit
+// circle.
 //
 // --- Why the edge noise displaces the ramp, not the sample UV -------------
 //
@@ -135,19 +141,25 @@ uniform vec2 uWind;
 // §3's chunking lands).
 uniform float uShowRaw;
 // uShowEffective is uShowRaw's complement: it dumps the mask channels right
-// after the army-vision reveal below has been multiplied in, so it's the
+// after the army-vision ramps below have been min()'d in, so it's the
 // one debug view that can show a troop's live contribution to fog (uShowRaw
 // returns before that reveal ever runs, so it never can).
 uniform float uShowEffective;
 // §1c's live army vision — see this file's header comment. Only the first
-// uArmyVisionCount entries of uArmyVisionSources are read; uArmyVisionRadius
-// is in world units (the same space the world position below is computed
-// in), shared by every source rather than per-army, matching
-// FogVisionRadii.ArmyVisionRadiusHexes (backend) having no per-unit-type
-// variant to draw from either.
+// uArmyVisionCount entries of uArmyVisionSources are read (world units, the
+// same space the world position below is computed in). uArmyHexSize is the
+// world-unit size of one hex step along x and y, which turns a world offset
+// into the hex-euclidean distance used by armyRamps. uArmyVisionRadii[i] is
+// source i's own vision radius in hexes (ArmyResponse.visionRadius: the
+// best-sighted unit type plus Odin's Ravens). uArmyRamp is
+// (blackOffset, blackMargin, whiteOffset, whiteMargin), all in hexes and
+// relative to a source's own radius, so one set of ramp widths serves every
+// army whatever it sees.
 uniform vec2 uArmyVisionSources[${MAX_ARMY_VISION_SOURCES}];
+uniform float uArmyVisionRadii[${MAX_ARMY_VISION_SOURCES}];
 uniform float uArmyVisionCount;
-uniform float uArmyVisionRadius;
+uniform vec2 uArmyHexSize;
+uniform vec4 uArmyRamp;
 
 // Value noise (hash + smooth interpolation) from shaderNoise.ts: the lattice
 // values are a texture lookup, because a float ALU hash is not bit-stable on
@@ -277,20 +289,27 @@ float tierAlpha(
 }
 
 /**
- * §1c's real-time reveal at a world-space point: 1.0 within
- * uArmyVisionRadius of the nearest live army source, smoothly tapering to
- * 0.0 by 1.5x that radius, 0.0 with no sources at all. A max, not a sum,
- * across sources — two armies standing close together should read as one
- * unbroken revealed patch, not a brighter one.
+ * §1c's troop ramps at a world-space point, in the mask's own units: x is the
+ * unknown (white) ramp, y the out-of-sight (black) ramp — 0 where the troop
+ * clears the fog, 1 where it does not, linear in between over the margin
+ * given in uArmyRamp. The distance d is the hex-euclidean distance to a
+ * live source (world offset divided by uArmyHexSize) less that source's own
+ * vision radius, so a neighbouring hex is 1 away and the clearing is a flat
+ * ellipse on screen like the village's. The most revealing source wins (min
+ * over the sources' ramps, each with its own radius), so two
+ * armies standing close together read as one unbroken clearing. With no
+ * sources the result is vec2(1.0), which min() against the mask leaves
+ * untouched.
  */
-float armyVisionReveal(vec2 world) {
-  float reveal = 0.0;
+vec2 armyRamps(vec2 world) {
+  if (uArmyVisionCount < 0.5) return vec2(1.0);
+  vec2 ramps = vec2(1.0);
   for (int i = 0; i < ${MAX_ARMY_VISION_SOURCES}; i++) {
     if (float(i) >= uArmyVisionCount) break;
-    float dist = distance(world, uArmyVisionSources[i]);
-    reveal = max(reveal, 1.0 - smoothstep(uArmyVisionRadius, uArmyVisionRadius * 1.5, dist));
+    float d = length((world - uArmyVisionSources[i]) / uArmyHexSize) - uArmyVisionRadii[i];
+    ramps = min(ramps, clamp(vec2((d - uArmyRamp.z) / uArmyRamp.w, (d - uArmyRamp.x) / uArmyRamp.y), 0.0, 1.0));
   }
-  return reveal;
+  return ramps;
 }
 
 // Outside the fetched/generated mask entirely (past the world's own
@@ -326,21 +345,21 @@ void main() {
     m = mix(sampleMask(uMaskPrev, maskUVPrev), m, uMaskBlend);
   }
 
-  // §1c: a live army's real-time vision only ever reveals — it multiplies
-  // both ramps toward 0 (fully explored/visible), never pushes them up, and
-  // it is applied to the blended mask above (uMask/uMaskPrev already mixed
-  // into m), so it can't leak into what gets cross-faded from/to on the next
-  // mask swap. Applied before the tier/band selection below so the reveal
-  // also opens the edge-noise window, rather than being shaped by a band
-  // computed from the un-revealed ramp.
-  float reveal = 1.0 - armyVisionReveal(world);
-  m.r *= reveal;
-  m.g *= reveal;
+  // §1c: a live army's real-time vision only ever reveals — min() with the
+  // troop's own ramps (armyRamps) pulls each channel toward 0 (fully
+  // explored/visible), never pushes it up, and it is applied to the blended
+  // mask above (uMask/uMaskPrev already mixed into m), so it can't leak into
+  // what gets cross-faded from/to on the next mask swap. Applied before the
+  // tier/band selection below so the troop's ramp opens the edge-noise
+  // window exactly like the village's, rather than being shaped separately.
+  vec2 army = armyRamps(world);
+  m.r = min(m.r, army.x);
+  m.g = min(m.g, army.y);
 
-  // uShowEffective dumps right here — after the reveal above has landed but
-  // before tier/band selection reshapes it into an edge — so it's a direct
-  // read on what troops are actually doing to the mask, which uShowRaw
-  // (returning above, before this multiply) structurally can't show.
+  // uShowEffective dumps right here — after the troop ramps above have landed
+  // but before tier/band selection reshapes it into an edge — so it's a
+  // direct read on what troops are actually doing to the mask, which uShowRaw
+  // (returning above, before this min()) structurally can't show.
   if (uShowEffective > 0.5) {
     finalColor = vec4(m.r, m.g, m.b, 1.0);
     return;

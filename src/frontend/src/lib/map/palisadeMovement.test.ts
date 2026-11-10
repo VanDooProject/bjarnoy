@@ -61,8 +61,8 @@ describe('palisadeRestrictions', () => {
     const walls = column(-3, 2);
     for (const walker of [OWNER, 'enemy']) {
       const hours = hoursFrom(west, ctx(terrain, walls, walker), Infinity);
-      // The tip (3,2) is 4 hexes from (1,0): three grass steps, then the tip at grass 1 + 3.
-      expect(hours.get('3,2')).toBeCloseTo(3 + 1 + 3, 9);
+      // The tip (3,2) is 4 hexes from (1,0): three grass steps, then half the grass left and half the tip (grass 1 + 3).
+      expect(hours.get('3,2')).toBeCloseTo(3 + (1 + (1 + 3)) / 2, 9);
       expect(HALF_OPEN_END_COST).toBe(3);
       expect(findPath(west, east, ctx(terrain, walls, walker))?.map(coordKey)).toContain('3,2');
     }
@@ -131,7 +131,7 @@ describe('Utgard walls in the palisade rules (the jötnar owner key)', () => {
 describe('palisadeRestrictions with a rival wall from the walls read', () => {
   it('opens a rival gate for its own friends only, and blocks a rival wall for everyone else', () => {
     const rival = new WorldModel(20260825);
-    rival.applyRivalWalls([
+    rival.applyRivalBuildings([
       { q: 3, r: 0, type: 'palisadegate', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival' },
       { q: 3, r: -1, type: 'palisade', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival' },
       { q: 3, r: 1, type: 'palisade', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival' },
@@ -156,7 +156,7 @@ describe('palisadeRestrictions with a rival wall from the walls read', () => {
 describe('palisadeRestrictions outside the realm', () => {
   it('opens a gate outside its owner realm to every army but still blocks a plain wall', () => {
     const rival = new WorldModel(20260825);
-    rival.applyRivalWalls([
+    rival.applyRivalBuildings([
       { q: 3, r: 0, type: 'palisadegate', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival', outsideRealm: true },
       { q: 3, r: -1, type: 'palisade', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival', outsideRealm: true },
       { q: 3, r: 1, type: 'palisade', level: 1, settlementId: 's-rival', ownerUserId: 'user-rival' },

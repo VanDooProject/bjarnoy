@@ -49,6 +49,15 @@ const PUFFS: [number, number, number, number, number, number, number][] = [
   [808, 400, 270, 175, 46, 3600, -2880],
   [785, 240, 310, 165, 58, 3960, -3600],
 ];
+// the smoke column's box: every puff at the far end of its sway, with a little margin. The smoke masks and
+// rects stay inside it: a mask region is rastered whole, and these masks redraw every frame
+const SMOKE_BOX = (() => {
+  const x0 = Math.min(...PUFFS.map(([cx, , rx, , a]) => cx - rx - a)) - 10;
+  const x1 = Math.max(...PUFFS.map(([cx, , rx, , a]) => cx + rx + a)) + 10;
+  const y0 = Math.min(...PUFFS.map(([, cy, , ry]) => cy - ry)) - 10;
+  const y1 = Math.max(...PUFFS.map(([, cy, , ry]) => cy + ry)) + 10;
+  return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+})();
 
 const STONES: [number, number, number, number][] = [
   [770, 1146, 30, 15], [822, 1152, 32, 15], [880, 1155, 34, 15], [942, 1153, 32, 15], [1000, 1147, 30, 14],
@@ -110,16 +119,16 @@ const ARM =
       <!-- the shared intro fog texture (#intro-fog, 256 units) drawn at twice the size: one tile is 512 units -->
       <pattern :id="id('fog-a')" href="#intro-fog" patternTransform="scale(2)" />
       <pattern :id="id('fog-b')" href="#intro-fog" patternTransform="translate(60 210) scale(2)" />
-      <mask :id="id('column')" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600">
+      <mask :id="id('column')" maskUnits="userSpaceOnUse" v-bind="SMOKE_BOX">
         <g v-for="(p, i) in PUFFS" :key="i" class="sway" :style="{ '--a': `${p[4]}px`, '--p': `${p[5]}ms`, '--o': `${p[6]}ms` }">
           <ellipse :cx="p[0]" :cy="p[1]" :rx="p[2]" :ry="p[3]" :fill="url('puff')" />
         </g>
       </mask>
       <!-- the fog texture is white with alpha; used as a mask it lets the warm smoke colour through -->
-      <mask :id="id('smoke-a')" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600">
+      <mask :id="id('smoke-a')" maskUnits="userSpaceOnUse" v-bind="SMOKE_BOX">
         <g class="rise-a"><g class="lean lean-a"><rect x="300" y="0" width="1300" height="1800" :fill="url('fog-a')" /></g></g>
       </mask>
-      <mask :id="id('smoke-b')" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="1600">
+      <mask :id="id('smoke-b')" maskUnits="userSpaceOnUse" v-bind="SMOKE_BOX">
         <g class="rise-b"><g class="lean lean-b"><rect x="300" y="0" width="1300" height="1800" :fill="url('fog-b')" /></g></g>
       </mask>
       <slot name="defs" :id="id" />
@@ -200,11 +209,11 @@ const ARM =
       </g>
 
       <g class="smoke" :mask="url('column')">
-        <rect x="0" y="0" width="1600" height="1600" fill="#806c5e" :mask="url('smoke-a')" opacity=".75" />
+        <rect v-bind="SMOKE_BOX" fill="#806c5e" :mask="url('smoke-a')" opacity=".75" />
       </g>
       <slot name="vision" :id="id" :url="url" />
       <g class="smoke" :mask="url('column')">
-        <rect x="0" y="0" width="1600" height="1600" fill="#806c5e" :mask="url('smoke-b')" opacity=".55" />
+        <rect v-bind="SMOKE_BOX" fill="#806c5e" :mask="url('smoke-b')" opacity=".55" />
       </g>
 
       <g class="gutter">

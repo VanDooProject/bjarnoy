@@ -7,7 +7,9 @@
 // a browser/worker global this repo's node-environment vitest config
 // doesn't provide.
 import { describe, expect, it } from 'vitest';
-import { isLandFor, isWastedLandFor } from './waterMask.worker';
+import { isLandFor, isWastedLandFor, withLandHexes } from './waterMask.worker';
+import { WorldModel, terrainKey } from '../WorldModel';
+import { waterMaskTerrainFor } from '../HexMapRenderer';
 import { DEFAULT_GENERATION } from '../worldGenerator';
 import { nearestLand } from '../testing/islandFinders';
 
@@ -98,5 +100,42 @@ describe('isWastedLandFor (water-mask taint field)', () => {
 
     const hiddenAgain = isWastedLandFor(WASTED_SEED, DEFAULT_GENERATION, false);
     expect(hiddenAgain(wastedLand.q, wastedLand.r)).toBe(false);
+  });
+});
+
+describe('the bake worker and the inline bake agree on pocket lakes', () => {
+  // A pocket lake is an enclosed sea pocket the bog turned into lake water (`bogGenerator.findPockets`): the seed still
+  // calls its hexes sea. The worker only knows the seed, so without `landHexes` it baked them as sea and drew the shore
+  // foam around the lake, while the inline bake (`waterMaskTerrainFor`, through the bog overlay) called them land.
+  const seed = 40;
+  const sea = { q: -83, r: 256 };
+  const bogTile = (c: { q: number; r: number }, kind: 'lake' | 'bog') => ({
+    ...c,
+    kind,
+    inDirections: [],
+    outDirection: null,
+    waterEdges: [],
+  });
+
+  it('bakes a lake on a seed-sea hex as land on both paths', () => {
+    const model = new WorldModel(seed);
+    const land = nearestLand({ seed, generation: model.generation }, { q: 0, r: 0 })!;
+    model.setBogTiles([bogTile(sea, 'lake'), bogTile(land, 'bog')]);
+
+    const worker = withLandHexes(isLandFor(seed, model.generation, false), model.seaBogHexKeys());
+    const inline = waterMaskTerrainFor(model).isLand;
+    expect(isLandFor(seed, model.generation, false)(sea.q, sea.r)).toBe(false);
+    expect(inline(sea.q, sea.r)).toBe(true);
+    expect(worker(sea.q, sea.r)).toBe(true);
+    expect(worker(land.q, land.r)).toBe(inline(land.q, land.r));
+    // Only the hexes the seed gets wrong travel to the worker.
+    expect(model.seaBogHexKeys()).toEqual([terrainKey(sea.q, sea.r)]);
+  });
+
+  it('moves the water mask revision when the bog arrives, so the mask is rebaked', () => {
+    const model = new WorldModel(seed);
+    const before = model.waterMaskRevision;
+    model.setBogTiles([bogTile(sea, 'lake')]);
+    expect(model.waterMaskRevision).not.toBe(before);
   });
 });

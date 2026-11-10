@@ -16,7 +16,7 @@
 // streams, wall and bridge, with the same restrictions a world builds (`palisadeRestrictions`, `bridgeRestrictions`).
 import { coordKey, neighbors, type AxialCoord } from '../hex/coords';
 import { bridgeRestrictions } from '../map/bridgeMovement';
-import { findPath, pathCost, type PathContext } from '../map/hexPath';
+import { findPath, pathCost, timeOnHex, type PathContext } from '../map/hexPath';
 import { palisadeRestrictions, type PalisadeWalls } from '../map/palisadeMovement';
 import { isWideRiverTile, riverTilesFromPaths } from '../map/riverGenerator';
 import { StaticWorldModel } from '../map/StaticWorldModel';
@@ -233,22 +233,23 @@ export function landExampleContext(tiles: readonly Tile[] = buildLandExampleTile
     hexesPerHour: 1,
     restrictions: {
       ...palisadeRestrictions(walls, terrainAt, isWideRiver, LAND_EXAMPLE_SETTLEMENT),
-      ...bridgeRestrictions(bridges, terrainAt, rules, LAND_EXAMPLE_SETTLEMENT),
+      ...bridgeRestrictions(bridges, LAND_EXAMPLE_SETTLEMENT),
     },
   };
 }
 
-export interface LandExampleStep {
+export interface LandExampleHex {
   coord: AxialCoord;
   /** What the hex is, for its name in the legend. */
   kind: LandExampleKind;
-  /** What entering it costs (grass = 1). */
+  /** The time spent on it (grass = 1): the first and the last hex of the route half their price, every hex in between its full price. */
   cost: number;
 }
 
 export interface LandExampleRoute {
   path: AxialCoord[];
-  steps: LandExampleStep[];
+  /** Every hex of the route, the start included. */
+  hexes: LandExampleHex[];
   /** Total cost of the route in hex-cost units: minutes for a unit = 60 * total / speed. */
   total: number;
 }
@@ -272,10 +273,10 @@ export function landExampleRoute(tiles: readonly Tile[] = buildLandExampleTiles(
   const riverAt = new Map(LAND_EXAMPLE_RIVERS.map((r) => [coordKey(r), r]));
   const path = findPath(LAND_EXAMPLE_START, LAND_EXAMPLE_END, ctx);
   if (!path) throw new Error('the land movement example has no route');
-  const steps = path.slice(1).map((coord, i) => ({
+  const hexes = path.map((coord, i) => ({
     coord,
     kind: landExampleKindOf(byKey.get(coordKey(coord))!, riverAt.get(coordKey(coord)), ctx.isWideRiver(coord)),
-    cost: pathCost([path[i]!, coord], ctx),
+    cost: timeOnHex(path, i, ctx),
   }));
-  return { path, steps, total: pathCost(path, ctx) };
+  return { path, hexes, total: pathCost(path, ctx) };
 }

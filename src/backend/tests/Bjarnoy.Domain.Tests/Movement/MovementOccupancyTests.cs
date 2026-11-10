@@ -14,8 +14,10 @@ public class MovementOccupancyTests
             DepartedAt = departedAt,
             Path = path,
             CumulativeHours = cumulativeHours,
+            EdgeHours = cumulativeHours,
             ReturnPath = path,
             ReturnCumulativeHours = cumulativeHours,
+            ReturnEdgeHours = cumulativeHours,
             TurnAroundAt = departedAt,
         };
 
@@ -33,6 +35,24 @@ public class MovementOccupancyTests
         Assert.Equal(T0.AddHours(1), occupancy[0].End);
         Assert.Equal(T0.AddHours(1), occupancy[1].Start);
         Assert.Equal(T0.AddHours(2), occupancy[1].End);
+    }
+
+    [Fact]
+    public void A_hex_is_occupied_from_crossing_its_edge_not_from_reaching_its_centre()
+    {
+        // grass (1.0) -> bog (2.0) -> grass at 1 hex/h: the edge into the bog is crossed after 0.5 h, its centre reached
+        // after 1.5 h; the edge out of it after 2.5 h.
+        var movement = MakeMovement(
+            T0,
+            [new HexCoord(0, 0), new HexCoord(1, 0), new HexCoord(2, 0)],
+            [0, 1.5, 3]) with { EdgeHours = [0, 0.5, 2.5] };
+
+        var occupancy = MovementOccupancy.Compute(movement);
+
+        Assert.Equal(T0.AddHours(0.5), occupancy[0].End);
+        Assert.Equal(T0.AddHours(0.5), occupancy[1].Start);
+        Assert.Equal(T0.AddHours(2.5), occupancy[1].End);
+        Assert.Equal(T0.AddHours(2.5), occupancy[2].Start);
     }
 
     [Fact]

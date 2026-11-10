@@ -1,4 +1,5 @@
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Tests;
@@ -73,8 +74,58 @@ public class FogVisionRadiiTests
         Assert.Equal(plain.VisibleRadius + 10, ravens.VisibleRadius);
         Assert.Equal(plainTower.ExploredRadius + 10, ravensTower.ExploredRadius);
         Assert.Equal(plainTower.VisibleRadius + 10, ravensTower.VisibleRadius);
-        Assert.Equal(FogVisionRadii.ArmyVisionRadiusHexes + 10, FogVisionRadii.ArmyVisionRadius(10));
-        Assert.Equal(FogVisionRadii.ArmyVisionRadiusHexes, FogVisionRadii.ArmyVisionRadius());
+    }
+
+    [Theory]
+    [InlineData(UnitType.Thrall, 3)]
+    [InlineData(UnitType.Spearman, 2)]
+    [InlineData(UnitType.Axeman, 2)]
+    [InlineData(UnitType.Bowman, 2)]
+    [InlineData(UnitType.Berserker, 2)]
+    [InlineData(UnitType.Provisioner, 2)]
+    [InlineData(UnitType.Settler, 2)]
+    [InlineData(UnitType.Catapult, 1)]
+    [InlineData(UnitType.Ram, 1)]
+    [InlineData(UnitType.Karve, 6)]
+    [InlineData(UnitType.Longship, 4)]
+    public void Every_unit_type_has_its_decided_vision_radius(UnitType type, int expected)
+    {
+        Assert.Equal(expected, UnitCatalogue.Get(type).VisionRadius);
+        Assert.Equal(expected, FogVisionRadii.ArmyVisionRadius([new UnitStack(type, 1)]));
+    }
+
+    [Fact]
+    public void An_armys_vision_radius_is_the_highest_among_the_unit_types_in_it()
+    {
+        var mixed = new[] { new UnitStack(UnitType.Catapult, 4), new UnitStack(UnitType.Thrall, 1), new UnitStack(UnitType.Spearman, 9) };
+        var fleet = new[] { new UnitStack(UnitType.Longship, 2), new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Axeman, 5) };
+
+        Assert.Equal(3, FogVisionRadii.ArmyVisionRadius(mixed));
+        Assert.Equal(6, FogVisionRadii.ArmyVisionRadius(fleet));
+    }
+
+    [Fact]
+    public void An_emptied_stack_does_not_count_towards_the_armys_vision_radius()
+    {
+        var stacks = new[] { new UnitStack(UnitType.Thrall, 0), new UnitStack(UnitType.Ram, 2) };
+
+        Assert.Equal(1, FogVisionRadii.ArmyVisionRadius(stacks));
+    }
+
+    [Fact]
+    public void Odins_ravens_add_their_rings_on_top_of_the_highest_unit_vision()
+    {
+        var catapults = new[] { new UnitStack(UnitType.Catapult, 3) };
+
+        Assert.Equal(1 + 10, FogVisionRadii.ArmyVisionRadius(catapults, bonusRings: 10));
+        Assert.Equal(1, FogVisionRadii.ArmyVisionRadius(catapults, bonusRings: -4));
+    }
+
+    [Fact]
+    public void An_army_without_units_sees_only_the_ravens_rings()
+    {
+        Assert.Equal(0, FogVisionRadii.ArmyVisionRadius([]));
+        Assert.Equal(4, FogVisionRadii.ArmyVisionRadius([], bonusRings: 4));
     }
 
     [Fact]
@@ -93,5 +144,20 @@ public class FogVisionRadiiTests
                 Settlement.LonghouseDisc(HexCoord.Origin, level) is not null,
                 FogVisionRadii.ToVisionSource(HexCoord.Origin, level) is not null);
         }
+    }
+
+    // The rival-data gate (docs/design/map-fog-v2.md section 1h) reads these; the frontend files below must equal them:
+    //   fogRamp.ts FOG_MIST_OPAQUE_AT_RAMP = 0.8; FogMaskLayer.ts ARMY_FOG_WHITE_OFFSET = 0.75 and ARMY_FOG_WHITE_MARGIN = 6;
+    //   the unknown ramp's width (FogMaskOptions.UnknownMarginHexes, FOG_RAMP_MARGIN_HEXES) = 14.
+    [Fact]
+    public void The_fog_opacity_constants_the_rival_gate_reads_are_pinned()
+    {
+        Assert.Equal(0.8, FogVisionRadii.MistOpaqueAtRamp);
+        Assert.Equal(14, FogMaskOptions.DefaultUnknownMarginHexes);
+        Assert.Equal(14, new FogMaskOptions().UnknownMarginHexes);
+        Assert.Equal(0.75, FogVisionRadii.ArmyFogWhiteOffsetHexes);
+        Assert.Equal(6, FogVisionRadii.ArmyFogWhiteMarginHexes);
+        Assert.Equal(11.2, FogVisionRadii.SourceMistOpaqueMargin, 9);
+        Assert.Equal(5.55, FogVisionRadii.ArmyMistOpaqueMargin, 9);
     }
 }

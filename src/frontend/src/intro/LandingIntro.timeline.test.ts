@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import LandingIntro from './LandingIntro.vue';
 import { BEATS } from './beats/registry';
@@ -19,8 +19,16 @@ vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined)
 vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
 vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
 
+// Every intro listens for keys on `window`. `document.body.innerHTML = ''` removes the DOM but not the Vue app, so an intro a test
+// left mounted kept its listeners and answered every later event: the tests slowed down with each one before them and the drag test
+// hit the 5 s timeout in a full run. Unmount them all after each test and check no `window` keydown listener outlives them.
+const mounted: VueWrapper[] = [];
+let addSpy: MockInstance;
+let removeSpy: MockInstance;
+const keydownListeners = new Set<EventListenerOrEventListenerObject>();
 async function mountIntro(p: Partial<Props> = {}) {
   const w = mount(LandingIntro, { props: { ...base, ...p }, attachTo: document.body });
+  mounted.push(w);
   await flushPromises();
   return w;
 }
@@ -40,11 +48,26 @@ const pointer = async (el: Element, type: string, init: MouseEventInit = {}) => 
 
 beforeEach(() => {
   vi.useFakeTimers();
+  keydownListeners.clear();
+  const add = window.addEventListener.bind(window);
+  const remove = window.removeEventListener.bind(window);
+  addSpy = vi.spyOn(window, 'addEventListener').mockImplementation((type, listener, options) => {
+    if (type === 'keydown' && listener) keydownListeners.add(listener);
+    add(type, listener, options);
+  });
+  removeSpy = vi.spyOn(window, 'removeEventListener').mockImplementation((type, listener, options) => {
+    if (type === 'keydown' && listener) keydownListeners.delete(listener);
+    remove(type, listener, options);
+  });
   introLoad.terrain = null;
   introLoad.buildings = null;
   introLoad.animations = null;
 });
 afterEach(() => {
+  for (const w of mounted.splice(0)) w.unmount();
+  expect(keydownListeners.size).toBe(0);
+  addSpy.mockRestore();
+  removeSpy.mockRestore();
   vi.useRealTimers();
   document.body.innerHTML = '';
 });

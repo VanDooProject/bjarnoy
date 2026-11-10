@@ -7,6 +7,7 @@ using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.World;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Movement = Bjarnoy.Domain.Movement.Movement;
@@ -51,7 +52,7 @@ public sealed record RetargetFoundingApiResult(RetargetFoundingRejection Rejecti
     public bool Accepted => Rejection == RetargetFoundingRejection.None && Army is not null;
 }
 
-/// <summary>The outcome of asking to send an already-fielded army onward (issue #156 phase 1) — mirrors <see cref="RetargetFoundingApiResult"/>.</summary>
+/// <summary>The outcome of asking to send an already-fielded army onward (issue #156) — mirrors <see cref="RetargetFoundingApiResult"/>. <c>Army</c> is the army that left (the new one for a split).</summary>
 public sealed record FieldOrderApiResult(FieldOrderRejection Rejection, ArmyEntity? Army = null, bool ArmyNotFound = false)
 {
     public bool Accepted => Rejection == FieldOrderRejection.None && Army is not null;
@@ -101,6 +102,7 @@ public sealed class ArmyService(
     FieldBattleService fieldBattleService,
     CampService campService,
     CampAmbushService campAmbushService,
+    ExploredAreaService exploredAreaService,
     ILogger<ArmyService> logger)
 {
     private readonly GameDbContext _dbContext = dbContext;
@@ -114,7 +116,21 @@ public sealed class ArmyService(
     private readonly FieldBattleService _fieldBattleService = fieldBattleService;
     private readonly CampService _campService = campService;
     private readonly CampAmbushService _campAmbushService = campAmbushService;
+    private readonly ExploredAreaService _exploredAreaService = exploredAreaService;
     private readonly ILogger<ArmyService> _logger = logger;
+
+    /// <summary>
+    /// Saves the context, first staging the ground every tracked army walked on the legs it finished as explored
+    /// (<see cref="ExploredAreaService.StageWalkedLegsAsync"/>) so it commits with the same save and unit of work. Every
+    /// save in this service goes through here, including ones that change an army this request did not start from
+    /// (the other side of a field battle).
+    /// </summary>
+    private async Task SaveAsync(CancellationToken cancellationToken)
+    {
+        var armies = _dbContext.ChangeTracker.Entries<ArmyEntity>().Select(e => e.Entity).ToList();
+        await _exploredAreaService.StageWalkedLegsAsync(armies, cancellationToken).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Dispatches an army: charges the settlement for the units and
@@ -174,45 +190,15 @@ public sealed class ArmyService(
         IReadOnlyList<(HexCoord Centre, int Radius)> targetClaimDiscs = [];
         if (mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid)
         {
-            if (targetSettlementId is not { } targetId)
+            var resolved = await ResolveTargetSettlementAsync(settlement.WorldId, targetSettlementId, cancellationToken).ConfigureAwait(false);
+            if (resolved.Rejection != DispatchRejection.None)
             {
                 await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
-                return new ArmyDispatchResult(DispatchRejection.TargetSettlementRequired);
+                return new ArmyDispatchResult(resolved.Rejection);
             }
 
-            if (targetId == settlementId)
-            {
-                await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
-                return new ArmyDispatchResult(mission == ArmyMission.Support
-                    ? DispatchRejection.CannotSupportOwnSettlement
-                    : DispatchRejection.CannotAttackOwnSettlement);
-            }
-
-            // Same world only — an army cannot reach a settlement in another
-            // world's map, so a cross-world id is indistinguishable from one
-            // that does not exist. LonghouseLevel and the target's own Towers
-            // come along so a fleet Attack/Raid dispatch can check the
-            // target's *full* claimed territory (issue #40 phase 6 §4,
-            // extended for tower satellite discs) without a second round
-            // trip.
-            var target = await _dbContext.Settlements
-                .AsNoTracking()
-                .Where(s => s.Id == targetId && s.WorldId == settlement.WorldId)
-                .Select(s => new { s.CentreQ, s.CentreR })
-                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-
-            if (target is null)
-            {
-                await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
-                return new ArmyDispatchResult(DispatchRejection.TargetSettlementNotFound);
-            }
-
-            effectiveDestination = new HexCoord(target.CentreQ, target.CentreR);
-
-            // The target's connected claim discs (ConnectedRealm): its centre disc plus the discs of the towers that
-            // are chained to a longhouse of the target's player on that island.
-            var targetRealm = await PlayerRealms.ForStoredSettlementAsync(_dbContext, targetId, cancellationToken).ConfigureAwait(false);
-            targetClaimDiscs = targetRealm?.DiscsOf(targetId) ?? [];
+            effectiveDestination = resolved.Centre;
+            targetClaimDiscs = resolved.ClaimDiscs;
         }
         else
         {
@@ -239,19 +225,9 @@ public sealed class ArmyService(
         var targetCampIsWater = false;
         if (mission == ArmyMission.Hunt)
         {
-            var camp = await _campService.FindCampAsync(settlement.WorldId, effectiveDestination, now, cancellationToken)
-                .ConfigureAwait(false);
-            if (camp is { } found)
-            {
-                targetCampCoord = found.Camp.Coord;
-                targetCampIsWater = found.Camp.IsWater;
-                // A water camp (the whale road) is hunted by a fleet, whose route ends on the camp's own sea hex.
-                effectiveDestination = Army.HuntRouteDestination(
-                    found.Camp.Coord,
-                    Army.TrainingSite(settled.Centre, settled.Buildings, unitCounts),
-                    sampler.TerrainAt,
-                    isFleet: found.Camp.IsWater);
-            }
+            (effectiveDestination, targetCampCoord, targetCampIsWater) = await ResolveHuntCampAsync(
+                settlement.WorldId, effectiveDestination, Army.TrainingSite(settled.Centre, settled.Buildings, unitCounts),
+                now, sampler.TerrainAt, cancellationToken).ConfigureAwait(false);
         }
 
         // Founding-specific, dispatch-time-only checks (issue #55 §6): renown/
@@ -328,7 +304,7 @@ public sealed class ArmyService(
         armyEntity.ApplyDomain(decision.Army!);
         _dbContext.Armies.Add(armyEntity);
 
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Settlement {SettlementId} dispatched army {ArmyId} ({Count} stack(s)) to {Destination}, arriving {ArrivesAt}.",
@@ -336,6 +312,55 @@ public sealed class ArmyService(
             ((ArmyLocation.InTransit)decision.Army.Location).Movement.ArrivesAt);
 
         return new ArmyDispatchResult(DispatchRejection.None, armyEntity);
+    }
+
+    /// <summary>
+    /// Resolves an Attack/Support/Raid target for a dispatch or a field order, the one way both do it: the target
+    /// settlement must be named and exist in the army's own world (an army cannot reach another world's map, so a cross-world id
+    /// is indistinguishable from one that does not exist). Its centre is the destination, and its connected claim discs
+    /// (the centre disc plus the discs of the towers chained to a longhouse of the target's player on that island) come
+    /// along so a fleet Attack/Raid can check the target's whole claimed territory. Whether the target is the army's own
+    /// settlement is <see cref="Army"/>'s rule, not decided here.
+    /// </summary>
+    private async Task<(DispatchRejection Rejection, HexCoord Centre, IReadOnlyList<(HexCoord Centre, int Radius)> ClaimDiscs)>
+        ResolveTargetSettlementAsync(Guid worldId, Guid? targetSettlementId, CancellationToken cancellationToken)
+    {
+        if (targetSettlementId is not { } targetId)
+        {
+            return (DispatchRejection.TargetSettlementRequired, default, []);
+        }
+
+        var target = await _dbContext.Settlements
+            .AsNoTracking()
+            .Where(s => s.Id == targetId && s.WorldId == worldId)
+            .Select(s => new { s.CentreQ, s.CentreR })
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (target is null)
+        {
+            return (DispatchRejection.TargetSettlementNotFound, default, []);
+        }
+
+        var targetRealm = await PlayerRealms.ForStoredSettlementAsync(_dbContext, targetId, cancellationToken).ConfigureAwait(false);
+        return (DispatchRejection.None, new HexCoord(target.CentreQ, target.CentreR), targetRealm?.DiscsOf(targetId) ?? []);
+    }
+
+    /// <summary>
+    /// Looks up the wildlife camp a Hunt names by its hex, for a dispatch or a field order alike. With a camp there, returns the
+    /// hex the route ends on (<see cref="Army.HuntRouteDestination"/> from <paramref name="from"/>: the camp's own hex, or
+    /// its nearest walkable neighbour; a water camp, the whale road, is reached on its own sea hex), the camp's hex and
+    /// whether it stands on the sea. With none, returns <paramref name="campHex"/> and no camp, which
+    /// <see cref="Army"/> refuses as <see cref="DispatchRejection.NoCampAtDestination"/>.
+    /// </summary>
+    private async Task<(HexCoord Destination, HexCoord? CampCoord, bool CampIsWater)> ResolveHuntCampAsync(
+        Guid worldId, HexCoord campHex, HexCoord from, DateTimeOffset now, Func<HexCoord, Terrain> terrainAt, CancellationToken cancellationToken)
+    {
+        var camp = await _campService.FindCampAsync(worldId, campHex, now, cancellationToken).ConfigureAwait(false);
+        if (camp is not { } found)
+        {
+            return (campHex, null, false);
+        }
+
+        return (Army.HuntRouteDestination(found.Camp.Coord, from, terrainAt, isFleet: found.Camp.IsWater), found.Camp.Coord, found.Camp.IsWater);
     }
 
     /// <summary>
@@ -381,7 +406,7 @@ public sealed class ArmyService(
         var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
         if (outcome != ArmySettleOutcome.NoChange)
         {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
         }
 
         return outcome == ArmySettleOutcome.FoldedHome ? (null, clock) : (army, clock);
@@ -455,7 +480,7 @@ public sealed class ArmyService(
         var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
         if (outcome == ArmySettleOutcome.FoldedHome)
         {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
             return new RecallResult(RecallOutcome.NothingToRecall);
         }
 
@@ -497,14 +522,14 @@ public sealed class ArmyService(
         {
             if (outcome == ArmySettleOutcome.Updated)
             {
-                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await SaveAsync(cancellationToken).ConfigureAwait(false);
             }
 
             return new RecallResult(isRecallable ? RecallOutcome.NoRouteHome : RecallOutcome.NothingToRecall, army);
         }
 
         army.ApplyDomain(recalled);
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Army {ArmyId} recalled at {Now}, now heading home.", armyId, now);
 
@@ -532,7 +557,7 @@ public sealed class ArmyService(
         var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
         if (outcome == ArmySettleOutcome.FoldedHome)
         {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
             return new RetargetFoundingApiResult(RetargetFoundingRejection.NothingToRetarget);
         }
 
@@ -550,14 +575,14 @@ public sealed class ArmyService(
         {
             if (outcome == ArmySettleOutcome.Updated)
             {
-                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await SaveAsync(cancellationToken).ConfigureAwait(false);
             }
 
             return new RetargetFoundingApiResult(result.Rejection);
         }
 
         army.ApplyDomain(result.Army!);
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Founding convoy (army {ArmyId}) retargeted to {NewTarget} at {Now}.", armyId, newTarget, now);
 
@@ -565,25 +590,23 @@ public sealed class ArmyService(
     }
 
     /// <summary>
-    /// Sends an army already out in the field onward to a new hex (issue #156
-    /// phase 1) — "move on" once it has arrived and is standing, "append
-    /// goal" while it is still travelling. See <see cref="Army.PlanFieldOrder"/>
-    /// for the domain rule this wraps.
+    /// Sends an army already out in the field onward (issue #156) — "move on" once it has arrived and is standing, "append
+    /// goal" while it is still travelling — on a Move, Attack, Support, Hunt or Raid, optionally taking only part of a
+    /// standing army along. See <see cref="Army.PlanFieldOrder"/> for the domain rule this wraps.
     /// </summary>
     /// <remarks>
-    /// Restricted here, not in the pure domain method, to
-    /// <see cref="ArmyMission.Move"/>/<see cref="ArmyMission.Found"/>: an
-    /// Attack/Support/Raid army's destination is always a target settlement's
-    /// own hex, re-validated by <see cref="Army.PlanDispatch"/>'s
-    /// target-settlement/shoreline/claim-disc checks at dispatch time — none
-    /// of which a bare "new hex" field order can safely reuse without
-    /// redoing that whole validation. Issue #156's own design doc calls that
-    /// combination "in scope but separate work"; this only ever touches
-    /// <see cref="Army.Location"/>, never <see cref="Army.Mission"/> or
-    /// <see cref="Army.TargetSettlementId"/>, so a Found convoy that failed
-    /// to found and is standing at its target (<c>ResolveFoundingAsync</c>'s
-    /// fallback) can still be walked onward exactly like a Move army.
+    /// Restricted here, not in the pure domain method, to armies whose current mission is
+    /// <see cref="ArmyMission.Move"/>/<see cref="ArmyMission.Found"/>: an army already attacking, hunting, supporting or
+    /// raiding finishes that (or is recalled). The new mission and its targets are resolved exactly as
+    /// <see cref="DispatchAsync"/> resolves them (same helpers, same <see cref="Army"/> validation); once the order is
+    /// accepted the army is settled on arrival by its new mission like any dispatched one. A split leaves the remainder
+    /// standing where it is and creates the leaving part as a new army row of the same home settlement.
     /// </remarks>
+    /// <param name="destination">
+    /// Required for <see cref="ArmyMission.Move"/> and, as the camp's own hex, for <see cref="ArmyMission.Hunt"/>; ignored for
+    /// <see cref="ArmyMission.Attack"/>/<see cref="ArmyMission.Support"/>/<see cref="ArmyMission.Raid"/>, whose destination is
+    /// the target settlement's own hex, resolved here rather than trusted from the caller.
+    /// </param>
     /// <param name="callerUserId">
     /// The authenticated caller's id, if any — resolved to a live premium
     /// flag via <see cref="AuthService.GetIsPremiumAsync"/>, same as
@@ -592,11 +615,17 @@ public sealed class ArmyService(
     /// actions (a free "move on" with no waypoints) still work for them, only
     /// the premium half of the rule table is unavailable.
     /// </param>
+    /// <param name="units">What leaves; <see langword="null"/> means the whole army.</param>
+    /// <returns>The result's <see cref="FieldOrderApiResult.Army"/> is the army that left: the new army when split.</returns>
     public async Task<FieldOrderApiResult> FieldOrderAsync(
         Guid armyId,
         IReadOnlyList<HexCoord> waypoints,
-        HexCoord destination,
+        HexCoord? destination,
         Guid? callerUserId,
+        ArmyMission mission = ArmyMission.Move,
+        Guid? targetSettlementId = null,
+        HexCoord? targetBuildingCoord = null,
+        IReadOnlyList<UnitStack>? units = null,
         CancellationToken cancellationToken = default)
     {
         var army = await LoadArmyAsync(armyId, cancellationToken).ConfigureAwait(false);
@@ -611,50 +640,111 @@ public sealed class ArmyService(
         var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
         if (outcome == ArmySettleOutcome.FoldedHome)
         {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
             return new FieldOrderApiResult(FieldOrderRejection.NoActiveJourney);
+        }
+
+        // A refused order may still have advanced the army's own journey while settling above, which is a real change worth keeping.
+        async Task<FieldOrderApiResult> RejectAsync(FieldOrderRejection reason)
+        {
+            if (outcome == ArmySettleOutcome.Updated)
+            {
+                await SaveAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return new FieldOrderApiResult(reason, army);
         }
 
         var domain = army.ToDomain();
         if (domain.Mission is not (ArmyMission.Move or ArmyMission.Found))
         {
-            if (outcome == ArmySettleOutcome.Updated)
-            {
-                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            return new FieldOrderApiResult(FieldOrderRejection.MissionNotFieldOrderable, army);
+            return await RejectAsync(FieldOrderRejection.MissionNotFieldOrderable).ConfigureAwait(false);
         }
 
         var isPremium = callerUserId is { } userId
             && await _authService.GetIsPremiumAsync(userId, cancellationToken).ConfigureAwait(false) == true;
 
+        var worldId = army.Settlement.WorldId;
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
-        var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+        var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, worldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
         var home = army.Settlement.HomeHexFor(domain, sampler.TerrainAt);
+        var giants = await LoadGiantIndexAsync(worldId, cancellationToken).ConfigureAwait(false);
+
+        HexCoord effectiveDestination;
+        IReadOnlyList<(HexCoord Centre, int Radius)> targetClaimDiscs = [];
+        if (mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid)
+        {
+            var resolved = await ResolveTargetSettlementAsync(worldId, targetSettlementId, cancellationToken).ConfigureAwait(false);
+            if (resolved.Rejection != DispatchRejection.None)
+            {
+                return await RejectAsync(resolved.Rejection == DispatchRejection.TargetSettlementNotFound
+                    ? FieldOrderRejection.TargetSettlementNotFound
+                    : FieldOrderRejection.TargetSettlementRequired).ConfigureAwait(false);
+            }
+
+            effectiveDestination = resolved.Centre;
+            targetClaimDiscs = resolved.ClaimDiscs;
+        }
+        else
+        {
+            if (destination is not { } move)
+            {
+                return await RejectAsync(FieldOrderRejection.DestinationRequired).ConfigureAwait(false);
+            }
+
+            effectiveDestination = move;
+        }
+
+        // A hunt's route is planned from where the army stands now.
+        HexCoord? targetCampCoord = null;
+        var targetCampIsWater = false;
+        if (mission == ArmyMission.Hunt)
+        {
+            var standingHex = ((ArmyLocation.InTransit)domain.Location).Movement.PositionAt(now);
+            (effectiveDestination, targetCampCoord, targetCampIsWater) = await ResolveHuntCampAsync(
+                worldId, effectiveDestination, standingHex, now, sampler.TerrainAt, cancellationToken).ConfigureAwait(false);
+        }
 
         var result = Army.PlanFieldOrder(
-            domain, waypoints, destination, home, now, sampler.TerrainAt, isPremium,
-            army.Settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls);
+            domain, waypoints, effectiveDestination, home, now, sampler.TerrainAt, isPremium,
+            army.Settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls,
+            mission, targetSettlementId, targetBuildingCoord, targetClaimDiscs, targetCampCoord, targetCampIsWater,
+            giants, units, Guid.CreateVersion7());
 
         if (!result.Accepted)
         {
-            if (outcome == ArmySettleOutcome.Updated)
-            {
-                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            return new FieldOrderApiResult(result.Rejection, army);
+            return await RejectAsync(result.Rejection).ConfigureAwait(false);
         }
 
-        army.ApplyDomain(result.Army!);
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        var left = army;
+        if (result.Remainder is { } remainder)
+        {
+            // A split: the entity that was ordered keeps standing with what stayed, the units that left are a new army.
+            army.ApplyDomain(remainder);
+            left = new ArmyEntity { Id = result.Army!.Id, SettlementId = army.SettlementId };
+            left.ApplyDomain(result.Army);
+            _dbContext.Armies.Add(left);
+        }
+        else
+        {
+            army.ApplyDomain(result.Army!);
+        }
 
-        _logger.LogInformation("Army {ArmyId} given a field order at {Now}, now heading to {Destination}.", armyId, now, destination);
+        if (mission == ArmyMission.Hunt && army.Settlement.TroopsTrained)
+        {
+            // Onboarding quest hunt1, same rule as a hunt dispatched from home: starting a hunt counts.
+            army.Settlement.HuntStarted = true;
+        }
 
-        return new FieldOrderApiResult(FieldOrderRejection.None, army);
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Army {ArmyId} given a {Mission} field order at {Now}, army {LeavingArmyId} now heading to {Destination}.",
+            armyId, mission, now, left.Id, effectiveDestination);
+
+        return new FieldOrderApiResult(FieldOrderRejection.None, left);
     }
 
     /// <summary>
@@ -705,7 +795,7 @@ public sealed class ArmyService(
         var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
         if (outcome == ArmySettleOutcome.FoldedHome)
         {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
             return new AdminArmyEditResult(AdminArmyEditOutcome.ArmyNotFound);
         }
 
@@ -716,7 +806,7 @@ public sealed class ArmyService(
         {
             if (outcome == ArmySettleOutcome.Updated)
             {
-                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await SaveAsync(cancellationToken).ConfigureAwait(false);
             }
 
             return new AdminArmyEditResult(reason);
@@ -775,7 +865,7 @@ public sealed class ArmyService(
         }
 
         army.ApplyDomain(domain);
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Admin edited army {ArmyId} (stacks: {Stacks}, provisions: {Provisions}, arrival in: {Arrival}, hex: {Hex}).",
@@ -792,7 +882,7 @@ public sealed class ArmyService(
     public Task<List<ArmyEntity>> GetForWorldAsync(Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Armies
             .AsNoTracking()
-            .Include(a => a.Settlement)
+            .Include(a => a.Settlement!).ThenInclude(s => s.Buildings)
             .Include(a => a.Stacks)
             .Include(a => a.TargetSettlement)
             .Where(a => a.Settlement!.WorldId == worldId)
@@ -840,7 +930,7 @@ public sealed class ArmyService(
         {
             var dirty = _realmDirty.ToList();
             _realmDirty.Clear();
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
             foreach (var settlementId in dirty)
             {
                 await _settlementService.ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
@@ -961,6 +1051,8 @@ public sealed class ArmyService(
         {
             return ArmySettleOutcome.NoChange;
         }
+
+        army.WalkedLegs.AddRange(result.Walked);
 
         if (result.ArrivedHome)
         {
@@ -1085,6 +1177,7 @@ public sealed class ArmyService(
         if (arrival.Army is null)
         {
             // Wiped out — no return trip for zero units.
+            armyEntity.RecordWalkedToEnd();
             _dbContext.Armies.Remove(armyEntity);
             return ArmySettleOutcome.FoldedHome;
         }
@@ -1153,6 +1246,7 @@ public sealed class ArmyService(
         var returning = domain.SettleHuntArrival(plan, arrivesAt);
         if (returning is null)
         {
+            armyEntity.RecordWalkedToEnd();
             _dbContext.Armies.Remove(armyEntity);
             return ArmySettleOutcome.FoldedHome;
         }
@@ -1174,8 +1268,10 @@ public sealed class ArmyService(
             DepartedAt = movement.ArrivesAt,
             Path = movement.ReturnPath,
             CumulativeHours = movement.ReturnCumulativeHours,
+            EdgeHours = movement.ReturnEdgeHours,
             ReturnPath = movement.ReturnPath,
             ReturnCumulativeHours = movement.ReturnCumulativeHours,
+            ReturnEdgeHours = movement.ReturnEdgeHours,
             TurnAroundAt = movement.ArrivesAt,
             IsReturning = true,
         }),
@@ -1234,6 +1330,7 @@ public sealed class ArmyService(
             originSettlement.World!.SpeedFactor,
             cancellationToken).ConfigureAwait(false);
 
+        armyEntity.RecordWalkedToEnd();
         _dbContext.Armies.Remove(armyEntity);
 
         _logger.LogInformation(
@@ -1248,6 +1345,7 @@ public sealed class ArmyService(
     {
         var result = turnedArmy.SettleTo(now);
         var finalArmy = result.Changed ? result.Army : turnedArmy;
+        armyEntity.WalkedLegs.AddRange(result.Walked);
 
         if (result.ArrivedHome)
         {
@@ -1312,6 +1410,7 @@ public sealed class ArmyService(
 
         session.Apply(destinationEntity.Id, merged);
         session.WriteBack();
+        armyEntity.RecordWalkedToEnd();
         _dbContext.Armies.Remove(armyEntity);
     }
 
@@ -1428,7 +1527,7 @@ public sealed class ArmyService(
     {
         if (session.WriteBack())
         {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 }

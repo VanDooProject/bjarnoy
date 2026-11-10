@@ -71,10 +71,10 @@ its pre-founding state). `HudNav`'s pills were also restyled to plain uppercase 
 
 **Storage cap + fill bar:** the reference also shows a max/cap and a fill-progress underline for each of the
 four base resources (e.g. "4,965 / 12,000"). No storage-cap field exists anywhere in the data model
-(`Resources`, `Settlement`, the backend) for wood/stone/food/iron — only population had a real `max`. Rather
+(`Resources`, `Settlement`, the backend) for wood/brick/food/iron — only population had a real `max`. Rather
 than leave the pills capless, `WorldModel.storageCapFor()` derives a per-resource cap the same way
 `populationFor` derives population — client-side, from the longhouse level, with a different base per
-resource (wood/stone/food/iron aren't all the same number in the reference either) so the caps read as
+resource (wood/brick/food/iron aren't all the same number in the reference either) so the caps read as
 varied rather than one flat value repeated four times. `stores/world.ts`'s `syncHud()` now sets
 `hud.storageCap` alongside `hud.resources`/`hud.rates`, and `ResourceBar` renders `current/cap` plus a
 thin fill-percentage bar under every pill (population included, reusing its already-real `max`). Same
@@ -517,7 +517,7 @@ plain/unsettled or rival island's name is a muted gray.
 **Current state before this pass:** `HexMapRenderer.rebuildMarkers()`'s world-mode island loop drew every
 island name in the same neutral color (`0xe8f0f5`), regardless of who (if anyone) had settled there.
 
-**Decisions:** the island the current player has settled on now renders its name in gold and bold; every
+**Decisions:** the island the current player has settled on now renders its name in blue (the own-realm colour, `realmColours.ts`) and bold; every
 other island's name stays neutral. This needed one piece of plumbing that was entirely missing:
 `Settlement` (`lib/map/types.ts`) gained an optional `islandId` field, populated from the backend's
 `SettlementResponse.islandId` wherever a settlement is registered from a live-mode API response
@@ -535,7 +535,7 @@ at all in the first pass — the doc said so honestly, but a passing claim on an
 process bug worth naming.
 
 Fixed the styling itself: island names now render `island.name.toUpperCase()`, `letterSpacing: 1.5`,
-`fontSize: 13`, muted gray (`0x8fa3af`, matching the HUD's own `--muted` token) for other islands, gold+bold
+`fontSize: 13`, muted gray (`0x8fa3af`, matching the HUD's own `--muted` token) for other islands, blue+bold
 for the player's own — while resetting those same properties (`fontWeight`, `fontSize`, `letterSpacing`)
 explicitly on the other two label types sharing the same `Text` object pool (`ownerLabel`, fleet-ETA labels)
 so a pooled instance recycled across frames for a different label type can't inherit a stray letter-spacing

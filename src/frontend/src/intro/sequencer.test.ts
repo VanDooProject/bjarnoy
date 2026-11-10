@@ -667,15 +667,19 @@ describe('IntroSequencer seek', () => {
 });
 
 describe('IntroSequencer close', () => {
-  it('stops every timer and emits nothing afterwards', () => {
+  it('stops every timer and publishes one final closed state, then nothing', () => {
     const { seq, changes } = make('landing');
     seq.start();
     vi.advanceTimersByTime(500);
     const n = changes.length;
+    expect(changes.at(-1)!.closed).toBe(false);
+    seq.close();
+    expect(changes).toHaveLength(n + 1);
+    expect(changes.at(-1)).toMatchObject({ closed: true, phase: 'playing' });
     seq.close();
     seq.notifyLoaded();
     vi.advanceTimersByTime(20000);
-    expect(changes).toHaveLength(n);
+    expect(changes).toHaveLength(n + 1);
     expect(vi.getTimerCount()).toBe(0);
   });
 });

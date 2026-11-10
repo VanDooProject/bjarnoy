@@ -19,7 +19,7 @@ import { DRAWER_SLIDE_MS } from '../../lib/hud/queueMotion';
 
 function order(id: string): BuildOrderResponse {
   return {
-    id, q: 0, r: 0, building: 'farm', targetLevel: 1, state: 'building', slotCost: 1,
+    id, q: 0, r: 0, building: 'farm', kind: 'build', targetLevel: 1, state: 'building', slotCost: 1,
     completesAtGameTime: 'x', completesInSeconds: 100, totalSeconds: 100,
   };
 }

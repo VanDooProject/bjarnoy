@@ -291,16 +291,17 @@ public class ReportsModalTests(AppHostFixture fixture)
             Path = Path.Combine(screenshotsDir, "reports-modal-desktop-list.png"),
         });
 
+        // A row expands in place, under its own header: the list stays, and the URL does not change.
         await reportRow.ClickAsync();
         await Assertions.Expect(reportsModal.Locator("[data-testid=\"report-detail\"]")).ToBeVisibleAsync(new() { Timeout = 15_000 });
-        await desktopPage.WaitForURLAsync(url => url.EndsWith($"/reports/{reportId}"), new PageWaitForURLOptions { Timeout = 10_000 });
+        Assert.EndsWith("/reports", desktopPage.Url);
         await reportsModal.ScreenshotAsync(new LocatorScreenshotOptions
         {
             Path = Path.Combine(screenshotsDir, "reports-modal-desktop-detail.png"),
         });
 
-        await reportsModal.Locator("[data-testid=\"reports-back-to-list\"]").ClickAsync();
-        await Assertions.Expect(reportRow).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await reportRow.ClickAsync();
+        await Assertions.Expect(reportsModal.Locator("[data-testid=\"report-detail\"]")).Not.ToBeVisibleAsync(new() { Timeout = 15_000 });
 
         await reportsModal.Locator(".close-button").ClickAsync();
         await Assertions.Expect(reportsModal).Not.ToBeVisibleAsync(new() { Timeout = 15_000 });
@@ -342,16 +343,6 @@ public class ReportsModalTests(AppHostFixture fixture)
 
         var overflows = await phoneModal.EvaluateAsync<bool>("el => el.scrollWidth > el.clientWidth + 1");
         Assert.False(overflows, "The mobile reports panel overflows its own viewport width.");
-
-        await phoneModal.Locator(".back-button").TapAsync();
-        var phoneReportRow = phoneModal.Locator("[data-testid=\"report-row\"]").Filter(new LocatorFilterOptions { HasText = "Victory" });
-        await Assertions.Expect(phoneReportRow).ToBeVisibleAsync(new() { Timeout = 15_000 });
-        await phonePage.WaitForURLAsync(url => url.EndsWith("/reports"), new PageWaitForURLOptions { Timeout = 10_000 });
-
-        await phoneModal.ScreenshotAsync(new LocatorScreenshotOptions
-        {
-            Path = Path.Combine(screenshotsDir, "reports-modal-phone-list.png"),
-        });
 
         await phoneModal.Locator(".back-button").TapAsync();
         await Assertions.Expect(phoneModal).Not.ToBeVisibleAsync(new() { Timeout = 15_000 });

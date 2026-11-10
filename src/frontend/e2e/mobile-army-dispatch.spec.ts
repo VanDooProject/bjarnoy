@@ -4,6 +4,7 @@ import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 import { RingMenuComponent } from './pages/RingMenuComponent';
 import { gotoWorldMap, layoutOverflow, loginTestUser } from './helpers';
+import { DOUBLE_TAP_SLOP_PX } from '../src/lib/map/doubleTap';
 
 /**
  * Issue: mobile army dispatch. Phones (<=768px) get no ArmyPanel — a 260px
@@ -30,11 +31,15 @@ interface DemoWindow {
  * which fails ("object reference chain is too long") once the model holds
  * enough tiles.
  */
-function demoWorld(page: Page): Promise<{ dispatchDraft: any; selectedArmyId: string | null }> {
+function demoWorld(page: Page): Promise<{ dispatchDraft: any; sendPicker: any; selectedArmyId: string | null }> {
   return page.evaluate(() => {
     const world = (window as unknown as DemoWindow).__demoWorld();
     return JSON.parse(
-      JSON.stringify({ dispatchDraft: world.dispatchDraft ?? null, selectedArmyId: world.selectedArmyId ?? null }),
+      JSON.stringify({
+        dispatchDraft: world.dispatchDraft ?? null,
+        sendPicker: world.sendPicker ?? null,
+        selectedArmyId: world.selectedArmyId ?? null,
+      }),
     );
   });
 }
@@ -71,6 +76,8 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect(ring.action('Send army here')).toBeVisible();
 
     await ring.action('Send army here').click();
+    // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
+    await page.locator('.send-picker [data-source="home"] .send-row-head').click();
 
     const sheet = page.locator('.dispatch-sheet');
     await expect(sheet).toBeVisible();
@@ -97,8 +104,11 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect.poll(async () => (await demoWorld(page)).dispatchDraft?.route).toEqual([first.hex, second.hex]);
     await expect(ring.bubbles).toHaveCount(0);
 
-    // Tap (not drag) the first pin to remove it.
-    await settlement.clickHex(first);
+    // Tap (not drag) the first pin to remove it. The map slid when the ring opened (it makes room for the full
+    // circle), so the pin is where the renderer says it is now, not where `first` found it.
+    await settlement.clickHex(
+      await page.evaluate((hex) => (window as unknown as DemoWindow).__settlementRenderer().hexCenterScreen(hex), first.hex),
+    );
     await expect.poll(async () => (await demoWorld(page)).dispatchDraft?.route).toEqual([second.hex]);
 
     // Demo mode always shows the note and keeps Start disabled, even with a
@@ -114,6 +124,39 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
 
     await settlement.clickHex(first);
     await expect(ring.action('Send army here')).toBeVisible();
+  });
+
+  test('with the send picker open, a tap on the map moves its target there instead of opening the ring', async ({ page }) => {
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+    await seedGarrison(page);
+    const ring = new RingMenuComponent(page);
+
+    const first = await settlement.findHex();
+    await settlement.clickHex(first);
+    await ring.action('Send army here').click();
+    await expect(page.locator('.send-picker')).toBeVisible();
+    await expect.poll(async () => (await demoWorld(page)).sendPicker?.coord).toEqual(first.hex);
+
+    // A hex near the first one that sits on screen above the picker sheet (it covers the lower half on a phone).
+    const second = await page.evaluate((from) => {
+      const renderer = (window as unknown as DemoWindow).__settlementRenderer();
+      for (const [dq, dr] of [[1, -2], [2, -2], [-1, -1], [2, -3], [0, -2], [1, -1]]) {
+        const at = { q: from.q + dq!, r: from.r + dr! };
+        const screen = renderer.hexCenterScreen(at);
+        if (screen.x > 40 && screen.x < window.innerWidth - 40 && screen.y > 80 && screen.y < window.innerHeight * 0.45) {
+          return { hex: at, screen };
+        }
+      }
+      return null;
+    }, first.hex);
+    expect(second).not.toBeNull();
+    await settlement.clickHex(second!);
+
+    await expect.poll(async () => (await demoWorld(page)).sendPicker?.coord).toEqual(second!.hex);
+    expect((await demoWorld(page)).sendPicker?.mission).toBe('move');
+    await expect(ring.bubbles).toHaveCount(0);
+    await expect(page.locator('.send-picker')).toBeVisible();
   });
 
   test('tapping a rival-owned tile starts an Attack draft targeting it', async ({ page }) => {
@@ -147,6 +190,8 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect(ring.action('Attack')).toBeVisible();
 
     await ring.action('Attack').click();
+    // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
+    await page.locator('.send-picker [data-source="home"] .send-row-head').click();
 
     await expect(page.locator('.dispatch-sheet')).toBeVisible();
     const draft = await demoWorld(page).then((w) => w.dispatchDraft);
@@ -164,7 +209,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await gotoWorldMap(page);
     await page.mouse.click(centre.x, centre.y);
 
-    await expect(page).toHaveURL(/\/settlement#world$/);
+    await expect(page).toHaveURL(/\/settlement#world(&.*)?$/);
     // Only the army action: Build/Upgrade/Info open settlement-only modals.
     await expect(ring.action('Send army here')).toBeVisible();
     await expect(ring.bubbles).toHaveCount(1);
@@ -180,6 +225,8 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     const hex = await settlement.findHex();
     await settlement.clickHex(hex);
     await ring.action('Send army here').click();
+    // The ring opens the source picker; the garrison is its Home row, which hands over to the dispatch form.
+    await page.locator('.send-picker [data-source="home"] .send-row-head').click();
 
     const sheet = page.locator('.dispatch-sheet');
     await expect(sheet).toBeVisible();
@@ -194,7 +241,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     expect(overflow.offscreen).toEqual([]);
   });
 
-  test('QueueDrawer lists a seeded army with its ETA; a row tap closes the drawer, selects it and centres the camera', async ({ page }) => {
+  test('QueueDrawer lists a seeded army with its ETA; a row tap selects it and keeps the drawer open; a double tap closes the drawer and centres the camera', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await SettlementPage.found(page);
 
@@ -223,9 +270,11 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
             departedAt: new Date(Date.now() - 3_540_000).toISOString(),
             path: [{ q: home.q, r: home.r }, at],
             cumulativeHours: [0, 1],
+            edgeHours: [0, 0.5],
             arrivesAt: new Date(Date.now() + 60_000).toISOString(),
             returnPath: [],
             returnCumulativeHours: [],
+            returnEdgeHours: [],
             turnAroundAt: new Date(Date.now() + 60_000).toISOString(),
             returnArrivesAt: new Date(Date.now() + 7_200_000).toISOString(),
             isReturning: false,
@@ -249,7 +298,23 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
     await expect(armyRow).toBeVisible();
     await expect(armyRow.locator('.status-row-time')).not.toHaveText('—');
 
-    await armyRow.locator('.status-row-click').click();
+    // The single tap lands on the row's left end and the double tap below on
+    // its centre, further apart than DOUBLE_TAP_SLOP_PX: the spec runs the two
+    // gestures back to back, often within one double-tap window (DOUBLE_TAP_MS),
+    // so at the same point the double tap's first click could pair with this
+    // tap instead.
+    // The drawer would then close a click early and the double tap's second
+    // click would land on the map underneath, opening a ring menu whose
+    // make-room pan moves the camera off the army.
+    const rowButton = armyRow.locator('.status-row-click');
+    const rowBox = (await rowButton.boundingBox())!;
+    expect(rowBox.width / 2 - 8).toBeGreaterThan(DOUBLE_TAP_SLOP_PX);
+    await rowButton.click({ position: { x: 8, y: rowBox.height / 2 } });
+
+    await expect.poll(async () => (await demoWorld(page)).selectedArmyId).toBe('army-1');
+    await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'false');
+
+    await rowButton.dblclick();
 
     await expect(page.locator('#queue-drawer-body')).toHaveAttribute('aria-hidden', 'true');
     await expect.poll(async () => (await demoWorld(page)).selectedArmyId).toBe('army-1');
@@ -262,5 +327,7 @@ test.describe('mobile army dispatch', { tag: '@g3' }, () => {
         return Math.hypot(after.x - canvasCentre.x, after.y - canvasCentre.y);
       })
       .toBeLessThan(40);
+    // Checked once the camera has settled: no click of the double tap reached the map underneath.
+    await expect(new RingMenuComponent(page).bubbles).toHaveCount(0);
   });
 });

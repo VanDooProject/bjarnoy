@@ -26,6 +26,8 @@ import HudMenuLocaleRow from './HudMenuLocaleRow.vue';
 import HudNavLink from './HudNavLink.vue';
 import { settingsLocation } from '../../lib/modalRoute';
 import { usePreloadRoute } from '../../composables/usePreloadRoute';
+import { introMounted } from '../../intro/introSignal';
+import { mountLandingIntro } from '../../intro/startLandingIntro';
 
 // `unclaimedRealm`: the player already founded a realm but hasn't named a
 // jarl (registered) yet — for them "I already have a realm" as the headline
@@ -39,11 +41,20 @@ import { usePreloadRoute } from '../../composables/usePreloadRoute';
 // sitting on a dark bar (the founded landing's floating header, and the
 // in-game bar's top-right chip — see HudNav.vue), so it gets a
 // background of its own, the same chip look as the settlement bubble.
-const props = withDefaults(defineProps<{ nudging?: boolean; unclaimedRealm?: boolean; chip?: boolean }>(), {
-  nudging: false,
-  unclaimedRealm: false,
-  chip: false,
-});
+//
+// `landingEntries`: the pre-founding landing bar has no HudNav, so this menu is
+// its only menu ("How to play" floats beside it): it adds a "Start page" row (the intro's landing
+// page, otherwise only shown on a fresh device) and, on phones (where the
+// floating PlayIntroButton is left out), a "Play intro" row.
+const props = withDefaults(
+  defineProps<{ nudging?: boolean; unclaimedRealm?: boolean; chip?: boolean; landingEntries?: boolean }>(),
+  {
+    nudging: false,
+    unclaimedRealm: false,
+    chip: false,
+    landingEntries: false,
+  },
+);
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const route = useRoute();
@@ -82,6 +93,11 @@ function close() {
 function go(to: RouteLocationRaw) {
   close();
   router.push(to);
+}
+
+function openIntro(playNow: boolean) {
+  close();
+  mountLandingIntro({ playNow });
 }
 
 const settingsHref = computed(() => router.resolve('/settings').href);
@@ -175,6 +191,22 @@ watch(() => route.fullPath, close);
            above. `close` lets a row dismiss the panel. The account actions
            stay first: they are what this menu is for. -->
       <slot name="entries" :close="close" />
+      <template v-if="landingEntries">
+        <template v-if="!introMounted">
+          <button type="button" role="menuitem" class="row" data-testid="returning-player-start-page" @click="openIntro(false)">
+            {{ t('intro.startPage') }}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class="row play-intro-row"
+            data-testid="returning-player-play-intro"
+            @click="openIntro(true)"
+          >
+            {{ t('intro.playIntro') }}
+          </button>
+        </template>
+      </template>
       <HudNavLink
         :href="settingsHref"
         role="menuitem"
@@ -395,5 +427,11 @@ html[data-hud-motion='reduced'] .trigger.is-nudging {
 }
 .trigger-main--short {
   display: none;
+}
+/* Desktop has the floating PlayIntroButton (intro/PlayIntroButton.vue); phones only get this row. Same breakpoint. */
+@media (min-width: 769px) and (min-height: 501px) {
+  .play-intro-row {
+    display: none;
+  }
 }
 </style>

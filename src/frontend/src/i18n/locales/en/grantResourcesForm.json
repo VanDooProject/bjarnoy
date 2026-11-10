@@ -2,7 +2,7 @@
   "title": "Grant resources",
   "hint": "Positive adds, negative removes. A removal never takes stock below zero.",
   "wood": "Wood",
-  "stone": "Stone",
+  "stone": "Brick",
   "food": "Food",
   "iron": "Iron",
   "applying": "Applying…",

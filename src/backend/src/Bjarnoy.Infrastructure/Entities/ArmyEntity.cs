@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
@@ -100,9 +101,15 @@ public class ArmyEntity
 
     public List<double> CumulativeHours { get; set; } = [];
 
+    /// <summary>Persisted mirror of <see cref="Movement.EdgeHours"/>.</summary>
+    public List<double> EdgeHours { get; set; } = [];
+
     public List<HexPoint> ReturnPath { get; set; } = [];
 
     public List<double> ReturnCumulativeHours { get; set; } = [];
+
+    /// <summary>Persisted mirror of <see cref="Movement.ReturnEdgeHours"/>.</summary>
+    public List<double> ReturnEdgeHours { get; set; } = [];
 
     public DateTimeOffset TurnAroundAt { get; set; }
 
@@ -123,8 +130,10 @@ public class ArmyEntity
                     DepartedAt = DepartedAt,
                     Path = [.. Path.Select(p => new HexCoord(p.Q, p.R))],
                     CumulativeHours = CumulativeHours,
+                    EdgeHours = EdgeHours,
                     ReturnPath = [.. ReturnPath.Select(p => new HexCoord(p.Q, p.R))],
                     ReturnCumulativeHours = ReturnCumulativeHours,
+                    ReturnEdgeHours = ReturnEdgeHours,
                     TurnAroundAt = TurnAroundAt,
                     IsReturning = IsReturning,
                     RetreatImmune = RetreatImmune,
@@ -145,10 +154,38 @@ public class ArmyEntity
         };
     }
 
+    /// <summary>
+    /// Legs this entity finished since it was loaded (replaced route, arrival) that its columns no longer show: the ground
+    /// they crossed is saved as explored by <see cref="Bjarnoy.Infrastructure.World.ExploredAreaService.StageWalkedLegsAsync"/>
+    /// with the next save. Never persisted itself.
+    /// </summary>
+    [NotMapped]
+    public List<WalkedLeg> WalkedLegs { get; } = [];
+
+    /// <summary>
+    /// The leg stored on this entity ran its whole path and the army is about to be removed (folded into a garrison, founded a
+    /// settlement, wiped out at its destination), so ApplyDomain never sees the end of it.
+    /// </summary>
+    public void RecordWalkedToEnd()
+    {
+        if (IsInTransit && ToDomain().Location is ArmyLocation.InTransit { Movement: var leg })
+        {
+            WalkedLegs.Add(WalkedLeg.Full(leg));
+        }
+    }
+
+    // A freshly built entity (dispatch) has no stored leg yet.
+    private bool IsInTransit => !AtHome && !IsSupporting && Path.Count > 0;
+
     /// <summary>Writes a settled aggregate back onto the entity, reconciling the stack collection.</summary>
     public void ApplyDomain(Army army)
     {
         ArgumentNullException.ThrowIfNull(army);
+
+        if (IsInTransit && WalkedLeg.Between(ToDomain(), army) is { } walked)
+        {
+            WalkedLegs.Add(walked);
+        }
 
         Mission = (int)army.Mission;
         TargetSettlementId = army.TargetSettlementId;
@@ -185,8 +222,10 @@ public class ArmyEntity
                 DepartedAt = default;
                 Path = [];
                 CumulativeHours = [];
+                EdgeHours = [];
                 ReturnPath = [];
                 ReturnCumulativeHours = [];
+                ReturnEdgeHours = [];
                 TurnAroundAt = default;
                 IsReturning = false;
                 RetreatImmune = false;
@@ -199,8 +238,10 @@ public class ArmyEntity
                 DepartedAt = default;
                 Path = [];
                 CumulativeHours = [];
+                EdgeHours = [];
                 ReturnPath = [];
                 ReturnCumulativeHours = [];
+                ReturnEdgeHours = [];
                 TurnAroundAt = default;
                 IsReturning = false;
                 RetreatImmune = false;
@@ -213,8 +254,10 @@ public class ArmyEntity
                 DepartedAt = movement.DepartedAt;
                 Path = [.. movement.Path.Select(c => new HexPoint(c.Q, c.R))];
                 CumulativeHours = [.. movement.CumulativeHours];
+                EdgeHours = [.. movement.EdgeHours];
                 ReturnPath = [.. movement.ReturnPath.Select(c => new HexPoint(c.Q, c.R))];
                 ReturnCumulativeHours = [.. movement.ReturnCumulativeHours];
+                ReturnEdgeHours = [.. movement.ReturnEdgeHours];
                 TurnAroundAt = movement.TurnAroundAt;
                 IsReturning = movement.IsReturning;
                 RetreatImmune = movement.RetreatImmune;

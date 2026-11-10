@@ -231,10 +231,33 @@ describe('loadAtlasCategory page downloads', () => {
 
     await releaseAll(pending, done);
     const atlas = await done;
-    // Still merged and counted in page order.
+    // Every page counted once, never going backwards.
     expect(progress).toEqual(pages.map((_, i) => i + 1));
     const lastPageFrame = Object.keys(MANIFESTS[pages.at(-1)!.path].frames)[0];
     expect(atlas.textures[lastPageFrame]).toBeDefined();
+  });
+
+  it('counts a page as soon as its download finished, not once every earlier page is done', async () => {
+    await unloadAtlasCategory('terrain');
+    const pending = holdPageLoads();
+    const pages = discoveredPages('terrain');
+    expect(pages.length).toBeGreaterThan(1);
+
+    const progress: Array<[number, number]> = [];
+    const done = loadAtlasCategory('terrain', (loaded, total) => progress.push([loaded, total]));
+    await flush();
+
+    // The last page finishes first while page 0 is still downloading.
+    const last = pages.at(-1)!;
+    const lastUrl = [...pending.keys()].find((url) => pageNumber(url) === last.page)!;
+    pending.get(lastUrl)!();
+    pending.delete(lastUrl);
+    await flush();
+    expect(progress).toEqual([[1, pages.length]]);
+
+    await releaseAll(pending, done);
+    await done;
+    expect(progress).toEqual(pages.map((_, i) => [i + 1, pages.length]));
   });
 
   it('still downloads one page at a time when each page is drawn as it arrives', async () => {

@@ -51,6 +51,12 @@ public sealed record UnitDefinition
     /// <summary>Hexes per hour. Unused until movement (issue #40 phase 2+).</summary>
     public required double Speed { get; init; }
 
+    /// <summary>
+    /// Rings of the map around itself an army sees while it travels (<c>docs/design/map-fog-v2.md</c> §1c). An army sees as far as the
+    /// highest value among its unit types (<see cref="World.FogVisionRadii.ArmyVisionRadius"/>): faster units see a little more, stronger ones less.
+    /// </summary>
+    public required int VisionRadius { get; init; }
+
     /// <summary>Resources this unit can carry home from a raid.</summary>
     public required int CarryCapacity { get; init; }
 

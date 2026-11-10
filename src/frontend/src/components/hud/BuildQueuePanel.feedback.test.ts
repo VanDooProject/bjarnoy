@@ -19,7 +19,7 @@ import { makePendingOrder } from '../../lib/hud/pendingBuild';
 
 function order(overrides: Partial<BuildOrderResponse> = {}): BuildOrderResponse {
   return {
-    id: 'order-1', q: 1, r: 2, building: 'farm', targetLevel: 1, state: 'building', slotCost: 1,
+    id: 'order-1', q: 1, r: 2, building: 'farm', kind: 'build', targetLevel: 1, state: 'building', slotCost: 1,
     completesAtGameTime: 'x', completesInSeconds: 100, totalSeconds: 100, ...overrides,
   };
 }

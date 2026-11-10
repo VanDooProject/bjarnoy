@@ -21,7 +21,7 @@ public sealed class ArmyContractsTests
         // Deliberately uneven: the second leg costs three times the first, the
         // exact case a uniform-speed guess gets wrong.
         return Domain.Movement.Movement.Create(
-            Departure, path, [0, 1, 4], returnPath, [0, 3, 4],
+            Departure, path, [0, 1, 4], [0, 0.5, 2.5], returnPath, [0, 3, 4], [0, 1.5, 3.5],
             provisionsAtDeparture: 100, upkeepPerHour: 1);
     }
 

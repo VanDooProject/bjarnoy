@@ -28,6 +28,33 @@ public static class FogVisionRadii
     public const int ScoutRingHexes = 3;
 
     /// <summary>
+    /// The ramp value at which the client's fog mist is fully opaque (the point the edge noise has shut off). Mirrors the frontend's
+    /// <c>FOG_MIST_OPAQUE_AT_RAMP</c> (<c>src/frontend/src/lib/map/fog/fogRamp.ts</c>); <c>FogVisionRadiiTests</c> pins the number.
+    /// </summary>
+    public const double MistOpaqueAtRamp = 0.8;
+
+    /// <summary>
+    /// How far past a settlement's or tower's <see cref="ExploredRadius"/> (straight-line distance) the ground is still visible
+    /// through the mist: the unknown ramp's width times <see cref="MistOpaqueAtRamp"/> (11.2 hexes).
+    /// </summary>
+    public const double SourceMistOpaqueMargin = FogMaskOptions.DefaultUnknownMarginHexes * MistOpaqueAtRamp;
+
+    /// <summary>Where a marching army's own white fog ramp starts, past its vision radius. Mirrors the frontend's <c>ARMY_FOG_WHITE_OFFSET</c> (<c>FogMaskLayer.ts</c>).</summary>
+    public const double ArmyFogWhiteOffsetHexes = 0.75;
+
+    /// <summary>The army white ramp's width in hexes. Mirrors the frontend's <c>ARMY_FOG_WHITE_MARGIN</c> (<c>FogMaskLayer.ts</c>).</summary>
+    public const int ArmyFogWhiteMarginHexes = 6;
+
+    /// <summary>
+    /// How far past a marching army's vision radius (straight-line distance) the ground is still visible through the mist:
+    /// <see cref="ArmyFogWhiteOffsetHexes"/> plus the white ramp's width times <see cref="MistOpaqueAtRamp"/> (5.55 hexes).
+    /// </summary>
+    public const double ArmyMistOpaqueMargin = ArmyFogWhiteOffsetHexes + (ArmyFogWhiteMarginHexes * MistOpaqueAtRamp);
+
+    /// <summary>Slack for comparing a euclidean distance against the margins above (they are sums of binary fractions).</summary>
+    public const double ReachEpsilon = 1e-9;
+
+    /// <summary>
     /// The settlement's realm-border radius, in hexes. Mirrors the
     /// frontend's <c>borderRadius(settlement)</c>.
     /// </summary>
@@ -99,19 +126,17 @@ public static class FogVisionRadii
             TowerVisibleRadius(towerLevel) + Math.Max(0, bonusRings));
 
     /// <summary>
-    /// How far around a travelling army's current hex counts as "walked, now
-    /// permanently explored" — §1e's "Growth" trigger for
-    /// <c>PersistedExploredBitset</c>. Deliberately not a per-unit-type value:
-    /// no unit anywhere in <c>UnitCatalogue</c> has a vision stat today, and
-    /// §1c's real-time shader bonus (a separate, ephemeral thing — see
-    /// <c>fogShader.ts</c>) uses the same flat radius, so there is only one
-    /// number to tune rather than two that could quietly drift apart.
+    /// How far around its current hex a travelling army sees, and so how far its walked ground counts as "permanently explored"
+    /// (§1e's "Growth" trigger for <c>PersistedExploredBitset</c>): the highest <see cref="Units.UnitDefinition.VisionRadius"/> among the
+    /// unit types actually in it (count above zero), plus <paramref name="bonusRings"/> from the Odin Statue's Ravens of its home settlement.
+    /// The one place this is computed: the live disc, the walked-ground reveal and the army contract's <c>visionRadius</c> (which the
+    /// client's live fog layer draws) all read it. An army without any unit sees only the Ravens' rings.
     /// </summary>
-    public const int ArmyVisionRadiusHexes = 2;
+    public static int ArmyVisionRadius(IEnumerable<Units.UnitStack> stacks, int bonusRings = 0)
+    {
+        ArgumentNullException.ThrowIfNull(stacks);
 
-    /// <summary>
-    /// The walked-ground radius around a travelling army of a settlement whose
-    /// Odin Statue grants <paramref name="bonusRings"/> of Ravens.
-    /// </summary>
-    public static int ArmyVisionRadius(int bonusRings = 0) => ArmyVisionRadiusHexes + Math.Max(0, bonusRings);
+        return stacks.Where(s => s.Count > 0).Select(s => Units.UnitCatalogue.Get(s.Type).VisionRadius).DefaultIfEmpty(0).Max()
+            + Math.Max(0, bonusRings);
+    }
 }

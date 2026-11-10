@@ -57,8 +57,8 @@ const wallMap: PalisadeWalls = new Map(walls.map((w) => [coordKey(w), { gate: w.
 
 // Bridges: five one-hex corridors, each a wide river hex (straight, river width, fed from the west) between two grass hexes on each side,
 // everything else sea; the endpoints are (q0+1, 0) and (q0+3, 0). The bridge stands on the river hex (q0+2, 0): 110 a level-1 causeway,
-// 120 a level-2 footbridge, 130 a level-3 king's bridge over forest (priced as the forest), 140 a level-4 guarded bridge over sand (priced as
-// the sand, for its owner and friends only), 150 a level-0 foundation (opens nothing).
+// 120 a level-2 footbridge, 130 a level-3 king's bridge over forest, 140 a level-4 guarded bridge over sand (both priced 1.0 + 0.5 = 1.5 whatever the
+// ground, the guarded one for its owner and friends only), 150 a level-0 foundation (opens nothing).
 const bridges: { q: number; r: number; level: number }[] = [];
 const bridgeCorridor = (q0: number, level: number, under: Terrain) => {
   for (const q of [q0, q0 + 1, q0 + 3, q0 + 4]) put(q, 0, 'grass');
@@ -70,6 +70,11 @@ bridgeCorridor(120, 2, 'grass');
 bridgeCorridor(130, 3, 'forest');
 bridgeCorridor(140, 4, 'sand');
 bridgeCorridor(150, 0, 'grass');
+// 160..162: grass, forest, grass in a row (a step is billed half and half). 170: a wall strip like 70/80 whose middle hex (173,0) lies on forest,
+// so an army standing under its own wall leaves it at the forest's price.
+for (const [q, t] of [[160, 'grass'], [161, 'forest'], [162, 'grass']] as const) put(q, 0, t);
+wallStrip(170, -3, 3, true, 'mountainBelow');
+put(173, 0, 'forest');
 // Bridges belong to the same owner as the walls; a "friend" army belongs to another owner whose friends include it.
 const FRIEND = 'owner-friend';
 const bridgeMap: StandingBridges = new Map(bridges.filter((b) => b.level >= 1).map((b) => [coordKey(b), { level: b.level, owner: OWNER }]));
@@ -111,7 +116,7 @@ const contextFor = (army: 'friendly' | 'friend' | 'enemy'): PathContext => {
     hexesPerHour: 1,
     restrictions: {
       ...palisadeRestrictions(wallMap, terrainAt, isWideRiver, walker, friends),
-      ...bridgeRestrictions(bridgeMap, terrainAt, RULES, walker, friends),
+      ...bridgeRestrictions(bridgeMap, walker, friends),
     },
   };
 };
@@ -230,22 +235,22 @@ const caseInputs: CaseInput[] = [
     army: 'enemy',
   },
   {
-    name: 'bridge_level_3_kings_bridge_costs_the_terrain_under_it',
-    comment: 'A level-3 bridge (king\'s bridge) over forest: the river is as quick to cross as the ground beneath it (forest, 1.3), for an enemy too.',
+    name: 'bridge_level_3_kings_bridge_costs_1_5_whatever_the_ground',
+    comment: 'A level-3 bridge (king\'s bridge) over forest: the river costs 1.0 + 0.5 = 1.5 (HexPathfinder.KingsBridgeCrossingCost), not the forest\'s 1.3, for an enemy too.',
     from: { q: 131, r: 0 },
     to: { q: 133, r: 0 },
     army: 'enemy',
   },
   {
     name: 'bridge_level_4_guarded_bridge_lets_the_owner_over',
-    comment: 'A level-4 bridge (guarded) over sand: its owner\'s army crosses at the sand\'s own cost (1.1).',
+    comment: 'A level-4 bridge (guarded) over sand: its owner\'s army crosses at 1.5 (not the sand\'s 1.1).',
     from: { q: 141, r: 0 },
     to: { q: 143, r: 0 },
     army: 'friendly',
   },
   {
     name: 'bridge_level_4_guarded_bridge_lets_a_friend_over',
-    comment: 'The same guarded bridge for an army of a friend of the owner (same guild, or a guild at peace): the same 1.1.',
+    comment: 'The same guarded bridge for an army of a friend of the owner (same guild, or a guild at peace): the same 1.5.',
     from: { q: 141, r: 0 },
     to: { q: 143, r: 0 },
     army: 'friend',
@@ -262,6 +267,26 @@ const caseInputs: CaseInput[] = [
     comment: 'A level-0 bridge (a foundation) is not a bridge yet: the wide river stays shut for its owner too, so there is no route.',
     from: { q: 151, r: 0 },
     to: { q: 153, r: 0 },
+    army: 'friendly',
+  },
+  {
+    name: 'a_step_is_billed_half_and_half_over_forest',
+    comment: 'Grass, forest, grass in a row: each step is half the hex left plus half the hex entered, (1.0 + 1.3) / 2 = 1.15 into the forest and (1.3 + 1.0) / 2 = 1.15 out of it, 2.3 in all.',
+    from: { q: 160, r: 0 },
+    to: { q: 162, r: 0 },
+  },
+  {
+    name: 'an_army_standing_under_its_own_wall_leaves_at_the_ground_price',
+    comment: 'The army starts on a wall hex (a wall built under it; the hex is forest): leaving is never shut by the wall and costs the forest\'s 1.3, so the first step is (1.3 + 1.0) / 2 = 1.15, the second 1.0.',
+    from: { q: 173, r: 0 },
+    to: { q: 175, r: 0 },
+    army: 'friendly',
+  },
+  {
+    name: 'an_army_standing_on_a_burnt_bridge_leaves_at_12',
+    comment: 'The army starts on a wide river hex whose bridge is gone (a level-0 foundation is no bridge): leaving it costs 1.0 + 11.0 = 12, so the first step is (12 + 1.0) / 2 = 6.5, the second 1.0.',
+    from: { q: 152, r: 0 },
+    to: { q: 154, r: 0 },
     army: 'friendly',
   },
 ];
@@ -283,7 +308,7 @@ const findPathCases = caseInputs.map((raw) => {
 const rangeInputs = [
   { name: 'ordinary_dispatch_stream_detour_patch', comment: 'origin === home (an ordinary dispatch, not a field order): the reachable set from (10,0) with 6h of food, over the stream-detour patch above.', origin: { q: 10, r: 0 }, hoursOfFood: 6 },
   { name: 'mountain_wall_range', comment: 'Mountains are impassable: from (30,0) with plenty of food only the origin itself is reachable, neither the mountain nor the hex beyond it.', origin: { q: 30, r: 0 }, hoursOfFood: 100 },
-  { name: 'stream_on_a_mountain_range', comment: 'A stream over a mountain is walkable at 9.0 each way: from (40,0) with 30h of food the stream hex costs 18 round trip and the hex beyond it 20.', origin: { q: 40, r: 0 }, hoursOfFood: 30 },
+  { name: 'stream_on_a_mountain_range', comment: 'A stream over a mountain is walkable at 9.0 each way: from (40,0) with 30h of food the stream hex costs (1.0 + 9.0) / 2 = 5 each way, 10 round trip, and the hex beyond it 14.', origin: { q: 40, r: 0 }, hoursOfFood: 30 },
 ];
 const reachableRangeCases = rangeInputs.map((c) => {
   const range = reachableRange(c.origin, c.origin, c.hoursOfFood, contextFor('friendly'));
@@ -298,7 +323,7 @@ const reachableRangeCases = rangeInputs.map((c) => {
 
 const doc = {
   _comment:
-    "Issue #159 part B's anti-drift guard, updated for the movement rules (wide rivers and mountains impassable to land armies, a stream - any river tile that is not wide - walkable at a flat 1.0 + RiverCrossingCost = 9.0 whatever terrain it runs over). HexPathfinderGoldenTests.cs (backend) and hexPath.golden.test.ts (frontend) both compute against this fixture using each side's OWN production cost tables and wide-river rule (RiverArms.cs / riverArms.ts, from the full river tiles below), then assert the frozen results. Either side's cost model drifting from the other turns its own suite red, instead of the client's range tint quietly disagreeing with what the server actually paths over. Generated by scripts/regen-goldens/river-pathing-golden.ts from the frontend pathfinder; never hand-edit. walls are the standing palisade hexes (an army with case.army 'friendly' belongs to the wall owner, 'enemy' to anyone else; the default is friendly): every wall hex blocks, a gate passes only its owner's armies, a land end with one wall neighbour that touches no mountain or wide river is half open and costs the ground plus 3.0 (HexPathfinder.HalfOpenEndCost / HALF_OPEN_END_COST). bridges are the bridge hexes (a level-0 foundation opens nothing; the bridges and the walls share one owner, an army with case.army 'friend' belongs to another owner who is that owner's friend): levels 1 and 2 cost 1.0 + 5.0 and 1.0 + 3.0 for every army, level 3 the land terrain's own cost, level 4 the terrain's cost for the owner and friends only (HexPathfinder.CausewayCrossingCost / FootbridgeCrossingCost, BridgeIndex.cs; bridgeMovement.ts). terrain omits sea - any (q, r) not listed is sea (impassable to a land unit). A case with expectedPath null has no route. hexesPerHour/speedFactor are always 1.0 in these cases so every hour figure below is a plain sum of step costs.",
+    "Issue #159 part B's anti-drift guard, updated for the movement rules (wide rivers and mountains impassable to land armies, a stream - any river tile that is not wide - walkable at a flat 1.0 + RiverCrossingCost = 9.0 whatever terrain it runs over). HexPathfinderGoldenTests.cs (backend) and hexPath.golden.test.ts (frontend) both compute against this fixture using each side's OWN production cost tables and wide-river rule (RiverArms.cs / riverArms.ts, from the full river tiles below), then assert the frozen results. Either side's cost model drifting from the other turns its own suite red, instead of the client's range tint quietly disagreeing with what the server actually paths over. Generated by scripts/regen-goldens/river-pathing-golden.ts from the frontend pathfinder; never hand-edit. walls are the standing palisade hexes (an army with case.army 'friendly' belongs to the wall owner, 'enemy' to anyone else; the default is friendly): every wall hex blocks, a gate passes only its owner's armies, a land end with one wall neighbour that touches no mountain or wide river is half open and costs the ground plus 3.0 (HexPathfinder.HalfOpenEndCost / HALF_OPEN_END_COST). bridges are the bridge hexes (a level-0 foundation opens nothing; the bridges and the walls share one owner, an army with case.army 'friend' belongs to another owner who is that owner's friend): levels 1 and 2 cost 1.0 + 5.0 and 1.0 + 3.0 for every army, levels 3 and 4 cost 1.0 + 0.5 (the ground under the river never sets the price), level 4 for the owner and friends only (HexPathfinder.CausewayCrossingCost / FootbridgeCrossingCost / KingsBridgeCrossingCost, BridgeIndex.cs; bridgeMovement.ts). terrain omits sea - any (q, r) not listed is sea (impassable to a land unit). A case with expectedPath null has no route. hexesPerHour/speedFactor are always 1.0 in these cases so every hour figure below is a plain sum of step costs. A step is billed half and half: (leave price of the hex left + enter price of the hex entered) / 2 - the leave price is the enter price, except that a wall built under the army does not shut the hex it stands on and a wide river with no bridge costs 1.0 + 11.0 = 12 to leave (HexPathfinder.BurntBridgeLeaveCost).",
   terrain,
   riverTiles,
   walls: walls.map((w) => ({ q: w.q, r: w.r, gate: w.gate ?? false, owner: OWNER })),

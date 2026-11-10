@@ -107,9 +107,9 @@ public sealed class WorldBridgesTests : IDisposable
         var index = await WorldBridges.IndexAsync(db, world.Id, _ => Terrain.Grass, Ct);
 
         double? Crossing(Guid walker) => index.CrossingCost(SpanHex, walker);
-        Assert.Equal(1.0, Crossing(owner.Id));
-        Assert.Equal(1.0, Crossing(guildmate.Id));
-        Assert.Equal(1.0, Crossing(ally.Id));
+        Assert.Equal(1.5, Crossing(owner.Id));
+        Assert.Equal(1.5, Crossing(guildmate.Id));
+        Assert.Equal(1.5, Crossing(ally.Id));
         Assert.Null(Crossing(stranger.Id));
         // An anonymous settlement's key (the settlement itself) is in no guild.
         Assert.Null(Crossing(Guid.NewGuid()));
@@ -138,7 +138,7 @@ public sealed class WorldBridgesTests : IDisposable
 
         var rules = routes.ForOwner(owner.Id);
         Assert.NotNull(rules?.BridgeCost);
-        Assert.Equal(1.0, rules!.BridgeCost!(SpanHex));
+        Assert.Equal(1.5, rules!.BridgeCost!(SpanHex));
         Assert.Null(rules.BridgeCost(new HexCoord(9, 9)));
     }
 }

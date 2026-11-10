@@ -140,9 +140,10 @@ public sealed class PalisadeMovementTests
             var hours = HexPathfinder.CumulativeHours(
                 path, h => terrain.GetValueOrDefault(h, Terrain.Sea), hexesPerHour: 1.0,
                 blocked: rules.Blocked, friendlyGate: rules.FriendlyGate, halfOpen: rules.HalfOpen);
-            // Grass under the tip: the ground's 1.0 plus the end's 3.
-            Assert.Equal(1.0 + HexPathfinder.HalfOpenEndCost, hours[tip] - hours[tip - 1], 9);
-            Assert.Equal(4.0, hours[tip] - hours[tip - 1], 9);
+            // Grass under the tip: the ground's 1.0 plus the end's 3. A step is billed half and half, so the army spends the tip's
+            // full price (4.0) on it plus half a grass hex on each side.
+            Assert.Equal((1.0 / 2) + (1.0 + HexPathfinder.HalfOpenEndCost) + (1.0 / 2), hours[tip + 1] - hours[tip - 1], 9);
+            Assert.Equal(5.0, hours[tip + 1] - hours[tip - 1], 9);
             Assert.Equal(3.0, HexPathfinder.HalfOpenEndCost);
         }
     }
@@ -164,7 +165,7 @@ public sealed class PalisadeMovementTests
         var hours = HexPathfinder.CumulativeHours(
             path, h => terrain.GetValueOrDefault(h, Terrain.Sea), hexesPerHour: 1.0,
             blocked: rules.Blocked, friendlyGate: rules.FriendlyGate, halfOpen: rules.HalfOpen);
-        Assert.Equal(1.3 + 3.0, hours[tip] - hours[tip - 1], 9);
+        Assert.Equal(0.5 + (1.3 + 3.0) + 0.5, hours[tip + 1] - hours[tip - 1], 9);
     }
 
     [Fact]
@@ -182,7 +183,7 @@ public sealed class PalisadeMovementTests
         // Bog without a wall stays passable at 2.
         var plain = Index(terrain, []);
         var hours = HexPathfinder.CumulativeHours([new HexCoord(2, 2), new HexCoord(3, 2)], h => terrain.GetValueOrDefault(h, Terrain.Sea), 1.0);
-        Assert.Equal(2.0, hours[1]);
+        Assert.Equal(1.5, hours[1]); // (grass 1.0 + bog 2.0) / 2
         Assert.Null(plain.ForOwner(Owner));
 
         // A bog hex in the middle of a closed wall blocks.
