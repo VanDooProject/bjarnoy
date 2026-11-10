@@ -223,9 +223,9 @@ const loadRows = computed<LoadRow[]>(() => {
   const rows: LoadRow[] = [{ id: 'voices', ...voiceProgress.value, gating: true }];
   // terrain and buildings are listed from the start: a group that has not reported a page yet shows 0 of an unknown total
   for (const id of ['terrain', 'buildings'] as const) {
-    // the map is ready without this group reporting: no map renders (joining is blocked), so nothing to load
-    if (props.loaded && !introLoad[id]) continue;
     const count = introLoad[id] ?? { loaded: 0, total: 0 };
+    // the map is ready with this group unfinished: no map renders (joining is blocked), so nothing more will load
+    if (props.loaded && !(count.total > 0 && count.loaded >= count.total)) continue;
     rows.push({ id, loaded: count.loaded, total: count.total, gating: true });
   }
   if (introLoad.animations) rows.push({ id: 'animations', ...introLoad.animations, gating: false });

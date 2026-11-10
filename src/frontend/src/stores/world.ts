@@ -21,6 +21,7 @@ import type {
   RenownResponse,
   UnitStackResponse,
   WorldMovementResponse,
+  WorldSummaryResponse,
 } from '../api/types';
 import { DEMO_MODE } from '../config';
 import type { TrainingSplit } from '../lib/units/trainingEconomy';
@@ -523,9 +524,10 @@ export const useWorldStore = defineStore('world', {
       // `getWorld` also answers for worlds players can no longer pick (hidden by an admin, or not provisioned): a
       // visitor without a settlement who remembers one of those would be stuck there ("every plot taken") while
       // another world is open. Without a settlement, the remembered world only counts while it's still listed.
+      let listed: WorldSummaryResponse[] | null = null;
       if (world && !usePlayerStore().hasFoundedSettlement) {
         const listedId = world.id;
-        const listed = await api.listWorlds();
+        listed = await api.listWorlds();
         if (!listed.some((summary) => summary.id === listedId)) world = null;
       }
       // Worlds are shared and meant to be created by an admin, not by
@@ -546,7 +548,7 @@ export const useWorldStore = defineStore('world', {
       // way as any other "can't join right now" state below, rather than
       // silently self-served.)
       if (!world) {
-        world = await this.newestWorld();
+        world = await this.newestWorld(listed);
       }
       if (!world) {
         this.worldJoinable = false;
@@ -679,11 +681,12 @@ export const useWorldStore = defineStore('world', {
       await this.refreshWorldSettlements();
     },
     /** The most recently created world, or null if none exist yet. */
-    async newestWorld() {
+    async newestWorld(listed: WorldSummaryResponse[] | null = null) {
       // GET /worlds answers with WorldSummaryResponse — enough to pick a
       // world, but not the seed/generation this store actually needs to
       // build its local map, so the pick is followed by a real getWorld.
-      const summaries = await api.listWorlds();
+      // `listed`: the listing the caller already fetched, so it isn't asked for twice.
+      const summaries = listed ?? (await api.listWorlds());
       if (summaries.length === 0) return null;
       // GetWorldsAsync orders by id (UUIDv7, so creation order) ascending.
       const newest = summaries[summaries.length - 1];

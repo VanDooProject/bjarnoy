@@ -343,7 +343,10 @@ describe('LandingIntro timeline', () => {
 
     // Regression: with joining blocked no map renders, so terrain and buildings never report; they stayed 0/? to the
     // end of the intro although the map had already said it was ready.
-    it('drops terrain and buildings once the map is ready without them reporting (no map renders)', async () => {
+    it('drops terrain and buildings once the map is ready without them loading (no map renders)', async () => {
+      // the main app reports the totals up front (useIntroTilesSignal), before it knows whether a map renders
+      introLoad.terrain = { loaded: 0, total: 9 };
+      introLoad.buildings = { loaded: 0, total: 11 };
       const w = await mountIntro({ loaded: true });
       expect(w.findAll('[data-testid="intro-load-detail"] .srow').map((r) => r.attributes('data-group'))).toEqual(['voices']);
     });

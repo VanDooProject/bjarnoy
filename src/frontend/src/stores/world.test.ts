@@ -1332,6 +1332,30 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     expect(store.worldId).toBe('world-new');
   });
 
+  it('keeps a remembered world that is still listed, even when a newer one exists', async () => {
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-old';
+    listWorlds.mockReset().mockResolvedValue([{ ...listedNewest, id: 'world-old', name: 'world-old' }, listedNewest]);
+    getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
+    getIslands.mockReset().mockResolvedValue([]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(store.worldId).toBe('world-old');
+  });
+
+  it('lists the worlds once when it moves off an unlisted remembered world', async () => {
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-old';
+    listWorlds.mockReset().mockResolvedValue([listedNewest]);
+    getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
+    getIslands.mockReset().mockResolvedValue([]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(listWorlds).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps a remembered unlisted world for a player who has a settlement there', async () => {
     const store = await loadStoreModule(false);
     const { usePlayerStore } = await import('./player');
