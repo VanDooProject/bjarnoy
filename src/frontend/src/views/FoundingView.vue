@@ -76,7 +76,7 @@ const start = computed(() => {
 });
 
 const tocLinks = computed(() =>
-  ['first', 'more', 'renown', 'where', 'new'].map((id) => ({ href: `#${id}`, label: t(`docs.founding.toc.${id}`) })),
+  ['first', 'more', 'sea', 'renown', 'where', 'new'].map((id) => ({ href: `#${id}`, label: t(`docs.founding.toc.${id}`) })),
 );
 </script>
 
@@ -130,6 +130,7 @@ const tocLinks = computed(() =>
       </div>
       <p class="muted">{{ $t('docs.founding.more.order', { resources: RESOURCES.map(resourceName).join(' / ') }) }}</p>
       <p class="text">{{ $t('docs.founding.more.send') }}</p>
+      <p class="text">{{ $t('docs.founding.more.escorts') }}</p>
       <p class="text">{{ $t('docs.founding.more.provisions', { food: settlerFacts?.food ?? 0, total: settlerFacts?.carried ?? 0 }) }}</p>
       <i18n-t keypath="docs.founding.more.ambush" tag="p" class="text" scope="global">
         <template #camps>
@@ -139,6 +140,25 @@ const tocLinks = computed(() =>
           <DocsPageLink to="/docs/land-movement">{{ $t('docs.founding.more.movementLink') }}</DocsPageLink>
         </template>
       </i18n-t>
+    </section>
+
+    <section id="sea" class="block">
+      <h2>{{ $t('docs.founding.sea.heading') }}</h2>
+      <i18n-t keypath="docs.founding.sea.body" tag="p" class="text" scope="global">
+        <template #dockyard><BuildingLink type="dockyard" /></template>
+      </i18n-t>
+      <i18n-t keypath="docs.founding.sea.slots" tag="p" class="text" scope="global">
+        <template #ships>
+          <DocsPageLink to="/docs/ships">{{ $t('docs.founding.sea.shipsLink') }}</DocsPageLink>
+        </template>
+      </i18n-t>
+      <p class="text">{{ $t('docs.founding.sea.speed') }}</p>
+      <i18n-t keypath="docs.founding.sea.camps" tag="p" class="text" scope="global">
+        <template #camps>
+          <DocsPageLink to="/docs/wildlife-camps">{{ $t('docs.founding.more.campsLink') }}</DocsPageLink>
+        </template>
+      </i18n-t>
+      <p class="text">{{ $t('docs.founding.sea.ships') }}</p>
     </section>
 
     <section id="renown" class="block">
@@ -189,6 +209,7 @@ const tocLinks = computed(() =>
       <h2>{{ $t('docs.founding.where.heading') }}</h2>
       <ul class="rules">
         <li>{{ $t('docs.founding.where.land') }}</li>
+        <li>{{ $t('docs.founding.where.sea') }}</li>
         <li>{{ $t('docs.founding.where.spacing', { hexes: MINIMUM_SPACING }) }}</li>
         <li>{{ $t('docs.founding.where.twice') }}</li>
         <li>{{ $t('docs.founding.where.taken') }}</li>

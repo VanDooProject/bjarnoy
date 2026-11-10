@@ -25,7 +25,7 @@ import TrainingModal from '../components/hud/TrainingModal.vue';
 import BuildRefusalChip from '../components/hud/BuildRefusalChip.vue';
 import { announceConfirmedBuild, holdBuildRow, releaseBuildRow } from '../composables/buildFeedback';
 import RingMenuHost from '../components/hud/RingMenuHost.vue';
-import { foundingLock, type FoundingLock } from '../lib/founding';
+import { foundingLock, isShorelineHex, type FoundingLock } from '../lib/founding';
 import RingMenu, { type RingAction, type RingCategory } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
@@ -1082,7 +1082,7 @@ function rootActionList(): RingAction[] {
     return [...siegeActions(tile), sendArmyAction(tile)];
   }
   if (isUnclaimedTile.value) {
-    const onCoast = tile.terrain === 'sand';
+    const onCoast = isShorelineHex(tile, world.model.terrainOf);
     const lock = foundingLock(settlersAtHome(), world.hud.renown);
     return [
       {
