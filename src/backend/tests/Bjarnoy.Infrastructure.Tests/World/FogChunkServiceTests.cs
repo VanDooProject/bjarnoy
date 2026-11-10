@@ -289,6 +289,39 @@ public class FogChunkServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Explored_ground_in_a_neighbouring_chunk_near_the_seam_changes_this_chunks_version_and_pixels()
+    {
+        const int radius = 150;
+        var worldId = AddWorld(radius);
+        AddSettlement(worldId, "player-1", 0, 0, level: 1);
+        await _dbContext.SaveChangesAsync(Ct);
+
+        var home = new FogChunkCoord(0, 0);
+        var before = await GetWorldAsync(worldId, "player-1", radius);
+
+        // One explored hex at texel (64, 0): the first column of the chunk east of home, 2 hexes from
+        // texel (62, 0), the last column of home but one. Nothing in home's own bounds changes.
+        var across = FogMaskLayout.ToHex(new MaskTexel(64, 0));
+        var acrossChunk = FogChunkLayout.ChunkOf(across);
+        Assert.Equal(new FogChunkCoord(1, 0), acrossChunk);
+        var data = PersistedExploredBitset.Encode(acrossChunk, [across]);
+        _dbContext.PlayerExploredChunks.Add(new PlayerExploredChunkEntity
+        {
+            WorldId = worldId, OwnerId = "player-1", ChunkU = acrossChunk.U, ChunkV = acrossChunk.V, Bits = data.Bits,
+        });
+        await _dbContext.SaveChangesAsync(Ct);
+
+        var after = await GetWorldAsync(worldId, "player-1", radius);
+
+        Assert.NotEqual(ChunkAt(before, home).Version, ChunkAt(after, home).Version);
+        Assert.NotSame(ChunkAt(before, home).Png, ChunkAt(after, home).Png);
+
+        var nearSeam = new MaskTexel(62, 0);
+        Assert.Equal(255, CellAt(before, nearSeam).Unknown);
+        Assert.InRange(CellAt(after, nearSeam).Unknown, 1, 254);
+    }
+
+    [Fact]
     public async Task Persisted_history_survives_the_settlement_that_explored_it_being_lost()
     {
         var worldId = AddWorld(8);

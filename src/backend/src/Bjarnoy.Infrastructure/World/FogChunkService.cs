@@ -214,8 +214,10 @@ public sealed class FogChunkService(GameDbContext dbContext, IMemoryCache cache,
 
     /// <summary>
     /// Hash of exactly the inputs that shape a chunk: the sources in reach
-    /// (sorted, so query order can't matter) and the explored-history tokens
-    /// of the chunk and its ring.
+    /// (sorted, so query order can't matter), the explored-history tokens of
+    /// the chunk and its ring, and <see cref="FogMaskGenerator.Version"/>: the
+    /// version is the served ETag, so it must change when the generator's
+    /// output does for the same inputs.
     /// </summary>
     private static string ComputeVersion(IReadOnlyList<FogVisionSource> sources, string historyTokens)
     {
@@ -224,7 +226,7 @@ public sealed class FogChunkService(GameDbContext dbContext, IMemoryCache cache,
             sources
                 .OrderBy(s => s.Coord.Q).ThenBy(s => s.Coord.R).ThenBy(s => s.ExploredRadius).ThenBy(s => s.VisibleRadius)
                 .Select(s => $"{s.Coord.Q}:{s.Coord.R}:{s.ExploredRadius}:{s.VisibleRadius}"));
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{canonical}#{historyTokens}")))[..16];
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"v{FogMaskGenerator.Version}#{canonical}#{historyTokens}")))[..16];
     }
 
     private static string ComputeETag(int cuMin, int cuMax, int cvMin, int cvMax, List<FogChunk> chunks)

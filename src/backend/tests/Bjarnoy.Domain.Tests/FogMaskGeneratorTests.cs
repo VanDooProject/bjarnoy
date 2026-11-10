@@ -269,11 +269,73 @@ public class FogMaskGeneratorTests
     }
 
     [Fact]
-    public void Fringe_reach_fits_inside_the_one_chunk_history_ring()
+    public void A_chunk_window_equals_the_crop_of_the_3x3_chunk_region_when_explored_hexes_sit_just_across_its_seams()
     {
-        // FogChunkService loads history for the requested chunks plus one chunk on every side; the
-        // fringe (and the one-texel interpolation border) must not need explored hexes beyond that.
-        Assert.True((2 * FogMaskGenerator.TrailFringeReachSteps) + 1 <= FogChunkLayout.ChunkSize);
+        // The real property behind FogChunkService's one-chunk history ring: a chunk baked on its own, from
+        // explored ground in its neighbours only, matches the same texels of a bake over the whole 3x3 region.
+        var chunk = new FogChunkCoord(0, 0);
+        var window = FogChunkLayout.Bounds(chunk);
+        var region = new MaskBounds(window.MinU - 64, window.MinV - 64, window.MaxU + 64, window.MaxV + 64);
+
+        var explored = new HashSet<HexCoord>();
+        void AddAtTexel(int u, int v) => explored.Add(FogMaskLayout.ToHex(new MaskTexel(u, v)));
+
+        // Single hexes and short runs hugging every edge and corner from the outside (even u + v = hex texel).
+        for (var k = 0; k < 64; k += 6)
+        {
+            AddAtTexel(window.MinU - 2, window.MinV + (2 * (k / 2)));
+            AddAtTexel(window.MaxU + 1, window.MinV + (2 * (k / 2)) + 1);
+            AddAtTexel(window.MinU + (2 * (k / 2)), window.MinV - 2);
+            AddAtTexel(window.MinU + (2 * (k / 2)) + 1, window.MaxV + 1);
+        }
+
+        AddAtTexel(window.MinU - 1, window.MinV - 1);
+        AddAtTexel(window.MaxU, window.MaxV);
+
+        var whole = FogMaskGenerator.Generate(region, [], explored, Options);
+        var windowed = FogMaskGenerator.GenerateWindow(window, [], explored.Contains, Options);
+
+        var fringeSeen = false;
+        for (var v = window.MinV; v < window.MaxV; v++)
+        {
+            for (var u = window.MinU; u < window.MaxU; u++)
+            {
+                var texel = new MaskTexel(u, v);
+                Assert.Equal(whole[texel], windowed[texel]);
+                fringeSeen |= windowed[texel].Unknown is > 0 and < 255;
+            }
+        }
+
+        Assert.True(fringeSeen);
+    }
+
+    [Fact]
+    public void Windows_of_a_random_explored_pattern_stitch_into_the_whole_region()
+    {
+        var random = new Random(7);
+        var explored = new HashSet<HexCoord>();
+        for (var i = 0; i < 400; i++)
+        {
+            explored.Add(new HexCoord(random.Next(-40, 40), random.Next(-40, 40)));
+        }
+
+        var sources = new List<FogVisionSource> { new(new HexCoord(5, -8), 5, 3) };
+        var region = new MaskBounds(-128, -128, 128, 128);
+        var whole = FogMaskGenerator.Generate(region, sources, explored.Contains);
+
+        foreach (var chunk in new[] { new FogChunkCoord(-1, -1), new FogChunkCoord(0, 0), new FogChunkCoord(-1, 0) })
+        {
+            var window = FogChunkLayout.Bounds(chunk);
+            var windowed = FogMaskGenerator.GenerateWindow(
+                window, FogMaskGenerator.SourcesAffecting(window, sources), explored.Contains);
+            for (var v = window.MinV; v < window.MaxV; v++)
+            {
+                for (var u = window.MinU; u < window.MaxU; u++)
+                {
+                    Assert.Equal(whole[new MaskTexel(u, v)], windowed[new MaskTexel(u, v)]);
+                }
+            }
+        }
     }
 
     [Fact]

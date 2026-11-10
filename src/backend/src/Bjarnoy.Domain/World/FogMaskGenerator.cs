@@ -78,6 +78,14 @@ public sealed class FogMaskBuffer
 public static class FogMaskGenerator
 {
     /// <summary>
+    /// Version of the baked output. Bump it whenever the mask changes for the
+    /// same inputs (a new ramp, fringe or noise rule): it is part of the chunk
+    /// version the API serves as ETag, so browsers revalidating after a deploy
+    /// do not get a 304 for pixels the old generator baked.
+    /// </summary>
+    public const int Version = 2;
+
+    /// <summary>
     /// Generates the mask for <paramref name="bounds"/>. <paramref name="sources"/>
     /// should already include a source halo (§3's "Mechanics": every source
     /// within <c>max(ExploredRadius)</c> of the bounds, not just those whose
@@ -157,7 +165,7 @@ public static class FogMaskGenerator
         var outOfSightDistance = MultiSourceDistance(
             hexTexelSet, sources, s => s.VisibleRadius, options.OutOfSightMarginHexes);
 
-        var trailDistance = TrailFringeDistances(bounds, hexTexelSet, isExplored);
+        var trail = TrailFringe.Compute(bounds, isExplored);
 
         var cells = new FogMaskCell[bounds.Width * bounds.Height];
 
@@ -165,7 +173,7 @@ public static class FogMaskGenerator
         foreach (var texel in hexTexels)
         {
             var hex = FogMaskLayout.ToHex(texel);
-            var explored = isExplored(hex);
+            var explored = trail.IsExplored(texel);
 
             // Explored ground is 0. Beside it, the source ramp (255 far from any
             // settlement) is capped by the troop's own ramp around explored
@@ -174,7 +182,7 @@ public static class FogMaskGenerator
                 ? (byte)0
                 : Math.Min(
                     Ramp(GetOrMax(unknownDistance, texel), options.UnknownMarginHexes),
-                    TrailRamp(GetOrMax(trailDistance, texel)));
+                    TrailRamp(trail.DistanceAt(texel)));
             var outOfSight = Ramp(GetOrMax(outOfSightDistance, texel), options.OutOfSightMarginHexes);
             var noise = NoiseSeed(hex);
 
@@ -382,71 +390,140 @@ public static class FogMaskGenerator
     }
 
     /// <summary>
-    /// For every hex texel in <paramref name="hexTexels"/> within the fringe
-    /// reach of explored ground, the euclidean distance to the nearest
-    /// explored hex. Only explored hexes with an unexplored neighbour can be
-    /// the nearest explored hex of an unexplored one, so only those are
-    /// stamped. They may lie outside <paramref name="bounds"/> (up to the
-    /// fringe reach), so candidates are enumerated over the grown bounds.
+    /// Hex offsets with their euclidean length d &lt;= the fringe reach
+    /// (<see cref="TrailFringeOffsetHexes"/> + <see cref="TrailFringeMarginHexes"/>),
+    /// computed once and kept as texel deltas: <see cref="FogMaskLayout.ToTexel"/>
+    /// is the exact affine map <c>u = q</c>, <c>v = 2r + q</c> for every hex
+    /// (see <see cref="FogMaskLayout.WorldBounds"/>), so an axial offset
+    /// (dq, dr) is the constant texel delta (dq, 2dr + dq) whatever the
+    /// parity. A boundary hex stamps exactly these around itself: no radius
+    /// walk, no hex conversion and no square root per target.
     /// </summary>
-    private static Dictionary<MaskTexel, double> TrailFringeDistances(
-        MaskBounds bounds, HashSet<MaskTexel> hexTexels, Func<HexCoord, bool> isExplored)
+    private static readonly (int Du, int Dv, double D)[] TrailFringeOffsets = BuildTrailFringeOffsets();
+
+    /// <summary>The six hex neighbours as texel deltas (same map as <see cref="TrailFringeOffsets"/>).</summary>
+    private static readonly (int Du, int Dv)[] NeighbourTexelDeltas = [(1, 1), (1, -1), (0, -2), (-1, -1), (-1, 1), (0, 2)];
+
+    private static (int Du, int Dv, double D)[] BuildTrailFringeOffsets()
     {
-        var distance = new Dictionary<MaskTexel, double>();
-        var steps = TrailFringeReachSteps;
         var cap = TrailFringeOffsetHexes + TrailFringeMarginHexes;
-        var exploredCache = new Dictionary<HexCoord, bool>();
-
-        bool Explored(HexCoord hex)
+        var list = new List<(int, int, double)>();
+        foreach (var offset in HexCoord.Origin.WithinRadius(TrailFringeReachSteps))
         {
-            if (!exploredCache.TryGetValue(hex, out var value))
+            var d = HexCoord.EuclideanDistance(offset, HexCoord.Origin);
+            if (d <= cap)
             {
-                value = isExplored(hex);
-                exploredCache[hex] = value;
+                list.Add((offset.Q, (2 * offset.R) + offset.Q, d));
             }
-
-            return value;
         }
 
-        for (var v = bounds.MinV - (2 * steps); v < bounds.MaxV + (2 * steps); v++)
+        return [.. list];
+    }
+
+    /// <summary>
+    /// Explored-ground lookup and fringe distances over flat arrays. Explored
+    /// hexes with an unexplored neighbour are the only ones that can be the
+    /// nearest explored hex of an unexplored one, so only those are stamped.
+    /// They may lie outside the bounds (up to the fringe reach), so the
+    /// explored lookup covers the bounds grown by the reach, plus the border
+    /// the neighbour check reads (a hex neighbour is at most 1 texel away in
+    /// u and 2 in v).
+    /// </summary>
+    private sealed class TrailFringe
+    {
+        private readonly MaskBounds _bounds;
+        private readonly MaskBounds _lookup;
+        private readonly bool[] _explored;
+        private readonly double[] _distance;
+
+        private TrailFringe(MaskBounds bounds, MaskBounds lookup, bool[] explored, double[] distance)
         {
-            for (var u = bounds.MinU - steps; u < bounds.MaxU + steps; u++)
+            _bounds = bounds;
+            _lookup = lookup;
+            _explored = explored;
+            _distance = distance;
+        }
+
+        /// <summary>Whether the hex at <paramref name="texel"/> (inside the bounds) is explored.</summary>
+        public bool IsExplored(MaskTexel texel) =>
+            _explored[((texel.V - _lookup.MinV) * _lookup.Width) + (texel.U - _lookup.MinU)];
+
+        /// <summary>Euclidean distance to the nearest stamped explored hex, or +infinity beyond the reach.</summary>
+        public double DistanceAt(MaskTexel texel) =>
+            _distance[((texel.V - _bounds.MinV) * _bounds.Width) + (texel.U - _bounds.MinU)];
+
+        public static TrailFringe Compute(MaskBounds bounds, Func<HexCoord, bool> isExplored)
+        {
+            var steps = TrailFringeReachSteps;
+            var lookup = new MaskBounds(
+                bounds.MinU - steps - 1,
+                bounds.MinV - (2 * steps) - 2,
+                bounds.MaxU + steps + 1,
+                bounds.MaxV + (2 * steps) + 2);
+
+            var explored = new bool[lookup.Width * lookup.Height];
+            for (var v = lookup.MinV; v < lookup.MaxV; v++)
             {
-                var texel = new MaskTexel(u, v);
-                if (!FogMaskLayout.IsHexTexel(texel))
+                var row = (v - lookup.MinV) * lookup.Width;
+                for (var u = lookup.MinU; u < lookup.MaxU; u++)
                 {
-                    continue;
+                    var texel = new MaskTexel(u, v);
+                    if (FogMaskLayout.IsHexTexel(texel))
+                    {
+                        explored[row + (u - lookup.MinU)] = isExplored(FogMaskLayout.ToHex(texel));
+                    }
                 }
+            }
 
-                var hex = FogMaskLayout.ToHex(texel);
-                if (!Explored(hex) || !hex.Neighbours().Any(n => !Explored(n)))
-                {
-                    continue;
-                }
+            var distance = new double[bounds.Width * bounds.Height];
+            Array.Fill(distance, double.PositiveInfinity);
 
-                foreach (var target in hex.WithinRadius(steps))
+            var offsets = TrailFringeOffsets;
+            var neighbours = NeighbourTexelDeltas;
+            for (var v = bounds.MinV - (2 * steps); v < bounds.MaxV + (2 * steps); v++)
+            {
+                for (var u = bounds.MinU - steps; u < bounds.MaxU + steps; u++)
                 {
-                    var targetTexel = FogMaskLayout.ToTexel(target);
-                    if (!hexTexels.Contains(targetTexel))
+                    if (!FogMaskLayout.IsHexTexel(new MaskTexel(u, v)) || !explored[((v - lookup.MinV) * lookup.Width) + (u - lookup.MinU)])
                     {
                         continue;
                     }
 
-                    var d = HexCoord.EuclideanDistance(target, hex);
-                    if (d > cap)
+                    var boundary = false;
+                    foreach (var (nu, nv) in neighbours)
+                    {
+                        if (!explored[((v + nv - lookup.MinV) * lookup.Width) + (u + nu - lookup.MinU)])
+                        {
+                            boundary = true;
+                            break;
+                        }
+                    }
+
+                    if (!boundary)
                     {
                         continue;
                     }
 
-                    if (!distance.TryGetValue(targetTexel, out var existing) || d < existing)
+                    foreach (var (du, dv, d) in offsets)
                     {
-                        distance[targetTexel] = d;
+                        var tu = u + du;
+                        var tv = v + dv;
+                        if (tu < bounds.MinU || tu >= bounds.MaxU || tv < bounds.MinV || tv >= bounds.MaxV)
+                        {
+                            continue;
+                        }
+
+                        var index = ((tv - bounds.MinV) * bounds.Width) + (tu - bounds.MinU);
+                        if (d < distance[index] && !explored[((tv - lookup.MinV) * lookup.Width) + (tu - lookup.MinU)])
+                        {
+                            distance[index] = d;
+                        }
                     }
                 }
             }
-        }
 
-        return distance;
+            return new TrailFringe(bounds, lookup, explored, distance);
+        }
     }
 
     private static double GetOrMax(Dictionary<MaskTexel, double> distance, MaskTexel texel) =>
