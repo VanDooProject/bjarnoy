@@ -790,9 +790,9 @@ public static class BuildingCatalogue
         // MaxTowers and docs/design/economy.md section 5).
         ClaimRadius = level == 1 ? 2 : 3,
         // A longhouse upgrade is the settlement's biggest single commitment —
-        // it consumes every construction slot the settlement currently has,
-        // blocking all other construction until it finishes (issue #158).
-        OccupiesAllSlots = true,
+        // it consumes 90 % (rounded down) of the construction slots the
+        // settlement currently has, leaving the rest for other construction.
+        OccupiesMostSlots = true,
     };
 
     private static BuildingDefinition StorageHouse(int level) => new()

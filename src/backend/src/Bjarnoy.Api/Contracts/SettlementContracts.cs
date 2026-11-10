@@ -126,9 +126,9 @@ public sealed record PlacedBuildingResponse(
 /// waiting queue.
 /// </param>
 /// <param name="SlotCost">
-/// How many construction slots this order occupies once building — every
-/// slot the settlement currently has, for a Longhouse upgrade
-/// (<c>OccupiesAllSlots</c>); otherwise the catalogue's per-order
+/// How many construction slots this order occupies once building — 90 % of the
+/// slots the settlement currently has (rounded down), for a Longhouse upgrade
+/// (<c>OccupiesMostSlots</c>); otherwise the catalogue's per-order
 /// <c>SlotCost</c> (1 for everything today).
 /// </param>
 /// <param name="Kind">
@@ -397,8 +397,8 @@ public sealed record SettlementResponse(
                 o.Type.ToWireName(),
                 o.TargetLevel,
                 o.IsWaiting ? "waiting" : "building",
-                BuildingCatalogue.Get(o.Type, o.LevelInWork).OccupiesAllSlots
-                    ? domain.ConstructionSlots
+                BuildingCatalogue.Get(o.Type, o.LevelInWork).OccupiesMostSlots
+                    ? Settlement.LonghouseSlotCost(domain.ConstructionSlots)
                     : BuildingCatalogue.Get(o.Type, o.LevelInWork).SlotCost,
                 o.CompletesAt,
                 (clock.FreezesTime || o.IsWaiting) ? null : o.RemainingAt(gameNow).TotalSeconds,
@@ -497,7 +497,7 @@ public sealed record BuildingDefinitionResponse(
     bool AlsoOnCoastalWater,
     int RequiredLonghouseLevel,
     int SlotCost,
-    bool OccupiesAllSlots,
+    bool OccupiesMostSlots,
     int ClaimRadius,
     IReadOnlyList<BuildingPrerequisiteResponse> Prerequisites,
     string? RingCategory,
@@ -525,7 +525,7 @@ public sealed record BuildingDefinitionResponse(
             definition.AlsoOnCoastalWater,
             definition.RequiredLonghouseLevel,
             definition.SlotCost,
-            definition.OccupiesAllSlots,
+            definition.OccupiesMostSlots,
             definition.ClaimRadius,
             [.. definition.Prerequisites.Select(p => new BuildingPrerequisiteResponse(p.Type.ToWireName(), p.Level))],
             definition.RingCategory?.ToString().ToLowerInvariant(),

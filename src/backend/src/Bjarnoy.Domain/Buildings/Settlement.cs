@@ -250,8 +250,8 @@ public sealed record Settlement
 
     /// <summary>
     /// How many orders may build in parallel right now (issue #158):
-    /// <c>2 + max(0, (longhouseLevel − 5) / 5)</c> — 2 slots at level 1–9, 3 at
-    /// 10, 4 at 15, 5 at 20, 7 at 30. A razed settlement
+    /// <c>max(2, longhouseLevel)</c> — 2 slots at level 1–2, then one more per level
+    /// (3 at level 3, 10 at level 10, 30 at 30). A razed settlement
     /// (<see cref="LonghouseLevel"/> 0) still reads 2 — harmless, since every
     /// building needs <see cref="BuildingDefinition.RequiredLonghouseLevel"/>
     /// &gt;= 1 and nothing can be queued there anyway.
@@ -290,8 +290,14 @@ public sealed record Settlement
     private static int ConstructionSlotsFor(IReadOnlyList<PlacedBuilding> buildings)
     {
         var longhouseLevel = buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
-        return 2 + Math.Max(0, (longhouseLevel - 5) / 5);
+        return Math.Max(2, longhouseLevel);
     }
+
+    /// <summary>
+    /// Slots a Longhouse order occupies out of <paramref name="constructionSlots"/>: 90 %, rounded down, at least 1
+    /// (level 10: 9 of 10). The rest stay free for other construction.
+    /// </summary>
+    public static int LonghouseSlotCost(int constructionSlots) => Math.Max(1, constructionSlots * 9 / 10);
 
     /// <summary>Queued orders already under construction — see <see cref="BuildOrder.IsWaiting"/>.</summary>
     public IEnumerable<BuildOrder> ActiveOrders => Queue.Where(o => !o.IsWaiting);
@@ -305,7 +311,7 @@ public sealed record Settlement
     private static int EffectiveSlotCost(BuildOrder order, int constructionSlots)
     {
         var definition = BuildingCatalogue.Get(order.Type, order.LevelInWork);
-        return definition.OccupiesAllSlots ? constructionSlots : definition.SlotCost;
+        return definition.OccupiesMostSlots ? LonghouseSlotCost(constructionSlots) : definition.SlotCost;
     }
 
     private static int UsedSlotsFor(IReadOnlyList<BuildOrder> queue, int constructionSlots) =>
@@ -1625,7 +1631,7 @@ public sealed record Settlement
         double speedFactor,
         int maxWaitingOrders)
     {
-        var slotCost = slotDefinition.OccupiesAllSlots ? ConstructionSlots : slotDefinition.SlotCost;
+        var slotCost = slotDefinition.OccupiesMostSlots ? LonghouseSlotCost(ConstructionSlots) : slotDefinition.SlotCost;
 
         // A stacked order (maxOrdersPerHex > 1) can only ever start once
         // every earlier order already queued on this same hex is done — an
