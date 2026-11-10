@@ -260,6 +260,10 @@ public sealed record Army
     /// <paramref name="isRiver"/> into every <see cref="HexPathfinder"/> call this makes.
     /// <see langword="null"/> (the default) treats every river hex as a crossable stream.
     /// </param>
+    /// <param name="routeSearchBudget">
+    /// Node expansions all route searches of this order share (default <see cref="HexPathfinder.MaxExpandedNodes"/>); an
+    /// order that uses it up is refused <see cref="DispatchRejection.RouteTooLong"/>. Tests pass a small one.
+    /// </param>
     public static DispatchDecision PlanDispatch(
         Settlement settlement,
         IReadOnlyList<UnitStack> requestedUnits,
@@ -281,7 +285,8 @@ public sealed record Army
         IGiantIndex? giants = null,
         WallRules? walls = null,
         HexCoord? targetCampCoord = null,
-        bool targetCampIsWater = false)
+        bool targetCampIsWater = false,
+        int routeSearchBudget = HexPathfinder.MaxExpandedNodes)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
@@ -376,10 +381,11 @@ public sealed record Army
             : TrainingSite(settlement.Centre, settlement.Buildings, settlementDecision.Stacks!);
         List<HexCoord> stops = [origin, .. waypoints, routeDestination];
         List<HexCoord> fullPath = [origin];
+        var budget = routeSearchBudget;
 
         for (var i = 0; i < stops.Count - 1; i++)
         {
-            var search = HexPathfinder.Search(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+            var search = SearchWithinBudget(ref budget, stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls);
             if (search.Path is not { Count: > 0 } leg)
             {
                 return DispatchDecision.Rejected(
@@ -1163,13 +1169,15 @@ public sealed record Army
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
         }
 
-        var path = HexPathfinder.FindPath(fromHex, newTarget, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        // Both searches are one order: they share one expansion budget.
+        var budget = HexPathfinder.MaxExpandedNodes;
+        var path = SearchWithinBudget(ref budget, fromHex, newTarget, terrainAt, isLandUnit, isRiver, isWideRiver, walls).Path;
         if (path is null || path.Count == 0)
         {
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
         }
 
-        var returnPath = HexPathfinder.FindPath(newTarget, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnPath = SearchWithinBudget(ref budget, newTarget, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls).Path;
         if (returnPath is null || returnPath.Count == 0)
         {
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
@@ -1416,6 +1424,22 @@ public sealed record Army
         return this with { Location = new ArmyLocation.InTransit(retreatMovement) };
     }
 
+    /// <summary>
+    /// One route search of an order, drawn from the order's shared expansion budget: every search the order makes
+    /// (each leg, and a field order's way home) runs against what the earlier ones left, and subtracts what it used.
+    /// A budget that is used up makes the search report <see cref="PathSearch.LimitReached"/>, i.e. "too long to plan".
+    /// </summary>
+    private static PathSearch SearchWithinBudget(
+        ref int budget, HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt, bool isLandUnit,
+        Func<HexCoord, bool>? isRiver, Func<HexCoord, bool>? isWideRiver, WallRules? walls)
+    {
+        var search = HexPathfinder.Search(
+            from, to, terrainAt, isLandUnit, isRiver, isWideRiver,
+            walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost, budget);
+        budget -= search.Expanded;
+        return search;
+    }
+
     private static FieldOrderRejection NoRouteRejection(PathSearch search, bool isLandUnit) =>
         search.LimitReached ? FieldOrderRejection.RouteTooLong
         : isLandUnit ? FieldOrderRejection.UnreachableLeg
@@ -1499,6 +1523,9 @@ public sealed record Army
     /// <param name="giants">Giant hexes, for the fleet shore rule's territory test.</param>
     /// <param name="requestedUnits">What leaves; <see langword="null"/> means the whole army.</param>
     /// <param name="splitArmyId">The id of the new army when this is a split.</param>
+    /// <param name="routeSearchBudget">
+    /// Node expansions every route search of this order (each leg and the way home) shares; see <see cref="PlanDispatch"/>.
+    /// </param>
     public static FieldOrderResult PlanFieldOrder(
         Army army,
         IReadOnlyList<HexCoord> waypoints,
@@ -1519,7 +1546,8 @@ public sealed record Army
         bool targetCampIsWater = false,
         IGiantIndex? giants = null,
         IReadOnlyList<UnitStack>? requestedUnits = null,
-        Guid? splitArmyId = null)
+        Guid? splitArmyId = null,
+        int routeSearchBudget = HexPathfinder.MaxExpandedNodes)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(waypoints);
@@ -1615,6 +1643,7 @@ public sealed record Army
         DateTimeOffset departedAt;
         double provisionsAtDeparture;
         List<HexCoord> fullPath;
+        var budget = routeSearchBudget;
         Army? remainder = null;
 
         if (arrived)
@@ -1632,7 +1661,7 @@ public sealed record Army
             fullPath = [fromHex];
             for (var i = 0; i < stops.Count - 1; i++)
             {
-                var search = HexPathfinder.Search(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+                var search = SearchWithinBudget(ref budget, stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls);
                 if (search.Path is not { Count: > 0 } leg)
                 {
                     return FieldOrderResult.Rejected(NoRouteRejection(search, isLandUnit));
@@ -1653,7 +1682,7 @@ public sealed record Army
             fullPath = [.. movement.Path];
             for (var i = 0; i < stops.Count - 1; i++)
             {
-                var search = HexPathfinder.Search(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+                var search = SearchWithinBudget(ref budget, stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver, isWideRiver, walls);
                 if (search.Path is not { Count: > 0 } leg)
                 {
                     return FieldOrderResult.Rejected(NoRouteRejection(search, isLandUnit));
@@ -1663,7 +1692,7 @@ public sealed record Army
             }
         }
 
-        var returnSearch = HexPathfinder.Search(routeDestination, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        var returnSearch = SearchWithinBudget(ref budget, routeDestination, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls);
         if (returnSearch.Path is not { Count: > 0 } returnPath)
         {
             return FieldOrderResult.Rejected(NoRouteRejection(returnSearch, isLandUnit));

@@ -154,11 +154,13 @@ Consequences:
   `RetargetFoundingRejection.TargetNotReachable`) and the message "No land route: mountains
   and wide rivers can't be crossed."; the client maps the same codes to `apiErrors.rejections`
   in every locale and shows the text in the dispatch draft.
-- **The search is capped.** `HexPathfinder` expands at most 250,000 nodes per search (the TS
-  twin `MAX_EXPANDED_NODES` in `hexPath.ts` matches); a long sea route that detours around land
-  can need ~100,000 (a 534-hex fleet route against a 345-hex straight distance took 93,000,
-  ~50 ms). Past the cap the search reports `LimitReached` and the order is refused as
-  `RouteTooLong`.
+- **The search is capped.** `HexPathfinder` expands at most 250,000 nodes per order, shared by
+  all the searches the order makes: every leg through its waypoints, and a field order's way
+  home (the TS twin `MAX_EXPANDED_NODES` in `hexPath.ts` matches for a single search); a long sea
+  route that detours around land can need ~100,000 (a 534-hex fleet route against a 345-hex
+  straight distance took 93,000, ~50 ms). Past the cap the search reports `LimitReached` and
+  the order is refused as `RouteTooLong`. There is no waypoint limit: the shared budget bounds
+  what one request can cost.
 - **Route planning is rate-limited per player.** The endpoints that run the search (dispatch,
   recall, field orders, founding retarget, sending a guest home) share one sliding-window limit
   of 30 requests per minute per player (user id; the owner id without an account); the next one
