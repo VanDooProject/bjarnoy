@@ -234,6 +234,8 @@ export interface IslandResponse {
   utgardWalls?: UtgardWallResponse[];
   /** The Jötun watchtowers of a wasted island with Utgard (empty otherwise). */
   jotunTowers?: JotunTowerResponse[];
+  /** Water this island encloses that the bog did not fill (empty when it has none) — drawn like the sea, see `drawsAsSea`. */
+  inlandLakeTiles: TileCoordinate[];
   /** True for a wasted island — only ever present once the world's endboss has triggered (hidden before that). */
   wasted: boolean;
 }

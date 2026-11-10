@@ -76,7 +76,8 @@
     "forest": "Wald",
     "mountain": "Gebirge",
     "bog": "Moorland",
-    "lake": "Moorsee"
+    "lake": "Moorsee",
+    "inlandlake": "Binnensee"
   },
   "wastedTerrain": {
     "wasteland": "Ödland",

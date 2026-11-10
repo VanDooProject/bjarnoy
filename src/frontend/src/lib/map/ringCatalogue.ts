@@ -185,10 +185,17 @@ export function isLakeShoreHut(tile: { buildingType?: string; bog?: { kind: BogT
 }
 
 /**
+ * The buildings that may also stand on an inland-lake hex beside land (mirrors `BuildingDefinition.AlsoOnInlandLakeShore`: the
+ * Fishing Hut). Nothing else stands on an inland lake, and no building on one without land beside it.
+ */
+const INLAND_LAKE_SHORE_BUILDINGS: ReadonlySet<string> = new Set(['fishinghut']);
+
+/**
  * Whether `type` may stand on this one hex, from its terrain, coastal-water flag and bog kind — the client side of
  * `BuildingDefinition.AllowsHex`, read from the catalogue's placement rules (river shape and soil rules are separate, see
  * `riverBuildingAllowedHere`/`cropAllowedHere`). Nothing stands on a lake; a coastal-water building stands on coastal water, or on
- * the bog kinds its `lakeShoreKinds` name (the Fishing Hut on a lake's half shore); a wall's sea end (`alsoOnCoastalWater`) also on
+ * the bog kinds its `lakeShoreKinds` name (the Fishing Hut on a lake's half shore), or on an inland-lake hex beside land
+ * (`INLAND_LAKE_SHORE_BUILDINGS`, the Fishing Hut only); a wall's sea end (`alsoOnCoastalWater`) also on
  * coastal water; bog ground takes only what names its kind, never anything a grass building would. Whether a hex then takes a wall is
  * the wall rules' (`WorldModel.palisadePlacement`).
  */
@@ -198,6 +205,7 @@ export function buildingAllowedOnHex(
 ): boolean {
   const rule = placementRuleFor(type);
   if (!rule || tile.terrain === 'lake') return false;
+  if (tile.terrain === 'inlandlake') return INLAND_LAKE_SHORE_BUILDINGS.has(type) && tile.isCoastalWater === true;
   if (tile.terrain === 'sea') return tile.isCoastalWater === true && (rule.requiresCoastalWater || rule.alsoOnCoastalWater);
   if (tile.terrain === 'bog') {
     const kind = tile.bog?.kind;
@@ -231,7 +239,7 @@ export function tileIsBuildable(tile: {
 }): boolean {
   // A wildlife camp hex is buildable only once the camp is cleared (never Fenrir's brood).
   if (tile.camp && !tile.buildingType && !campHexBuildable(tile.camp)) return false;
-  return (tile.terrain !== 'sea' && tile.terrain !== 'lake') || isWaterOnlyBuilding(tile.buildingType) || isWallBuilding(tile.buildingType);
+  return (tile.terrain !== 'sea' && tile.terrain !== 'lake' && tile.terrain !== 'inlandlake') || isWaterOnlyBuilding(tile.buildingType) || isWallBuilding(tile.buildingType);
 }
 
 /** The palisade and its gate: the wall hexes (`BuildingType.Palisade`/`PalisadeGate`). */

@@ -52,7 +52,7 @@ import {
   type GiantTextureMap,
 } from './giantTiles';
 import { PALISADE_FAMILY, isRefusal, palisadeTileFor, type PalisadePiece } from './palisadeTiles';
-import type { BogTile, ForestKind, RiverTile, Terrain, Tile, TileOrientation } from './types';
+import { drawsAsSea, type BogTile, type ForestKind, type RiverTile, type Terrain, type Tile, type TileOrientation } from './types';
 import type { RiverVariant } from './worldGenerator';
 import {
   bend60OrientationOf,
@@ -1763,13 +1763,16 @@ export function textureKeyFor(tile: Tile, riverArt?: RiverArt): TextureKey {
   if (tile.buildingType === 'tower' && tile.terrain === 'forest') return 'towerforest';
   if (tile.buildingType === 'tower' && tile.terrain === 'sand') return 'towersand';
   if (tile.buildingType) return tile.buildingType;
-  if (tile.wasted) return WASTED_TEXTURE_KEY[tile.terrain] ?? tile.terrain;
+  if (tile.wasted) return WASTED_TEXTURE_KEY[seaArt(tile.terrain)] ?? seaArt(tile.terrain);
   if (tile.bog) return bogTextureKey(tile.bog);
   if (tile.terrain === 'mountain') return MOUNTAIN_SHAPE_KEY[tile.variant ?? 0] ?? 'mountain';
   // A living forest draws its biome's art; a forest the generator hasn't given a kind (older saves, hand-built islands) is the mixed one.
   if (tile.terrain === 'forest') return BIOME_FOREST_KEY[tile.forestKind ?? 'mixed'];
-  return tile.terrain;
+  return seaArt(tile.terrain);
 }
+
+/** An inland lake is drawn with the sea's art (same place, same look); every other terrain has its own. */
+const seaArt = (terrain: Terrain): Terrain => (drawsAsSea(terrain) ? 'sea' : terrain);
 
 /**
  * `textureKeyFor`, except that a biome forest key whose family has no frames in `textures` yet (the vendored atlas predates
@@ -1949,7 +1952,7 @@ function pickIndexed<T>(arr: (T | undefined)[] | undefined, index: number): T | 
  * shore end of an Utgard wall, brings its own base like the palisade's sea end.
  */
 function drawsCoastalWater(tile: Tile, riverArt?: RiverArt): boolean {
-  return tile.terrain === 'sea' && tile.isCoastalWater === true && !tile.buildingType && !(riverArt && ENDGAME_KEYS.has(riverArt.key));
+  return drawsAsSea(tile.terrain) && tile.isCoastalWater === true && !tile.buildingType && !(riverArt && ENDGAME_KEYS.has(riverArt.key));
 }
 
 /** Coastal water's base and prop frames by variant: a split pack's `baseIndexed` and `top`, an unsplit one's single indexed bucket as the base. */

@@ -48,12 +48,14 @@ import {
 } from './worldGenerator';
 import { generateRiversWithBogs, isWideRiverTile } from './riverGenerator';
 import { BOG_REACH } from './bogGenerator';
+import { enclosedWaterTiles } from './enclosedWater';
 import { placeLakeProps, type LakeProp, type LakePropBuilding } from './lakeProps';
 import { isOutsideRealm } from './realmDecay';
 import {
   emptyResources,
   mouthSeaDirection,
   TILE_ORIENTATIONS,
+  drawsAsSea,
   type BogTile,
   type CartShipment,
   type IslandLabel,
@@ -345,6 +347,15 @@ export class WorldModel {
   overlayRevision = 0;
   /** The island bogland known so far (live mode: every island at once; demo mode: island by island), by coordinate — see `setBogTiles`. */
   private bogByHex = new Map<string, BogTile>();
+  /**
+   * The terrain the island overlays (bog moss, bog lakes, inland lakes) give a hex that the seed alone cannot, by `terrainKey`.
+   * `terrainOf` answers from it before the seed, so a cache sweep (`setWastedRevealed`) re-derives the same answer.
+   */
+  private overlayTerrain = new Map<number, Terrain>();
+  /** The `overlayTerrain` keys of a wasted island's inland lakes (demo mode): plain sea until the wasted islands are revealed. */
+  private wastedInlandLakeKeys = new Set<number>();
+  /** The inland lakes known so far (live mode: every island at once; demo mode: island by island), by `terrainKey`. */
+  private inlandLakeKeys = new Set<number>();
   /** The lake decorations (fish weir, boats) the buildings on the shores ask for, by coordinate — see `lakeProps.ts` and `recomputeLakeProps`. */
   private lakePropByHex = new Map<string, LakeProp>();
   /** Set whenever the bog or a building that can ask for a lake decoration changes; `getTile` recomputes them lazily. */
@@ -490,7 +501,10 @@ export class WorldModel {
    * them (pathing, buildability, art) follow this overlay.
    */
   setBogTiles(tiles: BogTile[]) {
-    for (const tile of this.bogByHex.values()) this.terrain.delete(terrainKey(tile.q, tile.r));
+    for (const tile of this.bogByHex.values()) {
+      this.overlayTerrain.delete(terrainKey(tile.q, tile.r));
+      this.terrain.delete(terrainKey(tile.q, tile.r));
+    }
     for (const tile of this.bogByHex.values()) this.tiles.delete(coordKey(tile));
     this.bogByHex = new Map();
     this.overlayRevision++;
@@ -511,6 +525,7 @@ export class WorldModel {
       const key = coordKey(bog);
       this.bogByHex.set(key, bog);
       const terrain: Terrain = bog.kind === 'lake' ? 'lake' : 'bog';
+      this.overlayTerrain.set(terrainKey(bog.q, bog.r), terrain);
       this.terrain.set(terrainKey(bog.q, bog.r), terrain);
       const existing = this.tiles.get(key);
       if (existing) this.decorateBogTile(existing, bog, world);
@@ -519,6 +534,48 @@ export class WorldModel {
     this.previewIslandTilesCache.clear();
     this.previewIslandFloodCache.clear();
     this.lakePropsDirty = true;
+  }
+
+  /**
+   * Live mode: every fetched island's inland lakes (water an island encloses that the bog did not fill, see
+   * `IslandResponse.inlandLakeTiles`), replacing what was known. An inland lake reads as terrain `inlandlake` from here on:
+   * not land, not sea, but drawn like the sea (`drawsAsSea`).
+   */
+  setInlandLakeTiles(coords: AxialCoord[]) {
+    for (const key of this.inlandLakeKeys) {
+      this.overlayTerrain.delete(key);
+      this.terrain.delete(key);
+      const { q, r } = decodeTerrainKey(key);
+      this.tiles.delete(coordKey({ q, r }));
+    }
+    this.inlandLakeKeys = new Set();
+    this.wastedInlandLakeKeys = new Set();
+    this.overlayRevision++;
+    this.addInlandLakeTiles(coords);
+  }
+
+  /**
+   * Adds `coords` as inland lakes to what this model knows (demo mode generates island by island, see `placeGiantsForIsland`).
+   * A wasted island's lakes only count once the wasted islands are revealed, like the rest of the wasted terrain.
+   * Updates the pure terrain cache and any tile already materialised (its coastal-water flag, orientation and variant stay valid:
+   * an inland lake borders land exactly where the sea there would).
+   */
+  private addInlandLakeTiles(coords: AxialCoord[], wasted = false) {
+    if (coords.length === 0) return;
+    this.overlayRevision++;
+    for (const c of coords) {
+      const key = terrainKey(c.q, c.r);
+      this.inlandLakeKeys.add(key);
+      this.overlayTerrain.set(key, 'inlandlake');
+      if (wasted) this.wastedInlandLakeKeys.add(key);
+      if (wasted && !this.wastedRevealed) continue;
+      this.terrain.set(key, 'inlandlake');
+      const existing = this.tiles.get(coordKey(c));
+      if (existing) existing.terrain = 'inlandlake';
+    }
+    this.islandFootprintCache.clear();
+    this.previewIslandTilesCache.clear();
+    this.previewIslandFloodCache.clear();
   }
 
   /**
@@ -752,7 +809,11 @@ export class WorldModel {
     const k = terrainKey(q, r);
     let terrain = this.terrain.get(k);
     if (terrain === undefined) {
-      terrain = terrainAt(q, r, { seed: this.seed, generation: this.generation });
+      const overlay = this.overlayTerrain.get(k);
+      terrain =
+        overlay !== undefined && (this.wastedRevealed || !this.wastedInlandLakeKeys.has(k))
+          ? overlay
+          : terrainAt(q, r, { seed: this.seed, generation: this.generation });
       if (terrain === 'sea' && this.wastedRevealed) {
         const wasted = wastedTerrainAt(q, r, { seed: this.seed, generation: this.generation });
         if (wasted !== 'sea') terrain = wasted;
@@ -886,7 +947,7 @@ export class WorldModel {
           tile.wasted = true;
           delete tile.forestKind; // wasted forest stays deadforest
           tile.variant = wastedVariantAt(q, r, { seed: this.seed, generation: this.generation }, tile.terrain);
-        } else if (tile.terrain === 'sea' && tile.isCoastalWater) {
+        } else if (drawsAsSea(tile.terrain) && tile.isCoastalWater) {
           // Coastal water bordering wasted land also renders as wasted
           // (blacksandcoast) — see textures.ts's wasted family mapping.
           const bordersWasted = neighbors({ q, r }).some((n) => this.isWastedLandAt(n.q, n.r));
@@ -921,7 +982,7 @@ export class WorldModel {
    */
   seaFacingDirectionOf(coord: AxialCoord, inDirection?: TileOrientation): TileOrientation | null {
     const dirs = neighbors(coord);
-    const isSea = dirs.map((d) => this.getTile(d.q, d.r).terrain === 'sea');
+    const isSea = dirs.map((d) => drawsAsSea(this.getTile(d.q, d.r).terrain));
     // With the river's inflow known, prefer the sea straight ahead (the only angle the delta and
     // the widening mouth draw), then a bend, then the hairpin - see `mouthSeaDirection`.
     if (inDirection) return mouthSeaDirection(inDirection, isSea);
@@ -1051,19 +1112,25 @@ export class WorldModel {
     return this.riverRevision + this.overlayRevision;
   }
 
+  /** The open sea only: not land, and not water an island encloses (a bog lake, an inland lake). */
+  isSea(q: number, r: number): boolean {
+    return this.terrainOf(q, r) === 'sea';
+  }
+
   /**
    * Everything an island's picture is made of: land and the bog lakes among it (not the sea).
    * Also what the water mask calls land: a bog lake is drawn by its own art, never by the sea's
-   * water shader, so the shader (foam included) must stop at the sea's coast.
+   * water shader, so the shader (foam included) must stop at the sea's coast. An inland lake is water here
+   * (not in this set): it is drawn like the sea, shader and foam included.
    */
   isLandOrLake(q: number, r: number): boolean {
     return this.isLand(q, r) || this.terrainOf(q, r) === 'lake';
   }
 
-  /** Land: everything that is neither the sea nor a bog lake (a lake is water, but not the sea). */
+  /** Land: everything that is neither the sea, a bog lake nor an inland lake (a lake is water, but not the sea). */
   isLand(q: number, r: number): boolean {
     const terrain = this.terrainOf(q, r);
-    return terrain !== 'sea' && terrain !== 'lake';
+    return terrain !== 'sea' && terrain !== 'lake' && terrain !== 'inlandlake';
   }
 
   /**
@@ -2281,7 +2348,7 @@ export class WorldModel {
     // choice (never `this.isLand`, which folds in a revealed wasted layer
     // `terrainAt` alone knows nothing about).
     const globalIsLand = (c: AxialCoord) => terrainAt(c.q, c.r, world) !== 'sea';
-    const { rivers: riverTiles, bogs: bogTiles } = generateRiversWithBogs(
+    const { rivers: riverTiles, bogs: bogTiles, inlandLakes: greenInlandLakes } = generateRiversWithBogs(
       islandTiles,
       (c) => this.terrainOf(c.q, c.r),
       depthAt,
@@ -2295,6 +2362,15 @@ export class WorldModel {
     // Bogland (placed inside the river pipeline: a river runs through every lake) is terrain from here on, so
     // giants and camps below see it: no giant stands on a bog or a lake, and only plain moss holds a bog camp.
     this.addBogTiles(bogTiles);
+    // Water the island encloses that the bog did not fill: a green island's come out of the river pipeline; a wasted island
+    // has no bog, so every pocket is one (mirrors `WorldGenerator`'s wasted branch). Only counted once revealed.
+    const inlandLakes = wasted
+      ? enclosedWaterTiles(
+          islandTiles,
+          (c) => terrainAt(c.q, c.r, world) !== 'sea' || wastedTerrainAt(c.q, c.r, world) !== 'sea',
+        )
+      : greenInlandLakes;
+    this.addInlandLakeTiles(inlandLakes, wasted);
     const plainBog = new Set(bogTiles.filter((t) => t.kind === 'bog').map((t) => coordKey(t)));
     const riverKeys = new Set(riverTiles.map((t) => coordKey(t)));
     const isRiver = (c: AxialCoord) => riverKeys.has(coordKey(c));

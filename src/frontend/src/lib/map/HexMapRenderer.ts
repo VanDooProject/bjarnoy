@@ -71,7 +71,7 @@ import { atlasPageCount } from './atlasManifests';
 import { attachFramePacing } from './framePacing';
 import { insetBorderCorners, splitBorderEdges } from './realmBorderEdges';
 import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
-import { TILE_ORIENTATIONS, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
+import { drawsAsSea, TILE_ORIENTATIONS, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
@@ -164,6 +164,7 @@ const HOVER_STROKE = 0xffe9c2;
 // straight from that screenshot so the app actually matches what's shown.
 const WORLD_TERRAIN_FILL: Record<Terrain, number> = {
   sea: 0x215a7a, // unused (open sea has no tile at all in world mode)
+  inlandlake: 0x215a7a, // unused: drawn as the sea background
   sand: 0x9c8a5c,
   grass: 0x4e7a3a,
   forest: 0x365e2f,
@@ -1667,8 +1668,8 @@ export function wheelPassesToPage(o: {
  * `isLand` is `isLandOrLake`, not `isLand`: a bog lake is water to the game
  * (`WorldModel.isLand` says so), but to the water mask it is land. Lakes are
  * drawn entirely by their own art, so the sea's shader must never reach into
- * them. A pocket lake sits on what the seed calls sea, so the bake worker gets
- * those hexes as a list (`seaBogHexKeys`), and both bake paths agree.
+ * them. A pocket lake sits on what the seed calls sea, so the bake worker gets those hexes as a list (`seaBogHexKeys`), and both
+ * bake paths agree. An inland lake is the opposite: it is water here, drawn like the sea (the seed calls it sea too).
  */
 export function waterMaskTerrainFor(worldModel: WorldModel): TerrainLookup {
   const isLand = (q: number, r: number) => worldModel.isLandOrLake(q, r);
@@ -3373,7 +3374,7 @@ export class HexMapRenderer {
     // they can't actually land on. Once a settlement exists (village view)
     // or in world-map mode, water is just terrain like any other hex and
     // should hover/tooltip normally, even though it's still not buildable.
-    if (tile.terrain === 'sea' && mode === 'settlement' && !this.settlement()) {
+    if (drawsAsSea(tile.terrain) && mode === 'settlement' && !this.settlement()) {
       this.options.onHoverChange?.(null);
       return;
     }
@@ -4616,7 +4617,7 @@ export class HexMapRenderer {
       const grid = isoGridPosition(c, TILE_W, TILE_H);
       return { x: grid.x, y: grid.y - TILE_TOPFACE_Y_OFFSET };
     };
-    this.waterDryEntries = maskEntries(baseEntries.values(), (c) => worldModel.getTile(c.q, c.r).terrain === 'sea', artOrigin);
+    this.waterDryEntries = maskEntries(baseEntries.values(), (c) => drawsAsSea(worldModel.getTile(c.q, c.r).terrain), artOrigin);
     this.bogLakeEntries = maskEntries(baseEntries.values(), (_c, texture) => LAKE_FRAME_RE.test(texture.label ?? ''), artOrigin);
     this.riverFlowEntries = [];
     const flowCoords = new Map<string, RiverFlowEntry>();
@@ -4681,7 +4682,7 @@ export class HexMapRenderer {
       // entries zoomed out — and nine hexes in ten are the open sea this
       // skips, which would have been a full Tile built to say "background".
       const terrain = worldModel.terrainOf(c.q, c.r);
-      if (terrain === 'sea') continue; // open sea is just the background
+      if (drawsAsSea(terrain)) continue; // open sea (and an inland lake, drawn like it) is just the background
 
       // Same cull as the settlement view's rebuildTerrain: draw the island
       // under the thin part of the unexplored mist near the scouted ring
@@ -4782,8 +4783,8 @@ export class HexMapRenderer {
     // terrainOf, not getTile: this asks seven hexes a terrain-only question,
     // once per surviving wave grid point, and getTile would build (and cache)
     // a whole Tile — orientation, variant, coastal-ness — to answer it.
-    if (worldModel.terrainOf(coord.q, coord.r) !== 'sea') return true;
-    return NEIGHBOR_DIRS.some((d) => worldModel.terrainOf(coord.q + d.q, coord.r + d.r) !== 'sea');
+    if (!drawsAsSea(worldModel.terrainOf(coord.q, coord.r))) return true;
+    return NEIGHBOR_DIRS.some((d) => !drawsAsSea(worldModel.terrainOf(coord.q + d.q, coord.r + d.r)));
   }
 
   // Recomputes which open-water grid points get a wave squiggle for the
@@ -5330,7 +5331,7 @@ export class HexMapRenderer {
       if (fogActive && !worldModel.isExplored(c.q, c.r)) continue;
 
       const tile = worldModel.getTile(c.q, c.r);
-      if (mode === 'world' && tile.terrain === 'sea') continue;
+      if (mode === 'world' && drawsAsSea(tile.terrain)) continue;
       if (!tile.ownerId) continue;
 
       fogPerfStats.borderedHexCount++;

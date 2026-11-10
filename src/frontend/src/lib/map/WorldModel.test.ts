@@ -2086,6 +2086,104 @@ describe('WorldModel bogland', () => {
 });
 
 // The bog buildings (docs/design/bog.md, "Buildings"): where each may be placed, and the lake decorations they ask for.
+describe('WorldModel inland lakes', () => {
+  const DEMO_SEED = 20260824;
+
+  /** Two coastal-water hexes of the seed (open sea beside land) near the demo landfall: the overlay turns them into lakes beside the same land. */
+  function lakeAround(model: WorldModel) {
+    const at = model.findLandfall({ q: 0, r: 0 })!;
+    const lake = hexesInRadius(at, 14).filter((c) => model.terrainOf(c.q, c.r) === 'sea' && model.getTile(c.q, c.r).isCoastalWater === true).slice(0, 2);
+    expect(lake).toHaveLength(2);
+    return { at, lake };
+  }
+
+  it('reads an inland lake as water that is neither land, sea nor a bog lake, with a coastal tile beside land', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const { lake } = lakeAround(model);
+    const hex = lake[0]!;
+    expect(model.getTile(hex.q, hex.r).terrain).toBe('sea'); // materialised before the overlay: must be rewritten in place
+    const revision = model.overlayRevision;
+
+    model.setInlandLakeTiles(lake);
+
+    expect(model.overlayRevision).toBeGreaterThan(revision);
+    expect(model.terrainOf(hex.q, hex.r)).toBe('inlandlake');
+    expect(model.isLand(hex.q, hex.r)).toBe(false);
+    expect(model.isLandOrLake(hex.q, hex.r)).toBe(false);
+    expect(model.isSea(hex.q, hex.r)).toBe(false);
+    expect(model.getTile(hex.q, hex.r)).toMatchObject({ terrain: 'inlandlake', isCoastalWater: true });
+  });
+
+  it('replaces the lakes on a new call: the hexes go back to what the seed says', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const { lake } = lakeAround(model);
+    const hex = lake[0]!;
+    model.setInlandLakeTiles(lake);
+    model.setInlandLakeTiles([]);
+    expect(model.terrainOf(hex.q, hex.r)).toBe('sea');
+    expect(model.getTile(hex.q, hex.r).terrain).toBe('sea');
+  });
+
+  it('keeps an inland lake and a bog lake after the wasted islands are revealed (the cache sweep re-derives them)', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const { lake } = lakeAround(model);
+    const [inland, bogLake] = lake;
+    model.setBogTiles([{ q: bogLake!.q, r: bogLake!.r, kind: 'lake', inDirections: [], outDirection: null, waterEdges: [] }]);
+    model.setInlandLakeTiles([inland!]);
+    model.getTile(inland!.q, inland!.r);
+    model.getTile(bogLake!.q, bogLake!.r);
+
+    model.setWastedRevealed(true);
+
+    expect(model.terrainOf(inland!.q, inland!.r)).toBe('inlandlake');
+    expect(model.getTile(inland!.q, inland!.r).terrain).toBe('inlandlake');
+    expect(model.terrainOf(bogLake!.q, bogLake!.r)).toBe('lake');
+    expect(model.getTile(bogLake!.q, bogLake!.r).terrain).toBe('lake');
+  });
+
+  it('draws a ship-free lake: it is not an open-sea hex for the shore rules', () => {
+    const model = new WorldModel(DEMO_SEED);
+    const { lake } = lakeAround(model);
+    model.setInlandLakeTiles(lake);
+    expect(lake.every((c) => !model.isSea(c.q, c.r))).toBe(true);
+  });
+
+  it('places a Fishing Hut on an inland-lake shore, and refuses a Dockyard and any other building there', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    settlement.level = 6;
+    model.claimTerritory(settlement.id);
+    const radius = model.borderRadius(settlement);
+    // A coastal-water hex of the seed: the overlay turns it into an inland lake that still borders the same land.
+    const shore = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).isCoastalWater === true);
+    model.setInlandLakeTiles([shore]);
+
+    expect(model.getTile(shore.q, shore.r)).toMatchObject({ terrain: 'inlandlake', isCoastalWater: true });
+    expect(model.placeBuilding(settlement.id, shore, 'dockyard')).toBe(false);
+    expect(model.placeBuilding(settlement.id, shore, 'shrineofnjord')).toBe(false);
+    expect(model.placeBuilding(settlement.id, shore, 'farm')).toBe(false);
+    expect(model.placeBuilding(settlement.id, shore, 'fishinghut')).toBe(true);
+    expect(model.getTile(shore.q, shore.r).buildingType).toBe('fishinghut');
+  });
+
+  it('generates a demo island’s inland lakes: they are water, not sea, and not in the way of the island’s land', () => {
+    let found = 0;
+    for (const seed of [1, 2, 3, 4]) {
+      const model = new WorldModel(seed);
+      for (const island of enumerateIslands({ seed, generation: model.generation }, 400).slice(0, 4)) {
+        model.placeGiantsForIsland(island, seed);
+        for (const c of hexesInRadius(island, 30)) {
+          if (model.terrainOf(c.q, c.r) !== 'inlandlake') continue;
+          found++;
+          expect(model.isLand(c.q, c.r)).toBe(false);
+          expect(model.isSea(c.q, c.r)).toBe(false);
+        }
+      }
+    }
+    expect(found).toBeGreaterThan(0);
+  }, 60_000);
+});
+
 describe('WorldModel bog buildings', () => {
   const bogTile = (
     q: number,

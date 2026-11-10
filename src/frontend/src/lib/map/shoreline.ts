@@ -17,29 +17,31 @@ import { claimsWithGiants } from './territory';
 /** The subset of `WorldModel` this needs — narrowed so tests can pass a plain object instead of a full model. */
 export interface TerrainLookup {
   isLand(q: number, r: number): boolean;
+  /** The open sea: neither land nor water an island encloses (a bog lake, an inland lake). */
+  isSea(q: number, r: number): boolean;
 }
 
 /**
  * True when `center`'s claimed territory (every hex within `claimRadius`)
- * includes at least one shoreline hex — land with a sea neighbour. Mirrors
+ * includes at least one shoreline hex — land with a sea neighbour (an inland lake or a bog lake is not sea). Mirrors
  * `SettlementService.cs`'s `settled.Centre.WithinRadius(settled.ClaimRadius).Any(sampler.IsShoreline)`,
  * the `hasShoreline` flag `Settlement.PlanTrain` gates Ship-class training on.
  */
 export function hasShoreline(center: AxialCoord, claimRadius: number, terrain: TerrainLookup): boolean {
   for (const hex of hexesInRadius(center, claimRadius)) {
     if (!terrain.isLand(hex.q, hex.r)) continue;
-    if (neighbors(hex).some((n) => !terrain.isLand(n.q, n.r))) return true;
+    if (neighbors(hex).some((n) => terrain.isSea(n.q, n.r))) return true;
   }
   return false;
 }
 
 /**
  * Mirrors the backend's rule for where a fleet may be sent (`Army.PlanDispatch`'s fleet Attack/Raid gate): a building
- * hex is on the shore when it is a sea hex (the coastal-water buildings: Dockyard, Fishing Hut, Shrine of Njörd) or a
+ * hex is on the shore when it is a sea hex (the coastal-water buildings: Dockyard, Fishing Hut, Shrine of Njörd; a building on an inland lake is not) or a
  * shoreline land hex. The claim check is not mirrored: the buildings a caller offers already belong to the target.
  */
 export function isShoreBuildingHex(coord: AxialCoord, terrain: TerrainLookup): boolean {
-  return !terrain.isLand(coord.q, coord.r) || hasShoreline(coord, 0, terrain);
+  return terrain.isSea(coord.q, coord.r) || hasShoreline(coord, 0, terrain);
 }
 
 /**
