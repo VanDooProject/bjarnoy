@@ -5597,27 +5597,13 @@ export class HexMapRenderer {
       if (fogActive && !worldModel.isExplored(labelHex.q, labelHex.r)) continue;
       const grid = isoGridPosition(labelHex, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
-      // Reference draws settlements as a diamond (prototypes/worldmap/Viking
-      // Realm.dc.html's `world.marks`: `<polygon points="0,-8 8,0 0,8 -8,0">`),
-      // not a plain dot.
-      const markerR = 5 * this.camera.zoom + 3;
-      this.markerLayer
-        .poly([
-          center.x, center.y - markerR,
-          center.x + markerR, center.y,
-          center.x, center.y + markerR,
-          center.x - markerR, center.y,
-        ])
-        .fill({ color: realmColor(settlement, playerId) })
-        .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
-
-      // Settlers-II-style owner label under the marker: the shared realm pill
-      // (see drawRealmPill) in its small size, so the name stays readable over
-      // water and terrain without a drop shadow.
+      // The settlement is marked by the shared realm pill alone (see
+      // drawRealmPill; its diamond carries the realm colour), centred on the
+      // settlement hex, so the name stays readable over water and terrain.
       const ownerLabel = this.acquireLabel(LABEL_STYLES.ownerName);
       ownerLabel.text = settlement.ownerName;
       ownerLabel.anchor.set(0, 0.5);
-      const pill = layoutRealmPill(REALM_PILL.owner, 1, [ownerLabel.width], center.x, center.y + markerR + 4);
+      const pill = layoutRealmPill(REALM_PILL.owner, 1, [ownerLabel.width], center.x, center.y - REALM_PILL.owner.height / 2);
       this.drawRealmPill(pill, realmColor(settlement, playerId), 'diamond', 1);
       ownerLabel.position.set(pill.labelXs[0], pill.labelY);
       ownerLabel.visible = true;
