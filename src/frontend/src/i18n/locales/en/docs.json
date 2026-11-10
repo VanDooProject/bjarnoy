@@ -1051,6 +1051,7 @@
     "toc": {
       "first": "First settlement",
       "more": "More settlements",
+      "sea": "By sea",
       "renown": "Renown and price",
       "where": "Where",
       "new": "A new settlement"
@@ -1072,10 +1073,20 @@
         "minutes": "{n} min"
       },
       "send": "To send them, tap a free hex on the map and choose Send settlers, or Land here on the coast.",
+      "escorts": "You can send escorts along with the settlers. They stay at the new settlement as its garrison.",
       "provisions": "Each settler carries {food} food, {total} for all five. Load enough for the way there and back.",
       "ambush": "On the way, overland settlers can be ambushed by strong wildlife camps (see {camps}). How fast they cross each ground is on the {movement} page.",
       "campsLink": "Wildlife camps",
       "movementLink": "Land movement"
+    },
+    "sea": {
+      "heading": "Founding by sea",
+      "body": "Add ships from your home garrison to the five settlers and the convoy sails. It leaves from your {dockyard} and lands on the hex you chose: a land hex next to the sea, usually a beach. On the map, tap a free hex on the coast and choose Land here.",
+      "slots": "Each settler takes 1 slot aboard, so one Karve carries all five and still has room for escorts. If the troops need more slots than the ships have, the convoy cannot set out. The slots of every unit are on the {ships} page.",
+      "speed": "At sea the convoy moves at the speed of its slowest ship. The settlers do not slow it down.",
+      "camps": "Land camps never ambush a convoy at sea. The whale road does (see {camps}).",
+      "ships": "The ships stay at the new settlement too, with the escorts.",
+      "shipsLink": "Ships and water"
     },
     "renown": {
       "heading": "Renown and price",
@@ -1099,6 +1110,7 @@
     "where": {
       "heading": "Where a settlement can land",
       "land": "On any land hex your settlers can reach, except a giant's.",
+      "sea": "By sea, on a land hex next to the sea.",
       "spacing": "At least {hexes} hexes beyond the claim border of every settlement in the world, yours and other players'.",
       "twice": "This is checked when the settlers set out and again when they arrive.",
       "taken": "If someone else took the spot meanwhile, the settlers wait there. You can send them on or recall them, and they head home on their own when their food runs low."
@@ -1109,7 +1121,7 @@
       "garrison": "Every unit that travelled with the settlers, other than the settlers themselves, stays as its garrison."
     },
     "adminNote": {
-      "sea": "Founding by sea exists in the rules but has no interface yet (issue #447)."
+      "sea": "A convoy with a ship in it is a fleet (Army.IsFleet): it leaves from the Dockyard (Army.FleetAnchor), uses the sea route tables for recall and retreat, and moves at its slowest ship (ShipCargo.Pace). The landing hex is a land hex with a sea neighbour (Shoreline.IsShoreline), reached by the route's last hop."
     }
   },
   "realm": {
@@ -1342,7 +1354,7 @@
       "shrinesLink": "Shrines"
     },
     "adminNote": {
-      "sea": "Founding by sea follows the slot rule above: the {settlers} settlers of a founding party take {settlers} slots (ShipCargo). It has no interface yet (issue #447)."
+      "sea": "Founding by sea follows the slot rule above: the {settlers} settlers of a founding party take {settlers} slots (ShipCargo)."
     }
   },
   "shrines": {

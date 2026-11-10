@@ -92,12 +92,23 @@ describe('FoundingView', () => {
     wrapper.unmount();
   });
 
+  it('describes founding by sea: the dockyard, the slots a settler takes and the ships page', async () => {
+    const wrapper = await mountPage();
+
+    const sea = wrapper.get('#sea').text();
+    expect(sea).toContain('leaves from your Dockyard');
+    expect(sea).toContain('Each settler takes 1 slot aboard');
+    expect(sea).toContain('slowest ship');
+    expect(wrapper.find('#sea a[href="/docs/ships"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('keeps the admin note from players, even with the stored admin toggle on', async () => {
     useDocsAdminNotes().setEnabled(true);
     const wrapper = await mountPage();
 
     expect(wrapper.find('[data-testid=admin-note]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('Founding by sea');
+    expect(wrapper.text()).not.toContain('Army.FleetAnchor');
     wrapper.unmount();
   });
 
@@ -106,7 +117,7 @@ describe('FoundingView', () => {
     useDocsAdminNotes().setEnabled(true);
     const wrapper = await mountPage();
 
-    expect(wrapper.get('[data-testid=admin-note]').text()).toContain('Founding by sea');
+    expect(wrapper.get('[data-testid=admin-note]').text()).toContain('Army.FleetAnchor');
     wrapper.unmount();
   });
 });
