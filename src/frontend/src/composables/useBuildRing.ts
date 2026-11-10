@@ -25,6 +25,7 @@ import {
   buildingAllowedOnHex,
   cropAllowedHere,
   formatBuildTime,
+  hexOccupantLock,
   scaledBuildSeconds,
   isWallBuilding,
   longhouseLock,
@@ -42,7 +43,7 @@ import {
   slotsNeeded,
   type RingAvailability,
 } from '../lib/map/ringAvailability';
-import type { RingBuilding, RingCard, RingCategory } from '../components/hud/RingMenu.vue';
+import type { RingAction, RingBuilding, RingCard, RingCategory } from '../components/hud/RingMenu.vue';
 import type { Resources, Tile } from '../lib/map/types';
 import type { RiverVariant } from '../lib/map/worldGenerator';
 import { towerThreatAt } from '../lib/map/campRules';
@@ -289,6 +290,17 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
   /** Build is offered only on a hex that takes at least one building (docs/design/ui-guidelines.md, rule 1). */
   const canBuildHere = computed(() => categories.value.length > 0);
 
+  /**
+   * The ring's Build bubble for the clicked hex, or `undefined` where the ground takes nothing. A hex held by a giant, a guarded
+   * camp or an endgame site keeps Build, locked with the reason (`hexOccupantLock`), so the map and the onboarding never offer
+   * buildings there that the placement would refuse.
+   */
+  const buildAction = computed<RingAction | undefined>(() => {
+    if (!tile.value || !canBuildHere.value) return undefined;
+    const lock = tile.value.buildingType ? undefined : hexOccupantLock(tile.value);
+    return { id: 'build', label: t('hud.ringMenu.actions.build'), disabled: !!lock, hint: lock };
+  });
+
   /** The ring's categories for the clicked hex: the placement filter, narrowed by river shape and island soil, each building with its card. */
   const categories = computed<RingCategory[]>(() => {
     const hex = coord.value;
@@ -342,6 +354,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
   return {
     categories,
     canBuildHere,
+    buildAction,
     offersBuilding,
     placeBuildingDemo,
     // Shared with the map's Upgrade bubble, which judges the next level against the same locks, stock and slots.

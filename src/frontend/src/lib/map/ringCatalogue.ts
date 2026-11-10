@@ -7,7 +7,7 @@ import type { ResourceLine } from '../../api/types';
 import { resourceName } from '../../i18n/catalogueNames';
 import { i18n } from '../../i18n';
 import { additionalStorageHouseRequirement } from './buildingEconomy';
-import { campHexBuildable } from './campRules';
+import { campHexBuildable, NEVER_BUILDABLE_CAMP_FAMILY } from './campRules';
 import { allPlacementRules, placementRuleFor } from './placementRules';
 import type { BogTileKind } from './types';
 import type { RiverVariant } from './worldGenerator';
@@ -219,18 +219,45 @@ export function isWaterOnlyBuilding(type: string | undefined): boolean {
   return placementRuleFor(type)?.requiresCoastalWater === true;
 }
 
+/** The parts of a hex that can hold it against any building, whatever its ground (see `hexOccupant`). */
+export interface HexSite {
+  giant?: unknown;
+  camp?: { family: string; empty?: boolean };
+  utgardWall?: unknown;
+  jotunTower?: unknown;
+}
+
+/** What holds a hex so that nothing can be built on it (`hexOccupantLock` words it for the ring). */
+export type HexOccupant = 'giant' | 'camp' | 'fenrirBrood' | 'endgameSite';
+
+/**
+ * What holds a hex against every building, or `undefined` when nothing does: a giant (its art fills the hex), a wildlife camp
+ * until it is cleared (`campHexBuildable`), Fenrir's brood cleared or not, an Utgard wall or a Jötunn watchtower. Mirrors the
+ * server's `HexOccupiedByCamp` / `HexOccupiedByEndgameSite` refusals and `WorldModel.placeBuilding`.
+ */
+export function hexOccupant(tile: HexSite): HexOccupant | undefined {
+  if (tile.giant) return 'giant';
+  if (tile.camp && !campHexBuildable(tile.camp)) return tile.camp.family === NEVER_BUILDABLE_CAMP_FAMILY ? 'fenrirBrood' : 'camp';
+  if (tile.utgardWall || tile.jotunTower) return 'endgameSite';
+  return undefined;
+}
+
+/**
+ * Why the ring's Build bubble is locked on this hex, in the player's words, or `undefined` when nothing holds the hex. Build stays
+ * shown (the ground takes buildings), locked with this reason; the settlement map and the onboarding ring both read it.
+ */
+export function hexOccupantLock(tile: HexSite): string | undefined {
+  const occupant = hexOccupant(tile);
+  return occupant ? (i18n.global.t(`hud.ringMenu.occupiedLock.${occupant}`) as string) : undefined;
+}
+
 /**
  * Whether the building modal treats a tile as buildable/upgradeable: any
  * non-sea tile, or a sea tile that already carries a water building (open
  * water itself is never offered as an empty build target).
  */
-export function tileIsBuildable(tile: {
-  terrain: string;
-  buildingType?: string;
-  camp?: { family: string; empty?: boolean };
-}): boolean {
-  // A wildlife camp hex is buildable only once the camp is cleared (never Fenrir's brood).
-  if (tile.camp && !tile.buildingType && !campHexBuildable(tile.camp)) return false;
+export function tileIsBuildable(tile: HexSite & { terrain: string; buildingType?: string }): boolean {
+  if (!tile.buildingType && hexOccupant(tile)) return false;
   return (tile.terrain !== 'sea' && tile.terrain !== 'lake') || isWaterOnlyBuilding(tile.buildingType) || isWallBuilding(tile.buildingType);
 }
 

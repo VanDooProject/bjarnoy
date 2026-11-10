@@ -385,7 +385,7 @@ const ringScreen = ref<RingPlacement | null>(null);
 const ringCoord = ref<AxialCoord | null>(null);
 const ringTile = ref<Tile | null>(null);
 const ringError = ref<string | null>(null);
-const { categories: ringCategories, canBuildHere, offersBuilding, placeBuildingDemo } = useBuildRing(ringTile, ringCoord);
+const { categories: ringCategories, buildAction, offersBuilding, placeBuildingDemo } = useBuildRing(ringTile, ringCoord);
 // Every ring bubble's screen spot (the Build hub, categories, buildings), keyed by id - from RingMenu's own
 // `layout` emit, so the pointer aims at exactly where the bubble is actually drawn.
 // Every bubble as a circle (RingMenu's `bubbles` emit): the spots the pointer aims at, and the circles it keeps clear of.
@@ -457,10 +457,9 @@ watch(isHudDrawerOpen, (open) => {
   if (open) queueDrawerOpen.value = false;
 });
 
-// Root of the ring: Build, offered only on a hex that takes something (the map's rule; no dead button).
-const ringActions = computed<RingAction[]>(() =>
-  canBuildHere.value ? [{ id: 'build', label: t('hud.ringMenu.actions.build') }] : [],
-);
+// Root of the ring: the map's own Build bubble (offered only on a hex that takes something; locked on a guarded camp, giant or
+// endgame site with the reason).
+const ringActions = computed<RingAction[]>(() => (buildAction.value ? [buildAction.value] : []));
 
 // The hub names the tile the menu is anchored to: its bare terrain plus the hex coordinate.
 const ringTerrainLabel = computed(() => (ringTile.value ? terrainName(ringTile.value.terrain) : ''));
@@ -562,10 +561,13 @@ const showLandfallBanner = computed(
 // and "Click this plot" over an empty canvas point at nothing.
 const mapDrawn = computed(() => (canvasRef.value?.loadState.phase ?? 'terrain') !== 'terrain');
 
-/** The open ring's next guided step, with its label; null when the next guided building isn't offered on this hex. */
+/**
+ * The open ring's next guided step, with its label; null when the next guided building isn't offered on this hex, or Build is
+ * locked there (a guarded camp, a giant, an endgame site): the pointer then goes back to the guided hex.
+ */
 function ringStepTarget(): { id: string; spot: { x: number; y: number }; label: string } | null {
   const type = nextGuidedType(world.hud.placedBuildingTypes);
-  if (!type) return null;
+  if (!type || buildAction.value?.disabled) return null;
   const step = guidedRingStep(type, ringCategories.value, ringLaneSpots.value);
   if (!step) return null;
   if (step.kind === 'building') {
