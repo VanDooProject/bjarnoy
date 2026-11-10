@@ -154,7 +154,7 @@ describe('useBuildRing', () => {
     it("stays locked on Fenrir's brood, cleared or not", () => {
       for (const empty of [false, true]) {
         const { ring } = selectWith({ camp: { ...guarded, family: 'fenrirbrood', empty } });
-        expect(ring.buildAction.value).toMatchObject({ disabled: true, hint: "Fenrir's brood always regrows, nothing can be built here" });
+        expect(ring.buildAction.value).toMatchObject({ disabled: true, hint: "Fenrir's brood always regrows: nothing can be built here" });
       }
     });
 
