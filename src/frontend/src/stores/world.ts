@@ -35,6 +35,7 @@ import {
   buildSupportDispatchRequest,
   isFieldOrderMidMarch,
   isHuntUnit,
+  wouldExceedWaypointLimit,
 } from '../lib/units/armyDispatch';
 import { isWaterCampFamily } from '../lib/map/campPlacement';
 import { useUnitCatalogueStore } from './unitCatalogue';
@@ -1752,6 +1753,11 @@ export const useWorldStore = defineStore('world', {
         return;
       }
 
+      if (wouldExceedWaypointLimit(draft.route.length, draft.mission === 'move' || draft.mission === 'hunt', useAuthStore().isPremium)) {
+        draft.error = i18n.global.t('apiErrors.rejections.TooManyWaypoints');
+        return;
+      }
+
       draft.route.push(coord);
     },
     moveFieldOrderWaypoint(index: number, coord: AxialCoord) {
@@ -1952,8 +1958,14 @@ export const useWorldStore = defineStore('world', {
     },
     /** Clicking a hex on the map while a dispatch is being composed appends it as the next waypoint (the last click is always the eventual destination). */
     addWaypoint(coord: AxialCoord) {
-      if (!this.dispatchDraft) return;
-      this.dispatchDraft.route.push(coord);
+      const draft = this.dispatchDraft;
+      if (!draft) return;
+      if (wouldExceedWaypointLimit(draft.route.length, draft.mission === 'move', useAuthStore().isPremium)) {
+        draft.error = i18n.global.t('apiErrors.rejections.TooManyWaypoints');
+        return;
+      }
+
+      draft.route.push(coord);
     },
     /**
      * Issue #93: repositions an already-plotted waypoint — the map's own

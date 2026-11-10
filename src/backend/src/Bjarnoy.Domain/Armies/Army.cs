@@ -194,6 +194,15 @@ public sealed record Army
         _ => [home],
     };
 
+    /// <summary>The most waypoints one order takes.</summary>
+    public const int MaxWaypoints = 5;
+
+    /// <summary>The most waypoints one order takes for a premium account.</summary>
+    public const int MaxWaypointsPremium = 10;
+
+    /// <summary>The waypoint cap of an order: <see cref="MaxWaypointsPremium"/> with a premium account, else <see cref="MaxWaypoints"/>.</summary>
+    public static int MaxWaypointsFor(bool isPremium) => isPremium ? MaxWaypointsPremium : MaxWaypoints;
+
     /// <summary>
     /// The settlement side and the movement side of dispatching an army in
     /// one pure decision — mirrors <see cref="Settlement.PlanBuild"/>'s shape.
@@ -264,6 +273,10 @@ public sealed record Army
     /// Node expansions all route searches of this order share (default <see cref="HexPathfinder.MaxExpandedNodes"/>); an
     /// order that uses it up is refused <see cref="DispatchRejection.RouteTooLong"/>. Tests pass a small one.
     /// </param>
+    /// <param name="isPremium">
+    /// Whether the dispatching player has a premium account: only lifts the waypoint cap from <see cref="MaxWaypoints"/> to
+    /// <see cref="MaxWaypointsPremium"/> (a dispatch from home has free waypoints).
+    /// </param>
     public static DispatchDecision PlanDispatch(
         Settlement settlement,
         IReadOnlyList<UnitStack> requestedUnits,
@@ -286,12 +299,18 @@ public sealed record Army
         WallRules? walls = null,
         HexCoord? targetCampCoord = null,
         bool targetCampIsWater = false,
-        int routeSearchBudget = HexPathfinder.MaxExpandedNodes)
+        int routeSearchBudget = HexPathfinder.MaxExpandedNodes,
+        bool isPremium = false)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
         ArgumentNullException.ThrowIfNull(waypoints);
         ArgumentNullException.ThrowIfNull(terrainAt);
+
+        if (waypoints.Count > MaxWaypointsFor(isPremium))
+        {
+            return DispatchDecision.Rejected(DispatchRejection.TooManyWaypoints);
+        }
 
         var normalisedRequest = requestedUnits.Where(s => s.Count > 0).ToList();
 
@@ -1553,6 +1572,12 @@ public sealed record Army
         ArgumentNullException.ThrowIfNull(waypoints);
         ArgumentNullException.ThrowIfNull(terrainAt);
 
+        // Only the waypoints the player sent count: "append goal" adds the old destination as a stop itself.
+        if (waypoints.Count > MaxWaypointsFor(isPremium))
+        {
+            return FieldOrderResult.Rejected(FieldOrderRejection.TooManyWaypoints);
+        }
+
         if (army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit)
         {
             return FieldOrderResult.Rejected(FieldOrderRejection.NoActiveJourney);
@@ -2174,6 +2199,9 @@ public enum FieldOrderRejection
     /// own remarks and the design doc's rule table (issue #156 §3).
     /// </summary>
     PremiumRequired,
+
+    /// <summary>The order carries more waypoints than <see cref="Army.MaxWaypointsFor"/> allows.</summary>
+    TooManyWaypoints,
 }
 
 /// <summary>The outcome of asking to send an already-fielded army onward — mirrors <see cref="RetargetFoundingResult"/>.</summary>
@@ -2292,6 +2320,9 @@ public enum DispatchRejection
 
     /// <summary>The route search hit its node cap before reaching the destination: the trip is too long to plan.</summary>
     RouteTooLong,
+
+    /// <summary>The order carries more waypoints than <see cref="Army.MaxWaypointsFor"/> allows.</summary>
+    TooManyWaypoints,
 }
 
 /// <summary>The outcome of asking to dispatch an army — mirrors <see cref="BuildDecision"/>.</summary>

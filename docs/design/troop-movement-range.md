@@ -68,6 +68,8 @@ players cannot.
 | Supporting (guest) | Recall only | — |
 | Any field order | must pass the round-trip food check from where it stands | always |
 
+An order takes at most 5 waypoints, or 10 with a premium account.
+
 A movement always finishes: an in-flight order may only *extend* the route, never
 divert it. That makes **append** the same operation as **move on** with the current
 destination auto-prepended as a waypoint — one domain method, one endpoint.
@@ -159,8 +161,7 @@ Consequences:
   home (the TS twin `MAX_EXPANDED_NODES` in `hexPath.ts` matches for a single search); a long sea
   route that detours around land can need ~100,000 (a 534-hex fleet route against a 345-hex
   straight distance took 93,000, ~50 ms). Past the cap the search reports `LimitReached` and
-  the order is refused as `RouteTooLong`. There is no waypoint limit: the shared budget bounds
-  what one request can cost.
+  the order is refused as `RouteTooLong`.
 - **Route planning is rate-limited per player.** The endpoints that run the search (dispatch,
   recall, field orders, founding retarget, sending a guest home) share one sliding-window limit
   of 30 requests per minute per player (user id; the owner id without an account); the next one

@@ -395,7 +395,7 @@
     "fieldOrderInstructions": "Klicke auf Hexfelder, um festzulegen, wohin diese Armee als Nächstes ziehen soll — der letzte Klick ist das neue Ziel. {count} {hexWord} geplant.",
     "hexWord": "Hexfeld | Hexfelder",
     "freeAccountWaypoints": "Kostenlos im Konto enthalten: ein Ziel, keine Zwischenstopps.",
-    "premiumWaypointsNeeded": "wird benötigt, um zusätzliche Wegpunkte zu planen.",
+    "premiumWaypointsNeeded": "wird benötigt, um bis zu 10 Wegpunkte zu planen.",
     "premium": "Premium",
     "dragPinHint": "Ziehe eine Markierung auf der Karte, um einen Wegpunkt zu verschieben.",
     "destinationTag": "Ziel",

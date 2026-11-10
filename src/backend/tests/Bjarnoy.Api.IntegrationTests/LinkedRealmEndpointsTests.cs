@@ -383,7 +383,7 @@ public sealed class LinkedRealmEndpointsTests : IAsyncLifetime
             foreach (var hex in scene.NewestOnlyHexes)
             {
                 var result = await armies.DispatchAsync(
-                    scene.Newest, [new UnitStack(UnitType.Spearman, 30)], [], hex, provisions, cancellationToken: Ct);
+                    scene.Newest, [new UnitStack(UnitType.Spearman, 30)], [], hex, provisions, callerUserId: null, cancellationToken: Ct);
                 if (result.Accepted)
                 {
                     dispatched = result;

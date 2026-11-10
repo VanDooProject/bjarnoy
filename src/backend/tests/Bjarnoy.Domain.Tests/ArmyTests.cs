@@ -622,6 +622,53 @@ public class ArmyTests
         Assert.True(PlanWith(total).Accepted);
     }
 
+    private static List<HexCoord> WaypointsOf(int count) => [.. Enumerable.Range(1, count).Select(i => new HexCoord(i, 0))];
+
+    [Theory]
+    [InlineData(5, false, true)]
+    [InlineData(6, false, false)]
+    [InlineData(10, true, true)]
+    [InlineData(11, true, false)]
+    public void Dispatch_takes_at_most_five_waypoints_or_ten_with_premium(int count, bool isPremium, bool accepted)
+    {
+        var decision = Army.PlanDispatch(
+            Found(), [new UnitStack(UnitType.Spearman, 5)], 100, WaypointsOf(count), new HexCoord(count + 1, 0), T0,
+            Guid.CreateVersion7(), AllGrass(), isPremium: isPremium);
+
+        Assert.Equal(accepted, decision.Accepted);
+        if (!accepted)
+        {
+            Assert.Equal(DispatchRejection.TooManyWaypoints, decision.Rejection);
+        }
+    }
+
+    [Fact]
+    public void Dispatch_with_six_waypoints_is_refused_for_a_free_account_before_any_search()
+    {
+        var decision = Army.PlanDispatch(
+            Found(), [new UnitStack(UnitType.Spearman, 5)], 100, WaypointsOf(6), new HexCoord(7, 0), T0,
+            Guid.CreateVersion7(), AllGrass(), routeSearchBudget: 0);
+
+        Assert.Equal(DispatchRejection.TooManyWaypoints, decision.Rejection);
+    }
+
+    [Theory]
+    [InlineData(10, true)]
+    [InlineData(11, false)]
+    public void FieldOrder_move_on_takes_at_most_ten_waypoints_for_premium(int count, bool accepted)
+    {
+        var army = Standing(new HexCoord(0, 0));
+
+        var result = Army.PlanFieldOrder(
+            army, WaypointsOf(count), new HexCoord(count + 1, 0), Home, ArrivedAt(army), AllGrass(), isPremium: true);
+
+        Assert.Equal(accepted, result.Accepted);
+        if (!accepted)
+        {
+            Assert.Equal(FieldOrderRejection.TooManyWaypoints, result.Rejection);
+        }
+    }
+
     [Fact]
     public void FieldOrder_move_on_with_waypoints_requires_premium()
     {
