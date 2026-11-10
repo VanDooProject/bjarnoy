@@ -55,7 +55,6 @@ import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
-import { worldMaskBounds } from '../lib/map/fog/fogMaskLayout';
 import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { buildingArt } from '../lib/map/buildingArt';
 import { buildingStatsAt, buildingUpgradeCost, scaleOutput, upgradeRateGain } from '../lib/map/buildingEconomy';
@@ -374,11 +373,6 @@ watch(
   ([renderer, bitmap, bounds, coverage]) => {
     if (renderer && bitmap && bounds && coverage) renderer.setFogMask(bounds, bitmap, coverage);
   },
-);
-watch(
-  [() => canvasRef.value?.renderer, () => world.worldRadius],
-  ([renderer, radius]) => renderer?.setWorldMaskBounds(radius !== null ? worldMaskBounds(radius) : null),
-  { immediate: true },
 );
 
 // Premium players see every standing camp as a paw symbol on the world map; the renderer never reads the auth store
