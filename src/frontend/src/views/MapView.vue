@@ -352,6 +352,19 @@ watch(mode, (m) => {
   zoomDrivenTransition = false;
 });
 
+// A navigation that carries a camera anchor (a followed link or back/forward to `/settlement#q=..&r=..&z=..`, world mode
+// behind `#world&`) moves the camera there. The anchor is also read once at setup (`initialCameraView`) for a reload or a
+// fresh mount; this covers the map already being mounted. `flush: 'post'` runs it after the `mode` watcher above has
+// switched the renderer's mode.
+watch(
+  () => route.value.hash,
+  (hash) => {
+    const view = parseCameraHash(hash);
+    if (view) canvasRef.value?.renderer?.restoreCameraView(view.coord, view.zoom);
+  },
+  { flush: 'post' },
+);
+
 // "Show on map" requests (a report's location link, composables/useMapFocus.ts): centre and flash the hex, keeping the mode and
 // zoom the map is in. Also fulfilled when the renderer only appears after the request was raised.
 const mapFocus = useMapFocus();
