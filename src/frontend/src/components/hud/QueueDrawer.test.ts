@@ -412,6 +412,20 @@ describe('QueueDrawer', () => {
       expect(wrapper.findAll('.army-row')[1].get('.recall-refusal').text()).toBe('The army is already heading home.');
     });
 
+    it('a rate-limited recall (429 RouteRateLimited) shows the translated wait-and-retry text', async () => {
+      const world = useWorldStore();
+      world.armies = [army({ id: 'army-1' })];
+      recallArmy.mockRejectedValue(
+        new ApiError(429, { title: 'Too many requests.', status: 429, rejection: 'RouteRateLimited' }),
+      );
+
+      const wrapper = mountDrawer({ open: true });
+      await wrapper.get('.army-row .recall').trigger('click');
+      await vi.waitFor(() => expect(wrapper.find('.recall-refusal').exists()).toBe(true));
+
+      expect(wrapper.get('.recall-refusal').text()).toBe('Too many marching orders at once. Wait a moment and try again.');
+    });
+
     it('a recall refused without a rejection code (429) shows the generic recall error', async () => {
       const world = useWorldStore();
       world.armies = [army({ id: 'army-1' })];

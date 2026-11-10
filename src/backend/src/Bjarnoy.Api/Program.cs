@@ -108,6 +108,7 @@ var publicBuildInfo = diagnostics.PublicBuildInfo ?? !isProductionBuild;
 var exposeApiReference = diagnostics.ExposeApiReference ?? !isProductionBuild;
 
 builder.Services.AddProblemDetails();
+builder.Services.AddRoutePlanningRateLimit(builder.Configuration);
 builder.Services.AddOpenApi();
 
 // Lets a PATCH body (e.g. UpdateWorldSettingsRequest) distinguish "field
@@ -360,6 +361,7 @@ app.UseAuthentication();
 // failed authentication). A no-op for every other request.
 app.UseMiddleware<ApiKeyScopeMiddleware>();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 // Development always; otherwise whatever DiagnosticsOptions decided — which
 // leaves a branch deployment's API reference reachable (the point: a PR build

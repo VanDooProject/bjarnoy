@@ -272,7 +272,7 @@ export function reachableRange(
 }
 
 /** Hard cap on hexes `findPath` expands, the twin of `HexPathfinder.MaxExpandedNodes`. */
-export const MAX_EXPANDED_NODES = 20_000;
+export const MAX_EXPANDED_NODES = 250_000;
 
 /**
  * Open-set order of `findPath`, ascending (the C# twin is `HexPathfinder.OpenKey`): f = g + h, then h (of two equal-f

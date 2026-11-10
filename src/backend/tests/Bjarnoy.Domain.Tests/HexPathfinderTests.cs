@@ -694,6 +694,27 @@ public class HexPathfinderTests
         Assert.Equal(ShortestHexCount(from, goal, TerrainAt), search.Path.Count);
     }
 
+    [Fact]
+    public void Finds_a_long_sea_route_that_detours_around_a_land_barrier()
+    {
+        // The shape of a real fleet dispatch: 300 hexes straight, but a land barrier across the way
+        // (row r = -150 up to q = 150) forces a ~450-hex detour. A* has to expand everything cheaper than
+        // that route, which is far more than the old 20,000-node cap allowed.
+        var from = new HexCoord(0, 0);
+        var to = new HexCoord(0, -300);
+        Terrain TerrainAt(HexCoord c) => c.R == -150 && c.Q <= 150 ? Terrain.Mountain : Terrain.Sea;
+
+        var search = HexPathfinder.Search(from, to, TerrainAt, isLandUnit: false);
+
+        Assert.False(search.LimitReached);
+        Assert.NotNull(search.Path);
+        Assert.Equal(to, search.Path![^1]);
+        // The route crosses the barrier row at its open end (151, -150).
+        var gap = new HexCoord(151, -150);
+        Assert.Equal(from.DistanceTo(gap) + gap.DistanceTo(to) + 1, search.Path.Count);
+        Assert.True(search.Path.Count > from.DistanceTo(to) * 1.4);
+    }
+
     /// <summary>Breadth-first hex count of the shortest route over sea (uniform cost), inside the search's own bounding box.</summary>
     private static int ShortestHexCount(HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt)
     {

@@ -3,6 +3,7 @@ using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth.ApiKeys;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
+using Bjarnoy.Api.Hosting;
 using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Units;
@@ -29,6 +30,7 @@ public static class ArmyEndpoints
 
         settlements.MapPost("/{settlementId:guid}/armies", Dispatch)
             .WithName("DispatchArmy")
+            .RequireRateLimiting(RoutePlanningRateLimitOptions.PolicyName)
             .WithSummary("Dispatches units from a settlement's garrison on a move mission.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireSettlementOwner()
@@ -57,6 +59,7 @@ public static class ArmyEndpoints
 
         settlements.MapPost("/{settlementId:guid}/guests/{armyId:guid}/send-home", SendGuestHome)
             .WithName("SendGuestArmyHome")
+            .RequireRateLimiting(RoutePlanningRateLimitOptions.PolicyName)
             .WithSummary("Sends a guest (support) army stationed at this settlement back home — the host's recall.")
             // Host owner only: the guest's own owner recalls through
             // RecallArmy. 204 with no body, since the guest's full
@@ -85,6 +88,7 @@ public static class ArmyEndpoints
 
         armies.MapPost("/{armyId:guid}/recall", Recall)
             .WithName("RecallArmy")
+            .RequireRateLimiting(RoutePlanningRateLimitOptions.PolicyName)
             .WithSummary("Turns an army around mid-journey to head home early.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireArmyOwner()
@@ -93,6 +97,7 @@ public static class ArmyEndpoints
 
         armies.MapPost("/{armyId:guid}/orders", FieldOrder)
             .WithName("FieldOrderArmy")
+            .RequireRateLimiting(RoutePlanningRateLimitOptions.PolicyName)
             .WithSummary("Sends an army already out in the field onward on a move, attack, support, hunt or raid (issue #156) — 'move on' if it's standing, 'append goal' if it's still travelling. A standing army can send only part of itself; the response is the army that left.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireArmyOwner()
@@ -101,6 +106,7 @@ public static class ArmyEndpoints
 
         armies.MapPost("/{armyId:guid}/retarget-founding", RetargetFounding)
             .WithName("RetargetFoundingConvoy")
+            .RequireRateLimiting(RoutePlanningRateLimitOptions.PolicyName)
             .WithSummary("Redirects an in-transit or parked founding convoy to a different target hex (issue #55).")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .RequireArmyOwner()
