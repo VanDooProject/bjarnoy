@@ -195,6 +195,25 @@ export interface CampReportResponse {
   towerBurned: boolean;
 }
 
+export interface ArmyReportUnitLine {
+  type: string;
+  count: number;
+}
+
+/**
+ * Mirrors `ArmyReportResponse` — an army report that belongs to the player, not to a settlement: `stuck` (a wall blocks the army's way)
+ * or `starved` (it could not get home and its food ran out). `units` are the troops lost (`starved`) or in the army (`stuck`).
+ */
+export interface ArmyReportResponse {
+  id: string;
+  kind: 'stuck' | 'starved';
+  occurredAt: string;
+  armyId: string;
+  hex: { q: number; r: number };
+  mission: string;
+  units: ArmyReportUnitLine[];
+}
+
 /**
  * Mirrors `UtgardWallResponse` — one hex of an Utgard wall ring (see `lib/map/endgamePlacement.ts` and `docs/design/endgame.md`).
  * `piece` is the wall piece (`straight180`, `bend60`, `bend120`, `gate180`, `end` or `end_coast` on a sea hex); the atlas family is

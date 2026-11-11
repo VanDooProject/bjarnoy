@@ -393,6 +393,68 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.ToTable("armies", (string)null);
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyReportEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ArmyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Mission")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Q")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("R")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorldId", "OwnerId");
+
+                    b.ToTable("army_reports", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyReportUnitLineEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ArmyReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UnitType")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArmyReportId");
+
+                    b.ToTable("army_report_unit_lines", (string)null);
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyUnitStackEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2173,6 +2235,26 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Navigation("TargetSettlement");
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyReportEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", null)
+                        .WithMany()
+                        .HasForeignKey("WorldId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyReportUnitLineEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.ArmyReportEntity", "ArmyReport")
+                        .WithMany("UnitLines")
+                        .HasForeignKey("ArmyReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ArmyReport");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyUnitStackEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.ArmyEntity", "Army")
@@ -2630,6 +2712,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyEntity", b =>
                 {
                     b.Navigation("Stacks");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyReportEntity", b =>
+                {
+                    b.Navigation("UnitLines");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.BattleReportEntity", b =>

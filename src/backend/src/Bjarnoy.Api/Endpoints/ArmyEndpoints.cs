@@ -149,6 +149,17 @@ public static class ArmyEndpoints
             .WithSummary("Lists wildlife camp reports of a settlement, newest first.")
             .RequireSettlementOwner();
 
+        reports.MapGet("/army-reports/{reportId:guid}", GetArmyReport)
+            .WithName("GetArmyReport")
+            .WithSummary("Fetches one army report (army stuck, army starved) by id.")
+            // Only the player the report belongs to.
+            .RequireArmyReportOwner();
+
+        reports.MapGet("/worlds/{worldId:guid}/army-reports", ListArmyReportsForPlayer)
+            .WithName("ListWorldArmyReports")
+            .WithSummary("Lists the caller's own army reports in a world, newest first.")
+            .RequireCallerRealm();
+
         return app;
     }
 
@@ -661,6 +672,35 @@ public static class ArmyEndpoints
     {
         var entities = await reports.GetForSettlementAsync(settlementId, cancellationToken);
         IReadOnlyList<CampReportResponse> response = [.. entities.Select(CampReportResponse.From)];
+        return TypedResults.Ok(response);
+    }
+
+    private static async Task<Results<Ok<ArmyReportResponse>, NotFound>> GetArmyReport(
+        Guid reportId,
+        ArmyReportService reports,
+        CancellationToken cancellationToken)
+    {
+        var report = await reports.GetAsync(reportId, cancellationToken);
+        return report is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(ArmyReportResponse.From(report));
+    }
+
+    private static async Task<Ok<IReadOnlyList<ArmyReportResponse>>> ListArmyReportsForPlayer(
+        Guid worldId,
+        HttpContext httpContext,
+        ArmyReportService reports,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<ArmyReportResponse>>([]);
+        }
+
+        var entities = await reports.GetForPlayerAsync(worldId, realm.OwnerId!, cancellationToken);
+        IReadOnlyList<ArmyReportResponse> response = [.. entities.Select(ArmyReportResponse.From)];
         return TypedResults.Ok(response);
     }
 

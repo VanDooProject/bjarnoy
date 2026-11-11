@@ -547,3 +547,37 @@ public sealed record ForeignArmyResponse(
             [.. army.Stretch.EdgeHours],
             army.Stretch.ArrivesAt));
 }
+
+/// <summary>One unit type's count in an army report.</summary>
+public sealed record ArmyReportUnitLineResponse(string Type, int Count);
+
+/// <summary>
+/// An army report, as read from the player's inbox (it belongs to the player, not to a settlement).
+/// </summary>
+/// <param name="Kind"><c>"stuck"</c> or <c>"starved"</c>.</param>
+/// <param name="Hex">Where the army stood.</param>
+/// <param name="Mission">The army's mission when it happened, as the army responses name it.</param>
+/// <param name="Units">The troops lost for <c>"starved"</c>, the troops in the army for <c>"stuck"</c>.</param>
+public sealed record ArmyReportResponse(
+    Guid Id,
+    string Kind,
+    DateTimeOffset OccurredAt,
+    Guid ArmyId,
+    HexPointResponse Hex,
+    string Mission,
+    IReadOnlyList<ArmyReportUnitLineResponse> Units)
+{
+    public static ArmyReportResponse From(ArmyReportEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        return new ArmyReportResponse(
+            entity.Id,
+            ((ArmyReportKind)entity.Kind).ToString().ToLowerInvariant(),
+            entity.OccurredAt,
+            entity.ArmyId,
+            new HexPointResponse(entity.Q, entity.R),
+            ((ArmyMission)entity.Mission).ToString().ToLowerInvariant(),
+            [.. entity.UnitLines.OrderBy(l => l.UnitType).Select(l => new ArmyReportUnitLineResponse(l.UnitType.ToWireName(), l.Count))]);
+    }
+}
