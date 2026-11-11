@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   armyMarkerColor,
   armyMarkerAt,
+  armyTapSwallowed,
   armyVisionEntryOf,
   grantsArmyVision,
   type ArmyOverlayMarker,
@@ -1281,5 +1282,19 @@ describe('armyMarkerAt', () => {
   it('only hits pick markers while the send picker is open', () => {
     const armies = [marker('a'), marker('b', { pick: 'ineligible' })];
     expect(armyMarkerAt(armies, placed, { x: 100, y: 100 }, centre)).toBe('b');
+  });
+});
+
+describe('armyTapSwallowed', () => {
+  const marker = (id: string, extra: Partial<ArmyOverlayMarker> = {}): ArmyOverlayMarker => ({
+    id, position: { q: 0, r: 0 }, selected: false, returning: false, isFleet: true, visionRadius: 1, ...extra,
+  });
+
+  it('lets a marker tap reach the tile below when no send picker is open', () => {
+    expect(armyTapSwallowed([marker('a'), marker('b')])).toBe(false);
+  });
+
+  it('keeps the tap on the marker while the send picker is open', () => {
+    expect(armyTapSwallowed([marker('a'), marker('b', { pick: 'eligible' })])).toBe(true);
   });
 });

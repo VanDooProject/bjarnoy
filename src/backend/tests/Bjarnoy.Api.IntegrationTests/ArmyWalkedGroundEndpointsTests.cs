@@ -72,17 +72,17 @@ public sealed class ArmyWalkedGroundEndpointsTests : IAsyncLifetime
 
         await LoginAsync(client, adminName);
         var granted = await client.PostJsonAsync(
-            $"/api/v1/admin/settlements/{settlement.Id}/garrison", new AdjustGarrisonRequest("spearman", 5), Ct);
+            $"/api/v1/admin/settlements/{settlement.Id}/garrison", new AdjustGarrisonRequest("spearman", settlement.Spot(), 5), Ct);
         Assert.Equal(HttpStatusCode.OK, granted.StatusCode);
         granted = await client.PostJsonAsync(
-            $"/api/v1/admin/settlements/{settlement.Id}/garrison", new AdjustGarrisonRequest("provisioner", 5), Ct);
+            $"/api/v1/admin/settlements/{settlement.Id}/garrison", new AdjustGarrisonRequest("provisioner", settlement.Spot(), 5), Ct);
         Assert.Equal(HttpStatusCode.OK, granted.StatusCode);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", player.AccessToken);
 
         var target = await FindFarTargetAsync(client, world.Id, settlement);
         var dispatched = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("spearman", 5), new UnitCountRequest("provisioner", 5)], null,
+            new DispatchArmyRequest([new(settlement.Spot(), [new UnitCountRequest("spearman", 5), new UnitCountRequest("provisioner", 5)])], null,
                 new HexPointRequest(target.Q, target.R), 150), Ct);
         Assert.True(dispatched.IsSuccessStatusCode, await dispatched.Content.ReadAsStringAsync(Ct));
 

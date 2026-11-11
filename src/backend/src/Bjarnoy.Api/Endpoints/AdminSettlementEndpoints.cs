@@ -289,7 +289,8 @@ public static class AdminSettlementEndpoints
             });
         }
 
-        var result = await settlements.AdjustGarrisonAsync(settlementId, unitType, request.Count, cancellationToken);
+        var result = await settlements.AdjustGarrisonAsync(
+            settlementId, request.Spot.ToHexCoord(), unitType, request.Count, cancellationToken);
 
         switch (result.Outcome)
         {
@@ -303,6 +304,8 @@ public static class AdminSettlementEndpoints
                         AdminGarrisonEditRejection.InvalidCount => "A count of zero changes nothing.",
                         AdminGarrisonEditRejection.NotEnoughUnits =>
                             "The garrison does not hold that many units of that type.",
+                        AdminGarrisonEditRejection.NoFittingSpot =>
+                            "The hex is not a garrison spot of the settlement that can hold that unit type.",
                         _ => "The garrison could not be adjusted.",
                     }],
                 });

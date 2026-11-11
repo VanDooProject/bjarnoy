@@ -87,7 +87,7 @@ public sealed class CampAggressionEndpointsTests : IAsyncLifetime
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Axeman, Count = axemen });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Axeman, Count = axemen });
             await db.SaveChangesAsync(Ct);
         }
 
@@ -123,11 +123,11 @@ public sealed class CampAggressionEndpointsTests : IAsyncLifetime
 
     private DateTimeOffset GameNow() => _factory.Time.GetUtcNow();
 
-    private static Task<HttpResponseMessage> MoveAsync(
+    private static async Task<HttpResponseMessage> MoveAsync(
         HttpClient client, Guid settlementId, HexCoord to, int count, double provisions) =>
-        client.PostJsonAsync(
+        await client.PostJsonAsync(
             $"/api/v1/settlements/{settlementId}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("axeman", count)], null, new HexPointRequest(to.Q, to.R), provisions),
+            new DispatchArmyRequest([new(await client.SpotOfAsync(settlementId, Ct), [new UnitCountRequest("axeman", count)])], null, new HexPointRequest(to.Q, to.R), provisions),
             Ct);
 
     /// <summary>
@@ -246,6 +246,8 @@ public sealed class CampAggressionEndpointsTests : IAsyncLifetime
         var army = new ArmyEntity
         {
             SettlementId = setup.Settlement.Id,
+            HomeSpotQ = setup.Settlement.Q,
+            HomeSpotR = setup.Settlement.R,
             Mission = (int)ArmyMission.Move,
             AtHome = false,
             Provisions = 100,

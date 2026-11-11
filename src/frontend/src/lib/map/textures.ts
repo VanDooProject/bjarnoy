@@ -1986,7 +1986,8 @@ function coastalBaseAndTop(classified: ClassifiedFamily<Texture>): { base: Orien
 export function baseTextureFor(textures: TileTextures, tile: Tile, riverArt?: RiverArt): Texture {
   // A land wall hex keeps its own ground: the terrain's base (grass, forest floor without the trees, sand, bog moss) as that hex would be drawn
   // plain, in the hex's own rotation so it blends with its neighbours; only the wall's top is drawn over it.
-  if (riverArt && LAND_WALL_KEYS.has(riverArt.key)) {
+  // A Longhouse on a beach does the same: the grass version's building top over the plain sand base, not the grass base it ships with.
+  if ((riverArt && LAND_WALL_KEYS.has(riverArt.key)) || (!riverArt && tile.buildingType === 'longhouse' && tile.terrain === 'sand')) {
     const ground: Tile = { ...tile, buildingType: undefined, buildingLevel: undefined, variant: 0 };
     // The plain base, never a bog look's own props: slot 0 directly, since bare moss never draws that (retired) look.
     const bogBase = tile.bog?.kind === 'bog' ? textures.baseIndexed.bog?.[tileOrientationFor(ground)]?.[0] : undefined;

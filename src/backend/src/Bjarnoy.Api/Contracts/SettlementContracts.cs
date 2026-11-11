@@ -311,6 +311,7 @@ public sealed record SettlementResponse(
     IReadOnlyList<PlacedBuildingResponse> Buildings,
     IReadOnlyList<BuildOrderResponse> Queue,
     IReadOnlyList<UnitStackResponse> Garrison,
+    IReadOnlyList<GarrisonSpotResponse> GarrisonSpots,
     IReadOnlyList<TrainingOrderResponse> TrainingQueue,
     IReadOnlyList<RuneInstanceResponse> Runes,
     FeastResponse? Feast,
@@ -411,6 +412,14 @@ public sealed record SettlementResponse(
                     : (o.CompletesAt!.Value - o.StartedAt!.Value).TotalSeconds,
                 o.Kind.ToWireName()))],
             [.. domain.Garrison.Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
+            [.. domain.GarrisonSpots.Select(spot => new GarrisonSpotResponse(
+                spot.Kind.ToWireName(),
+                spot.Coord.Q,
+                spot.Coord.R,
+                [.. spot.Stacks.Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
+                [.. session.GuestStacksAt(id, spot.Coord).Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
+                spot.HoldsLand,
+                spot.HoldsShips))],
             [.. domain.TrainingQueue.Select(o => TrainingOrderResponse.From(o, clock, gameNow))],
             [.. domain.Runes.Select(r => new RuneInstanceResponse(
                 r.Id, r.Type.ToWireName(), r.Rarity.ToWireName(), r.SlottedAt?.Q, r.SlottedAt?.R))],
@@ -434,6 +443,17 @@ public sealed record SettlementResponse(
             [.. component]);
     }
 }
+
+/// <summary>
+/// One garrison spot of a settlement: its longhouse hex, a tower or a dock (empty ones included).
+/// </summary>
+/// <param name="Kind"><c>"longhouse"</c>, <c>"tower"</c> or <c>"dock"</c>.</param>
+/// <param name="Stacks">The settlement's own units standing here.</param>
+/// <param name="Guests">The units of supporting armies standing here, pooled by type.</param>
+/// <param name="HoldsLand">Whether land units may stand here.</param>
+/// <param name="HoldsShips">Whether ships may stand here.</param>
+public sealed record GarrisonSpotResponse(
+    string Kind, int Q, int R, IReadOnlyList<UnitStackResponse> Stacks, IReadOnlyList<UnitStackResponse> Guests, bool HoldsLand, bool HoldsShips);
 
 /// <summary>One connected claim disc: a longhouse's or a connected tower's centre and claim radius.</summary>
 public sealed record ClaimDiscResponse(int Q, int R, int Radius);

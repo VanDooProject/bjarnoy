@@ -1,6 +1,9 @@
 using Bjarnoy.Api.Hosting;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
+using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Units;
+using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -359,6 +362,116 @@ public sealed class MigrationTests
                 Assert.False(domainOrder.IsWaiting);
                 Assert.Equal(startedAt, domainOrder.StartedAt);
                 Assert.Equal(completesAt, domainOrder.CompletesAt);
+            }
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            File.Delete(file);
+        }
+    }
+
+    /// <summary>
+    /// Existing garrisons stand at the settlement's centre when the garrison-spots migration runs, ships at the Dockyard nearest
+    /// the centre (by hex distance, ties by Q, then R) or the centre when there is none; an army's home spot and a guest's spot
+    /// follow the same rule. The rows are written through the model, then the schema is taken back to the migration before
+    /// <c>AddGarrisonSpots</c> (which drops the spot columns) and migrated forward again, so the data step runs over them.
+    /// </summary>
+    [Fact]
+    public async Task The_garrison_spots_migration_puts_existing_garrisons_armies_and_guests_on_spots()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"bjarnoy-migration-test-{Guid.CreateVersion7():N}.db");
+        var connectionString = $"Data Source={file}";
+        try
+        {
+            var options = new DbContextOptionsBuilder<GameDbContext>()
+                .UseSqlite(connectionString, sqlite => sqlite.MigrationsAssembly(MigrationAssemblies.Sqlite))
+                .Options;
+
+            var harbour = Guid.CreateVersion7(); // centre (3,4), docks at (7,4), (5,6) (both 4 away) and (9,9)
+            var inland = Guid.CreateVersion7(); // centre (20,20), no dock
+            var landArmy = Guid.CreateVersion7();
+            var fleetArmy = Guid.CreateVersion7();
+            var guestFleet = Guid.CreateVersion7();
+
+            await using (var context = new GameDbContext(options))
+            {
+                await context.Database.MigrateAsync(Ct);
+
+                var world = new WorldEntity { Name = "Migration test world", MaxPlayers = 10 };
+                var island = new IslandEntity { WorldId = world.Id, Name = "Island", CentreQ = 0, CentreR = 0 };
+                context.Worlds.Add(world);
+                context.Islands.Add(island);
+
+                SettlementEntity Settle(Guid id, int q, int r) => new()
+                {
+                    Id = id,
+                    WorldId = world.Id,
+                    IslandId = island.Id,
+                    UserId = SystemUserIds.Abandoned,
+                    Name = $"s-{id:N}",
+                    OwnerId = "owner",
+                    OwnerName = "Owner",
+                    CentreQ = q,
+                    CentreR = r,
+                };
+
+                var harbourSettlement = Settle(harbour, 3, 4);
+                foreach (var (q, r) in new[] { (7, 4), (5, 6), (9, 9) })
+                {
+                    harbourSettlement.Buildings.Add(new PlacedBuildingEntity { SettlementId = harbour, Q = q, R = r, Type = BuildingType.Dockyard, Level = 1 });
+                }
+
+                harbourSettlement.Garrison.Add(new UnitStackEntity { SettlementId = harbour, UnitType = UnitType.Spearman, Count = 5 });
+                harbourSettlement.Garrison.Add(new UnitStackEntity { SettlementId = harbour, UnitType = UnitType.Karve, Count = 2 });
+                harbourSettlement.Garrison.Add(new UnitStackEntity { SettlementId = harbour, UnitType = UnitType.Longship, Count = 1 });
+                var inlandSettlement = Settle(inland, 20, 20);
+                inlandSettlement.Garrison.Add(new UnitStackEntity { SettlementId = inland, UnitType = UnitType.Karve, Count = 3 });
+                context.Settlements.AddRange(harbourSettlement, inlandSettlement);
+
+                ArmyEntity Army(Guid id, UnitType unit, bool supporting) => new()
+                {
+                    Id = id,
+                    SettlementId = harbour,
+                    Mission = supporting ? (int)ArmyMission.Support : (int)ArmyMission.Move,
+                    IsSupporting = supporting,
+                    TargetSettlementId = supporting ? inland : null,
+                    AtHome = false,
+                    Stacks = [new ArmyUnitStackEntity { ArmyId = id, UnitType = unit, Count = 1 }],
+                };
+
+                context.Armies.AddRange(
+                    Army(landArmy, UnitType.Spearman, supporting: false),
+                    Army(fleetArmy, UnitType.Karve, supporting: false),
+                    Army(guestFleet, UnitType.Karve, supporting: true));
+                await context.SaveChangesAsync(Ct);
+
+                // Back to the schema without the spot columns, then forward again: the data step sees these rows.
+                var migrator = context.GetInfrastructure().GetRequiredService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>();
+                await migrator.MigrateAsync("20261109051620_AddApiKeyAnonymousAccounts", Ct);
+                await migrator.MigrateAsync(cancellationToken: Ct);
+            }
+
+            await using (var context = new GameDbContext(options))
+            {
+                var stacks = await context.UnitStacks.AsNoTracking().ToListAsync(Ct);
+                (int Q, int R) SpotOf(Guid settlement, UnitType type) =>
+                    stacks.Where(s => s.SettlementId == settlement && s.UnitType == type).Select(s => (s.SpotQ, s.SpotR)).Single();
+
+                Assert.Equal((3, 4), SpotOf(harbour, UnitType.Spearman));
+                // Two docks are four hexes from the centre; the lower Q wins, the farther one never does.
+                Assert.Equal((5, 6), SpotOf(harbour, UnitType.Karve));
+                Assert.Equal((5, 6), SpotOf(harbour, UnitType.Longship));
+                Assert.Equal((20, 20), SpotOf(inland, UnitType.Karve));
+
+                var armies = await context.Armies.AsNoTracking().ToListAsync(Ct);
+                var land = armies.Single(a => a.Id == landArmy);
+                var fleet = armies.Single(a => a.Id == fleetArmy);
+                var guest = armies.Single(a => a.Id == guestFleet);
+                Assert.Equal((3, 4), (land.HomeSpotQ, land.HomeSpotR));
+                Assert.Equal((5, 6), (fleet.HomeSpotQ, fleet.HomeSpotR));
+                // A guest stands at a spot of its host: the host has no dock, so its centre.
+                Assert.Equal((20, 20), (guest.TargetBuildingQ, guest.TargetBuildingR));
             }
         }
         finally

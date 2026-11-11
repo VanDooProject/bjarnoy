@@ -53,7 +53,7 @@ const garrisonRows = computed(() =>
 );
 
 const picker = useDispatchUnitPicker(garrisonRows);
-const { isRowSelectable, hasLockedOutUnits, sandHuntLacksTroops } = picker;
+const { isRowSelectable, hasLockedOutUnits, sandHuntLacksTroops, unitSourceText } = picker;
 
 function quantityFor(unit: string): number {
   return draft.value?.unitCounts[unit] ?? 0;
@@ -437,7 +437,10 @@ async function confirmFieldOrderClick() {
             class="unit-picker-row"
             :class="{ 'is-locked-out': !isRowSelectable(row.unit) }"
           >
-            <span class="unit-picker-name">{{ row.label }}</span>
+            <span class="unit-picker-name">
+              {{ row.label }}
+              <span v-if="unitSourceText(row.unit)" class="unit-source" data-testid="unit-source">{{ unitSourceText(row.unit) }}</span>
+            </span>
             <input
               type="number"
               min="0"
@@ -451,6 +454,7 @@ async function confirmFieldOrderClick() {
           </div>
           <div v-if="!garrisonRows.length" class="status-subtext">{{ t('hud.armyPanel.noUnitsAvailable') }}</div>
         </div>
+        <p v-if="picker.severalSpots.value" class="status-subtext error-note" data-testid="several-spots">{{ t('hud.garrisonSpots.severalSpots') }}</p>
 
         <DispatchSlots :unit-counts="draft.unitCounts" />
 
@@ -484,6 +488,12 @@ async function confirmFieldOrderClick() {
 </template>
 
 <style scoped>
+.unit-source {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+}
 /* The card box and header are shared (style.css `.status-card`); this panel sets its place and size. `.status-row` mirrors
    TrainingQueuePanel.vue's. */
 .status-card {
