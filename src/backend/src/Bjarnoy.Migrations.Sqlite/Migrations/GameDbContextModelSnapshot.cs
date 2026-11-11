@@ -356,6 +356,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("RoutePlannedAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("SettlementId")
                         .HasColumnType("TEXT");
 

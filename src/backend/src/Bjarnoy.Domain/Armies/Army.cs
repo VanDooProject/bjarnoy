@@ -881,6 +881,7 @@ public sealed record Army
             ReturnEdgeHours = movement.ReturnEdgeHours,
             TurnAroundAt = battleInstant,
             IsReturning = true,
+            RoutePlannedAt = movement.RoutePlannedAt,
         };
 
         // Provisions are rebased to what the army carried at the battle instant, plus what the win refilled (same trick
@@ -931,6 +932,7 @@ public sealed record Army
             ReturnEdgeHours = movement.ReturnEdgeHours,
             TurnAroundAt = battleInstant,
             IsReturning = true,
+            RoutePlannedAt = movement.RoutePlannedAt,
         };
 
         // What the army carried at the battle instant, plus the food the win took from the camp to refill it.
@@ -1020,6 +1022,7 @@ public sealed record Army
             ReturnEdgeHours = edgeHours,
             TurnAroundAt = now,
             IsReturning = true,
+            RoutePlannedAt = now,
         };
 
         var army = new Army
@@ -1113,9 +1116,10 @@ public sealed record Army
 
         var returnCumulative = HexPathfinder.CumulativeHours(back, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
         var returnEdge = HexPathfinder.EdgeHours(back, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        // The route out keeps the instant it was planned at (the earlier of the two).
         var rebuilt = Movement.Movement.Create(
             movement.DepartedAt, movement.Path, movement.CumulativeHours, movement.EdgeHours, back, returnCumulative, returnEdge,
-            Provisions, TotalUpkeepPerHour);
+            Provisions, TotalUpkeepPerHour) with { RoutePlannedAt = movement.RoutePlannedAt };
         return this with { Location = new ArmyLocation.InTransit(rebuilt), HomeSpot = newHome };
     }
 
@@ -1486,6 +1490,7 @@ public sealed record Army
                 ReturnEdgeHours = movement.ReturnEdgeHours,
                 TurnAroundAt = movement.TurnAroundAt,
                 IsReturning = true,
+                RoutePlannedAt = movement.RoutePlannedAt,
             };
 
             var turned = this with
@@ -1597,6 +1602,7 @@ public sealed record Army
             ReturnEdgeHours = edgeHours,
             TurnAroundAt = now,
             IsReturning = true,
+            RoutePlannedAt = now,
         };
 
         return this with { Location = new ArmyLocation.InTransit(recallMovement), Provisions = provisionsNow };
@@ -1661,6 +1667,7 @@ public sealed record Army
             TurnAroundAt = battleInstant,
             IsReturning = true,
             FieldBattleImmuneUntil = immuneUntil,
+            RoutePlannedAt = battleInstant,
         };
 
         // The retreat departs at the battle instant, so the stored baseline is what the army carried then.
@@ -1748,6 +1755,7 @@ public sealed record Army
                 TurnAroundAt = at,
                 IsReturning = true,
                 FieldBattleImmuneUntil = movement.FieldBattleImmuneUntil,
+                RoutePlannedAt = at,
             };
             return new WallRerouteResult(this with { Location = new ArmyLocation.InTransit(returning), Provisions = provisionsNow }, null);
         }
@@ -1782,6 +1790,8 @@ public sealed record Army
             var backHours = hours(back);
             var standing = Movement.Movement.Create(
                 movement.DepartedAt, walk, walkHours, walkEdges, back, backHours, edges(back), Provisions, TotalUpkeepPerHour);
+            // The walk was checked against the walls up to now and the way home is planned now.
+            standing = standing with { RoutePlannedAt = at };
             if (standing.TurnAroundAt < at)
             {
                 standing = standing with { TurnAroundAt = at };
@@ -1805,6 +1815,7 @@ public sealed record Army
                 IsReturning = false,
                 IsStranded = true,
                 FieldBattleImmuneUntil = movement.FieldBattleImmuneUntil,
+                RoutePlannedAt = at,
             }),
         }).WithProvisionsAt(at, ProvisionsAt(at));
 
@@ -2101,8 +2112,10 @@ public sealed record Army
             return FieldOrderResult.Rejected(FieldOrderRejection.InsufficientProvisionsForRoundTrip);
         }
 
+        // Planned now, with the walls standing now, also when an army still marching keeps its departure.
         var newMovement = Movement.Movement.Create(
-            departedAt, fullPath, cumulativeHours, edgeHours, returnPath, returnCumulativeHours, returnEdgeHours, provisionsAtDeparture, upkeepPerHour);
+            departedAt, fullPath, cumulativeHours, edgeHours, returnPath, returnCumulativeHours, returnEdgeHours, provisionsAtDeparture, upkeepPerHour)
+            with { RoutePlannedAt = now };
 
         var ordered = leaving with
         {
@@ -2214,7 +2227,8 @@ public sealed record Army
             var storedFood = stayingFood + (stayingUpkeep * hoursSinceDeparture);
             var rebuilt = Movement.Movement.Create(
                 movement.DepartedAt, movement.Path, movement.CumulativeHours, movement.EdgeHours,
-                movement.ReturnPath, movement.ReturnCumulativeHours, movement.ReturnEdgeHours, storedFood, stayingUpkeep);
+                movement.ReturnPath, movement.ReturnCumulativeHours, movement.ReturnEdgeHours, storedFood, stayingUpkeep)
+                with { RoutePlannedAt = movement.RoutePlannedAt };
             remainder = staying with { Provisions = storedFood, Location = new ArmyLocation.InTransit(rebuilt) };
         }
 

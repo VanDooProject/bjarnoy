@@ -88,6 +88,17 @@ public sealed record Movement
     /// </summary>
     public DateTimeOffset? FieldBattleImmuneUntil { get; init; }
 
+    /// <summary>
+    /// The instant this movement's routes (<see cref="Path"/> and <see cref="ReturnPath"/>) were planned, with the walls standing then. It is
+    /// not <see cref="DepartedAt"/> for a way home planned at dispatch: a turn-around or a post-battle return walks the stored way home
+    /// and keeps the instant it was planned at. A wall that changed after it may block the route (<c>WallTimeline.MayBlock</c>);
+    /// <see langword="null"/> when not known (a movement stored before the instant was recorded), see <see cref="PlannedAt"/>.
+    /// </summary>
+    public DateTimeOffset? RoutePlannedAt { get; init; }
+
+    /// <summary><see cref="RoutePlannedAt"/>, or <see cref="DateTimeOffset.MinValue"/> when it is not known: every wall then counts as new.</summary>
+    public DateTimeOffset PlannedAt => RoutePlannedAt ?? DateTimeOffset.MinValue;
+
     /// <summary>How long a fleeing army is protected after the battle it lost.</summary>
     public static readonly TimeSpan FleeProtection = TimeSpan.FromHours(6);
 
@@ -123,6 +134,7 @@ public sealed record Movement
         TurnAroundAt = at,
         IsReturning = false,
         IsStranded = true,
+        RoutePlannedAt = at,
     };
 
     /// <summary>When this leg's <see cref="Path"/> is fully travelled.</summary>
@@ -184,6 +196,7 @@ public sealed record Movement
             ReturnEdgeHours = returnEdgeHours,
             TurnAroundAt = arrivesAt + TimeSpan.FromHours(standingHours),
             IsReturning = false,
+            RoutePlannedAt = departedAt,
         };
     }
 

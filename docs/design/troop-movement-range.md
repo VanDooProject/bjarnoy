@@ -210,7 +210,11 @@ Consequences:
     `WallEncounters.FindEarliest`, `WallBlocking.FirstBlockingIn`): a plain piece blocks while it is no half-open end, so
     from the later of its own instant and that of the neighbour that closed the end; a gate blocks while it does not open
     for the army. A gate's friendships and realm carry no instant, so a gate that already stood when the route was planned
-    blocks only from the instant the army is settled to; an army that passed it before then is not sent back. Everything due
+    blocks only from the instant the army is settled to; an army that passed it before then is not sent back. A route
+    remembers the instant it was planned (`Movement.RoutePlannedAt`): the way home planned at dispatch keeps that instant
+    after the turn-around or the battle, so a wall built behind the army while it marched is found when it turns home, even
+    when the army is first settled later; a leg that starts during a settle (a battle's way home) is checked in the same
+    settle. Everything due
     before that instant is settled first (turn-around, fights, ambushes), then the army re-routes from where it is then
     (`Army.RerouteAroundWall`), with the same rules: the walls standing at that instant and its owner's gate rule. An outbound army that finds a way on gets a fresh leg and turn-around from the food it carries
     then, or turns home at once when that food no longer covers the round trip. A stranded army's path is the walk to the

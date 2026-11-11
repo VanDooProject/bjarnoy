@@ -127,6 +127,9 @@ public class ArmyEntity
     /// <summary>Persisted mirror of <see cref="Movement.IsStranded"/>: the army cannot get home and starves when its food runs out.</summary>
     public bool IsStranded { get; set; }
 
+    /// <summary>Persisted mirror of <see cref="Movement.RoutePlannedAt"/>; <see langword="null"/> for a row stored before it was recorded.</summary>
+    public DateTimeOffset? RoutePlannedAt { get; set; }
+
     /// <summary>Rebuilds the domain aggregate from the stored columns.</summary>
     public Army ToDomain()
     {
@@ -147,6 +150,7 @@ public class ArmyEntity
                     IsReturning = IsReturning,
                     FieldBattleImmuneUntil = FieldBattleImmuneUntil,
                     IsStranded = IsStranded,
+                    RoutePlannedAt = RoutePlannedAt,
                 });
 
         return new Army
@@ -244,6 +248,7 @@ public class ArmyEntity
                 IsReturning = false;
                 FieldBattleImmuneUntil = null;
                 IsStranded = false;
+                RoutePlannedAt = null;
                 break;
 
             case ArmyLocation.Supporting supporting:
@@ -263,6 +268,7 @@ public class ArmyEntity
                 IsReturning = false;
                 FieldBattleImmuneUntil = null;
                 IsStranded = false;
+                RoutePlannedAt = null;
                 break;
 
             case ArmyLocation.InTransit inTransit:
@@ -280,6 +286,7 @@ public class ArmyEntity
                 IsReturning = movement.IsReturning;
                 FieldBattleImmuneUntil = movement.FieldBattleImmuneUntil;
                 IsStranded = movement.IsStranded;
+                RoutePlannedAt = movement.RoutePlannedAt;
                 break;
         }
     }

@@ -1009,7 +1009,18 @@ public sealed class ArmyService(
         {
             if (await FindWallEncounterAsync(army, now, cancellationToken).ConfigureAwait(false) is not { } encounter)
             {
-                break;
+                var step = await SettleStepAsync(army, now, cancellationToken).ConfigureAwait(false);
+
+                // The step may have started a new leg (a battle's or an arrival's way home, a turn-around): a wall in its way is dealt with
+                // in this settle too, not left to walk through.
+                if (step != ArmySettleOutcome.Updated
+                    || await FindWallEncounterAsync(army, now, cancellationToken).ConfigureAwait(false) is null)
+                {
+                    return step == ArmySettleOutcome.NoChange && changed ? ArmySettleOutcome.Updated : step;
+                }
+
+                changed = true;
+                continue;
             }
 
             for (var step = 0; step < MaxStepsBeforeWall; step++)
@@ -1113,14 +1124,14 @@ public sealed class ArmyService(
         // The timeline alone rules out what cannot block (an own gate, a half-open end nobody built beside since the route was planned),
         // so a route through such hexes only costs the one timeline read: terrain, rivers and guilds are read for a candidate only.
         var route = movement.IsReturning ? movement.Path : movement.Path.Concat(movement.ReturnPath);
-        if (timeline.IsEmpty || !route.Any(hex => timeline.MayBlock(hex, ownerKey, movement.DepartedAt, now)))
+        if (timeline.IsEmpty || !route.Any(hex => timeline.MayBlock(hex, ownerKey, movement.PlannedAt, now)))
         {
             return null;
         }
 
         var blocking = await WallBlockingAsync(settlement, cancellationToken).ConfigureAwait(false);
         return WallEncounters.FindEarliest(
-            movement, (hex, from, before) => blocking.FirstBlockingIn(hex, ownerKey, from, before, movement.DepartedAt, now), now);
+            movement, (hex, from, before) => blocking.FirstBlockingIn(hex, ownerKey, from, before, movement.PlannedAt, now), now);
     }
 
     /// <summary>
@@ -1588,6 +1599,7 @@ public sealed class ArmyService(
             ReturnEdgeHours = movement.ReturnEdgeHours,
             TurnAroundAt = movement.ArrivesAt,
             IsReturning = true,
+            RoutePlannedAt = movement.RoutePlannedAt,
         }),
     };
 

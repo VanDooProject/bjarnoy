@@ -278,4 +278,26 @@ public sealed class WallEncounterTests
         Assert.True(starved.Starved);
         Assert.Equal(at, Assert.Single(starved.Walked).Until);
     }
+
+    [Fact]
+    public void The_instant_the_routes_were_planned_is_kept_by_the_turn_around_and_set_afresh_by_a_recall_and_a_re_route()
+    {
+        var army = Marching(provisions: 400);
+        var movement = MovementOf(army);
+        Assert.Equal(T0, movement.RoutePlannedAt);
+
+        var turned = army.SettleTo(movement.TurnAroundAt.AddMinutes(1)).Army;
+        Assert.True(MovementOf(turned).IsReturning);
+        Assert.Equal(T0, MovementOf(turned).RoutePlannedAt);
+
+        var recalledAt = T0.AddHours(1);
+        Assert.Equal(recalledAt, MovementOf(army.Recall(recalledAt, Home, Strip)!).RoutePlannedAt);
+
+        var at = EntryOf(movement, WallHex).AddMinutes(-30);
+        var rerouted = army.RerouteAroundWall(EncounterOn(movement, WallHex, at), Home, Strip, walls: WallWithGap()).Army;
+        Assert.Equal(at, MovementOf(rerouted).RoutePlannedAt);
+
+        // A movement stored before the instant was recorded counts every wall as new.
+        Assert.Equal(DateTimeOffset.MinValue, (movement with { RoutePlannedAt = null }).PlannedAt);
+    }
 }

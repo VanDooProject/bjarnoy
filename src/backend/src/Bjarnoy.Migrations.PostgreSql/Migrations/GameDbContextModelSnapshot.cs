@@ -361,6 +361,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTimeOffset?>("RoutePlannedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("SettlementId")
                         .HasColumnType("uuid");
 

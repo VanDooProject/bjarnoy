@@ -87,8 +87,10 @@ public sealed class WallRerouteEndpointsTests : IAsyncLifetime
 
     /// <param name="guildmate">The marching owner's account when it is a real one in the wall owner's guild (so the wall owner's gates open for it); anonymous otherwise.</param>
     /// <param name="camp">A strong camp (a level 1 wolf den) planted on the island there.</param>
+    /// <param name="attack">The army marches to attack an undefended settlement of another player on <see cref="Target"/> instead of moving there.</param>
     private async Task<Scene> PlantAsync(
-        bool returning, double provisions, IEnumerable<WallPlan> walls, WallKind kind, Guid? guildmate, HexCoord? camp = null)
+        bool returning, double provisions, IEnumerable<WallPlan> walls, WallKind kind, Guid? guildmate, HexCoord? camp = null,
+        bool attack = false)
     {
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
@@ -132,6 +134,14 @@ public sealed class WallRerouteEndpointsTests : IAsyncLifetime
         var home = Settlement(Owner, guildmate ?? SystemUserIds.Abandoned, Home);
         var wallOwner = Settlement("builder-owner", builder.Id, new HexCoord(20, 20));
         db.Settlements.AddRange(home, wallOwner);
+        SettlementEntity? defender = null;
+        if (attack)
+        {
+            var defenderUser = new UserEntity { UserName = "defender", NormalizedUserName = "DEFENDER", PasswordHash = "hash" };
+            db.Users.Add(defenderUser);
+            defender = Settlement("defender-owner", defenderUser.Id, Target);
+            db.Settlements.Add(defender);
+        }
 
         foreach (var (hex, wallAfter, gate) in walls)
         {
@@ -162,10 +172,12 @@ public sealed class WallRerouteEndpointsTests : IAsyncLifetime
             SettlementId = home.Id,
             HomeSpotQ = Home.Q,
             HomeSpotR = Home.R,
-            Mission = (int)ArmyMission.Move,
+            Mission = (int)(attack ? ArmyMission.Attack : ArmyMission.Move),
+            TargetSettlementId = defender?.Id,
             AtHome = false,
             Provisions = provisions,
             DepartedAt = start,
+            RoutePlannedAt = start,
             Path = [.. path.Select(p => new HexPoint(p.Q, p.R))],
             CumulativeHours = hours,
             EdgeHours = hours,
@@ -450,5 +462,60 @@ public sealed class WallRerouteEndpointsTests : IAsyncLifetime
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
         return await db.Armies.Where(a => a.Id == armyId).Select(a => a.SettlementId).SingleAsync(Ct);
+    }
+
+    /// <summary>A wall line across r = 0 at q = -3 (r -2..2), standing from +4 h: the army passed (-3,0) at +3 h on its way out. With a gate in the middle (another player's, hostile) when asked.</summary>
+    private static IEnumerable<WallPlan> LineBehindTheArmy(bool gate = false) =>
+        Enumerable.Range(-2, 5).Select(r => new WallPlan(new HexCoord(-3, r), TimeSpan.FromHours(4), Gate: gate && r == 0));
+
+    [Fact]
+    public async Task A_wall_built_behind_an_outbound_army_is_found_when_it_turns_around_even_when_it_is_first_settled_after_that()
+    {
+        // It turns around at +16 h and is first read at +18 h, on its way home.
+        var scene = await PlantAsync(returning: false, 1_000, LineBehindTheArmy(), WallKind.Standing, guildmate: null);
+        using var client = Client();
+
+        _factory.Time.Advance(TimeSpan.FromHours(18));
+        var army = await ArmyAsync(client, scene.ArmyId);
+
+        var movement = army.Movement!;
+        Assert.True(movement.IsReturning);
+        Assert.Equal(scene.Start + TimeSpan.FromHours(16), movement.DepartedAt);
+        Assert.Equal(P(Target.Q, Target.R), movement.Path[0]);
+        Assert.Equal(P(Home.Q, Home.R), movement.Path[^1]);
+        Assert.DoesNotContain(P(-3, 0), movement.Path);
+    }
+
+    [Fact]
+    public async Task A_wall_built_behind_an_attacking_army_is_found_on_its_way_home_after_the_battle()
+    {
+        // It fights at +12 h (the target is undefended) and is first read at +14 h, on its way home.
+        var scene = await PlantAsync(returning: false, 1_000, LineBehindTheArmy(), WallKind.Standing, guildmate: null, attack: true);
+        using var client = Client();
+
+        _factory.Time.Advance(TimeSpan.FromHours(14));
+        var army = await ArmyAsync(client, scene.ArmyId);
+
+        var movement = army.Movement!;
+        Assert.True(movement.IsReturning);
+        Assert.Equal(scene.Start + TimeSpan.FromHours(12), movement.DepartedAt);
+        Assert.Equal(P(Home.Q, Home.R), movement.Path[^1]);
+        Assert.DoesNotContain(P(-3, 0), movement.Path);
+    }
+
+    [Fact]
+    public async Task A_hostile_gate_built_behind_an_outbound_army_is_found_when_it_turns_around_not_only_when_it_is_settled()
+    {
+        var scene = await PlantAsync(returning: false, 1_000, LineBehindTheArmy(gate: true), WallKind.Standing, guildmate: null);
+        using var client = Client();
+
+        _factory.Time.Advance(TimeSpan.FromHours(18));
+        var army = await ArmyAsync(client, scene.ArmyId);
+
+        var movement = army.Movement!;
+        Assert.True(movement.IsReturning);
+        Assert.Equal(scene.Start + TimeSpan.FromHours(16), movement.DepartedAt);
+        Assert.Equal(P(Target.Q, Target.R), movement.Path[0]);
+        Assert.DoesNotContain(P(-3, 0), movement.Path);
     }
 }

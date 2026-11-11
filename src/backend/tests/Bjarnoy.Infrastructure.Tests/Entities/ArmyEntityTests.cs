@@ -31,8 +31,11 @@ public class ArmyEntityTests
         Assert.True(back.CannotGetHome);
         Assert.Equal(army.StarvesAt, back.StarvesAt);
         Assert.Equal(new HexCoord(3, 1), back.PositionAt(back.HomeSpot, T0));
+        Assert.Equal(T0, entity.RoutePlannedAt);
+        Assert.Equal(T0, ((ArmyLocation.InTransit)back.Location).Movement.RoutePlannedAt);
 
         entity.ApplyDomain(back with { Location = new ArmyLocation.AtHome() });
         Assert.False(entity.IsStranded);
+        Assert.Null(entity.RoutePlannedAt);
     }
 }
