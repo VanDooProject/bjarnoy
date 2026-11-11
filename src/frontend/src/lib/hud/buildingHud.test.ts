@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { BuildingDefinitionResponse, BuildOrderResponse, TrainingOrderResponse } from '../../api/types';
 import {
   HUD_BOX_FONT_PX,
-  HUD_HOVER_SCALE,
   HUD_TIER,
   affordableInSeconds,
   ageViewModel,
@@ -297,19 +296,18 @@ describe('tierFor', () => {
 });
 
 describe('markerScale', () => {
-  it('grows at least 1.3x on hover, and lifts to the default-zoom size when zoomed far out', () => {
-    expect(HUD_HOVER_SCALE).toBe(1.3);
-    const cases: [number, number, number][] = [
-      [0.5, 0, 0.5],
-      [0.5, 1, 1],
-      [1, 0, 1],
-      [1, 1, 1.3],
-      [1.5, 0, 1.5],
-      [1.5, 1, 1.95],
-      [2, 0, 2],
-      [2, 1, 2.6],
-    ];
-    for (const [mapScale, hoverT, expected] of cases) expect(markerScale(mapScale, hoverT)).toBeCloseTo(expected, 6);
+  it('grows at least 1.3x on hover', () => {
+    expect(markerScale(1.5, 0)).toBeCloseTo(1.5, 6);
+    expect(markerScale(1.5, 1)).toBeCloseTo(1.95, 6);
+    expect(markerScale(2, 1)).toBeCloseTo(2.6, 6);
+  });
+
+  it('at the smallest zoom lifts to the size where the compact box with text shows', () => {
+    expect(tierFor(0.3)).toBe('far');
+    expect(tierFor(markerScale(0.3, 1))).toBe('mid');
+    expect(tierFor(markerScale(0.05, 1))).toBe('mid');
+    // Not hovered it stays the size the map gives it.
+    expect(markerScale(0.3, 0)).toBeCloseTo(0.3, 6);
   });
 
   it('eases in between (half way is half way) and clamps the hover progress', () => {

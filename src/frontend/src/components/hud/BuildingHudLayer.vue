@@ -3,8 +3,8 @@
 // countdown, and, near and mid, a box docked to it). What a marker shows is lib/hud/buildingHud.ts; this layer feeds it from
 // the stores, keeps the markers on their buildings frame by frame (CSS transforms written straight to the elements, like
 // composables/useMapAnchor.ts, no Vue re-render per frame) and owns the H key (the toggle button itself is BuildingInfoToggle). A marker is sized
-// like the Pixi progress dial: it scales with the map and grows on hover / tap (`markerScale`: at least 1.3x, to the default-zoom size
-// when zoomed far out). Hover = the mouse on its dial, its hex or its box; a tap = on its dial or box.
+// like the Pixi progress dial: it scales with the map and grows on hover / tap (`markerScale`: at least 1.3x, at the smallest zoom to the size
+// where the compact box shows). Hover = the mouse on its dial, its hex or its box; a tap = on its dial or box.
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';

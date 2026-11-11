@@ -11,10 +11,14 @@ import { useWorldStore } from '../../stores/world';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { installFakeAnimate, type FakeAnimate } from '../../test/fakeAnimate';
 import { DIAL_REJECT_MS, constructionDialsFromQueue, rejectDialAt, type ConstructionDial } from '../../lib/map/constructionDial';
+import { markerScale } from '../../lib/hud/buildingHud';
 import { makePendingOrder } from '../../lib/hud/pendingBuild';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
+
+/** A marker at the smallest zoom, fully hovered: lifted to the size where the compact box shows. */
+const HOVERED_SMALLEST = markerScale(0.3, 1);
 
 // The live building list (`hud.buildings`) is the source under test; the demo reads the local model instead.
 vi.mock('../../config', () => ({ DEMO_MODE: false, API_BASE_URL: '/api/v1' }));
@@ -198,7 +202,7 @@ describe('BuildingHudLayer', () => {
     }
     vi.useRealTimers();
     await wrapper.vm.$nextTick();
-    expect(el().element.style.transform).toContain('scale(1.000)');
+    expect(el().element.style.transform).toContain(`scale(${HOVERED_SMALLEST.toFixed(3)})`);
     expect(el().attributes('data-tier')).toBe('mid');
     expect(el().find('.hud-marker__box').exists()).toBe(true);
     // Left-most by x, yet above the markers to its right.
@@ -225,7 +229,7 @@ describe('BuildingHudLayer', () => {
       vi.advanceTimersByTime(60);
       runFrame();
     }
-    expect(wrapper.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain('scale(1.000)');
+    expect(wrapper.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain(`scale(${HOVERED_SMALLEST.toFixed(3)})`);
     renderer.tapObserver!({ x: 600, y: 50 });
     for (let i = 0; i < 4; i++) {
       vi.advanceTimersByTime(60);
@@ -246,7 +250,7 @@ describe('BuildingHudLayer', () => {
       runFrame();
     }
     vi.useRealTimers();
-    expect(wrapper.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain('scale(1.000)');
+    expect(wrapper.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain(`scale(${HOVERED_SMALLEST.toFixed(3)})`);
   });
 
   describe('hover and tap on the box', () => {

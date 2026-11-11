@@ -3,7 +3,7 @@
 // `buildingStatsFor`, `maxLevelFor`), see docs on `resolveUpgradeTarget`.
 import type { AxialCoord } from '../hex/coords';
 import type { BuildingDefinitionResponse, BuildOrderResponse, TrainingOrderResponse, UnitStackResponse } from '../../api/types';
-import { DIAL_LABEL_BASE_PX, DIAL_MIN_LABEL_PX, dialPhase, easeInOut, type ConstructionDial } from '../map/constructionDial';
+import { DIAL_LABEL_BASE_PX, DIAL_MIN_LABEL_PX, dialPhase, liftedScale, type ConstructionDial } from '../map/constructionDial';
 import { buildingStatsFor, maxLevelFor, scaleOutput, type BuildingKind, type BuildingOutput } from '../map/buildingEconomy';
 import {
   RING_RESOURCE_KEYS,
@@ -53,16 +53,15 @@ export function tierFor(zs: number, previous: HudTier | null = null): HudTier {
 // ---- hover size and hit ---------------------------------------------------------------------------------------------------
 
 /** A hovered or tapped marker grows to at least this many times its size. */
-export const HUD_HOVER_SCALE = 1.3;
+const HUD_HOVER_SCALE = 1.3;
 
 /**
  * The marker's size factor at map scale `mapScale` and hover progress `hoverT` (0..1). Unlike the progress dial (`dialScale`),
  * which only grows to its default-zoom size, the marker always grows by `HUD_HOVER_SCALE`; zoomed far out it lifts to the
- * default-zoom size, which keeps its box readable.
+ * smallest size at which the compact box with its text shows (`tierFor` gives 'mid'), so a hovered marker is always readable.
  */
 export function markerScale(mapScale: number, hoverT: number): number {
-  const eased = easeInOut(Math.min(1, Math.max(0, hoverT)));
-  return mapScale + (Math.max(mapScale * HUD_HOVER_SCALE, 1) - mapScale) * eased;
+  return liftedScale(mapScale, Math.max(mapScale * HUD_HOVER_SCALE, HUD_TIER.boxBelow + HUD_TIER.hysteresis), hoverT);
 }
 
 /** Screen rect of a marker's box: it starts on the dial's centre line (`x`, `y`), `w` x `h` is its unscaled size, `zs` the marker's size factor. */
