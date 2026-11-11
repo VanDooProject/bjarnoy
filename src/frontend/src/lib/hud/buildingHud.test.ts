@@ -105,9 +105,10 @@ describe('upgrade state', () => {
     expect(vm.dial).toMatchObject({ ring: 'max', progress: 1 });
   });
 
-  it('is busy (blocked, no shortfall) when the hex waits behind another order', () => {
+  it('stays ready when affordable but the hex waits behind another order', () => {
     const vm = buildingHudViewModel(input({ definitions: [def(1), def(2), def(3), def(4)], queue: [order({ state: 'waiting' })] }));
-    expect(vm.upgrade.state).toBe('busy');
+    expect(vm.upgrade.state).toBe('ready');
+    expect(vm.dial.ring).toBe('ready');
   });
 
   it('wears the crown only on a maxed Longhouse', () => {

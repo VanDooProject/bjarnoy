@@ -51,7 +51,7 @@ export function stackOrder<T extends { x: number; hovered?: boolean }>(markers: 
 
 export const TRAINING_SLOTS = 5;
 
-export type HudUpgradeState = 'ready' | 'short' | 'longhouse' | 'prereq' | 'storage' | 'busy' | 'upgrading' | 'max';
+export type HudUpgradeState = 'ready' | 'short' | 'longhouse' | 'prereq' | 'storage' | 'upgrading' | 'max';
 export type HudRing = 'ready' | 'blocked' | 'upgrading' | 'max';
 
 /** One thing the upgrade still needs. The view renders it through i18n (building name + level), never as an English string. */
@@ -243,9 +243,8 @@ export function buildingHudViewModel(input: BuildingHudInput): BuildingHudViewMo
       amount: availability.shortfall[key]!,
     }));
     vm.upgrade = { ...base, state: 'short', missing, affordableInSeconds: affordableInSeconds(missing, input.rates) };
-  } else if (availability.state === 'waiting') {
-    vm.upgrade = { ...base, state: 'busy' };
   } else {
+    // Affordable but maybe unable to start right now (slots busy, hex waits behind an order): still "ready" — it queues.
     vm.upgrade = { ...base, state: 'ready' };
   }
   vm.dial = { kind: 'state', ring: vm.upgrade.state === 'ready' ? 'ready' : 'blocked' };
