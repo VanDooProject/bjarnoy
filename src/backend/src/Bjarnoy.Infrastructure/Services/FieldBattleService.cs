@@ -114,6 +114,12 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
                 continue;
             }
 
+            // A stranded army that has starved by then is no longer there to fight, on either side.
+            if (found.At >= domain.StarvesAt || found.At >= otherDomain.StarvesAt)
+            {
+                continue;
+            }
+
             if (earliest is null || found.At < earliest.Value.At
                 || (found.At == earliest.Value.At && other.Id < earliest.Value.Other.Id))
             {

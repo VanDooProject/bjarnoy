@@ -42,7 +42,9 @@ function army(overrides: Partial<ArmyResponse> = {}): ArmyResponse {
       turnAroundAt: '2026-01-01T02:00:00Z',
       returnArrivesAt: '2026-01-01T04:00:00Z',
       isReturning: false,
+      isStranded: false,
     },
+    starvesAt: null,
     ...overrides,
   };
 }

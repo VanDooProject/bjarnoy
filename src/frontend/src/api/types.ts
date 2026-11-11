@@ -1674,6 +1674,8 @@ export interface MovementResponse {
   turnAroundAt: string;
   returnArrivesAt: string;
   isReturning: boolean;
+  /** The army cannot get home and stands on the one hex of `path`; `ArmyResponse.starvesAt` is when its food runs out and the whole army dies. */
+  isStranded: boolean;
 }
 
 /**
@@ -1724,6 +1726,8 @@ export interface ArmyResponse {
   visionRadius: number;
   stacks: ArmyUnitStackResponse[];
   movement: MovementResponse | null;
+  /** When the provisions of an army that cannot get home run out and the whole army dies; null for every other army. */
+  starvesAt: string | null;
 }
 
 export interface ArmyUnitStackResponse {

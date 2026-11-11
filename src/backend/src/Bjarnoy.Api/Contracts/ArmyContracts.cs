@@ -138,6 +138,10 @@ public sealed record HexPointResponse(int Q, int R)
 /// </param>
 /// <param name="ReturnCumulativeHours">The same per-hex schedule for <paramref name="ReturnPath"/>, measured from <paramref name="TurnAroundAt"/>.</param>
 /// <param name="ReturnEdgeHours">The same edge-crossing schedule for <paramref name="ReturnPath"/>, measured from <paramref name="TurnAroundAt"/>.</param>
+/// <param name="IsStranded">
+/// True when the army cannot get home and stands where it is (<see cref="Movement.IsStranded"/>): <paramref name="Path"/> is the one hex it
+/// stands on, and <see cref="ArmyResponse.StarvesAt"/> is when its food runs out and the whole army dies.
+/// </param>
 public sealed record MovementResponse(
     DateTimeOffset DepartedAt,
     IReadOnlyList<HexPointResponse> Path,
@@ -149,7 +153,8 @@ public sealed record MovementResponse(
     IReadOnlyList<double> ReturnEdgeHours,
     DateTimeOffset TurnAroundAt,
     DateTimeOffset ReturnArrivesAt,
-    bool IsReturning)
+    bool IsReturning,
+    bool IsStranded)
 {
     public static MovementResponse From(Movement movement) => new(
         movement.DepartedAt,
@@ -162,7 +167,8 @@ public sealed record MovementResponse(
         [.. movement.ReturnEdgeHours],
         movement.TurnAroundAt,
         movement.ReturnArrivesAt,
-        movement.IsReturning);
+        movement.IsReturning,
+        movement.IsStranded);
 }
 
 /// <param name="VisionRadius">
@@ -175,6 +181,9 @@ public sealed record MovementResponse(
 /// <paramref name="TargetSettlementId"/> (issue #40 phase 4) — mutually
 /// exclusive with <paramref name="AtHome"/>; <paramref name="Movement"/> is
 /// null here too, since a guest is not travelling.
+/// </param>
+/// <param name="StarvesAt">
+/// When the army's provisions run out and the whole army dies; only set while it cannot get home (<see cref="MovementResponse.IsStranded"/>).
 /// </param>
 /// <param name="Position">
 /// Current hex: the home settlement's centre while <paramref name="AtHome"/>,
@@ -194,7 +203,8 @@ public sealed record ArmyResponse(
     double TotalUpkeepPerHour,
     int VisionRadius,
     IReadOnlyList<ArmyUnitStackResponse> Stacks,
-    MovementResponse? Movement)
+    MovementResponse? Movement,
+    DateTimeOffset? StarvesAt)
 {
     public static ArmyResponse From(ArmyEntity entity, DateTimeOffset gameNow)
     {
@@ -227,7 +237,8 @@ public sealed record ArmyResponse(
             domain.TotalUpkeepPerHour,
             FogVisionRadii.ArmyVisionRadius(domain.Stacks, entity.Settlement.ToDomain().VisionBonusRings),
             [.. domain.Stacks.Select(s => new ArmyUnitStackResponse(s.Type.ToWireName(), s.Count))],
-            movement is null ? null : MovementResponse.From(movement));
+            movement is null ? null : MovementResponse.From(movement),
+            domain.StarvesAt);
     }
 }
 

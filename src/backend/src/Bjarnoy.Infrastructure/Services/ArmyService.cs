@@ -103,6 +103,7 @@ public sealed class ArmyService(
     CampService campService,
     CampAmbushService campAmbushService,
     ExploredAreaService exploredAreaService,
+    ArmyReportService armyReportService,
     ILogger<ArmyService> logger)
 {
     private readonly GameDbContext _dbContext = dbContext;
@@ -117,6 +118,7 @@ public sealed class ArmyService(
     private readonly CampService _campService = campService;
     private readonly CampAmbushService _campAmbushService = campAmbushService;
     private readonly ExploredAreaService _exploredAreaService = exploredAreaService;
+    private readonly ArmyReportService _armyReportService = armyReportService;
     private readonly ILogger<ArmyService> _logger = logger;
 
     /// <summary>
@@ -1000,6 +1002,14 @@ public sealed class ArmyService(
             return ArmySettleOutcome.Updated;
         }
 
+        // An army that cannot get home stands where it is until its food runs out (docs/design/troop-movement-range.md §2a). It
+        // has no outbound leg left to arrive on, so none of the mission arrivals below apply to it.
+        if (domain.CannotGetHome)
+        {
+            var strandedResult = domain.SettleTo(now);
+            return strandedResult.Starved ? Starve(army, domain, strandedResult) : ArmySettleOutcome.NoChange;
+        }
+
         // A strong camp's ambush (docs/design/wildlife-camps.md) is likewise checked before any arrival handling and
         // likewise leaves the rest of the settle to this army's next call.
         switch (await _campAmbushService.TryResolveAsync(army, domain, now, cancellationToken).ConfigureAwait(false))
@@ -1110,6 +1120,11 @@ public sealed class ArmyService(
             return ArmySettleOutcome.NoChange;
         }
 
+        if (result.Starved)
+        {
+            return Starve(army, domain, result);
+        }
+
         army.WalkedLegs.AddRange(result.Walked);
 
         if (result.ArrivedHome)
@@ -1120,6 +1135,27 @@ public sealed class ArmyService(
 
         army.ApplyDomain(result.Army);
         return ArmySettleOutcome.Updated;
+    }
+
+    /// <summary>
+    /// A stranded army whose food ran out: the whole army dies where it stood. Records the ground it walked, removes the row and
+    /// writes the starvation report (army, where, troops lost) for its owner. Not folded home: its stacks are gone, not garrisoned.
+    /// </summary>
+    private ArmySettleOutcome Starve(ArmyEntity army, Army domain, ArmySettleResult result)
+    {
+        var movement = ((ArmyLocation.InTransit)domain.Location).Movement;
+        var starvesAt = result.Walked[^1].Until;
+
+        army.WalkedLegs.AddRange(result.Walked);
+        _armyReportService.Add(
+            army.Settlement!, ArmyReportKind.Starved, starvesAt, army.Id, movement.Path[0], domain.Mission, domain.Stacks);
+        _dbContext.Armies.Remove(army);
+
+        _logger.LogInformation(
+            "Army {ArmyId} starved at {Hex} with {Troops} troop(s): it could not get home and its provisions ran out.",
+            army.Id, movement.Path[0], domain.Stacks.Sum(s => s.Count));
+
+        return ArmySettleOutcome.FoldedHome;
     }
 
     /// <summary>
@@ -1472,6 +1508,11 @@ public sealed class ArmyService(
         ArmyEntity armyEntity, Army turnedArmy, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var result = turnedArmy.SettleTo(now);
+        if (result.Starved)
+        {
+            return Starve(armyEntity, turnedArmy, result);
+        }
+
         var finalArmy = result.Changed ? result.Army : turnedArmy;
         armyEntity.WalkedLegs.AddRange(result.Walked);
 

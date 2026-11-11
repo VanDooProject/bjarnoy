@@ -65,7 +65,9 @@ function army(overrides: Partial<ArmyResponse> & { id: string }): ArmyResponse {
       turnAroundAt: '2026-11-10T00:00:00Z',
       returnArrivesAt: '2026-11-10T05:00:00Z',
       isReturning: false,
+      isStranded: false,
     },
+    starvesAt: null,
     ...overrides,
   };
 }
