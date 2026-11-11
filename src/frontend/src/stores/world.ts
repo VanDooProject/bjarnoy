@@ -21,6 +21,7 @@ import type {
   RenownResponse,
   UnitStackResponse,
   WorldMovementResponse,
+  WorldSummaryResponse,
 } from '../api/types';
 import { DEMO_MODE } from '../config';
 import type { TrainingSplit } from '../lib/units/trainingEconomy';
@@ -31,11 +32,14 @@ import {
   buildAttackDispatchRequest,
   buildHuntDispatchRequest,
   buildFieldOrderRequest,
+  buildFoundDispatchRequest,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
   isFieldOrderMidMarch,
   isHuntUnit,
+  maxAffordableProvisions,
 } from '../lib/units/armyDispatch';
+import { SETTLERS_PER_FOUNDING } from '../lib/founding';
 import { isWaterCampFamily } from '../lib/map/campPlacement';
 import { useUnitCatalogueStore } from './unitCatalogue';
 import { stackCounts } from '../lib/units/fieldOrderFeasibility';
@@ -334,7 +338,8 @@ export const useWorldStore = defineStore('world', {
       // phase 4) is shaped identically to 'attack' — a target settlement plus
       // optional waypoints — see `buildSupportDispatchRequest`.
       // 'hunt' targets a wildlife camp's hex (`targetCamp`); the route holds only intermediate waypoints.
-      mission: 'move' | 'attack' | 'support' | 'hunt';
+      // 'found' is move-shaped (the route's last hex is where the settlement is founded) and carries the fixed five settlers.
+      mission: 'move' | 'attack' | 'support' | 'hunt' | 'found';
       targetSettlementId: string | null;
       targetCamp: { q: number; r: number } | null;
       // Issue #40 phase 5: the coordinate of a building within the target
@@ -520,6 +525,15 @@ export const useWorldStore = defineStore('world', {
       if (DEMO_MODE || this.liveReady) return;
 
       let world = this.worldId ? await api.getWorld(this.worldId).catch(() => null) : null;
+      // `getWorld` also answers for worlds players can no longer pick (hidden by an admin, or not provisioned): a
+      // visitor without a settlement who remembers one of those would be stuck there ("every plot taken") while
+      // another world is open. Without a settlement, the remembered world only counts while it's still listed.
+      let listed: WorldSummaryResponse[] | null = null;
+      if (world && !usePlayerStore().hasFoundedSettlement) {
+        const listedId = world.id;
+        listed = await api.listWorlds();
+        if (!listed.some((summary) => summary.id === listedId)) world = null;
+      }
       // Worlds are shared and meant to be created by an admin, not by
       // whichever browser tab happens to land here first — so join whatever
       // exists rather than filtering by status. (There used to be a
@@ -538,7 +552,7 @@ export const useWorldStore = defineStore('world', {
       // way as any other "can't join right now" state below, rather than
       // silently self-served.)
       if (!world) {
-        world = await this.newestWorld();
+        world = await this.newestWorld(listed);
       }
       if (!world) {
         this.worldJoinable = false;
@@ -671,11 +685,12 @@ export const useWorldStore = defineStore('world', {
       await this.refreshWorldSettlements();
     },
     /** The most recently created world, or null if none exist yet. */
-    async newestWorld() {
+    async newestWorld(listed: WorldSummaryResponse[] | null = null) {
       // GET /worlds answers with WorldSummaryResponse — enough to pick a
       // world, but not the seed/generation this store actually needs to
       // build its local map, so the pick is followed by a real getWorld.
-      const summaries = await api.listWorlds();
+      // `listed`: the listing the caller already fetched, so it isn't asked for twice.
+      const summaries = listed ?? (await api.listWorlds());
       if (summaries.length === 0) return null;
       // GetWorldsAsync orders by id (UUIDv7, so creation order) ascending.
       const newest = summaries[summaries.length - 1];
@@ -1840,16 +1855,26 @@ export const useWorldStore = defineStore('world', {
      * dispatch already aimed at `coord` — a Move destination, or an Attack/
      * Support against whatever settlement owns that tile — instead of the
      * blank draft `startDispatch` leaves for ArmyPanel's own tabs/target list
-     * to fill in. Units are still picked manually (no default selection);
+     * to fill in. Units are still picked manually (no default selection), except a founding, which carries its fixed five settlers;
      * this only sets the mission and destination the tap already implied.
      */
     startDispatchAt(
       coord: AxialCoord,
-      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string; targetBuildingCoord?: AxialCoord } = {},
+      opts: { mission?: 'attack' | 'support' | 'hunt' | 'found'; targetSettlementId?: string; targetBuildingCoord?: AxialCoord } = {},
     ) {
       this.startDispatch();
       if (!this.dispatchDraft) return;
-      if (opts.mission === 'hunt') {
+      if (opts.mission === 'found') {
+        // The ring's "Send settlers" / "Land here": the tapped hex is the destination, five settlers go.
+        this.dispatchDraft.mission = 'found';
+        this.addWaypoint(coord);
+        this.dispatchDraft.unitCounts = { settler: SETTLERS_PER_FOUNDING };
+        this.dispatchDraft.provisions = maxAffordableProvisions(
+          this.dispatchDraft.unitCounts,
+          useUnitCatalogueStore().byType,
+          this.hud.available.food,
+        );
+      } else if (opts.mission === 'hunt') {
         this.dispatchDraft.mission = 'hunt';
         this.dispatchDraft.targetCamp = { q: coord.q, r: coord.r };
       } else if (opts.mission && opts.targetSettlementId) {
@@ -1944,6 +1969,8 @@ export const useWorldStore = defineStore('world', {
     },
     setDispatchUnitCount(unit: string, count: number) {
       if (!this.dispatchDraft) return;
+      // A founding convoy's settlers are fixed at five; only its ships and escorts are picked.
+      if (this.dispatchDraft.mission === 'found' && unit === 'settler') return;
       this.dispatchDraft.unitCounts[unit] = Math.max(0, Math.floor(count));
     },
     setDispatchProvisions(provisions: number) {
@@ -2007,11 +2034,13 @@ export const useWorldStore = defineStore('world', {
             ? buildSupportDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetSettlementId)
             : draft.mission === 'hunt'
               ? buildHuntDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetCamp)
-              : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
+              : draft.mission === 'found'
+                ? buildFoundDispatchRequest(draft.unitCounts, draft.route, draft.provisions)
+                : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
       if (!request) {
         if (Object.values(draft.unitCounts).every((c) => c <= 0)) {
           draft.error = i18n.global.t('common.errors.selectAtLeastOneUnit');
-        } else if (draft.mission === 'move' && draft.route.length === 0) {
+        } else if ((draft.mission === 'move' || draft.mission === 'found') && draft.route.length === 0) {
           draft.error = i18n.global.t('common.errors.clickMapForDestination');
         } else if (draft.mission === 'hunt' && !draft.targetCamp) {
           draft.error = i18n.global.t('common.errors.chooseCampToHunt');

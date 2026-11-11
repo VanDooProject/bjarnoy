@@ -844,13 +844,15 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     ).toBeVisible();
   });
 
-  test("founding page prices the next settlements and hides the admin note", async ({
+  test("founding page lists the renown for the next settlements and hides the admin note", async ({
     page,
   }) => {
     await page.goto("/docs/founding");
     await expectPlayerPage(page, "Founding settlements", "price-table");
     await expect(page.locator('[data-settlement="2"]')).toContainText("55,000");
-    await expect(page.locator('[data-settlement="3"]')).toContainText("240 / 180 / 120 / 120");
+    // Settlers cost the same for every settlement; only the renown doubles.
+    await expect(page.locator('[data-settlement="3"]')).toContainText("110,000");
+    await expect(page.getByTestId("settler-table")).toContainText("120 / 90 / 60 / 60");
     await expect(page.getByText("issue #447")).toHaveCount(0);
   });
 

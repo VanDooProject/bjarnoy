@@ -1,5 +1,6 @@
 // The unit rows of a dispatch draft, shared by ArmyPanel.vue and MobileDispatchSheet.vue so both surfaces gate the same way:
 // a selection with ships is a fleet and may carry land units as passengers up to the ships' slots (`exceedsShipCapacity`);
+// a founding convoy is its five settlers (that row stays locked) plus any ships and land escorts, picked like in a move;
 // a hunt takes land units against a land camp, and against a camp at sea (the whale road) a fleet.
 import { computed, type ComputedRef } from 'vue';
 import { useWorldStore } from '../stores/world';
@@ -14,6 +15,7 @@ export function useDispatchUnitPicker(garrisonRows: ComputedRef<ReadonlyArray<{ 
   const draft = computed(() => world.dispatchDraft);
   const unitCounts = computed(() => draft.value?.unitCounts ?? {});
   const isHunt = computed(() => draft.value?.mission === 'hunt');
+  const isFound = computed(() => draft.value?.mission === 'found');
 
   // The hunt target is a camp on the sea (the whale road): a fleet goes.
   const huntAtSea = computed(() => {
@@ -25,6 +27,7 @@ export function useDispatchUnitPicker(garrisonRows: ComputedRef<ReadonlyArray<{ 
   const selectionKind = computed(() => classifyUnitSelection(unitCounts.value, catalogue.byType));
 
   function isRowSelectable(unit: string): boolean {
+    if (isFound.value && unit === 'settler') return false;
     return !isHunt.value || isHuntUnit(unit, catalogue.byType, huntAtSea.value);
   }
   // Ships sit greyed out in the list of a hunt on land: only then is there anything to explain.
@@ -35,5 +38,5 @@ export function useDispatchUnitPicker(garrisonRows: ComputedRef<ReadonlyArray<{ 
     () => !overCapacity.value && !(isHunt.value && huntAtSea.value && selectionKind.value !== 'fleet'),
   );
 
-  return { huntAtSea, selectionKind, isRowSelectable, hasLockedOutUnits, overCapacity, selectionSendable };
+  return { isFound, huntAtSea, selectionKind, isRowSelectable, hasLockedOutUnits, overCapacity, selectionSendable };
 }

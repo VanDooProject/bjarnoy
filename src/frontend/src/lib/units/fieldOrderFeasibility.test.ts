@@ -160,6 +160,36 @@ describe('fieldOrderFeasibility', () => {
     expect(fieldOrderFeasibility(standing(), camp, 'hunt', env).ok).toBe(true);
     expect(fieldOrderFeasibility(standing(), camp, 'move', env)).toEqual({ ok: false, reason: 'unreachable' });
   });
+
+  it('is pending, not unreachable, while the way out is still being searched', () => {
+    const env = lineEnv({ route: () => 'pending' });
+
+    expect(fieldOrderFeasibility(standing(), { q: 4, r: 0 }, 'move', env)).toEqual({ ok: false, reason: 'pending' });
+  });
+
+  it('is pending while only the way home is still being searched', () => {
+    const env = lineEnv({
+      route: (from, to) => (to.q === HOME.q && to.r === HOME.r ? 'pending' : { path: [from, to], cost: Math.abs(to.q - from.q) }),
+    });
+
+    expect(fieldOrderFeasibility(standing(), { q: 4, r: 0 }, 'move', env)).toEqual({ ok: false, reason: 'pending' });
+  });
+
+  it('a hunt waits for every candidate hex around the camp, since a pending one could be the cheapest', () => {
+    const camp = { q: 10, r: 4 };
+    const env = lineEnv({
+      route: (from, to) =>
+        to.q === camp.q + 1 && to.r === camp.r ? 'pending' : { path: [from, to], cost: Math.abs(to.q - from.q) + Math.abs(to.r - from.r) },
+    });
+
+    expect(fieldOrderFeasibility(standing(), camp, 'hunt', env)).toEqual({ ok: false, reason: 'pending' });
+  });
+
+  it('no route at all is unreachable', () => {
+    const env = lineEnv({ route: () => null });
+
+    expect(fieldOrderFeasibility(standing(), { q: 4, r: 0 }, 'move', env)).toEqual({ ok: false, reason: 'unreachable' });
+  });
 });
 
 describe('stackCounts', () => {

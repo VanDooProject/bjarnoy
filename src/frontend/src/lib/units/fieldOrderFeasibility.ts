@@ -23,9 +23,10 @@ export interface FeasibilityEnv {
   now: number;
   /**
    * Cheapest route from `from` to `to`, both included, with its price in hex-cost units (1.0 = one grass hex), or `null` when there is
-   * none. `fleet` asks for the sea table (open water only, 1.0 a hex), otherwise the land rules (`findPath`).
+   * none. `fleet` asks for the sea table (open water only, 1.0 a hex), otherwise the land rules (`findPath`). `'pending'` while the
+   * search has not finished yet (it runs in the background, see lib/map/routeQueue.ts): the verdict is then `pending`, not `unreachable`.
    */
-  route(from: AxialCoord, to: AxialCoord, fleet: boolean): { path: AxialCoord[]; cost: number } | null;
+  route(from: AxialCoord, to: AxialCoord, fleet: boolean): { path: AxialCoord[]; cost: number } | null | 'pending';
 }
 
 export type FieldOrderVerdict =
@@ -40,7 +41,7 @@ export type FieldOrderVerdict =
       /** Outbound route: where the army will stand when the order starts (its destination), through to the target. */
       path: AxialCoord[];
     }
-  | { ok: false; reason: 'noUnits' | 'unreachable' | 'noFood' };
+  | { ok: false; reason: 'noUnits' | 'unreachable' | 'noFood' | 'pending' };
 
 /** The unit-count map of an army's stacks. */
 export function stackCounts(stacks: ReadonlyArray<{ unit: string; count: number }>): Record<string, number> {
@@ -83,12 +84,17 @@ export function fieldOrderFeasibility(
   const fleet = classifyUnitSelection(leaving, env.byType) === 'fleet';
   const goals = mission === 'hunt' && !fleet ? [target, ...neighbors(target)] : [target];
   let best: { goal: AxialCoord; leg: { path: AxialCoord[]; cost: number } } | null = null;
+  let anyPending = false;
   for (const goal of goals) {
     const leg = env.route(start, goal, fleet);
-    if (leg && (!best || leg.cost < best.leg.cost)) best = { goal, leg };
+    if (leg === 'pending') anyPending = true;
+    else if (leg && (!best || leg.cost < best.leg.cost)) best = { goal, leg };
   }
+  // A goal still being searched could turn out cheaper than the best so far, so the verdict waits for all of them.
+  if (anyPending) return { ok: false, reason: 'pending' };
   if (!best) return { ok: false, reason: 'unreachable' };
   const back = env.route(best.goal, home, fleet);
+  if (back === 'pending') return { ok: false, reason: 'pending' };
   if (!back) return { ok: false, reason: 'unreachable' };
 
   const outboundHours = legHours + best.leg.cost / speed;

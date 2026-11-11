@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Settlement expansion (issue #55): renown, training settlers, and
-// dispatching/recalling/retargeting a founding convoy.
+// recalling/retargeting a founding convoy. Sending one out is the map ring's "Send settlers" / "Land here".
 //
 // Deliberately a small, self-contained panel that polls the API directly
 // rather than being woven into `stores/world.ts`'s existing WorldModel/HUD
@@ -26,7 +26,7 @@ import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { useUnsavedInput } from '../../composables/useUnsavedInput';
 import { SETTLERS_PER_FOUNDING } from '../../lib/founding';
 import { trainingBuildingsOfType } from '../../lib/units/trainingEconomy';
-import type { ArmySummary, RenownResponse, SettlementResponse } from '../../api/types';
+import type { ArmySummary, SettlementResponse } from '../../api/types';
 
 const world = useWorldStore();
 const auth = useAuthStore();
@@ -34,7 +34,8 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const visible = computed(() => !DEMO_MODE && auth.isAuthenticated && !!world.selectedSettlementId);
 
-const renown = ref<RenownResponse | null>(null);
+// One source for the ring and this panel: the world store's live renown (refreshed by the poll below).
+const renown = computed(() => world.hud.renown);
 const settlement = ref<SettlementResponse | null>(null);
 const convoys = ref<ArmySummary[]>([]);
 const error = ref<string | null>(null);
@@ -45,40 +46,21 @@ const settlerCount = computed(
 );
 const foundingConvoys = computed(() => convoys.value.filter((a) => a.mission === 'found'));
 
-// Founding-dispatch form.
+// Target of a retarget (the only place a coordinate is still typed).
 const destQ = ref(0);
 const destR = ref(0);
 useUnsavedInput(() => destQ.value !== 0 || destR.value !== 0);
-// The founding convoy is always 5 settlers (`SETTLERS_PER_FOUNDING`);
-// the backend rejects provisions above their combined `foodCarryCapacity`
-// (`ProvisionsExceedCarryCapacity`), so the form defaults to and is capped at
-// that total, read from the unit catalogue rather than hard-coded.
 const unitCatalogue = useUnitCatalogueStore();
-const maxProvisions = computed(
-  () => (unitCatalogue.byType['settler']?.foodCarryCapacity ?? 0) * SETTLERS_PER_FOUNDING,
-);
-const provisionsInput = ref<number | null>(null);
-const provisions = computed(() =>
-  Math.min(Math.max(provisionsInput.value ?? maxProvisions.value, 0), maxProvisions.value),
-);
-function onProvisionsInput(e: Event) {
-  const el = e.target as HTMLInputElement;
-  const raw = el.valueAsNumber;
-  if (Number.isNaN(raw)) return;
-  provisionsInput.value = Math.min(Math.max(raw, 0), maxProvisions.value);
-  if (provisionsInput.value !== raw) el.value = String(provisionsInput.value);
-}
 const retargetFor = ref<string | null>(null);
 
 async function refresh() {
   if (!visible.value || !world.worldId || !world.selectedSettlementId) return;
   try {
-    const [r, s, a] = await Promise.all([
-      api.getRenown(world.worldId),
+    const [, s, a] = await Promise.all([
+      world.loadRenownLive(),
       api.getSettlement(world.selectedSettlementId, world.ownerId ?? undefined),
       api.getSettlementArmies(world.selectedSettlementId),
     ]);
-    renown.value = r;
     settlement.value = s;
     convoys.value = a;
   } catch {
@@ -119,25 +101,6 @@ async function trainSettlers() {
     await refresh();
   } catch (e) {
     error.value = apiErrorMessage(e, t('hud.expansionPanel.trainingFailed'));
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function dispatchFounding() {
-  if (!world.selectedSettlementId) return;
-  busy.value = true;
-  error.value = null;
-  try {
-    await api.dispatchArmy(world.selectedSettlementId, {
-      units: [{ unit: 'settler', count: SETTLERS_PER_FOUNDING }],
-      destination: { q: destQ.value, r: destR.value },
-      provisions: provisions.value,
-      mission: 'found',
-    });
-    await refresh();
-  } catch (e) {
-    error.value = apiErrorMessage(e, t('hud.expansionPanel.dispatchFailed'));
   } finally {
     busy.value = false;
   }
@@ -234,28 +197,6 @@ watch(visible, (isVisible) => {
         <strong>{{ renown.canFoundAnother ? t('hud.expansionPanel.yes') : t('hud.expansionPanel.notYet') }}</strong>
       </div>
     </template>
-
-    <div v-if="settlerCount >= SETTLERS_PER_FOUNDING && renown?.canFoundAnother" class="expansion-form">
-      <div class="expansion-form-row">
-        <label>{{ t('hud.expansionPanel.targetHex') }}</label>
-        <input v-model.number="destQ" type="number" aria-label="Target Q" />
-        <input v-model.number="destR" type="number" aria-label="Target R" />
-      </div>
-      <div class="expansion-form-row">
-        <label>{{ t('hud.expansionPanel.provisions', { max: maxProvisions }) }}</label>
-        <input
-          :value="provisions"
-          type="number"
-          min="0"
-          :max="maxProvisions"
-          aria-label="Provisions"
-          @input="onProvisionsInput"
-        />
-      </div>
-      <button type="button" class="expansion-button" :disabled="busy" @click="dispatchFounding">
-        {{ t('hud.expansionPanel.foundHere') }}
-      </button>
-    </div>
 
     <div v-if="foundingConvoys.length" class="expansion-convoys">
       <div v-for="c in foundingConvoys" :key="c.id" class="status-row">
@@ -356,11 +297,6 @@ watch(visible, (isVisible) => {
   font: inherit;
   font-size: 11px;
   cursor: pointer;
-}
-.expansion-form {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--panel-border);
 }
 .expansion-form-row {
   display: flex;

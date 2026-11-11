@@ -334,6 +334,50 @@ describe('useWorldStore startDispatchAt', () => {
     expect(store.dispatchDraft?.targetSettlementId).toBeNull();
   });
 
+  it('starts a Found draft: the tapped hex is the destination and five settlers are loaded', async () => {
+    const store = await loadStoreModule(true);
+
+    store.startDispatchAt({ q: 4, r: -1 }, { mission: 'found' });
+
+    expect(store.dispatchDraft?.mission).toBe('found');
+    expect(store.dispatchDraft?.route).toEqual([{ q: 4, r: -1 }]);
+    expect(store.dispatchDraft?.unitCounts).toEqual({ settler: 5 });
+    expect(store.dispatchDraft?.targetSettlementId).toBeNull();
+  });
+
+  it('sends a Found draft as a found-mission dispatch to the tapped hex', async () => {
+    const store = await loadStoreModule(false);
+    dispatchArmy.mockReset().mockResolvedValue({});
+    store.selectedSettlementId = 'home-1';
+    store.startDispatchAt({ q: 4, r: -1 }, { mission: 'found' });
+
+    await store.confirmDispatch();
+
+    expect(dispatchArmy).toHaveBeenCalledWith(
+      'home-1',
+      expect.objectContaining({ mission: 'found', destination: { q: 4, r: -1 }, units: [{ unit: 'settler', count: 5 }] }),
+      undefined,
+    );
+  });
+
+  it('keeps a Found draft\'s settlers at five but lets ships and escorts be added to the dispatch', async () => {
+    const store = await loadStoreModule(false);
+    dispatchArmy.mockReset().mockResolvedValue({});
+    store.selectedSettlementId = 'home-1';
+    store.startDispatchAt({ q: 4, r: -1 }, { mission: 'found' });
+
+    store.setDispatchUnitCount('settler', 2);
+    store.setDispatchUnitCount('karve', 1);
+    store.setDispatchUnitCount('spearman', 3);
+    expect(store.dispatchDraft?.unitCounts).toEqual({ settler: 5, karve: 1, spearman: 3 });
+
+    await store.confirmDispatch();
+    const request = dispatchArmy.mock.calls[0][1] as { units: { unit: string; count: number }[] };
+    expect(request.units).toEqual(
+      expect.arrayContaining([{ unit: 'settler', count: 5 }, { unit: 'karve', count: 1 }, { unit: 'spearman', count: 3 }]),
+    );
+  });
+
   it('switching the mission drops a hunt target', async () => {
     const store = await loadStoreModule(true);
     store.startDispatchAt({ q: 7, r: -3 }, { mission: 'hunt' });
@@ -1283,6 +1327,91 @@ describe('useWorldStore bootstrapLiveWorld', () => {
     await store.bootstrapLiveWorld();
 
     expect(getIslands).toHaveBeenCalledWith('world-1', usePlayerStore().id);
+  });
+
+  // Regression: a visitor's browser remembered a world that is no longer listed (hidden by an admin). `getWorld`
+  // still answered for it, so the landing page bootstrapped into it, got NoPlotAvailable and showed "Not open yet"
+  // while the newest world was open.
+  function worldResponse(id: string) {
+    return {
+      id,
+      name: id,
+      seed: 1,
+      radius: 30,
+      maxPlayers: 100,
+      status: 'active',
+      islandCount: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'none',
+      startsAt: null,
+      endbossTriggered: false,
+      frozenIslesEnabled: false,
+      speedFactor: 1,
+      generation: generationResponse(),
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    };
+  }
+  const listedNewest = {
+    id: 'world-new',
+    name: 'world-new',
+    status: 'active',
+    joinable: true,
+    joinableReason: 'none',
+    playerCount: 0,
+    maxPlayers: 100,
+    freeSlots: 100,
+    startsAt: null,
+  };
+
+  it('moves a visitor without a settlement off a remembered world that is no longer listed', async () => {
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-old';
+    listWorlds.mockReset().mockResolvedValue([listedNewest]);
+    getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
+    getIslands.mockReset().mockResolvedValue([]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(store.worldId).toBe('world-new');
+  });
+
+  it('keeps a remembered world that is still listed, even when a newer one exists', async () => {
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-old';
+    listWorlds.mockReset().mockResolvedValue([{ ...listedNewest, id: 'world-old', name: 'world-old' }, listedNewest]);
+    getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
+    getIslands.mockReset().mockResolvedValue([]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(store.worldId).toBe('world-old');
+  });
+
+  it('lists the worlds once when it moves off an unlisted remembered world', async () => {
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-old';
+    listWorlds.mockReset().mockResolvedValue([listedNewest]);
+    getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
+    getIslands.mockReset().mockResolvedValue([]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(listWorlds).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a remembered unlisted world for a player who has a settlement there', async () => {
+    const store = await loadStoreModule(false);
+    const { usePlayerStore } = await import('./player');
+    usePlayerStore().foundSettlement('settlement-1');
+    store.worldId = 'world-old';
+    listWorlds.mockReset().mockResolvedValue([listedNewest]);
+    getWorld.mockReset().mockImplementation(async (id: string) => worldResponse(id));
+    getIslands.mockReset().mockResolvedValue([]);
+
+    await store.bootstrapLiveWorld();
+
+    expect(store.worldId).toBe('world-old');
   });
 });
 

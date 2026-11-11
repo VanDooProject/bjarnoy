@@ -1,6 +1,6 @@
-// The one answer to "which armies can be sent at this target": the ring menu's Send army / Attack / Support / Hunt bubbles read it to
-// decide whether they are enabled, and the source picker (SendArmyPicker.vue) reads the same rows to list them, so the two can never
-// disagree. A source is the home garrison or an army already out in the field.
+// The one answer to "which armies can be sent at this target": the source picker (SendArmyPicker.vue) lists these rows and MapView
+// reads them for the army markers it makes tappable, so the two can never disagree. A source is the home garrison or an army already
+// out in the field. The ring's Send army / Attack / Support / Hunt bubbles do not read it: they only open the picker.
 import type { AxialCoord } from '../hex/coords';
 import type { ArmyResponse, UnitDefinitionResponse } from '../../api/types';
 import { canFieldOrderArmy, garrisonCanHunt, isFieldOrderMidMarch } from './armyDispatch';
@@ -14,7 +14,8 @@ export type SourceBlock =
   | 'notOrderable'
   | 'premium'
   | 'unreachable'
-  | 'noFood';
+  | 'noFood'
+  | 'pending';
 
 export interface SendTarget {
   mission: SendMission;
@@ -83,6 +84,7 @@ export function evaluateSendSources(input: SendSourceInput): SendSource[] {
       if (army.movement?.isReturning) return blocked('returning');
       if (!canFieldOrderArmy(army)) return blocked('notOrderable');
       const verdict = fieldOrderFeasibility(army, target.coord, target.mission, env);
+      // The premium gate wins over a route still being searched; the verdict only fills in the travel time.
       if (!base.standing && !isPremium) return blocked('premium', verdict);
       if (!verdict.ok) return blocked(verdict.reason, verdict);
       return { ...base, ok: true, locked: false, travelMinutes: verdict.travelMinutes, verdict };
@@ -95,9 +97,4 @@ export function evaluateSendSources(input: SendSourceInput): SendSource[] {
       a.id.localeCompare(b.id),
   );
   return [home, ...field];
-}
-
-/** Whether at least one source can go: the ring's bubble is enabled exactly then. */
-export function anySendSourceCanGo(sources: ReadonlyArray<SendSource>): boolean {
-  return sources.some((s) => s.ok);
 }

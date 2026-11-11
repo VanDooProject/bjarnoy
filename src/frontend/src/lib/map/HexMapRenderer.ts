@@ -32,7 +32,7 @@
 // instead of slicing across their canopy. Fog-of-war dimming sits above
 // everything, since a scouted-but-not-currently-visible hex needs to dim
 // its whole tile, props included.
-import { cameraSeesOnly, frameCameraFor, type WorldRect } from './frameCamera';
+import { exploredShare, frameCameraFor } from './frameCamera';
 import {
   circleIntersectsRect,
   circlesIntersect,
@@ -1519,6 +1519,23 @@ function fogSourcesNear(
     }
   }
   return out;
+}
+
+/**
+ * Whether a hex is drawn clear of the white mist right now, from the same sources the fog shader reads: the loaded mask
+ * (`coverage`; outside its window everything is white) and the live reveal round every army (`armySources`, cleared between
+ * mask fetches). Before the first mask arrives the client's own `explored` set stands in for it. The send picker's framing
+ * compares how much of the view this is before and after a move.
+ */
+export function isDrawnClearOf(
+  q: number,
+  r: number,
+  coverage: { isExplored(q: number, r: number): boolean } | null,
+  exploredBeforeMask: (q: number, r: number) => boolean,
+  armySources: FogSource[],
+): boolean {
+  if (distanceBeyondSources(q, r, armySources) <= 0) return true;
+  return coverage ? coverage.isExplored(q, r) : exploredBeforeMask(q, r);
 }
 
 /**
@@ -5611,27 +5628,13 @@ export class HexMapRenderer {
       if (fogActive && !worldModel.isExplored(labelHex.q, labelHex.r)) continue;
       const grid = isoGridPosition(labelHex, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
-      // Reference draws settlements as a diamond (prototypes/worldmap/Viking
-      // Realm.dc.html's `world.marks`: `<polygon points="0,-8 8,0 0,8 -8,0">`),
-      // not a plain dot.
-      const markerR = 5 * this.camera.zoom + 3;
-      this.markerLayer
-        .poly([
-          center.x, center.y - markerR,
-          center.x + markerR, center.y,
-          center.x, center.y + markerR,
-          center.x - markerR, center.y,
-        ])
-        .fill({ color: realmColor(settlement, playerId) })
-        .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
-
-      // Settlers-II-style owner label under the marker: the shared realm pill
-      // (see drawRealmPill) in its small size, so the name stays readable over
-      // water and terrain without a drop shadow.
+      // The settlement is marked by the shared realm pill alone (see
+      // drawRealmPill; its diamond carries the realm colour), centred on the
+      // settlement hex, so the name stays readable over water and terrain.
       const ownerLabel = this.acquireLabel(LABEL_STYLES.ownerName);
       ownerLabel.text = settlement.ownerName;
       ownerLabel.anchor.set(0, 0.5);
-      const pill = layoutRealmPill(REALM_PILL.owner, 1, [ownerLabel.width], center.x, center.y + markerR + 4);
+      const pill = layoutRealmPill(REALM_PILL.owner, 1, [ownerLabel.width], center.x, center.y - REALM_PILL.owner.height / 2);
       this.drawRealmPill(pill, realmColor(settlement, playerId), 'diamond', 1);
       ownerLabel.position.set(pill.labelXs[0], pill.labelY);
       ownerLabel.visible = true;
@@ -6255,7 +6258,7 @@ export class HexMapRenderer {
    * Brings `coords` into the part of the canvas that stays visible (`bottomInsetPx` is what a sheet covers at the bottom), with
    * `marginPx` to spare: the camera stays put when they are all there already, and otherwise pans only by what sticks out and
    * zooms out only as far as they need, never in and never past a readable `MIN_FRAME_ZOOM` (see `frameCameraFor`). Eased over
-   * `durationMs`, at once when that is 0. A move that would show ground outside the loaded fog window is not made at all. False
+   * `durationMs`, at once when that is 0. A move that would show more white mist than the view has now is not made at all. False
    * when the camera cannot move or that move is refused.
    */
   frameHexes(coords: AxialCoord[], opts: { bottomInsetPx?: number; marginPx?: number; durationMs?: number } = {}): boolean {
@@ -6275,9 +6278,17 @@ export class HexMapRenderer {
       return true;
     }
     const to = this.clampCamera({ ...this.camera, ...framed });
-    // A move that would show ground past the loaded fog window (pure fog until it is fetched) is not made at all.
-    const loaded = this.loadedWorldRect();
-    if (loaded && !cameraSeesOnly(to, this.viewport, loaded, opts.bottomInsetPx ?? 0)) return false;
+    // A move that would show more white mist (unexplored or not yet loaded ground) than the player sees now is not made at all.
+    if (this.isFogActive()) {
+      const { worldModel } = this.options;
+      const coverage = worldModel.getFogCoverage();
+      const explored = (x: number, y: number) => {
+        const c = isoPixelToAxial({ x, y }, TILE_W, TILE_H);
+        return isDrawnClearOf(c.q, c.r, coverage, (q, r) => worldModel.isExplored(q, r), this.armyCullSources);
+      };
+      const inset = opts.bottomInsetPx ?? 0;
+      if (exploredShare(to, this.viewport, explored, inset) < exploredShare(this.camera, this.viewport, explored, inset)) return false;
+    }
     this.cameraTouched = true;
     this.idleDrift = false;
     if ((opts.durationMs ?? 0) > 0) {
@@ -6478,7 +6489,6 @@ export class HexMapRenderer {
    */
   setFogMask(bounds: MaskBounds, bitmap: ImageBitmap | null, coverage: FogCoverageLookup) {
     if (!bitmap) return;
-    this.fogMaskBounds = bounds;
 
     const { worldModel } = this.options;
     const previousSignature = worldModel.getFogCoverage()?.signature;
@@ -6511,34 +6521,6 @@ export class HexMapRenderer {
     this.fogViewportListener = listener;
     this.lastFogViewportRange = null;
     this.notifyFogViewport();
-  }
-
-  // Where the current fog mask sits (setFogMask; demo mode's covers the demo world): the loaded part of the map. Null before
-  // the first mask arrives.
-  private fogMaskBounds: MaskBounds | null = null;
-  // The whole world's mask bounds (setWorldMaskBounds): the fog window is clamped to them, past them there is nothing to load.
-  private worldMaskBounds: MaskBounds | null = null;
-
-  /** The world's own mask bounds, so `frameHexes` does not count the ground past the world's edge as unloaded. */
-  setWorldMaskBounds(bounds: MaskBounds | null) {
-    this.worldMaskBounds = bounds;
-  }
-
-  /**
-   * The loaded fog window in world space (inverse of notifyFogViewport's texel maths), open on every side where it reaches the
-   * world's edge; null while no mask is loaded.
-   */
-  private loadedWorldRect(): WorldRect | null {
-    const b = this.fogMaskBounds;
-    if (!b || !this.isFogActive()) return null;
-    const w = this.worldMaskBounds;
-    const colPitch = 0.75 * TILE_W;
-    return {
-      minX: w && b.minU <= w.minU ? -Infinity : b.minU * colPitch,
-      maxX: w && b.maxU >= w.maxU ? Infinity : b.maxU * colPitch,
-      minY: w && b.minV <= w.minV ? -Infinity : (b.minV * TILE_H) / 2,
-      maxY: w && b.maxV >= w.maxV ? Infinity : (b.maxV * TILE_H) / 2,
-    };
   }
 
   private fogViewportListener: ((range: ChunkRange) => void) | null = null;

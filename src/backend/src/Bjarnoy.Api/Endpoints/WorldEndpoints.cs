@@ -72,7 +72,7 @@ public static class WorldEndpoints
 
         worlds.MapGet("/{worldId:guid}/rival-buildings", GetRivalBuildings)
             .WithName("GetWorldRivalBuildings")
-            .WithSummary("Every standing building of rival settlements that lies on a hex the caller has explored, of any type (their own buildings excluded).")
+            .WithSummary("Every building of rival settlements, standing or under construction, that lies on a hex the caller has explored, of any type (their own buildings excluded).")
             .RequireCallerRealm();
 
         worlds.MapGet("/{worldId:guid}/tiles", GetTiles)
@@ -404,8 +404,8 @@ public static class WorldEndpoints
     }
 
     /// <summary>
-    /// Every standing building (level 1 or more, any type) of the world's rival settlements that stands on a hex in the caller's
-    /// visible area, one row per hex, so a live client can draw what it sees of a rival it never fetched a settlement for. Gated per hex
+    /// Every building of the world's rival settlements, any type and level (a level-0 construction site included), that stands on a hex
+    /// in the caller's visible area, one row per hex, so a live client can draw what it sees of a rival it never fetched a settlement for. Gated per hex
     /// like <see cref="GetWalls"/> (<see cref="RivalVisibility"/>): nothing about a hex out of sight is sent, with one exception: a
     /// rival's towers and Longhouse are sent when any hex of their claim disc is visible, wherever they stand themselves (the client
     /// draws the realm border from those discs). The caller's own buildings are left out. No resolvable realm or world answers an empty list.
@@ -437,7 +437,7 @@ public static class WorldEndpoints
 
         IReadOnlyList<RivalBuildingResponse> response =
         [
-            .. sights.SelectMany(sight => sight.VisibleStandingBuildings
+            .. sights.SelectMany(sight => sight.VisibleBuildings
                 .OrderBy(b => b.Q).ThenBy(b => b.R)
                 .Select(b => new RivalBuildingResponse(
                     b.Q, b.R, b.Type.ToWireName(), b.Level, sight.Settlement.Id,

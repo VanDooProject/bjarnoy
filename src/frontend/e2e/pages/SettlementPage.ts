@@ -45,6 +45,13 @@ export interface HexQuery {
    * spec gets back — is unchanged.
    */
   reach?: number;
+  /** A hex no settlement claims (the ring's Send settlers / Land here) instead of one of the realm's own. */
+  unclaimed?: boolean;
+  /**
+   * `true`: only a shoreline hex (land with an open-sea neighbour, where the ring offers Land here); `false`: never one
+   * (the ring offers Send settlers). Unset: either.
+   */
+  shoreline?: boolean;
   /**
    * Of the matching hexes, the one drawn closest to this canvas point rather
    * than the first in scan order — for a spec that needs the ring opened at a
@@ -199,11 +206,17 @@ export class SettlementPage {
           if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
           const at = { q: settlement.q + dq, r: settlement.r + dr };
           const tile = world.model.getTile(at.q, at.r);
-          if (tile.ownerId !== world.selectedSettlementId) continue;
+          if (q.unclaimed ? tile.ownerId : tile.ownerId !== world.selectedSettlementId) continue;
           if (tile.buildingType) continue;
           if (q.terrain !== undefined && tile.terrain !== q.terrain) continue;
           if (q.notTerrain !== undefined && tile.terrain === q.notTerrain) continue;
           if (q.coastalWater && !tile.isCoastalWater) continue;
+          if (q.shoreline !== undefined) {
+            const sides = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+            const land = tile.terrain !== 'sea' && tile.terrain !== 'lake';
+            const shore = land && sides.some(([sq, sr]) => world.model.terrainOf(at.q + sq, at.r + sr) === 'sea');
+            if (shore !== q.shoreline) continue;
+          }
           if (q.nearest) {
             const screen = renderer.hexCenterScreen(at);
             const d = Math.hypot(screen.x - q.nearest.x, screen.y - q.nearest.y);
@@ -225,7 +238,7 @@ export class SettlementPage {
         return { hex: best.hex, screen: best.screen };
       }
       throw new Error(
-        `no empty, owned hex matching ${JSON.stringify(q)} found inside the realm — pick a different demo seed`,
+        `no empty ${q.unclaimed ? 'unclaimed' : 'owned'} hex matching ${JSON.stringify(q)} found inside the realm — pick a different demo seed`,
       );
     }, query);
   }

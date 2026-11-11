@@ -309,6 +309,16 @@ alongside B and C, not an extension of either:
   without touching what that player personally OR-ed into their own
   record.
 
+**Trail fringe.** Explored history has no hard edge. Every unexplored hex
+within 6.75 hexes (euclidean) of explored ground gets the troop's own ramp
+in R: `trailRamp = round(255 * clamp((d - 0.75) / 6, 0, 1))` (offset 0.75,
+margin 6, `d` = distance to the nearest explored hex), and the baked value
+is `min(sourceRamp, trailRamp)`. A stored army trail therefore reads as the
+same soft path as the troop's live clearing. Constants:
+`FogMaskGenerator.TrailFringeOffsetHexes` / `TrailFringeMarginHexes`, equal to
+the frontend's `ARMY_FOG_WHITE_OFFSET` / `ARMY_FOG_WHITE_MARGIN`. The reach
+(8 steps) stays inside the one-chunk history ring of §3.
+
 ### 1f. What fog is protecting — current state, not terrain shape
 
 The same review flagged that `GET /api/v1/worlds/{id}/tiles` has no
@@ -377,10 +387,12 @@ to the one genuinely pre-authentication, current-state-exposing path. (Since res
 A rival settlement is delivered as soon as you can see any of it through the fog: its Longhouse centre or one of its
 standing buildings lies where your fog is not fully opaque, or such ground lies inside the claim disc of its Longhouse or of
 one of its towers. A building is only sent when its own hex lies in that area; a Longhouse or tower is sent as soon as any
-hex of its claim disc does, wherever it stands itself. The realm border is drawn from the full discs of the Longhouse and
+hex of its claim disc does, wherever it stands itself. A building under construction is shown as a construction site
+(level 0) when its hex lies in that area. The realm border is drawn from the full discs of the Longhouse and
 every tower sent, without the chain rule, and clipped by fog. "Not fully opaque" reaches 11.2 hexes (straight-line
 distance) past the explored ring of each of your settlements and towers and 5.55 hexes past the vision of each of your
-marching armies; explored ground without current vision has no such margin. The label rule stays: on the Longhouse when its
+marching armies. Stored explored ground gets the same 5.55 hexes as a marching army's vision, because the fog fades out
+from it the same way (the mask bakes that fringe around it). The label rule stays: on the Longhouse when its
 hex is explored, otherwise on the nearest visible hex of the realm.
 
 ### 1g. Foreign troops

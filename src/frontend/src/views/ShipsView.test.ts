@@ -114,7 +114,7 @@ describe('ShipsView', () => {
     const wrapper = await mountPage();
 
     expect(wrapper.find('[data-testid=admin-note]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('Founding by sea');
+    expect(wrapper.text()).not.toContain('(ShipCargo)');
     wrapper.unmount();
   });
 

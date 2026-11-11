@@ -493,7 +493,7 @@ export interface SettlementSummary {
 }
 
 /**
- * Mirrors `RivalBuildingResponse` (`GET /worlds/{id}/rival-buildings`): one standing building of another player's settlement on a
+ * Mirrors `RivalBuildingResponse` (`GET /worlds/{id}/rival-buildings`): one building of another player's settlement (level 0: under construction) on a
  * hex the caller has explored (every building type, the caller's own settlements left out). `ownerUserId` is null for an anonymous
  * settlement.
  */
@@ -1124,6 +1124,8 @@ export interface AdminArmyResponse {
   worldId: string;
   settlementName: string;
   ownerName: string;
+  /** Loot the army carries home and has not deposited yet. */
+  loot: ResourceLine;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/ChatContracts.cs.
