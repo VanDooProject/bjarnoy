@@ -490,6 +490,8 @@ export interface SettlementSummary {
    */
   labelQ: number;
   labelR: number;
+  /** The settlement is a beach camp: a one-hex settlement with no Longhouse (so no Longhouse level to read it from). */
+  isBeachCamp: boolean;
 }
 
 /**

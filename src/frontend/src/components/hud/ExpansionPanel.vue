@@ -145,9 +145,7 @@ async function switchTo(settlementId: string) {
   await refresh();
 }
 
-const mySettlements = ref<{ id: string; name: string; q: number; r: number; longhouseLevel: number }[]>([]);
-// A camp has no Longhouse, so its level is 0: the switcher names what it is next to its name.
-const isCamp = (s: { longhouseLevel: number }) => s.longhouseLevel === 0;
+const mySettlements = ref<{ id: string; name: string; q: number; r: number; isBeachCamp: boolean }[]>([]);
 const selectedIsCamp = computed(() => !!world.selectedSettlementId && world.model.isBeachCamp(world.selectedSettlementId));
 async function loadMySettlements() {
   // Same auth gate as refresh() — this hits an authorized endpoint, so an
@@ -184,7 +182,7 @@ watch(visible, (isVisible) => {
         @change="switchTo(($event.target as HTMLSelectElement).value)"
       >
         <option v-for="s in mySettlements" :key="s.id" :value="s.id">
-          {{ isCamp(s) ? t('hud.expansionPanel.campOption', { name: s.name, kind: buildingName('beachcamp') }) : s.name }}
+          {{ s.isBeachCamp ? t('hud.expansionPanel.campOption', { name: s.name, kind: buildingName('beachcamp') }) : s.name }}
         </option>
       </select>
     </div>

@@ -91,8 +91,8 @@ describe('ExpansionPanel', () => {
 
   it('names a camp in the switcher and offers no settler training when the selected settlement is a camp', async () => {
     api.listMySettlements.mockResolvedValue([
-      { id: 's1', name: 'Fjordholm', q: 0, r: 0, longhouseLevel: 4 },
-      { id: 's2', name: 'Sandspit', q: 9, r: 1, longhouseLevel: 0 },
+      { id: 's1', name: 'Fjordholm', q: 0, r: 0, isBeachCamp: false },
+      { id: 's2', name: 'Sandspit', q: 9, r: 1, isBeachCamp: true },
     ]);
     const wrapper = await mountPanel(true);
     expect(wrapper.findAll('#settlement-switcher option').map((o) => o.text())).toEqual(['Fjordholm', 'Sandspit (Beach camp)']);
