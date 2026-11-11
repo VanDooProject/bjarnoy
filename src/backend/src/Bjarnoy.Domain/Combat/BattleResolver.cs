@@ -256,6 +256,16 @@ public static class BattleResolver
     internal static double FoodCapacity(IEnumerable<UnitStack> stacks) =>
         stacks.Sum(s => (double)UnitCatalogue.Get(s.Type).FoodCarryCapacity * s.Count);
 
+    /// <summary>
+    /// What <paramref name="survivors"/> can carry home as loot: the surviving ships' <see cref="UnitDefinition.CarryCapacity"/> alone
+    /// when the army has ships (a fleet carries with its ships; the troops aboard do not count), else everyone's.
+    /// </summary>
+    internal static double LootCapacity(IReadOnlyList<UnitStack> survivors)
+    {
+        var ships = ShipCargo.Ships(survivors);
+        return CarryCapacity(ships.Count > 0 ? ships : survivors);
+    }
+
     /// <summary>The summed <see cref="UnitDefinition.CarryCapacity"/> of <paramref name="stacks"/>.</summary>
     internal static double CarryCapacity(IEnumerable<UnitStack> stacks) =>
         stacks.Sum(s => (double)UnitCatalogue.Get(s.Type).CarryCapacity * s.Count);

@@ -330,8 +330,7 @@ public static class FieldBattleResolver
         IReadOnlyList<UnitStack> winnerSurvivors, ResourceAmounts winnerAlreadyCarried, ResourceAmounts loserCarried,
         double winnerProvisions)
     {
-        var ships = ShipCargo.Ships(winnerSurvivors);
-        var totalCapacity = BattleResolver.CarryCapacity(ships.Count > 0 ? ships : winnerSurvivors);
+        var totalCapacity = BattleResolver.LootCapacity(winnerSurvivors);
         var alreadyUsed = winnerAlreadyCarried.Wood + winnerAlreadyCarried.Stone
             + winnerAlreadyCarried.Food + winnerAlreadyCarried.Iron;
         var remainingCapacity = Math.Max(0, totalCapacity - alreadyUsed);

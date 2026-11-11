@@ -96,7 +96,7 @@ public static class CampBattleResolver
         // land army. The food that refills the provisions of every survivor, passengers included, comes off the top.
         var (loot, refill) = plan.Winner == CampFightWinner.Army
             ? BattleResolver.TakeLootAndRefill(
-                BattleResolver.CarryCapacity(ShipCargo.Ships(survivors).Count > 0 ? ShipCargo.Ships(survivors) : survivors),
+                BattleResolver.LootCapacity(survivors),
                 BattleResolver.FoodCapacity(survivors), provisionsAtBattle, plan.LootAvailable)
             : (ResourceAmounts.Zero, 0);
         return plan with { ArmyLosses = losses, ArmySurvivors = survivors, Loot = loot, Refill = refill };

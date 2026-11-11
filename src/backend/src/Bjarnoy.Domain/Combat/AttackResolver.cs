@@ -251,7 +251,7 @@ public static class AttackResolver
         // refills the provisions of everyone aboard comes off the top.
         var (loot, refill) = landWon
             ? BattleResolver.TakeLootAndRefill(
-                BattleResolver.CarryCapacity(shipSurvivors), BattleResolver.FoodCapacity(survivors), provisionsAtBattle, lootAvailable)
+                BattleResolver.LootCapacity(shipSurvivors), BattleResolver.FoodCapacity(survivors), provisionsAtBattle, lootAvailable)
             : (ResourceAmounts.Zero, 0);
         if (landFight is not null)
         {
