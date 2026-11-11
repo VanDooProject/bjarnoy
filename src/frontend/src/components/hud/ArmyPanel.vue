@@ -493,42 +493,16 @@ async function confirmFieldOrderClick() {
 </template>
 
 <style scoped>
-/* Mirrors TrainingQueuePanel.vue's `.status-card`/`.status-row` rules
-   (scoped styles don't leak across components — see that file's own comment
-   for why they're duplicated rather than shared). */
+/* The card box and header are shared (style.css `.status-card`); this panel sets its place and size. `.status-row` mirrors
+   TrainingQueuePanel.vue's. */
 .status-card {
-  position: absolute;
   right: 16px;
   /* --hud-inset-bottom only differs from 0px on a mobile-docked-bottom HUD
      bar (see MapView.vue's own hudInsetBottomPx). */
   bottom: calc(16px + var(--hud-inset-bottom, 0px));
-  z-index: 10;
   width: 260px;
   max-height: 60vh;
   overflow-y: auto;
-  padding: 14px 15px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 0;
-}
-.status-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--panel-border);
-}
-.status-card-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text);
-}
-.status-card-count {
-  font-size: 12px;
-  color: var(--muted);
 }
 .status-row {
   padding: 8px 0;

@@ -13,6 +13,7 @@ import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enApiErrors from '../../i18n/locales/en/apiErrors.json';
 import unitCatalogue from '../../data/unit-catalogue.json';
+import { ApiError } from '../../api/client';
 import type { UnitDefinitionResponse } from '../../api/types';
 
 vi.mock('../../config', async (importOriginal) => {
@@ -28,6 +29,9 @@ const api = vi.hoisted(() => ({
   getUnitCatalogue: vi.fn(),
   dispatchArmy: vi.fn(),
   trainUnits: vi.fn(),
+  recallArmy: vi.fn(),
+  getSettlementGuests: vi.fn(),
+  getArmy: vi.fn(),
 }));
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
@@ -60,6 +64,9 @@ describe('ExpansionPanel', () => {
     api.listMySettlements.mockResolvedValue([]);
     api.dispatchArmy.mockResolvedValue({});
     api.trainUnits.mockResolvedValue({ orders: [] });
+    api.recallArmy.mockResolvedValue({});
+    api.getSettlementGuests.mockResolvedValue([]);
+    api.getArmy.mockImplementation(async (id: string) => ({ id, mission: 'found', atHome: false, supporting: false }));
   });
 
   it('has no founding form: the ring sends settlers', async () => {
@@ -99,5 +106,34 @@ describe('ExpansionPanel', () => {
     // The camp has nothing to train in: neither the settler count nor the button is left.
     expect(wrapper.text()).not.toContain('Settlers in garrison');
     expect(wrapper.findAll('button.expansion-button').some((b) => b.text().includes('settlers'))).toBe(false);
+  });
+
+  describe('recalling a founding convoy', () => {
+    const convoy = { id: 'army-1', mission: 'found', atHome: false, supporting: false, position: { q: 2, r: 3 } };
+
+    it('recalls through the shared recall (with the owner) and refreshes the convoy list', async () => {
+      api.getSettlementArmies.mockResolvedValue([convoy]);
+      const wrapper = await mountPanel();
+      const callsBefore = api.getSettlementArmies.mock.calls.length;
+      await wrapper.findAll('.expansion-convoys .expansion-button-small')[0].trigger('click');
+      await flushPromises();
+      expect(api.recallArmy).toHaveBeenCalledWith('army-1', undefined);
+      expect(api.getSettlementArmies.mock.calls.length).toBeGreaterThan(callsBefore);
+      expect(wrapper.find('.recall-refusal').exists()).toBe(false);
+    });
+
+    it('a refused recall (409) shows the translated rejection on that convoy row', async () => {
+      api.getSettlementArmies.mockResolvedValue([convoy, { ...convoy, id: 'army-2' }]);
+      api.recallArmy.mockRejectedValue(
+        new ApiError(409, { title: 'Nothing to recall.', detail: 'The army is already heading home.', status: 409, rejection: 'NothingToRecall' }),
+      );
+      const wrapper = await mountPanel();
+      const rows = wrapper.findAll('.expansion-convoys .status-row');
+      await rows[1].findAll('.expansion-button-small')[0].trigger('click');
+      await flushPromises();
+
+      expect(wrapper.findAll('.recall-refusal')).toHaveLength(1);
+      expect(wrapper.findAll('.expansion-convoys .status-row')[1].get('.recall-refusal').text()).toBe('The army is already heading home.');
+    });
   });
 });

@@ -1279,6 +1279,20 @@ export class WorldModel {
     return [...types];
   }
 
+  /** Every building standing on a settlement's claimed hexes (coord, type, level) — the demo's counterpart of the live building list. */
+  listBuildings(settlementId: string): { q: number; r: number; type: string; level: number }[] {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return [];
+    const buildings: { q: number; r: number; type: string; level: number }[] = [];
+    for (const c of this.claimedHexes(settlement)) {
+      const tile = this.getTile(c.q, c.r);
+      if (tile.ownerId === settlementId && tile.buildingType) {
+        buildings.push({ q: c.q, r: c.r, type: tile.buildingType, level: tile.buildingLevel ?? 1 });
+      }
+    }
+    return buildings;
+  }
+
   /**
    * How many of each building type a settlement has standing (by wire name) —
    * `listPlacedBuildings` keeps only the distinct types, but the onboarding

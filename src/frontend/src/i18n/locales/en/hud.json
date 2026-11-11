@@ -151,7 +151,8 @@
       "maxLevel": "Max level",
       "siege": "Siege",
       "noRamAtHome": "Needs a battering ram at home",
-      "hexBusy": "This hex already has an order"
+      "hexBusy": "This hex already has an order",
+      "storageTooSmall": "Storage too small"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "LV {level} · HEX {q}, {r}",
@@ -315,7 +316,6 @@
     "retarget": "Retarget",
     "confirm": "Confirm",
     "trainingFailed": "Training failed.",
-    "recallFailed": "Recall failed.",
     "retargetFailed": "Retarget failed."
   },
   "battleReport": {
@@ -562,5 +562,26 @@
     "towerBurned": "The tower at ({q}, {r}) burned down.",
     "towerHeld": "The tower at ({q}, {r}) held.",
     "summary": "{title}: {lost} units lost, {beasts} beasts slain, {loot} loot"
+  },
+  "buildingHud": {
+    "upgrade": "Upgrade",
+    "needsLonghouse": "Longhouse {level}",
+    "needsBuilding": "{building} {level}",
+    "storage": "Storage too small",
+    "max": "Max",
+    "more": "+{n} more",
+    "moreShort": "+{n}",
+    "perHour": "/h",
+    "each": "each",
+    "feast": "Feast",
+    "duration": {
+      "hoursMinutes": "{hours}h {minutes}m",
+      "minutes": "{minutes}m"
+    },
+    "markerLabel": "{building}, level {level}",
+    "toggle": {
+      "label": "Building info (H)",
+      "title": "Show or hide building info (H)"
+    }
   }
 }

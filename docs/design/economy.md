@@ -35,7 +35,8 @@ per real hour on every world. So on a fast world a full load of provisions reach
 
 ## 2. Resources
 
-Wood, Brick, Food, Iron. (The internal key stays `stone` in the API, stores and i18n keys; the German name is Stein.)
+Wood, Brick, Food, Iron. Brick (made from clay) is the resource. The code still calls it `stone` internally (API, stores, i18n
+keys); it can be renamed to brick or clay when we work on those parts. The German name is Stein.
 
 - **Wood** — Lumberjack (forest).
 - **Brick** — the **Clay Brickworks** on bog ground is the start's brick
@@ -365,7 +366,7 @@ for friend and foe, a half-open end and a sealed end), the dispatch is refused w
 land route is left, and the range tint applies the same rules for the selected
 settlement's owner (friends come from the guild store: `friendlyUserIds`).
 
-**Siege.** On land a wall hex falls to **battering rams only** (a fleet can hit a wall's sea end, see below): a won Attack or Raid that names the wall hex
+**Siege.** On land a wall hex falls to **battering rams only**: a won Attack or Raid that names the wall hex
 as `TargetBuildingCoord` takes **one level** off it, however many rams survive
 (`SiegeResolver.LevelsTakenFrom`, the same rule as a bridge): a level-3 palisade needs three won
 sieges to be breached, and the hex is gone at level 0. Catapults do nothing to a wall. There is no
@@ -373,12 +374,12 @@ separate siege mission: the in-game "Siege" action on a rival wall opens an Atta
 settlement with the wall hex as the preferred target building. Which engine damages which
 building is one table (`UnitDefinition.SiegeTargets`, asked through `SiegeResolver.CanDamage`):
 
-| Target | Rams | Catapults | Ships (shore only) | Levels per won siege |
-|---|---|---|---|---|
-| Wall hex (Palisade, Palisade Gate) | yes | no | yes | 1 |
-| Tower | yes | yes | yes | `LevelsDestroyed` of the surviving power that can damage it |
-| Bridge | no | yes | yes | 1 |
-| Every other building (Longhouse included) | no | yes | yes | `LevelsDestroyed` |
+| Target | Rams | Catapults | Levels per won siege |
+|---|---|---|---|
+| Wall hex (Palisade, Palisade Gate) | yes | no | 1 |
+| Tower | yes | yes | `LevelsDestroyed` of the surviving power that can damage it |
+| Bridge | no | yes | 1 |
+| Every other building (Longhouse included) | no | yes | `LevelsDestroyed` |
 
 Only the surviving engines that can damage the target count towards its levels. A named target
 the surviving engines cannot damage takes no damage (the report has no siege line). Without a
@@ -386,21 +387,12 @@ named target, or when it is gone, the pick is random (seeded) among the building
 engines can damage; if there are none, no siege happens. Rams and catapults are trained at the Siege Workshop
 (section 8, the iron ladder).
 
-**Fleets.** A fleet Attack or Raid is always sent at one building on the target's shore: a building inside the target's
-claim on a shoreline land hex or on a sea hex (Dockyard, Fishing Hut, Shrine of Njörd, a wall's sea end). Without one the
-dispatch is refused (`FleetTargetBuildingRequired`, `FleetTargetBuildingNotOnShore`). The fleet's route ends at that
-building's hex and the target's Longhouse may be inland. The battle there is fought by the ships standing on that hex
-only: the defender's ships at home when the target is the hex they are anchored at (its Dockyard, or a centre on the
-shore), and allied fleets supporting it when the target is its centre. Land troops on either side stay out of it. With no
-ships on that hex there is no battle and the fleet's siege hits the building.
-A won fight damages only that building, by `LevelsDestroyed` of the surviving ships' siege power (Karve 10, Longship 20,
-starting values to be tuned; catapult 40), walls and bridges one level as above. A fleet has no random fallback: if the
-building is gone when it arrives, nothing is damaged.
+**Fleets.** Ships do no damage to buildings on land; fleet attacks are in [`skirmish/conquest.md`](skirmish/conquest.md).
 
 **Troops on ships.** Ships carry land units in slots (`ShipCargo`); every mission a fleet can take can carry them, and a
 dispatch whose passengers need more slots than its ships have is refused (`InsufficientShipCapacity`). A fleet moves at the
-speed of its slowest ship; passengers do not slow it. Passengers eat from the fleet's provisions. They stay on board during a
-fleet battle and do not fight; they only go ashore at a beach camp (`skirmish/beach-camp.md`). When ships are lost, the
+speed of its slowest ship; passengers do not slow it. Passengers eat from the fleet's provisions. They do not take part in the ship
+fight; in the land fight they fight from on board. They go ashore only at a beach camp or a home dock (`skirmish/conquest.md`). When ships are lost, the
 passengers beyond what the surviving ships can carry drown, the units that take the most slots first. Starting values, to be tuned:
 
 | Ship | Slots |
@@ -836,8 +828,6 @@ oases and NPC villages. Bjarnoy's version:
   clearing new islands must pay much more than farming smaller players.**
   Spawn, levels and guard ranges are implemented (no gameplay yet): see
   [`wildlife-camps.md`](./wildlife-camps.md).
-- **Beast dens** are the oasis equivalent: raidable spots whose loot grows
-  back over time, and which can later be annexed for a production bonus.
 - **Merchant ships** sail NPC routes between islands and can be raided at
   sea.
 - **Inactive players** become raidable, but only after several days of

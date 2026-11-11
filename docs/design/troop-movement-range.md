@@ -41,6 +41,28 @@ Berserker 160, Spearman 192, Thrall 200, Settler 320); lighter units reach furth
 So "range" means *how far an army can go and still get back*. Everything below keeps
 that rule rather than inventing a second one.
 
+## 1a. Leftover provisions go home
+
+When an army reaches home, its leftover provisions are deposited into the stock
+of the garrison spot it folds into: the realm's shared stock at a settlement, the
+camp's piles at a beach camp ([garrison.md](garrison.md)). What does not fit
+under the stock cap is wasted.
+
+## 1b. Looting food refills provisions
+
+When an army wins a fight (raid, camp) and the target has food,
+the army first refills its provisions to the full `FoodCarryCapacity` from the
+target's food. This food is taken on top of the loot: it does not use the
+army's loot capacity (`CarryCapacity`). The loot is then taken as before, up
+to that capacity, from what the target has left. Loot is never eaten as
+provisions.
+
+- The refill goes with the loot: where a fight gives no loot, it gives no refill either.
+- It is measured on the surviving units, passengers included (they eat on the way
+  too).
+- A won field battle refills from the loser's carried loot, never from its
+  provisions, which stay untouched so the loser does not starve.
+
 ## 2. The gap
 
 An army that has reached its destination is `ArmyLocation.InTransit` with
@@ -74,7 +96,8 @@ destination auto-prepended as a waypoint — one domain method, one endpoint.
 
 The food check uses `ProvisionsAt(now)` (what is left after the burn so far), not the
 figure loaded at departure, and the rebuilt `Movement` recomputes `TurnAroundAt` from
-the remainder. Provisions only ever decrease, so chained hops cannot be gamed: an army
+the remainder. Provisions only ever decrease, except when an army sets out from a
+garrison spot (a settlement or a beach camp) or picks up food in a won fight (§1b), so chained hops cannot be gamed: an army
 may walk outward indefinitely as long as it can still afford the way home.
 
 - A field order carries a mission: Move, Attack, Support or Hunt, against the same targets

@@ -99,42 +99,12 @@ const guestCount = computed(() => world.guestArmies.length);
   color: var(--muted);
 }
 /*
- * `.status-card`/`.status-row`/`.status-progress`/`.status-subtext`/
- * `.status-card-header`/`.status-card-title`/`.status-card-count` are
- * intentionally mirrored from BuildQueuePanel.vue's scoped styles (Vue
- * scoped styles don't leak across components) rather than shared, so both
- * panels stay visually identical without introducing a cross-component CSS
- * dependency for four small rulesets.
+ * The card box and its header (`.status-card`, `.status-card-header/-title/-count`) are shared in style.css; only this panel's
+ * place is set here. `.status-row`/`.status-progress`/`.status-subtext` are still mirrored from BuildQueuePanel.vue.
  */
 .status-card {
-  position: absolute;
   right: 16px;
   top: 76px;
-  z-index: 10;
-  width: 240px;
-  padding: 14px 15px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 0;
-}
-.status-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--panel-border);
-}
-.status-card-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text);
-}
-.status-card-count {
-  font-size: 12px;
-  color: var(--muted);
 }
 .status-row {
   padding: 8px 0;

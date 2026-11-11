@@ -8,6 +8,7 @@ import { useDisplayedRoute } from '../composables/useDisplayedRoute';
 import { useMapFocus } from '../composables/useMapFocus';
 import { isModalRouteName } from '../lib/modalRoute';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
+import BuildingHudLayer from '../components/hud/BuildingHudLayer.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
 import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
 import { useLoadFlow } from '../composables/useLoadFlow';
@@ -62,6 +63,7 @@ import { hudBarHeightPx, hudRailWidthPx } from '../composables/hudBarHeight';
 import { isHudRail } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
 import { hexTakesNoOrder, nextUpgradeLevel } from '../lib/hud/pendingBuild';
+import { upgradeVerdict } from '../lib/hud/upgradeRules';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
@@ -988,19 +990,27 @@ function siegeActions(tile: Tile): RingAction[] {
 function upgradeActionFor(tile: Tile): RingAction {
   const type = tile.buildingType!;
   const label = t('hud.ringMenu.actions.upgrade');
-  // Queued behind a running upgrade, this one starts from the level that one reaches.
-  const nextLevel = nextUpgradeLevel(tile.buildingLevel ?? 1, world.hud.queue, tile);
-  const level = nextLevel - 1;
-  const definitions = buildingCatalogue.byType[type];
-  const upgradeDefinition = definitions?.find((d) => d.level === nextLevel);
-  // A catalogue that lists the building but has no further level: nothing left to upgrade to.
-  if (definitions?.length && !upgradeDefinition) {
+  // The same verdict the building HUD reads. Queued behind a running upgrade, this one starts from the level that one reaches.
+  const verdict = upgradeVerdict({
+    type,
+    builtLevel: tile.buildingLevel ?? 1,
+    queue: world.hud.queue,
+    at: tile,
+    definitions: buildingCatalogue.byType[type],
+    longhouseLevel: world.hud.level,
+    builtLevels: builtLevels(),
+    storageCap: world.hud.storageCap,
+  });
+  const { nextLevel, level, definition: upgradeDefinition, cost, blockers } = verdict;
+  // Nothing left to upgrade to: at the last level, or the last one is already ordered.
+  if (verdict.maxed || !cost) {
     return { id: 'upgrade', label, color: 'var(--gold)', disabled: true, hint: t('hud.ringMenu.actions.maxLevel') };
   }
-  const cost = upgradeDefinition?.cost ?? buildingUpgradeCost(type, nextLevel);
   const locks = [
-    longhouseLock(upgradeDefinition?.requiredLonghouseLevel, world.hud.level),
-    ...prerequisiteLocks(upgradeDefinition?.prerequisites, builtLevels()),
+    longhouseLock(blockers.longhouse, world.hud.level),
+    ...prerequisiteLocks(blockers.prerequisites, builtLevels()),
+    // The stores cannot hold the next level's price: waiting would never get there.
+    verdict.storageShort ? t('hud.ringMenu.actions.storageTooSmall') : undefined,
   ].filter((lock): lock is string => !!lock);
   const hexBusy = world.hud.queue.some((o) => o.q === tile.q && o.r === tile.r);
   const availability = availabilityFor(cost, upgradeDefinition, locks.length > 0, hexBusy);
@@ -1576,6 +1586,8 @@ async function upgrade() {
       </template>
     </TopBar>
     <template v-if="mode === 'settlement'">
+      <!-- Over the map, under every panel: one marker per own building (dial + docked box) and the switch that hides them. -->
+      <BuildingHudLayer :renderer="canvasRef?.renderer" />
       <template v-if="isMobile">
         <QueueDrawer v-if="!hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
       </template>
