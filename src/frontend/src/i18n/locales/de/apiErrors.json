@@ -97,6 +97,9 @@
     "HuntRequiresLandUnits": "Schiffe können kein Lager an Land jagen. Schick Landeinheiten.",
     "HuntRequiresFleet": "Ein Lager auf See kannst du nur mit Schiffen jagen. Landeinheiten erreichen es nicht.",
     "HexOccupiedByCamp": "Wilde Tiere halten dieses Feld noch.",
-    "HexOccupiedByEndgameSite": "Auf diesem Feld steht eine Utgardmauer oder ein Jötunn-Wachturm."
+    "HexOccupiedByEndgameSite": "Auf diesem Feld steht eine Utgardmauer oder ein Jötunn-Wachturm.",
+    "WrongCampBuilderCount": "Für ein Strandlager brauchst du genau zwei Lagerbauer.",
+    "CampSiteNotSandShore": "Ein Strandlager kannst du nur auf einem Sandfeld am Ufer errichten.",
+    "CampSiteNotFree": "Dieses Feld ist belegt: Hier steht schon etwas."
   }
 }

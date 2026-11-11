@@ -183,7 +183,7 @@ public static class ArmyEndpoints
             return TypedResults.BadRequest(new ProblemDetails
             {
                 Title = "Unknown mission.",
-                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, found, hunt.",
+                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, found, hunt, setupcamp.",
                 Status = StatusCodes.Status400BadRequest,
             });
         }
@@ -665,6 +665,12 @@ public static class ArmyEndpoints
             return true;
         }
 
+        if (string.Equals(value, "setupcamp", StringComparison.OrdinalIgnoreCase))
+        {
+            mission = ArmyMission.SetUpCamp;
+            return true;
+        }
+
         mission = default;
         return false;
     }
@@ -728,6 +734,11 @@ public static class ArmyEndpoints
                 DispatchRejection.NoCampAtDestination => "No wildlife camp stands on the destination hex.",
                 DispatchRejection.HuntRequiresLandUnits => "Ships cannot hunt a camp on land; only land units can.",
                 DispatchRejection.HuntRequiresFleet => "Only ships can hunt a camp at sea (the whale road); land units cannot reach it.",
+                DispatchRejection.WrongCampBuilderCount =>
+                    $"A beach camp mission requires exactly {BeachCamp.RequiredBuilders} camp builders, no more, no fewer.",
+                DispatchRejection.CampSiteNotSandShore => "A beach camp can only be set up on a sand hex on the shore.",
+                DispatchRejection.CampSiteNotFree =>
+                    "That hex is taken: a building, a settlement, a wildlife camp or a giant stands on it.",
                 _ => "Refused.",
             },
             Status = StatusCodes.Status409Conflict,

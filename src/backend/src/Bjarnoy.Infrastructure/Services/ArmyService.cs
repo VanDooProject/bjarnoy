@@ -275,12 +275,22 @@ public sealed class ArmyService(
                 Founding.IsHexFoundable(target, claimedSettlements, SettlementService.MinimumSpacing, dispatchGiantIndex);
         }
 
+        // SetUpCamp-specific: what stands on the camp hex is database state Army.PlanDispatch cannot see.
+        Func<HexCoord, bool>? isCampSiteOccupied = null;
+        if (mission == ArmyMission.SetUpCamp)
+        {
+            var campSiteOccupied = await IsCampSiteOccupiedAsync(settlement.WorldId, effectiveDestination, now, cancellationToken).ConfigureAwait(false);
+            var campSite = effectiveDestination;
+            isCampSiteOccupied = hex => campSiteOccupied && hex == campSite;
+        }
+
         var decision = Army.PlanDispatch(
             settled, unitCounts, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimDiscs,
             isHexFoundable, renownAndSlotAllowed, session.SpeedFactor, rivers.IsRiver, rivers.IsWide,
-            dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater);
+            dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater,
+            isCampSiteOccupied: isCampSiteOccupied);
 
         if (!decision.Accepted)
         {
@@ -312,6 +322,24 @@ public sealed class ArmyService(
             ((ArmyLocation.InTransit)decision.Army.Location).Movement.ArrivesAt);
 
         return new ArmyDispatchResult(DispatchRejection.None, armyEntity);
+    }
+
+    /// <summary>
+    /// Whether anything but bare ground stands on <paramref name="hex"/>: a building of any player (a level-0 foundation
+    /// included), a settlement centre or a wildlife camp. Giants are the map's, checked by <see cref="BeachCamp.CheckSite"/>
+    /// through the giant index. The one fact a beach camp site needs from the database, at dispatch and again when the camp is due.
+    /// </summary>
+    private async Task<bool> IsCampSiteOccupiedAsync(Guid worldId, HexCoord hex, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (await _dbContext.PlacedBuildings.AsNoTracking()
+                .AnyAsync(b => b.Settlement!.WorldId == worldId && b.Q == hex.Q && b.R == hex.R, cancellationToken).ConfigureAwait(false)
+            || await _dbContext.Settlements.AsNoTracking()
+                .AnyAsync(s => s.WorldId == worldId && s.CentreQ == hex.Q && s.CentreR == hex.R, cancellationToken).ConfigureAwait(false))
+        {
+            return true;
+        }
+
+        return await _campService.FindCampAsync(worldId, hex, now, cancellationToken).ConfigureAwait(false) is not null;
     }
 
     /// <summary>

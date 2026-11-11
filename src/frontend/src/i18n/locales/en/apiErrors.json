@@ -97,6 +97,9 @@
     "HuntRequiresLandUnits": "Ships cannot hunt a camp on land; send land units.",
     "HuntRequiresFleet": "Only ships can hunt a camp at sea; land units cannot reach it.",
     "HexOccupiedByCamp": "Wild beasts still hold that hex.",
-    "HexOccupiedByEndgameSite": "An Utgard wall or a jötun watchtower stands on that hex."
+    "HexOccupiedByEndgameSite": "An Utgard wall or a jötun watchtower stands on that hex.",
+    "WrongCampBuilderCount": "A beach camp needs exactly two camp builders.",
+    "CampSiteNotSandShore": "A beach camp can only go on a sand hex on the shore.",
+    "CampSiteNotFree": "That hex is taken: something already stands there."
   }
 }

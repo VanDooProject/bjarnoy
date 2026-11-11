@@ -253,6 +253,94 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         return refreshed;
     }
 
+    /// <summary>Trains exactly 2 camp builders and fast-forwards until the batch completes (see <see cref="TrainFiveSettlersAsync"/>).</summary>
+    private async Task<AuthResponse> TrainCampBuildersAsync(HttpClient client, Guid settlementId, string refreshToken)
+    {
+        var current = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlementId}", SqliteApiFixture.StrictJson, Ct);
+        var workshop = current!.Buildings.First(b => b.Type == "cartworkshop");
+        var response = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlementId}/units", new TrainUnitsRequest("campbuilder", BeachCamp.RequiredBuilders, workshop.Q, workshop.R), Ct);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+
+        // 2 camp builders x 12 minutes — past the 15-minute access token lifetime together with the wait.
+        _factory.Time.Advance(TimeSpan.FromMinutes(25));
+        var refreshed = await RefreshAsync(client, refreshToken);
+
+        var settled = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlementId}", SqliteApiFixture.StrictJson, Ct);
+        Assert.Contains(settled!.Garrison, g => g.Unit == "campbuilder" && g.Count == BeachCamp.RequiredBuilders);
+        return refreshed;
+    }
+
+    /// <summary>
+    /// The closest sand hex on a shore (a sea neighbour) that a land army can walk to from <paramref name="settlement"/> (a real BFS
+    /// over the world's generated terrain) and nothing stands on yet.
+    /// </summary>
+    private async Task<TileCoordinate> FindSandShoreTargetAsync(HttpClient client, Guid worldId, SettlementResponse settlement)
+    {
+        const int Window = 40;
+        var chunk = await client.GetFromJsonAsync<TileChunkResponse>(
+            $"/api/v1/worlds/{worldId}/tiles?qMin={settlement.Q - Window}&qMax={settlement.Q + Window}" +
+            $"&rMin={settlement.R - Window}&rMax={settlement.R + Window}",
+            SqliteApiFixture.StrictJson, Ct);
+        var terrainAt = chunk!.Tiles.ToDictionary(t => (t.Q, t.R), t => t.Terrain);
+        var occupied = settlement.Buildings.Select(b => (b.Q, b.R)).ToHashSet();
+
+        var start = (settlement.Q, settlement.R);
+        var visited = new HashSet<(int Q, int R)> { start };
+        var queue = new Queue<(int Q, int R)>();
+        queue.Enqueue(start);
+        while (queue.Count > 0)
+        {
+            var (q, r) = queue.Dequeue();
+            if (terrainAt[(q, r)] == "sand" && !occupied.Contains((q, r))
+                && AxialNeighbourOffsets.Any(o => terrainAt.TryGetValue((q + o.Dq, r + o.Dr), out var t) && t == "sea"))
+            {
+                return new TileCoordinate(q, r);
+            }
+
+            foreach (var o in AxialNeighbourOffsets)
+            {
+                var next = (Q: q + o.Dq, R: r + o.Dr);
+                if (visited.Contains(next) || !terrainAt.TryGetValue(next, out var terrain) || terrain is "sea" or "lake")
+                {
+                    continue;
+                }
+
+                visited.Add(next);
+                queue.Enqueue(next);
+            }
+        }
+
+        Assert.Fail("No sand shore hex is reachable overland within the sampled window.");
+        return default!;
+    }
+
+    /// <summary>Trains the camp builders and dispatches them (with food for the trip and the build wait) at the closest free sand shore.</summary>
+    private async Task<(Guid WorldId, SettlementResponse Settlement, AuthResponse Player, TileCoordinate Site, ArmyResponse Army, AuthResponse Tokens,
+        SettlementResponse Before, SettlementResponse After)>
+        DispatchCampBuildersAsync(HttpClient client)
+    {
+        var (worldId, settlement, player, _) = await SetUpPlayerReadyToExpandAsync(client);
+        Authorize(client, player.AccessToken);
+        var tokens = await TrainCampBuildersAsync(client, settlement.Id, player.RefreshToken);
+        var site = await FindSandShoreTargetAsync(client, worldId, settlement);
+        var before = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
+
+        var dispatch = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/armies",
+            new DispatchArmyRequest(
+                [new UnitCountRequest("campbuilder", BeachCamp.RequiredBuilders)], null, new HexPointRequest(site.Q, site.R), 80, "setupcamp"),
+            Ct);
+        Assert.True(dispatch.IsSuccessStatusCode, $"dispatch was refused: {await dispatch.Content.ReadAsStringAsync(Ct)}");
+        var army = await dispatch.ReadStrictAsync<ArmyResponse>(Ct);
+        var after = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
+        return (worldId, settlement, player, site, army, tokens, before!, after!);
+    }
+
     [Fact]
     public async Task The_unit_catalogue_includes_the_settler()
     {
@@ -583,5 +671,63 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
 
         Assert.Equal(2, mine!.Count);
         Assert.Contains(mine, s => s.Q == target.Q && s.R == target.R);
+    }
+    [Fact]
+    public async Task The_unit_catalogue_includes_the_camp_builder_at_its_flat_price()
+    {
+        using var client = Client();
+
+        var catalogue = await client.GetFromJsonAsync<List<UnitDefinitionResponse>>(
+            "/api/v1/units", SqliteApiFixture.StrictJson, Ct);
+
+        var builder = Assert.Single(catalogue!, u => u.Type == "campbuilder");
+        Assert.Equal("civilian", builder.Class);
+        Assert.Equal(80, builder.TrainingCost.Wood);
+        Assert.Equal(40, builder.TrainingCost.Stone);
+        Assert.Equal(40, builder.TrainingCost.Food);
+        Assert.Equal(20, builder.TrainingCost.Iron);
+    }
+
+    [Fact]
+    public async Task Dispatching_camp_builders_charges_the_camp_cost_from_the_launching_settlement()
+    {
+        using var client = Client();
+        var (_, settlement, player, site, army, _, before, after) = await DispatchCampBuildersAsync(client);
+
+        Assert.Equal("setupcamp", army.Mission);
+        // 200 wood and 100 brick left the stock (80 food went with the army as provisions).
+        Assert.InRange(before.Resources.Stock.Wood - after.Resources.Stock.Wood, 199, 201);
+        Assert.InRange(before.Resources.Stock.Stone - after.Resources.Stock.Stone, 99, 101);
+        Assert.InRange(before.Resources.Stock.Food - after.Resources.Stock.Food, 79, 81);
+        Assert.Equal(site.Q, army.Movement!.Path[^1].Q);
+        Assert.Equal(site.R, army.Movement.Path[^1].R);
+
+        // The cost sits in the army's loot (not in the stock): the whole 200 wood / 100 brick, and the builders left the garrison.
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        var entity = await db.Armies.AsNoTracking().Include(a => a.Stacks).SingleAsync(a => a.Id == army.Id, Ct);
+        Assert.Equal(BeachCamp.Cost, entity.ToDomain().Loot);
+        var home = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
+        Assert.DoesNotContain(home!.Garrison, g => g.Unit == "campbuilder");
+        Assert.NotNull(player);
+    }
+
+    [Fact]
+    public async Task A_camp_dispatch_with_one_builder_is_refused()
+    {
+        using var client = Client();
+        var (_, settlement, player, _) = await SetUpPlayerReadyToExpandAsync(client);
+        Authorize(client, player.AccessToken);
+        await TrainCampBuildersAsync(client, settlement.Id, player.RefreshToken);
+        var site = await FindSandShoreTargetAsync(client, settlement.WorldId, settlement);
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/armies",
+            new DispatchArmyRequest([new UnitCountRequest("campbuilder", 1)], null, new HexPointRequest(site.Q, site.R), 40, "setupcamp"),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("WrongCampBuilderCount", await response.Content.ReadAsStringAsync(Ct));
     }
 }
