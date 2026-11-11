@@ -155,7 +155,6 @@ public class BuildingCatalogueTests
     }
 
     [Theory]
-    [InlineData(BuildingType.Longhouse)]
     [InlineData(BuildingType.StorageHouse)]
     [InlineData(BuildingType.SiegeWorkshop)]
     public void Anchor_and_support_buildings_are_gated_to_grass(BuildingType type)
@@ -164,6 +163,18 @@ public class BuildingCatalogueTests
 
         Assert.True(definition.AllowsTerrain(Terrain.Grass));
         Assert.False(definition.AllowsTerrain(Terrain.Sand));
+        Assert.False(definition.AllowsTerrain(Terrain.Mountain));
+        Assert.False(definition.AllowsTerrain(Terrain.Forest));
+        Assert.False(definition.AllowsTerrain(Terrain.Sea));
+    }
+
+    [Fact]
+    public void The_longhouse_stands_on_grass_or_shore_sand_only()
+    {
+        var definition = BuildingCatalogue.Get(BuildingType.Longhouse, 1);
+
+        Assert.True(definition.AllowsTerrain(Terrain.Grass));
+        Assert.True(definition.AllowsTerrain(Terrain.Sand));
         Assert.False(definition.AllowsTerrain(Terrain.Mountain));
         Assert.False(definition.AllowsTerrain(Terrain.Forest));
         Assert.False(definition.AllowsTerrain(Terrain.Sea));
@@ -702,6 +713,18 @@ public class SettlementTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
     private static readonly HexCoord Centre = new(0, 0);
+
+    /// <summary>Regression: a settlement founded on sand (from the sea) had a Longhouse that every upgrade refused with TerrainNotAllowed.</summary>
+    [Fact]
+    public void A_longhouse_standing_on_sand_can_be_upgraded()
+    {
+        var settlement = Found(stock: 100_000);
+
+        var decision = settlement.PlanBuild(BuildingType.Longhouse, Centre, Terrain.Sand, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted, decision.Rejection.ToString());
+        Assert.Equal(2, decision.Order!.TargetLevel);
+    }
 
     /// <summary>
     /// A just-founded settlement: one longhouse, and a stock and capacity that

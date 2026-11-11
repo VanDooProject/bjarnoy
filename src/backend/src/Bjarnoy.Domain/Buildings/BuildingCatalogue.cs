@@ -781,7 +781,10 @@ public static class BuildingCatalogue
         // producer): +15 wood, +12 stone, +15 food, +2 iron per level.
         ProductionPerHour = new ResourceAmounts(Wood: 15, Stone: 12, Food: 15, Iron: 2) * level,
         StorageCapacity = ResourceAmounts.Uniform(250) * level,
-        AllowedTerrain = Grass,
+        // Grass, or the shore sand a settlement founded from the sea stands on (docs/design/skirmish/realm-takeover.md): the
+        // upgrade re-checks the hex, so a sand-founded Longhouse could not be levelled while this was grass only. The
+        // Longhouse is never placed anew (PlanBuild refuses a second one), so this only keeps the founded one upgradable.
+        AllowedTerrain = new HashSet<Terrain> { Terrain.Grass, Terrain.Sand },
         // The settlement's own centre-disc claim radius at this longhouse
         // level — see Settlement.ClaimRadius, which reads this back. The
         // Longhouse only grows the realm until towers are available: 2 at
