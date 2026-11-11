@@ -568,10 +568,12 @@
     "each": "je",
     "feast": "Fest",
     "upgradingTo": "Auf Stufe {level}",
+    "markerLabel": "{building}, Stufe {level}",
     "toggle": {
       "label": "Gebäudeinfo",
       "shown": "Gebäudeinfo eingeblendet",
       "hidden": "Gebäudeinfo ausgeblendet",
+      "key": "H",
       "shortcut": "Drück H, um die Gebäudeinfo ein- oder auszublenden"
     }
   }

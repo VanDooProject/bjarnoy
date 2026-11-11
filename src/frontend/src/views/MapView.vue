@@ -8,6 +8,7 @@ import { useDisplayedRoute } from '../composables/useDisplayedRoute';
 import { useMapFocus } from '../composables/useMapFocus';
 import { isModalRouteName } from '../lib/modalRoute';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
+import BuildingHudLayer from '../components/hud/BuildingHudLayer.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
 import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
 import { useLoadFlow } from '../composables/useLoadFlow';
@@ -1520,6 +1521,8 @@ async function upgrade() {
       </template>
     </TopBar>
     <template v-if="mode === 'settlement'">
+      <!-- Over the map, under every panel: one marker per own building (dial + docked box) and the switch that hides them. -->
+      <BuildingHudLayer :renderer="canvasRef?.renderer" />
       <template v-if="isMobile">
         <QueueDrawer v-if="!hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
       </template>

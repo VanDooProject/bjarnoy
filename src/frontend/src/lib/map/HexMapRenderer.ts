@@ -3601,7 +3601,7 @@ export class HexMapRenderer {
   private keyPanMoved = false;
 
   /** Whether a key event may drive the map: no Ctrl/Meta/Alt, not typing, camera free, and not a page-scrolling host. */
-  private keyDrivesMap(e: KeyboardEvent): boolean {
+  keyDrivesMap(e: KeyboardEvent): boolean {
     if (e.ctrlKey || e.metaKey || e.altKey || isTypingTarget(e.target)) return false;
     // A host that lets the page scroll keeps the keys for the page; a locked or menu-covered map does not move.
     return !this.lockCamera && !this.interactionLocked && !this.covered && !this.options.allowPageScroll;
@@ -6150,6 +6150,11 @@ export class HexMapRenderer {
     label.tint = 0xffffff;
     this.labelsUsed++;
     return label;
+  }
+
+  /** The zoom the settlement view lands on (the fog-margin framing) — what the building HUD's zoom tiers are measured against. */
+  get settlementBaseZoom(): number {
+    return this.settlementCameraOrigin().zoom;
   }
 
   /** Current camera zoom — for the zoom-transition debug panel's live readout and e2e assertions on camera continuity. `camera` itself stays private. */
