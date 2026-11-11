@@ -254,7 +254,7 @@ function labelOf(m: Marker): string {
 // ---- hover / tap (like the progress dial: grows to its default-zoom size, comes to the front) --------------------------------
 
 // The markers take no pointer input (like the canvas dials they never block the map's hover, tap and ring): hover is the
-// mouse position the map tracks, a tap is reported by the map. Both hit-test the dial's disc.
+// mouse position the map tracks (dial disc, box or hex), a tap is reported by the map (dial disc only).
 let tapKey: string | null = null;
 let tapAtMs = 0;
 const hoverT = new Map<string, number>();
@@ -277,6 +277,21 @@ function pickTappedMarker(screen: { x: number; y: number }): string | null {
 function onMapTap(screen: { x: number; y: number }) {
   tapKey = nextTapReveal(tapKey, pickTappedMarker(screen));
   tapAtMs = Date.now();
+}
+
+/**
+ * The marker the mouse is directly on (its dial disc or box), or null. Of several the one stacked on top wins (`stackOrder`:
+ * the hovered one, else the right-most). A direct hit beats the hex under the mouse, which is often a neighbour's.
+ */
+function directHit(mouse: { x: number; y: number } | null, candidates: { key: string; x: number; y: number; zs: number }[]): string | null {
+  if (!mouse) return null;
+  const hits = candidates
+    .filter(({ key, x, y, zs }) => {
+      const size = boxSizes.get(key);
+      return Math.hypot(mouse.x - x, mouse.y - y) <= dialRadiusPx(zs) || (size !== undefined && pointInRect(mouse, markerBoxRect(x, y, size, zs)));
+    })
+    .map(({ key, x }) => ({ key, x, hovered: (hoverT.get(key) ?? 0) > 0 }));
+  return stackOrder(hits).at(-1)?.key ?? null;
 }
 
 // ---- per-frame placement --------------------------------------------------------------------------------------------------
@@ -364,6 +379,16 @@ function tick() {
   const height = root.value?.offsetHeight ?? window.innerHeight;
   const circle = renderer.markerOcclusionCircle;
   const placed: { key: string; x: number; hovered: boolean }[] = [];
+  const mouse = renderer.mousePoint;
+  // A marker the mouse is directly on wins over the hex under it for every marker.
+  const direct = directHit(
+    mouse,
+    markers.value.flatMap((m) => {
+      if (!elements.has(m.key)) return [];
+      return [{ key: m.key, ...renderer.dialScreenPoint(m.coord), zs: markerScale(mapScale, hoverT.get(m.key) ?? 0) }];
+    }),
+  );
+  const hoverKey = direct ?? renderer.hoveredHexKey;
   let tiersChanged = false;
   const nextTiers: Record<string, HudTier> = {};
   for (const marker of markers.value) {
@@ -396,16 +421,9 @@ function tick() {
       el.dataset.occluded = occluded ? '1' : '0';
       el.classList.toggle('hud-marker--occluded', occluded || vis < 1);
     }
-    const mouse = renderer.mousePoint;
-    const zsBefore = markerScale(mapScale, hoverT.get(marker.key) ?? 0);
-    const disc = dialRadiusPx(zsBefore);
     const boxSize = boxSizes.get(marker.key);
-    const boxRect = boxSize ? markerBoxRect(x, y, boxSize, zsBefore) : null;
-    const hovered =
-      !occluded &&
-      (tapKey === marker.key ||
-        (mouse !== null && (Math.hypot(mouse.x - x, mouse.y - y) <= disc || (boxRect !== null && pointInRect(mouse, boxRect)))) ||
-        renderer.hoveredHexKey === marker.key);
+    const byMouse = !occluded && hoverKey === marker.key;
+    const hovered = byMouse || (!occluded && tapKey === marker.key);
     const t = dialHoverStep(hoverT.get(marker.key) ?? 0, hovered, dtMs, prefersReducedMotion());
     if (t > 0) hoverT.set(marker.key, t);
     else hoverT.delete(marker.key);

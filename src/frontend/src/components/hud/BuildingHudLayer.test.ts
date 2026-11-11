@@ -322,8 +322,8 @@ describe('BuildingHudLayer', () => {
       const renderer = await mountAt(1.5);
       expect(wrapper!.find('[data-coord="1,0"] .hud-marker__box').exists()).toBe(true);
       // The dial is at x 180, y 300; its disc is about 41 px. The box is 100 x 40 unscaled, i.e. 150 x 60 at 1.5: it spans
-      // x 180..330, y 270..330. x 250 is on the box and off the disc.
-      renderer.mousePoint = { x: 250, y: 320 };
+      // x 180..330, y 270..330. (225, 328) is on the box, off its disc and off the neighbour's dial.
+      renderer.mousePoint = { x: 225, y: 328 };
       advance();
       expect(scaleOf()).toContain('scale(1.950)');
       // Beside the box (above it) nothing hovers.
@@ -359,6 +359,39 @@ describe('BuildingHudLayer', () => {
       }
       vi.useRealTimers();
       expect(scaleOf()).toContain('scale(1.950)');
+    });
+
+    it('the marker the mouse is directly on wins over the hex under it, and ends up on top', async () => {
+      const renderer = await mountAt(1.5);
+      const scaleAt = (key: string) => wrapper!.get<HTMLElement>(`[data-coord="${key}"]`).element.style.transform;
+      const z = (key: string) => Number(wrapper!.get<HTMLElement>(`[data-coord="${key}"]`).element.style.zIndex);
+      // On the box of 1,0 (x 180..330, y 270..330) and off the dial discs of 1,0 and 2,0, while the hex under the mouse is 2,0's.
+      renderer.mousePoint = { x: 225, y: 328 };
+      renderer.hoveredHexKey = '2,0';
+      advance();
+      expect(scaleAt('1,0')).toContain('scale(1.950)');
+      expect(scaleAt('2,0')).toContain('scale(1.500)');
+      expect(z('1,0')).toBeGreaterThan(z('2,0'));
+      // Without a direct hit the hex decides.
+      renderer.mousePoint = { x: 225, y: 360 };
+      advance();
+      expect(scaleAt('1,0')).toContain('scale(1.500)');
+      expect(scaleAt('2,0')).toContain('scale(1.950)');
+    });
+
+    it('of two direct hits the one stacked on top wins: the hovered one, else the right-most', async () => {
+      const renderer = await mountAt(1.5);
+      const scaleAt = (key: string) => wrapper!.get<HTMLElement>(`[data-coord="${key}"]`).element.style.transform;
+      // On the boxes of both 1,0 and 2,0 (2,0's starts at x 260), off their dial discs: the right-most one.
+      renderer.mousePoint = { x: 300, y: 285 };
+      renderer.hoveredHexKey = '1,0';
+      advance();
+      expect(scaleAt('2,0')).toContain('scale(1.950)');
+      expect(scaleAt('1,0')).toContain('scale(1.500)');
+      // Still on both boxes: the one already hovered (2,0) stays on top.
+      renderer.mousePoint = { x: 300, y: 300 };
+      advance();
+      expect(scaleAt('2,0')).toContain('scale(1.950)');
     });
 
     it('stops observing a box that goes away and disconnects on unmount', async () => {
