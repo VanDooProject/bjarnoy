@@ -286,6 +286,9 @@ function onLeave(el: Element, done: () => void) {
   height: 24px;
   border-radius: 7px;
   font-size: 10px;
+  /* The box is bigger than the bubble's own content row: the negative margin keeps it out of the bubble's height (the hit area
+     below is positioned, not laid out). */
+  margin: -4px 0;
 }
 .menu-trigger.menu-trigger--touch::after {
   content: '';
