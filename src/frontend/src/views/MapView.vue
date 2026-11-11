@@ -49,7 +49,7 @@ import { parseCameraHash, serializeCameraHash } from '../lib/mapCameraHash';
 import { useAuthStore } from '../stores/auth';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
-import { armyOverlayMovement, foreignArmyMarker } from '../lib/map/armyOverlay';
+import { armyOverlayMovement, campArmyMarkers, foreignArmyMarker } from '../lib/map/armyOverlay';
 import { useGuildStore } from '../stores/guild';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
@@ -427,7 +427,13 @@ const sendPicker = useSendPickerRows();
 const armyOverlayData = computed<ArmyOverlayData>(() => {
   const picker = world.sendPicker;
   const pickRows = picker ? new Map(sendPicker.rows.value.map((r) => [r.id, r])) : null;
-  const armies: ArmyOverlayMarker[] = world.armies.map((a) => ({
+  // A fleet sailing to set up a beach camp is drawn one hex short of the camp, and its troops appear on the camp hex when it arrives
+  // (campArmyMarkers): while one is still under way the clock ticks so that moment is not missed.
+  const now = Date.now();
+  if (world.armies.some((a) => a.mission === 'setupcamp' && a.movement && !a.movement.isReturning && Date.parse(a.movement.arrivesAt) > now)) {
+    void world.hud.tick;
+  }
+  const armies: ArmyOverlayMarker[] = world.armies.flatMap((a) => campArmyMarkers({
     id: a.id,
     position: a.position,
     selected: a.id === world.selectedArmyId,
@@ -446,7 +452,7 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
     visionRadius: a.visionRadius,
     // An `atHome`/`supporting` army has no movement at all and keeps sitting on its authoritative hex.
     movement: a.movement ? armyOverlayMovement(a.movement) : undefined,
-  }));
+  }, a, now));
   // docs/design/map-fog-v2.md §1g: other players' troops marching inside our sight, in their owner's colour (guild/treaty/rival like
   // the realm borders). Never selected, never returning-grey, and the renderer gives them no vision of their own.
   for (const a of world.foreignArmies) {

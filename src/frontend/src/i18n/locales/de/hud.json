@@ -382,7 +382,8 @@
     "supporting": "Unterstützt",
     "returning": "Kehrt zurück",
     "inTransit": "Unterwegs",
-    "hunting": "Auf der Jagd"
+    "hunting": "Auf der Jagd",
+    "buildingCamp": "Baut das Strandlager, fertig um {time} Uhr"
   },
   "armyPanel": {
     "title": "Armeen",

@@ -10,6 +10,7 @@ import { useAuthStore } from '../stores/auth';
 import { missionName, unitName } from '../i18n/catalogueNames';
 import {
   armyStatusLabel,
+  campReadyAtMs,
   canFieldOrderArmy,
   formatEta,
   isFieldOrderMidMarch,
@@ -46,7 +47,7 @@ function armyProgressFraction(army: ArmyResponse, now: number): number | null {
 export function useArmyRows() {
   const world = useWorldStore();
   const auth = useAuthStore();
-  const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+  const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
   return computed<ArmyRow[]>(() => {
     void world.hud.tick; // reactive dependency so ETA countdowns tick every second
@@ -59,12 +60,18 @@ export function useArmyRows() {
       const targetName = army.targetSettlementId
         ? world.model.getSettlement(army.targetSettlementId)?.name ?? null
         : null;
-      const status = armyStatusLabel(army, army.supporting ? targetName : null);
-      const etaIso = army.movement
-        ? army.movement.isReturning
-          ? army.movement.returnArrivesAt
-          : army.movement.arrivesAt
-        : null;
+      // A camp army standing on its site is building the camp: its countdown runs to the camp being ready, not to its arrival.
+      const campReadyAt = campReadyAtMs(army, now, world.worldSpeedFactor);
+      const status = campReadyAt !== null
+        ? t('hud.armyStatus.buildingCamp', { time: d(new Date(campReadyAt), 'time') })
+        : armyStatusLabel(army, army.supporting ? targetName : null);
+      const etaIso = campReadyAt !== null
+        ? new Date(campReadyAt).toISOString()
+        : army.movement
+          ? army.movement.isReturning
+            ? army.movement.returnArrivesAt
+            : army.movement.arrivesAt
+          : null;
       const eta = etaIso ? formatEta(etaIso, now) : null;
       const etaMs = etaIso ? Date.parse(etaIso) : null;
       const canRecall = !army.atHome && (army.supporting || (army.movement !== null && !army.movement.isReturning));

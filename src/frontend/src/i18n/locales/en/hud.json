@@ -382,7 +382,8 @@
     "supporting": "Supporting",
     "returning": "Returning",
     "inTransit": "In transit",
-    "hunting": "Hunting"
+    "hunting": "Hunting",
+    "buildingCamp": "Building the camp, ready at {time}"
   },
   "armyPanel": {
     "title": "Armies",

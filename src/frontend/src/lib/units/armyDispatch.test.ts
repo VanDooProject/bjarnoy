@@ -10,6 +10,7 @@ import {
   buildMoveDispatchRequest,
   buildFoundDispatchRequest,
   buildCampDispatchRequest,
+  campReadyAtMs,
   dispatchHasDestination,
   isRouteDestination,
   buildSupportDispatchRequest,
@@ -720,5 +721,26 @@ describe('trainingSite', () => {
     expect(trainingSite(centre, [range], { spearman: 1 }, byType)).toEqual(centre);
     expect(trainingSite(centre, [barracks], {}, byType)).toEqual(centre);
     expect(trainingSite(centre, [barracks], { spearman: 0 }, byType)).toEqual(centre);
+  });
+});
+
+describe('campReadyAtMs', () => {
+  const arrivesAt = '2026-01-01T00:00:00Z';
+  const base = Date.parse(arrivesAt);
+  const standing = { mission: 'setupcamp', movement: { isReturning: false, arrivesAt } };
+
+  it('is arrival plus the 10 minute build time at world speed 1', () => {
+    expect(campReadyAtMs(standing, base + 1000, 1)).toBe(base + 10 * 60_000);
+  });
+
+  it('scales with the world speed', () => {
+    expect(campReadyAtMs(standing, base, 4)).toBe(base + 150_000);
+  });
+
+  it('is null before arrival, once recalled, and for any other mission', () => {
+    expect(campReadyAtMs(standing, base - 1, 1)).toBeNull();
+    expect(campReadyAtMs({ ...standing, movement: { isReturning: true, arrivesAt } }, base + 1, 1)).toBeNull();
+    expect(campReadyAtMs({ ...standing, mission: 'found' }, base + 1, 1)).toBeNull();
+    expect(campReadyAtMs({ mission: 'setupcamp', movement: null }, base + 1, 1)).toBeNull();
   });
 });

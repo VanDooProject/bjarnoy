@@ -5,6 +5,8 @@
 import { hexDistance, type AxialCoord } from '../hex/coords';
 import type { DispatchArmyRequest, FieldOrderRequest, HexPoint, UnitDefinitionResponse } from '../../api/types';
 import { i18n } from '../../i18n';
+import { BEACH_CAMP_BUILD_SECONDS } from '../founding';
+import { scaledBuildSeconds } from '../map/ringCatalogue';
 import { isShoreBuildingHex, type TerrainLookup } from '../map/shoreline';
 
 /**
@@ -507,6 +509,22 @@ export function formatEta(targetIso: string, now: number): string {
   if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
+}
+
+/**
+ * When a beach camp army's camp is up (ms epoch): the army's arrival plus the build time at the world's speed — `null` unless it is a
+ * `setupcamp` army standing on its site (arrived and not recalled). Mirrors `Army.PlanCampBuild`.
+ */
+export function campReadyAtMs(
+  army: { mission: string; movement: { isReturning: boolean; arrivesAt: string } | null },
+  now: number,
+  worldSpeedFactor: number,
+): number | null {
+  const movement = army.movement;
+  if (army.mission !== 'setupcamp' || !movement || movement.isReturning) return null;
+  const arrivedAt = Date.parse(movement.arrivesAt);
+  if (!(now >= arrivedAt)) return null;
+  return arrivedAt + scaledBuildSeconds(BEACH_CAMP_BUILD_SECONDS, 1, worldSpeedFactor) * 1000;
 }
 
 /**
