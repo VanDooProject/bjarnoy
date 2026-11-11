@@ -165,6 +165,31 @@ public class ArmyAttackTests
     }
 
     [Fact]
+    public void The_defenders_stock_goes_down_by_exactly_what_the_attacker_gets_whatever_the_rounding()
+    {
+        // (stock - refill) + refill can round above the stock; the spend then used to fail, leaving the defender's stock
+        // untouched while the attacker still got the loot and the refill. Sweep stocks and provisions to cover such cases.
+        for (var i = 0; i < 200; i++)
+        {
+            var food = 468.2 + (i * 0.137);
+            var settlement = Found();
+            var decision = DispatchAttack(settlement, Guid.CreateVersion7(), provisions: 100 + (i * 1.3));
+            var army = decision.Army!;
+            var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+            var defender = Found(centre: TargetHex, garrison: [], food: food);
+            var stockBefore = defender.Resources.At(movement.ArrivesAt);
+
+            var arrival = Army.SettleArrival(army, defender, defenderSpeedFactor: 1.0, movement.ArrivesAt, seed: 7);
+
+            var stockAfter = arrival.DefenderSettlement.Resources.At(movement.ArrivesAt);
+            var gotFood = arrival.Army!.Loot.Food + arrival.Attack!.Refill;
+            Assert.True(gotFood > 0);
+            Assert.Equal(stockBefore.Food - gotFood, stockAfter.Food, 6);
+            Assert.True(stockAfter.Food >= 0);
+        }
+    }
+
+    [Fact]
     public void A_lost_attack_refills_nothing_and_takes_no_food()
     {
         var settlement = Found();

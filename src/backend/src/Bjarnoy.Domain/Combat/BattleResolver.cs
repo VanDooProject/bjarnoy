@@ -240,7 +240,16 @@ public static class BattleResolver
     {
         var refill = Math.Min(Math.Max(0, available.Food), Math.Max(0, foodCapacity - provisions));
         var loot = ComputeLoot(carryCapacity, available with { Food = available.Food - refill });
-        return (loot, refill);
+
+        // (available - refill) + refill can round above available, and then spending loot + refill from the stock fails while
+        // the winner still gets both: resources from nothing. Nudge the loot's food down until the two never exceed the stock.
+        var lootFood = loot.Food;
+        while (lootFood > 0 && lootFood + refill > available.Food)
+        {
+            lootFood = Math.BitDecrement(lootFood);
+        }
+
+        return (loot with { Food = lootFood }, refill);
     }
 
     /// <summary>The summed <see cref="UnitDefinition.FoodCarryCapacity"/> of <paramref name="stacks"/>.</summary>
