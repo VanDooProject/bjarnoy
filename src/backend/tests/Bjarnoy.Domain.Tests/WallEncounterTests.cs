@@ -86,12 +86,46 @@ public sealed class WallEncounterTests
     }
 
     [Fact]
-    public void A_stranded_army_finds_no_wall()
+    public void A_stranded_army_standing_on_its_hex_finds_no_wall()
     {
         var stranded = MovementOf(Marching(provisions: 400).Strand(T0.AddHours(1), new HexCoord(1, 0)));
 
         Assert.Null(WallEncounters.FindEarliest(stranded, _ => DateTimeOffset.MinValue, DateTimeOffset.MaxValue));
     }
+
+    /// <summary>An army on its way home from <see cref="Far"/> that found its home walled in half an hour after setting out and walks on to (2,0), stranded.</summary>
+    private static (Army Army, DateTimeOffset At) StrandedOnTheWalk()
+    {
+        var army = Marching(provisions: 400).ForceFieldRetreat(T0.AddHours(6), Far, Home, Strip);
+        var movement = MovementOf(army);
+        var at = movement.DepartedAt.AddMinutes(30);
+        var walledIn = Blocking(Home.Neighbours());
+        var result = army.RerouteAroundWall(EncounterOn(movement, movement.Path[^2], at, onReturn: true), Home, Strip, walls: walledIn);
+        return (result.Army, at);
+    }
+
+    [Fact]
+    public void A_stranded_army_still_walking_to_its_stop_finds_a_wall_built_on_the_rest_of_the_walk_and_stops_before_it()
+    {
+        var (army, strandedAt) = StrandedOnTheWalk();
+        Assert.True(army.CannotGetHome);
+        var walk = MovementOf(army);
+        Assert.True(walk.Path.Count > 2);
+        var later = new HexCoord(4, 0);
+        Assert.Contains(later, walk.Path);
+        var built = strandedAt + ((EntryOf(walk, later) - strandedAt) / 2);
+
+        var encounter = WallEncounters.FindEarliest(walk, WallAt(later, built), DateTimeOffset.MaxValue);
+        Assert.Equal(new WallEncounter(built, later, IndexOf(walk.Path, later), OnReturnLeg: false), encounter);
+
+        var result = army.RerouteAroundWall(encounter!.Value, Home, Strip, walls: Blocking(Home.Neighbours().Concat(SealedLine(4))));
+        Assert.Equal(new HexCoord(5, 0), result.StuckAt);
+        Assert.True(result.Army.CannotGetHome);
+        Assert.Equal(new HexCoord(5, 0), MovementOf(result.Army).Path[^1]);
+        Assert.Equal(army.ProvisionsAt(built), result.Army.ProvisionsAt(built), 6);
+    }
+
+    private static IEnumerable<HexCoord> SealedLine(int q) => Enumerable.Range(-3, 7).Select(r => new HexCoord(q, r));
 
     /// <summary>Route rules where every hex of <paramref name="walls"/> blocks (no gate, no half-open end).</summary>
     private static WallRules Blocking(IEnumerable<HexCoord> walls)

@@ -1679,8 +1679,8 @@ public sealed record Army
     /// <item>Outbound, with no way on: it walks its old route to the last hex before the wall and drops its target (mission
     /// <see cref="ArmyMission.Move"/>). With a way home from there it stands and turns home when its food demands it, like after a move
     /// order; without one it is stranded there.</item>
-    /// <item>On its way home: a fresh way home from where it is (a fleeing army keeps its flee protection); with none it walks to the last
-    /// hex before the wall and is stranded there.</item>
+    /// <item>On its way home, or stranded and still walking to the hex it stops on: a fresh way home from where it is (a fleeing army keeps
+    /// its flee protection); with none it walks to the last hex before the wall and is stranded there.</item>
     /// </list>
     /// <paramref name="walls"/> are the route rules of the army's owner at <c>encounter.At</c>.
     /// </remarks>
@@ -1690,7 +1690,7 @@ public sealed record Army
         Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null, WallRules? walls = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
-        if (Location is not ArmyLocation.InTransit { Movement: var movement } || movement.IsStranded
+        if (Location is not ArmyLocation.InTransit { Movement: var movement }
             || encounter.OnReturnLeg != movement.IsReturning || encounter.BlockedIndex < 1 || encounter.BlockedIndex >= movement.Path.Count)
         {
             return new WallRerouteResult(this, null);
@@ -1711,7 +1711,7 @@ public sealed record Army
             HexPathfinder.EdgeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
 
         var provisionsNow = ProvisionsAt(at);
-        if (!movement.IsReturning)
+        if (!movement.IsReturning && !movement.IsStranded)
         {
             var target = movement.Path[^1];
             if (Route(from, target) is { } onward && Route(target, home) is { } back)
@@ -1772,11 +1772,11 @@ public sealed record Army
         IReadOnlyList<double> walkHours = [.. movement.CumulativeHours.Take(stopIndex + 1)];
         IReadOnlyList<double> walkEdges = [.. movement.EdgeHours.Take(stopIndex + 1)];
 
-        var army = movement.IsReturning
+        var army = movement.IsReturning || movement.IsStranded
             ? this
             : this with { Mission = ArmyMission.Move, TargetSettlementId = null, TargetBuildingCoord = null, TargetCampCoord = null };
 
-        if (!movement.IsReturning && route(stop, home) is { } back)
+        if (!movement.IsReturning && !movement.IsStranded && route(stop, home) is { } back)
         {
             // The walk keeps its departure, so the stored provisions stay the leg's baseline. It turns around no earlier than now.
             var backHours = hours(back);

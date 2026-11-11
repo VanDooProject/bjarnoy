@@ -214,7 +214,9 @@ Consequences:
     before that instant is settled first (turn-around, fights, ambushes), then the army re-routes from where it is then
     (`Army.RerouteAroundWall`), with the same rules: the walls standing at that instant and its owner's gate rule. An outbound army that finds a way on gets a fresh leg and turn-around from the food it carries
     then, or turns home at once when that food no longer covers the round trip. A stranded army's path is the walk to the
-    hex it stops on.
+    hex it stops on. Until it gets there, a new wall on the rest of the walk is found like on any leg (it goes home when a
+    way home is open from where it is then, otherwise it stops before that wall too), and strong camps on the walk ambush it
+    like any marching army. Its food is counted from the instant it is stranded, so it never starves before then.
 - `FindPath` also takes the palisade hooks (default `null`, nothing blocked): `blocked`
   (every standing wall hex), `friendlyGate` (a gate of the army's own owner) and `halfOpen`
   (a wall's land end, charged the ground plus `HalfOpenEndCost` = 3). The rules apply in this order: wide

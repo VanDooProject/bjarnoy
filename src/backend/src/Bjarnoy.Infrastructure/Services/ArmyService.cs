@@ -1095,12 +1095,13 @@ public sealed class ArmyService(
     /// The first wall that blocks <paramref name="army"/>'s way by <paramref name="now"/> (<see cref="WallEncounters.FindEarliest"/>), found at
     /// the instant the hex began to block this army (<see cref="WallBlocking.FirstBlockingIn"/>): a plain wall that is no half-open end, a gate
     /// that does not open for its owner. A rule change without an instant (a friendship ended, a gate left or rejoined its realm) counts from
-    /// <paramref name="now"/>. Land armies in transit only; a stranded army goes nowhere and a fleet is never blocked.
+    /// <paramref name="now"/>. Land armies in transit only (a stranded one on the rest of its walk to the hex it stops on); a fleet is never
+    /// blocked.
     /// </summary>
     private async Task<WallEncounter?> FindWallEncounterAsync(ArmyEntity army, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var domain = army.ToDomain();
-        if (domain.IsFleet || domain.Location is not ArmyLocation.InTransit { Movement: { IsStranded: false } movement })
+        if (domain.IsFleet || domain.Location is not ArmyLocation.InTransit { Movement: var movement })
         {
             return null;
         }
@@ -1196,6 +1197,20 @@ public sealed class ArmyService(
         // has no outbound leg left to arrive on, so none of the mission arrivals below apply to it.
         if (domain.CannotGetHome)
         {
+            // Still walking to the hex it stops on: a strong camp it passes on the way ambushes it like any marching army, up to the
+            // instant it gets there (or starves on the way).
+            if (domain.Location is ArmyLocation.InTransit { Movement: { Path.Count: > 1 } walk })
+            {
+                var walkEnds = domain.StarvesAt is { } starves && starves < walk.ArrivesAt ? starves : walk.ArrivesAt;
+                switch (await _campAmbushService.TryResolveAsync(army, domain, now < walkEnds ? now : walkEnds, cancellationToken).ConfigureAwait(false))
+                {
+                    case CampAmbushOutcome.Fought:
+                        return ArmySettleOutcome.Updated;
+                    case CampAmbushOutcome.ArmyDestroyed:
+                        return ArmySettleOutcome.FoldedHome;
+                }
+            }
+
             var strandedResult = domain.SettleTo(now);
             return strandedResult.Starved ? Starve(army, domain, strandedResult) : ArmySettleOutcome.NoChange;
         }

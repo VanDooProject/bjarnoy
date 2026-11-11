@@ -86,8 +86,9 @@ public sealed class WallRerouteEndpointsTests : IAsyncLifetime
         PlantAsync(returning, provisions, walls.Select(h => new WallPlan(h, wallAfter)), kind, guildmate: null);
 
     /// <param name="guildmate">The marching owner's account when it is a real one in the wall owner's guild (so the wall owner's gates open for it); anonymous otherwise.</param>
+    /// <param name="camp">A strong camp (a level 1 wolf den) planted on the island there.</param>
     private async Task<Scene> PlantAsync(
-        bool returning, double provisions, IEnumerable<WallPlan> walls, WallKind kind, Guid? guildmate)
+        bool returning, double provisions, IEnumerable<WallPlan> walls, WallKind kind, Guid? guildmate, HexCoord? camp = null)
     {
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
@@ -96,6 +97,11 @@ public sealed class WallRerouteEndpointsTests : IAsyncLifetime
         world.ApplyGenerationOptions(LandOptions);
         db.Worlds.Add(world);
         var island = new IslandEntity { WorldId = world.Id, Name = "Island", CentreQ = 0, CentreR = 0 };
+        if (camp is { } campHex)
+        {
+            island.Camps = [new CampRecord(campHex.Q, campHex.R, CampFamilies.Wolfden, 1, 0)];
+        }
+
         db.Islands.Add(island);
 
         SettlementEntity Settlement(string ownerId, Guid userId, HexCoord centre) => new()
@@ -393,5 +399,56 @@ public sealed class WallRerouteEndpointsTests : IAsyncLifetime
         Assert.Equal(P(-3, 0), movement.Path[0]);
         Assert.DoesNotContain(P(0, 0), movement.Path);
         Assert.DoesNotContain(P(0, 0), movement.ReturnPath);
+    }
+
+    [Fact]
+    public async Task A_stranded_army_still_walking_to_its_stop_stops_before_a_wall_built_on_the_rest_of_the_walk()
+    {
+        // Its home is walled in at +2 h (it walks on to (-4,0), stranded); at +4 h a wall across its walk goes up at q = 0.
+        var walls = Home.Neighbours().Select(h => new WallPlan(h, TimeSpan.FromHours(2)))
+            .Concat(LineAcross().Select(h => new WallPlan(h, TimeSpan.FromHours(4))));
+        var scene = await PlantAsync(returning: true, 1_000, walls, WallKind.Standing, guildmate: null);
+        using var client = Client();
+
+        _factory.Time.Advance(TimeSpan.FromHours(11));
+        var army = await ArmyAsync(client, scene.ArmyId);
+
+        Assert.True(army.Movement!.IsStranded);
+        Assert.Equal(P(1, 0), army.Position);
+        Assert.Equal(P(1, 0), army.Movement.Path[^1]);
+        var stuck = (await ReportsAsync(client, scene.WorldId)).Where(r => r.Kind == "stuck").OrderBy(r => r.OccurredAt).ToList();
+        Assert.Equal([P(-4, 0), P(1, 0)], stuck.Select(r => r.Hex));
+        Assert.Equal(scene.Start + TimeSpan.FromHours(4), stuck[1].OccurredAt);
+    }
+
+    [Fact]
+    public async Task A_stranded_army_still_walking_to_its_stop_is_ambushed_by_a_strong_camp_on_the_way()
+    {
+        var range = new Camp(new HexCoord(0, 0), CampFamilies.Wolfden, 1, TileOrientation.E).GuardRange;
+        Assert.InRange(range, 1, 5);
+        // In guard range of the walk from q = range - 2 on, which the army reaches hours after it was stranded at (4,0).
+        var campHex = new HexCoord(-2, range);
+        var walls = Home.Neighbours().Select(h => new WallPlan(h, TimeSpan.FromHours(2)));
+        var scene = await PlantAsync(returning: true, 1_000, walls, WallKind.Standing, guildmate: null, camp: campHex);
+        using var client = Client();
+
+        _factory.Time.Advance(TimeSpan.FromHours(11));
+        (await client.GetAsync($"/api/v1/armies/{scene.ArmyId}", Ct)).Dispose();
+
+        var settlementId = await HomeSettlementIdAsync(scene.ArmyId);
+        var reports = (await client.GetFromJsonAsync<List<CampReportResponse>>(
+            $"/api/v1/settlements/{settlementId}/camp-reports", SqliteApiFixture.StrictJson, Ct))!;
+        var ambush = Assert.Single(reports);
+        Assert.Equal("ambush", ambush.Kind);
+        Assert.Equal(scene.ArmyId, ambush.ArmyId);
+        Assert.Equal((campHex.Q, campHex.R), (ambush.Camp.Q, ambush.Camp.R));
+        Assert.True(ambush.OccurredAt > scene.Start + TimeSpan.FromHours(2));
+    }
+
+    private async Task<Guid> HomeSettlementIdAsync(Guid armyId)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        return await db.Armies.Where(a => a.Id == armyId).Select(a => a.SettlementId).SingleAsync(Ct);
     }
 }

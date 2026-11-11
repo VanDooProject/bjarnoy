@@ -37,22 +37,18 @@ public static class WallEncounters
     /// <remarks>
     /// The active leg is scanned, and for an outbound army also its stored way home, scheduled from <see cref="Movement.TurnAroundAt"/>
     /// (so a wall on the way home is found when the army turns around at the earliest). An outbound army that turns around before entering
-    /// a hex never enters it. The hex the army stands on is never in the way (index 0 is the leg's start). A stranded army goes nowhere.
+    /// a hex never enters it. The hex the army stands on is never in the way (index 0 is the leg's start). A stranded army's walk to the
+    /// hex it stops on is scanned like a leg (it has no way home to scan); one that stands on its hex goes nowhere.
     /// </remarks>
     public static WallEncounter? FindEarliest(
         Movement movement, Func<HexCoord, DateTimeOffset, DateTimeOffset, DateTimeOffset?> firstBlocking, DateTimeOffset until)
     {
         ArgumentNullException.ThrowIfNull(movement);
         ArgumentNullException.ThrowIfNull(firstBlocking);
-        if (movement.IsStranded)
-        {
-            return null;
-        }
-
         WallEncounter? best = null;
         Scan(movement.Path, movement.EdgeHours, movement.DepartedAt,
-            movement.IsReturning ? DateTimeOffset.MaxValue : movement.TurnAroundAt, movement.IsReturning);
-        if (!movement.IsReturning)
+            movement.IsReturning || movement.IsStranded ? DateTimeOffset.MaxValue : movement.TurnAroundAt, movement.IsReturning);
+        if (!movement.IsReturning && !movement.IsStranded)
         {
             Scan(movement.ReturnPath, movement.ReturnEdgeHours, movement.TurnAroundAt, DateTimeOffset.MaxValue, onReturnLeg: true);
         }
