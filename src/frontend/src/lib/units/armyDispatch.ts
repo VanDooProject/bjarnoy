@@ -536,12 +536,13 @@ export function armyStatusLabel(
   army: {
     atHome: boolean;
     supporting: boolean;
-    movement: { isReturning: boolean } | null;
+    movement: { isReturning: boolean; isStranded?: boolean } | null;
     mission?: string;
   },
   targetSettlementName?: string | null,
 ): string {
   if (army.atHome) return i18n.global.t('hud.armyStatus.atHome');
+  if (army.movement?.isStranded) return i18n.global.t('hud.armyStatus.cannotGetHome');
   if (army.supporting) {
     return targetSettlementName
       ? i18n.global.t('hud.armyStatus.supportingNamed', { name: targetSettlementName })

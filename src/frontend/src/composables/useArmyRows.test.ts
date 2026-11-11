@@ -117,6 +117,42 @@ describe('useArmyRows', () => {
     expect(r.canFieldOrder).toBe(true); // 'move' mission, not at home/supporting
   });
 
+  it('shows an army that cannot get home with the time until it starves, no recall, and a move-on order', () => {
+    const world = useWorldStore();
+    const stand = { q: 2, r: 2 };
+    world.armies = [
+      army({
+        position: stand,
+        movement: {
+          departedAt: '2026-01-01T00:00:00Z',
+          path: [stand],
+          cumulativeHours: [0],
+          edgeHours: [0],
+          arrivesAt: '2026-01-01T00:00:00Z',
+          returnPath: [stand],
+          returnCumulativeHours: [0],
+          returnEdgeHours: [0],
+          turnAroundAt: '2026-01-01T04:30:00Z',
+          returnArrivesAt: '2026-01-01T04:30:00Z',
+          isReturning: false,
+          isStranded: true,
+          isFleeing: false,
+        },
+        starvesAt: '2026-01-01T04:30:00Z',
+      }),
+    ];
+
+    const rows = mountArmyRows();
+
+    const r = rows.value[0];
+    expect(r.status).toBe('Cannot get home');
+    expect(r.eta).toBe('starves in 3h 30m');
+    expect(r.etaMs).toBe(Date.parse('2026-01-01T04:30:00Z'));
+    expect(r.canRecall).toBe(false);
+    expect(r.canFieldOrder).toBe(true);
+    expect(r.fieldOrderLabel).toBe('Move on');
+  });
+
   it('uses the return leg once an army has turned around', () => {
     const world = useWorldStore();
     world.armies = [

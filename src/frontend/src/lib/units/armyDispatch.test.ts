@@ -362,6 +362,12 @@ describe('armyStatusLabel', () => {
     expect(armyStatusLabel({ atHome: true, supporting: false, movement: null })).toBe('At home');
   });
 
+  it('labels an army that cannot get home, whatever its mission', () => {
+    expect(
+      armyStatusLabel({ atHome: false, supporting: false, mission: 'hunt', movement: { isReturning: false, isStranded: true } }),
+    ).toBe('Cannot get home');
+  });
+
   it('labels a supporting guest army with no settlement name given', () => {
     expect(armyStatusLabel({ atHome: false, supporting: true, movement: null })).toBe('Supporting');
   });

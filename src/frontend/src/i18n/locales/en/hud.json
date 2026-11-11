@@ -385,7 +385,9 @@
     "supporting": "Supporting",
     "returning": "Returning",
     "inTransit": "In transit",
-    "hunting": "Hunting"
+    "hunting": "Hunting",
+    "cannotGetHome": "Cannot get home",
+    "starvesIn": "starves in {eta}"
   },
   "garrisonSpots": {
     "longhouse": "Longhouse",
