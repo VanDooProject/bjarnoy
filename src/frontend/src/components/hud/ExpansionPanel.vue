@@ -232,17 +232,17 @@ watch(visible, (isVisible) => {
 </template>
 
 <style scoped>
-/* Reuses the .status-card/.status-row convention BuildQueuePanel established. */
+/* The card box and header come from the shared `.status-card` (style.css); this panel sets its place. */
 .expansion-card {
+  left: 16px;
   top: 340px;
 }
-/* Mobile-readiness audit: guard against the fixed 240px status-card width
-   (see BuildQueuePanel.vue, whose rules this shares) overflowing a very
-   narrow viewport — its left/top position vs. mobile's QueueDrawer handle is
-   pre-existing and out of scope here (see MapView.vue's ringBounds comment). */
+/* Phones: the shared 240px status card must not overflow a narrow viewport, and it clears the queue drawer's handle. */
 @media (max-width: 768px), (max-height: 500px) {
   .expansion-card {
-    max-width: calc(100vw - 24px);
+    /* Right of the queue drawer's 48px handle on the left edge (16px gap), like the ring's bounds in MapView.vue. */
+    left: 64px;
+    max-width: calc(100vw - 80px);
   }
 }
 .expansion-switcher {
