@@ -441,6 +441,27 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     expect(model.fogSignature()).not.toBe(signatureBefore);
   });
 
+  it('gives a beach camp a claim of its own hex only (border radius 0), not the nothing of a destroyed Longhouse', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    settlement.level = 0;
+    const snapshot = (buildings: { q: number; r: number; type: string; level: number }[]) => ({
+      level: 0,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.capacity!,
+      buildings,
+    });
+
+    model.applyServerSnapshot(settlement.id, snapshot([]));
+    expect(model.borderRadius(settlement)).toBe(0);
+    expect(model.claimDiscsOf(settlement.id)).toEqual([]);
+
+    model.applyServerSnapshot(settlement.id, snapshot([{ q: settlement.q, r: settlement.r, type: 'beachcamp', level: 1 }]));
+    expect(model.claimDiscsOf(settlement.id)).toEqual([{ q: settlement.q, r: settlement.r, radius: 0 }]);
+    expect(model.claimedHexCount(settlement.id)).toBe(1);
+  });
+
   it('refuses to place a tower outside the existing border, so it can only bump the shape outward, never teleport it', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
