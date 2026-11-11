@@ -210,6 +210,8 @@ export const useWorldStore = defineStore('world', {
     otherBuildOrders: [] as OwnBuildOrders[],
     /** `Date.now()` at which `otherBuildOrders` was read: the base its `completesInSeconds` are measured from. */
     otherBuildOrdersFetchedAt: 0,
+    /** Live mode: the player's settlements in this world (`GET /worlds/{id}/settlements/mine`), the header's realm switcher reads them. */
+    myRealms: [] as SettlementSummary[],
     // Set by WorldMapView (`setWorldMapActive`) so `refreshWorldSettlements`
     // knows it's safe to paint every rival's territory — the world map is
     // the one legitimate place that shows the whole world, unlike the
@@ -553,6 +555,15 @@ export const useWorldStore = defineStore('world', {
      */
     isRealmSettlement: (state) => (settlementId: string | null | undefined): boolean =>
       !!settlementId && (settlementId === state.selectedSettlementId || state.linkedMemberIds.includes(settlementId)),
+    /** The player's realms, one row per realm (a linked group is one realm, named and levelled by its oldest member). */
+    realmList: (state): { id: string; name: string; level: number; q: number; r: number; isBeachCamp: boolean }[] => {
+      const byRealm = new Map<string, SettlementSummary>();
+      for (const s of state.myRealms) {
+        const key = s.realmId ?? s.id;
+        if (!byRealm.has(key) || s.id === key) byRealm.set(key, s);
+      }
+      return [...byRealm.entries()].map(([id, s]) => ({ id, name: s.name, level: s.longhouseLevel, q: s.q, r: s.r, isBeachCamp: s.isBeachCamp }));
+    },
     /** The realm id (oldest linked member) of `settlementId` when it belongs to the local player, else null. */
     ownRealmOf: (state) => (settlementId: string | null | undefined): string | null => {
       if (!settlementId) return null;
@@ -1345,6 +1356,20 @@ export const useWorldStore = defineStore('world', {
       const player = usePlayerStore();
       player.switchSettlement(settlementId);
       await this.restoreLiveSettlement(player.id, settlementId);
+      await this.refreshMyRealms();
+    },
+    /**
+     * Live mode: reloads the player's realms for the header switcher. Best-effort: a failed read keeps the last list. The one
+     * gate for every caller: an anonymous visitor (landing, onboarding) must never even attempt the request, because it 401s and
+     * the logged error surfaces as a console error that the e2e suites reject.
+     */
+    async refreshMyRealms() {
+      if (DEMO_MODE || !useAuthStore().isAuthenticated || !this.worldId || !this.selectedSettlementId) return;
+      try {
+        this.myRealms = await api.listMySettlements(this.worldId);
+      } catch {
+        // The switcher then simply shows what it had.
+      }
     },
     /**
      * Live mode: rehydrates `selectedSettlementId`/`WorldModel` after a page
@@ -1478,6 +1503,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.queue = [];
       this.otherBuildOrders = [];
       this.otherBuildOrdersFetchedAt = 0;
+      this.myRealms = [];
       this.hud.garrison = [];
       this.hud.garrisonSpots = [];
       this.hud.trainingQueue = [];
@@ -1765,26 +1791,21 @@ export const useWorldStore = defineStore('world', {
      * them as sources), on the army poll. A realm whose read fails keeps its last snapshot; one that is gone drops out.
      */
     async refreshOtherRealms() {
-      // `listMySettlements` is an authorized endpoint: an anonymous player (who can own a settlement) must never attempt it, it 401s.
       if (DEMO_MODE || !useAuthStore().isAuthenticated || !this.worldId || !this.selectedSettlementId) return;
       const open = this.selectedSettlementId;
-      let mine: SettlementSummary[];
-      try {
-        mine = await api.listMySettlements(this.worldId);
-      } catch (err) {
-        console.warn('own settlements refresh failed', err);
-        return;
-      }
-      const realmIds = [...new Set(mine.map((s) => s.realmId))].filter((id) => id !== open);
+      // The one read of the player's settlements (gated like this one); a failed read keeps the last list.
+      await this.refreshMyRealms();
+      if (this.selectedSettlementId !== open) return;
+      const realms = this.realmList.filter((r) => r.id !== open);
       const owner = this.ownerId ?? undefined;
       const snapshots = await Promise.all(
-        realmIds.map(async (realmId): Promise<OtherRealmSnapshot | null> => {
+        realms.map(async ({ id: realmId, name }): Promise<OtherRealmSnapshot | null> => {
           try {
             const [settlement, summaries] = await Promise.all([api.getSettlement(realmId, owner), api.getSettlementArmies(realmId, owner)]);
             const armies = await Promise.all(summaries.map((s) => api.getArmy(s.id, owner)));
             return {
               realmId,
-              name: mine.find((s) => s.id === realmId)?.name ?? settlement.name,
+              name,
               garrison: settlement.garrison,
               garrisonSpots: settlement.garrisonSpots,
               buildings: settlement.buildings,

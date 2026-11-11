@@ -47,6 +47,7 @@ import { useWorldStore, type SendPickerTarget } from '../stores/world';
 import { WORLD_HASH, isWorldHash } from '../lib/mapModeRoute';
 import { parseCameraHash, serializeCameraHash } from '../lib/mapCameraHash';
 import { useAuthStore } from '../stores/auth';
+import { realmToSwitchTo } from '../lib/realmTap';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
 import { armyOverlayMovement, campArmyMarkers, campFleetLiveCoord, foreignArmyMarker } from '../lib/map/armyOverlay';
@@ -208,6 +209,11 @@ function onFocusHome() {
   if (!renderer) return;
   if (mode.value === 'world') renderer.focusWorldCamera();
   else renderer.focusSettlementCamera();
+}
+
+/** Centres the camera on another of the player's realms (its longhouse) without switching to it. */
+function onFocusRealm(at: { q: number; r: number }) {
+  canvasRef.value?.renderer?.panTo(at);
 }
 
 let flashTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -1274,7 +1280,7 @@ const ringCoordLabel = computed(() => {
 
 const ringOpen = computed(() => !!(selectedTile.value && ringScreen.value));
 
-function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
+async function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
   // docs/design/ship-movement.md §5: fleet waypoints/orders must work at
   // world zoom too, not just settlement zoom — ships range over open water
   // the settlement view never shows. So a dispatch/field-order draft in
@@ -1308,10 +1314,23 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   // uses instead, so a fleet's target (open water the settlement view never
   // shows) can be picked by tapping it, not just by search in ArmyPanel.
   hoverInfo.value = null;
+  // Settlement view: a tap on a hex of another of the player's realms switches to it first, so the ring below offers the home
+  // actions of the realm that is now run. The camera stays where it is. World zoom never switches.
+  let switchError: string | null = null;
+  let ringTile = tile;
+  const otherRealm = realmToSwitchTo(mode.value, tile.ownerId, world.selectedSettlementId, world.ownRealmOf);
+  if (otherRealm) {
+    try {
+      await world.switchToSettlement(otherRealm);
+      ringTile = world.model.getTile(coord.q, coord.r) ?? tile;
+    } catch (e) {
+      switchError = apiErrorMessage(e, t('hud.ringMenu.errors.couldNotSwitchRealm'));
+    }
+  }
   selectedCoord.value = coord;
-  selectedTile.value = tile;
+  selectedTile.value = ringTile;
   ringScreen.value = roomForRing(screen);
-  actionError.value = null;
+  actionError.value = switchError;
 }
 
 /** Pans the map so the tapped tile's ring opens as a circle (lib/map/ringPlacement.ts); returns where it opens. */
@@ -1607,7 +1626,7 @@ async function upgrade() {
          top-bar gradient) keeps the logo/resources/nav readable regardless
          of what's under them. -->
     <div class="hud-scrim" :class="{ 'hud-scrim--bottom': hudBarAtBottom }" />
-    <TopBar @focus-home="onFocusHome">
+    <TopBar @focus-home="onFocusHome" @focus-realm="onFocusRealm">
       <ResourceBar :ring-open="ringOpen" />
       <HudNav has-resource-bar />
       <template #drawer="{ close }">

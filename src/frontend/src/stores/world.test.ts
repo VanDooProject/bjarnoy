@@ -3495,6 +3495,9 @@ describe('useWorldStore other realms as send sources', () => {
     getSettlement.mockReset().mockImplementation(async (id: string) => realmResponse(id, id, [{ unit: 'spearman', count: 1 }]));
     getSettlementArmies.mockReset().mockResolvedValue([]);
     await store.refreshOtherRealms();
+    // One read of the player's settlements feeds both the header's realm list and the other-realm snapshots.
+    expect(listMySettlements).toHaveBeenCalledTimes(1);
+    expect(store.realmList.map((r) => r.id)).toEqual(['a', 'b']);
 
     getSettlement.mockReset().mockImplementation(async (id: string) => {
       if (id === 'a') throw new Error('boom');

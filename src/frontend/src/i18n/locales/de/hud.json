@@ -5,7 +5,7 @@
     "goTo": "Zu {name}",
     "rename": "Umbenennen …",
     "realms": "Deine Reiche",
-    "current": "Aktuell"
+    "longhouse": "Langhaus {level}"
   },
   "settlementRename": {
     "label": "Name der Siedlung",
@@ -201,6 +201,7 @@
       "raze": "{name} noch einmal antippen, um abzureißen"
     },
     "errors": {
+      "couldNotSwitchRealm": "Der Wechsel in dieses Reich ist fehlgeschlagen.",
       "couldNotQueueBuild": "Der Bau konnte nicht eingereiht werden.",
       "couldNotQueueUpgrade": "Der Ausbau konnte nicht eingereiht werden.",
       "couldNotQueueRaze": "Der Abriss konnte nicht eingereiht werden."

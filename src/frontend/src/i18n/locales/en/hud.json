@@ -5,7 +5,7 @@
     "goTo": "Go to {name}",
     "rename": "Rename…",
     "realms": "Your realms",
-    "current": "Current"
+    "longhouse": "Longhouse {level}"
   },
   "settlementRename": {
     "label": "Settlement name",
@@ -201,6 +201,7 @@
       "raze": "Tap {name} again to raze"
     },
     "errors": {
+      "couldNotSwitchRealm": "Could not switch to that realm.",
       "couldNotQueueBuild": "Could not queue that build.",
       "couldNotQueueUpgrade": "Could not queue that upgrade.",
       "couldNotQueueRaze": "Could not queue that raze."
