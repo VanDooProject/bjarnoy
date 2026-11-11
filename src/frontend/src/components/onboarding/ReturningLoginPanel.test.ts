@@ -122,14 +122,14 @@ describe('ReturningLoginPanel', () => {
     await flushPromises();
 
     expect(router.currentRoute.value.path).toBe('/');
-    expect(useLoginFlowStore().noRealmWorldName).toBe('Midgard');
+    expect(useLoginFlowStore().noRealm).toEqual({ worldId: 'world-9', worldName: 'Midgard' });
     expect(wrapper.find('[data-testid="returning-login-no-realm-title"]').text()).toBe('No realm of yours in Midgard');
     expect(wrapper.find('[data-testid="returning-login-password"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="returning-login-pick-world"]').attributes('href')).toBe('/worlds');
 
     // "Start a realm here" ends the gate: notice cleared and the account forgotten.
     await wrapper.find('[data-testid="returning-login-start-here"]').trigger('click');
-    expect(useLoginFlowStore().noRealmWorldName).toBeNull();
+    expect(useLoginFlowStore().noRealm).toBeNull();
     expect(player.lastAccount).toBeNull();
   });
 
@@ -149,7 +149,7 @@ describe('ReturningLoginPanel', () => {
     await flushPromises();
 
     expect(world.joinWorld).not.toHaveBeenCalled();
-    expect(useLoginFlowStore().noRealmWorldName).toBeNull();
+    expect(useLoginFlowStore().noRealm).toBeNull();
   });
 
   it('shows an error and does not navigate when login fails', async () => {

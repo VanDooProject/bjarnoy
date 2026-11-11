@@ -6,11 +6,10 @@
   "usernameLabel": "Benutzername",
   "passwordLabel": "Passwort",
   "submit": "Anmelden",
-  "checking": "Dein Konto wird geprüft…",
-  "loadingRealm": "Dein Reich wird geladen…",
-  "slow": "Der Server ist gerade langsam. Wir versuchen es weiter.",
-  "restoring": "Willkommen zurück, {name}. Dein Reich wird geladen…",
-  "restoringSlow": "Willkommen zurück, {name}. Dein Reich wird geladen… Der Server ist gerade langsam. Wir versuchen es weiter.",
+  "checking": "Wir prüfen dein Konto…",
+  "loadingRealm": "Wir laden dein Reich…",
+  "slow": "Der Server braucht gerade länger. Wir warten noch.",
+  "restoring": "Willkommen zurück, {name}. Wir laden dein Reich…",
   "registerLink": "Spielst du anonym? Konto erstellen",
   "back": "← Zurück",
   "errors": {
@@ -18,7 +17,7 @@
     "invalidCredentials": "Falscher Benutzername oder Passwort.",
     "generic": "Beim Server ist ein Fehler aufgetreten. Versuch es gleich noch einmal.",
     "timeout": "Der Server antwortet nicht. Versuch es gleich noch einmal.",
-    "network": "Keine Verbindung zum Server. Prüfe deine Internetverbindung und versuch es erneut.",
-    "restoreFailedTitle": "Du bist angemeldet, aber dein Reich konnte nicht geladen werden"
+    "network": "Keine Verbindung zum Server. Prüf deine Internetverbindung und versuch es noch mal.",
+    "restoreFailedTitle": "Du bist angemeldet, aber dein Reich lässt sich gerade nicht laden"
   }
 }

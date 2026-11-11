@@ -15,7 +15,9 @@ export function useLoginRestoreOverlay() {
   const error = computed<unknown>(() => (active.value ? flow.restoreError : null));
   const step = computed(() =>
     active.value && flow.restoreError === null
-      ? t(flow.slow ? 'login.restoringSlow' : 'login.restoring', { name: flow.accountName ?? '' })
+      ? [t('login.restoring', { name: flow.accountName ?? '' }), flow.slow ? t('login.slow') : '']
+          .filter(Boolean)
+          .join(' ')
       : null,
   );
   const errorTitle = computed(() => (error.value !== null ? t('login.errors.restoreFailedTitle') : undefined));

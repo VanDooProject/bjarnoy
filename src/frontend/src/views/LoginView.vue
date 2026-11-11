@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../stores/world';
 import { useLoginForm } from '../composables/useLoginForm';
 import { useLoginRestoreOverlay } from '../composables/useLoginRestoreOverlay';
+import { useLoginFlowStore } from '../stores/loginFlow';
 import { useUnsavedInput } from '../composables/useUnsavedInput';
 import type { MessageSchema } from '../i18n/schema';
 import LocaleSwitcher from '../components/LocaleSwitcher.vue';
@@ -18,6 +19,11 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const { userName, password, submit, restoreRealmIfAny } = useLoginForm();
 const overlay = useLoginRestoreOverlay();
+const flow = useLoginFlowStore();
+// Leaving with a failed restore must not leave the flow busy for the next visit.
+onUnmounted(() => {
+  if (flow.restoreError !== null) flow.reset();
+});
 useUnsavedInput(() => userName.value !== '' || password.value !== '');
 
 // Login↔world linkage (docs/plans/returning-player-world-switching.md):
@@ -31,13 +37,17 @@ const linkedWorldId = computed(() => (typeof route.query.worldId === 'string' ? 
 const linkedWorldName = computed(() => (typeof route.query.worldName === 'string' ? route.query.worldName : null));
 
 function onSubmit() {
+  // Snapshot: the restore and the redirect run after awaits, by when the live
+  // route query may already be a different one.
+  const worldId = linkedWorldId.value;
+  const redirect = worldId ? '/' : typeof route.query.redirect === 'string' ? route.query.redirect : '/';
   return submit({
     restore: async () => {
-      if (linkedWorldId.value) {
+      if (worldId) {
         // Same mechanism WorldPickerView.vue's own `joinOrReturn` uses: joins
         // (or returns to) the linked world, then lands in the
         // founding/settlement flow for it.
-        await world.joinWorld(linkedWorldId.value);
+        await world.joinWorld(worldId);
       } else {
         // Player logout/login gate: a plain login (no linked world) still needs
         // this account's realm in whatever world is already loaded restored
@@ -46,7 +56,6 @@ function onSubmit() {
       }
     },
     done: async () => {
-      const redirect = linkedWorldId.value ? '/' : typeof route.query.redirect === 'string' ? route.query.redirect : '/';
       await router.push(redirect);
     },
   });
@@ -69,32 +78,34 @@ onMounted(() => {
 
 <template>
   <div class="login">
-    <header class="topbar">
-      <span class="brand">{{ t('login.brand') }}</span>
-      <LocaleSwitcher />
-    </header>
-    <main class="body">
-      <h1>{{ t('login.title') }}</h1>
-      <p v-if="linkedWorldId" class="world-linked">
-        {{
-          linkedWorldName
-            ? t('login.continueInWorld', { worldName: linkedWorldName })
-            : t('login.continueInWorldGeneric')
-        }}
-      </p>
-      <LoginFields
-        v-model:user-name="userName"
-        v-model:password="password"
-        class="form"
-        user-name-id="userName"
-        password-id="password"
-        @submit="onSubmit"
-      />
-      <button class="link" @click="router.push({ path: '/register', query: route.query })">
-        {{ t('login.registerLink') }}
-      </button>
-      <button class="back" @click="router.push('/')">{{ t('login.back') }}</button>
-    </main>
+    <div class="scroller">
+      <header class="topbar">
+        <span class="brand">{{ t('login.brand') }}</span>
+        <LocaleSwitcher />
+      </header>
+      <main class="body">
+        <h1>{{ t('login.title') }}</h1>
+        <p v-if="linkedWorldId" class="world-linked">
+          {{
+            linkedWorldName
+              ? t('login.continueInWorld', { worldName: linkedWorldName })
+              : t('login.continueInWorldGeneric')
+          }}
+        </p>
+        <LoginFields
+          v-model:user-name="userName"
+          v-model:password="password"
+          class="form"
+          user-name-id="userName"
+          password-id="password"
+          @submit="onSubmit"
+        />
+        <button class="link" @click="router.push({ path: '/register', query: route.query })">
+          {{ t('login.registerLink') }}
+        </button>
+        <button class="back" @click="router.push('/')">{{ t('login.back') }}</button>
+      </main>
+    </div>
     <MapStatusOverlay
       :step="overlay.step.value"
       :error="overlay.error.value"
@@ -112,9 +123,14 @@ onMounted(() => {
      viewport (browser chrome eats into it) — 100dvh tracks the real
      visible height, as a progressive enhancement over the 100vh above. */
   height: 100dvh;
-  overflow: auto;
+  /* Holds the scroller and the restore overlay as siblings: the overlay stays
+     put while the content scrolls. */
   position: relative;
   background: var(--shell);
+}
+.scroller {
+  height: 100%;
+  overflow: auto;
 }
 .topbar {
   display: flex;

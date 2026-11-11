@@ -16,6 +16,7 @@ import { useLoginForm } from '../../composables/useLoginForm';
 import { useLoginFlowStore } from '../../stores/loginFlow';
 import { useWorldStore } from '../../stores/world';
 import LoginFields from '../auth/LoginFields.vue';
+import AuthPrimaryButton from '../auth/AuthPrimaryButton.vue';
 import { useUnsavedInput } from '../../composables/useUnsavedInput';
 import type { MessageSchema } from '../../i18n/schema';
 
@@ -52,7 +53,7 @@ function onSubmit() {
         // The restore ran and found no realm of this account in this world:
         // say so (LandingView keeps the gate up while this is set) instead of
         // the panel just vanishing. Demo mode runs no restore: no notice.
-        flow.noRealmWorldName = world.worldName ?? '';
+        flow.noRealm = { worldId: world.worldId ?? '', worldName: world.worldName ?? '' };
       }
     },
   });
@@ -75,15 +76,15 @@ function startNewRealm() {
 
 <template>
   <div class="returning-login" data-testid="returning-login-panel">
-    <template v-if="flow.noRealmWorldName !== null">
+    <template v-if="flow.noRealm !== null">
       <h1 data-testid="returning-login-no-realm-title">
-        {{ t('onboarding.returningLogin.noRealmTitle', { world: flow.noRealmWorldName }) }}
+        {{ t('onboarding.returningLogin.noRealmTitle', { world: flow.noRealm.worldName }) }}
       </h1>
       <p class="lede">{{ t('onboarding.returningLogin.noRealmBody') }}</p>
       <div class="notice-actions">
-        <button type="button" class="submit" data-testid="returning-login-start-here" @click="startHere">
+        <AuthPrimaryButton data-testid="returning-login-start-here" @click="startHere">
           {{ t('onboarding.returningLogin.startHere') }}
-        </button>
+        </AuthPrimaryButton>
         <RouterLink
           class="pick-world"
           :to="{ name: 'worlds' }"
@@ -154,15 +155,6 @@ h1 {
 .form {
   margin-top: 20px;
   max-width: 320px;
-}
-.submit {
-  background: var(--gold);
-  color: #1a1208;
-  border: none;
-  border-radius: 8px;
-  padding: 10px 16px;
-  font-weight: 600;
-  cursor: pointer;
 }
 .notice-actions {
   display: flex;

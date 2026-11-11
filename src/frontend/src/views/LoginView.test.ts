@@ -168,6 +168,40 @@ describe('LoginView world linkage', () => {
     expect(router.currentRoute.value.path).toBe('/');
   });
 
+  it('does not stay busy after leaving the screen with a failed restore', async () => {
+    const { wrapper } = await mountLoginView();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    useAuthStore().login = vi.fn().mockResolvedValue(undefined);
+    const world = useWorldStore();
+    world.worldId = 'world-9';
+    world.joinWorld = vi.fn().mockRejectedValue(new Error('boom'));
+    await submit(wrapper);
+    expect(useLoginFlowStore().phase).toBe('restore');
+
+    wrapper.unmount();
+    expect(useLoginFlowStore().phase).toBe('idle');
+
+    const { wrapper: again } = await mountLoginView();
+    expect(again.find('button[type="submit"]').text()).toBe('Log in');
+    expect(again.find('fieldset').attributes('disabled')).toBeUndefined();
+  });
+
+  it('uses the query from submit time for the restore and redirect', async () => {
+    const { wrapper, router } = await mountLoginView({ worldId: 'world-1' });
+    useAuthStore().login = vi.fn().mockResolvedValue(undefined);
+    const world = useWorldStore();
+    let resolveJoin!: () => void;
+    world.joinWorld = vi.fn(() => new Promise<void>((r) => (resolveJoin = r)));
+
+    await submit(wrapper);
+    await router.replace({ path: '/login', query: { worldId: 'other', redirect: '/elsewhere' } });
+    resolveJoin();
+    await flushPromises();
+
+    expect(world.joinWorld).toHaveBeenCalledWith('world-1');
+    expect(router.currentRoute.value.path).toBe('/');
+  });
+
   it('marks the inputs invalid and focuses the password after a 401', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -177,6 +211,7 @@ describe('LoginView world linkage', () => {
 
     expect(attached.find('[role="alert"]').text()).toBe('Wrong username or password.');
     expect(attached.find('#password').attributes('aria-invalid')).toBe('true');
+    expect(attached.find('#password').attributes('aria-describedby')).toBe(attached.find('[role="alert"]').attributes('id'));
     expect(document.activeElement).toBe(attached.find('#password').element);
     attached.unmount();
     host.remove();

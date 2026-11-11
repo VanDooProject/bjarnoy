@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/client';
 import { i18n } from '../i18n';
 import { LOGIN_SLOW_MS, useLoginFlowStore } from './loginFlow';
-import { useAuthStore } from './auth';
+import { AuthNetworkError, useAuthStore } from './auth';
 
 function deferred() {
   let resolve!: () => void;
@@ -92,7 +92,8 @@ describe('loginFlow store', () => {
     ['401', new ApiError(401, undefined), 'login.errors.invalidCredentials', true],
     ['timeout', new DOMException('t', 'TimeoutError'), 'login.errors.timeout', false],
     ['abort', new DOMException('a', 'AbortError'), 'login.errors.timeout', false],
-    ['network', new TypeError('Failed to fetch'), 'login.errors.network', false],
+    ['network', new AuthNetworkError(new TypeError('Failed to fetch')), 'login.errors.network', false],
+    ['unknown', new TypeError('bug in our code'), 'login.errors.generic', false],
     ['500', new ApiError(500, undefined), 'login.errors.generic', false],
   ])('maps a %s login failure to its message', async (_name, err, key, rejected) => {
     const { auth, flow } = setup();
@@ -132,5 +133,18 @@ describe('loginFlow store', () => {
     expect(flow.slow).toBe(false);
     await vi.advanceTimersByTimeAsync(LOGIN_SLOW_MS * 2);
     expect(flow.slow).toBe(false);
+  });
+
+  it('clears slow when the restore fails and restarts the timer on retry', async () => {
+    vi.useFakeTimers();
+    const { flow } = setup();
+    const restore = vi.fn().mockRejectedValueOnce(new Error('boom')).mockReturnValue(new Promise(() => {}));
+    await flow.submit('ragnar', 'pw', { restore, done: async () => {} });
+    await vi.advanceTimersByTimeAsync(LOGIN_SLOW_MS);
+    expect(flow.slow).toBe(false);
+
+    void flow.retryRestore();
+    await vi.advanceTimersByTimeAsync(LOGIN_SLOW_MS);
+    expect(flow.slow).toBe(true);
   });
 });

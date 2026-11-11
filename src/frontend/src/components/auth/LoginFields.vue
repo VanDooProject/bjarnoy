@@ -4,13 +4,14 @@
 // block. Its state (phase, slow, error) comes from the login flow store, so
 // the busy/slow/error behaviour is written once; the views only pass their
 // element ids/test ids and wire `submit`.
-import { nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
+import AuthPrimaryButton from './AuthPrimaryButton.vue';
 import { useLoginFlowStore } from '../../stores/loginFlow';
 import type { MessageSchema } from '../../i18n/schema';
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     userNameId: string;
     passwordId: string;
@@ -30,6 +31,7 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const flow = useLoginFlowStore();
 const { phase, slow, error, credentialsRejected } = storeToRefs(flow);
 
+const errorId = computed(() => `${props.passwordId}-error`);
 const passwordInput = ref<HTMLInputElement | null>(null);
 
 // The store outlives the form: an error from an attempt on another screen is
@@ -63,6 +65,7 @@ watch(
         autocomplete="username"
         required
         :aria-invalid="credentialsRejected || undefined"
+        :aria-describedby="error ? errorId : undefined"
       />
 
       <label :for="passwordId">{{ t('login.passwordLabel') }}</label>
@@ -74,13 +77,14 @@ watch(
         autocomplete="current-password"
         required
         :aria-invalid="credentialsRejected || undefined"
+        :aria-describedby="error ? errorId : undefined"
         :data-testid="passwordTestid"
       />
     </fieldset>
 
-    <p v-if="error" class="error" role="alert" :data-testid="errorTestid">{{ error }}</p>
+    <p v-if="error" :id="errorId" class="error" role="alert" :data-testid="errorTestid">{{ error }}</p>
 
-    <button
+    <AuthPrimaryButton
       class="submit"
       :class="{ 'submit--start': align === 'start' }"
       type="submit"
@@ -91,7 +95,7 @@ watch(
       <template v-if="phase === 'auth'">{{ t('login.checking') }}</template>
       <template v-else-if="phase === 'restore'">{{ t('login.loadingRealm') }}</template>
       <template v-else>{{ t('login.submit') }}</template>
-    </button>
+    </AuthPrimaryButton>
     <p class="slow" aria-live="polite">{{ slow ? t('login.slow') : '' }}</p>
   </form>
 </template>
@@ -134,24 +138,9 @@ input[aria-invalid='true'] {
 }
 .submit {
   margin-top: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: var(--gold);
-  color: #1a1208;
-  border: none;
-  border-radius: 8px;
-  padding: 10px 16px;
-  font-weight: 600;
-  cursor: pointer;
 }
 .submit--start {
   align-self: flex-start;
-}
-.submit:disabled {
-  opacity: 0.6;
-  cursor: default;
 }
 .spinner {
   width: 14px;

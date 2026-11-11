@@ -8,9 +8,8 @@
   "submit": "Log in",
   "checking": "Checking your account…",
   "loadingRealm": "Loading your realm…",
-  "slow": "The server is slow right now. Still trying.",
+  "slow": "The server is slow right now. Still waiting.",
   "restoring": "Welcome back, {name}. Loading your realm…",
-  "restoringSlow": "Welcome back, {name}. Loading your realm… The server is slow right now. Still trying.",
   "registerLink": "Playing anonymously? Create an account",
   "back": "← Back",
   "errors": {

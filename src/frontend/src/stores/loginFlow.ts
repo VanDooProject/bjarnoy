@@ -8,7 +8,7 @@
 import { defineStore } from 'pinia';
 import { ref, shallowRef } from 'vue';
 import { ApiError } from '../api/client';
-import { useAuthStore } from './auth';
+import { AuthNetworkError, useAuthStore } from './auth';
 import { i18n } from '../i18n';
 
 export type LoginPhase = 'idle' | 'auth' | 'restore';
@@ -32,7 +32,9 @@ export const useLoginFlowStore = defineStore('loginFlow', () => {
   const error = ref<string | null>(null);
   const credentialsRejected = ref(false);
   const restoreError = shallowRef<unknown>(null);
-  const noRealmWorldName = ref<string | null>(null);
+  // Set once a restore found no realm of this account; bound to the world it
+  // was found for so it can't leak into another world or screen.
+  const noRealm = ref<{ worldId: string; worldName: string } | null>(null);
   const accountName = ref<string | null>(null);
 
   // Not state: a pending timer and the callbacks `retryRestore` re-runs.
@@ -63,7 +65,8 @@ export const useLoginFlowStore = defineStore('loginFlow', () => {
     if (err instanceof DOMException && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
       return t('login.errors.timeout');
     }
-    if (err instanceof TypeError) return t('login.errors.network');
+    if (err instanceof AuthNetworkError) return t('login.errors.network');
+    console.error('login failed', err);
     return t('login.errors.generic');
   }
 
@@ -76,6 +79,9 @@ export const useLoginFlowStore = defineStore('loginFlow', () => {
     } catch (err) {
       console.error('login restore failed', err);
       restoreError.value = err;
+      // Nothing is "still trying" once the error is showing.
+      clearSlowTimer();
+      slow.value = false;
       return;
     }
     steps = null;
@@ -87,7 +93,7 @@ export const useLoginFlowStore = defineStore('loginFlow', () => {
     error.value = null;
     credentialsRejected.value = false;
     restoreError.value = null;
-    noRealmWorldName.value = null;
+    noRealm.value = null;
     accountName.value = userName;
     setPhase('auth');
     try {
@@ -106,6 +112,7 @@ export const useLoginFlowStore = defineStore('loginFlow', () => {
   // Re-runs the realm restore only: the login itself already succeeded.
   async function retryRestore(): Promise<void> {
     if (phase.value !== 'restore' || restoreError.value === null) return;
+    setPhase('restore');
     await runRestore();
   }
 
@@ -122,7 +129,7 @@ export const useLoginFlowStore = defineStore('loginFlow', () => {
     error.value = null;
     credentialsRejected.value = false;
     restoreError.value = null;
-    noRealmWorldName.value = null;
+    noRealm.value = null;
     accountName.value = null;
   }
 
@@ -132,7 +139,7 @@ export const useLoginFlowStore = defineStore('loginFlow', () => {
     error,
     credentialsRejected,
     restoreError,
-    noRealmWorldName,
+    noRealm,
     accountName,
     submit,
     retryRestore,

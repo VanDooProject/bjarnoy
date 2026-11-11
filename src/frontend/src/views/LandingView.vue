@@ -100,7 +100,7 @@ const loginOverlay = useLoginRestoreOverlay();
 const showReturningLoginGate = computed(
   () =>
     (!!player.lastAccount && !auth.isAuthenticated && !player.hasFoundedSettlement) ||
-    loginFlow.noRealmWorldName !== null,
+    (loginFlow.noRealm !== null && loginFlow.noRealm.worldId === world.worldId),
 );
 
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
@@ -300,11 +300,14 @@ const landingCanvasShown = computed(
 // step/error stay hidden (they would cover the form, and the login's restore
 // re-bootstraps the world anyway); the restore's progress/error show instead.
 // `overlayStep`/`overlayError` themselves stay untouched for the intro signal.
-const shownStep = computed(() => loginOverlay.step.value ?? (showReturningLoginGate.value ? null : overlayStep.value));
-const shownError = computed<unknown>(() =>
-  loginOverlay.error.value !== null ? loginOverlay.error.value : showReturningLoginGate.value ? null : overlayError.value,
+// While a login restore runs only its own step/error show, never the map's.
+const shownStep = computed(() =>
+  loginOverlay.active.value ? loginOverlay.step.value : showReturningLoginGate.value ? null : overlayStep.value,
 );
-const shownErrorTitle = computed(() => (loginOverlay.error.value !== null ? loginOverlay.errorTitle.value : undefined));
+const shownError = computed<unknown>(() =>
+  loginOverlay.active.value ? loginOverlay.error.value : showReturningLoginGate.value ? null : overlayError.value,
+);
+const shownErrorTitle = computed(() => (loginOverlay.active.value ? loginOverlay.errorTitle.value : undefined));
 useIntroTilesSignal({
   settled: loadSettled,
   error: overlayError,
@@ -318,6 +321,10 @@ function retryLoad() {
   else void world.fetchFogMask();
 }
 onUnmounted(() => {
+  // Leaving with a failed restore would leave the flow busy for the next
+  // visit; the no-realm notice belongs to this screen only.
+  if (loginFlow.restoreError !== null) loginFlow.reset();
+  loginFlow.noRealm = null;
   world.stopHudSync();
   stopPreviewPoll();
   clearTimeout(invalidClickTimer);

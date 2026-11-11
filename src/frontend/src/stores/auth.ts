@@ -10,15 +10,31 @@ import { clearStoredRefreshToken, readStoredRefreshToken, storeRefreshToken } fr
 // api/client.ts: that module's `request()` attaches the access token and
 // retries once on 401 via this store's hooks, which login/register/refresh
 // themselves must not do (a failed login is not an expired token).
-// The timeout keeps a dead server from leaving "Logging in…" hanging forever.
-const AUTH_TIMEOUT_MS = 30_000;
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
-  });
+// A caller may pass `timeoutMs`: login does, so a dead server doesn't leave
+// "Checking your account…" hanging forever.
+const LOGIN_TIMEOUT_MS = 30_000;
+
+/** The request never reached the server (offline, DNS, refused): fetch itself rejected with a TypeError. */
+export class AuthNetworkError extends Error {
+  constructor(cause: unknown) {
+    super('Could not reach the server', { cause });
+    this.name = 'AuthNetworkError';
+  }
+}
+
+async function post<T>(path: string, body: unknown, opts: { timeoutMs?: number } = {}): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: opts.timeoutMs !== undefined ? AbortSignal.timeout(opts.timeoutMs) : undefined,
+    });
+  } catch (err) {
+    if (err instanceof TypeError) throw new AuthNetworkError(err);
+    throw err;
+  }
   if (!res.ok) {
     const problem = await res.json().catch(() => undefined);
     throw new ApiError(res.status, problem);
@@ -89,7 +105,7 @@ export const useAuthStore = defineStore('auth', {
       this.applyAuthResponse(response);
     },
     async login(userName: string, password: string) {
-      const response = await post<AuthResponse>('/auth/login', { userName, password });
+      const response = await post<AuthResponse>('/auth/login', { userName, password }, { timeoutMs: LOGIN_TIMEOUT_MS });
       this.applyAuthResponse(response);
     },
     /**
