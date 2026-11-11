@@ -78,8 +78,9 @@ rather than needing a separate mechanism.
 
 - **Found**: any user not already in a guild can found one; the founder
   becomes its `Leader`; the guild starts at `Copper`.
-- **Join**: open — no invite/application step in v1 (see §5). Refused once
+- **Join**: open — no invite/application step in v1. Refused once
   the guild is at its member cap, or the user is already in a guild.
+  Decided to change: open join goes away, see "Roles, joining and war" below.
 - **Leave**: any non-`Leader` member may leave anytime. A `Leader` may only
   leave alone — leaving as the guild's last member disbands it
   (`DisbandedAt` set). Otherwise the `Leader` must hand off leadership first.
@@ -98,6 +99,19 @@ rather than needing a separate mechanism.
 - **Accept/Reject**: `Leader`/`Officer` of the target guild. Accepting is
   refused if the target guild is itself at its cap.
 - **Break**: `Leader` of either guild, on an `Active` treaty only.
+
+The `Officer` role in the rules above is decided to be replaced, see
+"Roles, joining and war" below.
+
+### Roles, joining and war (decided, not built yet)
+
+- Roles: Leader, Warmaster, Recruiter, Herald, Member. The Warmaster handles
+  diplomacy (peace and war), the Recruiter handles invites and applications,
+  the Herald can send a message to all members. These replace Officer.
+- A guild recruits by application or by invite only. There is no open join.
+- Two guilds have peace, war, or no relation. War is a status like peace: it
+  is declared, and it ends only when both guilds agree to end it, which
+  returns the pair to no relation.
 
 ### Map colours
 
@@ -146,7 +160,8 @@ is inherently tied to a real `UserId`.
 Deferred, roughly in the order they'd likely be wanted next:
 
 - **Invites / applications** — v1 join is open (capped only by the member
-  cap). No invite-only or apply-to-join recruitment modes yet.
+  cap). Decided: apply or invite only (§3, "Roles, joining and war"); not
+  built yet.
 - **Audit log** — no record of kicks, role changes, etc.
   beyond structured log lines.
 - **Rejoin cooldown** — a kicked or departed member can rejoin immediately;
@@ -158,10 +173,10 @@ Deferred, roughly in the order they'd likely be wanted next:
   communication surface.
 - **Report embeds** — a `Report`-kind topic is just a flagged topic; there is
   no reports feature yet to render inside it.
-- **Extended diplomacy** — no NAP-vs-peace distinction, no war declarations,
-  no confederations. Only a single peace/no-peace relationship per guild
-  pair.
-- **Custom roles / permission editor** — three fixed roles only.
+- **Extended diplomacy** — no NAP-vs-peace distinction, no confederations.
+  War is decided (§3, "Roles, joining and war") but not built yet.
+- **Custom roles / permission editor** — three fixed roles today; the
+  decided role set is in §3, "Roles, joining and war".
 - **Guild emblem/heraldry** — name, tag and description only.
 - **Multi-guild "families"/wings** — one active membership per account,
   enforced at the database.
