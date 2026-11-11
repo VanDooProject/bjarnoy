@@ -13,6 +13,18 @@
 - An army whose home is destroyed (for example a beach camp while its troops are out) gets the nearest garrison spot of its
   owner as its new home.
 
+## Training, sending out, losing a spot
+
+- Newly trained units join the nearest garrison spot that can hold them, measured from the building that trained them:
+  land units the nearest tower or longhouse, ships the nearest dock (or a longhouse on sand next to the sea).
+- An army can be put together from units of several garrison spots of one settlement. Each group leaves its own spot at
+  once; they meet at the first hex their routes share. A group that gets there first waits, eating its provisions, and the
+  army moves on together at the pace of its slowest unit. The walk to that hex and the wait count in the round-trip food
+  check.
+- The home of such an army is the settlement's garrison spot nearest the hex where the groups met.
+- When a tower or dock is destroyed, the units that survive in it march to the owner's nearest garrison spot that can hold
+  them, and that spot becomes their home.
+
 ## Attacks
 
 - Attacks are aimed at buildings, never at a settlement as a whole. Attacking a settlement means attacking a building in its realm;
