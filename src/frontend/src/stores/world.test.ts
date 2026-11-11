@@ -2070,8 +2070,6 @@ describe('useWorldStore joinWorld', () => {
     getTradeBoard.mockReset().mockResolvedValue([]);
     getMyTradeOffers.mockReset().mockResolvedValue([]);
     getShipments.mockReset().mockResolvedValue([]);
-    getSettlementArmies.mockReset().mockResolvedValue([]);
-    getSettlementGuests.mockReset().mockResolvedValue([]);
 
     const store = await loadStoreModule(false);
 
@@ -2946,6 +2944,8 @@ describe('useWorldStore linked realms', () => {
     store.hud.queue.push(makePendingOrder('tower', { q: 2, r: 2 }));
     expect(store.hud.queue.some(isPendingOrder)).toBe(true);
     const poll = vi.spyOn(store, 'refreshLiveSettlement');
+    store.dispatchDraft = { stale: true } as never;
+    store.selectedArmyId = 'army-a';
 
     await store.switchToSettlement('B');
 
@@ -2958,6 +2958,60 @@ describe('useWorldStore linked realms', () => {
     expect(store.hud.construction.slots).toBe(3);
     expect(store.hud.garrison).toEqual(realmB.garrison);
     expect(store.hud.trainingQueue.map((o) => o.id)).toEqual(['train-b']);
+    expect(store.dispatchDraft).toBeNull();
+    expect(store.selectedArmyId).toBeNull();
+    expect(getSettlementArmies).toHaveBeenCalledWith('B', expect.anything());
+  });
+
+  it('a poll for the old realm that resolves after a switch does not overwrite the new realm\'s HUD', async () => {
+    const store = await loadStoreModule(false);
+    store.liveReady = true;
+    store.worldId = 'world-1';
+    const realmA = { ...response('A', 'A', ['A']), buildings: [{ q: 1, r: 0, type: 'sawmill', level: 2 }], garrison: [{ unit: 'spearman', count: 5 }] };
+    const realmB = { ...response('B', 'B', ['B']), buildings: [{ q: 3, r: 3, type: 'quarry', level: 1 }], garrison: [{ unit: 'archer', count: 2 }] };
+    getSettlement.mockReset().mockImplementation(async (id: string) => (id === 'A' ? realmA : realmB));
+    getTradeBoard.mockReset().mockResolvedValue([]);
+    getMyTradeOffers.mockReset().mockResolvedValue([]);
+    getShipments.mockReset().mockResolvedValue([]);
+    getSettlementArmies.mockReset().mockResolvedValue([]);
+    getSettlementGuests.mockReset().mockResolvedValue([]);
+    await store.restoreLiveSettlement('player-1', 'A');
+    let resolveA!: (v: unknown) => void;
+    getSettlement.mockImplementation((id: string) =>
+      id === 'A' ? new Promise((resolve) => { resolveA = resolve; }) : Promise.resolve(realmB));
+    const stalePoll = store.refreshLiveSettlement();
+
+    await store.switchToSettlement('B');
+    resolveA(realmA);
+    await stalePoll;
+
+    expect(store.selectedSettlementId).toBe('B');
+    expect(store.hud.buildings).toEqual(realmB.buildings);
+    expect(store.hud.garrison).toEqual(realmB.garrison);
+  });
+
+  it('an army poll for the old realm that resolves after a switch leaves the new realm\'s armies alone', async () => {
+    const store = await loadStoreModule(false);
+    store.liveReady = true;
+    store.worldId = 'world-1';
+    getSettlement.mockReset().mockImplementation(async (id: string) => response(id, id, [id]));
+    getTradeBoard.mockReset().mockResolvedValue([]);
+    getMyTradeOffers.mockReset().mockResolvedValue([]);
+    getShipments.mockReset().mockResolvedValue([]);
+    getSettlementGuests.mockReset().mockResolvedValue([]);
+    getSettlementArmies.mockReset().mockResolvedValue([]);
+    await store.restoreLiveSettlement('player-1', 'A');
+    let resolveA!: (v: unknown) => void;
+    getSettlementArmies.mockImplementation((id: string) =>
+      id === 'A' ? new Promise((resolve) => { resolveA = resolve; }) : Promise.resolve([]));
+    getArmy.mockReset().mockResolvedValue({ id: 'army-a' });
+    const staleArmies = store.refreshArmies();
+
+    await store.switchToSettlement('B');
+    resolveA([{ id: 'army-a' }]);
+    await staleArmies;
+
+    expect(store.armies).toEqual([]);
   });
 
   it('registerSettlementSummaries stores the realmId', async () => {
