@@ -17,6 +17,28 @@ function unit(overrides: Partial<UnitDefinitionResponse> & { type: string }): Un
 
 const rows = computed(() => ['settler', 'spearman', 'karve'].map((u) => ({ unit: u })));
 
+describe('useDispatchUnitPicker for a beach camp army', () => {
+  const campRows = computed(() => ['campbuilder', 'spearman', 'karve'].map((u) => ({ unit: u })));
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    useUnitCatalogueStore().definitions = [
+      unit({ type: 'campbuilder' }),
+      unit({ type: 'spearman' }),
+      unit({ type: 'karve', class: 'ship', cargoSlots: 0, shipSlots: 10 }),
+    ];
+    useWorldStore().startDispatchAt({ q: 4, r: -1 }, { mission: 'setupcamp' });
+  });
+
+  it('locks the camp builder row and leaves ships and land escorts selectable', () => {
+    const picker = useDispatchUnitPicker(campRows);
+    expect(picker.isCamp.value).toBe(true);
+    expect(picker.isRowSelectable('campbuilder')).toBe(false);
+    expect(picker.isRowSelectable('spearman')).toBe(true);
+    expect(picker.isRowSelectable('karve')).toBe(true);
+  });
+});
+
 describe('useDispatchUnitPicker for a founding convoy', () => {
   beforeEach(() => {
     setActivePinia(createPinia());

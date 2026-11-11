@@ -9,6 +9,7 @@ import {
   isHuntUnit,
   buildMoveDispatchRequest,
   buildFoundDispatchRequest,
+  buildCampDispatchRequest,
   dispatchHasDestination,
   isRouteDestination,
   buildSupportDispatchRequest,
@@ -137,11 +138,31 @@ describe('buildFoundDispatchRequest', () => {
   });
 });
 
+describe('buildCampDispatchRequest', () => {
+  it('returns null without units or without a route', () => {
+    expect(buildCampDispatchRequest({ campbuilder: 0 }, [{ q: 1, r: 1 }], 10)).toBeNull();
+    expect(buildCampDispatchRequest({ campbuilder: 2 }, [], 10)).toBeNull();
+  });
+
+  it('is a move-shaped request with mission setupcamp: the last hex is the camp hex', () => {
+    const route = [{ q: 0, r: 0 }, { q: 3, r: -1 }];
+    expect(buildCampDispatchRequest({ campbuilder: 2, karve: 1, spearman: 3 }, route, 40)).toEqual({
+      units: [{ unit: 'campbuilder', count: 2 }, { unit: 'karve', count: 1 }, { unit: 'spearman', count: 3 }],
+      waypoints: [{ q: 0, r: 0 }],
+      destination: { q: 3, r: -1 },
+      provisions: 40,
+      mission: 'setupcamp',
+    });
+  });
+});
+
 describe('isRouteDestination', () => {
   it('marks the last hex of a move or found route only', () => {
     expect(isRouteDestination('move', 1, 2)).toBe(true);
     expect(isRouteDestination('found', 1, 2)).toBe(true);
     expect(isRouteDestination('found', 0, 2)).toBe(false);
+    expect(isRouteDestination('setupcamp', 1, 2)).toBe(true);
+    expect(isRouteDestination('setupcamp', 0, 2)).toBe(false);
     expect(isRouteDestination('attack', 1, 2)).toBe(false);
     expect(isRouteDestination('hunt', 1, 2)).toBe(false);
   });
@@ -150,6 +171,8 @@ describe('isRouteDestination', () => {
 describe('dispatchHasDestination', () => {
   const base = { targetSettlementId: null, targetCamp: null, route: [] };
   it('needs a route for move and found', () => {
+    expect(dispatchHasDestination({ ...base, mission: 'setupcamp' })).toBe(false);
+    expect(dispatchHasDestination({ ...base, mission: 'setupcamp', route: [{ q: 1, r: 0 }] })).toBe(true);
     expect(dispatchHasDestination({ ...base, mission: 'found' })).toBe(false);
     expect(dispatchHasDestination({ ...base, mission: 'found', route: [{ q: 1, r: 0 }] })).toBe(true);
     expect(dispatchHasDestination({ ...base, mission: 'move', route: [{ q: 1, r: 0 }] })).toBe(true);

@@ -135,6 +135,8 @@
       "foundNeedsSettlers": "{have} / {need} settlers at home",
       "foundNeedsRenown": "Renown {total} / {required}",
       "foundRenownUnknown": "Checking your renown…",
+      "setUpCamp": "Set up camp",
+      "campNeedsBuilders": "{have} / {need} camp builders at home",
       "sendArmyHere": "Send army here",
       "attack": "Attack",
       "support": "Support",
@@ -173,7 +175,10 @@
       "razeTitle": "Raze to level {level}",
       "razeTitleRemove": "Tear down",
       "razeSubRemove": "{building} · Level 1 → gone",
-      "razeBadge": "CAN BE RAZED"
+      "razeBadge": "CAN BE RAZED",
+      "campTitle": "Set up a beach camp",
+      "campSub": "Two camp builders set it up",
+      "campBadge": "CAMP CAN GO HERE"
     },
     "tap": {
       "build": "Tap {name} again to build",
@@ -403,6 +408,7 @@
     "cancel": "Cancel",
     "sending": "Sending…",
     "confirmOrder": "Confirm order",
+    "campInstructions": "The last hex of the route is where the beach camp is set up. Two camp builders go, and you can add ships and escorts. It costs {cost} and takes {time} to build once the army is there.",
     "foundInstructions": "The last hex of the route is where the settlement is founded. Five settlers go, and you can add ships and escorts. With ships the convoy sails and lands on the last hex.",
     "dispatchInstructions": "Click hexes on the map to plot a route — the last click is the destination. {count} {hexWord} plotted.",
     "targetInstructions": "Choose a settlement to {mission}, then optionally click hexes on the map to plot a route there. {count} {waypointWord} plotted.",

@@ -27,7 +27,15 @@ import TrainingModal from '../components/hud/TrainingModal.vue';
 import BuildRefusalChip from '../components/hud/BuildRefusalChip.vue';
 import { announceConfirmedBuild, holdBuildRow, releaseBuildRow } from '../composables/buildFeedback';
 import RingMenuHost from '../components/hud/RingMenuHost.vue';
-import { foundingLock, isShorelineHex, type FoundingLock } from '../lib/founding';
+import {
+  BEACH_CAMP_BUILD_SECONDS,
+  BEACH_CAMP_COST,
+  campLock,
+  foundingLock,
+  isCampSite,
+  isShorelineHex,
+  type FoundingLock,
+} from '../lib/founding';
 import RingMenu, { type RingAction, type RingCategory } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
@@ -62,7 +70,7 @@ import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { buildingArt } from '../lib/map/buildingArt';
 import { buildingStatsAt, buildingUpgradeCost, scaleOutput, upgradeRateGain } from '../lib/map/buildingEconomy';
 import { razeBlock, razeRefund, razeSeconds } from '../lib/map/raze';
-import { formatBuildTime, formatMissingResources, longhouseLock } from '../lib/map/ringCatalogue';
+import { formatBuildTime, formatMissingResources, longhouseLock, scaledBuildSeconds } from '../lib/map/ringCatalogue';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
 import { buildingEntryId, primaryActionFirst } from '../lib/map/ringActions';
@@ -1074,6 +1082,37 @@ const rootActions = computed<RingAction[]>(() => primaryActionFirst(rootActionLi
 function settlersAtHome(): number {
   return world.hud.garrison.find((g) => g.unit === 'settler')?.count ?? 0;
 }
+// Set up a beach camp: offered on a sand shore hex with nothing on it (an enemy realm's included), live mode only. Locked with
+// the missing requirement (camp builders at home, the camp's cost), like a founding; the card shows the cost and the build time.
+function campActions(tile: Tile): RingAction[] {
+  if (DEMO_MODE || !isCampSite(tile, world.model.terrainOf, (c) => world.model.giantAnchorAt(c))) return [];
+  const buildersAtHome = world.hud.garrison.find((g) => g.unit === 'campbuilder')?.count ?? 0;
+  const lock = campLock(buildersAtHome, world.hud.available);
+  const missing = formatMissingResources(BEACH_CAMP_COST, world.hud.available);
+  const hint = !lock
+    ? undefined
+    : lock.reason === 'builders'
+      ? t('hud.ringMenu.actions.campNeedsBuilders', { have: lock.have, need: lock.need })
+      : t('hud.ringMenu.actions.notEnough', { resources: missing });
+  return [
+    {
+      id: 'setup-camp',
+      label: t('hud.ringMenu.actions.setUpCamp'),
+      disabled: lock !== null,
+      state: lock ? 'waiting' : undefined,
+      hint,
+      card: {
+        title: t('hud.ringMenu.card.campTitle'),
+        sub: t('hud.ringMenu.card.campSub'),
+        cost: BEACH_CAMP_COST,
+        time: formatBuildTime(scaledBuildSeconds(BEACH_CAMP_BUILD_SECONDS, 1, world.worldSpeedFactor)),
+        okBadge: t('hud.ringMenu.card.campBadge'),
+        locks: hint ? [hint] : [],
+        art: buildingArt('beachcamp', 1),
+      },
+    },
+  ];
+}
 function foundingLockHint(lock: FoundingLock): string {
   switch (lock.reason) {
     case 'settlers':
@@ -1090,13 +1129,13 @@ function rootActionList(): RingAction[] {
   // World zoom only offers the army action: BuildingModal/TrainingModal and
   // the build fan only exist in the settlement template, so Build/Upgrade
   // bubbles here would open nothing.
-  if (mode.value === 'world') return [...huntActions(tile), ...siegeActions(tile), sendArmyAction(tile)];
+  if (mode.value === 'world') return [...huntActions(tile), ...siegeActions(tile), ...campActions(tile), sendArmyAction(tile)];
 
   if (isEnemyTile.value) {
     // Replaces the old permanently-disabled "Attack / Raid" bubble — combat
     // is implemented now, via the same dispatch draft/sheet every other
     // "send army" entry point uses.
-    return [...siegeActions(tile), sendArmyAction(tile)];
+    return [...siegeActions(tile), ...campActions(tile), sendArmyAction(tile)];
   }
   if (isUnclaimedTile.value) {
     const onCoast = isShorelineHex(tile, world.model.terrainOf);
@@ -1109,6 +1148,7 @@ function rootActionList(): RingAction[] {
         hint: lock ? foundingLockHint(lock) : undefined,
       },
       ...huntActions(tile),
+      ...campActions(tile),
       sendArmyAction(tile),
     ];
   }
@@ -1145,10 +1185,11 @@ function rootActionList(): RingAction[] {
     return [
       ...(buildAction.value ? [buildAction.value] : []),
       ...huntActions(tile),
+      ...campActions(tile),
       sendArmyAction(tile),
     ];
   }
-  return [...huntActions(tile), sendArmyAction(tile)];
+  return [...huntActions(tile), ...campActions(tile), sendArmyAction(tile)];
 }
 
 
@@ -1301,6 +1342,11 @@ async function onRingSelect(id: string) {
     case 'land-here':
       // Same dispatch draft the Hunt / Siege bubbles use: the hex is the destination, five settlers go.
       if (selectedCoord.value) world.startDispatchAt(selectedCoord.value, { mission: 'found' });
+      closeRing();
+      return;
+    case 'setup-camp':
+      // Same dispatch draft as a founding: the hex is the camp's site, two camp builders go.
+      if (selectedCoord.value) world.startDispatchAt(selectedCoord.value, { mission: 'setupcamp' });
       closeRing();
       return;
     case 'hunt':

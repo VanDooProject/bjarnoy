@@ -26,7 +26,7 @@ export function routeToWaypointsAndDestination(
 
 /** Shared body of the move-shaped dispatches: the last clicked hex is the destination, every hex before it a waypoint. */
 function buildRouteDispatchRequest(
-  mission: 'move' | 'found',
+  mission: 'move' | 'found' | 'setupcamp',
   unitCounts: Record<string, number>,
   route: AxialCoord[],
   provisions: number,
@@ -67,9 +67,21 @@ export function buildFoundDispatchRequest(
   return buildRouteDispatchRequest('found', unitCounts, route, provisions);
 }
 
-/** Whether the clicked route's last hex is the destination: a move walks there, a founding settles there. */
+/**
+ * Builds a `setupcamp`-mission `DispatchArmyRequest`: move-shaped like a founding (the route's last hex is the camp's hex, the fleet's
+ * route ends on it). The server checks the two camp builders, the site and the cost.
+ */
+export function buildCampDispatchRequest(
+  unitCounts: Record<string, number>,
+  route: AxialCoord[],
+  provisions: number,
+): DispatchArmyRequest | null {
+  return buildRouteDispatchRequest('setupcamp', unitCounts, route, provisions);
+}
+
+/** Whether the clicked route's last hex is the destination: a move walks there, a founding settles there, a camp is set up there. */
 export function isRouteDestination(mission: string | undefined, index: number, routeLength: number): boolean {
-  return (mission === 'move' || mission === 'found') && index === routeLength - 1;
+  return (mission === 'move' || mission === 'found' || mission === 'setupcamp') && index === routeLength - 1;
 }
 
 /**

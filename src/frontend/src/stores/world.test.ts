@@ -360,6 +360,37 @@ describe('useWorldStore startDispatchAt', () => {
     );
   });
 
+  it('starts a Set up camp draft: the tapped hex is the destination and two camp builders are loaded', async () => {
+    const store = await loadStoreModule(true);
+
+    store.startDispatchAt({ q: 4, r: -1 }, { mission: 'setupcamp' });
+
+    expect(store.dispatchDraft?.mission).toBe('setupcamp');
+    expect(store.dispatchDraft?.route).toEqual([{ q: 4, r: -1 }]);
+    expect(store.dispatchDraft?.unitCounts).toEqual({ campbuilder: 2 });
+  });
+
+  it('sends a Set up camp draft as a setupcamp-mission dispatch, builders fixed at two, ships and escorts addable', async () => {
+    const store = await loadStoreModule(false);
+    dispatchArmy.mockReset().mockResolvedValue({});
+    store.selectedSettlementId = 'home-1';
+    store.startDispatchAt({ q: 4, r: -1 }, { mission: 'setupcamp' });
+
+    store.setDispatchUnitCount('campbuilder', 7);
+    store.setDispatchUnitCount('karve', 1);
+    await store.confirmDispatch();
+
+    expect(dispatchArmy).toHaveBeenCalledWith(
+      'home-1',
+      expect.objectContaining({
+        mission: 'setupcamp',
+        destination: { q: 4, r: -1 },
+        units: expect.arrayContaining([{ unit: 'campbuilder', count: 2 }, { unit: 'karve', count: 1 }]),
+      }),
+      undefined,
+    );
+  });
+
   it('keeps a Found draft\'s settlers at five but lets ships and escorts be added to the dispatch', async () => {
     const store = await loadStoreModule(false);
     dispatchArmy.mockReset().mockResolvedValue({});
