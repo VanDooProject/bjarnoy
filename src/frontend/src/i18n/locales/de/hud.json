@@ -330,7 +330,9 @@
       "reindeerherder": "Rentierhirte",
       "pumpkinfarm": "Kürbisfarm",
       "palisade": "Palisade",
-      "palisadegate": "Palisadentor"
+      "palisadegate": "Palisadentor",
+      "dockyard": "Werft",
+      "shrineofnjord": "Schrein des Njörd"
     },
     "missionAttack": "Angriff",
     "missionRaid": "Überfall",
@@ -354,7 +356,14 @@
     "lootTaken": "Beute",
     "settlementRazed": "Siedlung dem Erdboden gleichgemacht",
     "siege": "Belagerung",
-    "hexCoord": "Hex ({q}, {r})"
+    "hexCoord": "Hex ({q}, {r})",
+    "shipFight": "Schiffskampf",
+    "landFight": "Landkampf",
+    "noLandFight": "Es kam zu keinem Landkampf.",
+    "drowned": "Ertrunken",
+    "fireShips": "Brandschiffe",
+    "fireShipsBurned": "{n} Brandschiffe verbrannt",
+    "summaryDrowned": "{n} ertrunken"
   },
   "fieldBattleReport": {
     "title": "Feldschlacht",
@@ -583,5 +592,8 @@
       "label": "Gebäudeinfo (H)",
       "title": "Gebäudeinfo ein- oder ausblenden (H)"
     }
+  },
+  "panelColumn": {
+    "toggle": "{panel} ein- oder ausblenden"
   }
 }

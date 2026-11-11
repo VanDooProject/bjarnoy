@@ -41,7 +41,7 @@ import {
   maxAffordableProvisions,
 } from '../lib/units/armyDispatch';
 import { CAMP_BUILDERS_PER_CAMP, SETTLERS_PER_FOUNDING } from '../lib/founding';
-import { isWaterCampFamily } from '../lib/map/campPlacement';
+import { isSandCampFamily, isWaterCampFamily } from '../lib/map/campPlacement';
 import { useUnitCatalogueStore } from './unitCatalogue';
 import { stackCounts } from '../lib/units/fieldOrderFeasibility';
 import { DemoTradeError, WorldModel } from '../lib/map/WorldModel';
@@ -1415,12 +1415,15 @@ export const useWorldStore = defineStore('world', {
       // Rival buildings ride the same cadence: the settlement list is data-only, so this is the only way the client learns which
       // buildings of another player stand on explored ground (to draw them, offer Siege on their walls and route around them).
       // A failed read keeps the last set.
-      const [summaries, rivalBuildings] = await Promise.all([
+      // The player's own settlements other than the open one come from the same cadence: only the open one's buildings are loaded
+      // with its snapshot, so without this the others stay empty until the player switches to them.
+      const [summaries, rivalBuildings, ownBuildings] = await Promise.all([
         api.listSettlements(this.worldId, this.ownerId ?? undefined),
         api.listRivalBuildings(this.worldId, this.ownerId ?? undefined).catch(() => null),
+        api.listOwnBuildings(this.worldId, this.ownerId ?? undefined).catch(() => null),
       ]);
       this.registerSettlementSummaries(summaries);
-      if (rivalBuildings) this.model.applyRivalBuildings(rivalBuildings);
+      if (rivalBuildings && ownBuildings) this.model.applyRivalBuildings([...rivalBuildings, ...ownBuildings], this.selectedSettlementId);
       if (this.worldMapActive) {
         this.model.claimAllTerritory();
       } else {
@@ -1728,7 +1731,7 @@ export const useWorldStore = defineStore('world', {
       if (picker.mission === 'attack' && picker.targetSettlementId) void this.loadDispatchTargetBuildings(picker.targetSettlementId);
     },
     /**
-     * A hunt takes land units against a land camp, and against a camp at sea the ships and their passengers: the units of the
+     * A hunt takes land units against a land camp (a sand camp also ships, as their carriers), and against a camp at sea the ships and their passengers: the units of the
      * other class in the picker's field order are unselected.
      */
     dropNonHuntUnits() {
@@ -1737,8 +1740,9 @@ export const useWorldStore = defineStore('world', {
       if (!draft?.units || !picker) return;
       const camp = this.model.campAt(picker.coord);
       const atSea = !!camp && isWaterCampFamily(camp.family);
+      const onSand = !!camp && isSandCampFamily(camp.family);
       const byType = useUnitCatalogueStore().byType;
-      for (const unit of Object.keys(draft.units)) if (!isHuntUnit(unit, byType, atSea)) draft.units[unit] = 0;
+      for (const unit of Object.keys(draft.units)) if (!isHuntUnit(unit, byType, atSea, onSand)) draft.units[unit] = 0;
     },
     /** Sets how many of one unit of the selected field army leave (a standing army's split), clamped to what the army holds. */
     setFieldOrderUnitCount(unit: string, count: number) {

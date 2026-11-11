@@ -52,10 +52,16 @@ public enum UnitType
     Ram = 10,
 
     /// <summary>
+    /// Fire ship: a hull with no attack and no slots, sent with a fleet to burn a building standing in the water (see
+    /// <c>docs/design/economy.md</c>, "Fire Ship"); requires Karve to be trainable first.
+    /// </summary>
+    FireShip = 11,
+
+    /// <summary>
     /// Civilian that sets up a beach camp (<see cref="Bjarnoy.Domain.Settlers.BeachCamp"/>): two of them, landed on a free sand
     /// shore, build it and are used up doing so. See <c>docs/design/skirmish/beach-camp.md</c>.
     /// </summary>
-    CampBuilder = 11,
+    CampBuilder = 12,
 }
 
 public static class UnitTypeExtensions
@@ -73,6 +79,7 @@ public static class UnitTypeExtensions
         UnitType.Longship => "longship",
         UnitType.Settler => "settler",
         UnitType.Ram => "ram",
+        UnitType.FireShip => "fireship",
         UnitType.CampBuilder => "campbuilder",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown unit type"),
     };

@@ -6,10 +6,9 @@
 // `armies` comment), this one is specifically about dispatched bodies
 // (in transit / returning / supporting) plus the flow for creating a new one.
 //
-// Bottom-right HUD corner: BuildQueuePanel is top-left, TrainingQueuePanel
-// top-right (see each panel's own `position: absolute` in their <style>) —
-// bottom-left is open since RealmPanel's removal (zoom now drives
-// settlement<->world switching, so its manual override button is gone).
+// Bottom-right HUD corner by default. In the desktop settlement view the panel
+// is one of the four dockable ones (HudPanelDock.vue puts it in the corner the
+// player chose); in the world view it keeps its own `position: absolute` below.
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
@@ -55,7 +54,7 @@ const garrisonRows = computed(() =>
 );
 
 const picker = useDispatchUnitPicker(garrisonRows);
-const { isRowSelectable, hasLockedOutUnits } = picker;
+const { isRowSelectable, hasLockedOutUnits, sandHuntLacksTroops } = picker;
 
 function quantityFor(unit: string): number {
   return draft.value?.unitCounts[unit] ?? 0;
@@ -189,8 +188,8 @@ async function confirmFieldOrderClick() {
 </script>
 
 <template>
-  <div class="status-card army-panel">
-    <div class="status-card-header">
+  <div class="status-card army-panel" data-testid="army-panel">
+    <div class="status-card-header" data-dock-handle>
       <span class="status-card-title">{{ t('hud.armyPanel.title') }}</span>
       <span class="status-card-count">{{ armyRows.length }}</span>
     </div>
@@ -439,6 +438,7 @@ async function confirmFieldOrderClick() {
         </div>
 
         <p v-if="hasLockedOutUnits" class="status-subtext fleet-note">{{ t('hud.armyPanel.huntLandOnlyNote') }}</p>
+        <p v-if="sandHuntLacksTroops" class="status-subtext fleet-note" role="alert">{{ t('apiErrors.rejections.HuntRequiresLandUnits') }}</p>
         <div class="unit-picker">
           <div
             v-for="row in garrisonRows"

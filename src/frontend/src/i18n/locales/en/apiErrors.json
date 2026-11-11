@@ -94,7 +94,7 @@
     "NotCompleted": "That quest isn't completed yet.",
     "UnknownQuest": "There is no such quest.",
     "NoCampAtDestination": "There is no wildlife camp at that hex.",
-    "HuntRequiresLandUnits": "Ships cannot hunt a camp on land; send land units.",
+    "HuntRequiresLandUnits": "A fleet can only hunt a sand camp, and only with land troops aboard.",
     "HuntRequiresFleet": "Only ships can hunt a camp at sea; land units cannot reach it.",
     "HexOccupiedByCamp": "Wild beasts still hold that hex.",
     "HexOccupiedByEndgameSite": "An Utgard wall or a jötun watchtower stands on that hex.",

@@ -139,7 +139,7 @@ public sealed record Army
 
     /// <summary>
     /// The building this <see cref="ArmyMission.Attack"/>/<see cref="ArmyMission.Raid"/> army was told to
-    /// hit with its surviving siege power (catapults, issue #40 phase 5; ships) — a coordinate
+    /// hit with its surviving siege power (catapults, issue #40 phase 5) — a coordinate
     /// within the target settlement, not an arbitrary hex. <see langword="null"/>
     /// means "no preference": <see cref="Combat.SiegeResolver.Resolve"/>
     /// picks uniformly at random among whatever buildings the defender
@@ -186,6 +186,21 @@ public sealed record Army
 
         var hours = Math.Max(0, (now - inTransit.Movement.DepartedAt).TotalHours);
         return Math.Max(0, Provisions - (TotalUpkeepPerHour * hours));
+    }
+
+    /// <summary>
+    /// This army with its provisions rebased so that <see cref="ProvisionsAt"/> gives exactly <paramref name="provisionsAtThen"/> at
+    /// <paramref name="at"/>, burning at the army's <em>current</em> upkeep from there on. The stored figure is the active leg's
+    /// departure baseline, so after a fight that changed the stacks (smaller upkeep) or refilled the food it is set to
+    /// <c>provisionsAtThen + upkeep * hours since the leg departed</c>; for a leg that departs at <paramref name="at"/> (a battle's
+    /// return leg) that is <paramref name="provisionsAtThen"/> itself.
+    /// </summary>
+    public Army WithProvisionsAt(DateTimeOffset at, double provisionsAtThen)
+    {
+        var burnedSinceDeparture = Location is ArmyLocation.InTransit inTransit
+            ? TotalUpkeepPerHour * Math.Max(0, (at - inTransit.Movement.DepartedAt).TotalHours)
+            : 0;
+        return this with { Provisions = Math.Max(0, provisionsAtThen) + burnedSinceDeparture };
     }
 
     /// <summary>Current hex: <paramref name="home"/> while <see cref="ArmyLocation.AtHome"/>, else the active leg's position.</summary>
@@ -295,6 +310,7 @@ public sealed record Army
         WallRules? walls = null,
         HexCoord? targetCampCoord = null,
         bool targetCampIsWater = false,
+        bool targetCampIsSand = false,
         Func<HexCoord, bool>? isCampSiteOccupied = null)
     {
         ArgumentNullException.ThrowIfNull(settlement);
@@ -314,7 +330,7 @@ public sealed record Army
         // PlanFieldOrder, which holds a field order to exactly the same targets.
         var target = ValidateMissionTarget(
             mission, normalisedRequest, settlement.Id, targetSettlementId, targetBuildingCoord, targetClaimDiscs,
-            destination, targetCampCoord, targetCampIsWater, terrainAt, giants);
+            destination, targetCampCoord, targetCampIsWater, targetCampIsSand, terrainAt, giants);
         if (target.Rejection != DispatchRejection.None)
         {
             return DispatchDecision.Rejected(target.Rejection);
@@ -396,7 +412,7 @@ public sealed record Army
         // settlers on (issue #55 §2) — same beaching exemption, no separate shoreline check needed:
         // HexPathfinder can only ever reach that land hex by sea if it is adjacent to reachable open water, which is
         // exactly what "shoreline" means (see Shoreline.IsShoreline); any other land hex fails as UnreachableLeg below.
-        if (!SkipsDestinationTerrainCheck(isFleet, mission) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
+        if (!SkipsDestinationTerrainCheck(isFleet, mission, targetCampIsSand) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
         {
             return DispatchDecision.Rejected(isFleet
                 ? DispatchRejection.DestinationNotSea
@@ -490,7 +506,7 @@ public sealed record Army
     /// <summary>
     /// The mission and target rules a dispatch from home (<see cref="PlanDispatch"/>) and a field order
     /// (<see cref="PlanFieldOrder"/>) both hold an army to, in one place: a fleet's passengers need ship slots, a
-    /// <see cref="ArmyMission.Hunt"/> needs a camp the units can reach (land units a land camp, ships a water camp), an
+    /// <see cref="ArmyMission.Hunt"/> needs a camp the units can reach (land units a land camp, ships a water camp, a fleet a sand camp too with land troops aboard), an
     /// Attack/Support/Raid needs a target settlement other than the army's own, a target building only goes with
     /// Attack/Raid, and a fleet Attack/Raid is always sent at one building on the target's shore.
     /// </summary>
@@ -514,6 +530,7 @@ public sealed record Army
         HexCoord destination,
         HexCoord? targetCampCoord,
         bool targetCampIsWater,
+        bool targetCampIsSand,
         Func<HexCoord, Terrain> terrainAt,
         IGiantIndex? giants)
     {
@@ -533,13 +550,15 @@ public sealed record Army
         {
             // The camp itself is looked up by the caller, which passes its hex as targetCampCoord only when one
             // exists (and says whether it stands on the sea). Land units hunt land camps and fleets hunt water
-            // camps (the whale road); neither can reach the other's.
+            // camps (the whale road); a fleet also hunts a sand camp (a haul-out) with the land troops it carries (they fight,
+            // the ships do not), so it needs some aboard. Any other land camp is out of a fleet's reach, and land units cannot
+            // reach a water camp.
             if (targetCampCoord is null)
             {
                 return (DispatchRejection.NoCampAtDestination, destination);
             }
 
-            if (isFleet && !targetCampIsWater)
+            if (isFleet && !targetCampIsWater && !(targetCampIsSand && ShipCargo.Passengers(units).Count > 0))
             {
                 return (DispatchRejection.HuntRequiresLandUnits, destination);
             }
@@ -613,8 +632,10 @@ public sealed record Army
     /// ends on land, which is exactly the point (see <see cref="HexPathfinder.FindPath"/>'s beaching exemption at both
     /// route endpoints). The real fleet-reachability gate for Attack/Raid is the shore-building check.
     /// </summary>
-    private static bool SkipsDestinationTerrainCheck(bool isFleet, ArmyMission mission) =>
-        isFleet && mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid or ArmyMission.Found or ArmyMission.SetUpCamp;
+    private static bool SkipsDestinationTerrainCheck(bool isFleet, ArmyMission mission, bool targetCampIsSand) =>
+        isFleet && (mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid or ArmyMission.Found
+            or ArmyMission.SetUpCamp
+            || (mission == ArmyMission.Hunt && targetCampIsSand));
 
     /// <summary>
     /// Settles an <see cref="ArmyMission.Attack"/> or <see cref="ArmyMission.Raid"/>
@@ -687,7 +708,7 @@ public sealed record Army
             || army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit
             || now < inTransit.Movement.ArrivesAt)
         {
-            return new ArmyArrivalResult(army, defenderSettlement, Fought: false, Battle: null, GuestLosses: [], Siege: null);
+            return new ArmyArrivalResult(army, defenderSettlement, Fought: false, Battle: null, GuestLosses: [], Siege: null, Attack: null);
         }
 
         guestDefenderStacks ??= [];
@@ -716,43 +737,31 @@ public sealed record Army
 
         var lootAvailable = settledDefender.Resources.At(battleInstant);
 
-        // Guest armies fight alongside the home garrison (issue #40 phase 4
-        // §3): their stacks are merged, by type, into the defense side the
-        // resolver sees, so combined defense power (and hence the win/loss
-        // outcome itself) properly reflects everyone standing on the wall.
+        // Guest armies fight alongside the home garrison (issue #40 phase 4 §3): their stacks are merged, by type, into the defense
+        // side of each fight, so combined defense power (and hence the win/loss outcome itself) reflects everyone standing on the
+        // wall. A land army fights the defender's land units; a fleet fights the defender's ships first and then lands what is still
+        // aboard against the land units (AttackResolver, docs/design/economy.md "Fleets"). The defender's pooled losses are split
+        // back home/guest inside the resolver (ProportionalAllocator, see its remarks). A second split, of the guest total across
+        // the actual guest Army records, happens one layer up in ArmyService — this method only knows the pooled guest total, never
+        // individual guest armies, to keep it DB-free.
         //
-        // A fleet's battle is fought by the ships standing on the target hex only (docs/design/economy.md, "Fleets"): the
-        // attacker's passengers stay aboard, and the defender's land units (garrison and guests) stay out of it. The home
-        // ships stand at the fleet anchor (Dockyard, or a shoreline centre), the guests' ships at the centre. A defender
-        // with no ships on the target hex has nobody to fight: the resolver gives the fleet a costless win, and the siege
-        // below applies. The passengers the surviving ships cannot carry drown (ShipCargo.Rejoin).
-        IReadOnlyList<UnitStack> fightingGuests = guestDefenderStacks;
-        IReadOnlyList<UnitStack> fightingHome = settledDefender.Garrison;
-        if (army.IsFleet)
-        {
-            var target = army.TargetBuildingCoord;
-            var homeFights = target == FleetAnchor(settledDefender.Centre, settledDefender.Buildings, terrainAt!);
-            var guestsFight = target == settledDefender.Centre;
-            fightingHome = homeFights ? ShipCargo.Ships(settledDefender.Garrison) : [];
-            fightingGuests = guestsFight ? ShipCargo.Ships(guestDefenderStacks) : [];
-        }
-
-        var combinedDefense = MergeStacksByType(fightingHome, fightingGuests);
-        var (attackerFighters, passengers) = ShipCargo.SplitForFight(army.Stacks);
-        var plan = BattleResolver.Resolve(
-            attackerFighters, combinedDefense, defenseBonusPercent, lootAvailable, seed,
+        // The provisions the (pre-battle, full-strength) army still carries at the battle instant: what it burned reaching it is gone,
+        // and a won land fight refills them from the target's food (docs/design/troop-movement-range.md section 1b).
+        var provisionsAtBattle = army.ProvisionsAt(battleInstant);
+        var attack = AttackResolver.Resolve(
+            army.Stacks, settledDefender.Garrison, guestDefenderStacks, defenseBonusPercent, lootAvailable, seed,
             raid: army.Mission == ArmyMission.Raid,
             landAttackBonusPercent: landAttackBonusPercent,
-            shipAttackBonusPercent: shipAttackBonusPercent);
-        var shipSurvivors = plan.AttackerSurvivors;
-        var (attackerLosses, attackerSurvivors) = ShipCargo.Rejoin(plan.AttackerLosses, shipSurvivors, passengers);
-        plan = plan with { AttackerLosses = attackerLosses, AttackerSurvivors = attackerSurvivors };
+            shipAttackBonusPercent: shipAttackBonusPercent,
+            army.TargetBuildingCoord, settledDefender.Buildings, terrainAt, provisionsAtBattle);
+        var plan = attack.Overall;
 
         // Loot leaves the defender's stock at the instant of battle even
         // though it does not reach the attacker's own stock until the
         // survivors physically get home (see Loot's remarks) — it is gone
-        // from the defender either way.
-        var afterLoot = settledDefender.Resources.TrySpend(plan.LootTaken, battleInstant, out var spent)
+        // from the defender either way. So is the food that refilled the army's provisions.
+        var afterLoot = settledDefender.Resources.TrySpend(
+            plan.LootTaken + new ResourceAmounts(0, 0, attack.Refill, 0), battleInstant, out var spent)
             ? spent
             : settledDefender.Resources.SettledTo(battleInstant);
 
@@ -764,42 +773,25 @@ public sealed record Army
         // at this same instant, not whenever someone next looks.
         settledDefender = (settledDefender with { Resources = afterLoot }).DropUnfundedOrders(battleInstant);
 
-        // plan.DefenderLosses/DefenderSurvivors are pooled across home+guest
-        // (they were computed against combinedDefense above) — split each
-        // type's pooled loss back between "home garrison" and "the guest
-        // total", proportional to each side's own pre-battle holding of that
-        // type (ProportionalAllocator; see its remarks). A second split, of
-        // the guest total across the actual guest Army records, happens one
-        // layer up in ArmyService — this method only knows the pooled guest
-        // total, never individual guest armies, to keep it DB-free.
-        var homeLosses = SplitPooledByOwner(plan.DefenderLosses, fightingHome, fightingGuests, wantHome: true);
-        var guestLosses = SplitPooledByOwner(plan.DefenderLosses, fightingHome, fightingGuests, wantHome: false);
-        var homeSurvivors = SubtractStacks(settledDefender.Garrison, homeLosses);
+        var guestLosses = attack.DefenderGuestLosses;
+        var homeSurvivors = SubtractStacks(settledDefender.Garrison, attack.DefenderHomeLosses);
 
         var defenderPostBattle = settledDefender with { Garrison = homeSurvivors, Resources = afterLoot };
 
-        // Catapult damage (issue #40 phase 5): only ever applied on an
-        // attacker win, against whatever survived the fight. Applied to
-        // Buildings before the forward SettleTo below, so the resulting
-        // production/capacity totals (and hence any starvation the loss of a
-        // Farm/FishingHut/PumpkinFarm triggers) already reflect the damage —
-        // Settlement.SettleTo recomputes both from Buildings on every call,
-        // nothing extra is needed here for that to fall out correctly.
-        var siege = plan.Winner == BattleWinner.Attacker
-            ? Combat.SiegeResolver.Resolve(
-                // A fleet's siege is its surviving ships'; the siege engines aboard are passengers and do not fire.
-                army.IsFleet ? shipSurvivors : plan.AttackerSurvivors, defenderPostBattle.Buildings, army.TargetBuildingCoord, seed,
-                randomFallback: !army.IsFleet)
-            : Combat.SiegeOutcome.None;
-
-        if (siege.Applied)
+        // Building damage (issue #40 phase 5): the Fire Ships' fire first, then the siege engines' (only after a won land fight),
+        // both already worked out by the resolver. Applied to Buildings before the forward SettleTo below, so the resulting
+        // production/capacity totals (and hence any starvation the loss of a Farm/FishingHut/PumpkinFarm triggers) already reflect
+        // the damage — Settlement.SettleTo recomputes both from Buildings on every call, nothing extra is needed here for that
+        // to fall out correctly. Each step drops any build order still targeting a hex it destroyed outright, or the next SettleTo
+        // would find nothing standing there and silently rebuild it (issue #158 stage 1b).
+        var siege = attack.LandSiege;
+        foreach (var step in new[] { attack.FireSiege, attack.LandSiege })
         {
-            // Drops any build order still targeting the hit hex when the
-            // catapult destroyed it outright, or the next SettleTo would find
-            // nothing standing there and silently rebuild it (issue #158
-            // stage 1b).
-            defenderPostBattle = defenderPostBattle.WithSiegeDamage(
-                siege.UpdatedBuildings!, siege.TargetCoord!.Value, battleInstant, defenderSpeedFactor, guestDefenderStacks);
+            if (step.Applied)
+            {
+                defenderPostBattle = defenderPostBattle.WithSiegeDamage(
+                    step.UpdatedBuildings!, step.TargetCoord!.Value, battleInstant, defenderSpeedFactor, guestDefenderStacks);
+            }
         }
 
         var finalDefender = defenderPostBattle.SettleTo(now, defenderSpeedFactor).Settlement;
@@ -807,14 +799,8 @@ public sealed record Army
         var survivorCount = plan.AttackerSurvivors.Sum(s => s.Count);
         if (survivorCount == 0)
         {
-            return new ArmyArrivalResult(null, finalDefender, Fought: true, plan, guestLosses, siege);
+            return new ArmyArrivalResult(null, finalDefender, Fought: true, plan, guestLosses, siege, attack);
         }
-
-        // Rebase provisions to what the (pre-battle, full-strength) army had
-        // actually burned reaching the battle instant — same trick
-        // SettleTo's turn-around branch uses for Move.
-        var elapsedOutboundHours = (battleInstant - movement.DepartedAt).TotalHours;
-        var provisionsAtBattle = Math.Max(0, army.Provisions - (army.TotalUpkeepPerHour * elapsedOutboundHours));
 
         var returning = new Movement.Movement
         {
@@ -833,15 +819,16 @@ public sealed record Army
             RetreatImmune = true,
         };
 
-        var survivorArmy = army with
+        // Provisions are rebased to what the army carried at the battle instant, plus what the win refilled (same trick
+        // SettleTo's turn-around branch uses for Move).
+        var survivorArmy = (army with
         {
             Stacks = plan.AttackerSurvivors,
             Location = new ArmyLocation.InTransit(returning),
-            Provisions = provisionsAtBattle,
             Loot = plan.LootTaken,
-        };
+        }).WithProvisionsAt(battleInstant, provisionsAtBattle + attack.Refill);
 
-        return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan, guestLosses, siege);
+        return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan, guestLosses, siege, attack);
     }
 
     /// <summary>
@@ -867,8 +854,7 @@ public sealed record Army
         }
 
         var movement = inTransit.Movement;
-        var elapsedOutboundHours = (battleInstant - movement.DepartedAt).TotalHours;
-        var provisionsAtBattle = Math.Max(0, Provisions - (TotalUpkeepPerHour * elapsedOutboundHours));
+        var provisionsAtBattle = ProvisionsAt(battleInstant);
 
         var returning = new Movement.Movement
         {
@@ -884,13 +870,13 @@ public sealed record Army
             RetreatImmune = true,
         };
 
-        return this with
+        // What the army carried at the battle instant, plus the food the win took from the camp to refill it.
+        return (this with
         {
             Stacks = plan.ArmySurvivors,
             Location = new ArmyLocation.InTransit(returning),
-            Provisions = provisionsAtBattle,
             Loot = plan.Loot,
-        };
+        }).WithProvisionsAt(battleInstant, provisionsAtBattle + plan.Refill);
     }
 
     /// <summary>
@@ -989,7 +975,7 @@ public sealed record Army
     }
 
     /// <summary>Merges two stack lists into one, aggregated by type.</summary>
-    private static IReadOnlyList<UnitStack> MergeStacksByType(
+    internal static IReadOnlyList<UnitStack> MergeStacksByType(
         IReadOnlyList<UnitStack> a, IReadOnlyList<UnitStack> b) =>
         a.Concat(b)
             .GroupBy(s => s.Type)
@@ -997,7 +983,7 @@ public sealed record Army
             .ToList();
 
     /// <summary>Subtracts <paramref name="losses"/> from <paramref name="stacks"/>, per type, dropping a type that reaches zero.</summary>
-    private static IReadOnlyList<UnitStack> SubtractStacks(
+    internal static IReadOnlyList<UnitStack> SubtractStacks(
         IReadOnlyList<UnitStack> stacks, IReadOnlyList<UnitStack> losses)
     {
         var lossByType = losses.ToDictionary(s => s.Type, s => s.Count);
@@ -1013,7 +999,7 @@ public sealed record Army
     /// share, per <see cref="ProportionalAllocator"/> — see
     /// <see cref="SettleArrival"/>'s remarks.
     /// </summary>
-    private static IReadOnlyList<UnitStack> SplitPooledByOwner(
+    internal static IReadOnlyList<UnitStack> SplitPooledByOwner(
         IReadOnlyList<UnitStack> pooled,
         IReadOnlyList<UnitStack> homeStacks,
         IReadOnlyList<UnitStack> guestStacks,
@@ -1580,6 +1566,7 @@ public sealed record Army
     /// <param name="targetClaimDiscs">The target's claim discs, for the fleet shore rule — see <see cref="PlanDispatch"/>.</param>
     /// <param name="targetCampCoord">The camp's hex for a Hunt, or <see langword="null"/> when no camp stands there.</param>
     /// <param name="targetCampIsWater">Whether that camp stands on the sea.</param>
+    /// <param name="targetCampIsSand">Whether that camp is a sand camp (a haul-out), the one land camp a fleet hunts, with the land troops aboard.</param>
     /// <param name="giants">Giant hexes, for the fleet shore rule's territory test.</param>
     /// <param name="requestedUnits">What leaves; <see langword="null"/> means the whole army.</param>
     /// <param name="splitArmyId">The id of the new army when this is a split.</param>
@@ -1601,6 +1588,7 @@ public sealed record Army
         IReadOnlyList<(HexCoord Centre, int Radius)>? targetClaimDiscs = null,
         HexCoord? targetCampCoord = null,
         bool targetCampIsWater = false,
+        bool targetCampIsSand = false,
         IGiantIndex? giants = null,
         IReadOnlyList<UnitStack>? requestedUnits = null,
         Guid? splitArmyId = null)
@@ -1656,7 +1644,7 @@ public sealed record Army
 
         var target = ValidateMissionTarget(
             mission, leavingStacks, army.SettlementId, targetSettlementId, targetBuildingCoord, targetClaimDiscs,
-            destination, targetCampCoord, targetCampIsWater, terrainAt, giants);
+            destination, targetCampCoord, targetCampIsWater, targetCampIsSand, terrainAt, giants);
         if (target.Rejection != DispatchRejection.None)
         {
             return FieldOrderResult.Rejected(ToFieldOrderRejection(target.Rejection));
@@ -1664,7 +1652,7 @@ public sealed record Army
 
         var routeDestination = target.RouteDestination;
 
-        if (!SkipsDestinationTerrainCheck(isFleet, mission) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
+        if (!SkipsDestinationTerrainCheck(isFleet, mission, targetCampIsSand) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
         {
             return FieldOrderResult.Rejected(isLandUnit
                 ? FieldOrderRejection.DestinationNotLand
@@ -2091,11 +2079,17 @@ public sealed record WalkedLeg(Movement.Movement Leg, DateTimeOffset Until)
 /// catapults survived to fire, or the defender had no buildings to hit, and
 /// <see langword="null"/> only when <paramref name="Fought"/> is
 /// <see langword="false"/> (no battle happened at all this call, so siege was
-/// never even attempted) — see <see cref="Combat.SiegeResolver.Resolve"/>.
+/// never even attempted) — see <see cref="Combat.SiegeResolver.Resolve"/>. The Fire Ships' fire damage is
+/// <see cref="Combat.AttackPlan.FireSiege"/> on <paramref name="Attack"/>.
+/// </param>
+/// <param name="Attack">
+/// The whole attack: the ship fight and the land fight, the drowned, the Fire Ships burned and both sieges (see
+/// <see cref="Combat.AttackPlan"/>). <paramref name="Battle"/> is its <see cref="Combat.AttackPlan.Overall"/> summary.
+/// <see langword="null"/> when nothing was fought.
 /// </param>
 public sealed record ArmyArrivalResult(
     Army? Army, Settlement DefenderSettlement, bool Fought, Combat.BattlePlan? Battle,
-    IReadOnlyList<UnitStack> GuestLosses, Combat.SiegeOutcome? Siege);
+    IReadOnlyList<UnitStack> GuestLosses, Combat.SiegeOutcome? Siege, Combat.AttackPlan? Attack);
 
 /// <param name="Arrived">
 /// True when this call actually brought the army to its host — the caller

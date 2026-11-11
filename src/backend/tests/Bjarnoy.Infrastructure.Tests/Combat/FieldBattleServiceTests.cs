@@ -300,6 +300,43 @@ public sealed class FieldBattleServiceTests : IDisposable
         Assert.Equal(new HexCoord(0, 0), loserTransit.Movement.Path[0]);
     }
 
+    [Theory]
+    [InlineData(1.0, 1000.0)] // provisions already burned to zero at the battle: the whole refill must still arrive
+    [InlineData(200.0, 30.0)] // a small refill that leaves room: provisions after = provisions at the battle + the refill
+    public async Task The_winners_provisions_right_after_a_field_battle_are_those_at_the_battle_plus_the_refill_never_above_capacity(
+        double provisions, double loserFood)
+    {
+        using var db = CreateContext();
+        var worldId = AddWorld(db);
+        var islandId = AddIsland(db, worldId);
+        var settlementA = AddSettlement(db, worldId, islandId, AddUser(db), -20, 0);
+        var settlementB = AddSettlement(db, worldId, islandId, AddUser(db), 20, 0);
+        var armyA = MakeInTransitArmy(
+            settlementA, [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Axeman, 10));
+        armyA.Provisions = provisions;
+        var armyB = MakeInTransitArmy(
+            settlementB, [(2, 0), (1, 0), (0, 0), (-1, 0), (-2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Spearman, 5));
+        armyB.LootFood = loserFood;
+        db.Armies.AddRange(armyA, armyB);
+        await db.SaveChangesAsync(Ct);
+
+        var service = new FieldBattleService(db, NullLogger<FieldBattleService>.Instance);
+        var loadedA = (await LoadAsync(db, armyA.Id, Ct))!;
+        var before = loadedA.ToDomain();
+        var now = T0 + TimeSpan.FromHours(3);
+        Assert.True(await service.TryResolveAsync(loadedA, before, now, Ct));
+        await db.SaveChangesAsync(Ct);
+
+        // Both armies cross hex (0,0) two hours in: that is the battle instant.
+        var battleAt = T0 + TimeSpan.FromHours(2);
+        var winner = (await LoadAsync(db, armyA.Id, Ct))!.ToDomain();
+        var capacity = winner.TotalFoodCarryCapacity;
+        var expected = Math.Min(capacity, before.ProvisionsAt(battleAt) + loserFood);
+
+        Assert.Equal(expected, winner.ProvisionsAt(battleAt), 6);
+        Assert.True(winner.ProvisionsAt(battleAt) <= capacity + 1e-9);
+    }
+
     [Fact]
     public async Task An_exact_tie_leaves_both_sides_with_survivors_and_no_loot_changes_hands()
     {
