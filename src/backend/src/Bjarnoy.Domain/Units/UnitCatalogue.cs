@@ -245,6 +245,25 @@ public static class UnitCatalogue
             RequiredUnitType = UnitType.Karve,
             RequiredBuildingType = BuildingType.Dockyard,
         },
+        [UnitType.FireShip] = new UnitDefinition
+        {
+            Type = UnitType.FireShip,
+            VisionRadius = 6,
+            Class = UnitClass.Ship,
+            // Starting values, to be tuned. No attack and no slots: ten Fire Ships burn one building level in the water.
+            Attack = 0,
+            Defense = 25,
+            Speed = 8,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 200,
+            ShipSlots = 0,
+            UpkeepPerHour = 5,
+            TrainingCost = new ResourceAmounts(Wood: 300, Stone: 60, Food: 40, Iron: 80),
+            TrainingDuration = TimeSpan.FromMinutes(40),
+            RequiredLonghouseLevel = 12,
+            RequiredUnitType = UnitType.Karve,
+            RequiredBuildingType = BuildingType.Dockyard,
+        },
     };
 
     /// <summary>The definition for a unit type.</summary>

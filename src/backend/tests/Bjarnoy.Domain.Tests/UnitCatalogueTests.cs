@@ -293,4 +293,33 @@ public class UnitCatalogueTests
             Assert.Equal(SiegeTargets.None, UnitCatalogue.Get(type).SiegeTargets);
         }
     }
+
+    [Fact]
+    public void The_fire_ship_has_its_starting_numbers_and_is_a_slotless_hull_without_attack()
+    {
+        var fireShip = UnitCatalogue.Get(UnitType.FireShip);
+
+        Assert.Equal(UnitClass.Ship, fireShip.Class);
+        Assert.Equal(0, fireShip.Attack);
+        Assert.Equal(25, fireShip.Defense);
+        Assert.Equal(8, fireShip.Speed);
+        Assert.Equal(0, fireShip.ShipSlots);
+        Assert.Equal(0, fireShip.CarryCapacity);
+        Assert.Equal(200, fireShip.FoodCarryCapacity);
+        Assert.Equal(5, fireShip.UpkeepPerHour);
+        Assert.Equal(6, fireShip.VisionRadius);
+        Assert.Equal(new ResourceAmounts(Wood: 300, Stone: 60, Food: 40, Iron: 80), fireShip.TrainingCost);
+        Assert.Equal(TimeSpan.FromMinutes(40), fireShip.TrainingDuration);
+        Assert.Equal("fireship", UnitType.FireShip.ToWireName());
+    }
+
+    [Fact]
+    public void The_fire_ship_needs_longhouse_12_a_dockyard_and_the_karve()
+    {
+        Assert.Equal(UnitType.Karve, UnitCatalogue.Get(UnitType.FireShip).RequiredUnitType);
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.FireShip, 11));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.FireShip, 12));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.FireShip, 12, _ => 0));
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.FireShip, 12, t => t == BuildingType.Dockyard ? 1 : 0));
+    }
 }
