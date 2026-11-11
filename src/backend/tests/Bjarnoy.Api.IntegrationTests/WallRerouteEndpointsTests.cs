@@ -518,4 +518,22 @@ public sealed class WallRerouteEndpointsTests : IAsyncLifetime
         Assert.Equal(P(Target.Q, Target.R), movement.Path[0]);
         Assert.DoesNotContain(P(-3, 0), movement.Path);
     }
+
+    [Fact]
+    public async Task A_wall_whose_instant_turns_out_to_lie_before_the_route_was_planned_is_still_walked_around()
+    {
+        // A waiting order gets its instants, in the past, only when its owner settles: here the line stood an hour before the army
+        // planned its route straight through the middle (0,0), and nothing changed after that.
+        var scene = await PlantAsync(returning: false, 1_000, LineAcross(), TimeSpan.FromHours(-1), WallKind.Standing);
+        using var client = Client();
+
+        _factory.Time.Advance(TimeSpan.FromHours(2));
+        var army = await ArmyAsync(client, scene.ArmyId);
+
+        var movement = army.Movement!;
+        Assert.False(movement.IsReturning);
+        Assert.Equal(P(Target.Q, Target.R), movement.Path[^1]);
+        Assert.DoesNotContain(P(0, 0), movement.Path);
+        Assert.DoesNotContain(P(0, 0), movement.ReturnPath);
+    }
 }

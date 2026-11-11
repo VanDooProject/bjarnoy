@@ -101,9 +101,27 @@ public sealed class WallBlockingTests
         // The old end (0,0) changed when (0,-1) stood beside it; the far end (0,3) did not change since long before.
         Assert.True(timeline.MayBlock(End, Marcher, T0, now));
         Assert.False(timeline.MayBlock(new HexCoord(0, 3), Marcher, T0, now));
-        // Planned after the change, or asked before it: nothing to look at.
-        Assert.False(timeline.MayBlock(End, Marcher, T0.AddHours(2), now));
+        // Asked before the change: nothing to look at. The new end (0,-1), planned through after it stood, is half open.
         Assert.False(timeline.MayBlock(End, Marcher, T0, T0.AddHours(1)));
+        Assert.False(timeline.MayBlock(Next, Marcher, T0.AddHours(2), now));
         Assert.False(timeline.MayBlock(new HexCoord(9, 9), Marcher, T0, now));
+    }
+
+    [Fact]
+    public void The_pre_check_keeps_a_piece_that_stood_as_no_end_when_the_route_was_planned_through_it()
+    {
+        // A waiting build order started when the order ahead of it finished, so once its owner settles, the line (0,0)..(0,3) turns
+        // out to have stood since before the army planned its route at T0, with no change after it.
+        var timeline = new WallTimeline(Line(T0.AddHours(-1)));
+        var now = T0.AddHours(3);
+
+        // A middle piece was never a half-open end: a route planned through it can only have been planned without it.
+        Assert.True(timeline.MayBlock(new HexCoord(0, 1), Marcher, T0, now));
+        Assert.True(timeline.MayBlock(new HexCoord(0, 2), Marcher, T0, now));
+        // The ends were half open then: a route may go through them.
+        Assert.False(timeline.MayBlock(End, Marcher, T0, now));
+        Assert.False(timeline.MayBlock(new HexCoord(0, 3), Marcher, T0, now));
+        // A lone piece with no neighbour blocks too.
+        Assert.True(new WallTimeline([Plain(new HexCoord(9, 9), T0.AddHours(-1))]).MayBlock(new HexCoord(9, 9), Marcher, T0, now));
     }
 }

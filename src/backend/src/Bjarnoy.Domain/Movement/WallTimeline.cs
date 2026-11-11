@@ -59,7 +59,9 @@ public sealed class WallTimeline
     /// <list type="bullet">
     /// <item>No wall, or a gate of the army's own owner (open to it inside its realm and outside): never.</item>
     /// <item>Another owner's gate: it may have closed since without a timestamp (a friendship or peace ended, the gate rejoined its realm).</item>
-    /// <item>A plain piece only when the timeline changed around it after the route was planned (<see cref="EventsAround"/> in
+    /// <item>A plain piece that stood when the route was planned as no land end (not exactly one standing neighbour): it blocked then
+    /// already, so the route was planned before the timeline knew of it (a waiting order's instants are set in the past).</item>
+    /// <item>Any other plain piece only when the timeline changed around it after the route was planned (<see cref="EventsAround"/> in
     /// <c>(plannedAt, now]</c>): a route is planned with the walls standing then, and every settle up to <paramref name="now"/> has dealt
     /// with what changed before it, so a piece whose neighbourhood stayed the same blocks no route that goes through it.</item>
     /// </list>
@@ -74,6 +76,14 @@ public sealed class WallTimeline
         if (wall.Wall.IsGate)
         {
             return wall.Wall.OwnerKey != ownerKey;
+        }
+
+        // A piece standing when the route was planned that was no land end then (not exactly one neighbour) blocked even then: the
+        // route cannot have been planned through it, it only learnt of it later (a waiting order that started when the one ahead of it
+        // finished gets its instants, in the past, when its owner settles).
+        if (wall.StandsAt(plannedAt) && hex.Neighbours().Count(n => _walls.TryGetValue(n, out var nb) && nb.StandsAt(plannedAt)) != 1)
+        {
+            return true;
         }
 
         return EventsAround(hex).Any(e => e > plannedAt && e <= now);
