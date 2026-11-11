@@ -321,7 +321,7 @@
 # interaction between u (AI) and user (me)
 
 ## github cloud agent
-- add screenshots to PR comments
+- add screenshots to PR comments if possible, if not into chat ins enough
 
 ## CLAUDE
 - ask questions if anything is unclear or you need more context
