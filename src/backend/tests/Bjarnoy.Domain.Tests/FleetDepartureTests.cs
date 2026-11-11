@@ -39,18 +39,17 @@ public class FleetDepartureTests
                 new PlacedBuilding(centre, BuildingType.Longhouse, longhouseLevel),
                 .. dockyards.Select(d => new PlacedBuilding(d, BuildingType.Dockyard, 1)),
             ],
-            Garrison = garrison,
             Resources = ResourcePool.Create(new ResourceAmounts(1_000_000, 1_000_000, 1_000_000, 1_000_000), production, capacity, T0),
-        };
+        }.WithGarrison(garrison);
     }
 
     private static DispatchDecision Move(Settlement settlement, HexCoord destination, UnitStack[]? requested = null) =>
-        Army.PlanDispatch(
+        TestArmy.PlanDispatch(
             settlement, requested ?? [new UnitStack(UnitType.Karve, 5)], 100, [], destination, T0,
             Guid.CreateVersion7(), Strait);
 
     private static DispatchDecision Raid(Settlement settlement) =>
-        Army.PlanDispatch(
+        TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Karve, 5)], 100, [], CoastalTarget, T0,
             Guid.CreateVersion7(), Strait, ArmyMission.Raid, Guid.CreateVersion7(),
             targetBuildingCoord: CoastalTarget, targetClaimDiscs: [(CoastalTarget, 3)]);
@@ -100,18 +99,42 @@ public class FleetDepartureTests
         Assert.Equal(Dock, movement.ReturnPath[^1]);
     }
 
+    // (2,0) is sand and touches the sea: its centre harbours ships. The same hex as grass does not.
+    private static Terrain SandBeach(HexCoord c) => c == new HexCoord(2, 0) ? Terrain.Sand : Strait(c);
+
     [Fact]
-    public void Coastal_settlement_keeps_its_centre_as_the_fleet_origin()
+    public void A_sand_centre_next_to_the_sea_keeps_its_centre_as_the_fleet_origin()
     {
         var centre = new HexCoord(2, 0);
-        var settlement = Found(centre, Dock);
+        var settlement = (Found(centre, Dock) with { CentreHarboursShips = true }).WithGarrison([new UnitStack(UnitType.Karve, 5)]);
+        Assert.Equal(centre, Army.FleetAnchor(settlement, SandBeach));
 
-        var decision = Move(settlement, new HexCoord(6, 0));
+        var decision = TestArmy.PlanDispatch(
+            settlement, [new UnitStack(UnitType.Karve, 5)], 100, [], new HexCoord(6, 0), T0,
+            Guid.CreateVersion7(), SandBeach, fromSpot: centre);
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
         var movement = MovementOf(decision.Army!);
         Assert.Equal(centre, movement.Path[0]);
         Assert.Equal(centre, movement.ReturnPath[^1]);
+        Assert.Equal(centre, decision.Army!.HomeSpot);
+    }
+
+    [Fact]
+    public void A_grass_centre_next_to_the_sea_does_not_harbour_ships_the_dockyard_is_the_anchor()
+    {
+        var centre = new HexCoord(2, 0);
+        var settlement = Found(centre, Dock);
+
+        Assert.True(Shoreline.IsShoreline(centre, Strait));
+        Assert.Equal(Dock, Army.FleetAnchor(settlement, Strait));
+        Assert.False(settlement.SpotAt(centre)!.HoldsShips);
+
+        var decision = Move(settlement, new HexCoord(6, 0));
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        Assert.Equal(Dock, MovementOf(decision.Army!).Path[0]);
+        Assert.Equal(Dock, decision.Army!.HomeSpot);
     }
 
     [Fact]
@@ -151,7 +174,7 @@ public class FleetDepartureTests
     {
         var settlement = FoundWithUnits(InlandHome, [new UnitStack(UnitType.Spearman, 5)], Dock);
 
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Spearman, 5)], 10, [], new HexCoord(0, 2), T0,
             Guid.CreateVersion7(), Strait);
 
@@ -166,7 +189,7 @@ public class FleetDepartureTests
     {
         var settlement = Found(InlandHome, Dock);
         var army = Move(settlement, new HexCoord(7, 0)).Army!;
-        var home = army.HomeHex(settlement.Centre, settlement.Buildings, Strait);
+        var home = army.HomeSpot;
 
         var recalled = army.Recall(T0.AddMinutes(10), home, Strait);
 
@@ -189,13 +212,14 @@ public class FleetDepartureTests
         {
             Id = Guid.CreateVersion7(),
             SettlementId = settlement.Id,
+            HomeSpot = Dock,
             Stacks = [new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Settler, 5)],
             Location = new ArmyLocation.InTransit(movement),
             Provisions = 100,
             Mission = ArmyMission.Found,
         };
         Assert.True(convoy.IsFleet);
-        var home = convoy.HomeHex(settlement.Centre, settlement.Buildings, Strait);
+        var home = convoy.HomeSpot;
         Assert.Equal(Dock, home);
 
         var recalled = convoy.Recall(T0.AddHours(1.5), home, Strait);
@@ -211,7 +235,7 @@ public class FleetDepartureTests
     {
         var settlement = Found(InlandHome, Dock);
         var army = Move(settlement, new HexCoord(6, 0)).Army!;
-        var home = army.HomeHex(settlement.Centre, settlement.Buildings, Strait);
+        var home = army.HomeSpot;
 
         var result = Army.PlanFieldOrder(army, [], new HexCoord(8, 0), home, T0.AddMinutes(5), Strait, isPremium: true);
 
@@ -231,12 +255,13 @@ public class FleetDepartureTests
         {
             Id = Guid.CreateVersion7(),
             SettlementId = settlement.Id,
+            HomeSpot = Dock,
             Stacks = [new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Settler, 5)],
             Location = new ArmyLocation.InTransit(movement),
             Provisions = 100,
             Mission = ArmyMission.Found,
         };
-        var home = convoy.HomeHex(settlement.Centre, settlement.Buildings, Strait);
+        var home = convoy.HomeSpot;
 
         var result = Army.RetargetFounding(convoy, new HexCoord(9, 1), T0.AddHours(1.5), home, Strait);
 
@@ -249,7 +274,7 @@ public class FleetDepartureTests
     {
         var settlement = Found(InlandHome, Dock);
         var army = Move(settlement, new HexCoord(7, 0)).Army!;
-        var home = army.HomeHex(settlement.Centre, settlement.Buildings, Strait);
+        var home = army.HomeSpot;
 
         var retreating = army.ForceFieldRetreat(T0.AddMinutes(30), new HexCoord(5, 0), home, Strait);
 

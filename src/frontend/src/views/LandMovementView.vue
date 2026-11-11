@@ -235,6 +235,7 @@ const tocLinks = computed(() =>
     <section id="sendOut" class="block">
       <h2>{{ $t('docs.landMovement.sendOut.heading') }}</h2>
       <ul class="rules">
+        <li>{{ $t('docs.landMovement.sendOut.spots') }}</li>
         <li>{{ $t('docs.landMovement.sendOut.orders') }}</li>
         <li>{{ $t('docs.landMovement.sendOut.split') }}</li>
         <li>{{ $t('docs.landMovement.sendOut.reach') }}</li>

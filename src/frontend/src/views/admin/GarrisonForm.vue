@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
-import type { SettlementResponse, UnitStackResponse } from '../../api/types';
+import type { GarrisonSpotResponse, SettlementResponse, UnitStackResponse } from '../../api/types';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import type { MessageSchema } from '../../i18n/schema';
 import { useUnsavedInput } from '../../composables/useUnsavedInput';
@@ -12,7 +12,7 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 // Troop creation via admin (issue #105): units land straight in the garrison,
 // free of cost and training time, and are ordinary units from then on —
 // dispatchable, feedable, starvable.
-const props = defineProps<{ settlementId: string; garrison: UnitStackResponse[] }>();
+const props = defineProps<{ settlementId: string; garrison: UnitStackResponse[]; spots: GarrisonSpotResponse[] }>();
 const emit = defineEmits<{ changed: [settlement: SettlementResponse] }>();
 
 const catalogue = useUnitCatalogueStore();
@@ -21,6 +21,8 @@ void catalogue.load();
 const unit = ref('');
 const count = ref(10);
 useUnsavedInput(() => count.value !== 10);
+// The garrison spot the units are created at or removed from, as "q,r"; the longhouse (listed first) until another is picked.
+const spot = ref('');
 const saving = ref(false);
 const error = ref<string | null>(null);
 
@@ -43,14 +45,28 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => props.spots,
+  (spots) => {
+    if (!spots.some((s) => spotKey(s) === spot.value)) spot.value = spots[0] ? spotKey(spots[0]) : '';
+  },
+  { immediate: true },
+);
+
+function spotKey(s: { q: number; r: number }): string {
+  return `${s.q},${s.r}`;
+}
+
 async function submit(sign: 1 | -1) {
-  if (saving.value || !unit.value) return;
+  if (saving.value || !unit.value || !spot.value) return;
+  const [q, r] = spot.value.split(',').map(Number);
 
   saving.value = true;
   error.value = null;
   try {
     const updated = await api.adminAdjustGarrison(props.settlementId, {
       unit: unit.value,
+      spot: { q, r },
       count: sign * Math.abs(count.value),
     });
     emit('changed', updated);
@@ -83,16 +99,24 @@ async function submit(sign: 1 | -1) {
         </select>
       </label>
       <label>
+        {{ $t('garrisonForm.spot') }}
+        <select v-model="spot" class="spot-select">
+          <option v-for="s in spots" :key="spotKey(s)" :value="spotKey(s)">
+            {{ $t(`garrisonForm.spots.${s.kind}`) }} {{ s.q }},{{ s.r }}
+          </option>
+        </select>
+      </label>
+      <label>
         {{ $t('garrisonForm.count') }}
         <input v-model.number="count" type="number" min="1" step="1" />
       </label>
     </div>
 
     <div class="actions">
-      <button type="submit" :disabled="saving || !unit">
+      <button type="submit" :disabled="saving || !unit || !spot">
         {{ saving ? $t('garrisonForm.working') : $t('garrisonForm.create') }}
       </button>
-      <button type="button" class="danger" :disabled="saving || !unit" @click="submit(-1)">
+      <button type="button" class="danger" :disabled="saving || !unit || !spot" @click="submit(-1)">
         {{ $t('garrisonForm.remove') }}
       </button>
     </div>

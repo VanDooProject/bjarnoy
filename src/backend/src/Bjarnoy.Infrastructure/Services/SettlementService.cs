@@ -526,7 +526,8 @@ public sealed class SettlementService(
             Name = name,
             Centre = coord,
             Buildings = [new PlacedBuilding(coord, BuildingType.Longhouse, 1)],
-            Garrison = startingGarrison,
+            // The convoy's escort stands at the new longhouse, the only spot a new settlement has.
+            SpotStacks = [.. startingGarrison.Select(g => new SpotStack(coord, g.Type, g.Count))],
             Resources = ResourcePool.Create(BuildingCatalogue.FoundingStock, production, capacity, now),
         });
 
@@ -611,7 +612,7 @@ public sealed class SettlementService(
             return null;
         }
 
-        if (session.WriteBack())
+        if (await session.WriteBackAsync(cancellationToken).ConfigureAwait(false))
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -675,7 +676,7 @@ public sealed class SettlementService(
         // The grant goes into the linked realm's shared stock.
         var settled = session.View(settlementId);
         session.Apply(settlementId, settled with { Resources = settled.Resources.Adjust(delta, session.Now) });
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -720,7 +721,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, result.Settlement!);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
@@ -748,7 +749,7 @@ public sealed class SettlementService(
 
         var granted = session.View(settlementId).GrantRune(new RuneInstance { Id = Guid.CreateVersion7(), Type = type, Rarity = rarity });
         session.Apply(settlementId, granted);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -788,7 +789,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, result.Settlement!);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return new RuneResult(RuneOutcome.Applied, session.Anchor, session.Clock);
@@ -821,7 +822,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, result.Settlement!);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return new RuneResult(RuneOutcome.Applied, session.Anchor, session.Clock);
@@ -854,7 +855,7 @@ public sealed class SettlementService(
 
         session.Store.SettleTo(session.Now);
 
-        if (session.WriteBack())
+        if (await session.WriteBackAsync(cancellationToken).ConfigureAwait(false))
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -909,7 +910,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, result.Settlement!);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
@@ -943,7 +944,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, result.Settlement!);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         await ReconcileRealmAsync(settlementId, cancellationToken).ConfigureAwait(false);
@@ -962,6 +963,7 @@ public sealed class SettlementService(
     /// </summary>
     public async Task<AdminGarrisonEditServiceResult> AdjustGarrisonAsync(
         Guid settlementId,
+        HexCoord spot,
         UnitType unitType,
         int delta,
         CancellationToken cancellationToken = default)
@@ -973,7 +975,7 @@ public sealed class SettlementService(
         }
 
         var result = session.View(settlementId).AdjustGarrison(
-            unitType, delta, session.Now, session.SpeedFactor, session.GuestStacksOf(settlementId), session.TerrainAt);
+            spot, unitType, delta, session.Now, session.SpeedFactor, session.GuestStacksOf(settlementId), session.TerrainAt);
 
         if (!result.Accepted)
         {
@@ -982,7 +984,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, result.Settlement!);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -1118,7 +1120,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(bookingId, booked.Enqueue(decision.Order!, now));
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -1169,7 +1171,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(bookingId, booked.Enqueue(decision.Order!, now));
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -1212,7 +1214,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(owner, decision.Settlement!);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Settlement {Id} cancelled build order {OrderId}.", settlementId, orderId);
@@ -1239,12 +1241,12 @@ public sealed class SettlementService(
         var settled = session.View(settlementId);
         if (!settled.Buildings.Any(b => b.Coord == coord && b.Type == BuildingType.Tower))
         {
-            session.WriteBack();
+            await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
             return false;
         }
 
         session.Apply(settlementId, settled.BurnTower(coord, now, session.SpeedFactor, session.GuestStacksOf(settlementId), session.TerrainAt));
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         return true;
     }
 
@@ -1308,7 +1310,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, settled.EnqueueTraining(decision.Orders, now));
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -1345,7 +1347,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, settled.StartFeast(decision.Feast!, now));
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -1387,7 +1389,7 @@ public sealed class SettlementService(
         }
 
         session.Apply(settlementId, settled.ClaimQuest(decision.Quest!, now));
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Settlement {Id} claimed quest {Quest}.", settlementId, decision.Quest!.Id);
@@ -1452,7 +1454,7 @@ public sealed class SettlementService(
             }
 
             session.Store.Rerate(newFactor);
-            session.WriteBack();
+            await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
             handled.UnionWith(session.Members.Select(m => m.Id));
         }
 
@@ -1644,7 +1646,7 @@ public sealed class SettlementService(
     /// <summary>Writes the session back and saves when settling (or a refused request) changed anything: a real change worth keeping.</summary>
     private async Task SaveIfChangedAsync(LinkedGroupSession session, CancellationToken cancellationToken)
     {
-        if (session.WriteBack())
+        if (await session.WriteBackAsync(cancellationToken).ConfigureAwait(false))
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }

@@ -83,6 +83,7 @@ import {
 import { reachableRange } from '../lib/map/hexPath';
 import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
+import { isGarrisonSpotTile } from '../lib/units/garrisonSpots';
 import { useSendBlockText, useSendPickerRows, useSendSources } from '../composables/useSendSources';
 import { motionEnabled } from '../lib/motion';
 import MobileDispatchSheet from '../components/hud/MobileDispatchSheet.vue';
@@ -900,7 +901,9 @@ function sendMissionAt(tile: Tile): 'move' | 'attack' | 'support' {
   const ownerSettlementId = tile.ownerId;
   if (!ownerSettlementId) return 'move';
   if (world.model.getSettlement(ownerSettlementId)?.ownerId !== player.id) return 'attack';
-  return world.isRealmSettlement(ownerSettlementId) ? 'move' : 'support';
+  if (world.isRealmSettlement(ownerSettlementId)) return 'move';
+  // Support joins one of the host's garrison spots: its longhouse, a tower or a dock. Anywhere else on its land it is a plain move.
+  return isGarrisonSpotTile(tile, world.model.getSettlement(ownerSettlementId)) ? 'support' : 'move';
 }
 function sendArmyAction(tile: Tile): RingAction {
   const mission = sendMissionAt(tile);
@@ -931,7 +934,11 @@ function retargetSendPicker(coord: AxialCoord, tile: Tile) {
   const canGo = !!selectedRow && (selectedRow.ok || selectedRow.block === 'pending');
   world.retargetSendPicker(
     coord,
-    mission === 'move' ? {} : mission === 'hunt' ? { mission } : { mission, targetSettlementId: tile.ownerId ?? undefined },
+    mission === 'move'
+      ? {}
+      : mission === 'hunt'
+        ? { mission }
+        : { mission, targetSettlementId: tile.ownerId ?? undefined, targetBuildingCoord: mission === 'support' ? coord : undefined },
     canGo,
   );
 }
@@ -1334,7 +1341,12 @@ async function onRingSelect(id: string) {
     case 'attack':
     case 'support':
       if (selectedCoord.value && tile?.ownerId) {
-        world.openSendPicker(selectedCoord.value, { mission: id, targetSettlementId: tile.ownerId });
+        // A support names the tapped hex: the host's garrison spot the army joins.
+        world.openSendPicker(selectedCoord.value, {
+          mission: id,
+          targetSettlementId: tile.ownerId,
+          targetBuildingCoord: id === 'support' ? selectedCoord.value : undefined,
+        });
       }
       closeRing();
       return;
