@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BuildingDefinitionResponse, BuildOrderResponse, TrainingOrderResponse } from '../../api/types';
 import {
+  HUD_BOX_FONT_PX,
   HUD_TIER,
   affordableInSeconds,
   buildingHudViewModel,
@@ -10,6 +11,7 @@ import {
   type BuildingHudInput,
   type HudRow,
 } from './buildingHud';
+import { DIAL_MIN_LABEL_PX, dialScale } from '../map/constructionDial';
 
 const stock = (o: Partial<Record<'wood' | 'stone' | 'food' | 'iron', number>> = {}) => ({ wood: 0, stone: 0, food: 0, iron: 0, ...o });
 
@@ -229,27 +231,43 @@ describe('rowsFor', () => {
 });
 
 describe('tierFor', () => {
-  it('uses the thresholds without history', () => {
+  const { labelBelow, boxBelow, nearAt, hysteresis } = HUD_TIER;
+  it('goes far exactly where the progress dial hides its label', () => {
+    // dialScale(mapScale, 0) shows the label from this size on; below it the marker is the ring only.
+    expect(dialScale(labelBelow, 0).showLabel).toBe(true);
+    expect(dialScale(labelBelow - 0.01, 0).showLabel).toBe(false);
+    expect(tierFor(labelBelow)).toBe('dial');
+    expect(tierFor(labelBelow - 0.01)).toBe('far');
+  });
+  it('shows the box once its text would be at least the minimum label size on screen', () => {
+    expect(HUD_BOX_FONT_PX * boxBelow).toBeCloseTo(DIAL_MIN_LABEL_PX);
+    expect(tierFor(boxBelow - 0.01)).toBe('dial');
+    expect(tierFor(boxBelow)).toBe('mid');
+  });
+  it('goes near at the one exported threshold', () => {
     expect(tierFor(1)).toBe('mid');
-    expect(tierFor(HUD_TIER.nearAt)).toBe('near');
-    expect(tierFor(HUD_TIER.farBelow - 0.01)).toBe('far');
-    expect(tierFor(HUD_TIER.farBelow)).toBe('mid');
+    expect(tierFor(nearAt - 0.01)).toBe('mid');
+    expect(tierFor(nearAt)).toBe('near');
   });
-  it('stays near until the ratio drops 0.05 below the threshold', () => {
-    expect(tierFor(1.38, 'near')).toBe('near');
-    expect(tierFor(1.34, 'near')).toBe('mid');
-    expect(tierFor(1.38, 'mid')).toBe('mid');
+  it('keeps the tier until zs is past the threshold by the hysteresis', () => {
+    expect(tierFor(nearAt - hysteresis / 2, 'near')).toBe('near');
+    expect(tierFor(nearAt - hysteresis - 0.001, 'near')).toBe('mid');
+    expect(tierFor(nearAt - hysteresis / 2, 'mid')).toBe('mid');
+    expect(tierFor(boxBelow - hysteresis / 2, 'mid')).toBe('mid');
+    expect(tierFor(boxBelow - hysteresis / 2, 'dial')).toBe('dial');
+    expect(tierFor(labelBelow - hysteresis / 2, 'dial')).toBe('dial');
+    expect(tierFor(labelBelow - hysteresis / 2, 'far')).toBe('far');
   });
-  it('stays far until the ratio rises 0.05 above the threshold', () => {
-    expect(tierFor(0.72, 'far')).toBe('far');
-    expect(tierFor(0.76, 'far')).toBe('mid');
-    expect(tierFor(0.72, 'mid')).toBe('mid');
-  });
-  it('does not flicker when the ratio jitters around a threshold', () => {
-    let tier = tierFor(1.45, null);
+  it('does not flicker when zs jitters around a threshold', () => {
+    let tier = tierFor(nearAt + 0.05, null);
     const seen = new Set<string>();
-    for (const r of [1.41, 1.39, 1.42, 1.38, 1.4]) seen.add((tier = tierFor(r, tier)));
+    for (const z of [nearAt + 0.01, nearAt - 0.01, nearAt + 0.02, nearAt - 0.02, nearAt]) seen.add((tier = tierFor(z, tier)));
     expect(seen).toEqual(new Set(['near']));
+  });
+  it('has no box rows on far and dial', () => {
+    const vm = buildingHudViewModel(input());
+    expect(rowsFor(vm, 'far', { premium: false })).toEqual([]);
+    expect(rowsFor(vm, 'dial', { premium: false })).toEqual([]);
   });
 });
 

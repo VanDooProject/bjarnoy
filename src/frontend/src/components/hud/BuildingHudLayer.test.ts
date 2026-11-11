@@ -28,12 +28,12 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
   const renderer = {
     // Screen x grows with q, so the stacking order is easy to predict.
     dialScreenPoint: (coord: { q: number; r: number }) => ({ x: 100 + coord.q * 80, y: 300 + coord.r * 10 }),
-    cameraZoom: 1,
-    settlementBaseZoom: 1,
+    // The progress dial's map scale: 1 is the size at the settlement's default zoom.
+    dialMapScale: 1,
     keyDrivesMap: vi.fn(() => true),
     ...overrides,
   };
-  return renderer as BuildingHudRenderer & { cameraZoom: number; keyDrivesMap: ReturnType<typeof vi.fn> };
+  return renderer as BuildingHudRenderer & { dialMapScale: number; keyDrivesMap: ReturnType<typeof vi.fn> };
 }
 
 function mountLayer(renderer: BuildingHudRenderer) {
@@ -53,6 +53,8 @@ function seedBuildings() {
     { q: 2, r: 0, type: 'tower', level: 10 },
     // A wall segment has no level to show.
     { q: 4, r: 0, type: 'palisade', level: 1 },
+    // A bridge does get a marker.
+    { q: 5, r: 0, type: 'bridge', level: 1 },
   ];
   return world;
 }
@@ -79,11 +81,11 @@ describe('BuildingHudLayer', () => {
     vi.unstubAllGlobals();
   });
 
-  it('renders one marker per building that has a level, and none for walls', () => {
+  it('renders one marker per building that is not a wall, bridges included', () => {
     seedBuildings();
     wrapper = mountLayer(fakeRenderer());
     const coords = wrapper.findAll('.hud-marker').map((m) => m.attributes('data-coord'));
-    expect(coords.sort()).toEqual(['1,0', '2,0', '3,0']);
+    expect(coords.sort()).toEqual(['1,0', '2,0', '3,0', '5,0']);
     expect(wrapper.get('[data-coord="3,0"] .hud-marker__inner').attributes('aria-label')).toBe('Barracks, level 2');
   });
 
@@ -99,45 +101,107 @@ describe('BuildingHudLayer', () => {
     seedBuildings();
     wrapper = mountLayer(fakeRenderer());
     runFrame();
-    expect(wrapper.get<HTMLElement>('[data-coord="2,0"]').element.style.transform).toBe('translate3d(260.0px, 300.0px, 0)');
+    // The dial's centre sits on the progress dial's centre, scaled by the map scale.
+    expect(wrapper.get<HTMLElement>('[data-coord="2,0"]').element.style.transform).toBe('translate3d(260.0px, 300.0px, 0) scale(1.000)');
   });
 
-  it('shows the box on mid and near, and only the dial on far', async () => {
+  it('scales the whole marker with the map like the progress dial', () => {
+    seedBuildings();
+    const renderer = fakeRenderer({ dialMapScale: 0.8 });
+    wrapper = mountLayer(renderer);
+    runFrame();
+    expect(wrapper.get<HTMLElement>('[data-coord="2,0"]').element.style.transform).toContain('scale(0.800)');
+    renderer.dialMapScale = 2;
+    runFrame();
+    expect(wrapper.get<HTMLElement>('[data-coord="2,0"]').element.style.transform).toContain('scale(2.000)');
+  });
+
+  it('shows the box from mid on, the dial alone before that, and the bare ring on far', async () => {
     seedBuildings();
     const renderer = fakeRenderer();
     wrapper = mountLayer(renderer);
-    runFrame();
-    await wrapper.vm.$nextTick();
-    expect(wrapper.get('[data-coord="3,0"]').attributes('data-tier')).toBe('mid');
-    expect(wrapper.find('[data-coord="3,0"] .hud-marker__box').exists()).toBe(true);
+    const at = async (scale: number) => {
+      renderer.dialMapScale = scale;
+      runFrame();
+      await wrapper!.vm.$nextTick();
+    };
+    const marker = () => wrapper!.get('[data-coord="3,0"]');
+    await at(1);
+    expect(marker().attributes('data-tier')).toBe('mid');
+    expect(marker().find('.hud-marker__box').exists()).toBe(true);
 
-    renderer.cameraZoom = 2;
-    runFrame();
-    await wrapper.vm.$nextTick();
-    expect(wrapper.get('[data-coord="3,0"]').attributes('data-tier')).toBe('near');
-    expect(wrapper.find('[data-coord="3,0"] .hud-marker__box').exists()).toBe(true);
+    await at(1.5);
+    expect(marker().attributes('data-tier')).toBe('near');
+    expect(marker().find('.hud-marker__box').exists()).toBe(true);
 
-    renderer.cameraZoom = 0.5;
-    runFrame();
-    await wrapper.vm.$nextTick();
-    expect(wrapper.get('[data-coord="3,0"]').attributes('data-tier')).toBe('far');
-    expect(wrapper.find('.hud-marker__box').exists()).toBe(false);
-    // The dial stays, smaller.
-    expect(wrapper.find('[data-coord="3,0"] svg.hud-dial').exists()).toBe(true);
+    // The box text would be under the minimum size: the dial with its level, no box.
+    await at(0.8);
+    expect(marker().attributes('data-tier')).toBe('dial');
+    expect(marker().find('.hud-marker__box').exists()).toBe(false);
+    expect(marker().find('text').text()).toBe('2');
+
+    // Where the progress dial hides its label: ring only, no number, no box.
+    await at(0.5);
+    expect(marker().attributes('data-tier')).toBe('far');
+    expect(marker().find('.hud-marker__box').exists()).toBe(false);
+    expect(marker().find('text').exists()).toBe(false);
+    expect(marker().find('svg.hud-dial polygon').exists()).toBe(true);
   });
 
-  it('measures the tiers against the zoom the view landed on, not an absolute zoom', async () => {
+  it('grows a hovered marker to its default-zoom size and brings it to the front, then lets it shrink back', async () => {
     seedBuildings();
-    // Landed at 0.4: the same 0.4 is mid, 0.8 is near.
-    const renderer = fakeRenderer({ settlementBaseZoom: 0.4, cameraZoom: 0.4 });
+    const renderer = fakeRenderer({ dialMapScale: 0.5 });
     wrapper = mountLayer(renderer);
     runFrame();
     await wrapper.vm.$nextTick();
-    expect(wrapper.get('.hud-marker').attributes('data-tier')).toBe('mid');
-    renderer.cameraZoom = 0.8;
-    runFrame();
+    const el = () => wrapper!.get<HTMLElement>('[data-coord="1,0"]');
+    expect(el().element.style.transform).toContain('scale(0.500)');
+    expect(el().attributes('data-tier')).toBe('far');
+
+    await el().get('.hud-marker__dial').trigger('pointerenter', { pointerType: 'mouse' });
+    // Frames are 0 ms apart in the test; the tween needs real time, so step the clock.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(60);
+      runFrame();
+    }
+    vi.useRealTimers();
     await wrapper.vm.$nextTick();
-    expect(wrapper.get('.hud-marker').attributes('data-tier')).toBe('near');
+    expect(el().element.style.transform).toContain('scale(1.000)');
+    expect(el().attributes('data-tier')).toBe('mid');
+    expect(el().find('.hud-marker__box').exists()).toBe(true);
+    // Left-most by x, yet above the markers to its right.
+    expect(Number(el().element.style.zIndex)).toBe(3);
+
+    await el().get('.hud-marker__dial').trigger('pointerleave', { pointerType: 'mouse' });
+    vi.useFakeTimers({ toFake: ['Date'] });
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(60);
+      runFrame();
+    }
+    vi.useRealTimers();
+    expect(el().element.style.transform).toContain('scale(0.500)');
+  });
+
+  it('reveals a tapped marker on touch and closes it with the next tap elsewhere', async () => {
+    seedBuildings();
+    const renderer = fakeRenderer({ dialMapScale: 0.5 });
+    wrapper = mountLayer(renderer);
+    runFrame();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    await wrapper.get('[data-coord="1,0"] .hud-marker__dial').trigger('pointerdown', { pointerType: 'touch' });
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(60);
+      runFrame();
+    }
+    expect(wrapper.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain('scale(1.000)');
+    window.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch' }));
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(60);
+      runFrame();
+    }
+    vi.useRealTimers();
+    expect(wrapper.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain('scale(0.500)');
   });
 
   it('stacks markers by screen x, right-most on top', () => {
@@ -149,18 +213,19 @@ describe('BuildingHudLayer', () => {
     expect(z('2,0')).toBeLessThan(z('3,0'));
   });
 
-  it('hides every marker when the switch is turned off, and the choice is remembered', async () => {
+  it('hides every marker when the icon button is turned off, and the choice is remembered', async () => {
     seedBuildings();
     wrapper = mountLayer(fakeRenderer());
-    const toggle = wrapper.get('button[role="switch"]');
-    expect(toggle.attributes('aria-checked')).toBe('true');
+    const toggle = wrapper.get('button.building-hud__toggle');
+    expect(toggle.attributes('aria-pressed')).toBe('true');
+    expect(toggle.attributes('aria-label')).toBe('Building info (H)');
     await toggle.trigger('click');
     expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
-    expect(toggle.attributes('aria-checked')).toBe('false');
+    expect(toggle.attributes('aria-pressed')).toBe('false');
     expect(useHudPrefsStore().buildingInfo).toBe(false);
     expect(localStorage.getItem('bjarnoy.hudBuildingInfo')).toBe('off');
     await toggle.trigger('click');
-    expect(wrapper.findAll('.hud-marker')).toHaveLength(3);
+    expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
   });
 
   it('starts hidden when the player turned it off before', () => {
@@ -178,7 +243,7 @@ describe('BuildingHudLayer', () => {
     expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
     keyDown('H');
     await wrapper.vm.$nextTick();
-    expect(wrapper.findAll('.hud-marker')).toHaveLength(3);
+    expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
   });
 
   it('leaves H alone where the renderer would ignore a key (locked, covered, typing, modifier)', async () => {
@@ -201,7 +266,7 @@ describe('BuildingHudLayer', () => {
     expect(useHudPrefsStore().buildingInfo).toBe(true);
   });
 
-  it('counts a running upgrade down inside the dial on mid and keeps the level on far', async () => {
+  it('counts a running upgrade down inside the dial on mid and shows the ring and arc only on far', async () => {
     const world = seedBuildings();
     world.hud.queueFetchedAt = Date.now();
     world.hud.queue = [
@@ -215,9 +280,11 @@ describe('BuildingHudLayer', () => {
     runFrame();
     await wrapper.vm.$nextTick();
     expect(wrapper.get('[data-coord="3,0"] text').text()).toBe('2:05');
-    renderer.cameraZoom = 0.5;
+    // On far the dial is the ring and the yellow arc only.
+    renderer.dialMapScale = 0.5;
     runFrame();
     await wrapper.vm.$nextTick();
-    expect(wrapper.get('[data-coord="3,0"] text').text()).toBe('2');
+    expect(wrapper.find('[data-coord="3,0"] text').exists()).toBe(false);
+    expect(wrapper.find('[data-coord="3,0"] polyline').exists()).toBe(true);
   });
 });

@@ -9,8 +9,8 @@ const props = defineProps<{
   ring: HudRing;
   /** Elapsed fraction of a running upgrade. */
   progress?: number;
-  /** What sits inside: the level, or the time left. */
-  label: string;
+  /** What sits inside: the level, or the time left; empty = the ring only. */
+  label?: string;
   /** The label is a countdown (smaller font on near/mid, where it replaces the level). */
   time?: boolean;
 }>();
@@ -59,6 +59,7 @@ const labelColor = computed(() => (props.ring === 'max' ? GOLD : '#fff'));
     <polygon :points="geometry.hex" fill="none" :stroke="trackColor" :stroke-opacity="trackOpacity" :stroke-width="geometry.sw" stroke-linejoin="round" />
     <polyline v-if="geometry.arc" :points="geometry.arc" fill="none" stroke="#ffd23f" :stroke-width="geometry.sw" stroke-linecap="round" stroke-linejoin="round" />
     <text
+      v-if="label"
       :x="geometry.c"
       :y="geometry.c + geometry.font * 0.36"
       text-anchor="middle"

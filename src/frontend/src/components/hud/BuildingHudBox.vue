@@ -3,14 +3,14 @@
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { buildingName } from '../../i18n/catalogueNames';
-import type { HudRequirement, HudRow, HudTier } from '../../lib/hud/buildingHud';
+import type { HudRequirement, HudRow } from '../../lib/hud/buildingHud';
 import { formatCountdown } from '../../lib/hud/countdown';
 import { formatFullNumber } from '../../lib/hud/compactNumber';
 import { RESOURCE_TOKENS } from '../../lib/resources/resourceGlyphs';
 import BuildingHudIcon from './BuildingHudIcon.vue';
 import UnitIcon from '../UnitIcon.vue';
 
-defineProps<{ rows: HudRow[]; tier: Exclude<HudTier, 'far'> }>();
+defineProps<{ rows: HudRow[]; tier: 'near' | 'mid' }>();
 
 const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -139,6 +139,11 @@ const pct = (fraction: number) => `${(Math.min(1, Math.max(0, fraction)) * 100).
 .hud-rows--mid {
   gap: 3px;
 }
+/* The whole marker scales with the map; near only shows from HUD_TIER.nearAt up, so its text is set smaller here and reads at 1x
+   from there on while three rows still fit the dial's height. */
+.hud-rows--near {
+  zoom: 0.8;
+}
 .hud-row {
   display: flex;
   align-items: center;
@@ -156,6 +161,11 @@ const pct = (fraction: number) => `${(Math.min(1, Math.max(0, fraction)) * 100).
 .hud-chip--blocked { color: #93a3ae; }
 .hud-chip--work { color: #6fb0e0; }
 .hud-chip--max { color: #ffc55c; }
+.hud-premium,
+.hud-chip--work {
+  /* The box lets the pointer through to the map; these two carry a tooltip. */
+  pointer-events: auto;
+}
 .hud-premium {
   display: inline-flex;
   color: #c79bff;

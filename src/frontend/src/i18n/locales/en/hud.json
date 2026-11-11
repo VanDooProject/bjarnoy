@@ -570,11 +570,8 @@
     "upgradingTo": "To level {level}",
     "markerLabel": "{building}, level {level}",
     "toggle": {
-      "label": "Building info",
-      "shown": "Building info shown",
-      "hidden": "Building info hidden",
-      "key": "H",
-      "shortcut": "Press H to show or hide building info"
+      "label": "Building info (H)",
+      "title": "Show or hide building info (H)"
     }
   }
 }

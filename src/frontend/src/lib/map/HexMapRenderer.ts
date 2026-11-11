@@ -3934,7 +3934,7 @@ export class HexMapRenderer {
    */
   private handleDialTap(screen: { x: number; y: number }): boolean {
     const nowMs = Date.now();
-    const mapScale = this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM;
+    const mapScale = this.dialMapScale;
     const targets = (this.constructionDials ?? [])
       .filter((d) => d.rejectedAtMs === undefined)
       .filter((d) => !this.isDialOccluded(this.dialScreenPoint(d.coord), mapScale))
@@ -5912,7 +5912,7 @@ export class HexMapRenderer {
   private drawConstructionDials() {
     if (!this.constructionDials) return;
     const nowMs = Date.now();
-    const mapScale = this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM;
+    const mapScale = this.dialMapScale;
     const g = this.markerLayer;
     const strokePath = (path: number[], width: number, color: number, alpha: number) => {
       if (path.length < 4) return;
@@ -6152,9 +6152,12 @@ export class HexMapRenderer {
     return label;
   }
 
-  /** The zoom the settlement view lands on (the fog-margin framing) — what the building HUD's zoom tiers are measured against. */
-  get settlementBaseZoom(): number {
-    return this.settlementCameraOrigin().zoom;
+  /**
+   * The map scale the construction dials size themselves by (`camera.zoom` over the settlement's default zoom, see `dialScale`);
+   * the building HUD's markers read the same number, so they stay the same fraction of a tile as the dials.
+   */
+  get dialMapScale(): number {
+    return this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM;
   }
 
   /** Current camera zoom — for the zoom-transition debug panel's live readout and e2e assertions on camera continuity. `camera` itself stays private. */

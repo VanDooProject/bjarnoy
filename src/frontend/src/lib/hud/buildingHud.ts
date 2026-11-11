@@ -3,6 +3,7 @@
 // `buildingStatsFor`, `maxLevelFor`), see docs on `resolveUpgradeTarget`.
 import type { AxialCoord } from '../hex/coords';
 import type { BuildingDefinitionResponse, BuildOrderResponse, TrainingOrderResponse, UnitStackResponse } from '../../api/types';
+import { DIAL_LABEL_BASE_PX, DIAL_MIN_LABEL_PX } from '../map/constructionDial';
 import { buildingStatsFor, maxLevelFor, scaleOutput, type BuildingKind, type BuildingOutput } from '../map/buildingEconomy';
 import {
   RING_RESOURCE_KEYS,
@@ -16,28 +17,35 @@ import { resolveUpgradeTarget, upgradeBlockers } from './upgradeRules';
 
 // ---- zoom tiers -------------------------------------------------------------------------------------------------------
 
-export type HudTier = 'near' | 'mid' | 'far';
+/**
+ * far: the dial's ring only (the progress dial would hide its label too); dial: level or time inside, no box yet; mid: the
+ * compact box; near: the full box.
+ */
+export type HudTier = 'near' | 'mid' | 'dial' | 'far';
 
-/** Ratio = camera zoom / the zoom the settlement view lands on. The view lands on mid. */
+/** Smallest text of the box at zs = 1, in px; the box shows once this would be `DIAL_MIN_LABEL_PX` on screen. */
+export const HUD_BOX_FONT_PX = 11;
+
+/** The marker's tiers are measured on `zs`, the progress dial's own size factor (`dialScale`), so both change at the same zoom. */
 export const HUD_TIER = {
-  /** At or above this ratio the tier is near. */
-  nearAt: 1.4,
-  /** Below this ratio the tier is far. */
-  farBelow: 0.7,
-  /** A tier is only left once the ratio is this far past its threshold, so it does not flicker. */
-  hysteresis: 0.05,
+  /** Below this zs the dial's label would be under `DIAL_MIN_LABEL_PX` on screen: far, ring only (the progress dial's rule). */
+  labelBelow: DIAL_MIN_LABEL_PX / DIAL_LABEL_BASE_PX,
+  /** Below this zs the box text would be under `DIAL_MIN_LABEL_PX` on screen: the dial alone. */
+  boxBelow: DIAL_MIN_LABEL_PX / HUD_BOX_FONT_PX,
+  /** At or above this zs the full box shows. */
+  nearAt: 1.3,
+  /** A tier is only left once zs is this far past its threshold, so it does not flicker. */
+  hysteresis: 0.03,
 } as const;
 
-/** Dial radius per tier in screen px (markers do not scale with the map). */
-export const HUD_DIAL_RADIUS: Record<HudTier, number> = { near: 34, mid: 24, far: 14 };
-
-export function tierFor(ratio: number, previous: HudTier | null = null): HudTier {
-  const { nearAt, farBelow, hysteresis } = HUD_TIER;
-  if (previous === 'near' && ratio >= nearAt - hysteresis) return 'near';
-  if (previous === 'far' && ratio < farBelow + hysteresis) return 'far';
-  if (ratio >= nearAt) return 'near';
-  if (ratio < farBelow) return 'far';
-  return 'mid';
+/** The tier at size factor `zs`; `previous` (the marker's current tier) adds the hysteresis. */
+export function tierFor(zs: number, previous: HudTier | null = null): HudTier {
+  const { labelBelow, boxBelow, nearAt, hysteresis } = HUD_TIER;
+  // A threshold the marker is already past stays crossed until zs is `hysteresis` back.
+  const atLeast = (threshold: number, held: HudTier[]) => zs >= threshold - (previous !== null && held.includes(previous) ? hysteresis : 0);
+  if (!atLeast(labelBelow, ['dial', 'mid', 'near'])) return 'far';
+  if (!atLeast(boxBelow, ['mid', 'near'])) return 'dial';
+  return atLeast(nearAt, ['near']) ? 'near' : 'mid';
 }
 
 // ---- stacking ---------------------------------------------------------------------------------------------------------
@@ -313,9 +321,9 @@ function upgradeRow(vm: BuildingHudViewModel, tier: 'near' | 'mid', premium: boo
   };
 }
 
-/** The rows a marker shows at `tier` (none on far). Near takes up to three rows, mid two. */
+/** The rows a marker shows at `tier` (none without a box: far and dial). Near takes up to three rows, mid two. */
 export function rowsFor(vm: BuildingHudViewModel, tier: HudTier, opts: { premium: boolean }): HudRow[] {
-  if (tier === 'far') return [];
+  if (tier === 'far' || tier === 'dial') return [];
   const upgrade = upgradeRow(vm, tier, opts.premium);
   // The Longhouse with a garrison shows the garrison instead of its production.
   const showProduction = !vm.garrison;
