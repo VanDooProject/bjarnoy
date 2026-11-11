@@ -1150,7 +1150,7 @@
     },
     "setup": {
       "heading": "Ein Lager errichten",
-      "body": "Du brauchst genau {count} {builders} aus der {workshop} und {cost}. Die Kosten zahlst du, sobald die Armee aufbricht. Schiffe und Truppen kannst du dazunehmen. {minutes} Minuten nach der Ankunft der Armee steht das Lager. Tipp auf der Karte ein freies Sandfeld am Ufer an und wähle „Lager errichten“.",
+      "body": "Du brauchst genau {count} {builders} aus der {workshop} und {cost}. Die Kosten zahlst du, sobald die Armee aufbricht. Schiffe und Truppen kannst du dazunehmen. {minutes} Minuten nach der Ankunft der Armee steht das Lager. Tipp auf der Karte ein freies Sandfeld am Ufer an und wähle „Strandlager errichten“.",
       "rules": {
         "site": "Du kannst es nur auf einem Sandfeld am Ufer errichten, auf dem noch nichts steht.",
         "inside": "Es darf auch im Gebiet eines anderen Spielers stehen, selbst im Gebiet eines Feindes.",
