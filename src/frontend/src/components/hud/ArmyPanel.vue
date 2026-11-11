@@ -23,6 +23,7 @@ import {
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
 import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
+import CampInstructions from './CampInstructions.vue';
 import HuntTargetSummary from './HuntTargetSummary.vue';
 import DispatchTargetBuildingPicker from './DispatchTargetBuildingPicker.vue';
 import SendArmyPicker from './SendArmyPicker.vue';
@@ -352,6 +353,13 @@ async function confirmFieldOrderClick() {
           >
             {{ missionName('found') }}
           </button>
+          <button
+            v-if="draft.mission === 'setupcamp'"
+            type="button"
+            class="mission-tab active"
+          >
+            {{ missionName('setupcamp') }}
+          </button>
         </div>
 
         <template v-if="draft.mission === 'hunt'">
@@ -363,6 +371,7 @@ async function confirmFieldOrderClick() {
         <p v-else-if="draft.mission === 'found'" class="status-subtext instructions">
           {{ t('hud.armyPanel.foundInstructions') }}
         </p>
+        <CampInstructions v-else-if="draft.mission === 'setupcamp'" />
         <p v-else-if="draft.mission === 'move'" class="status-subtext instructions">
           {{ t('hud.armyPanel.dispatchInstructions', {
             count: routeLength,

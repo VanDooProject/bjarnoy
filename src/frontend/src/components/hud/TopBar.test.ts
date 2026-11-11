@@ -222,6 +222,19 @@ describe('TopBar', () => {
     wrapper.unmount();
   });
 
+  it('names a beach camp as what it is in the caption, not with a Longhouse level', () => {
+    const world = useWorldStore();
+    world.selectedSettlementId = 'camp-1';
+    world.hud.settlementName = 'Sandspit';
+    world.hud.level = 0;
+    vi.spyOn(world.model, 'isBeachCamp').mockReturnValue(true);
+
+    const wrapper = mountTopBar();
+
+    expect(wrapper.get('.caption').text()).toBe('BEACH CAMP');
+    wrapper.unmount();
+  });
+
   it('lets a caller name the bar, overriding the settlement', () => {
     const world = useWorldStore();
     world.hud.settlementName = 'Unnamed realm';

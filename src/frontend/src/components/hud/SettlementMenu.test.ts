@@ -10,8 +10,8 @@ import type { SettlementSummary } from '../../api/types';
 
 const mounted: { unmount: () => void }[] = [];
 
-function summary(id: string, name: string, q: number, longhouseLevel: number): SettlementSummary {
-  return { id, realmId: id, name, ownerName: 'Ulf', q, r: 0, longhouseLevel, islandId: 'i', mine: true } as SettlementSummary;
+function summary(id: string, name: string, q: number, longhouseLevel: number, isBeachCamp = false): SettlementSummary {
+  return { id, realmId: id, name, ownerName: 'Ulf', q, r: 0, longhouseLevel, islandId: 'i', mine: true, isBeachCamp } as SettlementSummary;
 }
 
 function mountMenu() {
@@ -114,6 +114,15 @@ describe('SettlementMenu', () => {
       expect(rows[0]!.querySelector('.realm-pick')!.getAttribute('aria-current')).toBe('true');
       expect(rows[1]!.classList.contains('current')).toBe(false);
       expect(rows[1]!.querySelector('.realm-caption')!.textContent).toBe('Longhouse 2');
+    });
+
+    it('names a beach camp by its building name instead of a Longhouse level', async () => {
+      useWorldStore().myRealms = [summary('s1', 'Bjornstad', 0, 3), summary('s2', 'Sandspit', 7, 1, true)];
+      const wrapper = mountMenu();
+      await openMenu(wrapper);
+      const rows = bodyAll('.realm-line');
+      expect(rows[0]!.querySelector('.realm-caption')!.textContent).toBe('Longhouse 3');
+      expect(rows[1]!.querySelector('.realm-caption')!.textContent).toBe('Beach camp');
     });
 
     it('a click on another realm switches to it, centres on it and closes', async () => {

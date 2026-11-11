@@ -8,6 +8,7 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } fr
 import { routerKey } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
+import { buildingName } from '../../i18n/catalogueNames';
 import { fadePopover } from '../../lib/hud/chipMotion';
 import type { MessageSchema } from '../../i18n/schema';
 
@@ -25,6 +26,7 @@ interface RealmRow {
   id: string;
   name: string;
   level: number;
+  isBeachCamp: boolean;
   q: number | null;
   r: number | null;
 }
@@ -41,7 +43,7 @@ const showList = computed(() => world.realmList.length > 1);
 const rows = computed<RealmRow[]>(() =>
   showList.value
     ? world.realmList
-    : [{ id: world.selectedSettlementId ?? '', name: props.name, level: world.hud.level, q: null, r: null }],
+    : [{ id: world.selectedSettlementId ?? '', name: props.name, level: world.hud.level, isBeachCamp: !!world.selectedSettlementId && world.model.isBeachCamp(world.selectedSettlementId), q: null, r: null }],
 );
 const isCurrent = (id: string) => id === (world.selectedSettlementId ?? '');
 
@@ -206,7 +208,7 @@ function onLeave(el: Element, done: () => void) {
               </svg>
               <span class="realm-text">
                 <span class="realm-name">{{ row.name }}</span>
-                <span class="realm-caption">{{ t('hud.settlementMenu.longhouse', { level: row.level }) }}</span>
+                <span class="realm-caption">{{ row.isBeachCamp ? buildingName('beachcamp') : t('hud.settlementMenu.longhouse', { level: row.level }) }}</span>
               </span>
             </button>
             <span class="realm-actions">

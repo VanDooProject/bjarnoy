@@ -58,6 +58,11 @@
         "wildlifeCamps": "Strong camps can ambush settlers on the way.",
         "realm": "A new settlement keeps its distance from your claim, towers included."
       },
+      "beachCamp": {
+        "founding": "Camp builders are trained at the same Cart Workshop as settlers.",
+        "ships": "The camp is set up from the sea, and the ships wait out on the water.",
+        "realm": "A camp claims one hex and joins your realm when it touches it."
+      },
       "realm": {
         "founding": "Where a new settlement may land is measured from every claim border, towers included.",
         "walls": "Walls stand inside your realm too, and need a level-5 Tower.",
@@ -153,6 +158,10 @@
       "founding": {
         "title": "Founding settlements",
         "description": "Settler troops from the cart workshop, and where a new settlement can land."
+      },
+      "beachCamp": {
+        "title": "Beach camp",
+        "description": "Camp builders, a camp on a sand shore, and what it holds."
       },
       "realm": {
         "title": "Extending the realm",
@@ -1087,8 +1096,10 @@
       "slots": "Each settler takes 1 slot aboard, so one Karve carries all five and still has room for escorts. If the troops need more slots than the ships have, the convoy cannot set out. The slots of every unit are on the {ships} page.",
       "speed": "At sea the convoy moves at the speed of its slowest ship. The settlers do not slow it down.",
       "camps": "Land camps never ambush a convoy at sea. The whale road does (see {camps}).",
+      "camp": "If you only want a foothold on a shore and not a new realm, set up a {camp} instead.",
       "ships": "The ships stay at the new settlement too, with the escorts.",
-      "shipsLink": "Ships and water"
+      "shipsLink": "Ships and water",
+      "campLink": "beach camp"
     },
     "renown": {
       "heading": "Renown and price",
@@ -1121,6 +1132,48 @@
     },
     "adminNote": {
       "sea": "A convoy with a ship in it is a fleet (Army.IsFleet): it leaves from the Dockyard (Army.FleetAnchor), uses the sea route tables for recall and retreat, and moves at its slowest ship (ShipCargo.Pace). The landing hex is a land hex with a sea neighbour (Shoreline.IsShoreline), reached by the route's last hop."
+    }
+  },
+  "beachCamp": {
+    "title": "Beach camp",
+    "intro": "A small base on a sand shore, set up from the sea.",
+    "toc": {
+      "what": "What it is for",
+      "setup": "Setting it up",
+      "holds": "What it holds",
+      "claim": "Ground and realm",
+      "risks": "Dangers"
+    },
+    "what": {
+      "heading": "A base for landing from the sea",
+      "body": "A beach camp is where an attack from the sea gets its footing. Ships bring the troops to a sand shore, the camp goes up there, and the troops fight from it. A camp is a settlement of its own, but only one hex big."
+    },
+    "setup": {
+      "heading": "Setting up a camp",
+      "body": "You need exactly {count} {builders}, trained at the {workshop}, and {cost}, paid when the army sets out. Add ships and troops as you like. The camp is up {minutes} minutes after the army reaches its site. On the map, tap a free sand hex on the shore and choose Set up camp.",
+      "rules": {
+        "site": "It goes only on a sand hex on the shore with nothing built on it.",
+        "inside": "It may stand inside another realm, an enemy's too.",
+        "waiting": "While the camp goes up, the troops wait on its hex and the ships wait one hex out on the water.",
+        "garrison": "The camp builders are used up. Everything else you sent stays in the camp as its garrison.",
+        "home": "If you recall the army, or someone takes the site while the camp goes up, the camp builders and the resources come home."
+      }
+    },
+    "holds": {
+      "heading": "What a camp holds",
+      "body": "A camp holds up to {cap} of each resource: wood, brick, food and iron. It has its own garrison.",
+      "nothing": "It produces nothing, and there is nothing to build in it."
+    },
+    "claim": {
+      "heading": "Ground and realm",
+      "body": "A camp claims only its own hex. When that hex touches one of your realms, the camp joins it: they share one stock and the camp shows under the realm's name (see {realm}).",
+      "realmLink": "Extending the realm",
+      "limit": "A camp does not count towards your limit of settlements."
+    },
+    "risks": {
+      "heading": "Dangers",
+      "attacked": "A camp can be attacked from land and from sea. When no troops defend it, it can be plundered.",
+      "empty": "When no troops are in it, it can be destroyed even without siege engines."
     }
   },
   "realm": {
@@ -1332,10 +1385,12 @@
       "heading": "At sea",
       "sea": "Ships sail on the sea only. Coastal and open water cost the same, and bog lakes are closed to them.",
       "targets": "A fleet can attack, raid or support settlements that hold shoreline. Attacking a settlement means attacking a building in its realm; supporting it means joining one of its garrisons.",
+      "camp": "A fleet can also carry the builders of a {camp} to a sand shore, a base for landing from the sea.",
       "walls": "{walls} do not stop fleets.",
       "wallsLink": "Walls",
       "camps": "Land camps never ambush a fleet. The whale road, a camp on open sea, ambushes a fleet that sails onto its hex (see {camps}).",
-      "campsLink": "Wildlife camps"
+      "campsLink": "Wildlife camps",
+      "campLink": "beach camp"
     },
     "troops": {
       "heading": "Troops aboard",

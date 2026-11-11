@@ -27,7 +27,15 @@ import TrainingModal from '../components/hud/TrainingModal.vue';
 import BuildRefusalChip from '../components/hud/BuildRefusalChip.vue';
 import { announceConfirmedBuild, holdBuildRow, releaseBuildRow } from '../composables/buildFeedback';
 import RingMenuHost from '../components/hud/RingMenuHost.vue';
-import { foundingLock, isShorelineHex, type FoundingLock } from '../lib/founding';
+import {
+  BEACH_CAMP_BUILD_SECONDS,
+  BEACH_CAMP_COST,
+  campLock,
+  foundingLock,
+  isCampSite,
+  isShorelineHex,
+  type FoundingLock,
+} from '../lib/founding';
 import RingMenu, { type RingAction, type RingCategory } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
@@ -42,7 +50,7 @@ import { useAuthStore } from '../stores/auth';
 import { realmToSwitchTo } from '../lib/realmTap';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
-import { armyOverlayMovement, foreignArmyMarker } from '../lib/map/armyOverlay';
+import { armyOverlayMovement, campArmyMarkers, campFleetLiveCoord, foreignArmyMarker } from '../lib/map/armyOverlay';
 import { useGuildStore } from '../stores/guild';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
@@ -64,10 +72,10 @@ import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
 import { buildingStatsAt, buildingUpgradeCost, scaleOutput, upgradeRateGain } from '../lib/map/buildingEconomy';
 import { razeBlock, razeRefund, razeSeconds } from '../lib/map/raze';
-import { formatBuildTime, formatMissingResources, longhouseLock } from '../lib/map/ringCatalogue';
+import { formatBuildTime, formatMissingResources, longhouseLock, scaledBuildSeconds } from '../lib/map/ringCatalogue';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
-import { buildingEntryId, primaryActionFirst } from '../lib/map/ringActions';
+import { buildingEntryId, offersUpgradeAndRaze, primaryActionFirst } from '../lib/map/ringActions';
 import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
 import { useRingMaxScale } from '../composables/useRingMaxScale';
 import type { Tile } from '../lib/map/types';
@@ -234,9 +242,20 @@ function onArmySelect(armyId: string) {
   onQueueSelect(liveArmyCoord(army));
 }
 
+/** Whether an army has a ship (its land units are passengers): the marker is a ship, not a flag. */
+function isFleetArmy(a: (typeof world.armies)[number]): boolean {
+  return (
+    classifyUnitSelection(Object.fromEntries(a.stacks.map((s) => [s.unit, s.count])), unitCatalogue.byType) === 'fleet'
+  );
+}
+
 /** The hex an army's marker is on right now: where it is along its leg (the half it has reached), not the last hex the poll reported. */
 function liveArmyCoord(army: (typeof world.armies)[number]): AxialCoord {
   let coord: AxialCoord = army.position;
+  // A camp fleet is drawn one hex short of the camp: the marker's own leg decides (campFleetLiveCoord).
+  if (army.mission === 'setupcamp' && army.movement && !army.movement.isReturning && isFleetArmy(army)) {
+    return campFleetLiveCoord({ position: army.position, movement: army.movement }, Date.now());
+  }
   if (army.movement) {
     const {
       path, cumulativeHours, edgeHours, departedAt, arrivesAt, isReturning,
@@ -428,7 +447,13 @@ const sendPicker = useSendPickerRows();
 const armyOverlayData = computed<ArmyOverlayData>(() => {
   const picker = world.sendPicker;
   const pickRows = picker ? new Map(sendPicker.rows.value.map((r) => [r.id, r])) : null;
-  const armies: ArmyOverlayMarker[] = world.armies.map((a) => ({
+  // A fleet sailing to set up a beach camp is drawn one hex short of the camp, and its troops appear on the camp hex when it arrives
+  // (campArmyMarkers): while one is still under way the clock ticks so that moment is not missed.
+  const now = Date.now();
+  if (world.armies.some((a) => a.mission === 'setupcamp' && a.movement && !a.movement.isReturning && Date.parse(a.movement.arrivesAt) > now)) {
+    void world.hud.tick;
+  }
+  const armies: ArmyOverlayMarker[] = world.armies.flatMap((a) => campArmyMarkers({
     id: a.id,
     position: a.position,
     selected: a.id === world.selectedArmyId,
@@ -438,16 +463,12 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
     // docs/design/ship-movement.md §4: ship marker for a fleet (any ship in
     // the army, its land units are passengers), flag for a land army — the
     // same classification dispatch relies on.
-    isFleet:
-      classifyUnitSelection(
-        Object.fromEntries(a.stacks.map((s) => [s.unit, s.count])),
-        unitCatalogue.byType,
-      ) === 'fleet',
+    isFleet: isFleetArmy(a),
     // The backend's own figure: best-sighted unit type plus the home settlement's Ravens.
     visionRadius: a.visionRadius,
     // An `atHome`/`supporting` army has no movement at all and keeps sitting on its authoritative hex.
     movement: a.movement ? armyOverlayMovement(a.movement) : undefined,
-  }));
+  }, a, now));
   // docs/design/map-fog-v2.md §1g: other players' troops marching inside our sight, in their owner's colour (guild/treaty/rival like
   // the realm borders). Never selected, never returning-grey, and the renderer gives them no vision of their own.
   for (const a of world.foreignArmies) {
@@ -1122,6 +1143,37 @@ const rootActions = computed<RingAction[]>(() => primaryActionFirst(rootActionLi
 function settlersAtHome(): number {
   return world.hud.garrison.find((g) => g.unit === 'settler')?.count ?? 0;
 }
+// Set up a beach camp: offered on a sand shore hex with nothing on it (an enemy realm's included), live mode only. Locked with
+// the missing requirement (camp builders at home, the camp's cost), like a founding; the card shows the cost and the build time.
+function campActions(tile: Tile): RingAction[] {
+  if (DEMO_MODE || !isCampSite(tile, world.model.terrainOf, (c) => world.model.giantAnchorAt(c))) return [];
+  const buildersAtHome = world.hud.garrison.find((g) => g.unit === 'campbuilder')?.count ?? 0;
+  const lock = campLock(buildersAtHome, world.hud.available);
+  const missing = formatMissingResources(BEACH_CAMP_COST, world.hud.available);
+  const hint = !lock
+    ? undefined
+    : lock.reason === 'builders'
+      ? t('hud.ringMenu.actions.campNeedsBuilders', { have: lock.have, need: lock.need })
+      : t('hud.ringMenu.actions.notEnough', { resources: missing });
+  return [
+    {
+      id: 'setup-camp',
+      label: t('hud.ringMenu.actions.setUpCamp'),
+      disabled: lock !== null,
+      state: lock ? 'waiting' : undefined,
+      hint,
+      card: {
+        title: t('hud.ringMenu.card.campTitle'),
+        sub: t('hud.ringMenu.card.campSub'),
+        cost: BEACH_CAMP_COST,
+        time: formatBuildTime(scaledBuildSeconds(BEACH_CAMP_BUILD_SECONDS, 1, world.worldSpeedFactor)),
+        okBadge: t('hud.ringMenu.card.campBadge'),
+        locks: hint ? [hint] : [],
+        art: buildingArt('beachcamp', 1),
+      },
+    },
+  ];
+}
 function foundingLockHint(lock: FoundingLock): string {
   switch (lock.reason) {
     case 'settlers':
@@ -1138,13 +1190,13 @@ function rootActionList(): RingAction[] {
   // World zoom only offers the army action: BuildingModal/TrainingModal and
   // the build fan only exist in the settlement template, so Build/Upgrade
   // bubbles here would open nothing.
-  if (mode.value === 'world') return [...huntActions(tile), ...siegeActions(tile), sendArmyAction(tile)];
+  if (mode.value === 'world') return [...huntActions(tile), ...siegeActions(tile), ...campActions(tile), sendArmyAction(tile)];
 
   if (isEnemyTile.value) {
     // Replaces the old permanently-disabled "Attack / Raid" bubble — combat
     // is implemented now, via the same dispatch draft/sheet every other
     // "send army" entry point uses.
-    return [...siegeActions(tile), sendArmyAction(tile)];
+    return [...siegeActions(tile), ...campActions(tile), sendArmyAction(tile)];
   }
   if (isUnclaimedTile.value) {
     const onCoast = isShorelineHex(tile, world.model.terrainOf);
@@ -1157,9 +1209,12 @@ function rootActionList(): RingAction[] {
         hint: lock ? foundingLockHint(lock) : undefined,
       },
       ...huntActions(tile),
+      ...campActions(tile),
       sendArmyAction(tile),
     ];
   }
+  // A beach camp has nothing to upgrade, raze, train or build: its one hex offers only the army action.
+  if (isMineTile.value && tile.buildingType && !offersUpgradeAndRaze(tile.buildingType)) return [sendArmyAction(tile)];
   if (isMineTile.value && tile.buildingType) {
     // The previous ring floated "Lv n / upgrade" as a gold badge above the
     // orbit, joined to it by a guide line. 2a has no badge — every action is
@@ -1193,10 +1248,11 @@ function rootActionList(): RingAction[] {
     return [
       ...(buildAction.value ? [buildAction.value] : []),
       ...huntActions(tile),
+      ...campActions(tile),
       sendArmyAction(tile),
     ];
   }
-  return [...huntActions(tile), sendArmyAction(tile)];
+  return [...huntActions(tile), ...campActions(tile), sendArmyAction(tile)];
 }
 
 
@@ -1362,6 +1418,11 @@ async function onRingSelect(id: string) {
     case 'land-here':
       // Same dispatch draft the Hunt / Siege bubbles use: the hex is the destination, five settlers go.
       if (selectedCoord.value) world.startDispatchAt(selectedCoord.value, { mission: 'found' });
+      closeRing();
+      return;
+    case 'setup-camp':
+      // Same dispatch draft as a founding: the hex is the camp's site, two camp builders go.
+      if (selectedCoord.value) world.startDispatchAt(selectedCoord.value, { mission: 'setupcamp' });
       closeRing();
       return;
     case 'hunt':

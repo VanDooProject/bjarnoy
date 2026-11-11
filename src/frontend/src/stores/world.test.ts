@@ -430,6 +430,38 @@ describe('useWorldStore startDispatchAt', () => {
     );
   });
 
+  it('starts a Set up camp draft: the tapped hex is the destination and two camp builders are loaded', async () => {
+    const store = await loadStoreModule(true);
+
+    store.startDispatchAt({ q: 4, r: -1 }, { mission: 'setupcamp' });
+
+    expect(store.dispatchDraft?.mission).toBe('setupcamp');
+    expect(store.dispatchDraft?.route).toEqual([{ q: 4, r: -1 }]);
+    expect(store.dispatchDraft?.unitCounts).toEqual({ campbuilder: 2 });
+  });
+
+  it('sends a Set up camp draft as a setupcamp-mission dispatch, builders fixed at two, ships and escorts addable', async () => {
+    const store = await loadStoreModule(false);
+    dispatchArmy.mockReset().mockResolvedValue({});
+    store.selectedSettlementId = 'home-1';
+    store.hud.garrisonSpots = [{ ...LONGHOUSE_SPOT, stacks: [{ unit: 'campbuilder', count: 2 }, { unit: 'karve', count: 1 }] }];
+    store.startDispatchAt({ q: 4, r: -1 }, { mission: 'setupcamp' });
+
+    store.setDispatchUnitCount('campbuilder', 7);
+    store.setDispatchUnitCount('karve', 1);
+    await store.confirmDispatch();
+
+    expect(dispatchArmy).toHaveBeenCalledWith(
+      'home-1',
+      expect.objectContaining({ mission: 'setupcamp', destination: { q: 4, r: -1 } }),
+      undefined,
+    );
+    const request = dispatchArmy.mock.calls[0][1] as { from: { units: { unit: string; count: number }[] }[] };
+    expect(request.from[0].units).toEqual(
+      expect.arrayContaining([{ unit: 'campbuilder', count: 2 }, { unit: 'karve', count: 1 }]),
+    );
+  });
+
   it('keeps a Found draft\'s settlers at five but lets ships and escorts be added to the dispatch', async () => {
     const store = await loadStoreModule(false);
     dispatchArmy.mockReset().mockResolvedValue({});
@@ -2779,7 +2811,7 @@ describe('useWorldStore queueBuildOptimistic (W3)', () => {
 
 describe('useWorldStore live realm membership', () => {
   const summary = (id: string, mine: boolean, realmId = id, relation: 'guild' | 'treaty' | 'rival' = 'rival') => ({
-    id, realmId, name: id, ownerName: 'Astrid', q: 0, r: 0, labelQ: 0, labelR: 0, longhouseLevel: 1, islandId: 'island-1', mine,
+    id, realmId, name: id, ownerName: 'Astrid', q: 0, r: 0, labelQ: 0, labelR: 0, longhouseLevel: 1, isBeachCamp: false, islandId: 'island-1', mine,
     relation: mine ? ('mine' as const) : relation,
   });
 
@@ -3022,7 +3054,7 @@ describe('useWorldStore linked realms', () => {
   it('registerSettlementSummaries stores the realmId', async () => {
     const store = await loadStoreModule(false);
     store.registerSettlementSummaries([
-      { id: 'r2', realmId: 'r1', name: 'Rival', ownerName: 'Bo', q: 5, r: 5, labelQ: 5, labelR: 5, longhouseLevel: 1, islandId: 'i', mine: false, relation: 'rival' },
+      { id: 'r2', realmId: 'r1', name: 'Rival', ownerName: 'Bo', q: 5, r: 5, labelQ: 5, labelR: 5, longhouseLevel: 1, isBeachCamp: false, islandId: 'i', mine: false, relation: 'rival' },
     ]);
 
     expect(store.model.getSettlement('r2')?.realmId).toBe('r1');

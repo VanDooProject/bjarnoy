@@ -5,6 +5,8 @@
 import { hexDistance, type AxialCoord } from '../hex/coords';
 import type { DispatchArmyRequest, DispatchFromSpot, FieldOrderRequest, HexPoint, UnitDefinitionResponse } from '../../api/types';
 import { i18n } from '../../i18n';
+import { BEACH_CAMP_BUILD_SECONDS } from '../founding';
+import { scaledBuildSeconds } from '../map/ringCatalogue';
 import { isShoreBuildingHex, type TerrainLookup } from '../map/shoreline';
 
 /**
@@ -26,7 +28,7 @@ export function routeToWaypointsAndDestination(
 
 /** Shared body of the move-shaped dispatches: the last clicked hex is the destination, every hex before it a waypoint. */
 function buildRouteDispatchRequest(
-  mission: 'move' | 'found',
+  mission: 'move' | 'found' | 'setupcamp',
   from: DispatchFromSpot[],
   route: AxialCoord[],
   provisions: number,
@@ -64,9 +66,21 @@ export function buildFoundDispatchRequest(
   return buildRouteDispatchRequest('found', from, route, provisions);
 }
 
-/** Whether the clicked route's last hex is the destination: a move walks there, a founding settles there. */
+/**
+ * Builds a `setupcamp`-mission `DispatchArmyRequest`: move-shaped like a founding (the route's last hex is the camp's hex, the fleet's
+ * route ends on it). The server checks the two camp builders, the site and the cost.
+ */
+export function buildCampDispatchRequest(
+  from: DispatchFromSpot[],
+  route: AxialCoord[],
+  provisions: number,
+): DispatchArmyRequest | null {
+  return buildRouteDispatchRequest('setupcamp', from, route, provisions);
+}
+
+/** Whether the clicked route's last hex is the destination: a move walks there, a founding settles there, a camp is set up there. */
 export function isRouteDestination(mission: string | undefined, index: number, routeLength: number): boolean {
-  return (mission === 'move' || mission === 'found') && index === routeLength - 1;
+  return (mission === 'move' || mission === 'found' || mission === 'setupcamp') && index === routeLength - 1;
 }
 
 /**
@@ -513,6 +527,22 @@ export function formatEta(targetIso: string, now: number): string {
   if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
+}
+
+/**
+ * When a beach camp army's camp is up (ms epoch): the army's arrival plus the build time at the world's speed — `null` unless it is a
+ * `setupcamp` army standing on its site (arrived and not recalled). Mirrors `Army.PlanCampBuild`.
+ */
+export function campReadyAtMs(
+  army: { mission: string; movement: { isReturning: boolean; arrivesAt: string } | null },
+  now: number,
+  worldSpeedFactor: number,
+): number | null {
+  const movement = army.movement;
+  if (army.mission !== 'setupcamp' || !movement || movement.isReturning) return null;
+  const arrivedAt = Date.parse(movement.arrivesAt);
+  if (!(now >= arrivedAt)) return null;
+  return arrivedAt + scaledBuildSeconds(BEACH_CAMP_BUILD_SECONDS, 1, worldSpeedFactor) * 1000;
 }
 
 /**
