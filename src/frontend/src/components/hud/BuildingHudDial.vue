@@ -1,15 +1,18 @@
 <script setup lang="ts">
 // The pointy-top hex dial of a building marker: level (or the countdown of a running upgrade) inside, ring colour = upgrade
 // state, a yellow arc from the top vertex = elapsed fraction (like the Pixi construction dial, lib/map/constructionDial.ts).
+// The arc flows: from the order's start / end time it is one linear Web Animation of the hex outline's dash offset over the
+// remaining time (information, so it plays under reduced motion too), not a step per polled second.
 // It also draws every state of the hex's order dial the way the canvas does (`order`, read through `dialPhase`): queued (plain
 // track and `#place`), pending (orbiting sweep and dots), refused (red flash, cross, shrink) and the finish animation.
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch, type ComponentPublicInstance } from 'vue';
 import type { HudRing } from '../../lib/hud/buildingHud';
 import {
   CONSTRUCTION_DIAL_ELAPSED_COLOR,
   CONSTRUCTION_DIAL_REJECT_COLOR,
   DIAL_PENDING_SWEEP_MS,
   dialPhase,
+  dialProgress,
   hexPerimeterSegment,
   pendingDotFrame,
   polylinePartial,
@@ -20,7 +23,7 @@ import { hudReducedMotion } from '../../composables/useBuildingHudMotion';
 const props = defineProps<{
   radius: number;
   ring: HudRing;
-  /** Elapsed fraction of a running upgrade. */
+  /** Elapsed fraction of a running upgrade, as last polled; the arc takes it where the order has no times. */
   progress?: number;
   /** What sits inside: the level, the time left or `#place`; empty = the ring only. */
   label?: string;
@@ -61,24 +64,44 @@ const geometry = computed(() => {
   };
   const hexAt = (rr: number) => fmt([0, 1, 2, 3, 4, 5].map((i) => vertex(i, rr)));
   const hex = [0, 1, 2, 3, 4, 5].map((i) => vertex(i, r));
-  // The arc runs clockwise from the top vertex along the hex edges, `progress` of the way round.
-  let arc = '';
-  const progress = props.ring === 'upgrading' ? (props.progress ?? 0) : 0;
-  if (progress > 0) {
-    let rem = Math.min(1, progress) * 6;
-    const out: (readonly number[])[] = [hex[0]!];
-    for (let i = 0; i < 6 && rem > 1e-6; i++) {
-      const a = hex[i]!;
-      const b = hex[(i + 1) % 6]!;
-      const t = Math.min(1, rem);
-      out.push([a[0]! + (b[0]! - a[0]!) * t, a[1]! + (b[1]! - a[1]!) * t]);
-      rem -= t;
-    }
-    arc = fmt(out);
-  }
+  // The arc is this outline (from the top vertex, clockwise, closed), drawn `progress` of the way round by its dash offset.
+  const outline = fmt([...hex, hex[0]!]);
   const font = props.time ? (14.4 * r) / 27.5 : 13 + (r - 14) * 0.5;
-  return { sw, size: 2 * c, c, hex: fmt(hex), hexAt, arc, font, unit: sw / 6 };
+  return { sw, size: 2 * c, c, hex: fmt(hex), hexAt, outline, font, unit: sw / 6 };
 });
+
+// ---- the elapsed arc --------------------------------------------------------------------------------------------------------
+
+/** The order's own start and end (the canvas dial's `dialProgress`); without them the polled `progress` is all there is. */
+const timed = computed(() => {
+  const o = props.order;
+  return !!o && o.state === 'building' && o.startMs !== null && o.endMs !== null && o.endMs > o.startMs;
+});
+const arcShown = computed(() => props.ring === 'upgrading' && (timed.value || (props.progress ?? 0) > 0));
+const arcProgress = (nowMs: number) => (timed.value ? dialProgress(props.order!, nowMs) : Math.min(1, Math.max(0, props.progress ?? 0)));
+/** `stroke-dashoffset` of the outline (path length 1, dash 1, gap 1): 1 - progress shows `progress` of it from the top vertex. */
+const arcOffset = computed(() => 1 - arcProgress(Date.now()));
+
+const arcEl = ref<Element | null>(null);
+const setArcEl = (el: Element | ComponentPublicInstance | null) => (arcEl.value = el instanceof Element ? el : null);
+let arcAnim: Animation | null = null;
+function stopArc() {
+  arcAnim?.cancel();
+  arcAnim = null;
+}
+// One linear animation from the progress now to the full ring at the order's end; restarted only when the order's times change.
+watch(
+  [arcEl, () => (timed.value ? `${props.order!.startMs}|${props.order!.endMs}` : null)],
+  ([el, times]) => {
+    stopArc();
+    if (!el || times === null || typeof (el as { animate?: unknown }).animate !== 'function') return;
+    const nowMs = Date.now();
+    const remaining = props.order!.endMs! - nowMs;
+    if (remaining <= 0) return;
+    arcAnim = el.animate([{ strokeDashoffset: 1 - arcProgress(nowMs) }, { strokeDashoffset: 0 }], { duration: remaining, easing: 'linear', fill: 'forwards' });
+  },
+  { flush: 'post', immediate: true },
+);
 
 const trackColor = computed(() => RING_COLOR[props.ring]);
 const trackOpacity = computed(() => (props.ring === 'upgrading' ? 0.3 : props.ring === 'none' ? 0.2 : 1));
@@ -126,6 +149,7 @@ watch(
   { immediate: true },
 );
 onUnmounted(() => {
+  stopArc();
   cancelAnimationFrame(raf);
   if (endTimer !== null) clearTimeout(endTimer);
 });
@@ -218,7 +242,7 @@ const pending = computed(() => {
     <template v-else>
       <polygon :points="geometry.hex" fill="#0b1720" />
       <polygon :points="geometry.hex" fill="none" :stroke="trackColor" :stroke-opacity="trackOpacity" :stroke-width="geometry.sw" stroke-linejoin="round" />
-      <polyline v-if="geometry.arc" :points="geometry.arc" fill="none" :stroke="YELLOW" :stroke-width="geometry.sw" stroke-linecap="round" stroke-linejoin="round" />
+      <polyline v-if="arcShown" :ref="setArcEl" class="hud-dial__arc" :points="geometry.outline" pathLength="1" stroke-dasharray="1 1" :stroke-dashoffset="arcOffset" fill="none" :stroke="YELLOW" :stroke-width="geometry.sw" stroke-linecap="round" stroke-linejoin="round" />
       <template v-if="pending">
         <polyline v-for="(segment, i) in pending.segments" :key="i" class="hud-dial__sweep" :points="segment" fill="none" :stroke="YELLOW" :stroke-width="pending.width" stroke-linecap="round" stroke-linejoin="round" />
         <template v-if="labelVisible">
