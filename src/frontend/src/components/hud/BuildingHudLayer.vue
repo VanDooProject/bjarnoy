@@ -19,6 +19,7 @@ import {
   boxChangeFor,
   dialGoneAfterMs,
   dialShownAfterMs,
+  hudReducedMotion,
   useBuildingHudMotion,
   waveDelays,
   type MarkerParts,
@@ -50,7 +51,6 @@ import {
   type ConstructionDial,
 } from '../../lib/map/constructionDial';
 import { circleIntersectsRect, markerFadeStep, type OcclusionCircle } from '../../lib/map/markerOcclusion';
-import { animationPreference } from '../../lib/perf/animationPreference';
 import BuildingHudBox from './BuildingHudBox.vue';
 import BuildingHudDial from './BuildingHudDial.vue';
 import BuildingInfoToggle from './BuildingInfoToggle.vue';
@@ -384,7 +384,7 @@ function tick() {
           w: Math.max(DIAL_HALF, boxWidth) * zsNow + DIAL_HALF * zsNow,
           h: 2 * DIAL_HALF * zsNow,
         });
-      vis = markerFadeStep(vis0, occluded, dtMs, animationPreference.reducedMotion);
+      vis = markerFadeStep(vis0, occluded, dtMs, hudReducedMotion());
       if (vis < 1) visibility.set(marker.key, vis);
       else visibility.delete(marker.key);
     }
@@ -403,7 +403,7 @@ function tick() {
       (tapKey === marker.key ||
         (mouse !== null && (Math.hypot(mouse.x - x, mouse.y - y) <= disc || (boxRect !== null && pointInRect(mouse, boxRect)))) ||
         renderer.hoveredHexKey === marker.key);
-    const t = dialHoverStep(hoverT.get(marker.key) ?? 0, hovered, dtMs, animationPreference.reducedMotion);
+    const t = dialHoverStep(hoverT.get(marker.key) ?? 0, hovered, dtMs, hudReducedMotion());
     if (t > 0) hoverT.set(marker.key, t);
     else hoverT.delete(marker.key);
     const zs = markerScale(mapScale, t);
@@ -492,7 +492,7 @@ watch(
       rendered.value = true;
       await nextTick();
       const parts = markerParts();
-      const reduced = animationPreference.reducedMotion;
+      const reduced = hudReducedMotion();
       clearHandovers();
       for (const part of parts) {
         // Coming from fully hidden, every marker starts with the canvas still drawing its hex.
@@ -502,7 +502,7 @@ watch(
       await motion.setShown(true, parts);
     } else {
       const parts = markerParts();
-      const reduced = animationPreference.reducedMotion;
+      const reduced = hudReducedMotion();
       clearHandovers();
       for (const part of parts) if (!notOwned.value.has(part.key)) handOverAfter(part.key, dialGoneAfterMs(part.delayMs, reduced), true);
       await motion.setShown(false, parts);

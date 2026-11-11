@@ -5,8 +5,14 @@
 //    cross-fading into the new ones; folding into / unfolding from the dial (no box <-> box); the number fading (far <-> dial).
 // Web Animations only: the animations write no inline style, so the layer's per-frame placement transform never clashes with
 // them. Where `Element.animate` does not exist, every call falls back to the end state at once (a capability check).
-// The game's own reduced-motion setting (`animationPreference.reducedMotion`) turns each of them into a 150 ms opacity fade.
-import { animationPreference } from '../lib/perf/animationPreference';
+// The player's own HUD motion setting (Settings > Graphics > HUD menus, `motionPreferences.hud`; 'auto' follows the device's
+// reduce-motion flag) turns each of them into a 150 ms opacity fade when it resolves to off: `hudReducedMotion`.
+import { motionPreferences } from '../lib/perf/motionPreferences';
+
+/** Whether the building HUD plays reduced motion: the player's HUD motion setting is off (an explicit 'on' wins over the OS flag). */
+export function hudReducedMotion(): boolean {
+  return !motionPreferences.hudEnabled;
+}
 
 /** Timings (ms) and curves. */
 export const HUD_MOTION = {
@@ -149,7 +155,7 @@ export interface BuildingHudMotion {
   dispose(): void;
 }
 
-export function createBuildingHudMotion(isReduced: () => boolean = () => animationPreference.reducedMotion): BuildingHudMotion {
+export function createBuildingHudMotion(isReduced: () => boolean = hudReducedMotion): BuildingHudMotion {
   const phases = new Map<string, Phase>();
   /** Animations of a finished hide, holding the markers away until they are removed. */
   const held = new Map<string, Animation[]>();
@@ -336,7 +342,7 @@ export function createBuildingHudMotion(isReduced: () => boolean = () => animati
   };
 }
 
-/** The layer's motion; reads the game's reduced-motion setting each time something starts. */
+/** The layer's motion; reads the HUD motion setting each time something starts. */
 export function useBuildingHudMotion(): BuildingHudMotion {
   return createBuildingHudMotion();
 }

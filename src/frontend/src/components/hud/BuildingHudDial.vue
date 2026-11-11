@@ -15,7 +15,7 @@ import {
   polylinePartial,
   type ConstructionDial,
 } from '../../lib/map/constructionDial';
-import { animationPreference } from '../../lib/perf/animationPreference';
+import { hudReducedMotion } from '../../composables/useBuildingHudMotion';
 
 const props = defineProps<{
   radius: number;
@@ -89,10 +89,10 @@ const labelColor = computed(() => (props.ring === 'max' ? GOLD : '#fff'));
 // one refresh so its finish starts on time.
 
 const now = ref(Date.now());
-const phase = computed(() => (props.order ? dialPhase(props.order, now.value, animationPreference.reducedMotion) : null));
+const phase = computed(() => (props.order ? dialPhase(props.order, now.value, hudReducedMotion()) : null));
 const animated = computed(() => {
   const p = phase.value;
-  return p !== null && (p.kind === 'finish' || p.kind === 'reject' || (p.kind === 'pending' && !animationPreference.reducedMotion));
+  return p !== null && (p.kind === 'finish' || p.kind === 'reject' || (p.kind === 'pending' && !hudReducedMotion()));
 });
 
 let raf = 0;
@@ -183,7 +183,7 @@ const pending = computed(() => {
   if (phase.value?.kind !== 'pending') return null;
   const { c, sw } = geometry.value;
   const r = props.radius;
-  const reduced = animationPreference.reducedMotion;
+  const reduced = hudReducedMotion();
   const segments: string[] = [];
   if (reduced) for (let k = 0; k < 3; k++) segments.push(flat(hexPerimeterSegment(c, c, r, k / 3, k / 3 + 1 / 12)));
   else {
