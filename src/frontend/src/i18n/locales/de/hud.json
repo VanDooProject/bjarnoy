@@ -309,7 +309,6 @@
     "retarget": "Neu ausrichten",
     "confirm": "Bestätigen",
     "trainingFailed": "Ausbildung fehlgeschlagen.",
-    "recallFailed": "Rückruf fehlgeschlagen.",
     "retargetFailed": "Neuausrichtung fehlgeschlagen."
   },
   "battleReport": {

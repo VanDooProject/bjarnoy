@@ -309,7 +309,6 @@
     "retarget": "Retarget",
     "confirm": "Confirm",
     "trainingFailed": "Training failed.",
-    "recallFailed": "Recall failed.",
     "retargetFailed": "Retarget failed."
   },
   "battleReport": {
