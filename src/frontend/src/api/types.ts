@@ -1732,11 +1732,28 @@ export interface BattleReportSiege {
 }
 
 /**
+ * The fight at sea of a fleet's attack: its ships against the defender's ships. Mirrors `BattleReportShipFightResponse`.
+ * `winner` is `'attacker'` or `'defender'`.
+ */
+export interface BattleReportShipFight {
+  attackerLines: BattleReportAttackerLine[];
+  defenderLines: BattleReportDefenderLine[];
+  attackPower: number;
+  defensePower: number;
+  winner: string;
+}
+
+/**
  * Mirrors `BattleReportResponse`. `mission` is `'attack'` or `'raid'`
  * (backend phase 7) — this phase's dispatch UI only offers Attack, but a
  * report can still come back as a Raid (e.g. from another player), so it's
  * rendered with its own label rather than assumed to always be an Attack.
- * `winner` is `'attacker'` or `'defender'` (no draw).
+ * `winner` is `'attacker'` or `'defender'` (no draw): the whole attack's, the attacker unless a fight was lost.
+ *
+ * A land army fights one fight, a fleet two: `attackPower`/`defensePower`/`attackerLines`/`defenderLines`/`siege` are the
+ * land fight (the only fight of a land army, empty for a fleet that fought none) and `shipFight` the fight at sea (`null` for
+ * a land army, a target without ships and reports stored before ships fought separately). `drowned` are the passengers the
+ * surviving ships could not carry, `fireShipsBurned` the Fire Ships the fire used up and `fireSiege` the building it burned.
  */
 export interface BattleReportResponse {
   id: string;
@@ -1753,6 +1770,10 @@ export interface BattleReportResponse {
   attackerLines: BattleReportAttackerLine[];
   defenderLines: BattleReportDefenderLine[];
   siege: BattleReportSiege | null;
+  shipFight: BattleReportShipFight | null;
+  drowned: ArmyUnitStackResponse[];
+  fireShipsBurned: number;
+  fireSiege: BattleReportSiege | null;
 }
 
 // Issue #206 (frontend): in-flight field battles — army-vs-army interception
@@ -1828,7 +1849,8 @@ export interface SimulatorRequest {
  * Mirrors `SimulatorResponse` — deliberately the same field shape as
  * `BattleReportResponse` minus the persistence-only identity fields no
  * simulated battle has (no `id`, `occurredAt`, army/settlement ids), so the
- * same report-rendering markup (`BattleReportCard.vue`) can display either.
+ * same report-rendering markup (`BattleReportCard.vue`) can display either —
+ * a fleet's ship fight and land fight included, from the one `AttackResolver` a real attack uses.
  */
 export interface SimulatorResponse {
   mission: string;
@@ -1840,6 +1862,14 @@ export interface SimulatorResponse {
   attackerLines: BattleReportAttackerLine[];
   defenderLines: BattleReportDefenderLine[];
   siege: BattleReportSiege | null;
+  /**
+   * A fleet's fight at sea and what followed (the drowned passengers; the Fire Ships burned and their fire damage are always
+   * zero/`null` here, a simulated attack names no building). `attackPower`/`defensePower`/the lines are the land fight.
+   */
+  shipFight: BattleReportShipFight | null;
+  drowned: ArmyUnitStackResponse[];
+  fireShipsBurned: number;
+  fireSiege: BattleReportSiege | null;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/SettlementContracts.cs's

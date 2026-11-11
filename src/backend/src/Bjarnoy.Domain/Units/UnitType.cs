@@ -50,6 +50,12 @@ public enum UnitType
     /// requires Berserker to be trainable first.
     /// </summary>
     Ram = 10,
+
+    /// <summary>
+    /// Fire ship: a hull with no attack and no slots, sent with a fleet to burn a building standing in the water (see
+    /// <c>docs/design/economy.md</c>, "Fire Ship"); requires Karve to be trainable first.
+    /// </summary>
+    FireShip = 11,
 }
 
 public static class UnitTypeExtensions
@@ -67,6 +73,7 @@ public static class UnitTypeExtensions
         UnitType.Longship => "longship",
         UnitType.Settler => "settler",
         UnitType.Ram => "ram",
+        UnitType.FireShip => "fireship",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown unit type"),
     };
 }

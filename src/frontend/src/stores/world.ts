@@ -40,7 +40,7 @@ import {
   maxAffordableProvisions,
 } from '../lib/units/armyDispatch';
 import { SETTLERS_PER_FOUNDING } from '../lib/founding';
-import { isWaterCampFamily } from '../lib/map/campPlacement';
+import { isSandCampFamily, isWaterCampFamily } from '../lib/map/campPlacement';
 import { useUnitCatalogueStore } from './unitCatalogue';
 import { stackCounts } from '../lib/units/fieldOrderFeasibility';
 import { DemoTradeError, WorldModel } from '../lib/map/WorldModel';
@@ -1730,7 +1730,7 @@ export const useWorldStore = defineStore('world', {
       if (picker.mission === 'attack' && picker.targetSettlementId) void this.loadDispatchTargetBuildings(picker.targetSettlementId);
     },
     /**
-     * A hunt takes land units against a land camp, and against a camp at sea the ships and their passengers: the units of the
+     * A hunt takes land units against a land camp (a sand camp also ships, as their carriers), and against a camp at sea the ships and their passengers: the units of the
      * other class in the picker's field order are unselected.
      */
     dropNonHuntUnits() {
@@ -1739,8 +1739,9 @@ export const useWorldStore = defineStore('world', {
       if (!draft?.units || !picker) return;
       const camp = this.model.campAt(picker.coord);
       const atSea = !!camp && isWaterCampFamily(camp.family);
+      const onSand = !!camp && isSandCampFamily(camp.family);
       const byType = useUnitCatalogueStore().byType;
-      for (const unit of Object.keys(draft.units)) if (!isHuntUnit(unit, byType, atSea)) draft.units[unit] = 0;
+      for (const unit of Object.keys(draft.units)) if (!isHuntUnit(unit, byType, atSea, onSand)) draft.units[unit] = 0;
     },
     /** Sets how many of one unit of the selected field army leave (a standing army's split), clamped to what the army holds. */
     setFieldOrderUnitCount(unit: string, count: number) {

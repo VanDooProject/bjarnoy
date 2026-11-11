@@ -15,7 +15,7 @@ import { formatMinutes } from '../lib/docs/landMovementDocs';
 import { TOWER_DEFENCE_PERCENT_PER_LEVEL, minutesPerSeaHex } from '../lib/docs/shipDocs';
 import { SETTLERS_PER_FOUNDING } from '../lib/founding';
 
-// The ships page: the dockyard, a table of the two ships and the rules for fleets at sea. Ship figures come from the
+// The ships page: the dockyard, a table of the ships and the rules for fleets at sea. Ship figures come from the
 // unit catalogue, the dockyard's from the building catalogue; the sea rules are mirrored in shipDocs.ts.
 
 const { n, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });

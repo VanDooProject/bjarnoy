@@ -13,7 +13,7 @@ import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
 import { campName, missionName, unitName } from '../../i18n/catalogueNames';
 import { motionEnabled } from '../../lib/motion';
-import { isHuntUnit } from '../../lib/units/armyDispatch';
+import { fleetLacksLandTroops, isHuntUnit } from '../../lib/units/armyDispatch';
 import { stackCounts } from '../../lib/units/fieldOrderFeasibility';
 import type { SendSource } from '../../lib/units/sendSources';
 import { useSendBlockText, useSendPickerRows } from '../../composables/useSendSources';
@@ -123,7 +123,12 @@ const splitNote = computed(() => {
   if (leavingCount.value >= wholeCount.value) return t('hud.sendPicker.wholeArmy');
   return t('hud.sendPicker.splits', { go: leavingCount.value, stay: wholeCount.value - leavingCount.value });
 });
+// A hunt at a sand camp with ships leaving and no land troops aboard: the ships do not fight there (`HuntRequiresLandUnits`).
+const sandHuntLacksTroops = computed(
+  () => draft.value?.mission === 'hunt' && !!target.value?.campOnSand && fleetLacksLandTroops(leaving.value, catalogue.byType),
+);
 const verdictNote = computed(() => {
+  if (sandHuntLacksTroops.value) return t('apiErrors.rejections.HuntRequiresLandUnits');
   const v = verdict.value;
   if (!v || v.ok) return '';
   return v.reason === 'noFood' ? t('hud.sendPicker.reasons.noFood') : v.reason === 'unreachable' ? t('hud.sendPicker.reasons.unreachable') : '';
@@ -135,11 +140,12 @@ const canSend = computed(
     !draft.value.submitting &&
     leavingCount.value > 0 &&
     !!verdict.value?.ok &&
+    !sandHuntLacksTroops.value &&
     !buildingPicker.isMissingRequiredPick.value,
 );
-// A hunt on land cannot take ships along: their rows are locked at 0 (see trimToHuntUnits).
+// A hunt on a land camp other than sand cannot take ships along: their rows are locked at 0 (see trimToHuntUnits).
 function unitLocked(unit: string): boolean {
-  return draft.value?.mission === 'hunt' && !isHuntUnit(unit, catalogue.byType, !!target.value?.campAtSea);
+  return draft.value?.mission === 'hunt' && !isHuntUnit(unit, catalogue.byType, !!target.value?.campAtSea, !!target.value?.campOnSand);
 }
 const sendLabel = computed(() => {
   if (draft.value?.submitting) return t('hud.dispatchSheet.starting');
