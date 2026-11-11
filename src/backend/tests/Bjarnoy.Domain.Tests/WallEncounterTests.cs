@@ -300,4 +300,21 @@ public sealed class WallEncounterTests
         // A movement stored before the instant was recorded counts every wall as new.
         Assert.Equal(DateTimeOffset.MinValue, (movement with { RoutePlannedAt = null }).PlannedAt);
     }
+
+    [Fact]
+    public void An_order_to_an_army_still_marching_keeps_the_instant_its_kept_route_was_planned_and_a_time_shift_moves_it()
+    {
+        var army = Marching(provisions: 400);
+        var movement = MovementOf(army);
+        var orderedAt = T0.AddHours(1);
+        Assert.True(orderedAt < movement.ArrivesAt);
+
+        var order = Army.PlanFieldOrder(army, [], new HexCoord(2, 0), Home, orderedAt, Strip, isPremium: true);
+
+        Assert.True(order.Accepted, $"expected accept, got {order.Rejection}");
+        Assert.Equal(T0, MovementOf(order.Army!).RoutePlannedAt);
+
+        var shifted = army.ShiftArrivalTo(movement.ArrivesAt.AddHours(-2))!;
+        Assert.Equal(T0.AddHours(-2), MovementOf(shifted).RoutePlannedAt);
+    }
 }

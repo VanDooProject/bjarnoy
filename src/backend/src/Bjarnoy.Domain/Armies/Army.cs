@@ -2112,10 +2112,11 @@ public sealed record Army
             return FieldOrderResult.Rejected(FieldOrderRejection.InsufficientProvisionsForRoundTrip);
         }
 
-        // Planned now, with the walls standing now, also when an army still marching keeps its departure.
+        // A route planned now is checked against the walls from now on. An army still marching keeps its old hexes, so it keeps
+        // the older planning instant too: an earlier instant only means more wall checks, never a missed one.
         var newMovement = Movement.Movement.Create(
             departedAt, fullPath, cumulativeHours, edgeHours, returnPath, returnCumulativeHours, returnEdgeHours, provisionsAtDeparture, upkeepPerHour)
-            with { RoutePlannedAt = now };
+            with { RoutePlannedAt = arrived ? now : movement.RoutePlannedAt };
 
         var ordered = leaving with
         {
@@ -2291,6 +2292,7 @@ public sealed record Army
                 DepartedAt = movement.DepartedAt + shift,
                 TurnAroundAt = movement.TurnAroundAt + shift,
                 FieldBattleImmuneUntil = movement.FieldBattleImmuneUntil + shift,
+                RoutePlannedAt = movement.RoutePlannedAt + shift,
             }),
         };
     }
