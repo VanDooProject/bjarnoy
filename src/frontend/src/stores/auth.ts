@@ -10,11 +10,14 @@ import { clearStoredRefreshToken, readStoredRefreshToken, storeRefreshToken } fr
 // api/client.ts: that module's `request()` attaches the access token and
 // retries once on 401 via this store's hooks, which login/register/refresh
 // themselves must not do (a failed login is not an expired token).
+// The timeout keeps a dead server from leaving "Logging in…" hanging forever.
+const AUTH_TIMEOUT_MS = 30_000;
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
   });
   if (!res.ok) {
     const problem = await res.json().catch(() => undefined);
