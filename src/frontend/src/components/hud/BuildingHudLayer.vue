@@ -263,19 +263,9 @@ const dialDiscs = new Map<string, { key: string; cx: number; cy: number; r: numb
 /** Where each marker's box is drawn right now (canvas px); absent while it has none. */
 const boxRects = new Map<string, { x: number; y: number; w: number; h: number }>();
 
-/** The marker a screen point is on: its dial disc first, else its box. */
-function pickTappedMarker(screen: { x: number; y: number }): string | null {
-  const disc = pickTappedDial(screen, [...dialDiscs.values()]);
-  if (disc !== null) return disc;
-  // Overlapping boxes: the right-most is on top (`stackOrder`), so it takes the tap.
-  let hit: { key: string; x: number } | null = null;
-  for (const [key, rect] of boxRects) if (pointInRect(screen, rect) && (hit === null || rect.x > hit.x)) hit = { key, x: rect.x };
-  return hit?.key ?? null;
-}
-
-/** A tap on a dial or box reveals it (a second one closes it); a tap elsewhere closes a revealed one. */
+/** A tap on a dial reveals it (a second one closes it); a tap elsewhere closes a revealed one. A box takes no tap: the hex under it is another one's. */
 function onMapTap(screen: { x: number; y: number }) {
-  tapKey = nextTapReveal(tapKey, pickTappedMarker(screen));
+  tapKey = nextTapReveal(tapKey, pickTappedDial(screen, [...dialDiscs.values()]));
   tapAtMs = Date.now();
 }
 

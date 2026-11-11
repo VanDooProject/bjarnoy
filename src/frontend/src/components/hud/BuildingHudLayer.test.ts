@@ -335,8 +335,8 @@ describe('BuildingHudLayer', () => {
       expect(scaleOf()).toContain('scale(1.500)');
     });
 
-    it('reveals a marker with a touch tap on its box, not on the empty map beside it', async () => {
-      // One building, so no neighbour's dial or box lies over the point.
+    it('a touch tap on a box reveals nothing: the hex under it belongs to the map', async () => {
+      // One building, so no neighbour's dial lies over the point.
       const world = seedBuildings();
       world.hud.buildings = [{ q: 1, r: 0, type: 'longhouse', level: 1 }];
       const renderer = fakeRenderer({ dialMapScale: 1.5 });
@@ -346,17 +346,19 @@ describe('BuildingHudLayer', () => {
       sizeBoxes();
       runFrame();
       vi.useFakeTimers({ toFake: ['Date'] });
-      renderer.tapObserver!({ x: 300, y: 340 });
-      for (let i = 0; i < 5; i++) {
-        vi.advanceTimersByTime(60);
-        runFrame();
-      }
-      expect(scaleOf()).toContain('scale(1.500)');
+      const frames5 = () => {
+        for (let i = 0; i < 5; i++) {
+          vi.advanceTimersByTime(60);
+          runFrame();
+        }
+      };
+      // On the box (x 180..330, y 270..330), off the dial disc.
       renderer.tapObserver!({ x: 300, y: 320 });
-      for (let i = 0; i < 5; i++) {
-        vi.advanceTimersByTime(60);
-        runFrame();
-      }
+      frames5();
+      expect(scaleOf()).toContain('scale(1.500)');
+      // On the dial it does.
+      renderer.tapObserver!({ x: 181, y: 301 });
+      frames5();
       vi.useRealTimers();
       expect(scaleOf()).toContain('scale(1.950)');
     });
