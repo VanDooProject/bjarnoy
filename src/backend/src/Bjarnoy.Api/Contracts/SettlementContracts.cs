@@ -431,7 +431,8 @@ public sealed record SettlementResponse(
                     Feasts.Duration.TotalSeconds / speedFactor,
                     Feasts.RenownFor(domain.TownSquareLevel))
                 : null,
-            [.. Bjarnoy.Domain.Settlers.Quests.All.Select(q => new QuestResponse(
+            // Quests are enabled on the player's first settlement only (economy.md section 7).
+            [.. Bjarnoy.Domain.Settlers.Quests.All.Where(_ => id == session.FirstSettlementId).Select(q => new QuestResponse(
                 q.Id, q.IsCompleted(domain), domain.HasClaimed(q), ResourceLine.From(q.Reward),
                 q.Progress?.Invoke(domain) is { } p ? new QuestProgressResponse(p.Current, p.Target) : null))],
             WorldClockResponse.From(clock, gameNow),

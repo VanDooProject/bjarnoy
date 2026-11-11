@@ -945,6 +945,7 @@ public static class SettlementEndpoints
         QuestRejection.UnknownQuest => "There is no such quest.",
         QuestRejection.AlreadyClaimed => "This quest's reward was already claimed.",
         QuestRejection.NotCompleted => "This quest is not completed yet.",
+        QuestRejection.NotFirstSettlement => "Quests are only available on your first settlement.",
         _ => "Refused.",
     };
 

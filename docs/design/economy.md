@@ -629,7 +629,9 @@ their renown.
   - **Exactly once per settlement.** Each quest has a bit in the settlement's
     claimed-quests mask, set in the same save that pays the reward, so a
     double click or a retry gets a 409 (`AlreadyClaimed`), never a second
-    payment. A second settlement has its own list.
+    payment. Quests are enabled only on a player's first settlement in a world
+    (the oldest by founding time): any later settlement lists none, and claiming one there gets a 409
+    (`NotFirstSettlement`).
   - **Only standing buildings count.** Queued and under-construction orders do
     not; a producer is any building (other than the Longhouse) that yields
     wood, brick, food or iron of its own, so storage, towers and the
