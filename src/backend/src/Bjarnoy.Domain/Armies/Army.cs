@@ -1452,7 +1452,7 @@ public sealed record Army
         }
 
         // Any ship makes the whole army a fleet (a sea Found convoy carries settlers on its ships), the same
-        // read IsFleet and HomeHex use, so the route table always matches the home hex.
+        // read IsFleet uses, so the route table always matches the fleet it belongs to.
         var isLandUnit = !IsFleet;
 
         var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
