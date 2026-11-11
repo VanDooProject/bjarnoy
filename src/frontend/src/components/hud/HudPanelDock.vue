@@ -34,8 +34,11 @@ const emit = defineEmits<{ select: [coord: { q: number; r: number }]; 'focus-arm
 
 const SIDES: DockSide[] = ['left', 'right'];
 const ALIGNS: DockAlign[] = ['top', 'bottom'];
-const COLLAPSE_MS = 160;
-const CHEVRON_PX = 24;
+const COLLAPSE_MS = 200;
+const CHEVRON_PX = 32;
+/** The chevron's stroke sits this far inside its button: the button reaches that far into the panel's padding so the stroke
+ *  lines up with the panel's content edge (the header's count above other rows). */
+const CHEVRON_INSET_PX = 7;
 
 const prefs = useHudPrefsStore();
 const { shown: panelShown, heldOpen: panelHeld } = useHudPanelShown();
@@ -98,8 +101,10 @@ function measureHandles() {
     const hs = getComputedStyle(handle);
     const ps = getComputedStyle(panel);
     next[slot.dataset.hudPanel as HudPanelId] = {
-      left: h.right - s.left - CHEVRON_PX,
-      top: top + (h.height - CHEVRON_PX) / 2,
+      left: h.right - s.left - CHEVRON_PX + CHEVRON_INSET_PX,
+      // Centred on the header's text line (its content box), not on its box: the header's bottom padding and divider sit
+      // under the text and would push the chevron below the title and count.
+      top: top + px(hs.borderTopWidth) + px(hs.paddingTop) + (h.height - px(hs.borderTopWidth) - px(hs.paddingTop) - px(hs.paddingBottom) - px(hs.borderBottomWidth) - CHEVRON_PX) / 2,
       // The header's own divider (its bottom padding and border) is hidden while collapsed; the panel's bottom padding and
       // border close the box under the title instead (the border is redrawn by the slot's ::after, since the clip cuts it).
       collapsedHeight: top + h.height - px(hs.paddingBottom) - px(hs.borderBottomWidth) + px(ps.paddingBottom) + px(ps.borderBottomWidth),
@@ -136,7 +141,7 @@ async function toggleCollapse(id: HudPanelId) {
   if (isCollapsed(id) && now.firstElementChild) now.firstElementChild.scrollTop = 0;
   const to = now.offsetHeight;
   if (motionEnabled() && from !== to) {
-    void animate(now, [{ height: `${from}px`, overflow: 'hidden' }, { height: `${to}px`, overflow: 'hidden' }], { duration: COLLAPSE_MS, easing: 'ease-out' });
+    void animate(now, [{ height: `${from}px`, overflow: 'hidden' }, { height: `${to}px`, overflow: 'hidden' }], { duration: COLLAPSE_MS, easing: 'cubic-bezier(0.2, 0, 0, 1)' });
   }
 }
 
