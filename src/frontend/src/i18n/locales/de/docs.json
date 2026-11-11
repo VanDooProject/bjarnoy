@@ -1248,6 +1248,7 @@
       "upkeep": "Eine Armee isst ab dem Aufbruch jede Stunde den Unterhalt ihrer Einheiten an Nahrung.",
       "carry": "Mehr Nahrung, als ihre Einheiten tragen, kann sie nicht mitnehmen. Den Proviant für den ganzen Weg lädst du also vor dem Aufbruch.",
       "turnBack": "Wird die Nahrung knapp, kehrt eine marschierende Armee um.",
+      "noWayHome": "Kommt eine Armee nicht mehr nach Hause, etwa weil eine Palisade den Weg versperrt, bleibt sie, wo sie ist. Geht ihr die Nahrung aus, verhungert die ganze Armee, und du bekommst einen Bericht.",
       "columns": {
         "upkeep": "Isst pro Stunde",
         "carries": "Trägt (Nahrung)"
@@ -1258,6 +1259,8 @@
       "camps": "Kommt eine Armee in die Reichweite eines starken Wildtierlagers, wird sie überfallen, außer das Lager ist ruhig. Ein starkes Lager bewacht {min} bis {max} Felder um sich (2 plus seine Stufe). Mehr dazu unter {link}.",
       "campsLink": "Wildtierlager",
       "enemies": "Feindliche Armeen, die sich auf der Straße treffen, kämpfen eine Feldschlacht. Armeen desselben Besitzers oder derselben Gilde kämpfen nie gegeneinander.",
+      "fleeing": "Nur eine Armee, die nach einer verlorenen Feldschlacht flieht, ist vor Feldschlachten und Überfällen aus Wildtierlagern sicher, höchstens 6 Stunden lang. Du kannst ihr Befehle geben wie jeder anderen Armee, doch mit dem ersten Befehl endet dieser Schutz.",
+      "newWalls": "Versperrt eine neue Palisade einer Armee den Weg, sucht sie sich einen anderen – auf dem Hinweg wie auf dem Heimweg. Findet sie keinen, bleibt sie auf dem letzten Feld vor der Palisade stehen, und du bekommst einen Bericht. Steckt sie auf dem Hinweg fest, gibt sie ihr Ziel auf und wartet dort.",
       "orders": "Jeder Befehl hat ein Ziel gratis. Wegpunkte unterwegs sind eine Premium-Funktion."
     },
     "sendOut": {
