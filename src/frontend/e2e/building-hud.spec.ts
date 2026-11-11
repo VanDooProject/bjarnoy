@@ -99,7 +99,7 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     await expect(reloaded.hud.toggle).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('a marker never takes the pointer: the hex under its dial still shows its tooltip and opens its ring', async ({ page }) => {
+  test('a marker never takes the pointer: the hex under its dial opens its ring, while the tile tooltip stays away', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     const { hud } = settlement;
@@ -115,7 +115,9 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     expect(await hud.elementTagAt(at)).toBe('CANVAS');
 
     await page.mouse.move(at.x, at.y, { steps: 4 });
-    await expect(settlement.tooltip).toBeVisible();
+    // The marker is hovered (it grows): the tile tooltip does not show while it is.
+    await expect(hud.marker(hex)).toHaveAttribute('style', /scale\((1\.9|2\.)/);
+    await expect(settlement.tooltip).toHaveCount(0);
 
     await page.mouse.click(at.x, at.y);
     await settlement.ring.waitForOpen();

@@ -3,7 +3,7 @@
 // they're unit-testable without mounting a component or a Pinia store, same
 // reasoning as lib/units/trainingEconomy.ts.
 import { hexDistance, type AxialCoord } from '../hex/coords';
-import type { DispatchArmyRequest, FieldOrderRequest, HexPoint, UnitDefinitionResponse } from '../../api/types';
+import type { DispatchArmyRequest, DispatchFromSpot, FieldOrderRequest, HexPoint, UnitDefinitionResponse } from '../../api/types';
 import { i18n } from '../../i18n';
 import { BEACH_CAMP_BUILD_SECONDS } from '../founding';
 import { scaledBuildSeconds } from '../map/ringCatalogue';
@@ -29,18 +29,15 @@ export function routeToWaypointsAndDestination(
 /** Shared body of the move-shaped dispatches: the last clicked hex is the destination, every hex before it a waypoint. */
 function buildRouteDispatchRequest(
   mission: 'move' | 'found' | 'setupcamp',
-  unitCounts: Record<string, number>,
+  from: DispatchFromSpot[],
   route: AxialCoord[],
   provisions: number,
 ): DispatchArmyRequest | null {
-  const units = Object.entries(unitCounts)
-    .filter(([, count]) => count > 0)
-    .map(([unit, count]) => ({ unit, count }));
-  if (units.length === 0 || route.length === 0) return null;
+  if (from.length === 0 || route.length === 0) return null;
 
   const { waypoints, destination } = routeToWaypointsAndDestination(route);
   return {
-    units,
+    from,
     waypoints: waypoints.length > 0 ? waypoints : undefined,
     destination,
     provisions,
@@ -48,13 +45,13 @@ function buildRouteDispatchRequest(
   };
 }
 
-/** Builds a `move`-mission `DispatchArmyRequest` from a unit-count map, a clicked route, and provisions. */
+/** Builds a `move`-mission `DispatchArmyRequest` from the units grouped by spot, a clicked route, and provisions. */
 export function buildMoveDispatchRequest(
-  unitCounts: Record<string, number>,
+  from: DispatchFromSpot[],
   route: AxialCoord[],
   provisions: number,
 ): DispatchArmyRequest | null {
-  return buildRouteDispatchRequest('move', unitCounts, route, provisions);
+  return buildRouteDispatchRequest('move', from, route, provisions);
 }
 
 /**
@@ -62,11 +59,11 @@ export function buildMoveDispatchRequest(
  * settlement is founded). The server checks the five settlers, renown and spacing.
  */
 export function buildFoundDispatchRequest(
-  unitCounts: Record<string, number>,
+  from: DispatchFromSpot[],
   route: AxialCoord[],
   provisions: number,
 ): DispatchArmyRequest | null {
-  return buildRouteDispatchRequest('found', unitCounts, route, provisions);
+  return buildRouteDispatchRequest('found', from, route, provisions);
 }
 
 /**
@@ -74,11 +71,11 @@ export function buildFoundDispatchRequest(
  * route ends on it). The server checks the two camp builders, the site and the cost.
  */
 export function buildCampDispatchRequest(
-  unitCounts: Record<string, number>,
+  from: DispatchFromSpot[],
   route: AxialCoord[],
   provisions: number,
 ): DispatchArmyRequest | null {
-  return buildRouteDispatchRequest('setupcamp', unitCounts, route, provisions);
+  return buildRouteDispatchRequest('setupcamp', from, route, provisions);
 }
 
 /** Whether the clicked route's last hex is the destination: a move walks there, a founding settles there, a camp is set up there. */
@@ -103,7 +100,7 @@ export function dispatchHasDestination(draft: {
 
 
 /**
- * Builds an `attack`-mission `DispatchArmyRequest` from a unit-count map, a
+ * Builds an `attack`-mission `DispatchArmyRequest` from the units grouped by spot, a
  * clicked route, and provisions. Unlike `buildMoveDispatchRequest`, the
  * clicked route is never split into "waypoints + final destination" — the
  * backend ignores `destination` for an attack dispatch and always resolves
@@ -122,20 +119,17 @@ export function dispatchHasDestination(draft: {
  * as-is.
  */
 export function buildAttackDispatchRequest(
-  unitCounts: Record<string, number>,
+  from: DispatchFromSpot[],
   route: AxialCoord[],
   provisions: number,
   targetSettlementId: string | null,
   targetBuildingCoord?: HexPoint | null,
 ): DispatchArmyRequest | null {
-  const units = Object.entries(unitCounts)
-    .filter(([, count]) => count > 0)
-    .map(([unit, count]) => ({ unit, count }));
-  if (units.length === 0 || !targetSettlementId) return null;
+  if (from.length === 0 || !targetSettlementId) return null;
 
   const waypoints = route.map((c) => ({ q: c.q, r: c.r }));
   return {
-    units,
+    from,
     waypoints: waypoints.length > 0 ? waypoints : undefined,
     provisions,
     mission: 'attack',
@@ -152,19 +146,16 @@ export function buildAttackDispatchRequest(
  * (`isHuntUnit`) and by the server (`HuntRequiresLandUnits` / `HuntRequiresFleet`).
  */
 export function buildHuntDispatchRequest(
-  unitCounts: Record<string, number>,
+  from: DispatchFromSpot[],
   route: AxialCoord[],
   provisions: number,
   targetCamp: AxialCoord | null,
 ): DispatchArmyRequest | null {
-  const units = Object.entries(unitCounts)
-    .filter(([, count]) => count > 0)
-    .map(([unit, count]) => ({ unit, count }));
-  if (units.length === 0 || !targetCamp) return null;
+  if (from.length === 0 || !targetCamp) return null;
 
   const waypoints = route.map((c) => ({ q: c.q, r: c.r }));
   return {
-    units,
+    from,
     waypoints: waypoints.length > 0 ? waypoints : undefined,
     destination: { q: targetCamp.q, r: targetCamp.r },
     provisions,
@@ -249,12 +240,14 @@ export function buildFieldOrderRequest(route: AxialCoord[], options: FieldOrderO
 
   if (mission === 'attack' || mission === 'support') {
     if (!targetSettlementId) return null;
+    // A support names the host's garrison spot it joins (docs/design/garrison.md).
+    if (mission === 'support' && !targetBuildingCoord) return null;
     const waypoints = route.map((c) => ({ q: c.q, r: c.r }));
     return {
       waypoints: waypoints.length > 0 ? waypoints : undefined,
       mission,
       targetSettlementId,
-      targetBuildingCoord: mission === 'attack' && targetBuildingCoord ? { q: targetBuildingCoord.q, r: targetBuildingCoord.r } : undefined,
+      targetBuildingCoord: targetBuildingCoord ? { q: targetBuildingCoord.q, r: targetBuildingCoord.r } : undefined,
       units: leaving,
     };
   }
@@ -446,26 +439,26 @@ export function shoreBuildings<T extends { q: number; r: number }>(buildings: T[
  * hex (see `ArmyService.DispatchAsync`). Kept as its own function rather than
  * reusing `buildAttackDispatchRequest` under the hood so each mission's
  * request-building stays a one-line, self-contained read at the call site —
- * mirrors why `buildAttackDispatchRequest` doesn't share `buildMoveDispatchRequest`.
+ * mirrors why `buildAttackDispatchRequest` doesn't share `buildMoveDispatchRequest`. `targetBuildingCoord` is the host's garrison
+ * spot (its longhouse, a tower or a dock) the army joins; the server refuses a support without one.
  */
 export function buildSupportDispatchRequest(
-  unitCounts: Record<string, number>,
+  from: DispatchFromSpot[],
   route: AxialCoord[],
   provisions: number,
   targetSettlementId: string | null,
+  targetBuildingCoord: HexPoint | null,
 ): DispatchArmyRequest | null {
-  const units = Object.entries(unitCounts)
-    .filter(([, count]) => count > 0)
-    .map(([unit, count]) => ({ unit, count }));
-  if (units.length === 0 || !targetSettlementId) return null;
+  if (from.length === 0 || !targetSettlementId || !targetBuildingCoord) return null;
 
   const waypoints = route.map((c) => ({ q: c.q, r: c.r }));
   return {
-    units,
+    from,
     waypoints: waypoints.length > 0 ? waypoints : undefined,
     provisions,
     mission: 'support',
     targetSettlementId,
+    targetBuildingCoord: { q: targetBuildingCoord.q, r: targetBuildingCoord.r },
   };
 }
 
@@ -619,4 +612,27 @@ export function trainingSite(
     .filter((b) => b.type === required)
     .sort((a, b) => hexDistance(a, centre) - hexDistance(b, centre) || a.q - b.q || a.r - b.r);
   return candidates.length > 0 ? { q: candidates[0].q, r: candidates[0].r } : centre;
+}
+
+/**
+ * The hex a dispatch draft is aimed at, which decides the spots its units leave from (nearest first): the last clicked hex of a
+ * move or founding, the camp of a hunt, the target settlement's hex (or its named garrison spot) of an attack or support.
+ * `null` while the draft has no target yet.
+ */
+export function dispatchTargetCoord(
+  draft: {
+    mission: string;
+    targetSettlementId: string | null;
+    targetCamp: AxialCoord | null;
+    targetBuildingCoord: AxialCoord | null;
+    route: ReadonlyArray<AxialCoord>;
+  },
+  settlementCoord: (settlementId: string) => AxialCoord | undefined,
+): AxialCoord | null {
+  if (draft.mission === 'attack' || draft.mission === 'support') {
+    if (draft.mission === 'support' && draft.targetBuildingCoord) return draft.targetBuildingCoord;
+    return draft.targetSettlementId ? settlementCoord(draft.targetSettlementId) ?? null : null;
+  }
+  if (draft.mission === 'hunt') return draft.targetCamp;
+  return draft.route.length > 0 ? draft.route[draft.route.length - 1] : null;
 }

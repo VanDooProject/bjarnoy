@@ -30,6 +30,11 @@ public class ArmyEntity
 
     public SettlementEntity? Settlement { get; set; }
 
+    /// <summary>The hex of the garrison spot of <see cref="SettlementId"/> the army leaves from and returns to — <see cref="Army.HomeSpot"/>.</summary>
+    public int HomeSpotQ { get; set; }
+
+    public int HomeSpotR { get; set; }
+
     public int Mission { get; set; }
 
     /// <summary>
@@ -53,7 +58,8 @@ public class ArmyEntity
 
     /// <summary>
     /// The building coordinate an <see cref="ArmyMission.Attack"/> army was
-    /// told to hit (issue #40 phase 5) — see <see cref="Army.TargetBuildingCoord"/>.
+    /// told to hit (issue #40 phase 5), or the host's garrison spot a <see cref="ArmyMission.Support"/> army joins — see
+    /// <see cref="Army.TargetBuildingCoord"/>.
     /// Null (both columns) means "no preference"; the two are always either
     /// both set or both null, never one alone.
     /// </summary>
@@ -122,7 +128,7 @@ public class ArmyEntity
     public Army ToDomain()
     {
         ArmyLocation location = IsSupporting
-            ? new ArmyLocation.Supporting(TargetSettlementId!.Value)
+            ? new ArmyLocation.Supporting(TargetSettlementId!.Value, new HexCoord(TargetBuildingQ!.Value, TargetBuildingR!.Value))
             : AtHome
                 ? new ArmyLocation.AtHome()
                 : new ArmyLocation.InTransit(new Movement
@@ -143,6 +149,7 @@ public class ArmyEntity
         {
             Id = Id,
             SettlementId = SettlementId,
+            HomeSpot = new HexCoord(HomeSpotQ, HomeSpotR),
             Stacks = [.. Stacks.OrderBy(s => s.UnitType).Select(s => new UnitStack(s.UnitType, s.Count))],
             Location = location,
             Provisions = Provisions,
@@ -187,6 +194,9 @@ public class ArmyEntity
             WalkedLegs.Add(walked);
         }
 
+        SettlementId = army.SettlementId;
+        HomeSpotQ = army.HomeSpot.Q;
+        HomeSpotR = army.HomeSpot.R;
         Mission = (int)army.Mission;
         TargetSettlementId = army.TargetSettlementId;
         TargetBuildingQ = army.TargetBuildingCoord?.Q;
@@ -235,6 +245,8 @@ public class ArmyEntity
                 AtHome = false;
                 IsSupporting = true;
                 TargetSettlementId = supporting.HostSettlementId;
+                TargetBuildingQ = supporting.Spot.Q;
+                TargetBuildingR = supporting.Spot.R;
                 DepartedAt = default;
                 Path = [];
                 CumulativeHours = [];

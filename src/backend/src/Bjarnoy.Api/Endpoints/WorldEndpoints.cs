@@ -80,6 +80,12 @@ public static class WorldEndpoints
             .WithSummary("Every building of every settlement of the caller, standing or under construction, so a client can draw one it has not opened.")
             .RequireCallerRealm();
 
+        worlds.MapGet("/{worldId:guid}/own-build-orders", GetOwnBuildOrders)
+            .WithName("GetWorldOwnBuildOrders")
+            .WithSummary("The active build queue of each of the caller's realms (one row per realm, its oldest member), so a client can show the construction progress of a settlement it has not opened.")
+            .RequireCallerRealm()
+            .WithConcurrencyRetry();
+
         worlds.MapGet("/{worldId:guid}/tiles", GetTiles)
             .WithName("GetWorldTiles")
             .WithSummary("Returns the terrain of an axial rectangle of hexes.");
@@ -485,6 +491,51 @@ public static class WorldEndpoints
         ];
 
         return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// The build queue of each of the caller's realms in the world, read from the settled linked group exactly as <c>GET /settlements/{id}</c>
+    /// reads it (a realm's queue merges its members', so one row per realm, named by its oldest member). The settlement view only polls the
+    /// open settlement; this is how a client learns when a build elsewhere completes and how long it still runs. No resolvable realm or
+    /// world answers an empty list.
+    /// </summary>
+    private static async Task<Ok<IReadOnlyList<OwnBuildOrdersResponse>>> GetOwnBuildOrders(
+        Guid worldId,
+        HttpContext httpContext,
+        SettlementService settlements,
+        RealmDirectory realms,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<OwnBuildOrdersResponse>>([]);
+        }
+
+        var callerUserId = RivalVisibility.CallerUserId(httpContext.User);
+        var result = new List<OwnBuildOrdersResponse>();
+        var seenRealms = new HashSet<Guid>();
+        foreach (var own in (await settlements.GetForWorldAsync(worldId, cancellationToken))
+                     .Where(s => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId)))
+        {
+            var session = await settlements.GetGroupAsync(own.Id, cancellationToken);
+            if (session is null)
+            {
+                continue;
+            }
+
+            var realmId = session.Store.RealmIdOf(own.Id);
+            if (!seenRealms.Add(realmId))
+            {
+                continue;
+            }
+
+            var response = SettlementResponse.Build(session, realmId, session.Clock, session.Clock.ToGameTime(time.GetUtcNow()));
+            result.Add(new OwnBuildOrdersResponse(realmId, response.Queue));
+        }
+
+        return TypedResults.Ok<IReadOnlyList<OwnBuildOrdersResponse>>(result);
     }
 
     /// <summary>

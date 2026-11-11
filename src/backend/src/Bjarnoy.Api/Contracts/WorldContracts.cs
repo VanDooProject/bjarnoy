@@ -650,3 +650,9 @@ public sealed record WallResponse(
 /// <param name="OwnerUserId">The owning account; null for an anonymous settlement (owned by the shared abandoned user).</param>
 public sealed record RivalBuildingResponse(
     int Q, int R, string Type, int Level, Guid SettlementId, Guid? OwnerUserId, bool OutsideRealm = false);
+
+/// <summary>
+/// The active build queue of one of the caller's realms (<c>GET /worlds/{id}/own-build-orders</c>), the same orders <c>GET /settlements/{id}</c> lists for it.
+/// </summary>
+/// <param name="SettlementId">The realm's oldest member, whose view the queue is (it merges the linked members' queues).</param>
+public sealed record OwnBuildOrdersResponse(Guid SettlementId, IReadOnlyList<BuildOrderResponse> Queue);

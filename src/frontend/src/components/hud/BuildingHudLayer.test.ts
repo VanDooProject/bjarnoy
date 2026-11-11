@@ -11,10 +11,14 @@ import { useWorldStore } from '../../stores/world';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { installFakeAnimate, type FakeAnimate } from '../../test/fakeAnimate';
 import { DIAL_REJECT_MS, constructionDialsFromQueue, rejectDialAt, type ConstructionDial } from '../../lib/map/constructionDial';
+import { markerScale } from '../../lib/hud/buildingHud';
 import { makePendingOrder } from '../../lib/hud/pendingBuild';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
+
+/** A marker at the smallest zoom, fully hovered: lifted to the size where the compact box shows. */
+const HOVERED_SMALLEST = markerScale(0.3, 1);
 
 // The live building list (`hud.buildings`) is the source under test; the demo reads the local model instead.
 vi.mock('../../config', () => ({ DEMO_MODE: false, API_BASE_URL: '/api/v1' }));
@@ -224,7 +228,7 @@ describe('BuildingHudLayer', () => {
     expect(marker().find('svg.hud-dial polygon').exists()).toBe(true);
   });
 
-  it('grows a hovered marker to its default-zoom size and brings it to the front, then lets it shrink back', async () => {
+  it('grows a hovered marker (markerScale) and brings it to the front, then lets it shrink back', async () => {
     seedBuildings();
     const renderer = fakeRenderer({ dialMapScale: 0.5 });
     wrapper = mountLayer(renderer);
@@ -244,7 +248,7 @@ describe('BuildingHudLayer', () => {
     }
     vi.useRealTimers();
     await wrapper.vm.$nextTick();
-    expect(el().element.style.transform).toContain('scale(1.000)');
+    expect(el().element.style.transform).toContain(`scale(${HOVERED_SMALLEST.toFixed(3)})`);
     expect(el().attributes('data-tier')).toBe('mid');
     expect(el().find('.hud-marker__box').exists()).toBe(true);
     // Left-most by x, yet above the markers to its right.
@@ -271,7 +275,7 @@ describe('BuildingHudLayer', () => {
       vi.advanceTimersByTime(60);
       runFrame();
     }
-    expect(wrapper.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain('scale(1.000)');
+    expect(wrapper.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain(`scale(${HOVERED_SMALLEST.toFixed(3)})`);
     renderer.tapObserver!({ x: 600, y: 50 });
     for (let i = 0; i < 4; i++) {
       vi.advanceTimersByTime(60);
@@ -292,7 +296,222 @@ describe('BuildingHudLayer', () => {
       runFrame();
     }
     vi.useRealTimers();
-    expect(wrapper.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain('scale(1.000)');
+    expect(wrapper.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain(`scale(${HOVERED_SMALLEST.toFixed(3)})`);
+  });
+
+  describe('hover and tap on the box', () => {
+    // jsdom has no layout and no ResizeObserver: a stand-in that reports whatever size a test gives the observed box.
+    const observeOptions: (ResizeObserverOptions | undefined)[] = [];
+    let observers: { cb: ResizeObserverCallback; targets: Set<Element>; disconnected: boolean }[] = [];
+    beforeEach(() => {
+      observers = [];
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          readonly rec = { cb: undefined as unknown as ResizeObserverCallback, targets: new Set<Element>(), disconnected: false };
+          constructor(cb: ResizeObserverCallback) {
+            this.rec.cb = cb;
+            observers.push(this.rec);
+          }
+          observe(el: Element, options?: ResizeObserverOptions) {
+            observeOptions.push(options);
+            this.rec.targets.add(el);
+          }
+          unobserve(el: Element) {
+            this.rec.targets.delete(el);
+          }
+          disconnect() {
+            this.rec.disconnected = true;
+          }
+        },
+      );
+    });
+
+    /** Gives every observed box the unscaled size 100 x 40 and fires the observers. */
+    function sizeBoxes() {
+      for (const o of observers) {
+        const entries = [...o.targets].map((target) => {
+          Object.defineProperty(target, 'offsetWidth', { configurable: true, value: 100 });
+          Object.defineProperty(target, 'offsetHeight', { configurable: true, value: 40 });
+          return { target } as ResizeObserverEntry;
+        });
+        o.cb(entries, {} as ResizeObserver);
+      }
+    }
+    async function mountAt(scale: number) {
+      seedBuildings();
+      const renderer = fakeRenderer({ dialMapScale: scale });
+      wrapper = mountLayer(renderer);
+      runFrame();
+      await wrapper.vm.$nextTick();
+      sizeBoxes();
+      runFrame();
+      return renderer;
+    }
+    function advance(frameCount = 5) {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      for (let i = 0; i < frameCount; i++) {
+        vi.advanceTimersByTime(60);
+        runFrame();
+      }
+      vi.useRealTimers();
+    }
+    const scaleOf = () => wrapper!.get<HTMLElement>('[data-coord="1,0"]').element.style.transform;
+
+    it('grows a marker 1.3x when the mouse is on the dial, even zoomed in', async () => {
+      const renderer = await mountAt(1.5);
+      expect(scaleOf()).toContain('scale(1.500)');
+      renderer.mousePoint = { x: 180, y: 300 };
+      advance();
+      expect(scaleOf()).toContain('scale(1.950)');
+    });
+
+    it('hovers a marker by its box, which starts on the dial centre line', async () => {
+      const renderer = await mountAt(1.5);
+      expect(wrapper!.find('[data-coord="1,0"] .hud-marker__box').exists()).toBe(true);
+      // The dial is at x 180, y 300; its disc is about 41 px. The box is 100 x 40 unscaled, i.e. 150 x 60 at 1.5: it spans
+      // x 180..330, y 270..330. (225, 328) is on the box, off its disc and off the neighbour's dial.
+      renderer.mousePoint = { x: 225, y: 328 };
+      advance();
+      expect(scaleOf()).toContain('scale(1.950)');
+      // Beside the box (above it) nothing hovers.
+      renderer.mousePoint = null;
+      advance();
+      expect(scaleOf()).toContain('scale(1.500)');
+      renderer.mousePoint = { x: 300, y: 260 };
+      advance();
+      expect(scaleOf()).toContain('scale(1.500)');
+    });
+
+    it('a touch tap on a box reveals nothing: the hex under it belongs to the map', async () => {
+      // One building, so no neighbour's dial lies over the point.
+      const world = seedBuildings();
+      world.hud.buildings = [{ q: 1, r: 0, type: 'longhouse', level: 1 }];
+      const renderer = fakeRenderer({ dialMapScale: 1.5 });
+      wrapper = mountLayer(renderer);
+      runFrame();
+      await wrapper.vm.$nextTick();
+      sizeBoxes();
+      runFrame();
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const frames5 = () => {
+        for (let i = 0; i < 5; i++) {
+          vi.advanceTimersByTime(60);
+          runFrame();
+        }
+      };
+      // On the box (x 180..330, y 270..330), off the dial disc.
+      renderer.tapObserver!({ x: 300, y: 320 });
+      frames5();
+      expect(scaleOf()).toContain('scale(1.500)');
+      // On the dial it does.
+      renderer.tapObserver!({ x: 181, y: 301 });
+      frames5();
+      vi.useRealTimers();
+      expect(scaleOf()).toContain('scale(1.950)');
+    });
+
+    it('the marker the mouse is directly on wins over the hex under it, and ends up on top', async () => {
+      const renderer = await mountAt(1.5);
+      const scaleAt = (key: string) => wrapper!.get<HTMLElement>(`[data-coord="${key}"]`).element.style.transform;
+      const z = (key: string) => Number(wrapper!.get<HTMLElement>(`[data-coord="${key}"]`).element.style.zIndex);
+      // On the box of 1,0 (x 180..330, y 270..330) and off the dial discs of 1,0 and 2,0, while the hex under the mouse is 2,0's.
+      renderer.mousePoint = { x: 225, y: 328 };
+      renderer.hoveredHexKey = '2,0';
+      advance();
+      expect(scaleAt('1,0')).toContain('scale(1.950)');
+      expect(scaleAt('2,0')).toContain('scale(1.500)');
+      expect(z('1,0')).toBeGreaterThan(z('2,0'));
+      // Without a direct hit the hex decides.
+      renderer.mousePoint = { x: 225, y: 360 };
+      advance();
+      expect(scaleAt('1,0')).toContain('scale(1.500)');
+      expect(scaleAt('2,0')).toContain('scale(1.950)');
+    });
+
+    it('of two direct hits the one stacked on top wins: the hovered one, else the right-most', async () => {
+      const renderer = await mountAt(1.5);
+      const scaleAt = (key: string) => wrapper!.get<HTMLElement>(`[data-coord="${key}"]`).element.style.transform;
+      // On the boxes of both 1,0 and 2,0 (2,0's starts at x 260), off their dial discs: the right-most one.
+      renderer.mousePoint = { x: 300, y: 285 };
+      renderer.hoveredHexKey = '1,0';
+      advance();
+      expect(scaleAt('2,0')).toContain('scale(1.950)');
+      expect(scaleAt('1,0')).toContain('scale(1.500)');
+      // Still on both boxes: the one already hovered (2,0) stays on top.
+      renderer.mousePoint = { x: 300, y: 300 };
+      advance();
+      expect(scaleAt('2,0')).toContain('scale(1.950)');
+    });
+
+    it('tells the map only when the mouse starts or stops hovering a marker, not for a tap', async () => {
+      const renderer = await mountAt(1.5);
+      const hovering = () => wrapper!.emitted('update:hovering') ?? [];
+      expect(hovering()).toEqual([]);
+      renderer.mousePoint = { x: 180, y: 300 };
+      advance();
+      advance();
+      expect(hovering()).toEqual([[true]]);
+      // From one marker to its neighbour: still hovering, nothing sent.
+      renderer.mousePoint = { x: 260, y: 300 };
+      advance();
+      expect(hovering()).toEqual([[true]]);
+      renderer.mousePoint = null;
+      renderer.hoveredHexKey = null;
+      advance();
+      expect(hovering()).toEqual([[true], [false]]);
+      // A touch tap reveals the marker but is no mouse hover.
+      renderer.tapObserver!({ x: 181, y: 301 });
+      advance();
+      expect(hovering()).toEqual([[true], [false]]);
+    });
+
+    it('tells the map the hover is over when the hovered marker goes away with the last one', async () => {
+      const renderer = await mountAt(1.5);
+      const hovering = () => wrapper!.emitted('update:hovering') ?? [];
+      renderer.mousePoint = { x: 180, y: 300 };
+      advance();
+      expect(hovering()).toEqual([[true]]);
+      // Nothing left to place (every building gone, no construction dial): the tooltip must come back all the same.
+      useWorldStore().hud.buildings = [];
+      useWorldStore().hud.tick += 1;
+      await wrapper!.vm.$nextTick();
+      advance();
+      expect(wrapper!.findAll('[data-coord]')).toHaveLength(0);
+      expect(hovering()).toEqual([[true], [false]]);
+    });
+
+    it('observes the border box and takes its size from the entry, falling back to the layout size', async () => {
+      const renderer = await mountAt(1.5);
+      expect(observeOptions.length).toBeGreaterThan(0);
+      expect(observeOptions.every((o) => o?.box === 'border-box')).toBe(true);
+      // The entry's border-box size (60 x 20) replaces the 100 x 40 the layout reported: the box spans x 180..270 at 1.5.
+      for (const o of observers) {
+        o.cb(
+          [...o.targets].map((target) => ({ target, borderBoxSize: [{ inlineSize: 60, blockSize: 20 }] }) as unknown as ResizeObserverEntry),
+          {} as ResizeObserver,
+        );
+      }
+      renderer.mousePoint = { x: 300, y: 300 };
+      advance();
+      // 300 is beyond the 90 px wide box of 1,0 (it is on 2,0's, which is hovered instead).
+      expect(wrapper!.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain('scale(1.500)');
+    });
+
+    it('stops observing a box that goes away and disconnects on unmount', async () => {
+      const renderer = await mountAt(1.5);
+      expect(observers.length).toBe(1);
+      const observedBox = wrapper!.get('[data-coord="1,0"] .hud-marker__box').element;
+      expect(observers[0]!.targets.has(observedBox)).toBe(true);
+      renderer.dialMapScale = 0.8;
+      runFrame();
+      await wrapper!.vm.$nextTick();
+      expect(wrapper!.find('[data-coord="1,0"] .hud-marker__box').exists()).toBe(false);
+      expect(observers[0]!.targets.has(observedBox)).toBe(false);
+      wrapper!.unmount();
+      wrapper = undefined;
+      expect(observers[0]!.disconnected).toBe(true);
+    });
   });
 
   it('takes no pointer events itself and stops listening to the map when it goes away', () => {
@@ -398,7 +617,7 @@ describe('BuildingHudLayer', () => {
     runFrame();
     await wrapper.vm.$nextTick();
     expect(wrapper.find('[data-coord="3,0"] text').exists()).toBe(false);
-    expect(wrapper.find('[data-coord="3,0"] polyline').exists()).toBe(true);
+    expect(wrapper.find('[data-coord="3,0"] path.hud-dial__arc').exists()).toBe(true);
   });
   it('ages the countdown each tick without rebuilding the markers that do not tick', async () => {
     const world = seedBuildings();
@@ -444,7 +663,7 @@ describe('BuildingHudLayer', () => {
       runFrame();
       await setDials(renderer, constructionDialsFromQueue(world.hud.queue, Date.now()));
       expect(wrapper.get('[data-coord="3,0"] text').text()).toBe('#1');
-      expect(wrapper.find('[data-coord="3,0"] polyline').exists()).toBe(false);
+      expect(wrapper.find('[data-coord="3,0"] .hud-dial__arc').exists()).toBe(false);
       // The track is the white, dimmed one of a running dial.
       expect(wrapper.get('[data-coord="3,0"] polygon:nth-of-type(2)').attributes('stroke-opacity')).toBe('0.3');
     });
@@ -513,6 +732,46 @@ describe('BuildingHudLayer', () => {
       vi.useRealTimers();
     });
 
+    it('shows no colour and no number once the time is up, until the next poll brings the new level', async () => {
+      const world = seedBuildings();
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+      const now = Date.now();
+      world.hud.queueFetchedAt = now;
+      world.hud.queue = [waiting(3, { state: 'building', completesInSeconds: 0.5, totalSeconds: 10 })];
+      const renderer = fakeRenderer();
+      wrapper = mountLayer(renderer);
+      runFrame();
+      await setDials(renderer, constructionDialsFromQueue(world.hud.queue, now));
+      const dial = () => wrapper!.get('[data-coord="3,0"]');
+      expect(dial().get('text').text()).toBe('0:01');
+      // The time is up: the finish animation plays, its frames carry no number.
+      vi.advanceTimersByTime(800);
+      world.hud.tick += 1;
+      runFrame();
+      await wrapper.vm.$nextTick();
+      expect(dial().find('.hud-dial__burst').exists()).toBe(true);
+      expect(dial().find('text').exists()).toBe(false);
+      // The animation is over and the renderer pruned the dial, but no poll has come yet: the queue still holds the order.
+      vi.advanceTimersByTime(3000);
+      world.hud.tick += 1;
+      await setDials(renderer, []);
+      expect(dial().find('.hud-dial__burst').exists()).toBe(false);
+      expect(dial().find('text').exists()).toBe(false);
+      expect(dial().find('.hud-dial__arc').exists()).toBe(false);
+      const track = dial().get('polygon:nth-of-type(2)');
+      expect(track.attributes('stroke')).toBe('#fff');
+      expect(Number(track.attributes('stroke-opacity'))).toBeLessThan(0.3);
+      expect(dial().html()).not.toContain('#ffd23f');
+      expect(dial().html()).not.toContain('#ffc55c');
+      // The poll: the order is gone and the building is a level up.
+      world.hud.queue = [];
+      world.hud.buildings = world.hud.buildings.map((b) => (b.q === 3 ? { ...b, level: 3 } : b));
+      world.hud.tick += 1;
+      await wrapper.vm.$nextTick();
+      expect(dial().get('text').text()).toBe('3');
+      vi.useRealTimers();
+    });
+
     it('draws a new build as a dial-only marker: no building marker, no box, just the dial with its countdown', async () => {
       const world = seedBuildings();
       const now = Date.now();
@@ -527,9 +786,9 @@ describe('BuildingHudLayer', () => {
       expect(wrapper.find('[data-coord="9,0"]').exists()).toBe(false);
       const marker = wrapper.get<HTMLElement>('[data-dial-only="9,0"]');
       expect(marker.find('.hud-marker__box').exists()).toBe(false);
-      expect(marker.find('polyline').exists()).toBe(true);
+      expect(marker.find('.hud-dial__arc').exists()).toBe(true);
       expect(marker.element.style.transform).toBe('translate3d(820.0px, 300.0px, 0) scale(0.500)');
-      // Far tier is the ring only; hovering it grows it to the default-zoom size and shows the countdown.
+      // Far tier is the ring only; hovering it grows it (markerScale) and shows the countdown.
       expect(marker.find('text').exists()).toBe(false);
       renderer.hoveredHexKey = '9,0';
       vi.useFakeTimers({ toFake: ['Date'] });
@@ -539,7 +798,7 @@ describe('BuildingHudLayer', () => {
       }
       vi.useRealTimers();
       await wrapper.vm.$nextTick();
-      expect(marker.element.style.transform).toContain('scale(1.000)');
+      expect(marker.element.style.transform).toContain(`scale(${markerScale(0.5, 1).toFixed(3)})`);
       expect(marker.get('text').text()).toBe('5:00');
     });
 
@@ -612,7 +871,7 @@ describe('BuildingHudLayer', () => {
         runFrame();
       }
       vi.useRealTimers();
-      expect(wrapper.get<HTMLElement>('[data-dial-only="9,0"]').element.style.transform).toContain('scale(1.000)');
+      expect(wrapper.get<HTMLElement>('[data-dial-only="9,0"]').element.style.transform).toContain(`scale(${markerScale(0.5, 1).toFixed(3)})`);
     });
   });
 

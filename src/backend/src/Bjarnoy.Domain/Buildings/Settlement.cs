@@ -86,8 +86,121 @@ public sealed record Settlement
 
     public IReadOnlyList<BuildOrder> Queue { get; init; } = [];
 
-    /// <summary>Units standing at this settlement. Not armies in the field — see issue #40 phase 2+.</summary>
-    public IReadOnlyList<UnitStack> Garrison { get; init; } = [];
+    /// <summary>
+    /// The units standing at this settlement, one entry per spot and unit type (<see cref="SpotStack"/>). Not armies in the
+    /// field. Read through <see cref="GarrisonSpots"/>/<see cref="GarrisonAt"/> and written through
+    /// <see cref="WithGarrisonAt"/>/<see cref="AddToGarrisonAt"/>; <see cref="Garrison"/> is their total.
+    /// </summary>
+    public IReadOnlyList<SpotStack> SpotStacks { get; init; } = [];
+
+    /// <summary>
+    /// Whether the centre (the Longhouse hex) can harbour ships: it is sand and a shoreline hex. The domain knows no terrain,
+    /// so the infrastructure fills this when it builds the settlement; never persisted.
+    /// </summary>
+    public bool CentreHarboursShips { get; init; }
+
+    /// <summary>
+    /// Everything standing at this settlement, pooled by type over all its garrison spots (what upkeep, the quests and the
+    /// fight read). Writes go through <see cref="WithGarrisonAt"/>.
+    /// </summary>
+    public IReadOnlyList<UnitStack> Garrison => TotalOf(SpotStacks);
+
+    /// <summary>
+    /// The garrison spots: the Longhouse hex first, then every standing Tower and Dockyard by Q, then R — one entry each, empty
+    /// ones included. A tower outside the realm is still a building and still a spot; a foundation still under construction
+    /// (level 0) is not standing yet.
+    /// </summary>
+    public IReadOnlyList<GarrisonSpot> GarrisonSpots
+    {
+        get
+        {
+            var coords = new List<(HexCoord Coord, GarrisonSpotKind Kind)> { (Centre, IsBeachCamp ? GarrisonSpotKind.BeachCamp : GarrisonSpotKind.Longhouse) };
+            coords.AddRange(Buildings
+                .Where(b => b.Type is BuildingType.Tower or BuildingType.Dockyard && b.Level >= 1 && b.Coord != Centre)
+                .OrderBy(b => b.Coord.Q).ThenBy(b => b.Coord.R)
+                .Select(b => (b.Coord, b.Type == BuildingType.Tower ? GarrisonSpotKind.Tower : GarrisonSpotKind.Dock)));
+
+            return
+            [
+                .. coords.Select(c =>
+                {
+                    var (land, ships) = GarrisonSpot.Rule(c.Kind, CentreHarboursShips);
+                    return new GarrisonSpot(c.Coord, c.Kind, GarrisonAt(c.Coord), land, ships);
+                }),
+            ];
+        }
+    }
+
+    /// <summary>The garrison spot at <paramref name="coord"/>, or <see langword="null"/> when that hex is none.</summary>
+    public GarrisonSpot? SpotAt(HexCoord coord) => GarrisonSpots.FirstOrDefault(s => s.Coord == coord);
+
+    /// <summary>The units standing at <paramref name="coord"/> (empty when none, or when it is no spot).</summary>
+    public IReadOnlyList<UnitStack> GarrisonAt(HexCoord coord) =>
+        [.. SpotStacks.Where(s => s.Coord == coord && s.Count > 0).OrderBy(s => (int)s.Type).Select(s => new UnitStack(s.Type, s.Count))];
+
+    /// <summary>This settlement with the units at <paramref name="coord"/> replaced by <paramref name="stacks"/>.</summary>
+    public Settlement WithGarrisonAt(HexCoord coord, IEnumerable<UnitStack> stacks)
+    {
+        ArgumentNullException.ThrowIfNull(stacks);
+
+        return this with
+        {
+            SpotStacks =
+            [
+                .. SpotStacks.Where(s => s.Coord != coord),
+                .. stacks.Where(s => s.Count > 0).GroupBy(s => s.Type)
+                    .Select(g => new SpotStack(coord, g.Key, g.Sum(s => s.Count))),
+            ],
+        };
+    }
+
+    /// <summary>This settlement with <paramref name="stacks"/> added to the units standing at <paramref name="coord"/>.</summary>
+    public Settlement AddToGarrisonAt(HexCoord coord, IEnumerable<UnitStack> stacks) =>
+        WithGarrisonAt(coord, GarrisonAt(coord).Concat(stacks));
+
+    /// <summary>
+    /// The nearest spot (by hex distance from <paramref name="from"/>, ties by Q, then R) that can hold every one of
+    /// <paramref name="stacks"/>; <see langword="null"/> when there is none.
+    /// </summary>
+    public GarrisonSpot? NearestSpotFor(HexCoord from, IEnumerable<UnitStack> stacks)
+    {
+        var list = stacks.ToList();
+        return GarrisonSpots
+            .Where(s => s.HoldsAll(list))
+            .OrderBy(s => s.Coord.DistanceTo(from)).ThenBy(s => s.Coord.Q).ThenBy(s => s.Coord.R)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Splits off the units standing at a coordinate that is no longer a garrison spot (its Tower or Dockyard was destroyed,
+    /// however that happened) and returns this settlement without them, plus what stood there. The one place such a garrison is
+    /// found; the infrastructure marches each group to a new spot when it persists the settlement.
+    /// </summary>
+    public (Settlement Settlement, IReadOnlyList<OrphanedGarrison> Orphaned) TakeOrphanedGarrisons()
+    {
+        var spots = GarrisonSpots.Select(s => s.Coord).ToHashSet();
+        var orphans = SpotStacks.Where(s => s.Count > 0 && !spots.Contains(s.Coord)).ToList();
+        if (orphans.Count == 0)
+        {
+            return (this, []);
+        }
+
+        var groups = orphans
+            .GroupBy(s => s.Coord)
+            .OrderBy(g => g.Key.Q).ThenBy(g => g.Key.R)
+            .Select(g => new OrphanedGarrison(
+                g.Key, [.. g.OrderBy(s => (int)s.Type).Select(s => new UnitStack(s.Type, s.Count))]))
+            .ToList();
+        return (this with { SpotStacks = [.. SpotStacks.Where(s => spots.Contains(s.Coord))] }, groups);
+    }
+
+    /// <summary>This settlement with the garrison at <paramref name="orphans"/> put back (a march that found no spot to go to).</summary>
+    public Settlement WithOrphanedGarrison(OrphanedGarrison orphan) =>
+        this with { SpotStacks = [.. SpotStacks, .. orphan.Stacks.Select(s => new SpotStack(orphan.From, s.Type, s.Count))] };
+
+    /// <summary>Pools <paramref name="stacks"/> by type, ordered by unit type.</summary>
+    internal static List<UnitStack> TotalOf(IEnumerable<SpotStack> stacks) =>
+        [.. stacks.Where(s => s.Count > 0).GroupBy(s => s.Type).OrderBy(g => (int)g.Key).Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))];
 
     public IReadOnlyList<TrainingOrder> TrainingQueue { get; init; } = [];
 
@@ -586,7 +699,7 @@ public sealed record Settlement
         guestStacks ??= [];
 
         var buildings = Buildings.ToList();
-        var garrison = Garrison.ToList();
+        var spotStacks = SpotStacks.ToList();
         var guestPool = guestStacks.ToList();
         var queue = Queue.ToList();
         var trainingQueue = TrainingQueue.ToList();
@@ -660,7 +773,11 @@ public sealed record Settlement
                 // instant the last unit finishes — see TrainingOrder's
                 // remarks for why a batch is not split as it partially
                 // completes.
-                AddToGarrison(garrison, train.UnitType, train.Count);
+                // It joins the nearest spot that can hold it, measured from the building that trained it.
+                var batch = new[] { new UnitStack(train.UnitType, train.Count) };
+                var standing = this with { Buildings = buildings, SpotStacks = spotStacks };
+                var spot = standing.NearestSpotFor(train.BuildingCoord, batch)?.Coord ?? Centre;
+                spotStacks = [.. standing.AddToGarrisonAt(spot, batch).SpotStacks];
                 trainingQueue.Remove(train);
                 completedTraining.Add(train);
             }
@@ -669,7 +786,7 @@ public sealed record Settlement
             // building (or batch) finished an hour ago has applied for that
             // hour.
             var (production, capacity) = BoostedTotals(buildings, Runes, terrainAt);
-            resources = resources.WithRate(ApplyUpkeep(production * speedFactor, garrison, guestPool), capacity, eventTime);
+            resources = resources.WithRate(ApplyUpkeep(production * speedFactor, TotalOf(spotStacks), guestPool), capacity, eventTime);
 
             // A finished raze pays its refund after the re-rate, so it is capped by the storage left standing.
             if (takeBuild && dueBuild!.IsRaze)
@@ -699,7 +816,7 @@ public sealed record Settlement
                 Buildings = buildings,
                 Queue = queue,
                 TrainingQueue = trainingQueue,
-                Garrison = garrison,
+                SpotStacks = spotStacks,
                 Resources = resources,
             };
             var (promoted, promotionChanged) = soFar.PromoteWaitingOrders(eventTime, speedFactor);
@@ -724,7 +841,12 @@ public sealed record Settlement
         IReadOnlyList<UnitStack> guestDeaths = [];
         if (Linked is null)
         {
-            (deaths, guestDeaths) = ApplyStarvation(ref resources, garrison, guestPool, finalProduction, finalCapacity, now);
+            var pooledGarrison = TotalOf(spotStacks);
+            (deaths, guestDeaths) = ApplyStarvation(ref resources, pooledGarrison, guestPool, finalProduction, finalCapacity, now);
+            if (deaths.Count > 0)
+            {
+                spotStacks = [.. TakeDeathsProRata(spotStacks, deaths)];
+            }
         }
 
         // A guest army arriving or departing changes upkeep from outside this
@@ -737,7 +859,7 @@ public sealed record Settlement
         // re-writing) keeps the "nothing due, nothing to persist" contract
         // intact for the overwhelming majority of settles where nothing
         // guest-related changed.
-        var correctNetProduction = ApplyUpkeep(finalProduction, garrison, guestPool);
+        var correctNetProduction = ApplyUpkeep(finalProduction, TotalOf(spotStacks), guestPool);
         var rateIsStale = Linked is null && !ApproximatelyEqual(resources.RatePerHour, correctNetProduction);
         if (rateIsStale)
         {
@@ -778,7 +900,7 @@ public sealed record Settlement
         var settled = (this with
         {
             Buildings = buildings,
-            Garrison = garrison,
+            SpotStacks = spotStacks,
             Queue = queue,
             TrainingQueue = trainingQueue,
             Resources = resources,
@@ -1105,15 +1227,28 @@ public sealed record Settlement
     }
 
     /// <summary>This settlement with <paramref name="deaths"/> removed from its home garrison.</summary>
-    internal Settlement WithHomeDeaths(IReadOnlyList<UnitStack> deaths)
+    internal Settlement WithHomeDeaths(IReadOnlyList<UnitStack> deaths) =>
+        this with { SpotStacks = TakeDeathsProRata(SpotStacks, deaths) };
+
+    /// <summary>
+    /// <paramref name="stacks"/> after <paramref name="deaths"/> (pooled per type over the whole settlement): each type's deaths
+    /// are split across the spots proportional to each spot's count of that type (<see cref="ProportionalAllocator"/>).
+    /// </summary>
+    private static List<SpotStack> TakeDeathsProRata(IReadOnlyList<SpotStack> stacks, IReadOnlyList<UnitStack> deaths)
     {
-        var garrison = Garrison.ToList();
-        foreach (var death in deaths)
+        var result = stacks.ToList();
+        foreach (var death in deaths.GroupBy(d => d.Type).Select(g => new UnitStack(g.Key, g.Sum(d => d.Count))))
         {
-            Reduce(garrison, death.Type, death.Count);
+            var indices = Enumerable.Range(0, result.Count).Where(i => result[i].Type == death.Type).ToList();
+            var split = ProportionalAllocator.Allocate(death.Count, [.. indices.Select(i => result[i].Count)]);
+            for (var k = 0; k < indices.Count; k++)
+            {
+                result[indices[k]] = result[indices[k]] with { Count = result[indices[k]].Count - split[k] };
+            }
         }
 
-        return this with { Garrison = garrison };
+        result.RemoveAll(s => s.Count <= 0);
+        return result;
     }
 
     /// <summary>Merges two stack lists into a new one, aggregated by type — never mutates either input.</summary>
@@ -1149,19 +1284,6 @@ public sealed record Settlement
         else
         {
             stacks[index] = stacks[index] with { Count = remaining };
-        }
-    }
-
-    private static void AddToGarrison(List<UnitStack> garrison, UnitType type, int count)
-    {
-        var index = garrison.FindIndex(s => s.Type == type);
-        if (index >= 0)
-        {
-            garrison[index] = garrison[index] with { Count = garrison[index].Count + count };
-        }
-        else
-        {
-            garrison.Add(new UnitStack(type, count));
         }
     }
 
@@ -2074,6 +2196,7 @@ public sealed record Settlement
     /// <see cref="SetBuildingLevel"/> follows.
     /// </remarks>
     public AdminGarrisonEditResult AdjustGarrison(
+        HexCoord spot,
         UnitType type,
         int delta,
         DateTimeOffset now,
@@ -2086,37 +2209,24 @@ public sealed record Settlement
             return AdminGarrisonEditResult.Rejected(AdminGarrisonEditRejection.InvalidCount);
         }
 
-        var garrison = Garrison.ToList();
-        var index = garrison.FindIndex(s => s.Type == type);
-        var standing = index >= 0 ? garrison[index].Count : 0;
+        if (SpotAt(spot) is not { } target || !target.Holds(type))
+        {
+            return AdminGarrisonEditResult.Rejected(AdminGarrisonEditRejection.NoFittingSpot);
+        }
 
+        var standing = target.Stacks.Where(s => s.Type == type).Sum(s => s.Count);
         if (standing + delta < 0)
         {
             return AdminGarrisonEditResult.Rejected(AdminGarrisonEditRejection.NotEnoughUnits);
         }
 
-        if (index >= 0)
-        {
-            var remaining = standing + delta;
-            if (remaining == 0)
-            {
-                garrison.RemoveAt(index);
-            }
-            else
-            {
-                garrison[index] = garrison[index] with { Count = remaining };
-            }
-        }
-        else
-        {
-            garrison.Add(new UnitStack(type, delta));
-        }
+        var edited = WithGarrisonAt(spot, target.Stacks.Where(s => s.Type != type).Append(new UnitStack(type, standing + delta)));
 
         var (production, capacity) = BoostedTotals(Buildings, Runes, terrainAt);
         var resources = Resources.WithRate(
-            ApplyUpkeep(production * speedFactor, garrison, guestStacks ?? []), capacity, now);
+            ApplyUpkeep(production * speedFactor, edited.Garrison.ToList(), guestStacks ?? []), capacity, now);
 
-        return AdminGarrisonEditResult.Accept((this with { Garrison = garrison, Resources = resources }).WithQuestLatches());
+        return AdminGarrisonEditResult.Accept((edited with { Resources = resources }).WithQuestLatches());
     }
 
     /// <summary>
@@ -2825,9 +2935,14 @@ public sealed record Settlement
     /// <see cref="PlanTrain"/>.
     /// </remarks>
     public SettlementDispatchDecision PlanDispatch(
-        IReadOnlyList<UnitStack> requestedUnits, double provisions, DateTimeOffset now)
+        HexCoord fromSpot, IReadOnlyList<UnitStack> requestedUnits, double provisions, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(requestedUnits);
+
+        if (SpotAt(fromSpot) is null)
+        {
+            return SettlementDispatchDecision.Rejected(DispatchRejection.NotAGarrisonSpot);
+        }
 
         var normalised = requestedUnits
             .Where(s => s.Count > 0)
@@ -2840,11 +2955,10 @@ public sealed record Settlement
             return SettlementDispatchDecision.Rejected(DispatchRejection.NoUnitsRequested);
         }
 
-        var garrison = Garrison.ToList();
+        var atSpot = GarrisonAt(fromSpot);
         foreach (var stack in normalised)
         {
-            var index = garrison.FindIndex(g => g.Type == stack.Type);
-            if (index < 0 || garrison[index].Count < stack.Count)
+            if (atSpot.Where(g => g.Type == stack.Type).Sum(g => g.Count) < stack.Count)
             {
                 return SettlementDispatchDecision.Rejected(DispatchRejection.InsufficientGarrison);
             }
@@ -2868,21 +2982,10 @@ public sealed record Settlement
             return SettlementDispatchDecision.Rejected(DispatchRejection.InsufficientResources);
         }
 
-        foreach (var stack in normalised)
-        {
-            var index = garrison.FindIndex(g => g.Type == stack.Type);
-            var remaining = garrison[index].Count - stack.Count;
-            if (remaining <= 0)
-            {
-                garrison.RemoveAt(index);
-            }
-            else
-            {
-                garrison[index] = garrison[index] with { Count = remaining };
-            }
-        }
-
-        var updated = this with { Garrison = garrison, Resources = paidResources };
+        var left = atSpot
+            .Select(g => g with { Count = g.Count - normalised.Where(n => n.Type == g.Type).Sum(n => n.Count) })
+            .Where(g => g.Count > 0);
+        var updated = WithGarrisonAt(fromSpot, left) with { Resources = paidResources };
         return SettlementDispatchDecision.Accept(updated, normalised);
     }
 }

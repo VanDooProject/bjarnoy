@@ -309,6 +309,15 @@
 - when a change reveals a new kind of recurring UI leftover, add the rule
   to `docs/design/ui-guidelines.md`
 
+# reduced motion
+- the device's "reduce motion" flag (`prefers-reduced-motion`, `animationPreference.reducedMotion`) is honoured only while the
+  player's graphics setting for that kind of motion (Settings → Graphics: buildings, water, lakes, fog, HUD) is on Auto. On or Off
+  wins over the device flag
+- every reduced-motion check therefore goes through the resolved setting of its kind (`motionPreferences.hudEnabled`,
+  `.waterEnabled`, `.lakesEnabled`, `.fogEnabled`, or `animationPreference.effective` for buildings), never the raw device
+  flag or a direct `matchMedia('(prefers-reduced-motion: reduce)')` / CSS `@media (prefers-reduced-motion)`. New motion that
+  fits no existing kind gets its own row in that settings screen first, so the player can override it there
+
 # interaction between u (AI) and user (me)
 
 ## github cloud agent
@@ -358,6 +367,10 @@
   bullet below.)
 - Blender is installable the same way (`sudo apt-get install -y blender`)
   for anything touching 3D/tile-art asset work.
+- **short version (vendored art, needed for `npm run build`/vite/tests): not a plain `git clone`.** `add_repo`
+  (`VanDooProject/bg_assets_hextile`, read) → `git clone --depth 1` as it instructs → check out the sha from
+  `git ls-tree HEAD src/frontend/vendor/bg_assets_hextile` → copy `hextiles/ atlas/ README.md` into
+  `src/frontend/vendor/bg_assets_hextile/`. Details below.
 - `src/frontend/vendor/bg_assets_hextile` is a gitignored submodule
   checkout of the private `VanDooProject/bg_assets_hextile` repo — without
   it populated, the terrain/building texture atlases fail to load

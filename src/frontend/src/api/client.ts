@@ -89,6 +89,7 @@ import type {
   SlotRuneRequest,
   SettlementSummary,
   RivalBuilding,
+  OwnBuildOrders,
   ShipmentResponse,
   SimulatorRequest,
   SimulatorResponse,
@@ -306,6 +307,8 @@ export const api = {
     request<SettlementSummary[]>(`/worlds/${worldId}/settlements`, { headers: ownerHeader(ownerId) }),
   listRivalBuildings: (worldId: string, ownerId?: string) =>
     request<RivalBuilding[]>(`/worlds/${worldId}/rival-buildings`, { headers: ownerHeader(ownerId) }),
+  listOwnBuildOrders: (worldId: string, ownerId?: string) =>
+    request<OwnBuildOrders[]>(`/worlds/${worldId}/own-build-orders`, { headers: ownerHeader(ownerId) }),
   listOwnBuildings: (worldId: string, ownerId?: string) =>
     request<RivalBuilding[]>(`/worlds/${worldId}/own-buildings`, { headers: ownerHeader(ownerId) }),
   // `ownerId` becomes the `X-Owner-Id` header the backend's ownership

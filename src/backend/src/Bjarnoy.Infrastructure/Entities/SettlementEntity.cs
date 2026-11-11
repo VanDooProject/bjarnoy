@@ -162,22 +162,23 @@ public class SettlementEntity
     private static BuildingType Merged(BuildingType type) =>
         type == BuildingType.FisherHut ? BuildingType.FishingHut : type;
 
-    /// <summary>
-    /// The hex <paramref name="army"/> departs from and returns to: <see cref="Army.HomeHex"/> over this settlement's centre
-    /// and (loaded) <see cref="Buildings"/>. The one place that maps stored settlement columns to an army's home hex.
-    /// </summary>
-    public HexCoord HomeHexFor(Army army, Func<HexCoord, Terrain> terrainAt)
+    /// <summary>The hex <paramref name="army"/> departs from and returns to: its home garrison spot.</summary>
+    public HexCoord HomeHexFor(Army army)
     {
         ArgumentNullException.ThrowIfNull(army);
-        return army.HomeHex(new HexCoord(CentreQ, CentreR), Buildings.Select(b => b.ToPlacedBuilding()), terrainAt);
+        return army.HomeSpot;
     }
 
-    /// <summary>Rebuilds the domain aggregate from the stored columns.</summary>
-    public Settlement ToDomain() => new()
+    /// <summary>
+    /// Rebuilds the domain aggregate from the stored columns. <paramref name="terrainAt"/> tells whether the centre can harbour
+    /// ships (<see cref="Settlement.CentreHarboursShips"/>, never stored); without it the centre does not.
+    /// </summary>
+    public Settlement ToDomain(Func<HexCoord, Terrain>? terrainAt = null) => new()
     {
         Id = Id,
         Name = Name,
         Centre = new HexCoord(CentreQ, CentreR),
+        CentreHarboursShips = terrainAt is not null && Army.CentreHarbours(new HexCoord(CentreQ, CentreR), terrainAt),
         Resources = ResourcePool.Create(Stock, Rate, Capacity, SettledAt),
         // Every write path (PlaceBuildingAsync, SetBuildingLevelAsync, PlanBuild's
         // own leveling) already clamps a level to BuildingCatalogue's 1..MaxLevelFor(type)
@@ -222,9 +223,10 @@ public class SettlementEntity
                     CompletesAt = o.CompletesAt,
                 }),
         ],
-        Garrison =
+        SpotStacks =
         [
-            .. Garrison.OrderBy(g => g.UnitType).Select(g => new UnitStack(g.UnitType, g.Count)),
+            .. Garrison.OrderBy(g => g.SpotQ).ThenBy(g => g.SpotR).ThenBy(g => g.UnitType)
+                .Select(g => new SpotStack(new HexCoord(g.SpotQ, g.SpotR), g.UnitType, g.Count)),
         ],
         TrainingQueue =
         [
@@ -379,20 +381,21 @@ public class SettlementEntity
 
     private void SyncGarrison(Settlement settlement)
     {
-        // A stack with a type no longer present (fully starved or otherwise
-        // removed) simply drops out; the rest are updated or added in place,
-        // same shape as SyncBuildings.
-        var present = settlement.Garrison.Select(g => g.Type).ToHashSet();
-        Garrison.RemoveAll(g => !present.Contains(g.UnitType));
+        // A stack whose (spot, type) is no longer present (fully starved, left, or moved) simply drops out; the rest are
+        // updated or added in place, same shape as SyncBuildings.
+        var present = settlement.SpotStacks.Where(g => g.Count > 0).Select(g => (g.Coord.Q, g.Coord.R, g.Type)).ToHashSet();
+        Garrison.RemoveAll(g => !present.Contains((g.SpotQ, g.SpotR, g.UnitType)));
 
-        foreach (var stack in settlement.Garrison)
+        foreach (var stack in settlement.SpotStacks.Where(g => g.Count > 0))
         {
-            var existing = Garrison.FirstOrDefault(g => g.UnitType == stack.Type);
+            var existing = Garrison.FirstOrDefault(g => g.SpotQ == stack.Coord.Q && g.SpotR == stack.Coord.R && g.UnitType == stack.Type);
             if (existing is null)
             {
                 Garrison.Add(new UnitStackEntity
                 {
                     SettlementId = Id,
+                    SpotQ = stack.Coord.Q,
+                    SpotR = stack.Coord.R,
                     UnitType = stack.Type,
                     Count = stack.Count,
                 });
@@ -527,7 +530,7 @@ public class BuildOrderEntity
     public DateTimeOffset? CompletesAt { get; set; }
 }
 
-/// <summary>Some number of one unit type standing in a settlement's garrison.</summary>
+/// <summary>Some number of one unit type standing at one garrison spot of a settlement.</summary>
 public class UnitStackEntity
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
@@ -535,6 +538,11 @@ public class UnitStackEntity
     public Guid SettlementId { get; set; }
 
     public SettlementEntity? Settlement { get; set; }
+
+    /// <summary>The hex of the garrison spot (longhouse, tower or dock) the units stand at.</summary>
+    public int SpotQ { get; set; }
+
+    public int SpotR { get; set; }
 
     public UnitType UnitType { get; set; }
 

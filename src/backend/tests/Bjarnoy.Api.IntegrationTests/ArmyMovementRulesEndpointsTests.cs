@@ -73,13 +73,12 @@ public sealed class ArmyMovementRulesEndpointsTests : IAsyncLifetime
             .ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
         Authorize(client, adminToken);
         var granted = await client.PostJsonAsync(
-            $"/api/v1/admin/settlements/{settlement.Id}/garrison", new AdjustGarrisonRequest("spearman", 5), Ct);
+            $"/api/v1/admin/settlements/{settlement.Id}/garrison", new AdjustGarrisonRequest("spearman", settlement.Spot(), 5), Ct);
         Assert.Equal(HttpStatusCode.OK, granted.StatusCode);
         Authorize(client, player.AccessToken);
 
         var target = await FindWalkableTargetAsync(client, world.Id, settlement);
-        DispatchArmyRequest ToTarget() => new(
-            [new UnitCountRequest("spearman", 1)], null, new HexPointRequest(target.Q, target.R), 10);
+        DispatchArmyRequest ToTarget() => new([new(settlement.Spot(), [new UnitCountRequest("spearman", 1)])], null, new HexPointRequest(target.Q, target.R), 10);
 
         // Control: the target is reachable until it is walled in.
         var control = await client.PostJsonAsync($"/api/v1/settlements/{settlement.Id}/armies", ToTarget(), Ct);

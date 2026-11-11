@@ -35,9 +35,8 @@ public sealed class LinkedStoreTests
             Centre = centre,
             Buildings = [new PlacedBuilding(centre, BuildingType.Longhouse, longhouse), .. extra ?? []],
             Queue = queue ?? [],
-            Garrison = garrison ?? [],
             Resources = ResourcePool.Create(ResourceAmounts.Zero, ResourceAmounts.Zero, ResourceAmounts.Zero, T0),
-        };
+        }.WithGarrison(garrison ?? []);
         var (production, capacity) = bare.CurrentTotals(1.0, guests);
         return bare with { Resources = ResourcePool.Create(stock, production, capacity, settledAt ?? T0) };
     }
@@ -368,7 +367,7 @@ public sealed class LinkedStoreTests
         var b = Member(CentreB, new ResourceAmounts(0, 0, 10, 0), garrison: [new UnitStack(UnitType.Catapult, 20)]);
         var store = Store([guestsA, []], a, b);
 
-        var gross = Rate(a with { Garrison = [] }).Food + Rate(b with { Garrison = [] }).Food;
+        var gross = Rate(a.WithGarrison([])).Food + Rate(b.WithGarrison([])).Food;
         var upkeep = (80 * thrallUpkeep) + (30 * catapultUpkeep);
         Assert.True(upkeep > gross);
         var kills = (int)Math.Ceiling((upkeep - gross) / catapultUpkeep);

@@ -1315,6 +1315,7 @@
     },
     "sendOut": {
       "heading": "Eine Armee losschicken, die schon unterwegs ist",
+      "spots": "Deine Truppen stehen in deinem Langhaus, in deinen Wachtürmen und in deinen Werften. Schiffe liegen in den Werften, im Langhaus nur dann, wenn es am Meer auf Sand steht. Neue Einheiten ziehen an den nächstgelegenen Ort, der sie aufnehmen kann, und eine Armee kehrt dorthin zurück, wo sie losgezogen ist. Um eine andere deiner Siedlungen zu unterstützen, tippst du auf ihr Langhaus, einen ihrer Wachtürme oder eine ihrer Werften.",
       "orders": "Tippe auf einem Feld auf „Armee hierher entsenden“, „Angreifen“, „Unterstützen“ oder „Jagen“ und wähle die Armee, die losziehen soll: deine Garnison oder eine Armee, die schon draußen ist. Eine stehende Armee kann ziehen, angreifen, unterstützen oder jagen. Eine marschierende Armee leitest du mit Premium um. Willst du lieber woandershin, tippst du währenddessen einfach auf ein anderes Feld. Greifst du eine Siedlung an, greifst du ein Gebäude in ihrem Reich an. Hat das Gebäude eine Besatzung, verteidigt sie es. Unterstützt du eine Siedlung, verstärkst du eine ihrer Besatzungen.",
       "split": "Von einer stehenden Armee kannst du nur einen Teil losschicken. Der Rest bleibt, wo er steht. Eine marschierende Armee zieht immer komplett los.",
       "reach": "Eine Armee zieht nur los, wenn sie das Ziel erreicht und danach noch genug Proviant für den Rückweg hat. Alle anderen siehst du ausgegraut in der Liste, zusammen mit dem Grund.",

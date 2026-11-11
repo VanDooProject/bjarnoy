@@ -7,6 +7,9 @@ import {
   ageViewModel,
   buildingHudViewModel,
   hudMarkerKeys,
+  markerBoxRect,
+  markerScale,
+  pointInRect,
   rowsSignature,
   rowsFor,
   stackOrder,
@@ -292,6 +295,42 @@ describe('tierFor', () => {
   });
 });
 
+describe('markerScale', () => {
+  it('grows at least 1.3x on hover', () => {
+    expect(markerScale(1.5, 0)).toBeCloseTo(1.5, 6);
+    expect(markerScale(1.5, 1)).toBeCloseTo(1.95, 6);
+    expect(markerScale(2, 1)).toBeCloseTo(2.6, 6);
+  });
+
+  it('at the smallest zoom lifts to the size where the compact box with text shows', () => {
+    expect(tierFor(0.3)).toBe('far');
+    expect(tierFor(markerScale(0.3, 1))).toBe('mid');
+    expect(tierFor(markerScale(0.05, 1))).toBe('mid');
+    // Not hovered it stays the size the map gives it.
+    expect(markerScale(0.3, 0)).toBeCloseTo(0.3, 6);
+  });
+
+  it('eases in between (half way is half way) and clamps the hover progress', () => {
+    expect(markerScale(1.5, 0.5)).toBeCloseTo(1.5 + 0.45 / 2, 6);
+    expect(markerScale(1.5, 3)).toBeCloseTo(1.95, 6);
+    expect(markerScale(1.5, -1)).toBeCloseTo(1.5, 6);
+  });
+});
+
+describe('box hit', () => {
+  it('puts the box right of the dial centre line, centred on it vertically, scaled by zs', () => {
+    expect(markerBoxRect(100, 200, { w: 80, h: 40 }, 1.5)).toEqual({ x: 100, y: 170, w: 120, h: 60 });
+  });
+
+  it('hits inside the rect and on its edges, not outside', () => {
+    const rect = { x: 100, y: 170, w: 120, h: 60 };
+    expect(pointInRect({ x: 150, y: 200 }, rect)).toBe(true);
+    expect(pointInRect({ x: 220, y: 230 }, rect)).toBe(true);
+    expect(pointInRect({ x: 99, y: 200 }, rect)).toBe(false);
+    expect(pointInRect({ x: 150, y: 231 }, rect)).toBe(false);
+  });
+});
+
 describe('stackOrder', () => {
   it('puts the right-most marker on top', () => {
     expect(stackOrder([{ x: 30, id: 'c' }, { x: 10, id: 'a' }, { x: 20, id: 'b' }]).map((m) => m.id)).toEqual(['a', 'b', 'c']);
@@ -370,6 +409,27 @@ describe('order dial of a standing building', () => {
     expect(vmWith(ending, { nowMs: NOW + DIAL_FINISH_MS }).dial.kind).toBe('state');
   });
 
+  it('settles (no colour, no number) once the order has finished and the queue still holds it until the next poll', () => {
+    const ending = orderDial({ state: 'building', queuePosition: null, startMs: NOW - 120_000, endMs: NOW - 100 });
+    const stale = [order({ completesInSeconds: 0, totalSeconds: 120 })];
+    // The finish animation is over, the renderer has pruned the dial, the queue is as fetched.
+    for (const dial of [null, ending]) {
+      const vm = vmWith(dial, { queue: stale, nowMs: NOW + DIAL_FINISH_MS });
+      expect(vm.dial).toMatchObject({ kind: 'settling', ring: 'none', secondsLeft: 0 });
+      expect(vm.dial.progress).toBeUndefined();
+      // The box keeps what it said.
+      expect(vm.upgrade.state).toBe('upgrading');
+    }
+    // The new level arrives with the next poll: the normal state ring again.
+    expect(vmWith(null, { queue: [], level: 3, nowMs: NOW + DIAL_FINISH_MS }).dial).toMatchObject({ kind: 'state' });
+  });
+
+  it('settles a raze whose time is up the same way', () => {
+    const razing = orderDial({ state: 'building', queuePosition: null, startMs: NOW - 120_000, endMs: NOW + 100 });
+    const vm = vmWith(razing, { queue: [order({ kind: 'raze', targetLevel: 1, completesInSeconds: 0, totalSeconds: 120 })] });
+    expect(vm.dial).toMatchObject({ kind: 'settling', ring: 'none' });
+  });
+
   it('keeps the upgrade rows of the building underneath', () => {
     const vm = vmWith(orderDial({ state: 'pending', queuePosition: null }));
     expect(vm.upgrade.state).toBe('ready');
@@ -422,7 +482,8 @@ describe('ageViewModel', () => {
     const vm = buildingHudViewModel(input({ queue: [order({ completesInSeconds: 30, totalSeconds: 120 })] }));
     expect(vm.dial).toMatchObject({ secondsLeft: 30, progress: 0.75 });
     expect(ageViewModel(vm, { ...none, queue: 15 }).dial).toMatchObject({ secondsLeft: 15, progress: 0.875 });
-    expect(ageViewModel(vm, { ...none, queue: 99 }).dial).toMatchObject({ secondsLeft: 0, progress: 1 });
+    // Past the end the dial shows nothing (`settling`) until the next poll.
+    expect(ageViewModel(vm, { ...none, queue: 99 }).dial).toMatchObject({ kind: 'settling', ring: 'none', secondsLeft: 0 });
     // The view model it was made from is not touched.
     expect(vm.dial.secondsLeft).toBe(30);
   });

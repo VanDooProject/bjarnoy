@@ -232,6 +232,7 @@ onBeforeUnmount(stopDetailPolling);
                       <GarrisonForm
                         :settlement-id="detail.id"
                         :garrison="detail.garrison"
+                        :spots="detail.garrisonSpots"
                         @changed="onChanged(detail.id, $event)"
                       />
                     </div>

@@ -102,33 +102,39 @@ describe('hudPrefs store', () => {
   });
 
   describe('dockable panels', () => {
-    it('defaults to every panel open in today\'s corner', () => {
+    const def = (side: 'left' | 'right', align: 'top' | 'bottom') => ({ open: true, collapsed: false, side, column: 0, align, order: 0 });
+
+    it('defaults to every panel open and expanded in the first spots', () => {
       stubLocalStorage();
       expect(useHudPrefsStore().panels).toEqual({
-        construction: { open: true, corner: 'top-left' },
-        garrison: { open: true, corner: 'top-right' },
-        armies: { open: true, corner: 'bottom-right' },
-        quests: { open: true, corner: 'bottom-left' },
+        construction: def('left', 'top'),
+        garrison: def('right', 'top'),
+        armies: def('right', 'bottom'),
+        quests: def('left', 'bottom'),
       });
     });
 
-    it('togglePanel and setPanelCorner update state and persist under one key, and a new store reads them back', () => {
+    it('togglePanel, toggleCollapsed and movePanel update state and persist under one key, and a new store reads them back', () => {
       const backing = stubLocalStorage();
       const prefs = useHudPrefsStore();
       prefs.togglePanel('quests');
-      prefs.setPanelCorner('armies', 'top-left');
+      prefs.toggleCollapsed('garrison');
+      prefs.movePanel('armies', { side: 'left', column: 1, align: 'top', before: null });
       expect(prefs.panels.quests.open).toBe(false);
-      expect(prefs.panels.armies.corner).toBe('top-left');
+      expect(prefs.panels.garrison.collapsed).toBe(true);
+      expect(prefs.panels.armies).toMatchObject({ side: 'left', column: 1, align: 'top' });
       expect(JSON.parse(backing.get('bjarnoy.hudPanels')!)).toMatchObject({
-        quests: { open: false, corner: 'bottom-left' },
-        armies: { open: true, corner: 'top-left' },
+        quests: { open: false },
+        garrison: { collapsed: true },
+        armies: { side: 'left', column: 1, align: 'top', order: 0 },
       });
       setActivePinia(createPinia());
       const again = useHudPrefsStore();
       expect(again.panels.quests.open).toBe(false);
-      expect(again.panels.armies.corner).toBe('top-left');
-      again.togglePanel('quests');
-      expect(again.panels.quests.open).toBe(true);
+      expect(again.panels.garrison.collapsed).toBe(true);
+      expect(again.panels.armies).toMatchObject({ side: 'left', column: 1 });
+      again.toggleCollapsed('garrison');
+      expect(again.panels.garrison.collapsed).toBe(false);
     });
 
     it('validates each panel on its own and falls back per panel to its default', () => {
@@ -136,23 +142,31 @@ describe('hudPrefs store', () => {
       backing.set(
         'bjarnoy.hudPanels',
         JSON.stringify({
-          construction: { open: false, corner: 'middle' },
-          garrison: { open: 'yes', corner: 'bottom-left' },
+          construction: { ...def('left', 'top'), open: false, column: 2 },
+          garrison: { ...def('right', 'top'), side: 'middle' },
           armies: 7,
         }),
       );
       expect(useHudPrefsStore().panels).toEqual({
-        construction: { open: false, corner: 'top-left' },
-        garrison: { open: true, corner: 'bottom-left' },
-        armies: { open: true, corner: 'bottom-right' },
-        quests: { open: true, corner: 'bottom-left' },
+        construction: { ...def('left', 'top'), open: false, column: 2 },
+        garrison: def('right', 'top'),
+        armies: def('right', 'bottom'),
+        quests: def('left', 'bottom'),
       });
+    });
+
+    it('drops entries in the old corner format back to their defaults', () => {
+      const backing = stubLocalStorage();
+      backing.set('bjarnoy.hudPanels', JSON.stringify({ quests: { open: false, corner: 'top-right' }, garrison: { open: true, corner: 'bottom-left' } }));
+      const prefs = useHudPrefsStore();
+      expect(prefs.panels.quests).toEqual(def('left', 'bottom'));
+      expect(prefs.panels.garrison).toEqual(def('right', 'top'));
     });
 
     it('falls back to the defaults for corrupt JSON and survives unavailable storage', () => {
       const backing = stubLocalStorage();
       backing.set('bjarnoy.hudPanels', '{nope');
-      expect(useHudPrefsStore().panels.garrison).toEqual({ open: true, corner: 'top-right' });
+      expect(useHudPrefsStore().panels.garrison).toEqual(def('right', 'top'));
       vi.stubGlobal('localStorage', {
         getItem: () => {
           throw new Error('storage disabled');

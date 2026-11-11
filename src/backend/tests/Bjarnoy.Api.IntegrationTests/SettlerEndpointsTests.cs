@@ -338,7 +338,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         var dispatch = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/armies",
             new DispatchArmyRequest(
-                [new UnitCountRequest("campbuilder", BeachCamp.RequiredBuilders)], null, new HexPointRequest(site.Q, site.R), 80, "setupcamp"),
+                [new(settlement.Spot(), [new UnitCountRequest("campbuilder", BeachCamp.RequiredBuilders)])], null, new HexPointRequest(site.Q, site.R), 80, "setupcamp"),
             Ct);
         Assert.True(dispatch.IsSuccessStatusCode, $"dispatch was refused: {await dispatch.Content.ReadAsStringAsync(Ct)}");
         var army = await dispatch.ReadStrictAsync<ArmyResponse>(Ct);
@@ -622,8 +622,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         var target = island.StartPositions[3];
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/armies",
-            new DispatchArmyRequest(
-                [new UnitCountRequest("settler", 5)], null,
+            new DispatchArmyRequest([new(settlement.Spot(), [new UnitCountRequest("settler", 5)])], null,
                 // 5 Settlers carry at most 5 * 40 = 200 food
                 // (FoodCarryCapacity); this must be the rejection under
                 // test — a renown/slot gate, not carry capacity.
@@ -660,8 +659,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
 
         var dispatch = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/armies",
-            new DispatchArmyRequest(
-                [new UnitCountRequest("settler", 5)], null,
+            new DispatchArmyRequest([new(settlement.Spot(), [new UnitCountRequest("settler", 5)])], null,
                 // 5 Settlers carry at most 5 * 40 = 200 food
                 // (FoodCarryCapacity) — a higher request is rejected before
                 // Found-specific validation is ever reached.
@@ -737,7 +735,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("campbuilder", 1)], null, new HexPointRequest(site.Q, site.R), 40, "setupcamp"),
+            new DispatchArmyRequest([new(settlement.Spot(), [new UnitCountRequest("campbuilder", 1)])], null, new HexPointRequest(site.Q, site.R), 40, "setupcamp"),
             Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);

@@ -69,7 +69,6 @@ import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenSta
 import { useIsMobile } from '../composables/useIsMobile';
 import { useHasActiveDraft } from '../composables/useHudPanelContent';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
-import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { buildingArt } from '../lib/map/buildingArt';
 import { buildingStatsAt, buildingUpgradeCost, scaleOutput, upgradeRateGain } from '../lib/map/buildingEconomy';
 import { razeBlock, razeRefund, razeSeconds } from '../lib/map/raze';
@@ -92,6 +91,7 @@ import {
 import { reachableRange } from '../lib/map/hexPath';
 import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
+import { isGarrisonSpotTile } from '../lib/units/garrisonSpots';
 import { useSendBlockText, useSendPickerRows, useSendSources } from '../composables/useSendSources';
 import { motionEnabled } from '../lib/motion';
 import MobileDispatchSheet from '../components/hud/MobileDispatchSheet.vue';
@@ -612,7 +612,7 @@ watch(
   { immediate: true },
 );
 
-// A tap on an army's marker while the picker is open: a army that can go is selected, the same as tapping its row; one that cannot
+// A tap on an army's marker (while the picker is open: a army that can go is selected, the same as tapping its row; one that cannot
 // shows its reason in a small hint above it.
 const armyHint = ref<{ x: number; y: number; text: string } | null>(null);
 let armyHintTimer: ReturnType<typeof setTimeout> | null = null;
@@ -620,8 +620,14 @@ const sendBlockText = useSendBlockText();
 function onArmyTap(armyId: string, screen: { x: number; y: number }) {
   if (armyHintTimer) clearTimeout(armyHintTimer);
   armyHint.value = null;
+  // No picker open: the marker selects its army, shown highlighted in the armies panel. The tap still reaches the tile (onHexClick), so
+  // while a route is being composed it adds the waypoint and selects nothing.
+  if (!world.sendPicker) {
+    if (!world.dispatchDraft && !world.fieldOrderDraft) world.selectArmy(armyId);
+    return;
+  }
   const row = sendPicker.rows.value.find((r) => r.id === armyId);
-  if (!row || !world.sendPicker) return;
+  if (!row) return;
   if (row.ok) {
     world.selectSendSource(armyId);
     return;
@@ -655,9 +661,9 @@ onUnmounted(() => armyHintTimer && clearTimeout(armyHintTimer));
 // Construction progress dials over buildings still being built; the renderer
 // animates the progress itself every tick from these absolute timestamps.
 watch(
-  [() => canvasRef.value?.renderer, () => world.hud.queue, () => world.hud.queueFetchedAt],
+  [() => canvasRef.value?.renderer, () => world.constructionDials],
   ([renderer]) => {
-    renderer?.setConstructionDials(constructionDialsFromQueue(world.hud.queue, world.hud.queueFetchedAt));
+    renderer?.setConstructionDials(world.constructionDials);
   },
   { immediate: true },
 );
@@ -700,6 +706,8 @@ watch(
 );
 
 const hoverInfo = ref<HoverInfo | null>(null);
+/** The mouse is on a building HUD marker: the tile tooltip stays away (the marker says it better). */
+const hudHovering = ref(false);
 function onHover(info: HoverInfo | null) {
   // The renderer's pointer tracking is a window-level listener (see
   // HexMapRenderer's onPointerMove), so it keeps resolving a hex under the
@@ -765,17 +773,17 @@ onMounted(() => {
 });
 onUnmounted(() => stageObserver?.disconnect());
 
-// The desktop panels are dockable (HudPanelDock): each can sit in any of the four corners, so the ring treats the worst
-// case as always present. Every number below is traceable to the dock's corner geometry (lib/hud/hudPanelDock.ts) and
+// The desktop panels are dockable (HudPanelDock): each can sit in any column on either side, so the ring treats the worst
+// case as always present. Every number below is traceable to the dock's column geometry (lib/hud/hudPanelDock.ts) and
 // the panels' widths:
-//   top corners     top:76 (TopBar .hud-bar height 64, plus a 12px gap), left/right 16
-//   bottom corners  bottom:16, right 16; bottom left starts at 68, right of the icon column (HudPanelColumn)
+//   columns         full height: top:76 (TopBar .hud-bar height 64, plus a 12px gap), bottom:16, left/right 16
+//   icon rail       left 16, or right of the left panel columns when they reach down to it (HudPanelColumn)
 //   panel widths    Construction 240, Garrison 240, Armies 260, Quests 280
 //   ExpansionPanel  .status-card  left:16  top:340   width:240  (fixed, not dockable)
 // The left edge stays at the default Construction column (left 16 + 240 + 12 -> 268). The right edge is set by the widest
 // panel that can sit in the ring's way: Armies (260 wide, runs down to the bottom bound) beats Garrison (240) ->
 // right = stage width - (16 + 260 + 16), floored at 420. These are constants, not the live layout: every panel is treated
-// as present in its default corner. On mobile the panels are replaced by QueueDrawer's collapsed handle
+// as present in its default column. On mobile the panels are replaced by QueueDrawer's collapsed handle
 // (.queue-drawer-handle, a 48px-wide tab) pinned to the left edge, and the HUD bar can be docked at the bottom instead
 // of the top (`--hud-inset-bottom`) — `hudInsetTopPx`/`hudInsetBottomPx` above mirror the bar's real height into
 // whichever edge it occupies now.
@@ -914,7 +922,9 @@ function sendMissionAt(tile: Tile): 'move' | 'attack' | 'support' {
   const ownerSettlementId = tile.ownerId;
   if (!ownerSettlementId) return 'move';
   if (world.model.getSettlement(ownerSettlementId)?.ownerId !== player.id) return 'attack';
-  return world.isRealmSettlement(ownerSettlementId) ? 'move' : 'support';
+  if (world.isRealmSettlement(ownerSettlementId)) return 'move';
+  // Support joins one of the host's garrison spots: its longhouse, a tower or a dock. Anywhere else on its land it is a plain move.
+  return isGarrisonSpotTile(tile, world.model.getSettlement(ownerSettlementId)) ? 'support' : 'move';
 }
 function sendArmyAction(tile: Tile): RingAction {
   const mission = sendMissionAt(tile);
@@ -945,7 +955,11 @@ function retargetSendPicker(coord: AxialCoord, tile: Tile) {
   const canGo = !!selectedRow && (selectedRow.ok || selectedRow.block === 'pending');
   world.retargetSendPicker(
     coord,
-    mission === 'move' ? {} : mission === 'hunt' ? { mission } : { mission, targetSettlementId: tile.ownerId ?? undefined },
+    mission === 'move'
+      ? {}
+      : mission === 'hunt'
+        ? { mission }
+        : { mission, targetSettlementId: tile.ownerId ?? undefined, targetBuildingCoord: mission === 'support' ? coord : undefined },
     canGo,
   );
 }
@@ -1388,7 +1402,12 @@ async function onRingSelect(id: string) {
     case 'attack':
     case 'support':
       if (selectedCoord.value && tile?.ownerId) {
-        world.openSendPicker(selectedCoord.value, { mission: id, targetSettlementId: tile.ownerId });
+        // A support names the tapped hex: the host's garrison spot the army joins.
+        world.openSendPicker(selectedCoord.value, {
+          mission: id,
+          targetSettlementId: tile.ownerId,
+          targetBuildingCoord: id === 'support' ? selectedCoord.value : undefined,
+        });
       }
       closeRing();
       return;
@@ -1586,7 +1605,7 @@ async function upgrade() {
     </TopBar>
     <template v-if="mode === 'settlement'">
       <!-- Over the map, under every panel: one marker per own building (dial + docked box) and the switch that hides them. -->
-      <BuildingHudLayer :renderer="canvasRef?.renderer" />
+      <BuildingHudLayer :renderer="canvasRef?.renderer" @update:hovering="hudHovering = $event" />
       <template v-if="isMobile">
         <QueueDrawer v-if="!hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
       </template>
@@ -1597,7 +1616,7 @@ async function upgrade() {
       </template>
       <ExpansionPanel />
       <QuestTray v-if="isMobile && !hasActiveDraft" />
-      <HexTooltip v-if="hoverInfo" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
+      <HexTooltip v-if="hoverInfo && !hudHovering" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
       <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
           v-if="selectedTile && ringScreen"

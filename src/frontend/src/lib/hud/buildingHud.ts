@@ -3,7 +3,7 @@
 // `buildingStatsFor`, `maxLevelFor`), see docs on `resolveUpgradeTarget`.
 import type { AxialCoord } from '../hex/coords';
 import type { BuildingDefinitionResponse, BuildOrderResponse, TrainingOrderResponse, UnitStackResponse } from '../../api/types';
-import { DIAL_LABEL_BASE_PX, DIAL_MIN_LABEL_PX, dialPhase, type ConstructionDial } from '../map/constructionDial';
+import { DIAL_LABEL_BASE_PX, DIAL_MIN_LABEL_PX, dialPhase, liftedScale, type ConstructionDial } from '../map/constructionDial';
 import { buildingStatsFor, maxLevelFor, scaleOutput, type BuildingKind, type BuildingOutput } from '../map/buildingEconomy';
 import {
   RING_RESOURCE_KEYS,
@@ -50,6 +50,30 @@ export function tierFor(zs: number, previous: HudTier | null = null): HudTier {
   return atLeast(nearAt, ['near']) ? 'near' : 'mid';
 }
 
+// ---- hover size and hit ---------------------------------------------------------------------------------------------------
+
+/** A hovered or tapped marker grows to at least this many times its size. */
+const HUD_HOVER_SCALE = 1.3;
+
+/**
+ * The marker's size factor at map scale `mapScale` and hover progress `hoverT` (0..1). Unlike the progress dial (`dialScale`),
+ * which only grows to its default-zoom size, the marker always grows by `HUD_HOVER_SCALE`; zoomed far out it lifts to the
+ * smallest size at which the compact box with its text shows (`tierFor` gives 'mid'), so a hovered marker is always readable.
+ */
+export function markerScale(mapScale: number, hoverT: number): number {
+  return liftedScale(mapScale, Math.max(mapScale * HUD_HOVER_SCALE, HUD_TIER.boxBelow + HUD_TIER.hysteresis), hoverT);
+}
+
+/** Screen rect of a marker's box: it starts on the dial's centre line (`x`, `y`), `w` x `h` is its unscaled size, `zs` the marker's size factor. */
+export function markerBoxRect(x: number, y: number, size: { w: number; h: number }, zs: number): { x: number; y: number; w: number; h: number } {
+  return { x, y: y - (size.h * zs) / 2, w: size.w * zs, h: size.h * zs };
+}
+
+/** Whether `point` is inside `rect` (edges included). */
+export function pointInRect(point: { x: number; y: number }, rect: { x: number; y: number; w: number; h: number }): boolean {
+  return point.x >= rect.x && point.x <= rect.x + rect.w && point.y >= rect.y && point.y <= rect.y + rect.h;
+}
+
 // ---- stacking ---------------------------------------------------------------------------------------------------------
 
 /** Markers bottom to top: ascending screen x (right-most on top), the hovered/tapped one last. Stable, input untouched. */
@@ -60,8 +84,9 @@ export function stackOrder<T extends { x: number; hovered?: boolean }>(markers: 
 // ---- view model -------------------------------------------------------------------------------------------------------
 
 export type HudUpgradeState = 'ready' | 'short' | 'longhouse' | 'prereq' | 'storage' | 'upgrading' | 'queued' | 'max';
-export type HudDialKind = 'state' | 'upgrading' | 'razing' | 'queued' | 'pending' | 'rejected' | 'finishing';
-export type HudRing = 'ready' | 'blocked' | 'upgrading' | 'max';
+export type HudDialKind = 'state' | 'upgrading' | 'razing' | 'queued' | 'pending' | 'rejected' | 'finishing' | 'settling';
+/** `none`: the dark hex with only a faint neutral track, no arc and no colour (`settling`). */
+export type HudRing = 'ready' | 'blocked' | 'upgrading' | 'max' | 'none';
 
 /** One thing the upgrade still needs. The view renders it through i18n (building name + level), never as an English string. */
 export type HudRequirement = { kind: 'longhouse'; level: number } | { kind: 'building'; type: string; level: number };
@@ -75,7 +100,8 @@ export interface BuildingHudViewModel {
     /**
      * What the dial draws. `state`: the level on the ring of the upgrade state. The other kinds are the order dial of the hex,
      * the same states the canvas construction dial has: `upgrading` / `razing` a running order (arc and time), `queued` (plain
-     * track and `#place`), `pending` (sweep and dots), `rejected` and `finishing` (their animations).
+     * track and `#place`), `pending` (sweep and dots), `rejected` and `finishing` (their animations). `settling`: the time of an
+     * upgrade or raze is up and the new state is not known yet (the next poll): no colour, no number.
      */
     kind: HudDialKind;
     ring: HudRing;
@@ -194,12 +220,12 @@ export function buildingHudViewModel(input: BuildingHudInput): BuildingHudViewMo
       break;
     case 'building': {
       // A running upgrade already is the dial; the order only lets it play its finish at the end.
-      if (vm.dial.kind === 'upgrading') vm.dial.order = order;
+      if (vm.dial.kind === 'upgrading' || vm.dial.kind === 'settling') vm.dial.order = order;
       else {
         const raze = input.queue.find((o) => sameHex(o, input.coord) && o.kind === 'raze' && o.state === 'building');
         if (raze) {
           const left = raze.completesInSeconds ?? undefined;
-          vm.dial = {
+          const razing: BuildingHudViewModel['dial'] = {
             kind: 'razing',
             ring: 'upgrading',
             secondsLeft: left,
@@ -207,6 +233,7 @@ export function buildingHudViewModel(input: BuildingHudInput): BuildingHudViewMo
             progress: left !== undefined && raze.totalSeconds > 0 ? clamp01(1 - left / raze.totalSeconds) : 0,
             order,
           };
+          vm.dial = left !== undefined && left <= 0 ? settlingDial(razing) : razing;
         }
       }
       break;
@@ -228,7 +255,8 @@ export function ageViewModel(vm: BuildingHudViewModel, since: { queue: number; t
   const aged: BuildingHudViewModel = { ...vm };
   if (ticksDial) {
     const secondsLeft = left(d.secondsLeft!, since.queue);
-    aged.dial = { ...d, secondsLeft, progress: d.totalSeconds && d.totalSeconds > 0 ? clamp01(1 - secondsLeft / d.totalSeconds) : 0 };
+    const next = { ...d, secondsLeft, progress: d.totalSeconds && d.totalSeconds > 0 ? clamp01(1 - secondsLeft / d.totalSeconds) : 0 };
+    aged.dial = secondsLeft <= 0 ? settlingDial(next) : next;
   }
   if (vm.training?.current) {
     const current = vm.training.current;
@@ -293,7 +321,7 @@ function standingViewModel(input: BuildingHudInput): BuildingHudViewModel {
   if (running) {
     const left = running.completesInSeconds ?? undefined;
     vm.upgrade = { state: 'upgrading', targetLevel: running.targetLevel, crown };
-    vm.dial = {
+    const upgrading: BuildingHudViewModel['dial'] = {
       kind: 'upgrading',
       ring: 'upgrading',
       targetLevel: running.targetLevel,
@@ -301,6 +329,7 @@ function standingViewModel(input: BuildingHudInput): BuildingHudViewModel {
       totalSeconds: running.totalSeconds,
       progress: left !== undefined && running.totalSeconds > 0 ? clamp01(1 - left / running.totalSeconds) : 0,
     };
+    vm.dial = left !== undefined && left <= 0 ? settlingDial(upgrading) : upgrading;
     return vm;
   }
 
@@ -363,6 +392,11 @@ function standingViewModel(input: BuildingHudInput): BuildingHudViewModel {
   }
   vm.dial = { kind: 'state', ring: vm.upgrade.state === 'ready' ? 'ready' : 'blocked' };
   return vm;
+}
+
+/** The dial of an upgrade or raze whose time is up: nothing to show until the poll brings the new state. */
+function settlingDial(d: BuildingHudViewModel['dial']): BuildingHudViewModel['dial'] {
+  return { ...d, kind: 'settling', ring: 'none', secondsLeft: 0, progress: undefined };
 }
 
 function clamp01(n: number): number {

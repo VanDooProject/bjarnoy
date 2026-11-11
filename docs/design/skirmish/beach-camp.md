@@ -17,6 +17,7 @@ Part of [Skirmish](README.md). The base for landing from the sea (see [Conquest 
 - Land troops fight from the camp and eat its food. The food comes in with the fleet, and the camp can be supplied again later.
 - If the camp is destroyed while troops from it are out, the nearest garrison spot of yours they can reach becomes their new
   home. If they can reach none, they stay where they are until their provisions run out, and then starve.
+- An army on its way to a camp when it is destroyed goes on to the camp's hex and stays there, as after a move order.
 - A destroyed camp is gone: it claims nothing, holds nothing and is no longer in the settlement list. What its piles held is
   lost, except what the attacker looted.
 - A fleet that reaches the camp is garrisoned there like any other troops. It defends the camp and can be sent out again from it.

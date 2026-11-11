@@ -140,7 +140,7 @@ public sealed class ArmyService(
     /// Required for <see cref="ArmyMission.Move"/> and, as the camp's own hex, for <see cref="ArmyMission.Hunt"/>
     /// (the route then ends on the camp's hex, or on its nearest walkable neighbour when that hex is not walkable); ignored for
     /// <see cref="ArmyMission.Attack"/>/<see cref="ArmyMission.Support"/>,
-    /// whose destination is always the target settlement's own hex —
+    /// whose destination is always the target settlement's own hex (a support army walks to the garrison spot it names) —
     /// resolved here rather than trusted from the caller.
     /// </param>
     /// <param name="targetSettlementId">
@@ -151,12 +151,17 @@ public sealed class ArmyService(
     /// settlement, is not supported.
     /// </param>
     /// <param name="targetBuildingCoord">
-    /// Optional; only meaningful for <see cref="ArmyMission.Attack"/> — the
+    /// Optional for <see cref="ArmyMission.Attack"/> — the
     /// building coordinate to hit with any surviving catapults (issue #40
-    /// phase 5). See <see cref="Army.TargetBuildingCoord"/>.
+    /// phase 5); required for <see cref="ArmyMission.Support"/>: the host's garrison spot the guest joins.
+    /// See <see cref="Army.TargetBuildingCoord"/>.
+    /// </param>
+    /// <param name="fromSpot">
+    /// The garrison spot (longhouse, tower or dock hex) of the settlement the units leave from; it becomes the army's home spot.
     /// </param>
     public async Task<ArmyDispatchResult> DispatchAsync(
         Guid settlementId,
+        HexCoord fromSpot,
         IReadOnlyList<UnitStack> unitCounts,
         IReadOnlyList<HexCoord> waypoints,
         HexCoord? destination,
@@ -188,9 +193,10 @@ public sealed class ArmyService(
 
         HexCoord effectiveDestination;
         IReadOnlyList<(HexCoord Centre, int Radius)> targetClaimDiscs = [];
+        IReadOnlyList<GarrisonSpot> targetSpots = [];
         if (mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid)
         {
-            var resolved = await ResolveTargetSettlementAsync(settlement.WorldId, targetSettlementId, cancellationToken).ConfigureAwait(false);
+            var resolved = await ResolveTargetSettlementAsync(settlement.WorldId, targetSettlementId, session.Sampler.TerrainAt, cancellationToken).ConfigureAwait(false);
             if (resolved.Rejection != DispatchRejection.None)
             {
                 await SaveIfChangedAsync(session, cancellationToken).ConfigureAwait(false);
@@ -199,6 +205,7 @@ public sealed class ArmyService(
 
             effectiveDestination = resolved.Centre;
             targetClaimDiscs = resolved.ClaimDiscs;
+            targetSpots = resolved.Spots;
         }
         else
         {
@@ -227,7 +234,7 @@ public sealed class ArmyService(
         if (mission == ArmyMission.Hunt)
         {
             (effectiveDestination, targetCampCoord, targetCampIsWater, targetCampIsSand) = await ResolveHuntCampAsync(
-                settlement.WorldId, effectiveDestination, Army.TrainingSite(settled.Centre, settled.Buildings, unitCounts),
+                settlement.WorldId, effectiveDestination, fromSpot,
                 now, sampler.TerrainAt, cancellationToken).ConfigureAwait(false);
         }
 
@@ -286,12 +293,12 @@ public sealed class ArmyService(
         }
 
         var decision = Army.PlanDispatch(
-            settled, unitCounts, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
+            settled, fromSpot, unitCounts, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
-            mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimDiscs,
+            mission is ArmyMission.Attack or ArmyMission.Raid or ArmyMission.Support ? targetBuildingCoord : null, targetClaimDiscs,
             isHexFoundable, renownAndSlotAllowed, session.SpeedFactor, rivers.IsRiver, rivers.IsWide,
             dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater,
-            targetCampIsSand: targetCampIsSand, isCampSiteOccupied: isCampSiteOccupied);
+            targetCampIsSand: targetCampIsSand, targetSpots: targetSpots, isCampSiteOccupied: isCampSiteOccupied);
 
         if (!decision.Accepted)
         {
@@ -302,7 +309,7 @@ public sealed class ArmyService(
         }
 
         session.Apply(settlementId, decision.Settlement!);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         if (mission == ArmyMission.Hunt && settled.TroopsTrained)
         {
             // Onboarding quest hunt1 (locked until the troops were trained; claims never
@@ -351,26 +358,28 @@ public sealed class ArmyService(
     /// along so a fleet Attack/Raid can check the target's whole claimed territory. Whether the target is the army's own
     /// settlement is <see cref="Army"/>'s rule, not decided here.
     /// </summary>
-    private async Task<(DispatchRejection Rejection, HexCoord Centre, IReadOnlyList<(HexCoord Centre, int Radius)> ClaimDiscs)>
-        ResolveTargetSettlementAsync(Guid worldId, Guid? targetSettlementId, CancellationToken cancellationToken)
+    private async Task<(DispatchRejection Rejection, HexCoord Centre, IReadOnlyList<(HexCoord Centre, int Radius)> ClaimDiscs, IReadOnlyList<GarrisonSpot> Spots)>
+        ResolveTargetSettlementAsync(Guid worldId, Guid? targetSettlementId, Func<HexCoord, Terrain> terrainAt, CancellationToken cancellationToken)
     {
         if (targetSettlementId is not { } targetId)
         {
-            return (DispatchRejection.TargetSettlementRequired, default, []);
+            return (DispatchRejection.TargetSettlementRequired, default, [], []);
         }
 
         var target = await _dbContext.Settlements
             .AsNoTracking()
+            .Include(s => s.Buildings)
             .Where(s => s.Id == targetId && s.WorldId == worldId)
-            .Select(s => new { s.CentreQ, s.CentreR })
             .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         if (target is null)
         {
-            return (DispatchRejection.TargetSettlementNotFound, default, []);
+            return (DispatchRejection.TargetSettlementNotFound, default, [], []);
         }
 
         var targetRealm = await PlayerRealms.ForStoredSettlementAsync(_dbContext, targetId, cancellationToken).ConfigureAwait(false);
-        return (DispatchRejection.None, new HexCoord(target.CentreQ, target.CentreR), targetRealm?.DiscsOf(targetId) ?? []);
+        return (
+            DispatchRejection.None, new HexCoord(target.CentreQ, target.CentreR), targetRealm?.DiscsOf(targetId) ?? [],
+            target.ToDomain(terrainAt).GarrisonSpots);
     }
 
     /// <summary>
@@ -517,18 +526,8 @@ public sealed class ArmyService(
         HexCoord? currentHex = null;
         if (domain.Location is ArmyLocation.Supporting supporting)
         {
-            // A guest army has no active Movement to derive its position
-            // from — look up the host settlement's hex directly.
-            var host = await _dbContext.Settlements
-                .AsNoTracking()
-                .Where(s => s.Id == supporting.HostSettlementId)
-                .Select(s => new { s.CentreQ, s.CentreR })
-                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-
-            if (host is not null)
-            {
-                currentHex = new HexCoord(host.CentreQ, host.CentreR);
-            }
+            // A guest army has no active Movement to derive its position from: it stands at the host's garrison spot it joined.
+            currentHex = supporting.Spot;
         }
 
         // Mirrors Army.Recall's own switch: only these two locations (with a
@@ -571,7 +570,7 @@ public sealed class ArmyService(
         var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
-        var home = army.Settlement.HomeHexFor(domain, sampler.TerrainAt);
+        var home = army.Settlement.HomeHexFor(domain);
 
         return domain.Recall(at, home, sampler.TerrainAt, currentHex, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls);
     }
@@ -606,7 +605,7 @@ public sealed class ArmyService(
         var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
         var domain = army.ToDomain();
-        var home = army.Settlement.HomeHexFor(domain, sampler.TerrainAt);
+        var home = army.Settlement.HomeHexFor(domain);
 
         var result = Army.RetargetFounding(
             domain, newTarget, now, home, sampler.TerrainAt, army.Settlement.World.SpeedFactor,
@@ -709,14 +708,15 @@ public sealed class ArmyService(
         var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
         var walls = (await WorldBridges.RouteIndexAsync(_dbContext, worldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
-        var home = army.Settlement.HomeHexFor(domain, sampler.TerrainAt);
+        var home = army.Settlement.HomeHexFor(domain);
         var giants = await LoadGiantIndexAsync(worldId, cancellationToken).ConfigureAwait(false);
 
         HexCoord effectiveDestination;
         IReadOnlyList<(HexCoord Centre, int Radius)> targetClaimDiscs = [];
+        IReadOnlyList<GarrisonSpot> targetSpots = [];
         if (mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid)
         {
-            var resolved = await ResolveTargetSettlementAsync(worldId, targetSettlementId, cancellationToken).ConfigureAwait(false);
+            var resolved = await ResolveTargetSettlementAsync(worldId, targetSettlementId, sampler.TerrainAt, cancellationToken).ConfigureAwait(false);
             if (resolved.Rejection != DispatchRejection.None)
             {
                 return await RejectAsync(resolved.Rejection == DispatchRejection.TargetSettlementNotFound
@@ -726,6 +726,7 @@ public sealed class ArmyService(
 
             effectiveDestination = resolved.Centre;
             targetClaimDiscs = resolved.ClaimDiscs;
+            targetSpots = resolved.Spots;
         }
         else
         {
@@ -752,7 +753,7 @@ public sealed class ArmyService(
             domain, waypoints, effectiveDestination, home, now, sampler.TerrainAt, isPremium,
             army.Settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls,
             mission, targetSettlementId, targetBuildingCoord, targetClaimDiscs, targetCampCoord, targetCampIsWater, targetCampIsSand,
-            giants, units, Guid.CreateVersion7());
+            giants, units, Guid.CreateVersion7(), targetSpots);
 
         if (!result.Accepted)
         {
@@ -877,7 +878,7 @@ public sealed class ArmyService(
             var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
             var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
-            var home = army.Settlement.HomeHexFor(domain, sampler.TerrainAt);
+            var home = army.Settlement.HomeHexFor(domain);
 
             // An explicit provisions value is the admin's final word, so it is
             // carried into the new leg rather than being re-burned against the
@@ -1079,20 +1080,27 @@ public sealed class ArmyService(
             && now >= moveTransit.Movement.ArrivesAt)
         {
             var destination = moveTransit.Movement.Path[^1];
-            var dockyardSettlement = await FindDockyardSettlementAtAsync(
+            var found = await FindDockyardSettlementAtAsync(
                 army.Settlement!.WorldId, army.SettlementId, destination, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (dockyardSettlement is not null && dockyardSettlement.OwnerId == army.Settlement.OwnerId)
+            if (found is { Settlement: var dockyardSettlement, ByCentre: var byCentre })
             {
-                await FoldIntoDockAsync(army, dockyardSettlement, domain, now, cancellationToken).ConfigureAwait(false);
-                return ArmySettleOutcome.FoldedHome;
-            }
+                if (dockyardSettlement.OwnerId == army.Settlement.OwnerId)
+                {
+                    // The fleet folds into the harbour spot it reached (a dock hex), or the settlement's own harbour spot
+                    // when it landed on the centre; that spot is its new home.
+                    var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World!, cancellationToken).ConfigureAwait(false);
+                    var spot = byCentre ? Army.FleetAnchor(dockyardSettlement.ToDomain(sampler.TerrainAt), sampler.TerrainAt) : destination;
+                    await FoldIntoDockAsync(army, dockyardSettlement, spot, domain, moveTransit.Movement.ArrivesAt, now, cancellationToken).ConfigureAwait(false);
+                    return ArmySettleOutcome.FoldedHome;
+                }
 
-            if (dockyardSettlement is not null)
-            {
-                var asAttack = domain with { Mission = ArmyMission.Attack, TargetSettlementId = dockyardSettlement.Id };
-                return await ResolveBattleAsync(army, asAttack, now, cancellationToken).ConfigureAwait(false);
+                if (byCentre)
+                {
+                    var asAttack = domain with { Mission = ArmyMission.Attack, TargetSettlementId = dockyardSettlement.Id };
+                    return await ResolveBattleAsync(army, asAttack, now, cancellationToken).ConfigureAwait(false);
+                }
             }
         }
 
@@ -1204,7 +1212,7 @@ public sealed class ArmyService(
             session.Store.SettleTo(now);
         }
 
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
 
         var report = BattleReport.From(
             Guid.CreateVersion7(), movement.ArrivesAt, armyEntity.Id, armyEntity.SettlementId, targetId,
@@ -1478,12 +1486,12 @@ public sealed class ArmyService(
     }
 
     /// <summary>
-    /// Folds a returned army's stacks — and any <see cref="Army.Loot"/> — into
-    /// its home settlement's garrison and stock, then removes the army row.
+    /// Folds a returned army's stacks — and any <see cref="Army.Loot"/> and leftover provisions — into
+    /// its home spot and its home settlement's stock, then removes the army row.
     /// </summary>
     private async Task FoldHomeAsync(ArmyEntity armyEntity, Army returnedArmy, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        await FoldStacksIntoAsync(armyEntity.Settlement!, armyEntity, returnedArmy, now, cancellationToken).ConfigureAwait(false);
+        await FoldStacksIntoAsync(armyEntity.Settlement!, returnedArmy.HomeSpot, armyEntity, returnedArmy, now, now, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Army {ArmyId} arrived home at settlement {SettlementId}; folded into garrison.",
@@ -1491,19 +1499,18 @@ public sealed class ArmyService(
     }
 
     /// <summary>
-    /// docs/design/ship-movement.md §2: a fleet reaching a *different*
+    /// docs/design/garrison.md: a fleet reaching a *different*
     /// settlement it owns (with a Dockyard) folds into that settlement's
-    /// garrison exactly like <see cref="FoldHome"/> does for a return to
-    /// origin — this is what makes that settlement the fleet's new home,
-    /// with no separate "home" field to track. Kept as its own method
-    /// (rather than a parameter on <see cref="FoldHome"/>) so the two
-    /// call sites' log messages stay distinct: one is "came home", the other
+    /// harbour spot exactly like <see cref="FoldHomeAsync"/> does for a return to
+    /// origin — that spot becomes the fleet's new home, with no separate "home" field to track. Kept as its own method
+    /// so the two call sites' log messages stay distinct: one is "came home", the other
     /// is "made a new home".
     /// </summary>
     private async Task FoldIntoDockAsync(
-        ArmyEntity armyEntity, SettlementEntity dockyardSettlement, Army dockedFleet, DateTimeOffset now, CancellationToken cancellationToken)
+        ArmyEntity armyEntity, SettlementEntity dockyardSettlement, HexCoord spot, Army dockedFleet, DateTimeOffset arrivedAt, DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
-        await FoldStacksIntoAsync(dockyardSettlement, armyEntity, dockedFleet, now, cancellationToken).ConfigureAwait(false);
+        await FoldStacksIntoAsync(dockyardSettlement, spot, armyEntity, dockedFleet, arrivedAt, now, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Fleet {ArmyId} docked at settlement {SettlementId}, which it owns but did not depart from ({OriginId}); folded into its garrison.",
@@ -1511,60 +1518,113 @@ public sealed class ArmyService(
     }
 
     /// <summary>
-    /// Shared body of <see cref="FoldHome"/>/<see cref="FoldIntoDock"/>:
-    /// merges an arrived army's stacks and loot into <paramref name="destinationEntity"/>'s
-    /// garrison and stock, then removes the army row.
+    /// Shared body of <see cref="FoldHomeAsync"/>/<see cref="FoldIntoDockAsync"/>: puts an arrived army's stacks into the
+    /// garrison spot <paramref name="spot"/> of <paramref name="destinationEntity"/>, its loot and leftover provisions
+    /// (<see cref="Army.ProvisionsAt"/> at <paramref name="arrivedAt"/>) into the settlement's stock (what does not fit is
+    /// wasted), then removes the army row. Land units never stand at a dock: they come off the ships as a new army and
+    /// walk from the land hex next to the dock to the nearest tower or longhouse, on food from the stock
+    /// (<see cref="GarrisonRelocation.LandingMarch"/>).
     /// </summary>
     private async Task FoldStacksIntoAsync(
-        SettlementEntity destinationEntity, ArmyEntity armyEntity, Army arrivedArmy, DateTimeOffset now, CancellationToken cancellationToken)
+        SettlementEntity destinationEntity, HexCoord spot, ArmyEntity armyEntity, Army arrivedArmy, DateTimeOffset arrivedAt, DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
-        // The stacks join this settlement's garrison; the loot goes into the linked realm's shared stock.
         var session = await _settlementService.LoadGroupAsync(destinationEntity.Id, now, cancellationToken: cancellationToken)
             .ConfigureAwait(false) ?? throw new InvalidOperationException($"Settlement {destinationEntity.Id} disappeared while an army folded into it.");
 
-        var merged = MergeIntoGarrison(session.View(destinationEntity.Id), arrivedArmy.Stacks);
-        if (!arrivedArmy.Loot.IsZero)
+        var view = session.View(destinationEntity.Id);
+        var isDock = view.SpotAt(spot) is { Kind: GarrisonSpotKind.Dock };
+        bool IsShip(UnitStack s) => UnitCatalogue.Get(s.Type).Class == UnitClass.Ship;
+        var staying = isDock ? arrivedArmy.Stacks.Where(IsShip).ToList() : [.. arrivedArmy.Stacks];
+        var landing = isDock ? arrivedArmy.Stacks.Where(s => !IsShip(s)).ToList() : [];
+
+        var merged = view.AddToGarrisonAt(spot, staying).WithQuestLatches();
+        var deposit = arrivedArmy.Loot + new ResourceAmounts(0, 0, arrivedArmy.ProvisionsAt(arrivedAt), 0);
+        if (!deposit.IsZero)
         {
-            merged = merged with { Resources = merged.Resources.Deposit(arrivedArmy.Loot, now) };
+            merged = merged with { Resources = merged.Resources.Deposit(deposit, now) };
+        }
+
+        if (landing.Count > 0)
+        {
+            var relocation = new GarrisonRelocation(_dbContext);
+            var routing = await relocation.LoadRoutingAsync(
+                destinationEntity.WorldId, session.SpeedFactor, session.TerrainAt, destinationEntity.UserId, destinationEntity.Id, cancellationToken)
+                .ConfigureAwait(false);
+            if (GarrisonRelocation.LandingMarch(merged, spot, landing, now, routing, Guid.CreateVersion7()) is { } found)
+            {
+                var (walkers, resources) = GarrisonRelocation.WithWalkFood(found.March, merged.Resources, now);
+                merged = merged with { Resources = resources };
+                relocation.AddArmy(walkers);
+            }
+            else
+            {
+                // Nowhere to walk to: they stay aboard at the dock.
+                merged = merged.AddToGarrisonAt(spot, landing);
+            }
         }
 
         session.Apply(destinationEntity.Id, merged);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         armyEntity.RecordWalkedToEnd();
         _dbContext.Armies.Remove(armyEntity);
     }
 
     /// <summary>
-    /// The Dockyard settlement standing at <paramref name="hex"/> in
-    /// <paramref name="worldId"/>, if any and if it isn't
-    /// <paramref name="excludeSettlementId"/> itself — the arriving fleet's
-    /// own settlement of origin is never itself a docking target, whether or
-    /// not it owns the hex it just departed from. Ownership is deliberately
-    /// left to the caller: a fleet reaching an *owned* Dockyard folds into
-    /// it (docs/design/ship-movement.md §2), while reaching a *foreign* one
-    /// resolves through battle instead (§2's last paragraph) — both need
-    /// this same lookup first. <see langword="null"/> when no settlement
-    /// sits on that hex at all, or it has no Dockyard.
+    /// The settlement in <paramref name="worldId"/> a fleet that reached <paramref name="hex"/> docks at: one whose centre is
+    /// there and that has a functioning Dockyard (<c>ByCentre</c>), or one with a Dockyard standing on that hex. Never
+    /// <paramref name="excludeSettlementId"/> itself — the arriving fleet's own settlement of origin is not a docking target.
+    /// Ownership is left to the caller: a fleet reaching an *owned* one folds into it, while reaching a *foreign* one by its centre
+    /// resolves through battle instead — both need this same lookup first. <see langword="null"/> when there is none.
     /// </summary>
-    private async Task<SettlementEntity?> FindDockyardSettlementAtAsync(
+    private async Task<(SettlementEntity Settlement, bool ByCentre)?> FindDockyardSettlementAtAsync(
         Guid worldId, Guid excludeSettlementId, HexCoord hex, CancellationToken cancellationToken)
     {
-        var candidate = await _dbContext.Settlements
+        var candidates = await _dbContext.Settlements
             .Include(s => s.World)
             .Include(s => s.Buildings)
             .Include(s => s.Queue)
             .Include(s => s.Garrison)
             .Include(s => s.TrainingQueue)
             .Include(s => s.Runes)
-            .FirstOrDefaultAsync(s => s.WorldId == worldId && s.CentreQ == hex.Q && s.CentreR == hex.R, cancellationToken)
-            .ConfigureAwait(false);
+            .Where(s => s.WorldId == worldId && s.Id != excludeSettlementId
+                && ((s.CentreQ == hex.Q && s.CentreR == hex.R)
+                    || s.Buildings.Any(b => b.Type == BuildingType.Dockyard && b.Q == hex.Q && b.R == hex.R)))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-        if (candidate is null || candidate.Id == excludeSettlementId)
+        foreach (var candidate in candidates)
         {
-            return null;
+            var functioning = candidate.Buildings.Any(b => b.Type == BuildingType.Dockyard && b.OutsideRealmSince == null);
+            var byCentre = candidate.CentreQ == hex.Q && candidate.CentreR == hex.R;
+            if (functioning && (byCentre || candidate.Buildings.Any(b => b.Type == BuildingType.Dockyard && b.Q == hex.Q && b.R == hex.R && b.OutsideRealmSince == null)))
+            {
+                return (candidate, byCentre);
+            }
         }
 
-        return candidate.Buildings.Any(b => b.Type == BuildingType.Dockyard && b.OutsideRealmSince == null) ? candidate : null;
+        return null;
+    }
+
+    /// <summary>
+    /// Gives every army out of home whose home is <paramref name="settlementId"/> (and, when given, the garrison spot
+    /// <paramref name="spot"/>; <see langword="null"/> means the whole settlement) a new home: the nearest garrison spot of its
+    /// owner, by route, that it can reach on its current provisions and that can hold it, with its return route rebuilt to it.
+    /// For when the home is given up (a destroyed tower or dock, a beach camp about to be deleted). An army that can reach none
+    /// is left as it is; field armies do not starve today, so nothing further happens to it. Does not save.
+    /// </summary>
+    public async Task RehomeArmiesAsync(Guid settlementId, HexCoord? spot, DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        var entity = await LoadSettlementAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (entity?.World is not { } world)
+        {
+            return;
+        }
+
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
+        var relocation = new GarrisonRelocation(_dbContext);
+        var routing = await relocation.LoadRoutingAsync(world.Id, world.SpeedFactor, sampler.TerrainAt, entity.UserId, entity.Id, cancellationToken).ConfigureAwait(false);
+        var candidates = await relocation.OwnerSpotsAsync(world.Id, entity.OwnerId, sampler.TerrainAt, new Dictionary<Guid, Settlement>(), cancellationToken).ConfigureAwait(false);
+        await relocation.RehomeAsync(settlementId, spot, candidates, now, routing, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1578,25 +1638,6 @@ public sealed class ArmyService(
             .Include(a => a.Stacks)
             .Where(a => a.IsSupporting && a.TargetSettlementId == hostSettlementId)
             .ToListAsync(cancellationToken);
-
-    private static Settlement MergeIntoGarrison(Settlement settlement, IReadOnlyList<UnitStack> stacks)
-    {
-        var garrison = settlement.Garrison.ToList();
-        foreach (var stack in stacks)
-        {
-            var index = garrison.FindIndex(g => g.Type == stack.Type);
-            if (index >= 0)
-            {
-                garrison[index] = garrison[index] with { Count = garrison[index].Count + stack.Count };
-            }
-            else
-            {
-                garrison.Add(stack);
-            }
-        }
-
-        return (settlement with { Garrison = garrison }).WithQuestLatches();
-    }
 
     private Task<SettlementEntity?> LoadSettlementAsync(Guid settlementId, CancellationToken cancellationToken) =>
         _dbContext.Settlements
@@ -1645,7 +1686,7 @@ public sealed class ArmyService(
     /// <summary>Writes the session back and saves when settling changed anything: a real change worth keeping even if the request was refused.</summary>
     private async Task SaveIfChangedAsync(LinkedGroupSession session, CancellationToken cancellationToken)
     {
-        if (session.WriteBack())
+        if (await session.WriteBackAsync(cancellationToken).ConfigureAwait(false))
         {
             await SaveAsync(cancellationToken).ConfigureAwait(false);
         }

@@ -15,6 +15,7 @@ const recallArmy = vi.fn();
 const listSettlements = vi.fn();
 const listRivalBuildings = vi.fn();
 const listOwnBuildings = vi.fn();
+const listOwnBuildOrders = vi.fn();
 const foundSettlement = vi.fn();
 const getTradeBoard = vi.fn();
 const getMyTradeOffers = vi.fn();
@@ -78,6 +79,7 @@ async function loadStoreModule(demoMode: boolean) {
       // Unconfigured, the rival buildings read is an empty world.
       listRivalBuildings: async (...args: unknown[]) => (await listRivalBuildings(...args)) ?? [],
       listOwnBuildings: async (...args: unknown[]) => (await listOwnBuildings(...args)) ?? [],
+      listOwnBuildOrders: async (...args: unknown[]) => (await listOwnBuildOrders(...args)) ?? [],
       foundSettlement: (...args: unknown[]) => foundSettlement(...args),
       getTradeBoard: (...args: unknown[]) => getTradeBoard(...args),
       getMyTradeOffers: (...args: unknown[]) => getMyTradeOffers(...args),
@@ -216,6 +218,56 @@ describe('useWorldStore refreshArmies (guest armies)', () => {
   });
 });
 
+const LONGHOUSE_SPOT = { kind: 'longhouse' as const, q: 0, r: 0, stacks: [{ unit: 'spearman', count: 10 }], guests: [], holdsLand: true, holdsShips: false };
+const TOWER_SPOT = { kind: 'tower' as const, q: 6, r: 0, stacks: [{ unit: 'spearman', count: 4 }], guests: [], holdsLand: true, holdsShips: false };
+
+// The garrison stands at several spots: the picked units are taken from the spot nearest the target first and sent as `from`.
+describe('useWorldStore confirmDispatch from garrison spots', () => {
+  async function composed(units: Record<string, number>, mission: 'move' | 'support' = 'move') {
+    const store = await loadStoreModule(false);
+    dispatchArmy.mockReset().mockResolvedValue({});
+    store.selectedSettlementId = 'home-1';
+    store.hud.garrisonSpots = [LONGHOUSE_SPOT, TOWER_SPOT];
+    store.startDispatch();
+    store.dispatchDraft!.mission = mission;
+    store.dispatchDraft!.unitCounts = units;
+    store.dispatchDraft!.provisions = 10;
+    return store;
+  }
+
+  it('sends the units of the spot nearest the target as the one `from` group', async () => {
+    const store = await composed({ spearman: 3 });
+    store.addWaypoint({ q: 8, r: 0 });
+
+    await store.confirmDispatch();
+
+    expect(dispatchArmy).toHaveBeenCalledTimes(1);
+    expect(dispatchArmy.mock.calls[0][1].from).toEqual([{ spot: { q: 6, r: 0 }, units: [{ unit: 'spearman', count: 3 }] }]);
+    expect(dispatchArmy.mock.calls[0][1]).not.toHaveProperty('units');
+  });
+
+  it('does not attempt a dispatch whose units stand at several spots', async () => {
+    const store = await composed({ spearman: 6 });
+    store.addWaypoint({ q: 8, r: 0 });
+
+    await store.confirmDispatch();
+
+    expect(dispatchArmy).not.toHaveBeenCalled();
+    expect(store.dispatchDraft!.error).toMatch(/several spots/i);
+    expect(store.dispatchSpotGroups(store.dispatchDraft!)).toHaveLength(2);
+  });
+
+  it('sends a support to the host spot the ring named', async () => {
+    const store = await composed({ spearman: 2 }, 'support');
+    store.dispatchDraft!.targetSettlementId = 'host-1';
+    store.dispatchDraft!.targetBuildingCoord = { q: 12, r: 3 };
+
+    await store.confirmDispatch();
+
+    expect(dispatchArmy.mock.calls[0][1]).toMatchObject({ mission: 'support', targetSettlementId: 'host-1', targetBuildingCoord: { q: 12, r: 3 } });
+  });
+});
+
 // The movement rules (wide rivers and mountains stop a land army): a dispatch with no land route is
 // refused by the API (409 UnreachableLeg) and the draft stays open with the reason, so the player can
 // pick another target instead of losing the unit/provisions selection.
@@ -227,6 +279,7 @@ describe('useWorldStore confirmDispatch with no land route', () => {
       new ApiError(409, { title: 'The dispatch was refused.', detail: 'No land route: mountains and wide rivers can\'t be crossed.', rejection: 'UnreachableLeg' }),
     );
     store.selectedSettlementId = 'home-1';
+    store.hud.garrisonSpots = [LONGHOUSE_SPOT];
     store.startDispatch();
     store.dispatchDraft!.unitCounts = { spearman: 2 };
     store.dispatchDraft!.provisions = 10;
@@ -325,6 +378,14 @@ describe('useWorldStore startDispatchAt', () => {
     expect(store.dispatchDraft?.targetSettlementId).toBe('own-other-1');
   });
 
+  it('starts a Support draft that names the tapped garrison spot of the host', async () => {
+    const store = await loadStoreModule(true);
+
+    store.startDispatchAt({ q: 4, r: 2 }, { mission: 'support', targetSettlementId: 'own-other-1', targetBuildingCoord: { q: 4, r: 2 } });
+
+    expect(store.dispatchDraft?.targetBuildingCoord).toEqual({ q: 4, r: 2 });
+  });
+
   it('starts a Hunt draft aimed at the camp hex, with no route waypoint', async () => {
     const store = await loadStoreModule(true);
 
@@ -351,13 +412,14 @@ describe('useWorldStore startDispatchAt', () => {
     const store = await loadStoreModule(false);
     dispatchArmy.mockReset().mockResolvedValue({});
     store.selectedSettlementId = 'home-1';
+    store.hud.garrisonSpots = [{ ...LONGHOUSE_SPOT, stacks: [{ unit: 'settler', count: 5 }, { unit: 'karve', count: 1 }, { unit: 'spearman', count: 3 }] }];
     store.startDispatchAt({ q: 4, r: -1 }, { mission: 'found' });
 
     await store.confirmDispatch();
 
     expect(dispatchArmy).toHaveBeenCalledWith(
       'home-1',
-      expect.objectContaining({ mission: 'found', destination: { q: 4, r: -1 }, units: [{ unit: 'settler', count: 5 }] }),
+      expect.objectContaining({ mission: 'found', destination: { q: 4, r: -1 }, from: [{ spot: { q: 0, r: 0 }, units: [{ unit: 'settler', count: 5 }] }] }),
       undefined,
     );
   });
@@ -376,6 +438,7 @@ describe('useWorldStore startDispatchAt', () => {
     const store = await loadStoreModule(false);
     dispatchArmy.mockReset().mockResolvedValue({});
     store.selectedSettlementId = 'home-1';
+    store.hud.garrisonSpots = [{ ...LONGHOUSE_SPOT, stacks: [{ unit: 'campbuilder', count: 2 }, { unit: 'karve', count: 1 }] }];
     store.startDispatchAt({ q: 4, r: -1 }, { mission: 'setupcamp' });
 
     store.setDispatchUnitCount('campbuilder', 7);
@@ -384,12 +447,12 @@ describe('useWorldStore startDispatchAt', () => {
 
     expect(dispatchArmy).toHaveBeenCalledWith(
       'home-1',
-      expect.objectContaining({
-        mission: 'setupcamp',
-        destination: { q: 4, r: -1 },
-        units: expect.arrayContaining([{ unit: 'campbuilder', count: 2 }, { unit: 'karve', count: 1 }]),
-      }),
+      expect.objectContaining({ mission: 'setupcamp', destination: { q: 4, r: -1 } }),
       undefined,
+    );
+    const request = dispatchArmy.mock.calls[0][1] as { from: { units: { unit: string; count: number }[] }[] };
+    expect(request.from[0].units).toEqual(
+      expect.arrayContaining([{ unit: 'campbuilder', count: 2 }, { unit: 'karve', count: 1 }]),
     );
   });
 
@@ -397,6 +460,7 @@ describe('useWorldStore startDispatchAt', () => {
     const store = await loadStoreModule(false);
     dispatchArmy.mockReset().mockResolvedValue({});
     store.selectedSettlementId = 'home-1';
+    store.hud.garrisonSpots = [{ ...LONGHOUSE_SPOT, stacks: [{ unit: 'settler', count: 5 }, { unit: 'karve', count: 1 }, { unit: 'spearman', count: 3 }] }];
     store.startDispatchAt({ q: 4, r: -1 }, { mission: 'found' });
 
     store.setDispatchUnitCount('settler', 2);
@@ -405,8 +469,8 @@ describe('useWorldStore startDispatchAt', () => {
     expect(store.dispatchDraft?.unitCounts).toEqual({ settler: 5, karve: 1, spearman: 3 });
 
     await store.confirmDispatch();
-    const request = dispatchArmy.mock.calls[0][1] as { units: { unit: string; count: number }[] };
-    expect(request.units).toEqual(
+    const request = dispatchArmy.mock.calls[0][1] as { from: { units: { unit: string; count: number }[] }[] };
+    expect(request.from[0].units).toEqual(
       expect.arrayContaining([{ unit: 'settler', count: 5 }, { unit: 'karve', count: 1 }, { unit: 'spearman', count: 3 }]),
     );
   });
@@ -917,6 +981,33 @@ describe('useWorldStore refreshWorldSettlements (rival buildings)', () => {
 
     expect(listOwnBuildings).toHaveBeenCalledWith('world-1', 'me');
     expect(store.model.getTile(3, 1)).toMatchObject({ buildingType: 'farm', buildingLevel: 2, ownerId: 'own-2' });
+  });
+
+  // The build queues of the player's other realms: the map draws their construction dials like the open settlement's.
+  it('keeps the build queues of the other own realms and draws a dial for each running build, not for the open realm', async () => {
+    listSettlements.mockReset().mockResolvedValue([]);
+    listRivalBuildings.mockReset().mockResolvedValue([]);
+    listOwnBuildings.mockReset().mockResolvedValue([]);
+    const order = (q: number, r: number, completesInSeconds: number) => ({
+      id: `o-${q}-${r}`, q, r, building: 'farm', targetLevel: 2, state: 'building', slotCost: 1,
+      completesAtGameTime: null, completesInSeconds, totalSeconds: 100, kind: 'build',
+    });
+    listOwnBuildOrders.mockReset().mockResolvedValueOnce([
+      { settlementId: 'own-1', queue: [order(1, 1, 40)] },
+      { settlementId: 'own-2', queue: [order(7, 7, 60)] },
+    ]);
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.selectedSettlementId = 'own-1';
+    const before = Date.now();
+    await store.refreshWorldSettlements();
+
+    const dials = store.constructionDials;
+    expect(dials.map((d) => d.coord)).toEqual([{ q: 7, r: 7 }]);
+    expect(dials[0].state).toBe('building');
+    expect(dials[0].endMs! - dials[0].startMs!).toBe(100_000);
+    expect(dials[0].endMs!).toBeGreaterThanOrEqual(before + 60_000);
   });
 
   it('draws a rival\'s non-wall buildings too, next to its longhouse', async () => {
@@ -2916,7 +3007,7 @@ describe('useWorldStore send picker', () => {
 
     store.openSendPicker({ q: 3, r: -2 });
 
-    expect(store.sendPicker).toEqual({ mission: 'move', coord: { q: 3, r: -2 }, targetSettlementId: null, selectedId: null });
+    expect(store.sendPicker).toEqual({ mission: 'move', coord: { q: 3, r: -2 }, targetSettlementId: null, targetBuildingCoord: null, selectedId: null });
     expect(store.dispatchDraft).toBeNull();
     expect(store.fieldOrderDraft).toBeNull();
   });
@@ -2930,6 +3021,17 @@ describe('useWorldStore send picker', () => {
     expect(store.sendPicker).toBeNull();
     expect(store.dispatchDraft?.mission).toBe('attack');
     expect(store.dispatchDraft?.targetSettlementId).toBe('enemy-1');
+  });
+
+  it('a support names the tapped garrison spot of the host, and home hands it to the dispatch draft', async () => {
+    const store = await loadStoreModule(true);
+    store.openSendPicker({ q: 4, r: 2 }, { mission: 'support', targetSettlementId: 'own-other-1', targetBuildingCoord: { q: 4, r: 2 } });
+    expect(store.sendPicker?.targetBuildingCoord).toEqual({ q: 4, r: 2 });
+
+    store.selectSendSource('home');
+
+    expect(store.dispatchDraft?.mission).toBe('support');
+    expect(store.dispatchDraft?.targetBuildingCoord).toEqual({ q: 4, r: 2 });
   });
 
   it('home on a plain move plots the tapped hex as the destination', async () => {
@@ -2976,7 +3078,7 @@ describe('useWorldStore send picker', () => {
     store.selectSendSource('a');
 
     store.retargetSendPicker({ q: 7, r: 0 });
-    expect(store.sendPicker).toEqual({ mission: 'move', coord: { q: 7, r: 0 }, targetSettlementId: null, selectedId: 'a' });
+    expect(store.sendPicker).toEqual({ mission: 'move', coord: { q: 7, r: 0 }, targetSettlementId: null, targetBuildingCoord: null, selectedId: 'a' });
     expect(store.fieldOrderDraft).toMatchObject({ armyId: 'a', mission: 'move', route: [{ q: 7, r: 0 }] });
 
     store.retargetSendPicker({ q: 5, r: 1 }, { mission: 'attack', targetSettlementId: 'enemy-1' });
@@ -3005,7 +3107,7 @@ describe('useWorldStore send picker', () => {
 
     store.retargetSendPicker({ q: 1, r: 1 });
 
-    expect(store.sendPicker).toEqual({ mission: 'move', coord: { q: 1, r: 1 }, targetSettlementId: null, selectedId: null });
+    expect(store.sendPicker).toEqual({ mission: 'move', coord: { q: 1, r: 1 }, targetSettlementId: null, targetBuildingCoord: null, selectedId: null });
     expect(store.fieldOrderDraft).toBeNull();
   });
 

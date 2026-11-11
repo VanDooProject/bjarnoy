@@ -165,6 +165,50 @@ public sealed class RivalBuildingsEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Own_build_orders_lists_the_running_build_of_the_callers_realm_with_its_timing()
+    {
+        var (worldId, own, _, client) = await SetUpAsync();
+        using var _ = client;
+        var queued = await client.PostJsonAsync(
+            $"/api/v1/settlements/{own.Id}/builds", new QueueBuildRequest("longhouse", own.Q, own.R), Ct);
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, queued.StatusCode);
+
+        var orders = (await client.GetFromJsonAsync<List<OwnBuildOrdersResponse>>(
+            $"/api/v1/worlds/{worldId}/own-build-orders", SqliteApiFixture.StrictJson, Ct))!;
+
+        var realm = Assert.Single(orders);
+        Assert.Equal(own.Id, realm.SettlementId);
+        var order = Assert.Single(realm.Queue);
+        Assert.Equal((own.Q, own.R, "building"), (order.Q, order.R, order.State));
+        Assert.True(order.TotalSeconds > 0);
+    }
+
+    [Fact]
+    public async Task Own_build_orders_settles_a_finished_build_and_survives_losing_the_write_race_to_a_concurrent_writer()
+    {
+        var (worldId, own, _, client) = await SetUpAsync();
+        using var _ = client;
+        var queued = await client.PostJsonAsync(
+            $"/api/v1/settlements/{own.Id}/builds", new QueueBuildRequest("longhouse", own.Q, own.R), Ct);
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, queued.StatusCode);
+        var running = (await client.GetFromJsonAsync<List<OwnBuildOrdersResponse>>(
+            $"/api/v1/worlds/{worldId}/own-build-orders", SqliteApiFixture.StrictJson, Ct))!;
+        var order = Assert.Single(Assert.Single(running).Queue);
+
+        // The build finishes, so the next read settles it and saves; a concurrent write to the same settlement lands between
+        // that read and the save (what a build/poll of the open settlement does in the browser).
+        _factory.Time.Advance(TimeSpan.FromSeconds(order.TotalSeconds * 2));
+        _factory.Race.Arm(own.Id, () => SettlementRaceInterceptor.BumpAsync(_factory.Services, own.Id, Ct), repeat: false);
+
+        var response = await client.GetAsync($"/api/v1/worlds/{worldId}/own-build-orders", Ct);
+
+        _factory.Race.Disarm();
+        Assert.Equal(1, _factory.Race.Fired);
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(Assert.Single(await response.ReadStrictAsync<List<OwnBuildOrdersResponse>>(Ct)).Queue);
+    }
+
+    [Fact]
     public async Task Is_empty_for_a_caller_with_no_realm()
     {
         var (worldId, own, _, client) = await SetUpAsync();
