@@ -20,7 +20,8 @@ public class BuildingCatalogueTests
                 Assert.Equal(type, definition.Type);
                 Assert.Equal(level, definition.Level);
                 Assert.True(definition.Cost.IsNonNegative);
-                Assert.True(definition.BuildDuration > TimeSpan.Zero);
+                // The beach camp is set down by a camp builder, not built: it has no build time.
+                Assert.True(type == BuildingType.BeachCamp || definition.BuildDuration > TimeSpan.Zero);
             }
         }
     }

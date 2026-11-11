@@ -547,10 +547,14 @@ public sealed class SettlementService(
     /// <summary>
     /// How many settlements <paramref name="userId"/> already holds in
     /// <paramref name="worldId"/> — the "existing settlement count"
-    /// <c>Settlers.RenownThresholds.AllowsAnotherSettlement</c> scales against (issue #55 §3).
+    /// <c>Settlers.RenownThresholds.AllowsAnotherSettlement</c> scales against (issue #55 §3). Beach camps (a
+    /// <see cref="BuildingType.BeachCamp"/> at the centre) do not count towards the renown limit.
     /// </summary>
     public Task<int> GetSettlementCountAsync(Guid userId, Guid worldId, CancellationToken cancellationToken = default) =>
-        _dbContext.Settlements.CountAsync(s => s.UserId == userId && s.WorldId == worldId, cancellationToken);
+        _dbContext.Settlements.CountAsync(
+            s => s.UserId == userId && s.WorldId == worldId
+                && !s.Buildings.Any(b => b.Type == BuildingType.BeachCamp && b.Q == s.CentreQ && b.R == s.CentreR),
+            cancellationToken);
 
     /// <summary>
     /// Every claimed settlement in <paramref name="worldId"/> — yours or

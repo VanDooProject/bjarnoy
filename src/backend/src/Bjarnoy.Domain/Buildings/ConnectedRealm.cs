@@ -98,7 +98,7 @@ public sealed class ConnectedRealm
         foreach (var settlement in list)
         {
             var longhouseLevel = settlement.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
-            var centreDisc = Settlement.LonghouseDisc(settlement.Centre, longhouseLevel);
+            var centreDisc = Settlement.CentreDisc(settlement.Centre, longhouseLevel, Settlement.HasBeachCampAt(settlement.Buildings, settlement.Centre));
             discs[settlement.Id] = [];
             if (centreDisc is { } disc)
             {

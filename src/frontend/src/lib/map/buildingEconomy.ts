@@ -521,6 +521,7 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   greatstorehouse: { wood: 300, stone: 260, food: 0, iron: 0 },
   archeryrange: { wood: 140, stone: 100, food: 0, iron: 0 },
   siegeworkshop: { wood: 220, stone: 160, food: 0, iron: 0 },
+  beachcamp: { wood: 0, stone: 0, food: 0, iron: 0 },
   dockyard: { wood: 200, stone: 120, food: 0, iron: 0 },
   barracks: { wood: 130, stone: 110, food: 0, iron: 0 },
   sawmill: SMALL_BUILDING_COST,

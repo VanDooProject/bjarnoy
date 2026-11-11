@@ -280,6 +280,41 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_beach_camp_does_not_count_towards_the_renown_settlement_limit()
+    {
+        using var client = Client();
+        var (worldId, _, player, _) = await SetUpPlayerReadyToExpandAsync(client);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var home = await db.Settlements.AsNoTracking().SingleAsync(s => s.WorldId == worldId, Ct);
+            var camp = new SettlementEntity
+            {
+                WorldId = worldId,
+                IslandId = home.IslandId,
+                UserId = home.UserId,
+                Name = "Strandlager",
+                OwnerName = home.OwnerName,
+                OwnerId = home.OwnerId,
+                CentreQ = home.CentreQ + 40,
+                CentreR = home.CentreR,
+                FoundedAt = home.FoundedAt,
+            };
+            camp.Buildings.Add(new PlacedBuildingEntity { Q = camp.CentreQ, R = camp.CentreR, Type = BuildingType.BeachCamp, Level = 1 });
+            db.Settlements.Add(camp);
+            await db.SaveChangesAsync(Ct);
+        }
+
+        Authorize(client, player.AccessToken);
+        var renown = await client.GetFromJsonAsync<RenownResponse>(
+            $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.Equal(1, renown!.SettlementCount);
+        Assert.Equal(55_000, renown.RequiredForNextSettlement);
+    }
+
+    [Fact]
     public async Task Renown_accrues_over_time_from_building_levels_but_buildings_alone_do_not_reach_the_second_settlement_soon()
     {
         using var client = Client();
