@@ -271,3 +271,36 @@ html[data-hud-motion='reduced'] .floating-art-shadow {
 .docs-map-canvas:active {
   cursor: grabbing;
 }
+
+/* The HUD's status cards (build queue, training queue, armies, expansion; issue #16): sharp corners and a header row with an
+   uppercase label and a count. One shared rule because Vue scoped styles don't leak: a panel that only carried the class got
+   no box at all. Each panel's own scoped style sets where it sits (left/right/top/bottom) and, if it differs, its width. */
+.status-card {
+  position: absolute;
+  z-index: 10;
+  width: 240px;
+  padding: 14px 15px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 0;
+}
+.status-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.status-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.status-card-count {
+  font-size: 12px;
+  color: var(--muted);
+}

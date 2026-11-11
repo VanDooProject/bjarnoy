@@ -154,39 +154,13 @@ const reservedTotal = computed(() => {
  * added here since only this construction panel is wired up yet.
  */
 .status-card {
-  position: absolute;
   left: 16px;
   top: 76px;
-  z-index: 10;
-  width: 240px;
-  padding: 14px 15px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 0;
 }
 /* The first build's card, until its confirmation reveals it (Q5). */
 .status-card.is-held,
 .status-row.is-held {
   visibility: hidden;
-}
-.status-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--panel-border);
-}
-.status-card-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text);
-}
-.status-card-count {
-  font-size: 12px;
-  color: var(--muted);
 }
 .status-row {
   display: flex;

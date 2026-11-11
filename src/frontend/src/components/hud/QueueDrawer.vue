@@ -541,32 +541,11 @@ function onDrawerLeave(el: Element, done: () => void) {
 
 <style scoped>
 /*
- * Reuses the `.status-*` conventions from BuildQueuePanel.vue/
- * TrainingQueuePanel.vue (mirrored, not shared — Vue scoped styles don't
- * leak across components) so the expanded drawer body reads the same as
- * the desktop panels it replaces.
+ * Reuses the `.status-*` conventions of BuildQueuePanel.vue/TrainingQueuePanel.vue so the expanded drawer body reads the same
+ * as the desktop panels it replaces: the card header is shared (style.css), the row rules are mirrored here.
  */
-.status-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--panel-border);
-}
 .status-card-header.has-section-above {
   margin-top: 12px;
-}
-.status-card-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text);
-}
-.status-card-count {
-  font-size: 12px;
-  color: var(--muted);
 }
 .status-row {
   display: flex;
