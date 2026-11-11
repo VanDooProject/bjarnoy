@@ -6,6 +6,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { useHudPanelContent } from '../../composables/useHudPanelContent';
+import { useHudPanelShown } from '../../composables/useHudPanelShown';
 import { useQuests } from '../../composables/useQuests';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { COLUMN_BUTTON_GAP, DOCK_GUTTER, HUD_PANEL_IDS, type HudPanelId } from '../../lib/hud/hudPanelDock';
@@ -16,6 +17,7 @@ import HudIconButton from './HudIconButton.vue';
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const prefs = useHudPrefsStore();
 const content = useHudPanelContent();
+const { shown, heldOpen } = useHudPanelShown();
 const { hasNew } = useQuests();
 
 const labelKey: Record<HudPanelId, string> = {
@@ -38,7 +40,8 @@ const columnStyle = { left: `${DOCK_GUTTER}px`, gap: `${COLUMN_BUTTON_GAP}px` };
       :key="id"
       class="hud-panel-column__button"
       :data-testid="`hud-panel-toggle-${id}`"
-      :pressed="prefs.panels[id].open"
+      :pressed="shown[id].value"
+      :disabled="heldOpen[id].value"
       :aria-label="label(id)"
       :title="t('hud.panelColumn.toggle', { panel: label(id) })"
       @click="prefs.togglePanel(id)"

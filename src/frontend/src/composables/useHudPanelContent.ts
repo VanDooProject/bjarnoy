@@ -28,3 +28,4 @@ export function useHudPanelContent(): Record<HudPanelId, ComputedRef<boolean>> {
     quests: computed(() => !!current.value && !hasActiveDraft.value),
   };
 }
+

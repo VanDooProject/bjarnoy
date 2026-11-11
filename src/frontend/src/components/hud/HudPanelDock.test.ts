@@ -10,11 +10,12 @@ import HudPanelDock from './HudPanelDock.vue';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
 import type { HudPanelId } from '../../lib/hud/hudPanelDock';
 
-const flags = vi.hoisted(() => ({ content: undefined as unknown }));
+const flags = vi.hoisted(() => ({ draft: undefined as unknown, content: undefined as unknown }));
 vi.mock('../../composables/useHudPanelContent', async () => {
   const { ref } = await import('vue');
   flags.content = { construction: ref(true), garrison: ref(true), armies: ref(true), quests: ref(true) };
-  return { useHudPanelContent: () => flags.content };
+  flags.draft = ref(false);
+  return { useHudPanelContent: () => flags.content, useHasActiveDraft: () => flags.draft };
 });
 
 const content = () => flags.content as Record<HudPanelId, ReturnType<typeof ref<boolean>>>;
@@ -55,6 +56,7 @@ describe('HudPanelDock', () => {
     localStorage.clear();
     setActivePinia(createPinia());
     for (const flag of Object.values(content())) flag.value = true;
+    (flags.draft as ReturnType<typeof ref<boolean>>).value = false;
   });
   afterEach(() => {
     wrapper?.unmount();
@@ -67,6 +69,16 @@ describe('HudPanelDock', () => {
     expect(idsIn(w, 'top-right')).toEqual(['garrison']);
     expect(idsIn(w, 'bottom-right')).toEqual(['armies']);
     expect(idsIn(w, 'bottom-left')).toEqual(['quests']);
+  });
+
+  it('shows a collapsed Armies panel while a dispatch is being composed, and only then', async () => {
+    useHudPrefsStore().togglePanel('armies');
+    const w = mountDock();
+    expect(idsIn(w, 'bottom-right')).toEqual([]);
+    (flags.draft as ReturnType<typeof ref<boolean>>).value = true;
+    await w.vm.$nextTick();
+    expect(idsIn(w, 'bottom-right')).toEqual(['armies']);
+    expect(useHudPrefsStore().panels.armies.open).toBe(false);
   });
 
   it('puts a panel in the corner the player chose, and stacks panels of one corner in the fixed order', () => {

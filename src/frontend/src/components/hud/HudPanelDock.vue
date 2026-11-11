@@ -6,7 +6,7 @@
 // Every panel enters and leaves through the one transition here, and a drag on a panel's header moves it to another corner
 // (composables/useHudPanelDock.ts). The world view keeps ArmyPanel undocked and does not use this.
 import { ref, type Component } from 'vue';
-import { useHudPanelContent } from '../../composables/useHudPanelContent';
+import { useHudPanelShown } from '../../composables/useHudPanelShown';
 import { useHudPanelDock } from '../../composables/useHudPanelDock';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { DOCK_CORNERS, cornerStyle, panelsInCorner, type HudPanelId } from '../../lib/hud/hudPanelDock';
@@ -18,7 +18,7 @@ import QuestTray from '../onboarding/QuestTray.vue';
 const emit = defineEmits<{ select: [coord: { q: number; r: number }]; 'focus-army': [armyId: string] }>();
 
 const prefs = useHudPrefsStore();
-const content = useHudPanelContent();
+const { shown: panelShown } = useHudPanelShown();
 const root = ref<HTMLElement | null>(null);
 const { dragging, onPointerDown, onEnter, onLeave } = useHudPanelDock(root);
 
@@ -38,7 +38,7 @@ const listeners: Record<HudPanelId, Record<string, unknown>> = {
   quests: {},
 };
 
-const shown = (id: HudPanelId) => prefs.panels[id].open && content[id].value;
+const shown = (id: HudPanelId) => panelShown[id].value;
 const inCorner = (corner: (typeof DOCK_CORNERS)[number]) => panelsInCorner(prefs.panels, corner, shown);
 </script>
 

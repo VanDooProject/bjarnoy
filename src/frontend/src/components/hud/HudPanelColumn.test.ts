@@ -12,11 +12,12 @@ import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enQuests from '../../i18n/locales/en/quests.json';
 
-const flags = vi.hoisted(() => ({ hasNew: undefined as unknown, content: undefined as unknown }));
+const flags = vi.hoisted(() => ({ draft: undefined as unknown, hasNew: undefined as unknown, content: undefined as unknown }));
 vi.mock('../../composables/useHudPanelContent', async () => {
   const { ref } = await import('vue');
   flags.content = { construction: ref(true), garrison: ref(true), armies: ref(true), quests: ref(true) };
-  return { useHudPanelContent: () => flags.content };
+  flags.draft = ref(false);
+  return { useHudPanelContent: () => flags.content, useHasActiveDraft: () => flags.draft };
 });
 vi.mock('../../composables/useQuests', async () => {
   const { ref } = await import('vue');
@@ -38,6 +39,7 @@ describe('HudPanelColumn', () => {
     setActivePinia(createPinia());
     for (const flag of Object.values(content())) flag.value = true;
     (flags.hasNew as ReturnType<typeof ref<boolean>>).value = false;
+    (flags.draft as ReturnType<typeof ref<boolean>>).value = false;
   });
 
   it('shows the five icons top to bottom: building info, construction, garrison, armies, quests', () => {
@@ -85,5 +87,19 @@ describe('HudPanelColumn', () => {
     await wrapper.vm.$nextTick();
     expect(wrapper.find('[data-testid="quest-ready-dot"]').exists()).toBe(false);
   });
-});
 
+  it('holds the Armies icon pressed and disabled while a draft shows the collapsed Armies panel', async () => {
+    useHudPrefsStore().togglePanel('armies');
+    const wrapper = mountColumn();
+    const button = wrapper.get('[data-testid="hud-panel-toggle-armies"]');
+    expect(button.attributes('aria-pressed')).toBe('false');
+    (flags.draft as ReturnType<typeof ref<boolean>>).value = true;
+    await wrapper.vm.$nextTick();
+    expect(button.attributes('aria-pressed')).toBe('true');
+    expect(button.attributes('disabled')).toBeDefined();
+    (flags.draft as ReturnType<typeof ref<boolean>>).value = false;
+    await wrapper.vm.$nextTick();
+    expect(button.attributes('aria-pressed')).toBe('false');
+    expect(button.attributes('disabled')).toBeUndefined();
+  });
+});

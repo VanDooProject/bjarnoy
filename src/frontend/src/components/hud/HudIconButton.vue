@@ -27,7 +27,10 @@ defineProps<{ pressed: boolean }>();
   border-radius: 6px;
   cursor: pointer;
 }
-.hud-icon-button:hover {
+.hud-icon-button:disabled {
+  cursor: default;
+}
+.hud-icon-button:hover:not(:disabled) {
   color: var(--text);
 }
 .hud-icon-button[aria-pressed='true'] {
