@@ -85,4 +85,25 @@ public sealed class WallBlockingTests
         Assert.True(rules.Blocked(End) && !rules.HalfOpen(End));
         Assert.True(blocking.IndexAt(at.AddTicks(-1)).IsHalfOpen(End));
     }
+
+    [Fact]
+    public void The_pre_check_skips_own_gates_and_pieces_whose_neighbourhood_did_not_change_since_the_route_was_planned()
+    {
+        var ownGate = new TimedWall(new StandingWall(new HexCoord(3, 0), IsGate: true, Marcher), T0.AddHours(1));
+        var foreignGate = new TimedWall(new StandingWall(new HexCoord(6, 0), IsGate: true, Builder), T0.AddHours(-10));
+        var timeline = new WallTimeline(Line(T0.AddHours(-10)).Append(Plain(Next, T0.AddHours(2))).Append(ownGate).Append(foreignGate));
+        var now = T0.AddHours(3);
+
+        // An own gate never blocks its owner's army, even one built after it set out: no terrain, river or guild read for it.
+        Assert.False(timeline.MayBlock(ownGate.Wall.Coord, Marcher, T0, now));
+        // Another owner's gate may have closed without a timestamp.
+        Assert.True(timeline.MayBlock(foreignGate.Wall.Coord, Marcher, T0, now));
+        // The old end (0,0) changed when (0,-1) stood beside it; the far end (0,3) did not change since long before.
+        Assert.True(timeline.MayBlock(End, Marcher, T0, now));
+        Assert.False(timeline.MayBlock(new HexCoord(0, 3), Marcher, T0, now));
+        // Planned after the change, or asked before it: nothing to look at.
+        Assert.False(timeline.MayBlock(End, Marcher, T0.AddHours(2), now));
+        Assert.False(timeline.MayBlock(End, Marcher, T0, T0.AddHours(1)));
+        Assert.False(timeline.MayBlock(new HexCoord(9, 9), Marcher, T0, now));
+    }
 }

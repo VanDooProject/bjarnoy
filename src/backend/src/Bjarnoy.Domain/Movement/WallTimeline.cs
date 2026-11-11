@@ -49,6 +49,35 @@ public sealed class WallTimeline
             }
         }
     }
+
+    /// <summary>
+    /// The cheap pre-check before any route rule is built (it needs no terrain, river or guild read): whether the wall on
+    /// <paramref name="hex"/> may block an army of <paramref name="ownerKey"/> whose route was planned at <paramref name="plannedAt"/>, by
+    /// <paramref name="now"/>.
+    /// </summary>
+    /// <remarks>
+    /// <list type="bullet">
+    /// <item>No wall, or a gate of the army's own owner (open to it inside its realm and outside): never.</item>
+    /// <item>Another owner's gate: it may have closed since without a timestamp (a friendship or peace ended, the gate rejoined its realm).</item>
+    /// <item>A plain piece only when the timeline changed around it after the route was planned (<see cref="EventsAround"/> in
+    /// <c>(plannedAt, now]</c>): a route is planned with the walls standing then, and every settle up to <paramref name="now"/> has dealt
+    /// with what changed before it, so a piece whose neighbourhood stayed the same blocks no route that goes through it.</item>
+    /// </list>
+    /// </remarks>
+    public bool MayBlock(HexCoord hex, Guid ownerKey, DateTimeOffset plannedAt, DateTimeOffset now)
+    {
+        if (!_walls.TryGetValue(hex, out var wall))
+        {
+            return false;
+        }
+
+        if (wall.Wall.IsGate)
+        {
+            return wall.Wall.OwnerKey != ownerKey;
+        }
+
+        return EventsAround(hex).Any(e => e > plannedAt && e <= now);
+    }
 }
 
 /// <summary>

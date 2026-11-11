@@ -998,8 +998,8 @@ public sealed class ArmyService(
     /// Settles <paramref name="army"/> to <paramref name="now"/>, dealing first with every wall built after it set out that blocks its way
     /// (<c>docs/design/troop-movement-range.md</c> §5): everything due before the instant the army finds the wall is settled first, then it
     /// re-routes from where it is then (<see cref="Army.RerouteAroundWall"/>), and the settle goes on. A world without a wall on the
-    /// army's way costs one small read (<see cref="WorldPalisades.TimelineAsync"/>, once per request and world); a route is only searched
-    /// when a wall actually blocks it.
+    /// army's way, or only walls that cannot block it (<see cref="WallTimeline.MayBlock"/>), costs one small read
+    /// (<see cref="WorldPalisades.TimelineAsync"/>, once per request and world); a route is only searched when a wall actually blocks it.
     /// </summary>
     private async Task<ArmySettleOutcome> SettleAndFoldCoreAsync(
         ArmyEntity army, DateTimeOffset now, CancellationToken cancellationToken)
@@ -1107,14 +1107,17 @@ public sealed class ArmyService(
 
         var settlement = army.Settlement!;
         var timeline = await WallTimelineAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var ownerKey = WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id);
+
+        // The timeline alone rules out what cannot block (an own gate, a half-open end nobody built beside since the route was planned),
+        // so a route through such hexes only costs the one timeline read: terrain, rivers and guilds are read for a candidate only.
         var route = movement.IsReturning ? movement.Path : movement.Path.Concat(movement.ReturnPath);
-        if (timeline.IsEmpty || !route.Any(hex => timeline.TryGet(hex, out var wall) && wall.StandingFrom <= now))
+        if (timeline.IsEmpty || !route.Any(hex => timeline.MayBlock(hex, ownerKey, movement.DepartedAt, now)))
         {
             return null;
         }
 
         var blocking = await WallBlockingAsync(settlement, cancellationToken).ConfigureAwait(false);
-        var ownerKey = WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id);
         return WallEncounters.FindEarliest(
             movement, (hex, from, before) => blocking.FirstBlockingIn(hex, ownerKey, from, before, movement.DepartedAt, now), now);
     }
