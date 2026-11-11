@@ -25,11 +25,10 @@ public class ArmyHuntTests
             Name = "Bjornstad",
             Centre = Home,
             Buildings = [new PlacedBuilding(Home, BuildingType.Longhouse, 5)],
-            Garrison = garrison ?? [new UnitStack(UnitType.Axeman, 1000), new UnitStack(UnitType.Karve, 5)],
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: food, Iron: 1_000_000),
                 production, capacity, T0),
-        };
+        }.WithGarrison(garrison ?? [new UnitStack(UnitType.Axeman, 1000), new UnitStack(UnitType.Karve, 5)]);
     }
 
     private static DispatchDecision DispatchHunt(
@@ -38,7 +37,7 @@ public class ArmyHuntTests
         IReadOnlyList<UnitStack>? requested = null,
         double provisions = 100,
         HexCoord? destination = null,
-        Func<HexCoord, Terrain>? terrain = null) => Army.PlanDispatch(
+        Func<HexCoord, Terrain>? terrain = null) => TestArmy.PlanDispatch(
             settlement, requested ?? [new UnitStack(UnitType.Axeman, 10)], provisions, [], destination ?? CampHex, T0,
             Guid.CreateVersion7(), terrain ?? AllGrass(), ArmyMission.Hunt, targetCampCoord: targetCamp);
 
@@ -91,7 +90,7 @@ public class ArmyHuntTests
     [Fact]
     public void Fleet_hunting_a_water_camp_carries_passengers_up_to_its_slots()
     {
-        DispatchDecision Hunt(params UnitStack[] requested) => Army.PlanDispatch(
+        DispatchDecision Hunt(params UnitStack[] requested) => TestArmy.PlanDispatch(
             Found(), requested, 100, [], CampHex, T0, Guid.CreateVersion7(), _ => Terrain.Sea, ArmyMission.Hunt,
             targetCampCoord: CampHex, targetCampIsWater: true);
 
@@ -114,7 +113,7 @@ public class ArmyHuntTests
     [Fact]
     public void Only_a_hunt_keeps_a_target_camp()
     {
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             Found(), [new UnitStack(UnitType.Axeman, 10)], 100, [], CampHex, T0, Guid.CreateVersion7(), AllGrass(),
             ArmyMission.Move, targetCampCoord: CampHex);
 

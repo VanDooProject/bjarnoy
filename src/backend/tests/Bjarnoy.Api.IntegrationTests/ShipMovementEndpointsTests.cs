@@ -359,7 +359,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
                 Type = BuildingType.Dockyard,
                 Level = 1,
             });
-            settlement.Garrison.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Karve, Count = 3 });
+            settlement.Garrison.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = dock.Q, SpotR = dock.R, UnitType = UnitType.Karve, Count = 3 });
             settlement.StockFood = 100_000;
             settlement.CapacityFood = 100_000;
             db.Settlements.Add(settlement);
@@ -372,7 +372,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         var dispatched = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlementId}/armies",
             new DispatchArmyRequest(
-                [new UnitCountRequest("karve", 3)], null, new HexPointRequest(destination.Q, destination.R), 30),
+                [new UnitCountRequest("karve", 3)], new HexPointRequest(dock.Q, dock.R), null, new HexPointRequest(destination.Q, destination.R), 30),
             Ct);
         Assert.Equal(HttpStatusCode.Created, dispatched.StatusCode);
         var army = await dispatched.ReadStrictAsync<ArmyResponse>(Ct);
@@ -427,8 +427,9 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
             var (worldId, islandId) = await AddWorldAsync(db, SmallIslandOptions);
             var attacker = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, attackerOwner, attackerCentre.Q, attackerCentre.R);
             attacker.Buildings.Add(new PlacedBuildingEntity { SettlementId = attacker.Id, Q = dock.Q, R = dock.R, Type = BuildingType.Dockyard, Level = 1 });
-            attacker.Garrison.Add(new UnitStackEntity { SettlementId = attacker.Id, UnitType = UnitType.Karve, Count = 1 });
-            attacker.Garrison.Add(new UnitStackEntity { SettlementId = attacker.Id, UnitType = UnitType.Spearman, Count = 20 });
+            // The passengers board where the ship stands: a fleet is dispatched from one spot.
+            attacker.Garrison.Add(new UnitStackEntity { SettlementId = attacker.Id, SpotQ = dock.Q, SpotR = dock.R, UnitType = UnitType.Karve, Count = 1 });
+            attacker.Garrison.Add(new UnitStackEntity { SettlementId = attacker.Id, SpotQ = dock.Q, SpotR = dock.R, UnitType = UnitType.Spearman, Count = 20 });
             // Odin's Ravens at level 5 (10 rings) widen what the fleet sees.
             attacker.Buildings.Add(new PlacedBuildingEntity { SettlementId = attacker.Id, Q = attackerCentre.Q + 1, R = attackerCentre.R, Type = BuildingType.OdinStatue, Level = 5 });
             attacker.StockFood = 100_000;
@@ -449,13 +450,13 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
 
         var tooMany = await client.PostJsonAsync(
             $"/api/v1/settlements/{attackerId}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("karve", 1), new UnitCountRequest("spearman", 11)], null, centre, 30, "attack", targetId, building), Ct);
+            new DispatchArmyRequest([new UnitCountRequest("karve", 1), new UnitCountRequest("spearman", 11)], new HexPointRequest(dock.Q, dock.R), null, centre, 30, "attack", targetId, building), Ct);
         Assert.Equal(HttpStatusCode.Conflict, tooMany.StatusCode);
         Assert.Equal("InsufficientShipCapacity", await tooMany.RejectionAsync(Ct));
 
         var fits = await client.PostJsonAsync(
             $"/api/v1/settlements/{attackerId}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("karve", 1), new UnitCountRequest("spearman", 10)], null, centre, 30, "attack", targetId, building), Ct);
+            new DispatchArmyRequest([new UnitCountRequest("karve", 1), new UnitCountRequest("spearman", 10)], new HexPointRequest(dock.Q, dock.R), null, centre, 30, "attack", targetId, building), Ct);
         Assert.Equal(HttpStatusCode.Created, fits.StatusCode);
         var army = await fits.ReadStrictAsync<ArmyResponse>(Ct);
         Assert.Contains(army.Stacks, s => s.Unit == "spearman" && s.Count == 10);
@@ -487,7 +488,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
             var (worldId, islandId) = await AddWorldAsync(db, SmallIslandOptions);
             var attacker = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, attackerOwner, attackerCentre.Q, attackerCentre.R);
             attacker.Buildings.Add(new PlacedBuildingEntity { SettlementId = attacker.Id, Q = dock.Q, R = dock.R, Type = BuildingType.Dockyard, Level = 1 });
-            attacker.Garrison.Add(new UnitStackEntity { SettlementId = attacker.Id, UnitType = UnitType.Karve, Count = 3 });
+            attacker.Garrison.Add(new UnitStackEntity { SettlementId = attacker.Id, SpotQ = dock.Q, SpotR = dock.R, UnitType = UnitType.Karve, Count = 3 });
             attacker.StockFood = 100_000;
             attacker.CapacityFood = 100_000;
 
@@ -508,17 +509,17 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
 
         var withoutBuilding = await client.PostJsonAsync(
             $"/api/v1/settlements/{attackerId}/armies",
-            new DispatchArmyRequest(karves, null, centre, 30, "attack", targetId), Ct);
+            new DispatchArmyRequest(karves, new HexPointRequest(dock.Q, dock.R), null, centre, 30, "attack", targetId), Ct);
         Assert.Equal(HttpStatusCode.Conflict, withoutBuilding.StatusCode);
 
         var inland = await client.PostJsonAsync(
             $"/api/v1/settlements/{attackerId}/armies",
-            new DispatchArmyRequest(karves, null, centre, 30, "attack", targetId, new HexPointRequest(inlandBuilding.Q, inlandBuilding.R)), Ct);
+            new DispatchArmyRequest(karves, new HexPointRequest(dock.Q, dock.R), null, centre, 30, "attack", targetId, new HexPointRequest(inlandBuilding.Q, inlandBuilding.R)), Ct);
         Assert.Equal(HttpStatusCode.Conflict, inland.StatusCode);
 
         var dispatched = await client.PostJsonAsync(
             $"/api/v1/settlements/{attackerId}/armies",
-            new DispatchArmyRequest(karves, null, centre, 30, "attack", targetId, new HexPointRequest(shoreBuilding.Q, shoreBuilding.R)), Ct);
+            new DispatchArmyRequest(karves, new HexPointRequest(dock.Q, dock.R), null, centre, 30, "attack", targetId, new HexPointRequest(shoreBuilding.Q, shoreBuilding.R)), Ct);
         Assert.Equal(HttpStatusCode.Created, dispatched.StatusCode);
         var army = await dispatched.ReadStrictAsync<ArmyResponse>(Ct);
         Assert.Equal(new HexPointResponse(shoreBuilding.Q, shoreBuilding.R), army.Movement!.Path[^1]);
@@ -548,12 +549,12 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_land_army_departs_from_and_is_recalled_to_its_Barracks()
+    public async Task A_land_army_departs_from_and_is_recalled_to_the_tower_it_was_sent_from()
     {
         using var client = Client();
         var ownerId = $"owner-{Guid.CreateVersion7():N}";
         var centre = new HexCoord(0, 0);
-        var barracks = new HexCoord(2, 0);
+        var tower = new HexCoord(2, 0);
         var destination = new HexCoord(10, 0);
         Guid settlementId;
 
@@ -565,12 +566,12 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
             settlement.Buildings.Add(new PlacedBuildingEntity
             {
                 SettlementId = settlement.Id,
-                Q = barracks.Q,
-                R = barracks.R,
-                Type = BuildingType.Barracks,
+                Q = tower.Q,
+                R = tower.R,
+                Type = BuildingType.Tower,
                 Level = 1,
             });
-            settlement.Garrison.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Spearman, Count = 3 });
+            settlement.Garrison.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = tower.Q, SpotR = tower.R, UnitType = UnitType.Spearman, Count = 3 });
             settlement.StockFood = 100_000;
             settlement.CapacityFood = 100_000;
             db.Settlements.Add(settlement);
@@ -583,12 +584,12 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         var dispatched = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlementId}/armies",
             new DispatchArmyRequest(
-                [new UnitCountRequest("spearman", 3)], null, new HexPointRequest(destination.Q, destination.R), 30),
+                [new UnitCountRequest("spearman", 3)], new HexPointRequest(tower.Q, tower.R), null, new HexPointRequest(destination.Q, destination.R), 30),
             Ct);
         Assert.Equal(HttpStatusCode.Created, dispatched.StatusCode);
         var army = await dispatched.ReadStrictAsync<ArmyResponse>(Ct);
-        Assert.Equal(new HexPointResponse(barracks.Q, barracks.R), army.Movement!.Path[0]);
-        Assert.Equal(new HexPointResponse(barracks.Q, barracks.R), army.Movement.ReturnPath[^1]);
+        Assert.Equal(new HexPointResponse(tower.Q, tower.R), army.Movement!.Path[0]);
+        Assert.Equal(new HexPointResponse(tower.Q, tower.R), army.Movement.ReturnPath[^1]);
 
         _factory.Time.Advance(TimeSpan.FromHours(army.Movement.CumulativeHours[^1] * 0.5));
 
@@ -596,7 +597,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, recalled.StatusCode);
         var recall = await recalled.ReadStrictAsync<ArmyResponse>(Ct);
         Assert.True(recall.Movement!.IsReturning);
-        Assert.Equal(new HexPointResponse(barracks.Q, barracks.R), recall.Movement.Path[^1]);
+        Assert.Equal(new HexPointResponse(tower.Q, tower.R), recall.Movement.Path[^1]);
 
         // A second recall of the now-returning army is refused with a code the frontend can translate.
         var again = await client.PostAsync($"/api/v1/armies/{army.Id}/recall", null, Ct);

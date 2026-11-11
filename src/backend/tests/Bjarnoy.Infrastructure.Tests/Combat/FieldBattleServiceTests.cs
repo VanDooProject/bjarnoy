@@ -140,6 +140,8 @@ public sealed class FieldBattleServiceTests : IDisposable
         var army = new ArmyEntity
         {
             SettlementId = settlementId,
+            HomeSpotQ = path[0].Q,
+            HomeSpotR = path[0].R,
             Mission = (int)ArmyMission.Move,
             AtHome = false,
             DepartedAt = departedAt,

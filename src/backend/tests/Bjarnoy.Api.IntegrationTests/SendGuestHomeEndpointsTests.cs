@@ -138,6 +138,9 @@ public sealed class SendGuestHomeEndpointsTests : IAsyncLifetime
         };
         return await WithDbAsync(async db =>
         {
+            var host = await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == hostSettlementId, Ct);
+            army.TargetBuildingQ = host.CentreQ;
+            army.TargetBuildingR = host.CentreR;
             db.Armies.Add(army);
             await db.SaveChangesAsync(Ct);
             return army.Id;

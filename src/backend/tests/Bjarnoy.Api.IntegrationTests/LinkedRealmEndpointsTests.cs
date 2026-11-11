@@ -255,7 +255,7 @@ public sealed class LinkedRealmEndpointsTests : IAsyncLifetime
         var entity = await db.Settlements
             .Include(s => s.Buildings).Include(s => s.Queue).Include(s => s.Garrison).Include(s => s.TrainingQueue).Include(s => s.Runes)
             .FirstAsync(s => s.Id == id, Ct);
-        entity.ApplyDomain(entity.ToDomain() with { Garrison = stacks });
+        entity.ApplyDomain(entity.ToDomain().WithGarrisonAt(new HexCoord(entity.CentreQ, entity.CentreR), stacks));
         await db.SaveChangesAsync(Ct);
         return true;
     });
@@ -273,6 +273,8 @@ public sealed class LinkedRealmEndpointsTests : IAsyncLifetime
         var army = new ArmyEntity
         {
             SettlementId = homeId,
+            HomeSpotQ = from.Q,
+            HomeSpotR = from.R,
             Mission = (int)mission,
             TargetSettlementId = targetId,
             AtHome = false,
@@ -383,7 +385,7 @@ public sealed class LinkedRealmEndpointsTests : IAsyncLifetime
             foreach (var hex in scene.NewestOnlyHexes)
             {
                 var result = await armies.DispatchAsync(
-                    scene.Newest, [new UnitStack(UnitType.Spearman, 30)], [], hex, provisions, cancellationToken: Ct);
+                    scene.Newest, scene.NewestCentre, [new UnitStack(UnitType.Spearman, 30)], [], hex, provisions, cancellationToken: Ct);
                 if (result.Accepted)
                 {
                     dispatched = result;

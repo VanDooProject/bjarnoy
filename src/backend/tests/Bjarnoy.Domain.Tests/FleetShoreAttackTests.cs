@@ -36,16 +36,15 @@ public class FleetShoreAttackTests
             Name = "Bjornstad",
             Centre = centre,
             Buildings = [new PlacedBuilding(centre, BuildingType.Longhouse, longhouseLevel), .. extra],
-            Garrison = garrison,
             Resources = ResourcePool.Create(new ResourceAmounts(1_000_000, 1_000_000, 1_000_000, 1_000_000), production, capacity, T0),
-        };
+        }.WithGarrison(garrison);
     }
 
     private static Settlement Attacker() =>
         Found(Home, [new UnitStack(UnitType.Karve, 5)], new PlacedBuilding(Dock, BuildingType.Dockyard, 1));
 
     private static DispatchDecision Send(ArmyMission mission, HexCoord? targetBuilding, Settlement? attacker = null) =>
-        Army.PlanDispatch(
+        TestArmy.PlanDispatch(
             attacker ?? Attacker(), [new UnitStack(UnitType.Karve, 5)], 100, [], TargetCentre, T0,
             Guid.CreateVersion7(), Strait, mission, Guid.CreateVersion7(),
             targetBuildingCoord: targetBuilding, targetClaimDiscs: [(TargetCentre, ClaimRadius)]);
@@ -110,7 +109,7 @@ public class FleetShoreAttackTests
         UnitStack[] army = [new UnitStack(UnitType.Axeman, 20), new UnitStack(UnitType.Provisioner, 20)];
         var attacker = Found(Home, army);
 
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             attacker, army, 400, [], TargetCentre, T0,
             Guid.CreateVersion7(), _ => Terrain.Grass, ArmyMission.Attack, Guid.CreateVersion7(),
             targetClaimDiscs: [(TargetCentre, ClaimRadius)]);
@@ -177,11 +176,12 @@ public class FleetShoreAttackTests
 
     private static Army SendLoaded(UnitStack[] requested, ArmyMission mission = ArmyMission.Attack)
     {
-        var attacker = Found(Home, requested, new PlacedBuilding(Dock, BuildingType.Dockyard, 1));
-        var decision = Army.PlanDispatch(
+        // The troops board where the ships stand: a fleet is sent from one spot.
+        var attacker = Found(Home, [], new PlacedBuilding(Dock, BuildingType.Dockyard, 1)).WithGarrisonAt(Dock, requested);
+        var decision = TestArmy.PlanDispatch(
             attacker, requested, Math.Min(150, requested.Sum(u => UnitCatalogue.Get(u.Type).FoodCarryCapacity * u.Count)), [], TargetCentre, T0,
             Guid.CreateVersion7(), Strait, mission, Guid.CreateVersion7(),
-            targetBuildingCoord: ShoreHex, targetClaimDiscs: [(TargetCentre, ClaimRadius)]);
+            targetBuildingCoord: ShoreHex, targetClaimDiscs: [(TargetCentre, ClaimRadius)], fromSpot: Dock);
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
         return decision.Army!;
     }
@@ -231,7 +231,7 @@ public class FleetShoreAttackTests
     private static Army SendAtCentre(HexCoord centre, UnitStack[] requested)
     {
         var attacker = Found(Home, requested, new PlacedBuilding(Dock, BuildingType.Dockyard, 1));
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             attacker, requested, 100, [], centre, T0, Guid.CreateVersion7(), Strait, ArmyMission.Attack, Guid.CreateVersion7(),
             targetBuildingCoord: centre, targetClaimDiscs: [(centre, ClaimRadius)]);
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
@@ -382,7 +382,7 @@ public class FleetShoreAttackTests
     {
         UnitStack[] force = [new UnitStack(UnitType.Axeman, 20), new UnitStack(UnitType.Provisioner, 20)];
         var attacker = Found(Home, force);
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             attacker, force, 400, [], TargetCentre, T0,
             Guid.CreateVersion7(), _ => Terrain.Grass, ArmyMission.Attack, Guid.CreateVersion7(),
             targetClaimDiscs: [(TargetCentre, ClaimRadius)]);

@@ -202,7 +202,7 @@ public class ReportsModalTests(AppHostFixture fixture)
         // bypasses — see UnitCatalogue.Get(UnitType.Spearman)) ---
         var garrisonResponse = await adminHttpClient.PostAsJsonAsync(
             $"/api/v1/admin/settlements/{playerSettlement.Id}/garrison",
-            new AdjustGarrisonRequest("spearman", 10),
+            new AdjustGarrisonRequest("spearman", new HexPointRequest(playerSettlement.Q, playerSettlement.R), 10),
             cancellationToken);
         garrisonResponse.EnsureSuccessStatusCode();
 
@@ -211,6 +211,7 @@ public class ReportsModalTests(AppHostFixture fixture)
             $"/api/v1/settlements/{playerSettlement.Id}/armies",
             new DispatchArmyRequest(
                 Units: [new UnitCountRequest("spearman", 10)],
+                FromSpot: new HexPointRequest(playerSettlement.Q, playerSettlement.R),
                 Waypoints: null,
                 Destination: null,
                 Provisions: 50,

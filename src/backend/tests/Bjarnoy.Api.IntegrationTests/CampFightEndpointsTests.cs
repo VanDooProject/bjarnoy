@@ -75,19 +75,19 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
             var entity = await db.Islands.SingleAsync(i => i.Id == island.Id, Ct);
             entity.Camps = [new CampRecord(campHex.Q, campHex.R, family, level, 0)];
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Axeman, Count = axemen });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Axeman, Count = axemen });
             await db.SaveChangesAsync(Ct);
         }
 
         return (world.Id, settlement, campHex, island.Id);
     }
 
-    private static Task<HttpResponseMessage> HuntAsync(
+    private static async Task<HttpResponseMessage> HuntAsync(
         HttpClient client, Guid settlementId, HexCoord destination, string unit = "axeman", int count = 10) =>
-        client.PostJsonAsync(
+        await client.PostJsonAsync(
             $"/api/v1/settlements/{settlementId}/armies",
             new DispatchArmyRequest(
-                [new UnitCountRequest(unit, count)], null, new HexPointRequest(destination.Q, destination.R),
+                [new UnitCountRequest(unit, count)], await client.SpotOfAsync(settlementId, Ct), null, new HexPointRequest(destination.Q, destination.R),
                 Math.Min(50, count * 10), "hunt"),
             Ct);
 
@@ -260,7 +260,7 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
 
         var noDestination = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("axeman", 5)], null, null, 20, "hunt"), Ct);
+            new DispatchArmyRequest([new UnitCountRequest("axeman", 5)], settlement.Spot(), null, null, 20, "hunt"), Ct);
         Assert.Equal(HttpStatusCode.Conflict, noDestination.StatusCode);
         Assert.Equal("DestinationRequired", await noDestination.RejectionAsync(Ct));
 

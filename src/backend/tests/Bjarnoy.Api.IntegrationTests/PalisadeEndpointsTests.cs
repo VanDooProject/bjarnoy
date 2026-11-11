@@ -76,7 +76,7 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
         return chunk!.Tiles.ToDictionary(t => new HexCoord(t.Q, t.R), t => t.Terrain);
     }
 
-    private async Task GrantAsync(HttpClient client, params (Guid SettlementId, int Spearmen)[] grants)
+    private async Task GrantAsync(HttpClient client, params (SettlementResponse Settlement, int Spearmen)[] grants)
     {
         var adminName = Unique("admin");
         var admin = await (await client.PostJsonAsync(
@@ -91,10 +91,10 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
         var token = (await (await client.PostJsonAsync(
             "/api/v1/auth/login", new LoginRequest(adminName, "correct-horse-battery"), Ct)).ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
         Authorize(client, token);
-        foreach (var (settlementId, spearmen) in grants)
+        foreach (var (grantee, spearmen) in grants)
         {
             var granted = await client.PostJsonAsync(
-                $"/api/v1/admin/settlements/{settlementId}/garrison", new AdjustGarrisonRequest("spearman", spearmen), Ct);
+                $"/api/v1/admin/settlements/{grantee.Id}/garrison", new AdjustGarrisonRequest("spearman", grantee.Spot(), spearmen), Ct);
             Assert.Equal(HttpStatusCode.OK, granted.StatusCode);
         }
     }
@@ -232,16 +232,16 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
         // A client of its own: the first one now carries the owner's session.
         using var strangerClient = _factory.CreateClient();
         var stranger = await FoundAsync(strangerClient, world.Id, island, plot, "Egil");
-        await GrantAsync(client, (owner.Settlement.Id, 10), (stranger.Settlement.Id, 10));
+        await GrantAsync(client, (owner.Settlement, 10), (stranger.Settlement, 10));
 
         var ring = target.Neighbours();
 
-        DispatchArmyRequest ToTarget() =>
-            new([new UnitCountRequest("spearman", DispatchedSpearmen)], null, new HexPointRequest(target.Q, target.R), DispatchedProvisions);
+        DispatchArmyRequest ToTarget(Player who) =>
+            new([new UnitCountRequest("spearman", DispatchedSpearmen)], who.Settlement.Spot(), null, new HexPointRequest(target.Q, target.R), DispatchedProvisions);
         async Task<HttpResponseMessage> DispatchAsync(Player who)
         {
             Authorize(client, who.Auth.AccessToken);
-            return await client.PostJsonAsync($"/api/v1/settlements/{who.Settlement.Id}/armies", ToTarget(), Ct);
+            return await client.PostJsonAsync($"/api/v1/settlements/{who.Settlement.Id}/armies", ToTarget(who), Ct);
         }
 
         // Control: both players reach the target while no wall stands there.

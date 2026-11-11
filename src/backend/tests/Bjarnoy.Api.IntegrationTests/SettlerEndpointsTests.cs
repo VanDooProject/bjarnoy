@@ -487,7 +487,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/armies",
             new DispatchArmyRequest(
-                [new UnitCountRequest("settler", 5)], null,
+                [new UnitCountRequest("settler", 5)], settlement.Spot(), null,
                 // 5 Settlers carry at most 5 * 40 = 200 food
                 // (FoodCarryCapacity); this must be the rejection under
                 // test — a renown/slot gate, not carry capacity.
@@ -525,7 +525,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         var dispatch = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/armies",
             new DispatchArmyRequest(
-                [new UnitCountRequest("settler", 5)], null,
+                [new UnitCountRequest("settler", 5)], settlement.Spot(), null,
                 // 5 Settlers carry at most 5 * 40 = 200 food
                 // (FoodCarryCapacity) — a higher request is rejected before
                 // Found-specific validation is ever reached.

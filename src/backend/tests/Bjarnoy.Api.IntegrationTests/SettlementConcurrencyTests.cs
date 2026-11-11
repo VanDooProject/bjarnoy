@@ -89,7 +89,7 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
             new GrantResourcesRequest(Wood: 100_000, Stone: 100_000, Food: 100_000, Iron: 100_000), Ct);
         Assert.Equal(HttpStatusCode.OK, grant.StatusCode);
         var garrison = await admin.PostJsonAsync(
-            $"/api/v1/admin/settlements/{founded.Id}/garrison", new AdjustGarrisonRequest("spearman", 10), Ct);
+            $"/api/v1/admin/settlements/{founded.Id}/garrison", new AdjustGarrisonRequest("spearman", founded.Spot(), 10), Ct);
         Assert.Equal(HttpStatusCode.OK, garrison.StatusCode);
 
         var layout = await admin.GetFromJsonAsync<AdminSettlementLayoutResponse>(
@@ -189,7 +189,7 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
         HttpResponseMessage? competing = null;
         _injector.ArmOnce(async () => competing = await p.Client.PostJsonAsync(
             $"/api/v1/settlements/{p.Settlement.Id}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("spearman", 4)], null, new HexPointRequest(target.Q, target.R), 5),
+            new DispatchArmyRequest([new UnitCountRequest("spearman", 4)], p.Settlement.Spot(), null, new HexPointRequest(target.Q, target.R), 5),
             Ct));
         var build = await QueueFarm(p.Client, p.Settlement.Id, p.FreeGrass[0]);
 

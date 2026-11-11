@@ -230,11 +230,7 @@ public sealed class LinkedSettlementContextTests
     {
         var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
         var pool = ResourcePool.Create(ResourceAmounts.Zero, production, capacity, T0).WithRate(new ResourceAmounts { Food = -50 }, capacity, T0);
-        var s = Found() with
-        {
-            Resources = pool,
-            Garrison = [new UnitStack(UnitType.Spearman, 1000)],
-        };
+        var s = (Found() with { Resources = pool }).WithGarrison([new UnitStack(UnitType.Spearman, 1000)]);
 
         var alone = s.SettleTo(T0.AddHours(10));
         Assert.NotEmpty(alone.Deaths);
@@ -337,7 +333,7 @@ public sealed class LinkedSettlementContextTests
     [Fact]
     public void GrossTotals_are_the_boosted_totals_times_speed_and_WithHomeDeaths_reduces_the_garrison()
     {
-        var s = Found() with { Garrison = [new UnitStack(UnitType.Spearman, 5)] };
+        var s = Found().WithGarrison([new UnitStack(UnitType.Spearman, 5)]);
 
         var (prod1, cap1) = s.GrossTotals(1.0, null);
         var (prod2, cap2) = s.GrossTotals(3.0, null);

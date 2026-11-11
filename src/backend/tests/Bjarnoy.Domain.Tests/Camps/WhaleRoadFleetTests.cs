@@ -33,16 +33,15 @@ public class WhaleRoadFleetTests
             Name = "Bjornstad",
             Centre = Home,
             Buildings = [new PlacedBuilding(Home, BuildingType.Longhouse, 5)],
-            Garrison = [new UnitStack(UnitType.Longship, 20), new UnitStack(UnitType.Karve, 20), new UnitStack(UnitType.Axeman, 100)],
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 1_000_000, Iron: 1_000_000),
                 production, capacity, T0),
-        };
+        }.WithGarrison([new UnitStack(UnitType.Longship, 20), new UnitStack(UnitType.Karve, 20), new UnitStack(UnitType.Axeman, 100)]);
     }
 
     private static DispatchDecision Dispatch(
         UnitStack[] units, HexCoord target, bool targetIsWater, HexCoord? destination = null,
-        ArmyMission mission = ArmyMission.Hunt) => Army.PlanDispatch(
+        ArmyMission mission = ArmyMission.Hunt) => TestArmy.PlanDispatch(
             Found(), units, 50, [], destination ?? target, T0, Guid.CreateVersion7(), Terr, mission,
             targetCampCoord: mission == ArmyMission.Hunt ? target : null, targetCampIsWater: targetIsWater);
 
@@ -53,7 +52,7 @@ public class WhaleRoadFleetTests
         // A full load, as far as the home stores can hold.
         var food = Math.Min(
             units.Sum(u => UnitCatalogue.Get(u.Type).FoodCarryCapacity * u.Count), home.Resources.Capacity.Food);
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             home, units, food, [], WhaleHex, T0, Guid.CreateVersion7(), Terr, ArmyMission.Hunt,
             targetCampCoord: WhaleHex, targetCampIsWater: true);
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
@@ -96,7 +95,7 @@ public class WhaleRoadFleetTests
         var land = Dispatch([new UnitStack(UnitType.Axeman, 10)], LandCampHex, targetIsWater: false, destination: LandCampHex);
         Assert.True(land.Accepted, $"expected accept, got {land.Rejection}");
 
-        var noCamp = Army.PlanDispatch(
+        var noCamp = TestArmy.PlanDispatch(
             Found(), [new UnitStack(UnitType.Longship, 5)], 50, [], WhaleHex, T0, Guid.CreateVersion7(), Terr, ArmyMission.Hunt);
         Assert.Equal(DispatchRejection.NoCampAtDestination, noCamp.Rejection);
     }
@@ -104,7 +103,7 @@ public class WhaleRoadFleetTests
     [Fact]
     public void A_fleet_hunt_needs_the_round_trip_food()
     {
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             Found(), [new UnitStack(UnitType.Longship, 5)], 1, [], WhaleHex, T0, Guid.CreateVersion7(), Terr, ArmyMission.Hunt,
             targetCampCoord: WhaleHex, targetCampIsWater: true);
 

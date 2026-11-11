@@ -107,7 +107,8 @@ public sealed record Settlement
 
     /// <summary>
     /// The garrison spots: the Longhouse hex first, then every standing Tower and Dockyard by Q, then R — one entry each, empty
-    /// ones included. A tower outside the realm is still a building and still a spot.
+    /// ones included. A tower outside the realm is still a building and still a spot; a foundation still under construction
+    /// (level 0) is not standing yet.
     /// </summary>
     public IReadOnlyList<GarrisonSpot> GarrisonSpots
     {
@@ -115,7 +116,7 @@ public sealed record Settlement
         {
             var coords = new List<(HexCoord Coord, GarrisonSpotKind Kind)> { (Centre, GarrisonSpotKind.Longhouse) };
             coords.AddRange(Buildings
-                .Where(b => b.Type is BuildingType.Tower or BuildingType.Dockyard && b.Coord != Centre)
+                .Where(b => b.Type is BuildingType.Tower or BuildingType.Dockyard && b.Level >= 1 && b.Coord != Centre)
                 .OrderBy(b => b.Coord.Q).ThenBy(b => b.Coord.R)
                 .Select(b => (b.Coord, b.Type == BuildingType.Tower ? GarrisonSpotKind.Tower : GarrisonSpotKind.Dock)));
 

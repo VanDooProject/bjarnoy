@@ -120,9 +120,9 @@ public sealed class WhaleRoadEndpointsTests : IAsyncLifetime
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Longship, Count = 10 });
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Karve, Count = 10 });
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Axeman, Count = 20 });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Longship, Count = 10 });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Karve, Count = 10 });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Axeman, Count = 20 });
             await db.SaveChangesAsync(Ct);
         }
 
@@ -148,11 +148,12 @@ public sealed class WhaleRoadEndpointsTests : IAsyncLifetime
         await db.SaveChangesAsync(Ct);
     }
 
-    private Task<HttpResponseMessage> DispatchAsync(
+    private async Task<HttpResponseMessage> DispatchAsync(
         HttpClient client, Guid settlementId, string unit, int count, HexCoord to, double provisions, string? mission = null) =>
-        client.PostJsonAsync(
+        await client.PostJsonAsync(
             $"/api/v1/settlements/{settlementId}/armies",
-            new DispatchArmyRequest([new UnitCountRequest(unit, count)], null, new HexPointRequest(to.Q, to.R), provisions, mission),
+            new DispatchArmyRequest(
+                [new UnitCountRequest(unit, count)], await client.SpotOfAsync(settlementId, Ct), null, new HexPointRequest(to.Q, to.R), provisions, mission),
             Ct);
 
     private Task<List<CampReportResponse>?> CampReportsAsync(HttpClient client, Guid settlementId) =>

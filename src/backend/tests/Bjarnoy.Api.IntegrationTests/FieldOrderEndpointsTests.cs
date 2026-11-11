@@ -91,7 +91,7 @@ public sealed class FieldOrderEndpointsTests : IAsyncLifetime
     {
         var dispatched = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlementId}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("axeman", count)], null, Point(to), count * 10),
+            new DispatchArmyRequest([new UnitCountRequest("axeman", count)], await client.SpotOfAsync(settlementId, Ct), null, Point(to), count * 10),
             Ct);
         Assert.Equal(HttpStatusCode.Created, dispatched.StatusCode);
         var army = await dispatched.ReadStrictAsync<ArmyResponse>(Ct);
@@ -296,7 +296,7 @@ public sealed class FieldOrderEndpointsTests : IAsyncLifetime
         // Still marching (not yet arrived): the whole army only.
         var dispatched = await client.PostJsonAsync(
             $"/api/v1/settlements/{setup.Settlement.Id}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("axeman", 10)], null, Point(setup.GrassNeighbours[0]), 100),
+            new DispatchArmyRequest([new UnitCountRequest("axeman", 10)], setup.Settlement.Spot(), null, Point(setup.GrassNeighbours[0]), 100),
             Ct);
         var marching = await dispatched.ReadStrictAsync<ArmyResponse>(Ct);
         var tooEarly = await OrderAsync(client, marching.Id, new FieldOrderRequest(
