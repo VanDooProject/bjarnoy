@@ -1,5 +1,20 @@
 {
   "focusHome": "Zurück zu deiner Siedlung",
+  "settlementMenu": {
+    "toggle": "Siedlungsmenü",
+    "goTo": "Zu {name}",
+    "rename": "Umbenennen …",
+    "realms": "Deine Reiche",
+    "current": "Aktuell"
+  },
+  "settlementRename": {
+    "label": "Name der Siedlung",
+    "tooShort": "Mindestens {min} Zeichen",
+    "tooLong": "Höchstens {max} Zeichen",
+    "failed": "Die Siedlung konnte nicht umbenannt werden.",
+    "save": "Speichern",
+    "cancel": "Abbrechen"
+  },
   "nav": {
     "settlement": "Siedlung",
     "leaderboards": "Ranglisten",
@@ -33,7 +48,7 @@
     "toggle": "Mehr anzeigen"
   },
   "realmPanel": {
-    "levelHexesShort": "Lv {level} · {count} Hexfelder"
+    "levelShort": "Lv {level}"
   },
   "hoverTooltip": {
     "level": "STUFE {level}",
@@ -300,23 +315,6 @@
     "training": "Wird ausgebildet…",
     "train": "Ausbilden",
     "trainingFailed": "Ausbildung fehlgeschlagen."
-  },
-  "expansionPanel": {
-    "title": "Expansion",
-    "renown": "Ruhm {total} / {required}",
-    "settlement": "Siedlung",
-    "campOption": "{name} ({kind})",
-    "settlersInGarrison": "Siedler in der Garnison",
-    "trainSettlers": "5 Siedler ausbilden",
-    "canFoundAnother": "Kann eine weitere Siedlung gründen",
-    "yes": "Ja",
-    "notYet": "Noch nicht",
-    "settlerConvoy": "Siedlerkonvoi",
-    "recall": "Zurückrufen",
-    "retarget": "Neu ausrichten",
-    "confirm": "Bestätigen",
-    "trainingFailed": "Ausbildung fehlgeschlagen.",
-    "retargetFailed": "Neuausrichtung fehlgeschlagen."
   },
   "battleReport": {
     "buildings": {

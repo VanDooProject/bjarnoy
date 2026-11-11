@@ -80,6 +80,16 @@ public sealed record ClaimQuestResult(
     public bool Accepted => Rejection == QuestRejection.None && !SettlementNotFound && !WorldPaused && Settlement is not null;
 }
 
+/// <summary>Outcome of renaming a settlement.</summary>
+public sealed record RenameSettlementResult(
+    bool SettlementNotFound = false,
+    bool WorldPaused = false,
+    SettlementEntity? Settlement = null,
+    GameClock? Clock = null)
+{
+    public bool Accepted => !SettlementNotFound && !WorldPaused && Settlement is not null;
+}
+
 public sealed record TrainResult(
     TrainRejection Rejection,
     IReadOnlyList<TrainingOrder>? Orders = null,
@@ -1463,6 +1473,34 @@ public sealed class SettlementService(
         _logger.LogInformation("Settlement {Id} claimed quest {Quest}.", settlementId, decision.Quest!.Id);
 
         return new ClaimQuestResult(QuestRejection.None, Settlement: session.Anchor, Clock: session.Clock);
+    }
+
+    /// <summary>
+    /// Renames a settlement: the owner may do so any time, free, and names need not be unique. The caller passes the
+    /// already trimmed and length-checked name; only the display name changes, nothing is settled or charged.
+    /// </summary>
+    public async Task<RenameSettlementResult> RenameAsync(
+        Guid settlementId, string name, CancellationToken cancellationToken = default)
+    {
+        var session = await _groups.LoadAsync(settlementId, ct: cancellationToken).ConfigureAwait(false);
+        var settlement = session?.Members.FirstOrDefault(m => m.Id == settlementId);
+        if (session is null || settlement is null)
+        {
+            return new RenameSettlementResult(SettlementNotFound: true);
+        }
+
+        if (!session.Clock.AllowsCommands)
+        {
+            return new RenameSettlementResult(WorldPaused: true);
+        }
+
+        settlement.Name = name;
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Settlement {Id} was renamed.", settlementId);
+
+        return new RenameSettlementResult(Settlement: settlement, Clock: session.Clock);
     }
 
     /// <summary>

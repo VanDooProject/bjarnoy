@@ -1,5 +1,20 @@
 {
   "focusHome": "Back to your settlement",
+  "settlementMenu": {
+    "toggle": "Settlement menu",
+    "goTo": "Go to {name}",
+    "rename": "Rename…",
+    "realms": "Your realms",
+    "current": "Current"
+  },
+  "settlementRename": {
+    "label": "Settlement name",
+    "tooShort": "At least {min} characters",
+    "tooLong": "At most {max} characters",
+    "failed": "The settlement could not be renamed.",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
   "nav": {
     "settlement": "Settlement",
     "leaderboards": "Leaderboards",
@@ -33,7 +48,7 @@
     "toggle": "Show more"
   },
   "realmPanel": {
-    "levelHexesShort": "Lv {level} · {count} hexes"
+    "levelShort": "Lv {level}"
   },
   "hoverTooltip": {
     "level": "LEVEL {level}",
@@ -300,23 +315,6 @@
     "training": "Training…",
     "train": "Train",
     "trainingFailed": "Training failed."
-  },
-  "expansionPanel": {
-    "title": "Expansion",
-    "renown": "Renown {total} / {required}",
-    "settlement": "Settlement",
-    "campOption": "{name} ({kind})",
-    "settlersInGarrison": "Settlers in garrison",
-    "trainSettlers": "Train 5 settlers",
-    "canFoundAnother": "Can found another settlement",
-    "yes": "Yes",
-    "notYet": "Not yet",
-    "settlerConvoy": "Settler convoy",
-    "recall": "Recall",
-    "retarget": "Retarget",
-    "confirm": "Confirm",
-    "trainingFailed": "Training failed.",
-    "retargetFailed": "Retarget failed."
   },
   "battleReport": {
     "buildings": {

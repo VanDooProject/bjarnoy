@@ -27,6 +27,10 @@ public sealed record FoundSettlementRequest(
     [property: Required, MinLength(2), MaxLength(100)] string OwnerName,
     [property: Required, MinLength(1), MaxLength(200)] string OwnerId);
 
+/// <param name="Name">The new display name; trimmed server-side, 2-100 characters after trimming.</param>
+public sealed record RenameSettlementRequest(
+    [property: Required, MinLength(2), MaxLength(100)] string Name);
+
 /// <param name="Q">The hex whose building loses one level.</param>
 public sealed record RazeBuildingRequest(int Q, int R);
 

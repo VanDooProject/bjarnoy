@@ -18,7 +18,6 @@ import ResourceBar from '../components/hud/ResourceBar.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import HudPanelColumn from '../components/hud/HudPanelColumn.vue';
 import HudPanelDock from '../components/hud/HudPanelDock.vue';
-import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
 import QuestTray from '../components/onboarding/QuestTray.vue';
 import QueueDrawer from '../components/hud/QueueDrawer.vue';
 import ArmyPanel from '../components/hud/ArmyPanel.vue';
@@ -779,7 +778,6 @@ onUnmounted(() => stageObserver?.disconnect());
 //   columns         full height: top:76 (TopBar .hud-bar height 64, plus a 12px gap), bottom:16, left/right 16
 //   icon rail       left 16, or right of the left panel columns when they reach down to it (HudPanelColumn)
 //   panel widths    Construction 240, Garrison 240, Armies 260, Quests 280
-//   ExpansionPanel  .status-card  left:16  top:340   width:240  (fixed, not dockable)
 // The left edge stays at the default Construction column (left 16 + 240 + 12 -> 268). The right edge is set by the widest
 // panel that can sit in the ring's way: Armies (260 wide, runs down to the bottom bound) beats Garrison (240) ->
 // right = stage width - (16 + 260 + 16), floored at 420. These are constants, not the live layout: every panel is treated
@@ -1614,7 +1612,6 @@ async function upgrade() {
         <HudPanelColumn />
         <HudPanelDock @select="onQueueSelect" @focus-army="onArmySelect" />
       </template>
-      <ExpansionPanel />
       <QuestTray v-if="isMobile && !hasActiveDraft" />
       <HexTooltip v-if="hoverInfo && !hudHovering" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
       <RingMenuHost @retracted="clearRingFootprint">

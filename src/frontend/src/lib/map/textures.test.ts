@@ -2109,6 +2109,19 @@ describe('palisade art', () => {
     expect(topTextureFor(textures, tile, art)).toBe('wall-1');
   });
 
+  it('a Longhouse on sand draws the plain sand base under the grass version\'s building top; on grass it keeps its own base', () => {
+    const textures = emptyTextures();
+    textures.base.sand = Object.fromEntries(ORIENTATIONS.map((o) => [o, `sand-base-${o}`])) as never;
+    textures.base.grass = Object.fromEntries(ORIENTATIONS.map((o) => [o, `grass-base-${o}`])) as never;
+    textures.baseIndexed.longhouse = orientationMap(['hall-base-0', 'hall-base-1'] as unknown as never);
+    textures.top.longhouse = orientationMap(['hall-top-0', 'hall-top-1'] as unknown as never);
+    const tile = (terrain: 'sand' | 'grass'): Tile => ({ q: 0, r: 0, terrain, orientation: 'NE', buildingType: 'longhouse', buildingLevel: 1 });
+
+    expect(baseTextureFor(textures, tile('sand'))).toBe('sand-base-NE');
+    expect(topTextureFor(textures, tile('sand'))).toBe('hall-top-1');
+    expect(baseTextureFor(textures, tile('grass'))).toBe('hall-base-1');
+  });
+
   it('keeps the sea end on its own coastal base', () => {
     const textures = emptyTextures();
     textures.base.sea = orientationMap('sea-base' as unknown as never);

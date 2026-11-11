@@ -416,6 +416,12 @@ export const api = {
       body: JSON.stringify({}),
       headers: ownerHeader(ownerId),
     }),
+  renameSettlement: (settlementId: string, name: string, ownerId?: string) =>
+    request<SettlementResponse>(`/settlements/${settlementId}/name`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+      headers: ownerHeader(ownerId),
+    }),
   claimQuest: (settlementId: string, questId: string, ownerId?: string) =>
     request<SettlementResponse>(`/settlements/${settlementId}/quests/${encodeURIComponent(questId)}/claim`, {
       method: 'POST',
