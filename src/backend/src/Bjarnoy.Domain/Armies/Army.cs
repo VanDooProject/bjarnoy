@@ -281,7 +281,8 @@ public sealed record Army
         IGiantIndex? giants = null,
         WallRules? walls = null,
         HexCoord? targetCampCoord = null,
-        bool targetCampIsWater = false)
+        bool targetCampIsWater = false,
+        bool targetCampIsSand = false)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
@@ -300,7 +301,7 @@ public sealed record Army
         // PlanFieldOrder, which holds a field order to exactly the same targets.
         var target = ValidateMissionTarget(
             mission, normalisedRequest, settlement.Id, targetSettlementId, targetBuildingCoord, targetClaimDiscs,
-            destination, targetCampCoord, targetCampIsWater, terrainAt, giants);
+            destination, targetCampCoord, targetCampIsWater, targetCampIsSand, terrainAt, giants);
         if (target.Rejection != DispatchRejection.None)
         {
             return DispatchDecision.Rejected(target.Rejection);
@@ -351,7 +352,7 @@ public sealed record Army
         // settlers on (issue #55 §2) — same beaching exemption, no separate shoreline check needed:
         // HexPathfinder can only ever reach that land hex by sea if it is adjacent to reachable open water, which is
         // exactly what "shoreline" means (see Shoreline.IsShoreline); any other land hex fails as UnreachableLeg below.
-        if (!SkipsDestinationTerrainCheck(isFleet, mission, targetCampIsWater) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
+        if (!SkipsDestinationTerrainCheck(isFleet, mission, targetCampIsSand) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
         {
             return DispatchDecision.Rejected(isFleet
                 ? DispatchRejection.DestinationNotSea
@@ -442,7 +443,7 @@ public sealed record Army
     /// <summary>
     /// The mission and target rules a dispatch from home (<see cref="PlanDispatch"/>) and a field order
     /// (<see cref="PlanFieldOrder"/>) both hold an army to, in one place: a fleet's passengers need ship slots, a
-    /// <see cref="ArmyMission.Hunt"/> needs a camp the units can reach (land units a land camp, ships a water camp, a fleet a land camp too with land troops aboard), an
+    /// <see cref="ArmyMission.Hunt"/> needs a camp the units can reach (land units a land camp, ships a water camp, a fleet a sand camp too with land troops aboard), an
     /// Attack/Support/Raid needs a target settlement other than the army's own, a target building only goes with
     /// Attack/Raid, and a fleet Attack/Raid is always sent at one building on the target's shore.
     /// </summary>
@@ -466,6 +467,7 @@ public sealed record Army
         HexCoord destination,
         HexCoord? targetCampCoord,
         bool targetCampIsWater,
+        bool targetCampIsSand,
         Func<HexCoord, Terrain> terrainAt,
         IGiantIndex? giants)
     {
@@ -485,14 +487,15 @@ public sealed record Army
         {
             // The camp itself is looked up by the caller, which passes its hex as targetCampCoord only when one
             // exists (and says whether it stands on the sea). Land units hunt land camps and fleets hunt water
-            // camps (the whale road); a fleet also hunts a land camp with the land troops it carries (they fight, the
-            // ships do not), so it needs some aboard. Land units cannot reach a water camp.
+            // camps (the whale road); a fleet also hunts a sand camp (a haul-out) with the land troops it carries (they fight,
+            // the ships do not), so it needs some aboard. Any other land camp is out of a fleet's reach, and land units cannot
+            // reach a water camp.
             if (targetCampCoord is null)
             {
                 return (DispatchRejection.NoCampAtDestination, destination);
             }
 
-            if (isFleet && !targetCampIsWater && ShipCargo.Passengers(units).Count == 0)
+            if (isFleet && !targetCampIsWater && !(targetCampIsSand && ShipCargo.Passengers(units).Count > 0))
             {
                 return (DispatchRejection.HuntRequiresLandUnits, destination);
             }
@@ -566,9 +569,9 @@ public sealed record Army
     /// ends on land, which is exactly the point (see <see cref="HexPathfinder.FindPath"/>'s beaching exemption at both
     /// route endpoints). The real fleet-reachability gate for Attack/Raid is the shore-building check.
     /// </summary>
-    private static bool SkipsDestinationTerrainCheck(bool isFleet, ArmyMission mission, bool targetCampIsWater) =>
+    private static bool SkipsDestinationTerrainCheck(bool isFleet, ArmyMission mission, bool targetCampIsSand) =>
         isFleet && (mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid or ArmyMission.Found
-            || (mission == ArmyMission.Hunt && !targetCampIsWater));
+            || (mission == ArmyMission.Hunt && targetCampIsSand));
 
     /// <summary>
     /// Settles an <see cref="ArmyMission.Attack"/> or <see cref="ArmyMission.Raid"/>
@@ -1465,6 +1468,7 @@ public sealed record Army
     /// <param name="targetClaimDiscs">The target's claim discs, for the fleet shore rule — see <see cref="PlanDispatch"/>.</param>
     /// <param name="targetCampCoord">The camp's hex for a Hunt, or <see langword="null"/> when no camp stands there.</param>
     /// <param name="targetCampIsWater">Whether that camp stands on the sea.</param>
+    /// <param name="targetCampIsSand">Whether that camp is a sand camp (a haul-out), the one land camp a fleet hunts, with the land troops aboard.</param>
     /// <param name="giants">Giant hexes, for the fleet shore rule's territory test.</param>
     /// <param name="requestedUnits">What leaves; <see langword="null"/> means the whole army.</param>
     /// <param name="splitArmyId">The id of the new army when this is a split.</param>
@@ -1486,6 +1490,7 @@ public sealed record Army
         IReadOnlyList<(HexCoord Centre, int Radius)>? targetClaimDiscs = null,
         HexCoord? targetCampCoord = null,
         bool targetCampIsWater = false,
+        bool targetCampIsSand = false,
         IGiantIndex? giants = null,
         IReadOnlyList<UnitStack>? requestedUnits = null,
         Guid? splitArmyId = null)
@@ -1541,7 +1546,7 @@ public sealed record Army
 
         var target = ValidateMissionTarget(
             mission, leavingStacks, army.SettlementId, targetSettlementId, targetBuildingCoord, targetClaimDiscs,
-            destination, targetCampCoord, targetCampIsWater, terrainAt, giants);
+            destination, targetCampCoord, targetCampIsWater, targetCampIsSand, terrainAt, giants);
         if (target.Rejection != DispatchRejection.None)
         {
             return FieldOrderResult.Rejected(ToFieldOrderRejection(target.Rejection));
@@ -1549,7 +1554,7 @@ public sealed record Army
 
         var routeDestination = target.RouteDestination;
 
-        if (!SkipsDestinationTerrainCheck(isFleet, mission, targetCampIsWater) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
+        if (!SkipsDestinationTerrainCheck(isFleet, mission, targetCampIsSand) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
         {
             return FieldOrderResult.Rejected(isLandUnit
                 ? FieldOrderRejection.DestinationNotLand

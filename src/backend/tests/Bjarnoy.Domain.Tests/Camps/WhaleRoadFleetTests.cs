@@ -42,9 +42,9 @@ public class WhaleRoadFleetTests
 
     private static DispatchDecision Dispatch(
         UnitStack[] units, HexCoord target, bool targetIsWater, HexCoord? destination = null,
-        ArmyMission mission = ArmyMission.Hunt) => Army.PlanDispatch(
+        ArmyMission mission = ArmyMission.Hunt, bool targetIsSand = false) => Army.PlanDispatch(
             Found(), units, 50, [], destination ?? target, T0, Guid.CreateVersion7(), Terr, mission,
-            targetCampCoord: mission == ArmyMission.Hunt ? target : null, targetCampIsWater: targetIsWater);
+            targetCampCoord: mission == ArmyMission.Hunt ? target : null, targetCampIsWater: targetIsWater, targetCampIsSand: targetIsSand);
 
     private static Army Hunter(UnitStack[]? units = null)
     {
@@ -83,19 +83,19 @@ public class WhaleRoadFleetTests
     }
 
     [Fact]
-    public void A_fleet_without_land_troops_aboard_cannot_hunt_a_land_camp()
+    public void A_fleet_without_land_troops_aboard_cannot_hunt_a_sand_camp()
     {
-        var decision = Dispatch([new UnitStack(UnitType.Longship, 5)], LandCampHex, targetIsWater: false);
+        var decision = Dispatch([new UnitStack(UnitType.Longship, 5)], LandCampHex, targetIsWater: false, targetIsSand: true);
 
         Assert.Equal(DispatchRejection.HuntRequiresLandUnits, decision.Rejection);
     }
 
     [Fact]
-    public void A_fleet_with_land_troops_aboard_may_hunt_a_land_camp_and_beaches_on_it()
+    public void A_fleet_with_land_troops_aboard_may_hunt_a_sand_camp_and_beaches_on_it()
     {
         var decision = Dispatch(
             [new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 10)], LandCampHex, targetIsWater: false,
-            destination: LandCampHex);
+            destination: LandCampHex, targetIsSand: true);
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
         Assert.True(decision.Army!.IsFleet);
@@ -103,11 +103,21 @@ public class WhaleRoadFleetTests
     }
 
     [Fact]
-    public void The_troops_aboard_still_need_ship_slots_for_a_land_camp_hunt()
+    public void A_fleet_cannot_hunt_a_land_camp_that_is_not_sand_even_with_land_troops_aboard()
+    {
+        var decision = Dispatch(
+            [new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 10)], LandCampHex, targetIsWater: false,
+            destination: LandCampHex);
+
+        Assert.Equal(DispatchRejection.HuntRequiresLandUnits, decision.Rejection);
+    }
+
+    [Fact]
+    public void The_troops_aboard_still_need_ship_slots_for_a_sand_camp_hunt()
     {
         var decision = Dispatch(
             [new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Axeman, 6)], LandCampHex, targetIsWater: false,
-            destination: LandCampHex);
+            destination: LandCampHex, targetIsSand: true);
 
         Assert.Equal(DispatchRejection.InsufficientShipCapacity, decision.Rejection);
     }

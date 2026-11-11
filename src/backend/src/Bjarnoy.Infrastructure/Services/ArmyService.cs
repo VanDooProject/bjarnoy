@@ -223,9 +223,10 @@ public sealed class ArmyService(
         // hex is not walkable.
         HexCoord? targetCampCoord = null;
         var targetCampIsWater = false;
+        var targetCampIsSand = false;
         if (mission == ArmyMission.Hunt)
         {
-            (effectiveDestination, targetCampCoord, targetCampIsWater) = await ResolveHuntCampAsync(
+            (effectiveDestination, targetCampCoord, targetCampIsWater, targetCampIsSand) = await ResolveHuntCampAsync(
                 settlement.WorldId, effectiveDestination, Army.TrainingSite(settled.Centre, settled.Buildings, unitCounts),
                 now, sampler.TerrainAt, cancellationToken).ConfigureAwait(false);
         }
@@ -280,7 +281,7 @@ public sealed class ArmyService(
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimDiscs,
             isHexFoundable, renownAndSlotAllowed, session.SpeedFactor, rivers.IsRiver, rivers.IsWide,
-            dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater);
+            dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater, targetCampIsSand: targetCampIsSand);
 
         if (!decision.Accepted)
         {
@@ -348,19 +349,19 @@ public sealed class ArmyService(
     /// Looks up the wildlife camp a Hunt names by its hex, for a dispatch or a field order alike. With a camp there, returns the
     /// hex the route ends on (<see cref="Army.HuntRouteDestination"/> from <paramref name="from"/>: the camp's own hex, or
     /// its nearest walkable neighbour; a water camp, the whale road, is reached on its own sea hex), the camp's hex and
-    /// whether it stands on the sea. With none, returns <paramref name="campHex"/> and no camp, which
+    /// whether it stands on the sea or on sand. With none, returns <paramref name="campHex"/> and no camp, which
     /// <see cref="Army"/> refuses as <see cref="DispatchRejection.NoCampAtDestination"/>.
     /// </summary>
-    private async Task<(HexCoord Destination, HexCoord? CampCoord, bool CampIsWater)> ResolveHuntCampAsync(
+    private async Task<(HexCoord Destination, HexCoord? CampCoord, bool CampIsWater, bool CampIsSand)> ResolveHuntCampAsync(
         Guid worldId, HexCoord campHex, HexCoord from, DateTimeOffset now, Func<HexCoord, Terrain> terrainAt, CancellationToken cancellationToken)
     {
         var camp = await _campService.FindCampAsync(worldId, campHex, now, cancellationToken).ConfigureAwait(false);
         if (camp is not { } found)
         {
-            return (campHex, null, false);
+            return (campHex, null, false, false);
         }
 
-        return (Army.HuntRouteDestination(found.Camp.Coord, from, terrainAt, isFleet: found.Camp.IsWater), found.Camp.Coord, found.Camp.IsWater);
+        return (Army.HuntRouteDestination(found.Camp.Coord, from, terrainAt, isFleet: found.Camp.IsWater), found.Camp.Coord, found.Camp.IsWater, found.Camp.IsSand);
     }
 
     /// <summary>
@@ -700,17 +701,18 @@ public sealed class ArmyService(
         // A hunt's route is planned from where the army stands now.
         HexCoord? targetCampCoord = null;
         var targetCampIsWater = false;
+        var targetCampIsSand = false;
         if (mission == ArmyMission.Hunt)
         {
             var standingHex = ((ArmyLocation.InTransit)domain.Location).Movement.PositionAt(now);
-            (effectiveDestination, targetCampCoord, targetCampIsWater) = await ResolveHuntCampAsync(
+            (effectiveDestination, targetCampCoord, targetCampIsWater, targetCampIsSand) = await ResolveHuntCampAsync(
                 worldId, effectiveDestination, standingHex, now, sampler.TerrainAt, cancellationToken).ConfigureAwait(false);
         }
 
         var result = Army.PlanFieldOrder(
             domain, waypoints, effectiveDestination, home, now, sampler.TerrainAt, isPremium,
             army.Settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls,
-            mission, targetSettlementId, targetBuildingCoord, targetClaimDiscs, targetCampCoord, targetCampIsWater,
+            mission, targetSettlementId, targetBuildingCoord, targetClaimDiscs, targetCampCoord, targetCampIsWater, targetCampIsSand,
             giants, units, Guid.CreateVersion7());
 
         if (!result.Accepted)

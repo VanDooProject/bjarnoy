@@ -288,7 +288,7 @@ public class CampBattleResolverTests
         // 50 axemen attack 2000 against 195; the 5 longships (attack 300, 20 carry each) would have added little and are not in it.
         var army = new[] { new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 50) };
 
-        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(family: CampFamilies.Walrushaulout), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         Assert.Equal(2000, plan.ArmyPower);
         Assert.Equal(CampFightWinner.Army, plan.Winner);
@@ -303,7 +303,7 @@ public class CampBattleResolverTests
         // The axemen could carry far more; the 5 longships carry 5 x 80 = 400.
         var army = new[] { new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 50) };
 
-        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(family: CampFamilies.Walrushaulout), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         var available = plan.LootAvailable;
         Assert.True(available.Wood + available.Stone + available.Food + available.Iron > 400);
@@ -315,7 +315,7 @@ public class CampBattleResolverTests
     {
         var army = new[] { new UnitStack(UnitType.Karve, 5), new UnitStack(UnitType.Axeman, 1) };
 
-        var plan = CampBattleResolver.Hunt(army, FullStrong(5), Strong(5), 5, seed: 1, provisionsAtBattle: double.PositiveInfinity);
+        var plan = CampBattleResolver.Hunt(army, FullStrong(5), Strong(5, CampFamilies.Walrushaulout), 5, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         Assert.Equal(CampFightWinner.Camp, plan.Winner);
         Assert.Equal(5, Count(plan.ArmySurvivors, UnitType.Karve));

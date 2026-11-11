@@ -1230,6 +1230,12 @@ public class ArmyTests
             mission: ArmyMission.Hunt, targetCampCoord: new HexCoord(7, 0), targetCampIsWater: false);
         Assert.Equal(FieldOrderRejection.HuntRequiresLandUnits, onLand.Rejection);
 
+        // A sand camp is hunted with land troops aboard only; a fleet with none is refused.
+        var onSand = Army.PlanFieldOrder(
+            fleet, [], new HexCoord(7, 0), Dock, now, Strait, isPremium: true,
+            mission: ArmyMission.Hunt, targetCampCoord: new HexCoord(7, 0), targetCampIsSand: true);
+        Assert.Equal(FieldOrderRejection.HuntRequiresLandUnits, onSand.Rejection);
+
         var atSea = Army.PlanFieldOrder(
             fleet, [], new HexCoord(7, 0), Dock, now, Strait, isPremium: true,
             mission: ArmyMission.Hunt, targetCampCoord: new HexCoord(7, 0), targetCampIsWater: true);

@@ -78,7 +78,7 @@ public static class CampBattleResolver
         IReadOnlyList<UnitStack> survivors;
         CampFightPlan plan;
 
-        if (ShipCargo.Ships(army).Count > 0 && !camp.IsWater)
+        if (ShipCargo.Ships(army).Count > 0 && camp.IsSand)
         {
             // A sand camp is hunted by the land troops aboard: the ships take no part and no losses.
             plan = HuntFight(ShipCargo.Passengers(army), garrison, camp, effectiveLevel, seed, landAttackBonusPercent, leftover);
