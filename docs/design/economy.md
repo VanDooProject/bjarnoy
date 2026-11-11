@@ -407,6 +407,20 @@ passengers beyond what the surviving ships can carry drown, the units that take 
 |---|---|
 | Karve | 10 |
 | Longship | 20 |
+| Fire Ship | 0 |
+
+The **Fire Ship** is a ship hull that carries nothing and does not attack. Starting values, to be tuned:
+
+| Fire Ship | |
+|---|---|
+| Cost (wood / stone / food / iron) | 300 / 60 / 40 / 80 |
+| Training time | 40 min |
+| Needs | Longhouse 12, the Karve, a Dockyard |
+| Attack / defence | 0 / 25 |
+| Speed | 8 |
+| Troop slots / loot capacity | 0 / 0 |
+| Food capacity | 200 |
+| Upkeep per hour | 5 |
 
 | Unit | Slots |
 |---|---|
@@ -697,6 +711,7 @@ them so the levels match. *Implemented:*
   | Spearman | Barracks | 5 (1) |
   | Axeman | Barracks | 6 (3): three levels after the bog-ore works open (LH 3) |
   | Karve | Dockyard | 8 (5) |
+  | Fire Ship | Dockyard | 12: after the Karve |
   | Bowman | Archery Range | 9 (4) |
   | Provisioner, Settler | Cart Workshop | 10 (4, 5) |
   | Berserker, Catapult, Longship | Barracks, Siege Workshop, Dockyard | 20 (6, 10, 8): with the Hammer Forge |
