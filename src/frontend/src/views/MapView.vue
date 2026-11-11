@@ -679,6 +679,8 @@ watch(
 );
 
 const hoverInfo = ref<HoverInfo | null>(null);
+/** The mouse is on a building HUD marker: the tile tooltip stays away (the marker says it better). */
+const hudHovering = ref(false);
 function onHover(info: HoverInfo | null) {
   // The renderer's pointer tracking is a window-level listener (see
   // HexMapRenderer's onPointerMove), so it keeps resolving a hex under the
@@ -1525,7 +1527,7 @@ async function upgrade() {
     </TopBar>
     <template v-if="mode === 'settlement'">
       <!-- Over the map, under every panel: one marker per own building (dial + docked box) and the switch that hides them. -->
-      <BuildingHudLayer :renderer="canvasRef?.renderer" />
+      <BuildingHudLayer :renderer="canvasRef?.renderer" @update:hovering="hudHovering = $event" />
       <template v-if="isMobile">
         <QueueDrawer v-if="!hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
       </template>
@@ -1536,7 +1538,7 @@ async function upgrade() {
       </template>
       <ExpansionPanel />
       <QuestTray v-if="isMobile && !hasActiveDraft" />
-      <HexTooltip v-if="hoverInfo" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
+      <HexTooltip v-if="hoverInfo && !hudHovering" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
       <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu
           v-if="selectedTile && ringScreen"

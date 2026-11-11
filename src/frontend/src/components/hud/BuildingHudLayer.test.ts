@@ -396,6 +396,28 @@ describe('BuildingHudLayer', () => {
       expect(scaleAt('2,0')).toContain('scale(1.950)');
     });
 
+    it('tells the map only when the mouse starts or stops hovering a marker, not for a tap', async () => {
+      const renderer = await mountAt(1.5);
+      const hovering = () => wrapper!.emitted('update:hovering') ?? [];
+      expect(hovering()).toEqual([]);
+      renderer.mousePoint = { x: 180, y: 300 };
+      advance();
+      advance();
+      expect(hovering()).toEqual([[true]]);
+      // From one marker to its neighbour: still hovering, nothing sent.
+      renderer.mousePoint = { x: 260, y: 300 };
+      advance();
+      expect(hovering()).toEqual([[true]]);
+      renderer.mousePoint = null;
+      renderer.hoveredHexKey = null;
+      advance();
+      expect(hovering()).toEqual([[true], [false]]);
+      // A touch tap reveals the marker but is no mouse hover.
+      renderer.tapObserver!({ x: 181, y: 301 });
+      advance();
+      expect(hovering()).toEqual([[true], [false]]);
+    });
+
     it('stops observing a box that goes away and disconnects on unmount', async () => {
       const renderer = await mountAt(1.5);
       expect(observers.length).toBe(1);

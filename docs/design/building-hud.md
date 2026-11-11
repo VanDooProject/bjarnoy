@@ -26,4 +26,4 @@
   its box or its hex, or when a touch taps its dial (the tap still reaches the map; a tap on the box reveals nothing, the hex
   under it belongs to the map). The mouse directly on a marker's dial or box wins over the hex under it: only that marker
   grows, and where several overlap the one on top (the hovered one, else the right-most) takes it. The box text stands on its
-  own, there are no tooltips on it.
+  own, there are no tooltips on it. While a marker is hovered, the map's tile tooltip does not show.

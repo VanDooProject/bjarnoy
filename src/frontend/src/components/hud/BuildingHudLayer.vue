@@ -77,6 +77,10 @@ export interface BuildingHudRenderer {
 }
 
 const props = defineProps<{ renderer: BuildingHudRenderer | null | undefined }>();
+const emit = defineEmits<{
+  /** Whether the mouse hovers some marker (a tap reveal does not count); sent when it changes, so the map can hold back its tile tooltip. */
+  'update:hovering': [hovering: boolean];
+}>();
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const world = useWorldStore();
@@ -350,6 +354,12 @@ function setElement(key: string, el: unknown) {
 const boxOf = (key: string) => elements.get(key)?.querySelector<HTMLElement>('.hud-marker__box') ?? null;
 
 let lastFrameMs = 0;
+let mouseHoveringBefore = false;
+function setMouseHovering(on: boolean) {
+  if (on === mouseHoveringBefore) return;
+  mouseHoveringBefore = on;
+  emit('update:hovering', on);
+}
 let lastDialList: readonly ConstructionDial[] | null = null;
 
 function tick() {
@@ -358,7 +368,10 @@ function tick() {
   const nowMs = Date.now();
   const dtMs = lastFrameMs ? Math.min(100, nowMs - lastFrameMs) : 0;
   lastFrameMs = nowMs;
-  if (!renderer || !rendered.value) return;
+  if (!renderer || !rendered.value) {
+    setMouseHovering(false);
+    return;
+  }
   if (renderer.constructionDialList !== lastDialList) {
     lastDialList = renderer.constructionDialList;
     dialsVersion.value += 1;
@@ -379,6 +392,7 @@ function tick() {
     }),
   );
   const hoverKey = direct ?? renderer.hoveredHexKey;
+  let mouseHovering = false;
   let tiersChanged = false;
   const nextTiers: Record<string, HudTier> = {};
   for (const marker of markers.value) {
@@ -413,6 +427,7 @@ function tick() {
     }
     const boxSize = boxSizes.get(marker.key);
     const byMouse = !occluded && hoverKey === marker.key;
+    if (byMouse) mouseHovering = true;
     const hovered = byMouse || (!occluded && tapKey === marker.key);
     const t = dialHoverStep(hoverT.get(marker.key) ?? 0, hovered, dtMs, prefersReducedMotion());
     if (t > 0) hoverT.set(marker.key, t);
@@ -431,6 +446,7 @@ function tick() {
     placed.push({ key: marker.key, x, hovered: t > 0 });
   }
   if (tiersChanged) tiers.value = nextTiers;
+  setMouseHovering(mouseHovering);
   // Right-most on top, the hovered / tapped one above all.
   stackOrder(placed).forEach((p, i) => {
     if (lastZ.get(p.key) === i) return;
@@ -602,6 +618,7 @@ watch(
 );
 onUnmounted(() => {
   cancelAnimationFrame(frame);
+  setMouseHovering(false);
   clearHandovers();
   motion.dispose();
   boxObserver?.disconnect();
