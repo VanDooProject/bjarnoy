@@ -6,8 +6,9 @@ import { flushPromises } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeAnimation, installFakeAnimate, type FakeAnimate } from '../test/fakeAnimate';
 import { animationPreference } from '../lib/perf/animationPreference';
+import { prefersReducedMotion } from '../lib/motion';
 import { motionPreferences } from '../lib/perf/motionPreferences';
-import { HUD_MOTION, boxChangeFor, createBuildingHudMotion, hudReducedMotion, motionStyleFor, waveDelayMs, waveDelays } from './useBuildingHudMotion';
+import { HUD_MOTION, boxChangeFor, createBuildingHudMotion, motionStyleFor, waveDelayMs, waveDelays } from './useBuildingHudMotion';
 
 describe('the wave', () => {
   it('waits 1.2 ms per px from the Longhouse and never longer than 450 ms', () => {
@@ -266,7 +267,7 @@ describe("the player's HUD motion setting decides, not the device flag", () => {
 
   it("HUD menus 'on' plays full motion although the device asks for reduced motion", () => {
     motionPreferences.hud = 'on';
-    expect(hudReducedMotion()).toBe(false);
+    expect(prefersReducedMotion()).toBe(false);
     fake = installFakeAnimate();
     const near = marker(0);
     const far = { ...marker(300), key: 'far' };
@@ -280,7 +281,7 @@ describe("the player's HUD motion setting decides, not the device flag", () => {
 
   it("HUD menus 'auto' follows the device flag: a 150 ms fade, no wave", () => {
     motionPreferences.hud = 'auto';
-    expect(hudReducedMotion()).toBe(true);
+    expect(prefersReducedMotion()).toBe(true);
     fake = installFakeAnimate();
     const m = marker(300);
     void createBuildingHudMotion().setShown(true, [m]);
@@ -292,6 +293,6 @@ describe("the player's HUD motion setting decides, not the device flag", () => {
   it("HUD menus 'off' is reduced whatever the device says", () => {
     motionPreferences.hud = 'off';
     vi.spyOn(animationPreference, 'reducedMotion', 'get').mockReturnValue(false);
-    expect(hudReducedMotion()).toBe(true);
+    expect(prefersReducedMotion()).toBe(true);
   });
 });

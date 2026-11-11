@@ -11,25 +11,16 @@
 
 import { motionPreferences } from './perf/motionPreferences';
 
-const REDUCED_QUERY = '(prefers-reduced-motion: reduce)';
-
 /** Longest a reduced-motion stand-in may run. */
 export const REDUCED_MAX_MS = 120;
 
 /**
- * Whether HUD motion is reduced: the player's own "Menu animations" setting
- * wins ('on' -> full motion, 'off' -> reduced); 'auto' follows the live OS /
- * browser `prefers-reduced-motion` query. False where matchMedia is missing
- * (jsdom).
+ * Whether HUD motion is reduced: the single check every HUD animation uses (ring menu, building HUD, canvas construction dial).
+ * It is the resolved HUD motion setting (`motionPreferences.hudEnabled`): the player's explicit 'on' / 'off' wins, 'auto'
+ * follows the device's reduce-motion flag.
  */
 export function prefersReducedMotion(): boolean {
-  if (motionPreferences.hud === 'on') return false;
-  if (motionPreferences.hud === 'off') return true;
-  try {
-    return typeof window !== 'undefined' && !!window.matchMedia?.(REDUCED_QUERY).matches;
-  } catch {
-    return false;
-  }
+  return !motionPreferences.hudEnabled;
 }
 
 /** Whether the Web Animations API exists here at all (not in jsdom). */
