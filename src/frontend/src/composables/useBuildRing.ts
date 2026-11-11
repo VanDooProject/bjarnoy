@@ -81,12 +81,12 @@ export function categoriesFor(tile: Tile): BuildCategory[] {
 // Category tints, carried into each category's own buildings so a building
 // bubble reads as belonging to the category it fanned out of.
 export const CATEGORY_COLORS: Record<string, string> = {
-  resource: 'var(--food)',
-  military: 'var(--iron)',
-  defense: 'var(--stone)',
-  religion: 'var(--shrine)',
-  logistics: 'var(--stone)',
-  water: 'var(--water)',
+  resource: 'var(--cat-resource)',
+  military: 'var(--cat-military)',
+  defense: 'var(--cat-defense)',
+  religion: 'var(--cat-religion)',
+  logistics: 'var(--cat-logistics)',
+  water: 'var(--cat-water)',
 };
 
 const RESOURCE_KINDS: (keyof Resources)[] = ['wood', 'stone', 'food', 'iron'];
