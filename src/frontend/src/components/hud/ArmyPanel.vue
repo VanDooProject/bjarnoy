@@ -47,7 +47,7 @@ const draft = computed(() => world.dispatchDraft);
 // Only garrison units can be sent — the wire-name -> count map the quantity
 // inputs below read/write against, filtered to what's actually standing here.
 const garrisonRows = computed(() =>
-  world.hud.garrison
+  (world.dispatchSource?.garrison ?? world.hud.garrison)
     .filter((g) => g.count > 0)
     .map((g) => ({ unit: g.unit, label: unitName(g.unit), available: g.count })),
 );
@@ -69,7 +69,7 @@ function setQuantity(unit: string, value: string, max: number) {
     // Issue #158: provisions come out of `available`, not raw stock — food
     // reserved for the waiting build queue is not free to load onto an army.
     world.setDispatchProvisions(
-      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.hud.available.food),
+      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.dispatchSource?.availableFood ?? world.hud.available.food),
     );
   }
 }
