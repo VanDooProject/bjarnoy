@@ -22,7 +22,7 @@ import { campGuardRange, isStrongCampFamily, placeCamps, placeWhaleRoads, StartP
 import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
 import type { PalisadePiece } from './palisadeTiles';
 import type { CampStateResponse } from '../../api/types';
-import { claimDiscs, longhouseDiscs, type ClaimDisc } from './shoreline';
+import { centreClaimDiscs, centreVisionDiscs, claimDiscs, type ClaimDisc } from './shoreline';
 import type { FogCoverageLookup } from './fog/fogCoverage';
 import { claimsWithGiants } from './territory';
 import { realmFromDiscs, resolveRealm, type ConnectedRealm } from './realmChain';
@@ -399,6 +399,14 @@ export class WorldModel {
    * (`wisdomFactor`, shorter builds) read. Updated alongside `settlementTowers`.
    */
   private settlementOdinLevels = new Map<string, number>();
+  /** Settlements that are beach camps (a `beachcamp` building in the server's list): they see like a level-1 Longhouse. */
+  private beachCampIds = new Set<string>();
+  /** Rival settlements whose `beachcamp` the server delivered (`applyRivalBuildings`): they claim their own hex only. */
+  private rivalBeachCampIds = new Set<string>();
+
+  private isBeachCamp(settlementId: string): boolean {
+    return this.beachCampIds.has(settlementId) || this.rivalBeachCampIds.has(settlementId);
+  }
   /**
    * Every hex belonging to a giant's 7-hex footprint, mapped to that giant's
    * own anchor coord — this model's own `IGiantIndex` (see the backend's
@@ -1017,6 +1025,7 @@ export class WorldModel {
       signature += `|${s.id}:${s.level}:${s.q},${s.r}`;
       for (const t of this.settlementTowers.get(s.id) ?? []) signature += `;${t.q},${t.r},${t.level}`;
       signature += `;odin${this.settlementOdinLevels.get(s.id) ?? 0}`;
+      if (this.isBeachCamp(s.id)) signature += ';camp';
     }
     return signature;
   }
@@ -1390,10 +1399,10 @@ export class WorldModel {
    * `HexMapRenderer.rebuildSettlementLabels`). Fog radius
    * (`visibleHexes`/`exploredRadius`) is tower-aware via `visionDiscsFor`
    * instead. HUD territory-size readouts use `claimedHexCount` instead,
-   * which also accounts for towers. 0 when the Longhouse is destroyed (`longhouseDiscs` has no disc then).
+   * which also accounts for towers. 0 when the Longhouse is destroyed (`centreClaimDiscs` has no disc then); 0 for a beach camp, which claims its own hex only.
    */
   borderRadius(settlement: Settlement): number {
-    return longhouseDiscs(settlement, settlement.level)[0]?.radius ?? 0;
+    return centreClaimDiscs(settlement, settlement.level, this.isBeachCamp(settlement.id))[0]?.radius ?? 0;
   }
 
   /**
@@ -1430,6 +1439,7 @@ export class WorldModel {
         q: m.q,
         r: m.r,
         level: m.level,
+        isBeachCamp: this.isBeachCamp(m.id),
         towers: this.settlementTowers.get(m.id) ?? [],
       })),
     );
@@ -1443,7 +1453,7 @@ export class WorldModel {
     // A rival's claim is its Longhouse plus every tower the server delivered, whether or not the chain connects it: the client
     // cannot resolve another player's realm and draws what the server showed it.
     if (this.isRivalSettlement(settlement)) {
-      return claimDiscs({ q: settlement.q, r: settlement.r }, settlement.level, this.rivalTowers.get(settlement.id) ?? []);
+      return claimDiscs({ q: settlement.q, r: settlement.r }, settlement.level, this.rivalTowers.get(settlement.id) ?? [], this.isBeachCamp(settlement.id));
     }
     return this.realmOf(settlement).discsOf(settlement.id);
   }
@@ -1493,7 +1503,7 @@ export class WorldModel {
     // A tower cut off from every longhouse of the player's realm sees nothing (and gets no Ravens rings either).
     const realm = this.realmOf(settlement);
     return [
-      ...longhouseDiscs(settlement, settlement.level).map((d) => ({ ...d, radius: d.radius + ravens })),
+      ...centreVisionDiscs(settlement, settlement.level, this.isBeachCamp(settlement.id)).map((d) => ({ ...d, radius: d.radius + ravens })),
       ...(this.settlementTowers.get(settlement.id) ?? []).filter((t) => realm.isTowerConnected(settlement.id, t)).map((t) => ({
         q: t.q,
         r: t.r,
@@ -1780,6 +1790,11 @@ export class WorldModel {
     this.settlementOdinLevels.set(settlementId, odin);
     const ravensChanged = ravensRings(odin) !== ravensRings(previousOdin);
 
+    const wasBeachCamp = this.beachCampIds.has(settlementId);
+    const isBeachCamp = snapshot.buildings.some((b) => b.type === 'beachcamp' && b.level >= 1);
+    if (isBeachCamp) this.beachCampIds.add(settlementId);
+    else this.beachCampIds.delete(settlementId);
+
     const levelIncreased = snapshot.level > settlement.level;
     if (levelIncreased) settlement.level = snapshot.level;
 
@@ -1787,7 +1802,7 @@ export class WorldModel {
     // centre disc grew (a longhouse level-up) or the set of Tower satellite
     // discs changed (a new, levelled-up, downgraded or burnt tower) — not
     // every poll, since claiming is otherwise pure repeated work.
-    const claimChanged = levelIncreased || towersChanged || ravensChanged || realmChanged;
+    const claimChanged = levelIncreased || towersChanged || ravensChanged || realmChanged || isBeachCamp !== wasBeachCamp;
     if (claimChanged) this.exploreRealm(settlement);
     settlement.resources = snapshot.resources;
     settlement.rates = snapshot.rates;
@@ -1948,9 +1963,11 @@ export class WorldModel {
 
     const next = new Map<string, { settlementId: string; ownerUserId: string | null; own: boolean }>();
     const towers = new Map<string, { q: number; r: number; level: number }[]>();
+    const rivalCamps = new Set<string>();
     for (const building of buildings) {
       const key = coordKey({ q: building.q, r: building.r });
       if (ownRendered.has(key)) continue;
+      if (building.type === 'beachcamp' && building.level >= 1) rivalCamps.add(building.settlementId);
       if (building.type === 'tower' && building.level >= 1) {
         const list = towers.get(building.settlementId) ?? [];
         list.push({ q: building.q, r: building.r, level: building.level });
@@ -1976,6 +1993,7 @@ export class WorldModel {
 
     this.rivalBuildings = next;
     this.rivalTowers = towers;
+    this.rivalBeachCampIds = rivalCamps;
     this.rivalClaimRevision++;
     this.wallRevision++;
   }

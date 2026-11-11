@@ -114,7 +114,7 @@ public sealed record Settlement
     {
         get
         {
-            var coords = new List<(HexCoord Coord, GarrisonSpotKind Kind)> { (Centre, GarrisonSpotKind.Longhouse) };
+            var coords = new List<(HexCoord Coord, GarrisonSpotKind Kind)> { (Centre, IsBeachCamp ? GarrisonSpotKind.BeachCamp : GarrisonSpotKind.Longhouse) };
             coords.AddRange(Buildings
                 .Where(b => b.Type is BuildingType.Tower or BuildingType.Dockyard && b.Level >= 1 && b.Coord != Centre)
                 .OrderBy(b => b.Coord.Q).ThenBy(b => b.Coord.R)
@@ -285,6 +285,17 @@ public sealed record Settlement
     public int LonghouseLevel =>
         Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
 
+    /// <summary>
+    /// Whether this is a beach camp: a <see cref="BuildingType.BeachCamp"/> stands at the <see cref="Centre"/> (one hex, a stock
+    /// and a garrison, no production). It has no Longhouse, so <see cref="LonghouseLevel"/> stays 0 and nothing that asks for a
+    /// Longhouse is satisfied by it.
+    /// </summary>
+    public bool IsBeachCamp => HasBeachCampAt(Buildings, Centre);
+
+    /// <summary>Whether a <see cref="BuildingType.BeachCamp"/> stands at <paramref name="centre"/> among <paramref name="buildings"/>.</summary>
+    public static bool HasBeachCampAt(IEnumerable<PlacedBuilding> buildings, HexCoord centre) =>
+        buildings.Any(b => b.Type == BuildingType.BeachCamp && b.Coord == centre && b.Level >= 1);
+
     /// <summary>The level of the highest standing Tower (0 when there is none). Completes the onboarding quest <c>tower3</c>.</summary>
     public int TowerLevel => HighestLevelOf(BuildingType.Tower);
 
@@ -339,6 +350,13 @@ public sealed record Settlement
     /// </summary>
     public static (HexCoord Centre, int Radius)? LonghouseDisc(HexCoord centre, int longhouseLevel) =>
         longhouseLevel <= 0 ? null : (centre, ClaimRadiusForLonghouseLevel(longhouseLevel));
+
+    /// <summary>
+    /// The claim disc of a settlement's centre: for a beach camp (<paramref name="isBeachCamp"/>) always its own hex only (radius
+    /// 0, fixed, never grows); otherwise <see cref="LonghouseDisc"/>. The one place callers read a settlement's centre claim.
+    /// </summary>
+    public static (HexCoord Centre, int Radius)? CentreDisc(HexCoord centre, int longhouseLevel, bool isBeachCamp) =>
+        isBeachCamp ? (centre, 0) : LonghouseDisc(centre, longhouseLevel);
 
     /// <summary>
     /// How many towers the whole (linked) realm may hold: this settlement's limit (<see cref="BuildingCatalogue.MaxTowers"/>) plus
@@ -402,6 +420,12 @@ public sealed record Settlement
 
     private static int ConstructionSlotsFor(IReadOnlyList<PlacedBuilding> buildings)
     {
+        // A beach camp has no Longhouse and builds nothing of its own: no slots, so it adds none to a linked realm.
+        if (!buildings.Any(b => b.Type == BuildingType.Longhouse) && buildings.Any(b => b.Type == BuildingType.BeachCamp))
+        {
+            return 0;
+        }
+
         var longhouseLevel = buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
         return Math.Max(2, longhouseLevel);
     }

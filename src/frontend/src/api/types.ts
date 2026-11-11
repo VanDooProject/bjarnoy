@@ -359,7 +359,7 @@ export interface UnitStackResponse {
 }
 
 /** The places a garrison stands: the longhouse, a tower, a dock (a dockyard). */
-export type GarrisonSpotKind = 'longhouse' | 'tower' | 'dock';
+export type GarrisonSpotKind = 'longhouse' | 'tower' | 'dock' | 'beachcamp';
 
 /**
  * One garrison spot of a settlement (`docs/design/garrison.md`): the units standing there, the guests (supporting armies of

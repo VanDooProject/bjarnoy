@@ -35,7 +35,7 @@ import FpsMeter from '../components/hud/FpsMeter.vue';
 import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
-import { useWorldStore } from '../stores/world';
+import { useWorldStore, type SendPickerTarget } from '../stores/world';
 import { WORLD_HASH, isWorldHash } from '../lib/mapModeRoute';
 import { parseCameraHash, serializeCameraHash } from '../lib/mapCameraHash';
 import { useAuthStore } from '../stores/auth';
@@ -84,6 +84,7 @@ import { reachableRange } from '../lib/map/hexPath';
 import { gamePathContext } from '../lib/map/movementContext';
 import { routeProgressAt } from '../lib/units/armyProgress';
 import { isGarrisonSpotTile } from '../lib/units/garrisonSpots';
+import { isHomeSourceId } from '../lib/units/sendSources';
 import { useSendBlockText, useSendPickerRows, useSendSources } from '../composables/useSendSources';
 import { motionEnabled } from '../lib/motion';
 import MobileDispatchSheet from '../components/hud/MobileDispatchSheet.vue';
@@ -534,9 +535,11 @@ watch(
 const rangeOverlayHexes = computed<AxialCoord[] | null>(() => {
   const draft = world.dispatchDraft;
   if (!draft || draft.mission !== 'move') return null;
-  if (!world.selectedSettlementId) return null;
+  // The realm the units leave from: the open one, or another realm of the player's when the picker sent its garrison.
+  const source = world.dispatchSource;
+  if (!source) return null;
 
-  const home = world.model.getSettlement(world.selectedSettlementId);
+  const home = world.model.getSettlement(source.realmId);
   if (!home) return null;
 
   const speed = totalSpeed(draft.unitCounts, unitCatalogue.byType);
@@ -557,7 +560,7 @@ const rangeOverlayHexes = computed<AxialCoord[] | null>(() => {
   const origin =
     classifyUnitSelection(draft.unitCounts, unitCatalogue.byType) === 'fleet'
       ? { q: home.q, r: home.r }
-      : trainingSite({ q: home.q, r: home.r }, world.hud.buildings, draft.unitCounts, unitCatalogue.byType);
+      : trainingSite({ q: home.q, r: home.r }, source.buildings, draft.unitCounts, unitCatalogue.byType);
   const range = reachableRange(origin, origin, hoursOfFood, ctx);
   return [...range.keys()].map(parseKey);
 });
@@ -632,7 +635,7 @@ watch(
 watch(
   () => {
     const id = world.sendPicker?.selectedId;
-    if (!id || id === 'home') return null;
+    if (!id || isHomeSourceId(id)) return null;
     const row = sendPicker.rows.value.find((r) => r.id === id);
     return row ? (row.ok ? 'ok' : (row.block ?? null)) : null;
   },
@@ -892,30 +895,44 @@ const isMineTile = computed(
 );
 
 // Issue: mobile army dispatch. Every tile's ring gets a "send army" bubble —
-// what it's called and what it starts depends on who (if anyone) owns the
-// tile: another player's settlement reads "Attack" and targets it directly;
-// the player's own *other* settlement (multi-settlement accounts) reads
-// "Support"; anything else (own current settlement, unclaimed ground, open
-// water) is a plain Move with `route = [coord]`. Always enabled, so opening a
-// ring runs no route search: the send picker it opens lists which armies can
-// go and why the others cannot. Enabled on every viewport —
-// on desktop, starting a draft this way just pre-fills ArmyPanel's existing
-// dispatch form, same as picking a mission tab and a target there by hand.
-function sendMissionAt(tile: Tile): 'move' | 'attack' | 'support' {
-  const ownerSettlementId = tile.ownerId;
-  if (!ownerSettlementId) return 'move';
-  if (world.model.getSettlement(ownerSettlementId)?.ownerId !== player.id) return 'attack';
-  if (world.isRealmSettlement(ownerSettlementId)) return 'move';
-  // Support joins one of the host's garrison spots: its longhouse, a tower or a dock. Anywhere else on its land it is a plain move.
-  return isGarrisonSpotTile(tile, world.model.getSettlement(ownerSettlementId)) ? 'support' : 'move';
+// what it's called depends on who (if anyone) owns the tile: another player's
+// settlement reads "Attack" and targets it directly; anything else (any hex of
+// the player's own realms, unclaimed ground, open water) reads "Send army here"
+// and opens the picker with the hex as a plain Move target. On a hex of one of
+// the player's own realms the picker sends that realm's troops there as a Move
+// and the troops of the player's other realms as a Support to that realm
+// (`targetRealmId`/`targetBuildingCoord`, see lib/units/sendSources.ts
+// `missionFor`). Always enabled, so opening a ring runs no route search: the
+// send picker it opens lists which armies can go and why the others cannot.
+// Enabled on every viewport — on desktop, starting a draft this way just
+// pre-fills ArmyPanel's existing dispatch form, same as picking a mission tab
+// and a target there by hand.
+function sendMissionAt(tile: Tile): 'move' | 'attack' {
+  if (!tile.ownerId) return 'move';
+  return ownRealmAt(tile) ? 'move' : 'attack';
+}
+/** The player's realm that owns `tile` (the open realm for its own or a linked member's hex), else null. */
+function ownRealmAt(tile: Tile): string | null {
+  if (!tile.ownerId) return null;
+  if (world.isRealmSettlement(tile.ownerId)) return world.selectedSettlementId;
+  if (world.model.getSettlement(tile.ownerId)?.ownerId !== player.id) return null;
+  return world.ownRealmOf(tile.ownerId) ?? tile.ownerId;
+}
+/**
+ * What the picker aims at on `tile`: an attack names the owning settlement; a hex of the player's own realm names that realm and
+ * the garrison spot a support from another realm joins (the tapped hex when it is a spot, else the realm's centre).
+ */
+function sendPickerTargetAt(tile: Tile, coord: AxialCoord): SendPickerTarget {
+  if (sendMissionAt(tile) === 'attack') return { mission: 'attack', targetSettlementId: tile.ownerId ?? undefined };
+  const realmId = ownRealmAt(tile);
+  const realm = realmId ? world.model.getSettlement(realmId) : undefined;
+  if (!realmId || !realm) return {};
+  const spot = isGarrisonSpotTile(tile, world.model.getSettlement(tile.ownerId ?? realmId)) ? coord : { q: realm.q, r: realm.r };
+  return { targetRealmId: realmId, targetBuildingCoord: spot };
 }
 function sendArmyAction(tile: Tile): RingAction {
-  const mission = sendMissionAt(tile);
-  const id = mission === 'move' ? 'send-army' : mission;
-  const label = t(
-    mission === 'attack' ? 'hud.ringMenu.actions.attack' : mission === 'support' ? 'hud.ringMenu.actions.support' : 'hud.ringMenu.actions.sendArmyHere',
-  );
-  return { id, label };
+  const attack = sendMissionAt(tile) === 'attack';
+  return { id: attack ? 'attack' : 'send-army', label: t(attack ? 'hud.ringMenu.actions.attack' : 'hud.ringMenu.actions.sendArmyHere') };
 }
 
 /** Whether the ring offers Hunt on this tile (huntActions): a wildlife camp still on the map, live mode only. */
@@ -931,20 +948,24 @@ function isHuntableCamp(tile: Tile): boolean {
 function retargetSendPicker(coord: AxialCoord, tile: Tile) {
   const picker = world.sendPicker;
   if (!picker) return;
-  const mission = picker.mission === 'hunt' && isHuntableCamp(tile) ? 'hunt' : sendMissionAt(tile);
+  const hunting = picker.mission === 'hunt' && isHuntableCamp(tile);
+  const options: SendPickerTarget = hunting ? { mission: 'hunt' } : sendPickerTargetAt(tile, coord);
+  const mission = options.mission ?? 'move';
   const selected = picker.selectedId;
   // A route still being searched keeps the army too: the watch on the selected row drops it once the search says it cannot go.
-  const selectedRow = selected ? sendSources.evaluate(sendSources.targetAt(mission, coord)).find((r) => r.id === selected) : undefined;
+  const selectedRow = selected
+    ? sendSources
+        .evaluate(
+          sendSources.targetAt(mission, coord, {
+            targetSettlementId: options.targetSettlementId,
+            ownRealmId: options.targetRealmId,
+            supportSpot: options.targetBuildingCoord,
+          }),
+        )
+        .find((r) => r.id === selected)
+    : undefined;
   const canGo = !!selectedRow && (selectedRow.ok || selectedRow.block === 'pending');
-  world.retargetSendPicker(
-    coord,
-    mission === 'move'
-      ? {}
-      : mission === 'hunt'
-        ? { mission }
-        : { mission, targetSettlementId: tile.ownerId ?? undefined, targetBuildingCoord: mission === 'support' ? coord : undefined },
-    canGo,
-  );
+  world.retargetSendPicker(coord, options, canGo);
 }
 
 // Hunt a wildlife camp: offered on a camp tile that is still on the map, live mode only
@@ -1334,7 +1355,7 @@ async function onRingSelect(id: string) {
       await raze();
       return;
     case 'send-army':
-      if (selectedCoord.value) world.openSendPicker(selectedCoord.value);
+      if (selectedCoord.value && tile) world.openSendPicker(selectedCoord.value, sendPickerTargetAt(tile, selectedCoord.value));
       closeRing();
       return;
     case 'send-settlers':
@@ -1356,15 +1377,7 @@ async function onRingSelect(id: string) {
       closeRing();
       return;
     case 'attack':
-    case 'support':
-      if (selectedCoord.value && tile?.ownerId) {
-        // A support names the tapped hex: the host's garrison spot the army joins.
-        world.openSendPicker(selectedCoord.value, {
-          mission: id,
-          targetSettlementId: tile.ownerId,
-          targetBuildingCoord: id === 'support' ? selectedCoord.value : undefined,
-        });
-      }
+      if (selectedCoord.value && tile?.ownerId) world.openSendPicker(selectedCoord.value, { mission: 'attack', targetSettlementId: tile.ownerId });
       closeRing();
       return;
     default:

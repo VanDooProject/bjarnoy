@@ -246,7 +246,7 @@
       "water": "Water"
     },
     "lore": {
-      "longhouse": "The heart of the settlement. Its level sets the claim radius, the build slots and which buildings unlock, and it produces a little of every resource and adds storage of its own. Every settlement starts with one, standing on grass.",
+      "longhouse": "The heart of the settlement. Its level sets the claim radius, the build slots and which buildings unlock, and it produces a little of every resource and adds storage of its own. Every settlement starts with one, standing on grass or, if it was founded from the sea, on the sand of the shore.",
       "lumberjack": "Fells timber on forested ground — the wood behind every wall and roof.",
       "quarry": "Cuts stone from a mountain ridge — the bones of every keep.",
       "odinstatue": "Odin's statue on grass, at Longhouse 25 behind a level-10 Druid Hut. Wisdom: every build in this settlement takes 2% less time per level (10% at level 5). Ravens: its claim, its towers and its armies see 2 more rings per level (10 at level 5). Counts as the settlement's one shrine.",
@@ -1266,8 +1266,8 @@
     },
     "sendOut": {
       "heading": "Sending an army that is already out",
-      "spots": "Your troops stand in your longhouse, your towers and your docks. Ships wait at docks, and at the longhouse too if it stands on sand by the sea. New units join the nearest place that can hold them, and an army comes back to the place it left from. To support another settlement of yours, tap its longhouse, one of its towers or one of its docks.",
-      "orders": "Tap Send army here, Attack, Support or Hunt on a hex and pick the army to send: your garrison or an army that is already out. A standing army can move, attack, support or hunt. An army still on the march can be redirected with Premium. While you pick, tap another hex to aim at that one instead. Attacking a settlement means attacking a building in its realm: a building with a garrison is defended by it. Supporting a settlement means joining one of its garrisons.",
+      "spots": "Your troops stand in your longhouse, your towers and your docks. Ships wait at docks, and at the longhouse too if it stands on sand by the sea. New units join the nearest place that can hold them, and an army comes back to the place it left from. To send troops to another realm of yours, tap one of its hexes: they join its garrison as support at the spot you tapped, or at its longhouse.",
+      "orders": "Tap Send army here, Attack or Hunt on a hex and pick the army to send: the garrison of any of your realms, or an army of yours that is already out. Each row names its realm and what its troops would do there: on a hex of your own realm they move there, troops of your other realms support it. A standing army can move, attack, support or hunt. An army still on the march can be redirected with Premium. While you pick, tap another hex to aim at that one instead. Attacking a settlement means attacking a building in its realm: a building with a garrison is defended by it. Supporting a settlement means joining one of its garrisons.",
       "split": "You can send only part of a standing army. The rest keeps standing where it is. An army on the march always goes whole.",
       "reach": "An army only goes if it can get there and still has the food for the way home. The ones that cannot stay in the list, greyed out, with the reason.",
       "support": "An army that is supporting another settlement has to be recalled first."

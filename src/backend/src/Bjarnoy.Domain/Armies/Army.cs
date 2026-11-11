@@ -71,6 +71,14 @@ public enum ArmyMission
     /// see <see cref="Army.SettleHuntArrival"/>.
     /// </summary>
     Hunt = 5,
+
+    /// <summary>
+    /// Travel to a free sand shore hex and, once the army has stood there for <see cref="BeachCamp.BuildDuration"/>, set up a
+    /// beach camp: a one-hex settlement (<c>ArmyService.ResolveCampAsync</c>, <see cref="Army.PlanCampBuild"/>). The two camp
+    /// builders are used up. The camp's cost rides in <see cref="Army.Loot"/> until then, so a recall or an invalid site brings
+    /// it home with the army. See <c>docs/design/skirmish/beach-camp.md</c>.
+    /// </summary>
+    SetUpCamp = 6,
 }
 
 /// <summary>
@@ -260,6 +268,11 @@ public sealed record Army
     /// #55 §6: a convoy already travelling is never invalidated later by a
     /// renown or slot rule that changes after it left).
     /// </param>
+    /// <param name="isCampSiteOccupied">
+    /// Only consulted for <see cref="ArmyMission.SetUpCamp"/>: whether <paramref name="destination"/> holds a building of any
+    /// player, a settlement centre or a wildlife camp (see <see cref="BeachCamp.CheckSite"/>). The caller has the database, so it
+    /// supplies this; <see langword="null"/> means nothing stands there.
+    /// </param>
     /// <param name="speedFactor">
     /// The world's speed multiplier, mirroring how build/training durations
     /// are scaled in <see cref="Buildings.Settlement.PlanBuild"/>. Defaults to
@@ -305,7 +318,8 @@ public sealed record Army
         HexCoord? targetCampCoord = null,
         bool targetCampIsWater = false,
         bool targetCampIsSand = false,
-        IReadOnlyList<GarrisonSpot>? targetSpots = null)
+        IReadOnlyList<GarrisonSpot>? targetSpots = null,
+        Func<HexCoord, bool>? isCampSiteOccupied = null)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
@@ -353,10 +367,41 @@ public sealed record Army
             }
         }
 
+        var isCampMission = mission == ArmyMission.SetUpCamp;
+        if (isCampMission)
+        {
+            var builderCount = normalisedRequest
+                .Where(s => s.Type == UnitType.CampBuilder)
+                .Sum(s => s.Count);
+            if (builderCount != BeachCamp.RequiredBuilders)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.WrongCampBuilderCount);
+            }
+
+            var siteRejection = BeachCamp.CheckSite(destination, terrainAt, giants, isCampSiteOccupied);
+            if (siteRejection != DispatchRejection.None)
+            {
+                return DispatchDecision.Rejected(siteRejection);
+            }
+        }
+
         var settlementDecision = settlement.PlanDispatch(fromSpot, requestedUnits, provisions, now);
         if (!settlementDecision.Accepted)
         {
             return DispatchDecision.Rejected(settlementDecision.Rejection);
+        }
+
+        // The camp's cost leaves the stock now, like the provisions (and not out of what the build queue has reserved), and
+        // rides in the army's Loot.
+        var dispatchedFrom = settlementDecision.Settlement!;
+        if (isCampMission)
+        {
+            if (!dispatchedFrom.TrySpendAvailable(BeachCamp.Cost, now, out var paidForCamp))
+            {
+                return DispatchDecision.Rejected(DispatchRejection.InsufficientResources);
+            }
+
+            dispatchedFrom = dispatchedFrom with { Resources = paidForCamp };
         }
 
         // A fleet needs every hex of its route to be open sea; a land army
@@ -433,7 +478,9 @@ public sealed record Army
         // carrying, with nobody feeding it on the way — so the same
         // "can it get back" check that gates Move/Attack/Raid has to gate
         // Support too, or a recalled guest starves on the road home.
-        var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
+        // A camp army also stands on the site while the camp is built, and must not be due to turn around before it is up.
+        var standingHours = isCampMission ? BeachCamp.ScaledBuildDuration(speedFactor).TotalHours : 0;
+        var totalFoodNeeded = (cumulativeHours[^1] + standingHours + returnCumulativeHours[^1]) * upkeepPerHour;
 
         if (provisions < totalFoodNeeded)
         {
@@ -455,9 +502,10 @@ public sealed record Army
             TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             TargetBuildingCoord = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetBuildingCoord : null,
             TargetCampCoord = mission == ArmyMission.Hunt ? targetCampCoord : null,
+            Loot = isCampMission ? BeachCamp.Cost : default,
         };
 
-        return DispatchDecision.Accept(settlementDecision.Settlement!, army);
+        return DispatchDecision.Accept(dispatchedFrom, army);
     }
 
     /// <summary>
@@ -610,6 +658,7 @@ public sealed record Army
     /// </summary>
     private static bool SkipsDestinationTerrainCheck(bool isFleet, ArmyMission mission, bool targetCampIsSand) =>
         isFleet && (mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid or ArmyMission.Found
+            or ArmyMission.SetUpCamp
             || (mission == ArmyMission.Hunt && targetCampIsSand));
 
     /// <summary>
@@ -1205,6 +1254,42 @@ public sealed record Army
     }
 
     /// <summary>
+    /// Decides whether an <see cref="ArmyMission.SetUpCamp"/> army has stood on its site long enough
+    /// (<see cref="Movement.ArrivesAt"/> plus <see cref="BeachCamp.ScaledBuildDuration"/>) for the camp to be up, and if so
+    /// whether the site is still free. A pure decision; creating the settlement is <c>ArmyService.ResolveCampAsync</c>'s job.
+    /// A recalled army (<see cref="Movement.IsReturning"/>) is never due: recalling during the build cancels the camp.
+    /// When the site is no longer free the caller settles the army the ordinary way: it stands, auto-returns and can be
+    /// recalled, and its <see cref="Loot"/> (the camp's cost) comes home with it.
+    /// </summary>
+    /// <param name="siteStillFree">The site rule (<see cref="BeachCamp.CheckSite"/>) re-checked as of the completion instant.</param>
+    public static CampBuildResult PlanCampBuild(Army army, DateTimeOffset now, double speedFactor, bool siteStillFree)
+    {
+        ArgumentNullException.ThrowIfNull(army);
+
+        if (army.Mission != ArmyMission.SetUpCamp
+            || army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit)
+        {
+            return new CampBuildResult(false, false, default, default, [], 0);
+        }
+
+        var completesAt = inTransit.Movement.ArrivesAt + BeachCamp.ScaledBuildDuration(speedFactor);
+        var site = inTransit.Movement.Path[^1];
+        if (now < completesAt)
+        {
+            return new CampBuildResult(false, false, site, completesAt, [], 0);
+        }
+
+        if (!siteStillFree)
+        {
+            return new CampBuildResult(true, false, site, completesAt, [], 0);
+        }
+
+        // The camp builders are used up; whatever else travelled along (troops, the ships that carried them) garrisons the camp.
+        var garrison = army.Stacks.Where(s => s.Type != UnitType.CampBuilder).ToList();
+        return new CampBuildResult(true, true, site, completesAt, garrison, army.ProvisionsAt(completesAt));
+    }
+
+    /// <summary>
     /// Redirects an <see cref="ArmyMission.Found"/> convoy to a different
     /// target hex — issue #55 §6's "retargetable" edge case, for when the
     /// original target was claimed by someone else mid-transit (see
@@ -1653,7 +1738,7 @@ public sealed record Army
             return FieldOrderResult.Rejected(FieldOrderRejection.NoActiveJourney);
         }
 
-        if (mission == ArmyMission.Found)
+        if (mission is ArmyMission.Found or ArmyMission.SetUpCamp)
         {
             return FieldOrderResult.Rejected(FieldOrderRejection.MissionNotAllowed);
         }
@@ -2174,6 +2259,21 @@ public sealed record ArmySupportArrivalResult(Army Army, bool Arrived);
 public sealed record FoundingArrivalResult(
     bool Arrived, bool ShouldFound, Army? Army, IReadOnlyList<UnitStack> GarrisonForNewSettlement, HexCoord FoundedAt);
 
+/// <summary>
+/// What <see cref="Army.PlanCampBuild"/> decided about an <see cref="ArmyMission.SetUpCamp"/> army.
+/// </summary>
+/// <param name="Due">
+/// Whether the army has stood on its site for the whole build time (<see cref="BeachCamp.ScaledBuildDuration"/>). When
+/// <see langword="false"/> nothing is decided yet and the caller settles the army the ordinary way.
+/// </param>
+/// <param name="ShouldBuild">Due and the site is still free: the camp is set up and the army row goes.</param>
+/// <param name="Site">The camp's hex.</param>
+/// <param name="CompletesAt">When the camp was finished: arrival plus build time.</param>
+/// <param name="GarrisonForCamp">Every stack but the used-up camp builders (troops and ships that came along).</param>
+/// <param name="FoodForCamp">The army's leftover provisions at <paramref name="CompletesAt"/>, for the camp's food pile.</param>
+public sealed record CampBuildResult(
+    bool Due, bool ShouldBuild, HexCoord Site, DateTimeOffset CompletesAt, IReadOnlyList<UnitStack> GarrisonForCamp, double FoodForCamp);
+
 /// <summary>Why <see cref="Army.RetargetFounding"/> was refused.</summary>
 public enum RetargetFoundingRejection
 {
@@ -2400,6 +2500,15 @@ public enum DispatchRejection
 
     /// <summary>The route search hit its node cap before reaching the destination: the trip is too long to plan.</summary>
     RouteTooLong,
+
+    /// <summary>An <see cref="ArmyMission.SetUpCamp"/> dispatch did not name exactly <see cref="BeachCamp.RequiredBuilders"/> camp builders.</summary>
+    WrongCampBuilderCount,
+
+    /// <summary>An <see cref="ArmyMission.SetUpCamp"/> dispatch's target hex is not a sand hex on the shoreline.</summary>
+    CampSiteNotSandShore,
+
+    /// <summary>An <see cref="ArmyMission.SetUpCamp"/> dispatch's target hex holds a building, a settlement centre, a wildlife camp or a giant.</summary>
+    CampSiteNotFree,
 
     /// <summary>The dispatch's <c>FromSpot</c> is not a garrison spot (longhouse, tower or dock) of the settlement.</summary>
     NotAGarrisonSpot,

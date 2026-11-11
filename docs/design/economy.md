@@ -275,7 +275,8 @@ play.
   the same for bog-ore works. A river or creek running through a claim is a
   trade: fewer producer hexes, and a much stronger boost on the ones that are
   left.
-- **Which ground takes what.** Sand takes only towers and walls. Every other
+- **Which ground takes what.** Sand takes only towers, walls and the Longhouse of a settlement founded on the shore (it
+  is never placed anew, only levelled where it stands). Every other
   ordinary building (Smithy, Archery Range, Barracks, Siege Workshop and the
   rest) stands on grass only. A stream, a widening or a river spring takes no
   building. A full-width river hex takes only what has art for its shape:
@@ -630,7 +631,9 @@ their renown.
   - **Exactly once per settlement.** Each quest has a bit in the settlement's
     claimed-quests mask, set in the same save that pays the reward, so a
     double click or a retry gets a 409 (`AlreadyClaimed`), never a second
-    payment. A second settlement has its own list.
+    payment. Quests are enabled only on a player's first settlement in a world
+    (the oldest by founding time): any later settlement lists none, and claiming one there gets a 409
+    (`NotFirstSettlement`).
   - **Only standing buildings count.** Queued and under-construction orders do
     not; a producer is any building (other than the Longhouse) that yields
     wood, brick, food or iron of its own, so storage, towers and the

@@ -2,7 +2,15 @@ using System.Net;
 using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
+using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Settlers;
+using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -149,5 +157,51 @@ public sealed class QuestEndpointsTests : IAsyncLifetime
         client.DefaultRequestHeaders.Remove("X-Owner-Id");
         client.DefaultRequestHeaders.Add("X-Owner-Id", OwnerId);
         Assert.False((await GetAsync(client, settlement.Id))!.Quests.Single(q => q.Id == "longhouse2").Claimed);
+    }
+
+    [Fact]
+    public async Task Only_the_players_first_settlement_has_quests()
+    {
+        using var client = _factory.CreateClient();
+        var first = await FoundAsync(client);
+
+        Guid secondId;
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var entity = await db.Settlements.AsNoTracking().FirstAsync(s => s.Id == first.Id, Ct);
+            var centre = new HexCoord(first.Q + 40, first.R);
+            var second = new SettlementEntity
+            {
+                WorldId = entity.WorldId,
+                IslandId = entity.IslandId,
+                Name = "Lillestad",
+                OwnerName = entity.OwnerName,
+                OwnerId = entity.OwnerId,
+                UserId = entity.UserId,
+                FoundedAt = entity.FoundedAt.AddMinutes(10),
+            };
+            var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
+            second.ApplyDomain(new Settlement
+            {
+                Id = second.Id,
+                Name = "Lillestad",
+                Centre = centre,
+                Buildings = [new PlacedBuilding(centre, BuildingType.Longhouse, 1)],
+                Resources = ResourcePool.Create(BuildingCatalogue.FoundingStock, production, capacity, entity.SettledAt),
+            });
+            db.Settlements.Add(second);
+            await db.SaveChangesAsync(Ct);
+            secondId = second.Id;
+        }
+
+        var firstAgain = await GetAsync(client, first.Id);
+        var secondRead = await GetAsync(client, secondId);
+        Assert.Equal(Quests.All.Count, firstAgain!.Quests.Count);
+        Assert.Empty(secondRead!.Quests);
+
+        var refused = await client.PostAsync(ClaimUrl(secondId, "producers3"), null, Ct);
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Contains("NotFirstSettlement", await refused.Content.ReadAsStringAsync(Ct));
     }
 }

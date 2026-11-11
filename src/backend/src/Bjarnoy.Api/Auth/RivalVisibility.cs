@@ -132,10 +132,12 @@ internal static class RivalVisibility
         var discs = new List<(PlacedBuildingEntity, (HexCoord, int))>();
         foreach (var building in settlement.Buildings.Where(b => b.Level >= 1))
         {
-            if (building.Type == BuildingType.Longhouse
-                && Settlement.LonghouseDisc(new HexCoord(settlement.CentreQ, settlement.CentreR), building.Level) is { } longhouse)
+            if (building.Type is BuildingType.Longhouse or BuildingType.BeachCamp
+                && Settlement.CentreDisc(
+                    new HexCoord(settlement.CentreQ, settlement.CentreR), building.Type == BuildingType.Longhouse ? building.Level : 0,
+                    building.Type == BuildingType.BeachCamp) is { } centreDisc)
             {
-                discs.Add((building, longhouse));
+                discs.Add((building, centreDisc));
             }
             else if (building.Type == BuildingType.Tower)
             {
