@@ -6,11 +6,14 @@
 - Only a maxed Longhouse shows the crown.
 - The time until a short-of-resources upgrade becomes affordable is a premium feature. Free accounts see only that
   resources are short.
+- The dial scales with the map like the construction dial and sits at the same height above its tile. Zoomed out far
+  enough that the construction dial drops its time, the dial is empty: ring only, no number, no box.
 - Next to the dial a box shows the details. Near zoom: up to three rows (upgrade state, production or Town Square feast,
-  garrison troop types, training queue). Mid zoom: two rows. Far zoom: the dial only.
+  garrison troop types, training queue). Mid zoom: two rows.
+- Bridges get a dial; wall pieces do not.
 - The Longhouse drops its production row while troops are garrisoned there.
 - Up to three missing prerequisites are listed; from four on, two are listed plus "+n more".
 - Overlapping markers stack left to right: the right-most is on top. Hovering or tapping a marker brings it to the front,
   enlarged.
-- The building info can be switched off (map button or H). While it is on, it replaces the construction dial for upgrades
+- The building info can be switched off (icon button at the top left of the map, or H). While it is on, it replaces the construction dial for upgrades
   of existing buildings.
