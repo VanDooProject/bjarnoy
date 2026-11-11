@@ -154,7 +154,7 @@ public static class FieldBattleResolver
         }
 
         var longhouseLevel = buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
-        if (Settlement.LonghouseDisc(settlementCentre, longhouseLevel) is not { } centreDisc
+        if (Settlement.CentreDisc(settlementCentre, longhouseLevel, Settlement.HasBeachCampAt(buildings, settlementCentre)) is not { } centreDisc
             || centreDisc.Centre.DistanceTo(hex) > centreDisc.Radius)
         {
             return FieldBattleClaim.None;

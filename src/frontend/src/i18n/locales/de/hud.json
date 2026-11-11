@@ -391,6 +391,7 @@
     "longhouse": "Langhaus",
     "tower": "Wachturm",
     "dock": "Werft",
+    "beachcamp": "Strandlager",
     "from": "aus: {spots}",
     "severalSpots": "Diese Einheiten stehen an mehreren Orten. Von mehreren Orten gleichzeitig loszuschicken, ist bald möglich."
   },

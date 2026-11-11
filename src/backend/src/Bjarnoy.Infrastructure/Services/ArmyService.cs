@@ -283,13 +283,22 @@ public sealed class ArmyService(
                 Founding.IsHexFoundable(target, claimedSettlements, SettlementService.MinimumSpacing, dispatchGiantIndex);
         }
 
+        // SetUpCamp-specific: what stands on the camp hex is database state Army.PlanDispatch cannot see.
+        Func<HexCoord, bool>? isCampSiteOccupied = null;
+        if (mission == ArmyMission.SetUpCamp)
+        {
+            var campSiteOccupied = await IsCampSiteOccupiedAsync(settlement.WorldId, effectiveDestination, now, cancellationToken).ConfigureAwait(false);
+            var campSite = effectiveDestination;
+            isCampSiteOccupied = hex => campSiteOccupied && hex == campSite;
+        }
+
         var decision = Army.PlanDispatch(
             settled, fromSpot, unitCounts, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             mission is ArmyMission.Attack or ArmyMission.Raid or ArmyMission.Support ? targetBuildingCoord : null, targetClaimDiscs,
             isHexFoundable, renownAndSlotAllowed, session.SpeedFactor, rivers.IsRiver, rivers.IsWide,
-            dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater, targetCampIsSand: targetCampIsSand,
-            targetSpots: targetSpots);
+            dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater,
+            targetCampIsSand: targetCampIsSand, targetSpots: targetSpots, isCampSiteOccupied: isCampSiteOccupied);
 
         if (!decision.Accepted)
         {
@@ -321,6 +330,24 @@ public sealed class ArmyService(
             ((ArmyLocation.InTransit)decision.Army.Location).Movement.ArrivesAt);
 
         return new ArmyDispatchResult(DispatchRejection.None, armyEntity);
+    }
+
+    /// <summary>
+    /// Whether anything but bare ground stands on <paramref name="hex"/>: a building of any player (a level-0 foundation
+    /// included), a settlement centre or a wildlife camp. Giants are the map's, checked by <see cref="BeachCamp.CheckSite"/>
+    /// through the giant index. The one fact a beach camp site needs from the database, at dispatch and again when the camp is due.
+    /// </summary>
+    private async Task<bool> IsCampSiteOccupiedAsync(Guid worldId, HexCoord hex, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (await _dbContext.PlacedBuildings.AsNoTracking()
+                .AnyAsync(b => b.Settlement!.WorldId == worldId && b.Q == hex.Q && b.R == hex.R, cancellationToken).ConfigureAwait(false)
+            || await _dbContext.Settlements.AsNoTracking()
+                .AnyAsync(s => s.WorldId == worldId && s.CentreQ == hex.Q && s.CentreR == hex.R, cancellationToken).ConfigureAwait(false))
+        {
+            return true;
+        }
+
+        return await _campService.FindCampAsync(worldId, hex, now, cancellationToken).ConfigureAwait(false) is not null;
     }
 
     /// <summary>
@@ -495,13 +522,7 @@ public sealed class ArmyService(
             return new RecallResult(RecallOutcome.NothingToRecall);
         }
 
-        var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
-        var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
-            .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
-
         var domain = army.ToDomain();
-        var home = army.Settlement.HomeHexFor(domain);
         HexCoord? currentHex = null;
         if (domain.Location is ArmyLocation.Supporting supporting)
         {
@@ -516,8 +537,7 @@ public sealed class ArmyService(
         var isRecallable = domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false }
             || (domain.Location is ArmyLocation.Supporting && currentHex is not null);
 
-        var recalled = domain.Recall(
-            now, home, sampler.TerrainAt, currentHex, army.Settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls);
+        var recalled = await PlanRecallAsync(army, domain, now, currentHex, cancellationToken).ConfigureAwait(false);
 
         if (recalled is null)
         {
@@ -535,6 +555,24 @@ public sealed class ArmyService(
         _logger.LogInformation("Army {ArmyId} recalled at {Now}, now heading home.", armyId, now);
 
         return new RecallResult(RecallOutcome.Recalled, army);
+    }
+
+    /// <summary>
+    /// <see cref="Army.Recall"/> for <paramref name="domain"/> (the domain view of <paramref name="army"/>) as of <paramref name="at"/>,
+    /// with the inputs every recall uses: the home hex, the world's terrain, speed factor, rivers and the owner's walls. Null when the
+    /// army is not recallable or no route home exists. The one place those inputs are gathered.
+    /// </summary>
+    private async Task<Army?> PlanRecallAsync(
+        ArmyEntity army, Army domain, DateTimeOffset at, HexCoord? currentHex, CancellationToken cancellationToken)
+    {
+        var world = army.Settlement!.World!;
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
+        var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+            .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
+        var home = army.Settlement.HomeHexFor(domain);
+
+        return domain.Recall(at, home, sampler.TerrainAt, currentHex, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls);
     }
 
     /// <summary>
@@ -986,6 +1024,15 @@ public sealed class ArmyService(
             return await ResolveHuntAsync(army, domain, now, cancellationToken).ConfigureAwait(false);
         }
 
+        // A camp army stands on its site while the camp is built: nothing is due before arrival plus the build time (then it
+        // falls through to the ordinary settle below, which only turns it around once its provisions demand it).
+        if (domain.Mission == ArmyMission.SetUpCamp
+            && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } campTransit
+            && now >= campTransit.Movement.ArrivesAt + BeachCamp.ScaledBuildDuration(army.Settlement!.World!.SpeedFactor))
+        {
+            return await ResolveCampAsync(army, domain, now, cancellationToken).ConfigureAwait(false);
+        }
+
         if (domain.Mission == ArmyMission.Found
             && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } foundTransit
             && now >= foundTransit.Movement.ArrivesAt)
@@ -1359,6 +1406,64 @@ public sealed class ArmyService(
         _logger.LogInformation(
             "Settler convoy (army {ArmyId}) founded settlement {NewSettlementId} at {Coord} for user {UserId}.",
             armyEntity.Id, newSettlement.Id, targetHex, originSettlement.UserId);
+
+        return ArmySettleOutcome.FoldedHome;
+    }
+
+    /// <summary>
+    /// Settles an <see cref="ArmyMission.SetUpCamp"/> army once it has stood on its site for the whole build time: re-checks the
+    /// site as of now (<see cref="BeachCamp.CheckSite"/>, the same facts as at dispatch) and either sets the camp up
+    /// (<see cref="SettlementService.FoundCampFromConvoyAsync"/>, consuming the army: the builders are used up, the cost in its
+    /// <see cref="Army.Loot"/> is spent, the rest garrisons the camp and the leftover provisions fill its food pile) or — when the
+    /// site was taken in the meantime — recalls it as of the completion instant, so the builders and the cost (its loot) come home.
+    /// </summary>
+    private async Task<ArmySettleOutcome> ResolveCampAsync(
+        ArmyEntity armyEntity, Army domain, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var originSettlement = armyEntity.Settlement!;
+        var world = originSettlement.World!;
+        var site = ((ArmyLocation.InTransit)domain.Location).Movement.Path[^1];
+
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
+        var giants = await LoadGiantIndexAsync(world.Id, cancellationToken).ConfigureAwait(false);
+        var occupied = await IsCampSiteOccupiedAsync(world.Id, site, now, cancellationToken).ConfigureAwait(false);
+        var siteStillFree = BeachCamp.CheckSite(site, sampler.TerrainAt, giants, hex => occupied && hex == site) == DispatchRejection.None;
+
+        var plan = Army.PlanCampBuild(domain, now, world.SpeedFactor, siteStillFree);
+        if (!plan.ShouldBuild)
+        {
+            // The shore is no longer free: the builders and the camp's cost (the loot) come home. The army is recalled as of the
+            // completion instant, so it is returning afterwards and this branch can never fire for it again.
+            var recalled = await PlanRecallAsync(armyEntity, domain, plan.CompletesAt, null, cancellationToken).ConfigureAwait(false);
+            if (recalled is not null)
+            {
+                return await ApplyArmyOutcomeAsync(armyEntity, recalled, now, cancellationToken).ConfigureAwait(false);
+            }
+
+            _logger.LogWarning(
+                "Camp army {ArmyId} found its site {Site} taken but has no route home; it stands there like a Move army.",
+                armyEntity.Id, site);
+            return await ApplyArmyOutcomeAsync(armyEntity, domain, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        var camp = await _settlementService.FoundCampFromConvoyAsync(
+            world.Id,
+            plan.Site,
+            originSettlement.UserId,
+            originSettlement.OwnerName,
+            originSettlement.OwnerId,
+            $"{originSettlement.OwnerName}'s Camp",
+            plan.GarrisonForCamp,
+            plan.FoodForCamp,
+            plan.CompletesAt,
+            cancellationToken).ConfigureAwait(false);
+
+        armyEntity.RecordWalkedToEnd();
+        _dbContext.Armies.Remove(armyEntity);
+
+        _logger.LogInformation(
+            "Camp builders (army {ArmyId}) set up beach camp {CampId} at {Coord} for user {UserId}.",
+            armyEntity.Id, camp.Id, plan.Site, originSettlement.UserId);
 
         return ArmySettleOutcome.FoldedHome;
     }

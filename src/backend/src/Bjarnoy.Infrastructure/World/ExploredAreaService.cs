@@ -205,7 +205,7 @@ public sealed class ExploredAreaService(GameDbContext dbContext, TimeProvider ti
             ravensBySettlement[settlement.Id] = ravens;
             var centre = new HexCoord(settlement.CentreQ, settlement.CentreR);
             // A settlement whose Longhouse is destroyed sees nothing around its centre (no source, no explored disc).
-            if (FogVisionRadii.ToVisionSource(centre, level, ravens) is { } centreSource)
+            if (FogVisionRadii.ToVisionSource(centre, level, ravens, domain.IsBeachCamp) is { } centreSource)
             {
                 sources.Add(centreSource);
                 discs.Add(new ExploredDisc(centre, centreSource.ExploredRadius));
