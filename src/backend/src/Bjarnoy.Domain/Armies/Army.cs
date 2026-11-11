@@ -180,6 +180,21 @@ public sealed record Army
         return Math.Max(0, Provisions - (TotalUpkeepPerHour * hours));
     }
 
+    /// <summary>
+    /// This army with its provisions rebased so that <see cref="ProvisionsAt"/> gives exactly <paramref name="provisionsAtThen"/> at
+    /// <paramref name="at"/>, burning at the army's <em>current</em> upkeep from there on. The stored figure is the active leg's
+    /// departure baseline, so after a fight that changed the stacks (smaller upkeep) or refilled the food it is set to
+    /// <c>provisionsAtThen + upkeep * hours since the leg departed</c>; for a leg that departs at <paramref name="at"/> (a battle's
+    /// return leg) that is <paramref name="provisionsAtThen"/> itself.
+    /// </summary>
+    public Army WithProvisionsAt(DateTimeOffset at, double provisionsAtThen)
+    {
+        var burnedSinceDeparture = Location is ArmyLocation.InTransit inTransit
+            ? TotalUpkeepPerHour * Math.Max(0, (at - inTransit.Movement.DepartedAt).TotalHours)
+            : 0;
+        return this with { Provisions = Math.Max(0, provisionsAtThen) + burnedSinceDeparture };
+    }
+
     /// <summary>Current hex: <paramref name="home"/> while <see cref="ArmyLocation.AtHome"/>, else the active leg's position.</summary>
     public HexCoord PositionAt(HexCoord home, DateTimeOffset now) => Location switch
     {
@@ -755,15 +770,14 @@ public sealed record Army
             RetreatImmune = true,
         };
 
-        var survivorArmy = army with
+        // Provisions are rebased to what the army carried at the battle instant, plus what the win refilled (same trick
+        // SettleTo's turn-around branch uses for Move).
+        var survivorArmy = (army with
         {
             Stacks = plan.AttackerSurvivors,
             Location = new ArmyLocation.InTransit(returning),
-            // Provisions are rebased to what the army carried at the battle instant, plus what the win refilled (same trick
-            // SettleTo's turn-around branch uses for Move).
-            Provisions = provisionsAtBattle + attack.Refill,
             Loot = plan.LootTaken,
-        };
+        }).WithProvisionsAt(battleInstant, provisionsAtBattle + attack.Refill);
 
         return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan, guestLosses, siege, attack);
     }
@@ -807,14 +821,13 @@ public sealed record Army
             RetreatImmune = true,
         };
 
-        return this with
+        // What the army carried at the battle instant, plus the food the win took from the camp to refill it.
+        return (this with
         {
             Stacks = plan.ArmySurvivors,
             Location = new ArmyLocation.InTransit(returning),
-            // What the army carried at the battle instant, plus the food the win took from the camp to refill it.
-            Provisions = provisionsAtBattle + plan.Refill,
             Loot = plan.Loot,
-        };
+        }).WithProvisionsAt(battleInstant, provisionsAtBattle + plan.Refill);
     }
 
     /// <summary>

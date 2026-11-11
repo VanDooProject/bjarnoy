@@ -240,13 +240,13 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         switch (plan.Winner)
         {
             case FieldBattleWinner.SideA:
-                updatedA = ApplyWin(domainA, movementA, plan.SideASurvivors, plan.LootTakenByWinner, plan.FoodRefillToWinner);
+                updatedA = ApplyWin(domainA, movementA, plan.SideASurvivors, plan.LootTakenByWinner, plan.FoodRefillToWinner, at);
                 updatedB = ApplyLoss(armyB.Settlement, domainB, hex, at, plan.SideBSurvivors, TakenFromLoser(plan), bog, rivers, walls);
                 break;
 
             case FieldBattleWinner.SideB:
                 updatedA = ApplyLoss(armyA.Settlement, domainA, hex, at, plan.SideASurvivors, TakenFromLoser(plan), bog, rivers, walls);
-                updatedB = ApplyWin(domainB, movementB, plan.SideBSurvivors, plan.LootTakenByWinner, plan.FoodRefillToWinner);
+                updatedB = ApplyWin(domainB, movementB, plan.SideBSurvivors, plan.LootTakenByWinner, plan.FoodRefillToWinner, at);
                 break;
 
             default:
@@ -274,18 +274,18 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         plan.LootTakenByWinner + new ResourceAmounts(0, 0, plan.FoodRefillToWinner, 0);
 
     private static Army ApplyWin(
-        Army domain, Movement movement, IReadOnlyList<UnitStack> survivors, ResourceAmounts lootTaken, double foodRefill) =>
-        domain with
+        Army domain, Movement movement, IReadOnlyList<UnitStack> survivors, ResourceAmounts lootTaken, double foodRefill,
+        DateTimeOffset at) =>
+        // The refill tops the provisions up, on top of the loot. The stored figure is the leg's departure baseline and the survivors
+        // burn less than the full army did, so it is rebased: what the army carried at the battle, plus the refill, from `at` on.
+        (domain with
         {
             Stacks = survivors,
             Loot = domain.Loot + lootTaken,
-            // The refill tops the provisions up, on top of the loot (the stored figure is the leg's departure baseline, so adding to
-            // it lifts what the army has now by exactly the refill).
-            Provisions = domain.Provisions + foodRefill,
             // The winner's own journey is untouched — it simply continues
             // wherever it was already headed (issue #206 §3).
             Location = new ArmyLocation.InTransit(movement),
-        };
+        }).WithProvisionsAt(at, domain.ProvisionsAt(at) + foodRefill);
 
     private static Army ApplyLoss(
         SettlementEntity? loserSettlement,
