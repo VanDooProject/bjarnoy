@@ -162,6 +162,24 @@ public static class UnitCatalogue
             RequiredLonghouseLevel = 10,
             RequiredBuildingType = BuildingType.CartWorkshop,
         },
+        [UnitType.CampBuilder] = new UnitDefinition
+        {
+            Type = UnitType.CampBuilder,
+            VisionRadius = 2,
+            Class = UnitClass.Civilian,
+            Attack = 0,
+            Defense = 3,
+            Speed = 4,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 40,
+            CargoSlots = 1,
+            UpkeepPerHour = 0.25,
+            // Flat price like the Settler's, but far cheaper: a camp is a stopgap base, not a new realm.
+            TrainingCost = new ResourceAmounts(Wood: 80, Stone: 40, Food: 40, Iron: 20),
+            TrainingDuration = TimeSpan.FromMinutes(12),
+            RequiredLonghouseLevel = 10,
+            RequiredBuildingType = BuildingType.CartWorkshop,
+        },
         [UnitType.Catapult] = new UnitDefinition
         {
             Type = UnitType.Catapult,

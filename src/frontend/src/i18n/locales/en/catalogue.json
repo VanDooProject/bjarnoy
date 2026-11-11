@@ -46,7 +46,8 @@
     "ram": "Battering ram",
     "karve": "Karve",
     "longship": "Longship",
-    "settler": "Settler"
+    "settler": "Settler",
+    "campbuilder": "Camp builder"
   },
   "giants": {
     "giantmountain": "Giant mountain",
