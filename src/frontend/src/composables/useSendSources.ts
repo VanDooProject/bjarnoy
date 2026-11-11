@@ -9,7 +9,7 @@ import { useAuthStore } from '../stores/auth';
 import { useGuildStore } from '../stores/guild';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import type { AxialCoord } from '../lib/hex/coords';
-import { findPathSteps, findSeaPathSteps, pathCost } from '../lib/map/hexPath';
+import { findPathSteps, findSeaPathSteps, pathCost, seaPathCost } from '../lib/map/hexPath';
 import { clearRouteCache, routeCacheVersion, routeKey, routeOrQueue, type RouteJob } from '../lib/map/routeQueue';
 import { gamePathContext } from '../lib/map/movementContext';
 import { isWaterCampFamily } from '../lib/map/campPlacement';
@@ -55,9 +55,10 @@ export function useSendSources() {
       guild.friendlyUserIds,
     );
     function* routeJob(from: AxialCoord, to: AxialCoord, fleet: boolean): RouteJob {
-      const path = yield* (fleet ? findSeaPathSteps(from, to, (c) => world.model.getTile(c.q, c.r).terrain) : findPathSteps(from, to, ctx));
+      const terrainAt = (c: AxialCoord) => world.model.getTile(c.q, c.r).terrain;
+      const path = yield* (fleet ? findSeaPathSteps(from, to, terrainAt) : findPathSteps(from, to, ctx));
       if (!path) return null;
-      const cost = fleet ? path.length - 1 : pathCost(path, ctx);
+      const cost = fleet ? seaPathCost(path, terrainAt) : pathCost(path, ctx);
       return Number.isFinite(cost) ? { path, cost } : null;
     }
     return {
