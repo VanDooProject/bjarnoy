@@ -3,7 +3,7 @@
 // `buildingStatsFor`, `maxLevelFor`), see docs on `resolveUpgradeTarget`.
 import type { AxialCoord } from '../hex/coords';
 import type { BuildingDefinitionResponse, BuildOrderResponse, TrainingOrderResponse, UnitStackResponse } from '../../api/types';
-import { DIAL_LABEL_BASE_PX, DIAL_MIN_LABEL_PX } from '../map/constructionDial';
+import { DIAL_LABEL_BASE_PX, DIAL_MIN_LABEL_PX, dialPhase, type ConstructionDial } from '../map/constructionDial';
 import { buildingStatsFor, maxLevelFor, scaleOutput, type BuildingKind, type BuildingOutput } from '../map/buildingEconomy';
 import {
   RING_RESOURCE_KEYS,
@@ -61,6 +61,7 @@ export function stackOrder<T extends { x: number; hovered?: boolean }>(markers: 
 export const TRAINING_SLOTS = 5;
 
 export type HudUpgradeState = 'ready' | 'short' | 'longhouse' | 'prereq' | 'storage' | 'upgrading' | 'queued' | 'max';
+export type HudDialKind = 'state' | 'upgrading' | 'razing' | 'queued' | 'pending' | 'rejected' | 'finishing';
 export type HudRing = 'ready' | 'blocked' | 'upgrading' | 'max';
 
 /** One thing the upgrade still needs. The view renders it through i18n (building name + level), never as an English string. */
@@ -72,12 +73,21 @@ export interface BuildingHudViewModel {
   level: number;
   maxLevel: number;
   dial: {
-    kind: 'state' | 'upgrading';
+    /**
+     * What the dial draws. `state`: the level on the ring of the upgrade state. The other kinds are the order dial of the hex,
+     * the same states the canvas construction dial has: `upgrading` / `razing` a running order (arc and time), `queued` (plain
+     * track and `#place`), `pending` (sweep and dots), `rejected` and `finishing` (their animations).
+     */
+    kind: HudDialKind;
     ring: HudRing;
-    /** Elapsed fraction 0..1 of a running upgrade (the max ring reads as full). */
+    /** Elapsed fraction 0..1 of a running upgrade or raze (the max ring reads as full). */
     progress?: number;
     secondsLeft?: number;
     targetLevel?: number;
+    /** 1-based place of a queued order. */
+    queuePosition?: number | null;
+    /** The hex's canvas-side dial (`constructionDialsFromQueue`), whose animation frames `dialPhase` reads at draw time. */
+    order?: ConstructionDial;
   };
   upgrade: {
     state: HudUpgradeState;
@@ -129,6 +139,10 @@ export interface BuildingHudInput {
   garrison?: readonly UnitStackResponse[];
   /** Training orders of the whole settlement; the ones on this hex are picked here. */
   trainingQueue?: readonly TrainingOrderResponse[];
+  /** The dial the construction dials hold for this hex (the renderer's list: queue orders, plus finishing and refused ones). */
+  orderDial?: ConstructionDial | null;
+  /** `Date.now()` for the order dial's phase; tests pin it. */
+  nowMs?: number;
 }
 
 /** Seconds until `rates` cover every `missing` line: the slowest one counts. Null when a missing resource has no income. */
@@ -155,7 +169,47 @@ function productionOf(output: BuildingOutput | undefined, speedFactor: number): 
   return scaled.kind === 'resourceRate' ? [{ resource: scaled.resource, perHour: Math.round(scaled.amount) }] : undefined;
 }
 
+/**
+ * What the marker over one own building shows. The upgrade rows and ring come from the building's own state; the dial then
+ * takes over the order dial of its hex (queued, pending, refused, finishing, raze), the way the canvas dial draws them.
+ */
 export function buildingHudViewModel(input: BuildingHudInput): BuildingHudViewModel {
+  const vm = standingViewModel(input);
+  const order = input.orderDial;
+  const phase = order ? dialPhase(order, input.nowMs ?? Date.now(), false) : null;
+  if (!order || !phase) return vm;
+  switch (phase.kind) {
+    case 'finish':
+      vm.dial = { kind: 'finishing', ring: 'upgrading', order };
+      break;
+    case 'reject':
+      vm.dial = { kind: 'rejected', ring: 'upgrading', order };
+      break;
+    case 'pending':
+      vm.dial = { kind: 'pending', ring: 'upgrading', order };
+      break;
+    case 'queued':
+      vm.dial = { kind: 'queued', ring: 'upgrading', queuePosition: phase.position, order };
+      break;
+    case 'building': {
+      // A running upgrade already is the dial; the order only lets it play its finish at the end.
+      if (vm.dial.kind === 'upgrading') vm.dial.order = order;
+      else if (input.queue.some((o) => sameHex(o, input.coord) && o.kind === 'raze' && o.state === 'building')) {
+        vm.dial = {
+          kind: 'razing',
+          ring: 'upgrading',
+          progress: phase.progress,
+          secondsLeft: phase.remaining ?? undefined,
+          order,
+        };
+      }
+      break;
+    }
+  }
+  return vm;
+}
+
+function standingViewModel(input: BuildingHudInput): BuildingHudViewModel {
   const { coord, type, level } = input;
   const maxLevel = maxLevelFor(type as BuildingKind);
   const isLonghouse = type === 'longhouse';
@@ -362,22 +416,19 @@ export function rowsFor(vm: BuildingHudViewModel, tier: HudTier, opts: { premium
 
 // ---- hand-over of the upgrade dial ------------------------------------------------------------------------------------
 
+/** Walls (palisade pieces and gates) and level-0 sites get no marker; every other standing building, bridges included, does. */
+export function hasHudMarker(b: { type: string; level: number }): boolean {
+  return b.level >= 1 && !isWallBuilding(b.type);
+}
+
 /**
- * Hex keys (`q,r`) whose running upgrade the HUD marker's dial shows: a 'build' order in state 'building' on a hex that has a
- * standing building of level 1 or more and gets a marker (no walls). The canvas progress dial skips these
- * (`skipHudOwnedDials`); a new build (level-0 site), a queued, pending or razing order stays the canvas dial's.
+ * Hex keys (`q,r`) that have a HUD marker: a standing building of level 1 or more that is no wall. The marker's dial draws every
+ * order state of its hex (running, queued, pending, refused, finishing, raze), so the canvas construction dial skips these hexes
+ * (`skipHudOwnedDials`); a new build (level-0 site) keeps the canvas dial.
  */
-export function hudOwnedUpgradeKeys(
-  queue: readonly Pick<BuildOrderResponse, 'q' | 'r' | 'kind' | 'state'>[],
-  buildings: readonly { q: number; r: number; type: string; level: number }[],
-): Set<string> {
-  const standing = new Set<string>();
-  for (const b of buildings) if (b.level >= 1 && !isWallBuilding(b.type)) standing.add(`${b.q},${b.r}`);
+export function hudMarkerKeys(buildings: readonly { q: number; r: number; type: string; level: number }[]): Set<string> {
   const keys = new Set<string>();
-  for (const o of queue) {
-    const key = `${o.q},${o.r}`;
-    if (o.kind === 'build' && o.state === 'building' && standing.has(key)) keys.add(key);
-  }
+  for (const b of buildings) if (hasHudMarker(b)) keys.add(`${b.q},${b.r}`);
   return keys;
 }
 

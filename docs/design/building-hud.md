@@ -15,8 +15,11 @@
 - Up to three missing prerequisites are listed; from four on, two are listed plus "+n more".
 - Overlapping markers stack left to right: the right-most is on top. Hovering or tapping a marker brings it to the front,
   enlarged.
-- The building info can be switched off (icon button at the top left of the map, or H). While it is on, it replaces the construction dial for upgrades
-  of existing buildings.
+- The building info can be switched off (icon button at the top left of the map, or H). While it is on, its dial replaces the
+  construction dial for every order on an existing building: running upgrade, waiting (`#place`), just clicked (sweep and
+  dots), refused (red flash and cross), raze and the finish animation, drawn the same way. New builds (no building standing
+  yet) keep the construction dial. Switching the info on or off hands each hex over marker by marker, so a hex always shows
+  exactly one dial.
 - Markers never take mouse or touch input: hover, taps, wheel and drags go to the map under them like on any tile. A marker
   grows when the mouse is on its dial or its hex, or when a touch taps its dial (the tap still reaches the map). The box
   text stands on its own, there are no tooltips on it.

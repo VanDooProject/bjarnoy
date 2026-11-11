@@ -14,11 +14,18 @@ import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { useWorldStore } from '../../stores/world';
 import { builtBuildingLevels, ownBuildings } from '../../composables/useBuildRing';
 import { useIsMobile } from '../../composables/useIsMobile';
-import { boxChangeFor, useBuildingHudMotion, waveDelays, type MarkerParts } from '../../composables/useBuildingHudMotion';
+import {
+  boxChangeFor,
+  dialGoneAfterMs,
+  dialShownAfterMs,
+  useBuildingHudMotion,
+  waveDelays,
+  type MarkerParts,
+} from '../../composables/useBuildingHudMotion';
 import type { AxialCoord } from '../../lib/hex/coords';
 import {
   buildingHudViewModel,
-  hudOwnedUpgradeKeys,
+  hasHudMarker,
   rowsFor,
   rowsSignature,
   stackOrder,
@@ -28,9 +35,16 @@ import {
 } from '../../lib/hud/buildingHud';
 import { formatCountdownShort } from '../../lib/hud/countdown';
 import { boostContextAt, type BuildingKind } from '../../lib/map/buildingEconomy';
-import { DIAL_TAP_REVEAL_MS, dialHoverStep, dialRadiusPx, dialScale, nextTapReveal, pickTappedDial } from '../../lib/map/constructionDial';
+import {
+  DIAL_TAP_REVEAL_MS,
+  dialHoverStep,
+  dialRadiusPx,
+  dialScale,
+  nextTapReveal,
+  pickTappedDial,
+  type ConstructionDial,
+} from '../../lib/map/constructionDial';
 import { circleIntersectsRect, markerFadeStep, type OcclusionCircle } from '../../lib/map/markerOcclusion';
-import { isWallBuilding } from '../../lib/map/ringCatalogue';
 import { animationPreference } from '../../lib/perf/animationPreference';
 import BuildingHudBox from './BuildingHudBox.vue';
 import BuildingHudDial from './BuildingHudDial.vue';
@@ -50,8 +64,10 @@ export interface BuildingHudRenderer {
   setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null): void;
   /** The open ring menu's footprint (canvas px); markers beneath it fade out like the progress dials do. */
   readonly markerOcclusionCircle: OcclusionCircle | null;
-  /** The hexes whose running-upgrade progress dial the canvas must not draw because a marker shows it; null = draw every dial. */
+  /** The hexes whose construction dials (every order state) the canvas must not draw because a marker shows them; null = draw every dial. */
   setHudOwnedDials(keys: ReadonlySet<string> | null): void;
+  /** The construction dials the renderer holds: the queue's, plus finishing and refused ones. Replaced on every change. */
+  readonly constructionDialList: readonly ConstructionDial[];
 }
 
 const props = defineProps<{ renderer: BuildingHudRenderer | null | undefined }>();
@@ -71,8 +87,8 @@ const rendered = ref(prefs.buildingInfo);
 const tiers = ref<Record<string, HudTier>>({});
 const tierOf = (key: string): HudTier => tiers.value[key] ?? 'mid';
 
-// Walls (palisade pieces and gates) are no buildings with a level; every other building, bridges included, gets a marker.
-const hasMarker = (type: string) => !isWallBuilding(type);
+/** Bumped when the renderer's dial list changes (a refusal, a finish, a new order): the markers read their order dial from it. */
+const dialsVersion = ref(0);
 
 /** The dial is drawn at the progress dial's default-zoom size; the marker is scaled to the live size factor `zs`. */
 const DIAL_RADIUS = dialRadiusPx(1);
@@ -88,6 +104,7 @@ interface Marker {
 
 const markers = computed<Marker[]>(() => {
   void world.hud.tick; // the countdowns tick every second
+  void dialsVersion.value;
   if (!rendered.value || !world.selectedSettlementId) return [];
   const now = Date.now();
   const sinceQueue = (now - world.hud.queueFetchedAt) / 1000;
@@ -109,9 +126,11 @@ const markers = computed<Marker[]>(() => {
     : null;
   const builtLevels = builtBuildingLevels(world);
   const tileAt = (q: number, r: number) => world.model.getTile(q, r);
+  const orderDials = new Map<string, ConstructionDial>();
+  for (const d of props.renderer?.constructionDialList ?? []) orderDials.set(`${d.coord.q},${d.coord.r}`, d);
 
   return ownBuildings(world)
-    .filter((b) => hasMarker(b.type))
+    .filter(hasHudMarker)
     .map((b) => {
       const coord = { q: b.q, r: b.r };
       const boost = boostContextAt(b.type as BuildingKind, { ...coord, bog: tileAt(b.q, b.r).bog }, tileAt);
@@ -133,6 +152,8 @@ const markers = computed<Marker[]>(() => {
         feast,
         garrison: world.hud.garrison,
         trainingQueue,
+        orderDial: orderDials.get(`${b.q},${b.r}`) ?? null,
+        nowMs: now,
       });
       return { key: `${b.q},${b.r}`, coord, type: b.type, name: buildingName(b.type), level: b.level, vm };
     });
@@ -160,10 +181,26 @@ function rowsOf(m: Marker) {
   return rowsFor(m.vm, tierOf(m.key), { premium: auth.isPremium });
 }
 
-/** Inside the dial: the countdown of a running upgrade, else the level; the far tier is the ring only. */
+/**
+ * Inside the dial: the countdown of a running upgrade or raze, `#place` of a queued order, else the level; the far tier is the
+ * ring only. A pending, refused or finishing dial draws its own symbols instead of a number.
+ */
 function labelOf(m: Marker): string {
   if (tierOf(m.key) === 'far') return '';
-  return m.vm.dial.kind === 'upgrading' ? formatCountdownShort(m.vm.dial.secondsLeft ?? 0) : String(m.level);
+  const { dial } = m.vm;
+  switch (dial.kind) {
+    case 'upgrading':
+    case 'razing':
+      return formatCountdownShort(dial.secondsLeft ?? 0);
+    case 'queued':
+      return `#${dial.queuePosition ?? ''}`;
+    case 'pending':
+    case 'rejected':
+    case 'finishing':
+      return '';
+    default:
+      return String(m.level);
+  }
 }
 
 // ---- hover / tap (like the progress dial: grows to its default-zoom size, comes to the front) --------------------------------
@@ -211,6 +248,7 @@ function setElement(key: string, el: unknown) {
 const boxOf = (key: string) => elements.get(key)?.querySelector<HTMLElement>('.hud-marker__box') ?? null;
 
 let lastFrameMs = 0;
+let lastDialList: readonly ConstructionDial[] | null = null;
 
 function tick() {
   frame = requestAnimationFrame(tick);
@@ -219,6 +257,10 @@ function tick() {
   const dtMs = lastFrameMs ? Math.min(100, nowMs - lastFrameMs) : 0;
   lastFrameMs = nowMs;
   if (!renderer || !rendered.value) return;
+  if (renderer.constructionDialList !== lastDialList) {
+    lastDialList = renderer.constructionDialList;
+    dialsVersion.value += 1;
+  }
   if (tapKey !== null && nowMs - tapAtMs >= DIAL_TAP_REVEAL_MS) tapKey = null;
   const mapScale = renderer.dialMapScale;
   const width = root.value?.offsetWidth ?? window.innerWidth;
@@ -310,17 +352,66 @@ function markerParts(): MarkerParts[] {
   });
 }
 
+// ---- hand-over of the construction dials ----------------------------------------------------------------------------------
+// While a marker shows, its dial draws every order state of its hex, so the canvas skips that hex. Per marker the hand-over
+// follows the marker's own dial: the canvas dial stays until the show animation begins to draw the marker's dial, and comes
+// back once a hide has taken it away. `notOwned` = markers whose hex the canvas still draws.
+
+const notOwned = ref<Set<string>>(new Set());
+const handoverTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function setCanvasDraws(key: string, draws: boolean) {
+  if (notOwned.value.has(key) === draws) return;
+  const next = new Set(notOwned.value);
+  if (draws) next.add(key);
+  else next.delete(key);
+  notOwned.value = next;
+}
+
+function clearHandovers() {
+  for (const timer of handoverTimers.values()) clearTimeout(timer);
+  handoverTimers.clear();
+}
+
+function handOverAfter(key: string, ms: number, canvasDraws: boolean) {
+  if (ms <= 0) return setCanvasDraws(key, canvasDraws);
+  handoverTimers.set(
+    key,
+    setTimeout(() => {
+      handoverTimers.delete(key);
+      setCanvasDraws(key, canvasDraws);
+    }, ms),
+  );
+}
+
 // Show / hide: a hide keeps the markers in the DOM until it has ended; a toggle while one runs reverses it.
 watch(
   () => prefs.buildingInfo,
   async (on) => {
     if (on) {
+      const wasShown = rendered.value;
       rendered.value = true;
       await nextTick();
-      await motion.setShown(true, markerParts());
+      const parts = markerParts();
+      const reduced = animationPreference.reducedMotion;
+      clearHandovers();
+      for (const part of parts) {
+        // Coming from fully hidden, every marker starts with the canvas still drawing its hex.
+        if (!wasShown) setCanvasDraws(part.key, true);
+        if (notOwned.value.has(part.key)) handOverAfter(part.key, dialShownAfterMs(part.delayMs, reduced), false);
+      }
+      await motion.setShown(true, parts);
     } else {
-      await motion.setShown(false, markerParts());
-      if (!prefs.buildingInfo) rendered.value = false;
+      const parts = markerParts();
+      const reduced = animationPreference.reducedMotion;
+      clearHandovers();
+      for (const part of parts) if (!notOwned.value.has(part.key)) handOverAfter(part.key, dialGoneAfterMs(part.delayMs, reduced), true);
+      await motion.setShown(false, parts);
+      if (!prefs.buildingInfo) {
+        rendered.value = false;
+        clearHandovers();
+        notOwned.value = new Set();
+      }
     }
   },
 );
@@ -367,12 +458,13 @@ function labelFade(key: string) {
   return settled.has(key) ? motion.fadeLabel : null;
 }
 
-// While the HUD shows the dials, the canvas does not draw the running upgrades of existing buildings too.
+// The canvas draws no dial on a hex whose marker is handing its dial over.
+const markerKeys = computed(() => markers.value.map((m) => m.key).join('|'));
 watch(
-  [() => props.renderer, rendered, () => world.hud.queue, () => ownBuildings(world), () => world.selectedSettlementId],
+  [() => props.renderer, rendered, markerKeys, notOwned],
   () => {
-    const on = rendered.value && !!world.selectedSettlementId;
-    props.renderer?.setHudOwnedDials(on ? hudOwnedUpgradeKeys(world.hud.queue, ownBuildings(world).filter((b) => hasMarker(b.type))) : null);
+    const keys = rendered.value ? markers.value.map((m) => m.key).filter((key) => !notOwned.value.has(key)) : null;
+    props.renderer?.setHudOwnedDials(keys ? new Set(keys) : null);
   },
   { immediate: true },
 );
@@ -405,6 +497,7 @@ watch(
 );
 onUnmounted(() => {
   cancelAnimationFrame(frame);
+  clearHandovers();
   motion.dispose();
   props.renderer?.setHudOwnedDials(null);
   window.removeEventListener('keydown', onKeyDown);
@@ -423,8 +516,10 @@ onUnmounted(() => {
                 :ring="m.vm.dial.ring"
                 :progress="m.vm.dial.progress"
                 :label="labelOf(m)"
-                :time="m.vm.dial.kind === 'upgrading'"
+                :time="m.vm.dial.kind === 'upgrading' || m.vm.dial.kind === 'razing'"
                 :label-fade="labelFade(m.key)"
+                :order="m.vm.dial.order"
+                :label-visible="tierOf(m.key) !== 'far'"
               />
             </span>
             <Transition :css="false" @enter="(el, done) => boxHook('in', el, done)" @leave="(el, done) => boxHook('out', el, done)">

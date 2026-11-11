@@ -5,7 +5,7 @@ import {
   HUD_TIER,
   affordableInSeconds,
   buildingHudViewModel,
-  hudOwnedUpgradeKeys,
+  hudMarkerKeys,
   rowsSignature,
   rowsFor,
   stackOrder,
@@ -13,7 +13,7 @@ import {
   type BuildingHudInput,
   type HudRow,
 } from './buildingHud';
-import { DIAL_MIN_LABEL_PX, dialScale } from '../map/constructionDial';
+import { DIAL_FINISH_MS, DIAL_MIN_LABEL_PX, DIAL_REJECT_MS, dialScale, type ConstructionDial } from '../map/constructionDial';
 
 const stock = (o: Partial<Record<'wood' | 'stone' | 'food' | 'iron', number>> = {}) => ({ wood: 0, stone: 0, food: 0, iron: 0, ...o });
 
@@ -305,24 +305,73 @@ describe('stackOrder', () => {
   });
 });
 
-describe('hudOwnedUpgradeKeys', () => {
-  const order = (q: number, over: Partial<BuildOrderResponse> = {}) => ({ q, r: 0, kind: 'build' as const, state: 'building' as const, ...over });
+describe('hudMarkerKeys', () => {
   const built = (q: number, level: number, type = 'barracks') => ({ q, r: 0, type, level });
 
-  it('owns a running upgrade of a standing building', () => {
-    expect([...hudOwnedUpgradeKeys([order(1)], [built(1, 2)])]).toEqual(['1,0']);
+  it('lists the hexes of standing buildings, bridges included', () => {
+    expect([...hudMarkerKeys([built(1, 2), built(2, 1, 'bridge')])]).toEqual(['1,0', '2,0']);
   });
 
-  it('leaves new builds (level 0 site), queued orders and razes to the canvas dial', () => {
-    const keys = hudOwnedUpgradeKeys(
-      [order(1), order(2, { state: 'waiting' }), order(3, { kind: 'raze' }), order(4)],
-      [built(1, 0), built(2, 3), built(3, 3)],
-    );
-    expect(keys.size).toBe(0);
+  it('leaves out new builds (level 0 site) and walls, which get no marker', () => {
+    expect(hudMarkerKeys([built(1, 0), built(2, 1, 'palisade'), built(3, 1, 'palisadegate')]).size).toBe(0);
+  });
+});
+
+describe('order dial of a standing building', () => {
+  const NOW = 1_000_000;
+  const orderDial = (over: Partial<ConstructionDial> = {}): ConstructionDial => ({
+    coord: { q: 1, r: 2 },
+    startMs: null,
+    endMs: null,
+    state: 'queued',
+    queuePosition: 2,
+    ...over,
+  });
+  const vmWith = (dial: ConstructionDial | null, over: Partial<BuildingHudInput> = {}) =>
+    buildingHudViewModel(input({ orderDial: dial, nowMs: NOW, ...over }));
+
+  it('stays the plain state dial without an order', () => {
+    expect(vmWith(null).dial.kind).toBe('state');
   });
 
-  it('leaves walls to the canvas dial since they get no marker', () => {
-    expect(hudOwnedUpgradeKeys([order(1)], [built(1, 1, 'palisade')]).size).toBe(0);
+  it('is queued with its place for a waiting order', () => {
+    const vm = vmWith(orderDial(), { queue: [order({ state: 'waiting', completesInSeconds: null, totalSeconds: 0 })] });
+    expect(vm.dial).toMatchObject({ kind: 'queued', ring: 'upgrading', queuePosition: 2 });
+  });
+
+  it('is pending for an order the server has not answered yet', () => {
+    expect(vmWith(orderDial({ state: 'pending', queuePosition: null })).dial).toMatchObject({ kind: 'pending', ring: 'upgrading' });
+  });
+
+  it('keeps a running upgrade as the upgrading dial and hands it the order for its finish', () => {
+    const running = orderDial({ state: 'building', queuePosition: null, startMs: NOW - 90_000, endMs: NOW + 30_000 });
+    const vm = vmWith(running, { queue: [order()] });
+    expect(vm.dial).toMatchObject({ kind: 'upgrading', secondsLeft: 30, order: running });
+  });
+
+  it('shows a running raze with its progress arc and time', () => {
+    const razing = orderDial({ state: 'building', queuePosition: null, startMs: NOW - 30_000, endMs: NOW + 90_000 });
+    const vm = vmWith(razing, { queue: [order({ kind: 'raze', targetLevel: 1 })] });
+    expect(vm.dial).toMatchObject({ kind: 'razing', ring: 'upgrading', progress: 0.25, secondsLeft: 90 });
+    expect(vm.upgrade.state).not.toBe('upgrading');
+  });
+
+  it('is rejected while the refusal plays and the state dial again once it is over', () => {
+    const rejected = orderDial({ state: 'pending', queuePosition: null, rejectedAtMs: NOW - 200 });
+    expect(vmWith(rejected).dial).toMatchObject({ kind: 'rejected', order: rejected });
+    expect(vmWith(rejected, { nowMs: NOW + DIAL_REJECT_MS }).dial.kind).toBe('state');
+  });
+
+  it('is finishing from the order end on, even while the order is still in the queue, and the state dial after the animation', () => {
+    const ending = orderDial({ state: 'building', queuePosition: null, startMs: NOW - 120_000, endMs: NOW - 100 });
+    const vm = vmWith(ending, { queue: [order({ completesInSeconds: 0 })] });
+    expect(vm.dial).toMatchObject({ kind: 'finishing', order: ending });
+    expect(vmWith(ending, { nowMs: NOW + DIAL_FINISH_MS }).dial.kind).toBe('state');
+  });
+
+  it('keeps the upgrade rows of the building underneath', () => {
+    const vm = vmWith(orderDial({ state: 'pending', queuePosition: null }));
+    expect(vm.upgrade.state).toBe('ready');
   });
 });
 

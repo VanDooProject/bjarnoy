@@ -7,6 +7,11 @@ import type { BuildOrderResponse } from '../../api/types';
 import type { AxialCoord } from '../hex/coords';
 import { isPendingOrder } from '../hud/pendingBuild';
 
+/** The elapsed arc, the sweep and the finish animation. */
+export const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
+/** The refused-build dial: red outline, flash and rings. */
+export const CONSTRUCTION_DIAL_REJECT_COLOR = 0xff4d3d;
+
 export interface ConstructionDial {
   coord: AxialCoord;
   /** `Date.now()`-epoch ms the build started; null while queued / pending / unknown. */
@@ -65,16 +70,14 @@ export function constructionDialsFromQueue(queue: BuildOrderResponse[], fetchedA
 }
 
 /**
- * The dials the canvas still draws while the building HUD owns some: a running upgrade's dial (its hex key is in `hudOwned`)
- * is the HUD marker's ring, so the canvas skips it. A finishing dial (its end has passed) still plays its finish animation
- * here; queued, pending and refused dials never are in `hudOwned`. `null` = building info is off: every dial draws.
+ * The dials the canvas still draws while the building HUD owns some: `hudOwned` holds the hexes (`q,r`) that have a HUD marker
+ * (a standing building, no wall); the marker's dial draws every state of an order there (running, queued, pending, refused,
+ * finishing, raze), so the canvas skips all of them. New builds (no marker yet) always draw. `null` = building info is off:
+ * every dial draws.
  */
-export function skipHudOwnedDials(dials: ConstructionDial[], hudOwned: ReadonlySet<string> | null, nowMs: number): ConstructionDial[] {
+export function skipHudOwnedDials(dials: ConstructionDial[], hudOwned: ReadonlySet<string> | null): ConstructionDial[] {
   if (!hudOwned || hudOwned.size === 0) return dials;
-  return dials.filter((d) => {
-    if (!hudOwned.has(`${d.coord.q},${d.coord.r}`)) return true;
-    return d.endMs !== null && nowMs >= d.endMs;
-  });
+  return dials.filter((d) => !hudOwned.has(`${d.coord.q},${d.coord.r}`));
 }
 
 /** Elapsed fraction 0..1 of the build at `nowMs`; 0 when timing is unknown. */
@@ -427,4 +430,30 @@ export function rejectDialAt(dials: ConstructionDial[], coord: AxialCoord, nowMs
   const here = (d: ConstructionDial) => d.coord.q === coord.q && d.coord.r === coord.r;
   if (dials.some((d) => here(d) && d.endMs !== null)) return dials;
   return [...dials.filter((d) => !here(d)), { coord, startMs: null, endMs: null, state: 'pending', queuePosition: null, rejectedAtMs: nowMs }];
+}
+
+/**
+ * What a dial shows at `nowMs`, for every surface that draws one (the canvas and the building HUD's marker dial): the finish
+ * or rejection animation frame while one plays, else the order's own state. Null once a finish / rejection has played out (the
+ * dial is pruned then).
+ */
+export type DialPhase =
+  | { kind: 'finish'; frame: DialFinishFrame }
+  | { kind: 'reject'; frame: DialRejectFrame }
+  | { kind: 'pending' }
+  | { kind: 'queued'; position: number | null }
+  | { kind: 'building'; progress: number; remaining: number | null };
+
+export function dialPhase(d: ConstructionDial, nowMs: number, reducedMotion: boolean): DialPhase | null {
+  if (d.rejectedAtMs !== undefined) {
+    const frame = dialRejectFrame(nowMs - d.rejectedAtMs, reducedMotion);
+    return frame ? { kind: 'reject', frame } : null;
+  }
+  if (d.endMs !== null && nowMs >= d.endMs) {
+    const frame = dialFinishFrame(nowMs - d.endMs);
+    return frame ? { kind: 'finish', frame } : null;
+  }
+  if (d.state === 'pending') return { kind: 'pending' };
+  if (d.state === 'queued') return { kind: 'queued', position: d.queuePosition };
+  return { kind: 'building', progress: dialProgress(d, nowMs), remaining: dialRemainingSeconds(d, nowMs) };
 }

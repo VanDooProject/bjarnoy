@@ -4,6 +4,7 @@ import { makePendingOrder } from '../hud/pendingBuild';
 import {
   rejectDialAt,
   skipHudOwnedDials,
+  dialPhase,
   constructionDialsFromQueue,
   DIAL_HOVER_MS,
   DIAL_LABEL_BASE_PX,
@@ -533,19 +534,42 @@ describe('skipHudOwnedDials', () => {
 
   it('draws every dial while building info is off', () => {
     const dials = [dial(1), dial(2)];
-    expect(skipHudOwnedDials(dials, null, 5_000)).toBe(dials);
-    expect(skipHudOwnedDials(dials, new Set(), 5_000)).toBe(dials);
+    expect(skipHudOwnedDials(dials, null)).toBe(dials);
+    expect(skipHudOwnedDials(dials, new Set())).toBe(dials);
   });
 
-  it('skips the running upgrade the marker shows and keeps the other dials', () => {
-    const owned = dial(1);
-    const newBuild = dial(2);
-    const queued = dial(3, { startMs: null, endMs: null, state: 'queued', queuePosition: 1 });
-    expect(skipHudOwnedDials([owned, newBuild, queued], new Set(['1,0']), 5_000)).toEqual([newBuild, queued]);
+  it('skips every dial on a hex with a marker, whatever state it is in, and keeps the hexes without one', () => {
+    const running = dial(1);
+    const queued = dial(2, { startMs: null, endMs: null, state: 'queued', queuePosition: 1 });
+    const pending = dial(3, { startMs: null, endMs: null, state: 'pending' });
+    const finishing = dial(4, { endMs: 4_000 });
+    const rejected = dial(5, { startMs: null, endMs: null, state: 'pending', rejectedAtMs: 100 });
+    const newBuild = dial(6);
+    const owned = new Set(['1,0', '2,0', '3,0', '4,0', '5,0']);
+    expect(skipHudOwnedDials([running, queued, pending, finishing, rejected, newBuild], owned)).toEqual([newBuild]);
+  });
+});
+
+describe('dialPhase', () => {
+  const base: ConstructionDial = { coord: { q: 1, r: 0 }, startMs: 0, endMs: 10_000, state: 'building', queuePosition: null };
+
+  it('reads a running build as progress and time left', () => {
+    expect(dialPhase(base, 2_500, false)).toEqual({ kind: 'building', progress: 0.25, remaining: 7.5 });
   });
 
-  it('still plays the finish animation of an owned hex once its end has passed', () => {
-    const finishing = dial(1, { endMs: 4_000 });
-    expect(skipHudOwnedDials([finishing], new Set(['1,0']), 5_000)).toEqual([finishing]);
+  it('reads queued with its place and pending as such', () => {
+    expect(dialPhase({ ...base, startMs: null, endMs: null, state: 'queued', queuePosition: 2 }, 0, false)).toEqual({ kind: 'queued', position: 2 });
+    expect(dialPhase({ ...base, startMs: null, endMs: null, state: 'pending' }, 0, false)).toEqual({ kind: 'pending' });
+  });
+
+  it('plays the finish frame from the end on and is over after DIAL_FINISH_MS', () => {
+    expect(dialPhase(base, 10_000 + 300, false)).toEqual({ kind: 'finish', frame: dialFinishFrame(300) });
+    expect(dialPhase(base, 10_000 + DIAL_FINISH_MS, false)).toBeNull();
+  });
+
+  it('plays the rejection frame of a refused order and is over after DIAL_REJECT_MS', () => {
+    const rejected: ConstructionDial = { ...base, startMs: null, endMs: null, state: 'pending', rejectedAtMs: 1_000 };
+    expect(dialPhase(rejected, 1_200, true)).toEqual({ kind: 'reject', frame: dialRejectFrame(200, true) });
+    expect(dialPhase(rejected, 1_000 + DIAL_REJECT_MS, false)).toBeNull();
   });
 });

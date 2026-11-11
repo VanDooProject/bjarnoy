@@ -47,8 +47,6 @@ import type { Camera } from './camera';
 import { formatCountdownShort } from '../hud/countdown';
 import {
   DIAL_FINISH_MS,
-  dialFinishFrame,
-  dialRejectFrame,
   hexPerimeterSegment,
   pendingDotFrame,
   DIAL_PENDING_SWEEP_MS,
@@ -56,8 +54,9 @@ import {
   polylinePartial,
   retainFinishingDials,
   skipHudOwnedDials,
-  dialProgress,
-  dialRemainingSeconds,
+  dialPhase,
+  CONSTRUCTION_DIAL_ELAPSED_COLOR,
+  CONSTRUCTION_DIAL_REJECT_COLOR,
   hexPerimeterPath,
   dialScale,
   dialHoverStep,
@@ -979,13 +978,12 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
   return points;
 }
 
+const NO_DIALS: readonly ConstructionDial[] = [];
+
 // Construction progress dial (see `constructionDial.ts`): drawn in screen space
 // by `drawConstructionDials` (scaled with the map, grows on hover) over a building under construction — white track, yellow elapsed arc,
 // remaining time inside. A queued order draws `#position` on the plain track, a pending one an orbiting sweep and dots,
 // a refused one a red flash and cross.
-const CONSTRUCTION_DIAL_ELAPSED_COLOR = 0xffd23f;
-// Refused-build dial: red outline, flash and rings.
-const CONSTRUCTION_DIAL_REJECT_COLOR = 0xff4d3d;
 // Dial height above the tile centre: half a tile, so the dial's middle sits on
 // the hex's upper edge and the dial overlaps its own tile instead of floating
 // above it.
@@ -3941,7 +3939,7 @@ export class HexMapRenderer {
   private handleDialTap(screen: { x: number; y: number }): boolean {
     const nowMs = Date.now();
     const mapScale = this.dialMapScale;
-    const targets = skipHudOwnedDials(this.constructionDials ?? [], this.hudOwnedDials, nowMs)
+    const targets = skipHudOwnedDials(this.constructionDials ?? [], this.hudOwnedDials)
       .filter((d) => d.rejectedAtMs === undefined)
       .filter((d) => !this.isDialOccluded(this.dialScreenPoint(d.coord), mapScale))
       .map((d) => {
@@ -5936,10 +5934,11 @@ export class HexMapRenderer {
     const pointer = this.hoverPointer;
     const seen = new Set<string>();
     if (this.tapRevealKey !== null && nowMs - this.tapRevealAtMs >= DIAL_TAP_REVEAL_MS) this.tapRevealKey = null;
-    const placed = skipHudOwnedDials(live, this.hudOwnedDials, nowMs).map((dial) => {
+    const placed = skipHudOwnedDials(live, this.hudOwnedDials).map((dial) => {
       const anchor = this.dialScreenPoint(dial.coord);
       // A refused build's dial shakes, flashes red with a cross, then shrinks and fades (dialRejectFrame).
-      const reject = dial.rejectedAtMs !== undefined ? dialRejectFrame(nowMs - dial.rejectedAtMs, reduced) : null;
+      const phase = dialPhase(dial, nowMs, reduced);
+      const reject = phase?.kind === 'reject' ? phase.frame : null;
       const key = coordKey(dial.coord);
       seen.add(key);
       const cx = anchor.x + (reject?.offsetX ?? 0);
@@ -5960,20 +5959,20 @@ export class HexMapRenderer {
       hoverT = dialHoverStep(hoverT, hovered, dtMs, reduced);
       if (hoverT > 0) this.dialHover.set(key, hoverT);
       else this.dialHover.delete(key);
-      return { dial, reject, cx, cy, hoverT, vis };
+      return { dial, phase, reject, cx, cy, hoverT, vis };
     });
     for (const key of this.dialHover.keys()) if (!seen.has(key)) this.dialHover.delete(key);
     for (const key of this.dialVisibility.keys()) if (!seen.has(key)) this.dialVisibility.delete(key);
     if (this.tapRevealKey !== null && !seen.has(this.tapRevealKey)) this.tapRevealKey = null;
     placed.sort((a, b) => a.hoverT - b.hoverT);
-    for (const { dial, reject, cx, cy, hoverT, vis } of placed) {
-      if (vis <= 0) continue;
-      const progress = dialProgress(dial, nowMs);
-      const remaining = dialRemainingSeconds(dial, nowMs);
+    for (const { dial, phase, reject, cx, cy, hoverT, vis } of placed) {
+      if (vis <= 0 || !phase) continue;
+      const progress = phase.kind === 'building' ? phase.progress : 0;
+      const remaining = phase.kind === 'building' ? phase.remaining : null;
       const dAlpha = (reject?.alpha ?? 1) * vis;
       const { zs, showLabel } = dialScale(mapScale, hoverT, reject?.scale ?? 1);
       const r = dialRadiusPx(zs, reject?.scale ?? 1);
-      const frame = dial.endMs !== null && nowMs >= dial.endMs ? dialFinishFrame(nowMs - dial.endMs) : null;
+      const frame = phase.kind === 'finish' ? phase.frame : null;
 
       if (frame) {
         const fr = r * frame.scale;
@@ -6083,7 +6082,7 @@ export class HexMapRenderer {
    * running upgrades the building HUD's markers show instead (`setHudOwnedDials`).
    */
   drawnConstructionDialKeys(): string[] {
-    return skipHudOwnedDials(this.constructionDials ?? [], this.hudOwnedDials, Date.now()).map((d) => coordKey(d.coord));
+    return skipHudOwnedDials(this.constructionDials ?? [], this.hudOwnedDials).map((d) => coordKey(d.coord));
   }
 
   private hideUnusedIcons() {
@@ -6479,12 +6478,21 @@ export class HexMapRenderer {
   }
 
   /**
-   * While the building HUD is on, its marker dial is the upgrade dial of an existing building: `keys` (`coordKey`) are the
-   * hexes whose running upgrade the canvas must not draw too. New builds, queued, pending, refused and finishing dials still
-   * draw. `null` (building info off) restores every dial.
+   * While the building HUD is on, its marker dial draws every order state of a standing building: `keys` (`coordKey`) are the
+   * hexes whose dials (running, queued, pending, refused, finishing, raze) the canvas must not draw too. New builds (no marker
+   * yet) still draw. `null` (building info off) restores every dial.
    */
   setHudOwnedDials(keys: ReadonlySet<string> | null) {
     this.hudOwnedDials = keys;
+  }
+
+  /**
+   * The dials the renderer holds right now: the queue's, plus the finishing and refused ones it keeps until their animation has
+   * played (`setConstructionDials`, `rejectConstructionDial`). The list is replaced, never edited, so a changed identity means
+   * a changed list. The building HUD's markers draw the ones on their hexes from it.
+   */
+  get constructionDialList(): readonly ConstructionDial[] {
+    return this.constructionDials ?? NO_DIALS;
   }
 
   /** The open ring menu's footprint (`setMarkerOcclusion`), read by HTML markers that fade out beneath it like the dials do. */

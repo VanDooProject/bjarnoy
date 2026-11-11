@@ -47,6 +47,16 @@ export function waveDelayMs(distancePx: number): number {
   return Math.round(Math.min(HUD_MOTION.waveMaxMs, Math.max(0, distancePx) * HUD_MOTION.waveMsPerPx));
 }
 
+/** Ms after a show starts until a marker's dial is drawn (the canvas dial of its hex hands over then). */
+export function dialShownAfterMs(delayMs: number, reducedMotion: boolean): number {
+  return reducedMotion ? 0 : delayMs;
+}
+
+/** Ms after a hide starts until a marker's dial is gone (the canvas dial of its hex takes over again then). */
+export function dialGoneAfterMs(delayMs: number, reducedMotion: boolean): number {
+  return reducedMotion ? HUD_MOTION.fade : delayMs + HUD_MOTION.hideDialDelay + HUD_MOTION.hideDialSpin;
+}
+
 /** Per-marker delays of the wave from `origin`; without an origin (no Longhouse marker) nothing waits. */
 export function waveDelays(
   points: readonly { key: string; x: number; y: number }[],
