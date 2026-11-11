@@ -8,6 +8,7 @@ using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Bjarnoy.Api.IntegrationTests;
@@ -77,8 +78,16 @@ public sealed class WallRerouteEndpointsTests : IAsyncLifetime
         Ordered,
     }
 
+    /// <summary>One wall hex of the scene, standing (level 1) from <paramref name="After"/> past the start (negative: before it).</summary>
+    private sealed record WallPlan(HexCoord Hex, TimeSpan After, bool Gate = false);
+
+    private Task<Scene> PlantAsync(
+        bool returning, double provisions, IEnumerable<HexCoord> walls, TimeSpan wallAfter, WallKind kind) =>
+        PlantAsync(returning, provisions, walls.Select(h => new WallPlan(h, wallAfter)), kind, guildmate: null);
+
+    /// <param name="guildmate">The marching owner's account when it is a real one in the wall owner's guild (so the wall owner's gates open for it); anonymous otherwise.</param>
     private async Task<Scene> PlantAsync(
-        bool returning, double provisions, IEnumerable<HexCoord> walls, TimeSpan wallAfter, WallKind kind)
+        bool returning, double provisions, IEnumerable<WallPlan> walls, WallKind kind, Guid? guildmate)
     {
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
@@ -106,16 +115,25 @@ public sealed class WallRerouteEndpointsTests : IAsyncLifetime
 
         var builder = new UserEntity { UserName = "builder", NormalizedUserName = "BUILDER", PasswordHash = "hash" };
         db.Users.Add(builder);
-        var home = Settlement(Owner, SystemUserIds.Abandoned, Home);
+        if (guildmate is { } marcher)
+        {
+            var guild = new GuildEntity { WorldId = world.Id, Name = "Wall guild", Tag = "WALL" };
+            guild.Memberships.Add(new GuildMembershipEntity { UserId = builder.Id });
+            guild.Memberships.Add(new GuildMembershipEntity { UserId = marcher });
+            db.Guilds.Add(guild);
+        }
+
+        var home = Settlement(Owner, guildmate ?? SystemUserIds.Abandoned, Home);
         var wallOwner = Settlement("builder-owner", builder.Id, new HexCoord(20, 20));
         db.Settlements.AddRange(home, wallOwner);
 
-        var standsAt = start + wallAfter;
-        foreach (var hex in walls)
+        foreach (var (hex, wallAfter, gate) in walls)
         {
+            var standsAt = start + wallAfter;
+            var type = gate ? BuildingType.PalisadeGate : BuildingType.Palisade;
             wallOwner.Buildings.Add(new PlacedBuildingEntity
             {
-                SettlementId = wallOwner.Id, Q = hex.Q, R = hex.R, Type = BuildingType.Palisade,
+                SettlementId = wallOwner.Id, Q = hex.Q, R = hex.R, Type = type,
                 Level = kind == WallKind.Standing ? 1 : 0,
                 StandingSince = kind == WallKind.Standing ? standsAt : null,
             });
@@ -123,7 +141,7 @@ public sealed class WallRerouteEndpointsTests : IAsyncLifetime
             {
                 wallOwner.Queue.Add(new BuildOrderEntity
                 {
-                    SettlementId = wallOwner.Id, Q = hex.Q, R = hex.R, Type = BuildingType.Palisade, TargetLevel = 1,
+                    SettlementId = wallOwner.Id, Q = hex.Q, R = hex.R, Type = type, TargetLevel = 1,
                     Kind = BuildOrderKind.Build, QueuedAt = start, BaseDuration = wallAfter, StartedAt = start, CompletesAt = standsAt,
                 });
             }
@@ -265,5 +283,115 @@ public sealed class WallRerouteEndpointsTests : IAsyncLifetime
         var reports = await ReportsAsync(client, scene.WorldId);
         var starved = Assert.Single(reports, r => r.Kind == "starved");
         Assert.Equal(P(-4, 0), starved.Hex);
+    }
+
+    /// <summary>A plain line (0,0)..(0,3) standing since long before the army set out: (0,0), on the army's way, is its half-open end.</summary>
+    private static IEnumerable<WallPlan> OldLineEndingOnTheRoute() =>
+        Enumerable.Range(0, 4).Select(r => new WallPlan(new HexCoord(0, r), TimeSpan.FromHours(-10)));
+
+    [Fact]
+    public async Task An_army_whose_half_open_end_was_closed_by_the_next_piece_re_routes_from_where_it_was_then_and_never_walks_through()
+    {
+        // At +2 h the owner extends the line by (0,-1): (0,0) is no end any more and blocks; the army reaches it only at +6 h.
+        var walls = OldLineEndingOnTheRoute().Append(new WallPlan(new HexCoord(0, -1), TimeSpan.FromHours(2)));
+        var scene = await PlantAsync(returning: false, 1_000, walls, WallKind.Standing, guildmate: null);
+        using var client = Client();
+
+        _factory.Time.Advance(TimeSpan.FromHours(3));
+        var army = await ArmyAsync(client, scene.ArmyId);
+
+        var movement = army.Movement!;
+        Assert.False(movement.IsReturning);
+        Assert.False(movement.IsStranded);
+        Assert.Equal(scene.Start + TimeSpan.FromHours(2), movement.DepartedAt);
+        Assert.Equal(P(-4, 0), movement.Path[0]);
+        Assert.Equal(P(Target.Q, Target.R), movement.Path[^1]);
+        Assert.DoesNotContain(P(0, 0), movement.Path);
+        Assert.DoesNotContain(P(0, 0), movement.ReturnPath);
+
+        // Later settles keep that route: the army is not sent back to where it was at +2 h again.
+        _factory.Time.Advance(TimeSpan.FromHours(4));
+        var later = (await ArmyAsync(client, scene.ArmyId)).Movement!;
+        Assert.Equal(movement.DepartedAt, later.DepartedAt);
+        Assert.Equal(movement.Path, later.Path);
+        Assert.Empty(await ReportsAsync(client, scene.WorldId));
+    }
+
+    /// <summary>A wall line across r = 0 at q = 0 (r -2..2) whose middle (0,0) is a gate of the wall owner, standing long before the army set out.</summary>
+    private static IEnumerable<WallPlan> OldLineWithGate() =>
+        Enumerable.Range(-2, 5).Select(r => new WallPlan(new HexCoord(0, r), TimeSpan.FromHours(-10), Gate: r == 0));
+
+    private const string Password = "correct-horse-battery";
+
+    /// <summary>A real account for the marching owner (signed in with <see cref="SignInAsync"/>).</summary>
+    private async Task<(Guid Id, string Name)> RegisterAsync(HttpClient client)
+    {
+        var name = $"m{Guid.CreateVersion7():N}"[..16];
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", new RegisterRequest(name, Password, null), Ct);
+        response.EnsureSuccessStatusCode();
+        var auth = (await response.Content.ReadFromJsonAsync<AuthResponse>(SqliteApiFixture.StrictJson, Ct))!;
+        return (auth.User.Id, name);
+    }
+
+    /// <summary>Signs <paramref name="name"/> in afresh (the test clock jumps by hours, past an access token's lifetime).</summary>
+    private async Task SignInAsync(HttpClient client, string name)
+    {
+        client.DefaultRequestHeaders.Authorization = null;
+        var response = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequest(name, Password), Ct);
+        response.EnsureSuccessStatusCode();
+        var auth = (await response.Content.ReadFromJsonAsync<AuthResponse>(SqliteApiFixture.StrictJson, Ct))!;
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", auth.AccessToken);
+    }
+
+    private async Task LeaveGuildAsync(Guid userId)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        await db.GuildMemberships.Where(m => m.UserId == userId).ExecuteDeleteAsync(Ct);
+    }
+
+    [Fact]
+    public async Task An_army_that_passed_a_gate_before_its_friendship_ended_is_not_rewound()
+    {
+        using var client = Client();
+        var marcher = await RegisterAsync(client);
+        var scene = await PlantAsync(returning: false, 1_000, OldLineWithGate(), WallKind.Standing, marcher.Id);
+
+        // Through the gate at +6 h, while still a guildmate; the friendship ends after that.
+        _factory.Time.Advance(TimeSpan.FromHours(8));
+        await SignInAsync(client, marcher.Name);
+        await ArmyAsync(client, scene.ArmyId);
+        await LeaveGuildAsync(marcher.Id);
+        _factory.Time.Advance(TimeSpan.FromHours(1));
+        await SignInAsync(client, marcher.Name);
+        var army = await ArmyAsync(client, scene.ArmyId);
+
+        var movement = army.Movement!;
+        Assert.Equal(scene.Start, movement.DepartedAt);
+        Assert.Equal(P(Home.Q, Home.R), movement.Path[0]);
+        Assert.Contains(P(0, 0), movement.Path);
+        Assert.Equal(P(3, 0), army.Position);
+    }
+
+    [Fact]
+    public async Task An_army_whose_gate_closed_before_it_got_there_re_routes_from_where_it_is_when_settled()
+    {
+        using var client = Client();
+        var marcher = await RegisterAsync(client);
+        var scene = await PlantAsync(returning: false, 1_000, OldLineWithGate(), WallKind.Standing, marcher.Id);
+
+        _factory.Time.Advance(TimeSpan.FromHours(2));
+        await SignInAsync(client, marcher.Name);
+        await ArmyAsync(client, scene.ArmyId);
+        await LeaveGuildAsync(marcher.Id);
+        _factory.Time.Advance(TimeSpan.FromHours(1));
+        await SignInAsync(client, marcher.Name);
+        var army = await ArmyAsync(client, scene.ArmyId);
+
+        var movement = army.Movement!;
+        Assert.Equal(scene.Start + TimeSpan.FromHours(3), movement.DepartedAt);
+        Assert.Equal(P(-3, 0), movement.Path[0]);
+        Assert.DoesNotContain(P(0, 0), movement.Path);
+        Assert.DoesNotContain(P(0, 0), movement.ReturnPath);
     }
 }

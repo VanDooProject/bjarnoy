@@ -14,10 +14,25 @@ public readonly record struct WallEncounter(DateTimeOffset At, HexCoord Hex, int
 public static class WallEncounters
 {
     /// <summary>
+    /// <see cref="FindEarliest(Movement, Func{HexCoord, DateTimeOffset, DateTimeOffset, DateTimeOffset?}, DateTimeOffset)"/> for a wall that,
+    /// once it blocks (<paramref name="blockingSince"/>: the instant, <see langword="null"/> when it never does), keeps blocking.
+    /// </summary>
+    public static WallEncounter? FindEarliest(
+        Movement movement, Func<HexCoord, DateTimeOffset?> blockingSince, DateTimeOffset until)
+    {
+        ArgumentNullException.ThrowIfNull(blockingSince);
+        return FindEarliest(
+            movement,
+            (hex, from, before) => blockingSince(hex) is { } since && since < before ? (since > from ? since : from) : null,
+            until);
+    }
+
+    /// <summary>
     /// The earliest encounter at or before <paramref name="until"/>, or <see langword="null"/>. A hex <c>i</c> of a leg that starts at
-    /// <c>start</c> is entered at <c>start + EdgeHours[i]</c>; a wall that blocks the army there (<paramref name="blockingSince"/>: the
-    /// instant the hex blocks this army, <see langword="null"/> when it never does) and stands before that entry is found at
-    /// <c>max(standing, start)</c>: an army only looks at its route when the leg begins, and at once when a wall goes up while it walks.
+    /// <c>start</c> is entered at <c>entry = start + EdgeHours[i]</c>; the army finds a wall there at the first instant in
+    /// <c>[start, entry)</c> at which it blocks the army (<paramref name="firstBlocking"/>: hex, from, before), so a hex the army entered
+    /// before it began to block is never in the way: an army only looks at its route when the leg begins, and at once when a wall goes up
+    /// while it walks.
     /// </summary>
     /// <remarks>
     /// The active leg is scanned, and for an outbound army also its stored way home, scheduled from <see cref="Movement.TurnAroundAt"/>
@@ -25,10 +40,10 @@ public static class WallEncounters
     /// a hex never enters it. The hex the army stands on is never in the way (index 0 is the leg's start). A stranded army goes nowhere.
     /// </remarks>
     public static WallEncounter? FindEarliest(
-        Movement movement, Func<HexCoord, DateTimeOffset?> blockingSince, DateTimeOffset until)
+        Movement movement, Func<HexCoord, DateTimeOffset, DateTimeOffset, DateTimeOffset?> firstBlocking, DateTimeOffset until)
     {
         ArgumentNullException.ThrowIfNull(movement);
-        ArgumentNullException.ThrowIfNull(blockingSince);
+        ArgumentNullException.ThrowIfNull(firstBlocking);
         if (movement.IsStranded)
         {
             return null;
@@ -54,13 +69,7 @@ public static class WallEncounters
                     break;
                 }
 
-                if (blockingSince(path[i]) is not { } standing || standing >= entry)
-                {
-                    continue;
-                }
-
-                var at = standing > start ? standing : start;
-                if (at <= until && (best is null || at < best.Value.At))
+                if (firstBlocking(path[i], start, entry) is { } at && at <= until && (best is null || at < best.Value.At))
                 {
                     best = new WallEncounter(at, path[i], i, onReturnLeg);
                 }
