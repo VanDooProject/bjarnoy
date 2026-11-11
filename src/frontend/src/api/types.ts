@@ -1849,7 +1849,8 @@ export interface SimulatorRequest {
  * Mirrors `SimulatorResponse` — deliberately the same field shape as
  * `BattleReportResponse` minus the persistence-only identity fields no
  * simulated battle has (no `id`, `occurredAt`, army/settlement ids), so the
- * same report-rendering markup (`BattleReportCard.vue`) can display either.
+ * same report-rendering markup (`BattleReportCard.vue`) can display either —
+ * a fleet's ship fight and land fight included, from the one `AttackResolver` a real attack uses.
  */
 export interface SimulatorResponse {
   mission: string;
@@ -1861,6 +1862,14 @@ export interface SimulatorResponse {
   attackerLines: BattleReportAttackerLine[];
   defenderLines: BattleReportDefenderLine[];
   siege: BattleReportSiege | null;
+  /**
+   * A fleet's fight at sea and what followed (the drowned passengers; the Fire Ships burned and their fire damage are always
+   * zero/`null` here, a simulated attack names no building). `attackPower`/`defensePower`/the lines are the land fight.
+   */
+  shipFight: BattleReportShipFight | null;
+  drowned: ArmyUnitStackResponse[];
+  fireShipsBurned: number;
+  fireSiege: BattleReportSiege | null;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/SettlementContracts.cs's

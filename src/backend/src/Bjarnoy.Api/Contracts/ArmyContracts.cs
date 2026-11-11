@@ -344,7 +344,13 @@ public sealed record BattleReportResponse(
     {
         ArgumentNullException.ThrowIfNull(entity);
 
-        var domain = entity.ToDomain();
+        return From(entity.ToDomain());
+    }
+
+    public static BattleReportResponse From(BattleReport domain)
+    {
+        ArgumentNullException.ThrowIfNull(domain);
+
         return new BattleReportResponse(
             domain.Id,
             domain.OccurredAt,
