@@ -1,0 +1,266 @@
+import { describe, expect, it } from 'vitest';
+import type { BuildingDefinitionResponse, BuildOrderResponse, TrainingOrderResponse } from '../../api/types';
+import {
+  HUD_TIER,
+  affordableInSeconds,
+  buildingHudViewModel,
+  rowsFor,
+  stackOrder,
+  tierFor,
+  type BuildingHudInput,
+  type HudRow,
+} from './buildingHud';
+
+const stock = (o: Partial<Record<'wood' | 'stone' | 'food' | 'iron', number>> = {}) => ({ wood: 0, stone: 0, food: 0, iron: 0, ...o });
+
+function def(level: number, over: Partial<BuildingDefinitionResponse> = {}): BuildingDefinitionResponse {
+  return {
+    type: 'lumberjack',
+    level,
+    cost: stock({ wood: 100 }),
+    buildSeconds: 60,
+    requiredLonghouseLevel: 1,
+    slotCost: 1,
+    occupiesMostSlots: false,
+    prerequisites: [],
+    ...over,
+  } as BuildingDefinitionResponse;
+}
+
+function input(over: Partial<BuildingHudInput> = {}): BuildingHudInput {
+  return {
+    coord: { q: 1, r: 2 },
+    type: 'lumberjack',
+    level: 2,
+    definitions: [def(1), def(2), def(3)],
+    queue: [],
+    longhouseLevel: 5,
+    builtLevels: { longhouse: 5 },
+    available: stock({ wood: 1000, stone: 1000, food: 1000, iron: 1000 }),
+    storageCap: stock({ wood: 5000, stone: 5000, food: 5000, iron: 5000 }),
+    rates: stock({ wood: 360, stone: 360, food: 360, iron: 360 }),
+    construction: { slots: 2, slotsUsed: 0, maxWaitingOrders: 0, waitingOrders: 0 },
+    worldSpeedFactor: 1,
+    ...over,
+  };
+}
+
+const order = (over: Partial<BuildOrderResponse> = {}): BuildOrderResponse =>
+  ({
+    id: 'o1', q: 1, r: 2, building: 'lumberjack', kind: 'build', targetLevel: 3, state: 'building', slotCost: 1,
+    completesAtGameTime: null, completesInSeconds: 30, totalSeconds: 120, ...over,
+  }) as BuildOrderResponse;
+
+describe('upgrade state', () => {
+  it('is ready when affordable and unblocked', () => {
+    const vm = buildingHudViewModel(input());
+    expect(vm.upgrade).toMatchObject({ state: 'ready', targetLevel: 3 });
+    expect(vm.dial).toMatchObject({ kind: 'state', ring: 'ready' });
+  });
+
+  it('is short with the missing amounts and the time until production covers them', () => {
+    const vm = buildingHudViewModel(input({ available: stock({ wood: 40 }), rates: stock({ wood: 120 }) }));
+    expect(vm.upgrade.state).toBe('short');
+    expect(vm.upgrade.missing).toEqual([{ resource: 'wood', amount: 60 }]);
+    expect(vm.upgrade.affordableInSeconds).toBe(1800);
+    expect(vm.dial.ring).toBe('blocked');
+  });
+
+  it('is longhouse-locked when the settlement Longhouse is too low', () => {
+    const vm = buildingHudViewModel(input({ definitions: [def(1), def(2), def(3, { requiredLonghouseLevel: 9 })] }));
+    expect(vm.upgrade.state).toBe('longhouse');
+    expect(vm.upgrade.requirements).toEqual([{ kind: 'longhouse', level: 9 }]);
+    expect(vm.dial.ring).toBe('blocked');
+  });
+
+  it('is prereq when a prerequisite building is missing', () => {
+    const vm = buildingHudViewModel(input({ definitions: [def(1), def(2), def(3, { prerequisites: [{ type: 'quarry', level: 4 }] })] }));
+    expect(vm.upgrade.state).toBe('prereq');
+    expect(vm.upgrade.requirements).toEqual([{ kind: 'building', type: 'quarry', level: 4 }]);
+  });
+
+  it('is storage when the next level costs more than the stores hold, even if it would otherwise be short', () => {
+    const vm = buildingHudViewModel(
+      input({ definitions: [def(1), def(2), def(3, { cost: stock({ wood: 900 }) })], storageCap: stock({ wood: 500 }), available: stock({ wood: 100 }) }),
+    );
+    expect(vm.upgrade.state).toBe('storage');
+    expect(vm.dial.ring).toBe('blocked');
+  });
+
+  it('is upgrading with progress, time left and target while an order runs', () => {
+    const vm = buildingHudViewModel(input({ queue: [order()] }));
+    expect(vm.upgrade).toMatchObject({ state: 'upgrading', targetLevel: 3 });
+    expect(vm.dial).toMatchObject({ kind: 'upgrading', ring: 'upgrading', secondsLeft: 30, targetLevel: 3, progress: 0.75 });
+  });
+
+  it('ignores a running order on another hex and a raze on this one', () => {
+    expect(buildingHudViewModel(input({ queue: [order({ q: 9 })] })).upgrade.state).toBe('ready');
+    expect(buildingHudViewModel(input({ queue: [order({ kind: 'raze', targetLevel: 1 })] })).upgrade.state).not.toBe('upgrading');
+  });
+
+  it('is max at the type ceiling, with a full ring', () => {
+    const vm = buildingHudViewModel(input({ type: 'tower', level: 10 }));
+    expect(vm.maxLevel).toBe(10);
+    expect(vm.upgrade.state).toBe('max');
+    expect(vm.dial).toMatchObject({ ring: 'max', progress: 1 });
+  });
+
+  it('is busy (blocked, no shortfall) when the hex waits behind another order', () => {
+    const vm = buildingHudViewModel(input({ definitions: [def(1), def(2), def(3), def(4)], queue: [order({ state: 'waiting' })] }));
+    expect(vm.upgrade.state).toBe('busy');
+  });
+
+  it('wears the crown for the Longhouse only', () => {
+    expect(buildingHudViewModel(input({ type: 'longhouse', definitions: undefined })).upgrade.crown).toBe(true);
+    expect(buildingHudViewModel(input()).upgrade.crown).toBe(false);
+    expect(buildingHudViewModel(input({ type: 'townsquare', definitions: undefined })).upgrade.crown).toBe(false);
+  });
+});
+
+describe('affordableInSeconds', () => {
+  it('takes the slowest missing resource', () => {
+    expect(affordableInSeconds([{ resource: 'wood', amount: 100 }, { resource: 'stone', amount: 100 }], stock({ wood: 3600, stone: 360 }))).toBe(1000);
+  });
+  it('is null when a missing resource has no income', () => {
+    expect(affordableInSeconds([{ resource: 'iron', amount: 5 }], stock())).toBeNull();
+  });
+});
+
+describe('requirement listing', () => {
+  const reqs = (n: number) => ({
+    definitions: [def(1), def(2), def(3, { prerequisites: Array.from({ length: n }, (_, i) => ({ type: `b${i}`, level: 2 })) })],
+  });
+  const upgradeRowOf = (rows: HudRow[]) => rows[0] as Extract<HudRow, { kind: 'upgrade' }>;
+
+  it.each([
+    [1, 1, 0],
+    [2, 2, 0],
+    [3, 3, 0],
+    [4, 2, 2],
+    [5, 2, 3],
+  ])('near with %i requirements lists %i and folds %i', (n, shown, more) => {
+    const row = upgradeRowOf(rowsFor(buildingHudViewModel(input(reqs(n))), 'near', { premium: false }));
+    expect(row.requirements).toHaveLength(shown);
+    expect(row.moreCount).toBe(more);
+  });
+
+  it.each([
+    [1, 1, 0],
+    [2, 2, 0],
+    [3, 1, 2],
+    [4, 1, 3],
+    [5, 1, 4],
+  ])('mid with %i requirements lists %i and folds %i', (n, shown, more) => {
+    const row = upgradeRowOf(rowsFor(buildingHudViewModel(input(reqs(n))), 'mid', { premium: false }));
+    expect(row.requirements).toHaveLength(shown);
+    expect(row.moreCount).toBe(more);
+  });
+
+  it('counts the Longhouse requirement as a line, listed first', () => {
+    const vm = buildingHudViewModel(input({ definitions: [def(1), def(2), def(3, { requiredLonghouseLevel: 9, prerequisites: [{ type: 'quarry', level: 4 }] })] }));
+    expect(vm.upgrade.state).toBe('longhouse');
+    expect(vm.upgrade.requirements?.map((r) => r.kind)).toEqual(['longhouse', 'building']);
+  });
+});
+
+describe('rowsFor', () => {
+  const garrison = [{ unit: 'spearman', count: 4 }, { unit: 'axeman', count: 3 }];
+
+  it('shows nothing on far', () => {
+    expect(rowsFor(buildingHudViewModel(input()), 'far', { premium: true })).toEqual([]);
+  });
+
+  it('near: upgrade then production', () => {
+    const rows = rowsFor(buildingHudViewModel(input()), 'near', { premium: false });
+    expect(rows.map((r) => r.kind)).toEqual(['upgrade', 'production']);
+    expect(rows[1]).toMatchObject({ production: [{ resource: 'wood' }] });
+  });
+
+  it('a storage building shows its capacity', () => {
+    const rows = rowsFor(buildingHudViewModel(input({ type: 'storagehouse', definitions: undefined })), 'near', { premium: false });
+    expect(rows.map((r) => r.kind)).toEqual(['upgrade', 'storage']);
+  });
+
+  it('the Longhouse with a garrison drops production in favour of the garrison', () => {
+    const vm = buildingHudViewModel(input({ type: 'longhouse', level: 3, definitions: undefined, garrison }));
+    expect(rowsFor(vm, 'near', { premium: false }).map((r) => r.kind)).toEqual(['upgrade', 'garrison']);
+    const mid = rowsFor(vm, 'mid', { premium: false })[1] as Extract<HudRow, { kind: 'compact' }>;
+    expect(mid.production).toBeUndefined();
+    expect(mid.garrisonTotal).toBe(7);
+  });
+
+  it('other buildings never show the settlement garrison', () => {
+    expect(buildingHudViewModel(input({ garrison })).garrison).toBeUndefined();
+  });
+
+  it('mid has two rows at most, the second compact', () => {
+    const rows = rowsFor(buildingHudViewModel(input()), 'mid', { premium: false });
+    expect(rows.map((r) => r.kind)).toEqual(['upgrade', 'compact']);
+  });
+
+  it('a training building shows its queue pips and current order', () => {
+    const t = { id: 't', unit: 'spearman', q: 1, r: 2, count: 3, completedCount: 0, completesInSeconds: 50, totalSeconds: 200 } as TrainingOrderResponse;
+    const vm = buildingHudViewModel(input({ type: 'barracks', definitions: undefined, trainingQueue: [t, { ...t, id: 'u', q: 7 }] }));
+    expect(vm.training).toMatchObject({ slotsUsed: 1, slotsMax: 5, current: { unit: 'spearman', count: 3, secondsLeft: 50, progress: 0.75 } });
+    expect(rowsFor(vm, 'near', { premium: false }).map((r) => r.kind)).toContain('training');
+  });
+
+  it('a running feast replaces production on the Town Square', () => {
+    const vm = buildingHudViewModel(input({ type: 'townsquare', definitions: undefined, feast: { secondsLeft: 100, totalSeconds: 200, renownGain: 6122 } }));
+    expect(rowsFor(vm, 'near', { premium: false })[1]).toMatchObject({ kind: 'feast', secondsLeft: 100, renownGain: 6122 });
+  });
+
+  describe('time until affordable', () => {
+    const short = () => buildingHudViewModel(input({ available: stock({ wood: 40 }), rates: stock({ wood: 120 }) }));
+    it('premium gets the time and no hint', () => {
+      expect(rowsFor(short(), 'near', { premium: true })[0]).toMatchObject({ affordableInSeconds: 1800, premiumHint: false });
+    });
+    it('free gets the premium hint and no time', () => {
+      const row = rowsFor(short(), 'near', { premium: false })[0] as Extract<HudRow, { kind: 'upgrade' }>;
+      expect(row.premiumHint).toBe(true);
+      expect(row.affordableInSeconds).toBeUndefined();
+    });
+    it('neither shows it when nothing is short', () => {
+      expect(rowsFor(buildingHudViewModel(input()), 'near', { premium: true })[0]).toMatchObject({ premiumHint: false, affordableInSeconds: undefined });
+    });
+  });
+});
+
+describe('tierFor', () => {
+  it('uses the thresholds without history', () => {
+    expect(tierFor(1)).toBe('mid');
+    expect(tierFor(HUD_TIER.nearAt)).toBe('near');
+    expect(tierFor(HUD_TIER.farBelow - 0.01)).toBe('far');
+    expect(tierFor(HUD_TIER.farBelow)).toBe('mid');
+  });
+  it('stays near until the ratio drops 0.05 below the threshold', () => {
+    expect(tierFor(1.38, 'near')).toBe('near');
+    expect(tierFor(1.34, 'near')).toBe('mid');
+    expect(tierFor(1.38, 'mid')).toBe('mid');
+  });
+  it('stays far until the ratio rises 0.05 above the threshold', () => {
+    expect(tierFor(0.72, 'far')).toBe('far');
+    expect(tierFor(0.76, 'far')).toBe('mid');
+    expect(tierFor(0.72, 'mid')).toBe('mid');
+  });
+  it('does not flicker when the ratio jitters around a threshold', () => {
+    let tier = tierFor(1.45, null);
+    const seen = new Set<string>();
+    for (const r of [1.41, 1.39, 1.42, 1.38, 1.4]) seen.add((tier = tierFor(r, tier)));
+    expect(seen).toEqual(new Set(['near']));
+  });
+});
+
+describe('stackOrder', () => {
+  it('puts the right-most marker on top', () => {
+    expect(stackOrder([{ x: 30, id: 'c' }, { x: 10, id: 'a' }, { x: 20, id: 'b' }]).map((m) => m.id)).toEqual(['a', 'b', 'c']);
+  });
+  it('puts the hovered marker last, whatever its x', () => {
+    expect(stackOrder([{ x: 10, id: 'a', hovered: true }, { x: 30, id: 'c' }, { x: 20, id: 'b' }]).map((m) => m.id)).toEqual(['b', 'c', 'a']);
+  });
+  it('leaves the input alone', () => {
+    const markers = [{ x: 2 }, { x: 1 }];
+    stackOrder(markers);
+    expect(markers[0].x).toBe(2);
+  });
+});

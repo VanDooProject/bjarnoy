@@ -554,5 +554,25 @@
     "towerBurned": "Der Turm bei ({q}, {r}) brannte nieder.",
     "towerHeld": "Der Turm bei ({q}, {r}) hielt stand.",
     "summary": "{title}: {lost} Einheiten verloren, {beasts} Tiere erlegt, {loot} Beute"
+  },
+  "buildingHud": {
+    "upgrade": "Ausbauen",
+    "premiumHint": "Premium zeigt dir, wann du es dir leisten kannst",
+    "needsLonghouse": "Langhaus {level}",
+    "needsBuilding": "{building} {level}",
+    "storage": "Lager zu klein",
+    "max": "Max",
+    "more": "+{n} weitere",
+    "moreShort": "+{n}",
+    "perHour": "/h",
+    "each": "je",
+    "feast": "Fest",
+    "upgradingTo": "Auf Stufe {level}",
+    "toggle": {
+      "label": "Gebäudeinfo",
+      "shown": "Gebäudeinfo eingeblendet",
+      "hidden": "Gebäudeinfo ausgeblendet",
+      "shortcut": "Drück H, um die Gebäudeinfo ein- oder auszublenden"
+    }
   }
 }

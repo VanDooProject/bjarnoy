@@ -54,6 +54,7 @@ import { hudBarHeightPx, hudRailWidthPx } from '../composables/hudBarHeight';
 import { isHudRail } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
 import { hexTakesNoOrder, nextUpgradeLevel } from '../lib/hud/pendingBuild';
+import { resolveUpgradeTarget, upgradeBlockers } from '../lib/hud/upgradeRules';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
@@ -968,18 +969,22 @@ function upgradeActionFor(tile: Tile): RingAction {
   const type = tile.buildingType!;
   const label = t('hud.ringMenu.actions.upgrade');
   // Queued behind a running upgrade, this one starts from the level that one reaches.
-  const nextLevel = nextUpgradeLevel(tile.buildingLevel ?? 1, world.hud.queue, tile);
-  const level = nextLevel - 1;
   const definitions = buildingCatalogue.byType[type];
-  const upgradeDefinition = definitions?.find((d) => d.level === nextLevel);
+  const { nextLevel, level, definition: upgradeDefinition, maxed } = resolveUpgradeTarget(
+    tile.buildingLevel ?? 1,
+    world.hud.queue,
+    tile,
+    definitions,
+  );
   // A catalogue that lists the building but has no further level: nothing left to upgrade to.
-  if (definitions?.length && !upgradeDefinition) {
+  if (maxed) {
     return { id: 'upgrade', label, color: 'var(--gold)', disabled: true, hint: t('hud.ringMenu.actions.maxLevel') };
   }
   const cost = upgradeDefinition?.cost ?? buildingUpgradeCost(type, nextLevel);
+  const blockers = upgradeBlockers(upgradeDefinition, world.hud.level, builtLevels());
   const locks = [
-    longhouseLock(upgradeDefinition?.requiredLonghouseLevel, world.hud.level),
-    ...prerequisiteLocks(upgradeDefinition?.prerequisites, builtLevels()),
+    longhouseLock(blockers.longhouse, world.hud.level),
+    ...prerequisiteLocks(blockers.prerequisites, builtLevels()),
   ].filter((lock): lock is string => !!lock);
   const hexBusy = world.hud.queue.some((o) => o.q === tile.q && o.r === tile.r);
   const availability = availabilityFor(cost, upgradeDefinition, locks.length > 0, hexBusy);

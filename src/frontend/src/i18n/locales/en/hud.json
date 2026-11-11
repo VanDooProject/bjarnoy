@@ -554,5 +554,25 @@
     "towerBurned": "The tower at ({q}, {r}) burned down.",
     "towerHeld": "The tower at ({q}, {r}) held.",
     "summary": "{title}: {lost} units lost, {beasts} beasts slain, {loot} loot"
+  },
+  "buildingHud": {
+    "upgrade": "Upgrade",
+    "premiumHint": "Premium shows when you can afford it",
+    "needsLonghouse": "Longhouse {level}",
+    "needsBuilding": "{building} {level}",
+    "storage": "Storage full",
+    "max": "Max",
+    "more": "+{n} more",
+    "moreShort": "+{n}",
+    "perHour": "/h",
+    "each": "each",
+    "feast": "Feast",
+    "upgradingTo": "To level {level}",
+    "toggle": {
+      "label": "Building info",
+      "shown": "Building info shown",
+      "hidden": "Building info hidden",
+      "shortcut": "Press H to show or hide building info"
+    }
   }
 }
