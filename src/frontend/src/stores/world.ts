@@ -19,6 +19,7 @@ import type {
   ForeignArmyResponse,
   QuestResponse,
   RenownResponse,
+  SettlementResponse,
   UnitStackResponse,
   GarrisonSpotResponse,
   WorldMovementResponse,
@@ -1085,6 +1086,13 @@ export const useWorldStore = defineStore('world', {
         await this.switchToSettlement(response.realmId);
         return;
       }
+      this.applySettlementResponse(response);
+    },
+    /**
+     * Applies a fetched settlement response to the model and the HUD. Shared by the live poll and by a settlement switch, so
+     * both show the same state. Keeps pending optimistic orders (W3) already in `hud.queue`; a switch clears the queue first.
+     */
+    applySettlementResponse(response: SettlementResponse) {
       this.linkedMemberIds = [...response.linkedMemberIds];
       this.model.applyServerSnapshot(response.id, {
         level: response.longhouseLevel,
@@ -1280,8 +1288,14 @@ export const useWorldStore = defineStore('world', {
       });
       this.model.claimTerritory(response.id);
       this.selectedSettlementId = response.id;
-      this.linkedMemberIds = [...response.linkedMemberIds];
-      this.syncHud();
+      // The previous realm's queue (pending optimistic orders included) must not survive into the new one.
+      this.hud.queue = [];
+      this.applySettlementResponse(response);
+      this.armies = [];
+      this.guestArmies = [];
+      this.armiesFetchedAt = 0;
+      this.guestArmiesFetchedAt = 0;
+      void this.refreshArmies();
       void this.refreshTradeAsync();
     },
     /**
