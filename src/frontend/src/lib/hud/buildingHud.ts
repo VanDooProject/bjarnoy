@@ -465,8 +465,8 @@ export function hasHudMarker(b: { type: string; level: number }): boolean {
 
 /**
  * Hex keys (`q,r`) that have a HUD marker: a standing building of level 1 or more that is no wall. The marker's dial draws every
- * order state of its hex (running, queued, pending, refused, finishing, raze), so the canvas construction dial skips these hexes
- * (`skipHudOwnedDials`); a new build (level-0 site) keeps the canvas dial.
+ * order state of its hex (running, queued, pending, refused, finishing, raze); a hex without one (a new build, a wall) shows its
+ * construction dial as a dial-only marker of the layer.
  */
 export function hudMarkerKeys(buildings: readonly { q: number; r: number; type: string; level: number }[]): Set<string> {
   const keys = new Set<string>();

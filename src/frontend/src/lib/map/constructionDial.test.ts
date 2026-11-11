@@ -3,7 +3,6 @@ import type { BuildOrderResponse } from '../../api/types';
 import { makePendingOrder } from '../hud/pendingBuild';
 import {
   rejectDialAt,
-  skipHudOwnedDials,
   dialPhase,
   constructionDialsFromQueue,
   DIAL_HOVER_MS,
@@ -519,34 +518,6 @@ describe('rejectDialAt', () => {
   it('keeps a running build on the hex (an upgrade refused behind it) instead of replacing it', () => {
     const running = { coord: at, startMs: 0, endMs: 9000, state: 'building' as const, queuePosition: null };
     expect(rejectDialAt([other, running], at, 500)).toEqual([other, running]);
-  });
-});
-
-describe('skipHudOwnedDials', () => {
-  const dial = (q: number, over: Partial<ConstructionDial> = {}): ConstructionDial => ({
-    coord: { q, r: 0 },
-    startMs: 0,
-    endMs: 10_000,
-    state: 'building',
-    queuePosition: null,
-    ...over,
-  });
-
-  it('draws every dial while building info is off', () => {
-    const dials = [dial(1), dial(2)];
-    expect(skipHudOwnedDials(dials, null)).toBe(dials);
-    expect(skipHudOwnedDials(dials, new Set())).toBe(dials);
-  });
-
-  it('skips every dial on a hex with a marker, whatever state it is in, and keeps the hexes without one', () => {
-    const running = dial(1);
-    const queued = dial(2, { startMs: null, endMs: null, state: 'queued', queuePosition: 1 });
-    const pending = dial(3, { startMs: null, endMs: null, state: 'pending' });
-    const finishing = dial(4, { endMs: 4_000 });
-    const rejected = dial(5, { startMs: null, endMs: null, state: 'pending', rejectedAtMs: 100 });
-    const newBuild = dial(6);
-    const owned = new Set(['1,0', '2,0', '3,0', '4,0', '5,0']);
-    expect(skipHudOwnedDials([running, queued, pending, finishing, rejected, newBuild], owned)).toEqual([newBuild]);
   });
 });
 

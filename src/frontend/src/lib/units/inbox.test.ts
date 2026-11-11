@@ -18,6 +18,10 @@ function battle(id: string, occurredAt: string): BattleReportResponse {
     attackerLines: [],
     defenderLines: [],
     siege: null,
+    shipFight: null,
+    drowned: [],
+    fireShipsBurned: 0,
+    fireSiege: null,
   };
 }
 

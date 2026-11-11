@@ -589,6 +589,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             line.ToTable("battle_report_attacker_lines");
             line.HasKey(l => l.Id);
             line.Property(l => l.Id).ValueGeneratedNever();
+            line.Property(l => l.Fight).HasConversion<int>();
             line.Property(l => l.UnitType).HasConversion<int>();
         });
 
@@ -597,6 +598,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             line.ToTable("battle_report_defender_lines");
             line.HasKey(l => l.Id);
             line.Property(l => l.Id).ValueGeneratedNever();
+            line.Property(l => l.Fight).HasConversion<int>();
             line.Property(l => l.UnitType).HasConversion<int>();
         });
 

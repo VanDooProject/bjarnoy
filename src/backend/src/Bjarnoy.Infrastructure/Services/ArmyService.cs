@@ -223,9 +223,10 @@ public sealed class ArmyService(
         // hex is not walkable.
         HexCoord? targetCampCoord = null;
         var targetCampIsWater = false;
+        var targetCampIsSand = false;
         if (mission == ArmyMission.Hunt)
         {
-            (effectiveDestination, targetCampCoord, targetCampIsWater) = await ResolveHuntCampAsync(
+            (effectiveDestination, targetCampCoord, targetCampIsWater, targetCampIsSand) = await ResolveHuntCampAsync(
                 settlement.WorldId, effectiveDestination, Army.TrainingSite(settled.Centre, settled.Buildings, unitCounts),
                 now, sampler.TerrainAt, cancellationToken).ConfigureAwait(false);
         }
@@ -280,7 +281,7 @@ public sealed class ArmyService(
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimDiscs,
             isHexFoundable, renownAndSlotAllowed, session.SpeedFactor, rivers.IsRiver, rivers.IsWide,
-            dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater);
+            dispatchGiantIndex, walls: walls, targetCampCoord: targetCampCoord, targetCampIsWater: targetCampIsWater, targetCampIsSand: targetCampIsSand);
 
         if (!decision.Accepted)
         {
@@ -348,19 +349,19 @@ public sealed class ArmyService(
     /// Looks up the wildlife camp a Hunt names by its hex, for a dispatch or a field order alike. With a camp there, returns the
     /// hex the route ends on (<see cref="Army.HuntRouteDestination"/> from <paramref name="from"/>: the camp's own hex, or
     /// its nearest walkable neighbour; a water camp, the whale road, is reached on its own sea hex), the camp's hex and
-    /// whether it stands on the sea. With none, returns <paramref name="campHex"/> and no camp, which
+    /// whether it stands on the sea or on sand. With none, returns <paramref name="campHex"/> and no camp, which
     /// <see cref="Army"/> refuses as <see cref="DispatchRejection.NoCampAtDestination"/>.
     /// </summary>
-    private async Task<(HexCoord Destination, HexCoord? CampCoord, bool CampIsWater)> ResolveHuntCampAsync(
+    private async Task<(HexCoord Destination, HexCoord? CampCoord, bool CampIsWater, bool CampIsSand)> ResolveHuntCampAsync(
         Guid worldId, HexCoord campHex, HexCoord from, DateTimeOffset now, Func<HexCoord, Terrain> terrainAt, CancellationToken cancellationToken)
     {
         var camp = await _campService.FindCampAsync(worldId, campHex, now, cancellationToken).ConfigureAwait(false);
         if (camp is not { } found)
         {
-            return (campHex, null, false);
+            return (campHex, null, false, false);
         }
 
-        return (Army.HuntRouteDestination(found.Camp.Coord, from, terrainAt, isFleet: found.Camp.IsWater), found.Camp.Coord, found.Camp.IsWater);
+        return (Army.HuntRouteDestination(found.Camp.Coord, from, terrainAt, isFleet: found.Camp.IsWater), found.Camp.Coord, found.Camp.IsWater, found.Camp.IsSand);
     }
 
     /// <summary>
@@ -700,17 +701,18 @@ public sealed class ArmyService(
         // A hunt's route is planned from where the army stands now.
         HexCoord? targetCampCoord = null;
         var targetCampIsWater = false;
+        var targetCampIsSand = false;
         if (mission == ArmyMission.Hunt)
         {
             var standingHex = ((ArmyLocation.InTransit)domain.Location).Movement.PositionAt(now);
-            (effectiveDestination, targetCampCoord, targetCampIsWater) = await ResolveHuntCampAsync(
+            (effectiveDestination, targetCampCoord, targetCampIsWater, targetCampIsSand) = await ResolveHuntCampAsync(
                 worldId, effectiveDestination, standingHex, now, sampler.TerrainAt, cancellationToken).ConfigureAwait(false);
         }
 
         var result = Army.PlanFieldOrder(
             domain, waypoints, effectiveDestination, home, now, sampler.TerrainAt, isPremium,
             army.Settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls,
-            mission, targetSettlementId, targetBuildingCoord, targetClaimDiscs, targetCampCoord, targetCampIsWater,
+            mission, targetSettlementId, targetBuildingCoord, targetClaimDiscs, targetCampCoord, targetCampIsWater, targetCampIsSand,
             giants, units, Guid.CreateVersion7());
 
         if (!result.Accepted)
@@ -1125,7 +1127,9 @@ public sealed class ArmyService(
         // Attack army — exactly SettleArrival's own fire condition.
         var battle = arrival.Battle!;
 
-        if (arrival.Siege is { Applied: true })
+        // The building damage of either step (the Fire Ships' fire, the siege engines) changes the realm.
+        var fireSiege = arrival.Attack!.FireSiege;
+        if (arrival.Siege is { Applied: true } || fireSiege.Applied)
         {
             _realmDirty.Add(targetId);
         }
@@ -1156,8 +1160,17 @@ public sealed class ArmyService(
 
         var report = BattleReport.From(
             Guid.CreateVersion7(), movement.ArrivesAt, armyEntity.Id, armyEntity.SettlementId, targetId,
-            domain.Stacks, battle, seed, arrival.Siege, wasRaid: domain.Mission == ArmyMission.Raid);
+            domain.Stacks, arrival.Attack!, seed, wasRaid: domain.Mission == ArmyMission.Raid);
         _dbContext.BattleReports.Add(BattleReportEntity.FromDomain(report));
+
+        if (fireSiege.Applied)
+        {
+            _logger.LogInformation(
+                "Army {ArmyId}'s fire ships burned {Burned} ship(s) and reduced {TargetType} at ({Q},{R}) in settlement {TargetId} "
+                    + "from level {Before} to {After}.",
+                armyEntity.Id, arrival.Attack!.FireShipsBurned, fireSiege.TargetType, fireSiege.TargetCoord!.Value.Q,
+                fireSiege.TargetCoord.Value.R, targetId, fireSiege.LevelBefore, fireSiege.LevelAfter);
+        }
 
         if (arrival.Siege is { Applied: true } siege)
         {
@@ -1219,16 +1232,17 @@ public sealed class ArmyService(
         var effectiveLevel = state.EffectiveLevel(camp);
 
         var attackerEntity = await LoadSettlementAsync(armyEntity.SettlementId, cancellationToken).ConfigureAwait(false);
-        // Fleets hunting a water camp fight with the ship attack bonus, land armies with the land one.
-        var attackBonusPercent = attackerEntity?.ToDomain().AttackBonusPercent(domain.IsFleet ? UnitClass.Ship : UnitClass.Infantry) ?? 0;
+        // Fleets hunting a water camp fight with the ship attack bonus; land armies, and the land troops a fleet puts ashore at a
+        // sand camp, with the land one.
+        var attackBonusPercent = attackerEntity?.ToDomain().AttackBonusPercent(domain.IsFleet && camp.IsWater ? UnitClass.Ship : UnitClass.Infantry) ?? 0;
 
         var seed = Random.Shared.Next();
         var plan = CampBattleResolver.Hunt(
-            domain.Stacks, garrison, camp, effectiveLevel, seed, attackBonusPercent, state.Leftover);
+            domain.Stacks, garrison, camp, effectiveLevel, seed, domain.ProvisionsAt(arrivesAt), attackBonusPercent, state.Leftover);
 
         // An already empty camp is a pickup, not a clear: clears, calm and snapshot stay as they were.
         var nextState = garrison.IsEmpty
-            ? state.AfterPickup(plan.Loot)
+            ? state.AfterPickup(plan.Taken)
             : state.AfterHunt(camp, arrivesAt, plan);
         await _campService.UpsertStateAsync(worldId, camp.Coord, nextState, cancellationToken).ConfigureAwait(false);
 

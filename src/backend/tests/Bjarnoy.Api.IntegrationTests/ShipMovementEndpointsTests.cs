@@ -466,11 +466,12 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_fleet_attack_is_sent_at_a_shore_building_of_an_inland_centred_target_and_damages_only_it()
+    public async Task A_fleet_attack_is_sent_at_a_shore_building_of_an_inland_centred_target_and_its_siege_engines_damage_only_it()
     {
         // Issue #450, target half. The target's centre (-60,-38) has no sea within two hexes, but its claim (radius 2)
-        // reaches the shoreline hex (-60,-40); the fleet must name a building there, sails to that hex, wins against the
-        // empty garrison, and the siege hits that building only (3 Karves = 30 siege power -> 3 levels).
+        // reaches the shoreline hex (-60,-40); the fleet must name a building there, sails to that hex, has no ships to fight,
+        // lands the catapult it carries against the empty garrison, and that siege hits that building only (ships do no
+        // siege damage; 1 catapult = 40 siege power -> 4 levels).
         using var client = Client();
         var attackerOwner = $"owner-{Guid.CreateVersion7():N}";
         var targetOwner = $"rival-{Guid.CreateVersion7():N}";
@@ -488,6 +489,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
             var attacker = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, attackerOwner, attackerCentre.Q, attackerCentre.R);
             attacker.Buildings.Add(new PlacedBuildingEntity { SettlementId = attacker.Id, Q = dock.Q, R = dock.R, Type = BuildingType.Dockyard, Level = 1 });
             attacker.Garrison.Add(new UnitStackEntity { SettlementId = attacker.Id, UnitType = UnitType.Karve, Count = 3 });
+            attacker.Garrison.Add(new UnitStackEntity { SettlementId = attacker.Id, UnitType = UnitType.Catapult, Count = 1 });
             attacker.StockFood = 100_000;
             attacker.CapacityFood = 100_000;
 
@@ -503,7 +505,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         }
 
         client.DefaultRequestHeaders.Add("X-Owner-Id", attackerOwner);
-        UnitCountRequest[] karves = [new UnitCountRequest("karve", 3)];
+        UnitCountRequest[] karves = [new UnitCountRequest("karve", 3), new UnitCountRequest("catapult", 1)];
         var centre = new HexPointRequest(targetCentre.Q, targetCentre.R);
 
         var withoutBuilding = await client.PostJsonAsync(
@@ -518,7 +520,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
 
         var dispatched = await client.PostJsonAsync(
             $"/api/v1/settlements/{attackerId}/armies",
-            new DispatchArmyRequest(karves, null, centre, 30, "attack", targetId, new HexPointRequest(shoreBuilding.Q, shoreBuilding.R)), Ct);
+            new DispatchArmyRequest(karves, null, centre, 60, "attack", targetId, new HexPointRequest(shoreBuilding.Q, shoreBuilding.R)), Ct);
         Assert.Equal(HttpStatusCode.Created, dispatched.StatusCode);
         var army = await dispatched.ReadStrictAsync<ArmyResponse>(Ct);
         Assert.Equal(new HexPointResponse(shoreBuilding.Q, shoreBuilding.R), army.Movement!.Path[^1]);
@@ -539,11 +541,16 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         Assert.NotNull(report.Siege);
         Assert.Equal(new HexPointResponse(shoreBuilding.Q, shoreBuilding.R), report.Siege!.TargetCoord);
         Assert.Equal(5, report.Siege.LevelBefore);
-        Assert.Equal(2, report.Siege.LevelAfter);
+        Assert.Equal(1, report.Siege.LevelAfter);
+        // The target had no ships: no ship fight, the land fight is the catapult's.
+        Assert.Null(report.ShipFight);
+        Assert.Empty(report.Drowned);
+        Assert.Equal(0, report.FireShipsBurned);
+        Assert.Null(report.FireSiege);
 
         var settlement = await client.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{targetId}", SqliteApiFixture.StrictJson, Ct);
-        Assert.Equal(2, settlement!.Buildings.Single(b => b.Q == shoreBuilding.Q && b.R == shoreBuilding.R).Level);
+        Assert.Equal(1, settlement!.Buildings.Single(b => b.Q == shoreBuilding.Q && b.R == shoreBuilding.R).Level);
         Assert.Equal(5, settlement.Buildings.Single(b => b.Q == inlandBuilding.Q && b.R == inlandBuilding.R).Level);
     }
 

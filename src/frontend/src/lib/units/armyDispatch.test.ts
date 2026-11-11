@@ -6,6 +6,7 @@ import {
   buildFieldOrderRequest,
   buildHuntDispatchRequest,
   garrisonCanHunt,
+  fleetLacksLandTroops,
   isHuntUnit,
   buildMoveDispatchRequest,
   buildFoundDispatchRequest,
@@ -604,6 +605,27 @@ describe('buildHuntDispatchRequest', () => {
     expect(isHuntUnit('longship', byType, true)).toBe(true);
     expect(isHuntUnit('spearman', byType, true)).toBe(true);
     expect(isHuntUnit('unknown', byType, true)).toBe(false);
+  });
+
+  it('a sand camp is hunted by land units that a fleet may carry: ships and land units both selectable', () => {
+    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
+    expect(isHuntUnit('longship', byType, false, true)).toBe(true);
+    expect(isHuntUnit('spearman', byType, false, true)).toBe(true);
+    expect(isHuntUnit('unknown', byType, false, true)).toBe(false);
+    // The ships take no part in the fight: a sand hunt needs a land unit to lead it, so ships alone cannot.
+    const shipsOnly = [{ unit: 'longship', count: 2 }];
+    const withLand = [{ unit: 'longship', count: 2 }, { unit: 'spearman', count: 1 }];
+    expect(garrisonCanHunt(shipsOnly, byType, false)).toBe(false);
+    expect(garrisonCanHunt(withLand, byType, false)).toBe(true);
+  });
+
+  it('a fleet without land troops aboard lacks what a sand hunt needs', () => {
+    const byType = { spearman: unit({ type: 'spearman', class: 'infantry' }), longship: unit({ type: 'longship', class: 'ship' }) };
+    expect(fleetLacksLandTroops({ longship: 2 }, byType)).toBe(true);
+    expect(fleetLacksLandTroops({ longship: 2, spearman: 0 }, byType)).toBe(true);
+    expect(fleetLacksLandTroops({ longship: 2, spearman: 1 }, byType)).toBe(false);
+    expect(fleetLacksLandTroops({ spearman: 4 }, byType)).toBe(false);
+    expect(fleetLacksLandTroops({}, byType)).toBe(false);
   });
 
   it('the hunt ring action needs land units at home for a land camp and a ship for a camp at sea', () => {

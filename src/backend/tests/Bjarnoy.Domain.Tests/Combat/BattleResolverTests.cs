@@ -371,4 +371,30 @@ public class BattleResolverTests
         // rounded figure — only which stack(s) absorb it may vary.
         Assert.Single(totalLostAcrossSeeds);
     }
+
+    [Fact]
+    public void Loot_capacity_is_the_surviving_ships_alone_when_there_are_ships_else_everyones()
+    {
+        var withShips = new[] { new UnitStack(UnitType.Longship, 2), new UnitStack(UnitType.Axeman, 50) };
+        var landOnly = new[] { new UnitStack(UnitType.Axeman, 50) };
+
+        Assert.Equal(BattleResolver.CarryCapacity([new UnitStack(UnitType.Longship, 2)]), BattleResolver.LootCapacity(withShips));
+        Assert.Equal(BattleResolver.CarryCapacity(landOnly), BattleResolver.LootCapacity(landOnly));
+        Assert.True(BattleResolver.LootCapacity(landOnly) > 0);
+        Assert.Equal(0, BattleResolver.LootCapacity([]));
+    }
+
+    [Fact]
+    public void Loot_food_plus_refill_never_exceeds_the_available_food()
+    {
+        // (468.2 - 197.6) + 197.6 rounds to 468.20000000000005 in floating point.
+        const double stock = 468.2;
+        const double refill = 197.6;
+        var (loot, taken) = BattleResolver.TakeLootAndRefill(
+            carryCapacity: 10_000, foodCapacity: refill, provisions: 0, new ResourceAmounts(0, 0, stock, 0));
+
+        Assert.Equal(refill, taken, 9);
+        Assert.True(loot.Food + taken <= stock);
+        Assert.Equal(stock - refill, loot.Food, 9);
+    }
 }
