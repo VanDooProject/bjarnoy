@@ -296,22 +296,6 @@
     "train": "Ausbilden",
     "trainingFailed": "Ausbildung fehlgeschlagen."
   },
-  "expansionPanel": {
-    "title": "Expansion",
-    "renown": "Ruhm {total} / {required}",
-    "settlement": "Siedlung",
-    "settlersInGarrison": "Siedler in der Garnison",
-    "trainSettlers": "5 Siedler ausbilden",
-    "canFoundAnother": "Kann eine weitere Siedlung gründen",
-    "yes": "Ja",
-    "notYet": "Noch nicht",
-    "settlerConvoy": "Siedlerkonvoi",
-    "recall": "Zurückrufen",
-    "retarget": "Neu ausrichten",
-    "confirm": "Bestätigen",
-    "trainingFailed": "Ausbildung fehlgeschlagen.",
-    "retargetFailed": "Neuausrichtung fehlgeschlagen."
-  },
   "battleReport": {
     "buildings": {
       "longhouse": "Langhaus",

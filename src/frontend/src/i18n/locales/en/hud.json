@@ -296,22 +296,6 @@
     "train": "Train",
     "trainingFailed": "Training failed."
   },
-  "expansionPanel": {
-    "title": "Expansion",
-    "renown": "Renown {total} / {required}",
-    "settlement": "Settlement",
-    "settlersInGarrison": "Settlers in garrison",
-    "trainSettlers": "Train 5 settlers",
-    "canFoundAnother": "Can found another settlement",
-    "yes": "Yes",
-    "notYet": "Not yet",
-    "settlerConvoy": "Settler convoy",
-    "recall": "Recall",
-    "retarget": "Retarget",
-    "confirm": "Confirm",
-    "trainingFailed": "Training failed.",
-    "retargetFailed": "Retarget failed."
-  },
   "battleReport": {
     "buildings": {
       "longhouse": "Longhouse",
