@@ -2453,6 +2453,7 @@ export class HexMapRenderer {
   private hoverPointer: { x: number; y: number } | null = null;
   /** Told of every touch/pen tap on the map (canvas px) without taking it over; see `setTapObserver`. */
   private tapObserver: ((screen: { x: number; y: number }) => void) | null = null;
+  private frameObserver: (() => void) | null = null;
   /** Per-dial hover tween progress 0..1 (`dialHoverStep`), keyed by `coordKey`; absent = 0. */
   private dialHover = new Map<string, number>();
   /** Dial revealed by a touch/pen tap (acts as hovered); see `handleDialTap`. */
@@ -2923,6 +2924,9 @@ export class HexMapRenderer {
     this.tickKeyPan();
     this.tickCameraAnim();
     this.tickDoubleTapZoom();
+    // HTML overlays placed from the camera (the building HUD) follow in this same tick, so what they place is the frame Pixi
+    // presents; a tick Pixi skips (framePacing) skips them too.
+    this.frameObserver?.();
     this.rebuildMarkers();
     // Issue #16 "ring menu": the settlement name badge (rebuildSettlementLabels,
     // below) floats right where the ring's own bubbles/track need to sit — it
@@ -6465,6 +6469,15 @@ export class HexMapRenderer {
    */
   setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null) {
     this.tapObserver = fn;
+  }
+
+  /**
+   * Called once per rendered map frame, right after the camera moved for that frame (before the canvas markers are drawn):
+   * HTML overlays that follow the camera (the building HUD) place themselves from it, so they never run ahead of or behind
+   * the canvas, however `framePacing` thins the ticks out. `null` clears it.
+   */
+  setFrameObserver(fn: (() => void) | null) {
+    this.frameObserver = fn;
   }
 
   /**

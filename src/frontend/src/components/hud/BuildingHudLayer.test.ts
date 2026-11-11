@@ -20,11 +20,17 @@ import enCatalogue from '../../i18n/locales/en/catalogue.json';
 vi.mock('../../config', () => ({ DEMO_MODE: false, API_BASE_URL: '/api/v1' }));
 
 let frames: FrameRequestCallback[] = [];
-/** Runs the placement loop once, like one animation frame. */
-function runFrame() {
+let mounted: { frameObserver: (() => void) | null } | null = null;
+/** One bare animation frame: runs what asked for one (a dial's own animation), but the layer's placement ignores it. */
+function runAnimationFrame() {
   const callbacks = frames;
   frames = [];
   callbacks.forEach((cb) => cb(0));
+}
+/** One rendered map frame: the renderer calls the layer's frame observer (the layer has no animation-frame loop of its own). */
+function runFrame() {
+  mounted?.frameObserver?.();
+  runAnimationFrame();
 }
 
 function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
@@ -41,6 +47,10 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null) {
       this.tapObserver = fn;
     },
+    frameObserver: null as (() => void) | null,
+    setFrameObserver(fn: (() => void) | null) {
+      this.frameObserver = fn;
+    },
     markerOcclusionCircle: null as { x: number; y: number; r: number } | null,
     setHudOwnedDials: vi.fn(),
     // The renderer's construction dials; a test replaces the array to change them, like the renderer does.
@@ -54,12 +64,14 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     markerOcclusionCircle: { x: number; y: number; r: number } | null;
     hoveredHexKey: string | null;
     tapObserver: ((screen: { x: number; y: number }) => void) | null;
+    frameObserver: (() => void) | null;
     constructionDialList: ConstructionDial[];
     setHudOwnedDials: ReturnType<typeof vi.fn>;
   };
 }
 
 function mountLayer(renderer: BuildingHudRenderer) {
+  mounted = renderer as unknown as { frameObserver: (() => void) | null };
   return mount(BuildingHudLayer, {
     props: { renderer },
     attachTo: document.body,
@@ -91,6 +103,7 @@ describe('BuildingHudLayer', () => {
     setActivePinia(createPinia());
     localStorage.clear();
     frames = [];
+    mounted = null;
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
       frames.push(cb);
       return frames.length;
@@ -126,6 +139,41 @@ describe('BuildingHudLayer', () => {
     runFrame();
     // The dial's centre sits on the progress dial's centre, scaled by the map scale.
     expect(wrapper.get<HTMLElement>('[data-coord="2,0"]').element.style.transform).toBe('translate3d(260.0px, 300.0px, 0) scale(1.000)');
+  });
+
+  it('places the markers from the renderer frame, from the camera of that same frame, and not from animation frames', () => {
+    seedBuildings();
+    const renderer = fakeRenderer();
+    wrapper = mountLayer(renderer);
+    runFrame();
+    const el = () => wrapper!.get<HTMLElement>('[data-coord="2,0"]').element;
+    expect(el().style.transform).toBe('translate3d(260.0px, 300.0px, 0) scale(1.000)');
+
+    // The camera moves, but the canvas has not rendered yet: animation frames alone do not move the markers.
+    renderer.dialScreenPoint = (coord) => ({ x: 500 + coord.q * 80, y: 40 });
+    renderer.dialMapScale = 0.5;
+    runAnimationFrame();
+    runAnimationFrame();
+    expect(el().style.transform).toBe('translate3d(260.0px, 300.0px, 0) scale(1.000)');
+
+    // The renderer's frame places them from the camera it just drew.
+    runFrame();
+    expect(el().style.transform).toBe('translate3d(660.0px, 40.0px, 0) scale(0.500)');
+    expect(frames).toEqual([]);
+  });
+
+  it('hands the frame observer to a renderer it is given later and lets go of the old one', async () => {
+    seedBuildings();
+    const first = fakeRenderer();
+    wrapper = mountLayer(first);
+    expect(first.frameObserver).toBeTypeOf('function');
+    const second = fakeRenderer();
+    await wrapper.setProps({ renderer: second });
+    expect(first.frameObserver).toBeNull();
+    expect(second.frameObserver).toBeTypeOf('function');
+    wrapper.unmount();
+    wrapper = undefined;
+    expect(second.frameObserver).toBeNull();
   });
 
   it('scales the whole marker with the map like the progress dial', () => {

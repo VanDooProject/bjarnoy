@@ -64,6 +64,8 @@ export interface BuildingHudRenderer {
   readonly hoveredHexKey: string | null;
   /** Touch taps on the map, which still reach the map itself: a tap on a marker's dial reveals it. */
   setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null): void;
+  /** Called once per rendered map frame after the camera moved: the markers are placed from it, in the frame the canvas presents. */
+  setFrameObserver(fn: (() => void) | null): void;
   /** The open ring menu's footprint (canvas px); markers beneath it fade out like the progress dials do. */
   readonly markerOcclusionCircle: OcclusionCircle | null;
   /** The hexes whose construction dials (every order state) the canvas must not draw because a marker shows them; null = draw every dial. */
@@ -265,7 +267,6 @@ function onMapTap(screen: { x: number; y: number }) {
 const root = ref<HTMLElement | null>(null);
 const elements = new Map<string, HTMLElement>();
 const lastZ = new Map<string, number>();
-let frame = 0;
 
 /** Ring-menu fade per marker (`markerFadeStep`); absent = fully visible. */
 const visibility = new Map<string, number>();
@@ -292,8 +293,8 @@ const boxOf = (key: string) => elements.get(key)?.querySelector<HTMLElement>('.h
 let lastFrameMs = 0;
 let lastDialList: readonly ConstructionDial[] | null = null;
 
+/** Runs from the renderer's own frame (`setFrameObserver`), never from a rAF of its own: the camera it reads is the one just drawn. */
 function tick() {
-  frame = requestAnimationFrame(tick);
   const renderer = props.renderer;
   const nowMs = Date.now();
   const dtMs = lastFrameMs ? Math.min(100, nowMs - lastFrameMs) : 0;
@@ -531,24 +532,26 @@ function onKeyDown(e: KeyboardEvent) {
 }
 
 onMounted(() => {
-  frame = requestAnimationFrame(tick);
   window.addEventListener('keydown', onKeyDown);
   props.renderer?.setTapObserver(onMapTap);
+  props.renderer?.setFrameObserver(tick);
 });
 watch(
   () => props.renderer,
   (next, previous) => {
     previous?.setTapObserver(null);
+    previous?.setFrameObserver(null);
     next?.setTapObserver(onMapTap);
+    next?.setFrameObserver(tick);
   },
 );
 onUnmounted(() => {
-  cancelAnimationFrame(frame);
   clearHandovers();
   motion.dispose();
   props.renderer?.setHudOwnedDials(null);
   window.removeEventListener('keydown', onKeyDown);
   props.renderer?.setTapObserver(null);
+  props.renderer?.setFrameObserver(null);
 });
 </script>
 
