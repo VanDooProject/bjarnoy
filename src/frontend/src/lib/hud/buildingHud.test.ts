@@ -121,6 +121,24 @@ describe('upgrade state', () => {
     expect(buildingHudViewModel(input({ type: 'tower', level: 10 })).upgrade.crown).toBe(false);
     expect(buildingHudViewModel(input({ type: 'townsquare', definitions: undefined })).upgrade.crown).toBe(false);
   });
+
+  it('is not max, and wears no crown, while an order only waits for the last level', () => {
+    // Longhouse at 29 with a waiting order to 30: it stands at 29, so no gold ring and no crown yet.
+    const longhouseDefs = Array.from({ length: 30 }, (_, i) => def(i + 1, { type: 'longhouse' }));
+    const waiting = order({ building: 'longhouse', targetLevel: 30, state: 'waiting' });
+    const vm = buildingHudViewModel(input({ type: 'longhouse', level: 29, definitions: longhouseDefs, queue: [waiting] }));
+    expect(vm.upgrade).toMatchObject({ state: 'queued', targetLevel: 30, crown: false });
+    expect(vm.dial.ring).not.toBe('max');
+    expect(vm.dial.progress).toBeUndefined();
+    // The same with a catalogue that ends at the order's level.
+    const short = buildingHudViewModel(input({ level: 2, definitions: [def(1), def(2), def(3)], queue: [order({ state: 'waiting' })] }));
+    expect(short.upgrade.state).toBe('queued');
+    // Standing at the last level is max and crowned.
+    const done = buildingHudViewModel(input({ type: 'longhouse', level: 30, definitions: longhouseDefs }));
+    expect(done.upgrade).toMatchObject({ state: 'max', crown: true });
+    // A catalogue whose last level is below the type ceiling: standing there is max.
+    expect(buildingHudViewModel(input({ level: 3, definitions: [def(1), def(2), def(3)] })).upgrade.state).toBe('max');
+  });
 });
 
 describe('affordableInSeconds', () => {

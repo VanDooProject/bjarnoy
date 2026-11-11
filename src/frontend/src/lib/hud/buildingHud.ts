@@ -60,7 +60,7 @@ export function stackOrder<T extends { x: number; hovered?: boolean }>(markers: 
 
 export const TRAINING_SLOTS = 5;
 
-export type HudUpgradeState = 'ready' | 'short' | 'longhouse' | 'prereq' | 'storage' | 'upgrading' | 'max';
+export type HudUpgradeState = 'ready' | 'short' | 'longhouse' | 'prereq' | 'storage' | 'upgrading' | 'queued' | 'max';
 export type HudRing = 'ready' | 'blocked' | 'upgrading' | 'max';
 
 /** One thing the upgrade still needs. The view renders it through i18n (building name + level), never as an English string. */
@@ -215,10 +215,19 @@ export function buildingHudViewModel(input: BuildingHudInput): BuildingHudViewMo
     return vm;
   }
 
-  const target = resolveUpgradeTarget(level, input.queue, coord, input.definitions);
-  if (level >= maxLevel || target.maxed) {
+  // Max and the crown are about the level the building stands at: an order already waiting for the last level does not make it so.
+  const catalogueTop = input.definitions?.length ? Math.max(...input.definitions.map((d) => d.level)) : undefined;
+  if (level >= maxLevel || (catalogueTop !== undefined && level >= catalogueTop)) {
     vm.upgrade = { state: 'max', crown: isLonghouse };
     vm.dial = { kind: 'state', ring: 'max', progress: 1 };
+    return vm;
+  }
+
+  const target = resolveUpgradeTarget(level, input.queue, coord, input.definitions);
+  if (target.maxed) {
+    // Below the last level, yet the catalogue has nothing after the level an order already waits for: nothing more to queue.
+    vm.upgrade = { state: 'queued', targetLevel: target.level, crown };
+    vm.dial = { kind: 'state', ring: 'upgrading' };
     return vm;
   }
 

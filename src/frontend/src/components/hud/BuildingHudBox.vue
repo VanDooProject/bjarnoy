@@ -61,7 +61,7 @@ const pct = (fraction: number) => `${(Math.min(1, Math.max(0, fraction)) * 100).
             <span v-else class="hud-num">{{ eta(row.affordableInSeconds) }}</span>
           </span>
           <span v-else-if="row.state === 'storage'" class="hud-chip hud-chip--blocked"><BuildingHudIcon name="lock" />{{ t('hud.buildingHud.storage') }}</span>
-          <span v-else-if="row.state === 'upgrading'" class="hud-chip hud-chip--work">{{ `→${row.targetLevel}` }}</span>
+          <span v-else-if="row.state === 'upgrading' || row.state === 'queued'" class="hud-chip hud-chip--work">{{ `→${row.targetLevel}` }}</span>
           <span v-else-if="row.state === 'max'" class="hud-chip hud-chip--max"><BuildingHudIcon v-if="row.crown" name="crown" />{{ t('hud.buildingHud.max') }}</span>
         </div>
       </template>
