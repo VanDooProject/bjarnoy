@@ -56,6 +56,7 @@ public static class LeaderboardEndpoints
 
     private static async Task<Results<Ok<LeaderboardDirectoryResponse>, NotFound>> GetDirectory(
         Guid worldId,
+        ClaimsPrincipal principal,
         LeaderboardService leaderboards,
         WorldService worlds,
         CancellationToken cancellationToken)
@@ -65,7 +66,7 @@ public static class LeaderboardEndpoints
             return TypedResults.NotFound();
         }
 
-        var boards = await leaderboards.GetDirectoryAsync(worldId, cancellationToken);
+        var boards = await leaderboards.GetDirectoryAsync(worldId, CallerId(principal), cancellationToken);
         var windows = await leaderboards.GetClosedWindowsAsync(worldId, cancellationToken);
 
         return TypedResults.Ok(new LeaderboardDirectoryResponse(
@@ -170,6 +171,15 @@ public static class LeaderboardEndpoints
         return result is null
             ? TypedResults.NotFound()
             : TypedResults.Ok(LeaderboardMeResponse.From(result));
+    }
+
+    /// <summary>The caller's user id; <see langword="null"/> for anonymous play, which is an ordinary caller here.</summary>
+    private static Guid? CallerId(ClaimsPrincipal principal)
+    {
+        var idClaim = principal.Identity?.IsAuthenticated == true
+            ? principal.FindFirstValue(ClaimTypes.NameIdentifier)
+            : null;
+        return Guid.TryParse(idClaim, out var id) ? id : null;
     }
 
     private static ProblemDetails UnknownBoardProblem() => new()

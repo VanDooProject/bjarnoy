@@ -162,6 +162,57 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Directory_carries_the_callers_rank_per_board_and_nothing_for_anonymous()
+    {
+        using var client = Client();
+        var worldId = await CreateWorldAsync();
+        var plots = await GetPlotsAsync(client, worldId);
+
+        // A stronger rival first, then the caller: the caller must come out second on both boards.
+        var rivalOwner = Unique("rival");
+        var rival = await FoundSettlementAsync(client, worldId, plots, rivalOwner);
+        await RegisterAndClaimAsync(client, rivalOwner);
+        await SetLonghouseLevelAsync(rival.Id, 9);
+
+        var myOwner = Unique("mine");
+        var mine = await FoundSettlementAsync(client, worldId, plots, myOwner);
+        var (_, token) = await RegisterAndClaimAsync(client, myOwner);
+        await SetLonghouseLevelAsync(mine.Id, 4);
+        await RefreshBoardsAsync(worldId);
+
+        var anonymous = await client.GetFromJsonAsync<LeaderboardDirectoryResponse>(
+            $"/api/v1/worlds/{worldId}/leaderboards", SqliteApiFixture.StrictJson, Ct);
+        Assert.All(anonymous!.Boards, b => Assert.Null(b.MyRank));
+
+        Authorize(client, token);
+        var directory = await client.GetFromJsonAsync<LeaderboardDirectoryResponse>(
+            $"/api/v1/worlds/{worldId}/leaderboards", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.Equal(2, Assert.Single(directory!.Boards, b => b.Scope == "user" && b.Category == "score").MyRank);
+        Assert.Equal(
+            2, Assert.Single(directory.Boards, b => b.Scope == "settlement" && b.Category == "biggestSettlement").MyRank);
+
+        // Dark boards never carry a rank, even for a signed-in caller.
+        Assert.All(directory.Boards.Where(b => !b.Available), b => Assert.Null(b.MyRank));
+    }
+
+    [Fact]
+    public async Task Directory_has_no_rank_for_a_caller_without_an_entry()
+    {
+        using var client = Client();
+        var worldId = await CreateWorldAsync();
+        await BuildUserBoardAsync(client, worldId, [5]);
+
+        // A registered player who owns nothing in this world.
+        var (_, token) = await RegisterAndClaimAsync(client, Unique("nobody"));
+        Authorize(client, token);
+
+        var directory = await client.GetFromJsonAsync<LeaderboardDirectoryResponse>(
+            $"/api/v1/worlds/{worldId}/leaderboards", SqliteApiFixture.StrictJson, Ct);
+        Assert.All(directory!.Boards, b => Assert.Null(b.MyRank));
+    }
+
+    [Fact]
     public async Task Unknown_scope_or_category_is_a_bad_request()
     {
         using var client = Client();
