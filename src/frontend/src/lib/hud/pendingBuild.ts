@@ -48,7 +48,7 @@ export function isPendingOrder(order: Pick<BuildOrderResponse, 'id'>): boolean {
  */
 export function nextUpgradeLevel(
   builtLevel: number,
-  queue: Pick<BuildOrderResponse, 'q' | 'r' | 'kind' | 'targetLevel'>[],
+  queue: readonly Pick<BuildOrderResponse, 'q' | 'r' | 'kind' | 'targetLevel'>[],
   at: AxialCoord,
 ): number {
   const queued = queue.filter((o) => o.q === at.q && o.r === at.r && (o.kind ?? 'build') === 'build').map((o) => o.targetLevel);

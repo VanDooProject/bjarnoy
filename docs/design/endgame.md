@@ -143,7 +143,8 @@ Garrisons sit at every watchtower and at Utgard. Jötnar are a second garrison f
   If the army wins they are dead and the garrison does not recover; if it loses, the army is gone and regrowth
   goes on. An army standing on a taken tower keeps it taken.
 - **Siege loot**: each siege tick the army takes `SiegeLootPerHour` (watchtower 300, Utgard 1 000; split
-  iron 40% / food 30% / brick 30%) into its carried loot until its carry capacity is full; the rest is lost.
+  iron 40% / wood 30% / brick 30%) into its carried loot until its carry capacity is full; the rest is lost. Siege loot has
+  no food, so a siege tick does not refill provisions.
 - **Aggression** (like strong camps, but full battles): a site with jötnar ambushes armies that enter its guard
   range (`CampAmbush`), and burns player towers inside it unless defended (`CampTowerThreat`). After a fight
   it is calm for `EndgameCalm` = 1 h.

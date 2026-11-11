@@ -149,7 +149,8 @@
       "maxLevel": "Höchste Stufe",
       "siege": "Belagern",
       "noRamAtHome": "Braucht einen Rammbock zu Hause",
-      "hexBusy": "Auf diesem Feld läuft schon ein Auftrag"
+      "hexBusy": "Auf diesem Feld läuft schon ein Auftrag",
+      "storageTooSmall": "Lager zu klein"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "STF {level} · HEX {q}, {r}",
@@ -309,7 +310,6 @@
     "retarget": "Neu ausrichten",
     "confirm": "Bestätigen",
     "trainingFailed": "Ausbildung fehlgeschlagen.",
-    "recallFailed": "Rückruf fehlgeschlagen.",
     "retargetFailed": "Neuausrichtung fehlgeschlagen."
   },
   "battleReport": {
@@ -554,5 +554,26 @@
     "towerBurned": "Der Turm bei ({q}, {r}) brannte nieder.",
     "towerHeld": "Der Turm bei ({q}, {r}) hielt stand.",
     "summary": "{title}: {lost} Einheiten verloren, {beasts} Tiere erlegt, {loot} Beute"
+  },
+  "buildingHud": {
+    "upgrade": "Ausbauen",
+    "needsLonghouse": "Langhaus {level}",
+    "needsBuilding": "{building} {level}",
+    "storage": "Lager zu klein",
+    "max": "Max",
+    "more": "+{n} weitere",
+    "moreShort": "+{n}",
+    "perHour": "/h",
+    "each": "je",
+    "feast": "Fest",
+    "duration": {
+      "hoursMinutes": "{hours} Std. {minutes} Min.",
+      "minutes": "{minutes} Min."
+    },
+    "markerLabel": "{building}, Stufe {level}",
+    "toggle": {
+      "label": "Gebäudeinfo (H)",
+      "title": "Gebäudeinfo ein- oder ausblenden (H)"
+    }
   }
 }

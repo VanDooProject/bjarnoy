@@ -64,4 +64,30 @@ describe('hudPrefs store', () => {
     expect(() => prefs.setBarPosition('bottom')).not.toThrow();
     expect(prefs.barPosition).toBe('bottom');
   });
+
+  it('shows building info by default, and remembers turning it off', () => {
+    const backing = stubLocalStorage();
+    const prefs = useHudPrefsStore();
+    expect(prefs.buildingInfo).toBe(true);
+    prefs.setBuildingInfo(false);
+    expect(backing.get('bjarnoy.hudBuildingInfo')).toBe('off');
+    setActivePinia(createPinia());
+    expect(useHudPrefsStore().buildingInfo).toBe(false);
+  });
+
+  it('keeps building info on in memory when storage is unavailable', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('storage disabled');
+      },
+      setItem: () => {
+        throw new Error('storage disabled');
+      },
+      removeItem: () => {},
+    });
+    const prefs = useHudPrefsStore();
+    expect(prefs.buildingInfo).toBe(true);
+    expect(() => prefs.setBuildingInfo(false)).not.toThrow();
+    expect(prefs.buildingInfo).toBe(false);
+  });
 });

@@ -272,9 +272,21 @@ export function buildingStatsAt(
   tile: AxialCoord & { bog?: Tile['bog'] },
   getTile: (q: number, r: number) => Tile,
 ): BuildingLevelStats {
+  const { matchingNeighbours, onLake } = boostContextAt(type, tile, getTile);
+  return buildingStatsFor(type, level, matchingNeighbours, onLake);
+}
+
+/** The map-dependent inputs of `buildingStatsFor` for a building of `type` standing on `tile`. */
+export function boostContextAt(
+  type: BuildingKind,
+  tile: AxialCoord & { bog?: Tile['bog'] },
+  getTile: (q: number, r: number) => Tile,
+): { matchingNeighbours: number; onLake: boolean } {
   const boostTerrain = BOOST_TERRAIN[type];
-  const matching = boostTerrain ? matchingNeighbourCount(tile, boostTerrain, getTile) : 0;
-  return buildingStatsFor(type, level, matching, type === 'fishinghut' && tile.bog?.kind === 'half');
+  return {
+    matchingNeighbours: boostTerrain ? matchingNeighbourCount(tile, boostTerrain, getTile) : 0,
+    onLake: type === 'fishinghut' && tile.bog?.kind === 'half',
+  };
 }
 
 /** Whether any of `tile`'s six direct neighbours is one of `terrains`. */
