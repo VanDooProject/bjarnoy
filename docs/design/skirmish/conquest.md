@@ -9,7 +9,7 @@ in [Taking over a realm](realm-takeover.md).
 - Passengers do not take part in the ship fight. The passengers the surviving ships cannot carry drown after the ship fight,
   before the land fight. Losses in the land fight are land troop losses only.
 - Siege engines on board (catapults, rams) fire in the land fight, from on board.
-- Ships do no damage to buildings on land. The Fire Ship (Brandschiff) damages buildings in the water: docks, fishers, the Shrine
+- Ships do no damage to buildings on land. The Fire Ship (Brandschiff) is trained at the Dockyard. It damages buildings in the water: docks, fishers, the Shrine
   of Njörd and a wall's sea end. It does no damage to units, cannot carry anything and eats a lot of food (high upkeep). It is single use: when it reaches the target and
   the ship fight there is won, it burns up and damages the building. In the ship fight it counts as a ship with its own hull and
   can be sunk, but adds no attack. It takes the same round-trip food check as every army, since it can be recalled before it
