@@ -323,7 +323,7 @@ export interface DialFinishFrame {
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
-const easeInOut = (t: number) => t * t * (3 - 2 * t);
+export const easeInOut = (t: number) => t * t * (3 - 2 * t);
 
 /** Completion animation state `msSinceEnd` after the build ended; null outside it. */
 export function dialFinishFrame(msSinceEnd: number): DialFinishFrame | null {

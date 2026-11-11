@@ -2,11 +2,15 @@ import { describe, expect, it } from 'vitest';
 import type { BuildingDefinitionResponse, BuildOrderResponse, TrainingOrderResponse } from '../../api/types';
 import {
   HUD_BOX_FONT_PX,
+  HUD_HOVER_SCALE,
   HUD_TIER,
   affordableInSeconds,
   ageViewModel,
   buildingHudViewModel,
   hudMarkerKeys,
+  markerBoxRect,
+  markerScale,
+  pointInRect,
   rowsSignature,
   rowsFor,
   stackOrder,
@@ -289,6 +293,43 @@ describe('tierFor', () => {
     const vm = buildingHudViewModel(input());
     expect(rowsFor(vm, 'far', { premium: false })).toEqual([]);
     expect(rowsFor(vm, 'dial', { premium: false })).toEqual([]);
+  });
+});
+
+describe('markerScale', () => {
+  it('grows at least 1.3x on hover, and lifts to the default-zoom size when zoomed far out', () => {
+    expect(HUD_HOVER_SCALE).toBe(1.3);
+    const cases: [number, number, number][] = [
+      [0.5, 0, 0.5],
+      [0.5, 1, 1],
+      [1, 0, 1],
+      [1, 1, 1.3],
+      [1.5, 0, 1.5],
+      [1.5, 1, 1.95],
+      [2, 0, 2],
+      [2, 1, 2.6],
+    ];
+    for (const [mapScale, hoverT, expected] of cases) expect(markerScale(mapScale, hoverT)).toBeCloseTo(expected, 6);
+  });
+
+  it('eases in between (half way is half way) and clamps the hover progress', () => {
+    expect(markerScale(1.5, 0.5)).toBeCloseTo(1.5 + 0.45 / 2, 6);
+    expect(markerScale(1.5, 3)).toBeCloseTo(1.95, 6);
+    expect(markerScale(1.5, -1)).toBeCloseTo(1.5, 6);
+  });
+});
+
+describe('box hit', () => {
+  it('puts the box right of the dial centre line, centred on it vertically, scaled by zs', () => {
+    expect(markerBoxRect(100, 200, { w: 80, h: 40 }, 1.5)).toEqual({ x: 100, y: 170, w: 120, h: 60 });
+  });
+
+  it('hits inside the rect and on its edges, not outside', () => {
+    const rect = { x: 100, y: 170, w: 120, h: 60 };
+    expect(pointInRect({ x: 150, y: 200 }, rect)).toBe(true);
+    expect(pointInRect({ x: 220, y: 230 }, rect)).toBe(true);
+    expect(pointInRect({ x: 99, y: 200 }, rect)).toBe(false);
+    expect(pointInRect({ x: 150, y: 231 }, rect)).toBe(false);
   });
 });
 

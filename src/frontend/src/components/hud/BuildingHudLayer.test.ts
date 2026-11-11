@@ -249,6 +249,128 @@ describe('BuildingHudLayer', () => {
     expect(wrapper.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain('scale(1.000)');
   });
 
+  describe('hover and tap on the box', () => {
+    // jsdom has no layout and no ResizeObserver: a stand-in that reports whatever size a test gives the observed box.
+    let observers: { cb: ResizeObserverCallback; targets: Set<Element>; disconnected: boolean }[] = [];
+    beforeEach(() => {
+      observers = [];
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          readonly rec = { cb: undefined as unknown as ResizeObserverCallback, targets: new Set<Element>(), disconnected: false };
+          constructor(cb: ResizeObserverCallback) {
+            this.rec.cb = cb;
+            observers.push(this.rec);
+          }
+          observe(el: Element) {
+            this.rec.targets.add(el);
+          }
+          unobserve(el: Element) {
+            this.rec.targets.delete(el);
+          }
+          disconnect() {
+            this.rec.disconnected = true;
+          }
+        },
+      );
+    });
+
+    /** Gives every observed box the unscaled size 100 x 40 and fires the observers. */
+    function sizeBoxes() {
+      for (const o of observers) {
+        const entries = [...o.targets].map((target) => {
+          Object.defineProperty(target, 'offsetWidth', { configurable: true, value: 100 });
+          Object.defineProperty(target, 'offsetHeight', { configurable: true, value: 40 });
+          return { target } as ResizeObserverEntry;
+        });
+        o.cb(entries, {} as ResizeObserver);
+      }
+    }
+    async function mountAt(scale: number) {
+      seedBuildings();
+      const renderer = fakeRenderer({ dialMapScale: scale });
+      wrapper = mountLayer(renderer);
+      runFrame();
+      await wrapper.vm.$nextTick();
+      sizeBoxes();
+      runFrame();
+      return renderer;
+    }
+    function advance(frameCount = 5) {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      for (let i = 0; i < frameCount; i++) {
+        vi.advanceTimersByTime(60);
+        runFrame();
+      }
+      vi.useRealTimers();
+    }
+    const scaleOf = () => wrapper!.get<HTMLElement>('[data-coord="1,0"]').element.style.transform;
+
+    it('grows a marker 1.3x when the mouse is on the dial, even zoomed in', async () => {
+      const renderer = await mountAt(1.5);
+      expect(scaleOf()).toContain('scale(1.500)');
+      renderer.mousePoint = { x: 180, y: 300 };
+      advance();
+      expect(scaleOf()).toContain('scale(1.950)');
+    });
+
+    it('hovers a marker by its box, which starts on the dial centre line', async () => {
+      const renderer = await mountAt(1.5);
+      expect(wrapper!.find('[data-coord="1,0"] .hud-marker__box').exists()).toBe(true);
+      // The dial is at x 180, y 300; its disc is about 41 px. The box is 100 x 40 unscaled, i.e. 150 x 60 at 1.5: it spans
+      // x 180..330, y 270..330. x 250 is on the box and off the disc.
+      renderer.mousePoint = { x: 250, y: 320 };
+      advance();
+      expect(scaleOf()).toContain('scale(1.950)');
+      // Beside the box (above it) nothing hovers.
+      renderer.mousePoint = null;
+      advance();
+      expect(scaleOf()).toContain('scale(1.500)');
+      renderer.mousePoint = { x: 300, y: 260 };
+      advance();
+      expect(scaleOf()).toContain('scale(1.500)');
+    });
+
+    it('reveals a marker with a touch tap on its box, not on the empty map beside it', async () => {
+      // One building, so no neighbour's dial or box lies over the point.
+      const world = seedBuildings();
+      world.hud.buildings = [{ q: 1, r: 0, type: 'longhouse', level: 1 }];
+      const renderer = fakeRenderer({ dialMapScale: 1.5 });
+      wrapper = mountLayer(renderer);
+      runFrame();
+      await wrapper.vm.$nextTick();
+      sizeBoxes();
+      runFrame();
+      vi.useFakeTimers({ toFake: ['Date'] });
+      renderer.tapObserver!({ x: 300, y: 340 });
+      for (let i = 0; i < 5; i++) {
+        vi.advanceTimersByTime(60);
+        runFrame();
+      }
+      expect(scaleOf()).toContain('scale(1.500)');
+      renderer.tapObserver!({ x: 300, y: 320 });
+      for (let i = 0; i < 5; i++) {
+        vi.advanceTimersByTime(60);
+        runFrame();
+      }
+      vi.useRealTimers();
+      expect(scaleOf()).toContain('scale(1.950)');
+    });
+
+    it('stops observing a box that goes away and disconnects on unmount', async () => {
+      const renderer = await mountAt(1.5);
+      expect(observers.length).toBe(1);
+      expect(observers[0]!.targets.size).toBeGreaterThan(0);
+      renderer.dialMapScale = 0.8;
+      runFrame();
+      await wrapper!.vm.$nextTick();
+      expect(wrapper!.find('[data-coord="1,0"] .hud-marker__box').exists()).toBe(false);
+      wrapper!.unmount();
+      wrapper = undefined;
+      expect(observers[0]!.disconnected).toBe(true);
+    });
+  });
+
   it('takes no pointer events itself and stops listening to the map when it goes away', () => {
     seedBuildings();
     const renderer = fakeRenderer();

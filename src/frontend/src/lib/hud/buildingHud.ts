@@ -3,7 +3,7 @@
 // `buildingStatsFor`, `maxLevelFor`), see docs on `resolveUpgradeTarget`.
 import type { AxialCoord } from '../hex/coords';
 import type { BuildingDefinitionResponse, BuildOrderResponse, TrainingOrderResponse, UnitStackResponse } from '../../api/types';
-import { DIAL_LABEL_BASE_PX, DIAL_MIN_LABEL_PX, dialPhase, type ConstructionDial } from '../map/constructionDial';
+import { DIAL_LABEL_BASE_PX, DIAL_MIN_LABEL_PX, dialPhase, easeInOut, type ConstructionDial } from '../map/constructionDial';
 import { buildingStatsFor, maxLevelFor, scaleOutput, type BuildingKind, type BuildingOutput } from '../map/buildingEconomy';
 import {
   RING_RESOURCE_KEYS,
@@ -48,6 +48,31 @@ export function tierFor(zs: number, previous: HudTier | null = null): HudTier {
   if (!atLeast(labelBelow, ['dial', 'mid', 'near'])) return 'far';
   if (!atLeast(boxBelow, ['mid', 'near'])) return 'dial';
   return atLeast(nearAt, ['near']) ? 'near' : 'mid';
+}
+
+// ---- hover size and hit ---------------------------------------------------------------------------------------------------
+
+/** A hovered or tapped marker grows to at least this many times its size. */
+export const HUD_HOVER_SCALE = 1.3;
+
+/**
+ * The marker's size factor at map scale `mapScale` and hover progress `hoverT` (0..1). Unlike the progress dial (`dialScale`),
+ * which only grows to its default-zoom size, the marker always grows by `HUD_HOVER_SCALE`; zoomed far out it lifts to the
+ * default-zoom size, which keeps its box readable.
+ */
+export function markerScale(mapScale: number, hoverT: number): number {
+  const eased = easeInOut(Math.min(1, Math.max(0, hoverT)));
+  return mapScale + (Math.max(mapScale * HUD_HOVER_SCALE, 1) - mapScale) * eased;
+}
+
+/** Screen rect of a marker's box: it starts on the dial's centre line (`x`, `y`), `w` x `h` is its unscaled size, `zs` the marker's size factor. */
+export function markerBoxRect(x: number, y: number, size: { w: number; h: number }, zs: number): { x: number; y: number; w: number; h: number } {
+  return { x, y: y - (size.h * zs) / 2, w: size.w * zs, h: size.h * zs };
+}
+
+/** Whether `point` is inside `rect` (edges included). */
+export function pointInRect(point: { x: number; y: number }, rect: { x: number; y: number; w: number; h: number }): boolean {
+  return point.x >= rect.x && point.x <= rect.x + rect.w && point.y >= rect.y && point.y <= rect.y + rect.h;
 }
 
 // ---- stacking ---------------------------------------------------------------------------------------------------------

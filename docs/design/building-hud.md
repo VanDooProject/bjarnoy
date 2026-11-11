@@ -21,5 +21,6 @@
   the finish animation, drawn the same way. New builds (no building standing yet) keep the construction dial. Switching the info
   on or off hands each hex over marker by marker, so a hex always shows exactly one dial.
 - Markers never take mouse or touch input: hover, taps, wheel and drags go to the map under them like on any tile. A marker
-  grows when the mouse is on its dial or its hex, or when a touch taps its dial (the tap still reaches the map). The box
+  grows (at least 1.3x, to its default-zoom size when zoomed far out) when the mouse is on its dial, its hex or its box, or
+  when a touch taps its dial or box (the tap still reaches the map). The box
   text stands on its own, there are no tooltips on it.

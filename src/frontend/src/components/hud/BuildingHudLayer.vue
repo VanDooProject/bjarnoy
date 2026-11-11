@@ -3,7 +3,8 @@
 // countdown, and, near and mid, a box docked to it). What a marker shows is lib/hud/buildingHud.ts; this layer feeds it from
 // the stores, keeps the markers on their buildings frame by frame (CSS transforms written straight to the elements, like
 // composables/useMapAnchor.ts, no Vue re-render per frame) and owns the H key (the toggle button itself is BuildingInfoToggle). A marker is sized
-// like the Pixi progress dial (`dialScale`): it scales with the map, grows to its default-zoom size on hover / tap.
+// like the Pixi progress dial: it scales with the map and grows on hover / tap (`markerScale`: at least 1.3x, to the default-zoom size
+// when zoomed far out). Hover = the mouse on its dial, its hex or its box; a tap = on its dial or box.
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
@@ -27,6 +28,9 @@ import {
   ageViewModel,
   buildingHudViewModel,
   hasHudMarker,
+  markerBoxRect,
+  markerScale,
+  pointInRect,
   rowsFor,
   rowsSignature,
   stackOrder,
@@ -41,7 +45,6 @@ import {
   DIAL_TAP_REVEAL_MS,
   dialHoverStep,
   dialRadiusPx,
-  dialScale,
   nextTapReveal,
   pickTappedDial,
   type ConstructionDial,
@@ -254,10 +257,22 @@ let tapAtMs = 0;
 const hoverT = new Map<string, number>();
 /** Where each marker's dial is drawn right now (canvas px, radius), for the tap hit test. */
 const dialDiscs = new Map<string, { key: string; cx: number; cy: number; r: number }>();
+/** Where each marker's box is drawn right now (canvas px); absent while it has none. */
+const boxRects = new Map<string, { x: number; y: number; w: number; h: number }>();
 
-/** A tap on a dial reveals it (a second one closes it); a tap elsewhere closes a revealed one. */
+/** The marker a screen point is on: its dial disc first, else its box. */
+function pickTappedMarker(screen: { x: number; y: number }): string | null {
+  const disc = pickTappedDial(screen, [...dialDiscs.values()]);
+  if (disc !== null) return disc;
+  // Overlapping boxes: the right-most is on top (`stackOrder`), so it takes the tap.
+  let hit: { key: string; x: number } | null = null;
+  for (const [key, rect] of boxRects) if (pointInRect(screen, rect) && (hit === null || rect.x > hit.x)) hit = { key, x: rect.x };
+  return hit?.key ?? null;
+}
+
+/** A tap on a dial or box reveals it (a second one closes it); a tap elsewhere closes a revealed one. */
 function onMapTap(screen: { x: number; y: number }) {
-  tapKey = nextTapReveal(tapKey, pickTappedDial(screen, [...dialDiscs.values()]));
+  tapKey = nextTapReveal(tapKey, pickTappedMarker(screen));
   tapAtMs = Date.now();
 }
 
@@ -275,12 +290,48 @@ const placedOnce = new Set<string>();
 /** Markers whose first frame is over: only these animate a tier or content change (not the one that sets the tier up). */
 const settled = new Set<string>();
 
+// Each box's unscaled size, kept up to date by a ResizeObserver so the frame loop never reads the layout for it. A box that is
+// folding or morphing may report a size mid-animation; that is fine for hit testing and occlusion.
+/** The marker a DOM element of it belongs to. */
+const keyOf = (el: Element) => el.closest('.hud-marker')?.getAttribute('data-coord') ?? '';
+const boxSizes = new Map<string, { w: number; h: number }>();
+const observedBoxes = new Map<string, HTMLElement>();
+let boxObserver: ResizeObserver | null = null;
+
+function ensureBoxObserver(): ResizeObserver | null {
+  if (boxObserver || typeof ResizeObserver === 'undefined') return boxObserver;
+  boxObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const el = entry.target as HTMLElement;
+      const key = keyOf(el);
+      if (key && observedBoxes.get(key) === el) boxSizes.set(key, { w: el.offsetWidth, h: el.offsetHeight });
+    }
+  });
+  return boxObserver;
+}
+
+function setBox(key: string, el: unknown) {
+  const previous = observedBoxes.get(key);
+  if (el instanceof HTMLElement) {
+    if (previous === el) return;
+    if (previous) boxObserver?.unobserve(previous);
+    observedBoxes.set(key, el);
+    ensureBoxObserver()?.observe(el);
+    return;
+  }
+  if (previous) boxObserver?.unobserve(previous);
+  observedBoxes.delete(key);
+  boxSizes.delete(key);
+  boxRects.delete(key);
+}
+
 function setElement(key: string, el: unknown) {
   if (el instanceof HTMLElement) elements.set(key, el);
   else {
     elements.delete(key);
     lastZ.delete(key);
     dialDiscs.delete(key);
+    boxRects.delete(key);
     hoverT.delete(key);
     visibility.delete(key);
     placedOnce.delete(key);
@@ -312,11 +363,6 @@ function tick() {
   const placed: { key: string; x: number; hovered: boolean }[] = [];
   let tiersChanged = false;
   const nextTiers: Record<string, HudTier> = {};
-  // All the layout reads (box widths) first, then every style write: no read after a write for the next marker.
-  const boxWidths = new Map<string, number>();
-  for (const marker of markers.value) {
-    if (circle || (visibility.get(marker.key) ?? 1) < 1) boxWidths.set(marker.key, boxOf(marker.key)?.offsetWidth ?? 0);
-  }
   for (const marker of markers.value) {
     const el = elements.get(marker.key);
     if (!el) continue;
@@ -328,8 +374,8 @@ function tick() {
     let vis = vis0;
     let occluded = false;
     if (circle || vis0 < 1) {
-      const zsNow = dialScale(mapScale, hoverT.get(marker.key) ?? 0).zs;
-      const boxWidth = boxWidths.get(marker.key) ?? 0;
+      const zsNow = markerScale(mapScale, hoverT.get(marker.key) ?? 0);
+      const boxWidth = boxSizes.get(marker.key)?.w ?? 0;
       occluded =
         circle !== null &&
         circleIntersectsRect(circle, {
@@ -348,20 +394,25 @@ function tick() {
       el.classList.toggle('hud-marker--occluded', occluded || vis < 1);
     }
     const mouse = renderer.mousePoint;
-    const disc = dialRadiusPx(dialScale(mapScale, hoverT.get(marker.key) ?? 0).zs);
+    const zsBefore = markerScale(mapScale, hoverT.get(marker.key) ?? 0);
+    const disc = dialRadiusPx(zsBefore);
+    const boxSize = boxSizes.get(marker.key);
+    const boxRect = boxSize ? markerBoxRect(x, y, boxSize, zsBefore) : null;
     const hovered =
       !occluded &&
       (tapKey === marker.key ||
-        (mouse !== null && Math.hypot(mouse.x - x, mouse.y - y) <= disc) ||
+        (mouse !== null && (Math.hypot(mouse.x - x, mouse.y - y) <= disc || (boxRect !== null && pointInRect(mouse, boxRect)))) ||
         renderer.hoveredHexKey === marker.key);
     const t = dialHoverStep(hoverT.get(marker.key) ?? 0, hovered, dtMs, animationPreference.reducedMotion);
     if (t > 0) hoverT.set(marker.key, t);
     else hoverT.delete(marker.key);
-    const { zs } = dialScale(mapScale, t);
+    const zs = markerScale(mapScale, t);
     const tier = tierFor(zs, tiers.value[marker.key] ?? null);
     nextTiers[marker.key] = tier;
     if (tier !== tiers.value[marker.key]) tiersChanged = true;
     dialDiscs.set(marker.key, { key: marker.key, cx: x, cy: y, r: dialRadiusPx(zs) });
+    if (boxSize) boxRects.set(marker.key, markerBoxRect(x, y, boxSize, zs));
+    else boxRects.delete(marker.key);
     el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${zs.toFixed(3)})`;
     // A marker well off screen is not worth compositing.
     const reach = 320 * zs;
@@ -496,7 +547,6 @@ watch(
   { flush: 'pre' },
 );
 
-const keyOf = (el: Element) => el.closest('.hud-marker')?.getAttribute('data-coord') ?? '';
 function boxHook(direction: 'in' | 'out', el: Element, done: () => void) {
   if (!settled.has(keyOf(el))) return done();
   if (direction === 'in') motion.unfoldBox(el, done);
@@ -543,6 +593,10 @@ onUnmounted(() => {
   cancelAnimationFrame(frame);
   clearHandovers();
   motion.dispose();
+  boxObserver?.disconnect();
+  boxObserver = null;
+  observedBoxes.clear();
+  boxSizes.clear();
   props.renderer?.setHudOwnedDials(null);
   window.removeEventListener('keydown', onKeyDown);
   props.renderer?.setTapObserver(null);
@@ -567,7 +621,7 @@ onUnmounted(() => {
               />
             </span>
             <Transition :css="false" @enter="(el, done) => boxHook('in', el, done)" @leave="(el, done) => boxHook('out', el, done)">
-              <div v-if="rowsOf(m).length" class="hud-marker__box" :style="boxStyle(tierOf(m.key))">
+              <div v-if="rowsOf(m).length" :ref="(el) => setBox(m.key, el)" class="hud-marker__box" :style="boxStyle(tierOf(m.key))">
                 <BuildingHudBox :rows="rowsOf(m)" :tier="tierOf(m.key) === 'near' ? 'near' : 'mid'" />
               </div>
             </Transition>
