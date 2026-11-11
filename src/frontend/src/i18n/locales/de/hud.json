@@ -577,6 +577,8 @@
     }
   },
   "panelColumn": {
-    "toggle": "{panel} ein- oder ausblenden"
+    "toggle": "{panel} ein- oder ausblenden",
+    "collapse": "{panel} einklappen",
+    "expand": "{panel} ausklappen"
   }
 }

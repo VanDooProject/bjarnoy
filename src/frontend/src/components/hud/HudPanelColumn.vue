@@ -2,14 +2,16 @@
 // Desktop settlement view: the vertical icon column at the map's bottom left. Top to bottom: the building info switch, then
 // one icon per dockable panel (Construction, Garrison, Armies, Quests) that has something to show right now. A panel icon
 // collapses its panel to just the icon and opens it again (pressed = open); the panels themselves are HudPanelDock's.
-import { computed } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { useHudPanelContent } from '../../composables/useHudPanelContent';
 import { useHudPanelShown } from '../../composables/useHudPanelShown';
+import { useHudRail } from '../../composables/useHudRail';
+import { animate, motionEnabled } from '../../lib/motion';
 import { useQuests } from '../../composables/useQuests';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
-import { COLUMN_BUTTON_GAP, DOCK_GUTTER, HUD_PANEL_IDS, type HudPanelId } from '../../lib/hud/hudPanelDock';
+import { COLUMN_BUTTON_GAP, HUD_PANEL_IDS, HUD_PANEL_LABEL_KEYS, type HudPanelId } from '../../lib/hud/hudPanelDock';
 import QuestIcon from '../onboarding/QuestIcon.vue';
 import BuildingInfoToggle from './BuildingInfoToggle.vue';
 import HudIconButton from './HudIconButton.vue';
@@ -20,20 +22,39 @@ const content = useHudPanelContent();
 const { shown, heldOpen } = useHudPanelShown();
 const { hasNew } = useQuests();
 
-const labelKey: Record<HudPanelId, string> = {
-  construction: 'hud.buildQueue.title',
-  garrison: 'hud.trainingQueue.garrison',
-  armies: 'hud.armyPanel.title',
-  quests: 'quests.title',
-};
-const label = (id: HudPanelId) => t(labelKey[id] as 'hud.buildQueue.title');
+const label = (id: HudPanelId) => t(HUD_PANEL_LABEL_KEYS[id] as 'hud.buildQueue.title');
 
 const icons = computed(() => HUD_PANEL_IDS.filter((id) => content[id].value));
-const columnStyle = { left: `${DOCK_GUTTER}px`, gap: `${COLUMN_BUTTON_GAP}px` };
+
+// The x comes from the dock (it moves right of the left panel columns that reach down to it); the rail reports its height back.
+const { railHeight, railLeft } = useHudRail();
+const columnStyle = computed(() => ({ left: `${railLeft.value}px`, gap: `${COLUMN_BUTTON_GAP}px` }));
+const el = ref<HTMLElement | null>(null);
+const SLIDE_MS = 180;
+
+// A new x slides the rail from where it was (FLIP): the new left applies first, the transform animates back to it.
+watch(railLeft, async (now, old) => {
+  await nextTick();
+  if (el.value && motionEnabled() && now !== old) {
+    void animate(el.value, [{ transform: `translateX(${old - now}px)` }, { transform: 'translateX(0)' }], { duration: SLIDE_MS, easing: 'ease-out' });
+  }
+});
+
+let observer: ResizeObserver | null = null;
+onMounted(() => {
+  if (!el.value) return;
+  railHeight.value = el.value.offsetHeight;
+  if (typeof ResizeObserver === 'undefined') return;
+  observer = new ResizeObserver(() => {
+    if (el.value) railHeight.value = el.value.offsetHeight;
+  });
+  observer.observe(el.value);
+});
+onUnmounted(() => observer?.disconnect());
 </script>
 
 <template>
-  <div class="hud-panel-column" data-testid="hud-panel-column" :style="columnStyle">
+  <div ref="el" class="hud-panel-column" data-testid="hud-panel-column" :style="columnStyle">
     <BuildingInfoToggle />
     <HudIconButton
       v-for="id in icons"
@@ -70,7 +91,8 @@ const columnStyle = { left: `${DOCK_GUTTER}px`, gap: `${COLUMN_BUTTON_GAP}px` };
 </template>
 
 <style scoped>
-/* Bottom left, 16px from the edges (a bottom-docked mobile bar's height is cleared through --hud-inset-bottom). */
+/* Bottom left, 16px from the bottom (a bottom-docked mobile bar's height is cleared through --hud-inset-bottom); the left
+   edge is 16px unless the dock's left columns reach down to it (useHudRail). */
 .hud-panel-column {
   position: absolute;
   bottom: calc(16px + var(--hud-inset-bottom, 0px));

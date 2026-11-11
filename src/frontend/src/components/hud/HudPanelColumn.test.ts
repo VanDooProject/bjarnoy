@@ -9,6 +9,7 @@ import type { ref } from 'vue';
 import HudPanelColumn from './HudPanelColumn.vue';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { createTestI18n } from '../../test/i18n';
+import { railLeft } from '../../composables/useHudRail';
 import enHud from '../../i18n/locales/en/hud.json';
 import enQuests from '../../i18n/locales/en/quests.json';
 
@@ -40,6 +41,16 @@ describe('HudPanelColumn', () => {
     for (const flag of Object.values(content())) flag.value = true;
     (flags.hasNew as ReturnType<typeof ref<boolean>>).value = false;
     (flags.draft as ReturnType<typeof ref<boolean>>).value = false;
+    railLeft.value = 16;
+  });
+
+  it('sits at the x the dock gives it and follows it', async () => {
+    const wrapper = mountColumn();
+    const rail = wrapper.get('[data-testid="hud-panel-column"]').element as HTMLElement;
+    expect(rail.style.left).toBe('16px');
+    railLeft.value = 308;
+    await wrapper.vm.$nextTick();
+    expect(rail.style.left).toBe('308px');
   });
 
   it('shows the five icons top to bottom: building info, construction, garrison, armies, quests', () => {

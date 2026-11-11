@@ -15,7 +15,7 @@
 - Up to three missing prerequisites are listed; from four on, two are listed plus "+n more".
 - Overlapping markers stack left to right: the right-most is on top. Hovering or tapping a marker brings it to the front,
   enlarged.
-- The building info can be switched off (icon button: on desktop the top icon of the panel column at the map's bottom left, on
+- The building info can be switched off (icon button: on desktop the top icon of the panel icon column at the map's bottom left (it moves right of the left panel columns when they reach down to it), on
   phones at the top left of the map; or H). While it is on, its dial replaces the construction dial for every order on an
   existing building: running upgrade, waiting (`#place`), just clicked (sweep and dots), refused (red flash and cross), raze and
   the finish animation, drawn the same way. New builds (no building standing yet) keep the construction dial. Switching the info
