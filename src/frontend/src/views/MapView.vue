@@ -598,9 +598,10 @@ const sendBlockText = useSendBlockText();
 function onArmyTap(armyId: string, screen: { x: number; y: number }) {
   if (armyHintTimer) clearTimeout(armyHintTimer);
   armyHint.value = null;
-  // No picker open: the marker selects its army, shown highlighted in the armies panel.
+  // No picker open: the marker selects its army, shown highlighted in the armies panel. The tap still reaches the tile (onHexClick), so
+  // while a route is being composed it adds the waypoint and selects nothing.
   if (!world.sendPicker) {
-    world.selectArmy(armyId);
+    if (!world.dispatchDraft && !world.fieldOrderDraft) world.selectArmy(armyId);
     return;
   }
   const row = sendPicker.rows.value.find((r) => r.id === armyId);
