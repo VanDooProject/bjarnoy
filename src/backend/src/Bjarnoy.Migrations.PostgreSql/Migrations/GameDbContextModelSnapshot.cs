@@ -1353,6 +1353,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("SettlementId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("StandingSince")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("Type")
                         .HasColumnType("integer");
 

@@ -1348,6 +1348,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("SettlementId")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("StandingSince")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Type")
                         .HasColumnType("INTEGER");
 
