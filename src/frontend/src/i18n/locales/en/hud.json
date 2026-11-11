@@ -392,6 +392,7 @@
     "longhouse": "Longhouse",
     "tower": "Tower",
     "dock": "Dock",
+    "beachcamp": "Beach camp",
     "from": "from {spots}",
     "severalSpots": "These units stand at several spots. Sending from several spots at once is coming soon."
   },

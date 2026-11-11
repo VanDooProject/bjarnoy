@@ -1,6 +1,7 @@
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Combat;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Tests;
@@ -148,5 +149,25 @@ public class BeachCampTests
 
         Assert.True(FieldBattleResolver.ClaimAt(Centre, Centre, buildings).Claims);
         Assert.False(FieldBattleResolver.ClaimAt(new HexCoord(1, 0), Centre, buildings).Claims);
+    }
+
+    [Fact]
+    public void A_camp_is_one_garrison_spot_that_holds_land_units_and_ships()
+    {
+        var spot = Assert.Single(FoundCamp().GarrisonSpots);
+
+        Assert.Equal(GarrisonSpotKind.BeachCamp, spot.Kind);
+        Assert.Equal(Centre, spot.Coord);
+        Assert.True(spot.Holds(UnitType.Spearman));
+        Assert.True(spot.Holds(UnitType.Longship));
+    }
+
+    [Fact]
+    public void A_fleet_finds_the_camp_as_a_spot_where_a_longhouse_away_from_the_sea_has_none()
+    {
+        UnitStack[] fleet = [new UnitStack(UnitType.Longship, 2), new UnitStack(UnitType.Spearman, 5)];
+
+        Assert.Equal(Centre, FoundCamp().NearestSpotFor(new HexCoord(3, 0), fleet)?.Coord);
+        Assert.Null(FoundLonghouse().NearestSpotFor(new HexCoord(3, 0), fleet));
     }
 }
