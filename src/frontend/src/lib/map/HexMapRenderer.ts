@@ -131,7 +131,6 @@ import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 import { DOUBLE_TAP_MS, DOUBLE_TAP_ZOOM_MS, doubleTapZoomLog, isDoubleTap, type Tap } from './doubleTap';
 import { animationPreference } from '../perf/animationPreference';
-import { prefersReducedMotion } from '../motion';
 import { antialiasPreference } from '../perf/antialiasPreference';
 import { advanceClipFrame, clipTimingOf, phasedStart, sharedClockPlayback, swayPeriodOffset } from './clipPlayback';
 import { hash2 } from './worldGenerator';
@@ -5882,7 +5881,7 @@ export class HexMapRenderer {
         this.badgeVisibility.get(settlement.id) ?? 1,
         occluded,
         dtMs,
-        prefersReducedMotion(),
+        animationPreference.reducedMotion,
       );
       if (vis < 1) this.badgeVisibility.set(settlement.id, vis);
       else this.badgeVisibility.delete(settlement.id);
@@ -5931,7 +5930,7 @@ export class HexMapRenderer {
     if (live.length !== this.constructionDials.length) this.constructionDials = live.length > 0 ? live : null;
     // Hover pass: advance each dial's tween, then draw the hovered ones last.
     const dtMs = this.app ? clampAnimationDeltaMs(this.app.ticker.deltaMS) : 0;
-    const reduced = prefersReducedMotion();
+    const reduced = animationPreference.reducedMotion;
     const pointer = this.hoverPointer;
     const seen = new Set<string>();
     if (this.tapRevealKey !== null && nowMs - this.tapRevealAtMs >= DIAL_TAP_REVEAL_MS) this.tapRevealKey = null;
