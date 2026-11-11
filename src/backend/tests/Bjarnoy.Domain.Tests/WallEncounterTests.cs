@@ -222,4 +222,26 @@ public sealed class WallEncounterTests
         Assert.True(result.Army.CannotGetHome);
         Assert.Equal(new HexCoord(4, 0), MovementOf(result.Army).Path[^1]);
     }
+
+    [Fact]
+    public void An_army_whose_food_ran_out_before_it_found_the_wall_starves_no_earlier_than_it_is_stranded()
+    {
+        // Fled home with almost nothing left: its food runs out long before it reaches the wall, which it may (it can still get home).
+        var army = Marching(provisions: 400).ForceFieldRetreat(T0.AddHours(6), new HexCoord(8, 0), Home, Strip, provisionsAtBattle: 1);
+        var movement = MovementOf(army);
+        var blocked = new HexCoord(3, 0);
+        var at = EntryOf(movement, blocked).AddMinutes(-30);
+        Assert.Equal(0, army.ProvisionsAt(at));
+
+        var result = army.RerouteAroundWall(
+            EncounterOn(movement, blocked, at, onReturn: true), Home, Strip, walls: SealedWall(3));
+
+        Assert.True(result.Army.CannotGetHome);
+        Assert.Equal(at, result.Army.StarvesAt);
+        Assert.True(MovementOf(result.Army).TurnAroundAt >= at);
+        Assert.False(result.Army.SettleTo(at.AddTicks(-1)).Starved);
+        var starved = result.Army.SettleTo(at.AddMinutes(1));
+        Assert.True(starved.Starved);
+        Assert.Equal(at, Assert.Single(starved.Walked).Until);
+    }
 }

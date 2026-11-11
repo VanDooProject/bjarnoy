@@ -1790,7 +1790,7 @@ public sealed record Army
             return new WallRerouteResult(army with { Location = new ArmyLocation.InTransit(standing) }, stop);
         }
 
-        var stranded = army with
+        var stranded = (army with
         {
             Location = new ArmyLocation.InTransit(new Movement.Movement
             {
@@ -1806,8 +1806,11 @@ public sealed record Army
                 IsStranded = true,
                 FieldBattleImmuneUntil = movement.FieldBattleImmuneUntil,
             }),
-        };
-        var starvesAt = stranded.StarvesAt ?? at.AddYears(100);
+        }).WithProvisionsAt(at, ProvisionsAt(at));
+
+        // Rebased to the food it carries when it is stranded, so an army whose food ran out on the way starves then, never earlier.
+        var starvesAt = stranded.StarvesAt is { } starves ? (starves > at ? starves : at) : at.AddYears(100);
+
         return new WallRerouteResult(
             stranded with
             {
