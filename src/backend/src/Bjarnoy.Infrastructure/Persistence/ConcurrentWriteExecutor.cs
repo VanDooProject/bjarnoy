@@ -84,7 +84,7 @@ public sealed class ConcurrentWriteExecutor(GameDbContext dbContext, ILogger<Con
     /// </summary>
     internal static readonly IReadOnlySet<string> SettlementChildUniqueIndexes = new HashSet<string>(StringComparer.Ordinal)
     {
-        "IX_unit_stacks_SettlementId_UnitType",
+        "IX_unit_stacks_SettlementId_SpotQ_SpotR_UnitType",
         "IX_placed_buildings_SettlementId_Q_R",
         "IX_build_orders_SettlementId_Q_R_TargetLevel",
     };

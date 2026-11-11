@@ -48,6 +48,11 @@ async function seedGarrison(page: Page) {
   await page.evaluate(() => {
     const world = (window as unknown as DemoWindow).__demoWorld();
     world.hud.garrison = [{ unit: 'spearman', count: 10 }];
+    // The one garrison spot the demo has: the longhouse on the settlement's centre hex.
+    const home = world.model.getSettlement(world.selectedSettlementId);
+    world.hud.garrisonSpots = [
+      { kind: 'longhouse', q: home?.q ?? 0, r: home?.r ?? 0, stacks: [{ unit: 'spearman', count: 10 }], guests: [], holdsLand: true, holdsShips: false },
+    ];
   });
 }
 

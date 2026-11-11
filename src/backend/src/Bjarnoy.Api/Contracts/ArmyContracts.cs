@@ -20,6 +20,13 @@ public sealed record HexPointRequest(int Q, int R)
     public HexCoord ToHexCoord() => new(Q, R);
 }
 
+/// <summary>The units, split by the garrison spot each group leaves from.</summary>
+/// <param name="Spot">The garrison spot (longhouse, tower or dock hex) the group stands at.</param>
+/// <param name="Units">The units of this group leaving from <paramref name="Spot"/>.</param>
+public sealed record DispatchSpotUnitsRequest(
+    [property: Required] HexPointRequest Spot,
+    [property: Required] IReadOnlyList<UnitCountRequest> Units);
+
 /// <param name="Waypoints">Ordered intermediate hexes; empty/omitted for a direct route.</param>
 /// <param name="Destination">
 /// Required for a <c>"move"</c> mission (the default); ignored for
@@ -44,8 +51,15 @@ public sealed record HexPointRequest(int Q, int R)
 /// (the settlement to fight on arrival) or <c>"support"</c> (the settlement
 /// to garrison as a guest on arrival).
 /// </param>
+/// <param name="From">
+/// The units, split by the garrison spot each group leaves from (longhouse, tower or dock hex of the settlement); only units
+/// standing there can be sent, and the spot becomes the army's home spot. Entries with no units are ignored, the same spot
+/// listed twice is merged. Gathering from several spots on the way is not built yet: more than one spot is refused with
+/// <see cref="DispatchRejection.UnitsAtSeveralSpots"/>.
+/// </param>
 /// <param name="TargetBuildingCoord">
-/// Only meaningful for <c>"attack"</c>/<c>"raid"</c> — the
+/// <b>Required for <c>"support"</c></b>: the target settlement's garrison spot the guest joins (it must be able to hold every unit of
+/// the army). Otherwise only meaningful for <c>"attack"</c>/<c>"raid"</c> — the
 /// coordinate of a building within the target settlement to hit with any
 /// surviving catapults on arrival (issue #40 phase 5). <b>Required for a fleet</b>:
 /// a fleet sails to this building, which must stand on the target's shore (inside its claim, on a
@@ -59,7 +73,7 @@ public sealed record HexPointRequest(int Q, int R)
 /// remarks).
 /// </param>
 public sealed record DispatchArmyRequest(
-    [property: Required, MinLength(1)] IReadOnlyList<UnitCountRequest> Units,
+    [property: Required, MinLength(1)] IReadOnlyList<DispatchSpotUnitsRequest> From,
     IReadOnlyList<HexPointRequest>? Waypoints,
     HexPointRequest? Destination,
     [property: Range(0, double.MaxValue)] double Provisions,
@@ -87,7 +101,7 @@ public sealed record RetargetFoundingRequest([property: Required] HexPointReques
 /// (founding from the field is a retarget).
 /// </param>
 /// <param name="TargetSettlementId">Required for <c>"attack"</c>/<c>"support"</c>/<c>"raid"</c>.</param>
-/// <param name="TargetBuildingCoord">Only for <c>"attack"</c>/<c>"raid"</c>; required when the army that leaves is a fleet.</param>
+/// <param name="TargetBuildingCoord">For <c>"attack"</c>/<c>"raid"</c>: required when the army that leaves is a fleet. For <c>"support"</c>: the garrison spot of the target to join (required).</param>
 /// <param name="Units">
 /// What leaves, for a standing army. Omitted: the whole army goes. Naming only part of it splits the army: the units listed
 /// leave as a new army (the response), the rest keep standing where they are.
@@ -196,7 +210,7 @@ public sealed record ArmyResponse(
         var position = domain.Location switch
         {
             ArmyLocation.InTransit transitLeg => transitLeg.Movement.PositionAt(gameNow),
-            ArmyLocation.Supporting when entity.TargetSettlement is { } host => new HexCoord(host.CentreQ, host.CentreR),
+            ArmyLocation.Supporting guest => guest.Spot,
             _ => home,
         };
 
@@ -233,7 +247,7 @@ public sealed record ArmySummary(Guid Id, string Mission, bool AtHome, bool Supp
         var position = domain.Location switch
         {
             ArmyLocation.InTransit inTransit => inTransit.Movement.PositionAt(gameNow),
-            ArmyLocation.Supporting when entity.TargetSettlement is { } host => new HexCoord(host.CentreQ, host.CentreR),
+            ArmyLocation.Supporting guest => guest.Spot,
             _ => home,
         };
 

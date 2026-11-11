@@ -225,6 +225,12 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         };
         return await WithDbAsync(async db =>
         {
+            var host = await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == hostSettlementId, Ct);
+            army.TargetBuildingQ = host.CentreQ;
+            army.TargetBuildingR = host.CentreR;
+            var guestHome = await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == guestHomeSettlementId, Ct);
+            army.HomeSpotQ = guestHome.CentreQ;
+            army.HomeSpotR = guestHome.CentreR;
             db.Armies.Add(army);
             await db.SaveChangesAsync(Ct);
             return army.Id;

@@ -30,7 +30,7 @@ public class ArmyBeachCampTests
             Name = "Bjornstad",
             Centre = Home,
             Buildings = [new PlacedBuilding(Home, BuildingType.Longhouse, 5)],
-            Garrison = garrison ?? [new UnitStack(UnitType.CampBuilder, 2)],
+            SpotStacks = [.. (garrison ?? [new UnitStack(UnitType.CampBuilder, 2)]).Select(s => new SpotStack(Home, s.Type, s.Count))],
             Resources = ResourcePool.Create(
                 stock ?? new ResourceAmounts(Wood: 10_000, Stone: 10_000, Food: 10_000, Iron: 10_000),
                 production, capacity, T0),
@@ -48,6 +48,7 @@ public class ArmyBeachCampTests
         double speedFactor = 1.0) =>
         Army.PlanDispatch(
             settlement,
+            settlement.Centre,
             requested ?? [new UnitStack(UnitType.CampBuilder, 2)],
             provisions,
             [],
@@ -100,7 +101,7 @@ public class ArmyBeachCampTests
         var settlement = Camp(garrison: [new UnitStack(UnitType.Spearman, 5)]);
 
         var decision = Army.PlanDispatch(
-            settlement, [new UnitStack(UnitType.Spearman, 5)], 40, [], new HexCoord(3, 0), T0, Guid.CreateVersion7(), SandShore);
+            settlement, settlement.Centre, [new UnitStack(UnitType.Spearman, 5)], 40, [], new HexCoord(3, 0), T0, Guid.CreateVersion7(), SandShore);
 
         Assert.True(decision.Accepted);
         Assert.True(decision.Army!.Loot.IsZero);

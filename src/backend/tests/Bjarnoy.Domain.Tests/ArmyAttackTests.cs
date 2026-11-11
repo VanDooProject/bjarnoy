@@ -33,11 +33,10 @@ public class ArmyAttackTests
             Name = "Bjornstad",
             Centre = home,
             Buildings = [new PlacedBuilding(home, BuildingType.Longhouse, longhouseLevel), .. extraBuildings ?? []],
-            Garrison = garrison ?? [new UnitStack(UnitType.Spearman, 1000), new UnitStack(UnitType.Axeman, 1000)],
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: food, Iron: 1_000_000),
                 production, capacity, T0),
-        };
+        }.WithGarrison(garrison ?? [new UnitStack(UnitType.Spearman, 1000), new UnitStack(UnitType.Axeman, 1000)]);
     }
 
     private static DispatchDecision DispatchAttack(
@@ -45,7 +44,7 @@ public class ArmyAttackTests
         Guid targetSettlementId,
         double provisions,
         IReadOnlyList<UnitStack>? requested = null,
-        HexCoord? targetBuildingCoord = null) => Army.PlanDispatch(
+        HexCoord? targetBuildingCoord = null) => TestArmy.PlanDispatch(
             settlement,
             requested ?? [new UnitStack(UnitType.Axeman, 20)],
             provisions,
@@ -63,7 +62,7 @@ public class ArmyAttackTests
     {
         var settlement = Found();
 
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Axeman, 5)], 40, [], TargetHex, T0,
             Guid.CreateVersion7(), AllGrass(), ArmyMission.Attack, targetSettlementId: null);
 
@@ -470,7 +469,7 @@ public class ArmyAttackTests
         var settlement = Found(garrison: [new UnitStack(UnitType.Karve, 5)]);
         Terrain TerrainAt(HexCoord c) => c == TargetHex ? Terrain.Grass : Terrain.Sea;
 
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Karve, 5)], 100, [], TargetHex, T0,
             Guid.CreateVersion7(), TerrainAt, ArmyMission.Attack, Guid.CreateVersion7(),
             targetBuildingCoord: TargetHex, targetClaimDiscs: [(TargetHex, 0)]);
@@ -485,7 +484,7 @@ public class ArmyAttackTests
         var landBlob = TargetHex.Neighbours().Append(TargetHex).ToHashSet();
         Terrain TerrainAt(HexCoord c) => landBlob.Contains(c) ? Terrain.Grass : Terrain.Sea;
 
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Karve, 5)], 100, [], TargetHex, T0,
             Guid.CreateVersion7(), TerrainAt, ArmyMission.Attack, Guid.CreateVersion7(),
             targetBuildingCoord: TargetHex, targetClaimDiscs: [(TargetHex, 0)]);
@@ -511,7 +510,7 @@ public class ArmyAttackTests
     {
         var settlement = Found();
 
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Axeman, 5)], 40, [], TargetHex, T0,
             Guid.CreateVersion7(), AllGrass(), ArmyMission.Move, targetSettlementId: null,
             targetBuildingCoord: new HexCoord(1, 1));
@@ -691,7 +690,7 @@ public class ArmyAttackTests
         Guid targetSettlementId,
         double provisions,
         IReadOnlyList<UnitStack>? requested = null,
-        HexCoord? targetBuildingCoord = null) => Army.PlanDispatch(
+        HexCoord? targetBuildingCoord = null) => TestArmy.PlanDispatch(
             settlement,
             requested ?? [new UnitStack(UnitType.Axeman, 20)],
             provisions,
@@ -709,7 +708,7 @@ public class ArmyAttackTests
     {
         var settlement = Found();
 
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Axeman, 5)], 40, [], TargetHex, T0,
             Guid.CreateVersion7(), AllGrass(), ArmyMission.Raid, targetSettlementId: null);
 
@@ -880,10 +879,9 @@ public class ArmyAttackTests
             Name = "Target",
             Centre = TargetHex,
             Buildings = [new PlacedBuilding(TargetHex, BuildingType.Longhouse, 1)],
-            Garrison = [],
             Resources = ResourcePool.Create(
                 defenderStock, production, ResourceAmounts.Uniform(10_000), T0),
-        };
+        }.WithGarrison([]);
 
         var neighbours = TargetHex.Neighbours();
 

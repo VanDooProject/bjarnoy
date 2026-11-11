@@ -388,6 +388,13 @@
     "inTransit": "Unterwegs",
     "hunting": "Auf der Jagd"
   },
+  "garrisonSpots": {
+    "longhouse": "Langhaus",
+    "tower": "Wachturm",
+    "dock": "Werft",
+    "from": "aus: {spots}",
+    "severalSpots": "Diese Einheiten stehen an mehreren Orten. Von mehreren Orten gleichzeitig loszuschicken, ist bald möglich."
+  },
   "armyPanel": {
     "title": "Armeen",
     "demoNote": "Die Entsendung von Armeen erfordert das echte Backend und ist im Demo-Modus noch nicht eingerichtet.",
@@ -586,6 +593,8 @@
     }
   },
   "panelColumn": {
-    "toggle": "{panel} ein- oder ausblenden"
+    "toggle": "{panel} ein- oder ausblenden",
+    "collapse": "{panel} einklappen",
+    "expand": "{panel} ausklappen"
   }
 }

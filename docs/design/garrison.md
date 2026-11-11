@@ -23,6 +23,10 @@
   army moves on together at the pace of its slowest unit. The walk to that hex and the wait count in the round-trip food
   check.
 - The home of such an army is the settlement's garrison spot nearest the hex where the groups met.
+- Sending out: the send picker counts the units of all spots together. It takes each unit type from the spots nearest the
+  target first, then from the next-nearest. The unit picker shows which spot the units come from.
+- Support: you can support a settlement only by choosing one of its garrison spots (its longhouse, a tower or a dock). The
+  army joins that spot.
 - When a tower or dock is destroyed, the units that survive in it march to the owner's nearest garrison spot that can hold
   them, and that spot becomes their home.
 

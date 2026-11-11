@@ -388,6 +388,13 @@
     "inTransit": "In transit",
     "hunting": "Hunting"
   },
+  "garrisonSpots": {
+    "longhouse": "Longhouse",
+    "tower": "Tower",
+    "dock": "Dock",
+    "from": "from {spots}",
+    "severalSpots": "These units stand at several spots. Sending from several spots at once is coming soon."
+  },
   "armyPanel": {
     "title": "Armies",
     "demoNote": "Dispatching armies requires the live backend and isn't wired up in demo mode yet.",
@@ -586,6 +593,8 @@
     }
   },
   "panelColumn": {
-    "toggle": "Show or hide {panel}"
+    "toggle": "Show or hide {panel}",
+    "collapse": "Collapse {panel}",
+    "expand": "Expand {panel}"
   }
 }

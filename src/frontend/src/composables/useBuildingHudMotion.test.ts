@@ -3,8 +3,11 @@
 // The building HUD's motion: the wave delay, which tier change is which resize, the show / hide with its reversal, the box
 // resize with the old rows fading out above the new ones, and the reduced-motion fade. Web Animations are a recording stand-in.
 import { flushPromises } from '@vue/test-utils';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeAnimation, installFakeAnimate, type FakeAnimate } from '../test/fakeAnimate';
+import { animationPreference } from '../lib/perf/animationPreference';
+import { prefersReducedMotion } from '../lib/motion';
+import { motionPreferences } from '../lib/perf/motionPreferences';
 import { HUD_MOTION, boxChangeFor, createBuildingHudMotion, motionStyleFor, waveDelayMs, waveDelays } from './useBuildingHudMotion';
 
 describe('the wave', () => {
@@ -247,5 +250,49 @@ describe('box and number transitions', () => {
     fake = installFakeAnimate();
     createBuildingHudMotion(() => true).foldBox(document.createElement('div'), () => {});
     expect(fake.animations[0]!.frames).toEqual([{ opacity: 1 }, { opacity: 0 }]);
+  });
+});
+
+describe("the player's HUD motion setting decides, not the device flag", () => {
+  let fake: FakeAnimate | undefined;
+  beforeEach(() => {
+    vi.spyOn(animationPreference, 'reducedMotion', 'get').mockReturnValue(true);
+  });
+  afterEach(() => {
+    fake?.restore();
+    fake = undefined;
+    motionPreferences.hud = 'auto';
+    vi.restoreAllMocks();
+  });
+
+  it("HUD menus 'on' plays full motion although the device asks for reduced motion", () => {
+    motionPreferences.hud = 'on';
+    expect(prefersReducedMotion()).toBe(false);
+    fake = installFakeAnimate();
+    const near = marker(0);
+    const far = { ...marker(300), key: 'far' };
+    void createBuildingHudMotion().setShown(true, [near, far]);
+    const spins = fake.animations.filter((a) => a.target === near.dial || a.target === far.dial);
+    // The spin keyframes (transform), not the 150 ms opacity fade, each waiting its own wave delay.
+    expect(spins.every((a) => 'transform' in a.frames[0]!)).toBe(true);
+    expect(spins.map((a) => a.timing.delay)).toEqual([0, 300]);
+    expect(spins.every((a) => a.timing.duration === HUD_MOTION.showDialSpin)).toBe(true);
+  });
+
+  it("HUD menus 'auto' follows the device flag: a 150 ms fade, no wave", () => {
+    motionPreferences.hud = 'auto';
+    expect(prefersReducedMotion()).toBe(true);
+    fake = installFakeAnimate();
+    const m = marker(300);
+    void createBuildingHudMotion().setShown(true, [m]);
+    const dial = fake.animations.find((a) => a.target === m.dial)!;
+    expect(dial.frames).toEqual([{ opacity: 0 }, { opacity: 1 }]);
+    expect(dial.timing.delay).toBeUndefined();
+  });
+
+  it("HUD menus 'off' is reduced whatever the device says", () => {
+    motionPreferences.hud = 'off';
+    vi.spyOn(animationPreference, 'reducedMotion', 'get').mockReturnValue(false);
+    expect(prefersReducedMotion()).toBe(true);
   });
 });

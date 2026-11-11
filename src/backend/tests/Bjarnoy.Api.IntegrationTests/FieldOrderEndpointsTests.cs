@@ -77,7 +77,7 @@ public sealed class FieldOrderEndpointsTests : IAsyncLifetime
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Axeman, Count = 20 });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Axeman, Count = 20 });
             await db.SaveChangesAsync(Ct);
         }
 
@@ -91,7 +91,7 @@ public sealed class FieldOrderEndpointsTests : IAsyncLifetime
     {
         var dispatched = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlementId}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("axeman", count)], null, Point(to), count * 10),
+            new DispatchArmyRequest([new(await client.SpotOfAsync(settlementId, Ct), [new UnitCountRequest("axeman", count)])], null, Point(to), count * 10),
             Ct);
         Assert.Equal(HttpStatusCode.Created, dispatched.StatusCode);
         var army = await dispatched.ReadStrictAsync<ArmyResponse>(Ct);
@@ -296,7 +296,7 @@ public sealed class FieldOrderEndpointsTests : IAsyncLifetime
         // Still marching (not yet arrived): the whole army only.
         var dispatched = await client.PostJsonAsync(
             $"/api/v1/settlements/{setup.Settlement.Id}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("axeman", 10)], null, Point(setup.GrassNeighbours[0]), 100),
+            new DispatchArmyRequest([new(setup.Settlement.Spot(), [new UnitCountRequest("axeman", 10)])], null, Point(setup.GrassNeighbours[0]), 100),
             Ct);
         var marching = await dispatched.ReadStrictAsync<ArmyResponse>(Ct);
         var tooEarly = await OrderAsync(client, marching.Id, new FieldOrderRequest(

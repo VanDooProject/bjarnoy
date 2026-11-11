@@ -137,10 +137,10 @@ public sealed class SeaFoundingEndpointsTests : IAsyncLifetime
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
             var user = await db.Users.SingleAsync(u => u.Id == player.User.Id, Ct);
             user.RenownTotal = RenownThresholds.RequiredFor(2);
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Karve, Count = 1 });
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Settler, Count = 5 });
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Spearman, Count = 2 });
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Berserker, Count = 2 });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Karve, Count = 1 });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Settler, Count = 5 });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Spearman, Count = 2 });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Berserker, Count = 2 });
             await db.SaveChangesAsync(Ct);
         }
 
@@ -151,7 +151,7 @@ public sealed class SeaFoundingEndpointsTests : IAsyncLifetime
         client.PostJsonAsync(
             $"/api/v1/settlements/{s.Home.Id}/armies",
             // Five settlers carry at most 5 * 40 = 200 food; the same ceiling the overland golden path uses.
-            new DispatchArmyRequest(units, null, new HexPointRequest(s.Target.Q, s.Target.R), 200, "found"),
+            new DispatchArmyRequest([new(s.Home.Spot(), units)], null, new HexPointRequest(s.Target.Q, s.Target.R), 200, "found"),
             Ct);
 
     [Fact]

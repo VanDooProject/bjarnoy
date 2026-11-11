@@ -309,6 +309,12 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("HomeSpotQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("HomeSpotR")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("IsReturning")
                         .HasColumnType("boolean");
 
@@ -1754,12 +1760,18 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("SettlementId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("SpotQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SpotR")
+                        .HasColumnType("integer");
+
                     b.Property<int>("UnitType")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SettlementId", "UnitType")
+                    b.HasIndex("SettlementId", "SpotQ", "SpotR", "UnitType")
                         .IsUnique();
 
                     b.ToTable("unit_stacks", (string)null);

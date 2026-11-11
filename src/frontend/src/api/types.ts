@@ -323,6 +323,12 @@ export interface PlacedBuildingResponse {
   nextLevelLossInSeconds?: number | null;
 }
 
+/** Mirrors `OwnBuildOrdersResponse` (`GET /worlds/{id}/own-build-orders`): the build queue of one of the player's realms, named by its oldest member. */
+export interface OwnBuildOrders {
+  settlementId: string;
+  queue: BuildOrderResponse[];
+}
+
 export interface BuildOrderResponse {
   id: string;
   q: number;
@@ -350,6 +356,23 @@ export interface BuildOrderResponse {
 export interface UnitStackResponse {
   unit: string;
   count: number;
+}
+
+/** The places a garrison stands: the longhouse, a tower, a dock (a dockyard). */
+export type GarrisonSpotKind = 'longhouse' | 'tower' | 'dock';
+
+/**
+ * One garrison spot of a settlement (`docs/design/garrison.md`): the units standing there, the guests (supporting armies of
+ * others) and what it can hold. Every spot is listed, the longhouse first, empty ones included.
+ */
+export interface GarrisonSpotResponse {
+  kind: GarrisonSpotKind;
+  q: number;
+  r: number;
+  stacks: UnitStackResponse[];
+  guests: UnitStackResponse[];
+  holdsLand: boolean;
+  holdsShips: boolean;
 }
 
 /**
@@ -457,6 +480,8 @@ export interface SettlementResponse {
   queue: BuildOrderResponse[];
   /** Units standing at this settlement (issue #55: includes trained `settler`). */
   garrison: UnitStackResponse[];
+  /** The garrison split by the spot it stands at (longhouse first); `garrison` is the total over all of them. */
+  garrisonSpots: GarrisonSpotResponse[];
   trainingQueue: TrainingOrderResponse[];
   runes: RuneInstanceResponse[];
   /** The running feast, if any. */
@@ -1082,6 +1107,8 @@ export interface PlaceBuildingRequest {
 /** Signed: a positive count creates units, a negative one removes them. */
 export interface AdjustGarrisonRequest {
   unit: string;
+  /** The garrison spot the units are created at or removed from. */
+  spot: HexPoint;
   count: number;
 }
 
@@ -1561,6 +1588,12 @@ export interface UnitCountRequest {
   count: number;
 }
 
+/** One group of a dispatch: the units that leave from one garrison spot. */
+export interface DispatchFromSpot {
+  spot: HexPoint;
+  units: UnitCountRequest[];
+}
+
 /**
  * `waypoints`: ordered intermediate hexes, empty/omitted for a direct route.
  * `destination`: required for `mission: 'move'` (the default); ignored for
@@ -1569,12 +1602,14 @@ export interface UnitCountRequest {
  * and what the settlement can afford.
  */
 export interface DispatchArmyRequest {
-  units: UnitCountRequest[];
+  /** The units split by the garrison spot each group leaves from. */
+  from: DispatchFromSpot[];
   waypoints?: HexPoint[];
   destination?: HexPoint;
   provisions: number;
   mission?: string;
   targetSettlementId?: string;
+  /** Attack: the building to hit. Support: the host's garrison spot the army joins (required). */
   targetBuildingCoord?: HexPoint;
 }
 
