@@ -188,4 +188,27 @@ public class MovementOccupancyTests
 
         Assert.Null(meeting);
     }
+
+    [Fact]
+    public void Two_armies_sharing_a_hex_across_the_not_before_instant_meet_at_that_instant()
+    {
+        var hex = new HexCoord(1, 0);
+        var a = MakeMovement(T0, [new HexCoord(0, 0), hex, new HexCoord(2, 0)], [0, 1, 5]);
+        var b = MakeMovement(T0, [new HexCoord(3, 0), hex, new HexCoord(0, 0)], [0, 1, 5]);
+
+        Assert.Equal(T0.AddHours(1), MovementOccupancy.EarliestMeeting(a, b)!.Value.At);
+        Assert.Equal(T0.AddHours(3), MovementOccupancy.EarliestMeeting(a, b, notBefore: T0.AddHours(3))!.Value.At);
+    }
+
+    [Fact]
+    public void A_not_before_instant_after_the_shared_window_ended_rules_the_meeting_out()
+    {
+        var hex = new HexCoord(1, 0);
+        var a = MakeMovement(T0, [new HexCoord(0, 0), hex, new HexCoord(2, 0)], [0, 1, 2]);
+        var b = MakeMovement(T0, [new HexCoord(3, 0), hex, new HexCoord(0, 0)], [0, 1, 2]);
+
+        // Together on the hex during [1h, 2h): a floor at 2h or later leaves nothing.
+        Assert.NotNull(MovementOccupancy.EarliestMeeting(a, b, notBefore: T0.AddHours(1.5)));
+        Assert.Null(MovementOccupancy.EarliestMeeting(a, b, notBefore: T0.AddHours(2)));
+    }
 }

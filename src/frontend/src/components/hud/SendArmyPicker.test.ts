@@ -62,7 +62,10 @@ function army(id: string, overrides: Partial<ArmyResponse> = {}, arrivesAt = '20
       turnAroundAt: '2099-01-01T00:00:00Z',
       returnArrivesAt: '2099-01-02T00:00:00Z',
       isReturning: false,
+      isStranded: false,
+      isFleeing: false,
     },
+    starvesAt: null,
     ...overrides,
   };
 }

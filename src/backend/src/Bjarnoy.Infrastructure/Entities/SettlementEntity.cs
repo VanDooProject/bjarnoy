@@ -199,7 +199,7 @@ public class SettlementEntity
                 .Where(b => BuildingCatalogue.MaxLevelFor(Merged(b.Type)) > 0)
                 .OrderBy(b => b.Q).ThenBy(b => b.R)
                 .Select(b => new PlacedBuilding(
-                    new HexCoord(b.Q, b.R), Merged(b.Type), Math.Min(b.Level, BuildingCatalogue.MaxLevelFor(Merged(b.Type))), b.OutsideRealmSince)),
+                    new HexCoord(b.Q, b.R), Merged(b.Type), Math.Min(b.Level, BuildingCatalogue.MaxLevelFor(Merged(b.Type))), b.OutsideRealmSince, b.StandingSince)),
         ],
         Queue =
         [
@@ -328,6 +328,7 @@ public class SettlementEntity
                     Type = placed.Type,
                     Level = placed.Level,
                     OutsideRealmSince = placed.OutsideRealmSince,
+                    StandingSince = placed.StandingSince,
                 });
             }
             else
@@ -335,6 +336,7 @@ public class SettlementEntity
                 existing.Type = placed.Type;
                 existing.Level = placed.Level;
                 existing.OutsideRealmSince = placed.OutsideRealmSince;
+                existing.StandingSince = placed.StandingSince;
             }
         }
     }
@@ -493,8 +495,14 @@ public class PlacedBuildingEntity
     /// </summary>
     public DateTimeOffset? OutsideRealmSince { get; set; }
 
+    /// <summary>
+    /// For a palisade or gate, the game instant it became a standing wall (<see cref="PlacedBuilding.StandingSince"/>); null for every
+    /// other building and for walls that stood before it was recorded.
+    /// </summary>
+    public DateTimeOffset? StandingSince { get; set; }
+
     /// <summary>The domain value of this building (stored columns as they are, no catalogue clamp).</summary>
-    public PlacedBuilding ToPlacedBuilding() => new(new HexCoord(Q, R), Type, Level, OutsideRealmSince);
+    public PlacedBuilding ToPlacedBuilding() => new(new HexCoord(Q, R), Type, Level, OutsideRealmSince, StandingSince);
 }
 
 /// <summary>A build in progress. Completes by clock; nothing advances it.</summary>

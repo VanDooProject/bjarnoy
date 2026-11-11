@@ -386,6 +386,12 @@ describe('armyStatusLabel', () => {
     expect(armyStatusLabel({ atHome: true, supporting: false, movement: null })).toBe('At home');
   });
 
+  it('labels an army that cannot get home, whatever its mission', () => {
+    expect(
+      armyStatusLabel({ atHome: false, supporting: false, mission: 'hunt', movement: { isReturning: false, isStranded: true } }),
+    ).toBe('Cannot get home');
+  });
+
   it('labels a supporting guest army with no settlement name given', () => {
     expect(armyStatusLabel({ atHome: false, supporting: true, movement: null })).toBe('Supporting');
   });
@@ -581,6 +587,15 @@ describe('canFieldOrderArmy', () => {
       expect(
         canFieldOrderArmy({ atHome: false, supporting: false, mission, movement: { isReturning: false } }),
       ).toBe(false);
+    }
+  });
+
+  it('allows a fleeing or stranded army on any mission, even one fleeing home', () => {
+    for (const movement of [
+      { isReturning: true, isFleeing: true, isStranded: false },
+      { isReturning: false, isFleeing: false, isStranded: true },
+    ]) {
+      expect(canFieldOrderArmy({ atHome: false, supporting: false, mission: 'attack', movement })).toBe(true);
     }
   });
 

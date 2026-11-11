@@ -391,6 +391,8 @@
     "returning": "Kehrt zurück",
     "inTransit": "Unterwegs",
     "hunting": "Auf der Jagd",
+    "cannotGetHome": "Kein Weg nach Hause",
+    "starvesIn": "verhungert in {eta}",
     "buildingCamp": "Baut das Strandlager, fertig um {time} Uhr"
   },
   "garrisonSpots": {

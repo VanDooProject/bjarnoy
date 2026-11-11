@@ -108,6 +108,7 @@ import type {
   WorldMembershipResponse,
   WorldResponse,
   WorldSummaryResponse,
+  ArmyReportResponse,
   CampReportResponse,
   CampStateResponse,
   ForeignArmyResponse,
@@ -739,6 +740,11 @@ export const api = {
     request<CampReportResponse>(`/camp-reports/${reportId}`, { headers: ownerHeader(ownerId) }),
   getSettlementCampReports: (settlementId: string, ownerId?: string) =>
     request<CampReportResponse[]>(`/settlements/${settlementId}/camp-reports`, { headers: ownerHeader(ownerId) }),
+  // Army reports (army stuck / army starved) belong to the player: listed per world by the caller's own realm, no settlement id.
+  getArmyReport: (reportId: string, ownerId?: string) =>
+    request<ArmyReportResponse>(`/army-reports/${reportId}`, { headers: ownerHeader(ownerId) }),
+  getWorldArmyReports: (worldId: string, ownerId?: string) =>
+    request<ArmyReportResponse[]>(`/worlds/${worldId}/army-reports`, { headers: ownerHeader(ownerId) }),
   getMyLeaderboardRank: (
     worldId: string,
     scope: LeaderboardScope,

@@ -195,6 +195,25 @@ export interface CampReportResponse {
   towerBurned: boolean;
 }
 
+export interface ArmyReportUnitLine {
+  type: string;
+  count: number;
+}
+
+/**
+ * Mirrors `ArmyReportResponse` — an army report that belongs to the player, not to a settlement: `stuck` (a wall blocks the army's way)
+ * or `starved` (it could not get home and its food ran out). `units` are the troops lost (`starved`) or in the army (`stuck`).
+ */
+export interface ArmyReportResponse {
+  id: string;
+  kind: 'stuck' | 'starved';
+  occurredAt: string;
+  armyId: string;
+  hex: { q: number; r: number };
+  mission: string;
+  units: ArmyReportUnitLine[];
+}
+
 /**
  * Mirrors `UtgardWallResponse` — one hex of an Utgard wall ring (see `lib/map/endgamePlacement.ts` and `docs/design/endgame.md`).
  * `piece` is the wall piece (`straight180`, `bend60`, `bend120`, `gate180`, `end` or `end_coast` on a sea hex); the atlas family is
@@ -1657,6 +1676,10 @@ export interface MovementResponse {
   turnAroundAt: string;
   returnArrivesAt: string;
   isReturning: boolean;
+  /** The army cannot get home and stays on the last hex of `path` (that hex alone, or the walk there when a wall closed its way); `ArmyResponse.starvesAt` is when its food runs out and the whole army dies. */
+  isStranded: boolean;
+  /** The army is fleeing after a lost field battle (on its way home or stranded): it takes field orders from where it is, and an order ends its flee protection. */
+  isFleeing: boolean;
 }
 
 /**
@@ -1707,6 +1730,8 @@ export interface ArmyResponse {
   visionRadius: number;
   stacks: ArmyUnitStackResponse[];
   movement: MovementResponse | null;
+  /** When the provisions of an army that cannot get home run out and the whole army dies; null for every other army. */
+  starvesAt: string | null;
 }
 
 export interface ArmyUnitStackResponse {

@@ -13,8 +13,12 @@ namespace Bjarnoy.Domain.Buildings;
 /// player's realm (<c>docs/design/economy.md</c> section 5, "Buildings outside the realm decay"), or <see langword="null"/>
 /// while it is inside: a building with a value there has no function (<see cref="IsFunctioning"/>) and loses a level every
 /// <see cref="BuildingCatalogue.DecayInterval(BuildingType, double)"/>. Only <see cref="Settlement.ApplyRealmState"/> sets or clears it.
+/// <paramref name="StandingSince"/> is, for a palisade or a gate, the game instant its build order raised it to a standing wall (level 1,
+/// or a palisade turned gate or back): armies already marching react to a wall from then on (<c>docs/design/troop-movement-range.md</c>
+/// §5). <see langword="null"/> for every other building and for walls that stood before it was recorded.
 /// </summary>
-public readonly record struct PlacedBuilding(HexCoord Coord, BuildingType Type, int Level, DateTimeOffset? OutsideRealmSince = null)
+public readonly record struct PlacedBuilding(
+    HexCoord Coord, BuildingType Type, int Level, DateTimeOffset? OutsideRealmSince = null, DateTimeOffset? StandingSince = null)
 {
     /// <summary>Whether the hex is inside the realm, so the building produces, boosts and trains.</summary>
     public bool IsFunctioning => OutsideRealmSince is null;
@@ -646,6 +650,21 @@ public sealed record Settlement
     public int Score => Buildings.Sum(b => b.Level * (b.Level + 1) / 2);
 
     /// <summary>
+    /// <see cref="PlacedBuilding.StandingSince"/> after <paramref name="order"/> completes at <paramref name="completedAt"/> on
+    /// <paramref name="before"/> (<see langword="null"/>: nothing stood there): a palisade or gate that becomes a standing wall (from
+    /// below level 1, or turned from one kind into the other) stands from then; an upgrade keeps the instant it already had.
+    /// </summary>
+    private static DateTimeOffset? WallStandsFrom(PlacedBuilding? before, BuildOrder order, DateTimeOffset completedAt)
+    {
+        if (order.Type is not (BuildingType.Palisade or BuildingType.PalisadeGate) || order.TargetLevel < 1)
+        {
+            return before?.StandingSince;
+        }
+
+        return before is { Level: >= 1 } standing && standing.Type == order.Type ? standing.StandingSince : completedAt;
+    }
+
+    /// <summary>
     /// The settlement as of <paramref name="now"/>: every order whose time has
     /// come is applied, and production and capacity are recomputed from what is
     /// then standing.
@@ -754,11 +773,19 @@ public sealed record Settlement
                 }
                 else if (index >= 0)
                 {
-                    buildings[index] = buildings[index] with { Type = order.Type, Level = order.TargetLevel };
+                    var before = buildings[index];
+                    buildings[index] = before with
+                    {
+                        Type = order.Type,
+                        Level = order.TargetLevel,
+                        StandingSince = WallStandsFrom(before, order, eventTime),
+                    };
                 }
                 else
                 {
-                    buildings.Add(new PlacedBuilding(order.Coord, order.Type, order.TargetLevel));
+                    buildings.Add(new PlacedBuilding(
+                        order.Coord, order.Type, order.TargetLevel,
+                        StandingSince: WallStandsFrom(null, order, eventTime)));
                 }
 
                 queue.Remove(order);

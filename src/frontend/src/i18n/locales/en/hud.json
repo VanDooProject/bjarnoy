@@ -391,6 +391,8 @@
     "returning": "Returning",
     "inTransit": "In transit",
     "hunting": "Hunting",
+    "cannotGetHome": "Cannot get home",
+    "starvesIn": "starves in {eta}",
     "buildingCamp": "Building the camp, ready at {time}"
   },
   "garrisonSpots": {

@@ -50,6 +50,7 @@ builder.Services.AddScoped<ArmyService>();
 builder.Services.AddScoped<BattleReportService>();
 builder.Services.AddScoped<FieldBattleReportService>();
 builder.Services.AddScoped<CampReportService>();
+builder.Services.AddScoped<ArmyReportService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<GuildService>();

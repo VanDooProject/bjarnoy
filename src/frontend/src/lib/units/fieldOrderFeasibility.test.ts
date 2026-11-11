@@ -193,6 +193,21 @@ describe('fieldOrderFeasibility', () => {
 });
 
 describe('stackCounts', () => {
+  it('does not claim a stranded army can go anywhere: its path is no way home, and the client does not know where home is', () => {
+    // Stranded where it stands, and stranded on the walk to the hex it stops on: neither path starts at home.
+    const standingStranded = standing({
+      position: { q: 5, r: 0 },
+      movement: { path: [{ q: 5, r: 0 }], arrivesAt: '2026-11-09T10:00:00Z', isReturning: false, isStranded: true },
+    });
+    const walking = standing({
+      position: { q: 9, r: 0 },
+      movement: { path: [{ q: 10, r: 0 }, { q: 9, r: 0 }, { q: 8, r: 0 }], arrivesAt: '2026-11-09T13:00:00Z', isReturning: false, isStranded: true },
+    });
+
+    expect(fieldOrderFeasibility(standingStranded, { q: 4, r: 0 }, 'move', lineEnv())).toEqual({ ok: false, reason: 'unreachable' });
+    expect(fieldOrderFeasibility(walking, { q: 4, r: 0 }, 'move', lineEnv())).toEqual({ ok: false, reason: 'unreachable' });
+  });
+
   it('sums stacks of one unit and skips empty ones', () => {
     expect(
       stackCounts([

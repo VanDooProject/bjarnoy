@@ -2,6 +2,7 @@ using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Combat;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Movement;
 using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
@@ -103,6 +104,7 @@ public sealed class ArmyService(
     CampService campService,
     CampAmbushService campAmbushService,
     ExploredAreaService exploredAreaService,
+    ArmyReportService armyReportService,
     ILogger<ArmyService> logger)
 {
     private readonly GameDbContext _dbContext = dbContext;
@@ -117,6 +119,7 @@ public sealed class ArmyService(
     private readonly CampService _campService = campService;
     private readonly CampAmbushService _campAmbushService = campAmbushService;
     private readonly ExploredAreaService _exploredAreaService = exploredAreaService;
+    private readonly ArmyReportService _armyReportService = armyReportService;
     private readonly ILogger<ArmyService> _logger = logger;
 
     /// <summary>
@@ -220,7 +223,7 @@ public sealed class ArmyService(
 
         var sampler = session.Sampler;
         var rivers = await WorldRivers.IndexAsync(_dbContext, settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, settlement.WorldId, sampler.TerrainAt, rivers.IsWide, now, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id));
         var dispatchGiantIndex = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var armyId = Guid.CreateVersion7();
@@ -568,7 +571,7 @@ public sealed class ArmyService(
         var world = army.Settlement!.World!;
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
         var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, at, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
         var home = army.Settlement.HomeHexFor(domain);
 
@@ -602,7 +605,7 @@ public sealed class ArmyService(
 
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
         var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, now, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
         var domain = army.ToDomain();
         var home = army.Settlement.HomeHexFor(domain);
@@ -695,7 +698,10 @@ public sealed class ArmyService(
         }
 
         var domain = army.ToDomain();
-        if (domain.Mission is not (ArmyMission.Move or ArmyMission.Found))
+
+        // A fleeing or stranded army's mission is over: it takes orders like any army in the field (docs/design/troop-movement-range.md §2a).
+        var missionOver = domain.Location is ArmyLocation.InTransit { Movement: { IsFleeing: true } or { IsStranded: true } };
+        if (!missionOver && domain.Mission is not (ArmyMission.Move or ArmyMission.Found))
         {
             return await RejectAsync(FieldOrderRejection.MissionNotFieldOrderable).ConfigureAwait(false);
         }
@@ -706,7 +712,7 @@ public sealed class ArmyService(
         var worldId = army.Settlement.WorldId;
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
         var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, worldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, worldId, sampler.TerrainAt, rivers.IsWide, now, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
         var home = army.Settlement.HomeHexFor(domain);
         var giants = await LoadGiantIndexAsync(worldId, cancellationToken).ConfigureAwait(false);
@@ -876,7 +882,7 @@ public sealed class ArmyService(
         {
             var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
             var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
-            var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+            var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, now, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
             var home = army.Settlement.HomeHexFor(domain);
 
@@ -982,7 +988,205 @@ public sealed class ArmyService(
         return outcome;
     }
 
+    /// <summary>At most this many walls are dealt with in one settle; each re-route starts at its wall's instant, the next only later.</summary>
+    private const int MaxWallEncountersPerSettle = 16;
+
+    /// <summary>At most this many events (a field battle, an arrival, a turn-around) settled before one wall encounter.</summary>
+    private const int MaxStepsBeforeWall = 8;
+
+    /// <summary>
+    /// Settles <paramref name="army"/> to <paramref name="now"/>, dealing first with every wall built after it set out that blocks its way
+    /// (<c>docs/design/troop-movement-range.md</c> §5): everything due before the instant the army finds the wall is settled first, then it
+    /// re-routes from where it is then (<see cref="Army.RerouteAroundWall"/>), and the settle goes on. A world without a wall on the
+    /// army's way, or only walls that cannot block it (<see cref="WallTimeline.MayBlock"/>), costs one small read
+    /// (<see cref="WorldPalisades.TimelineAsync"/>, once per request and world); a route is only searched when a wall actually blocks it.
+    /// </summary>
     private async Task<ArmySettleOutcome> SettleAndFoldCoreAsync(
+        ArmyEntity army, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var changed = false;
+        for (var round = 0; round < MaxWallEncountersPerSettle; round++)
+        {
+            if (await FindWallEncounterAsync(army, now, cancellationToken).ConfigureAwait(false) is not { } encounter)
+            {
+                var step = await SettleStepAsync(army, now, cancellationToken).ConfigureAwait(false);
+
+                // The step may have started a new leg (a battle's or an arrival's way home, a turn-around): a wall in its way is dealt with
+                // in this settle too, not left to walk through.
+                if (step != ArmySettleOutcome.Updated
+                    || await FindWallEncounterAsync(army, now, cancellationToken).ConfigureAwait(false) is null)
+                {
+                    return step == ArmySettleOutcome.NoChange && changed ? ArmySettleOutcome.Updated : step;
+                }
+
+                changed = true;
+                continue;
+            }
+
+            for (var step = 0; step < MaxStepsBeforeWall; step++)
+            {
+                var before = await SettleStepAsync(army, encounter.At, cancellationToken).ConfigureAwait(false);
+                if (before == ArmySettleOutcome.FoldedHome)
+                {
+                    return ArmySettleOutcome.FoldedHome;
+                }
+
+                if (before == ArmySettleOutcome.NoChange)
+                {
+                    break;
+                }
+
+                changed = true;
+            }
+
+            // What happened before the wall (a fight, a turn-around, an arrival) may have changed the route: look again.
+            if (await FindWallEncounterAsync(army, now, cancellationToken).ConfigureAwait(false) is not { } current)
+            {
+                break;
+            }
+
+            if (current.At > encounter.At)
+            {
+                continue;
+            }
+
+            // The safety net: a re-route that leaves the same route at the same instant would only find the same wall again.
+            if (!await RerouteAroundWallAsync(army, current, cancellationToken).ConfigureAwait(false))
+            {
+                break;
+            }
+
+            changed = true;
+        }
+
+        var outcome = await SettleStepAsync(army, now, cancellationToken).ConfigureAwait(false);
+        return outcome == ArmySettleOutcome.NoChange && changed ? ArmySettleOutcome.Updated : outcome;
+    }
+
+    private readonly Dictionary<Guid, WallTimeline> _wallTimelines = [];
+
+    private readonly Dictionary<Guid, WallBlocking> _wallBlocking = [];
+
+    /// <summary>The world's wall timeline, read once per request (this service is scoped).</summary>
+    private async Task<WallTimeline> WallTimelineAsync(Guid worldId, CancellationToken cancellationToken)
+    {
+        if (!_wallTimelines.TryGetValue(worldId, out var timeline))
+        {
+            timeline = new WallTimeline(await WorldPalisades.TimelineAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false));
+            _wallTimelines[worldId] = timeline;
+        }
+
+        return timeline;
+    }
+
+    /// <summary>
+    /// The route rules of the world's wall timeline at any instant (<see cref="WallBlocking"/>), built once per request and world: the one
+    /// rule set both <see cref="FindWallEncounterAsync"/> and <see cref="RerouteAroundWallAsync"/> use.
+    /// </summary>
+    private async Task<WallBlocking> WallBlockingAsync(SettlementEntity settlement, CancellationToken cancellationToken)
+    {
+        if (!_wallBlocking.TryGetValue(settlement.WorldId, out var blocking))
+        {
+            var timeline = await WallTimelineAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
+            var sampler = await WorldTerrain.SamplerAsync(_dbContext, settlement.World!, cancellationToken).ConfigureAwait(false);
+            var rivers = await WorldRivers.IndexAsync(_dbContext, settlement.WorldId, cancellationToken).ConfigureAwait(false);
+
+            // Only a gate cares who the friends are, so a world without one skips the guild queries.
+            var areFriends = timeline.Walls.Any(w => w.Wall.IsGate)
+                ? await WorldPalisades.FriendsAsync(_dbContext, settlement.WorldId, cancellationToken).ConfigureAwait(false)
+                : null;
+            blocking = new WallBlocking(timeline, sampler.TerrainAt, rivers.IsWide, areFriends);
+            _wallBlocking[settlement.WorldId] = blocking;
+        }
+
+        return blocking;
+    }
+
+    /// <summary>
+    /// The first wall that blocks <paramref name="army"/>'s way by <paramref name="now"/> (<see cref="WallEncounters.FindEarliest"/>), found at
+    /// the instant the hex began to block this army (<see cref="WallBlocking.FirstBlockingIn"/>): a plain wall that is no half-open end, a gate
+    /// that does not open for its owner. A rule change without an instant (a friendship ended, a gate left or rejoined its realm) counts from
+    /// <paramref name="now"/>. Land armies in transit only (a stranded one on the rest of its walk to the hex it stops on); a fleet is never
+    /// blocked.
+    /// </summary>
+    private async Task<WallEncounter?> FindWallEncounterAsync(ArmyEntity army, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var domain = army.ToDomain();
+        if (domain.IsFleet || domain.Location is not ArmyLocation.InTransit { Movement: var movement })
+        {
+            return null;
+        }
+
+        var settlement = army.Settlement!;
+        var timeline = await WallTimelineAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var ownerKey = WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id);
+
+        // The timeline alone rules out what cannot block (an own gate, a half-open end nobody built beside since the route was planned),
+        // so a route through such hexes only costs the one timeline read: terrain, rivers and guilds are read for a candidate only.
+        var route = movement.IsReturning ? movement.Path : movement.Path.Concat(movement.ReturnPath);
+        if (timeline.IsEmpty || !route.Any(hex => timeline.MayBlock(hex, ownerKey, movement.PlannedAt, now)))
+        {
+            return null;
+        }
+
+        var blocking = await WallBlockingAsync(settlement, cancellationToken).ConfigureAwait(false);
+        return WallEncounters.FindEarliest(
+            movement, (hex, from, before) => blocking.FirstBlockingIn(hex, ownerKey, from, before, movement.PlannedAt, now), now);
+    }
+
+    /// <summary>
+    /// <see cref="Army.RerouteAroundWall"/> for <paramref name="army"/> (settled to <c>encounter.At</c>) with the routes as they stand at that
+    /// instant, under the same rules that found the wall; an army that found no way past the wall gets its owner an "army stuck" report.
+    /// Does not save. Returns whether the army's movement changed.
+    /// </summary>
+    private async Task<bool> RerouteAroundWallAsync(ArmyEntity army, WallEncounter encounter, CancellationToken cancellationToken)
+    {
+        var settlement = army.Settlement!;
+        var world = settlement.World!;
+        var domain = army.ToDomain();
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
+        var rivers = await WorldRivers.IndexAsync(_dbContext, settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var walls = (await WallBlockingAsync(settlement, cancellationToken).ConfigureAwait(false)).IndexAt(encounter.At);
+        var bridges = await WorldBridges.IndexAsync(_dbContext, settlement.WorldId, sampler.TerrainAt, cancellationToken).ConfigureAwait(false);
+        var rules = new LandRouteIndex(walls, bridges).ForOwner(WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id));
+
+        var result = domain.RerouteAroundWall(
+            encounter, settlement.HomeHexFor(domain), sampler.TerrainAt, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, rules);
+        if (SameMovement(domain, result.Army))
+        {
+            _logger.LogWarning(
+                "Army {ArmyId} found the wall at {Wall} in its way at {At}, but the re-route kept its route; the wall is left to the next settle.",
+                army.Id, encounter.Hex, encounter.At);
+            return false;
+        }
+
+        army.ApplyDomain(result.Army);
+
+        if (result.StuckAt is { } stuck)
+        {
+            _armyReportService.Add(settlement, ArmyReportKind.Stuck, encounter.At, army.Id, stuck, domain.Mission, domain.Stacks);
+            _logger.LogInformation(
+                "Army {ArmyId} found the wall at {Wall} in its way at {At} and no way past it: it stops at {Hex}{Stranded}.",
+                army.Id, encounter.Hex, encounter.At, stuck, result.Army.CannotGetHome ? " and cannot get home" : string.Empty);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Army {ArmyId} found the wall at {Wall} in its way at {At} and takes another route.", army.Id, encounter.Hex, encounter.At);
+        }
+
+        return true;
+    }
+
+    /// <summary>Whether a re-route left the army on the same route from the same instant (the settle loop's safety net).</summary>
+    private static bool SameMovement(Army before, Army after) =>
+        before.Location is ArmyLocation.InTransit { Movement: var a }
+        && after.Location is ArmyLocation.InTransit { Movement: var b }
+        && a.DepartedAt == b.DepartedAt && a.IsReturning == b.IsReturning && a.IsStranded == b.IsStranded
+        && a.Path.SequenceEqual(b.Path) && a.ReturnPath.SequenceEqual(b.ReturnPath);
+
+    /// <summary>One settle step: the first due event of <paramref name="army"/> up to <paramref name="now"/> (see <see cref="SettleAndFoldAsync"/>).</summary>
+    private async Task<ArmySettleOutcome> SettleStepAsync(
         ArmyEntity army, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var domain = army.ToDomain();
@@ -998,6 +1202,28 @@ public sealed class ArmyService(
         if (await _fieldBattleService.TryResolveAsync(army, domain, now, cancellationToken).ConfigureAwait(false))
         {
             return ArmySettleOutcome.Updated;
+        }
+
+        // An army that cannot get home stands where it is until its food runs out (docs/design/troop-movement-range.md §2a). It
+        // has no outbound leg left to arrive on, so none of the mission arrivals below apply to it.
+        if (domain.CannotGetHome)
+        {
+            // Still walking to the hex it stops on: a strong camp it passes on the way ambushes it like any marching army, up to the
+            // instant it gets there (or starves on the way).
+            if (domain.Location is ArmyLocation.InTransit { Movement: { Path.Count: > 1 } walk })
+            {
+                var walkEnds = domain.StarvesAt is { } starves && starves < walk.ArrivesAt ? starves : walk.ArrivesAt;
+                switch (await _campAmbushService.TryResolveAsync(army, domain, now < walkEnds ? now : walkEnds, cancellationToken).ConfigureAwait(false))
+                {
+                    case CampAmbushOutcome.Fought:
+                        return ArmySettleOutcome.Updated;
+                    case CampAmbushOutcome.ArmyDestroyed:
+                        return ArmySettleOutcome.FoldedHome;
+                }
+            }
+
+            var strandedResult = domain.SettleTo(now);
+            return strandedResult.Starved ? Starve(army, domain, strandedResult) : ArmySettleOutcome.NoChange;
         }
 
         // A strong camp's ambush (docs/design/wildlife-camps.md) is likewise checked before any arrival handling and
@@ -1110,6 +1336,11 @@ public sealed class ArmyService(
             return ArmySettleOutcome.NoChange;
         }
 
+        if (result.Starved)
+        {
+            return Starve(army, domain, result);
+        }
+
         army.WalkedLegs.AddRange(result.Walked);
 
         if (result.ArrivedHome)
@@ -1120,6 +1351,30 @@ public sealed class ArmyService(
 
         army.ApplyDomain(result.Army);
         return ArmySettleOutcome.Updated;
+    }
+
+    /// <summary>
+    /// A stranded army whose food ran out: the whole army dies where it stood. Records the ground it walked, removes the row and
+    /// writes the starvation report (army, where, troops lost) for its owner. Not folded home: its stacks are gone, not garrisoned.
+    /// </summary>
+    private ArmySettleOutcome Starve(ArmyEntity army, Army domain, ArmySettleResult result)
+    {
+        var movement = ((ArmyLocation.InTransit)domain.Location).Movement;
+        var starvesAt = result.Walked[^1].Until;
+
+        // A stranded army may still be walking to the hex it stops on (a wall closed its way), so it dies where it is then.
+        var where = movement.PositionAt(starvesAt);
+
+        army.WalkedLegs.AddRange(result.Walked);
+        _armyReportService.Add(
+            army.Settlement!, ArmyReportKind.Starved, starvesAt, army.Id, where, domain.Mission, domain.Stacks);
+        _dbContext.Armies.Remove(army);
+
+        _logger.LogInformation(
+            "Army {ArmyId} starved at {Hex} with {Troops} troop(s): it could not get home and its provisions ran out.",
+            army.Id, where, domain.Stacks.Sum(s => s.Count));
+
+        return ArmySettleOutcome.FoldedHome;
     }
 
     /// <summary>
@@ -1344,6 +1599,7 @@ public sealed class ArmyService(
             ReturnEdgeHours = movement.ReturnEdgeHours,
             TurnAroundAt = movement.ArrivesAt,
             IsReturning = true,
+            RoutePlannedAt = movement.RoutePlannedAt,
         }),
     };
 
@@ -1472,6 +1728,11 @@ public sealed class ArmyService(
         ArmyEntity armyEntity, Army turnedArmy, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var result = turnedArmy.SettleTo(now);
+        if (result.Starved)
+        {
+            return Starve(armyEntity, turnedArmy, result);
+        }
+
         var finalArmy = result.Changed ? result.Army : turnedArmy;
         armyEntity.WalkedLegs.AddRange(result.Walked);
 
@@ -1549,7 +1810,7 @@ public sealed class ArmyService(
         {
             var relocation = new GarrisonRelocation(_dbContext);
             var routing = await relocation.LoadRoutingAsync(
-                destinationEntity.WorldId, session.SpeedFactor, session.TerrainAt, destinationEntity.UserId, destinationEntity.Id, cancellationToken)
+                destinationEntity.WorldId, session.SpeedFactor, session.TerrainAt, destinationEntity.UserId, destinationEntity.Id, now, cancellationToken)
                 .ConfigureAwait(false);
             if (GarrisonRelocation.LandingMarch(merged, spot, landing, now, routing, Guid.CreateVersion7()) is { } found)
             {
@@ -1622,7 +1883,7 @@ public sealed class ArmyService(
 
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
         var relocation = new GarrisonRelocation(_dbContext);
-        var routing = await relocation.LoadRoutingAsync(world.Id, world.SpeedFactor, sampler.TerrainAt, entity.UserId, entity.Id, cancellationToken).ConfigureAwait(false);
+        var routing = await relocation.LoadRoutingAsync(world.Id, world.SpeedFactor, sampler.TerrainAt, entity.UserId, entity.Id, now, cancellationToken).ConfigureAwait(false);
         var candidates = await relocation.OwnerSpotsAsync(world.Id, entity.OwnerId, sampler.TerrainAt, new Dictionary<Guid, Settlement>(), cancellationToken).ConfigureAwait(false);
         await relocation.RehomeAsync(settlementId, spot, candidates, now, routing, cancellationToken).ConfigureAwait(false);
     }

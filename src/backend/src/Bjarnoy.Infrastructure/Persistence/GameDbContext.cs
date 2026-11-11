@@ -57,6 +57,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<CampReportBeastLineEntity> CampReportBeastLines => Set<CampReportBeastLineEntity>();
 
+    public DbSet<ArmyReportEntity> ArmyReports => Set<ArmyReportEntity>();
+
+    public DbSet<ArmyReportUnitLineEntity> ArmyReportUnitLines => Set<ArmyReportUnitLineEntity>();
+
     public DbSet<UserEntity> Users => Set<UserEntity>();
 
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
@@ -690,6 +694,35 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             line.ToTable("camp_report_beast_lines");
             line.HasKey(l => l.Id);
             line.Property(l => l.Id).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<ArmyReportEntity>(report =>
+        {
+            report.ToTable("army_reports");
+            report.HasKey(r => r.Id);
+            report.Property(r => r.Id).ValueGeneratedNever();
+            report.Property(r => r.OwnerId).HasMaxLength(200).IsRequired();
+
+            // The inbox reads by world and the player's owner key — see ArmyReportService.GetForPlayerAsync.
+            report.HasIndex(r => new { r.WorldId, r.OwnerId });
+
+            report.HasOne<WorldEntity>()
+                .WithMany()
+                .HasForeignKey(r => r.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            report.HasMany(r => r.UnitLines)
+                .WithOne(l => l.ArmyReport!)
+                .HasForeignKey(l => l.ArmyReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ArmyReportUnitLineEntity>(line =>
+        {
+            line.ToTable("army_report_unit_lines");
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
+            line.Property(l => l.UnitType).HasConversion<int>();
         });
 
         modelBuilder.Entity<UserEntity>(user =>

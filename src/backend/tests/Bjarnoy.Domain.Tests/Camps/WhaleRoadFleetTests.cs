@@ -218,7 +218,7 @@ public class WhaleRoadFleetTests
 
         var leg = ((ArmyLocation.InTransit)retreat.Location).Movement;
         Assert.True(leg.IsReturning);
-        Assert.True(leg.RetreatImmune);
+        Assert.Equal(T0.AddHours(8) + MovementRecord.FleeProtection, leg.FieldBattleImmuneUntil);
         Assert.Equal(WhaleHex, leg.Path[0]);
         Assert.Equal(Home, leg.Path[^1]);
         Assert.All(leg.Path.Skip(1).Take(leg.Path.Count - 2), h => Assert.Equal(Terrain.Sea, Terr(h)));

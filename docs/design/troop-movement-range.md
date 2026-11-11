@@ -79,6 +79,15 @@ player can give it is **Recall**:
 Admins can already reposition an army through `PATCH /api/v1/admin/armies/{id}`;
 players cannot.
 
+## 2a. Armies that cannot get home
+
+- An army that cannot get home stays where it is: it has no home, or no route home (for example a wall in the way).
+  When its provisions run out, the whole army starves.
+- A stranded army can be attacked in the field like any other army. When it starves, you get a starvation report:
+  which army, where, and the troops lost.
+- Only an army fleeing after a lost field battle is protected from field battles and camp ambushes, for at most
+  6 hours. It can be given orders like any army in the field; once it gets one, it loses that protection.
+
 ## 3. Rules for a field order
 
 | Situation | Allowed | Gate |
@@ -124,8 +133,8 @@ Support dispatch used to validate one-way plus a 2h reserve, not the round trip.
 guest does not burn its own provisions while hosted (`Settlement.SettleTo` feeds it;
 `Army.ProvisionsAt` returns the raw field for `Supporting`), so at `Recall` it still
 held roughly that reserve and then walked home on an empty stomach. `ProvisionsAt`
-floors at zero and there is no in-field starvation model yet, so it survived by
-accident — the moment starvation lands, every recalled guest would have died.
+floors at zero, so it only survived because it could still get home (see §2a: only an army
+that cannot get home starves).
 
 Support now takes the same round-trip check as every other mission
 (`Army.PlanDispatch`). The consequence is deliberate: support dispatches roughly
@@ -188,9 +197,30 @@ Consequences:
   gets a 429 with `Retry-After` and the rejection `RouteRateLimited`, shown to the player as
   "Too many marching orders at once.". Configured under `RoutePlanningRateLimit`
   (`PermitLimit`, `WindowSeconds`, `Segments`).
-- **Armies already marching keep their stored paths.** Nothing re-routes them; the rules
-  only apply to routes planned from now on (a recall or retreat from where an army stands
-  is planned afresh, so an army standing on a mountain can still leave it).
+- **Walls built after an army set out block it too.** When a wall now blocks an army's path, on its way out or
+  on its way home, it looks for a new route from where it is. Only when there is none does it stop, at the last hex
+  before the wall, and you get an "army stuck" report. An army stuck on its way out drops its target and stands
+  there like after a move order. The other rules (rivers, mountains) only apply to routes planned from now on (a recall
+  or retreat from where an army stands is planned afresh, so an army standing on a mountain can still leave it).
+  - How it is settled: a wall stands from the instant its build order finished (`PlacedBuilding.StandingSince`, or the
+    order's `CompletesAt` while the owner's settlement has not been settled since) until the instant a raze order takes it
+    down to level 0 finishes (the order's `CompletesAt`, applied or not; `WorldPalisades.TimelineAsync`). A wall hex the
+    army still has to enter is in its way from the first instant it blocks this army before the army would enter it, no
+    earlier than the start of the leg (the way home of an outbound army counts from its turn-around;
+    `WallEncounters.FindEarliest`, `WallBlocking.FirstBlockingIn`): a plain piece blocks while it is no half-open end, so
+    from the later of its own instant and that of the neighbour that closed the end; a gate blocks while it does not open
+    for the army. A gate's friendships and realm carry no instant, so a gate that already stood when the route was planned
+    blocks only from the instant the army is settled to; an army that passed it before then is not sent back. A route
+    remembers the instant it was planned (`Movement.RoutePlannedAt`): the way home planned at dispatch keeps that instant
+    after the turn-around or the battle, so a wall built behind the army while it marched is found when it turns home, even
+    when the army is first settled later; a leg that starts during a settle (a battle's way home) is checked in the same
+    settle. Everything due
+    before that instant is settled first (turn-around, fights, ambushes), then the army re-routes from where it is then
+    (`Army.RerouteAroundWall`), with the same rules: the walls standing at that instant and its owner's gate rule. An outbound army that finds a way on gets a fresh leg and turn-around from the food it carries
+    then, or turns home at once when that food no longer covers the round trip. A stranded army's path is the walk to the
+    hex it stops on. Until it gets there, a new wall on the rest of the walk is found like on any leg (it goes home when a
+    way home is open from where it is then, otherwise it stops before that wall too), and strong camps on the walk ambush it
+    like any marching army. Its food is counted from the instant it is stranded, so it never starves before then.
 - `FindPath` also takes the palisade hooks (default `null`, nothing blocked): `blocked`
   (every standing wall hex), `friendlyGate` (a gate of the army's own owner) and `halfOpen`
   (a wall's land end, charged the ground plus `HalfOpenEndCost` = 3). The rules apply in this order: wide
