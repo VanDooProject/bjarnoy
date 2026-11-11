@@ -502,11 +502,15 @@ describe('buildFieldOrderRequest (mission, target and split)', () => {
     expect(request).not.toHaveProperty('destination');
   });
 
-  it('a support carries no building even if one was left in the draft', () => {
+  it('a support carries the host garrison spot it joins', () => {
     const request = buildFieldOrderRequest([], { mission: 'support', targetSettlementId: 'own-2', targetBuildingCoord: { q: 1, r: 1 } });
 
-    expect(request?.targetBuildingCoord).toBeUndefined();
+    expect(request?.targetBuildingCoord).toEqual({ q: 1, r: 1 });
     expect(request?.targetSettlementId).toBe('own-2');
+  });
+
+  it('a support without a garrison spot is incomplete', () => {
+    expect(buildFieldOrderRequest([], { mission: 'support', targetSettlementId: 'own-2' })).toBeNull();
   });
 
   it('an attack or support without a target settlement is incomplete', () => {

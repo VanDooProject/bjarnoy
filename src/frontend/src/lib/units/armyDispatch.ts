@@ -201,12 +201,14 @@ export function buildFieldOrderRequest(route: AxialCoord[], options: FieldOrderO
 
   if (mission === 'attack' || mission === 'support') {
     if (!targetSettlementId) return null;
+    // A support names the host's garrison spot it joins (docs/design/garrison.md).
+    if (mission === 'support' && !targetBuildingCoord) return null;
     const waypoints = route.map((c) => ({ q: c.q, r: c.r }));
     return {
       waypoints: waypoints.length > 0 ? waypoints : undefined,
       mission,
       targetSettlementId,
-      targetBuildingCoord: mission === 'attack' && targetBuildingCoord ? { q: targetBuildingCoord.q, r: targetBuildingCoord.r } : undefined,
+      targetBuildingCoord: targetBuildingCoord ? { q: targetBuildingCoord.q, r: targetBuildingCoord.r } : undefined,
       units: leaving,
     };
   }
