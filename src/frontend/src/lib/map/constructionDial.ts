@@ -224,6 +224,11 @@ export interface DialScale {
   showLabel: boolean;
 }
 
+/** `mapScale` lifted toward `target` by the eased hover progress `hoverT` (0..1, clamped): the one hover growth of the canvas dial and the HUD marker. */
+export function liftedScale(mapScale: number, target: number, hoverT: number): number {
+  return mapScale + (target - mapScale) * easeInOut(clamp01(hoverT));
+}
+
 /**
  * Dial sizing. `mapScale` is `camera.zoom / SETTLEMENT_DEFAULT_ZOOM`: the dial
  * scales exactly with the map (no floor, so it stays the same fraction of a
@@ -235,8 +240,7 @@ export interface DialScale {
  */
 export function dialScale(mapScale: number, hoverT: number, rejectScale = 1): DialScale {
   const t = clamp01(hoverT);
-  const eased = easeInOut(t);
-  const zs = mapScale + (Math.max(mapScale, 1) - mapScale) * eased;
+  const zs = liftedScale(mapScale, Math.max(mapScale, 1), t);
   return { zs, showLabel: t >= 0.5 || DIAL_LABEL_BASE_PX * zs * rejectScale >= DIAL_MIN_LABEL_PX };
 }
 

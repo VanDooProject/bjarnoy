@@ -309,6 +309,15 @@
 - when a change reveals a new kind of recurring UI leftover, add the rule
   to `docs/design/ui-guidelines.md`
 
+# reduced motion
+- the device's "reduce motion" flag (`prefers-reduced-motion`, `animationPreference.reducedMotion`) is honoured only while the
+  player's graphics setting for that kind of motion (Settings → Graphics: buildings, water, lakes, fog, HUD) is on Auto. On or Off
+  wins over the device flag
+- every reduced-motion check therefore goes through the resolved setting of its kind (`motionPreferences.hudEnabled`,
+  `.waterEnabled`, `.lakesEnabled`, `.fogEnabled`, or `animationPreference.effective` for buildings), never the raw device
+  flag or a direct `matchMedia('(prefers-reduced-motion: reduce)')` / CSS `@media (prefers-reduced-motion)`. New motion that
+  fits no existing kind gets its own row in that settings screen first, so the player can override it there
+
 # interaction between u (AI) and user (me)
 
 ## github cloud agent

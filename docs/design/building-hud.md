@@ -3,6 +3,7 @@
 - Every own building shows a hex dial with its level. The ring shows the upgrade state: green = can upgrade, red = cannot
   (short of resources, Longhouse cap, missing prerequisite, storage cap), yellow arc = upgrade running (time left inside),
   gold number with a full gold ring = max level.
+- When an upgrade's time is up, the dial shows no colour and no number until the new level arrives.
 - Only a maxed Longhouse shows the crown.
 - The time until a short-of-resources upgrade becomes affordable is a premium feature. Free accounts see only that
   resources are short.
@@ -25,5 +26,8 @@
   one dial. The map canvas draws no construction dial itself; the landing page's live settlement preview shows its dial-only
   markers too (no building markers there).
 - Markers never take mouse or touch input: hover, taps, wheel and drags go to the map under them like on any tile. A marker
-  grows when the mouse is on its dial or its hex, or when a touch taps its dial (the tap still reaches the map). The box
-  text stands on its own, there are no tooltips on it.
+  grows (at least 1.3x; at the smallest zoom to the size where its compact box with text shows) when the mouse is on its dial,
+  its box or its hex, or when a touch taps its dial (the tap still reaches the map; a tap on the box reveals nothing, the hex
+  under it belongs to the map). The mouse directly on a marker's dial or box wins over the hex under it: only that marker
+  grows, and where several overlap the one on top (the hovered one, else the right-most) takes it. The box text stands on its
+  own, there are no tooltips on it. While a marker is hovered, the map's tile tooltip does not show.
