@@ -11,7 +11,8 @@
 - The round-trip food check of an army setting out from a beach camp is measured from the camp.
 - Garrisons eat from the stock of their garrison spot, ships included.
 - An army whose home is destroyed (for example a beach camp while its troops are out) gets the nearest garrison spot of its
-  owner as its new home.
+  owner it can reach as its new home. If it can reach none, it stays where it is until its provisions run out, and then
+  starves.
 
 ## Training, sending out, losing a spot
 
