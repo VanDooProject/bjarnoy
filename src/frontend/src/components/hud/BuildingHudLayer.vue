@@ -27,6 +27,7 @@ import {
 import type { AxialCoord } from '../../lib/hex/coords';
 import {
   ageViewModel,
+  hudMarkerKeys,
   buildingHudViewModel,
   hasHudMarker,
   rowsFor,
@@ -360,6 +361,11 @@ function setElement(key: string, el: unknown) {
     visibility.delete(key);
     placedOnce.delete(key);
     settled.delete(key);
+    // A marker mounted again later settles its tier afresh instead of starting on the one it left with.
+    if (key in tiers.value) {
+      const { [key]: _gone, ...rest } = tiers.value;
+      tiers.value = rest;
+    }
   }
 }
 
@@ -380,6 +386,8 @@ function tick() {
     dialsVersion.value += 1;
   }
   if (tapKey !== null && nowMs - tapAtMs >= DIAL_TAP_REVEAL_MS) tapKey = null;
+  // Nothing to place (the landing page without an order, building info off and no dial): no layout read in the map's frame.
+  if (placeables.value.length === 0) return;
   const mapScale = renderer.dialMapScale;
   const width = root.value?.offsetWidth ?? window.innerWidth;
   const height = root.value?.offsetHeight ?? window.innerHeight;
@@ -514,14 +522,15 @@ watch(
     if (!props.buildingMarkers) return;
     if (on) {
       const wasShown = rendered.value;
+      // Coming from fully hidden, every marker starts with its dial-only marker still showing its hex. Set before the markers
+      // mount, so the dial-only markers already on screen stay mounted instead of being taken down and put back.
+      if (!wasShown) notOwned.value = hudMarkerKeys(ownBuildings(world));
       rendered.value = true;
       await nextTick();
       const parts = markerParts();
       const reduced = animationPreference.reducedMotion;
       clearHandovers();
       for (const part of parts) {
-        // Coming from fully hidden, every marker starts with a dial-only marker still showing its hex.
-        if (!wasShown) setCanvasDraws(part.key, true);
         if (notOwned.value.has(part.key)) handOverAfter(part.key, dialShownAfterMs(part.delayMs, reduced), false);
       }
       await motion.setShown(true, parts);

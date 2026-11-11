@@ -678,6 +678,33 @@ describe('BuildingHudLayer', () => {
       vi.useRealTimers();
     });
 
+    it('keeps the same dial-only element on screen while building info is switched on, until its marker takes the dial over', async () => {
+      seedBuildings();
+      fake = installFakeAnimate();
+      vi.useFakeTimers();
+      const prefs = useHudPrefsStore();
+      prefs.setBuildingInfo(false);
+      const renderer = fakeRenderer();
+      wrapper = mountLayer(renderer);
+      const now = Date.now();
+      renderer.constructionDialList = [{ coord: { q: 3, r: 0 }, startMs: now - 1000, endMs: now + 600_000, state: 'building', queuePosition: null }];
+      runFrame();
+      await vi.advanceTimersByTimeAsync(0);
+      const before = wrapper.get('[data-dial-only="3,0"]').element;
+      // Watch every change while the switch flips: the hex must never be without its dial-only element in between.
+      const removed: Node[] = [];
+      const observer = new MutationObserver((records) => records.forEach((r) => removed.push(...r.removedNodes)));
+      observer.observe(wrapper.element, { childList: true, subtree: true });
+      prefs.setBuildingInfo(true);
+      await vi.advanceTimersByTimeAsync(0);
+      observer.takeRecords().forEach((r) => removed.push(...r.removedNodes));
+      observer.disconnect();
+      expect(removed).not.toContain(before);
+      expect(wrapper.get('[data-dial-only="3,0"]').element).toBe(before);
+      fake.finishAll();
+      vi.useRealTimers();
+    });
+
     it('keeps the markers until the hide animation has ended', async () => {
       const world = seedBuildings();
       world.hud.queue = [upgradeOrder(3)];
