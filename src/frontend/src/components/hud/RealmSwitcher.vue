@@ -24,6 +24,7 @@ const open = ref(false);
 const busy = ref(false);
 const rootRef = ref<HTMLElement | null>(null);
 const triggerRef = ref<HTMLButtonElement | null>(null);
+const popRef = ref<HTMLElement | null>(null);
 const popStyle = ref<Record<string, string>>({});
 
 function place() {
@@ -71,7 +72,10 @@ async function pick(id: string) {
 }
 
 function onDocPointerDown(e: Event) {
-  if (open.value && rootRef.value && !rootRef.value.contains(e.target as Node)) open.value = false;
+  if (!open.value) return;
+  const target = e.target as Node;
+  if (rootRef.value?.contains(target) || popRef.value?.contains(target)) return;
+  open.value = false;
 }
 function onKeydown(e: KeyboardEvent) {
   if (open.value && e.key === 'Escape') {
@@ -112,8 +116,9 @@ watch(visible, (v) => {
       aria-haspopup="true"
       @click="toggle"
     />
+    <Teleport to="body">
     <Transition name="realm-pop">
-      <div v-if="open" class="realm-switcher-pop" :style="popStyle" data-testid="realm-switcher-list">
+      <div v-if="open" ref="popRef" class="realm-switcher-pop" :style="popStyle" data-testid="realm-switcher-list">
         <div class="realm-switcher-heading">{{ t('hud.realmSwitcher.title') }}</div>
         <button
           v-for="r in realms"
@@ -137,6 +142,7 @@ watch(visible, (v) => {
         </button>
       </div>
     </Transition>
+    </Teleport>
   </span>
 </template>
 
@@ -168,13 +174,19 @@ watch(visible, (v) => {
 .realm-switcher-btn.open::before {
   content: '\25B4';
 }
+.realm-switcher--bubble .realm-switcher-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  font-size: 10px;
+}
 .realm-switcher-btn:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
 .realm-switcher-pop {
   position: fixed;
-  z-index: 45;
+  z-index: 40;
   box-sizing: border-box;
   padding: 10px;
   border-radius: 12px;

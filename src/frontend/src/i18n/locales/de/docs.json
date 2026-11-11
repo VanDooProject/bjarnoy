@@ -1177,8 +1177,8 @@
       "body": "Berühren sich die Gebiete zweier deiner Siedlungen auf einer Insel, verbinden sie sich zu einem Gebiet. Es trägt den Namen deiner ältesten Siedlung darin und hat einen gemeinsamen Vorrat: Alles, was du produzierst, fließt hinein, und alles, was du dort baust, ausbildest oder handelst, bezahlst du daraus. Seine Lagerkapazität ist die aller Siedlungen zusammen, ebenso seine Bauplätze, die sich alle Bauaufträge teilen. Du verwaltest das Gebiet von deiner ältesten Siedlung aus und kannst von dort auf jedem seiner Felder bauen. Deine übrigen Siedlungen darin tauchen in keiner Liste mehr auf, und Rivalen sehen auf jedem Langhaus den Namen der ältesten. Ein Überfall auf eines seiner Langhäuser kann den ganzen Vorrat plündern. Reißt die Verbindung ab, behält jede Siedlung ihren Anteil am Vorrat – im Verhältnis zu ihrer Lagerkapazität."
     },
     "switching": {
-      "heading": "Zwischen Gebieten wechseln",
-      "body": "Besitzt du mehrere Gebiete, erscheint in der oberen Leiste ein Pfeil neben dem Namen deines Gebiets. Er listet deine Gebiete auf, und ein Tipp darauf wechselt dorthin. Du kannst auch auf der Karte ein anderes deiner Gebiete antippen: Du wechselst dorthin und kannst gleich bauen. Schickst du Truppen los, kannst du die Garnison oder die Armeen jedes deiner Gebiete wählen."
+      "heading": "Zwischen deinen Reichen wechseln",
+      "body": "Besitzt du mehrere Reiche, erscheint in der oberen Leiste ein Pfeil neben dem Namen deines Reichs. Er listet deine Reiche auf, und ein Tipp darauf wechselt dorthin. Du kannst auch auf der Karte ein anderes deiner Reiche antippen: Du wechselst dorthin und kannst gleich bauen. Schickst du Truppen los, kannst du die Garnison oder die Armeen jedes deiner Reiche wählen."
     }
   },
   "landMovement": {
