@@ -304,6 +304,7 @@
     "title": "Expansion",
     "renown": "Ruhm {total} / {required}",
     "settlement": "Siedlung",
+    "campOption": "{name} ({kind})",
     "settlersInGarrison": "Siedler in der Garnison",
     "trainSettlers": "5 Siedler ausbilden",
     "canFoundAnother": "Kann eine weitere Siedlung gründen",

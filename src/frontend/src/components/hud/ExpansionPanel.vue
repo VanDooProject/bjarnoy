@@ -21,6 +21,7 @@ import { useWorldStore } from '../../stores/world';
 import { useAuthStore } from '../../stores/auth';
 import { api } from '../../api/client';
 import { apiErrorMessage } from '../../i18n/apiErrors';
+import { buildingName } from '../../i18n/catalogueNames';
 import { DEMO_MODE } from '../../config';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { useUnsavedInput } from '../../composables/useUnsavedInput';
@@ -144,7 +145,10 @@ async function switchTo(settlementId: string) {
   await refresh();
 }
 
-const mySettlements = ref<{ id: string; name: string; q: number; r: number }[]>([]);
+const mySettlements = ref<{ id: string; name: string; q: number; r: number; longhouseLevel: number }[]>([]);
+// A camp has no Longhouse, so its level is 0: the switcher names what it is next to its name.
+const isCamp = (s: { longhouseLevel: number }) => s.longhouseLevel === 0;
+const selectedIsCamp = computed(() => !!world.selectedSettlementId && world.model.isBeachCamp(world.selectedSettlementId));
 async function loadMySettlements() {
   // Same auth gate as refresh() — this hits an authorized endpoint, so an
   // anonymous/demo player must never even attempt the request (it 401s,
@@ -179,17 +183,22 @@ watch(visible, (isVisible) => {
         :value="world.selectedSettlementId"
         @change="switchTo(($event.target as HTMLSelectElement).value)"
       >
-        <option v-for="s in mySettlements" :key="s.id" :value="s.id">{{ s.name }}</option>
+        <option v-for="s in mySettlements" :key="s.id" :value="s.id">
+          {{ isCamp(s) ? t('hud.expansionPanel.campOption', { name: s.name, kind: buildingName('beachcamp') }) : s.name }}
+        </option>
       </select>
     </div>
 
-    <div class="expansion-row">
-      <span>{{ t('hud.expansionPanel.settlersInGarrison') }}</span>
-      <strong>{{ settlerCount }}</strong>
-    </div>
-    <button type="button" class="expansion-button" :disabled="busy || settlerBuildings.length === 0" @click="trainSettlers">
-      {{ t('hud.expansionPanel.trainSettlers') }}
-    </button>
+    <!-- A camp has no building to train in, so it offers no settler training at all. -->
+    <template v-if="!selectedIsCamp">
+      <div class="expansion-row">
+        <span>{{ t('hud.expansionPanel.settlersInGarrison') }}</span>
+        <strong>{{ settlerCount }}</strong>
+      </div>
+      <button type="button" class="expansion-button" :disabled="busy || settlerBuildings.length === 0" @click="trainSettlers">
+        {{ t('hud.expansionPanel.trainSettlers') }}
+      </button>
+    </template>
 
     <template v-if="renown">
       <div class="expansion-row">

@@ -75,6 +75,8 @@ import { PREVIEW_ISLAND_RADIUS, type WorldModel } from './WorldModel';
 import { TILE_ORIENTATIONS, type IslandLabel, type RiverTile, type Settlement, type Terrain, type Tile } from './types';
 import { buildingStatsAt, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
+import { buildingName } from '../../i18n/catalogueNames';
+import { settlementBadgeSuffix } from './settlementBadge';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP, armyFogClearReachHexes, type ArmyVisionSource } from './fog/FogMaskLayer';
 import type { FogCoverageLookup } from './fog/fogCoverage';
@@ -5855,7 +5857,7 @@ export class HexMapRenderer {
       nameLabel.anchor.set(0, 0.5);
 
       const suffixLabel = this.acquireLabel(LABEL_STYLES.badgeSuffix, zoomScale);
-      suffixLabel.text = mine ? `you · Lv ${settlement.level}` : `Lv ${settlement.level}`;
+      suffixLabel.text = settlementBadgeSuffix(settlement, mine, worldModel.isBeachCamp(settlement.id), buildingName('beachcamp'));
       suffixLabel.anchor.set(0, 0.5);
 
       // `top` is already clear of every claimed tile's tallest possible art

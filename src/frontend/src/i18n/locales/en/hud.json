@@ -304,6 +304,7 @@
     "title": "Expansion",
     "renown": "Renown {total} / {required}",
     "settlement": "Settlement",
+    "campOption": "{name} ({kind})",
     "settlersInGarrison": "Settlers in garrison",
     "trainSettlers": "Train 5 settlers",
     "canFoundAnother": "Can found another settlement",

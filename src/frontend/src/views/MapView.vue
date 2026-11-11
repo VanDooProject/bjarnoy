@@ -73,7 +73,7 @@ import { razeBlock, razeRefund, razeSeconds } from '../lib/map/raze';
 import { formatBuildTime, formatMissingResources, longhouseLock, scaledBuildSeconds } from '../lib/map/ringCatalogue';
 import { boundsClearOfDock, ringDockFor } from '../lib/map/ringDock';
 import { ringShapes } from '../lib/map/ringLayout';
-import { buildingEntryId, primaryActionFirst } from '../lib/map/ringActions';
+import { buildingEntryId, offersUpgradeAndRaze, primaryActionFirst } from '../lib/map/ringActions';
 import { placeRing, type RingPlacement } from '../lib/map/ringPlacement';
 import { useRingMaxScale } from '../composables/useRingMaxScale';
 import type { Tile } from '../lib/map/types';
@@ -1158,6 +1158,8 @@ function rootActionList(): RingAction[] {
       sendArmyAction(tile),
     ];
   }
+  // A beach camp has nothing to upgrade, raze, train or build: its one hex offers only the army action.
+  if (isMineTile.value && tile.buildingType && !offersUpgradeAndRaze(tile.buildingType)) return [sendArmyAction(tile)];
   if (isMineTile.value && tile.buildingType) {
     // The previous ring floated "Lv n / upgrade" as a gold badge above the
     // orbit, joined to it by a guide line. 2a has no badge — every action is

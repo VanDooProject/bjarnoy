@@ -246,6 +246,8 @@ export const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   druidhut: 'druidhut',
   cartworkshop: 'cartworkshop',
   claybrickworks: 'claybrickworks',
+  // The beach camp (a one-hex settlement on a sand shore): its tile art is not in the pack yet.
+  beachcamp: 'beachcamp',
   wasteland: 'wasteland',
   deadforest: 'deadforest',
   blacksand: 'blacksand',

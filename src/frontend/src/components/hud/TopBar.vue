@@ -27,6 +27,7 @@ import { isHudBarAtBottom, isHudBarMounted, isHudRail, isSettlementBubbleShown }
 import { isHudDrawerPending } from '../../composables/hudDrawerPendingState';
 import { hudBarHeightPx, hudRailHeightPx, hudRailWidthPx, DEFAULT_HUD_BAR_HEIGHT } from '../../composables/hudBarHeight';
 import { HUD_COMPACT_QUERY, HUD_RAIL_QUERY } from '../../lib/breakpoints';
+import { buildingName } from '../../i18n/catalogueNames';
 import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{
@@ -83,12 +84,16 @@ const islandName = computed(() => {
   return world.model.listIslands().find((i) => i.id === settlement.islandId)?.name ?? null;
 });
 
+// A beach camp has no Longhouse level: the bar names what it is instead.
+const selectedIsCamp = computed(() => !!world.selectedSettlementId && world.model.isBeachCamp(world.selectedSettlementId));
+
 const caption = computed(() => {
   if (props.caption) return props.caption;
   // A caller that names the bar itself gets only the caption it asked for —
   // a docs page has no island or longhouse to report.
   if (props.title) return null;
-  const parts = [islandName.value?.toUpperCase(), `LONGHOUSE ${world.hud.level}`].filter(Boolean);
+  const kind = selectedIsCamp.value ? buildingName('beachcamp').toUpperCase() : `LONGHOUSE ${world.hud.level}`;
+  const parts = [islandName.value?.toUpperCase(), kind].filter(Boolean);
   return parts.length ? parts.join(' · ') : null;
 });
 
@@ -557,7 +562,7 @@ const backdropStyle = computed(() => {
       </svg>
     </span>
     <button type="button" class="bubble-name name-btn" :title="t('hud.focusHome')" @click="emit('focus-home')">{{ settlementName }}</button>
-    <span class="bubble-meta">{{ t('hud.realmPanel.levelHexesShort', { level: world.hud.level, count: claimedHexes }) }}</span>
+    <span class="bubble-meta">{{ selectedIsCamp ? buildingName('beachcamp') : t('hud.realmPanel.levelHexesShort', { level: world.hud.level, count: claimedHexes }) }}</span>
   </div>
   <div
     v-if="dragEnabled"

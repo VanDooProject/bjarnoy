@@ -404,7 +404,8 @@ export class WorldModel {
   /** Rival settlements whose `beachcamp` the server delivered (`applyRivalBuildings`): they claim their own hex only. */
   private rivalBeachCampIds = new Set<string>();
 
-  private isBeachCamp(settlementId: string): boolean {
+  /** Whether the settlement is a beach camp (it has a `beachcamp` instead of a Longhouse): the one place the client tells. */
+  isBeachCamp(settlementId: string): boolean {
     return this.beachCampIds.has(settlementId) || this.rivalBeachCampIds.has(settlementId);
   }
   /**

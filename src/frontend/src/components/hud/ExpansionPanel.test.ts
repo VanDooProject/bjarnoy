@@ -36,11 +36,12 @@ vi.mock('../../api/client', async (importOriginal) => {
 
 const definitions = unitCatalogue.data as UnitDefinitionResponse[];
 
-async function mountPanel() {
+async function mountPanel(selectedIsCamp = false) {
   setActivePinia(createPinia());
   const world = useWorldStore();
   world.selectedSettlementId = 's1';
   world.worldId = 'w1';
+  vi.spyOn(world.model, 'isBeachCamp').mockReturnValue(selectedIsCamp);
   useAuthStore().user = { id: 'u1', email: 'a@b.c' } as never;
   useUnitCatalogueStore().definitions = definitions;
   const wrapper = mount(ExpansionPanel, {
@@ -86,5 +87,17 @@ describe('ExpansionPanel', () => {
     await trainButton().trigger('click');
     await flushPromises();
     expect(api.trainUnits).toHaveBeenCalledWith('s1', { unit: 'settler', count: 5, q: 4, r: -1, split: 'evenly' });
+  });
+
+  it('names a camp in the switcher and offers no settler training when the selected settlement is a camp', async () => {
+    api.listMySettlements.mockResolvedValue([
+      { id: 's1', name: 'Fjordholm', q: 0, r: 0, longhouseLevel: 4 },
+      { id: 's2', name: 'Sandspit', q: 9, r: 1, longhouseLevel: 0 },
+    ]);
+    const wrapper = await mountPanel(true);
+    expect(wrapper.findAll('#settlement-switcher option').map((o) => o.text())).toEqual(['Fjordholm', 'Sandspit (Beach camp)']);
+    // The camp has nothing to train in: neither the settler count nor the button is left.
+    expect(wrapper.text()).not.toContain('Settlers in garrison');
+    expect(wrapper.findAll('button.expansion-button').some((b) => b.text().includes('settlers'))).toBe(false);
   });
 });
