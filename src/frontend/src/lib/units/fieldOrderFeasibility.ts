@@ -13,7 +13,7 @@ export interface FeasibilityArmy {
   provisions: number;
   stacks: ReadonlyArray<{ unit: string; count: number }>;
   position: AxialCoord;
-  movement: { path: ReadonlyArray<AxialCoord>; arrivesAt: string; isReturning: boolean } | null;
+  movement: { path: ReadonlyArray<AxialCoord>; arrivesAt: string; isReturning: boolean; isStranded?: boolean } | null;
 }
 
 export interface FeasibilityEnv {
@@ -56,6 +56,8 @@ export function stackCounts(stacks: ReadonlyArray<{ unit: string; count: number 
  * - The order starts where the army will stand: a standing army where it is, a marching one at its current destination (a march
  *   always finishes, so the hours it still has to walk count too), a fleeing army on its way home where it is now.
  * - The way home is planned from the target to the hex the army left from (`movement.path[0]`; the end of a fleeing army's way home).
+ *   A stranded army's path is the walk to the hex it stops on, not a way from home, and the army response does not say where home is,
+ *   so its way home is unknown: the verdict is `unreachable` rather than a promise the server would refuse.
  * - Food: the leaving part gets its upkeep share of the provisions and has to cover (outbound + return) hours at its own upkeep.
  *   Pace is the slowest leaving unit's, so splitting off the slow ones can change the verdict.
  *
@@ -75,6 +77,7 @@ export function fieldOrderFeasibility(
   if (partUpkeep <= 0 || speed <= 0) return { ok: false, reason: 'noUnits' };
 
   const movement = army.movement;
+  if (movement?.isStranded) return { ok: false, reason: 'unreachable' };
   // A fleeing army on its way home is ordered from the hex it has reached, and its leg ends at home.
   const fleeingHome = !!movement && movement.isReturning;
   const start = fleeingHome ? army.position : movement && movement.path.length > 0 ? movement.path[movement.path.length - 1]! : army.position;
