@@ -527,7 +527,7 @@ public static class ArmyEndpoints
                 FieldOrderRejection.CannotAttackOwnSettlement => "An army cannot attack its own settlement.",
                 FieldOrderRejection.CannotSupportOwnSettlement => "An army cannot support its own settlement.",
                 FieldOrderRejection.NoCampAtDestination => "No wildlife camp stands on the destination hex.",
-                FieldOrderRejection.HuntRequiresLandUnits => "Ships cannot hunt a camp on land; only land units can.",
+                FieldOrderRejection.HuntRequiresLandUnits => "A fleet needs land troops aboard to hunt a camp on land.",
                 FieldOrderRejection.HuntRequiresFleet => "Only ships can hunt a camp at sea (the whale road); land units cannot reach it.",
                 FieldOrderRejection.TargetBuildingRequiresAttackMission =>
                     "A target building may only be given for an attack or raid mission.",
@@ -732,7 +732,7 @@ public static class ArmyEndpoints
                 DispatchRejection.TargetHexNotFoundable =>
                     "The target hex is too close to an already-claimed settlement's border.",
                 DispatchRejection.NoCampAtDestination => "No wildlife camp stands on the destination hex.",
-                DispatchRejection.HuntRequiresLandUnits => "Ships cannot hunt a camp on land; only land units can.",
+                DispatchRejection.HuntRequiresLandUnits => "A fleet needs land troops aboard to hunt a camp on land.",
                 DispatchRejection.HuntRequiresFleet => "Only ships can hunt a camp at sea (the whale road); land units cannot reach it.",
                 DispatchRejection.WrongCampBuilderCount =>
                     $"A beach camp mission requires exactly {BeachCamp.RequiredBuilders} camp builders, no more, no fewer.",

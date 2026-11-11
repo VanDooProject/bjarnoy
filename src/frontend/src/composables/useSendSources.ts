@@ -12,7 +12,7 @@ import type { AxialCoord } from '../lib/hex/coords';
 import { findPathSteps, findSeaPathSteps, pathCost, seaPathCost } from '../lib/map/hexPath';
 import { clearRouteCache, routeCacheVersion, routeKey, routeOrQueue, type RouteJob } from '../lib/map/routeQueue';
 import { gamePathContext } from '../lib/map/movementContext';
-import { isWaterCampFamily } from '../lib/map/campPlacement';
+import { isSandCampFamily, isWaterCampFamily } from '../lib/map/campPlacement';
 import { fieldOrderFeasibility, type FeasibilityArmy, type FeasibilityEnv, type SendMission } from '../lib/units/fieldOrderFeasibility';
 import { evaluateSendSources, type SendSource, type SendTarget } from '../lib/units/sendSources';
 
@@ -41,7 +41,7 @@ export function useSendSources() {
   /** The target a ring action or the open picker aims at; a hunt at a camp on the sea is sent ships, not land units. */
   function targetAt(mission: SendMission, coord: AxialCoord): SendTarget {
     const camp = mission === 'hunt' ? world.model.campAt(coord) : undefined;
-    return { mission, coord, campAtSea: !!camp && isWaterCampFamily(camp.family) };
+    return { mission, coord, campAtSea: !!camp && isWaterCampFamily(camp.family), campOnSand: !!camp && isSandCampFamily(camp.family) };
   }
 
   function env(): FeasibilityEnv {

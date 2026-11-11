@@ -3,16 +3,13 @@ import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 
 /**
- * While a ring menu is open, the canvas markers beneath it (construction
- * dials, the realm name badge) are hidden so they don't show through between
- * the DOM bubbles; markers outside the ring's footprint stay, and everything
- * is back once the ring closes. The geometry is unit-tested
- * (markerOcclusion.test.ts); this is the wiring from the open ring to the
- * renderer, read through the renderer's own `markerVisibility()`.
+ * While a ring menu is open, the markers beneath it (the construction dials, which are HTML dial-only markers, and the canvas
+ * realm name badge) are hidden so they don't show through between the DOM bubbles; markers outside the ring's footprint
+ * stay, and everything is back once the ring closes. The geometry is unit-tested (markerOcclusion.test.ts); this is the
+ * wiring from the open ring to the markers: a dial's opacity in the DOM, the badge through the renderer's `markerVisibility()`.
  */
 test.describe('markers beneath the ring menu', { tag: '@g2' }, () => {
   interface Visibility {
-    dials: Record<string, number>;
     badges: Record<string, number>;
   }
   interface W {
@@ -41,7 +38,7 @@ test.describe('markers beneath the ring menu', { tag: '@g2' }, () => {
       const renderer = w.__settlementRenderer();
       const origin = renderer.hexCenterScreen({ q: s.q, r: s.r });
       // The realm is smaller than the ring, so the far dial sits just outside it, on the first hex 200+ px away.
-      // Both are new builds: a hex with a building standing shows its order in the building HUD's marker, not as a canvas dial.
+      // Both are new builds: a dial-only marker each (a hex with a building standing shows its order on the building's marker).
       const standing = new Set(world.model.listBuildings(world.selectedSettlementId).map((b: { q: number; r: number }) => `${b.q},${b.r}`));
       let nearHex: { q: number; r: number } | null = null;
       let farHex: { q: number; r: number } | null = null;
@@ -73,32 +70,30 @@ test.describe('markers beneath the ring menu', { tag: '@g2' }, () => {
       world.syncHud();
       return { near: nearHex, far: farHex, settlementId: world.selectedSettlementId };
     });
-    const nearKey = `${near.q},${near.r}`;
-    const farKey = `${far.q},${far.r}`;
-    const visibility = () => page.evaluate(() => (window as unknown as W).__settlementRenderer().markerVisibility());
-    // Absent from the map = fully visible.
-    const alpha = (map: Record<string, number>, key: string) => map[key] ?? 1;
+    const { hud } = settlement;
+    const badgeAlpha = async () => {
+      const badges = await page.evaluate(() => (window as unknown as W).__settlementRenderer().markerVisibility().badges);
+      // Absent from the map = fully visible.
+      return badges[settlementId] ?? 1;
+    };
 
     // Ring closed: everything shows.
-    await expect.poll(async () => alpha((await visibility()).dials, nearKey)).toBe(1);
+    await expect(hud.dialOnly(near)).toHaveCount(1);
+    await expect(hud.dialOnly(far)).toHaveCount(1);
+    await expect(hud.dialOnly(near)).toHaveCSS('opacity', '1');
 
     await settlement.clickHex(centre);
     await settlement.ring.waitForOpen();
-    await expect
-      .poll(async () => {
-        const v = await visibility();
-        return [alpha(v.dials, nearKey), alpha(v.badges, settlementId)];
-      })
-      .toEqual([0, 0]);
-    expect(alpha((await visibility()).dials, farKey)).toBe(1);
+    await expect(hud.dialOnly(near)).toHaveCSS('opacity', '0');
+    await expect(hud.dialOnly(near)).toHaveAttribute('data-occluded', '1');
+    await expect.poll(badgeAlpha).toBe(0);
+    await expect(hud.dialOnly(far)).toHaveCSS('opacity', '1');
+    await expect(hud.dialOnly(far)).toHaveAttribute('data-occluded', '0');
 
     await page.keyboard.press('Escape');
     await expect(settlement.ring.backdrop).toHaveCount(0);
-    await expect
-      .poll(async () => {
-        const v = await visibility();
-        return [alpha(v.dials, nearKey), alpha(v.badges, settlementId)];
-      })
-      .toEqual([1, 1]);
+    await expect(hud.dialOnly(near)).toHaveCSS('opacity', '1');
+    await expect(hud.dialOnly(near)).toHaveAttribute('data-occluded', '0');
+    await expect.poll(badgeAlpha).toBe(1);
   });
 });

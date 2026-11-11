@@ -324,7 +324,9 @@
       "reindeerherder": "Reindeer herder",
       "pumpkinfarm": "Pumpkin farm",
       "palisade": "Palisade",
-      "palisadegate": "Palisade gate"
+      "palisadegate": "Palisade gate",
+      "dockyard": "Dockyard",
+      "shrineofnjord": "Shrine of Njörd"
     },
     "missionAttack": "Attack",
     "missionRaid": "Raid",
@@ -348,7 +350,14 @@
     "lootTaken": "Loot taken",
     "settlementRazed": "Settlement razed",
     "siege": "Siege",
-    "hexCoord": "Hex ({q}, {r})"
+    "hexCoord": "Hex ({q}, {r})",
+    "shipFight": "Ship fight",
+    "landFight": "Land fight",
+    "noLandFight": "No land fight was fought.",
+    "drowned": "Drowned",
+    "fireShips": "Fire Ships",
+    "fireShipsBurned": "{n} Fire Ships burned",
+    "summaryDrowned": "{n} drowned"
   },
   "fieldBattleReport": {
     "title": "Field battle",
@@ -575,5 +584,8 @@
       "label": "Building info (H)",
       "title": "Show or hide building info (H)"
     }
+  },
+  "panelColumn": {
+    "toggle": "Show or hide {panel}"
   }
 }

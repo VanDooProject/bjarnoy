@@ -1,7 +1,13 @@
 // Issue #40 phase 3 (frontend): pure helpers behind the battle-reports
 // inbox/detail view (ReportsView.vue, stores/reports.ts) — kept dependency-
 // free and unit-testable, same reasoning as lib/units/armyDispatch.ts.
-import type { BattleReportAttackerLine, BattleReportDefenderLine, BattleReportSiege, ResourceLine } from '../../api/types';
+import type {
+  BattleReportAttackerLine,
+  BattleReportDefenderLine,
+  BattleReportShipFight,
+  BattleReportSiege,
+  ResourceLine,
+} from '../../api/types';
 import { i18n } from '../../i18n';
 
 /** A readable label for a wire building-type name, falling back to the raw value for anything unmapped. */
@@ -44,25 +50,38 @@ function sumSurvived(lines: Array<{ survived: number }>): number {
 
 /**
  * A one-line summary for a report-inbox row, e.g. `"5 lost, 12 survived, 340
- * looted"` — losses/survivors are counted on `viewerSide`'s own lines, and
- * loot is only mentioned when the attacker actually took some (a defender
- * never "loots" their own losses).
+ * looted"` — losses/survivors are counted on `viewerSide`'s own lines (a fleet's ship fight and land fight together, the Fire
+ * Ships burned counted as losses and no longer as survivors), the passengers that drowned are named on their own, and loot is only mentioned when the attacker
+ * actually took some (a defender never "loots" their own losses).
  */
 export function reportSummaryLine(
   report: {
     attackerLines: BattleReportAttackerLine[];
     defenderLines: BattleReportDefenderLine[];
     lootTaken: ResourceLine;
+    shipFight?: Pick<BattleReportShipFight, 'attackerLines' | 'defenderLines'> | null;
+    drowned?: Array<{ count: number }>;
+    fireShipsBurned?: number;
   },
   viewerSide: 'attacker' | 'defender',
 ): string {
-  const lines = viewerSide === 'attacker' ? report.attackerLines : report.defenderLines;
-  const lost = sumLost(lines);
-  const survived = sumSurvived(lines);
+  const attacker = viewerSide === 'attacker';
+  const lines: Array<{ lost: number; survived: number }> = attacker
+    ? [...report.attackerLines, ...(report.shipFight?.attackerLines ?? [])]
+    : [...report.defenderLines, ...(report.shipFight?.defenderLines ?? [])];
+  // A burned Fire Ship survived the ship fight and then burned: it counts as lost, once, not as a survivor as well.
+  const burned = attacker ? (report.fireShipsBurned ?? 0) : 0;
+  const lost = sumLost(lines) + burned;
+  const survived = Math.max(0, sumSurvived(lines) - burned);
   const parts = [i18n.global.t('hud.battleReport.summaryLost', { n: lost }), i18n.global.t('hud.battleReport.summarySurvived', { n: survived })];
 
+  const drowned = attacker ? (report.drowned ?? []).reduce((total, d) => total + d.count, 0) : 0;
+  if (drowned > 0) {
+    parts.push(i18n.global.t('hud.battleReport.summaryDrowned', { n: drowned }));
+  }
+
   const loot = totalLoot(report.lootTaken);
-  if (viewerSide === 'attacker' && loot > 0) {
+  if (attacker && loot > 0) {
     parts.push(i18n.global.t('hud.battleReport.summaryLooted', { n: Math.round(loot) }));
   }
   return parts.join(', ');

@@ -240,10 +240,6 @@ public static class UnitCatalogue
             FoodCarryCapacity = 600,
             ShipSlots = 10,
             UpkeepPerHour = 1.5,
-            // Starting value, to be tuned: a won fleet attack damages the building it was sent at by
-            // SiegeResolver.LevelsDestroyed over the surviving ships' summed SiegePower (catapult: 40).
-            SiegePower = 10,
-            SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
             TrainingCost = new ResourceAmounts(Wood: 250, Stone: 100, Food: 40, Iron: 100),
             TrainingDuration = TimeSpan.FromMinutes(45),
             RequiredLonghouseLevel = 8,
@@ -261,12 +257,28 @@ public static class UnitCatalogue
             FoodCarryCapacity = 320,
             ShipSlots = 20,
             UpkeepPerHour = 2,
-            // Starting value, to be tuned (see Karve).
-            SiegePower = 20,
-            SiegeTargets = SiegeTargets.Walls | SiegeTargets.Towers | SiegeTargets.Buildings,
             TrainingCost = new ResourceAmounts(Wood: 400, Stone: 200, Food: 60, Iron: 220),
             TrainingDuration = TimeSpan.FromHours(1.5),
             RequiredLonghouseLevel = 20,
+            RequiredUnitType = UnitType.Karve,
+            RequiredBuildingType = BuildingType.Dockyard,
+        },
+        [UnitType.FireShip] = new UnitDefinition
+        {
+            Type = UnitType.FireShip,
+            VisionRadius = 6,
+            Class = UnitClass.Ship,
+            // Starting values, to be tuned. No attack and no slots: ten Fire Ships burn one building level in the water.
+            Attack = 0,
+            Defense = 25,
+            Speed = 8,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 200,
+            ShipSlots = 0,
+            UpkeepPerHour = 5,
+            TrainingCost = new ResourceAmounts(Wood: 300, Stone: 60, Food: 40, Iron: 80),
+            TrainingDuration = TimeSpan.FromMinutes(40),
+            RequiredLonghouseLevel = 12,
             RequiredUnitType = UnitType.Karve,
             RequiredBuildingType = BuildingType.Dockyard,
         },
