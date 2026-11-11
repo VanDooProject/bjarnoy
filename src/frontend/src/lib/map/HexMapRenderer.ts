@@ -521,7 +521,7 @@ export interface HexMapRendererOptions {
   onWaypointTap?: (index: number) => void;
   /**
    * A tap landed on an army's marker (while the send picker is open, only on its `pick` markers; otherwise on any own marker): the
-   * army's id and the marker's canvas position, so the host can show a hint beside it. The tap does not reach the tile below.
+   * army's id and the marker's canvas position, so the host can show a hint beside it. While the send picker is open the tap does not reach the tile below (`armyTapSwallowed`); otherwise it does.
    */
   onArmyTap?: (armyId: string, screen: { x: number; y: number }) => void;
   /**
@@ -617,6 +617,11 @@ export interface ArmyOverlayMarker {
   color?: number;
 }
 
+/** True while the send picker marks armies: a tap on a marker then only picks it and never reaches the tile below. */
+export function armyTapSwallowed(armies: readonly ArmyOverlayMarker[]): boolean {
+  return armies.some((a) => a.pick);
+}
+
 /**
  * The id of the army marker under canvas point `screen`, nearest first. While the send picker marks armies (`pick`) only those are
  * hit; otherwise every own marker is (a foreign army is not ours to select). `placed` are the markers' resolved screen points.
@@ -627,7 +632,7 @@ export function armyMarkerAt(
   screen: { x: number; y: number },
   hitCentre: (p: { x: number; y: number }, isFleet: boolean) => { x: number; y: number },
 ): string | null {
-  const picking = armies.some((a) => a.pick);
+  const picking = armyTapSwallowed(armies);
   let best: { id: string; distance: number } | null = null;
   for (const p of placed) {
     const army = armies.find((a) => a.id === p.id);
@@ -3876,11 +3881,12 @@ export class HexMapRenderer {
     if (!screen) return;
     // Touch/pen has no hover: the HTML markers (construction dials included) reveal themselves from this tap, which still reaches the tile.
     if (e.pointerType !== 'mouse') this.tapObserver?.(screen);
-    // An army's marker is a button: the tap picks it (send picker open) or selects it (otherwise) instead of the tile below.
+    // An army's marker is a button while the send picker is open: the tap picks it instead of reaching the tile below. Otherwise the
+    // tap also selects the army but still reaches the tile (ring menu, waypoint drafts), so a hex holding an army stays tappable.
     const armyId = this.pickedArmyAt(screen);
     if (armyId) {
       this.options.onArmyTap?.(armyId, screen);
-      return;
+      if (armyTapSwallowed(this.armyOverlay?.armies ?? [])) return;
     }
     const world = screenToWorld(this.camera, screen, this.viewport);
     const coord = isoPixelToAxial(world, TILE_W, TILE_H);
