@@ -47,7 +47,6 @@ import {
   snapToOfferedPlot,
   GUIDED_BUILD_TERRAIN as GUIDED_TERRAIN_FOR,
 } from '../lib/map/onboardingGuidance';
-import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { AlreadyFoundedError, useWorldStore } from '../stores/world';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { usePlayerStore } from '../stores/player';
@@ -893,9 +892,9 @@ watch(
 // Construction progress dials over buildings still being built; the renderer
 // animates the progress itself every tick from these absolute timestamps.
 watch(
-  [() => canvasRef.value?.renderer, () => world.hud.queue, () => world.hud.queueFetchedAt],
+  [() => canvasRef.value?.renderer, () => world.constructionDials],
   ([renderer]) => {
-    renderer?.setConstructionDials(constructionDialsFromQueue(world.hud.queue, world.hud.queueFetchedAt));
+    renderer?.setConstructionDials(world.constructionDials);
   },
   { immediate: true },
 );

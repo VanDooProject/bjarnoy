@@ -165,6 +165,25 @@ public sealed class RivalBuildingsEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Own_build_orders_lists_the_running_build_of_the_callers_realm_with_its_timing()
+    {
+        var (worldId, own, _, client) = await SetUpAsync();
+        using var _ = client;
+        var queued = await client.PostJsonAsync(
+            $"/api/v1/settlements/{own.Id}/builds", new QueueBuildRequest("longhouse", own.Q, own.R), Ct);
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, queued.StatusCode);
+
+        var orders = (await client.GetFromJsonAsync<List<OwnBuildOrdersResponse>>(
+            $"/api/v1/worlds/{worldId}/own-build-orders", SqliteApiFixture.StrictJson, Ct))!;
+
+        var realm = Assert.Single(orders);
+        Assert.Equal(own.Id, realm.SettlementId);
+        var order = Assert.Single(realm.Queue);
+        Assert.Equal((own.Q, own.R, "building"), (order.Q, order.R, order.State));
+        Assert.True(order.TotalSeconds > 0);
+    }
+
+    [Fact]
     public async Task Is_empty_for_a_caller_with_no_realm()
     {
         var (worldId, own, _, client) = await SetUpAsync();

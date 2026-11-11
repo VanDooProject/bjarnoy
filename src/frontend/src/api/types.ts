@@ -323,6 +323,12 @@ export interface PlacedBuildingResponse {
   nextLevelLossInSeconds?: number | null;
 }
 
+/** Mirrors `OwnBuildOrdersResponse` (`GET /worlds/{id}/own-build-orders`): the build queue of one of the player's realms, named by its oldest member. */
+export interface OwnBuildOrders {
+  settlementId: string;
+  queue: BuildOrderResponse[];
+}
+
 export interface BuildOrderResponse {
   id: string;
   q: number;
