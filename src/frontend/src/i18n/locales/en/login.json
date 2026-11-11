@@ -6,12 +6,19 @@
   "usernameLabel": "Username",
   "passwordLabel": "Password",
   "submit": "Log in",
-  "submitting": "Logging in…",
+  "checking": "Checking your account…",
+  "loadingRealm": "Loading your realm…",
+  "slow": "The server is slow right now. Still trying.",
+  "restoring": "Welcome back, {name}. Loading your realm…",
+  "restoringSlow": "Welcome back, {name}. Loading your realm… The server is slow right now. Still trying.",
   "registerLink": "Playing anonymously? Create an account",
   "back": "← Back",
   "errors": {
     "banned": "This account has been banned.",
     "invalidCredentials": "Wrong username or password.",
-    "generic": "Could not log in. Try again."
+    "generic": "The server had a problem. Try again in a moment.",
+    "timeout": "The server didn't answer. Try again in a moment.",
+    "network": "No connection to the server. Check your internet and try again.",
+    "restoreFailedTitle": "You're logged in, but your realm didn't load"
   }
 }

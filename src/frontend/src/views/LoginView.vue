@@ -4,16 +4,20 @@ import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../stores/world';
 import { useLoginForm } from '../composables/useLoginForm';
+import { useLoginRestoreOverlay } from '../composables/useLoginRestoreOverlay';
 import { useUnsavedInput } from '../composables/useUnsavedInput';
 import type { MessageSchema } from '../i18n/schema';
 import LocaleSwitcher from '../components/LocaleSwitcher.vue';
+import LoginFields from '../components/auth/LoginFields.vue';
+import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
 
 const world = useWorldStore();
 const router = useRouter();
 const route = useRoute();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-const { userName, password, submitting, error, login, restoreRealmIfAny } = useLoginForm();
+const { userName, password, submit, restoreRealmIfAny } = useLoginForm();
+const overlay = useLoginRestoreOverlay();
 useUnsavedInput(() => userName.value !== '' || password.value !== '');
 
 // Login↔world linkage (docs/plans/returning-player-world-switching.md):
@@ -26,22 +30,26 @@ useUnsavedInput(() => userName.value !== '' || password.value !== '');
 const linkedWorldId = computed(() => (typeof route.query.worldId === 'string' ? route.query.worldId : null));
 const linkedWorldName = computed(() => (typeof route.query.worldName === 'string' ? route.query.worldName : null));
 
-async function onSubmit() {
-  if (!(await login(userName.value, password.value))) return;
-
-  if (linkedWorldId.value) {
-    // Same mechanism WorldPickerView.vue's own `joinOrReturn` uses: joins
-    // (or returns to) the linked world, then lands in the
-    // founding/settlement flow for it.
-    await world.joinWorld(linkedWorldId.value);
-  } else {
-    // Player logout/login gate: a plain login (no linked world) still needs
-    // this account's realm in whatever world is already loaded restored
-    // before landing back in the game — see useLoginForm's own comment.
-    await restoreRealmIfAny();
-  }
-  const redirect = linkedWorldId.value ? '/' : typeof route.query.redirect === 'string' ? route.query.redirect : '/';
-  await router.push(redirect);
+function onSubmit() {
+  return submit({
+    restore: async () => {
+      if (linkedWorldId.value) {
+        // Same mechanism WorldPickerView.vue's own `joinOrReturn` uses: joins
+        // (or returns to) the linked world, then lands in the
+        // founding/settlement flow for it.
+        await world.joinWorld(linkedWorldId.value);
+      } else {
+        // Player logout/login gate: a plain login (no linked world) still needs
+        // this account's realm in whatever world is already loaded restored
+        // before landing back in the game — see useLoginForm's own comment.
+        await restoreRealmIfAny();
+      }
+    },
+    done: async () => {
+      const redirect = linkedWorldId.value ? '/' : typeof route.query.redirect === 'string' ? route.query.redirect : '/';
+      await router.push(redirect);
+    },
+  });
 }
 
 // Lets the Aspire dashboard's "Log in as admin" dev-only link carry the
@@ -74,24 +82,25 @@ onMounted(() => {
             : t('login.continueInWorldGeneric')
         }}
       </p>
-      <form class="form" @submit.prevent="onSubmit">
-        <label for="userName">{{ t('login.usernameLabel') }}</label>
-        <input id="userName" v-model="userName" type="text" autocomplete="username" required />
-
-        <label for="password">{{ t('login.passwordLabel') }}</label>
-        <input id="password" v-model="password" type="password" autocomplete="current-password" required />
-
-        <p v-if="error" class="error">{{ error }}</p>
-
-        <button class="submit" type="submit" :disabled="submitting">
-          {{ submitting ? t('login.submitting') : t('login.submit') }}
-        </button>
-      </form>
+      <LoginFields
+        v-model:user-name="userName"
+        v-model:password="password"
+        class="form"
+        user-name-id="userName"
+        password-id="password"
+        @submit="onSubmit"
+      />
       <button class="link" @click="router.push({ path: '/register', query: route.query })">
         {{ t('login.registerLink') }}
       </button>
       <button class="back" @click="router.push('/')">{{ t('login.back') }}</button>
     </main>
+    <MapStatusOverlay
+      :step="overlay.step.value"
+      :error="overlay.error.value"
+      :error-title="overlay.errorTitle.value"
+      @retry="overlay.retry"
+    />
   </div>
 </template>
 
@@ -104,6 +113,7 @@ onMounted(() => {
      visible height, as a progressive enhancement over the 100vh above. */
   height: 100dvh;
   overflow: auto;
+  position: relative;
   background: var(--shell);
 }
 .topbar {
@@ -130,42 +140,7 @@ onMounted(() => {
   line-height: 1.4;
 }
 .form {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   margin-top: 20px;
-}
-.form label {
-  font-size: 13px;
-  color: var(--muted);
-  margin-top: 8px;
-}
-.form input {
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  color: var(--text);
-  font: inherit;
-}
-.error {
-  color: var(--rival);
-  font-size: 13px;
-  margin: 4px 0 0;
-}
-.submit {
-  margin-top: 16px;
-  background: var(--gold);
-  color: #1a1208;
-  border: none;
-  border-radius: 8px;
-  padding: 10px 16px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.submit:disabled {
-  opacity: 0.6;
-  cursor: default;
 }
 .link {
   margin-top: 20px;

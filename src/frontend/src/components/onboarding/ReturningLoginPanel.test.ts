@@ -14,6 +14,7 @@ import ReturningLoginPanel from './ReturningLoginPanel.vue';
 import { usePlayerStore } from '../../stores/player';
 import { useAuthStore } from '../../stores/auth';
 import { useWorldStore } from '../../stores/world';
+import { useLoginFlowStore } from '../../stores/loginFlow';
 import { createTestI18n } from '../../test/i18n';
 import enOnboarding from '../../i18n/locales/en/onboarding.json';
 import enLogin from '../../i18n/locales/en/login.json';
@@ -33,6 +34,7 @@ function testRouter() {
     routes: [
       { path: '/', name: 'landing', component: { template: '<div />' } },
       { path: '/settlement', name: 'settlement', component: { template: '<div />' } },
+      { path: '/worlds', name: 'worlds', component: { template: '<div />' } },
     ],
   });
 }
@@ -101,7 +103,7 @@ describe('ReturningLoginPanel', () => {
     expect(router.currentRoute.value.path).toBe('/settlement');
   });
 
-  it('stays on the landing page after login when the account has no realm in this world', async () => {
+  it('shows the no-realm notice after login when the account has no realm in this world', async () => {
     const player = usePlayerStore();
     player.lastAccount = 'ragnar42';
     const { wrapper, router } = await mountPanel();
@@ -112,6 +114,7 @@ describe('ReturningLoginPanel', () => {
     world.worldId = 'world-9';
     world.joinWorld = vi.fn().mockImplementation(async () => {
       player.enterWorld('world-9', null);
+      world.worldName = 'Midgard';
     });
 
     await wrapper.find('[data-testid="returning-login-password"]').setValue('hunter2');
@@ -119,6 +122,34 @@ describe('ReturningLoginPanel', () => {
     await flushPromises();
 
     expect(router.currentRoute.value.path).toBe('/');
+    expect(useLoginFlowStore().noRealmWorldName).toBe('Midgard');
+    expect(wrapper.find('[data-testid="returning-login-no-realm-title"]').text()).toBe('No realm of yours in Midgard');
+    expect(wrapper.find('[data-testid="returning-login-password"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="returning-login-pick-world"]').attributes('href')).toBe('/worlds');
+
+    // "Start a realm here" ends the gate: notice cleared and the account forgotten.
+    await wrapper.find('[data-testid="returning-login-start-here"]').trigger('click');
+    expect(useLoginFlowStore().noRealmWorldName).toBeNull();
+    expect(player.lastAccount).toBeNull();
+  });
+
+  it('shows no notice when no restore ran (demo mode / no world loaded)', async () => {
+    const player = usePlayerStore();
+    player.lastAccount = 'ragnar42';
+    const { wrapper } = await mountPanel();
+
+    const auth = useAuthStore();
+    auth.login = vi.fn().mockResolvedValue(undefined);
+    const world = useWorldStore();
+    world.worldId = null;
+    world.joinWorld = vi.fn();
+
+    await wrapper.find('[data-testid="returning-login-password"]').setValue('hunter2');
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+
+    expect(world.joinWorld).not.toHaveBeenCalled();
+    expect(useLoginFlowStore().noRealmWorldName).toBeNull();
   });
 
   it('shows an error and does not navigate when login fails', async () => {
