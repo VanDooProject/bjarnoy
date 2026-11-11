@@ -110,9 +110,10 @@ describe('upgrade state', () => {
     expect(vm.upgrade.state).toBe('busy');
   });
 
-  it('wears the crown for the Longhouse only', () => {
-    expect(buildingHudViewModel(input({ type: 'longhouse', definitions: undefined })).upgrade.crown).toBe(true);
-    expect(buildingHudViewModel(input()).upgrade.crown).toBe(false);
+  it('wears the crown only on a maxed Longhouse', () => {
+    expect(buildingHudViewModel(input({ type: 'longhouse', level: 30, definitions: undefined })).upgrade.crown).toBe(true);
+    expect(buildingHudViewModel(input({ type: 'longhouse', level: 8, definitions: undefined })).upgrade.crown).toBe(false);
+    expect(buildingHudViewModel(input({ type: 'tower', level: 10 })).upgrade.crown).toBe(false);
     expect(buildingHudViewModel(input({ type: 'townsquare', definitions: undefined })).upgrade.crown).toBe(false);
   });
 });

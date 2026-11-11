@@ -79,7 +79,7 @@ export interface BuildingHudViewModel {
     /** Longhouse requirement first, then prerequisite buildings (states 'longhouse' and 'prereq'). */
     requirements?: HudRequirement[];
     targetLevel?: number;
-    /** Only the Longhouse wears the crown. */
+    /** Only a maxed Longhouse wears the crown. */
     crown: boolean;
   };
   production?: { resource: RingResourceKey; perHour: number }[];
@@ -149,7 +149,8 @@ function productionOf(output: BuildingOutput | undefined, speedFactor: number): 
 export function buildingHudViewModel(input: BuildingHudInput): BuildingHudViewModel {
   const { coord, type, level } = input;
   const maxLevel = maxLevelFor(type as BuildingKind);
-  const crown = type === 'longhouse';
+  const isLonghouse = type === 'longhouse';
+  const crown = false;
   const stats = buildingStatsFor(type as BuildingKind, level, input.matchingNeighbours ?? 0, input.onLake ?? false);
 
   const vm: BuildingHudViewModel = {
@@ -167,7 +168,7 @@ export function buildingHudViewModel(input: BuildingHudInput): BuildingHudViewMo
   if (type === 'townsquare' && input.feast && input.feast.secondsLeft !== null) {
     vm.feast = { secondsLeft: input.feast.secondsLeft, total: input.feast.totalSeconds, renownGain: input.feast.renownGain };
   }
-  if (crown && input.garrison?.some((g) => g.count > 0)) {
+  if (isLonghouse && input.garrison?.some((g) => g.count > 0)) {
     vm.garrison = input.garrison.filter((g) => g.count > 0).map((g) => ({ unit: g.unit, count: g.count }));
   }
 
@@ -207,7 +208,7 @@ export function buildingHudViewModel(input: BuildingHudInput): BuildingHudViewMo
 
   const target = resolveUpgradeTarget(level, input.queue, coord, input.definitions);
   if (level >= maxLevel || target.maxed) {
-    vm.upgrade = { state: 'max', crown };
+    vm.upgrade = { state: 'max', crown: isLonghouse };
     vm.dial = { kind: 'state', ring: 'max', progress: 1 };
     return vm;
   }
