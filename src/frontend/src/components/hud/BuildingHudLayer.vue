@@ -2,7 +2,7 @@
 // The building HUD: over every own building of the settlement view a marker (a hex dial with the level or the upgrade
 // countdown, and, near and mid, a box docked to it). What a marker shows is lib/hud/buildingHud.ts; this layer feeds it from
 // the stores, keeps the markers on their buildings frame by frame (CSS transforms written straight to the elements, like
-// composables/useMapAnchor.ts, no Vue re-render per frame) and owns the toggle (icon button and the H key). A marker is sized
+// composables/useMapAnchor.ts, no Vue re-render per frame) and owns the H key (the toggle button itself is BuildingInfoToggle). A marker is sized
 // like the Pixi progress dial (`dialScale`): it scales with the map, grows to its default-zoom size on hover / tap.
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -50,6 +50,7 @@ import { circleIntersectsRect, markerFadeStep, type OcclusionCircle } from '../.
 import { animationPreference } from '../../lib/perf/animationPreference';
 import BuildingHudBox from './BuildingHudBox.vue';
 import BuildingHudDial from './BuildingHudDial.vue';
+import BuildingInfoToggle from './BuildingInfoToggle.vue';
 
 /** The slice of HexMapRenderer the layer reads — kept narrow so tests (and other hosts) can hand it a stand-in. */
 export interface BuildingHudRenderer {
@@ -518,16 +519,12 @@ watch(
 
 // ---- toggle ---------------------------------------------------------------------------------------------------------------
 
-function toggle() {
-  prefs.setBuildingInfo(!prefs.buildingInfo);
-}
-
 function onKeyDown(e: KeyboardEvent) {
   if (e.key.toLowerCase() !== 'h' || e.shiftKey || e.repeat) return;
   // The renderer's own guard: no Ctrl/Meta/Alt, not while typing, not while the map is locked or covered.
   if (!props.renderer?.keyDrivesMap(e)) return;
   e.preventDefault();
-  toggle();
+  prefs.toggleBuildingInfo();
 }
 
 onMounted(() => {
@@ -577,22 +574,8 @@ onUnmounted(() => {
           </div>
         </div>
     </div>
-    <button
-      type="button"
-      class="building-hud__toggle"
-      :class="{ 'building-hud__toggle--desktop': !isMobile }"
-      :aria-pressed="prefs.buildingInfo"
-      :aria-label="t('hud.buildingHud.toggle.label')"
-      :title="t('hud.buildingHud.toggle.title')"
-      @click="toggle"
-    >
-      <!-- A hex dial with a quarter of its ring filled and a level mark inside. -->
-      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
-        <path class="building-hud__toggle-hex" d="M12 2.5 20.2 7.25V16.75L12 21.5 3.8 16.75V7.25Z" />
-        <path class="building-hud__toggle-arc" d="M12 2.5 20.2 7.25V16.75" />
-        <path class="building-hud__toggle-mark" d="M10.4 10.4 12.3 9.2V14.8" />
-      </svg>
-    </button>
+    <!-- Desktop: the switch is the first icon of the panel column (HudPanelColumn). -->
+    <BuildingInfoToggle v-if="isMobile" class="building-hud__toggle--phone" />
   </div>
 </template>
 
@@ -654,53 +637,10 @@ onUnmounted(() => {
   border-radius: 0 8px 8px 0;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
 }
-/* Icon button at the map's top left, under the header. Phone: below the settlement bubble that sits there (it ends about 44px
-   under the bar). Desktop: right of the build queue's column, where its card sits. */
-.building-hud__toggle {
+/* Phone: the switch sits at the map's top left, below the settlement bubble that sits there (it ends about 44px under the bar). */
+.building-hud__toggle--phone {
   position: absolute;
   top: calc(var(--hud-inset-top, 0px) + 60px);
   left: calc(16px + var(--hud-inset-left, 0px));
-  pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  color: var(--muted);
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 6px;
-  cursor: pointer;
-}
-.building-hud__toggle--desktop {
-  top: calc(var(--hud-inset-top, 0px) + 12px);
-  left: 268px;
-}
-.building-hud__toggle:hover {
-  color: var(--text);
-}
-.building-hud__toggle[aria-pressed='true'] {
-  color: var(--gold, #ffc55c);
-  border-color: var(--gold, #ffc55c);
-}
-.building-hud__toggle:focus-visible {
-  outline: 2px solid var(--gold, #ffc55c);
-  outline-offset: 2px;
-}
-.building-hud__toggle svg {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.building-hud__toggle-arc {
-  stroke: #ffd23f;
-  stroke-width: 2.6;
-}
-.building-hud__toggle[aria-pressed='false'] .building-hud__toggle-arc {
-  stroke: currentColor;
-  opacity: 0.5;
 }
 </style>
