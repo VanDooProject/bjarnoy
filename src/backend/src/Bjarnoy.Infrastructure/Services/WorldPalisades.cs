@@ -29,6 +29,8 @@ public static class WorldPalisades
     /// <see cref="BuildOrderEntity.CompletesAt"/>, whether or not its owner's settlement was settled since (the order's completion is
     /// applied lazily, but the wall stands for every army from then); an order still to complete is in the list too, with its future
     /// instant, so a caller filters by the time it asks about;</item>
+    /// <item>a raze order that takes a standing palisade or gate down to level 0 ends it at its <see cref="BuildOrderEntity.CompletesAt"/>
+    /// (<see cref="TimedWall.StandingUntil"/>), applied or not, like a build order; a raze that leaves level 1 or more changes nothing;</item>
     /// <item>the standing Utgard wall hexes of the world's wasted islands (<c>islands.UtgardWalls</c>, level 1 or more; a breached
     /// level-0 hex is passable) since always, owned by <see cref="EndgameRules.JotnarOwnerKey"/>.</item>
     /// </list>
@@ -48,10 +50,9 @@ public static class WorldPalisades
             .AsNoTracking()
             .Where(o => o.Settlement!.WorldId == worldId
                 && (o.Type == BuildingType.Palisade || o.Type == BuildingType.PalisadeGate)
-                && o.Kind == BuildOrderKind.Build
-                && o.TargetLevel >= 1
+                && ((o.Kind == BuildOrderKind.Build && o.TargetLevel >= 1) || (o.Kind == BuildOrderKind.Raze && o.TargetLevel < 1))
                 && o.CompletesAt != null)
-            .Select(o => new { o.Q, o.R, o.Type, o.SettlementId, o.Settlement!.UserId, o.CompletesAt })
+            .Select(o => new { o.Q, o.R, o.Type, o.Kind, o.SettlementId, o.Settlement!.UserId, o.CompletesAt })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         var utgardWalls = await db.Islands
@@ -71,7 +72,7 @@ public static class WorldPalisades
         }
 
         // An order on a hex that already stands as the same kind of wall is an upgrade and changes nothing for an army.
-        foreach (var order in orders.OrderBy(o => o.CompletesAt))
+        foreach (var order in orders.Where(o => o.Kind == BuildOrderKind.Build).OrderBy(o => o.CompletesAt))
         {
             var coord = new HexCoord(order.Q, order.R);
             var isGate = order.Type == BuildingType.PalisadeGate;
@@ -83,6 +84,16 @@ public static class WorldPalisades
             walls[coord] = new TimedWall(
                 new StandingWall(coord, isGate, OwnerKeyOf(order.UserId, order.SettlementId), outsideRealm.Contains(coord)),
                 order.CompletesAt!.Value);
+        }
+
+        // A raze to nothing ends the wall it takes down (one order per hex, so a raze never meets a build order on the same hex).
+        foreach (var raze in orders.Where(o => o.Kind == BuildOrderKind.Raze))
+        {
+            var coord = new HexCoord(raze.Q, raze.R);
+            if (walls.TryGetValue(coord, out var standing))
+            {
+                walls[coord] = standing with { StandingUntil = raze.CompletesAt };
+            }
         }
 
         foreach (var wall in utgardWalls.SelectMany(w => w).Where(w => w.Level >= 1))
@@ -114,7 +125,7 @@ public static class WorldPalisades
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(timeline);
-        var standing = timeline.Where(w => w.StandingFrom <= at).Select(w => w.Wall).ToList();
+        var standing = timeline.Where(w => w.StandsAt(at)).Select(w => w.Wall).ToList();
 
         // Only a gate cares who the friends are, so a world without one skips the guild queries.
         var areFriends = standing.Any(w => w.IsGate)

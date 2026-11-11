@@ -1076,7 +1076,7 @@ public sealed class ArmyService(
 
         var settlement = army.Settlement!;
         var timeline = await WallTimelineAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var standing = timeline.Where(w => w.StandingFrom <= now).ToDictionary(w => w.Wall.Coord);
+        var standing = timeline.Where(w => w.StandsAt(now)).ToDictionary(w => w.Wall.Coord);
         var route = movement.IsReturning ? movement.Path : movement.Path.Concat(movement.ReturnPath);
         if (standing.Count == 0 || !route.Any(standing.ContainsKey))
         {

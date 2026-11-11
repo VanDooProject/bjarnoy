@@ -8,10 +8,16 @@ namespace Bjarnoy.Domain.Movement;
 public readonly record struct StandingWall(HexCoord Coord, bool IsGate, Guid OwnerKey, bool OutsideRealm = false);
 
 /// <summary>
-/// A wall hex and the game instant it stands from: armies already marching react to it from then on (<c>docs/design/troop-movement-range.md</c>
-/// §5). <see cref="DateTimeOffset.MinValue"/> for a wall whose instant is not known (it stood before the instant was recorded).
+/// A wall hex and the game instants it stands from and until: armies already marching react to it from then on
+/// (<c>docs/design/troop-movement-range.md</c> §5). <paramref name="StandingFrom"/> is <see cref="DateTimeOffset.MinValue"/> for a wall whose
+/// instant is not known (it stood before the instant was recorded); <paramref name="StandingUntil"/> is the instant a raze order takes it down
+/// (exclusive), <see langword="null"/> while none does.
 /// </summary>
-public readonly record struct TimedWall(StandingWall Wall, DateTimeOffset StandingFrom);
+public readonly record struct TimedWall(StandingWall Wall, DateTimeOffset StandingFrom, DateTimeOffset? StandingUntil = null)
+{
+    /// <summary>Whether the wall stands at <paramref name="at"/>: from <see cref="StandingFrom"/> on, and before <see cref="StandingUntil"/>.</summary>
+    public bool StandsAt(DateTimeOffset at) => StandingFrom <= at && (StandingUntil is not { } until || at < until);
+}
 
 /// <summary>
 /// What a land army's pathfinding takes from the world's palisades (<see cref="HexPathfinder.FindPath"/>'s <c>blocked</c>,
