@@ -7,6 +7,12 @@ Part of [Skirmish](README.md). The base for landing from the sea (see [Conquest 
 - A camp can only go on a shore with no enemy buildings on it, so the enemy's shore buildings have to be destroyed first.
 - While the camp is built, the troops wait on the camp's hex and the ships wait one hex out on the water.
 - A camp may stand inside an enemy realm. It claims only its own hex, there too.
+- A camp is a settlement of its own: a one-hex settlement with a stock, garrisons and no production. It follows the rules of a
+  settlement with a Longhouse, with two differences: its claim is always its own hex only, and it does not count as a Longhouse
+  for building requirements (it is a different building).
+- A camp links with your other settlements like any settlement: when its hex touches one of your realms, it joins that realm
+  and shares its stock, and it is shown under that realm's name.
+- Destroying the camp ends it, the same way destroying a Longhouse ends a realm.
 - Land troops fight from the camp and eat its food. The food comes in with the fleet, and the camp can be supplied again later.
 - If the camp is destroyed, the troops that landed from it starve.
 - A fleet that reaches the camp is garrisoned there like any other troops. It defends the camp and can be sent out again from it.
