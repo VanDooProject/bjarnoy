@@ -63,7 +63,7 @@ function toggleExpanded() {
 }
 
 const garrisonRows = computed(() =>
-  world.hud.garrison
+  (world.dispatchSource?.garrison ?? world.hud.garrison)
     .filter((g) => g.count > 0)
     .map((g) => ({ unit: g.unit, label: unitName(g.unit), available: g.count })),
 );
@@ -81,7 +81,7 @@ function applyQuantity(unit: string, value: number, max: number) {
   // sensible default (the player can still edit it after).
   if (draft.value) {
     world.setDispatchProvisions(
-      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.hud.available.food),
+      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.dispatchSource?.availableFood ?? world.hud.available.food),
     );
   }
 }
