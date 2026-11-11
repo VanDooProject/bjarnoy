@@ -131,7 +131,7 @@ public sealed record Army
 
     /// <summary>
     /// The building this <see cref="ArmyMission.Attack"/>/<see cref="ArmyMission.Raid"/> army was told to
-    /// hit with its surviving siege power (catapults, issue #40 phase 5; ships) — a coordinate
+    /// hit with its surviving siege power (catapults, issue #40 phase 5) — a coordinate
     /// within the target settlement, not an arbitrary hex. <see langword="null"/>
     /// means "no preference": <see cref="Combat.SiegeResolver.Resolve"/>
     /// picks uniformly at random among whatever buildings the defender

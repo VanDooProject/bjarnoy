@@ -128,7 +128,7 @@ public class FleetShoreAttackTests
     [Theory]
     [InlineData(ArmyMission.Attack)]
     [InlineData(ArmyMission.Raid)]
-    public void A_won_fleet_fight_lowers_only_the_named_building_by_the_ships_siege_power(ArmyMission mission)
+    public void A_won_fleet_fight_damages_no_building_because_ships_do_no_siege_damage(ArmyMission mission)
     {
         var farm = new PlacedBuilding(ShoreHex, BuildingType.Farm, 9);
         var other = new PlacedBuilding(new HexCoord(10, 1), BuildingType.Farm, 9);
@@ -137,14 +137,9 @@ public class FleetShoreAttackTests
         var arrival = Arrive(defender, mission);
 
         Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
-        var siegePower = arrival.Battle.AttackerSurvivors.Sum(s => (long)UnitCatalogue.Get(s.Type).SiegePower * s.Count);
-        Assert.True(siegePower > 0);
-        var expectedLevel = 9 - SiegeResolver.LevelsDestroyed(siegePower);
-        Assert.True(arrival.Siege!.Applied);
-        Assert.Equal(ShoreHex, arrival.Siege.TargetCoord);
-        Assert.Equal(expectedLevel, arrival.Siege.LevelAfter);
+        Assert.False(arrival.Siege!.Applied);
         var buildings = arrival.DefenderSettlement.Buildings;
-        Assert.Equal(expectedLevel, buildings.Single(b => b.Coord == ShoreHex).Level);
+        Assert.Equal(9, buildings.Single(b => b.Coord == ShoreHex).Level);
         Assert.Equal(9, buildings.Single(b => b.Coord == other.Coord).Level);
         Assert.Equal(10, buildings.Single(b => b.Coord == TargetCentre).Level);
     }
@@ -205,8 +200,7 @@ public class FleetShoreAttackTests
         Assert.Empty(arrival.Battle.DefenderLosses);
         Assert.Equal(1000, Count(arrival.DefenderSettlement.Garrison, UnitType.Spearman));
         Assert.Equal(1000, Count(arrival.DefenderSettlement.Garrison, UnitType.Axeman));
-        Assert.True(arrival.Siege!.Applied);
-        Assert.Equal(ShoreHex, arrival.Siege.TargetCoord);
+        Assert.False(arrival.Siege!.Applied);
         Assert.Equal(5, Count(arrival.Army!.Stacks, UnitType.Karve));
     }
 
@@ -250,7 +244,7 @@ public class FleetShoreAttackTests
     }
 
     [Fact]
-    public void A_fleet_at_another_shore_building_does_not_fight_the_ships_at_the_dockyard_and_damages_the_building()
+    public void A_fleet_at_another_shore_building_does_not_fight_the_ships_at_the_dockyard()
     {
         var hut = new PlacedBuilding(CoastalWaterHex, BuildingType.FishingHut, 5);
         var defender = Found(TargetCentre, [new UnitStack(UnitType.Longship, 100)], new PlacedBuilding(ShoreHex, BuildingType.Dockyard, 3), hut);
@@ -262,9 +256,8 @@ public class FleetShoreAttackTests
         Assert.Empty(arrival.Battle.AttackerLosses);
         Assert.Empty(arrival.Battle.DefenderLosses);
         Assert.Equal(100, Count(arrival.DefenderSettlement.Garrison, UnitType.Longship));
-        Assert.True(arrival.Siege!.Applied);
-        Assert.Equal(CoastalWaterHex, arrival.Siege.TargetCoord);
-        Assert.True(arrival.Siege.LevelAfter < 5);
+        Assert.False(arrival.Siege!.Applied);
+        Assert.Equal(5, arrival.DefenderSettlement.Buildings.Single(b => b.Coord == CoastalWaterHex).Level);
         Assert.Equal(3, arrival.DefenderSettlement.Buildings.Single(b => b.Coord == ShoreHex).Level);
     }
 
@@ -315,7 +308,7 @@ public class FleetShoreAttackTests
 
         Assert.Equal(0, arrival.Battle!.DefensePower);
         Assert.Empty(arrival.GuestLosses);
-        Assert.True(arrival.Siege!.Applied);
+        Assert.False(arrival.Siege!.Applied);
     }
 
     [Fact]
@@ -333,16 +326,15 @@ public class FleetShoreAttackTests
     }
 
     [Fact]
-    public void Siege_engines_aboard_do_not_fire_only_the_surviving_ships_do()
+    public void A_fleet_hits_no_building_with_its_ships_even_when_siege_engines_are_aboard()
     {
-        // 1 Longship (siege power 20) carries 2 rams (siege power 40 each); only the ship's 20 count.
         var army = SendLoaded([new UnitStack(UnitType.Longship, 1), new UnitStack(UnitType.Ram, 2)]);
         var defender = Found(TargetCentre, [], new PlacedBuilding(ShoreHex, BuildingType.Farm, 9));
 
         var arrival = ArriveWith(army, defender);
 
-        Assert.True(arrival.Siege!.Applied);
-        Assert.Equal(9 - SiegeResolver.LevelsDestroyed(20), arrival.Siege.LevelAfter);
+        Assert.False(arrival.Siege!.Applied);
+        Assert.Equal(9, arrival.DefenderSettlement.Buildings.Single(b => b.Coord == ShoreHex).Level);
         Assert.Equal(2, Count(arrival.Army!.Stacks, UnitType.Ram));
     }
 

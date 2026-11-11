@@ -107,7 +107,7 @@ public static class SiegeResolver
 
     /// <summary>
     /// Whether <paramref name="unit"/>'s siege power counts against a <paramref name="type"/> building: rams breach walls and towers,
-    /// catapults burn towers and every other building, ships hit whatever shore building they are sent at (<c>docs/design/economy.md</c> section 5). The one place the split lives, as
+    /// catapults burn towers and every other building (<c>docs/design/economy.md</c> section 5); ships do no siege damage. The one place the split lives, as
     /// <see cref="UnitDefinition.SiegeTargets"/> data.
     /// </summary>
     public static bool CanDamage(UnitDefinition unit, BuildingType type)
@@ -132,7 +132,7 @@ public static class SiegeResolver
     /// </summary>
     /// <param name="attackerSurvivors">
     /// The attacking army's stacks that survived the battle (<see cref="BattlePlan.AttackerSurvivors"/>).
-    /// Only siege engines and ships that can damage the target contribute (<see cref="CanDamage"/>); call this only
+    /// Only siege engines that can damage the target contribute (<see cref="CanDamage"/>); call this only
     /// when the attacker actually won — an attacker that lost contributes no
     /// siege damage regardless of what it brought, and this method does not
     /// check the battle's winner itself (the caller already knows).
