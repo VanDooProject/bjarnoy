@@ -420,18 +420,17 @@
     and the vendored `bg_assets_hextile` art (see above).
     `playwright.ps1 install` is blocked by the egress proxy, and
     `Microsoft.Playwright` 1.62 launches
-    `$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-1234/chrome-linux/headless_shell`,
-    while the sandbox image now ships a newer revision with another layout
-    (`/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell`
-    as of 2026-11-02). Without a fix every test fails within seconds with
+    `$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell`,
+    while the sandbox image ships another revision of the same layout
+    (`/opt/pw-browsers/chromium_headless_shell-1243/...` as of 2026-11-11).
+    Without a fix every test fails within seconds with
     "Executable doesn't exist at .../chromium_headless_shell-1234/...".
-    Link the present binary to the path it asks for (sandbox-only, nothing
+    Link the present revision to the one it asks for (sandbox-only, nothing
     to commit; check the revision numbers in the error and under
     `/opt/pw-browsers` first):
     ```bash
-    sudo mkdir -p /opt/pw-browsers/chromium_headless_shell-1234/chrome-linux
-    sudo ln -sf /opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell \
-      /opt/pw-browsers/chromium_headless_shell-1234/chrome-linux/headless_shell
+    sudo ln -sfn /opt/pw-browsers/chromium_headless_shell-1243 \
+      /opt/pw-browsers/chromium_headless_shell-1234
     ```
     Run it from
     `src/backend/tests/Bjarnoy.AppHost.Tests` with **`CI=true dotnet test`**;
