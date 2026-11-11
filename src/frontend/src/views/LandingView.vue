@@ -17,6 +17,8 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
 import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
 import { useLoadFlow } from '../composables/useLoadFlow';
+import { useLoginRestoreOverlay } from '../composables/useLoginRestoreOverlay';
+import { useLoginFlowStore } from '../stores/loginFlow';
 import TopBar from '../components/hud/TopBar.vue';
 import BuildingHudLayer from '../components/hud/BuildingHudLayer.vue';
 import HudNav from '../components/hud/HudNav.vue';
@@ -89,8 +91,16 @@ const router = useRouter();
 // `hasFoundedSettlement` still wins once true — an anonymous founding that
 // happened in the same tab (or session) before the visitor got around to
 // logging back in should keep going, not get interrupted by the gate.
+// The gate also stays up while a login is in flight (the panel's state must not
+// vanish the moment `auth.isAuthenticated` flips, mid-restore) and while the
+// "no realm of yours in this world" notice is showing after a finished restore.
+const loginFlow = useLoginFlowStore();
+const loginOverlay = useLoginRestoreOverlay();
 const showReturningLoginGate = computed(
-  () => !!player.lastAccount && !auth.isAuthenticated && !player.hasFoundedSettlement,
+  () =>
+    (!!player.lastAccount && !auth.isAuthenticated && !player.hasFoundedSettlement) ||
+    loginFlow.noRealmWorldName !== null ||
+    loginFlow.phase !== 'idle',
 );
 
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
@@ -286,6 +296,15 @@ const overlayError = computed(
 const landingCanvasShown = computed(
   () => !!(player.hasFoundedSettlement ? world.selectedSettlementId : previewCoord.value),
 );
+// What the overlay displays. While the login gate is up the map's own load
+// step/error stay hidden (they would cover the form, and the login's restore
+// re-bootstraps the world anyway); the restore's progress/error show instead.
+// `overlayStep`/`overlayError` themselves stay untouched for the intro signal.
+const shownStep = computed(() => loginOverlay.step.value ?? (showReturningLoginGate.value ? null : overlayStep.value));
+const shownError = computed<unknown>(() =>
+  loginOverlay.error.value !== null ? loginOverlay.error.value : showReturningLoginGate.value ? null : overlayError.value,
+);
+const shownErrorTitle = computed(() => (loginOverlay.error.value !== null ? loginOverlay.errorTitle.value : undefined));
 useIntroTilesSignal({
   settled: loadSettled,
   error: overlayError,
@@ -294,7 +313,8 @@ useIntroTilesSignal({
   animLoad: computed(() => canvasRef.value?.animLoad),
 });
 function retryLoad() {
-  if (loadError.value) void loadLanding();
+  if (loginOverlay.active.value) loginOverlay.retry();
+  else if (loadError.value) void loadLanding();
   else void world.fetchFogMask();
 }
 onUnmounted(() => {
@@ -912,7 +932,7 @@ watch(
   >
     <!-- Deliberately outside the SettlementCanvas v-if below: it has to show
          before the canvas exists (world/settlement/plot still loading). -->
-    <MapStatusOverlay :step="overlayStep" :error="overlayError" @retry="retryLoad" />
+    <MapStatusOverlay :step="shownStep" :error="shownError" :error-title="shownErrorTitle" @retry="retryLoad" />
     <SettlementCanvas
       v-if="landingCanvasShown"
       ref="canvasRef"
