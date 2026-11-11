@@ -524,13 +524,13 @@ export const useWorldStore = defineStore('world', {
     isRealmSettlement: (state) => (settlementId: string | null | undefined): boolean =>
       !!settlementId && (settlementId === state.selectedSettlementId || state.linkedMemberIds.includes(settlementId)),
     /** The player's realms, one row per realm (a linked group is one realm, named and levelled by its oldest member). */
-    realmList: (state): { id: string; name: string; level: number }[] => {
+    realmList: (state): { id: string; name: string; level: number; q: number; r: number }[] => {
       const byRealm = new Map<string, SettlementSummary>();
       for (const s of state.myRealms) {
         const key = s.realmId ?? s.id;
         if (!byRealm.has(key) || s.id === key) byRealm.set(key, s);
       }
-      return [...byRealm.entries()].map(([id, s]) => ({ id, name: s.name, level: s.longhouseLevel }));
+      return [...byRealm.entries()].map(([id, s]) => ({ id, name: s.name, level: s.longhouseLevel, q: s.q, r: s.r }));
     },
     /** The realm id (oldest linked member) of `settlementId` when it belongs to the local player, else null. */
     ownRealmOf: (state) => (settlementId: string | null | undefined): string | null => {

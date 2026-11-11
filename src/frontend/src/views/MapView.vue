@@ -202,6 +202,11 @@ function onFocusHome() {
   else renderer.focusSettlementCamera();
 }
 
+/** Centres the camera on another of the player's realms (its longhouse) without switching to it. */
+function onFocusRealm(at: { q: number; r: number }) {
+  canvasRef.value?.renderer?.panTo(at);
+}
+
 let flashTimeout: ReturnType<typeof setTimeout> | null = null;
 function onQueueSelect(coord: { q: number; r: number }) {
   const renderer = canvasRef.value?.renderer;
@@ -1547,7 +1552,7 @@ async function upgrade() {
          top-bar gradient) keeps the logo/resources/nav readable regardless
          of what's under them. -->
     <div class="hud-scrim" :class="{ 'hud-scrim--bottom': hudBarAtBottom }" />
-    <TopBar @focus-home="onFocusHome">
+    <TopBar @focus-home="onFocusHome" @focus-realm="onFocusRealm">
       <ResourceBar :ring-open="ringOpen" />
       <HudNav has-resource-bar />
       <template #drawer="{ close }">

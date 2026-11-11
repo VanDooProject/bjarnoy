@@ -5,7 +5,7 @@
     "goTo": "Go to {name}",
     "rename": "Rename…",
     "realms": "Your realms",
-    "current": "Current"
+    "longhouse": "Longhouse {level}"
   },
   "settlementRename": {
     "label": "Settlement name",
@@ -49,11 +49,6 @@
   },
   "realmPanel": {
     "levelShort": "Lv {level}"
-  },
-  "realmSwitcher": {
-    "title": "Your realms",
-    "toggle": "Switch realm",
-    "longhouse": "Longhouse {level}"
   },
   "hoverTooltip": {
     "level": "LEVEL {level}",

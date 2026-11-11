@@ -57,11 +57,11 @@ describe('world store realmList', () => {
   it('lists one row per realm, named by its oldest member', () => {
     const store = useWorldStore();
     const row = (id: string, realmId: string, name: string, longhouseLevel: number) =>
-      ({ id, realmId, name, longhouseLevel }) as SettlementSummary;
+      ({ id, realmId, name, longhouseLevel, q: 1, r: 2 }) as SettlementSummary;
     store.myRealms = [row('a2', 'a', 'Newer', 1), row('a', 'a', 'Hrafn', 4), row('b', 'b', 'Sker', 2)];
     expect(store.realmList).toEqual([
-      { id: 'a', name: 'Hrafn', level: 4 },
-      { id: 'b', name: 'Sker', level: 2 },
+      { id: 'a', name: 'Hrafn', level: 4, q: 1, r: 2 },
+      { id: 'b', name: 'Sker', level: 2, q: 1, r: 2 },
     ]);
   });
 });

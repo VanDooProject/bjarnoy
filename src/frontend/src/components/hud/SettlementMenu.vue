@@ -1,40 +1,64 @@
 <script setup lang="ts">
-// The top bar's settlement menu: a chevron next to the settlement's name that opens "Go to <name>", "Rename…" and, when
-// the player owns more than one settlement, the list of their realms. The one menu for both the desktop bar and the phone
-// bubble: the parent only says where it hangs (the nearest positioned ancestor, under it) and what rename does.
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+// The top bar's settlement menu: one boxed arrow next to the settlement's name that opens the player's realms (one row each,
+// the current one filled) with "Go to" and "Rename" on the current row. Picking another row switches to that realm and
+// centres on it. On a hover-capable pointer the other rows show the same two buttons on hover: "Go to" pans without switching,
+// "Rename" switches first. The one menu for both the desktop bar and the phone bubble (`touch`); it renders through a teleport
+// so no stacking context of the bar or the bubble can put the queue drawer over it.
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { routerKey } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
-import { useAuthStore } from '../../stores/auth';
-import { api } from '../../api/client';
-import { DEMO_MODE } from '../../config';
 import { fadePopover } from '../../lib/hud/chipMotion';
-import type { SettlementSummary } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
 
-const props = defineProps<{ name: string; /** The phone bubble's chevron: a 44px tap target around the same small glyph. */ touch?: boolean }>();
-const emit = defineEmits<{ (e: 'focus-home'): void; (e: 'rename'): void }>();
+const props = defineProps<{ name: string; /** The phone bubble's arrow: a 24px box with a 44px tap area. */ touch?: boolean }>();
+const emit = defineEmits<{
+  (e: 'focus-home'): void;
+  (e: 'focus-realm', at: { q: number; r: number }): void;
+  (e: 'rename'): void;
+}>();
 
 const world = useWorldStore();
-const auth = useAuthStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
+interface RealmRow {
+  id: string;
+  name: string;
+  level: number;
+  q: number | null;
+  r: number | null;
+}
+
 const open = ref(false);
+const busy = ref(false);
 const rootEl = ref<HTMLElement | null>(null);
 const triggerEl = ref<HTMLButtonElement | null>(null);
 const menuEl = ref<HTMLElement | null>(null);
+const menuStyle = ref<Record<string, string>>({});
 
-// The realm list is an authorized read: an anonymous or demo player never even asks (it would 401).
-const realms = ref<SettlementSummary[]>([]);
-const canListRealms = computed(() => !DEMO_MODE && auth.isAuthenticated && !!world.worldId);
-const showRealms = computed(() => realms.value.length > 1);
+/** With 2+ realms the list; otherwise the one realm being run, from what the bar already knows. */
+const showList = computed(() => world.realmList.length > 1);
+const rows = computed<RealmRow[]>(() =>
+  showList.value
+    ? world.realmList
+    : [{ id: world.selectedSettlementId ?? '', name: props.name, level: world.hud.level, q: null, r: null }],
+);
+const isCurrent = (id: string) => id === (world.selectedSettlementId ?? '');
 
-async function loadRealms() {
-  if (!canListRealms.value || !world.worldId) return;
-  try {
-    realms.value = await api.listMySettlements(world.worldId);
-  } catch {
-    // Best-effort: without the list the menu just has its two entries.
+function place() {
+  const trigger = triggerEl.value;
+  if (!trigger) return;
+  const phone = !!props.touch;
+  const anchor = trigger.closest<HTMLElement>(phone ? '.settlement-bubble' : '.hud-bar') ?? trigger;
+  const a = anchor.getBoundingClientRect();
+  const vertical: Record<string, string> =
+    a.bottom <= window.innerHeight / 2 ? { top: `${a.bottom + 8}px` } : { bottom: `${window.innerHeight - a.top + 8}px` };
+  if (phone) {
+    menuStyle.value = { ...vertical, left: '16px', right: '16px' };
+  } else {
+    const brand = trigger.closest<HTMLElement>('.brand');
+    const left = brand ? brand.getBoundingClientRect().left : a.left;
+    menuStyle.value = { ...vertical, left: `${Math.max(16, left)}px`, width: '320px', maxWidth: 'calc(100vw - 32px)' };
   }
 }
 
@@ -49,8 +73,9 @@ function toggle() {
     close();
     return;
   }
+  place();
   open.value = true;
-  void loadRealms();
+  void world.refreshMyRealms();
 }
 
 function menuItems(): HTMLElement[] {
@@ -73,35 +98,65 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 function onOutsidePointerDown(e: Event) {
-  if (rootEl.value && !rootEl.value.contains(e.target as Node)) close();
+  const target = e.target as Node;
+  if (rootEl.value?.contains(target) || menuEl.value?.contains(target)) return;
+  close();
 }
 
 watch(open, (isOpen) => {
   if (isOpen) {
     document.addEventListener('pointerdown', onOutsidePointerDown, true);
     document.addEventListener('keydown', onKeydown);
+    void nextTick(() => menuItems()[0]?.focus({ preventScroll: true }));
   } else {
     document.removeEventListener('pointerdown', onOutsidePointerDown, true);
     document.removeEventListener('keydown', onKeydown);
   }
 });
+const router = inject(routerKey, null);
+const stopRouteWatch = router?.afterEach(() => close());
+onMounted(() => void world.refreshMyRealms());
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onOutsidePointerDown, true);
   document.removeEventListener('keydown', onKeydown);
+  stopRouteWatch?.();
 });
 
-function goHome() {
-  close();
-  emit('focus-home');
+/** Another realm's row: switch to it, then centre on it. The current row only closes. */
+async function pick(row: RealmRow) {
+  if (busy.value) return;
+  if (isCurrent(row.id)) {
+    close();
+    return;
+  }
+  busy.value = true;
+  try {
+    await world.switchToSettlement(row.id);
+    emit('focus-home');
+  } catch {
+    // The old realm stays.
+  } finally {
+    busy.value = false;
+    close();
+  }
 }
-function rename() {
+
+function goTo(row: RealmRow) {
   close();
+  if (isCurrent(row.id) || row.q === null || row.r === null) emit('focus-home');
+  else emit('focus-realm', { q: row.q, r: row.r });
+}
+
+async function rename(row: RealmRow) {
+  close();
+  if (!isCurrent(row.id)) {
+    try {
+      await world.switchToSettlement(row.id);
+    } catch {
+      return;
+    }
+  }
   emit('rename');
-}
-async function switchTo(id: string) {
-  close();
-  if (id === world.selectedSettlementId) return;
-  await world.switchToSettlement(id);
 }
 
 function onEnter(el: Element, done: () => void) {
@@ -110,11 +165,6 @@ function onEnter(el: Element, done: () => void) {
 function onLeave(el: Element, done: () => void) {
   void fadePopover(el, 'out').then(done, done);
 }
-
-// Opening from the keyboard lands on the first entry.
-watch(open, (isOpen) => {
-  if (isOpen) void nextTick(() => menuItems()[0]?.focus({ preventScroll: true }));
-});
 </script>
 
 <template>
@@ -129,158 +179,258 @@ watch(open, (isOpen) => {
       :aria-label="t('hud.settlementMenu.toggle')"
       :title="t('hud.settlementMenu.toggle')"
       @click="toggle"
-    >
-      <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" /></svg>
-    </button>
-    <Transition :css="false" @enter="onEnter" @leave="onLeave">
-      <div v-if="open" ref="menuEl" class="menu" role="menu" :aria-label="t('hud.settlementMenu.toggle')">
-        <button type="button" role="menuitem" class="row" @click="goHome">
-          {{ t('hud.settlementMenu.goTo', { name: props.name }) }}
-        </button>
-        <button type="button" role="menuitem" class="row" @click="rename">{{ t('hud.settlementMenu.rename') }}</button>
-        <template v-if="showRealms">
-          <div class="divider" role="separator" />
-          <div class="section-title" role="presentation">{{ t('hud.settlementMenu.realms') }}</div>
-          <button
-            v-for="realm in realms"
-            :key="realm.id"
-            type="button"
-            role="menuitem"
-            class="row realm-row"
-            :class="{ current: realm.id === world.selectedSettlementId }"
-            :aria-current="realm.id === world.selectedSettlementId ? 'true' : undefined"
-            @click="switchTo(realm.id)"
-          >
-            <span class="realm-name">{{ realm.name }}</span>
-            <span v-if="realm.id === world.selectedSettlementId" class="realm-mark">{{ t('hud.settlementMenu.current') }}</span>
-          </button>
-        </template>
-      </div>
-    </Transition>
+    />
+    <Teleport to="body">
+      <Transition :css="false" @enter="onEnter" @leave="onLeave">
+        <div
+          v-if="open"
+          ref="menuEl"
+          class="menu"
+          :class="{ 'menu--touch': props.touch }"
+          role="menu"
+          :aria-label="t('hud.settlementMenu.toggle')"
+          :style="menuStyle"
+        >
+          <div v-if="showList" class="section-title" role="presentation">{{ t('hud.settlementMenu.realms') }}</div>
+          <div v-for="row in rows" :key="row.id" class="realm-line" :class="{ current: isCurrent(row.id) }">
+            <button
+              type="button"
+              role="menuitem"
+              class="realm-pick"
+              :aria-current="isCurrent(row.id) ? 'true' : undefined"
+              :disabled="busy"
+              @click="pick(row)"
+            >
+              <svg class="realm-hex" viewBox="0 0 100 100" aria-hidden="true">
+                <polygon points="50,6 92,28 92,72 50,94 8,72 8,28" />
+              </svg>
+              <span class="realm-text">
+                <span class="realm-name">{{ row.name }}</span>
+                <span class="realm-caption">{{ t('hud.settlementMenu.longhouse', { level: row.level }) }}</span>
+              </span>
+            </button>
+            <span class="realm-actions">
+              <button
+                type="button"
+                role="menuitem"
+                class="icon-btn"
+                data-action="go-to"
+                :aria-label="t('hud.settlementMenu.goTo', { name: row.name })"
+                :title="t('hud.settlementMenu.goTo', { name: row.name })"
+                @click="goTo(row)"
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <circle cx="8" cy="8" r="3.2" />
+                  <path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                class="icon-btn"
+                data-action="rename"
+                :aria-label="t('hud.settlementMenu.rename')"
+                :title="t('hud.settlementMenu.rename')"
+                @click="rename(row)"
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M10.5 2.5l3 3L5.5 13.5l-3.5.5.5-3.5z" />
+                </svg>
+              </button>
+            </span>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
-/* The wrapper is layout-neutral: the menu hangs from the parent's positioned box (the name column / the bubble). */
+/* The wrapper is layout-neutral: the menu is teleported and positioned from the arrow's anchor (the bar's brand / the bubble). */
 .settlement-menu {
   display: contents;
 }
 .menu-trigger {
   appearance: none;
+  position: relative;
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: rgba(255, 197, 92, 0.08);
+  color: var(--gold);
   cursor: pointer;
   pointer-events: auto;
+  font-size: 12px;
+  line-height: 1;
   -webkit-tap-highlight-color: transparent;
 }
-.menu-trigger:hover,
-.menu-trigger.open {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
+.menu-trigger::before {
+  content: '\25BE';
+}
+.menu-trigger.open::before {
+  content: '\25B4';
 }
 .menu-trigger:focus-visible {
   outline: 2px solid var(--gold);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
-.menu-trigger svg {
-  width: 12px;
-  height: 12px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  transition: transform 150ms ease;
+/* Phone: a 24px box inside the bubble, its tap area stays 44px (the pseudo-element reaches past the box). */
+.menu-trigger.menu-trigger--touch {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  font-size: 10px;
 }
-.menu-trigger.open svg {
-  transform: rotate(180deg);
+.menu-trigger.menu-trigger--touch::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
 }
 .menu {
-  position: absolute;
-  top: calc(100% + 10px);
-  left: 0;
-  z-index: 50;
-  min-width: 220px;
-  width: max-content;
-  max-width: min(320px, calc(100vw - 32px));
+  position: fixed;
+  z-index: 40;
+  box-sizing: border-box;
   max-height: 70vh;
   overflow-y: auto;
-  padding: 6px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: rgba(10, 20, 27, 0.98);
+  background: var(--panel-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 10px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
   transform-origin: top left;
   pointer-events: auto;
-}
-.row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  appearance: none;
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  color: var(--text);
-  padding: 9px 10px;
-  min-height: 36px;
   text-align: left;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-}
-.row:hover,
-.row:focus-visible {
-  background: rgba(255, 255, 255, 0.07);
-  outline: none;
-}
-.divider {
-  height: 1px;
-  margin: 4px 2px;
-  background: var(--panel-border);
 }
 .section-title {
-  padding: 4px 10px 2px;
+  padding: 4px 8px 8px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
 }
+.realm-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px;
+}
+.realm-line:hover,
+.realm-line:focus-within,
+.realm-line.current {
+  background: rgba(255, 255, 255, 0.06);
+}
+.realm-pick {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.realm-pick:focus-visible,
+.icon-btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+}
+.realm-hex {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 7;
+  stroke-linejoin: round;
+}
+.realm-line.current .realm-hex {
+  fill: var(--gold);
+}
+.realm-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
 .realm-name {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.realm-row.current {
-  color: var(--gold);
-}
-.realm-mark {
-  flex: none;
+.realm-caption {
   font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--muted);
 }
-
-/* Phone: the chevron's glyph stays small, its tap target does not (the margins pull the extra size back out of the bubble's layout). */
-.menu-trigger.menu-trigger--touch {
-  background: transparent;
+.realm-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+  padding-right: 6px;
+}
+.icon-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--gold);
+  cursor: pointer;
+}
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.menu--touch .icon-btn {
   width: 44px;
   height: 44px;
-  margin: -14px -10px -14px -14px;
+}
+/* Other realms: no buttons on touch; with a mouse they show on hover or keyboard focus. */
+.realm-line:not(.current) .realm-actions {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .realm-line:not(.current) .realm-actions {
+    display: flex;
+    visibility: hidden;
+  }
+  .realm-line:not(.current):hover .realm-actions,
+  .realm-line:not(.current):focus-within .realm-actions {
+    visibility: visible;
+  }
 }
 </style>

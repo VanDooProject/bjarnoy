@@ -5,7 +5,7 @@
     "goTo": "Zu {name}",
     "rename": "Umbenennen …",
     "realms": "Deine Reiche",
-    "current": "Aktuell"
+    "longhouse": "Langhaus {level}"
   },
   "settlementRename": {
     "label": "Name der Siedlung",
@@ -49,11 +49,6 @@
   },
   "realmPanel": {
     "levelShort": "Lv {level}"
-  },
-  "realmSwitcher": {
-    "title": "Deine Reiche",
-    "toggle": "Reich wechseln",
-    "longhouse": "Langhaus {level}"
   },
   "hoverTooltip": {
     "level": "STUFE {level}",
