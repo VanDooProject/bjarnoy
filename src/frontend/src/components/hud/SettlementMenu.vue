@@ -281,6 +281,6 @@ watch(open, (isOpen) => {
   background: transparent;
   width: 44px;
   height: 44px;
-  margin: -14px -12px -14px -8px;
+  margin: -14px -10px -14px -14px;
 }
 </style>

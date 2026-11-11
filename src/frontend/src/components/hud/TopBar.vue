@@ -159,7 +159,6 @@ const barPosition = computed(() => (props.docked || isChipLayout.value ? 'top' :
 // "Bjarnoy") — those get an inline truncated title in the bar itself
 // instead (see `.mobile-title` below), not a second "Lv N · M hexes" bubble
 // that has nothing to do with them.
-const claimedHexes = computed(() => world.hud.claimedHexes);
 /**
  * The floating chips' margin to the screen's top and side edges — the phone
  * settlement bubble's own existing 16px side gutter (`.settlement-bubble`'s
@@ -633,7 +632,7 @@ const backdropStyle = computed(() => {
     </template>
     <template v-else>
       <button type="button" class="bubble-name name-btn" :title="t('hud.focusHome')" @click="emit('focus-home')">{{ settlementName }}</button>
-      <span class="bubble-meta">{{ t('hud.realmPanel.levelHexesShort', { level: world.hud.level, count: claimedHexes }) }}</span>
+      <span class="bubble-meta">{{ t('hud.realmPanel.levelShort', { level: world.hud.level }) }}</span>
       <SettlementMenu :name="settlementName ?? ''" touch @focus-home="emit('focus-home')" @rename="rename.begin()" />
     </template>
   </div>
@@ -1129,7 +1128,8 @@ const backdropStyle = computed(() => {
   align-items: center;
   gap: 8px;
   max-width: calc(58vw - 16px);
-  padding: 6px 14px 6px 8px;
+  /* Right padding is small: the menu chevron ends the row and its 44px tap area already reaches past its glyph. */
+  padding: 6px 4px 6px 8px;
   border-radius: 999px;
   background: rgba(6, 12, 16, 0.94);
   border: 1px solid var(--panel-border);
@@ -1154,7 +1154,11 @@ const backdropStyle = computed(() => {
   font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
-  flex: none;
+  /* With the menu chevron in the bubble the row is tight: the meta gives way first, so the name stays readable. */
+  flex: 0 1000 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Renaming on a phone: the bubble becomes the field, across the screen between the 16px gutters, with a 44px save and
    cancel and the counter / error hanging below it. */

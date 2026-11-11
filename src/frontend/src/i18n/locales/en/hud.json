@@ -48,7 +48,7 @@
     "toggle": "Show more"
   },
   "realmPanel": {
-    "levelHexesShort": "Lv {level} · {count} hexes"
+    "levelShort": "Lv {level}"
   },
   "hoverTooltip": {
     "level": "LEVEL {level}",

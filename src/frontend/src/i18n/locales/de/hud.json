@@ -48,7 +48,7 @@
     "toggle": "Mehr anzeigen"
   },
   "realmPanel": {
-    "levelHexesShort": "Lv {level} · {count} Hexfelder"
+    "levelShort": "Lv {level}"
   },
   "hoverTooltip": {
     "level": "STUFE {level}",

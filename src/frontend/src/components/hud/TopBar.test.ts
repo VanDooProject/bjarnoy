@@ -394,7 +394,7 @@ describe('TopBar', () => {
       expect(wrapper.find('.titles').exists()).toBe(false); // inline title stays hidden on mobile
       const bubble = wrapper.get('.settlement-bubble');
       expect(bubble.get('.bubble-name').text()).toBe('Bjørnstad');
-      expect(bubble.get('.bubble-meta').text()).toBe('Lv 4 · 19 hexes');
+      expect(bubble.get('.bubble-meta').text()).toBe('Lv 4');
       wrapper.unmount();
     });
 
