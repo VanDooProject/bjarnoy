@@ -209,6 +209,36 @@ public sealed record Army
         return this with { Provisions = Math.Max(0, provisionsAtThen) + burnedSinceDeparture };
     }
 
+    /// <summary>
+    /// True while this army cannot get home and so stands where it is, burning provisions until it starves
+    /// (<c>docs/design/troop-movement-range.md</c> §2a). The single place that decides it.
+    /// </summary>
+    public bool CannotGetHome => Location is ArmyLocation.InTransit { Movement.IsStranded: true };
+
+    /// <summary>
+    /// The instant a stranded army's provisions hit zero and the whole army dies (<see cref="ProvisionsAt"/> reaches 0);
+    /// <see langword="null"/> when the army is not stranded or burns nothing.
+    /// </summary>
+    public DateTimeOffset? StarvesAt =>
+        CannotGetHome && TotalUpkeepPerHour > 0 && Location is ArmyLocation.InTransit { Movement: var movement }
+            ? movement.DepartedAt + TimeSpan.FromHours(Provisions / TotalUpkeepPerHour)
+            : null;
+
+    /// <summary>
+    /// This army left standing on <paramref name="hex"/> from <paramref name="at"/> because it has no way home: the provisions it carried at
+    /// <paramref name="at"/> are kept and burn from there, and <see cref="Movement.TurnAroundAt"/> is the instant it starves, so the
+    /// "standing" checks of orders and camp aggression keep working until then. Any later order builds a normal movement.
+    /// </summary>
+    public Army Strand(DateTimeOffset at, HexCoord hex)
+    {
+        var stranded = this with { Provisions = ProvisionsAt(at), Location = new ArmyLocation.InTransit(Movement.Movement.Stranded(at, hex)) };
+        var turnAround = stranded.StarvesAt ?? at.AddYears(100);
+        return stranded with
+        {
+            Location = new ArmyLocation.InTransit(((ArmyLocation.InTransit)stranded.Location).Movement with { TurnAroundAt = turnAround }),
+        };
+    }
+
     /// <summary>Current hex: <paramref name="home"/> while <see cref="ArmyLocation.AtHome"/>, else the active leg's position.</summary>
     public HexCoord PositionAt(HexCoord home, DateTimeOffset now) => Location switch
     {
@@ -1415,6 +1445,15 @@ public sealed record Army
 
         var movement = inTransit.Movement;
 
+        if (movement.IsStranded)
+        {
+            // Never turns around: it waits for the food to run out, then the whole army is gone.
+            return StarvesAt is { } starvesAt && now >= starvesAt
+                ? new ArmySettleResult(
+                    this with { Provisions = 0 }, Changed: true, ArrivedHome: false, [new WalkedLeg(movement, starvesAt)], Starved: true)
+                : new ArmySettleResult(this, Changed: false, ArrivedHome: false);
+        }
+
         if (!movement.IsReturning)
         {
             if (now < movement.TurnAroundAt)
@@ -1581,10 +1620,8 @@ public sealed record Army
     /// understate the burn so far). Defaults to <see cref="ProvisionsAt"/> of this army.
     /// </param>
     /// <returns>
-    /// <see langword="null"/> only if no route home exists at all — should
-    /// not happen in practice for an army that was already mid-journey
-    /// (it came from home over land it was allowed to walk, and the same
-    /// rules price the way back), but handled defensively rather than throwing.
+    /// The army on its way home. When no route home exists (a wall now closes the way) it is instead left standing where it
+    /// fought (<see cref="Strand"/>) and starves when its food runs out.
     /// </returns>
     public Army ForceFieldRetreat(
         DateTimeOffset battleInstant, HexCoord fromHex, HexCoord home, Func<HexCoord, Terrain> terrainAt,
@@ -1598,13 +1635,16 @@ public sealed record Army
         var isLandUnit = !IsFleet;
         var provisionsNow = provisionsAtBattle ?? ProvisionsAt(battleInstant);
 
-        // No route home is not expected in practice (this army's original
-        // route already crossed fromHex), but rather than throw, it is left
-        // standing exactly where it fought — still immune, just going
-        // nowhere — a safe degenerate case rather than a crash.
-        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost) is { Count: > 0 } found
-            ? found
-            : (List<HexCoord>)[fromHex];
+        if (HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost) is not { Count: > 0 } path)
+        {
+            // No way home (a wall in the way): it stays where it fought, still protected from further fights, and starves
+            // when the food runs out (docs/design/troop-movement-range.md §2a).
+            var stranded = WithProvisionsAt(battleInstant, provisionsNow).Strand(battleInstant, fromHex);
+            return stranded with
+            {
+                Location = new ArmyLocation.InTransit(((ArmyLocation.InTransit)stranded.Location).Movement with { RetreatImmune = true }),
+            };
+        }
 
         var speed = TotalSpeed;
         var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
@@ -1999,6 +2039,11 @@ public sealed record Army
         {
             remainder = staying with { Provisions = army.Provisions * (1 - leavingShare) };
         }
+        else if (movement.IsStranded)
+        {
+            // A stranded remainder stays stranded; only its food (and so the instant it starves) changes.
+            remainder = staying.WithProvisionsAt(now, stayingFood).Strand(now, movement.Path[0]);
+        }
         else
         {
             var stayingUpkeep = staying.TotalUpkeepPerHour;
@@ -2153,7 +2198,8 @@ public sealed record Army
 /// <see cref="Movement.Movement"/> no longer shows once the result is stored (the outbound leg when it turned around,
 /// and the return leg too when the same call also brought it home). Empty when nothing changed.
 /// </param>
-public sealed record ArmySettleResult(Army Army, bool Changed, bool ArrivedHome, IReadOnlyList<WalkedLeg>? Walked = null)
+public sealed record ArmySettleResult(
+    Army Army, bool Changed, bool ArrivedHome, IReadOnlyList<WalkedLeg>? Walked = null, bool Starved = false)
 {
     public IReadOnlyList<WalkedLeg> Walked { get; init; } = Walked ?? [];
 }

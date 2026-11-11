@@ -124,6 +124,9 @@ public class ArmyEntity
     /// <summary>Persisted mirror of <see cref="Movement.RetreatImmune"/> (issue #206 §5).</summary>
     public bool RetreatImmune { get; set; }
 
+    /// <summary>Persisted mirror of <see cref="Movement.IsStranded"/>: the army cannot get home and starves when its food runs out.</summary>
+    public bool IsStranded { get; set; }
+
     /// <summary>Rebuilds the domain aggregate from the stored columns.</summary>
     public Army ToDomain()
     {
@@ -143,6 +146,7 @@ public class ArmyEntity
                     TurnAroundAt = TurnAroundAt,
                     IsReturning = IsReturning,
                     RetreatImmune = RetreatImmune,
+                    IsStranded = IsStranded,
                 });
 
         return new Army
@@ -239,6 +243,7 @@ public class ArmyEntity
                 TurnAroundAt = default;
                 IsReturning = false;
                 RetreatImmune = false;
+                IsStranded = false;
                 break;
 
             case ArmyLocation.Supporting supporting:
@@ -257,6 +262,7 @@ public class ArmyEntity
                 TurnAroundAt = default;
                 IsReturning = false;
                 RetreatImmune = false;
+                IsStranded = false;
                 break;
 
             case ArmyLocation.InTransit inTransit:
@@ -273,6 +279,7 @@ public class ArmyEntity
                 TurnAroundAt = movement.TurnAroundAt;
                 IsReturning = movement.IsReturning;
                 RetreatImmune = movement.RetreatImmune;
+                IsStranded = movement.IsStranded;
                 break;
         }
     }

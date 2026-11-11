@@ -99,6 +99,30 @@ public sealed record Movement
     /// </remarks>
     public bool RetreatImmune { get; init; }
 
+    /// <summary>
+    /// True for an army that cannot get home and so stands where it is (<see cref="Stranded"/>): its path is the single hex it stands on,
+    /// it never turns around, and when its provisions run out the whole army starves (<c>docs/design/troop-movement-range.md</c> §2a).
+    /// </summary>
+    public bool IsStranded { get; init; }
+
+    /// <summary>
+    /// A stranded stand on <paramref name="hex"/> from <paramref name="at"/>. <see cref="TurnAroundAt"/> is set to <paramref name="at"/> here;
+    /// <c>Army.Strand</c> replaces it with the instant the army starves.
+    /// </summary>
+    public static Movement Stranded(DateTimeOffset at, HexCoord hex) => new()
+    {
+        DepartedAt = at,
+        Path = [hex],
+        CumulativeHours = [0],
+        EdgeHours = [0],
+        ReturnPath = [hex],
+        ReturnCumulativeHours = [0],
+        ReturnEdgeHours = [0],
+        TurnAroundAt = at,
+        IsReturning = false,
+        IsStranded = true,
+    };
+
     /// <summary>When this leg's <see cref="Path"/> is fully travelled.</summary>
     public DateTimeOffset ArrivesAt => DepartedAt + TimeSpan.FromHours(CumulativeHours[^1]);
 

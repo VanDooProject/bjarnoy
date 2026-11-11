@@ -17,7 +17,7 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -316,6 +316,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasColumnType("integer");
 
                     b.Property<bool>("IsReturning")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsStranded")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsSupporting")
