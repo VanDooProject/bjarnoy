@@ -84,7 +84,12 @@ function startNewRealm() {
         <button type="button" class="submit" data-testid="returning-login-start-here" @click="startHere">
           {{ t('onboarding.returningLogin.startHere') }}
         </button>
-        <RouterLink class="pick-world" :to="{ name: 'worlds' }" data-testid="returning-login-pick-world">
+        <RouterLink
+          class="pick-world"
+          :to="{ name: 'worlds' }"
+          data-testid="returning-login-pick-world"
+          @click="flow.reset()"
+        >
           {{ t('onboarding.returningLogin.pickWorld') }}
         </RouterLink>
       </div>

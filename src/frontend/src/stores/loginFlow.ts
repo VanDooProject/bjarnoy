@@ -109,6 +109,11 @@ export const useLoginFlowStore = defineStore('loginFlow', () => {
     await runRestore();
   }
 
+  function clearError() {
+    error.value = null;
+    credentialsRejected.value = false;
+  }
+
   function reset() {
     clearSlowTimer();
     steps = null;
@@ -131,6 +136,7 @@ export const useLoginFlowStore = defineStore('loginFlow', () => {
     accountName,
     submit,
     retryRestore,
+    clearError,
     reset,
   };
 });

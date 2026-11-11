@@ -91,16 +91,16 @@ const router = useRouter();
 // `hasFoundedSettlement` still wins once true — an anonymous founding that
 // happened in the same tab (or session) before the visitor got around to
 // logging back in should keep going, not get interrupted by the gate.
-// The gate also stays up while a login is in flight (the panel's state must not
-// vanish the moment `auth.isAuthenticated` flips, mid-restore) and while the
-// "no realm of yours in this world" notice is showing after a finished restore.
+// The gate also stays up while the "no realm of yours in this world" notice is
+// showing after a finished restore. While the restore itself runs the gate is
+// already gone (`auth.isAuthenticated` flipped): its progress and errors show on
+// MapStatusOverlay, fed from the login flow store, not in the panel.
 const loginFlow = useLoginFlowStore();
 const loginOverlay = useLoginRestoreOverlay();
 const showReturningLoginGate = computed(
   () =>
     (!!player.lastAccount && !auth.isAuthenticated && !player.hasFoundedSettlement) ||
-    loginFlow.noRealmWorldName !== null ||
-    loginFlow.phase !== 'idle',
+    loginFlow.noRealmWorldName !== null,
 );
 
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);

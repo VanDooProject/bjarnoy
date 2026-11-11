@@ -4,7 +4,7 @@
 // block. Its state (phase, slow, error) comes from the login flow store, so
 // the busy/slow/error behaviour is written once; the views only pass their
 // element ids/test ids and wire `submit`.
-import { nextTick, ref, watch } from 'vue';
+import { nextTick, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import { useLoginFlowStore } from '../../stores/loginFlow';
@@ -31,6 +31,12 @@ const flow = useLoginFlowStore();
 const { phase, slow, error, credentialsRejected } = storeToRefs(flow);
 
 const passwordInput = ref<HTMLInputElement | null>(null);
+
+// The store outlives the form: an error from an attempt on another screen is
+// not this form's error.
+onMounted(() => {
+  if (phase.value === 'idle') flow.clearError();
+});
 
 // A new error sends the player straight back to the password to retype it.
 watch(
