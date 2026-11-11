@@ -29,7 +29,8 @@ A fleet cannot use a foreign dock as a passive waypoint; reaching it always mean
 attack or support, never a free stop.
 
 **Sand.** Fleets can enter sand, but only a hex with a beach camp or a wildlife camp, or the hex where its camp builders set up a
-beach camp or its settlers found a settlement. They cannot travel over it: from a sand hex a fleet can only leave again. A sand
+beach camp or its settlers found a settlement, or its home longhouse on sand next to the sea. A settlement can be founded from
+the sea only on a sand hex. They cannot travel over it: from a sand hex a fleet can only leave again. A sand
 hex costs a fleet 2, like bog for a land army; water costs 1. Docks stand in the water, not on
 sand. Who garrisons where: [garrison.md](garrison.md).
 

@@ -1,6 +1,7 @@
 # Garrison
 
-- Land troops garrison in three places: longhouse, tower, beach camp. Fleets garrison in two: dock, beach camp.
+- Land troops garrison in three places: longhouse, tower, beach camp. Fleets garrison in dock and beach camp, and in a
+  longhouse that stands on sand next to the sea.
 - Land troops cannot garrison in a dock. They go out onto the land tile with the best route to the nearest garrison spot
   (tower or longhouse) and march there on their own.
 - An army that arrives home folds into the garrison. Leftover provisions go into the stock there: the settlement stock at a

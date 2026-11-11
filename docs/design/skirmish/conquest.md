@@ -14,7 +14,8 @@ in [Taking over a realm](realm-takeover.md).
   the ship fight there is won, it burns up and damages the building. In the ship fight it counts as a ship with its own hull and
   can be sunk, but adds no attack. It takes the same round-trip food check as every army, since it can be recalled before it
   arrives. Fire Ships that are not used come back: when the target is gone, when the ship fight is lost, and those not needed
-  for the damage.
+  for the damage. 10 Fire Ships take one level off a building (starting value, to be tuned). The usual siege rules cap it: a
+  building never loses more levels in one attack than they allow, however many Fire Ships come.
 - Attack on a dock: ship fight only, and no loot. Attack on a beach camp: ship fight first, then the land fight. The land troops
   fight from on board and do not land. If the attacker loses the ship fight, there is no land fight. The camp's buildings are
   damaged by land siege in the land fight, never by ships.
