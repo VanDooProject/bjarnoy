@@ -13,7 +13,8 @@ const SRC = join(__dirname, '..');
 /** The places that own the device flag itself and resolve it into the settings. */
 const ALLOWED = [/^lib\/perf\//, /^lib\/motion\.ts$/];
 
-const DIRECT_QUERY = [/@media[^{]*prefers-reduced-motion/, /matchMedia\(\s*['"`]\(prefers-reduced-motion/, /REDUCED_QUERY\b/];
+/** A media rule on it, or the query as a string literal anywhere in code (matchMedia, useMediaQuery, a constant). */
+const DIRECT_QUERY = [/@media[^{]*prefers-reduced-motion/, /['"`][^'"`\n]*prefers-reduced-motion/];
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
