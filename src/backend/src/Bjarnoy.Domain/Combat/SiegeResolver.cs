@@ -79,6 +79,21 @@ public sealed record SiegeOutcome(
 public static class SiegeResolver
 {
     /// <summary>
+    /// Whether a beach camp falls without any siege engine: <paramref name="target"/> is a beach camp
+    /// (<see cref="Settlement.IsBeachCamp"/>) and no unit, land or ship, is left in it after the fight
+    /// (<paramref name="defendersAfterFight"/>: its garrison and the guests that fought with it). A camp that still has defenders
+    /// does not fall this way, and neither does any other settlement. A pure helper for attack resolution; destroying the camp
+    /// itself is the caller's job. See <c>docs/design/skirmish/beach-camp.md</c>.
+    /// </summary>
+    public static bool EmptyCampFalls(Settlement target, IReadOnlyList<UnitStack> defendersAfterFight)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(defendersAfterFight);
+
+        return target.IsBeachCamp && defendersAfterFight.All(s => s.Count <= 0);
+    }
+
+    /// <summary>
     /// <c>max(1, floor(sqrt(survivingSiegePower / 2)))</c> when
     /// <paramref name="survivingSiegePower"/> is positive, else 0 — the
     /// design doc's levels-destroyed formula.

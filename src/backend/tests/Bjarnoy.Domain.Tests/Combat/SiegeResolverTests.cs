@@ -1,5 +1,6 @@
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Combat;
+using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 
@@ -18,6 +19,46 @@ public class SiegeResolverTests
         new(FarmHex, BuildingType.Farm, farmLevel),
         new(TowerHex, BuildingType.Tower, towerLevel),
     ];
+
+    private static Settlement Camp() => new()
+    {
+        Id = Guid.CreateVersion7(),
+        Name = "Camp",
+        Centre = Longhouse,
+        Buildings = [new PlacedBuilding(Longhouse, BuildingType.BeachCamp, 1)],
+        Resources = ResourcePool.Create(ResourceAmounts.Zero, ResourceAmounts.Zero, ResourceAmounts.Uniform(2000), default),
+    };
+
+    [Fact]
+    public void An_empty_beach_camp_falls_without_siege_engines()
+    {
+        Assert.True(SiegeResolver.EmptyCampFalls(Camp(), []));
+        // a stack with no one left in it is no defender
+        Assert.True(SiegeResolver.EmptyCampFalls(Camp(), [new UnitStack(UnitType.Spearman, 0)]));
+    }
+
+    [Theory]
+    [InlineData(UnitType.Spearman)]
+    [InlineData(UnitType.Longship)]
+    public void A_beach_camp_with_land_troops_or_ships_left_does_not_fall(UnitType defender)
+    {
+        Assert.False(SiegeResolver.EmptyCampFalls(Camp(), [new UnitStack(defender, 1)]));
+    }
+
+    [Fact]
+    public void An_empty_settlement_with_a_longhouse_does_not_fall_this_way()
+    {
+        var realm = new Settlement
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Realm",
+            Centre = Longhouse,
+            Buildings = Buildings(),
+            Resources = ResourcePool.Create(ResourceAmounts.Zero, ResourceAmounts.Zero, ResourceAmounts.Uniform(500), default),
+        };
+
+        Assert.False(SiegeResolver.EmptyCampFalls(realm, []));
+    }
 
     [Theory]
     [InlineData(0, 0)]
