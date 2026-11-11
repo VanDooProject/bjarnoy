@@ -78,6 +78,120 @@ describe('TopBar', () => {
     expect(phone.emitted('focus-home')).toHaveLength(1);
   });
 
+  it('the hex logo takes you home too, like the name, and the chevron beside the name opens the settlement menu', async () => {
+    useWorldStore().hud.settlementName = 'Bjørnstad';
+    stubCompactMediaQuery(false);
+    const wrapper = mountTopBar();
+    await wrapper.find('.brand .logo-btn').trigger('click');
+    expect(wrapper.emitted('focus-home')).toHaveLength(1);
+
+    expect(wrapper.find('.titles [role="menu"]').exists()).toBe(false);
+    await wrapper.find('.titles .menu-trigger').trigger('click');
+    expect(wrapper.find('.titles [role="menu"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('Rename… opens the desktop popover; Escape cancels it and Enter saves through the store', async () => {
+    const world = useWorldStore();
+    world.hud.settlementName = 'Bjørnstad';
+    const renameSettlement = vi.spyOn(world, 'renameSettlement').mockResolvedValue();
+    stubCompactMediaQuery(false);
+    const wrapper = mountTopBar();
+    await wrapper.find('.titles .menu-trigger').trigger('click');
+    await wrapper.findAll('[role="menuitem"]')[1]!.trigger('click');
+
+    const card = wrapper.find('.rename-card');
+    expect(card.exists()).toBe(true);
+    const input = card.find('input');
+    expect((input.element as HTMLInputElement).value).toBe('Bjørnstad');
+    await input.setValue('a');
+    expect(card.text()).toContain('At least 2 characters');
+    expect(card.find('.btn-primary').attributes('disabled')).toBeDefined();
+
+    await input.setValue('Nyhavn');
+    expect(card.text()).toContain('6 / 100');
+    await input.trigger('keydown', { key: 'Enter' });
+    expect(renameSettlement).toHaveBeenCalledWith('Nyhavn');
+
+    await vi.waitFor(() => expect(wrapper.find('.rename-card').exists()).toBe(false));
+    wrapper.unmount();
+  });
+
+  it('Escape closes the rename popover without saving', async () => {
+    const world = useWorldStore();
+    world.hud.settlementName = 'Bjørnstad';
+    const renameSettlement = vi.spyOn(world, 'renameSettlement').mockResolvedValue();
+    stubCompactMediaQuery(false);
+    const wrapper = mountTopBar();
+    await wrapper.find('.titles .menu-trigger').trigger('click');
+    await wrapper.findAll('[role="menuitem"]')[1]!.trigger('click');
+    await wrapper.find('.rename-card input').trigger('keydown', { key: 'Escape' });
+    await vi.waitFor(() => expect(wrapper.find('.rename-card').exists()).toBe(false));
+    expect(renameSettlement).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('a page title has no settlement menu', () => {
+    stubCompactMediaQuery(false);
+    const wrapper = mountTopBar({ title: 'Docs' });
+    expect(wrapper.find('.menu-trigger').exists()).toBe(false);
+    expect(wrapper.find('.logo-btn').exists()).toBe(false);
+  });
+
+  it('phone bubble: hex and name go home, the chevron opens the menu, Rename… turns the bubble into the field', async () => {
+    const world = useWorldStore();
+    world.hud.settlementName = 'Bjørnstad';
+    const renameSettlement = vi.spyOn(world, 'renameSettlement').mockResolvedValue();
+    stubCompactMediaQuery(true);
+    const wrapper = mountTopBar();
+    await wrapper.vm.$nextTick();
+    const bubble = wrapper.find('.settlement-bubble');
+
+    await bubble.find('.logo-btn').trigger('click');
+    await bubble.find('.name-btn').trigger('click');
+    expect(wrapper.emitted('focus-home')).toHaveLength(2);
+
+    expect(bubble.find('.menu-trigger').classes()).toContain('menu-trigger--touch');
+    await bubble.find('.menu-trigger').trigger('click');
+    expect(bubble.find('[role="menu"]').exists()).toBe(true);
+    await bubble.findAll('[role="menuitem"]')[1]!.trigger('click');
+
+    expect(bubble.classes()).toContain('settlement-bubble--editing');
+    expect(bubble.find('.name-btn').exists()).toBe(false);
+    expect(bubble.find('.menu-trigger').exists()).toBe(false);
+    expect(wrapper.find('.rename-card').exists()).toBe(false);
+    const input = bubble.find('input');
+    expect((input.element as HTMLInputElement).value).toBe('Bjørnstad');
+    expect(bubble.find('.bubble-counter').text()).toBe('9 / 100');
+
+    await input.setValue(' ');
+    expect(bubble.find('.bubble-error').text()).toBe('At least 2 characters');
+    expect(bubble.find('.bubble-action--save').attributes('disabled')).toBeDefined();
+
+    await input.setValue('Nyhavn');
+    expect(bubble.find('.bubble-error').text()).toBe('');
+    await bubble.find('.bubble-action--save').trigger('click');
+    expect(renameSettlement).toHaveBeenCalledWith('Nyhavn');
+    await vi.waitFor(() => expect(wrapper.find('.settlement-bubble--editing').exists()).toBe(false));
+    wrapper.unmount();
+  });
+
+  it('phone bubble: the cancel button leaves edit mode without saving', async () => {
+    const world = useWorldStore();
+    world.hud.settlementName = 'Bjørnstad';
+    const renameSettlement = vi.spyOn(world, 'renameSettlement').mockResolvedValue();
+    stubCompactMediaQuery(true);
+    const wrapper = mountTopBar();
+    await wrapper.vm.$nextTick();
+    await wrapper.find('.settlement-bubble .menu-trigger').trigger('click');
+    await wrapper.findAll('.settlement-bubble [role="menuitem"]')[1]!.trigger('click');
+    const cancel = wrapper.findAll('.settlement-bubble .bubble-action')[1]!;
+    await cancel.trigger('click');
+    expect(wrapper.find('.settlement-bubble--editing').exists()).toBe(false);
+    expect(renameSettlement).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it('does not make a page title tappable', () => {
     stubCompactMediaQuery(false);
     const wrapper = mountTopBar({ title: 'Docs' });

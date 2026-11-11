@@ -26,7 +26,12 @@ import { isHudDrawerOpen, setHudDrawerCloseFn } from '../../composables/hudDrawe
 import { isHudBarAtBottom, isHudBarMounted, isHudRail, isSettlementBubbleShown } from '../../composables/hudSettlementBubbleState';
 import { isHudDrawerPending } from '../../composables/hudDrawerPendingState';
 import { hudBarHeightPx, hudRailHeightPx, hudRailWidthPx, DEFAULT_HUD_BAR_HEIGHT } from '../../composables/hudBarHeight';
+import { useSettlementRename } from '../../composables/useSettlementRename';
+import { fadePopover } from '../../lib/hud/chipMotion';
 import { HUD_COMPACT_QUERY, HUD_RAIL_QUERY } from '../../lib/breakpoints';
+import SettlementMenu from './SettlementMenu.vue';
+import SettlementNameInput from './SettlementNameInput.vue';
+import SettlementRenameCard from './SettlementRenameCard.vue';
 import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{
@@ -76,6 +81,15 @@ const emit = defineEmits<{ (e: 'focus-home'): void }>();
 const nameTappable = computed(() => !props.title && !!world.hud.settlementName);
 
 const settlementName = computed(() => props.title || world.hud.settlementName || null);
+
+// Renaming: one instance serves the desktop card and the phone bubble's edit mode.
+const rename = useSettlementRename();
+function onRenameEnter(el: Element, done: () => void) {
+  void fadePopover(el, 'in').then(done, done);
+}
+function onRenameLeave(el: Element, done: () => void) {
+  void fadePopover(el, 'out').then(done, done);
+}
 
 const islandName = computed(() => {
   const settlement = world.selectedSettlementId ? world.model.getSettlement(world.selectedSettlementId) : undefined;
@@ -169,11 +183,17 @@ const settlementBubbleLeft = computed(() => {
   if (isFloating.value) return FLOATING_EDGE;
   return isRail.value ? 'calc(8px + env(safe-area-inset-left, 0px))' : undefined;
 });
+// Editing the name, the bubble stretches across the screen. The floating chips' trigger sits top-right, so there the
+// field drops below the chip row instead of running under it.
+const settlementBubbleEditTop = computed(() => (isFloating.value ? `calc(${FLOATING_EDGE} + 48px)` : settlementBubbleTop.value));
+const bubbleEditing = computed(() => rename.editing && showSettlementBubble.value);
 const railJoined = computed(() => isChipLayout.value && showSettlementBubble.value && !isHudDrawerOpen.value);
 // Finding #13: only counts as "shown" once it's actually visible on screen —
 // the drawer hides it (`v-show="!isHudDrawerOpen"` below) without unmounting
 // it, so a plain `showSettlementBubble` alone would keep DemoModeBadge.vue
 // pinned below a bubble the player can't currently see.
+// The bubble hides behind an open drawer: a half-typed name would be edited out of sight.
+watch(isHudDrawerOpen, (open) => { if (open) rename.cancel(); });
 watch(
   () => showSettlementBubble.value && !isHudDrawerOpen.value,
   (shown) => { isSettlementBubbleShown.value = shown; },
@@ -475,15 +495,33 @@ const backdropStyle = computed(() => {
          an empty .brand would still eat the bar's gap for nothing, so it's
          skipped entirely rather than just hiding its contents. -->
     <div v-if="!isCompact" class="brand">
-      <span class="logo-hex" aria-hidden="true" title="Bjarnoy">
+      <button
+        v-if="nameTappable"
+        type="button"
+        class="logo-hex logo-btn"
+        :title="t('hud.focusHome')"
+        :aria-label="t('hud.focusHome')"
+        @click="emit('focus-home')"
+      >
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" />
+        </svg>
+      </button>
+      <span v-else class="logo-hex" aria-hidden="true" title="Bjarnoy">
         <svg viewBox="0 0 100 100">
           <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" />
         </svg>
       </span>
       <div class="titles" v-if="settlementName">
-        <button v-if="nameTappable" type="button" class="name name-btn" :title="t('hud.focusHome')" @click="emit('focus-home')">{{ settlementName }}</button>
-        <span v-else class="name">{{ settlementName }}</span>
+        <div class="name-row">
+          <button v-if="nameTappable" type="button" class="name name-btn" :title="t('hud.focusHome')" @click="emit('focus-home')">{{ settlementName }}</button>
+          <span v-else class="name">{{ settlementName }}</span>
+          <SettlementMenu v-if="nameTappable" :name="settlementName" @focus-home="emit('focus-home')" @rename="rename.begin()" />
+        </div>
         <span v-if="caption" class="caption">{{ caption }}</span>
+        <Transition :css="false" @enter="onRenameEnter" @leave="onRenameLeave">
+          <SettlementRenameCard v-if="nameTappable && rename.editing" :rename="rename" />
+        </Transition>
       </div>
     </div>
     <!-- Finding #10: a page that named itself via `title` (docs, the
@@ -547,17 +585,57 @@ const backdropStyle = computed(() => {
   <div
     v-if="showSettlementBubble"
     class="settlement-bubble"
-    :class="{ 'settlement-bubble--rail': isChipLayout, 'settlement-bubble--floating': isFloating }"
-    :style="{ top: settlementBubbleTop, left: settlementBubbleLeft }"
+    :class="{
+      'settlement-bubble--rail': isChipLayout,
+      'settlement-bubble--floating': isFloating,
+      'settlement-bubble--editing': bubbleEditing,
+    }"
+    :style="{ top: bubbleEditing ? settlementBubbleEditTop : settlementBubbleTop, left: settlementBubbleLeft }"
     v-show="!isHudDrawerOpen"
   >
-    <span class="logo-hex" aria-hidden="true">
-      <svg viewBox="0 0 100 100">
+    <button
+      type="button"
+      class="logo-hex logo-btn"
+      :title="t('hud.focusHome')"
+      :aria-label="t('hud.focusHome')"
+      :disabled="bubbleEditing"
+      @click="emit('focus-home')"
+    >
+      <svg viewBox="0 0 100 100" aria-hidden="true">
         <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" />
       </svg>
-    </span>
-    <button type="button" class="bubble-name name-btn" :title="t('hud.focusHome')" @click="emit('focus-home')">{{ settlementName }}</button>
-    <span class="bubble-meta">{{ t('hud.realmPanel.levelHexesShort', { level: world.hud.level, count: claimedHexes }) }}</span>
+    </button>
+    <template v-if="bubbleEditing">
+      <SettlementNameInput :rename="rename" class="bubble-input" />
+      <button
+        type="button"
+        class="bubble-action bubble-action--save"
+        :aria-label="t('hud.settlementRename.save')"
+        :disabled="!rename.canSave"
+        @click="rename.save()"
+      >
+        <span v-if="rename.saving" class="bubble-spinner" aria-hidden="true" />
+        <svg v-else viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5" /></svg>
+      </button>
+      <button
+        type="button"
+        class="bubble-action"
+        :aria-label="t('hud.settlementRename.cancel')"
+        :disabled="rename.saving"
+        @click="rename.cancel()"
+      >
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+      </button>
+      <div class="bubble-hint">
+        <span class="bubble-error" role="alert">{{ rename.error }}</span>
+        <span class="bubble-counter">{{ rename.counter }}</span>
+      </div>
+    </template>
+    <template v-else>
+      <button type="button" class="bubble-name name-btn" :title="t('hud.focusHome')" @click="emit('focus-home')">{{ settlementName }}</button>
+      <span class="bubble-meta">{{ t('hud.realmPanel.levelHexesShort', { level: world.hud.level, count: claimedHexes }) }}</span>
+      <SettlementMenu :name="settlementName ?? ''" touch @focus-home="emit('focus-home')" @rename="rename.begin()" />
+    </template>
   </div>
   <div
     v-if="dragEnabled"
@@ -685,9 +763,30 @@ const backdropStyle = computed(() => {
   stroke-width: 4;
 }
 .titles {
+  /* The settlement menu and the rename card hang from this box. */
+  position: relative;
   display: flex;
   flex-direction: column;
   line-height: 1.2;
+}
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.logo-btn {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+.logo-btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 .name {
   font-weight: 700;
@@ -1036,7 +1135,6 @@ const backdropStyle = computed(() => {
   border: 1px solid var(--panel-border);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
   pointer-events: none;
-  overflow: hidden;
 }
 .settlement-bubble .logo-hex {
   /* .logo-hex's own svg/polygon rules (shared with .brand's logo above)
@@ -1057,6 +1155,100 @@ const backdropStyle = computed(() => {
   color: var(--muted);
   white-space: nowrap;
   flex: none;
+}
+/* Renaming on a phone: the bubble becomes the field, across the screen between the 16px gutters, with a 44px save and
+   cancel and the counter / error hanging below it. */
+.settlement-bubble.settlement-bubble--editing {
+  right: 16px;
+  height: auto;
+  max-width: none;
+  border-radius: 28px;
+}
+/* The rail's trigger chip sits top-right: keep clear of it. */
+.settlement-bubble.settlement-bubble--editing.settlement-bubble--rail {
+  right: 156px;
+}
+.settlement-bubble.settlement-bubble--editing.settlement-bubble--floating {
+  right: 16px;
+  max-width: none;
+  padding-left: 8px;
+}
+.bubble-input {
+  flex: 1 1 auto;
+}
+.bubble-action {
+  appearance: none;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: -6px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+.bubble-action svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.bubble-action--save {
+  color: var(--gold);
+}
+.bubble-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.bubble-action:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+}
+.bubble-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 197, 92, 0.35);
+  border-top-color: var(--gold);
+  animation: bubble-spin 0.8s linear infinite;
+}
+@keyframes bubble-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.bubble-hint {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 8px;
+  right: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(6, 12, 16, 0.94);
+  border: 1px solid var(--panel-border);
+  font-size: 12px;
+  pointer-events: none;
+}
+.bubble-error {
+  color: var(--rival);
+}
+.bubble-counter {
+  margin-left: auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .hud-drawer-backdrop {
