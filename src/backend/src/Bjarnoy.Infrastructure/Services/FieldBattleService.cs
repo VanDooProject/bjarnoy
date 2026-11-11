@@ -139,7 +139,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
         var walls = await WorldBridges.RouteIndexAsync(
             _dbContext, worldId, new TerrainSampler(army.Settlement!.World!.ToGenerationOptions()).WithBogOverlay(bog).TerrainAt,
-            rivers.IsWide, cancellationToken).ConfigureAwait(false);
+            rivers.IsWide, chosen.At, cancellationToken).ConfigureAwait(false);
         Resolve(army, domain, movement, chosen.Other, chosen.OtherDomain, chosen.OtherMovement, chosen.Hex, chosen.At, giants, bog, rivers, walls, realms);
         return true;
     }

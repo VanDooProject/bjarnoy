@@ -163,7 +163,7 @@ public sealed class LinkedGroupSession
 
             relocation ??= new GarrisonRelocation(_dbContext);
             routing ??= await relocation.LoadRoutingAsync(
-                member.WorldId, SpeedFactor, TerrainAt, member.UserId, member.Id, cancellationToken).ConfigureAwait(false);
+                member.WorldId, SpeedFactor, TerrainAt, member.UserId, member.Id, Now, cancellationToken).ConfigureAwait(false);
 
             var known = Members.ToDictionary(m => m.Id, m => m.Id == member.Id ? taken : Store.Outcome(m.Id).Settlement);
             var candidates = await relocation.OwnerSpotsAsync(member.WorldId, member.OwnerId, TerrainAt, known, cancellationToken).ConfigureAwait(false);

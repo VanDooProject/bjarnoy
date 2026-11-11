@@ -134,7 +134,7 @@ public sealed class WorldBridgesTests : IDisposable
         await using var db = CreateContext();
         var (world, owner, _) = await SeedAsync(db, level: 3);
 
-        var routes = await WorldBridges.RouteIndexAsync(db, world.Id, _ => Terrain.Grass, _ => true, Ct);
+        var routes = await WorldBridges.RouteIndexAsync(db, world.Id, _ => Terrain.Grass, _ => true, DateTimeOffset.UtcNow, Ct);
 
         var rules = routes.ForOwner(owner.Id);
         Assert.NotNull(rules?.BridgeCost);

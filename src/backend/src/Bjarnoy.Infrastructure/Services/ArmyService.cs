@@ -222,7 +222,7 @@ public sealed class ArmyService(
 
         var sampler = session.Sampler;
         var rivers = await WorldRivers.IndexAsync(_dbContext, settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, settlement.WorldId, sampler.TerrainAt, rivers.IsWide, now, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id));
         var dispatchGiantIndex = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var armyId = Guid.CreateVersion7();
@@ -570,7 +570,7 @@ public sealed class ArmyService(
         var world = army.Settlement!.World!;
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
         var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, at, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
         var home = army.Settlement.HomeHexFor(domain);
 
@@ -604,7 +604,7 @@ public sealed class ArmyService(
 
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
         var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, now, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
         var domain = army.ToDomain();
         var home = army.Settlement.HomeHexFor(domain);
@@ -711,7 +711,7 @@ public sealed class ArmyService(
         var worldId = army.Settlement.WorldId;
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
         var rivers = await WorldRivers.IndexAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, worldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, worldId, sampler.TerrainAt, rivers.IsWide, now, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
         var home = army.Settlement.HomeHexFor(domain);
         var giants = await LoadGiantIndexAsync(worldId, cancellationToken).ConfigureAwait(false);
@@ -881,7 +881,7 @@ public sealed class ArmyService(
         {
             var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
             var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
-            var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+            var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, now, cancellationToken).ConfigureAwait(false))
             .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
             var home = army.Settlement.HomeHexFor(domain);
 
@@ -1593,7 +1593,7 @@ public sealed class ArmyService(
         {
             var relocation = new GarrisonRelocation(_dbContext);
             var routing = await relocation.LoadRoutingAsync(
-                destinationEntity.WorldId, session.SpeedFactor, session.TerrainAt, destinationEntity.UserId, destinationEntity.Id, cancellationToken)
+                destinationEntity.WorldId, session.SpeedFactor, session.TerrainAt, destinationEntity.UserId, destinationEntity.Id, now, cancellationToken)
                 .ConfigureAwait(false);
             if (GarrisonRelocation.LandingMarch(merged, spot, landing, now, routing, Guid.CreateVersion7()) is { } found)
             {
@@ -1666,7 +1666,7 @@ public sealed class ArmyService(
 
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
         var relocation = new GarrisonRelocation(_dbContext);
-        var routing = await relocation.LoadRoutingAsync(world.Id, world.SpeedFactor, sampler.TerrainAt, entity.UserId, entity.Id, cancellationToken).ConfigureAwait(false);
+        var routing = await relocation.LoadRoutingAsync(world.Id, world.SpeedFactor, sampler.TerrainAt, entity.UserId, entity.Id, now, cancellationToken).ConfigureAwait(false);
         var candidates = await relocation.OwnerSpotsAsync(world.Id, entity.OwnerId, sampler.TerrainAt, new Dictionary<Guid, Settlement>(), cancellationToken).ConfigureAwait(false);
         await relocation.RehomeAsync(settlementId, spot, candidates, now, routing, cancellationToken).ConfigureAwait(false);
     }

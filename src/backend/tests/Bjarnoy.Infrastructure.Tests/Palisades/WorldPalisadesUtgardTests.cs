@@ -45,7 +45,7 @@ public sealed class WorldPalisadesUtgardTests : IDisposable
             new UtgardWallRecord(12, 0, 1, (int)PalisadePiece.Straight180, 0, false, 0)));
         await db.SaveChangesAsync(Ct);
 
-        var index = await WorldPalisades.IndexAsync(db, world.Id, _ => Terrain.Grass, _ => false, Ct);
+        var index = await WorldPalisades.IndexAsync(db, world.Id, _ => Terrain.Grass, _ => false, DateTimeOffset.UtcNow, Ct);
 
         Assert.True(index.IsWall(new HexCoord(10, 0)));
         Assert.True(index.IsWall(new HexCoord(11, 0)));
@@ -63,7 +63,7 @@ public sealed class WorldPalisadesUtgardTests : IDisposable
         db.Islands.Add(Island(other.Id, 0, wasted: true, new UtgardWallRecord(50, 0, 0, (int)PalisadePiece.Straight180, 0, false, 2)));
         await db.SaveChangesAsync(Ct);
 
-        var index = await WorldPalisades.IndexAsync(db, world.Id, _ => Terrain.Grass, _ => false, Ct);
+        var index = await WorldPalisades.IndexAsync(db, world.Id, _ => Terrain.Grass, _ => false, DateTimeOffset.UtcNow, Ct);
 
         var gate = new HexCoord(10, 0);
         Assert.True(index.IsWall(gate));

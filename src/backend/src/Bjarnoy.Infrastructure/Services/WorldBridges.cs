@@ -36,14 +36,14 @@ public static class WorldBridges
     }
 
     /// <summary>
-    /// The palisades and bridges of <paramref name="worldId"/> together, the one lookup each call site that builds a land route asks for
+    /// The palisades (those standing at <paramref name="now"/>, see <see cref="WorldPalisades.IndexAsync"/>) and bridges of <paramref name="worldId"/> together, the one lookup each call site that builds a land route asks for
     /// and binds to the army's owner with <see cref="LandRouteIndex.ForOwner"/>.
     /// </summary>
     public static async Task<LandRouteIndex> RouteIndexAsync(
-        GameDbContext db, Guid worldId, Func<HexCoord, Terrain> terrainAt, Func<HexCoord, bool> isWideRiver,
+        GameDbContext db, Guid worldId, Func<HexCoord, Terrain> terrainAt, Func<HexCoord, bool> isWideRiver, DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
-        var walls = await WorldPalisades.IndexAsync(db, worldId, terrainAt, isWideRiver, cancellationToken).ConfigureAwait(false);
+        var walls = await WorldPalisades.IndexAsync(db, worldId, terrainAt, isWideRiver, now, cancellationToken).ConfigureAwait(false);
         var bridges = await IndexAsync(db, worldId, terrainAt, cancellationToken).ConfigureAwait(false);
         return new LandRouteIndex(walls, bridges);
     }
