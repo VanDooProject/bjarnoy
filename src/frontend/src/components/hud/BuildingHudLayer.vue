@@ -228,7 +228,8 @@ const rowsOf = (m: Marker): HudRow[] => rowsByKey.value[m.key] ?? [];
 
 /**
  * Inside the dial: the countdown of a running upgrade or raze, `#place` of a queued order, else the level; the far tier is the
- * ring only. A pending, refused or finishing dial draws its own symbols instead of a number.
+ * ring only. A pending, refused or finishing dial draws its own symbols instead of a number; an upgrade or raze whose time is up
+ * (`settling`, or the finish animation) shows none until the poll brings the new state.
  */
 function labelOf(m: Marker): string {
   if (tierOf(m.key) === 'far') return '';
@@ -236,12 +237,14 @@ function labelOf(m: Marker): string {
   switch (dial.kind) {
     case 'upgrading':
     case 'razing':
-      return formatCountdownShort(dial.secondsLeft ?? 0);
+      // Time up (the finish animation, or the poll has not brought the new state yet): no number.
+      return (dial.secondsLeft ?? 0) > 0 ? formatCountdownShort(dial.secondsLeft!) : '';
     case 'queued':
       return `#${dial.queuePosition ?? ''}`;
     case 'pending':
     case 'rejected':
     case 'finishing':
+    case 'settling':
       return '';
     default:
       return String(m.level);

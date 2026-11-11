@@ -589,6 +589,46 @@ describe('BuildingHudLayer', () => {
       vi.useRealTimers();
     });
 
+    it('shows no colour and no number once the time is up, until the next poll brings the new level', async () => {
+      const world = seedBuildings();
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+      const now = Date.now();
+      world.hud.queueFetchedAt = now;
+      world.hud.queue = [waiting(3, { state: 'building', completesInSeconds: 0.5, totalSeconds: 10 })];
+      const renderer = fakeRenderer();
+      wrapper = mountLayer(renderer);
+      runFrame();
+      await setDials(renderer, constructionDialsFromQueue(world.hud.queue, now));
+      const dial = () => wrapper!.get('[data-coord="3,0"]');
+      expect(dial().get('text').text()).toBe('0:01');
+      // The time is up: the finish animation plays, its frames carry no number.
+      vi.advanceTimersByTime(800);
+      world.hud.tick += 1;
+      runFrame();
+      await wrapper.vm.$nextTick();
+      expect(dial().find('.hud-dial__burst').exists()).toBe(true);
+      expect(dial().find('text').exists()).toBe(false);
+      // The animation is over and the renderer pruned the dial, but no poll has come yet: the queue still holds the order.
+      vi.advanceTimersByTime(3000);
+      world.hud.tick += 1;
+      await setDials(renderer, []);
+      expect(dial().find('.hud-dial__burst').exists()).toBe(false);
+      expect(dial().find('text').exists()).toBe(false);
+      expect(dial().find('polyline').exists()).toBe(false);
+      const track = dial().get('polygon:nth-of-type(2)');
+      expect(track.attributes('stroke')).toBe('#fff');
+      expect(Number(track.attributes('stroke-opacity'))).toBeLessThan(0.3);
+      expect(dial().html()).not.toContain('#ffd23f');
+      expect(dial().html()).not.toContain('#ffc55c');
+      // The poll: the order is gone and the building is a level up.
+      world.hud.queue = [];
+      world.hud.buildings = world.hud.buildings.map((b) => (b.q === 3 ? { ...b, level: 3 } : b));
+      world.hud.tick += 1;
+      await wrapper.vm.$nextTick();
+      expect(dial().get('text').text()).toBe('3');
+      vi.useRealTimers();
+    });
+
     it('draws no marker on a hex without a standing building: the canvas dial of a new build stays', async () => {
       const world = seedBuildings();
       world.hud.queue = [waiting(9)];

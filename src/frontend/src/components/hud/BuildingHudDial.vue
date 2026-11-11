@@ -34,7 +34,7 @@ const props = defineProps<{
   labelVisible?: boolean;
 }>();
 
-const RING_COLOR: Record<HudRing, string> = { ready: '#5fd08a', blocked: '#e2705f', upgrading: '#fff', max: '#ffd23f' };
+const RING_COLOR: Record<HudRing, string> = { ready: '#5fd08a', blocked: '#e2705f', upgrading: '#fff', max: '#ffd23f', none: '#fff' };
 const GOLD = '#ffc55c';
 const css = (color: number) => `#${color.toString(16).padStart(6, '0')}`;
 const YELLOW = css(CONSTRUCTION_DIAL_ELAPSED_COLOR);
@@ -81,7 +81,7 @@ const geometry = computed(() => {
 });
 
 const trackColor = computed(() => RING_COLOR[props.ring]);
-const trackOpacity = computed(() => (props.ring === 'upgrading' ? 0.3 : 1));
+const trackOpacity = computed(() => (props.ring === 'upgrading' ? 0.3 : props.ring === 'none' ? 0.2 : 1));
 const labelColor = computed(() => (props.ring === 'max' ? GOLD : '#fff'));
 
 // ---- the order dial's frames ----------------------------------------------------------------------------------------------

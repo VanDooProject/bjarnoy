@@ -3,6 +3,7 @@
 - Every own building shows a hex dial with its level. The ring shows the upgrade state: green = can upgrade, red = cannot
   (short of resources, Longhouse cap, missing prerequisite, storage cap), yellow arc = upgrade running (time left inside),
   gold number with a full gold ring = max level.
+- When an upgrade's time is up, the dial shows no colour and no number until the new level arrives.
 - Only a maxed Longhouse shows the crown.
 - The time until a short-of-resources upgrade becomes affordable is a premium feature. Free accounts see only that
   resources are short.
