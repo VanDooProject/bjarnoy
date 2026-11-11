@@ -82,7 +82,12 @@ describe('reportSummaryLine for a fleet', () => {
   };
 
   it('counts both fights, the burned Fire Ships as losses, and names the drowned', () => {
-    expect(reportSummaryLine(fleet, 'attacker')).toBe('19 lost, 36 survived, 20 drowned, 70 looted');
+    expect(reportSummaryLine(fleet, 'attacker')).toBe('19 lost, 26 survived, 20 drowned, 70 looted');
+  });
+
+  it('counts each unit once: lost plus survived is what was sent, burned Fire Ships included', () => {
+    // 15 land units sent (5 lost, 10 survived) and 30 Fire Ships sent (4 lost in the ship fight, 26 survived, 10 of those burned).
+    expect(reportSummaryLine(fleet, 'attacker')).toContain('19 lost, 26 survived');
   });
 
   it("counts the defender's ships and land units together and never the drowned", () => {

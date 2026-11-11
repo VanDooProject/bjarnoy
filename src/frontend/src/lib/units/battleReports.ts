@@ -51,7 +51,7 @@ function sumSurvived(lines: Array<{ survived: number }>): number {
 /**
  * A one-line summary for a report-inbox row, e.g. `"5 lost, 12 survived, 340
  * looted"` — losses/survivors are counted on `viewerSide`'s own lines (a fleet's ship fight and land fight together, the Fire
- * Ships burned as losses), the passengers that drowned are named on their own, and loot is only mentioned when the attacker
+ * Ships burned counted as losses and no longer as survivors), the passengers that drowned are named on their own, and loot is only mentioned when the attacker
  * actually took some (a defender never "loots" their own losses).
  */
 export function reportSummaryLine(
@@ -69,8 +69,10 @@ export function reportSummaryLine(
   const lines: Array<{ lost: number; survived: number }> = attacker
     ? [...report.attackerLines, ...(report.shipFight?.attackerLines ?? [])]
     : [...report.defenderLines, ...(report.shipFight?.defenderLines ?? [])];
-  const lost = sumLost(lines) + (attacker ? (report.fireShipsBurned ?? 0) : 0);
-  const survived = sumSurvived(lines);
+  // A burned Fire Ship survived the ship fight and then burned: it counts as lost, once, not as a survivor as well.
+  const burned = attacker ? (report.fireShipsBurned ?? 0) : 0;
+  const lost = sumLost(lines) + burned;
+  const survived = Math.max(0, sumSurvived(lines) - burned);
   const parts = [i18n.global.t('hud.battleReport.summaryLost', { n: lost }), i18n.global.t('hud.battleReport.summarySurvived', { n: survived })];
 
   const drowned = attacker ? (report.drowned ?? []).reduce((total, d) => total + d.count, 0) : 0;
