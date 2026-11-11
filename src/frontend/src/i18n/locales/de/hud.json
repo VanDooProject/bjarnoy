@@ -33,7 +33,13 @@
     "toggle": "Mehr anzeigen"
   },
   "realmPanel": {
-    "levelHexesShort": "Lv {level} · {count} Hexfelder"
+    "levelHexesShort": "Lv {level} · {count} Hexfelder",
+    "levelShort": "Lv {level}"
+  },
+  "realmSwitcher": {
+    "title": "Deine Reiche",
+    "toggle": "Reich wechseln",
+    "longhouse": "Langhaus {level}"
   },
   "hoverTooltip": {
     "level": "STUFE {level}",
@@ -182,6 +188,7 @@
       "raze": "{name} noch einmal antippen, um abzureißen"
     },
     "errors": {
+      "couldNotSwitchRealm": "Der Wechsel in dieses Reich ist fehlgeschlagen.",
       "couldNotQueueBuild": "Der Bau konnte nicht eingereiht werden.",
       "couldNotQueueUpgrade": "Der Ausbau konnte nicht eingereiht werden.",
       "couldNotQueueRaze": "Der Abriss konnte nicht eingereiht werden."
@@ -299,7 +306,6 @@
   "expansionPanel": {
     "title": "Expansion",
     "renown": "Ruhm {total} / {required}",
-    "settlement": "Siedlung",
     "settlersInGarrison": "Siedler in der Garnison",
     "trainSettlers": "5 Siedler ausbilden",
     "canFoundAnother": "Kann eine weitere Siedlung gründen",

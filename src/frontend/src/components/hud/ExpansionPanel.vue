@@ -14,7 +14,7 @@
 // pass that builds out the rest of the troop system's frontend (raids,
 // support, the world map's army markers) should fold this panel's polling
 // into that same live-sync mechanism rather than leave two parallel ones.
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { useWorldStore } from '../../stores/world';
@@ -131,30 +131,6 @@ async function confirmRetarget() {
     busy.value = false;
   }
 }
-
-async function switchTo(settlementId: string) {
-  if (settlementId === world.selectedSettlementId) return;
-  await world.switchToSettlement(settlementId);
-  await refresh();
-}
-
-const mySettlements = ref<{ id: string; name: string; q: number; r: number }[]>([]);
-async function loadMySettlements() {
-  // Same auth gate as refresh() — this hits an authorized endpoint, so an
-  // anonymous/demo player must never even attempt the request (it 401s,
-  // and the caught error still surfaces as a console error in tests that
-  // assert a clean console).
-  if (!visible.value || !world.worldId) return;
-  try {
-    mySettlements.value = await api.listMySettlements(world.worldId);
-  } catch {
-    // Best-effort — the switcher just shows only the current settlement then.
-  }
-}
-onMounted(loadMySettlements);
-watch(visible, (isVisible) => {
-  if (isVisible) loadMySettlements();
-});
 </script>
 
 <template>
@@ -164,17 +140,6 @@ watch(visible, (isVisible) => {
       <span v-if="renown" class="status-card-count">
         {{ t('hud.expansionPanel.renown', { total: Math.floor(renown.total), required: Math.round(renown.requiredForNextSettlement) }) }}
       </span>
-    </div>
-
-    <div v-if="mySettlements.length > 1" class="expansion-switcher">
-      <label for="settlement-switcher">{{ t('hud.expansionPanel.settlement') }}</label>
-      <select
-        id="settlement-switcher"
-        :value="world.selectedSettlementId"
-        @change="switchTo(($event.target as HTMLSelectElement).value)"
-      >
-        <option v-for="s in mySettlements" :key="s.id" :value="s.id">{{ s.name }}</option>
-      </select>
     </div>
 
     <div class="expansion-row">
@@ -244,20 +209,6 @@ watch(visible, (isVisible) => {
     left: 64px;
     max-width: calc(100vw - 80px);
   }
-}
-.expansion-switcher {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 10px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.expansion-switcher select {
-  background: transparent;
-  border: 1px solid var(--panel-border);
-  color: var(--text);
-  padding: 4px 6px;
 }
 .expansion-row {
   display: flex;

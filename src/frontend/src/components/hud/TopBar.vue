@@ -27,6 +27,7 @@ import { isHudBarAtBottom, isHudBarMounted, isHudRail, isSettlementBubbleShown }
 import { isHudDrawerPending } from '../../composables/hudDrawerPendingState';
 import { hudBarHeightPx, hudRailHeightPx, hudRailWidthPx, DEFAULT_HUD_BAR_HEIGHT } from '../../composables/hudBarHeight';
 import { HUD_COMPACT_QUERY, HUD_RAIL_QUERY } from '../../lib/breakpoints';
+import RealmSwitcher from './RealmSwitcher.vue';
 import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{
@@ -145,6 +146,8 @@ const barPosition = computed(() => (props.docked || isChipLayout.value ? 'top' :
 // "Bjarnoy") — those get an inline truncated title in the bar itself
 // instead (see `.mobile-title` below), not a second "Lv N · M hexes" bubble
 // that has nothing to do with them.
+/** The header's realm switcher shows with 2+ realms; the phone bubble then drops its hex count to keep the name's room. */
+const hasRealmSwitcher = computed(() => !props.title && world.realmList.length > 1);
 const claimedHexes = computed(() => world.hud.claimedHexes);
 /**
  * The floating chips' margin to the screen's top and side edges — the phone
@@ -485,6 +488,7 @@ const backdropStyle = computed(() => {
         <span v-else class="name">{{ settlementName }}</span>
         <span v-if="caption" class="caption">{{ caption }}</span>
       </div>
+      <RealmSwitcher v-if="nameTappable" variant="bar" @focus-home="emit('focus-home')" />
     </div>
     <!-- Finding #10: a page that named itself via `title` (docs, the
          pre-founding landing) has no settlement bubble to fall back on —
@@ -557,7 +561,12 @@ const backdropStyle = computed(() => {
       </svg>
     </span>
     <button type="button" class="bubble-name name-btn" :title="t('hud.focusHome')" @click="emit('focus-home')">{{ settlementName }}</button>
-    <span class="bubble-meta">{{ t('hud.realmPanel.levelHexesShort', { level: world.hud.level, count: claimedHexes }) }}</span>
+    <span class="bubble-meta">{{
+      hasRealmSwitcher
+        ? t('hud.realmPanel.levelShort', { level: world.hud.level })
+        : t('hud.realmPanel.levelHexesShort', { level: world.hud.level, count: claimedHexes })
+    }}</span>
+    <RealmSwitcher variant="bubble" @focus-home="emit('focus-home')" />
   </div>
   <div
     v-if="dragEnabled"

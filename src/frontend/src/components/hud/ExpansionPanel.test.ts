@@ -25,7 +25,6 @@ const api = vi.hoisted(() => ({
   getRenown: vi.fn(),
   getSettlement: vi.fn(),
   getSettlementArmies: vi.fn(),
-  listMySettlements: vi.fn(),
   getUnitCatalogue: vi.fn(),
   dispatchArmy: vi.fn(),
   trainUnits: vi.fn(),
@@ -60,7 +59,6 @@ describe('ExpansionPanel', () => {
     api.getRenown.mockResolvedValue({ total: 99, settlementCount: 1, requiredForNextSettlement: 10, canFoundAnother: true });
     api.getSettlement.mockResolvedValue({ garrison: [{ unit: 'settler', count: 5 }] });
     api.getSettlementArmies.mockResolvedValue([]);
-    api.listMySettlements.mockResolvedValue([]);
     api.dispatchArmy.mockResolvedValue({});
     api.trainUnits.mockResolvedValue({ orders: [] });
     api.recallArmy.mockResolvedValue({});
@@ -73,6 +71,12 @@ describe('ExpansionPanel', () => {
     expect(wrapper.find('input[aria-label="Target Q"]').exists()).toBe(false);
     expect(wrapper.find('input[aria-label="Provisions"]').exists()).toBe(false);
     expect(wrapper.find('.expansion-form').exists()).toBe(false);
+  });
+
+  it('has no realm select: the top bar switches realms', async () => {
+    const wrapper = await mountPanel();
+    expect(wrapper.find('select').exists()).toBe(false);
+    expect(wrapper.find('.expansion-switcher').exists()).toBe(false);
   });
 
   it('loads renown into the world store and shows it from there', async () => {

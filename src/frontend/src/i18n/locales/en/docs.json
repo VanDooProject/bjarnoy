@@ -1175,6 +1175,10 @@
     "linked": {
       "heading": "Linked realms",
       "body": "When the realms of two of your settlements on an island touch, they link into one realm. A linked realm has one name, that of your oldest settlement in it, and one stock: everything you produce goes into it, and everything you build, train or trade there is paid from it. Its storage is that of all its settlements added up, and so are its construction slots, which all its builds share. You run it from your oldest settlement and can build on any of its hexes from there. Your other settlements in it no longer show up in lists, and rivals see the oldest one's name on every longhouse. A raid on any of its longhouses can loot the whole stock. If the link breaks, each settlement keeps its share of the stock, in proportion to its storage."
+    },
+    "switching": {
+      "heading": "Switching between realms",
+      "body": "Once you own several realms, an arrow appears next to your realm's name in the top bar. It lists your realms, and picking one switches to it. You can also tap another of your realms on the map: the game switches to it, and you can build there right away. When you send troops, you can pick the garrison or the armies of any of your realms."
     }
   },
   "landMovement": {

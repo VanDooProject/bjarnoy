@@ -33,7 +33,13 @@
     "toggle": "Show more"
   },
   "realmPanel": {
-    "levelHexesShort": "Lv {level} · {count} hexes"
+    "levelHexesShort": "Lv {level} · {count} hexes",
+    "levelShort": "Lv {level}"
+  },
+  "realmSwitcher": {
+    "title": "Your realms",
+    "toggle": "Switch realm",
+    "longhouse": "Longhouse {level}"
   },
   "hoverTooltip": {
     "level": "LEVEL {level}",
@@ -182,6 +188,7 @@
       "raze": "Tap {name} again to raze"
     },
     "errors": {
+      "couldNotSwitchRealm": "Could not switch to that realm.",
       "couldNotQueueBuild": "Could not queue that build.",
       "couldNotQueueUpgrade": "Could not queue that upgrade.",
       "couldNotQueueRaze": "Could not queue that raze."
@@ -299,7 +306,6 @@
   "expansionPanel": {
     "title": "Expansion",
     "renown": "Renown {total} / {required}",
-    "settlement": "Settlement",
     "settlersInGarrison": "Settlers in garrison",
     "trainSettlers": "Train 5 settlers",
     "canFoundAnother": "Can found another settlement",

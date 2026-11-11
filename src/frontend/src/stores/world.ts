@@ -184,6 +184,8 @@ export const useWorldStore = defineStore('world', {
     otherBuildOrders: [] as OwnBuildOrders[],
     /** `Date.now()` at which `otherBuildOrders` was read: the base its `completesInSeconds` are measured from. */
     otherBuildOrdersFetchedAt: 0,
+    /** Live mode: the player's settlements in this world (`GET /worlds/{id}/settlements/mine`), the header's realm switcher reads them. */
+    myRealms: [] as SettlementSummary[],
     // Set by WorldMapView (`setWorldMapActive`) so `refreshWorldSettlements`
     // knows it's safe to paint every rival's territory — the world map is
     // the one legitimate place that shows the whole world, unlike the
@@ -520,6 +522,21 @@ export const useWorldStore = defineStore('world', {
      */
     isRealmSettlement: (state) => (settlementId: string | null | undefined): boolean =>
       !!settlementId && (settlementId === state.selectedSettlementId || state.linkedMemberIds.includes(settlementId)),
+    /** The player's realms, one row per realm (a linked group is one realm, named and levelled by its oldest member). */
+    realmList: (state): { id: string; name: string; level: number }[] => {
+      const byRealm = new Map<string, SettlementSummary>();
+      for (const s of state.myRealms) {
+        const key = s.realmId ?? s.id;
+        if (!byRealm.has(key) || s.id === key) byRealm.set(key, s);
+      }
+      return [...byRealm.entries()].map(([id, s]) => ({ id, name: s.name, level: s.longhouseLevel }));
+    },
+    /** The realm id (oldest linked member) of `settlementId` when it belongs to the local player, else null. */
+    ownRealmOf: (state) => (settlementId: string | null | undefined): string | null => {
+      if (!settlementId) return null;
+      const s = state.model.getSettlement(settlementId);
+      return s && state.ownerId && s.ownerId === state.ownerId ? (s.realmId ?? s.id) : null;
+    },
   },
   actions: {
     /**
@@ -1231,6 +1248,16 @@ export const useWorldStore = defineStore('world', {
       const player = usePlayerStore();
       player.switchSettlement(settlementId);
       await this.restoreLiveSettlement(player.id, settlementId);
+      await this.refreshMyRealms();
+    },
+    /** Live mode: reloads the player's realms for the header switcher. Best-effort: a failed read keeps the last list. */
+    async refreshMyRealms() {
+      if (DEMO_MODE || !this.worldId) return;
+      try {
+        this.myRealms = await api.listMySettlements(this.worldId);
+      } catch {
+        // The switcher then simply shows what it had.
+      }
     },
     /**
      * Live mode: rehydrates `selectedSettlementId`/`WorldModel` after a page
@@ -1349,6 +1376,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.queue = [];
       this.otherBuildOrders = [];
       this.otherBuildOrdersFetchedAt = 0;
+      this.myRealms = [];
       this.hud.garrison = [];
       this.hud.garrisonSpots = [];
       this.hud.trainingQueue = [];
