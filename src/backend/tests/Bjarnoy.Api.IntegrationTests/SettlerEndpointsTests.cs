@@ -870,8 +870,17 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         var standing = await client.GetAsync($"/api/v1/armies/{army.Id}", Ct);
         Assert.Equal(HttpStatusCode.OK, standing.StatusCode);
         Assert.Equal(1, await SettlementCountAsync(worldId));
+        // The shore was not free at completion: the army was recalled as of then, so it is returning (never builds later).
+        Assert.True((await standing.ReadStrictAsync<ArmyResponse>(Ct)).Movement!.IsReturning);
 
-        // It stands, auto-returns when its provisions demand it, and comes home.
+        // The site frees up again: still no camp, the army just comes home.
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            db.PlacedBuildings.RemoveRange(db.PlacedBuildings.Where(b => b.Q == site.Q && b.R == site.R));
+            await db.SaveChangesAsync(Ct);
+        }
+
         _factory.Time.Advance(TimeSpan.FromDays(10));
         await RefreshAsync(client, tokens.RefreshToken);
 

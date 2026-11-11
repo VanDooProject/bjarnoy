@@ -512,13 +512,7 @@ public sealed class ArmyService(
             return new RecallResult(RecallOutcome.NothingToRecall);
         }
 
-        var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World, cancellationToken).ConfigureAwait(false);
-        var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
-        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
-            .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
-
         var domain = army.ToDomain();
-        var home = army.Settlement.HomeHexFor(domain, sampler.TerrainAt);
         HexCoord? currentHex = null;
         if (domain.Location is ArmyLocation.Supporting supporting)
         {
@@ -543,8 +537,7 @@ public sealed class ArmyService(
         var isRecallable = domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false }
             || (domain.Location is ArmyLocation.Supporting && currentHex is not null);
 
-        var recalled = domain.Recall(
-            now, home, sampler.TerrainAt, currentHex, army.Settlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls);
+        var recalled = await PlanRecallAsync(army, domain, now, currentHex, cancellationToken).ConfigureAwait(false);
 
         if (recalled is null)
         {
@@ -562,6 +555,24 @@ public sealed class ArmyService(
         _logger.LogInformation("Army {ArmyId} recalled at {Now}, now heading home.", armyId, now);
 
         return new RecallResult(RecallOutcome.Recalled, army);
+    }
+
+    /// <summary>
+    /// <see cref="Army.Recall"/> for <paramref name="domain"/> (the domain view of <paramref name="army"/>) as of <paramref name="at"/>,
+    /// with the inputs every recall uses: the home hex, the world's terrain, speed factor, rivers and the owner's walls. Null when the
+    /// army is not recallable or no route home exists. The one place those inputs are gathered.
+    /// </summary>
+    private async Task<Army?> PlanRecallAsync(
+        ArmyEntity army, Army domain, DateTimeOffset at, HexCoord? currentHex, CancellationToken cancellationToken)
+    {
+        var world = army.Settlement!.World!;
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
+        var rivers = await WorldRivers.IndexAsync(_dbContext, army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var walls = (await WorldBridges.RouteIndexAsync(_dbContext, army.Settlement.WorldId, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false))
+            .ForOwner(WorldPalisades.OwnerKeyOf(army.Settlement.UserId, army.Settlement.Id));
+        var home = army.Settlement.HomeHexFor(domain, sampler.TerrainAt);
+
+        return domain.Recall(at, home, sampler.TerrainAt, currentHex, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, walls);
     }
 
     /// <summary>
@@ -1382,8 +1393,7 @@ public sealed class ArmyService(
     /// site as of now (<see cref="BeachCamp.CheckSite"/>, the same facts as at dispatch) and either sets the camp up
     /// (<see cref="SettlementService.FoundCampFromConvoyAsync"/>, consuming the army: the builders are used up, the cost in its
     /// <see cref="Army.Loot"/> is spent, the rest garrisons the camp and the leftover provisions fill its food pile) or — when the
-    /// site was taken in the meantime — settles it like <see cref="ResolveFoundingAsync"/>'s fallback: it stands, auto-returns
-    /// and can be recalled, and its loot (the cost) comes home with it.
+    /// site was taken in the meantime — recalls it as of the completion instant, so the builders and the cost (its loot) come home.
     /// </summary>
     private async Task<ArmySettleOutcome> ResolveCampAsync(
         ArmyEntity armyEntity, Army domain, DateTimeOffset now, CancellationToken cancellationToken)
@@ -1400,7 +1410,17 @@ public sealed class ArmyService(
         var plan = Army.PlanCampBuild(domain, now, world.SpeedFactor, siteStillFree);
         if (!plan.ShouldBuild)
         {
-            // The site was taken: the ordinary Move-shaped settle, never lost.
+            // The shore is no longer free: the builders and the camp's cost (the loot) come home. The army is recalled as of the
+            // completion instant, so it is returning afterwards and this branch can never fire for it again.
+            var recalled = await PlanRecallAsync(armyEntity, domain, plan.CompletesAt, null, cancellationToken).ConfigureAwait(false);
+            if (recalled is not null)
+            {
+                return await ApplyArmyOutcomeAsync(armyEntity, recalled, now, cancellationToken).ConfigureAwait(false);
+            }
+
+            _logger.LogWarning(
+                "Camp army {ArmyId} found its site {Site} taken but has no route home; it stands there like a Move army.",
+                armyEntity.Id, site);
             return await ApplyArmyOutcomeAsync(armyEntity, domain, now, cancellationToken).ConfigureAwait(false);
         }
 
