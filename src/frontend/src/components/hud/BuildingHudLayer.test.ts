@@ -19,6 +19,13 @@ import enCatalogue from '../../i18n/locales/en/catalogue.json';
 // The live building list (`hud.buildings`) is the source under test; the demo reads the local model instead.
 vi.mock('../../config', () => ({ DEMO_MODE: false, API_BASE_URL: '/api/v1' }));
 
+// Phone or desktop: the switch is the layer's own button on a phone and the panel column's first icon on desktop.
+const mobile = vi.hoisted(() => ({ value: true }));
+vi.mock('../../composables/useIsMobile', async () => {
+  const { ref } = await import('vue');
+  return { useIsMobile: () => ref(mobile.value) };
+});
+
 let frames: FrameRequestCallback[] = [];
 let mounted: { frameObserver: (() => void) | null } | null = null;
 /** One bare animation frame: runs what asked for one (a dial's own animation), but the layer's placement ignores it. */
@@ -305,6 +312,17 @@ describe('BuildingHudLayer', () => {
     const z = (key: string) => Number(wrapper!.get<HTMLElement>(`[data-coord="${key}"]`).element.style.zIndex);
     expect(z('1,0')).toBeLessThan(z('2,0'));
     expect(z('2,0')).toBeLessThan(z('3,0'));
+  });
+
+  it('renders no switch of its own on desktop (the panel column has it)', () => {
+    mobile.value = false;
+    try {
+      seedBuildings();
+      wrapper = mountLayer(fakeRenderer());
+      expect(wrapper.find('button.building-hud__toggle').exists()).toBe(false);
+    } finally {
+      mobile.value = true;
+    }
   });
 
   it('hides every marker when the icon button is turned off, and the choice is remembered', async () => {
