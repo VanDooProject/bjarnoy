@@ -218,7 +218,7 @@ watch(open, (isOpen) => {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: var(--panel-bg);
+  background: rgba(10, 20, 27, 0.98);
   border: 1px solid var(--panel-border);
   border-radius: 10px;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
@@ -277,9 +277,10 @@ watch(open, (isOpen) => {
 }
 
 /* Phone: the chevron's glyph stays small, its tap target does not (the margins pull the extra size back out of the bubble's layout). */
-.menu-trigger--touch {
+.menu-trigger.menu-trigger--touch {
+  background: transparent;
   width: 44px;
   height: 44px;
-  margin: -10px -12px -10px -8px;
+  margin: -14px -12px -14px -8px;
 }
 </style>

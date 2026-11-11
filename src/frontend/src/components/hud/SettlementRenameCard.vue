@@ -51,7 +51,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onOutsidePoint
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: var(--panel-bg);
+  background: rgba(10, 20, 27, 0.98);
   border: 1px solid var(--panel-border);
   border-radius: 10px;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);

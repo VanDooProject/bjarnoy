@@ -183,9 +183,9 @@ const settlementBubbleLeft = computed(() => {
   if (isFloating.value) return FLOATING_EDGE;
   return isRail.value ? 'calc(8px + env(safe-area-inset-left, 0px))' : undefined;
 });
-// Editing the name, the bubble stretches across the screen. The floating chips' trigger sits top-right, so there the
-// field drops below the chip row instead of running under it.
-const settlementBubbleEditTop = computed(() => (isFloating.value ? `calc(${FLOATING_EDGE} + 48px)` : settlementBubbleTop.value));
+// Editing the name, the bubble stretches across the screen. The account trigger chip sits top-right on that row, so the
+// field drops below the chip row instead of running under it (the landscape rail keeps its row and stops short of the chip).
+const settlementBubbleEditTop = computed(() => (isRail.value ? settlementBubbleTop.value : `calc(${settlementBubbleTop.value} + 52px)`));
 const bubbleEditing = computed(() => rename.editing && showSettlementBubble.value);
 const railJoined = computed(() => isChipLayout.value && showSettlementBubble.value && !isHudDrawerOpen.value);
 // Finding #13: only counts as "shown" once it's actually visible on screen —
