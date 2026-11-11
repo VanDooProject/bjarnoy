@@ -115,7 +115,7 @@ describe('HUD motion setting', () => {
     expect(prefersReducedMotion()).toBe(false);
   });
 
-  it('is the one check of the HUD, the ring menus and the canvas construction dial: the resolved HUD setting, for every combination', () => {
+  it('is the one check of the building HUD and the ring menus: the resolved HUD setting, for every combination', () => {
     for (const setting of ['auto', 'on', 'off'] as const) {
       for (const device of [true, false]) {
         stubMatchMedia(device);

@@ -15,7 +15,7 @@ import { motionPreferences } from './perf/motionPreferences';
 export const REDUCED_MAX_MS = 120;
 
 /**
- * Whether HUD motion is reduced: the single check every HUD animation uses (ring menu, building HUD, canvas construction dial).
+ * Whether HUD motion is reduced: the single check every HUD animation uses (ring menus, building HUD).
  * It is the resolved HUD motion setting (`motionPreferences.hudEnabled`): the player's explicit 'on' / 'off' wins, 'auto'
  * follows the device's reduce-motion flag.
  */
