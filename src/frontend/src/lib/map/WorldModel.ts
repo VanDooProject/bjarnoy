@@ -22,7 +22,7 @@ import { campGuardRange, isStrongCampFamily, placeCamps, placeWhaleRoads, StartP
 import { JOTNAR_OWNER_KEY, placeEndgame } from './endgamePlacement';
 import type { PalisadePiece } from './palisadeTiles';
 import type { CampStateResponse } from '../../api/types';
-import { claimDiscs, longhouseDiscs, type ClaimDisc } from './shoreline';
+import { centreVisionDiscs, claimDiscs, longhouseDiscs, type ClaimDisc } from './shoreline';
 import type { FogCoverageLookup } from './fog/fogCoverage';
 import { claimsWithGiants } from './territory';
 import { realmFromDiscs, resolveRealm, type ConnectedRealm } from './realmChain';
@@ -399,6 +399,8 @@ export class WorldModel {
    * (`wisdomFactor`, shorter builds) read. Updated alongside `settlementTowers`.
    */
   private settlementOdinLevels = new Map<string, number>();
+  /** Settlements that are beach camps (a `beachcamp` building in the server's list): they see like a level-1 Longhouse. */
+  private beachCampIds = new Set<string>();
   /**
    * Every hex belonging to a giant's 7-hex footprint, mapped to that giant's
    * own anchor coord — this model's own `IGiantIndex` (see the backend's
@@ -1017,6 +1019,7 @@ export class WorldModel {
       signature += `|${s.id}:${s.level}:${s.q},${s.r}`;
       for (const t of this.settlementTowers.get(s.id) ?? []) signature += `;${t.q},${t.r},${t.level}`;
       signature += `;odin${this.settlementOdinLevels.get(s.id) ?? 0}`;
+      if (this.beachCampIds.has(s.id)) signature += ';camp';
     }
     return signature;
   }
@@ -1473,7 +1476,7 @@ export class WorldModel {
     // A tower cut off from every longhouse of the player's realm sees nothing (and gets no Ravens rings either).
     const realm = this.realmOf(settlement);
     return [
-      ...longhouseDiscs(settlement, settlement.level).map((d) => ({ ...d, radius: d.radius + ravens })),
+      ...centreVisionDiscs(settlement, settlement.level, this.beachCampIds.has(settlement.id)).map((d) => ({ ...d, radius: d.radius + ravens })),
       ...(this.settlementTowers.get(settlement.id) ?? []).filter((t) => realm.isTowerConnected(settlement.id, t)).map((t) => ({
         q: t.q,
         r: t.r,
@@ -1760,6 +1763,11 @@ export class WorldModel {
     this.settlementOdinLevels.set(settlementId, odin);
     const ravensChanged = ravensRings(odin) !== ravensRings(previousOdin);
 
+    const wasBeachCamp = this.beachCampIds.has(settlementId);
+    const isBeachCamp = snapshot.buildings.some((b) => b.type === 'beachcamp' && b.level >= 1);
+    if (isBeachCamp) this.beachCampIds.add(settlementId);
+    else this.beachCampIds.delete(settlementId);
+
     const levelIncreased = snapshot.level > settlement.level;
     if (levelIncreased) settlement.level = snapshot.level;
 
@@ -1767,7 +1775,7 @@ export class WorldModel {
     // centre disc grew (a longhouse level-up) or the set of Tower satellite
     // discs changed (a new, levelled-up, downgraded or burnt tower) — not
     // every poll, since claiming is otherwise pure repeated work.
-    const claimChanged = levelIncreased || towersChanged || ravensChanged || realmChanged;
+    const claimChanged = levelIncreased || towersChanged || ravensChanged || realmChanged || isBeachCamp !== wasBeachCamp;
     if (claimChanged) this.exploreRealm(settlement);
     settlement.resources = snapshot.resources;
     settlement.rates = snapshot.rates;

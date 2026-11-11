@@ -3,6 +3,7 @@ import type { AxialCoord } from '../hex/coords';
 import { giantCoverage } from './giantTiles';
 import {
   claimDiscs,
+  centreVisionDiscs,
   longhouseDiscs,
   claimRadiusForLevel,
   hasShoreline,
@@ -101,6 +102,13 @@ describe('claimDiscs / hasShorelineInTerritory', () => {
     expect(claimDiscs({ q: 0, r: 0 }, 0, [])).toEqual([]);
     expect(longhouseDiscs({ q: 0, r: 0 }, 0)).toEqual([]);
     expect(longhouseDiscs({ q: 0, r: 0 }, 1)).toEqual([{ q: 0, r: 0, radius: 2 }]);
+  });
+
+  it('sees from a beach camp like a level-1 Longhouse, whatever its own level', () => {
+    expect(centreVisionDiscs({ q: 1, r: 2 }, 0, true)).toEqual([{ q: 1, r: 2, radius: 2 }]);
+    expect(centreVisionDiscs({ q: 1, r: 2 }, 5, true)).toEqual([{ q: 1, r: 2, radius: 2 }]);
+    expect(centreVisionDiscs({ q: 1, r: 2 }, 0, false)).toEqual([]);
+    expect(centreVisionDiscs({ q: 1, r: 2 }, 3, false)).toEqual([{ q: 1, r: 2, radius: 3 }]);
   });
 
   it('includes the centre disc plus one disc per tower, centred on the tower itself', () => {

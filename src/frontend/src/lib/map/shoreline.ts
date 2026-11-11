@@ -70,6 +70,14 @@ export function longhouseDiscs(center: AxialCoord, longhouseLevel: number): Clai
 }
 
 /**
+ * Mirrors `FogVisionRadii.ToVisionSource`'s centre: the sight disc of a settlement's centre. A beach camp (`isBeachCamp`) sees
+ * like a level-1 Longhouse, fixed (it has no Longhouse level of its own); otherwise the Longhouse's own disc (`longhouseDiscs`).
+ */
+export function centreVisionDiscs(center: AxialCoord, longhouseLevel: number, isBeachCamp: boolean): ClaimDisc[] {
+  return longhouseDiscs(center, isBeachCamp ? 1 : longhouseLevel);
+}
+
+/**
  * Mirrors `Settlement.cs`'s `TowerClaimRadius(int towerLevel)` (backed by
  * `BuildingCatalogue`'s Tower `ClaimRadius = level`, the same number
  * `building-catalogue.json`'s `tower` entries carry in their own

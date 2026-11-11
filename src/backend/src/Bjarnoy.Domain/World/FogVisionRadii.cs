@@ -81,17 +81,24 @@ public static class FogVisionRadii
     /// <summary>
     /// Builds the <see cref="FogVisionSource"/> a settlement's centre contributes to the
     /// mask, or <see langword="null"/> when it has none: a settlement whose Longhouse is destroyed (level 0) sees nothing
-    /// around its centre. That is decided by the same <see cref="Buildings.Settlement.LonghouseDisc"/> that decides whether
+    /// around its centre. That is decided by the same <see cref="Buildings.Settlement.CentreDisc"/> that decides whether
     /// it has a claim, so sight and claim cannot drift apart. <paramref name="bonusRings"/> is Odin's Ravens
     /// (<see cref="Buildings.Settlement.VisionBonusRings"/>): extra rings on both the explored and the visible radius.
+    /// A beach camp (<paramref name="isBeachCamp"/>) sees like a level-1 Longhouse, fixed: it has no Longhouse level of its own.
     /// </summary>
-    public static FogVisionSource? ToVisionSource(HexCoord coord, int longhouseLevel, int bonusRings = 0) =>
-        Buildings.Settlement.LonghouseDisc(coord, longhouseLevel) is null
+    public static FogVisionSource? ToVisionSource(HexCoord coord, int longhouseLevel, int bonusRings = 0, bool isBeachCamp = false)
+    {
+        var level = isBeachCamp ? BeachCampSightLevel : longhouseLevel;
+        return Buildings.Settlement.LonghouseDisc(coord, level) is null
             ? null
             : new FogVisionSource(
                 coord,
-                ExploredRadius(longhouseLevel) + Math.Max(0, bonusRings),
-                VisibleRadius(longhouseLevel) + Math.Max(0, bonusRings));
+                ExploredRadius(level) + Math.Max(0, bonusRings),
+                VisibleRadius(level) + Math.Max(0, bonusRings));
+    }
+
+    /// <summary>The Longhouse level a beach camp sees like (explored and visible radius), whatever it is.</summary>
+    public const int BeachCampSightLevel = 1;
 
     /// <summary>
     /// A single standing <see cref="Buildings.BuildingType.Tower"/>'s own
