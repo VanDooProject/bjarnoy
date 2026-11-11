@@ -102,8 +102,8 @@ public sealed record Movement
     public bool IsFieldBattleImmuneAt(DateTimeOffset at) => FieldBattleImmuneUntil is { } until && at < until;
 
     /// <summary>
-    /// True for an army that cannot get home and so stands where it is (<see cref="Stranded"/>): its path is the single hex it stands on,
-    /// it never turns around, and when its provisions run out the whole army starves (<c>docs/design/troop-movement-range.md</c> §2a).
+    /// True for an army that cannot get home and so stays where it is (<see cref="Stranded"/>): its path ends on the hex it stays on (the path is
+    /// that hex alone, or, when a wall closed its way, the walk there, <c>Army.RerouteAroundWall</c>), it never turns around, and when its provisions run out the whole army starves (<c>docs/design/troop-movement-range.md</c> §2a).
     /// </summary>
     public bool IsStranded { get; init; }
 

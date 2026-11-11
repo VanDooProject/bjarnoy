@@ -2,6 +2,7 @@ using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Combat;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Movement;
 using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
@@ -987,7 +988,150 @@ public sealed class ArmyService(
         return outcome;
     }
 
+    /// <summary>At most this many walls are dealt with in one settle; each re-route starts at its wall's instant, the next only later.</summary>
+    private const int MaxWallEncountersPerSettle = 16;
+
+    /// <summary>At most this many events (a field battle, an arrival, a turn-around) settled before one wall encounter.</summary>
+    private const int MaxStepsBeforeWall = 8;
+
+    /// <summary>
+    /// Settles <paramref name="army"/> to <paramref name="now"/>, dealing first with every wall built after it set out that blocks its way
+    /// (<c>docs/design/troop-movement-range.md</c> §5): everything due before the instant the army finds the wall is settled first, then it
+    /// re-routes from where it is then (<see cref="Army.RerouteAroundWall"/>), and the settle goes on. A world without a wall on the
+    /// army's way costs one small read (<see cref="WorldPalisades.TimelineAsync"/>, once per request and world); a route is only searched
+    /// when a wall actually blocks it.
+    /// </summary>
     private async Task<ArmySettleOutcome> SettleAndFoldCoreAsync(
+        ArmyEntity army, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var changed = false;
+        for (var round = 0; round < MaxWallEncountersPerSettle; round++)
+        {
+            if (await FindWallEncounterAsync(army, now, cancellationToken).ConfigureAwait(false) is not { } encounter)
+            {
+                break;
+            }
+
+            for (var step = 0; step < MaxStepsBeforeWall; step++)
+            {
+                var before = await SettleStepAsync(army, encounter.At, cancellationToken).ConfigureAwait(false);
+                if (before == ArmySettleOutcome.FoldedHome)
+                {
+                    return ArmySettleOutcome.FoldedHome;
+                }
+
+                if (before == ArmySettleOutcome.NoChange)
+                {
+                    break;
+                }
+
+                changed = true;
+            }
+
+            // What happened before the wall (a fight, a turn-around, an arrival) may have changed the route: look again.
+            if (await FindWallEncounterAsync(army, now, cancellationToken).ConfigureAwait(false) is not { } current)
+            {
+                break;
+            }
+
+            if (current.At > encounter.At)
+            {
+                continue;
+            }
+
+            await RerouteAroundWallAsync(army, current, cancellationToken).ConfigureAwait(false);
+            changed = true;
+        }
+
+        var outcome = await SettleStepAsync(army, now, cancellationToken).ConfigureAwait(false);
+        return outcome == ArmySettleOutcome.NoChange && changed ? ArmySettleOutcome.Updated : outcome;
+    }
+
+    private readonly Dictionary<Guid, IReadOnlyList<TimedWall>> _wallTimelines = [];
+
+    /// <summary>The world's wall timeline, read once per request (this service is scoped).</summary>
+    private async Task<IReadOnlyList<TimedWall>> WallTimelineAsync(Guid worldId, CancellationToken cancellationToken)
+    {
+        if (!_wallTimelines.TryGetValue(worldId, out var timeline))
+        {
+            timeline = await WorldPalisades.TimelineAsync(_dbContext, worldId, cancellationToken).ConfigureAwait(false);
+            _wallTimelines[worldId] = timeline;
+        }
+
+        return timeline;
+    }
+
+    /// <summary>
+    /// The first wall that blocks <paramref name="army"/>'s way by <paramref name="now"/> (<see cref="WallEncounters.FindEarliest"/>), under the
+    /// rules of its owner: a plain wall blocks, a gate of the owner or a friend and a half-open end do not. Land armies in transit only; a
+    /// stranded army goes nowhere and a fleet is never blocked. Terrain, rivers and friendships are only read when a wall stands on the route.
+    /// </summary>
+    private async Task<WallEncounter?> FindWallEncounterAsync(ArmyEntity army, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var domain = army.ToDomain();
+        if (domain.IsFleet || domain.Location is not ArmyLocation.InTransit { Movement: { IsStranded: false } movement })
+        {
+            return null;
+        }
+
+        var settlement = army.Settlement!;
+        var timeline = await WallTimelineAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var standing = timeline.Where(w => w.StandingFrom <= now).ToDictionary(w => w.Wall.Coord);
+        var route = movement.IsReturning ? movement.Path : movement.Path.Concat(movement.ReturnPath);
+        if (standing.Count == 0 || !route.Any(standing.ContainsKey))
+        {
+            return null;
+        }
+
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, settlement.World!, cancellationToken).ConfigureAwait(false);
+        var rivers = await WorldRivers.IndexAsync(_dbContext, settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var index = await WorldPalisades.IndexAtAsync(
+            _dbContext, settlement.WorldId, timeline, now, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false);
+        var rules = index.ForOwner(WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id))!;
+
+        DateTimeOffset? BlockingSince(HexCoord hex) =>
+            standing.TryGetValue(hex, out var wall) && !rules.FriendlyGate(hex) && !rules.HalfOpen(hex) ? wall.StandingFrom : null;
+
+        return WallEncounters.FindEarliest(movement, BlockingSince, now);
+    }
+
+    /// <summary>
+    /// <see cref="Army.RerouteAroundWall"/> for <paramref name="army"/> (settled to <c>encounter.At</c>) with the routes as they stand at that
+    /// instant; an army that found no way past the wall gets its owner an "army stuck" report. Does not save.
+    /// </summary>
+    private async Task RerouteAroundWallAsync(ArmyEntity army, WallEncounter encounter, CancellationToken cancellationToken)
+    {
+        var settlement = army.Settlement!;
+        var world = settlement.World!;
+        var domain = army.ToDomain();
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
+        var rivers = await WorldRivers.IndexAsync(_dbContext, settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var timeline = await WallTimelineAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var walls = await WorldPalisades.IndexAtAsync(
+            _dbContext, settlement.WorldId, timeline, encounter.At, sampler.TerrainAt, rivers.IsWide, cancellationToken).ConfigureAwait(false);
+        var bridges = await WorldBridges.IndexAsync(_dbContext, settlement.WorldId, sampler.TerrainAt, cancellationToken).ConfigureAwait(false);
+        var rules = new LandRouteIndex(walls, bridges).ForOwner(WorldPalisades.OwnerKeyOf(settlement.UserId, settlement.Id));
+
+        var result = domain.RerouteAroundWall(
+            encounter, settlement.HomeHexFor(domain), sampler.TerrainAt, world.SpeedFactor, rivers.IsRiver, rivers.IsWide, rules);
+        army.ApplyDomain(result.Army);
+
+        if (result.StuckAt is { } stuck)
+        {
+            _armyReportService.Add(settlement, ArmyReportKind.Stuck, encounter.At, army.Id, stuck, domain.Mission, domain.Stacks);
+            _logger.LogInformation(
+                "Army {ArmyId} found the wall at {Wall} in its way at {At} and no way past it: it stops at {Hex}{Stranded}.",
+                army.Id, encounter.Hex, encounter.At, stuck, result.Army.CannotGetHome ? " and cannot get home" : string.Empty);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Army {ArmyId} found the wall at {Wall} in its way at {At} and takes another route.", army.Id, encounter.Hex, encounter.At);
+        }
+    }
+
+    /// <summary>One settle step: the first due event of <paramref name="army"/> up to <paramref name="now"/> (see <see cref="SettleAndFoldAsync"/>).</summary>
+    private async Task<ArmySettleOutcome> SettleStepAsync(
         ArmyEntity army, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var domain = army.ToDomain();
@@ -1149,14 +1293,17 @@ public sealed class ArmyService(
         var movement = ((ArmyLocation.InTransit)domain.Location).Movement;
         var starvesAt = result.Walked[^1].Until;
 
+        // A stranded army may still be walking to the hex it stops on (a wall closed its way), so it dies where it is then.
+        var where = movement.PositionAt(starvesAt);
+
         army.WalkedLegs.AddRange(result.Walked);
         _armyReportService.Add(
-            army.Settlement!, ArmyReportKind.Starved, starvesAt, army.Id, movement.Path[0], domain.Mission, domain.Stacks);
+            army.Settlement!, ArmyReportKind.Starved, starvesAt, army.Id, where, domain.Mission, domain.Stacks);
         _dbContext.Armies.Remove(army);
 
         _logger.LogInformation(
             "Army {ArmyId} starved at {Hex} with {Troops} troop(s): it could not get home and its provisions ran out.",
-            army.Id, movement.Path[0], domain.Stacks.Sum(s => s.Count));
+            army.Id, where, domain.Stacks.Sum(s => s.Count));
 
         return ArmySettleOutcome.FoldedHome;
     }

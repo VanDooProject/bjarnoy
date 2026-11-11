@@ -131,20 +131,22 @@ public sealed class ArmyStarvationEndpointsTests : IAsyncLifetime
             var loserSettlement = MakeSettlement(world.Id, island.Id, LoserOwner, SystemUserIds.Abandoned, loserHome.Q, loserHome.R);
             db.Settlements.AddRange(winnerSettlement, loserSettlement);
 
-            // The winner's palisade closes the meeting hex in on every side: a ring of walls blocks all land armies.
+            // The winner's gates close the meeting hex in on every side, an hour and a half in: they let the winner through and block
+            // the loser, which has already walked past them onto its destination by then.
             foreach (var hex in meeting.Neighbours())
             {
                 winnerSettlement.Buildings.Add(new PlacedBuildingEntity
                 {
-                    SettlementId = winnerSettlement.Id, Q = hex.Q, R = hex.R, Type = BuildingType.Palisade, Level = 1,
+                    SettlementId = winnerSettlement.Id, Q = hex.Q, R = hex.R, Type = BuildingType.PalisadeGate, Level = 1,
+                    StandingSince = _factory.Time.GetUtcNow() + TimeSpan.FromHours(1.5),
                 });
             }
 
-            // Both cross the meeting hex around the same time; 10 axemen beat 5 spearmen.
+            // Both reach the meeting hex at the same time, the loser to stand there; 10 axemen beat 5 spearmen.
             var winner = MakeArmy(
                 winnerSettlement.Id, winnerHome, [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)], [(2, 0), (3, 0), (4, 0)], 1_000, UnitType.Axeman, 10);
             var loser = MakeArmy(
-                loserSettlement.Id, loserHome, [(2, 0), (1, 0), (0, 0), (-1, 0), (-2, 0)], [(-2, 0), (-3, 0), (-4, 0)], 100, UnitType.Spearman, 5);
+                loserSettlement.Id, loserHome, [(2, 0), (1, 0), (0, 0)], [(0, 0), (-1, 0), (-2, 0)], 100, UnitType.Spearman, 5);
             db.Armies.AddRange(winner, loser);
             await db.SaveChangesAsync(Ct);
 

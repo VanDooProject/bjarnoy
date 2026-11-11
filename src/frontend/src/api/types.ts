@@ -1674,7 +1674,7 @@ export interface MovementResponse {
   turnAroundAt: string;
   returnArrivesAt: string;
   isReturning: boolean;
-  /** The army cannot get home and stands on the one hex of `path`; `ArmyResponse.starvesAt` is when its food runs out and the whole army dies. */
+  /** The army cannot get home and stays on the last hex of `path` (that hex alone, or the walk there when a wall closed its way); `ArmyResponse.starvesAt` is when its food runs out and the whole army dies. */
   isStranded: boolean;
   /** The army is fleeing after a lost field battle (on its way home or stranded): it takes field orders from where it is, and an order ends its flee protection. */
   isFleeing: boolean;

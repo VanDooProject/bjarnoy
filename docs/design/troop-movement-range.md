@@ -202,6 +202,15 @@ Consequences:
   before the wall, and you get an "army stuck" report. An army stuck on its way out drops its target and stands
   there like after a move order. The other rules (rivers, mountains) only apply to routes planned from now on (a recall
   or retreat from where an army stands is planned afresh, so an army standing on a mountain can still leave it).
+  - How it is settled: a wall stands from the instant its build order finished (`PlacedBuilding.StandingSince`, or the
+    order's `CompletesAt` while the owner's settlement has not been settled since; `WorldPalisades.TimelineAsync`). A wall
+    hex the army still has to enter blocks it when the wall stood before the army would enter it, and the army finds it at
+    the later of the wall's instant and the start of the leg (the way home of an outbound army counts from its turn-around;
+    `WallEncounters.FindEarliest`). Everything due before that instant is settled first (turn-around, fights, ambushes),
+    then the army re-routes from where it is then (`Army.RerouteAroundWall`), with the walls standing at that instant and
+    its owner's gate rule. An outbound army that finds a way on gets a fresh leg and turn-around from the food it carries
+    then, or turns home at once when that food no longer covers the round trip. A stranded army's path is the walk to the
+    hex it stops on.
 - `FindPath` also takes the palisade hooks (default `null`, nothing blocked): `blocked`
   (every standing wall hex), `friendlyGate` (a gate of the army's own owner) and `halfOpen`
   (a wall's land end, charged the ground plus `HalfOpenEndCost` = 3). The rules apply in this order: wide

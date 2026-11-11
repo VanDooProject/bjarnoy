@@ -139,8 +139,9 @@ public sealed record HexPointResponse(int Q, int R)
 /// <param name="ReturnCumulativeHours">The same per-hex schedule for <paramref name="ReturnPath"/>, measured from <paramref name="TurnAroundAt"/>.</param>
 /// <param name="ReturnEdgeHours">The same edge-crossing schedule for <paramref name="ReturnPath"/>, measured from <paramref name="TurnAroundAt"/>.</param>
 /// <param name="IsStranded">
-/// True when the army cannot get home and stands where it is (<see cref="Movement.IsStranded"/>): <paramref name="Path"/> is the one hex it
-/// stands on, and <see cref="ArmyResponse.StarvesAt"/> is when its food runs out and the whole army dies.
+/// True when the army cannot get home and stays where it stops (<see cref="Movement.IsStranded"/>): the last hex of <paramref name="Path"/>
+/// (the path is that hex alone, or the walk there when a wall closed its way), and <see cref="ArmyResponse.StarvesAt"/> is when its food
+/// runs out and the whole army dies.
 /// </param>
 /// <param name="IsFleeing">
 /// True for an army fleeing after a lost field battle (<see cref="Movement.IsFleeing"/>), on its way home or stranded: it takes field orders

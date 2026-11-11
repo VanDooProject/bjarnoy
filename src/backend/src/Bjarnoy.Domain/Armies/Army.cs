@@ -82,6 +82,12 @@ public enum ArmyMission
 }
 
 /// <summary>
+/// The outcome of <see cref="Army.RerouteAroundWall"/>: the army afterwards, and the hex it stopped on when it found no way past the wall
+/// (<see langword="null"/> when it found another route or turned home).
+/// </summary>
+public sealed record WallRerouteResult(Army Army, HexCoord? StuckAt);
+
+/// <summary>
 /// A body of units in the field: dispatched from a settlement's
 /// <see cref="Settlement.Garrison"/>, travelling under its own
 /// <see cref="ArmyLocation"/>, independent of any settlement while away.
@@ -1661,6 +1667,155 @@ public sealed record Army
         return (this with { Location = new ArmyLocation.InTransit(retreatMovement) }).WithProvisionsAt(battleInstant, provisionsNow);
     }
 
+    /// <summary>
+    /// What a marching army does when a wall built after it set out blocks its way (<paramref name="encounter"/>, on its active leg;
+    /// <c>docs/design/troop-movement-range.md</c> §5): it looks for a new route from the hex it has reached at <c>encounter.At</c>, and only
+    /// when there is none stops at the last hex before the wall. The army must be settled to <c>encounter.At</c> already.
+    /// </summary>
+    /// <remarks>
+    /// <list type="bullet">
+    /// <item>Outbound, with a way on to its destination and back home from there: a fresh outbound leg from where it is, its turn-around
+    /// recomputed from the food it carries then. When that food no longer covers the longer round trip it turns home at once.</item>
+    /// <item>Outbound, with no way on: it walks its old route to the last hex before the wall and drops its target (mission
+    /// <see cref="ArmyMission.Move"/>). With a way home from there it stands and turns home when its food demands it, like after a move
+    /// order; without one it is stranded there.</item>
+    /// <item>On its way home: a fresh way home from where it is (a fleeing army keeps its flee protection); with none it walks to the last
+    /// hex before the wall and is stranded there.</item>
+    /// </list>
+    /// <paramref name="walls"/> are the route rules of the army's owner at <c>encounter.At</c>.
+    /// </remarks>
+    /// <returns>The army afterwards, and the hex it stopped on when it found no way past the wall (the "army stuck" report's hex).</returns>
+    public WallRerouteResult RerouteAroundWall(
+        WallEncounter encounter, HexCoord home, Func<HexCoord, Terrain> terrainAt, double speedFactor = 1.0,
+        Func<HexCoord, bool>? isRiver = null, Func<HexCoord, bool>? isWideRiver = null, WallRules? walls = null)
+    {
+        ArgumentNullException.ThrowIfNull(terrainAt);
+        if (Location is not ArmyLocation.InTransit { Movement: var movement } || movement.IsStranded
+            || encounter.OnReturnLeg != movement.IsReturning || encounter.BlockedIndex < 1 || encounter.BlockedIndex >= movement.Path.Count)
+        {
+            return new WallRerouteResult(this, null);
+        }
+
+        var at = encounter.At;
+        var from = movement.PositionAt(at);
+        var isLandUnit = !IsFleet;
+        var speed = TotalSpeed;
+        var upkeep = TotalUpkeepPerHour;
+
+        IReadOnlyList<HexCoord>? Route(HexCoord a, HexCoord b) =>
+            HexPathfinder.FindPath(a, b, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost)
+                is { Count: > 0 } path ? path : null;
+        IReadOnlyList<double> Hours(IReadOnlyList<HexCoord> path) =>
+            HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+        IReadOnlyList<double> Edges(IReadOnlyList<HexCoord> path) =>
+            HexPathfinder.EdgeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost);
+
+        var provisionsNow = ProvisionsAt(at);
+        if (!movement.IsReturning)
+        {
+            var target = movement.Path[^1];
+            if (Route(from, target) is { } onward && Route(target, home) is { } back)
+            {
+                var onwardHours = Hours(onward);
+                var backHours = Hours(back);
+                if (provisionsNow >= (onwardHours[^1] + backHours[^1]) * upkeep)
+                {
+                    var rerouted = Movement.Movement.Create(
+                        at, onward, onwardHours, Edges(onward), back, backHours, Edges(back), provisionsNow, upkeep);
+                    return new WallRerouteResult(this with { Location = new ArmyLocation.InTransit(rerouted), Provisions = provisionsNow }, null);
+                }
+
+                // The detour costs more food than it carries: it turns home at once.
+                if (Recall(at, home, terrainAt, null, speedFactor, isRiver, isWideRiver, walls) is { } recalled)
+                {
+                    return new WallRerouteResult(recalled, null);
+                }
+            }
+        }
+        else if (Route(from, home) is { } wayHome)
+        {
+            var hours = Hours(wayHome);
+            var edges = Edges(wayHome);
+            var returning = new Movement.Movement
+            {
+                DepartedAt = at,
+                Path = wayHome,
+                CumulativeHours = hours,
+                EdgeHours = edges,
+                ReturnPath = wayHome,
+                ReturnCumulativeHours = hours,
+                ReturnEdgeHours = edges,
+                TurnAroundAt = at,
+                IsReturning = true,
+                FieldBattleImmuneUntil = movement.FieldBattleImmuneUntil,
+            };
+            return new WallRerouteResult(this with { Location = new ArmyLocation.InTransit(returning), Provisions = provisionsNow }, null);
+        }
+
+        return StopBeforeWall(movement, encounter, at, home, Route, Hours, Edges);
+    }
+
+    /// <summary>
+    /// <see cref="RerouteAroundWall"/>'s last resort: the army keeps walking <paramref name="movement"/> as planned, but only up to the last hex
+    /// before the wall, where it stops. An outbound army drops its target and, with a way home from there, stands until its food sends it
+    /// home; otherwise (and on the way home) it is stranded there, its stranded movement being that walk.
+    /// </summary>
+    private WallRerouteResult StopBeforeWall(
+        Movement.Movement movement, WallEncounter encounter, DateTimeOffset at, HexCoord home,
+        Func<HexCoord, HexCoord, IReadOnlyList<HexCoord>?> route,
+        Func<IReadOnlyList<HexCoord>, IReadOnlyList<double>> hours,
+        Func<IReadOnlyList<HexCoord>, IReadOnlyList<double>> edges)
+    {
+        var stopIndex = encounter.BlockedIndex - 1;
+        var stop = movement.Path[stopIndex];
+        IReadOnlyList<HexCoord> walk = [.. movement.Path.Take(stopIndex + 1)];
+        IReadOnlyList<double> walkHours = [.. movement.CumulativeHours.Take(stopIndex + 1)];
+        IReadOnlyList<double> walkEdges = [.. movement.EdgeHours.Take(stopIndex + 1)];
+
+        var army = movement.IsReturning
+            ? this
+            : this with { Mission = ArmyMission.Move, TargetSettlementId = null, TargetBuildingCoord = null, TargetCampCoord = null };
+
+        if (!movement.IsReturning && route(stop, home) is { } back)
+        {
+            // The walk keeps its departure, so the stored provisions stay the leg's baseline. It turns around no earlier than now.
+            var backHours = hours(back);
+            var standing = Movement.Movement.Create(
+                movement.DepartedAt, walk, walkHours, walkEdges, back, backHours, edges(back), Provisions, TotalUpkeepPerHour);
+            if (standing.TurnAroundAt < at)
+            {
+                standing = standing with { TurnAroundAt = at };
+            }
+
+            return new WallRerouteResult(army with { Location = new ArmyLocation.InTransit(standing) }, stop);
+        }
+
+        var stranded = army with
+        {
+            Location = new ArmyLocation.InTransit(new Movement.Movement
+            {
+                DepartedAt = movement.DepartedAt,
+                Path = walk,
+                CumulativeHours = walkHours,
+                EdgeHours = walkEdges,
+                ReturnPath = [stop],
+                ReturnCumulativeHours = [0],
+                ReturnEdgeHours = [0],
+                TurnAroundAt = at,
+                IsReturning = false,
+                IsStranded = true,
+                FieldBattleImmuneUntil = movement.FieldBattleImmuneUntil,
+            }),
+        };
+        var starvesAt = stranded.StarvesAt ?? at.AddYears(100);
+        return new WallRerouteResult(
+            stranded with
+            {
+                Location = new ArmyLocation.InTransit(((ArmyLocation.InTransit)stranded.Location).Movement with { TurnAroundAt = starvesAt }),
+            },
+            stop);
+    }
+
     private static FieldOrderRejection NoRouteRejection(PathSearch search, bool isLandUnit) =>
         search.LimitReached ? FieldOrderRejection.RouteTooLong
         : isLandUnit ? FieldOrderRejection.UnreachableLeg
@@ -2047,7 +2202,7 @@ public sealed record Army
         else if (movement.IsStranded)
         {
             // A stranded remainder stays stranded; only its food (and so the instant it starves) changes.
-            remainder = staying.WithProvisionsAt(now, stayingFood).Strand(now, movement.Path[0]);
+            remainder = staying.WithProvisionsAt(now, stayingFood).Strand(now, movement.Path[^1]);
         }
         else
         {
