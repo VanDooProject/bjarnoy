@@ -48,3 +48,36 @@ describe('useDispatchUnitPicker for a founding convoy', () => {
     expect(picker.selectionSendable.value).toBe(false);
   });
 });
+
+describe('useDispatchUnitPicker with a garrison at several spots', () => {
+  const spot = (kind: 'longhouse' | 'tower', q: number, stacks: { unit: string; count: number }[]) => ({
+    kind, q, r: 0, stacks, guests: [], holdsLand: true, holdsShips: false,
+  });
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    useUnitCatalogueStore().definitions = [unit({ type: 'spearman' }), unit({ type: 'settler' }), unit({ type: 'karve', class: 'ship', cargoSlots: 0, shipSlots: 10 })];
+    const world = useWorldStore();
+    world.hud.garrisonSpots = [spot('longhouse', 0, [{ unit: 'spearman', count: 4 }]), spot('tower', 6, [{ unit: 'spearman', count: 4 }])];
+    world.startDispatchAt({ q: 8, r: 0 });
+  });
+
+  it('takes from the spot nearest the target and names it per unit row', () => {
+    const world = useWorldStore();
+    const picker = useDispatchUnitPicker(rows);
+    world.setDispatchUnitCount('spearman', 3);
+    expect(picker.unitSourceText('spearman')).toBe('from Tower');
+    expect(picker.unitSourceText('karve')).toBe('');
+    expect(picker.severalSpots.value).toBe(false);
+    expect(picker.selectionSendable.value).toBe(true);
+  });
+
+  it('is not sendable while the units come from several spots, and says where from', () => {
+    const world = useWorldStore();
+    const picker = useDispatchUnitPicker(rows);
+    world.setDispatchUnitCount('spearman', 6);
+    expect(picker.unitSourceText('spearman')).toBe('from Tower and Longhouse');
+    expect(picker.severalSpots.value).toBe(true);
+    expect(picker.selectionSendable.value).toBe(false);
+  });
+});

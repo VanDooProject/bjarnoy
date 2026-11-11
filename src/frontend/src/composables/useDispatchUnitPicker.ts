@@ -3,6 +3,8 @@
 // a founding convoy is its five settlers (that row stays locked) plus any ships and land escorts, picked like in a move;
 // a hunt takes land units against a land camp, and against a camp at sea (the whale road) a fleet.
 import { computed, type ComputedRef } from 'vue';
+import { i18n } from '../i18n';
+import { spotKindsForUnit } from '../lib/units/garrisonSpots';
 import { useWorldStore } from '../stores/world';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { isWaterCampFamily } from '../lib/map/campPlacement';
@@ -33,10 +35,22 @@ export function useDispatchUnitPicker(garrisonRows: ComputedRef<ReadonlyArray<{ 
   // Ships sit greyed out in the list of a hunt on land: only then is there anything to explain.
   const hasLockedOutUnits = computed(() => isHunt.value && garrisonRows.value.some((row) => !isRowSelectable(row.unit)));
   const overCapacity = computed(() => exceedsShipCapacity(unitCounts.value, catalogue.byType));
+  // Where the picked units are taken from: each unit type from the garrison spot nearest the target first (one rule, the store's).
+  const spotGroups = computed(() => (draft.value ? world.dispatchSpotGroups(draft.value) : []));
+  // Gathering an army from several spots is not possible yet: the dispatch waits.
+  const severalSpots = computed(() => spotGroups.value.length > 1);
+  /** "from Tower" / "from Longhouse and Dock": the spots the picked units of this type are taken from; empty while none is picked. */
+  function unitSourceText(unit: string): string {
+    const kinds = spotKindsForUnit(spotGroups.value, unit);
+    if (kinds.length === 0) return '';
+    const { t, locale } = i18n.global;
+    const names = kinds.map((k) => t(`hud.garrisonSpots.${k}`));
+    return t('hud.garrisonSpots.from', { spots: new Intl.ListFormat(locale.value, { type: 'conjunction' }).format(names) });
+  }
   // A hunt at sea needs at least one ship in the selection; passengers alone cannot sail.
   const selectionSendable = computed(
-    () => !overCapacity.value && !(isHunt.value && huntAtSea.value && selectionKind.value !== 'fleet'),
+    () => !overCapacity.value && !severalSpots.value && !(isHunt.value && huntAtSea.value && selectionKind.value !== 'fleet'),
   );
 
-  return { isFound, huntAtSea, selectionKind, isRowSelectable, hasLockedOutUnits, overCapacity, selectionSendable };
+  return { isFound, huntAtSea, selectionKind, isRowSelectable, hasLockedOutUnits, overCapacity, selectionSendable, severalSpots, unitSourceText };
 }

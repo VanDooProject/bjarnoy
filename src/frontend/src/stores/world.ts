@@ -20,6 +20,7 @@ import type {
   QuestResponse,
   RenownResponse,
   UnitStackResponse,
+  GarrisonSpotResponse,
   WorldMovementResponse,
   WorldSummaryResponse,
 } from '../api/types';
@@ -35,6 +36,7 @@ import {
   buildFoundDispatchRequest,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
+  dispatchTargetCoord,
   isFieldOrderMidMarch,
   isHuntUnit,
   maxAffordableProvisions,
@@ -43,6 +45,7 @@ import { SETTLERS_PER_FOUNDING } from '../lib/founding';
 import { isWaterCampFamily } from '../lib/map/campPlacement';
 import { useUnitCatalogueStore } from './unitCatalogue';
 import { stackCounts } from '../lib/units/fieldOrderFeasibility';
+import { allocateFromSpots, toDispatchFrom } from '../lib/units/garrisonSpots';
 import { DemoTradeError, WorldModel } from '../lib/map/WorldModel';
 import { evaluateDemoQuests, questBit } from '../lib/quests';
 import { useConnectionStatusStore } from './connectionStatus';
@@ -271,6 +274,8 @@ export const useWorldStore = defineStore('world', {
       // queue above. Always empty in demo mode — there is no local
       // WorldModel concept of trained units yet, only the live backend's.
       garrison: [] as UnitStackResponse[],
+      // The same garrison split by the spot it stands at (longhouse first); the dispatch takes its units from these.
+      garrisonSpots: [] as GarrisonSpotResponse[],
       trainingQueue: [] as TrainingOrderResponse[],
       trainingQueueFetchedAt: 0,
       // Town Square feast (economy.md section 6): the running feast and what
@@ -379,6 +384,8 @@ export const useWorldStore = defineStore('world', {
       mission: 'move' | 'attack' | 'support' | 'hunt';
       coord: AxialCoord;
       targetSettlementId: string | null;
+      // A support names the host's garrison spot (its longhouse, a tower or a dock) the army joins: the tapped hex.
+      targetBuildingCoord: AxialCoord | null;
       selectedId: string | null;
     } | null,
     // The target settlement's own placed buildings, fetched on demand once an
@@ -1079,6 +1086,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.reserved = { ...response.resources.reserved };
       this.hud.construction = { ...response.construction };
       this.hud.garrison = response.garrison;
+      this.hud.garrisonSpots = response.garrisonSpots;
       this.hud.trainingQueue = response.trainingQueue;
       this.hud.trainingQueueFetchedAt = Date.now();
       this.hud.runes = response.runes;
@@ -1321,6 +1329,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.buildings = [];
       this.hud.queue = [];
       this.hud.garrison = [];
+      this.hud.garrisonSpots = [];
       this.hud.trainingQueue = [];
       this.hud.runes = [];
       this.hud.feast = null;
@@ -1636,7 +1645,7 @@ export const useWorldStore = defineStore('world', {
      */
     openSendPicker(
       coord: AxialCoord,
-      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string } = {},
+      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string; targetBuildingCoord?: AxialCoord } = {},
     ) {
       this.dispatchDraft = null;
       this.fieldOrderDraft = null;
@@ -1644,6 +1653,7 @@ export const useWorldStore = defineStore('world', {
         mission: opts.mission ?? 'move',
         coord: { q: coord.q, r: coord.r },
         targetSettlementId: opts.targetSettlementId ?? null,
+        targetBuildingCoord: opts.targetBuildingCoord ? { q: opts.targetBuildingCoord.q, r: opts.targetBuildingCoord.r } : null,
         selectedId: null,
       };
     },
@@ -1655,7 +1665,7 @@ export const useWorldStore = defineStore('world', {
      */
     retargetSendPicker(
       coord: AxialCoord,
-      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string } = {},
+      opts: { mission?: 'attack' | 'support' | 'hunt'; targetSettlementId?: string; targetBuildingCoord?: AxialCoord } = {},
       keepSelected = true,
     ) {
       const picker = this.sendPicker;
@@ -1663,6 +1673,7 @@ export const useWorldStore = defineStore('world', {
       picker.mission = opts.mission ?? 'move';
       picker.coord = { q: coord.q, r: coord.r };
       picker.targetSettlementId = opts.targetSettlementId ?? null;
+      picker.targetBuildingCoord = opts.targetBuildingCoord ? { q: opts.targetBuildingCoord.q, r: opts.targetBuildingCoord.r } : null;
       const id = picker.selectedId;
       if (!id) return;
       if (!keepSelected) {
@@ -1705,7 +1716,11 @@ export const useWorldStore = defineStore('world', {
             ? {}
             : picker.mission === 'hunt'
               ? { mission: 'hunt' }
-              : { mission: picker.mission, targetSettlementId: picker.targetSettlementId ?? undefined },
+              : {
+                  mission: picker.mission,
+                  targetSettlementId: picker.targetSettlementId ?? undefined,
+                  targetBuildingCoord: picker.mission === 'support' ? picker.targetBuildingCoord ?? undefined : undefined,
+                },
         );
         return;
       }
@@ -1720,7 +1735,7 @@ export const useWorldStore = defineStore('world', {
         error: null,
         mission: picker.mission,
         targetSettlementId: picker.targetSettlementId,
-        targetBuildingCoord: null,
+        targetBuildingCoord: picker.mission === 'support' ? picker.targetBuildingCoord : null,
         units: standing ? stackCounts(army.stacks) : null,
       };
       if (picker.mission === 'hunt') this.dropNonHuntUnits();
@@ -1882,6 +1897,7 @@ export const useWorldStore = defineStore('world', {
         this.setDispatchTarget(opts.targetSettlementId);
         // The "Siege" ring action on a rival wall: an Attack on the wall's settlement that prefers the wall hex, the same
         // draft state the target-building picker sets (setDispatchTarget cleared it, so it is set after).
+        // A support's tapped hex is the host's garrison spot the army joins (setDispatchTarget defaulted it to the centre).
         if (opts.targetBuildingCoord) this.setDispatchTargetBuilding({ q: opts.targetBuildingCoord.q, r: opts.targetBuildingCoord.r });
       } else {
         this.addWaypoint(coord);
@@ -1903,7 +1919,9 @@ export const useWorldStore = defineStore('world', {
       // A previously-picked building preference belonged to whichever target
       // was selected before — it doesn't carry over to a new (or cleared)
       // target's layout.
-      this.dispatchDraft.targetBuildingCoord = null;
+      // A support joins one of the host's garrison spots: the centre (its longhouse) until another is named.
+      const host = settlementId && this.dispatchDraft.mission === 'support' ? this.model.getSettlement(settlementId) : undefined;
+      this.dispatchDraft.targetBuildingCoord = host ? { q: host.q, r: host.r } : null;
       if (settlementId && this.dispatchDraft.mission === 'attack') {
         void this.loadDispatchTargetBuildings(settlementId);
       } else {
@@ -2012,6 +2030,14 @@ export const useWorldStore = defineStore('world', {
       this.dispatchDraft.route = [];
     },
     /**
+     * Where the units of a dispatch draft leave from: the picked counts split over the garrison spots, each unit type from the
+     * spot nearest the draft's target first (`allocateFromSpots`). More than one group means the units stand at several spots.
+     */
+    dispatchSpotGroups(draft: Parameters<typeof dispatchTargetCoord>[0] & { unitCounts: Record<string, number> }) {
+      const target = dispatchTargetCoord(draft, (id) => this.model.getSettlement(id));
+      return allocateFromSpots(this.hud.garrisonSpots, draft.unitCounts, target);
+    },
+    /**
      * Sends the composed draft to the backend as a `move`, `attack`, or
      * `support` dispatch (issue #40 phase 3 added Attack, phase 4 Support).
      * Leaves the draft in place (with `error` set) on rejection so the player
@@ -2021,22 +2047,29 @@ export const useWorldStore = defineStore('world', {
     async confirmDispatch() {
       const draft = this.dispatchDraft;
       if (!draft || !this.selectedSettlementId) return;
+      const groups = this.dispatchSpotGroups(draft);
+      // Gathering an army from several spots is not possible yet: the dispatch is not attempted.
+      if (groups.length > 1) {
+        draft.error = i18n.global.t('hud.garrisonSpots.severalSpots');
+        return;
+      }
+      const from = toDispatchFrom(groups);
       const request =
         draft.mission === 'attack'
           ? buildAttackDispatchRequest(
-              draft.unitCounts,
+              from,
               draft.route,
               draft.provisions,
               draft.targetSettlementId,
               draft.targetBuildingCoord,
             )
           : draft.mission === 'support'
-            ? buildSupportDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetSettlementId)
+            ? buildSupportDispatchRequest(from, draft.route, draft.provisions, draft.targetSettlementId, draft.targetBuildingCoord)
             : draft.mission === 'hunt'
-              ? buildHuntDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetCamp)
+              ? buildHuntDispatchRequest(from, draft.route, draft.provisions, draft.targetCamp)
               : draft.mission === 'found'
-                ? buildFoundDispatchRequest(draft.unitCounts, draft.route, draft.provisions)
-                : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
+                ? buildFoundDispatchRequest(from, draft.route, draft.provisions)
+                : buildMoveDispatchRequest(from, draft.route, draft.provisions);
       if (!request) {
         if (Object.values(draft.unitCounts).every((c) => c <= 0)) {
           draft.error = i18n.global.t('common.errors.selectAtLeastOneUnit');

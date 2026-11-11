@@ -104,6 +104,10 @@ function detail(overrides: Partial<SettlementResponse> = {}): SettlementResponse
     buildings: [{ q: 0, r: 0, type: 'longhouse', level: 1 }],
     queue: [],
     garrison: [],
+    garrisonSpots: [
+      { kind: 'longhouse', q: 0, r: 0, stacks: [], guests: [], holdsLand: true, holdsShips: false },
+      { kind: 'tower', q: 2, r: 1, stacks: [], guests: [], holdsLand: true, holdsShips: false },
+    ],
     trainingQueue: [],
     runes: [],
     feast: null,
@@ -243,8 +247,25 @@ describe('AdminSettlementsView', () => {
     await wrapper.find('.garrison-form').trigger('submit');
     await flushPromises();
 
-    expect(adminAdjustGarrison).toHaveBeenCalledWith('settlement-1', { unit: 'spearman', count: 10 });
+    expect(adminAdjustGarrison).toHaveBeenCalledWith('settlement-1', { unit: 'spearman', spot: { q: 0, r: 0 }, count: 10 });
     expect(wrapper.text()).toContain('spearman 10');
+  });
+
+  it('creates troops at the spot picked in the selector', async () => {
+    adminAdjustGarrison.mockResolvedValue(detail({ garrison: [{ unit: 'spearman', count: 4 }] }));
+
+    const wrapper = await openDetail();
+    await vi.waitFor(() => {
+      expect(wrapper.findAll('.garrison-form option').length).toBeGreaterThan(0);
+    });
+
+    await wrapper.find('.garrison-form select').setValue('spearman');
+    await wrapper.find('.garrison-form .spot-select').setValue('2,1');
+    await wrapper.find('.garrison-form input[type="number"]').setValue(4);
+    await wrapper.find('.garrison-form').trigger('submit');
+    await flushPromises();
+
+    expect(adminAdjustGarrison).toHaveBeenCalledWith('settlement-1', { unit: 'spearman', spot: { q: 2, r: 1 }, count: 4 });
   });
 
   it('places a building on a clicked hex and updates the row', async () => {
