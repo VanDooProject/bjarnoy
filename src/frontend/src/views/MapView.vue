@@ -49,7 +49,7 @@ import { parseCameraHash, serializeCameraHash } from '../lib/mapCameraHash';
 import { useAuthStore } from '../stores/auth';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
-import { armyOverlayMovement, campArmyMarkers, foreignArmyMarker } from '../lib/map/armyOverlay';
+import { armyOverlayMovement, campArmyMarkers, campFleetLiveCoord, foreignArmyMarker } from '../lib/map/armyOverlay';
 import { useGuildStore } from '../stores/guild';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
@@ -233,9 +233,20 @@ function onArmySelect(armyId: string) {
   onQueueSelect(liveArmyCoord(army));
 }
 
+/** Whether an army has a ship (its land units are passengers): the marker is a ship, not a flag. */
+function isFleetArmy(a: (typeof world.armies)[number]): boolean {
+  return (
+    classifyUnitSelection(Object.fromEntries(a.stacks.map((s) => [s.unit, s.count])), unitCatalogue.byType) === 'fleet'
+  );
+}
+
 /** The hex an army's marker is on right now: where it is along its leg (the half it has reached), not the last hex the poll reported. */
 function liveArmyCoord(army: (typeof world.armies)[number]): AxialCoord {
   let coord: AxialCoord = army.position;
+  // A camp fleet is drawn one hex short of the camp: the marker's own leg decides (campFleetLiveCoord).
+  if (army.mission === 'setupcamp' && army.movement && !army.movement.isReturning && isFleetArmy(army)) {
+    return campFleetLiveCoord({ position: army.position, movement: army.movement }, Date.now());
+  }
   if (army.movement) {
     const {
       path, cumulativeHours, edgeHours, departedAt, arrivesAt, isReturning,
@@ -443,11 +454,7 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
     // docs/design/ship-movement.md §4: ship marker for a fleet (any ship in
     // the army, its land units are passengers), flag for a land army — the
     // same classification dispatch relies on.
-    isFleet:
-      classifyUnitSelection(
-        Object.fromEntries(a.stacks.map((s) => [s.unit, s.count])),
-        unitCatalogue.byType,
-      ) === 'fleet',
+    isFleet: isFleetArmy(a),
     // The backend's own figure: best-sighted unit type plus the home settlement's Ravens.
     visionRadius: a.visionRadius,
     // An `atHome`/`supporting` army has no movement at all and keeps sitting on its authoritative hex.

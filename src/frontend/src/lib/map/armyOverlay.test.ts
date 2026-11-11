@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ForeignArmyResponse } from '../../api/types';
-import { armyOverlayMovement, campArmyMarkers, campFleetMovement, campLandMarkerId, foreignArmyMarker } from './armyOverlay';
+import { armyOverlayMovement, campArmyMarkers, campFleetLiveCoord, campFleetMovement, campLandMarkerId, foreignArmyMarker } from './armyOverlay';
 import type { ArmyOverlayMarker } from './HexMapRenderer';
 import { GUILD_REALM_COLOR, RIVAL_REALM_COLOR } from './realmColours';
 import type { Settlement } from './types';
@@ -115,5 +115,13 @@ describe('camp army markers', () => {
     const fleet = marker(true);
     expect(campArmyMarkers(fleet, army({ isReturning: true }), Date.parse(arrivesAt) + 1000)).toEqual([fleet]);
     expect(campArmyMarkers(fleet, army({ mission: 'found' }), Date.parse(arrivesAt) + 1000)).toEqual([fleet]);
+  });
+
+  it('reads the live coord of a camp fleet off the trimmed leg, never the camp hex', () => {
+    const a = { position: { q: 0, r: 0 }, movement };
+    expect(campFleetLiveCoord(a, base + 0.4 * hour)).toEqual({ q: 0, r: 0 });
+    expect(campFleetLiveCoord(a, base + 1.9 * hour)).toEqual({ q: 2, r: 0 });
+    // Past the whole leg the fleet rests on the water hex, where campArmyMarkers draws it.
+    expect(campFleetLiveCoord(a, Date.parse(arrivesAt) + hour)).toEqual({ q: 2, r: 0 });
   });
 });

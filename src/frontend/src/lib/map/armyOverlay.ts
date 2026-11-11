@@ -1,4 +1,5 @@
 import type { ForeignArmyResponse } from '../../api/types';
+import { routeProgressAt } from '../units/armyProgress';
 import type { ArmyOverlayMarker, ArmyOverlayMovement } from './HexMapRenderer';
 import { realmColor } from './realmColours';
 import type { Settlement } from './types';
@@ -100,4 +101,18 @@ export function campArmyMarkers(
     movement: undefined,
   };
   return [fleet, land];
+}
+
+/**
+ * The hex a camp fleet's marker is on at `now` (the half of its leg it has reached): read off the same trimmed leg the marker is drawn
+ * on (`campFleetMovement`), so a pan or flash on the army lands where the marker is. `army` is an outbound `setupcamp` fleet.
+ */
+export function campFleetLiveCoord(
+  army: { position: { q: number; r: number }; movement: Parameters<typeof armyOverlayMovement>[0] },
+  now: number,
+): { q: number; r: number } {
+  const leg = campFleetMovement(armyOverlayMovement(army.movement));
+  const progress = routeProgressAt(leg.path, leg.cumulativeHours, leg.edgeHours, leg.departedAtMs, leg.arrivesAtMs, now);
+  if (!progress) return army.position;
+  return progress.arrived || progress.t >= 0.5 ? progress.to : progress.from;
 }
