@@ -11,7 +11,7 @@ namespace Bjarnoy.Domain.Combat;
 /// first a ship fight and then, with its passengers, a land fight (<c>docs/design/economy.md</c>, "Fleets").
 /// </summary>
 /// <param name="ShipFight">The attacker's ships against all the defender's ships; <see langword="null"/> when not fought (a land army, or a defender with no ships).</param>
-/// <param name="LandFight">The land troops against the defender's land units; <see langword="null"/> when not fought (a fleet without passengers, a lost ship fight, a Dockyard target).</param>
+/// <param name="LandFight">The land troops against the defender's land units; <see langword="null"/> when not fought (a fleet without passengers, a lost ship fight, a target building in the water).</param>
 /// <param name="Drowned">The passengers the surviving ships could not carry, drowned before the land fight (or after a lost ship fight).</param>
 /// <param name="FireShipsBurned">The Fire Ships burned by the fire damage: the levels taken times ten.</param>
 /// <param name="FireSiege">The fire damage to a building standing in the water; <see cref="SiegeOutcome.None"/> when nothing burned.</param>
@@ -217,10 +217,12 @@ public static class AttackResolver
                 defenderHomeLosses, defenderGuestLosses, ResourceAmounts.Zero, Refill: 0, BattleWinner.Defender, defenderBuildings);
         }
 
-        // The land fight: what is still aboard against the defender's land units. A Dockyard stands in the water: a fleet sent at it
-        // only fights at sea.
-        var target = targetBuildingCoord is { } coord ? defenderBuildings.Cast<PlacedBuilding?>().FirstOrDefault(b => b!.Value.Coord == coord) : null;
-        var skipLandFight = kept.Count == 0 || target?.Type == BuildingType.Dockyard;
+        // The land fight: what is still aboard against the defender's land units. A building in the water (a dock, a fisher, the
+        // Shrine of Njörd, a wall's sea end) is out of reach of the troops and siege engines aboard: a fleet sent at it only fights at sea.
+        var targetInWater = targetBuildingCoord is { } coord
+            && defenderBuildings.Any(b => b.Coord == coord)
+            && terrainAt(coord) == Terrain.Sea;
+        var skipLandFight = kept.Count == 0 || targetInWater;
         var landFight = skipLandFight
             ? null
             : BattleResolver.Resolve(

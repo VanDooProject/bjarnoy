@@ -222,20 +222,35 @@ public class AttackResolverTests
         Assert.Equal(ResourceAmounts.Zero, plan.Loot);
     }
 
-    // ---- Rule 6: a Dockyard target is a ship fight only
+    // ---- Rule 6: a target in the water is a ship fight only
 
-    [Fact]
-    public void A_dockyard_target_skips_the_land_fight_and_takes_no_loot()
+    [Theory]
+    [InlineData(BuildingType.Dockyard)]
+    [InlineData(BuildingType.FishingHut)]
+    [InlineData(BuildingType.Palisade)]
+    public void A_target_in_the_water_skips_the_land_fight_and_takes_no_loot(BuildingType type)
     {
-        var dockyard = new PlacedBuilding(SeaHex, BuildingType.Dockyard, 3);
+        var building = new PlacedBuilding(SeaHex, type, 3);
         var plan = Attack(
-            [new(UnitType.Karve, 5), new(UnitType.Spearman, 10)], home: [new(UnitType.Spearman, 1)],
-            buildings: Buildings(dockyard), target: SeaHex);
+            [new(UnitType.Karve, 5), new(UnitType.Spearman, 10), new(UnitType.Catapult, 1)], home: [new(UnitType.Spearman, 1)],
+            buildings: Buildings(building), target: SeaHex);
 
         Assert.Null(plan.LandFight);
+        Assert.False(plan.LandSiege.Applied);
         Assert.Equal(ResourceAmounts.Zero, plan.Loot);
         Assert.Equal(10, Count(plan.AttackerSurvivors, UnitType.Spearman));
+        Assert.Equal(3, plan.Buildings.Single(b => b.Coord == SeaHex).Level);
         Assert.Empty(plan.DefenderHomeLosses);
+    }
+
+    [Fact]
+    public void A_target_on_land_is_fought_over_on_land()
+    {
+        var plan = Attack(
+            [new(UnitType.Karve, 5), new(UnitType.Spearman, 10)], home: [new(UnitType.Spearman, 1)],
+            buildings: Buildings(new PlacedBuilding(LandHex, BuildingType.Sawmill, 3)), target: LandHex);
+
+        Assert.NotNull(plan.LandFight);
     }
 
     // ---- Rule 7: loot
@@ -321,19 +336,20 @@ public class AttackResolverTests
     }
 
     [Fact]
-    public void The_fire_burns_before_the_siege_engines_fire_on_the_result()
+    public void Siege_engines_aboard_do_not_fire_at_a_target_the_fire_hits()
     {
-        // A Dockyard in the water is not a land-fight target, so the fire alone hits it; a Fishing Hut in the water is hit by both.
-        var hut = new PlacedBuilding(SeaHex, BuildingType.FishingHut, 8);
+        // A wall's sea end loses one level per attack: the fire takes it, the rams aboard cannot reach a hex in the water.
+        var seaEnd = new PlacedBuilding(SeaHex, BuildingType.Palisade, 3);
         var plan = Attack(
-            [new(UnitType.Karve, 1), new(UnitType.FireShip, 20), new(UnitType.Catapult, 1)],
-            buildings: Buildings(hut), target: SeaHex);
+            [new(UnitType.Longship, 4), new(UnitType.FireShip, 25), new(UnitType.Ram, 2)],
+            buildings: Buildings(seaEnd), target: SeaHex);
 
         Assert.True(plan.FireSiege.Applied);
-        Assert.Equal(6, plan.FireSiege.LevelAfter);
-        Assert.True(plan.LandSiege.Applied);
-        Assert.Equal(6, plan.LandSiege.LevelBefore);
-        Assert.Equal(6 - SiegeResolver.LevelsDestroyed(40), plan.Buildings.Single(b => b.Coord == SeaHex).Level);
+        Assert.False(plan.LandSiege.Applied);
+        Assert.Null(plan.LandFight);
+        Assert.Equal(2, plan.Buildings.Single(b => b.Coord == SeaHex).Level);
+        Assert.Empty(plan.Drowned);
+        Assert.Equal(2, Count(plan.AttackerSurvivors, UnitType.Ram));
     }
 
     // ---- Defaults: tower bonus in both fights, raid caps in both, attack bonuses by fight
