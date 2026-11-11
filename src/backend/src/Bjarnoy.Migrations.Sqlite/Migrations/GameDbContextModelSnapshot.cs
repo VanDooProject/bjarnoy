@@ -304,6 +304,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("FieldBattleImmuneUntil")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("HomeSpotQ")
                         .HasColumnType("INTEGER");
 
@@ -340,9 +343,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<double>("Provisions")
                         .HasColumnType("REAL");
-
-                    b.Property<bool>("RetreatImmune")
-                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ReturnCumulativeHours")
                         .IsRequired()

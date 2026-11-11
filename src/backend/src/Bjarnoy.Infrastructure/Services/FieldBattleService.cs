@@ -66,14 +66,6 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
             return false;
         }
 
-        // A voluntary Recall (IsReturning but not RetreatImmune) is still
-        // fully interceptable — only the two immune legs are exempt (issue
-        // #206 §5).
-        if (movement.IsReturning && movement.RetreatImmune)
-        {
-            return false;
-        }
-
         var worldId = army.Settlement!.WorldId;
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World!, cancellationToken).ConfigureAwait(false);
         var homeA = army.Settlement.HomeHexFor(domain);
@@ -86,8 +78,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
             .Where(a => a.Id != army.Id
                 && !a.AtHome
                 && !a.IsSupporting
-                && a.Settlement!.WorldId == worldId
-                && !(a.IsReturning && a.RetreatImmune))
+                && a.Settlement!.WorldId == worldId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         (ArmyEntity Other, Army OtherDomain, Movement OtherMovement, HexCoord Hex, DateTimeOffset At)? earliest = null;
@@ -108,7 +99,9 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
             }
 
             var homeB = other.Settlement.HomeHexFor(otherDomain);
-            var meeting = MovementOccupancy.EarliestMeeting(movement, otherMovement, homeA, homeB);
+            // An army fleeing a lost field battle cannot be fought until its protection ends (docs/design/troop-movement-range.md §2a).
+            var notBefore = Max(movement.FieldBattleImmuneUntil, otherMovement.FieldBattleImmuneUntil);
+            var meeting = MovementOccupancy.EarliestMeeting(movement, otherMovement, homeA, homeB, notBefore);
             if (meeting is not { } found || found.At > now)
             {
                 continue;
@@ -274,6 +267,9 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
                 + "({PowerA} vs {PowerB}).",
             hex.Q, hex.R, armyA.Id, armyB.Id, plan.Winner, plan.SideAPower, plan.SideBPower);
     }
+
+    private static DateTimeOffset? Max(DateTimeOffset? a, DateTimeOffset? b) =>
+        a is { } x && b is { } y ? (x > y ? x : y) : a ?? b;
 
     /// <summary>What the winner took from the loser's carried loot: the loot and the food that refilled its provisions.</summary>
     private static ResourceAmounts TakenFromLoser(FieldBattlePlan plan) =>

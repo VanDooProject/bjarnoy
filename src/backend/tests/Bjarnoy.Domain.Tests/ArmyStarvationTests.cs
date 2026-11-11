@@ -123,7 +123,7 @@ public sealed class ArmyStarvationTests
         var movement = MovementOf(retreating);
         Assert.Equal([Here], movement.Path);
         Assert.False(movement.IsReturning);
-        Assert.True(movement.RetreatImmune);
+        Assert.Equal(battleAt + Bjarnoy.Domain.Movement.Movement.FleeProtection, movement.FieldBattleImmuneUntil);
         Assert.Equal(battleAt, movement.DepartedAt);
         // It is not folded home by the pathless "return": long after, it still stands there.
         var later = retreating.SettleTo(battleAt.AddHours(10));
@@ -190,5 +190,106 @@ public sealed class ArmyStarvationTests
         Assert.True(order.Accepted, $"expected accept, got {order.Rejection}");
         Assert.True(order.Remainder!.CannotGetHome);
         Assert.True(Math.Abs((army.StarvesAt!.Value - order.Remainder.StarvesAt!.Value).TotalSeconds) < 1);
+    }
+
+    // ---- flee protection: only after a lost field battle, at most 6 hours, any order ends it ----------------------------------------------
+
+    private static Army ProtectedStranded(out DateTimeOffset battleAt)
+    {
+        battleAt = T0.AddHours(6);
+        return Marching(200).ForceFieldRetreat(battleAt, Here, Home, Strip, walls: Sealed);
+    }
+
+    [Fact]
+    public void A_fleeing_army_is_protected_for_six_hours_from_the_battle_and_not_a_moment_longer()
+    {
+        var army = ProtectedStranded(out var battleAt);
+        var movement = MovementOf(army);
+
+        Assert.True(movement.IsFieldBattleImmuneAt(battleAt));
+        Assert.True(movement.IsFieldBattleImmuneAt(battleAt.AddHours(6).AddTicks(-1)));
+        Assert.False(movement.IsFieldBattleImmuneAt(battleAt.AddHours(6)));
+    }
+
+    [Fact]
+    public void A_fleeing_army_that_finds_a_way_home_is_protected_for_six_hours_too()
+    {
+        var battleAt = T0.AddHours(6);
+        var movement = MovementOf(Marching(200).ForceFieldRetreat(battleAt, Here, Home, Strip));
+
+        Assert.Equal(battleAt.AddHours(6), movement.FieldBattleImmuneUntil);
+    }
+
+    [Fact]
+    public void An_army_that_turns_round_by_itself_is_not_protected()
+    {
+        // 30 food, 2.5 per hour: the way home takes 8 hours, so it turns round long before the food is gone.
+        var army = Marching(60);
+        var turned = army.SettleTo(MovementOf(army).TurnAroundAt.AddMinutes(1));
+
+        Assert.True(MovementOf(turned.Army).IsReturning);
+        Assert.Null(MovementOf(turned.Army).FieldBattleImmuneUntil);
+    }
+
+    [Fact]
+    public void A_plain_recall_is_not_protected()
+    {
+        var recalled = Marching(200).Recall(T0.AddHours(3), Home, Strip);
+
+        Assert.Null(MovementOf(recalled!).FieldBattleImmuneUntil);
+    }
+
+    [Fact]
+    public void Stranding_an_army_again_keeps_its_protection()
+    {
+        var army = ProtectedStranded(out var battleAt);
+
+        var again = army.Strand(battleAt.AddHours(2), Here);
+
+        Assert.Equal(battleAt.AddHours(6), MovementOf(again).FieldBattleImmuneUntil);
+    }
+
+    [Fact]
+    public void A_recall_ends_the_protection()
+    {
+        var army = ProtectedStranded(out var battleAt);
+
+        var recalled = army.Recall(battleAt.AddHours(1), Home, Strip);
+
+        Assert.NotNull(recalled);
+        Assert.Null(MovementOf(recalled).FieldBattleImmuneUntil);
+    }
+
+    [Fact]
+    public void A_field_order_ends_the_protection()
+    {
+        var army = ProtectedStranded(out var battleAt);
+
+        var order = Army.PlanFieldOrder(army, [], new HexCoord(6, 1), Home, battleAt.AddHours(1), Strip, isPremium: false);
+
+        Assert.True(order.Accepted, $"expected accept, got {order.Rejection}");
+        Assert.Null(MovementOf(order.Army!).FieldBattleImmuneUntil);
+    }
+
+    [Fact]
+    public void Retargeting_a_founding_convoy_ends_the_protection()
+    {
+        var army = ProtectedStranded(out var battleAt) with { Mission = ArmyMission.Found };
+
+        var retargeted = Army.RetargetFounding(army, new HexCoord(6, 1), battleAt.AddHours(1), Home, Strip);
+
+        Assert.True(retargeted.Accepted, $"expected accept, got {retargeted.Rejection}");
+        Assert.Null(MovementOf(retargeted.Army!).FieldBattleImmuneUntil);
+    }
+
+    [Fact]
+    public void Rehoming_ends_the_protection()
+    {
+        var army = ProtectedStranded(out var battleAt);
+
+        var rehomed = army.RehomedTo(new HexCoord(1, 1), battleAt.AddHours(1), Strip);
+
+        Assert.NotNull(rehomed);
+        Assert.Null(MovementOf(rehomed).FieldBattleImmuneUntil);
     }
 }

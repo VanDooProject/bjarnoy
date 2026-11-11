@@ -81,23 +81,18 @@ public sealed record Movement
     public bool IsReturning { get; init; }
 
     /// <summary>
-    /// True only for the two immune-to-interception return legs (issue #206
-    /// §5): the existing natural provisions-driven turnaround
-    /// (<c>Army.SettleTo</c>'s turn-around branch) and a battle-forced retreat
-    /// (<c>Army.SettleArrival</c>'s post-battle survivor return, and the new
-    /// field-battle loser's direct-path-home march). Both are immune because
-    /// neither is something a player can trigger on demand at will.
+    /// Until when an army fleeing after a <em>lost field battle</em> is protected from field battles and camp ambushes
+    /// (<c>docs/design/troop-movement-range.md</c> §2a): the battle instant plus <see cref="FleeProtection"/>. <see langword="null"/> for every
+    /// other movement. Only <c>Army.ForceFieldRetreat</c> sets it; an order (recall, field order, retarget) builds a fresh movement without it,
+    /// which is what ends the protection early. A meeting or an ambush entry is ruled out only while it lies before this instant.
     /// </summary>
-    /// <remarks>
-    /// Deliberately distinct from <see cref="IsReturning"/>: a voluntary
-    /// <c>Army.Recall</c> also sets <see cref="IsReturning"/> but must remain
-    /// fully interceptable (issue #206 §5) — recalling the instant a player
-    /// spots an incoming interception would otherwise trivially dodge every
-    /// fight. Only <see cref="IsReturning"/> &amp;&amp; <see cref="RetreatImmune"/>
-    /// together mean "immune"; <see cref="IsReturning"/> alone (a plain
-    /// Recall) does not.
-    /// </remarks>
-    public bool RetreatImmune { get; init; }
+    public DateTimeOffset? FieldBattleImmuneUntil { get; init; }
+
+    /// <summary>How long a fleeing army is protected after the battle it lost.</summary>
+    public static readonly TimeSpan FleeProtection = TimeSpan.FromHours(6);
+
+    /// <summary>Whether a field battle or camp ambush at <paramref name="at"/> is ruled out by the flee protection.</summary>
+    public bool IsFieldBattleImmuneAt(DateTimeOffset at) => FieldBattleImmuneUntil is { } until && at < until;
 
     /// <summary>
     /// True for an army that cannot get home and so stands where it is (<see cref="Stranded"/>): its path is the single hex it stands on,

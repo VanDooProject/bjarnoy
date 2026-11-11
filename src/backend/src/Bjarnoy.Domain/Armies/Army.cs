@@ -229,9 +229,16 @@ public sealed record Army
     /// <paramref name="at"/> are kept and burn from there, and <see cref="Movement.TurnAroundAt"/> is the instant it starves, so the
     /// "standing" checks of orders and camp aggression keep working until then. Any later order builds a normal movement.
     /// </summary>
-    public Army Strand(DateTimeOffset at, HexCoord hex)
+    public Army Strand(DateTimeOffset at, HexCoord hex, DateTimeOffset? fieldBattleImmuneUntil = null)
     {
-        var stranded = this with { Provisions = ProvisionsAt(at), Location = new ArmyLocation.InTransit(Movement.Movement.Stranded(at, hex)) };
+        // The flee protection of the movement it leaves is kept (a stranded army that is stranded again stays protected).
+        var immuneUntil = fieldBattleImmuneUntil
+            ?? (Location is ArmyLocation.InTransit { Movement.FieldBattleImmuneUntil: { } carried } ? carried : null);
+        var stranded = this with
+        {
+            Provisions = ProvisionsAt(at),
+            Location = new ArmyLocation.InTransit(Movement.Movement.Stranded(at, hex) with { FieldBattleImmuneUntil = immuneUntil }),
+        };
         var turnAround = stranded.StarvesAt ?? at.AddYears(100);
         return stranded with
         {
@@ -868,10 +875,6 @@ public sealed record Army
             ReturnEdgeHours = movement.ReturnEdgeHours,
             TurnAroundAt = battleInstant,
             IsReturning = true,
-            // A battle-forced retreat is immune to further interception
-            // (issue #206 §5) — not something a player triggers on demand,
-            // unlike a voluntary Recall.
-            RetreatImmune = true,
         };
 
         // Provisions are rebased to what the army carried at the battle instant, plus what the win refilled (same trick
@@ -922,7 +925,6 @@ public sealed record Army
             ReturnEdgeHours = movement.ReturnEdgeHours,
             TurnAroundAt = battleInstant,
             IsReturning = true,
-            RetreatImmune = true,
         };
 
         // What the army carried at the battle instant, plus the food the win took from the camp to refill it.
@@ -1478,10 +1480,6 @@ public sealed record Army
                 ReturnEdgeHours = movement.ReturnEdgeHours,
                 TurnAroundAt = movement.TurnAroundAt,
                 IsReturning = true,
-                // Natural provisions-driven turnaround is immune to
-                // interception (issue #206 §5) — not something a player
-                // triggers on demand.
-                RetreatImmune = true,
             };
 
             var turned = this with
@@ -1603,12 +1601,10 @@ public sealed record Army
     /// march (issue #206 §5) — the mechanical consequence of losing (or
     /// tying) a <see cref="FieldBattleResolver"/> interception. Deliberately
     /// not built through <see cref="Recall"/>: the resulting <see cref="Movement"/>
-    /// carries <see cref="Movement.RetreatImmune"/> so it cannot itself be
-    /// intercepted again (unlike a voluntary Recall), and this army cannot
-    /// take a fresh <see cref="Recall"/>/<see cref="PlanFieldOrder"/> while it
-    /// holds — both require <see cref="Movement.IsReturning"/> to be
-    /// <see langword="false"/>, which a forced retreat never is again once
-    /// applied.
+    /// carries <see cref="Movement.FieldBattleImmuneUntil"/> (the battle instant plus
+    /// <see cref="Movement.FleeProtection"/>), so for those hours it can be neither intercepted again nor ambushed by a camp,
+    /// unlike a voluntary Recall. Any order built afterwards (<see cref="Recall"/>, <see cref="PlanFieldOrder"/>,
+    /// <see cref="RetargetFounding"/>) is a fresh movement and so ends that protection.
     /// </summary>
     /// <param name="battleInstant">
     /// When the fight happened — the new leg's <see cref="Movement.DepartedAt"/>,
@@ -1634,16 +1630,13 @@ public sealed record Army
 
         var isLandUnit = !IsFleet;
         var provisionsNow = provisionsAtBattle ?? ProvisionsAt(battleInstant);
+        var immuneUntil = battleInstant + Movement.Movement.FleeProtection;
 
         if (HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver, isWideRiver, walls?.Blocked, walls?.FriendlyGate, walls?.HalfOpen, walls?.BridgeCost) is not { Count: > 0 } path)
         {
             // No way home (a wall in the way): it stays where it fought, still protected from further fights, and starves
             // when the food runs out (docs/design/troop-movement-range.md §2a).
-            var stranded = WithProvisionsAt(battleInstant, provisionsNow).Strand(battleInstant, fromHex);
-            return stranded with
-            {
-                Location = new ArmyLocation.InTransit(((ArmyLocation.InTransit)stranded.Location).Movement with { RetreatImmune = true }),
-            };
+            return WithProvisionsAt(battleInstant, provisionsNow).Strand(battleInstant, fromHex, immuneUntil);
         }
 
         var speed = TotalSpeed;
@@ -1661,7 +1654,7 @@ public sealed record Army
             ReturnEdgeHours = edgeHours,
             TurnAroundAt = battleInstant,
             IsReturning = true,
-            RetreatImmune = true,
+            FieldBattleImmuneUntil = immuneUntil,
         };
 
         // The retreat departs at the battle instant, so the stored baseline is what the army carried then.
@@ -2113,6 +2106,7 @@ public sealed record Army
             {
                 DepartedAt = movement.DepartedAt + shift,
                 TurnAroundAt = movement.TurnAroundAt + shift,
+                FieldBattleImmuneUntil = movement.FieldBattleImmuneUntil + shift,
             }),
         };
     }

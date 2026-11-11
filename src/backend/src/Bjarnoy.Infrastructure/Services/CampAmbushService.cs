@@ -47,8 +47,7 @@ public sealed class CampAmbushService(
         ArgumentNullException.ThrowIfNull(armyEntity);
         ArgumentNullException.ThrowIfNull(domain);
 
-        if (domain.Location is not ArmyLocation.InTransit { Movement: var movement }
-            || movement.RetreatImmune)
+        if (domain.Location is not ArmyLocation.InTransit { Movement: var movement })
         {
             return CampAmbushOutcome.None;
         }

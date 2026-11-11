@@ -309,6 +309,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTimeOffset?>("FieldBattleImmuneUntil")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("HomeSpotQ")
                         .HasColumnType("integer");
 
@@ -345,9 +348,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<double>("Provisions")
                         .HasColumnType("double precision");
-
-                    b.Property<bool>("RetreatImmune")
-                        .HasColumnType("boolean");
 
                     b.Property<string>("ReturnCumulativeHours")
                         .IsRequired()

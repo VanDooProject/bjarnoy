@@ -121,8 +121,8 @@ public class ArmyEntity
 
     public bool IsReturning { get; set; }
 
-    /// <summary>Persisted mirror of <see cref="Movement.RetreatImmune"/> (issue #206 §5).</summary>
-    public bool RetreatImmune { get; set; }
+    /// <summary>Persisted mirror of <see cref="Movement.FieldBattleImmuneUntil"/>; <see langword="null"/> unless the army is fleeing a lost field battle.</summary>
+    public DateTimeOffset? FieldBattleImmuneUntil { get; set; }
 
     /// <summary>Persisted mirror of <see cref="Movement.IsStranded"/>: the army cannot get home and starves when its food runs out.</summary>
     public bool IsStranded { get; set; }
@@ -145,7 +145,7 @@ public class ArmyEntity
                     ReturnEdgeHours = ReturnEdgeHours,
                     TurnAroundAt = TurnAroundAt,
                     IsReturning = IsReturning,
-                    RetreatImmune = RetreatImmune,
+                    FieldBattleImmuneUntil = FieldBattleImmuneUntil,
                     IsStranded = IsStranded,
                 });
 
@@ -242,7 +242,7 @@ public class ArmyEntity
                 ReturnEdgeHours = [];
                 TurnAroundAt = default;
                 IsReturning = false;
-                RetreatImmune = false;
+                FieldBattleImmuneUntil = null;
                 IsStranded = false;
                 break;
 
@@ -261,7 +261,7 @@ public class ArmyEntity
                 ReturnEdgeHours = [];
                 TurnAroundAt = default;
                 IsReturning = false;
-                RetreatImmune = false;
+                FieldBattleImmuneUntil = null;
                 IsStranded = false;
                 break;
 
@@ -278,7 +278,7 @@ public class ArmyEntity
                 ReturnEdgeHours = [.. movement.ReturnEdgeHours];
                 TurnAroundAt = movement.TurnAroundAt;
                 IsReturning = movement.IsReturning;
-                RetreatImmune = movement.RetreatImmune;
+                FieldBattleImmuneUntil = movement.FieldBattleImmuneUntil;
                 IsStranded = movement.IsStranded;
                 break;
         }

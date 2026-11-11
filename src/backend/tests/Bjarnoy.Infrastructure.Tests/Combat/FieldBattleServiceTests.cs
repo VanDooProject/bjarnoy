@@ -298,8 +298,50 @@ public sealed class FieldBattleServiceTests : IDisposable
         var loserTransit = (ArmyLocation.InTransit)loserAfter.Location;
         // The loser was forced onto a brand-new retreat leg, immune and heading home.
         Assert.True(loserTransit.Movement.IsReturning);
-        Assert.True(loserTransit.Movement.RetreatImmune);
+        Assert.Equal(loserTransit.Movement.DepartedAt + Movement.FleeProtection, loserTransit.Movement.FieldBattleImmuneUntil);
         Assert.Equal(new HexCoord(0, 0), loserTransit.Movement.Path[0]);
+    }
+
+    /// <summary>Two hostile armies crossing at (0,0) during [2h, 3h); the weak one is protected until <paramref name="immuneUntilHours"/> (or not at all).</summary>
+    private async Task<bool> ResolveCrossingAsync(double? immuneUntilHours)
+    {
+        using var db = CreateContext();
+        var worldId = AddWorld(db);
+        var islandId = AddIsland(db, worldId);
+        var settlementA = AddSettlement(db, worldId, islandId, AddUser(db), -20, 0);
+        var settlementB = AddSettlement(db, worldId, islandId, AddUser(db), 20, 0);
+        var armyA = MakeInTransitArmy(
+            settlementA, [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Axeman, 10));
+        var armyB = MakeInTransitArmy(
+            settlementB, [(2, 0), (1, 0), (0, 0), (-1, 0), (-2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Spearman, 5));
+        armyB.FieldBattleImmuneUntil = immuneUntilHours is { } h ? T0 + TimeSpan.FromHours(h) : null;
+        db.Armies.AddRange(armyA, armyB);
+        await db.SaveChangesAsync(Ct);
+
+        var service = new FieldBattleService(db, NullLogger<FieldBattleService>.Instance);
+        var loaded = (await LoadAsync(db, armyA.Id, Ct))!;
+        var resolved = await service.TryResolveAsync(loaded, loaded.ToDomain(), T0 + TimeSpan.FromHours(3), Ct);
+        await db.SaveChangesAsync(Ct);
+        Assert.Equal(resolved ? 1 : 0, db.FieldBattleReports.Count());
+        return resolved;
+    }
+
+    [Fact]
+    public async Task A_fleeing_army_cannot_be_fought_while_it_is_protected()
+    {
+        Assert.False(await ResolveCrossingAsync(immuneUntilHours: 6));
+    }
+
+    [Fact]
+    public async Task A_fleeing_army_can_be_fought_once_its_protection_ends_while_the_armies_still_share_the_hex()
+    {
+        Assert.True(await ResolveCrossingAsync(immuneUntilHours: 2.5));
+    }
+
+    [Fact]
+    public async Task An_army_with_no_protection_is_fought_at_once()
+    {
+        Assert.True(await ResolveCrossingAsync(immuneUntilHours: null));
     }
 
     [Fact]
