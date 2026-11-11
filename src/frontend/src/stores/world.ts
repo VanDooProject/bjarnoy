@@ -1250,9 +1250,13 @@ export const useWorldStore = defineStore('world', {
       await this.restoreLiveSettlement(player.id, settlementId);
       await this.refreshMyRealms();
     },
-    /** Live mode: reloads the player's realms for the header switcher. Best-effort: a failed read keeps the last list. */
+    /**
+     * Live mode: reloads the player's realms for the header switcher. Best-effort: a failed read keeps the last list. The one
+     * gate for every caller: an anonymous visitor (landing, onboarding) must never even attempt the request, because it 401s and
+     * the logged error surfaces as a console error that the e2e suites reject.
+     */
     async refreshMyRealms() {
-      if (DEMO_MODE || !this.worldId) return;
+      if (DEMO_MODE || !useAuthStore().isAuthenticated || !this.worldId || !this.selectedSettlementId) return;
       try {
         this.myRealms = await api.listMySettlements(this.worldId);
       } catch {

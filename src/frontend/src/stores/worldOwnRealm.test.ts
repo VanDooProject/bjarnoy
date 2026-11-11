@@ -1,8 +1,19 @@
 // @vitest-environment jsdom
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWorldStore } from './world';
+import { useAuthStore } from './auth';
 import type { SettlementSummary } from '../api/types';
+
+vi.mock('../config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../config')>();
+  return { ...actual, DEMO_MODE: false };
+});
+const api = vi.hoisted(() => ({ listMySettlements: vi.fn() }));
+vi.mock('../api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/client')>();
+  return { ...actual, api: { ...actual.api, ...api } };
+});
 
 function register(store: ReturnType<typeof useWorldStore>, id: string, ownerId: string, realmId?: string) {
   store.model.registerSettlement({
@@ -52,5 +63,31 @@ describe('world store realmList', () => {
       { id: 'a', name: 'Hrafn', level: 4 },
       { id: 'b', name: 'Sker', level: 2 },
     ]);
+  });
+});
+
+describe('world store refreshMyRealms', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    api.listMySettlements.mockReset().mockResolvedValue([]);
+  });
+
+  it('never asks the API for a logged-out visitor (the 401 would be a console error)', async () => {
+    const store = useWorldStore();
+    store.worldId = 'w1';
+    store.selectedSettlementId = 's1';
+    await store.refreshMyRealms();
+    expect(api.listMySettlements).not.toHaveBeenCalled();
+  });
+
+  it('asks only once a world and a settlement are open', async () => {
+    const store = useWorldStore();
+    useAuthStore().user = { id: 'u1', email: 'a@b.c' } as never;
+    store.worldId = 'w1';
+    await store.refreshMyRealms();
+    expect(api.listMySettlements).not.toHaveBeenCalled();
+    store.selectedSettlementId = 's1';
+    await store.refreshMyRealms();
+    expect(api.listMySettlements).toHaveBeenCalledWith('w1');
   });
 });
