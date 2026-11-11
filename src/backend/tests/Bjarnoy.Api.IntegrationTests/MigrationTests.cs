@@ -1,7 +1,9 @@
 using Bjarnoy.Api.Hosting;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
+using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Units;
+using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -372,7 +374,8 @@ public sealed class MigrationTests
     /// <summary>
     /// Existing garrisons stand at the settlement's centre when the garrison-spots migration runs, ships at the Dockyard nearest
     /// the centre (by hex distance, ties by Q, then R) or the centre when there is none; an army's home spot and a guest's spot
-    /// follow the same rule. Written as rows under the pre-migration schema, then migrated and read back with plain SQL.
+    /// follow the same rule. The rows are written through the model, then the schema is taken back to the migration before
+    /// <c>AddGarrisonSpots</c> (which drops the spot columns) and migrated forward again, so the data step runs over them.
     /// </summary>
     [Fact]
     public async Task The_garrison_spots_migration_puts_existing_garrisons_armies_and_guests_on_spots()
@@ -385,142 +388,90 @@ public sealed class MigrationTests
                 .UseSqlite(connectionString, sqlite => sqlite.MigrationsAssembly(MigrationAssemblies.Sqlite))
                 .Options;
 
-            await using (var context = new GameDbContext(options))
-            {
-                var migrator = context.GetInfrastructure().GetRequiredService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>();
-                await migrator.MigrateAsync("20261109051630_AddApiKeyAnonymousAccounts", Ct);
-            }
-
-            var now = new DateTimeOffset(2026, 1, 1, 10, 0, 0, TimeSpan.Zero).ToString("o");
-            var worldId = Guid.CreateVersion7();
-            var islandId = Guid.CreateVersion7();
-            var userId = Guid.CreateVersion7();
             var harbour = Guid.CreateVersion7(); // centre (3,4), docks at (7,4), (5,6) (both 4 away) and (9,9)
             var inland = Guid.CreateVersion7(); // centre (20,20), no dock
             var landArmy = Guid.CreateVersion7();
             var fleetArmy = Guid.CreateVersion7();
             var guestFleet = Guid.CreateVersion7();
 
-            await using (var connection = new SqliteConnection(connectionString))
+            await using (var context = new GameDbContext(options))
             {
-                await connection.OpenAsync(Ct);
+                await context.Database.MigrateAsync(Ct);
 
-                await ExecuteAsync(
-                    connection,
-                    """
-                    INSERT INTO worlds
-                        (Id, Name, Seed, Radius, IslandCellSize, IslandChance, IslandMinRadius, IslandMaxRadius,
-                         BeachThreshold, MountainThreshold, MountainRockiness, ForestRockiness, MinimumIslandTiles,
-                         MaxPlayers, Status, CreatedAt)
-                    VALUES
-                        ($worldId, 'Migration test world', 1, 40, 8, 0.5, 3, 8, 0.2, 0.7, 0.5, 0.5, 5, 20, 0, $now)
-                    """,
-                    ("$worldId", worldId.ToString()), ("$now", now));
-                await ExecuteAsync(
-                    connection,
-                    "INSERT INTO islands (Id, WorldId, \"Index\", Name, CentreQ, CentreR, TileCount, StartPositions) VALUES ($i, $w, 0, 'Test isle', 0, 0, 10, '[]')",
-                    ("$i", islandId.ToString()), ("$w", worldId.ToString()));
-                await ExecuteAsync(
-                    connection,
-                    "INSERT INTO users (Id, UserName, NormalizedUserName, PasswordHash, Role, Status, CreatedAt, IsSystem) VALUES ($u, 'migration-test-user', 'MIGRATION-TEST-USER', 'x', 0, 0, $now, 0)",
-                    ("$u", userId.ToString()), ("$now", now));
+                var world = new WorldEntity { Name = "Migration test world", MaxPlayers = 10 };
+                var island = new IslandEntity { WorldId = world.Id, Name = "Island", CentreQ = 0, CentreR = 0 };
+                context.Worlds.Add(world);
+                context.Islands.Add(island);
 
-                foreach (var (id, q, r) in new[] { (harbour, 3, 4), (inland, 20, 20) })
+                SettlementEntity Settle(Guid id, int q, int r) => new()
                 {
-                    await ExecuteAsync(
-                        connection,
-                        """
-                        INSERT INTO settlements
-                            (Id, WorldId, IslandId, UserId, Name, OwnerId, OwnerName, CentreQ, CentreR,
-                             StockWood, StockStone, StockFood, StockIron, RateWood, RateStone, RateFood, RateIron,
-                             CapacityWood, CapacityStone, CapacityFood, CapacityIron, SettledAt, FoundedAt)
-                        VALUES
-                            ($id, $w, $i, $u, $name, 'owner', 'Owner', $q, $r, 100, 100, 100, 0, 0, 0, 0, 0, 500, 500, 500, 500, $now, $now)
-                        """,
-                        ("$id", id.ToString()), ("$w", worldId.ToString()), ("$i", islandId.ToString()), ("$u", userId.ToString()),
-                        ("$name", $"s-{id:N}"), ("$q", q), ("$r", r), ("$now", now));
-                }
+                    Id = id,
+                    WorldId = world.Id,
+                    IslandId = island.Id,
+                    UserId = SystemUserIds.Abandoned,
+                    Name = $"s-{id:N}",
+                    OwnerId = "owner",
+                    OwnerName = "Owner",
+                    CentreQ = q,
+                    CentreR = r,
+                };
 
+                var harbourSettlement = Settle(harbour, 3, 4);
                 foreach (var (q, r) in new[] { (7, 4), (5, 6), (9, 9) })
                 {
-                    await ExecuteAsync(
-                        connection,
-                        "INSERT INTO placed_buildings (Id, SettlementId, Q, R, Type, Level) VALUES ($id, $s, $q, $r, $type, 1)",
-                        ("$id", Guid.CreateVersion7().ToString()), ("$s", harbour.ToString()), ("$q", q), ("$r", r), ("$type", (int)BuildingType.Dockyard));
+                    harbourSettlement.Buildings.Add(new PlacedBuildingEntity { SettlementId = harbour, Q = q, R = r, Type = BuildingType.Dockyard, Level = 1 });
                 }
 
-                foreach (var (settlement, unit, count) in new[]
-                {
-                    (harbour, UnitType.Spearman, 5), (harbour, UnitType.Karve, 2), (harbour, UnitType.Longship, 1), (inland, UnitType.Karve, 3),
-                })
-                {
-                    await ExecuteAsync(
-                        connection,
-                        "INSERT INTO unit_stacks (Id, SettlementId, UnitType, Count) VALUES ($id, $s, $t, $c)",
-                        ("$id", Guid.CreateVersion7().ToString()), ("$s", settlement.ToString()), ("$t", (int)unit), ("$c", count));
-                }
+                harbourSettlement.Garrison.Add(new UnitStackEntity { SettlementId = harbour, UnitType = UnitType.Spearman, Count = 5 });
+                harbourSettlement.Garrison.Add(new UnitStackEntity { SettlementId = harbour, UnitType = UnitType.Karve, Count = 2 });
+                harbourSettlement.Garrison.Add(new UnitStackEntity { SettlementId = harbour, UnitType = UnitType.Longship, Count = 1 });
+                var inlandSettlement = Settle(inland, 20, 20);
+                inlandSettlement.Garrison.Add(new UnitStackEntity { SettlementId = inland, UnitType = UnitType.Karve, Count = 3 });
+                context.Settlements.AddRange(harbourSettlement, inlandSettlement);
 
-                foreach (var (army, unit, supporting) in new[]
+                ArmyEntity Army(Guid id, UnitType unit, bool supporting) => new()
                 {
-                    (landArmy, UnitType.Spearman, false), (fleetArmy, UnitType.Karve, false), (guestFleet, UnitType.Karve, true),
-                })
-                {
-                    await ExecuteAsync(
-                        connection,
-                        """
-                        INSERT INTO armies
-                            (Id, SettlementId, Mission, TargetSettlementId, IsSupporting, Provisions, LootWood, LootStone, LootFood, LootIron,
-                             AtHome, DepartedAt, Path, CumulativeHours, EdgeHours, ReturnPath, ReturnCumulativeHours, ReturnEdgeHours,
-                             TurnAroundAt, IsReturning, RetreatImmune)
-                        VALUES
-                            ($id, $home, $mission, $target, $supporting, 10, 0, 0, 0, 0, 0, $now, '[]', '[]', '[]', '[]', '[]', '[]', $now, 0, 0)
-                        """,
-                        ("$id", army.ToString()), ("$home", harbour.ToString()), ("$mission", supporting ? 2 : 0),
-                        ("$target", supporting ? inland.ToString() : DBNull.Value), ("$supporting", supporting ? 1 : 0), ("$now", now));
-                    await ExecuteAsync(
-                        connection,
-                        "INSERT INTO army_unit_stacks (Id, ArmyId, UnitType, Count) VALUES ($id, $a, $t, 1)",
-                        ("$id", Guid.CreateVersion7().ToString()), ("$a", army.ToString()), ("$t", (int)unit));
-                }
+                    Id = id,
+                    SettlementId = harbour,
+                    Mission = supporting ? (int)ArmyMission.Support : (int)ArmyMission.Move,
+                    IsSupporting = supporting,
+                    TargetSettlementId = supporting ? inland : null,
+                    AtHome = false,
+                    Stacks = [new ArmyUnitStackEntity { ArmyId = id, UnitType = unit, Count = 1 }],
+                };
+
+                context.Armies.AddRange(
+                    Army(landArmy, UnitType.Spearman, supporting: false),
+                    Army(fleetArmy, UnitType.Karve, supporting: false),
+                    Army(guestFleet, UnitType.Karve, supporting: true));
+                await context.SaveChangesAsync(Ct);
+
+                // Back to the schema without the spot columns, then forward again: the data step sees these rows.
+                var migrator = context.GetInfrastructure().GetRequiredService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>();
+                await migrator.MigrateAsync("20261109051620_AddApiKeyAnonymousAccounts", Ct);
+                await migrator.MigrateAsync(cancellationToken: Ct);
             }
 
             await using (var context = new GameDbContext(options))
             {
-                var migrator = context.GetInfrastructure().GetRequiredService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>();
-                await migrator.MigrateAsync(cancellationToken: Ct);
-            }
+                var stacks = await context.UnitStacks.AsNoTracking().ToListAsync(Ct);
+                (int Q, int R) SpotOf(Guid settlement, UnitType type) =>
+                    stacks.Where(s => s.SettlementId == settlement && s.UnitType == type).Select(s => (s.SpotQ, s.SpotR)).Single();
 
-            await using (var connection = new SqliteConnection(connectionString))
-            {
-                await connection.OpenAsync(Ct);
-
-                async Task<(long Q, long R)> ReadAsync(string sql, Guid id, params (string, object)[] more)
-                {
-                    await using var command = connection.CreateCommand();
-                    command.CommandText = sql;
-                    command.Parameters.AddWithValue("$id", id.ToString());
-                    foreach (var (name, value) in more)
-                    {
-                        command.Parameters.AddWithValue(name, value);
-                    }
-
-                    await using var reader = await command.ExecuteReaderAsync(Ct);
-                    Assert.True(await reader.ReadAsync(Ct));
-                    return (reader.GetInt64(0), reader.GetInt64(1));
-                }
-
-                const string Stack = "SELECT SpotQ, SpotR FROM unit_stacks WHERE SettlementId = $id AND UnitType = $t";
-                Assert.Equal((3, 4), await ReadAsync(Stack, harbour, ("$t", (int)UnitType.Spearman)));
+                Assert.Equal((3, 4), SpotOf(harbour, UnitType.Spearman));
                 // Two docks are four hexes from the centre; the lower Q wins, the farther one never does.
-                Assert.Equal((5, 6), await ReadAsync(Stack, harbour, ("$t", (int)UnitType.Karve)));
-                Assert.Equal((5, 6), await ReadAsync(Stack, harbour, ("$t", (int)UnitType.Longship)));
-                Assert.Equal((20, 20), await ReadAsync(Stack, inland, ("$t", (int)UnitType.Karve)));
+                Assert.Equal((5, 6), SpotOf(harbour, UnitType.Karve));
+                Assert.Equal((5, 6), SpotOf(harbour, UnitType.Longship));
+                Assert.Equal((20, 20), SpotOf(inland, UnitType.Karve));
 
-                const string Home = "SELECT HomeSpotQ, HomeSpotR FROM armies WHERE Id = $id";
-                Assert.Equal((3, 4), await ReadAsync(Home, landArmy));
-                Assert.Equal((5, 6), await ReadAsync(Home, fleetArmy));
+                var armies = await context.Armies.AsNoTracking().ToListAsync(Ct);
+                var land = armies.Single(a => a.Id == landArmy);
+                var fleet = armies.Single(a => a.Id == fleetArmy);
+                var guest = armies.Single(a => a.Id == guestFleet);
+                Assert.Equal((3, 4), (land.HomeSpotQ, land.HomeSpotR));
+                Assert.Equal((5, 6), (fleet.HomeSpotQ, fleet.HomeSpotR));
                 // A guest stands at a spot of its host: the host has no dock, so its centre.
-                Assert.Equal((20, 20), await ReadAsync("SELECT TargetBuildingQ, TargetBuildingR FROM armies WHERE Id = $id", guestFleet));
+                Assert.Equal((20, 20), (guest.TargetBuildingQ, guest.TargetBuildingR));
             }
         }
         finally

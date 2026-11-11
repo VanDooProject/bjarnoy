@@ -77,7 +77,7 @@ public sealed class FieldOrderEndpointsTests : IAsyncLifetime
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, UnitType = UnitType.Axeman, Count = 20 });
+            db.UnitStacks.Add(new UnitStackEntity { SettlementId = settlement.Id, SpotQ = settlement.Q, SpotR = settlement.R, UnitType = UnitType.Axeman, Count = 20 });
             await db.SaveChangesAsync(Ct);
         }
 

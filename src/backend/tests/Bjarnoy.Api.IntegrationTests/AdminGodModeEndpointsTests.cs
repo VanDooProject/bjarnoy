@@ -716,6 +716,8 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         var army = new ArmyEntity
         {
             SettlementId = settlement.Id,
+            HomeSpotQ = settlement.Q,
+            HomeSpotR = settlement.R,
             Mission = (int)ArmyMission.Move,
             AtHome = false,
             IsSupporting = false,

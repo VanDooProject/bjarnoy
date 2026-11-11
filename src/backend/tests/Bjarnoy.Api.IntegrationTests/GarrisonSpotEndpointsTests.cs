@@ -156,7 +156,7 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
             var (worldId, islandId) = await AddWorldAsync(db);
             var settlement = MakeSettlement(worldId, islandId, ownerId, centre, food: 10, (BuildingType.Tower, tower));
-            var army = PlantArmy(settlement, tower, tower, centre, returning: true, provisions: 300, new UnitStack(UnitType.Spearman, 5));
+            var army = PlantArmy(settlement, tower, tower, centre, returning: true, provisions: 100, new UnitStack(UnitType.Spearman, 5));
             db.Settlements.Add(settlement);
             db.Armies.Add(army);
             await db.SaveChangesAsync(Ct);
@@ -175,8 +175,9 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
         var towerSpot = after.GarrisonSpots.Single(s => s.Kind == "tower");
         Assert.Equal(new UnitStackResponse("spearman", 5), Assert.Single(towerSpot.Stacks));
         Assert.Empty(after.GarrisonSpots.Single(s => s.Kind == "longhouse").Stacks);
-        var leftover = 300 - (5 * UnitCatalogue.Get(UnitType.Spearman).UpkeepPerHour * 1.0);
-        Assert.Equal(leftover, after.Resources.Stock.Food - before.Resources.Stock.Food, 3);
+        var leftover = 100 - (5 * UnitCatalogue.Get(UnitType.Spearman).UpkeepPerHour * 1.0);
+        // The leftover joins the stock; the clock also ticks a minute between reads, which the longhouse's own food covers.
+        Assert.InRange(after.Resources.Stock.Food - before.Resources.Stock.Food, leftover - 0.001, leftover + 1);
     }
 
     [Fact]
@@ -339,7 +340,7 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
         using var guestClient = ClientFor(guestOwner);
         var from = await guestClient.SpotOfAsync(guestHomeId, Ct);
         DispatchArmyRequest Support(HexPointRequest spot) =>
-            new([new UnitCountRequest("spearman", 5)], from, null, null, 300, "support", hostId, spot);
+            new([new UnitCountRequest("spearman", 5)], from, null, null, 100, "support", hostId, spot);
 
         // A hex that is no spot, a dock (land units cannot stand there) and no spot at all are refused.
         var nowhere = await guestClient.PostJsonAsync($"/api/v1/settlements/{guestHomeId}/armies", Support(new HexPointRequest(13, 0)), Ct);
@@ -349,7 +350,7 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
         Assert.Equal("SupportSpotCannotHold", await atDock.RejectionAsync(Ct));
         var unnamed = await guestClient.PostJsonAsync(
             $"/api/v1/settlements/{guestHomeId}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("spearman", 5)], from, null, null, 300, "support", hostId), Ct);
+            new DispatchArmyRequest([new UnitCountRequest("spearman", 5)], from, null, null, 100, "support", hostId), Ct);
         Assert.Equal("SupportSpotRequired", await unnamed.RejectionAsync(Ct));
 
         var sent = await guestClient.PostJsonAsync($"/api/v1/settlements/{guestHomeId}/armies", Support(new HexPointRequest(hostTower.Q, hostTower.R)), Ct);
