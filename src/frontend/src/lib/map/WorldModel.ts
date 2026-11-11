@@ -1934,15 +1934,17 @@ export class WorldModel {
   /**
    * Replaces the set of buildings this model learns from the world read rather than from an opened settlement (live mode:
    * `GET /worlds/{id}/rival-buildings`: other players' buildings, fog-gated per hex, plus every building of the player's own
-   * settlements, so one they have not opened yet is drawn too; an open settlement's own hexes are skipped, see `ownRendered`). Each building is put on its tile the way an own one is (type, level, owning
+   * settlements, so one they have not opened yet is drawn too; the hexes of the open settlement, `openSettlementId`, are skipped). Each building is put on its tile the way an own one is (type, level, owning
    * settlement), so the piece it draws, the hit-test and the route rules need nothing special. A building of the previous call that
    * is missing now is cleared; a hex one of the player's own settlements renders is never touched.
    */
   applyRivalBuildings(
     buildings: { q: number; r: number; type: string; level: number; settlementId: string; ownerUserId: string | null; outsideRealm?: boolean }[],
+    openSettlementId: string | null = null,
   ) {
-    const ownRendered = new Set<string>();
-    for (const keys of this.renderedBuildingCoords.values()) for (const key of keys) ownRendered.add(key);
+    // Only the open settlement's snapshot is polled, so only its hexes are left to it; a settlement the player opened earlier and left
+    // is kept current by these rows like any other.
+    const ownRendered = new Set<string>(openSettlementId ? this.renderedBuildingCoords.get(openSettlementId) : []);
 
     const next = new Map<string, { settlementId: string; ownerUserId: string | null; own: boolean }>();
     const towers = new Map<string, { q: number; r: number; level: number }[]>();

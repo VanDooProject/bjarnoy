@@ -2683,8 +2683,8 @@ describe('WorldModel.applyRivalBuildings', () => {
       buildings: [{ ...own, type: 'palisade', level: 1 }],
     });
 
-    model.applyRivalBuildings([rivalBuilding(own.q, own.r), rivalBuilding(settlement.q, settlement.r, { type: 'longhouse' })]);
-    model.applyRivalBuildings([]);
+    model.applyRivalBuildings([rivalBuilding(own.q, own.r), rivalBuilding(settlement.q, settlement.r, { type: 'longhouse' })], settlement.id);
+    model.applyRivalBuildings([], settlement.id);
 
     expect(model.getTile(own.q, own.r)).toMatchObject({ buildingType: 'palisade', ownerId: settlement.id });
     expect(model.rivalBuildingOwner(own.q, own.r)).toBeUndefined();
@@ -2713,6 +2713,21 @@ describe('WorldModel.applyRivalBuildings', () => {
 
     model.applyRivalBuildings([]);
     expect(model.getTile(at.q, at.r).buildingType).toBeUndefined();
+  });
+
+  // Regression: a settlement opened once and then left kept its old buildings, because every ever-rendered hex was skipped.
+  it('keeps updating an own settlement the player opened and then left', () => {
+    const model = new WorldModel(20260825);
+    const { settlement: left } = foundLandedSettlement(model);
+    const at = { q: left.q + 1, r: left.r };
+    model.applyServerSnapshot(left.id, {
+      level: left.level, resources: left.resources, rates: left.rates, capacity: left.resources,
+      buildings: [{ ...at, type: 'farm', level: 1 }],
+    });
+
+    model.applyRivalBuildings([{ ...at, type: 'farm', level: 3, settlementId: left.id, ownerUserId: null }], 'another-open-one');
+
+    expect(model.getTile(at.q, at.r).buildingLevel).toBe(3);
   });
 });
 

@@ -1422,7 +1422,7 @@ export const useWorldStore = defineStore('world', {
         api.listOwnBuildings(this.worldId, this.ownerId ?? undefined).catch(() => null),
       ]);
       this.registerSettlementSummaries(summaries);
-      if (rivalBuildings && ownBuildings) this.model.applyRivalBuildings([...rivalBuildings, ...ownBuildings]);
+      if (rivalBuildings && ownBuildings) this.model.applyRivalBuildings([...rivalBuildings, ...ownBuildings], this.selectedSettlementId);
       if (this.worldMapActive) {
         this.model.claimAllTerritory();
       } else {
