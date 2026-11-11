@@ -228,7 +228,7 @@ describe('BuildingHudLayer', () => {
     expect(marker().find('svg.hud-dial polygon').exists()).toBe(true);
   });
 
-  it('grows a hovered marker to its default-zoom size and brings it to the front, then lets it shrink back', async () => {
+  it('grows a hovered marker (markerScale) and brings it to the front, then lets it shrink back', async () => {
     seedBuildings();
     const renderer = fakeRenderer({ dialMapScale: 0.5 });
     wrapper = mountLayer(renderer);
@@ -463,6 +463,21 @@ describe('BuildingHudLayer', () => {
       // A touch tap reveals the marker but is no mouse hover.
       renderer.tapObserver!({ x: 181, y: 301 });
       advance();
+      expect(hovering()).toEqual([[true], [false]]);
+    });
+
+    it('tells the map the hover is over when the hovered marker goes away with the last one', async () => {
+      const renderer = await mountAt(1.5);
+      const hovering = () => wrapper!.emitted('update:hovering') ?? [];
+      renderer.mousePoint = { x: 180, y: 300 };
+      advance();
+      expect(hovering()).toEqual([[true]]);
+      // Nothing left to place (every building gone, no construction dial): the tooltip must come back all the same.
+      useWorldStore().hud.buildings = [];
+      useWorldStore().hud.tick += 1;
+      await wrapper!.vm.$nextTick();
+      advance();
+      expect(wrapper!.findAll('[data-coord]')).toHaveLength(0);
       expect(hovering()).toEqual([[true], [false]]);
     });
 

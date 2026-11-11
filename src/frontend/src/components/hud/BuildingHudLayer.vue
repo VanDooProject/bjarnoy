@@ -65,7 +65,7 @@ import BuildingInfoToggle from './BuildingInfoToggle.vue';
 export interface BuildingHudRenderer {
   /** Screen point of the progress dial's centre over a building: lifted off the hex's centre. The marker's dial sits right there. */
   dialScreenPoint(coord: AxialCoord): { x: number; y: number };
-  /** `camera.zoom / SETTLEMENT_DEFAULT_ZOOM`: what the progress dial sizes itself by (`dialScale`). */
+  /** `camera.zoom / SETTLEMENT_DEFAULT_ZOOM`: what the markers size themselves by (`markerScale`). */
   readonly dialMapScale: number;
   /** The renderer's own "may this key drive the map" guard (no Ctrl/Meta/Alt, not typing, not covered or locked). */
   keyDrivesMap(e: KeyboardEvent): boolean;
@@ -463,7 +463,10 @@ function tick() {
   }
   if (tapKey !== null && nowMs - tapAtMs >= DIAL_TAP_REVEAL_MS) tapKey = null;
   // Nothing to place (the landing page without an order, building info off and no dial): no layout read in the map's frame.
-  if (placeables.value.length === 0) return;
+  if (placeables.value.length === 0) {
+    setMouseHovering(false);
+    return;
+  }
   const mapScale = renderer.dialMapScale;
   const width = root.value?.offsetWidth ?? window.innerWidth;
   const height = root.value?.offsetHeight ?? window.innerHeight;
@@ -475,6 +478,8 @@ function tick() {
     mouse,
     placeables.value.flatMap((m) => {
       if (!elements.has(m.key)) return [];
+      // While a hex is handed over, its dial-only marker sits on the building marker's dial: the building marker takes the hit.
+      if (m.key !== m.hexKey && elements.has(m.hexKey)) return [];
       return [{ key: m.key, ...renderer.dialScreenPoint(m.coord), zs: markerScale(mapScale, hoverT.get(m.key) ?? 0) }];
     }),
   );
@@ -522,7 +527,9 @@ function tick() {
     const tier = tierFor(zs, tiers.value[marker.key] ?? null);
     nextTiers[marker.key] = tier;
     if (tier !== tiers.value[marker.key]) tiersChanged = true;
-    dialDiscs.set(marker.key, { key: marker.hexKey, cx: x, cy: y, r: dialRadiusPx(zs) });
+    // A marker faded under the ring menu takes no tap.
+    if (occluded) dialDiscs.delete(marker.key);
+    else dialDiscs.set(marker.key, { key: marker.hexKey, cx: x, cy: y, r: dialRadiusPx(zs) });
     if (boxSize) boxRects.set(marker.key, markerBoxRect(x, y, boxSize, zs));
     else boxRects.delete(marker.key);
     el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${zs.toFixed(3)})`;
@@ -689,6 +696,7 @@ onMounted(() => {
 watch(
   () => props.renderer,
   (next, previous) => {
+    setMouseHovering(false);
     previous?.setTapObserver(null);
     previous?.setFrameObserver(null);
     next?.setTapObserver(onMapTap);

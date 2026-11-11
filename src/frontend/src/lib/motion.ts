@@ -1,7 +1,8 @@
 /**
  * Shared helpers for the HUD's small UI animations (ring menu choreography,
  * queue feedback, resource tick-down). Everything funnels through `animate`,
- * a thin Web Animations wrapper, so that `prefers-reduced-motion: reduce` is
+ * a thin Web Animations wrapper, so that the player's HUD motion setting
+ * (`motionPreferences.hudEnabled`: On / Off, or the device flag on Auto) is
  * honoured in exactly one place: by default a reduced-motion animation is
  * skipped (the element simply ends in its resting state), and a caller that
  * wants a quiet stand-in instead passes `reduced` frames (played as a short
