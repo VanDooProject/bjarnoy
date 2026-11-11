@@ -258,12 +258,12 @@ public class CampBattleResolverTests
     private static int Count(IEnumerable<UnitStack> stacks, UnitType type) => stacks.Where(s => s.Type == type).Sum(s => s.Count);
 
     [Fact]
-    public void A_hunting_fleets_passengers_do_not_fight_and_drown_beyond_the_slots_of_the_surviving_ships()
+    public void At_a_water_camp_a_hunting_fleets_passengers_do_not_fight_and_drown_beyond_the_slots_of_the_surviving_ships()
     {
         // 5 Longships attack 300 (100 slots) against 195; the 50 axemen aboard (100 slots) would have added 2000.
         var army = new[] { new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 50) };
 
-        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1);
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(family: CampFamilies.Whaleroad), 1, seed: 1);
 
         Assert.Equal(300, plan.ArmyPower);
         Assert.Equal(CampFightWinner.Army, plan.Winner);
@@ -274,12 +274,54 @@ public class CampBattleResolverTests
     }
 
     [Fact]
-    public void A_fleet_without_passengers_hunts_as_before()
+    public void A_fleet_without_passengers_hunts_a_water_camp_as_before()
     {
-        var plan = CampBattleResolver.Hunt([new UnitStack(UnitType.Longship, 5)], FullStrong(), Strong(), 1, seed: 1);
+        var plan = CampBattleResolver.Hunt([new UnitStack(UnitType.Longship, 5)], FullStrong(), Strong(family: CampFamilies.Whaleroad), 1, seed: 1);
 
         Assert.Equal(300, plan.ArmyPower);
         Assert.Equal(5, Count(plan.ArmyLosses, UnitType.Longship) + Count(plan.ArmySurvivors, UnitType.Longship));
+    }
+
+    [Fact]
+    public void At_a_sand_camp_the_land_troops_aboard_hunt_it_and_the_ships_take_no_part_and_no_losses()
+    {
+        // 50 axemen attack 2000 against 195; the 5 longships (attack 300, 20 carry each) would have added little and are not in it.
+        var army = new[] { new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 50) };
+
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1);
+
+        Assert.Equal(2000, plan.ArmyPower);
+        Assert.Equal(CampFightWinner.Army, plan.Winner);
+        Assert.Equal(5, Count(plan.ArmySurvivors, UnitType.Longship));
+        Assert.Equal(0, Count(plan.ArmyLosses, UnitType.Longship));
+        Assert.Equal(50, Count(plan.ArmySurvivors, UnitType.Axeman) + Count(plan.ArmyLosses, UnitType.Axeman));
+    }
+
+    [Fact]
+    public void At_a_sand_camp_the_loot_is_capped_by_the_surviving_ships_carry_capacity_only()
+    {
+        // The axemen could carry far more; the 5 longships carry 5 x 80 = 400.
+        var army = new[] { new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 50) };
+
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1);
+
+        var available = plan.LootAvailable;
+        Assert.True(available.Wood + available.Stone + available.Food + available.Iron > 400);
+        Assert.Equal(400, plan.Loot.Wood + plan.Loot.Stone + plan.Loot.Food + plan.Loot.Iron, 3);
+    }
+
+    [Fact]
+    public void At_a_sand_camp_a_lost_hunt_loses_the_troops_and_the_ships_sail_home_whole()
+    {
+        var army = new[] { new UnitStack(UnitType.Karve, 5), new UnitStack(UnitType.Axeman, 1) };
+
+        var plan = CampBattleResolver.Hunt(army, FullStrong(5), Strong(5), 5, seed: 1);
+
+        Assert.Equal(CampFightWinner.Camp, plan.Winner);
+        Assert.Equal(5, Count(plan.ArmySurvivors, UnitType.Karve));
+        Assert.Equal(1, Count(plan.ArmyLosses, UnitType.Axeman));
+        Assert.Equal(0, Count(plan.ArmyLosses, UnitType.Karve));
+        Assert.Equal(ResourceAmounts.Zero, plan.Loot);
     }
 
     [Fact]

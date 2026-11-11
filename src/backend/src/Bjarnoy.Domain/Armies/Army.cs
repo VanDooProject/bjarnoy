@@ -351,7 +351,7 @@ public sealed record Army
         // settlers on (issue #55 §2) — same beaching exemption, no separate shoreline check needed:
         // HexPathfinder can only ever reach that land hex by sea if it is adjacent to reachable open water, which is
         // exactly what "shoreline" means (see Shoreline.IsShoreline); any other land hex fails as UnreachableLeg below.
-        if (!SkipsDestinationTerrainCheck(isFleet, mission) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
+        if (!SkipsDestinationTerrainCheck(isFleet, mission, targetCampIsWater) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
         {
             return DispatchDecision.Rejected(isFleet
                 ? DispatchRejection.DestinationNotSea
@@ -485,13 +485,14 @@ public sealed record Army
         {
             // The camp itself is looked up by the caller, which passes its hex as targetCampCoord only when one
             // exists (and says whether it stands on the sea). Land units hunt land camps and fleets hunt water
-            // camps (the whale road); neither can reach the other's.
+            // camps (the whale road); a fleet also hunts a land camp with the land troops it carries (they fight, the
+            // ships do not), so it needs some aboard. Land units cannot reach a water camp.
             if (targetCampCoord is null)
             {
                 return (DispatchRejection.NoCampAtDestination, destination);
             }
 
-            if (isFleet && !targetCampIsWater)
+            if (isFleet && !targetCampIsWater && ShipCargo.Passengers(units).Count == 0)
             {
                 return (DispatchRejection.HuntRequiresLandUnits, destination);
             }
@@ -565,8 +566,9 @@ public sealed record Army
     /// ends on land, which is exactly the point (see <see cref="HexPathfinder.FindPath"/>'s beaching exemption at both
     /// route endpoints). The real fleet-reachability gate for Attack/Raid is the shore-building check.
     /// </summary>
-    private static bool SkipsDestinationTerrainCheck(bool isFleet, ArmyMission mission) =>
-        isFleet && mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid or ArmyMission.Found;
+    private static bool SkipsDestinationTerrainCheck(bool isFleet, ArmyMission mission, bool targetCampIsWater) =>
+        isFleet && (mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid or ArmyMission.Found
+            || (mission == ArmyMission.Hunt && !targetCampIsWater));
 
     /// <summary>
     /// Settles an <see cref="ArmyMission.Attack"/> or <see cref="ArmyMission.Raid"/>
@@ -1546,7 +1548,7 @@ public sealed record Army
 
         var routeDestination = target.RouteDestination;
 
-        if (!SkipsDestinationTerrainCheck(isFleet, mission) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
+        if (!SkipsDestinationTerrainCheck(isFleet, mission, targetCampIsWater) && !terrainAt(routeDestination).IsTraversable(isLandUnit))
         {
             return FieldOrderResult.Rejected(isLandUnit
                 ? FieldOrderRejection.DestinationNotLand

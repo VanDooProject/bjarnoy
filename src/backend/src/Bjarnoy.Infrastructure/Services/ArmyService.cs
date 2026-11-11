@@ -1221,8 +1221,9 @@ public sealed class ArmyService(
         var effectiveLevel = state.EffectiveLevel(camp);
 
         var attackerEntity = await LoadSettlementAsync(armyEntity.SettlementId, cancellationToken).ConfigureAwait(false);
-        // Fleets hunting a water camp fight with the ship attack bonus, land armies with the land one.
-        var attackBonusPercent = attackerEntity?.ToDomain().AttackBonusPercent(domain.IsFleet ? UnitClass.Ship : UnitClass.Infantry) ?? 0;
+        // Fleets hunting a water camp fight with the ship attack bonus; land armies, and the land troops a fleet puts ashore at a
+        // sand camp, with the land one.
+        var attackBonusPercent = attackerEntity?.ToDomain().AttackBonusPercent(domain.IsFleet && camp.IsWater ? UnitClass.Ship : UnitClass.Infantry) ?? 0;
 
         var seed = Random.Shared.Next();
         var plan = CampBattleResolver.Hunt(

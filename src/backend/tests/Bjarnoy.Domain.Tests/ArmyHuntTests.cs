@@ -81,14 +81,6 @@ public class ArmyHuntTests
     }
 
     [Fact]
-    public void Hunt_dispatch_with_ships_and_passengers_is_still_a_fleet_and_rejected_for_a_land_camp()
-    {
-        var decision = DispatchHunt(Found(), CampHex, [new UnitStack(UnitType.Axeman, 2), new UnitStack(UnitType.Karve, 2)]);
-
-        Assert.Equal(DispatchRejection.HuntRequiresLandUnits, decision.Rejection);
-    }
-
-    [Fact]
     public void Fleet_hunting_a_water_camp_carries_passengers_up_to_its_slots()
     {
         DispatchDecision Hunt(params UnitStack[] requested) => Army.PlanDispatch(

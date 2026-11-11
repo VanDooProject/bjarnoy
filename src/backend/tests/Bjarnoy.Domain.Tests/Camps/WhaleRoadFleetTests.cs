@@ -83,11 +83,33 @@ public class WhaleRoadFleetTests
     }
 
     [Fact]
-    public void A_fleet_cannot_hunt_a_land_camp()
+    public void A_fleet_without_land_troops_aboard_cannot_hunt_a_land_camp()
     {
         var decision = Dispatch([new UnitStack(UnitType.Longship, 5)], LandCampHex, targetIsWater: false);
 
         Assert.Equal(DispatchRejection.HuntRequiresLandUnits, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_fleet_with_land_troops_aboard_may_hunt_a_land_camp_and_beaches_on_it()
+    {
+        var decision = Dispatch(
+            [new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 10)], LandCampHex, targetIsWater: false,
+            destination: LandCampHex);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        Assert.True(decision.Army!.IsFleet);
+        Assert.Equal(LandCampHex, decision.Army.TargetCampCoord);
+    }
+
+    [Fact]
+    public void The_troops_aboard_still_need_ship_slots_for_a_land_camp_hunt()
+    {
+        var decision = Dispatch(
+            [new UnitStack(UnitType.Karve, 1), new UnitStack(UnitType.Axeman, 6)], LandCampHex, targetIsWater: false,
+            destination: LandCampHex);
+
+        Assert.Equal(DispatchRejection.InsufficientShipCapacity, decision.Rejection);
     }
 
     [Fact]
