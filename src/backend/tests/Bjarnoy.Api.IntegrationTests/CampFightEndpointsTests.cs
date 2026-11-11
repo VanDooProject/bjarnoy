@@ -86,8 +86,7 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
         HttpClient client, Guid settlementId, HexCoord destination, string unit = "axeman", int count = 10) =>
         await client.PostJsonAsync(
             $"/api/v1/settlements/{settlementId}/armies",
-            new DispatchArmyRequest(
-                [new UnitCountRequest(unit, count)], await client.SpotOfAsync(settlementId, Ct), null, new HexPointRequest(destination.Q, destination.R),
+            new DispatchArmyRequest([new(await client.SpotOfAsync(settlementId, Ct), [new UnitCountRequest(unit, count)])], null, new HexPointRequest(destination.Q, destination.R),
                 Math.Min(50, count * 10), "hunt"),
             Ct);
 
@@ -260,7 +259,7 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
 
         var noDestination = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("axeman", 5)], settlement.Spot(), null, null, 20, "hunt"), Ct);
+            new DispatchArmyRequest([new(settlement.Spot(), [new UnitCountRequest("axeman", 5)])], null, null, 20, "hunt"), Ct);
         Assert.Equal(HttpStatusCode.Conflict, noDestination.StatusCode);
         Assert.Equal("DestinationRequired", await noDestination.RejectionAsync(Ct));
 

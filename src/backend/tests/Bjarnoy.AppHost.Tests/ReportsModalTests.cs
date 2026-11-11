@@ -210,8 +210,7 @@ public class ReportsModalTests(AppHostFixture fixture)
         var dispatchResponse = await playerHttpClient.PostAsJsonAsync(
             $"/api/v1/settlements/{playerSettlement.Id}/armies",
             new DispatchArmyRequest(
-                Units: [new UnitCountRequest("spearman", 10)],
-                FromSpot: new HexPointRequest(playerSettlement.Q, playerSettlement.R),
+                From: [new(new HexPointRequest(playerSettlement.Q, playerSettlement.R), [new UnitCountRequest("spearman", 10)])],
                 Waypoints: null,
                 Destination: null,
                 Provisions: 50,

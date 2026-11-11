@@ -340,7 +340,7 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
         using var guestClient = ClientFor(guestOwner);
         var from = await guestClient.SpotOfAsync(guestHomeId, Ct);
         DispatchArmyRequest Support(HexPointRequest spot) =>
-            new([new UnitCountRequest("spearman", 5)], from, null, null, 100, "support", hostId, spot);
+            new([new(from, [new UnitCountRequest("spearman", 5)])], null, null, 100, "support", hostId, spot);
 
         // A hex that is no spot, a dock (land units cannot stand there) and no spot at all are refused.
         var nowhere = await guestClient.PostJsonAsync($"/api/v1/settlements/{guestHomeId}/armies", Support(new HexPointRequest(13, 0)), Ct);
@@ -350,7 +350,7 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
         Assert.Equal("SupportSpotCannotHold", await atDock.RejectionAsync(Ct));
         var unnamed = await guestClient.PostJsonAsync(
             $"/api/v1/settlements/{guestHomeId}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("spearman", 5)], from, null, null, 100, "support", hostId), Ct);
+            new DispatchArmyRequest([new(from, [new UnitCountRequest("spearman", 5)])], null, null, 100, "support", hostId), Ct);
         Assert.Equal("SupportSpotRequired", await unnamed.RejectionAsync(Ct));
 
         var sent = await guestClient.PostJsonAsync($"/api/v1/settlements/{guestHomeId}/armies", Support(new HexPointRequest(hostTower.Q, hostTower.R)), Ct);
@@ -372,5 +372,79 @@ public sealed class GarrisonSpotEndpointsTests : IAsyncLifetime
         Assert.Equal(new UnitStackResponse("spearman", 5), Assert.Single(snapshot.GarrisonSpots.Single(s => s.Kind == "tower").Guests));
         Assert.Empty(snapshot.GarrisonSpots.Single(s => s.Kind == "longhouse").Guests);
         Assert.Empty(snapshot.Garrison); // guests are not the settlement's own garrison
+        Assert.Equal(
+            [("longhouse", true, false), ("tower", true, false), ("dock", false, true)],
+            snapshot.GarrisonSpots.Select(s => (s.Kind, s.HoldsLand, s.HoldsShips)));
+    }
+
+    /// <summary>A host with a tower and a guest home holding 5 spearmen at its longhouse; returns the ids and the support request builder.</summary>
+    private async Task<(HttpClient Client, Guid HomeId, HexPointRequest HomeSpot, Func<IReadOnlyList<DispatchSpotUnitsRequest>, DispatchArmyRequest> Support)> SupportSetupAsync()
+    {
+        var hostOwner = $"owner-{Guid.CreateVersion7():N}";
+        var guestOwner = $"owner-{Guid.CreateVersion7():N}";
+        var hostTower = new HexCoord(15, 0);
+        Guid hostId, guestHomeId;
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var (worldId, islandId) = await AddWorldAsync(db);
+            var host = MakeSettlement(worldId, islandId, hostOwner, new HexCoord(12, 0), food: 400, (BuildingType.Tower, hostTower));
+            var guestHome = MakeSettlement(worldId, islandId, guestOwner, new HexCoord(0, 0), food: 400);
+            guestHome.Garrison.Add(Stack(guestHome, new HexCoord(0, 0), UnitType.Spearman, 5));
+            db.Settlements.AddRange(host, guestHome);
+            await db.SaveChangesAsync(Ct);
+            hostId = host.Id;
+            guestHomeId = guestHome.Id;
+        }
+
+        var client = ClientFor(guestOwner);
+        var home = await client.SpotOfAsync(guestHomeId, Ct);
+        return (client, guestHomeId, home, from => new DispatchArmyRequest(
+            from, null, null, 100, "support", hostId, new HexPointRequest(hostTower.Q, hostTower.R)));
+    }
+
+    [Fact]
+    public async Task A_dispatch_listing_units_at_two_spots_is_refused_as_units_at_several_spots()
+    {
+        var (client, homeId, home, support) = await SupportSetupAsync();
+        using var _ = client;
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/settlements/{homeId}/armies",
+            support([new(home, [new UnitCountRequest("spearman", 3)]), new(new HexPointRequest(3, 0), [new UnitCountRequest("spearman", 2)])]), Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("UnitsAtSeveralSpots", await response.RejectionAsync(Ct));
+    }
+
+    [Fact]
+    public async Task The_same_spot_listed_twice_is_merged_into_one_group()
+    {
+        var (client, homeId, home, support) = await SupportSetupAsync();
+        using var _ = client;
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/settlements/{homeId}/armies",
+            support([new(home, [new UnitCountRequest("spearman", 2)]), new(home, [new UnitCountRequest("spearman", 3)])]), Ct);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var army = await response.ReadStrictAsync<ArmyResponse>(Ct);
+        Assert.Equal(5, army.Stacks.Single(u => u.Unit == "spearman").Count);
+    }
+
+    [Fact]
+    public async Task An_entry_with_no_units_is_ignored_and_a_dispatch_with_no_units_at_all_is_refused()
+    {
+        var (client, homeId, home, support) = await SupportSetupAsync();
+        using var _ = client;
+
+        var ignored = await client.PostJsonAsync(
+            $"/api/v1/settlements/{homeId}/armies",
+            support([new(home, [new UnitCountRequest("spearman", 5)]), new(new HexPointRequest(3, 0), [])]), Ct);
+        Assert.Equal(HttpStatusCode.Created, ignored.StatusCode);
+
+        var none = await client.PostJsonAsync($"/api/v1/settlements/{homeId}/armies", support([new(home, [])]), Ct);
+        Assert.Equal(HttpStatusCode.Conflict, none.StatusCode);
+        Assert.Equal("NoUnitsRequested", await none.RejectionAsync(Ct));
     }
 }

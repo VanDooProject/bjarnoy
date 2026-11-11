@@ -371,8 +371,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
 
         var dispatched = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlementId}/armies",
-            new DispatchArmyRequest(
-                [new UnitCountRequest("karve", 3)], new HexPointRequest(dock.Q, dock.R), null, new HexPointRequest(destination.Q, destination.R), 30),
+            new DispatchArmyRequest([new(new HexPointRequest(dock.Q, dock.R), [new UnitCountRequest("karve", 3)])], null, new HexPointRequest(destination.Q, destination.R), 30),
             Ct);
         Assert.Equal(HttpStatusCode.Created, dispatched.StatusCode);
         var army = await dispatched.ReadStrictAsync<ArmyResponse>(Ct);
@@ -450,13 +449,13 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
 
         var tooMany = await client.PostJsonAsync(
             $"/api/v1/settlements/{attackerId}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("karve", 1), new UnitCountRequest("spearman", 11)], new HexPointRequest(dock.Q, dock.R), null, centre, 30, "attack", targetId, building), Ct);
+            new DispatchArmyRequest([new(new HexPointRequest(dock.Q, dock.R), [new UnitCountRequest("karve", 1), new UnitCountRequest("spearman", 11)])], null, centre, 30, "attack", targetId, building), Ct);
         Assert.Equal(HttpStatusCode.Conflict, tooMany.StatusCode);
         Assert.Equal("InsufficientShipCapacity", await tooMany.RejectionAsync(Ct));
 
         var fits = await client.PostJsonAsync(
             $"/api/v1/settlements/{attackerId}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("karve", 1), new UnitCountRequest("spearman", 10)], new HexPointRequest(dock.Q, dock.R), null, centre, 30, "attack", targetId, building), Ct);
+            new DispatchArmyRequest([new(new HexPointRequest(dock.Q, dock.R), [new UnitCountRequest("karve", 1), new UnitCountRequest("spearman", 10)])], null, centre, 30, "attack", targetId, building), Ct);
         Assert.Equal(HttpStatusCode.Created, fits.StatusCode);
         var army = await fits.ReadStrictAsync<ArmyResponse>(Ct);
         Assert.Contains(army.Stacks, s => s.Unit == "spearman" && s.Count == 10);
@@ -509,17 +508,17 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
 
         var withoutBuilding = await client.PostJsonAsync(
             $"/api/v1/settlements/{attackerId}/armies",
-            new DispatchArmyRequest(karves, new HexPointRequest(dock.Q, dock.R), null, centre, 30, "attack", targetId), Ct);
+            new DispatchArmyRequest([new(new HexPointRequest(dock.Q, dock.R), karves)], null, centre, 30, "attack", targetId), Ct);
         Assert.Equal(HttpStatusCode.Conflict, withoutBuilding.StatusCode);
 
         var inland = await client.PostJsonAsync(
             $"/api/v1/settlements/{attackerId}/armies",
-            new DispatchArmyRequest(karves, new HexPointRequest(dock.Q, dock.R), null, centre, 30, "attack", targetId, new HexPointRequest(inlandBuilding.Q, inlandBuilding.R)), Ct);
+            new DispatchArmyRequest([new(new HexPointRequest(dock.Q, dock.R), karves)], null, centre, 30, "attack", targetId, new HexPointRequest(inlandBuilding.Q, inlandBuilding.R)), Ct);
         Assert.Equal(HttpStatusCode.Conflict, inland.StatusCode);
 
         var dispatched = await client.PostJsonAsync(
             $"/api/v1/settlements/{attackerId}/armies",
-            new DispatchArmyRequest(karves, new HexPointRequest(dock.Q, dock.R), null, centre, 30, "attack", targetId, new HexPointRequest(shoreBuilding.Q, shoreBuilding.R)), Ct);
+            new DispatchArmyRequest([new(new HexPointRequest(dock.Q, dock.R), karves)], null, centre, 30, "attack", targetId, new HexPointRequest(shoreBuilding.Q, shoreBuilding.R)), Ct);
         Assert.Equal(HttpStatusCode.Created, dispatched.StatusCode);
         var army = await dispatched.ReadStrictAsync<ArmyResponse>(Ct);
         Assert.Equal(new HexPointResponse(shoreBuilding.Q, shoreBuilding.R), army.Movement!.Path[^1]);
@@ -583,8 +582,7 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
 
         var dispatched = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlementId}/armies",
-            new DispatchArmyRequest(
-                [new UnitCountRequest("spearman", 3)], new HexPointRequest(tower.Q, tower.R), null, new HexPointRequest(destination.Q, destination.R), 30),
+            new DispatchArmyRequest([new(new HexPointRequest(tower.Q, tower.R), [new UnitCountRequest("spearman", 3)])], null, new HexPointRequest(destination.Q, destination.R), 30),
             Ct);
         Assert.Equal(HttpStatusCode.Created, dispatched.StatusCode);
         var army = await dispatched.ReadStrictAsync<ArmyResponse>(Ct);

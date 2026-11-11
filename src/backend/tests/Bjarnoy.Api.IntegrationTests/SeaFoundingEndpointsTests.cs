@@ -151,7 +151,7 @@ public sealed class SeaFoundingEndpointsTests : IAsyncLifetime
         client.PostJsonAsync(
             $"/api/v1/settlements/{s.Home.Id}/armies",
             // Five settlers carry at most 5 * 40 = 200 food; the same ceiling the overland golden path uses.
-            new DispatchArmyRequest(units, s.Home.Spot(), null, new HexPointRequest(s.Target.Q, s.Target.R), 200, "found"),
+            new DispatchArmyRequest([new(s.Home.Spot(), units)], null, new HexPointRequest(s.Target.Q, s.Target.R), 200, "found"),
             Ct);
 
     [Fact]

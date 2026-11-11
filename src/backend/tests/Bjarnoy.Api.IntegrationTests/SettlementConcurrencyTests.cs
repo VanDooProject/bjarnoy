@@ -189,7 +189,7 @@ public sealed class SettlementConcurrencyTests : IAsyncLifetime
         HttpResponseMessage? competing = null;
         _injector.ArmOnce(async () => competing = await p.Client.PostJsonAsync(
             $"/api/v1/settlements/{p.Settlement.Id}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("spearman", 4)], p.Settlement.Spot(), null, new HexPointRequest(target.Q, target.R), 5),
+            new DispatchArmyRequest([new(p.Settlement.Spot(), [new UnitCountRequest("spearman", 4)])], null, new HexPointRequest(target.Q, target.R), 5),
             Ct));
         var build = await QueueFarm(p.Client, p.Settlement.Id, p.FreeGrass[0]);
 

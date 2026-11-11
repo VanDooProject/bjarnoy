@@ -237,7 +237,7 @@ public sealed class PalisadeEndpointsTests : IAsyncLifetime
         var ring = target.Neighbours();
 
         DispatchArmyRequest ToTarget(Player who) =>
-            new([new UnitCountRequest("spearman", DispatchedSpearmen)], who.Settlement.Spot(), null, new HexPointRequest(target.Q, target.R), DispatchedProvisions);
+            new([new(who.Settlement.Spot(), [new UnitCountRequest("spearman", DispatchedSpearmen)])], null, new HexPointRequest(target.Q, target.R), DispatchedProvisions);
         async Task<HttpResponseMessage> DispatchAsync(Player who)
         {
             Authorize(client, who.Auth.AccessToken);

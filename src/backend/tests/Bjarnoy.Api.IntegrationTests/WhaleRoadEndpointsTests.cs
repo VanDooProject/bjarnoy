@@ -152,8 +152,7 @@ public sealed class WhaleRoadEndpointsTests : IAsyncLifetime
         HttpClient client, Guid settlementId, string unit, int count, HexCoord to, double provisions, string? mission = null) =>
         await client.PostJsonAsync(
             $"/api/v1/settlements/{settlementId}/armies",
-            new DispatchArmyRequest(
-                [new UnitCountRequest(unit, count)], await client.SpotOfAsync(settlementId, Ct), null, new HexPointRequest(to.Q, to.R), provisions, mission),
+            new DispatchArmyRequest([new(await client.SpotOfAsync(settlementId, Ct), [new UnitCountRequest(unit, count)])], null, new HexPointRequest(to.Q, to.R), provisions, mission),
             Ct);
 
     private Task<List<CampReportResponse>?> CampReportsAsync(HttpClient client, Guid settlementId) =>

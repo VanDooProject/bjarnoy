@@ -161,22 +161,58 @@ public static class ArmyEndpoints
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var unitStacks = new List<UnitStack>();
-        foreach (var unit in request.Units)
+        // Group by spot (the same spot listed twice merges), parsing units and dropping all-zero entries.
+        var bySpot = new List<(HexCoord Spot, List<UnitStack> Stacks)>();
+        foreach (var group in request.From)
         {
-            if (!TryParseUnit(unit.Unit, out var type))
+            var spot = group.Spot.ToHexCoord();
+            var stacks = new List<UnitStack>();
+            foreach (var unit in group.Units)
             {
-                return TypedResults.BadRequest(new ProblemDetails
+                if (!TryParseUnit(unit.Unit, out var type))
                 {
-                    Title = "Unknown unit.",
-                    Detail = $"'{unit.Unit}' is not a unit. "
-                        + $"Valid: {string.Join(", ", UnitCatalogue.AllTypes.Select(t => t.ToWireName()))}.",
-                    Status = StatusCodes.Status400BadRequest,
-                });
+                    return TypedResults.BadRequest(new ProblemDetails
+                    {
+                        Title = "Unknown unit.",
+                        Detail = $"'{unit.Unit}' is not a unit. "
+                            + $"Valid: {string.Join(", ", UnitCatalogue.AllTypes.Select(t => t.ToWireName()))}.",
+                        Status = StatusCodes.Status400BadRequest,
+                    });
+                }
+
+                if (unit.Count > 0)
+                {
+                    stacks.Add(new UnitStack(type, unit.Count));
+                }
             }
 
-            unitStacks.Add(new UnitStack(type, unit.Count));
+            if (stacks.Count == 0)
+            {
+                continue;
+            }
+
+            var existing = bySpot.FindIndex(e => e.Spot == spot);
+            if (existing >= 0)
+            {
+                bySpot[existing].Stacks.AddRange(stacks);
+            }
+            else
+            {
+                bySpot.Add((spot, stacks));
+            }
         }
+
+        if (bySpot.Count == 0)
+        {
+            return TypedResults.Conflict(Problem(DispatchRejection.NoUnitsRequested));
+        }
+
+        if (bySpot.Count > 1)
+        {
+            return TypedResults.Conflict(Problem(DispatchRejection.UnitsAtSeveralSpots));
+        }
+
+        var (fromSpot, unitStacks) = bySpot[0];
 
         if (!TryParseMission(request.Mission, out var mission))
         {
@@ -192,7 +228,7 @@ public static class ArmyEndpoints
         var destination = request.Destination?.ToHexCoord();
 
         var result = await armies.DispatchAsync(
-            settlementId, request.FromSpot.ToHexCoord(), unitStacks, waypoints, destination, request.Provisions,
+            settlementId, fromSpot, unitStacks, waypoints, destination, request.Provisions,
             mission, request.TargetSettlementId, request.TargetBuildingCoord?.ToHexCoord(), cancellationToken);
 
         if (result.WorldPaused)
@@ -698,6 +734,7 @@ public static class ArmyEndpoints
                 DispatchRejection.NoUnitsRequested => "At least one unit must be requested.",
                 DispatchRejection.InsufficientGarrison => "The garrison spot does not hold that many of one or more requested unit types.",
                 DispatchRejection.NotAGarrisonSpot => "The hex is not a garrison spot (longhouse, tower or dock) of the settlement.",
+                DispatchRejection.UnitsAtSeveralSpots => "Units at several garrison spots cannot be sent together yet; send from one spot.",
                 DispatchRejection.SupportSpotRequired => "A support mission must name a garrison spot of the target to join.",
                 DispatchRejection.SupportSpotCannotHold => "That hex is not a garrison spot of the target that can hold every unit of the army.",
                 DispatchRejection.ProvisionsExceedCarryCapacity => "The requested provisions exceed what these units can carry.",

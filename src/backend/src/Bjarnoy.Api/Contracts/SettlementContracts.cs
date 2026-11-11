@@ -413,7 +413,9 @@ public sealed record SettlementResponse(
                 spot.Coord.Q,
                 spot.Coord.R,
                 [.. spot.Stacks.Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
-                [.. session.GuestStacksAt(id, spot.Coord).Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))]))],
+                [.. session.GuestStacksAt(id, spot.Coord).Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
+                spot.HoldsLand,
+                spot.HoldsShips))],
             [.. domain.TrainingQueue.Select(o => TrainingOrderResponse.From(o, clock, gameNow))],
             [.. domain.Runes.Select(r => new RuneInstanceResponse(
                 r.Id, r.Type.ToWireName(), r.Rarity.ToWireName(), r.SlottedAt?.Q, r.SlottedAt?.R))],
@@ -444,8 +446,10 @@ public sealed record SettlementResponse(
 /// <param name="Kind"><c>"longhouse"</c>, <c>"tower"</c> or <c>"dock"</c>.</param>
 /// <param name="Stacks">The settlement's own units standing here.</param>
 /// <param name="Guests">The units of supporting armies standing here, pooled by type.</param>
+/// <param name="HoldsLand">Whether land units may stand here.</param>
+/// <param name="HoldsShips">Whether ships may stand here.</param>
 public sealed record GarrisonSpotResponse(
-    string Kind, int Q, int R, IReadOnlyList<UnitStackResponse> Stacks, IReadOnlyList<UnitStackResponse> Guests);
+    string Kind, int Q, int R, IReadOnlyList<UnitStackResponse> Stacks, IReadOnlyList<UnitStackResponse> Guests, bool HoldsLand, bool HoldsShips);
 
 /// <summary>One connected claim disc: a longhouse's or a connected tower's centre and claim radius.</summary>
 public sealed record ClaimDiscResponse(int Q, int R, int Radius);

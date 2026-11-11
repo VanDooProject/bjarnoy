@@ -20,6 +20,13 @@ public sealed record HexPointRequest(int Q, int R)
     public HexCoord ToHexCoord() => new(Q, R);
 }
 
+/// <summary>The units, split by the garrison spot each group leaves from.</summary>
+/// <param name="Spot">The garrison spot (longhouse, tower or dock hex) the group stands at.</param>
+/// <param name="Units">The units of this group leaving from <paramref name="Spot"/>.</param>
+public sealed record DispatchSpotUnitsRequest(
+    [property: Required] HexPointRequest Spot,
+    [property: Required] IReadOnlyList<UnitCountRequest> Units);
+
 /// <param name="Waypoints">Ordered intermediate hexes; empty/omitted for a direct route.</param>
 /// <param name="Destination">
 /// Required for a <c>"move"</c> mission (the default); ignored for
@@ -44,9 +51,11 @@ public sealed record HexPointRequest(int Q, int R)
 /// (the settlement to fight on arrival) or <c>"support"</c> (the settlement
 /// to garrison as a guest on arrival).
 /// </param>
-/// <param name="FromSpot">
-/// The garrison spot (longhouse, tower or dock hex) of the settlement the units leave from; only units standing there can
-/// be sent, and it becomes the army's home spot.
+/// <param name="From">
+/// The units, split by the garrison spot each group leaves from (longhouse, tower or dock hex of the settlement); only units
+/// standing there can be sent, and the spot becomes the army's home spot. Entries with no units are ignored, the same spot
+/// listed twice is merged. Gathering from several spots on the way is not built yet: more than one spot is refused with
+/// <see cref="DispatchRejection.UnitsAtSeveralSpots"/>.
 /// </param>
 /// <param name="TargetBuildingCoord">
 /// <b>Required for <c>"support"</c></b>: the target settlement's garrison spot the guest joins (it must be able to hold every unit of
@@ -64,8 +73,7 @@ public sealed record HexPointRequest(int Q, int R)
 /// remarks).
 /// </param>
 public sealed record DispatchArmyRequest(
-    [property: Required, MinLength(1)] IReadOnlyList<UnitCountRequest> Units,
-    [property: Required] HexPointRequest FromSpot,
+    [property: Required, MinLength(1)] IReadOnlyList<DispatchSpotUnitsRequest> From,
     IReadOnlyList<HexPointRequest>? Waypoints,
     HexPointRequest? Destination,
     [property: Range(0, double.MaxValue)] double Provisions,

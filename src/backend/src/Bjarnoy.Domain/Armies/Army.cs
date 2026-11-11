@@ -2415,6 +2415,9 @@ public enum DispatchRejection
 
     /// <summary>The garrison spot a <see cref="ArmyMission.Support"/> dispatch named is none of the target's, or cannot hold the army's units.</summary>
     SupportSpotCannotHold,
+
+    /// <summary>A dispatch listed units at more than one garrison spot; gathering from several spots on the way is not built yet.</summary>
+    UnitsAtSeveralSpots,
 }
 
 /// <summary>The outcome of asking to dispatch an army — mirrors <see cref="BuildDecision"/>.</summary>

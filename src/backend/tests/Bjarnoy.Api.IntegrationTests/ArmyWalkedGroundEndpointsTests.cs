@@ -82,7 +82,7 @@ public sealed class ArmyWalkedGroundEndpointsTests : IAsyncLifetime
         var target = await FindFarTargetAsync(client, world.Id, settlement);
         var dispatched = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/armies",
-            new DispatchArmyRequest([new UnitCountRequest("spearman", 5), new UnitCountRequest("provisioner", 5)], settlement.Spot(), null,
+            new DispatchArmyRequest([new(settlement.Spot(), [new UnitCountRequest("spearman", 5), new UnitCountRequest("provisioner", 5)])], null,
                 new HexPointRequest(target.Q, target.R), 150), Ct);
         Assert.True(dispatched.IsSuccessStatusCode, await dispatched.Content.ReadAsStringAsync(Ct));
 

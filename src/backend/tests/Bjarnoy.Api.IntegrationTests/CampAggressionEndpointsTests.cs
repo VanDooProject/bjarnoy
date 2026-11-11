@@ -127,8 +127,7 @@ public sealed class CampAggressionEndpointsTests : IAsyncLifetime
         HttpClient client, Guid settlementId, HexCoord to, int count, double provisions) =>
         await client.PostJsonAsync(
             $"/api/v1/settlements/{settlementId}/armies",
-            new DispatchArmyRequest(
-                [new UnitCountRequest("axeman", count)], await client.SpotOfAsync(settlementId, Ct), null, new HexPointRequest(to.Q, to.R), provisions),
+            new DispatchArmyRequest([new(await client.SpotOfAsync(settlementId, Ct), [new UnitCountRequest("axeman", count)])], null, new HexPointRequest(to.Q, to.R), provisions),
             Ct);
 
     /// <summary>
