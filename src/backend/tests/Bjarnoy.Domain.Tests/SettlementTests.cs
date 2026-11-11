@@ -1982,6 +1982,15 @@ public class SettlementTests
     }
 
     [Fact]
+    public void A_second_longhouse_cannot_be_queued_on_an_empty_sand_hex_either()
+    {
+        var decision = Found().PlanBuild(
+            BuildingType.Longhouse, new HexCoord(1, 0), Terrain.Sand, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.LonghousePlacementNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
     public void The_existing_longhouse_can_still_be_levelled_up_through_the_build_menu()
     {
         var settlement = Found();
