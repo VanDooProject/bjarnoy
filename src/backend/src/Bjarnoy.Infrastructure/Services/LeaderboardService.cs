@@ -536,6 +536,26 @@ public sealed class LeaderboardService(
         return (items, items.Count == pageSize ? items[^1].Id : null);
     }
 
+    /// <summary>How many of the newest closed weekly windows a premium player may open.</summary>
+    public const int PremiumHistoryWindows = 4;
+
+    /// <summary>
+    /// The closed weekly windows a caller may open, out of <paramref name="windows"/> (oldest first, as
+    /// <see cref="GetClosedWindowsAsync"/> returns them): none for a free or anonymous player, the newest
+    /// <see cref="PremiumHistoryWindows"/> for a premium one, all for an admin. The one place that rule lives —
+    /// the directory lists these and the board read refuses everything else.
+    /// </summary>
+    public static IReadOnlyList<(DateTimeOffset PeriodStart, DateTimeOffset PeriodEnd)> OpenableWindows(
+        IReadOnlyList<(DateTimeOffset PeriodStart, DateTimeOffset PeriodEnd)> windows, bool isPremium, bool isAdmin)
+    {
+        if (isAdmin)
+        {
+            return windows;
+        }
+
+        return isPremium ? [.. windows.TakeLast(PremiumHistoryWindows)] : [];
+    }
+
     /// <summary>
     /// Status of every board in <see cref="LeaderboardCatalogue.Boards"/> for
     /// <paramref name="worldId"/>: live with its current snapshot's stats, or

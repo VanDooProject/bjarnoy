@@ -212,6 +212,121 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
         Assert.All(directory!.Boards, b => Assert.Null(b.MyRank));
     }
 
+    /// <summary>Registers a fresh account, applies <paramref name="premium"/>/<paramref name="admin"/> in the DB, and logs in so the token carries the role.</summary>
+    private async Task<string> TierTokenAsync(HttpClient client, bool premium = false, bool admin = false)
+    {
+        var userName = Unique("tier");
+        var registered = await client.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(userName, "correct-horse-battery"), Ct);
+        Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
+        var auth = await registered.ReadStrictAsync<AuthResponse>(Ct);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var user = await db.Users.SingleAsync(u => u.Id == auth.User.Id, Ct);
+            user.IsPremium = premium;
+            if (admin)
+            {
+                user.Role = UserRole.Admin;
+            }
+
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var loggedIn = await client.PostJsonAsync(
+            "/api/v1/auth/login", new LoginRequest(userName, "correct-horse-battery"), Ct);
+        Assert.Equal(HttpStatusCode.OK, loggedIn.StatusCode);
+        return (await loggedIn.ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
+    }
+
+    private static string WindowUrl(Guid worldId, DateTimeOffset periodStart) =>
+        $"/api/v1/worlds/{worldId}/leaderboards/user/weeklyScoreGained?periodStart={Uri.EscapeDataString(periodStart.ToString("O"))}";
+
+    private async Task<LeaderboardDirectoryResponse> DirectoryAsync(HttpClient client, Guid worldId) =>
+        (await client.GetFromJsonAsync<LeaderboardDirectoryResponse>(
+            $"/api/v1/worlds/{worldId}/leaderboards", SqliteApiFixture.StrictJson, Ct))!;
+
+    /// <summary>A world with <paramref name="closedWindows"/> closed weekly windows on the weekly score board.</summary>
+    private async Task<Guid> WorldWithClosedWindowsAsync(HttpClient client, int closedWindows)
+    {
+        var worldId = await CreateWorldAsync();
+        await BuildUserBoardAsync(client, worldId, [5]);
+        _factory.Time.Advance((LeaderboardService.WeeklyWindowLength * closedWindows) + TimeSpan.FromMinutes(1));
+        await CloseDueWindowsAsync(worldId);
+        return worldId;
+    }
+
+    [Fact]
+    public async Task Week_history_lists_no_windows_for_anonymous_and_free_players()
+    {
+        using var client = Client();
+        var worldId = await WorldWithClosedWindowsAsync(client, 2);
+
+        Assert.Empty((await DirectoryAsync(client, worldId)).WeeklyWindows);
+
+        Authorize(client, await TierTokenAsync(client));
+        Assert.Empty((await DirectoryAsync(client, worldId)).WeeklyWindows);
+    }
+
+    [Fact]
+    public async Task Week_history_lists_the_newest_four_windows_for_premium_and_all_for_admin()
+    {
+        using var client = Client();
+        var worldId = await WorldWithClosedWindowsAsync(client, 6);
+
+        Authorize(client, await TierTokenAsync(client, premium: true));
+        var premium = (await DirectoryAsync(client, worldId)).WeeklyWindows;
+        Assert.Equal(4, premium.Count);
+        Assert.Equal(premium.OrderBy(w => w.PeriodStart), premium);
+
+        Authorize(client, await TierTokenAsync(client, admin: true));
+        var admin = (await DirectoryAsync(client, worldId)).WeeklyWindows;
+        Assert.Equal(6, admin.Count);
+        Assert.Equal(admin.Skip(2), premium);
+    }
+
+    [Fact]
+    public async Task A_past_window_needs_an_account_and_premium_unless_admin()
+    {
+        using var client = Client();
+        var worldId = await WorldWithClosedWindowsAsync(client, 6);
+
+        Authorize(client, await TierTokenAsync(client, admin: true));
+        var windows = (await DirectoryAsync(client, worldId)).WeeklyWindows;
+        var oldest = windows[0].PeriodStart;
+        var newest = windows[^1].PeriodStart;
+        client.DefaultRequestHeaders.Authorization = null;
+
+        // Anonymous: 401, even for the newest window.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync(WindowUrl(worldId, newest), Ct)).StatusCode);
+
+        // Free: 403.
+        Authorize(client, await TierTokenAsync(client));
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(WindowUrl(worldId, newest), Ct)).StatusCode);
+
+        // Premium: the newest four are open, an older one is 403.
+        Authorize(client, await TierTokenAsync(client, premium: true));
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(WindowUrl(worldId, windows[2].PeriodStart), Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(WindowUrl(worldId, newest), Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(WindowUrl(worldId, oldest), Ct)).StatusCode);
+
+        // Admin: every window.
+        Authorize(client, await TierTokenAsync(client, admin: true));
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(WindowUrl(worldId, oldest), Ct)).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_current_weekly_board_stays_open_to_everyone()
+    {
+        using var client = Client();
+        var worldId = await WorldWithClosedWindowsAsync(client, 1);
+
+        var response = await client.GetAsync($"/api/v1/worlds/{worldId}/leaderboards/user/weeklyScoreGained", Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True((await response.ReadStrictAsync<LeaderboardBoardResponse>(Ct)).Available);
+    }
+
     [Fact]
     public async Task Unknown_scope_or_category_is_a_bad_request()
     {
@@ -463,6 +578,8 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
         _factory.Time.Advance(LeaderboardService.WeeklyWindowLength + TimeSpan.FromMinutes(1));
         await CloseDueWindowsAsync(worldId);
 
+        // Closed windows are listed for premium callers (week history is a premium feature).
+        Authorize(client, await TierTokenAsync(client, premium: true));
         var after = await client.GetFromJsonAsync<LeaderboardDirectoryResponse>(
             $"/api/v1/worlds/{worldId}/leaderboards", SqliteApiFixture.StrictJson, Ct);
         var window = Assert.Single(after!.WeeklyWindows);
@@ -485,6 +602,8 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
         _factory.Time.Advance(LeaderboardService.WeeklyWindowLength + TimeSpan.FromMinutes(1));
         await CloseDueWindowsAsync(worldId);
 
+        // Naming a past window is week history: premium only.
+        Authorize(client, await TierTokenAsync(client, premium: true));
         var directory = await client.GetFromJsonAsync<LeaderboardDirectoryResponse>(
             $"/api/v1/worlds/{worldId}/leaderboards", SqliteApiFixture.StrictJson, Ct);
         var window = Assert.Single(directory!.WeeklyWindows);
