@@ -30,6 +30,8 @@ const props = defineProps<{
   labelFade?: ((el: Element, direction: 'in' | 'out', done: () => void) => void) | null;
   /** The hex's order dial: its pending / refused / finish frames are drawn from it, frame by frame. */
   order?: ConstructionDial | null;
+  /** The label is shown in the elapsed colour (a countdown in its last minute). */
+  urgent?: boolean;
   /** The pending dial's centre dots show with the number (not on the far tier, like the canvas dial). */
   labelVisible?: boolean;
 }>();
@@ -82,7 +84,7 @@ const geometry = computed(() => {
 
 const trackColor = computed(() => RING_COLOR[props.ring]);
 const trackOpacity = computed(() => (props.ring === 'upgrading' ? 0.3 : 1));
-const labelColor = computed(() => (props.ring === 'max' ? GOLD : '#fff'));
+const labelColor = computed(() => (props.urgent ? YELLOW : props.ring === 'max' ? GOLD : '#fff'));
 
 // ---- the order dial's frames ----------------------------------------------------------------------------------------------
 // `now` only moves while a frame-by-frame animation plays (pending sweep, refusal, finish); a running order's end schedules
