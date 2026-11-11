@@ -1,5 +1,5 @@
 // The settlement's quest list as the quest tray and the panel column's Quests icon read it: which quests this build has
-// copy for, the current one, the other claimable ones, and whether there is a notice the player has not seen in the opened
+// copy for, the current one, the other claimable ones, the next one to fulfil, and whether there is a notice the player has not seen in the opened
 // tray yet (the "new" dot). One place, so the tray and the icon cannot disagree.
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -17,6 +17,11 @@ export function useQuests() {
   const unclaimed = computed(() => known.value.filter((q) => !q.claimed));
   const current = computed<QuestResponse | undefined>(() => unclaimed.value[0]);
   const alsoReady = computed(() => unclaimed.value.slice(1).filter((q) => q.completed));
+  // The first quest still to be fulfilled, when the current one is already claimable: otherwise a tray full of ready
+  // quests shows nothing left to work on. When the current quest is itself unfinished it is the one to work on.
+  const nextUp = computed<QuestResponse | undefined>(() =>
+    current.value?.completed ? unclaimed.value.find((q) => !q.completed) : undefined,
+  );
 
   // The dot says there is something the player has not seen in the opened card yet: a quest that became current, or one
   // that became claimable.
@@ -29,5 +34,5 @@ export function useQuests() {
   const { hasUnseen, markSeen } = useQuestSeen(computed(() => world.selectedSettlementId));
   const hasNew = computed(() => hasUnseen(noticeKeys.value));
 
-  return { known, unclaimed, current, alsoReady, noticeKeys, hasNew, markSeen };
+  return { known, unclaimed, current, alsoReady, nextUp, noticeKeys, hasNew, markSeen };
 }

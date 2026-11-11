@@ -26,7 +26,7 @@ const world = useWorldStore();
 
 const REWARD_KINDS = ['wood', 'stone', 'food'] as const;
 
-const { known, unclaimed, current, alsoReady, noticeKeys, hasNew, markSeen } = useQuests();
+const { known, unclaimed, current, alsoReady, nextUp, noticeKeys, hasNew, markSeen } = useQuests();
 const claimedCount = computed(() => known.value.length - unclaimed.value.length);
 
 // Phones: the tray is a peek strip (quest title + progress) until tapped open —
@@ -50,6 +50,7 @@ function progressOf(q: QuestResponse) {
   return kind && q.progress && !q.completed ? { kind, progress: q.progress } : null;
 }
 const currentProgress = computed(() => (current.value ? progressOf(current.value) : null));
+const nextUpProgress = computed(() => (nextUp.value ? progressOf(nextUp.value) : null));
 
 // Phone card: the hint clamps to two lines; "More" shows only when it overflows.
 const hintEl = ref<HTMLElement | null>(null);
@@ -182,6 +183,18 @@ async function claim(q: QuestResponse) {
           {{ busyId === q.id ? t('quests.claiming') : t('quests.claim') }}
         </button>
       </div>
+    </div>
+
+    <div v-if="nextUp" class="quest-also" data-testid="quest-next-up" :data-quest-id="nextUp.id">
+      <div class="quest-also-label">{{ t('quests.nextUp') }}</div>
+      <div class="quest-row-title">{{ t(`quests.items.${nextUp.id}.title`) }}</div>
+      <div class="quest-hint">{{ t(`quests.items.${nextUp.id}.hint`) }}</div>
+      <QuestProgress v-if="nextUpProgress" :kind="nextUpProgress.kind" :progress="nextUpProgress.progress" />
+      <span class="quest-reward quest-next-reward" :aria-label="t('quests.rewardLabel')">
+        <span v-for="kind in REWARD_KINDS" :key="kind" class="reward-item" :title="resourceName(kind)">
+          <ResourceIcon :kind="kind" :size="14" />{{ nextUp.reward[kind] }}
+        </span>
+      </span>
     </div>
 
     <div v-if="error" class="quest-error" role="alert" data-testid="quest-error">{{ error }}</div>
@@ -320,6 +333,9 @@ async function claim(q: QuestResponse) {
 .quest-row-title {
   font-size: 13px;
   color: var(--text);
+}
+.quest-next-reward {
+  margin-top: 6px;
 }
 
 /* Mobile: a full-width strip along the bottom edge (above a bottom-docked

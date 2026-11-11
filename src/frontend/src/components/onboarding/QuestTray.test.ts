@@ -87,6 +87,24 @@ describe('QuestTray', () => {
     expect(claim).toHaveBeenCalledWith('storagehouse1');
   });
 
+  it('shows the first unfinished quest when the current one is already claimable', () => {
+    const world = useWorldStore();
+    world.hud.quests = all({ producers3: { completed: true }, longhouse2: { completed: true } });
+
+    const wrapper = mountTray();
+
+    expect(wrapper.get('[data-testid="quest-next-up"]').attributes('data-quest-id')).toBe('storagehouse1');
+  });
+
+  it('shows no separate next-up block while the current quest is itself unfinished', () => {
+    const world = useWorldStore();
+    world.hud.quests = all({ longhouse2: { completed: true } });
+
+    const wrapper = mountTray();
+
+    expect(wrapper.find('[data-testid="quest-next-up"]').exists()).toBe(false);
+  });
+
   it('moves on to the next quest once the current one is claimed', () => {
     const world = useWorldStore();
     world.hud.quests = all({ producers3: { claimed: true, completed: true }, longhouse2: { claimed: true, completed: true } });
