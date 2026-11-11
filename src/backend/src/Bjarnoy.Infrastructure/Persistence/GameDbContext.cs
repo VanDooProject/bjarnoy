@@ -465,8 +465,8 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             stack.Property(s => s.Id).ValueGeneratedNever();
             stack.Property(s => s.UnitType).HasConversion<int>();
 
-            // One stack row per unit type per settlement.
-            stack.HasIndex(s => new { s.SettlementId, s.UnitType }).IsUnique();
+            // One stack row per unit type per garrison spot of a settlement.
+            stack.HasIndex(s => new { s.SettlementId, s.SpotQ, s.SpotR, s.UnitType }).IsUnique();
         });
 
         modelBuilder.Entity<TrainingOrderEntity>(order =>

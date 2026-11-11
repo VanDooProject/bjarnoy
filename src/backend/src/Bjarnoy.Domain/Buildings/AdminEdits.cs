@@ -45,6 +45,9 @@ public enum AdminGarrisonEditRejection
 
     /// <summary>Removing more units of that type than actually stand in the garrison.</summary>
     NotEnoughUnits,
+
+    /// <summary>The coordinate is not a garrison spot of the settlement, or one that cannot hold that unit type.</summary>
+    NoFittingSpot,
 }
 
 /// <summary>The outcome of an admin adding or removing garrison units directly.</summary>

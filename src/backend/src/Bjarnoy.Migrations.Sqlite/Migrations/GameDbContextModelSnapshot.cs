@@ -304,6 +304,12 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("HomeSpotQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HomeSpotR")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("IsReturning")
                         .HasColumnType("INTEGER");
 
@@ -1713,12 +1719,18 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("SettlementId")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("SpotQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SpotR")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("UnitType")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SettlementId", "UnitType")
+                    b.HasIndex("SettlementId", "SpotQ", "SpotR", "UnitType")
                         .IsUnique();
 
                     b.ToTable("unit_stacks", (string)null);

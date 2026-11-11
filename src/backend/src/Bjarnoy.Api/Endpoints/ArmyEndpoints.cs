@@ -192,7 +192,7 @@ public static class ArmyEndpoints
         var destination = request.Destination?.ToHexCoord();
 
         var result = await armies.DispatchAsync(
-            settlementId, unitStacks, waypoints, destination, request.Provisions,
+            settlementId, request.FromSpot.ToHexCoord(), unitStacks, waypoints, destination, request.Provisions,
             mission, request.TargetSettlementId, request.TargetBuildingCoord?.ToHexCoord(), cancellationToken);
 
         if (result.WorldPaused)
@@ -530,11 +530,13 @@ public static class ArmyEndpoints
                 FieldOrderRejection.HuntRequiresLandUnits => "Ships cannot hunt a camp on land; only land units can.",
                 FieldOrderRejection.HuntRequiresFleet => "Only ships can hunt a camp at sea (the whale road); land units cannot reach it.",
                 FieldOrderRejection.TargetBuildingRequiresAttackMission =>
-                    "A target building may only be given for an attack or raid mission.",
+                    "A target building may only be given for an attack, raid or support mission.",
                 FieldOrderRejection.FleetTargetBuildingRequired =>
                     "A fleet must be sent at one building on the target settlement's shore.",
                 FieldOrderRejection.FleetTargetBuildingNotOnShore =>
                     "That building is not on the target settlement's shore, so a fleet cannot reach it.",
+                FieldOrderRejection.SupportSpotRequired => "A support order must name a garrison spot of the target to join.",
+                FieldOrderRejection.SupportSpotCannotHold => "That hex is not a garrison spot of the target that can hold every unit of the army.",
                 FieldOrderRejection.InsufficientShipCapacity =>
                     "The ships would not have enough slots for the troops aboard (for a split, each part needs ships for its own troops).",
                 FieldOrderRejection.SplitRequiresStandingArmy =>
@@ -694,7 +696,10 @@ public static class ArmyEndpoints
             Detail = rejection switch
             {
                 DispatchRejection.NoUnitsRequested => "At least one unit must be requested.",
-                DispatchRejection.InsufficientGarrison => "The garrison does not hold that many of one or more requested unit types.",
+                DispatchRejection.InsufficientGarrison => "The garrison spot does not hold that many of one or more requested unit types.",
+                DispatchRejection.NotAGarrisonSpot => "The hex is not a garrison spot (longhouse, tower or dock) of the settlement.",
+                DispatchRejection.SupportSpotRequired => "A support mission must name a garrison spot of the target to join.",
+                DispatchRejection.SupportSpotCannotHold => "That hex is not a garrison spot of the target that can hold every unit of the army.",
                 DispatchRejection.ProvisionsExceedCarryCapacity => "The requested provisions exceed what these units can carry.",
                 DispatchRejection.InsufficientResources => "Not enough food to load the requested provisions (some may be reserved for queued construction).",
                 DispatchRejection.DestinationNotLand => "The destination is not land; sea pathing is not supported yet.",

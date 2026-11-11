@@ -76,7 +76,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
 
         var worldId = army.Settlement!.WorldId;
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World!, cancellationToken).ConfigureAwait(false);
-        var homeA = army.Settlement.HomeHexFor(domain, sampler.TerrainAt);
+        var homeA = army.Settlement.HomeHexFor(domain);
 
         var candidates = await _dbContext.Armies
             .Include(a => a.Stacks)
@@ -107,7 +107,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
                 continue;
             }
 
-            var homeB = other.Settlement.HomeHexFor(otherDomain, sampler.TerrainAt);
+            var homeB = other.Settlement.HomeHexFor(otherDomain);
             var meeting = MovementOccupancy.EarliestMeeting(movement, otherMovement, homeA, homeB);
             if (meeting is not { } found || found.At > now)
             {
@@ -285,7 +285,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         IReadOnlyDictionary<HexCoord, Terrain> bog, RiverIndex rivers, LandRouteIndex walls)
     {
         var loserSampler = new TerrainSampler(loserSettlement!.World!.ToGenerationOptions()).WithBogOverlay(bog);
-        var home = loserSettlement.HomeHexFor(domain, loserSampler.TerrainAt);
+        var home = loserSettlement.HomeHexFor(domain);
 
         var afterLosses = domain with
         {

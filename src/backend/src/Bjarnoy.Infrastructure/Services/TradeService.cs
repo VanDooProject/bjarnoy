@@ -120,7 +120,7 @@ public sealed class TradeService(
 
         var paid = TradeOffer.Post(settled, decision.Offer!, now);
         session.Apply(settlementId, paid);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
 
         var entity = new TradeOfferEntity
         {
@@ -180,7 +180,7 @@ public sealed class TradeService(
             Resources = settled.Resources.Deposit(offerEntity.OfferedResource.Only(offerEntity.OfferedAmount), now),
         };
         session.Apply(settlementId, refunded);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
 
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -235,10 +235,10 @@ public sealed class TradeService(
 
         if (!decision.Accepted)
         {
-            var changed = posterSession.WriteBack();
+            var changed = await posterSession.WriteBackAsync(cancellationToken).ConfigureAwait(false);
             if (!ReferenceEquals(posterSession, acceptorSession))
             {
-                changed |= acceptorSession.WriteBack();
+                changed |= await acceptorSession.WriteBackAsync(cancellationToken).ConfigureAwait(false);
             }
 
             if (changed)
@@ -253,10 +253,10 @@ public sealed class TradeService(
 
         posterSession.Apply(offerEntity.PosterSettlementId, settledPoster);
         acceptorSession.Apply(acceptorSettlementId, paidAcceptor);
-        posterSession.WriteBack();
+        await posterSession.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         if (!ReferenceEquals(posterSession, acceptorSession))
         {
-            acceptorSession.WriteBack();
+            await acceptorSession.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         }
 
         offerEntity.State = TradeOfferState.Accepted;
@@ -408,7 +408,7 @@ public sealed class TradeService(
         }
 
         session.Apply(settlementId, settled);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
 
         // Touch every offer whose shipment lands here, in the same save. The
         // poster's and the acceptor's settlements deliver in separate requests;
@@ -533,7 +533,7 @@ public sealed class TradeService(
         }
 
         session.Apply(settlementId, settled);
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -566,7 +566,7 @@ public sealed class TradeService(
     /// <summary>Writes the session back and saves when settling changed anything: a real change worth keeping even if the request was refused.</summary>
     private async Task SaveIfChangedAsync(LinkedGroupSession session, CancellationToken cancellationToken)
     {
-        if (session.WriteBack())
+        if (await session.WriteBackAsync(cancellationToken).ConfigureAwait(false))
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
