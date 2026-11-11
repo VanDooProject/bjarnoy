@@ -36,6 +36,7 @@ import {
   buildHuntDispatchRequest,
   buildFieldOrderRequest,
   buildFoundDispatchRequest,
+  buildCampDispatchRequest,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
   dispatchTargetCoord,
@@ -43,7 +44,7 @@ import {
   isHuntUnit,
   maxAffordableProvisions,
 } from '../lib/units/armyDispatch';
-import { SETTLERS_PER_FOUNDING } from '../lib/founding';
+import { CAMP_BUILDERS_PER_CAMP, SETTLERS_PER_FOUNDING } from '../lib/founding';
 import { isSandCampFamily, isWaterCampFamily } from '../lib/map/campPlacement';
 import { useUnitCatalogueStore } from './unitCatalogue';
 import { stackCounts } from '../lib/units/fieldOrderFeasibility';
@@ -381,7 +382,7 @@ export const useWorldStore = defineStore('world', {
       // optional waypoints — see `buildSupportDispatchRequest`.
       // 'hunt' targets a wildlife camp's hex (`targetCamp`); the route holds only intermediate waypoints.
       // 'found' is move-shaped (the route's last hex is where the settlement is founded) and carries the fixed five settlers.
-      mission: 'move' | 'attack' | 'support' | 'hunt' | 'found';
+      mission: 'move' | 'attack' | 'support' | 'hunt' | 'found' | 'setupcamp';
       targetSettlementId: string | null;
       targetCamp: { q: number; r: number } | null;
       // Issue #40 phase 5: the coordinate of a building within the target
@@ -2097,7 +2098,7 @@ export const useWorldStore = defineStore('world', {
     startDispatchAt(
       coord: AxialCoord,
       opts: {
-        mission?: 'attack' | 'support' | 'hunt' | 'found';
+        mission?: 'attack' | 'support' | 'hunt' | 'found' | 'setupcamp';
         targetSettlementId?: string;
         targetBuildingCoord?: AxialCoord;
         /** The realm whose garrison the units leave from; the open realm when left out. */
@@ -2111,6 +2112,16 @@ export const useWorldStore = defineStore('world', {
         this.dispatchDraft.mission = 'found';
         this.addWaypoint(coord);
         this.dispatchDraft.unitCounts = { settler: SETTLERS_PER_FOUNDING };
+        this.dispatchDraft.provisions = maxAffordableProvisions(
+          this.dispatchDraft.unitCounts,
+          useUnitCatalogueStore().byType,
+          this.hud.available.food,
+        );
+      } else if (opts.mission === 'setupcamp') {
+        // The ring's "Set up camp": the tapped hex is the camp's site, the two camp builders go.
+        this.dispatchDraft.mission = 'setupcamp';
+        this.addWaypoint(coord);
+        this.dispatchDraft.unitCounts = { campbuilder: CAMP_BUILDERS_PER_CAMP };
         this.dispatchDraft.provisions = maxAffordableProvisions(
           this.dispatchDraft.unitCounts,
           useUnitCatalogueStore().byType,
@@ -2216,6 +2227,8 @@ export const useWorldStore = defineStore('world', {
       if (!this.dispatchDraft) return;
       // A founding convoy's settlers are fixed at five; only its ships and escorts are picked.
       if (this.dispatchDraft.mission === 'found' && unit === 'settler') return;
+      // A camp army's builders are fixed at two likewise.
+      if (this.dispatchDraft.mission === 'setupcamp' && unit === 'campbuilder') return;
       this.dispatchDraft.unitCounts[unit] = Math.max(0, Math.floor(count));
     },
     setDispatchProvisions(provisions: number) {
@@ -2301,11 +2314,13 @@ export const useWorldStore = defineStore('world', {
               ? buildHuntDispatchRequest(from, draft.route, draft.provisions, draft.targetCamp)
               : draft.mission === 'found'
                 ? buildFoundDispatchRequest(from, draft.route, draft.provisions)
-                : buildMoveDispatchRequest(from, draft.route, draft.provisions);
+                : draft.mission === 'setupcamp'
+                  ? buildCampDispatchRequest(from, draft.route, draft.provisions)
+                  : buildMoveDispatchRequest(from, draft.route, draft.provisions);
       if (!request) {
         if (Object.values(draft.unitCounts).every((c) => c <= 0)) {
           draft.error = i18n.global.t('common.errors.selectAtLeastOneUnit');
-        } else if ((draft.mission === 'move' || draft.mission === 'found') && draft.route.length === 0) {
+        } else if ((draft.mission === 'move' || draft.mission === 'found' || draft.mission === 'setupcamp') && draft.route.length === 0) {
           draft.error = i18n.global.t('common.errors.clickMapForDestination');
         } else if (draft.mission === 'hunt' && !draft.targetCamp) {
           draft.error = i18n.global.t('common.errors.chooseCampToHunt');

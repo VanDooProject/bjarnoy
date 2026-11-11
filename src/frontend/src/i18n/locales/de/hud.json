@@ -150,6 +150,8 @@
       "foundNeedsSettlers": "{have} / {need} Siedler daheim",
       "foundNeedsRenown": "Ruhm {total} / {required}",
       "foundRenownUnknown": "Dein Ruhm wird geprüft …",
+      "setUpCamp": "Strandlager errichten",
+      "campNeedsBuilders": "{have} / {need} Lagerbauer daheim",
       "sendArmyHere": "Armee hierher entsenden",
       "attack": "Angreifen",
       "upgrade": "Ausbauen",
@@ -188,7 +190,10 @@
       "razeTitle": "Abriss auf Stufe {level}",
       "razeTitleRemove": "Abreißen",
       "razeSubRemove": "{building} · Stufe 1 → weg",
-      "razeBadge": "ABRISS MÖGLICH"
+      "razeBadge": "ABRISS MÖGLICH",
+      "campTitle": "Strandlager errichten",
+      "campSub": "Zwei Lagerbauer bauen es auf",
+      "campBadge": "HIER MÖGLICH"
     },
     "tap": {
       "build": "{name} noch einmal antippen, um zu bauen",
@@ -384,7 +389,8 @@
     "supporting": "Unterstützt",
     "returning": "Kehrt zurück",
     "inTransit": "Unterwegs",
-    "hunting": "Auf der Jagd"
+    "hunting": "Auf der Jagd",
+    "buildingCamp": "Baut das Strandlager, fertig um {time} Uhr"
   },
   "garrisonSpots": {
     "longhouse": "Langhaus",
@@ -418,6 +424,7 @@
     "cancel": "Abbrechen",
     "sending": "Wird gesendet…",
     "confirmOrder": "Auftrag bestätigen",
+    "campInstructions": "Am letzten Feld der Route errichtest du das Strandlager. Zwei Lagerbauer ziehen los, Schiffe und Begleitschutz kannst du dazunehmen. Es kostet {cost} und ist {time} nach der Ankunft der Armee fertig.",
     "foundInstructions": "Am letzten Feld der Route gründest du die Siedlung. Fünf Siedler ziehen los, Schiffe und Begleitschutz kannst du dazunehmen. Mit Schiffen segelt der Zug und landet am letzten Feld.",
     "dispatchInstructions": "Klicke auf Hexfelder, um eine Route zu planen — der letzte Klick ist das Ziel. {count} {hexWord} geplant.",
     "targetInstructions": "Wähle eine Siedlung zum {mission}, dann optional Hexfelder auf der Karte klicken, um eine Route dorthin zu planen. {count} {waypointWord} geplant.",

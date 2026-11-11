@@ -20,8 +20,8 @@ vi.mock('../../api/client', async (importOriginal) => {
   return { ...actual, api: { ...actual.api, listMySettlements } };
 });
 
-function summary(id: string, name: string): SettlementSummary {
-  return { id, realmId: id, name, ownerName: 'Ulf', q: 0, r: 0, longhouseLevel: 1, islandId: 'i', mine: true } as SettlementSummary;
+function summary(id: string, name: string, isBeachCamp = false): SettlementSummary {
+  return { id, realmId: id, name, ownerName: 'Ulf', q: 0, r: 0, longhouseLevel: 1, islandId: 'i', mine: true, isBeachCamp } as SettlementSummary;
 }
 
 function mountMenu() {
@@ -128,6 +128,17 @@ describe('SettlementMenu', () => {
       await realms[1]!.trigger('click');
       expect(switchTo).toHaveBeenCalledWith('s2');
       expect(wrapper.find('[role="menu"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('names a beach camp in the realm list', async () => {
+      listMySettlements.mockResolvedValue([summary('s1', 'Bjornstad'), summary('s2', 'Sandspit', true)]);
+      const wrapper = mountMenu();
+      await wrapper.find('.menu-trigger').trigger('click');
+      await flushPromises();
+      const realms = wrapper.findAll('.realm-row');
+      expect(realms[0]!.find('.realm-kind').exists()).toBe(false);
+      expect(realms[1]!.find('.realm-kind').text()).toBe('Beach camp');
       wrapper.unmount();
     });
 

@@ -57,7 +57,7 @@ describe('catalogueNames', () => {
   });
 
   it('has a translated name for every mission', () => {
-    for (const mission of ['move', 'attack', 'support', 'raid', 'found']) {
+    for (const mission of ['move', 'attack', 'support', 'raid', 'found', 'setupcamp']) {
       expect(missionName(mission), mission).not.toBe(mission);
     }
   });
