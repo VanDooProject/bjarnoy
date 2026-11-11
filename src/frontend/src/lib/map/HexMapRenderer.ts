@@ -35,7 +35,6 @@
 import { exploredShare, frameCameraFor } from './frameCamera';
 import {
   circleIntersectsRect,
-  circlesIntersect,
   markerFadeStep,
   type OcclusionCircle,
 } from './markerOcclusion';
@@ -44,29 +43,7 @@ import type { AxialCoord } from '../hex/coords';
 import { axialToOddQ, coordKey, hexesInRadius, neighbors, parseKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
-import { formatCountdownShort } from '../hud/countdown';
-import {
-  DIAL_FINISH_MS,
-  hexPerimeterSegment,
-  pendingDotFrame,
-  DIAL_PENDING_SWEEP_MS,
-  DIAL_REJECT_MS,
-  polylinePartial,
-  retainFinishingDials,
-  skipHudOwnedDials,
-  dialPhase,
-  CONSTRUCTION_DIAL_ELAPSED_COLOR,
-  CONSTRUCTION_DIAL_REJECT_COLOR,
-  hexPerimeterPath,
-  dialScale,
-  dialHoverStep,
-  dialRadiusPx,
-  pickTappedDial,
-  nextTapReveal,
-  DIAL_TAP_REVEAL_MS,
-  type ConstructionDial,
-  rejectDialAt,
-} from './constructionDial';
+import { DIAL_FINISH_MS, DIAL_REJECT_MS, retainFinishingDials, rejectDialAt, type ConstructionDial } from './constructionDial';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import { atlasPageCount } from './atlasManifests';
 import { attachFramePacing } from './framePacing';
@@ -251,13 +228,6 @@ export const LABEL_STYLES = {
   }),
   cart: new TextStyle({ fill: CART_COLOR, fontFamily: 'sans-serif', fontWeight: 'normal', fontSize: 11 }),
   badgeName: new TextStyle({ fill: 0xf4f8fa, fontFamily: "'Barlow', sans-serif", fontWeight: '700', fontSize: 15 }),
-  dialTime: new TextStyle({
-    fill: 0xffffff,
-    fontFamily: "'Barlow', sans-serif",
-    fontWeight: 'bold',
-    fontSize: 12,
-    dropShadow: { color: 0x000000, alpha: 0.9, blur: 2, distance: 1, angle: Math.PI / 2 },
-  }),
   badgeSuffix: new TextStyle({ fill: 0xb9c8d1, fontFamily: "'Barlow', sans-serif", fontWeight: '600', fontSize: 13 }),
 } as const;
 
@@ -980,10 +950,8 @@ function hexPoints(cx: number, cy: number, r: number): number[] {
 
 const NO_DIALS: readonly ConstructionDial[] = [];
 
-// Construction progress dial (see `constructionDial.ts`): drawn in screen space
-// by `drawConstructionDials` (scaled with the map, grows on hover) over a building under construction — white track, yellow elapsed arc,
-// remaining time inside. A queued order draws `#position` on the plain track, a pending one an orbiting sweep and dots,
-// a refused one a red flash and cross.
+// Construction progress dial (see `constructionDial.ts`): drawn by the HTML layer (BuildingHudLayer / BuildingHudDial); the renderer only
+// holds the data and the lift of the dial's centre above its hex.
 // Dial height above the tile centre: half a tile, so the dial's middle sits on
 // the hex's upper edge and the dial overlaps its own tile instead of floating
 // above it.
@@ -2253,8 +2221,6 @@ export class HexMapRenderer {
   // Construction progress dials — just stores data, drawn every tick into
   // `highlightLayer` (above the buildings) in settlement mode only.
   private constructionDials: ConstructionDial[] | null = null;
-  /** Hex keys whose running-upgrade dial the building HUD draws instead (`setHudOwnedDials`); null = building info off. */
-  private hudOwnedDials: ReadonlySet<string> | null = null;
   // Fog v2 (docs/design/map-fog-v2.md §2.4/§4): two screen-space Pixi Mesh
   // layers sampling the fetched mask texture through a shared GLSL shader —
   // see fog/FogMaskLayer.ts. blackFogLayer (out-of-sight tint) sits between
@@ -2454,15 +2420,9 @@ export class HexMapRenderer {
   /** Told of every touch/pen tap on the map (canvas px) without taking it over; see `setTapObserver`. */
   private tapObserver: ((screen: { x: number; y: number }) => void) | null = null;
   private frameObserver: (() => void) | null = null;
-  /** Per-dial hover tween progress 0..1 (`dialHoverStep`), keyed by `coordKey`; absent = 0. */
-  private dialHover = new Map<string, number>();
-  /** Dial revealed by a touch/pen tap (acts as hovered); see `handleDialTap`. */
-  private tapRevealKey: string | null = null;
-  private tapRevealAtMs = 0;
   /** Screen-space circle (canvas px) of an open ring menu; markers beneath it fade out. See `setMarkerOcclusion`. */
   private markerOcclusion: OcclusionCircle | null = null;
-  /** Per-marker visibility 0..1 (`markerFadeStep`): dials keyed by `coordKey`, badges by settlement id. Absent = 1. */
-  private dialVisibility = new Map<string, number>();
+  /** Per-badge visibility 0..1 (`markerFadeStep`), keyed by settlement id. Absent = 1. */
   private badgeVisibility = new Map<string, number>();
   // Issue #16 "ring menu": while a RingMenu is open, its DOM overlay sits on
   // top of the canvas, but this renderer's own pointer tracking is a
@@ -3892,10 +3852,8 @@ export class HexMapRenderer {
   private handleClick(e: TapPoint) {
     const screen = this.clientToCanvas(e.clientX, e.clientY);
     if (!screen) return;
-    // Touch/pen has no hover: a tap on a construction dial reveals it instead
-    // of reaching the tile below. Mouse clicks always go to the tile.
+    // Touch/pen has no hover: the HTML markers (construction dials included) reveal themselves from this tap, which still reaches the tile.
     if (e.pointerType !== 'mouse') this.tapObserver?.(screen);
-    if (e.pointerType !== 'mouse' && this.handleDialTap(screen)) return;
     // While the send picker is open an army's marker is a button: the tap picks (or explains) that army instead of the tile below.
     const armyId = this.pickedArmyAt(screen);
     if (armyId) {
@@ -3932,29 +3890,6 @@ export class HexMapRenderer {
       if (distance <= PICK_RING_RADIUS + 4 && (!best || distance < best.distance)) best = { id: army.id, distance };
     }
     return best?.id ?? null;
-  }
-
-  /**
-   * Touch tap at canvas point `screen`: when it lands on a construction dial
-   * (`pickTappedDial`) toggles that dial's tap-reveal and returns true (the
-   * caller must not dispatch the tap to the tile); otherwise clears any
-   * reveal and returns false so the tap behaves normally.
-   */
-  private handleDialTap(screen: { x: number; y: number }): boolean {
-    const nowMs = Date.now();
-    const mapScale = this.dialMapScale;
-    const targets = skipHudOwnedDials(this.constructionDials ?? [], this.hudOwnedDials)
-      .filter((d) => d.rejectedAtMs === undefined)
-      .filter((d) => !this.isDialOccluded(this.dialScreenPoint(d.coord), mapScale))
-      .map((d) => {
-        const key = coordKey(d.coord);
-        const p = this.dialScreenPoint(d.coord);
-        return { key, cx: p.x, cy: p.y, r: dialRadiusPx(dialScale(mapScale, this.dialHover.get(key) ?? 0).zs) };
-      });
-    const hit = pickTappedDial(screen, targets);
-    this.tapRevealKey = nextTapReveal(this.tapRevealKey, hit);
-    this.tapRevealAtMs = nowMs;
-    return hit !== null;
   }
 
   /**
@@ -5599,7 +5534,7 @@ export class HexMapRenderer {
     if (this.options.mode === 'settlement') {
       this.labelsUsed = 0;
       if (!this.options.hideSettlementBadge) this.rebuildSettlementLabels();
-      this.drawConstructionDials();
+      this.pruneConstructionDials();
       for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
       this.drawArmyOverlay();
       this.hideUnusedIcons();
@@ -5906,187 +5841,30 @@ export class HexMapRenderer {
   }
 
   /**
-   * Construction progress dials, in screen space (markerLayer): they scale
-   * exactly with the map (`camera.zoom / SETTLEMENT_DEFAULT_ZOOM`, no floor),
-   * so a dial stays the same fraction of a tile at every zoom. The time label
-   * is dropped while it would be under `DIAL_MIN_LABEL_PX` on screen (the ring
-   * and progress edge still draw); see `dialScale`. Hovering a dial with the
-   * mouse (on the dial itself or on its hex) eases it up to at least its
-   * default-zoom size and shows its time; hovered dials are drawn last so they
-   * sit above their neighbours. Must run before the unused-label hide loop in
-   * `rebuildMarkers` since it acquires pooled labels. A completed dial plays
-   * `dialFinishFrame` (pop, flash, shockwaves, check mark) and is then pruned.
+   * Drops the construction dials whose finish or refusal animation has played out (`dialPhase` is null then). The dials are drawn
+   * by the HTML layer (components/hud/BuildingHudLayer.vue) from `constructionDialList`; the data and its lifetime stay here.
    */
-  private drawConstructionDials() {
+  private pruneConstructionDials() {
     if (!this.constructionDials) return;
     const nowMs = Date.now();
-    const mapScale = this.dialMapScale;
-    const g = this.markerLayer;
-    const strokePath = (path: number[], width: number, color: number, alpha: number) => {
-      if (path.length < 4) return;
-      g.moveTo(path[0], path[1]);
-      for (let i = 2; i < path.length; i += 2) g.lineTo(path[i], path[i + 1]);
-      g.stroke({ width, color, alpha, cap: 'round', join: 'round' });
-    };
     const live = this.constructionDials.filter((d) =>
       d.rejectedAtMs !== undefined ? nowMs - d.rejectedAtMs < DIAL_REJECT_MS : d.endMs === null || nowMs - d.endMs < DIAL_FINISH_MS,
     );
     if (live.length !== this.constructionDials.length) this.constructionDials = live.length > 0 ? live : null;
-    // Hover pass: advance each dial's tween, then draw the hovered ones last.
-    const dtMs = this.app ? clampAnimationDeltaMs(this.app.ticker.deltaMS) : 0;
-    const reduced = animationPreference.reducedMotion;
-    const pointer = this.hoverPointer;
-    const seen = new Set<string>();
-    if (this.tapRevealKey !== null && nowMs - this.tapRevealAtMs >= DIAL_TAP_REVEAL_MS) this.tapRevealKey = null;
-    const placed = skipHudOwnedDials(live, this.hudOwnedDials).map((dial) => {
-      const anchor = this.dialScreenPoint(dial.coord);
-      // A refused build's dial shakes, flashes red with a cross, then shrinks and fades (dialRejectFrame).
-      const phase = dialPhase(dial, nowMs, reduced);
-      const reject = phase?.kind === 'reject' ? phase.frame : null;
-      const key = coordKey(dial.coord);
-      seen.add(key);
-      const cx = anchor.x + (reject?.offsetX ?? 0);
-      const cy = anchor.y;
-      let hoverT = this.dialHover.get(key) ?? 0;
-      // On the dial's drawn disc (it sits half a tile above its hex, so the hex alone is the wrong hit test) or on its hex.
-      const r0 = dialRadiusPx(dialScale(mapScale, hoverT, reject?.scale ?? 1).zs, reject?.scale ?? 1);
-      // Beneath an open ring: fade out and don't react to hover (or a tap reveal).
-      const occluded = this.isDialOccluded({ x: cx, y: cy }, mapScale);
-      const vis = markerFadeStep(this.dialVisibility.get(key) ?? 1, occluded, dtMs, reduced);
-      if (vis < 1) this.dialVisibility.set(key, vis);
-      else this.dialVisibility.delete(key);
-      const hovered =
-        !reject &&
-        !occluded &&
-        (this.tapRevealKey === key ||
-          (pointer !== null && (Math.hypot(pointer.x - cx, pointer.y - cy) <= r0 || this.hoveredKey === key)));
-      hoverT = dialHoverStep(hoverT, hovered, dtMs, reduced);
-      if (hoverT > 0) this.dialHover.set(key, hoverT);
-      else this.dialHover.delete(key);
-      return { dial, phase, reject, cx, cy, hoverT, vis };
-    });
-    for (const key of this.dialHover.keys()) if (!seen.has(key)) this.dialHover.delete(key);
-    for (const key of this.dialVisibility.keys()) if (!seen.has(key)) this.dialVisibility.delete(key);
-    if (this.tapRevealKey !== null && !seen.has(this.tapRevealKey)) this.tapRevealKey = null;
-    placed.sort((a, b) => a.hoverT - b.hoverT);
-    for (const { dial, phase, reject, cx, cy, hoverT, vis } of placed) {
-      if (vis <= 0 || !phase) continue;
-      const progress = phase.kind === 'building' ? phase.progress : 0;
-      const remaining = phase.kind === 'building' ? phase.remaining : null;
-      const dAlpha = (reject?.alpha ?? 1) * vis;
-      const { zs, showLabel } = dialScale(mapScale, hoverT, reject?.scale ?? 1);
-      const r = dialRadiusPx(zs, reject?.scale ?? 1);
-      const frame = phase.kind === 'finish' ? phase.frame : null;
-
-      if (frame) {
-        const fr = r * frame.scale;
-        const a = frame.alpha * vis;
-        g.poly(hexPoints(cx, cy, fr)).fill({ color: 0x08121a, alpha: 0.85 * a });
-        g.poly(hexPoints(cx, cy, fr)).fill({ color: CONSTRUCTION_DIAL_ELAPSED_COLOR, alpha: 0.75 * frame.flash * a });
-        strokePath(hexPerimeterPath(cx, cy, fr, 1), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, a);
-        for (const ring of frame.rings) {
-          if (ring.alpha <= 0) continue;
-          g.poly(hexPoints(cx, cy, r * ring.scale)).stroke({
-            width: 3 * zs,
-            color: CONSTRUCTION_DIAL_ELAPSED_COLOR,
-            alpha: ring.alpha * a,
-            join: 'round',
-          });
-        }
-        const check = polylinePartial(
-          [
-            { x: cx - 0.38 * fr, y: cy + 0.02 * fr },
-            { x: cx - 0.1 * fr, y: cy + 0.3 * fr },
-            { x: cx + 0.4 * fr, y: cy - 0.25 * fr },
-          ],
-          frame.check,
-        );
-        strokePath(check, 5 * zs, 0xffffff, a);
-        continue;
-      }
-
-      if (reject) {
-        const a = reject.alpha * vis;
-        for (const ring of reject.rings) {
-          g.poly(hexPoints(cx, cy, r * ring.scale)).stroke({
-            width: 3 * zs,
-            color: CONSTRUCTION_DIAL_REJECT_COLOR,
-            alpha: ring.alpha * a,
-            join: 'round',
-          });
-        }
-        g.poly(hexPoints(cx, cy, r)).fill({ color: 0x08121a, alpha: 0.85 * a });
-        g.poly(hexPoints(cx, cy, r)).fill({ color: CONSTRUCTION_DIAL_REJECT_COLOR, alpha: 0.7 * reject.flash * a });
-        strokePath(hexPerimeterPath(cx, cy, r, 1), 6 * zs, CONSTRUCTION_DIAL_REJECT_COLOR, a);
-        const h = 0.34 * r;
-        const cross = reject.cross;
-        strokePath(polylinePartial([{ x: cx - h, y: cy - h }, { x: cx + h, y: cy + h }], cross * 2), 5 * zs, 0xffffff, a);
-        strokePath(polylinePartial([{ x: cx + h, y: cy - h }, { x: cx - h, y: cy + h }], cross * 2 - 1), 5 * zs, 0xffffff, a);
-        continue;
-      }
-
-      const queued = dial.state === 'queued';
-      g.poly(hexPoints(cx, cy, r)).fill({ color: 0x08121a, alpha: 0.85 * dAlpha });
-      g.poly(hexPoints(cx, cy, r)).stroke({ width: 6 * zs, color: 0xffffff, alpha: 0.3 * dAlpha, join: 'round' });
-      if (dial.state === 'pending') {
-        if (reduced) {
-          for (let k = 0; k < 3; k++) {
-            strokePath(hexPerimeterSegment(cx, cy, r, k / 3, k / 3 + 1 / 12), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
-          }
-        } else {
-          const head = (nowMs % DIAL_PENDING_SWEEP_MS) / DIAL_PENDING_SWEEP_MS;
-          strokePath(hexPerimeterSegment(cx, cy, r, head, head + 1 / 6), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
-        }
-      } else if (!queued) {
-        strokePath(hexPerimeterPath(cx, cy, r, progress), 6 * zs, CONSTRUCTION_DIAL_ELAPSED_COLOR, dAlpha);
-      }
-      if (!showLabel) continue;
-      if (dial.state === 'pending') {
-        const s = 0.1 * r;
-        for (let i = 0; i < 3; i++) {
-          const dot = pendingDotFrame(nowMs, i, reduced);
-          g.circle(cx + (i - 1) * 3.2 * s, cy - dot.lift * s, s).fill({ color: 0xffffff, alpha: dot.alpha * dAlpha });
-        }
-        continue;
-      }
-      const label = this.acquireLabel(LABEL_STYLES.dialTime, zs * 1.2);
-      label.alpha = dAlpha;
-      label.text = queued ? `#${dial.queuePosition}` : remaining === null ? '…' : formatCountdownShort(remaining);
-      label.tint = !queued && remaining !== null && remaining <= 60 ? CONSTRUCTION_DIAL_ELAPSED_COLOR : 0xffffff;
-      label.anchor.set(0.5);
-      label.position.set(cx, cy);
-      label.visible = true;
-    }
-  }
-
-  /** True when a dial centred at `p` (at its resting size) overlaps the open ring's footprint. */
-  private isDialOccluded(p: { x: number; y: number }, mapScale: number): boolean {
-    if (!this.markerOcclusion) return false;
-    const r = dialRadiusPx(dialScale(mapScale, 0).zs);
-    return circlesIntersect(this.markerOcclusion, { x: p.x, y: p.y, r });
   }
 
   /**
-   * While a ring menu is open, markers beneath it (construction dials, the
-   * settlement name badge) fade out so they don't show through between its
-   * DOM bubbles. `circle` is the ring's footprint in canvas px; null restores
+   * While a ring menu is open, markers beneath it (the settlement name badge; the HTML markers read `markerOcclusionCircle`)
+   * fade out so they don't show through between its DOM bubbles. `circle` is the ring's footprint in canvas px; null restores
    * them. Markers outside the circle are unaffected.
    */
   setMarkerOcclusion(circle: OcclusionCircle | null) {
     this.markerOcclusion = circle;
   }
 
-  /** Current marker visibility 0..1 (read-only): dials by `coordKey` ("q,r"), badges by settlement id; absent = fully visible. */
-  markerVisibility(): { dials: Record<string, number>; badges: Record<string, number> } {
-    return { dials: Object.fromEntries(this.dialVisibility), badges: Object.fromEntries(this.badgeVisibility) };
-  }
-
-  /**
-   * Hex keys ("q,r") whose construction progress dial the canvas draws right now (read-only, for e2e): the queue's dials minus the
-   * running upgrades the building HUD's markers show instead (`setHudOwnedDials`).
-   */
-  drawnConstructionDialKeys(): string[] {
-    return skipHudOwnedDials(this.constructionDials ?? [], this.hudOwnedDials).map((d) => coordKey(d.coord));
+  /** Current marker visibility 0..1 (read-only): badges by settlement id; absent = fully visible. */
+  markerVisibility(): { badges: Record<string, number> } {
+    return { badges: Object.fromEntries(this.badgeVisibility) };
   }
 
   private hideUnusedIcons() {
@@ -6482,8 +6260,8 @@ export class HexMapRenderer {
 
   /**
    * Hands in the under-construction dials (`constructionDialsFromQueue`).
-   * Like `setRangeOverlay`, this only stores the data; `drawHighlight` redraws
-   * the animated progress every tick (settlement mode only). `null` clears.
+   * Like `setRangeOverlay`, this only stores the data; the HTML layer (BuildingHudLayer) draws and animates the dials from
+   * `constructionDialList`. `null` clears.
    */
   setConstructionDials(dials: ConstructionDial[] | null) {
     const merged = retainFinishingDials(this.constructionDials ?? [], dials ?? [], Date.now());
@@ -6491,18 +6269,9 @@ export class HexMapRenderer {
   }
 
   /**
-   * While the building HUD is on, its marker dial draws every order state of a standing building: `keys` (`coordKey`) are the
-   * hexes whose dials (running, queued, pending, refused, finishing, raze) the canvas must not draw too. New builds (no marker
-   * yet) still draw. `null` (building info off) restores every dial.
-   */
-  setHudOwnedDials(keys: ReadonlySet<string> | null) {
-    this.hudOwnedDials = keys;
-  }
-
-  /**
    * The dials the renderer holds right now: the queue's, plus the finishing and refused ones it keeps until their animation has
    * played (`setConstructionDials`, `rejectConstructionDial`). The list is replaced, never edited, so a changed identity means
-   * a changed list. The building HUD's markers draw the ones on their hexes from it.
+   * a changed list. The building HUD layer draws every dial from it (on the building's marker, or as a dial-only marker).
    */
   get constructionDialList(): readonly ConstructionDial[] {
     return this.constructionDials ?? NO_DIALS;
@@ -6525,7 +6294,7 @@ export class HexMapRenderer {
   /**
    * Screen position (the space `hexCenterScreen` reports in) of the middle of
    * the construction dial over `coord`: the hex's centre lifted by the same
-   * `CONSTRUCTION_DIAL_LIFT` `drawConstructionDials` uses, so an HTML overlay
+   * `CONSTRUCTION_DIAL_LIFT` the HTML dial markers sit at, so an HTML overlay
    * (the queue card's flying token) starts exactly where the dial is drawn.
    */
   dialScreenPoint(coord: AxialCoord): { x: number; y: number } {
