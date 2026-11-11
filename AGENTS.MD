@@ -49,8 +49,8 @@
   refinement and review every render
 
 # my gameplay wishes and requirements
-- collect the game wishes, requirements and mechanics I state (e.g. "a realm is taken by destroying its Longhouse", "ships can hit
-  the buildings on a target's shore") in the MD design docs under `docs/design/` — the doc for that topic, or a new one if none fits
+- collect the game wishes, requirements and mechanics I state (e.g. "a realm is taken by destroying its Longhouse", "ships do no
+  damage to buildings on land") in the MD design docs under `docs/design/` — the doc for that topic, or a new one if none fits
 - only things that make sense and are settled (a closed rule, not a half-thought or a question still being discussed)
 - ask me before saving: name the doc and the exact text, and write it only after I say yes
 - write down only what I asked for or decided: no "not planned" / "won't do" entries unless I explicitly list something as a
@@ -419,19 +419,18 @@
     timeout waiting for the `frontend` resource: `npm ci` in `src/frontend`
     and the vendored `bg_assets_hextile` art (see above).
     `playwright.ps1 install` is blocked by the egress proxy, and
-    `Microsoft.Playwright` 1.56 launches
-    `$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-1194/chrome-linux/headless_shell`,
-    while the sandbox image now ships a newer revision with another layout
-    (`/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell`
-    as of 2026-11-02). Without a fix every test fails within seconds with
-    "Executable doesn't exist at .../chromium_headless_shell-1194/...".
-    Link the present binary to the path it asks for (sandbox-only, nothing
+    `Microsoft.Playwright` 1.62 launches
+    `$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell`,
+    while the sandbox image ships another revision of the same layout
+    (`/opt/pw-browsers/chromium_headless_shell-1243/...` as of 2026-11-11).
+    Without a fix every test fails within seconds with
+    "Executable doesn't exist at .../chromium_headless_shell-1234/...".
+    Link the present revision to the one it asks for (sandbox-only, nothing
     to commit; check the revision numbers in the error and under
     `/opt/pw-browsers` first):
     ```bash
-    sudo mkdir -p /opt/pw-browsers/chromium_headless_shell-1194/chrome-linux
-    sudo ln -sf /opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell \
-      /opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell
+    sudo ln -sfn /opt/pw-browsers/chromium_headless_shell-1243 \
+      /opt/pw-browsers/chromium_headless_shell-1234
     ```
     Run it from
     `src/backend/tests/Bjarnoy.AppHost.Tests` with **`CI=true dotnet test`**;

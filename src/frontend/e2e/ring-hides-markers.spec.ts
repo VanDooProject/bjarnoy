@@ -41,10 +41,13 @@ test.describe('markers beneath the ring menu', { tag: '@g2' }, () => {
       const renderer = w.__settlementRenderer();
       const origin = renderer.hexCenterScreen({ q: s.q, r: s.r });
       // The realm is smaller than the ring, so the far dial sits just outside it, on the first hex 200+ px away.
+      // Both are new builds: a hex with a building standing shows its order in the building HUD's marker, not as a canvas dial.
+      const standing = new Set(world.model.listBuildings(world.selectedSettlementId).map((b: { q: number; r: number }) => `${b.q},${b.r}`));
       let nearHex: { q: number; r: number } | null = null;
       let farHex: { q: number; r: number } | null = null;
       for (let k = 1; k < 12 && (!nearHex || !farHex); k++) {
         const at = { q: s.q + k, r: s.r };
+        if (standing.has(`${at.q},${at.r}`)) continue;
         const p = renderer.hexCenterScreen(at);
         const d = Math.hypot(p.x - origin.x, p.y - origin.y);
         if (!nearHex && d > 20) nearHex = at;

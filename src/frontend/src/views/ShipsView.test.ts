@@ -72,9 +72,9 @@ describe('ShipsView', () => {
     });
     const text = wrapper.get('#troops').text();
     expect(text).toContain('slowest ship');
-    expect(text).toContain('do not fight');
+    expect(text).toContain('do not take part in the ship fight');
     expect(text).toContain('drown');
-    expect(wrapper.get('#battles').text()).toContain('Only ships fight');
+    expect(wrapper.get('#battles').text()).toContain('An attack is two fights');
     wrapper.unmount();
   });
 
@@ -99,13 +99,13 @@ describe('ShipsView', () => {
     wrapper.unmount();
   });
 
-  it('explains that a fleet is sent at one shore building, which a won fight damages', async () => {
+  it('explains that ships do not damage buildings on land and loot needs a won land fight', async () => {
     const wrapper = await mountPage();
 
     const text = wrapper.get('#battles').text();
-    expect(text).toContain("one building on the enemy's shore");
-    expect(text).toContain('Longhouse can stand inland');
-    expect(text).toContain('it damages that building');
+    expect(text).toContain('Ships do no damage to buildings on land');
+    expect(text).toContain('10 Fire Ships take one level off');
+    expect(text).toContain('Loot needs a won land fight');
     wrapper.unmount();
   });
 
