@@ -1262,7 +1262,7 @@
     },
     "sendOut": {
       "heading": "Eine Armee losschicken, die schon unterwegs ist",
-      "orders": "Tippe auf einem Feld auf „Armee hierher entsenden“, „Angreifen“, „Unterstützen“ oder „Jagen“ und wähle die Armee, die losziehen soll: deine Garnison oder eine Armee, die schon draußen ist. Eine stehende Armee kann ziehen, angreifen, unterstützen oder jagen. Eine marschierende Armee leitest du mit Premium um. Willst du lieber woandershin, tippst du währenddessen einfach auf ein anderes Feld.",
+      "orders": "Tippe auf einem Feld auf „Armee hierher entsenden“, „Angreifen“, „Unterstützen“ oder „Jagen“ und wähle die Armee, die losziehen soll: deine Garnison oder eine Armee, die schon draußen ist. Eine stehende Armee kann ziehen, angreifen, unterstützen oder jagen. Eine marschierende Armee leitest du mit Premium um. Willst du lieber woandershin, tippst du währenddessen einfach auf ein anderes Feld. Greifst du eine Siedlung an, greifst du ein Gebäude in ihrem Reich an. Hat das Gebäude eine Besatzung, verteidigt sie es. Unterstützt du eine Siedlung, verstärkst du eine ihrer Besatzungen.",
       "split": "Von einer stehenden Armee kannst du nur einen Teil losschicken. Der Rest bleibt, wo er steht. Eine marschierende Armee zieht immer komplett los.",
       "reach": "Eine Armee zieht nur los, wenn sie das Ziel erreicht und danach noch genug Proviant für den Rückweg hat. Alle anderen siehst du ausgegraut in der Liste, zusammen mit dem Grund.",
       "support": "Eine Armee, die eine andere Siedlung unterstützt, musst du erst zurückrufen."
@@ -1326,7 +1326,7 @@
     "sailing": {
       "heading": "Auf See",
       "sea": "Schiffe fahren nur auf dem Meer. Küstenwasser und offene See kosten gleich viel, Moorseen sind für sie gesperrt.",
-      "targets": "Eine Flotte kann Siedlungen angreifen, plündern oder unterstützen, die Küste beanspruchen.",
+      "targets": "Eine Flotte kann Siedlungen angreifen, plündern oder unterstützen, die Küste beanspruchen. Greifst du eine Siedlung an, greifst du ein Gebäude in ihrem Reich an. Unterstützt du sie, verstärkst du eine ihrer Besatzungen.",
       "walls": "{walls} halten Flotten nicht auf.",
       "wallsLink": "Mauern",
       "camps": "Lager an Land überfallen nie eine Flotte. Der Walweg liegt auf offener See und überfällt jede Flotte, die auf sein Feld segelt (siehe {camps}).",

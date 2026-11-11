@@ -1262,7 +1262,7 @@
     },
     "sendOut": {
       "heading": "Sending an army that is already out",
-      "orders": "Tap Send army here, Attack, Support or Hunt on a hex and pick the army to send: your garrison or an army that is already out. A standing army can move, attack, support or hunt. An army still on the march can be redirected with Premium. While you pick, tap another hex to aim at that one instead.",
+      "orders": "Tap Send army here, Attack, Support or Hunt on a hex and pick the army to send: your garrison or an army that is already out. A standing army can move, attack, support or hunt. An army still on the march can be redirected with Premium. While you pick, tap another hex to aim at that one instead. Attacking a settlement means attacking a building in its realm: a building with a garrison is defended by it. Supporting a settlement means joining one of its garrisons.",
       "split": "You can send only part of a standing army. The rest keeps standing where it is. An army on the march always goes whole.",
       "reach": "An army only goes if it can get there and still has the food for the way home. The ones that cannot stay in the list, greyed out, with the reason.",
       "support": "An army that is supporting another settlement has to be recalled first."
@@ -1326,7 +1326,7 @@
     "sailing": {
       "heading": "At sea",
       "sea": "Ships sail on the sea only. Coastal and open water cost the same, and bog lakes are closed to them.",
-      "targets": "A fleet can attack, raid or support settlements that hold shoreline.",
+      "targets": "A fleet can attack, raid or support settlements that hold shoreline. Attacking a settlement means attacking a building in its realm; supporting it means joining one of its garrisons.",
       "walls": "{walls} do not stop fleets.",
       "wallsLink": "Walls",
       "camps": "Land camps never ambush a fleet. The whale road, a camp on open sea, ambushes a fleet that sails onto its hex (see {camps}).",

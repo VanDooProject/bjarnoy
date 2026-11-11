@@ -15,7 +15,8 @@
 
 ## Attacks
 
-- Attacks are aimed at buildings, never at a settlement as a whole. An attack on a building with a garrison (longhouse, tower,
+- Attacks are aimed at buildings, never at a settlement as a whole. Attacking a settlement means attacking a building in its realm;
+  supporting a settlement means joining one of its garrisons. An attack on a building with a garrison (longhouse, tower,
   dock, beach camp) is fought by that building's garrison. An attack on any other building has no fight, unless an army stands
   on its hex; then that army fights.
 - Loot comes from three buildings: a longhouse or a beach camp (from the whole stock) and a storage house (at most that house's
