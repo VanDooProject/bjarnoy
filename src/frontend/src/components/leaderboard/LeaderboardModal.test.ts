@@ -74,7 +74,7 @@ describe('LeaderboardModal on a phone', () => {
 
     await wrapper.get('.picker .row').trigger('click');
     await flushPromises();
-    expect(wrapper.get('.mobile-title').text()).toBe('Score');
+    expect(wrapper.get('.mobile-title').text()).toBe('Players · Score');
     expect(wrapper.find('.picker').exists()).toBe(false);
     expect(wrapper.text()).toContain('Alma');
 

@@ -294,7 +294,7 @@ test.describe('leaderboards on a phone', { tag: '@g2' }, () => {
     await expect(dialog.locator('.mobile-title')).toHaveText('Leaderboards');
     await expect(dialog.getByRole('navigation')).toHaveCount(0);
     await dialog.getByRole('button', { name: /^Score/ }).first().click();
-    await expect(dialog.locator('.mobile-title')).toHaveText('Score');
+    await expect(dialog.locator('.mobile-title')).toHaveText('Players · Score');
     await expect(dialog.getByText('Player 2')).toBeVisible();
 
     await dialog.locator('.back-button').click();

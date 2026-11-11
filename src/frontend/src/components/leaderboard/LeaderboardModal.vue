@@ -12,15 +12,17 @@ import { useLeaderboardStore } from '../../stores/leaderboard';
 import type { MessageSchema } from '../../i18n/schema';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
-const { categoryLabel } = useLeaderboardLabels();
+const { scopeLabel, categoryLabel } = useLeaderboardLabels();
 const leaderboard = useLeaderboardStore();
 
 const modal = ref<InstanceType<typeof RouteModal> | null>(null);
 const boardOpen = ref(false);
 
-// The phone header names the open board; on the list (and on desktop) it names the dialog.
+// The phone header names the open board (scope and category: "Score" alone could be the players' or the guilds'); on the list (and on desktop) it names the dialog.
 const title = computed(() =>
-  boardOpen.value && leaderboard.category ? categoryLabel(leaderboard.category) : t('leaderboard.title'),
+  boardOpen.value && leaderboard.scope && leaderboard.category
+    ? t('leaderboard.boardTitle', { scope: scopeLabel(leaderboard.scope), category: categoryLabel(leaderboard.category) })
+    : t('leaderboard.title'),
 );
 
 function onBack() {
