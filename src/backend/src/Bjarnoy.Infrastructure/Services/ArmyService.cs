@@ -1227,11 +1227,11 @@ public sealed class ArmyService(
 
         var seed = Random.Shared.Next();
         var plan = CampBattleResolver.Hunt(
-            domain.Stacks, garrison, camp, effectiveLevel, seed, attackBonusPercent, state.Leftover);
+            domain.Stacks, garrison, camp, effectiveLevel, seed, domain.ProvisionsAt(arrivesAt), attackBonusPercent, state.Leftover);
 
         // An already empty camp is a pickup, not a clear: clears, calm and snapshot stay as they were.
         var nextState = garrison.IsEmpty
-            ? state.AfterPickup(plan.Loot)
+            ? state.AfterPickup(plan.Taken)
             : state.AfterHunt(camp, arrivesAt, plan);
         await _campService.UpsertStateAsync(worldId, camp.Coord, nextState, cancellationToken).ConfigureAwait(false);
 

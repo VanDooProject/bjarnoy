@@ -33,10 +33,11 @@ public class AttackResolverTests
         double defenseBonus = 0,
         double landBonus = 0,
         double shipBonus = 0,
-        ResourceAmounts? loot = null) =>
+        ResourceAmounts? loot = null,
+        double provisions = double.PositiveInfinity) =>
         AttackResolver.Resolve(
             attacker, home ?? [], guests ?? [], defenseBonus, loot ?? Stock, seed: 1, raid, landBonus, shipBonus,
-            target, buildings ?? Buildings(), Strait);
+            target, buildings ?? Buildings(), Strait, provisions);
 
     private static int Count(IEnumerable<UnitStack> stacks, UnitType type) => stacks.Where(s => s.Type == type).Sum(s => s.Count);
 
@@ -372,5 +373,60 @@ public class AttackResolverTests
 
         var landRaid = Attack([new(UnitType.Karve, 1), new(UnitType.Spearman, 10)], home: [new(UnitType.Spearman, 100)], raid: true);
         Assert.Equal(5, Count(landRaid.LandFight!.AttackerSurvivors, UnitType.Spearman));
+    }
+
+    // ---- Refill (docs/design/troop-movement-range.md section 1b): food off the top, up to the room in the provisions
+
+    [Fact]
+    public void A_won_land_fight_refills_the_provisions_from_the_targets_food_before_the_loot()
+    {
+        // 10 spearmen: food capacity 10 x 24 = 240, carry 10 x 20 = 200. Provisions 100 leave room for 140.
+        var plan = Attack([new(UnitType.Spearman, 10)], provisions: 100);
+
+        Assert.Equal(140, plan.Refill);
+        // The loot takes its full 200 from what is left, the refill on top of it.
+        Assert.Equal(200, plan.Loot.Wood + plan.Loot.Stone + plan.Loot.Food + plan.Loot.Iron);
+        Assert.Equal(plan.Loot, plan.LandFight!.LootTaken);
+    }
+
+    [Fact]
+    public void The_refill_is_capped_by_the_food_the_target_has_and_leaves_the_loot_to_what_is_left()
+    {
+        var plan = Attack([new(UnitType.Spearman, 10)], provisions: 0, loot: new ResourceAmounts(1000, 0, 100, 0));
+
+        Assert.Equal(100, plan.Refill);
+        Assert.Equal(0, plan.Loot.Food);
+        Assert.Equal(200, plan.Loot.Wood);
+    }
+
+    [Fact]
+    public void Full_provisions_leave_no_room_to_refill_and_the_loot_may_take_food()
+    {
+        var plan = Attack([new(UnitType.Spearman, 10)], provisions: 240, loot: new ResourceAmounts(0, 0, 1000, 0));
+
+        Assert.Equal(0, plan.Refill);
+        Assert.Equal(200, plan.Loot.Food);
+    }
+
+    [Fact]
+    public void A_fleets_refill_counts_the_food_capacity_of_every_survivor_aboard_but_its_loot_only_the_ships_carry()
+    {
+        // Karve: food 600, carry 200; 10 spearmen: food 240. Provisions 0: room for 840, the loot is the Karve's 200.
+        var plan = Attack([new(UnitType.Karve, 1), new(UnitType.Spearman, 10)], provisions: 0);
+
+        Assert.Equal(840, plan.Refill);
+        Assert.Equal(200, plan.Loot.Wood + plan.Loot.Stone + plan.Loot.Food + plan.Loot.Iron);
+    }
+
+    [Fact]
+    public void No_loot_means_no_refill_a_lost_fight_a_dockyard_target_or_a_fleet_without_passengers()
+    {
+        Assert.Equal(0, Attack([new(UnitType.Spearman, 1)], home: [new(UnitType.Spearman, 100)], provisions: 0).Refill);
+
+        var dockyard = new PlacedBuilding(SeaHex, BuildingType.Dockyard, 3);
+        Assert.Equal(
+            0, Attack([new(UnitType.Karve, 1), new(UnitType.Spearman, 10)], buildings: Buildings(dockyard), target: SeaHex, provisions: 0).Refill);
+
+        Assert.Equal(0, Attack([new(UnitType.Karve, 5)], provisions: 0).Refill);
     }
 }

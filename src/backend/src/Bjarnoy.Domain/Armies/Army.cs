@@ -442,7 +442,7 @@ public sealed record Army
     /// <summary>
     /// The mission and target rules a dispatch from home (<see cref="PlanDispatch"/>) and a field order
     /// (<see cref="PlanFieldOrder"/>) both hold an army to, in one place: a fleet's passengers need ship slots, a
-    /// <see cref="ArmyMission.Hunt"/> needs a camp the units can reach (land units a land camp, ships a water camp), an
+    /// <see cref="ArmyMission.Hunt"/> needs a camp the units can reach (land units a land camp, ships a water camp, a fleet a land camp too with land troops aboard), an
     /// Attack/Support/Raid needs a target settlement other than the army's own, a target building only goes with
     /// Attack/Raid, and a fleet Attack/Raid is always sent at one building on the target's shore.
     /// </summary>
@@ -677,19 +677,24 @@ public sealed record Army
         // back home/guest inside the resolver (ProportionalAllocator, see its remarks). A second split, of the guest total across
         // the actual guest Army records, happens one layer up in ArmyService — this method only knows the pooled guest total, never
         // individual guest armies, to keep it DB-free.
+        //
+        // The provisions the (pre-battle, full-strength) army still carries at the battle instant: what it burned reaching it is gone,
+        // and a won land fight refills them from the target's food (docs/design/troop-movement-range.md section 1b).
+        var provisionsAtBattle = army.ProvisionsAt(battleInstant);
         var attack = AttackResolver.Resolve(
             army.Stacks, settledDefender.Garrison, guestDefenderStacks, defenseBonusPercent, lootAvailable, seed,
             raid: army.Mission == ArmyMission.Raid,
             landAttackBonusPercent: landAttackBonusPercent,
             shipAttackBonusPercent: shipAttackBonusPercent,
-            army.TargetBuildingCoord, settledDefender.Buildings, terrainAt);
+            army.TargetBuildingCoord, settledDefender.Buildings, terrainAt, provisionsAtBattle);
         var plan = attack.Overall;
 
         // Loot leaves the defender's stock at the instant of battle even
         // though it does not reach the attacker's own stock until the
         // survivors physically get home (see Loot's remarks) — it is gone
-        // from the defender either way.
-        var afterLoot = settledDefender.Resources.TrySpend(plan.LootTaken, battleInstant, out var spent)
+        // from the defender either way. So is the food that refilled the army's provisions.
+        var afterLoot = settledDefender.Resources.TrySpend(
+            plan.LootTaken + new ResourceAmounts(0, 0, attack.Refill, 0), battleInstant, out var spent)
             ? spent
             : settledDefender.Resources.SettledTo(battleInstant);
 
@@ -730,12 +735,6 @@ public sealed record Army
             return new ArmyArrivalResult(null, finalDefender, Fought: true, plan, guestLosses, siege, attack);
         }
 
-        // Rebase provisions to what the (pre-battle, full-strength) army had
-        // actually burned reaching the battle instant — same trick
-        // SettleTo's turn-around branch uses for Move.
-        var elapsedOutboundHours = (battleInstant - movement.DepartedAt).TotalHours;
-        var provisionsAtBattle = Math.Max(0, army.Provisions - (army.TotalUpkeepPerHour * elapsedOutboundHours));
-
         var returning = new Movement.Movement
         {
             DepartedAt = battleInstant,
@@ -757,7 +756,9 @@ public sealed record Army
         {
             Stacks = plan.AttackerSurvivors,
             Location = new ArmyLocation.InTransit(returning),
-            Provisions = provisionsAtBattle,
+            // Provisions are rebased to what the army carried at the battle instant, plus what the win refilled (same trick
+            // SettleTo's turn-around branch uses for Move).
+            Provisions = provisionsAtBattle + attack.Refill,
             Loot = plan.LootTaken,
         };
 
@@ -787,8 +788,7 @@ public sealed record Army
         }
 
         var movement = inTransit.Movement;
-        var elapsedOutboundHours = (battleInstant - movement.DepartedAt).TotalHours;
-        var provisionsAtBattle = Math.Max(0, Provisions - (TotalUpkeepPerHour * elapsedOutboundHours));
+        var provisionsAtBattle = ProvisionsAt(battleInstant);
 
         var returning = new Movement.Movement
         {
@@ -808,7 +808,8 @@ public sealed record Army
         {
             Stacks = plan.ArmySurvivors,
             Location = new ArmyLocation.InTransit(returning),
-            Provisions = provisionsAtBattle,
+            // What the army carried at the battle instant, plus the food the win took from the camp to refill it.
+            Provisions = provisionsAtBattle + plan.Refill,
             Loot = plan.Loot,
         };
     }

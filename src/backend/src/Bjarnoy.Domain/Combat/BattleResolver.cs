@@ -226,6 +226,31 @@ public static class BattleResolver
     internal static ResourceAmounts ComputeLootWithCapacity(double carryCapacity, ResourceAmounts available) =>
         ComputeLoot(carryCapacity, available);
 
+    /// <summary>
+    /// What a won fight takes from <paramref name="available"/> (a settlement's stock, a camp's loot pool, a beaten army's carried
+    /// loot) and the order it is taken in (<c>docs/design/troop-movement-range.md</c> section 1b): first the food that refills the
+    /// winner's provisions, <c>min(available food, foodCapacity - provisions)</c> (never negative), then the loot, filled up to
+    /// <paramref name="carryCapacity"/> from what is left. The refill is on top of the loot and does not use the carry capacity.
+    /// </summary>
+    /// <param name="carryCapacity">The loot capacity (<see cref="UnitDefinition.CarryCapacity"/>) of whoever may carry it.</param>
+    /// <param name="foodCapacity">The food capacity (<see cref="UnitDefinition.FoodCarryCapacity"/>) of every survivor, passengers included.</param>
+    /// <param name="provisions">The winner's provisions at the instant of the fight.</param>
+    internal static (ResourceAmounts Loot, double Refill) TakeLootAndRefill(
+        double carryCapacity, double foodCapacity, double provisions, ResourceAmounts available)
+    {
+        var refill = Math.Min(Math.Max(0, available.Food), Math.Max(0, foodCapacity - provisions));
+        var loot = ComputeLoot(carryCapacity, available with { Food = available.Food - refill });
+        return (loot, refill);
+    }
+
+    /// <summary>The summed <see cref="UnitDefinition.FoodCarryCapacity"/> of <paramref name="stacks"/>.</summary>
+    internal static double FoodCapacity(IEnumerable<UnitStack> stacks) =>
+        stacks.Sum(s => (double)UnitCatalogue.Get(s.Type).FoodCarryCapacity * s.Count);
+
+    /// <summary>The summed <see cref="UnitDefinition.CarryCapacity"/> of <paramref name="stacks"/>.</summary>
+    internal static double CarryCapacity(IEnumerable<UnitStack> stacks) =>
+        stacks.Sum(s => (double)UnitCatalogue.Get(s.Type).CarryCapacity * s.Count);
+
     private static (IReadOnlyList<UnitStack> Losses, IReadOnlyList<UnitStack> Survivors) ApplyProportionalLosses(
         IReadOnlyList<UnitStack> stacks, double fraction, Random rng)
     {

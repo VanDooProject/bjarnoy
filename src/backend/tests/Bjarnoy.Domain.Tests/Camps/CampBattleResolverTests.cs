@@ -19,7 +19,7 @@ public class CampBattleResolverTests
         // 10 Axemen: attack 400 vs defense 195 -> (195/400)^1.5 = 0.34 -> 3 lost.
         var army = new[] { new UnitStack(UnitType.Axeman, 10) };
 
-        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1);
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         Assert.Equal(CampFightWinner.Army, plan.Winner);
         Assert.Equal(400, plan.ArmyPower);
@@ -34,7 +34,7 @@ public class CampBattleResolverTests
     public void Camp_wins_a_hunt_when_stronger_and_keeps_survivors()
     {
         var army = new[] { new UnitStack(UnitType.Axeman, 2) }; // 80 vs 195
-        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1);
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         Assert.Equal(CampFightWinner.Camp, plan.Winner);
         Assert.Equal(army, plan.ArmyLosses);
@@ -49,7 +49,7 @@ public class CampBattleResolverTests
     public void A_tie_goes_to_the_camp()
     {
         var army = new[] { new UnitStack(UnitType.Spearman, 13) }; // 13 * 15 = 195
-        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1);
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         Assert.Equal(195, plan.ArmyPower);
         Assert.Equal(195, plan.CampPower);
@@ -60,8 +60,8 @@ public class CampBattleResolverTests
     public void Hunt_is_deterministic_for_a_seed()
     {
         var army = new[] { new UnitStack(UnitType.Axeman, 7), new UnitStack(UnitType.Berserker, 3) };
-        var a = CampBattleResolver.Hunt(army, FullStrong(2), Strong(2), 2, seed: 42);
-        var b = CampBattleResolver.Hunt(army, FullStrong(2), Strong(2), 2, seed: 42);
+        var a = CampBattleResolver.Hunt(army, FullStrong(2), Strong(2), 2, seed: 42, provisionsAtBattle: double.PositiveInfinity);
+        var b = CampBattleResolver.Hunt(army, FullStrong(2), Strong(2), 2, seed: 42, provisionsAtBattle: double.PositiveInfinity);
         Assert.Equal(a.ArmySurvivors, b.ArmySurvivors);
         Assert.Equal(a.Loot, b.Loot);
     }
@@ -70,7 +70,7 @@ public class CampBattleResolverTests
     public void Hunt_land_attack_bonus_scales_army_power()
     {
         var army = new[] { new UnitStack(UnitType.Axeman, 10) };
-        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1, landAttackBonusPercent: 50);
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity, landAttackBonusPercent: 50);
         Assert.Equal(600, plan.ArmyPower);
     }
 
@@ -79,7 +79,7 @@ public class CampBattleResolverTests
     {
         // 7 survivors * 30 carry = 210 of the 1800 pool; the rest stays behind.
         var army = new[] { new UnitStack(UnitType.Axeman, 10) };
-        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1);
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         var total = plan.Loot.Wood + plan.Loot.Stone + plan.Loot.Food + plan.Loot.Iron;
         Assert.Equal(210, total, 6);
@@ -91,7 +91,7 @@ public class CampBattleResolverTests
     public void Hunt_loot_takes_the_whole_pool_when_the_army_can_carry_it()
     {
         UnitStack[] army = [new UnitStack(UnitType.Axeman, 10), new UnitStack(UnitType.Thrall, 100)];
-        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1);
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         Assert.Equal(CampFightWinner.Army, plan.Winner);
         Assert.Equal(new ResourceAmounts(600, 0, 600, 600), plan.Loot);
@@ -102,7 +102,7 @@ public class CampBattleResolverTests
     {
         var army = new[] { new UnitStack(UnitType.Axeman, 50) };
         var plan = CampBattleResolver.Hunt(
-            army, new CampGarrison(0, 3, 0), Strong(), 1, seed: 1, leftover: new ResourceAmounts(0, 0, 10, 0));
+            army, new CampGarrison(0, 3, 0), Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity, leftover: new ResourceAmounts(0, 0, 10, 0));
 
         var fraction = 90.0 / 195.0;
         Assert.Equal(Math.Floor((600 * fraction) + 10), plan.LootAvailable.Food);
@@ -114,7 +114,7 @@ public class CampBattleResolverTests
     {
         var army = new[] { new UnitStack(UnitType.Axeman, 5) }; // carry 150
         var leftover = new ResourceAmounts(0, 0, 90, 30);
-        var plan = CampBattleResolver.Hunt(army, CampGarrison.Empty, Strong(), 1, seed: 1, leftover: leftover);
+        var plan = CampBattleResolver.Hunt(army, CampGarrison.Empty, Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity, leftover: leftover);
 
         Assert.Equal(CampFightWinner.Army, plan.Winner);
         Assert.Empty(plan.ArmyLosses);
@@ -127,7 +127,7 @@ public class CampBattleResolverTests
     public void Hunt_on_an_empty_camp_without_leftover_gives_nothing()
     {
         var army = new[] { new UnitStack(UnitType.Axeman, 5) };
-        var plan = CampBattleResolver.Hunt(army, CampGarrison.Empty, Strong(), 1, seed: 1);
+        var plan = CampBattleResolver.Hunt(army, CampGarrison.Empty, Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         Assert.Equal(CampFightWinner.Army, plan.Winner);
         Assert.Equal(ResourceAmounts.Zero, plan.Loot);
@@ -138,7 +138,7 @@ public class CampBattleResolverTests
     {
         var army = new[] { new UnitStack(UnitType.Axeman, 1) }; // carry 30
         var plan = CampBattleResolver.Hunt(
-            army, CampGarrison.Empty, Strong(), 1, seed: 1, leftover: new ResourceAmounts(0, 0, 500, 0));
+            army, CampGarrison.Empty, Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity, leftover: new ResourceAmounts(0, 0, 500, 0));
         Assert.Equal(30, plan.Loot.Food);
     }
 
@@ -148,7 +148,7 @@ public class CampBattleResolverTests
         var camp = Strong();
         var state = CampState.Pristine(camp, T0);
         var army = new[] { new UnitStack(UnitType.Axeman, 10) };
-        var plan = CampBattleResolver.Hunt(army, state.GarrisonAt(camp, T0, false), camp, 1, seed: 1,
+        var plan = CampBattleResolver.Hunt(army, state.GarrisonAt(camp, T0, false), camp, 1, seed: 1, provisionsAtBattle: double.PositiveInfinity,
             leftover: state.Leftover);
 
         var after = state.AfterHunt(camp, T0, plan);
@@ -165,7 +165,7 @@ public class CampBattleResolverTests
         var camp = Strong();
         var state = CampState.Pristine(camp, T0) with { Leftover = new ResourceAmounts(0, 0, 5000, 0) };
         var army = new[] { new UnitStack(UnitType.Axeman, 10) };
-        var plan = CampBattleResolver.Hunt(army, state.GarrisonAt(camp, T0, false), camp, 1, seed: 1,
+        var plan = CampBattleResolver.Hunt(army, state.GarrisonAt(camp, T0, false), camp, 1, seed: 1, provisionsAtBattle: double.PositiveInfinity,
             leftover: state.Leftover);
 
         var after = state.AfterHunt(camp, T0, plan);
@@ -182,7 +182,7 @@ public class CampBattleResolverTests
         var leftover = new ResourceAmounts(1, 2, 3, 4);
         var state = CampState.Pristine(camp, T0) with { Leftover = leftover };
         var army = new[] { new UnitStack(UnitType.Axeman, 2) };
-        var plan = CampBattleResolver.Hunt(army, state.GarrisonAt(camp, T0, false), camp, 1, seed: 1, leftover: leftover);
+        var plan = CampBattleResolver.Hunt(army, state.GarrisonAt(camp, T0, false), camp, 1, seed: 1, provisionsAtBattle: double.PositiveInfinity, leftover: leftover);
 
         var after = state.AfterHunt(camp, T0, plan);
 
@@ -263,7 +263,7 @@ public class CampBattleResolverTests
         // 5 Longships attack 300 (100 slots) against 195; the 50 axemen aboard (100 slots) would have added 2000.
         var army = new[] { new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 50) };
 
-        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(family: CampFamilies.Whaleroad), 1, seed: 1);
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(family: CampFamilies.Whaleroad), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         Assert.Equal(300, plan.ArmyPower);
         Assert.Equal(CampFightWinner.Army, plan.Winner);
@@ -276,7 +276,7 @@ public class CampBattleResolverTests
     [Fact]
     public void A_fleet_without_passengers_hunts_a_water_camp_as_before()
     {
-        var plan = CampBattleResolver.Hunt([new UnitStack(UnitType.Longship, 5)], FullStrong(), Strong(family: CampFamilies.Whaleroad), 1, seed: 1);
+        var plan = CampBattleResolver.Hunt([new UnitStack(UnitType.Longship, 5)], FullStrong(), Strong(family: CampFamilies.Whaleroad), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         Assert.Equal(300, plan.ArmyPower);
         Assert.Equal(5, Count(plan.ArmyLosses, UnitType.Longship) + Count(plan.ArmySurvivors, UnitType.Longship));
@@ -288,7 +288,7 @@ public class CampBattleResolverTests
         // 50 axemen attack 2000 against 195; the 5 longships (attack 300, 20 carry each) would have added little and are not in it.
         var army = new[] { new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 50) };
 
-        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1);
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         Assert.Equal(2000, plan.ArmyPower);
         Assert.Equal(CampFightWinner.Army, plan.Winner);
@@ -303,7 +303,7 @@ public class CampBattleResolverTests
         // The axemen could carry far more; the 5 longships carry 5 x 80 = 400.
         var army = new[] { new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 50) };
 
-        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1);
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         var available = plan.LootAvailable;
         Assert.True(available.Wood + available.Stone + available.Food + available.Iron > 400);
@@ -315,7 +315,7 @@ public class CampBattleResolverTests
     {
         var army = new[] { new UnitStack(UnitType.Karve, 5), new UnitStack(UnitType.Axeman, 1) };
 
-        var plan = CampBattleResolver.Hunt(army, FullStrong(5), Strong(5), 5, seed: 1);
+        var plan = CampBattleResolver.Hunt(army, FullStrong(5), Strong(5), 5, seed: 1, provisionsAtBattle: double.PositiveInfinity);
 
         Assert.Equal(CampFightWinner.Camp, plan.Winner);
         Assert.Equal(5, Count(plan.ArmySurvivors, UnitType.Karve));
@@ -345,5 +345,90 @@ public class CampBattleResolverTests
         var plan = CampBattleResolver.Ambush(FullStrong(), Strong(), [new UnitStack(UnitType.Spearman, 10)], seed: 1);
 
         Assert.Equal(350, plan.ArmyPower);
+    }
+
+    // ---- Refill (docs/design/troop-movement-range.md section 1b)
+
+    [Fact]
+    public void A_cleared_camp_refills_the_provisions_from_the_pools_food_before_the_loot()
+    {
+        // 10 axemen: 3 die, 7 survive: food capacity 7 x 40 = 280. Provisions 100 leave room for 180.
+        var army = new[] { new UnitStack(UnitType.Axeman, 10) };
+
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(), 1, seed: 1, provisionsAtBattle: 100);
+
+        Assert.Equal(180, plan.Refill);
+        // The loot is the survivors' 7 x 30 = 210 from what is left; the refill is on top of it.
+        Assert.Equal(210, plan.Loot.Wood + plan.Loot.Stone + plan.Loot.Food + plan.Loot.Iron, 3);
+        Assert.Equal(180 + plan.Loot.Food, plan.Taken.Food, 3);
+    }
+
+    [Fact]
+    public void The_camp_refill_is_capped_by_the_food_in_the_pool_and_by_the_room_in_the_provisions()
+    {
+        var army = new[] { new UnitStack(UnitType.Axeman, 5) };
+        var leftover = new ResourceAmounts(0, 0, 50, 0);
+
+        var poor = CampBattleResolver.Hunt(army, CampGarrison.Empty, Strong(), 1, seed: 1, provisionsAtBattle: 0, leftover: leftover);
+        Assert.Equal(50, poor.Refill);
+        Assert.Equal(0, poor.Loot.Food);
+
+        var full = CampBattleResolver.Hunt(army, CampGarrison.Empty, Strong(), 1, seed: 1, provisionsAtBattle: 200, leftover: leftover);
+        Assert.Equal(0, full.Refill);
+        Assert.Equal(50, full.Loot.Food);
+    }
+
+    [Fact]
+    public void The_camps_leftover_shrinks_by_the_refill_as_well_as_the_loot()
+    {
+        var camp = Strong();
+        var state = CampState.Pristine(camp, T0);
+        var army = new[] { new UnitStack(UnitType.Axeman, 10) };
+        var plan = CampBattleResolver.Hunt(army, state.GarrisonAt(camp, T0, false), camp, 1, seed: 1, provisionsAtBattle: 100);
+
+        var after = state.AfterHunt(camp, T0, plan);
+
+        var availableTotal = plan.LootAvailable.Wood + plan.LootAvailable.Stone + plan.LootAvailable.Food + plan.LootAvailable.Iron;
+        var leftoverTotal = after.Leftover.Wood + after.Leftover.Stone + after.Leftover.Food + after.Leftover.Iron;
+        Assert.Equal(availableTotal - 210 - 180, leftoverTotal, 3);
+        Assert.Equal(plan.LootAvailable.Food - plan.Taken.Food, after.Leftover.Food, 3);
+    }
+
+    [Fact]
+    public void A_pickup_from_an_empty_camp_refills_from_the_leftover_and_empties_it_by_the_refill_too()
+    {
+        var camp = Strong();
+        var leftover = new ResourceAmounts(0, 0, 90, 30);
+        var state = CampState.Pristine(camp, T0) with { Leftover = leftover };
+        var army = new[] { new UnitStack(UnitType.Axeman, 5) };
+
+        var plan = CampBattleResolver.Hunt(army, CampGarrison.Empty, camp, 1, seed: 1, provisionsAtBattle: 0, leftover: leftover);
+
+        Assert.Equal(90, plan.Refill);
+        Assert.Equal(new ResourceAmounts(0, 0, 0, 30), plan.Loot);
+        Assert.Equal(ResourceAmounts.Zero, state.AfterPickup(plan.Taken).Leftover);
+    }
+
+    [Fact]
+    public void A_lost_hunt_refills_nothing()
+    {
+        var plan = CampBattleResolver.Hunt([new UnitStack(UnitType.Axeman, 2)], FullStrong(), Strong(), 1, seed: 1, provisionsAtBattle: 0);
+
+        Assert.Equal(CampFightWinner.Camp, plan.Winner);
+        Assert.Equal(0, plan.Refill);
+    }
+
+    [Fact]
+    public void A_fleet_at_a_water_camp_refills_for_everyone_aboard_but_carries_loot_with_its_ships_only()
+    {
+        // 5 Longships (food 5 x 320 = 1600 for the survivors) with passengers kept aboard.
+        var army = new[] { new UnitStack(UnitType.Longship, 5), new UnitStack(UnitType.Axeman, 10) };
+
+        var plan = CampBattleResolver.Hunt(army, FullStrong(), Strong(family: CampFamilies.Whaleroad), 1, seed: 1, provisionsAtBattle: 0);
+
+        var ships = Count(plan.ArmySurvivors, UnitType.Longship);
+        var food = (ships * 320) + (Count(plan.ArmySurvivors, UnitType.Axeman) * 40);
+        Assert.Equal(food, plan.Refill, 3);
+        Assert.Equal(ships * 80, plan.Loot.Wood + plan.Loot.Stone + plan.Loot.Food + plan.Loot.Iron, 3);
     }
 }

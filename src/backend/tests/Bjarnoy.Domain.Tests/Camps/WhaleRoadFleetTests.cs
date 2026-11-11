@@ -243,7 +243,7 @@ public class WhaleRoadFleetTests
         var arrivesAt = ((ArmyLocation.InTransit)army.Location).Movement.ArrivesAt;
         var garrison = state.GarrisonAt(camp, arrivesAt, insideRealm: false);
 
-        var plan = CampBattleResolver.Hunt(army.Stacks, garrison, camp, state.EffectiveLevel(camp), seed: 4, 0, state.Leftover);
+        var plan = CampBattleResolver.Hunt(army.Stacks, garrison, camp, state.EffectiveLevel(camp), seed: 4, double.PositiveInfinity, 0, state.Leftover);
 
         // 5 longships attack 300 against the garrison's defense 195.
         Assert.Equal(CampFightWinner.Army, plan.Winner);
@@ -278,7 +278,7 @@ public class WhaleRoadFleetTests
         var arrivesAt = ((ArmyLocation.InTransit)army.Location).Movement.ArrivesAt;
 
         var plan = CampBattleResolver.Hunt(
-            army.Stacks, state.GarrisonAt(camp, arrivesAt, false), camp, state.EffectiveLevel(camp), seed: 5, 0, state.Leftover);
+            army.Stacks, state.GarrisonAt(camp, arrivesAt, false), camp, state.EffectiveLevel(camp), seed: 5, double.PositiveInfinity, 0, state.Leftover);
 
         Assert.Equal(CampFightWinner.Camp, plan.Winner);
         Assert.False(plan.BeastSurvivors.IsEmpty);
@@ -299,7 +299,7 @@ public class WhaleRoadFleetTests
         var army = Hunter([new UnitStack(UnitType.Karve, 1)]);
 
         // Inside a realm the cleared camp is still empty at the instant it was cleared; the pickup takes the leftover only.
-        var plan = CampBattleResolver.Hunt(army.Stacks, CampGarrison.Empty, camp, 1, seed: 1, 0, cleared.Leftover);
+        var plan = CampBattleResolver.Hunt(army.Stacks, CampGarrison.Empty, camp, 1, seed: 1, double.PositiveInfinity, 0, cleared.Leftover);
 
         Assert.Equal(CampFightWinner.Army, plan.Winner);
         Assert.Equal(new ResourceAmounts(0, 0, 200, 0), plan.Loot); // one karve carries 200

@@ -180,6 +180,19 @@ public class ArmyHuntTests
     }
 
     [Fact]
+    public void A_hunts_refill_tops_the_provisions_up_on_the_way_home()
+    {
+        var army = Hunter();
+        var outbound = ((ArmyLocation.InTransit)army.Location).Movement;
+        var battleInstant = outbound.ArrivesAt;
+        var plan = Plan(CampFightWinner.Army, [new UnitStack(UnitType.Axeman, 9)], ResourceAmounts.Zero) with { Refill = 75 };
+
+        var returning = army.SettleHuntArrival(plan, battleInstant)!;
+
+        Assert.Equal(army.ProvisionsAt(battleInstant) + 75, returning.Provisions, 6);
+    }
+
+    [Fact]
     public void A_wiped_out_army_is_gone()
     {
         var army = Hunter();
@@ -210,7 +223,7 @@ public class ArmyHuntTests
         var arrivesAt = ((ArmyLocation.InTransit)army.Location).Movement.ArrivesAt;
 
         var garrison = state.GarrisonAt(camp, arrivesAt, insideRealm: false);
-        var plan = CampBattleResolver.Hunt(army.Stacks, garrison, camp, state.EffectiveLevel(camp), seed: 3, 0, state.Leftover);
+        var plan = CampBattleResolver.Hunt(army.Stacks, garrison, camp, state.EffectiveLevel(camp), seed: 3, double.PositiveInfinity, 0, state.Leftover);
         var returning = army.SettleHuntArrival(plan, arrivesAt);
         var after = state.AfterHunt(camp, arrivesAt, plan);
 

@@ -21,6 +21,7 @@ namespace Bjarnoy.Domain.Combat;
 /// <param name="DefenderHomeLosses">The defender's own garrison's losses, both fights together.</param>
 /// <param name="DefenderGuestLosses">The guests' pooled losses, both fights together.</param>
 /// <param name="Loot">Taken after a won land fight; capped by the surviving ships' carry capacity for a fleet.</param>
+/// <param name="Refill">The food taken from the target's stock first, on top of the loot, to refill the army's provisions (the same won fight as the loot).</param>
 /// <param name="Winner">The attacker when no fight was lost (a fight not fought counts as not lost), otherwise the defender.</param>
 /// <param name="Buildings">The defender's buildings after both sieges.</param>
 public sealed record AttackPlan(
@@ -35,6 +36,7 @@ public sealed record AttackPlan(
     IReadOnlyList<UnitStack> DefenderHomeLosses,
     IReadOnlyList<UnitStack> DefenderGuestLosses,
     ResourceAmounts Loot,
+    double Refill,
     BattleWinner Winner,
     IReadOnlyList<PlacedBuilding> Buildings)
 {
@@ -80,6 +82,7 @@ public static class AttackResolver
     /// <param name="targetBuildingCoord">The building the army was sent at (<see cref="Army.TargetBuildingCoord"/>).</param>
     /// <param name="defenderBuildings">The defender's buildings as of the battle instant.</param>
     /// <param name="terrainAt">Needed for a fleet: Fire Ships only burn a building standing on a sea hex.</param>
+    /// <param name="provisionsAtBattle">The attacker's provisions at the battle instant: a won land fight refills them from the target's food first.</param>
     public static AttackPlan Resolve(
         IReadOnlyList<UnitStack> attackerStacks,
         IReadOnlyList<UnitStack> defenderHome,
@@ -92,7 +95,8 @@ public static class AttackResolver
         double shipAttackBonusPercent,
         HexCoord? targetBuildingCoord,
         IReadOnlyList<PlacedBuilding> defenderBuildings,
-        Func<HexCoord, Terrain>? terrainAt)
+        Func<HexCoord, Terrain>? terrainAt,
+        double provisionsAtBattle)
     {
         ArgumentNullException.ThrowIfNull(attackerStacks);
         ArgumentNullException.ThrowIfNull(defenderHome);
@@ -106,13 +110,13 @@ public static class AttackResolver
         {
             return ResolveLandArmy(
                 attackerStacks, homeLand, guestLand, defenseBonusPercent, lootAvailable, seed, raid, landAttackBonusPercent,
-                targetBuildingCoord, defenderBuildings);
+                targetBuildingCoord, defenderBuildings, provisionsAtBattle);
         }
 
         ArgumentNullException.ThrowIfNull(terrainAt);
         return ResolveFleet(
             attackerStacks, defenderHome, defenderGuests, homeLand, guestLand, defenseBonusPercent, lootAvailable, seed, raid,
-            landAttackBonusPercent, shipAttackBonusPercent, targetBuildingCoord, defenderBuildings, terrainAt);
+            landAttackBonusPercent, shipAttackBonusPercent, targetBuildingCoord, defenderBuildings, terrainAt, provisionsAtBattle);
     }
 
     private static AttackPlan ResolveLandArmy(
@@ -125,11 +129,20 @@ public static class AttackResolver
         bool raid,
         double landAttackBonusPercent,
         HexCoord? targetBuildingCoord,
-        IReadOnlyList<PlacedBuilding> defenderBuildings)
+        IReadOnlyList<PlacedBuilding> defenderBuildings,
+        double provisionsAtBattle)
     {
         var landFight = BattleResolver.Resolve(
-            attackerStacks, Army.MergeStacksByType(homeLand, guestLand), defenseBonusPercent, lootAvailable, seed,
+            attackerStacks, Army.MergeStacksByType(homeLand, guestLand), defenseBonusPercent, ResourceAmounts.Zero, seed,
             raid, landAttackBonusPercent);
+
+        // The land army carries the loot itself; the food that refills its provisions comes off the top.
+        var (loot, refill) = landFight.Winner == BattleWinner.Attacker
+            ? BattleResolver.TakeLootAndRefill(
+                BattleResolver.CarryCapacity(landFight.AttackerSurvivors), BattleResolver.FoodCapacity(landFight.AttackerSurvivors),
+                provisionsAtBattle, lootAvailable)
+            : (ResourceAmounts.Zero, 0);
+        landFight = landFight with { LootTaken = loot };
 
         var siege = landFight.Winner == BattleWinner.Attacker
             ? SiegeResolver.Resolve(landFight.AttackerSurvivors, defenderBuildings, targetBuildingCoord, seed)
@@ -146,7 +159,8 @@ public static class AttackResolver
             AttackerSurvivors: landFight.AttackerSurvivors,
             DefenderHomeLosses: Army.SplitPooledByOwner(landFight.DefenderLosses, homeLand, guestLand, wantHome: true),
             DefenderGuestLosses: Army.SplitPooledByOwner(landFight.DefenderLosses, homeLand, guestLand, wantHome: false),
-            Loot: landFight.LootTaken,
+            Loot: loot,
+            Refill: refill,
             Winner: landFight.Winner,
             Buildings: siege.Applied ? siege.UpdatedBuildings! : defenderBuildings);
     }
@@ -165,7 +179,8 @@ public static class AttackResolver
         double shipAttackBonusPercent,
         HexCoord? targetBuildingCoord,
         IReadOnlyList<PlacedBuilding> defenderBuildings,
-        Func<HexCoord, Terrain> terrainAt)
+        Func<HexCoord, Terrain> terrainAt,
+        double provisionsAtBattle)
     {
         var (ships, passengers) = ShipCargo.SplitForFight(attackerStacks);
         var homeShips = ShipCargo.Ships(defenderHome);
@@ -199,7 +214,7 @@ public static class AttackResolver
                 shipFight, LandFight: null, drowned, FireShipsBurned: 0, SiegeOutcome.None, SiegeOutcome.None,
                 AttackerLosses: Army.MergeStacksByType(shipLosses, drowned),
                 AttackerSurvivors: [.. shipSurvivors, .. kept],
-                defenderHomeLosses, defenderGuestLosses, ResourceAmounts.Zero, BattleWinner.Defender, defenderBuildings);
+                defenderHomeLosses, defenderGuestLosses, ResourceAmounts.Zero, Refill: 0, BattleWinner.Defender, defenderBuildings);
         }
 
         // The land fight: what is still aboard against the defender's land units. A Dockyard stands in the water: a fleet sent at it
@@ -227,15 +242,21 @@ public static class AttackResolver
             buildings = landSiege.UpdatedBuildings!;
         }
 
-        // A fleet's loot is capped by what its surviving ships carry; the passengers' capacity does not count.
-        var loot = landWon
-            ? BattleResolver.ComputeLootWithCapacity(
-                shipSurvivors.Sum(s => (double)UnitCatalogue.Get(s.Type).CarryCapacity * s.Count), lootAvailable)
-            : ResourceAmounts.Zero;
-
         IReadOnlyList<UnitStack> burnedStacks = burned > 0 ? [new UnitStack(UnitType.FireShip, burned)] : [];
         var landLosses = landFight?.AttackerLosses ?? [];
         var landPassengers = landFight is null ? kept : landFight.AttackerSurvivors;
+        var survivors = (IReadOnlyList<UnitStack>)[.. Army.SubtractStacks(shipSurvivors, burnedStacks), .. landPassengers];
+
+        // A fleet's loot is capped by what its surviving ships carry; the passengers' capacity does not count. The food that
+        // refills the provisions of everyone aboard comes off the top.
+        var (loot, refill) = landWon
+            ? BattleResolver.TakeLootAndRefill(
+                BattleResolver.CarryCapacity(shipSurvivors), BattleResolver.FoodCapacity(survivors), provisionsAtBattle, lootAvailable)
+            : (ResourceAmounts.Zero, 0);
+        if (landFight is not null)
+        {
+            landFight = landFight with { LootTaken = loot };
+        }
 
         if (landFight is not null)
         {
@@ -253,10 +274,11 @@ public static class AttackResolver
             fireSiege,
             landSiege,
             AttackerLosses: Army.MergeStacksByType(Army.MergeStacksByType(shipLosses, drowned), Army.MergeStacksByType(landLosses, burnedStacks)),
-            AttackerSurvivors: [.. Army.SubtractStacks(shipSurvivors, burnedStacks), .. landPassengers],
+            AttackerSurvivors: survivors,
             defenderHomeLosses,
             defenderGuestLosses,
             loot,
+            refill,
             landLost ? BattleWinner.Defender : BattleWinner.Attacker,
             buildings);
     }

@@ -49,7 +49,9 @@ public readonly record struct FieldBattleClaim(bool Claims, double DefenseBonusP
 /// has no way to express. What *is* reused, byte-for-byte, is the loss
 /// rounding (<see cref="BattleResolver.ApplyProportionalLossesInternal"/>) and
 /// the water-fill loot split (<see cref="BattleResolver.ComputeLootWithCapacity"/>)
-/// — no field-battle-specific divergence in either.
+/// — no field-battle-specific divergence in either. The winner also refills its provisions
+/// (<see cref="FoodRefillToWinner"/>) from the loser's carried food, never from the loser's provisions
+/// (<c>docs/design/troop-movement-range.md</c> section 1b).
 /// </summary>
 public sealed record FieldBattlePlan(
     IReadOnlyList<UnitStack> SideALosses,
@@ -61,7 +63,8 @@ public sealed record FieldBattlePlan(
     double SideAPower,
     double SideBPower,
     bool SideAWasDefending,
-    bool SideBWasDefending);
+    bool SideBWasDefending,
+    double FoodRefillToWinner = 0);
 
 /// <summary>
 /// Pure combat math for an in-flight, army-vs-army interception (issue #206)
@@ -182,6 +185,8 @@ public static class FieldBattleResolver
     /// #206 §4). Also what side B loots if side A loses.
     /// </param>
     /// <param name="sideBLootCarried">Side B's own carried loot — the mirror of <paramref name="sideALootCarried"/>.</param>
+    /// <param name="sideAProvisions">Side A's provisions at the meeting instant: a win refills them from the loser's carried food first.</param>
+    /// <param name="sideBProvisions">Side B's provisions at the meeting instant.</param>
     /// <param name="seed">
     /// Seeds the tie-breaking RNG for proportional-loss rounding — see
     /// <see cref="BattleResolver.Resolve"/>'s own <c>seed</c> remarks. The
@@ -214,6 +219,8 @@ public static class FieldBattleResolver
         FieldBattleClaim sideBClaim,
         ResourceAmounts sideALootCarried,
         ResourceAmounts sideBLootCarried,
+        double sideAProvisions,
+        double sideBProvisions,
         int seed)
     {
         ArgumentNullException.ThrowIfNull(sideAStacks);
@@ -223,10 +230,23 @@ public static class FieldBattleResolver
         // (ShipCargo.Rejoin). A land army has no passengers and fights as before.
         var (fightersA, passengersA) = ShipCargo.SplitForFight(sideAStacks);
         var (fightersB, passengersB) = ShipCargo.SplitForFight(sideBStacks);
-        var plan = ResolveFight(fightersA, sideAClaim, fightersB, sideBClaim, sideALootCarried, sideBLootCarried, seed);
+        var plan = ResolveFight(fightersA, sideAClaim, fightersB, sideBClaim, seed);
         var (lossesA, survivorsA) = ShipCargo.Rejoin(plan.SideALosses, plan.SideASurvivors, passengersA);
         var (lossesB, survivorsB) = ShipCargo.Rejoin(plan.SideBLosses, plan.SideBSurvivors, passengersB);
-        return plan with { SideALosses = lossesA, SideASurvivors = survivorsA, SideBLosses = lossesB, SideBSurvivors = survivorsB };
+
+        // The winner takes what it can carry from the loser's carried loot, after refilling its provisions from the loser's
+        // carried food; whoever goes home with everyone who survived (passengers included) counts for the refill.
+        var (loot, refill) = plan.Winner switch
+        {
+            FieldBattleWinner.SideA => LootFor(survivorsA, sideALootCarried, sideBLootCarried, sideAProvisions),
+            FieldBattleWinner.SideB => LootFor(survivorsB, sideBLootCarried, sideALootCarried, sideBProvisions),
+            _ => (ResourceAmounts.Zero, 0),
+        };
+        return plan with
+        {
+            SideALosses = lossesA, SideASurvivors = survivorsA, SideBLosses = lossesB, SideBSurvivors = survivorsB,
+            LootTakenByWinner = loot, FoodRefillToWinner = refill,
+        };
     }
 
     private static FieldBattlePlan ResolveFight(
@@ -234,11 +254,8 @@ public static class FieldBattleResolver
         FieldBattleClaim sideAClaim,
         IReadOnlyList<UnitStack> sideBStacks,
         FieldBattleClaim sideBClaim,
-        ResourceAmounts sideALootCarried,
-        ResourceAmounts sideBLootCarried,
         int seed)
     {
-
         // Exactly one side defending is the only case that gets asymmetric
         // treatment — see the remarks above.
         var asymmetric = sideAClaim.Claims ^ sideBClaim.Claims;
@@ -286,16 +303,9 @@ public static class FieldBattleResolver
             (sideBLosses, sideBSurvivors) = BattleResolver.ApplyProportionalLossesInternal(sideBStacks, winnerFraction, rng);
         }
 
-        var loot = winner switch
-        {
-            FieldBattleWinner.SideA => LootFor(sideASurvivors, sideALootCarried, sideBLootCarried),
-            FieldBattleWinner.SideB => LootFor(sideBSurvivors, sideBLootCarried, sideALootCarried),
-            _ => ResourceAmounts.Zero,
-        };
-
         return new FieldBattlePlan(
             sideALosses, sideASurvivors, sideBLosses, sideBSurvivors,
-            loot, winner, sideAPower, sideBPower,
+            ResourceAmounts.Zero, winner, sideAPower, sideBPower,
             SideAWasDefending: asymmetric && sideAClaim.Claims,
             SideBWasDefending: asymmetric && sideBClaim.Claims);
     }
@@ -313,15 +323,19 @@ public static class FieldBattleResolver
     /// <summary>
     /// The winner's remaining carry capacity — its total capacity minus
     /// whatever loot it is already carrying — filled from the loser's carried
-    /// loot (issue #206 §4).
+    /// loot (issue #206 §4), after the food that refills the winner's provisions
+    /// (<see cref="BattleResolver.TakeLootAndRefill"/>). A fleet carries with its ships alone.
     /// </summary>
-    private static ResourceAmounts LootFor(
-        IReadOnlyList<UnitStack> winnerSurvivors, ResourceAmounts winnerAlreadyCarried, ResourceAmounts loserCarried)
+    private static (ResourceAmounts Loot, double Refill) LootFor(
+        IReadOnlyList<UnitStack> winnerSurvivors, ResourceAmounts winnerAlreadyCarried, ResourceAmounts loserCarried,
+        double winnerProvisions)
     {
-        var totalCapacity = winnerSurvivors.Sum(s => (double)UnitCatalogue.Get(s.Type).CarryCapacity * s.Count);
+        var ships = ShipCargo.Ships(winnerSurvivors);
+        var totalCapacity = BattleResolver.CarryCapacity(ships.Count > 0 ? ships : winnerSurvivors);
         var alreadyUsed = winnerAlreadyCarried.Wood + winnerAlreadyCarried.Stone
             + winnerAlreadyCarried.Food + winnerAlreadyCarried.Iron;
         var remainingCapacity = Math.Max(0, totalCapacity - alreadyUsed);
-        return BattleResolver.ComputeLootWithCapacity(remainingCapacity, loserCarried);
+        return BattleResolver.TakeLootAndRefill(
+            remainingCapacity, BattleResolver.FoodCapacity(winnerSurvivors), winnerProvisions, loserCarried);
     }
 }
