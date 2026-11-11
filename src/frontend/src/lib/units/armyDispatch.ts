@@ -151,12 +151,37 @@ export function buildHuntDispatchRequest(
 
 /**
  * Whether a unit type may join a hunt: land units against a land camp; against a water camp (`atSea`, the whale road) the
- * ships, and any land unit as their passenger.
+ * ships, and any land unit as their passenger; against a sand camp (`onSand`, a haul-out) the land units and ships as their
+ * carriers (the ships take no part in the fight, so a fleet needs land troops aboard: `fleetLacksLandTroops`).
  */
-export function isHuntUnit(type: string, byType: Record<string, UnitDefinitionResponse>, atSea = false): boolean {
+export function isHuntUnit(
+  type: string,
+  byType: Record<string, UnitDefinitionResponse>,
+  atSea = false,
+  onSand = false,
+): boolean {
   const definition = byType[type];
   if (!definition) return false;
-  return atSea ? true : definition.class !== 'ship';
+  return atSea || onSand ? true : definition.class !== 'ship';
+}
+
+/**
+ * Whether the selection is a fleet with no land troops aboard — refused for a hunt at a sand camp (`HuntRequiresLandUnits`),
+ * since the ships do not fight there. The slots the troops need are checked by `exceedsShipCapacity`.
+ */
+export function fleetLacksLandTroops(
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+): boolean {
+  let hasShip = false;
+  let hasPassenger = false;
+  for (const [type, count] of Object.entries(unitCounts)) {
+    const definition = byType[type];
+    if (count <= 0 || !definition) continue;
+    if (definition.class === 'ship') hasShip = true;
+    else hasPassenger = true;
+  }
+  return hasShip && !hasPassenger;
 }
 
 /** Whether a garrison holds any unit that may lead the hunt (`atSea`: a ship for a water camp, a land unit otherwise). */

@@ -14,6 +14,8 @@ const getSettlementGuests = vi.fn();
 const recallArmy = vi.fn();
 const listSettlements = vi.fn();
 const listRivalBuildings = vi.fn();
+const listOwnBuildings = vi.fn();
+const listOwnBuildOrders = vi.fn();
 const foundSettlement = vi.fn();
 const getTradeBoard = vi.fn();
 const getMyTradeOffers = vi.fn();
@@ -76,6 +78,8 @@ async function loadStoreModule(demoMode: boolean) {
       listSettlements: (...args: unknown[]) => listSettlements(...args),
       // Unconfigured, the rival buildings read is an empty world.
       listRivalBuildings: async (...args: unknown[]) => (await listRivalBuildings(...args)) ?? [],
+      listOwnBuildings: async (...args: unknown[]) => (await listOwnBuildings(...args)) ?? [],
+      listOwnBuildOrders: async (...args: unknown[]) => (await listOwnBuildOrders(...args)) ?? [],
       foundSettlement: (...args: unknown[]) => foundSettlement(...args),
       getTradeBoard: (...args: unknown[]) => getTradeBoard(...args),
       getMyTradeOffers: (...args: unknown[]) => getMyTradeOffers(...args),
@@ -926,6 +930,52 @@ describe('useWorldStore refreshWorldSettlements (rival buildings)', () => {
     await store.refreshWorldSettlements();
     expect(store.model.getTile(3, 1).buildingType).toBeUndefined();
     expect(store.model.getTile(4, 1).buildingType).toBe('palisade');
+  });
+
+  // Regression: another own settlement drew no buildings until the player had opened it.
+  it('draws the buildings of an own settlement that was never opened', async () => {
+    listSettlements.mockReset().mockResolvedValue([
+      { id: 'own-2', name: 'Second', ownerName: 'Me', q: 0, r: 0, labelQ: 0, labelR: 0, longhouseLevel: 1, islandId: 'island-near', mine: true },
+    ]);
+    listRivalBuildings.mockReset().mockResolvedValue([]);
+    listOwnBuildings.mockReset().mockResolvedValueOnce([
+      { q: 3, r: 1, type: 'farm', level: 2, settlementId: 'own-2', ownerUserId: null },
+    ]);
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'me';
+    await store.refreshWorldSettlements();
+
+    expect(listOwnBuildings).toHaveBeenCalledWith('world-1', 'me');
+    expect(store.model.getTile(3, 1)).toMatchObject({ buildingType: 'farm', buildingLevel: 2, ownerId: 'own-2' });
+  });
+
+  // The build queues of the player's other realms: the map draws their construction dials like the open settlement's.
+  it('keeps the build queues of the other own realms and draws a dial for each running build, not for the open realm', async () => {
+    listSettlements.mockReset().mockResolvedValue([]);
+    listRivalBuildings.mockReset().mockResolvedValue([]);
+    listOwnBuildings.mockReset().mockResolvedValue([]);
+    const order = (q: number, r: number, completesInSeconds: number) => ({
+      id: `o-${q}-${r}`, q, r, building: 'farm', targetLevel: 2, state: 'building', slotCost: 1,
+      completesAtGameTime: null, completesInSeconds, totalSeconds: 100, kind: 'build',
+    });
+    listOwnBuildOrders.mockReset().mockResolvedValueOnce([
+      { settlementId: 'own-1', queue: [order(1, 1, 40)] },
+      { settlementId: 'own-2', queue: [order(7, 7, 60)] },
+    ]);
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.selectedSettlementId = 'own-1';
+    const before = Date.now();
+    await store.refreshWorldSettlements();
+
+    const dials = store.constructionDials;
+    expect(dials.map((d) => d.coord)).toEqual([{ q: 7, r: 7 }]);
+    expect(dials[0].state).toBe('building');
+    expect(dials[0].endMs! - dials[0].startMs!).toBe(100_000);
+    expect(dials[0].endMs!).toBeGreaterThanOrEqual(before + 60_000);
   });
 
   it('draws a rival\'s non-wall buildings too, next to its longhouse', async () => {

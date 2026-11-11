@@ -19,6 +19,7 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { useWorldStore } from '../../stores/world';
 import { useBuildOrders } from '../../composables/useQueueOrders';
+import { useHudPanelContent } from '../../composables/useHudPanelContent';
 import { confirmedBuild, coordKey, heldBuildRows, releaseBuildRow } from '../../composables/buildFeedback';
 import { motionEnabled } from '../../lib/motion';
 import { bumpCount, flyToken, slideInCard, slideInRow } from '../../lib/hud/queueMotion';
@@ -43,6 +44,7 @@ async function cancel(orderId: string) {
 }
 
 const orders = useBuildOrders();
+const { construction: hasContent } = useHudPanelContent();
 
 // Q1 + Q5: after a confirmed build a gold token flies from the hex's dial into
 // the new row, which then slides in while the slot count bumps; if the card
@@ -97,8 +99,8 @@ const reservedTotal = computed(() => {
 </script>
 
 <template>
-  <div v-if="orders.length" ref="cardEl" class="status-card" :class="{ 'is-held': cardHeld }">
-    <div class="status-card-header">
+  <div v-if="hasContent" ref="cardEl" class="status-card" data-testid="construction-panel" :class="{ 'is-held': cardHeld }">
+    <div class="status-card-header" data-dock-handle>
       <span class="status-card-title">{{ t('hud.buildQueue.title') }}</span>
       <span class="status-card-count">{{ t('hud.buildQueue.slots', { used: world.hud.construction.slotsUsed, total: world.hud.construction.slots }) }}</span>
     </div>

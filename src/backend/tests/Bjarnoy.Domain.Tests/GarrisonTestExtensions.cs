@@ -82,9 +82,10 @@ internal static class TestArmy
         HexCoord? targetCampCoord = null,
         bool targetCampIsWater = false,
         IReadOnlyList<GarrisonSpot>? targetSpots = null,
-        HexCoord? fromSpot = null) =>
+        HexCoord? fromSpot = null,
+        bool targetCampIsSand = false) =>
         Army.PlanDispatch(
             settlement, fromSpot ?? settlement.SpotOf(requestedUnits), requestedUnits, provisions, waypoints, destination, now, armyId,
             terrainAt, mission, targetSettlementId, targetBuildingCoord, targetClaimDiscs, isHexFoundable, renownAndSlotAllowed,
-            speedFactor, isRiver, isWideRiver, giants, walls, targetCampCoord, targetCampIsWater, targetSpots);
+            speedFactor, isRiver, isWideRiver, giants, walls, targetCampCoord, targetCampIsWater, targetCampIsSand, targetSpots);
 }

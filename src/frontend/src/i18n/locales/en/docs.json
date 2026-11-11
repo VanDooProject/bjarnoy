@@ -1348,7 +1348,7 @@
       "same": "Fleets fight by the same rules as armies on land: attack against defence, and a tie goes to the defender.",
       "shipsOnly": "An attack is two fights: first ships against ships, then land troops against land troops. Ships and land troops never fight each other. Your ships at home defend your Dockyard (or your Longhouse, if it stands on sand at the shore), and allied fleets fight alongside them. If the target has no ships, the ship fight is skipped and counts as won. If you lose the ship fight, there is no land fight.",
       "shore": "Ships do no damage to buildings on land. Only the Fire Ship damages buildings, and only those in the water: a Dockyard, a Fishing Hut, the Shrine of Njörd and a wall's sea end. It burns up doing so: 10 Fire Ships take one level off, and a building never loses more levels than a won siege allows.",
-      "damage": "Loot needs a won land fight: an attack on a Dockyard is a ship fight only and takes no loot. Buildings on land are damaged only by the siege engines aboard (catapults, rams), in the land fight.",
+      "damage": "Loot needs a won land fight: an attack on a building in the water (a Dockyard, a Fishing Hut, the Shrine of Njörd, a wall's sea end) is a ship fight only and takes no loot, since the troops aboard can't reach it. Buildings on land are damaged only by the siege engines aboard (catapults, rams), in the land fight.",
       "tower": "A defending settlement's {tower} adds {percent}% defence per level.",
       "njord": "The {shrine} raises your ships' attack by {low}% at level 1, up to {high}% at level 5. See {shrines}.",
       "shrinesLink": "Shrines"

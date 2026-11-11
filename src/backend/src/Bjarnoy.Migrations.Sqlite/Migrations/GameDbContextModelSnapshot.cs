@@ -414,6 +414,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("BattleReportId")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("Fight")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Lost")
                         .HasColumnType("INTEGER");
 
@@ -440,6 +443,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<Guid>("BattleReportId")
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("Fight")
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("Lost")
                         .HasColumnType("INTEGER");
@@ -477,6 +483,27 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<double>("DefensePower")
                         .HasColumnType("REAL");
 
+                    b.Property<int>("FireShipsBurned")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("FireSiegeLevelAfter")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("FireSiegeLevelBefore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("FireSiegeSettlementRazed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("FireSiegeTargetQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("FireSiegeTargetR")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("FireSiegeTargetType")
+                        .HasColumnType("INTEGER");
+
                     b.Property<double>("LootFood")
                         .HasColumnType("REAL");
 
@@ -493,6 +520,15 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Seed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("ShipFightAttackPower")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("ShipFightDefensePower")
+                        .HasColumnType("REAL");
+
+                    b.Property<int?>("ShipFightWinner")
                         .HasColumnType("INTEGER");
 
                     b.Property<int?>("SiegeLevelAfter")

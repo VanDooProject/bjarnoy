@@ -240,7 +240,7 @@ describe('AdminSettlementsView', () => {
     // actually exist rather than assuming a fixed number of ticks — that
     // assumption held locally and lost the race on CI.
     await vi.waitFor(() => {
-      expect(wrapper.findAll('.garrison-form option').length).toBeGreaterThan(0);
+      expect(wrapper.find('.garrison-form option[value="spearman"]').exists()).toBe(true);
     });
 
     await wrapper.find('.garrison-form select').setValue('spearman');
@@ -256,7 +256,7 @@ describe('AdminSettlementsView', () => {
 
     const wrapper = await openDetail();
     await vi.waitFor(() => {
-      expect(wrapper.findAll('.garrison-form option').length).toBeGreaterThan(0);
+      expect(wrapper.find('.garrison-form option[value="spearman"]').exists()).toBe(true);
     });
 
     await wrapper.find('.garrison-form select').setValue('spearman');

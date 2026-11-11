@@ -23,6 +23,7 @@ import type {
   GarrisonSpotResponse,
   WorldMovementResponse,
   WorldSummaryResponse,
+  OwnBuildOrders,
 } from '../api/types';
 import { DEMO_MODE } from '../config';
 import type { TrainingSplit } from '../lib/units/trainingEconomy';
@@ -42,7 +43,7 @@ import {
   maxAffordableProvisions,
 } from '../lib/units/armyDispatch';
 import { SETTLERS_PER_FOUNDING } from '../lib/founding';
-import { isWaterCampFamily } from '../lib/map/campPlacement';
+import { isSandCampFamily, isWaterCampFamily } from '../lib/map/campPlacement';
 import { useUnitCatalogueStore } from './unitCatalogue';
 import { stackCounts } from '../lib/units/fieldOrderFeasibility';
 import { allocateFromSpots, toDispatchFrom } from '../lib/units/garrisonSpots';
@@ -68,6 +69,7 @@ import { decodeChunkPng, pixelsToBitmap } from '../lib/map/fog/fogChunkCodec';
 import { toTexel, type MaskBounds } from '../lib/map/fog/fogMaskLayout';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
 import type { PalisadePiece } from '../lib/map/palisadeTiles';
+import { constructionDialsFromQueue, type ConstructionDial } from '../lib/map/constructionDial';
 import type { CartShipment, ResourceKind, Resources, Settlement, Tile, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
 import { isPendingOrder, makePendingOrder, nextUpgradeLevel } from '../lib/hud/pendingBuild';
@@ -175,6 +177,13 @@ export const useWorldStore = defineStore('world', {
     linkedMemberIds: [] as string[],
     /** Demo mode only: bitmask of the onboarding quests already claimed (the server keeps this in live mode). */
     demoClaimedQuests: 0,
+    /**
+     * Live mode: the build queues of the player's realms other than the open one (`GET /worlds/{id}/own-build-orders`, one row
+     * per realm), refreshed with the world settlements. The open settlement's own queue is `hud.queue`; `constructionDials` merges both.
+     */
+    otherBuildOrders: [] as OwnBuildOrders[],
+    /** `Date.now()` at which `otherBuildOrders` was read: the base its `completesInSeconds` are measured from. */
+    otherBuildOrdersFetchedAt: 0,
     // Set by WorldMapView (`setWorldMapActive`) so `refreshWorldSettlements`
     // knows it's safe to paint every rival's territory — the world map is
     // the one legitimate place that shows the whole world, unlike the
@@ -495,6 +504,16 @@ export const useWorldStore = defineStore('world', {
     } as WorldMovementResponse,
   }),
   getters: {
+    /**
+     * Every construction dial the map draws: the open settlement's queue plus the running and waiting builds of the player's
+     * other realms, so a build elsewhere shows its progress and time like the open one (`constructionDialsFromQueue`).
+     */
+    constructionDials: (state): ConstructionDial[] => [
+      ...constructionDialsFromQueue(state.hud.queue, state.hud.queueFetchedAt),
+      ...state.otherBuildOrders
+        .filter((o) => o.settlementId !== state.selectedSettlementId)
+        .flatMap((o) => constructionDialsFromQueue(o.queue, state.otherBuildOrdersFetchedAt)),
+    ],
     /**
      * Whether `settlementId` is the selected settlement or a member of its linked realm. The one ownership check for "is this
      * ground mine": the ring/build menu works on every hex of the linked realm and those hexes never count as rival ground.
@@ -1328,6 +1347,8 @@ export const useWorldStore = defineStore('world', {
       this.dispatchTargetBuildingsError = false;
       this.hud.buildings = [];
       this.hud.queue = [];
+      this.otherBuildOrders = [];
+      this.otherBuildOrdersFetchedAt = 0;
       this.hud.garrison = [];
       this.hud.garrisonSpots = [];
       this.hud.trainingQueue = [];
@@ -1423,12 +1444,20 @@ export const useWorldStore = defineStore('world', {
       // Rival buildings ride the same cadence: the settlement list is data-only, so this is the only way the client learns which
       // buildings of another player stand on explored ground (to draw them, offer Siege on their walls and route around them).
       // A failed read keeps the last set.
-      const [summaries, rivalBuildings] = await Promise.all([
+      // The player's own settlements other than the open one come from the same cadence: only the open one's buildings are loaded
+      // with its snapshot, so without this the others stay empty until the player switches to them.
+      const [summaries, rivalBuildings, ownBuildings, ownOrders] = await Promise.all([
         api.listSettlements(this.worldId, this.ownerId ?? undefined),
         api.listRivalBuildings(this.worldId, this.ownerId ?? undefined).catch(() => null),
+        api.listOwnBuildings(this.worldId, this.ownerId ?? undefined).catch(() => null),
+        api.listOwnBuildOrders(this.worldId, this.ownerId ?? undefined).catch(() => null),
       ]);
+      if (ownOrders) {
+        this.otherBuildOrders = ownOrders;
+        this.otherBuildOrdersFetchedAt = Date.now();
+      }
       this.registerSettlementSummaries(summaries);
-      if (rivalBuildings) this.model.applyRivalBuildings(rivalBuildings);
+      if (rivalBuildings && ownBuildings) this.model.applyRivalBuildings([...rivalBuildings, ...ownBuildings], this.selectedSettlementId);
       if (this.worldMapActive) {
         this.model.claimAllTerritory();
       } else {
@@ -1742,7 +1771,7 @@ export const useWorldStore = defineStore('world', {
       if (picker.mission === 'attack' && picker.targetSettlementId) void this.loadDispatchTargetBuildings(picker.targetSettlementId);
     },
     /**
-     * A hunt takes land units against a land camp, and against a camp at sea the ships and their passengers: the units of the
+     * A hunt takes land units against a land camp (a sand camp also ships, as their carriers), and against a camp at sea the ships and their passengers: the units of the
      * other class in the picker's field order are unselected.
      */
     dropNonHuntUnits() {
@@ -1751,8 +1780,9 @@ export const useWorldStore = defineStore('world', {
       if (!draft?.units || !picker) return;
       const camp = this.model.campAt(picker.coord);
       const atSea = !!camp && isWaterCampFamily(camp.family);
+      const onSand = !!camp && isSandCampFamily(camp.family);
       const byType = useUnitCatalogueStore().byType;
-      for (const unit of Object.keys(draft.units)) if (!isHuntUnit(unit, byType, atSea)) draft.units[unit] = 0;
+      for (const unit of Object.keys(draft.units)) if (!isHuntUnit(unit, byType, atSea, onSand)) draft.units[unit] = 0;
     },
     /** Sets how many of one unit of the selected field army leave (a standing army's split), clamped to what the army holds. */
     setFieldOrderUnitCount(unit: string, count: number) {

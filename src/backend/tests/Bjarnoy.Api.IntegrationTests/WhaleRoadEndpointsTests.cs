@@ -202,8 +202,11 @@ public sealed class WhaleRoadEndpointsTests : IAsyncLifetime
         var survivors = 5 - report.Units.Single().Lost;
         Assert.True(report.Loot.Food <= survivors * UnitCatalogue.Get(UnitType.Longship).CarryCapacity);
 
-        // What the ships could not carry stays on the whale road.
-        Assert.Equal(1800, report.Loot.Food + after.Leftover.Food);
+        // The food of the pool first refilled the provisions of the ships that survived (320 food each; the fleet set out with at most
+        // 200), then the ships took what they could carry; the rest stays on the whale road.
+        var refill = 1800 - (report.Loot.Food + after.Leftover.Food);
+        var foodCapacity = survivors * UnitCatalogue.Get(UnitType.Longship).FoodCarryCapacity;
+        Assert.InRange(refill, Math.Min(1800, foodCapacity - 200), Math.Min(1800, foodCapacity));
     }
 
     [Fact]

@@ -1,6 +1,6 @@
 /**
  * Construction progress dial: pure helpers for the hex-shaped dial drawn over
- * a building under construction (see `HexMapRenderer.drawHighlight`). Kept
+ * a building under construction (drawn by `components/hud/BuildingHudDial.vue`). Kept
  * free of Pixi so the mapping and geometry are unit-testable.
  */
 import type { BuildOrderResponse } from '../../api/types';
@@ -67,17 +67,6 @@ export function constructionDialsFromQueue(queue: BuildOrderResponse[], fetchedA
     byHex.set(key, { dial: { coord: { q: o.q, r: o.r }, startMs, endMs, state, queuePosition }, building });
   }
   return [...byHex.values()].map((e) => e.dial);
-}
-
-/**
- * The dials the canvas still draws while the building HUD owns some: `hudOwned` holds the hexes (`q,r`) that have a HUD marker
- * (a standing building, no wall); the marker's dial draws every state of an order there (running, queued, pending, refused,
- * finishing, raze), so the canvas skips all of them. New builds (no marker yet) always draw. `null` = building info is off:
- * every dial draws.
- */
-export function skipHudOwnedDials(dials: ConstructionDial[], hudOwned: ReadonlySet<string> | null): ConstructionDial[] {
-  if (!hudOwned || hudOwned.size === 0) return dials;
-  return dials.filter((d) => !hudOwned.has(`${d.coord.q},${d.coord.r}`));
 }
 
 /** Elapsed fraction 0..1 of the build at `nowMs`; 0 when timing is unknown. */
@@ -221,7 +210,7 @@ export function polylinePartial(points: { x: number; y: number }[], fraction: nu
   return out;
 }
 
-/** The dial label's font size in px at map scale 1 (`LABEL_STYLES.dialTime` is 12 px, drawn at 1.2x). */
+/** The dial label's font size in px at map scale 1 (12 px drawn at 1.2x: the HUD dial's label, see `HUD_TIER.labelBelow`). */
 export const DIAL_LABEL_BASE_PX = 12 * 1.2;
 /** A dial's time label is hidden while it would be smaller than this many on-screen px. */
 export const DIAL_MIN_LABEL_PX = 10;

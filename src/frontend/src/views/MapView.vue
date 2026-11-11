@@ -16,10 +16,10 @@ import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
-import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
+import HudPanelColumn from '../components/hud/HudPanelColumn.vue';
+import HudPanelDock from '../components/hud/HudPanelDock.vue';
 import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
 import QuestTray from '../components/onboarding/QuestTray.vue';
-import TrainingQueuePanel from '../components/hud/TrainingQueuePanel.vue';
 import QueueDrawer from '../components/hud/QueueDrawer.vue';
 import ArmyPanel from '../components/hud/ArmyPanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
@@ -59,8 +59,8 @@ import { upgradeVerdict } from '../lib/hud/upgradeRules';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
+import { useHasActiveDraft } from '../composables/useHudPanelContent';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
-import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { buildingArt } from '../lib/map/buildingArt';
 import { buildingStatsAt, buildingUpgradeCost, scaleOutput, upgradeRateGain } from '../lib/map/buildingEconomy';
 import { razeBlock, razeRefund, razeSeconds } from '../lib/map/raze';
@@ -634,9 +634,9 @@ onUnmounted(() => armyHintTimer && clearTimeout(armyHintTimer));
 // Construction progress dials over buildings still being built; the renderer
 // animates the progress itself every tick from these absolute timestamps.
 watch(
-  [() => canvasRef.value?.renderer, () => world.hud.queue, () => world.hud.queueFetchedAt],
+  [() => canvasRef.value?.renderer, () => world.constructionDials],
   ([renderer]) => {
-    renderer?.setConstructionDials(constructionDialsFromQueue(world.hud.queue, world.hud.queueFetchedAt));
+    renderer?.setConstructionDials(world.constructionDials);
   },
   { immediate: true },
 );
@@ -744,22 +744,20 @@ onMounted(() => {
 });
 onUnmounted(() => stageObserver?.disconnect());
 
-// Every number below is traceable to a panel's own scoped style, so the ring
-// treats a panel as an edge rather than opening underneath it:
-//   BuildQueuePanel .status-card  left:16  top:76    width:240  -> left 268
-//   ExpansionPanel  .status-card  left:16  top:340   width:240  (same column)
-//   TrainingQueuePanel            right:16 top:76    width:240
-//   ArmyPanel       .status-card  right:16 bottom:16 width:260
-//   TopBar .hud-bar height 64, plus a 12px gap                  -> top 76
-// The right edge is set by the widest panel actually in the ring's way: ArmyPanel
-// (260 wide, runs down to the bottom bound) beats TrainingQueuePanel (240, top only)
-// -> right = stage width - (16 + 260 + 16), floored at 420.
-// These are worst-case constants: every panel is treated as present. On
-// mobile, BuildQueuePanel/TrainingQueuePanel are replaced by QueueDrawer's
-// collapsed handle (.queue-drawer-handle, a 48px-wide tab) pinned to the left
-// edge, and the HUD bar can be docked at the bottom instead of the top (see
-// ArmyPanel.vue's `--hud-inset-bottom`) — `hudInsetTopPx`/`hudInsetBottomPx`
-// above mirror the bar's real height into whichever edge it occupies now.
+// The desktop panels are dockable (HudPanelDock): each can sit in any of the four corners, so the ring treats the worst
+// case as always present. Every number below is traceable to the dock's corner geometry (lib/hud/hudPanelDock.ts) and
+// the panels' widths:
+//   top corners     top:76 (TopBar .hud-bar height 64, plus a 12px gap), left/right 16
+//   bottom corners  bottom:16, right 16; bottom left starts at 68, right of the icon column (HudPanelColumn)
+//   panel widths    Construction 240, Garrison 240, Armies 260, Quests 280
+//   ExpansionPanel  .status-card  left:16  top:340   width:240  (fixed, not dockable)
+// The left edge stays at the default Construction column (left 16 + 240 + 12 -> 268). The right edge is set by the widest
+// panel that can sit in the ring's way: Armies (260 wide, runs down to the bottom bound) beats Garrison (240) ->
+// right = stage width - (16 + 260 + 16), floored at 420. These are constants, not the live layout: every panel is treated
+// as present in its default corner. On mobile the panels are replaced by QueueDrawer's collapsed handle
+// (.queue-drawer-handle, a 48px-wide tab) pinned to the left edge, and the HUD bar can be docked at the bottom instead
+// of the top (`--hud-inset-bottom`) — `hudInsetTopPx`/`hudInsetBottomPx` above mirror the bar's real height into
+// whichever edge it occupies now.
 // Phone layout: the ring's detail card docks to a screen edge instead of
 // floating beside the ring — a bottom strip in portrait, a side panel away
 // from the tapped hex in landscape (lib/map/ringDock.ts).
@@ -817,7 +815,7 @@ watch(canvasInteractionLocked, (locked) => {
 // over the bottom of the screen while one is, so QueueDrawer (which would
 // otherwise clash with it) hides, and the HUD pull-down drawer closes the
 // same way opening QueueDrawer already does above.
-const hasActiveDraft = computed(() => !!(world.dispatchDraft || world.fieldOrderDraft || world.sendPicker));
+const hasActiveDraft = useHasActiveDraft();
 watch(hasActiveDraft, (active) => {
   if (active) {
     queueDrawerOpen.value = false;
@@ -1543,12 +1541,12 @@ async function upgrade() {
         <QueueDrawer v-if="!hasActiveDraft" v-model:open="queueDrawerOpen" @select="onQueueSelect" @select-army="onArmySelect" />
       </template>
       <template v-else>
-        <BuildQueuePanel @select="onQueueSelect" />
-        <TrainingQueuePanel />
+        <!-- Desktop: the four panels dock to the map's corners; their icons sit in the column at the bottom left. -->
+        <HudPanelColumn />
+        <HudPanelDock @select="onQueueSelect" @focus-army="onArmySelect" />
       </template>
       <ExpansionPanel />
-      <QuestTray v-if="!hasActiveDraft" />
-      <ArmyPanel v-if="!isMobile" @focus-army="onArmySelect" />
+      <QuestTray v-if="isMobile && !hasActiveDraft" />
       <HexTooltip v-if="hoverInfo" :info="hoverInfo" :friend-owners="guild.friendlyUserIds" />
       <RingMenuHost @retracted="clearRingFootprint">
         <RingMenu

@@ -337,8 +337,13 @@ public sealed class LinkedRealmEndpointsTests : IAsyncLifetime
         // The newer member held none of its own and a half share of the pool at most, yet the raid took the whole pooled stock.
         Assert.InRange(army.LootWood, 399, double.MaxValue);
         Assert.InRange(army.LootStone, 399, double.MaxValue);
-        Assert.InRange(army.LootFood, 399, double.MaxValue);
+        // The pool's food went into the raiders' provisions first (the refill; 500 axemen hold far more than 400), so none of it is
+        // loot: the army's provisions rose by what the pool held.
+        Assert.Equal(0, army.LootFood);
+        var burnedOnTheWayOut = 500 * UnitCatalogue.Get(UnitType.Axeman).UpkeepPerHour;
+        Assert.True(army.Provisions >= 1000 - burnedOnTheWayOut + 399, "the raid refilled the provisions from the pool's food");
         Assert.True(Total(oldest, newest, s => s.StockWood) < 100, "the raid left the pool nearly empty");
+        Assert.True(Total(oldest, newest, s => s.StockFood) < 100, "the raid took the pool's food too, as refill");
         AssertSharesEven(oldest, newest);
     }
 
