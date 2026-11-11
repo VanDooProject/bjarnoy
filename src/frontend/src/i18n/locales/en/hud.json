@@ -575,5 +575,8 @@
       "label": "Building info (H)",
       "title": "Show or hide building info (H)"
     }
+  },
+  "panelColumn": {
+    "toggle": "Show or hide {panel}"
   }
 }
