@@ -5,7 +5,7 @@ import { SettlementPage } from './pages';
 /**
  * docs/design/building-hud.md: every own building has a hex dial marker over it (walls excepted), the marker shows more as the
  * map zooms in, the whole HUD switches off and on (icon button, H) and the choice is kept, markers never take the pointer, and
- * while the HUD is on its dial replaces the canvas construction dial of a running upgrade. What a marker's rows say is
+ * while the HUD is on its dial shows a running upgrade, and a construction dial without a building marker is a dial-only marker. What a marker's rows say is
  * unit-tested (buildingHud.test.ts, BuildingHudLayer.test.ts); this is the wiring to the real map.
  */
 // DOM and game state only: water and fog pixels cannot change these results (see `mapLayers` in fixtures.ts).
@@ -124,7 +124,7 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     await expect(settlement.ring.backdrop).toHaveCount(1);
   });
 
-  test('while building info is on, its dial shows a running upgrade and the canvas dial is not drawn; off, the canvas dial is back', async ({ page }) => {
+  test('while building info is on, the marker dial shows a running upgrade; off, the same dial is a dial-only marker', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
     const { hud } = settlement;
@@ -134,19 +134,37 @@ test.describe('building HUD', { tag: '@g2' }, () => {
     // The number inside the dial shows from the dial tier on (the default framing of a young realm is the far one).
     await settlement.zoomTo(0.85);
     await expect(hud.dialLabel(farm)).toHaveText('1');
-    await expect.poll(() => hud.canvasDialKeys()).toEqual([]);
+    await expect(hud.dialOnlyMarkers).toHaveCount(0);
 
     await hud.startUpgrade(farm, 'farm', 2);
-    // The marker's dial counts down (m:ss, about 8:20 left) instead of showing the level, and the canvas draws nothing for it.
+    // The marker's dial counts down (m:ss, about 8:20 left) instead of showing the level; no dial-only marker doubles it.
     await expect(hud.dialLabel(farm)).toHaveText(/^\d+:\d\d$/);
-    await expect.poll(() => hud.canvasDialKeys()).not.toContain(key);
+    expect(await hud.dialOnlyKeys()).not.toContain(key);
 
     await hud.toggle.click();
     await expect(hud.markers).toHaveCount(0);
-    await expect.poll(() => hud.canvasDialKeys()).toContain(key);
+    await expect(hud.dialOnly(farm)).toHaveCount(1);
+    await expect(hud.dialOnlyDial(farm).locator('text')).toHaveText(/^\d+:\d\d$/);
 
     await hud.toggle.click();
     await expect(hud.dialLabel(farm)).toHaveText(/^\d+:\d\d$/);
-    await expect.poll(() => hud.canvasDialKeys()).not.toContain(key);
+    await expect(hud.dialOnly(farm)).toHaveCount(0);
+  });
+
+  test('a new build has no building marker, only a dial-only marker with its countdown, whatever the building info switch says', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+    const { hud } = settlement;
+    const site = (await settlement.findHex({ terrain: 'grass' })).hex;
+    await settlement.zoomTo(0.85);
+    await hud.startUpgrade(site, 'farm', 1);
+
+    await expect(hud.marker(site)).toHaveCount(0);
+    await expect(hud.dialOnly(site)).toHaveCount(1);
+    await expect(hud.dialOnlyDial(site).locator('text')).toHaveText(/^\d+:\d\d$/);
+
+    await hud.toggle.click();
+    await expect(hud.markers).toHaveCount(0);
+    await expect(hud.dialOnly(site)).toHaveCount(1);
   });
 });

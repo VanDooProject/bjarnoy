@@ -16,14 +16,15 @@ in [Taking over a realm](realm-takeover.md).
   arrives. Fire Ships that are not used come back: when the target is gone, when the ship fight is lost, and those not needed
   for the damage. 10 Fire Ships take one level off a building (starting value, to be tuned). The usual siege rules cap it: a
   building never loses more levels in one attack than they allow, however many Fire Ships come.
-- Attack on a dock: ship fight only, and no loot. Attack on a beach camp: ship fight first, then the land fight. The land troops
+- An attack on a building in the water (a dock, a fisher, the Shrine of Njörd, a wall's sea end) is a ship fight only, with no
+  loot: the troops and siege engines on board cannot reach it. Attack on a beach camp: ship fight first, then the land fight. The land troops
   fight from on board and do not land. If the attacker loses the ship fight, there is no land fight. The camp's buildings are
   damaged by land siege in the land fight, never by ships.
 - If the target has no fleet, the ship fight is skipped and counts as won.
 - Wildlife camps follow the same split. Water camps (the whale road) are fought by fleets only. Sand camps (seal and walrus
   haul-outs) are fought by land troops only, from on board; the fleet does no fighting there. A fleet without land troops on board
-  cannot hunt a sand camp. Loot is taken if the camp is cleared; at a sand camp the lower of the ships' and the land troops'
-  loot capacity caps it.
+  cannot hunt a sand camp. Loot is taken if the camp is cleared. A fleet's loot is capped by its ships' loot capacity only,
+  at a sand camp too: the land troops can carry the loot aboard in several trips.
 - Loot, including the food that refills the army's provisions ([troop-movement-range.md](../troop-movement-range.md) §1b), is only
   taken if the attacker wins every fight of the attack.
 - Guests (supporting armies) fight like the target's own troops, by the same rules.

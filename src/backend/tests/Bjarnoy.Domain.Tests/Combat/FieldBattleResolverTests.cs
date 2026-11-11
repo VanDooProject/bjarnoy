@@ -10,6 +10,9 @@ public class FieldBattleResolverTests
 {
     private static readonly ResourceAmounts NoLoot = ResourceAmounts.Zero;
 
+    // Provisions already at (or above) the food capacity: there is no room to refill.
+    private const double AtCapacity = double.PositiveInfinity;
+
     [Fact]
     public void Same_owner_is_never_hostile()
     {
@@ -113,7 +116,7 @@ public class FieldBattleResolverTests
         var sideB = new[] { new UnitStack(UnitType.Spearman, 10) };
 
         var plan = FieldBattleResolver.Resolve(
-            sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, NoLoot, seed: 1);
+            sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, NoLoot, AtCapacity, AtCapacity, seed: 1);
 
         Assert.Equal(400, plan.SideAPower);
         Assert.Equal(150, plan.SideBPower);
@@ -129,7 +132,7 @@ public class FieldBattleResolverTests
         var sideA = new[] { new UnitStack(UnitType.Axeman, 10) };
         var sideB = new[] { new UnitStack(UnitType.Spearman, 10) };
 
-        var plan = FieldBattleResolver.Resolve(sideA, claim, sideB, claim, NoLoot, NoLoot, seed: 1);
+        var plan = FieldBattleResolver.Resolve(sideA, claim, sideB, claim, NoLoot, NoLoot, AtCapacity, AtCapacity, seed: 1);
 
         // Both claim -> not asymmetric -> both use Attack power, bonus ignored.
         Assert.Equal(400, plan.SideAPower);
@@ -146,7 +149,7 @@ public class FieldBattleResolverTests
         var sideB = new[] { new UnitStack(UnitType.Axeman, 1) };
 
         var plan = FieldBattleResolver.Resolve(
-            sideA, sideAClaim, sideB, FieldBattleClaim.None, NoLoot, NoLoot, seed: 1);
+            sideA, sideAClaim, sideB, FieldBattleClaim.None, NoLoot, NoLoot, AtCapacity, AtCapacity, seed: 1);
 
         Assert.Equal(350 * 1.2, plan.SideAPower);
         Assert.True(plan.SideAWasDefending);
@@ -160,7 +163,7 @@ public class FieldBattleResolverTests
         var sideB = new[] { new UnitStack(UnitType.Spearman, 1) };
 
         var plan = FieldBattleResolver.Resolve(
-            sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, NoLoot, seed: 1);
+            sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, NoLoot, AtCapacity, AtCapacity, seed: 1);
 
         Assert.Equal(FieldBattleWinner.SideA, plan.Winner);
         Assert.Equal(sideB, plan.SideBLosses);
@@ -179,7 +182,7 @@ public class FieldBattleResolverTests
         var sideB = new[] { new UnitStack(UnitType.Spearman, 10) };
 
         var plan = FieldBattleResolver.Resolve(
-            sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, NoLoot, seed: 1);
+            sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, NoLoot, AtCapacity, AtCapacity, seed: 1);
 
         Assert.Equal(FieldBattleWinner.Tie, plan.Winner);
         Assert.Equal(plan.SideAPower, plan.SideBPower);
@@ -199,7 +202,7 @@ public class FieldBattleResolverTests
         var lootB = new ResourceAmounts(Wood: 100, Stone: 0, Food: 0, Iron: 0);
 
         var plan = FieldBattleResolver.Resolve(
-            sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, lootB, seed: 1);
+            sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, lootB, AtCapacity, AtCapacity, seed: 1);
 
         Assert.Equal(ResourceAmounts.Zero, plan.LootTakenByWinner);
     }
@@ -212,7 +215,7 @@ public class FieldBattleResolverTests
         var lootB = new ResourceAmounts(Wood: 5, Stone: 0, Food: 0, Iron: 0);
 
         var plan = FieldBattleResolver.Resolve(
-            sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, lootB, seed: 1);
+            sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, lootB, AtCapacity, AtCapacity, seed: 1);
 
         Assert.Equal(FieldBattleWinner.SideA, plan.Winner);
         Assert.Equal(5, plan.LootTakenByWinner.Wood);
@@ -232,7 +235,7 @@ public class FieldBattleResolverTests
         var weakB = new[] { new UnitStack(UnitType.Spearman, 1) };
 
         var plan = FieldBattleResolver.Resolve(
-            sideA, FieldBattleClaim.None, weakB, FieldBattleClaim.None, lootA, lootB, seed: 1);
+            sideA, FieldBattleClaim.None, weakB, FieldBattleClaim.None, lootA, lootB, AtCapacity, AtCapacity, seed: 1);
 
         Assert.Equal(FieldBattleWinner.SideA, plan.Winner);
         Assert.Equal(5, plan.LootTakenByWinner.Wood);
@@ -247,7 +250,7 @@ public class FieldBattleResolverTests
         var sideA = new[] { new UnitStack(UnitType.Longship, 4), new UnitStack(UnitType.Spearman, 80) };
         var sideB = new[] { new UnitStack(UnitType.Longship, 3) };
 
-        var plan = FieldBattleResolver.Resolve(sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, NoLoot, seed: 1);
+        var plan = FieldBattleResolver.Resolve(sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, NoLoot, AtCapacity, AtCapacity, seed: 1);
 
         Assert.Equal(240, plan.SideAPower);
         Assert.Equal(FieldBattleWinner.SideA, plan.Winner);
@@ -263,8 +266,55 @@ public class FieldBattleResolverTests
         var sideA = new[] { new UnitStack(UnitType.Axeman, 10), new UnitStack(UnitType.Spearman, 10) };
         var sideB = new[] { new UnitStack(UnitType.Spearman, 10) };
 
-        var plan = FieldBattleResolver.Resolve(sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, NoLoot, seed: 1);
+        var plan = FieldBattleResolver.Resolve(sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, NoLoot, AtCapacity, AtCapacity, seed: 1);
 
         Assert.Equal(550, plan.SideAPower);
+    }
+
+    // ---- Refill (docs/design/troop-movement-range.md section 1b): only from the loser's carried food, never its provisions
+
+    [Fact]
+    public void The_winner_refills_its_provisions_from_the_losers_carried_food_before_the_loot()
+    {
+        var sideA = new[] { new UnitStack(UnitType.Axeman, 100) }; // food capacity 4000, carry 3000
+        var sideB = new[] { new UnitStack(UnitType.Spearman, 1) };
+        var lootB = new ResourceAmounts(Wood: 100, Stone: 0, Food: 300, Iron: 0);
+
+        var plan = FieldBattleResolver.Resolve(
+            sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, lootB, sideAProvisions: 3900, sideBProvisions: 5, seed: 1);
+
+        Assert.Equal(FieldBattleWinner.SideA, plan.Winner);
+        Assert.Equal(100, plan.FoodRefillToWinner);
+        // The rest of the carried food (200) and the wood are loot.
+        Assert.Equal(new ResourceAmounts(Wood: 100, Stone: 0, Food: 200, Iron: 0), plan.LootTakenByWinner);
+    }
+
+    [Fact]
+    public void The_refill_never_takes_the_losers_provisions_only_what_it_carried_as_loot()
+    {
+        var sideA = new[] { new UnitStack(UnitType.Axeman, 100) };
+        var sideB = new[] { new UnitStack(UnitType.Spearman, 1) };
+
+        var plan = FieldBattleResolver.Resolve(
+            sideA, FieldBattleClaim.None, sideB, FieldBattleClaim.None, NoLoot, NoLoot, sideAProvisions: 0, sideBProvisions: 5000, seed: 1);
+
+        Assert.Equal(0, plan.FoodRefillToWinner);
+        Assert.Equal(ResourceAmounts.Zero, plan.LootTakenByWinner);
+    }
+
+    [Fact]
+    public void A_tie_refills_nobody_and_the_refill_is_capped_by_the_room_in_the_winners_provisions()
+    {
+        var spearmen = new[] { new UnitStack(UnitType.Spearman, 10) };
+        var lootB = new ResourceAmounts(Wood: 0, Stone: 0, Food: 500, Iron: 0);
+        var tie = FieldBattleResolver.Resolve(
+            spearmen, FieldBattleClaim.None, spearmen, FieldBattleClaim.None, NoLoot, lootB, sideAProvisions: 0, sideBProvisions: 0, seed: 1);
+        Assert.Equal(0, tie.FoodRefillToWinner);
+
+        var full = FieldBattleResolver.Resolve(
+            [new UnitStack(UnitType.Axeman, 100)], FieldBattleClaim.None, [new UnitStack(UnitType.Spearman, 1)], FieldBattleClaim.None,
+            NoLoot, lootB, sideAProvisions: 4000, sideBProvisions: 0, seed: 1);
+        Assert.Equal(0, full.FoodRefillToWinner);
+        Assert.Equal(500, full.LootTakenByWinner.Food);
     }
 }

@@ -83,12 +83,12 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
     }
 
     private static Task<HttpResponseMessage> HuntAsync(
-        HttpClient client, Guid settlementId, HexCoord destination, string unit = "axeman", int count = 10) =>
+        HttpClient client, Guid settlementId, HexCoord destination, string unit = "axeman", int count = 10, double? provisions = null) =>
         client.PostJsonAsync(
             $"/api/v1/settlements/{settlementId}/armies",
             new DispatchArmyRequest(
                 [new UnitCountRequest(unit, count)], null, new HexPointRequest(destination.Q, destination.R),
-                Math.Min(50, count * 10), "hunt"),
+                provisions ?? Math.Min(50, count * 10), "hunt"),
             Ct);
 
     private Task<List<CampStateResponse>?> CampsAsync(HttpClient client, Guid worldId, string query = "") =>
@@ -305,8 +305,11 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
         Assert.Equal(new[] { "young", "adult" }, report.Beasts.Select(b => b.Tier));
         Assert.All(report.Beasts, b => Assert.Equal(b.Before, b.Lost));
 
-        // What the survivors could not carry stays at the camp.
-        Assert.Equal(450, report.Loot.Food + camp.Leftover.Food);
+        // The food of the pool first refilled the survivors' provisions (up to 40 food each; they set out with at most 50), then the
+        // loot took what the survivors could carry; the rest stays at the camp.
+        var refill = 450 - (report.Loot.Food + camp.Leftover.Food);
+        var survivors = axemen.Sent - axemen.Lost;
+        Assert.InRange(refill, (survivors * UnitCatalogue.Get(UnitType.Axeman).FoodCarryCapacity) - 50, survivors * UnitCatalogue.Get(UnitType.Axeman).FoodCarryCapacity);
 
         // The owner reads the same report by id.
         var byId = await client.GetFromJsonAsync<CampReportResponse>(
@@ -324,12 +327,15 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
     {
         using var client = Client();
         var (worldId, settlement, campHex, _) = await SetUpAsync(client);
-        var first = await (await HuntAsync(client, settlement.Id, campHex)).ReadStrictAsync<ArmyResponse>(Ct);
+        // Both armies set out with full provisions (10 axemen hold 40 food each), so no food of the camp goes into a refill and the
+        // loot is what shows: 10 axemen cannot carry the whole pool.
+        const double fullProvisions = 400;
+        var first = await (await HuntAsync(client, settlement.Id, campHex, provisions: fullProvisions)).ReadStrictAsync<ArmyResponse>(Ct);
         await ResolveHuntAsync(client, first.Id);
         var leftover = (await CampAtAsync(client, worldId, campHex)).Leftover;
         Assert.True(leftover.Food > 0, "sanity: 10 axemen cannot carry the whole pool");
 
-        var second = await (await HuntAsync(client, settlement.Id, campHex)).ReadStrictAsync<ArmyResponse>(Ct);
+        var second = await (await HuntAsync(client, settlement.Id, campHex, provisions: fullProvisions)).ReadStrictAsync<ArmyResponse>(Ct);
         await ResolveHuntAsync(client, second.Id);
 
         var camp = await CampAtAsync(client, worldId, campHex);
@@ -343,7 +349,10 @@ public sealed class CampFightEndpointsTests : IAsyncLifetime
         Assert.False(pickup.CampCleared);
         Assert.Empty(pickup.Beasts);
         Assert.True(pickup.Loot.Food > 0);
-        Assert.Equal(leftover.Food, pickup.Loot.Food + camp.Leftover.Food);
+        // The little food the second army burned on its way out refilled its provisions first (it set out full); the rest is the
+        // pickup and what stays.
+        var refill = leftover.Food - (pickup.Loot.Food + camp.Leftover.Food);
+        Assert.InRange(refill, 0.0001, 10);
     }
 
     [Fact]

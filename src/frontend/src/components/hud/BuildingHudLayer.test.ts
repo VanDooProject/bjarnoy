@@ -31,11 +31,17 @@ vi.mock('../../composables/useIsMobile', async () => {
 });
 
 let frames: FrameRequestCallback[] = [];
-/** Runs the placement loop once, like one animation frame. */
-function runFrame() {
+let mounted: { frameObserver: (() => void) | null } | null = null;
+/** One bare animation frame: runs what asked for one (a dial's own animation), but the layer's placement ignores it. */
+function runAnimationFrame() {
   const callbacks = frames;
   frames = [];
   callbacks.forEach((cb) => cb(0));
+}
+/** One rendered map frame: the renderer calls the layer's frame observer (the layer has no animation-frame loop of its own). */
+function runFrame() {
+  mounted?.frameObserver?.();
+  runAnimationFrame();
 }
 
 function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
@@ -52,8 +58,11 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null) {
       this.tapObserver = fn;
     },
+    frameObserver: null as (() => void) | null,
+    setFrameObserver(fn: (() => void) | null) {
+      this.frameObserver = fn;
+    },
     markerOcclusionCircle: null as { x: number; y: number; r: number } | null,
-    setHudOwnedDials: vi.fn(),
     // The renderer's construction dials; a test replaces the array to change them, like the renderer does.
     constructionDialList: [] as ConstructionDial[],
     ...overrides,
@@ -65,12 +74,13 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     markerOcclusionCircle: { x: number; y: number; r: number } | null;
     hoveredHexKey: string | null;
     tapObserver: ((screen: { x: number; y: number }) => void) | null;
+    frameObserver: (() => void) | null;
     constructionDialList: ConstructionDial[];
-    setHudOwnedDials: ReturnType<typeof vi.fn>;
   };
 }
 
 function mountLayer(renderer: BuildingHudRenderer) {
+  mounted = renderer as unknown as { frameObserver: (() => void) | null };
   return mount(BuildingHudLayer, {
     props: { renderer },
     attachTo: document.body,
@@ -102,6 +112,7 @@ describe('BuildingHudLayer', () => {
     setActivePinia(createPinia());
     localStorage.clear();
     frames = [];
+    mounted = null;
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
       frames.push(cb);
       return frames.length;
@@ -137,6 +148,41 @@ describe('BuildingHudLayer', () => {
     runFrame();
     // The dial's centre sits on the progress dial's centre, scaled by the map scale.
     expect(wrapper.get<HTMLElement>('[data-coord="2,0"]').element.style.transform).toBe('translate3d(260.0px, 300.0px, 0) scale(1.000)');
+  });
+
+  it('places the markers from the renderer frame, from the camera of that same frame, and not from animation frames', () => {
+    seedBuildings();
+    const renderer = fakeRenderer();
+    wrapper = mountLayer(renderer);
+    runFrame();
+    const el = () => wrapper!.get<HTMLElement>('[data-coord="2,0"]').element;
+    expect(el().style.transform).toBe('translate3d(260.0px, 300.0px, 0) scale(1.000)');
+
+    // The camera moves, but the canvas has not rendered yet: animation frames alone do not move the markers.
+    renderer.dialScreenPoint = (coord) => ({ x: 500 + coord.q * 80, y: 40 });
+    renderer.dialMapScale = 0.5;
+    runAnimationFrame();
+    runAnimationFrame();
+    expect(el().style.transform).toBe('translate3d(260.0px, 300.0px, 0) scale(1.000)');
+
+    // The renderer's frame places them from the camera it just drew.
+    runFrame();
+    expect(el().style.transform).toBe('translate3d(660.0px, 40.0px, 0) scale(0.500)');
+    expect(frames).toEqual([]);
+  });
+
+  it('hands the frame observer to a renderer it is given later and lets go of the old one', async () => {
+    seedBuildings();
+    const first = fakeRenderer();
+    wrapper = mountLayer(first);
+    expect(first.frameObserver).toBeTypeOf('function');
+    const second = fakeRenderer();
+    await wrapper.setProps({ renderer: second });
+    expect(first.frameObserver).toBeNull();
+    expect(second.frameObserver).toBeTypeOf('function');
+    wrapper.unmount();
+    wrapper = undefined;
+    expect(second.frameObserver).toBeNull();
   });
 
   it('scales the whole marker with the map like the progress dial', () => {
@@ -602,7 +648,7 @@ describe('BuildingHudLayer', () => {
       runFrame();
       await setDials(renderer, constructionDialsFromQueue(world.hud.queue, Date.now()));
       expect(wrapper.get('[data-coord="3,0"] text').text()).toBe('#1');
-      expect(wrapper.find('[data-coord="3,0"] polyline').exists()).toBe(false);
+      expect(wrapper.find('[data-coord="3,0"] .hud-dial__arc').exists()).toBe(false);
       // The track is the white, dimmed one of a running dial.
       expect(wrapper.get('[data-coord="3,0"] polygon:nth-of-type(2)').attributes('stroke-opacity')).toBe('0.3');
     });
@@ -696,7 +742,7 @@ describe('BuildingHudLayer', () => {
       await setDials(renderer, []);
       expect(dial().find('.hud-dial__burst').exists()).toBe(false);
       expect(dial().find('text').exists()).toBe(false);
-      expect(dial().find('polyline').exists()).toBe(false);
+      expect(dial().find('.hud-dial__arc').exists()).toBe(false);
       const track = dial().get('polygon:nth-of-type(2)');
       expect(track.attributes('stroke')).toBe('#fff');
       expect(Number(track.attributes('stroke-opacity'))).toBeLessThan(0.3);
@@ -711,13 +757,106 @@ describe('BuildingHudLayer', () => {
       vi.useRealTimers();
     });
 
-    it('draws no marker on a hex without a standing building: the canvas dial of a new build stays', async () => {
+    it('draws a new build as a dial-only marker: no building marker, no box, just the dial with its countdown', async () => {
       const world = seedBuildings();
-      world.hud.queue = [waiting(9)];
+      const now = Date.now();
+      world.hud.queueFetchedAt = now;
+      world.hud.queue = [waiting(9, { state: 'building', completesInSeconds: 300, totalSeconds: 600 })];
+      const renderer = fakeRenderer({ dialMapScale: 0.5 });
+      wrapper = mountLayer(renderer);
+      runFrame();
+      await setDials(renderer, constructionDialsFromQueue(world.hud.queue, now));
+      runFrame();
+      await wrapper.vm.$nextTick();
+      expect(wrapper.find('[data-coord="9,0"]').exists()).toBe(false);
+      const marker = wrapper.get<HTMLElement>('[data-dial-only="9,0"]');
+      expect(marker.find('.hud-marker__box').exists()).toBe(false);
+      expect(marker.find('.hud-dial__arc').exists()).toBe(true);
+      expect(marker.element.style.transform).toBe('translate3d(820.0px, 300.0px, 0) scale(0.500)');
+      // Far tier is the ring only; hovering it grows it (markerScale) and shows the countdown.
+      expect(marker.find('text').exists()).toBe(false);
+      renderer.hoveredHexKey = '9,0';
+      vi.useFakeTimers({ toFake: ['Date'] });
+      for (let i = 0; i < 4; i++) {
+        vi.advanceTimersByTime(60);
+        runFrame();
+      }
+      vi.useRealTimers();
+      await wrapper.vm.$nextTick();
+      expect(marker.element.style.transform).toContain(`scale(${markerScale(0.5, 1).toFixed(3)})`);
+      expect(marker.get('text').text()).toBe('5:00');
+    });
+
+    it('turns the countdown of a dial-only marker yellow in its last minute and shows #place for a queued one', async () => {
+      const world = seedBuildings();
+      const now = Date.now();
+      world.hud.queueFetchedAt = now;
+      world.hud.queue = [waiting(9, { state: 'building', completesInSeconds: 45, totalSeconds: 600 }), waiting(10)];
       const renderer = fakeRenderer();
       wrapper = mountLayer(renderer);
-      expect(wrapper.find('[data-coord="9,0"]').exists()).toBe(false);
-      expect((renderer.setHudOwnedDials.mock.lastCall![0] as Set<string>).has('9,0')).toBe(false);
+      runFrame();
+      await setDials(renderer, constructionDialsFromQueue(world.hud.queue, now));
+      runFrame();
+      await wrapper.vm.$nextTick();
+      expect(wrapper.get('[data-dial-only="9,0"] text').attributes('fill')).toBe('#ffd23f');
+      expect(wrapper.get('[data-dial-only="10,0"] text').text()).toBe('#1');
+      expect(wrapper.get('[data-dial-only="10,0"] text').attributes('fill')).toBe('#fff');
+    });
+
+    it('is not tied to the building info switch: dial-only markers show with it off and in a layer without building markers', async () => {
+      const world = seedBuildings();
+      const now = Date.now();
+      world.hud.queueFetchedAt = now;
+      world.hud.queue = [waiting(9, { state: 'building', completesInSeconds: 300, totalSeconds: 600 })];
+      useHudPrefsStore().setBuildingInfo(false);
+      const renderer = fakeRenderer();
+      wrapper = mountLayer(renderer);
+      runFrame();
+      await setDials(renderer, constructionDialsFromQueue(world.hud.queue, now));
+      runFrame();
+      await wrapper.vm.$nextTick();
+      expect(wrapper.findAll('[data-coord]')).toHaveLength(0);
+      expect(wrapper.find('[data-dial-only="9,0"]').exists()).toBe(true);
+      wrapper.unmount();
+
+      useHudPrefsStore().setBuildingInfo(true);
+      const landing = fakeRenderer();
+      landing.constructionDialList = constructionDialsFromQueue(world.hud.queue, now);
+      wrapper = mount(BuildingHudLayer, {
+        props: { renderer: landing, buildingMarkers: false },
+        attachTo: document.body,
+        global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] },
+      });
+      mounted = landing;
+      runFrame();
+      await wrapper.vm.$nextTick();
+      expect(wrapper.findAll('[data-coord]')).toHaveLength(0);
+      expect(wrapper.find('[data-dial-only="9,0"]').exists()).toBe(true);
+      expect(wrapper.find('.building-hud__toggle').exists()).toBe(false);
+      keyDown('h');
+      expect(landing.keyDrivesMap).not.toHaveBeenCalled();
+      expect(useHudPrefsStore().buildingInfo).toBe(true);
+    });
+
+    it('lets a dial-only marker be revealed by a tap like any other marker', async () => {
+      const world = seedBuildings();
+      const now = Date.now();
+      world.hud.queueFetchedAt = now;
+      world.hud.queue = [waiting(9, { state: 'building', completesInSeconds: 300, totalSeconds: 600 })];
+      const renderer = fakeRenderer({ dialMapScale: 0.5 });
+      wrapper = mountLayer(renderer);
+      runFrame();
+      await setDials(renderer, constructionDialsFromQueue(world.hud.queue, now));
+      runFrame();
+      await wrapper.vm.$nextTick();
+      vi.useFakeTimers({ toFake: ['Date'] });
+      renderer.tapObserver!({ x: 821, y: 301 });
+      for (let i = 0; i < 4; i++) {
+        vi.advanceTimersByTime(60);
+        runFrame();
+      }
+      vi.useRealTimers();
+      expect(wrapper.get<HTMLElement>('[data-dial-only="9,0"]').element.style.transform).toContain(`scale(${markerScale(0.5, 1).toFixed(3)})`);
     });
   });
 
@@ -743,25 +882,25 @@ describe('BuildingHudLayer', () => {
       ...over,
     });
 
-    it('hands every dial of a standing building to the HUD while it shows, and gives them back when it is off', async () => {
+    it('shows a dial on a hex with a marker on that marker, and on a hex without one as a dial-only marker', async () => {
       const world = seedBuildings();
       world.hud.queue = [upgradeOrder(3), upgradeOrder(2, { state: 'waiting' })];
       const renderer = fakeRenderer();
       wrapper = mountLayer(renderer);
-      // Every marker's hex (walls have none): running, queued or no order at all.
-      expect(renderer.setHudOwnedDials).toHaveBeenLastCalledWith(new Set(['1,0', '2,0', '3,0', '5,0']));
-      // A new order on a hex with no building stays the canvas dial's.
-      world.hud.queue = [upgradeOrder(3), upgradeOrder(9)];
+      runFrame();
+      const now = Date.now();
+      renderer.constructionDialList = constructionDialsFromQueue([...world.hud.queue, upgradeOrder(9)], now);
+      runFrame();
       await wrapper.vm.$nextTick();
-      expect(renderer.setHudOwnedDials).toHaveBeenLastCalledWith(new Set(['1,0', '2,0', '3,0', '5,0']));
+      // Every marker's hex (walls have none): its own marker draws the dial; the new build on 9,0 is dial-only.
+      expect(wrapper.findAll('[data-dial-only]').map((m) => m.attributes('data-dial-only'))).toEqual(['9,0']);
+      // Switched off: every dial is a dial-only marker.
       useHudPrefsStore().setBuildingInfo(false);
       await flushPromises();
-      expect(renderer.setHudOwnedDials).toHaveBeenLastCalledWith(null);
-      wrapper.unmount();
-      wrapper = undefined;
+      expect(wrapper.findAll('[data-dial-only]').map((m) => m.attributes('data-dial-only')).sort()).toEqual(['2,0', '3,0', '9,0']);
     });
 
-    it('keeps each canvas dial until its marker has drawn its own, and takes it back marker by marker on a hide', async () => {
+    it('keeps each dial-only marker until its building marker has drawn its own, and brings it back marker by marker on a hide', async () => {
       seedBuildings();
       fake = installFakeAnimate();
       vi.useFakeTimers();
@@ -769,28 +908,62 @@ describe('BuildingHudLayer', () => {
       wrapper = mountLayer(renderer);
       runFrame();
       const prefs = useHudPrefsStore();
-      const owned = () => renderer.setHudOwnedDials.mock.lastCall![0] as Set<string> | null;
+      const now = Date.now();
+      const dial = (q: number): ConstructionDial => ({ coord: { q, r: 0 }, startMs: now - 1000, endMs: now + 600_000, state: 'building', queuePosition: null });
+      renderer.constructionDialList = [dial(1), dial(3)];
+      runFrame();
+      await vi.advanceTimersByTimeAsync(0);
+      const dialOnlyAt = (key: string) => wrapper!.find(`[data-dial-only="${key}"]`).exists();
+      expect(dialOnlyAt('1,0') || dialOnlyAt('3,0')).toBe(false);
       // Hide: the longhouse marker (q 1, the wave's origin) is gone first, the barracks (q 3, 160 px away) later.
       prefs.setBuildingInfo(false);
       await vi.advanceTimersByTimeAsync(0);
-      expect(owned()).toEqual(new Set(['1,0', '2,0', '3,0', '5,0']));
+      expect(dialOnlyAt('1,0') || dialOnlyAt('3,0')).toBe(false);
       await vi.advanceTimersByTimeAsync(100 + 300);
-      expect(owned()!.has('1,0')).toBe(false);
-      expect(owned()!.has('3,0')).toBe(true);
+      expect(dialOnlyAt('1,0')).toBe(true);
+      expect(dialOnlyAt('3,0')).toBe(false);
       await vi.advanceTimersByTimeAsync(400);
-      expect(owned()!.has('3,0')).toBe(false);
+      expect(dialOnlyAt('3,0')).toBe(true);
       fake.finishAll();
       await vi.advanceTimersByTimeAsync(0);
-      expect(owned()).toBeNull();
-      // Show: every canvas dial stays until its marker's dial starts to spin in (the wave delay).
+      expect(wrapper.findAll('[data-coord]')).toHaveLength(0);
+      // Show: every dial-only marker stays until its marker's dial starts to spin in (the wave delay).
       prefs.setBuildingInfo(true);
       await vi.advanceTimersByTimeAsync(0);
       // The longhouse marker (the wave's origin) starts at once; the barracks' dial 192 ms later.
-      expect(owned()).toEqual(new Set(['1,0']));
+      expect(dialOnlyAt('1,0')).toBe(false);
+      expect(dialOnlyAt('3,0')).toBe(true);
       await vi.advanceTimersByTimeAsync(150);
-      expect(owned()!.has('3,0')).toBe(false);
+      expect(dialOnlyAt('3,0')).toBe(true);
       await vi.advanceTimersByTimeAsync(50);
-      expect(owned()!.has('3,0')).toBe(true);
+      expect(dialOnlyAt('3,0')).toBe(false);
+      vi.useRealTimers();
+    });
+
+    it('keeps the same dial-only element on screen while building info is switched on, until its marker takes the dial over', async () => {
+      seedBuildings();
+      fake = installFakeAnimate();
+      vi.useFakeTimers();
+      const prefs = useHudPrefsStore();
+      prefs.setBuildingInfo(false);
+      const renderer = fakeRenderer();
+      wrapper = mountLayer(renderer);
+      const now = Date.now();
+      renderer.constructionDialList = [{ coord: { q: 3, r: 0 }, startMs: now - 1000, endMs: now + 600_000, state: 'building', queuePosition: null }];
+      runFrame();
+      await vi.advanceTimersByTimeAsync(0);
+      const before = wrapper.get('[data-dial-only="3,0"]').element;
+      // Watch every change while the switch flips: the hex must never be without its dial-only element in between.
+      const removed: Node[] = [];
+      const observer = new MutationObserver((records) => records.forEach((r) => removed.push(...r.removedNodes)));
+      observer.observe(wrapper.element, { childList: true, subtree: true });
+      prefs.setBuildingInfo(true);
+      await vi.advanceTimersByTimeAsync(0);
+      observer.takeRecords().forEach((r) => removed.push(...r.removedNodes));
+      observer.disconnect();
+      expect(removed).not.toContain(before);
+      expect(wrapper.get('[data-dial-only="3,0"]').element).toBe(before);
+      fake.finishAll();
       vi.useRealTimers();
     });
 
@@ -808,7 +981,6 @@ describe('BuildingHudLayer', () => {
       fake.finishAll();
       await flushPromises();
       expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
-      expect(renderer.setHudOwnedDials).toHaveBeenLastCalledWith(null);
     });
 
     it('turns around when switched back on mid-animation: the same markers, the running animations reversed', async () => {

@@ -195,6 +195,25 @@
       "siegeTargets": []
     },
     {
+      "type": "fireship",
+      "class": "ship",
+      "attack": 0,
+      "defense": 25,
+      "speed": 8,
+      "visionRadius": 6,
+      "carryCapacity": 0,
+      "foodCarryCapacity": 200,
+      "cargoSlots": 0,
+      "shipSlots": 0,
+      "upkeepPerHour": 5,
+      "trainingCost": { "wood": 300, "stone": 60, "food": 40, "iron": 80 },
+      "trainingSeconds": 2400,
+      "requiredLonghouseLevel": 12,
+      "requiredUnitType": "karve",
+      "requiredBuildingType": "dockyard",
+      "siegeTargets": []
+    },
+    {
       "type": "settler",
       "class": "civilian",
       "attack": 0,

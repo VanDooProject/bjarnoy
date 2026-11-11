@@ -51,6 +51,10 @@ function battleReport(overrides: Partial<BattleReportResponse> = {}): BattleRepo
     attackerLines: [],
     defenderLines: [],
     siege: null,
+    shipFight: null,
+    drowned: [],
+    fireShipsBurned: 0,
+    fireSiege: null,
     ...overrides,
   };
 }
