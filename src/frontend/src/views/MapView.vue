@@ -748,17 +748,17 @@ onMounted(() => {
 });
 onUnmounted(() => stageObserver?.disconnect());
 
-// The desktop panels are dockable (HudPanelDock): each can sit in any of the four corners, so the ring treats the worst
-// case as always present. Every number below is traceable to the dock's corner geometry (lib/hud/hudPanelDock.ts) and
+// The desktop panels are dockable (HudPanelDock): each can sit in any column on either side, so the ring treats the worst
+// case as always present. Every number below is traceable to the dock's column geometry (lib/hud/hudPanelDock.ts) and
 // the panels' widths:
-//   top corners     top:76 (TopBar .hud-bar height 64, plus a 12px gap), left/right 16
-//   bottom corners  bottom:16, right 16; bottom left starts at 68, right of the icon column (HudPanelColumn)
+//   columns         full height: top:76 (TopBar .hud-bar height 64, plus a 12px gap), bottom:16, left/right 16
+//   icon rail       left 16, or right of the left panel columns when they reach down to it (HudPanelColumn)
 //   panel widths    Construction 240, Garrison 240, Armies 260, Quests 280
 //   ExpansionPanel  .status-card  left:16  top:340   width:240  (fixed, not dockable)
 // The left edge stays at the default Construction column (left 16 + 240 + 12 -> 268). The right edge is set by the widest
 // panel that can sit in the ring's way: Armies (260 wide, runs down to the bottom bound) beats Garrison (240) ->
 // right = stage width - (16 + 260 + 16), floored at 420. These are constants, not the live layout: every panel is treated
-// as present in its default corner. On mobile the panels are replaced by QueueDrawer's collapsed handle
+// as present in its default column. On mobile the panels are replaced by QueueDrawer's collapsed handle
 // (.queue-drawer-handle, a 48px-wide tab) pinned to the left edge, and the HUD bar can be docked at the bottom instead
 // of the top (`--hud-inset-bottom`) — `hudInsetTopPx`/`hudInsetBottomPx` above mirror the bar's real height into
 // whichever edge it occupies now.
