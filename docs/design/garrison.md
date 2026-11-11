@@ -12,3 +12,11 @@
 - Garrisons eat from the stock of their garrison spot, ships included.
 - An army whose home is destroyed (for example a beach camp while its troops are out) gets the nearest garrison spot of its
   owner as its new home.
+
+## Attacks
+
+- Attacks are aimed at buildings, never at a settlement as a whole. An attack on a building with a garrison (longhouse, tower,
+  dock, beach camp) is fought by that building's garrison. An attack on any other building has no fight, unless an army stands
+  on its hex; then that army fights.
+- Loot comes from three buildings: a longhouse or a beach camp (from the whole stock) and a storage house (at most that house's
+  own capacity). A storage house that was looted gives no loot for 24 h.
