@@ -65,7 +65,7 @@ const geometry = computed(() => {
   const hexAt = (rr: number) => fmt([0, 1, 2, 3, 4, 5].map((i) => vertex(i, rr)));
   const hex = [0, 1, 2, 3, 4, 5].map((i) => vertex(i, r));
   // The arc is this outline (from the top vertex, clockwise, closed), drawn `progress` of the way round by its dash offset.
-  const outline = fmt([...hex, hex[0]!]);
+  const outline = `M${hex.map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' L')} Z`;
   const font = props.time ? (14.4 * r) / 27.5 : 13 + (r - 14) * 0.5;
   return { sw, size: 2 * c, c, hex: fmt(hex), hexAt, outline, font, unit: sw / 6 };
 });
@@ -242,7 +242,7 @@ const pending = computed(() => {
     <template v-else>
       <polygon :points="geometry.hex" fill="#0b1720" />
       <polygon :points="geometry.hex" fill="none" :stroke="trackColor" :stroke-opacity="trackOpacity" :stroke-width="geometry.sw" stroke-linejoin="round" />
-      <polyline v-if="arcShown" :ref="setArcEl" class="hud-dial__arc" :points="geometry.outline" pathLength="1" stroke-dasharray="1 1" :stroke-dashoffset="arcOffset" fill="none" :stroke="YELLOW" :stroke-width="geometry.sw" stroke-linecap="round" stroke-linejoin="round" />
+      <path v-if="arcShown" :ref="setArcEl" class="hud-dial__arc" :d="geometry.outline" pathLength="1" stroke-dasharray="1 1" :stroke-dashoffset="arcOffset" fill="none" :stroke="YELLOW" :stroke-width="geometry.sw" stroke-linecap="round" stroke-linejoin="round" />
       <template v-if="pending">
         <polyline v-for="(segment, i) in pending.segments" :key="i" class="hud-dial__sweep" :points="segment" fill="none" :stroke="YELLOW" :stroke-width="pending.width" stroke-linecap="round" stroke-linejoin="round" />
         <template v-if="labelVisible">

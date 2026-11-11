@@ -41,7 +41,7 @@ describe('BuildingHudDial arc', () => {
     wrapper = mount(BuildingHudDial, { props: { radius: 27.5, ring: 'upgrading', ...props } });
     return wrapper;
   };
-  const arc = () => wrapper!.find('polyline.hud-dial__arc');
+  const arc = () => wrapper!.find('path.hud-dial__arc');
 
   it('starts one linear animation of the dash offset from the elapsed share to the full ring, over the remaining time', async () => {
     fake = installFakeAnimate();
@@ -55,6 +55,8 @@ describe('BuildingHudDial arc', () => {
     expect(to!.strokeDashoffset).toBe(0);
     expect(arcs[0]!.timing).toMatchObject({ duration: 90_000, easing: 'linear', fill: 'forwards' });
     // The outline is one hex path of length 1, dashed so that `1 - offset` of it shows.
+    // A closed path from the top vertex, clockwise (not a polyline: WebKit mis-draws dashes on those).
+    expect(arc().attributes('d')).toMatch(/^M[\d.]+,[\d.]+( L[\d.]+,[\d.]+){5} Z$/);
     expect(arc().attributes('pathLength')).toBe('1');
     expect(arc().attributes('stroke-dasharray')).toBe('1 1');
   });

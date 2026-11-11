@@ -255,6 +255,7 @@ describe('BuildingHudLayer', () => {
 
   describe('hover and tap on the box', () => {
     // jsdom has no layout and no ResizeObserver: a stand-in that reports whatever size a test gives the observed box.
+    const observeOptions: (ResizeObserverOptions | undefined)[] = [];
     let observers: { cb: ResizeObserverCallback; targets: Set<Element>; disconnected: boolean }[] = [];
     beforeEach(() => {
       observers = [];
@@ -266,7 +267,8 @@ describe('BuildingHudLayer', () => {
             this.rec.cb = cb;
             observers.push(this.rec);
           }
-          observe(el: Element) {
+          observe(el: Element, options?: ResizeObserverOptions) {
+            observeOptions.push(options);
             this.rec.targets.add(el);
           }
           unobserve(el: Element) {
@@ -418,14 +420,33 @@ describe('BuildingHudLayer', () => {
       expect(hovering()).toEqual([[true], [false]]);
     });
 
+    it('observes the border box and takes its size from the entry, falling back to the layout size', async () => {
+      const renderer = await mountAt(1.5);
+      expect(observeOptions.length).toBeGreaterThan(0);
+      expect(observeOptions.every((o) => o?.box === 'border-box')).toBe(true);
+      // The entry's border-box size (60 x 20) replaces the 100 x 40 the layout reported: the box spans x 180..270 at 1.5.
+      for (const o of observers) {
+        o.cb(
+          [...o.targets].map((target) => ({ target, borderBoxSize: [{ inlineSize: 60, blockSize: 20 }] }) as unknown as ResizeObserverEntry),
+          {} as ResizeObserver,
+        );
+      }
+      renderer.mousePoint = { x: 300, y: 300 };
+      advance();
+      // 300 is beyond the 90 px wide box of 1,0 (it is on 2,0's, which is hovered instead).
+      expect(wrapper!.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain('scale(1.500)');
+    });
+
     it('stops observing a box that goes away and disconnects on unmount', async () => {
       const renderer = await mountAt(1.5);
       expect(observers.length).toBe(1);
-      expect(observers[0]!.targets.size).toBeGreaterThan(0);
+      const observedBox = wrapper!.get('[data-coord="1,0"] .hud-marker__box').element;
+      expect(observers[0]!.targets.has(observedBox)).toBe(true);
       renderer.dialMapScale = 0.8;
       runFrame();
       await wrapper!.vm.$nextTick();
       expect(wrapper!.find('[data-coord="1,0"] .hud-marker__box').exists()).toBe(false);
+      expect(observers[0]!.targets.has(observedBox)).toBe(false);
       wrapper!.unmount();
       wrapper = undefined;
       expect(observers[0]!.disconnected).toBe(true);
@@ -535,7 +556,7 @@ describe('BuildingHudLayer', () => {
     runFrame();
     await wrapper.vm.$nextTick();
     expect(wrapper.find('[data-coord="3,0"] text').exists()).toBe(false);
-    expect(wrapper.find('[data-coord="3,0"] polyline').exists()).toBe(true);
+    expect(wrapper.find('[data-coord="3,0"] path.hud-dial__arc').exists()).toBe(true);
   });
   it('ages the countdown each tick without rebuilding the markers that do not tick', async () => {
     const world = seedBuildings();

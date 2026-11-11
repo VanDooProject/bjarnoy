@@ -316,7 +316,10 @@ function ensureBoxObserver(): ResizeObserver | null {
     for (const entry of entries) {
       const el = entry.target as HTMLElement;
       const key = keyOf(el);
-      if (key && observedBoxes.get(key) === el) boxSizes.set(key, { w: el.offsetWidth, h: el.offsetHeight });
+      if (!key || observedBoxes.get(key) !== el) continue;
+      // The border box: the near / mid padding change resizes it too. Where the entry has no border-box size, the layout size.
+      const size = entry.borderBoxSize?.[0];
+      boxSizes.set(key, size ? { w: size.inlineSize, h: size.blockSize } : { w: el.offsetWidth, h: el.offsetHeight });
     }
   });
   return boxObserver;
@@ -328,7 +331,7 @@ function setBox(key: string, el: unknown) {
     if (previous === el) return;
     if (previous) boxObserver?.unobserve(previous);
     observedBoxes.set(key, el);
-    ensureBoxObserver()?.observe(el);
+    ensureBoxObserver()?.observe(el, { box: 'border-box' });
     return;
   }
   if (previous) boxObserver?.unobserve(previous);
