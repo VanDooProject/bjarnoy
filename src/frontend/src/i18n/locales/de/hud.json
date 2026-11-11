@@ -575,5 +575,8 @@
       "label": "Gebäudeinfo (H)",
       "title": "Gebäudeinfo ein- oder ausblenden (H)"
     }
+  },
+  "panelColumn": {
+    "toggle": "{panel} ein- oder ausblenden"
   }
 }
