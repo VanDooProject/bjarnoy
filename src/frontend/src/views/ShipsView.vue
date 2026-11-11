@@ -134,6 +134,11 @@ const loc = computed(() => String(locale.value));
       <ul class="rules">
         <li>{{ $t('docs.ships.sailing.sea') }}</li>
         <li>{{ $t('docs.ships.sailing.targets') }}</li>
+        <i18n-t keypath="docs.ships.sailing.camp" tag="li" scope="global">
+          <template #camp>
+            <DocsPageLink to="/docs/beach-camp">{{ $t('docs.ships.sailing.campLink') }}</DocsPageLink>
+          </template>
+        </i18n-t>
         <i18n-t keypath="docs.ships.sailing.walls" tag="li" scope="global">
           <template #walls>
             <DocsPageLink to="/docs/walls">{{ $t('docs.ships.sailing.wallsLink') }}</DocsPageLink>

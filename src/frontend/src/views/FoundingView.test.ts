@@ -102,6 +102,13 @@ describe('FoundingView', () => {
     wrapper.unmount();
   });
 
+  it('points the sea section at the beach camp page', async () => {
+    const wrapper = await mountPage();
+
+    expect(wrapper.find('#sea a[href="/docs/beach-camp"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('keeps the admin note from players, even with the stored admin toggle on', async () => {
     useDocsAdminNotes().setEnabled(true);
     const wrapper = await mountPage();

@@ -14,6 +14,7 @@ export type DocsPageId =
   | 'walls'
   | 'training'
   | 'founding'
+  | 'beachCamp'
   | 'realm'
   | 'landMovement'
   | 'ships'
@@ -98,6 +99,7 @@ export const DOCS_GROUPS: DocsGroupEntry[] = [
   group('move', [
     page('training', '/docs/training', 'barracks_SE_level004', 'backdrop', ['founding', 'ships', 'realm']),
     page('founding', '/docs/founding', 'cartworkshop_SE_level004', 'backdrop', ['landMovement', 'wildlifeCamps', 'realm']),
+    page('beachCamp', '/docs/beach-camp', 'cartworkshop_SE_level004', 'backdrop', ['founding', 'ships', 'realm']),
     page('realm', '/docs/realm', 'stavetower_SE_level003', 'backdrop', ['founding', 'walls', 'wildlifeCamps']),
     page('landMovement', '/docs/land-movement', 'riverbridge_SE_level004', 'backdrop', ['walls', 'wildlifeCamps', 'founding']),
     page('ships', '/docs/ships', 'dockyard_SE_level007', 'backdrop', ['shrines', 'walls', 'wildlifeCamps']),

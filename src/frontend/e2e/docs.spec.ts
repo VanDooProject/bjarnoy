@@ -498,6 +498,7 @@ test.describe("docs pages scrolling", { tag: "@g2" }, () => {
     "/docs/production",
     "/docs/training",
     "/docs/founding",
+    "/docs/beach-camp",
     "/docs/realm",
     "/docs/land-movement",
     "/docs/ships",
