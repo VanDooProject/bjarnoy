@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
@@ -10,6 +11,17 @@ public sealed record BattleReportAttackerLine(UnitType Type, int Sent, int Lost,
 
 /// <summary>One unit type's lost/survived counts on the defending side of a battle.</summary>
 public sealed record BattleReportDefenderLine(UnitType Type, int Lost, int Survived);
+
+/// <summary>
+/// The ship fight of a fleet's attack (<see cref="AttackPlan.ShipFight"/>): the attacking ships against all the defending ships.
+/// Present on a <see cref="BattleReport"/> only when the defender had ships to fight.
+/// </summary>
+public sealed record BattleReportShipFight(
+    IReadOnlyList<BattleReportAttackerLine> AttackerLines,
+    IReadOnlyList<BattleReportDefenderLine> DefenderLines,
+    double AttackPower,
+    double DefensePower,
+    BattleWinner Winner);
 
 /// <summary>
 /// The building-damage section of a <see cref="BattleReport"/> (issue #40
@@ -30,17 +42,25 @@ public sealed record BattleReportSiegeLine(
 }
 
 /// <summary>
-/// The immutable, persisted record of one <see cref="BattleResolver.Resolve"/>
-/// call (issue #40 phase 3) — one row per battle, landing in both the
+/// The immutable, persisted record of one attack (issue #40 phase 3) — one row per battle, landing in both the
 /// attacker's and the defender's settlement inbox (see
 /// <c>Infrastructure.Services.BattleReportService</c>'s query, which matches
 /// either side).
 /// </summary>
 /// <remarks>
+/// <para>
+/// A land army fights one fight and a fleet two (<see cref="AttackResolver"/>): the report's own fields
+/// (<see cref="AttackerLines"/>, <see cref="DefenderLines"/>, <see cref="AttackPower"/>, <see cref="DefensePower"/>,
+/// <see cref="LootTaken"/>, <see cref="Siege"/>) are the land fight (the only fight of a land army; empty for a fleet that
+/// fought none), <see cref="ShipFight"/> is the fight at sea, and <see cref="Winner"/> is the whole attack's. A report stored
+/// before ships fought separately has no ship fight and reads exactly as it did.
+/// </para>
+/// <para>
 /// Carries <see cref="Seed"/> alongside every input the resolver took, so the
-/// exact fight can be replayed by calling <see cref="BattleResolver.Resolve"/>
+/// exact fight can be replayed by calling <see cref="AttackResolver.Resolve"/>
 /// again with the same arguments — this is what "a battle must be replayable
 /// from its inputs" (issue #40, §6) means in practice.
+/// </para>
 /// </remarks>
 public sealed record BattleReport
 {
@@ -56,16 +76,21 @@ public sealed record BattleReport
 
     public required Guid DefenderSettlementId { get; init; }
 
+    /// <summary>The land fight's attacking side (a land army's only fight); empty when a fleet fought no land fight.</summary>
     public required IReadOnlyList<BattleReportAttackerLine> AttackerLines { get; init; }
 
+    /// <summary>The land fight's defending side; empty when no land fight happened.</summary>
     public required IReadOnlyList<BattleReportDefenderLine> DefenderLines { get; init; }
 
     public required ResourceAmounts LootTaken { get; init; }
 
+    /// <summary>The land fight's attack power; zero when no land fight happened.</summary>
     public required double AttackPower { get; init; }
 
+    /// <summary>The land fight's defence power; zero when no land fight happened.</summary>
     public required double DefensePower { get; init; }
 
+    /// <summary>The whole attack's winner: the attacker unless a fight was lost (a fight not fought counts as not lost).</summary>
     public required BattleWinner Winner { get; init; }
 
     public required int Seed { get; init; }
@@ -79,22 +104,29 @@ public sealed record BattleReport
     public bool WasRaid { get; init; }
 
     /// <summary>
-    /// The building-damage outcome (issue #40 phase 5), or <see langword="null"/>
-    /// when no catapult damage happened this battle — the attacker lost, no
-    /// catapults survived to fire, or the defender had no buildings to hit.
+    /// The siege engines' building damage (issue #40 phase 5), or <see langword="null"/>
+    /// when none happened this battle — the land fight was lost or not fought, no
+    /// siege engine survived to fire, or the defender had no buildings to hit.
     /// </summary>
     public BattleReportSiegeLine? Siege { get; init; }
 
+    /// <summary>The fight at sea; <see langword="null"/> for a land army and for a fleet whose target had no ships.</summary>
+    public BattleReportShipFight? ShipFight { get; init; }
+
+    /// <summary>The passengers the surviving ships could not carry, drowned.</summary>
+    public IReadOnlyList<UnitStack> Drowned { get; init; } = [];
+
+    /// <summary>The Fire Ships burned by the fire damage.</summary>
+    public int FireShipsBurned { get; init; }
+
+    /// <summary>The Fire Ships' damage to a building standing in the water, or <see langword="null"/> when nothing burned.</summary>
+    public BattleReportSiegeLine? FireSiege { get; init; }
+
     /// <summary>
-    /// Builds the report from a resolved <see cref="BattlePlan"/> plus the
+    /// Builds the report from a resolved <see cref="AttackPlan"/> plus the
     /// identity fields the resolver itself has no reason to know about.
     /// </summary>
-    /// <param name="siege">
-    /// The siege outcome from the same battle, if any was attempted — see
-    /// <see cref="Armies.ArmyArrivalResult.Siege"/>. Reduced to
-    /// <see cref="BattleReportSiegeLine"/> internally; pass <see langword="null"/>
-    /// when no siege resolution happened at all.
-    /// </param>
+    /// <param name="attackerSent">The army as dispatched, at the moment of battle.</param>
     public static BattleReport From(
         Guid id,
         DateTimeOffset occurredAt,
@@ -102,36 +134,29 @@ public sealed record BattleReport
         Guid attackerSettlementId,
         Guid defenderSettlementId,
         IReadOnlyList<UnitStack> attackerSent,
-        BattlePlan plan,
+        AttackPlan attack,
         int seed,
-        SiegeOutcome? siege = null,
         bool wasRaid = false)
     {
         ArgumentNullException.ThrowIfNull(attackerSent);
-        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(attack);
 
-        var lostByType = plan.AttackerLosses.ToDictionary(s => s.Type, s => s.Count);
-        var survivedByType = plan.AttackerSurvivors.ToDictionary(s => s.Type, s => s.Count);
+        var isFleet = ShipCargo.Ships(attackerSent).Count > 0;
 
-        var attackerLines = attackerSent
-            .Select(sent => new BattleReportAttackerLine(
-                sent.Type,
-                sent.Count,
-                lostByType.GetValueOrDefault(sent.Type),
-                survivedByType.GetValueOrDefault(sent.Type)))
-            .ToList();
+        // A land army's land fight carries everyone it sent; a fleet's carries the passengers still aboard when it was fought.
+        var landSent = isFleet ? Army.SubtractStacks(ShipCargo.Passengers(attackerSent), attack.Drowned) : attackerSent;
+        var land = attack.LandFight;
 
-        var defenderSurvivedByType = plan.DefenderSurvivors.ToDictionary(s => s.Type, s => s.Count);
-        var defenderLines = plan.DefenderLosses
-            .Select(lost => new BattleReportDefenderLine(
-                lost.Type, lost.Count, defenderSurvivedByType.GetValueOrDefault(lost.Type)))
-            // A defender stack that took no losses at all (winning defence)
-            // still belongs in the report — add any survivor-only types the
-            // loss list did not already cover.
-            .Concat(plan.DefenderSurvivors
-                .Where(s => !plan.DefenderLosses.Any(l => l.Type == s.Type))
-                .Select(s => new BattleReportDefenderLine(s.Type, Lost: 0, Survived: s.Count)))
-            .ToList();
+        BattleReportShipFight? shipFight = null;
+        if (attack.ShipFight is { } ship)
+        {
+            shipFight = new BattleReportShipFight(
+                AttackerLinesOf(ShipCargo.Ships(attackerSent), ship),
+                DefenderLinesOf(ship),
+                ship.AttackPower,
+                ship.DefensePower,
+                ship.Winner);
+        }
 
         return new BattleReport
         {
@@ -140,15 +165,44 @@ public sealed record BattleReport
             AttackerArmyId = attackerArmyId,
             AttackerSettlementId = attackerSettlementId,
             DefenderSettlementId = defenderSettlementId,
-            AttackerLines = attackerLines,
-            DefenderLines = defenderLines,
-            LootTaken = plan.LootTaken,
-            AttackPower = plan.AttackPower,
-            DefensePower = plan.DefensePower,
-            Winner = plan.Winner,
+            AttackerLines = land is null ? [] : AttackerLinesOf(landSent, land),
+            DefenderLines = land is null ? [] : DefenderLinesOf(land),
+            LootTaken = attack.Loot,
+            AttackPower = land?.AttackPower ?? 0,
+            DefensePower = land?.DefensePower ?? 0,
+            Winner = attack.Winner,
             Seed = seed,
             WasRaid = wasRaid,
-            Siege = BattleReportSiegeLine.From(siege),
+            Siege = BattleReportSiegeLine.From(attack.LandSiege),
+            ShipFight = shipFight,
+            Drowned = attack.Drowned,
+            FireShipsBurned = attack.FireShipsBurned,
+            FireSiege = BattleReportSiegeLine.From(attack.FireSiege),
         };
+    }
+
+    private static List<BattleReportAttackerLine> AttackerLinesOf(IReadOnlyList<UnitStack> sent, BattlePlan fight)
+    {
+        var lostByType = fight.AttackerLosses.ToDictionary(s => s.Type, s => s.Count);
+        var survivedByType = fight.AttackerSurvivors.ToDictionary(s => s.Type, s => s.Count);
+
+        return [.. sent.Select(unit => new BattleReportAttackerLine(
+            unit.Type,
+            unit.Count,
+            lostByType.GetValueOrDefault(unit.Type),
+            survivedByType.GetValueOrDefault(unit.Type)))];
+    }
+
+    private static List<BattleReportDefenderLine> DefenderLinesOf(BattlePlan fight)
+    {
+        var survivedByType = fight.DefenderSurvivors.ToDictionary(s => s.Type, s => s.Count);
+        return [.. fight.DefenderLosses
+            .Select(lost => new BattleReportDefenderLine(lost.Type, lost.Count, survivedByType.GetValueOrDefault(lost.Type)))
+            // A defender stack that took no losses at all (winning defence)
+            // still belongs in the report — add any survivor-only types the
+            // loss list did not already cover.
+            .Concat(fight.DefenderSurvivors
+                .Where(s => !fight.DefenderLosses.Any(l => l.Type == s.Type))
+                .Select(s => new BattleReportDefenderLine(s.Type, Lost: 0, Survived: s.Count)))];
     }
 }

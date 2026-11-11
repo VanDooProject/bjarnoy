@@ -288,11 +288,38 @@ public sealed record BattleReportSiegeResponse(
                 siege.LevelBefore, siege.LevelAfter, siege.SettlementRazed);
 }
 
+/// <summary>The fight at sea of a fleet's attack: its ships against the defender's ships.</summary>
+public sealed record BattleReportShipFightResponse(
+    IReadOnlyList<BattleReportAttackerLineResponse> AttackerLines,
+    IReadOnlyList<BattleReportDefenderLineResponse> DefenderLines,
+    double AttackPower,
+    double DefensePower,
+    string Winner)
+{
+    public static BattleReportShipFightResponse? From(BattleReportShipFight? fight) =>
+        fight is null
+            ? null
+            : new BattleReportShipFightResponse(
+                [.. fight.AttackerLines.Select(l => new BattleReportAttackerLineResponse(l.Type.ToWireName(), l.Sent, l.Lost, l.Survived))],
+                [.. fight.DefenderLines.Select(l => new BattleReportDefenderLineResponse(l.Type.ToWireName(), l.Lost, l.Survived))],
+                fight.AttackPower,
+                fight.DefensePower,
+                fight.Winner.ToString().ToLowerInvariant());
+}
+
 /// <summary>A resolved battle (issue #40 phase 3), as read from either side's inbox.</summary>
 /// <param name="Mission">
 /// <c>"attack"</c> or <c>"raid"</c> (issue #40 phase 7) — which mission fought
 /// this battle; see <see cref="Domain.Armies.ArmyMission.Raid"/>.
 /// </param>
+/// <param name="Winner">The whole attack's winner: <c>"attacker"</c> unless a fight was lost.</param>
+/// <param name="AttackPower">The land fight's attack power (the only fight of a land army); zero when a fleet fought no land fight.</param>
+/// <param name="AttackerLines">The land fight's attacking side; empty when a fleet fought no land fight.</param>
+/// <param name="Siege">The siege engines' building damage after a won land fight.</param>
+/// <param name="ShipFight">The fight at sea of a fleet; <see langword="null"/> for a land army, a target without ships and older reports.</param>
+/// <param name="Drowned">The passengers the surviving ships could not carry.</param>
+/// <param name="FireShipsBurned">The Fire Ships burned by the fire damage.</param>
+/// <param name="FireSiege">The Fire Ships' damage to a building in the water, if any burned.</param>
 public sealed record BattleReportResponse(
     Guid Id,
     DateTimeOffset OccurredAt,
@@ -307,7 +334,11 @@ public sealed record BattleReportResponse(
     ResourceAmountsResponse LootTaken,
     IReadOnlyList<BattleReportAttackerLineResponse> AttackerLines,
     IReadOnlyList<BattleReportDefenderLineResponse> DefenderLines,
-    BattleReportSiegeResponse? Siege)
+    BattleReportSiegeResponse? Siege,
+    BattleReportShipFightResponse? ShipFight,
+    IReadOnlyList<ArmyUnitStackResponse> Drowned,
+    int FireShipsBurned,
+    BattleReportSiegeResponse? FireSiege)
 {
     public static BattleReportResponse From(BattleReportEntity entity)
     {
@@ -328,7 +359,11 @@ public sealed record BattleReportResponse(
             ResourceAmountsResponse.From(domain.LootTaken),
             [.. domain.AttackerLines.Select(l => new BattleReportAttackerLineResponse(l.Type.ToWireName(), l.Sent, l.Lost, l.Survived))],
             [.. domain.DefenderLines.Select(l => new BattleReportDefenderLineResponse(l.Type.ToWireName(), l.Lost, l.Survived))],
-            BattleReportSiegeResponse.From(domain.Siege));
+            BattleReportSiegeResponse.From(domain.Siege),
+            BattleReportShipFightResponse.From(domain.ShipFight),
+            [.. domain.Drowned.Select(d => new ArmyUnitStackResponse(d.Type.ToWireName(), d.Count))],
+            domain.FireShipsBurned,
+            BattleReportSiegeResponse.From(domain.FireSiege));
     }
 }
 

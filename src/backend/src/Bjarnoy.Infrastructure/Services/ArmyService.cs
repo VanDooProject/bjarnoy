@@ -1158,8 +1158,17 @@ public sealed class ArmyService(
 
         var report = BattleReport.From(
             Guid.CreateVersion7(), movement.ArrivesAt, armyEntity.Id, armyEntity.SettlementId, targetId,
-            domain.Stacks, battle, seed, arrival.Siege is { Applied: true } ? arrival.Siege : fireSiege, wasRaid: domain.Mission == ArmyMission.Raid);
+            domain.Stacks, arrival.Attack!, seed, wasRaid: domain.Mission == ArmyMission.Raid);
         _dbContext.BattleReports.Add(BattleReportEntity.FromDomain(report));
+
+        if (fireSiege.Applied)
+        {
+            _logger.LogInformation(
+                "Army {ArmyId}'s fire ships burned {Burned} ship(s) and reduced {TargetType} at ({Q},{R}) in settlement {TargetId} "
+                    + "from level {Before} to {After}.",
+                armyEntity.Id, arrival.Attack!.FireShipsBurned, fireSiege.TargetType, fireSiege.TargetCoord!.Value.Q,
+                fireSiege.TargetCoord.Value.R, targetId, fireSiege.LevelBefore, fireSiege.LevelAfter);
+        }
 
         if (arrival.Siege is { Applied: true } siege)
         {
