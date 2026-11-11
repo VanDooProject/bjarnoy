@@ -75,6 +75,11 @@ public static class WorldEndpoints
             .WithSummary("Every building of rival settlements, standing or under construction, that lies on a hex the caller has explored, of any type (their own buildings excluded).")
             .RequireCallerRealm();
 
+        worlds.MapGet("/{worldId:guid}/own-buildings", GetOwnBuildings)
+            .WithName("GetWorldOwnBuildings")
+            .WithSummary("Every building of every settlement of the caller, standing or under construction, so a client can draw one it has not opened.")
+            .RequireCallerRealm();
+
         worlds.MapGet("/{worldId:guid}/tiles", GetTiles)
             .WithName("GetWorldTiles")
             .WithSummary("Returns the terrain of an axial rectangle of hexes.");
@@ -443,6 +448,40 @@ public static class WorldEndpoints
                     b.Q, b.R, b.Type.ToWireName(), b.Level, sight.Settlement.Id,
                     sight.Settlement.UserId == SystemUserIds.Abandoned ? null : sight.Settlement.UserId,
                     b.OutsideRealmSince is not null))),
+        ];
+
+        return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// Every building of each of the caller's own settlements in the world, one row per hex, same shape as <see cref="GetRivalBuildings"/>.
+    /// No fog gate: they are the caller's own. A client only loads the buildings of the settlement it has open, so this is how it draws
+    /// the others. No resolvable realm or world answers an empty list.
+    /// </summary>
+    private static async Task<Ok<IReadOnlyList<RivalBuildingResponse>>> GetOwnBuildings(
+        Guid worldId,
+        HttpContext httpContext,
+        SettlementService settlements,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome != CallerRealmOutcome.Resolved)
+        {
+            return TypedResults.Ok<IReadOnlyList<RivalBuildingResponse>>([]);
+        }
+
+        var callerUserId = RivalVisibility.CallerUserId(httpContext.User);
+        IReadOnlyList<RivalBuildingResponse> response =
+        [
+            .. (await settlements.GetForWorldAsync(worldId, cancellationToken))
+                .Where(s => RivalVisibility.IsMine(s, realm.OwnerId!, callerUserId))
+                .SelectMany(own => own.Buildings
+                    .OrderBy(b => b.Q).ThenBy(b => b.R)
+                    .Select(b => new RivalBuildingResponse(
+                        b.Q, b.R, b.Type.ToWireName(), b.Level, own.Id,
+                        own.UserId == SystemUserIds.Abandoned ? null : own.UserId,
+                        b.OutsideRealmSince is not null))),
         ];
 
         return TypedResults.Ok(response);

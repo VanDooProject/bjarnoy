@@ -306,6 +306,8 @@ export const api = {
     request<SettlementSummary[]>(`/worlds/${worldId}/settlements`, { headers: ownerHeader(ownerId) }),
   listRivalBuildings: (worldId: string, ownerId?: string) =>
     request<RivalBuilding[]>(`/worlds/${worldId}/rival-buildings`, { headers: ownerHeader(ownerId) }),
+  listOwnBuildings: (worldId: string, ownerId?: string) =>
+    request<RivalBuilding[]>(`/worlds/${worldId}/own-buildings`, { headers: ownerHeader(ownerId) }),
   // `ownerId` becomes the `X-Owner-Id` header the backend's ownership
   // filter reads for an anonymous (unclaimed) settlement — see
   // SettlementOwnershipEndpointFilter. Harmless to omit or send stale for a

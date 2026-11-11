@@ -495,7 +495,7 @@ export interface SettlementSummary {
 /**
  * Mirrors `RivalBuildingResponse` (`GET /worlds/{id}/rival-buildings`): one building of another player's settlement (level 0: under construction) on a
  * hex the caller has explored (every building type, the caller's own settlements left out). `ownerUserId` is null for an anonymous
- * settlement.
+ * settlement. `GET /worlds/{id}/own-buildings` answers the same shape for the caller's own settlements.
  */
 export interface RivalBuilding {
   q: number;
