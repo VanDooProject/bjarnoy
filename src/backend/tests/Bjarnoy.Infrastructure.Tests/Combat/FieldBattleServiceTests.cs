@@ -302,6 +302,34 @@ public sealed class FieldBattleServiceTests : IDisposable
         Assert.Equal(new HexCoord(0, 0), loserTransit.Movement.Path[0]);
     }
 
+    [Fact]
+    public async Task The_force_retreated_loser_keeps_the_provisions_it_carried_at_the_battle()
+    {
+        using var db = CreateContext();
+        var worldId = AddWorld(db);
+        var islandId = AddIsland(db, worldId);
+        var settlementA = AddSettlement(db, worldId, islandId, AddUser(db), -20, 0);
+        var settlementB = AddSettlement(db, worldId, islandId, AddUser(db), 20, 0);
+        var armyA = MakeInTransitArmy(
+            settlementA, [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Axeman, 10));
+        var armyB = MakeInTransitArmy(
+            settlementB, [(2, 0), (1, 0), (0, 0), (-1, 0), (-2, 0)], [0, 1, 2, 3, 4], T0, (UnitType.Spearman, 5));
+        armyB.Provisions = 1000;
+        db.Armies.AddRange(armyA, armyB);
+        await db.SaveChangesAsync(Ct);
+
+        var service = new FieldBattleService(db, NullLogger<FieldBattleService>.Instance);
+        var loadedA = (await LoadAsync(db, armyA.Id, Ct))!;
+        Assert.True(await service.TryResolveAsync(loadedA, loadedA.ToDomain(), T0 + TimeSpan.FromHours(3), Ct));
+        await db.SaveChangesAsync(Ct);
+
+        var loser = (await LoadAsync(db, armyB.Id, Ct))!.ToDomain();
+        var battleAt = ((ArmyLocation.InTransit)loser.Location).Movement.DepartedAt;
+        var burnedBefore = 5 * UnitCatalogue.Get(UnitType.Spearman).UpkeepPerHour * (battleAt - T0).TotalHours;
+        Assert.True(battleAt > T0);
+        Assert.Equal(1000 - burnedBefore, loser.ProvisionsAt(battleAt), 6);
+    }
+
     [Theory]
     [InlineData(1.0, 1000.0)] // provisions already burned to zero at the battle: the whole refill must still arrive
     [InlineData(200.0, 30.0)] // a small refill that leaves room: provisions after = provisions at the battle + the refill

@@ -1576,6 +1576,10 @@ public sealed record Army
     /// exactly like <see cref="Army.SettleArrival"/>'s own post-battle return.
     /// </param>
     /// <param name="fromHex">Where the fight happened — always a hex this army's original route actually passed through.</param>
+    /// <param name="provisionsAtBattle">
+    /// What the army carried at <paramref name="battleInstant"/>, when the caller has already swapped in the survivors (whose smaller upkeep would
+    /// understate the burn so far). Defaults to <see cref="ProvisionsAt"/> of this army.
+    /// </param>
     /// <returns>
     /// <see langword="null"/> only if no route home exists at all — should
     /// not happen in practice for an army that was already mid-journey
@@ -1586,11 +1590,13 @@ public sealed record Army
         DateTimeOffset battleInstant, HexCoord fromHex, HexCoord home, Func<HexCoord, Terrain> terrainAt,
         double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null,
         Func<HexCoord, bool>? isWideRiver = null,
-        WallRules? walls = null)
+        WallRules? walls = null,
+        double? provisionsAtBattle = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
         var isLandUnit = !IsFleet;
+        var provisionsNow = provisionsAtBattle ?? ProvisionsAt(battleInstant);
 
         // No route home is not expected in practice (this army's original
         // route already crossed fromHex), but rather than throw, it is left
@@ -1618,7 +1624,8 @@ public sealed record Army
             RetreatImmune = true,
         };
 
-        return this with { Location = new ArmyLocation.InTransit(retreatMovement) };
+        // The retreat departs at the battle instant, so the stored baseline is what the army carried then.
+        return (this with { Location = new ArmyLocation.InTransit(retreatMovement) }).WithProvisionsAt(battleInstant, provisionsNow);
     }
 
     private static FieldOrderRejection NoRouteRejection(PathSearch search, bool isLandUnit) =>

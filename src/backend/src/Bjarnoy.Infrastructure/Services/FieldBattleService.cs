@@ -303,6 +303,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         };
 
         return afterLosses.ForceFieldRetreat(at, hex, home, loserSampler.TerrainAt, loserSettlement.World.SpeedFactor, rivers.IsRiver, rivers.IsWide,
-            walls.ForOwner(WorldPalisades.OwnerKeyOf(loserSettlement.UserId, loserSettlement.Id)));
+            walls.ForOwner(WorldPalisades.OwnerKeyOf(loserSettlement.UserId, loserSettlement.Id)),
+            provisionsAtBattle: domain.ProvisionsAt(at));
     }
 }
