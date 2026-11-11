@@ -1427,7 +1427,7 @@ public sealed class SettlementService(
         }
 
         settlement.Name = name;
-        session.WriteBack();
+        await session.WriteBackAsync(cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Settlement {Id} was renamed.", settlementId);
