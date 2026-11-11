@@ -13,6 +13,8 @@ const props = defineProps<{
   label?: string;
   /** The label is a countdown (smaller font on near/mid, where it replaces the level). */
   time?: boolean;
+  /** Fades the number in / out when it appears or goes away (far <-> dial); null = it just switches. */
+  labelFade?: ((el: Element, direction: 'in' | 'out', done: () => void) => void) | null;
 }>();
 
 const RING_COLOR: Record<HudRing, string> = { ready: '#5fd08a', blocked: '#e2705f', upgrading: '#fff', max: '#ffd23f' };
@@ -58,6 +60,7 @@ const labelColor = computed(() => (props.ring === 'max' ? GOLD : '#fff'));
     <polygon :points="geometry.hex" fill="#0b1720" />
     <polygon :points="geometry.hex" fill="none" :stroke="trackColor" :stroke-opacity="trackOpacity" :stroke-width="geometry.sw" stroke-linejoin="round" />
     <polyline v-if="geometry.arc" :points="geometry.arc" fill="none" stroke="#ffd23f" :stroke-width="geometry.sw" stroke-linecap="round" stroke-linejoin="round" />
+    <Transition :css="false" @enter="(el, done) => (labelFade ? labelFade(el, 'in', done) : done())" @leave="(el, done) => (labelFade ? labelFade(el, 'out', done) : done())">
     <text
       v-if="label"
       :x="geometry.c"
@@ -73,6 +76,7 @@ const labelColor = computed(() => (props.ring === 'max' ? GOLD : '#fff'));
     >
       {{ label }}
     </text>
+    </Transition>
   </svg>
 </template>
 

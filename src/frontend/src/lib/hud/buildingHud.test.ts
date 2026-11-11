@@ -5,6 +5,8 @@ import {
   HUD_TIER,
   affordableInSeconds,
   buildingHudViewModel,
+  hudOwnedUpgradeKeys,
+  rowsSignature,
   rowsFor,
   stackOrder,
   tierFor,
@@ -282,5 +284,60 @@ describe('stackOrder', () => {
     const markers = [{ x: 2 }, { x: 1 }];
     stackOrder(markers);
     expect(markers[0].x).toBe(2);
+  });
+});
+
+describe('hudOwnedUpgradeKeys', () => {
+  const order = (q: number, over: Partial<BuildOrderResponse> = {}) => ({ q, r: 0, kind: 'build' as const, state: 'building' as const, ...over });
+  const built = (q: number, level: number, type = 'barracks') => ({ q, r: 0, type, level });
+
+  it('owns a running upgrade of a standing building', () => {
+    expect([...hudOwnedUpgradeKeys([order(1)], [built(1, 2)])]).toEqual(['1,0']);
+  });
+
+  it('leaves new builds (level 0 site), queued orders and razes to the canvas dial', () => {
+    const keys = hudOwnedUpgradeKeys(
+      [order(1), order(2, { state: 'waiting' }), order(3, { kind: 'raze' }), order(4)],
+      [built(1, 0), built(2, 3), built(3, 3)],
+    );
+    expect(keys.size).toBe(0);
+  });
+
+  it('leaves walls to the canvas dial since they get no marker', () => {
+    expect(hudOwnedUpgradeKeys([order(1)], [built(1, 1, 'palisade')]).size).toBe(0);
+  });
+});
+
+describe('rowsSignature', () => {
+  const upgrade = (over: Partial<Extract<HudRow, { kind: 'upgrade' }>> = {}): HudRow => ({
+    kind: 'upgrade',
+    state: 'ready',
+    crown: false,
+    requirements: [],
+    moreCount: 0,
+    premiumHint: false,
+    ...over,
+  });
+  const training = (over: Partial<Extract<HudRow, { kind: 'training' }>> = {}): HudRow => ({ kind: 'training', slotsUsed: 1, slotsMax: 5, ...over });
+
+  it('does not change when only a countdown or an amount ticks', () => {
+    const current = (secondsLeft: number, progress: number) => ({ unit: 'spearman', count: 5, secondsLeft, progress });
+    const a = [upgrade(), training({ current: current(60, 0.1) })];
+    const b = [upgrade(), training({ current: current(59, 0.12), slotsUsed: 2 })];
+    expect(rowsSignature('near', a)).toBe(rowsSignature('near', b));
+    const feast = (secondsLeft: number): HudRow => ({ kind: 'feast', secondsLeft, total: 100, renownGain: 5 });
+    expect(rowsSignature('near', [feast(10)])).toBe(rowsSignature('near', [feast(9)]));
+  });
+
+  it('changes when the layout does: a training order starts, the upgrade state flips, the tier differs', () => {
+    const idle = [upgrade(), training()];
+    const busy = [upgrade(), training({ current: { unit: 'spearman', count: 5, secondsLeft: 60, progress: 0 } })];
+    expect(rowsSignature('near', idle)).not.toBe(rowsSignature('near', busy));
+    expect(rowsSignature('near', [upgrade()])).not.toBe(rowsSignature('near', [upgrade({ state: 'upgrading', targetLevel: 3 })]));
+    expect(rowsSignature('near', idle)).not.toBe(rowsSignature('mid', idle));
+  });
+
+  it('is empty after the bar for a tier without a box', () => {
+    expect(rowsSignature('far', [])).toBe('far|');
   });
 });

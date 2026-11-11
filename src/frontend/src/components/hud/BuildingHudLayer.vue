@@ -4,7 +4,7 @@
 // the stores, keeps the markers on their buildings frame by frame (CSS transforms written straight to the elements, like
 // composables/useMapAnchor.ts, no Vue re-render per frame) and owns the toggle (icon button and the H key). A marker is sized
 // like the Pixi progress dial (`dialScale`): it scales with the map, grows to its default-zoom size on hover / tap.
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { buildingName } from '../../i18n/catalogueNames';
@@ -14,11 +14,22 @@ import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { useWorldStore } from '../../stores/world';
 import { builtBuildingLevels, ownBuildings } from '../../composables/useBuildRing';
 import { useIsMobile } from '../../composables/useIsMobile';
+import { boxChangeFor, useBuildingHudMotion, waveDelays, type MarkerParts } from '../../composables/useBuildingHudMotion';
 import type { AxialCoord } from '../../lib/hex/coords';
-import { buildingHudViewModel, rowsFor, stackOrder, tierFor, type BuildingHudViewModel, type HudTier } from '../../lib/hud/buildingHud';
+import {
+  buildingHudViewModel,
+  hudOwnedUpgradeKeys,
+  rowsFor,
+  rowsSignature,
+  stackOrder,
+  tierFor,
+  type BuildingHudViewModel,
+  type HudTier,
+} from '../../lib/hud/buildingHud';
 import { formatCountdownShort } from '../../lib/hud/countdown';
 import { boostContextAt, type BuildingKind } from '../../lib/map/buildingEconomy';
 import { DIAL_TAP_REVEAL_MS, dialHoverStep, dialRadiusPx, dialScale, nextTapReveal, pickTappedDial } from '../../lib/map/constructionDial';
+import { circleIntersectsRect, markerFadeStep, type OcclusionCircle } from '../../lib/map/markerOcclusion';
 import { isWallBuilding } from '../../lib/map/ringCatalogue';
 import { animationPreference } from '../../lib/perf/animationPreference';
 import BuildingHudBox from './BuildingHudBox.vue';
@@ -37,6 +48,10 @@ export interface BuildingHudRenderer {
   readonly hoveredHexKey: string | null;
   /** Touch taps on the map, which still reach the map itself: a tap on a marker's dial reveals it. */
   setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null): void;
+  /** The open ring menu's footprint (canvas px); markers beneath it fade out like the progress dials do. */
+  readonly markerOcclusionCircle: OcclusionCircle | null;
+  /** The hexes whose running-upgrade progress dial the canvas must not draw because a marker shows it; null = draw every dial. */
+  setHudOwnedDials(keys: ReadonlySet<string> | null): void;
 }
 
 const props = defineProps<{ renderer: BuildingHudRenderer | null | undefined }>();
@@ -47,6 +62,10 @@ const auth = useAuthStore();
 const catalogue = useBuildingCatalogueStore();
 const prefs = useHudPrefsStore();
 const isMobile = useIsMobile();
+const motion = useBuildingHudMotion();
+
+/** The markers are in the DOM: from the moment they are switched on until their hide animation has ended. */
+const rendered = ref(prefs.buildingInfo);
 
 /** Every marker's current tier (they differ while one is hovered); the placement loop writes it only when it changes. */
 const tiers = ref<Record<string, HudTier>>({});
@@ -61,6 +80,7 @@ const DIAL_RADIUS = dialRadiusPx(1);
 interface Marker {
   key: string;
   coord: AxialCoord;
+  type: string;
   name: string;
   level: number;
   vm: BuildingHudViewModel;
@@ -68,7 +88,7 @@ interface Marker {
 
 const markers = computed<Marker[]>(() => {
   void world.hud.tick; // the countdowns tick every second
-  if (!prefs.buildingInfo || !world.selectedSettlementId) return [];
+  if (!rendered.value || !world.selectedSettlementId) return [];
   const now = Date.now();
   const sinceQueue = (now - world.hud.queueFetchedAt) / 1000;
   const sinceTraining = (now - world.hud.trainingQueueFetchedAt) / 1000;
@@ -114,7 +134,7 @@ const markers = computed<Marker[]>(() => {
         garrison: world.hud.garrison,
         trainingQueue,
       });
-      return { key: `${b.q},${b.r}`, coord, name: buildingName(b.type), level: b.level, vm };
+      return { key: `${b.q},${b.r}`, coord, type: b.type, name: buildingName(b.type), level: b.level, vm };
     });
 });
 
@@ -169,14 +189,26 @@ const elements = new Map<string, HTMLElement>();
 const lastZ = new Map<string, number>();
 let frame = 0;
 
+/** Ring-menu fade per marker (`markerFadeStep`); absent = fully visible. */
+const visibility = new Map<string, number>();
+/** Markers the placement loop has placed once already; the first frame still settles the tier a marker mounts with. */
+const placedOnce = new Set<string>();
+/** Markers whose first frame is over: only these animate a tier or content change (not the one that sets the tier up). */
+const settled = new Set<string>();
+
 function setElement(key: string, el: unknown) {
   if (el instanceof HTMLElement) elements.set(key, el);
   else {
     elements.delete(key);
     lastZ.delete(key);
     dialDiscs.delete(key);
+    visibility.delete(key);
+    placedOnce.delete(key);
+    settled.delete(key);
   }
 }
+
+const boxOf = (key: string) => elements.get(key)?.querySelector<HTMLElement>('.hud-marker__box') ?? null;
 
 let lastFrameMs = 0;
 
@@ -186,24 +218,52 @@ function tick() {
   const nowMs = Date.now();
   const dtMs = lastFrameMs ? Math.min(100, nowMs - lastFrameMs) : 0;
   lastFrameMs = nowMs;
-  if (!renderer || !prefs.buildingInfo) return;
+  if (!renderer || !rendered.value) return;
   if (tapKey !== null && nowMs - tapAtMs >= DIAL_TAP_REVEAL_MS) tapKey = null;
   const mapScale = renderer.dialMapScale;
   const width = root.value?.offsetWidth ?? window.innerWidth;
   const height = root.value?.offsetHeight ?? window.innerHeight;
+  const circle = renderer.markerOcclusionCircle;
   const placed: { key: string; x: number; hovered: boolean }[] = [];
   let tiersChanged = false;
   const nextTiers: Record<string, HudTier> = {};
   for (const marker of markers.value) {
     const el = elements.get(marker.key);
     if (!el) continue;
+    if (placedOnce.has(marker.key)) settled.add(marker.key);
+    else placedOnce.add(marker.key);
     const { x, y } = renderer.dialScreenPoint(marker.coord);
+    // Beneath an open ring menu a marker fades out and stops reacting, like the progress dials.
+    const vis0 = visibility.get(marker.key) ?? 1;
+    let vis = vis0;
+    let occluded = false;
+    if (circle || vis0 < 1) {
+      const zsNow = dialScale(mapScale, hoverT.get(marker.key) ?? 0).zs;
+      const boxWidth = boxOf(marker.key)?.offsetWidth ?? 0;
+      occluded =
+        circle !== null &&
+        circleIntersectsRect(circle, {
+          x: x - DIAL_HALF * zsNow,
+          y: y - DIAL_HALF * zsNow,
+          w: Math.max(DIAL_HALF, boxWidth) * zsNow + DIAL_HALF * zsNow,
+          h: 2 * DIAL_HALF * zsNow,
+        });
+      vis = markerFadeStep(vis0, occluded, dtMs, animationPreference.reducedMotion);
+      if (vis < 1) visibility.set(marker.key, vis);
+      else visibility.delete(marker.key);
+    }
+    if (vis !== vis0 || el.dataset.occluded !== (occluded ? '1' : '0')) {
+      el.style.opacity = vis < 1 ? vis.toFixed(2) : '';
+      el.dataset.occluded = occluded ? '1' : '0';
+      el.classList.toggle('hud-marker--occluded', occluded || vis < 1);
+    }
     const mouse = renderer.mousePoint;
     const disc = dialRadiusPx(dialScale(mapScale, hoverT.get(marker.key) ?? 0).zs);
     const hovered =
-      tapKey === marker.key ||
-      (mouse !== null && Math.hypot(mouse.x - x, mouse.y - y) <= disc) ||
-      renderer.hoveredHexKey === marker.key;
+      !occluded &&
+      (tapKey === marker.key ||
+        (mouse !== null && Math.hypot(mouse.x - x, mouse.y - y) <= disc) ||
+        renderer.hoveredHexKey === marker.key);
     const t = dialHoverStep(hoverT.get(marker.key) ?? 0, hovered, dtMs, animationPreference.reducedMotion);
     if (t > 0) hoverT.set(marker.key, t);
     else hoverT.delete(marker.key);
@@ -226,6 +286,96 @@ function tick() {
     elements.get(p.key)!.style.zIndex = String(i);
   });
 }
+
+// ---- motion (composables/useBuildingHudMotion.ts) ------------------------------------------------------------------------------
+
+/** Every marker's parts with its wave delay: the distance on screen to the Longhouse's marker. */
+function markerParts(): MarkerParts[] {
+  const renderer = props.renderer;
+  const points = markers.value.map((m) => ({ key: m.key, ...(renderer ? renderer.dialScreenPoint(m.coord) : { x: 0, y: 0 }) }));
+  const longhouse = markers.value.find((m) => m.type === 'longhouse');
+  const origin = points.find((p) => p.key === longhouse?.key) ?? null;
+  const delays = waveDelays(points, origin);
+  return markers.value.flatMap((m) => {
+    const el = elements.get(m.key);
+    if (!el) return [];
+    return [
+      {
+        key: m.key,
+        dial: el.querySelector<HTMLElement>('.hud-marker__dial'),
+        box: el.querySelector<HTMLElement>('.hud-marker__box'),
+        delayMs: delays.get(m.key) ?? 0,
+      },
+    ];
+  });
+}
+
+// Show / hide: a hide keeps the markers in the DOM until it has ended; a toggle while one runs reverses it.
+watch(
+  () => prefs.buildingInfo,
+  async (on) => {
+    if (on) {
+      rendered.value = true;
+      await nextTick();
+      await motion.setShown(true, markerParts());
+    } else {
+      await motion.setShown(false, markerParts());
+      if (!prefs.buildingInfo) rendered.value = false;
+    }
+  },
+);
+
+/** What each marker's box is made of (null until its first frame): a change of it resizes the box, ticking text does not. */
+const signatures = computed(() => {
+  const out: Record<string, string | null> = {};
+  for (const m of markers.value) out[m.key] = tiers.value[m.key] === undefined ? null : rowsSignature(tierOf(m.key), rowsOf(m));
+  return out;
+});
+const hasBox = (signature: string) => !signature.endsWith('|');
+const tierOfSignature = (signature: string) => signature.slice(0, signature.indexOf('|'));
+
+// Runs before the DOM follows: the old size and rows are still there to be taken. A box that appears or goes away is the
+// `<Transition>` below.
+watch(
+  signatures,
+  (next, previous) => {
+    const morphs: { key: string; from: ReturnType<typeof motion.snapshotBox>; change: ReturnType<typeof boxChangeFor> }[] = [];
+    for (const [key, signature] of Object.entries(next)) {
+      const before = previous[key];
+      if (before == null || signature == null || before === signature || !settled.has(key)) continue;
+      if (!hasBox(before) || !hasBox(signature)) continue;
+      morphs.push({ key, from: motion.snapshotBox(boxOf(key)), change: boxChangeFor(tierOfSignature(before), tierOfSignature(signature)) });
+    }
+    if (morphs.length === 0) return;
+    void nextTick(() => {
+      for (const { key, from, change } of morphs) {
+        const box = boxOf(key);
+        if (box) motion.morphBox(box, from, change);
+      }
+    });
+  },
+  { flush: 'pre' },
+);
+
+const keyOf = (el: Element) => el.closest('.hud-marker')?.getAttribute('data-coord') ?? '';
+function boxHook(direction: 'in' | 'out', el: Element, done: () => void) {
+  if (!settled.has(keyOf(el))) return done();
+  if (direction === 'in') motion.unfoldBox(el, done);
+  else motion.foldBox(el, done);
+}
+function labelFade(key: string) {
+  return settled.has(key) ? motion.fadeLabel : null;
+}
+
+// While the HUD shows the dials, the canvas does not draw the running upgrades of existing buildings too.
+watch(
+  [() => props.renderer, rendered, () => world.hud.queue, () => ownBuildings(world), () => world.selectedSettlementId],
+  () => {
+    const on = rendered.value && !!world.selectedSettlementId;
+    props.renderer?.setHudOwnedDials(on ? hudOwnedUpgradeKeys(world.hud.queue, ownBuildings(world).filter((b) => hasMarker(b.type))) : null);
+  },
+  { immediate: true },
+);
 
 // ---- toggle ---------------------------------------------------------------------------------------------------------------
 
@@ -255,6 +405,8 @@ watch(
 );
 onUnmounted(() => {
   cancelAnimationFrame(frame);
+  motion.dispose();
+  props.renderer?.setHudOwnedDials(null);
   window.removeEventListener('keydown', onKeyDown);
   props.renderer?.setTapObserver(null);
 });
@@ -262,8 +414,7 @@ onUnmounted(() => {
 
 <template>
   <div ref="root" class="building-hud">
-    <Transition name="building-hud-fade">
-      <div v-if="prefs.buildingInfo" class="building-hud__markers">
+    <div v-if="rendered" class="building-hud__markers">
         <div v-for="m in markers" :key="m.key" :ref="(el) => setElement(m.key, el)" class="hud-marker" :data-coord="m.key" :data-tier="tierOf(m.key)">
           <div class="hud-marker__inner" :style="innerStyle" role="img" :aria-label="t('hud.buildingHud.markerLabel', { building: m.name, level: m.level })">
             <span class="hud-marker__dial">
@@ -273,15 +424,17 @@ onUnmounted(() => {
                 :progress="m.vm.dial.progress"
                 :label="labelOf(m)"
                 :time="m.vm.dial.kind === 'upgrading'"
+                :label-fade="labelFade(m.key)"
               />
             </span>
-            <div v-if="rowsOf(m).length" class="hud-marker__box" :style="boxStyle(tierOf(m.key))">
-              <BuildingHudBox :rows="rowsOf(m)" :tier="tierOf(m.key) === 'near' ? 'near' : 'mid'" />
-            </div>
+            <Transition :css="false" @enter="(el, done) => boxHook('in', el, done)" @leave="(el, done) => boxHook('out', el, done)">
+              <div v-if="rowsOf(m).length" class="hud-marker__box" :style="boxStyle(tierOf(m.key))">
+                <BuildingHudBox :rows="rowsOf(m)" :tier="tierOf(m.key) === 'near' ? 'near' : 'mid'" />
+              </div>
+            </Transition>
           </div>
         </div>
-      </div>
-    </Transition>
+    </div>
     <button
       type="button"
       class="building-hud__toggle"
@@ -315,14 +468,6 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
 }
-.building-hud-fade-enter-active,
-.building-hud-fade-leave-active {
-  transition: opacity 150ms ease;
-}
-.building-hud-fade-enter-from,
-.building-hud-fade-leave-to {
-  opacity: 0;
-}
 /* The marker is a zero-size anchor at the dial's centre; the placement loop moves and scales it (zs, like the progress dial). */
 .hud-marker {
   position: absolute;
@@ -340,6 +485,9 @@ onUnmounted(() => {
   /* No marker takes the pointer (like the canvas dials): hover, taps, wheel and drags all reach the map. */
   pointer-events: none;
 }
+.hud-marker--occluded .hud-marker__dial {
+  pointer-events: none;
+}
 .hud-marker__dial {
   position: relative;
   z-index: 2;
@@ -354,6 +502,8 @@ onUnmounted(() => {
   justify-content: center;
   box-sizing: border-box;
   overflow: hidden;
+  /* The box folds into / unfolds from the dial's centre line. */
+  transform-origin: left center;
   padding-block: 4px;
   padding-right: 8px;
   background: var(--panel-bg);

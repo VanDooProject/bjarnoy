@@ -13,6 +13,7 @@ import {
   type RingResourceKey,
   type RingStock,
 } from '../map/ringAvailability';
+import { isWallBuilding } from '../map/ringCatalogue';
 import { resolveUpgradeTarget, upgradeBlockers } from './upgradeRules';
 
 // ---- zoom tiers -------------------------------------------------------------------------------------------------------
@@ -348,4 +349,53 @@ export function rowsFor(vm: BuildingHudViewModel, tier: HudTier, opts: { premium
   if (vm.garrison) rows.push({ kind: 'garrison', entries: vm.garrison.slice(0, 4) });
   if (vm.training) rows.push({ kind: 'training', ...vm.training });
   return rows.slice(0, 3);
+}
+
+// ---- hand-over of the upgrade dial ------------------------------------------------------------------------------------
+
+/**
+ * Hex keys (`q,r`) whose running upgrade the HUD marker's dial shows: a 'build' order in state 'building' on a hex that has a
+ * standing building of level 1 or more and gets a marker (no walls). The canvas progress dial skips these
+ * (`skipHudOwnedDials`); a new build (level-0 site), a queued, pending or razing order stays the canvas dial's.
+ */
+export function hudOwnedUpgradeKeys(
+  queue: readonly Pick<BuildOrderResponse, 'q' | 'r' | 'kind' | 'state'>[],
+  buildings: readonly { q: number; r: number; type: string; level: number }[],
+): Set<string> {
+  const standing = new Set<string>();
+  for (const b of buildings) if (b.level >= 1 && !isWallBuilding(b.type)) standing.add(`${b.q},${b.r}`);
+  const keys = new Set<string>();
+  for (const o of queue) {
+    const key = `${o.q},${o.r}`;
+    if (o.kind === 'build' && o.state === 'building' && standing.has(key)) keys.add(key);
+  }
+  return keys;
+}
+
+// ---- structure of a marker's box ---------------------------------------------------------------------------------------
+
+/**
+ * What a box is made of, without the text that ticks: the same string = the same layout, so no resize. A countdown or a
+ * resource amount changing is not a change; another row, another state chip, a training order starting is.
+ */
+export function rowsSignature(tier: HudTier, rows: readonly HudRow[]): string {
+  const part = (row: HudRow): string => {
+    switch (row.kind) {
+      case 'upgrade':
+        return `upgrade:${row.state}:${row.crown ? 1 : 0}:${row.requirements.length}:${row.moreCount}:${row.premiumHint ? 1 : 0}`;
+      case 'production':
+        return `production:${row.production.map((p) => p.resource).join('+')}`;
+      case 'storage':
+        return 'storage';
+      case 'feast':
+        return 'feast';
+      case 'garrison':
+        return `garrison:${row.entries.map((e) => e.unit).join('+')}`;
+      case 'training':
+        return `training:${row.slotsMax}:${row.current ? row.current.unit : '-'}`;
+      case 'compact':
+        return `compact:${row.production?.length ?? '-'}:${row.storage !== undefined ? 1 : 0}:${row.feastSecondsLeft !== undefined ? 1 : 0}:${row.garrisonTotal !== undefined ? 1 : 0}:${row.queue ? 1 : 0}`;
+    }
+  };
+  return `${tier}|${rows.map(part).join('|')}`;
 }

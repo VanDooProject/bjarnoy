@@ -64,6 +64,19 @@ export function constructionDialsFromQueue(queue: BuildOrderResponse[], fetchedA
   return [...byHex.values()].map((e) => e.dial);
 }
 
+/**
+ * The dials the canvas still draws while the building HUD owns some: a running upgrade's dial (its hex key is in `hudOwned`)
+ * is the HUD marker's ring, so the canvas skips it. A finishing dial (its end has passed) still plays its finish animation
+ * here; queued, pending and refused dials never are in `hudOwned`. `null` = building info is off: every dial draws.
+ */
+export function skipHudOwnedDials(dials: ConstructionDial[], hudOwned: ReadonlySet<string> | null, nowMs: number): ConstructionDial[] {
+  if (!hudOwned || hudOwned.size === 0) return dials;
+  return dials.filter((d) => {
+    if (!hudOwned.has(`${d.coord.q},${d.coord.r}`)) return true;
+    return d.endMs !== null && nowMs >= d.endMs;
+  });
+}
+
 /** Elapsed fraction 0..1 of the build at `nowMs`; 0 when timing is unknown. */
 export function dialProgress(d: ConstructionDial, nowMs: number): number {
   if (d.startMs === null || d.endMs === null || d.endMs <= d.startMs) return 0;

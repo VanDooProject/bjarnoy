@@ -5,10 +5,11 @@
 // renderer is a stand-in that only answers the four things the layer reads.
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import BuildingHudLayer, { type BuildingHudRenderer } from './BuildingHudLayer.vue';
 import { useWorldStore } from '../../stores/world';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
+import { installFakeAnimate, type FakeAnimate } from '../../test/fakeAnimate';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
@@ -38,12 +39,15 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null) {
       this.tapObserver = fn;
     },
+    markerOcclusionCircle: null as { x: number; y: number; r: number } | null,
+    setHudOwnedDials: vi.fn(),
     ...overrides,
   };
   return renderer as BuildingHudRenderer & {
     dialMapScale: number;
     keyDrivesMap: ReturnType<typeof vi.fn>;
     mousePoint: { x: number; y: number } | null;
+    markerOcclusionCircle: { x: number; y: number; r: number } | null;
     hoveredHexKey: string | null;
     tapObserver: ((screen: { x: number; y: number }) => void) | null;
   };
@@ -258,6 +262,7 @@ describe('BuildingHudLayer', () => {
     expect(toggle.attributes('aria-pressed')).toBe('true');
     expect(toggle.attributes('aria-label')).toBe('Building info (H)');
     await toggle.trigger('click');
+    await flushPromises();
     expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
     expect(toggle.attributes('aria-pressed')).toBe('false');
     expect(useHudPrefsStore().buildingInfo).toBe(false);
@@ -277,7 +282,7 @@ describe('BuildingHudLayer', () => {
     seedBuildings();
     wrapper = mountLayer(fakeRenderer());
     keyDown('h');
-    await wrapper.vm.$nextTick();
+    await flushPromises();
     expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
     keyDown('H');
     await wrapper.vm.$nextTick();
@@ -324,5 +329,123 @@ describe('BuildingHudLayer', () => {
     await wrapper.vm.$nextTick();
     expect(wrapper.find('[data-coord="3,0"] text').exists()).toBe(false);
     expect(wrapper.find('[data-coord="3,0"] polyline').exists()).toBe(true);
+  });
+  describe('motion and the hand-over of the upgrade dial', () => {
+    let fake: FakeAnimate | undefined;
+    afterEach(() => {
+      fake?.restore();
+      fake = undefined;
+    });
+
+    const upgradeOrder = (q: number, over: Record<string, unknown> = {}) => ({
+      id: `o${q}`,
+      q,
+      r: 0,
+      building: 'barracks',
+      kind: 'build' as const,
+      targetLevel: 3,
+      state: 'building' as const,
+      slotCost: 1,
+      completesAtGameTime: null,
+      completesInSeconds: 600,
+      totalSeconds: 1200,
+      ...over,
+    });
+
+    it('hands the running upgrade of a standing building to the HUD while it shows, and gives it back when it is off', async () => {
+      const world = seedBuildings();
+      world.hud.queue = [upgradeOrder(3), upgradeOrder(2, { state: 'waiting' })];
+      const renderer = fakeRenderer();
+      wrapper = mountLayer(renderer);
+      expect(renderer.setHudOwnedDials).toHaveBeenLastCalledWith(new Set(['3,0']));
+      // A new order on a hex with no building stays the canvas dial's.
+      world.hud.queue = [upgradeOrder(3), upgradeOrder(9)];
+      await wrapper.vm.$nextTick();
+      expect(renderer.setHudOwnedDials).toHaveBeenLastCalledWith(new Set(['3,0']));
+      useHudPrefsStore().setBuildingInfo(false);
+      await flushPromises();
+      expect(renderer.setHudOwnedDials).toHaveBeenLastCalledWith(null);
+      wrapper.unmount();
+      wrapper = undefined;
+    });
+
+    it('keeps the markers until the hide animation has ended, and the canvas dials stay away meanwhile', async () => {
+      const world = seedBuildings();
+      world.hud.queue = [upgradeOrder(3)];
+      fake = installFakeAnimate();
+      const renderer = fakeRenderer();
+      wrapper = mountLayer(renderer);
+      runFrame();
+      useHudPrefsStore().setBuildingInfo(false);
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker')).toHaveLength(4);
+      expect(fake.running().length).toBeGreaterThan(0);
+      expect(renderer.setHudOwnedDials).toHaveBeenLastCalledWith(new Set(['3,0']));
+      fake.finishAll();
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker')).toHaveLength(0);
+      expect(renderer.setHudOwnedDials).toHaveBeenLastCalledWith(null);
+    });
+
+    it('turns around when switched back on mid-animation: the same markers, the running animations reversed', async () => {
+      seedBuildings();
+      fake = installFakeAnimate();
+      wrapper = mountLayer(fakeRenderer());
+      runFrame();
+      const prefs = useHudPrefsStore();
+      prefs.setBuildingInfo(false);
+      await flushPromises();
+      const dials = wrapper.findAll('.hud-marker__dial').map((d) => d.element);
+      const started = fake.animations.length;
+      prefs.setBuildingInfo(true);
+      await flushPromises();
+      expect(fake.animations).toHaveLength(started);
+      expect(fake.animations.every((a) => a.reversed)).toBe(true);
+      fake.finishAll();
+      await flushPromises();
+      expect(wrapper.findAll('.hud-marker__dial').map((d) => d.element)).toEqual(dials);
+      expect(fake.animations.every((a) => a.playState === 'idle')).toBe(true);
+    });
+
+    it('delays each marker by its distance to the Longhouse marker', async () => {
+      seedBuildings();
+      fake = installFakeAnimate();
+      wrapper = mountLayer(fakeRenderer());
+      runFrame();
+      useHudPrefsStore().setBuildingInfo(false);
+      await flushPromises();
+      // The Longhouse is at q 1 (x 180); the tower at q 2 is 80 px away, the barracks at q 3 is 160 px away.
+      const spinDelay = (key: string) =>
+        fake!.animations.find((a) => a.target === wrapper!.get(`[data-coord="${key}"] .hud-marker__dial`).element)!.timing.delay;
+      expect(spinDelay('1,0')).toBe(100);
+      expect(spinDelay('2,0')).toBe(100 + 96);
+      expect(spinDelay('3,0')).toBe(100 + 192);
+    });
+
+    it('fades a marker out beneath an open ring menu and back when it closes', async () => {
+      seedBuildings();
+      const renderer = fakeRenderer();
+      wrapper = mountLayer(renderer);
+      runFrame();
+      const el = () => wrapper!.get<HTMLElement>('[data-coord="3,0"]').element;
+      // Reduced motion is off, the fade takes real frame time: the footprint covers the barracks' dial at x 340.
+      renderer.markerOcclusionCircle = { x: 340, y: 300, r: 30 };
+      vi.useFakeTimers({ toFake: ['Date'] });
+      for (let i = 0; i < 4; i++) {
+        vi.advanceTimersByTime(60);
+        runFrame();
+      }
+      expect(Number(el().style.opacity)).toBe(0);
+      expect(el().classList.contains('hud-marker--occluded')).toBe(true);
+      // Another marker outside the footprint is untouched.
+      expect(wrapper.get<HTMLElement>('[data-coord="1,0"]').element.style.opacity).toBe('');
+      renderer.markerOcclusionCircle = null;
+      for (let i = 0; i < 4; i++) {
+        vi.advanceTimersByTime(60);
+        runFrame();
+      }
+      vi.useRealTimers();
+      expect(el().style.opacity).toBe('');
+    });
   });
 });

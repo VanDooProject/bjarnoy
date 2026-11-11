@@ -3,6 +3,7 @@ import type { BuildOrderResponse } from '../../api/types';
 import { makePendingOrder } from '../hud/pendingBuild';
 import {
   rejectDialAt,
+  skipHudOwnedDials,
   constructionDialsFromQueue,
   DIAL_HOVER_MS,
   DIAL_LABEL_BASE_PX,
@@ -517,5 +518,34 @@ describe('rejectDialAt', () => {
   it('keeps a running build on the hex (an upgrade refused behind it) instead of replacing it', () => {
     const running = { coord: at, startMs: 0, endMs: 9000, state: 'building' as const, queuePosition: null };
     expect(rejectDialAt([other, running], at, 500)).toEqual([other, running]);
+  });
+});
+
+describe('skipHudOwnedDials', () => {
+  const dial = (q: number, over: Partial<ConstructionDial> = {}): ConstructionDial => ({
+    coord: { q, r: 0 },
+    startMs: 0,
+    endMs: 10_000,
+    state: 'building',
+    queuePosition: null,
+    ...over,
+  });
+
+  it('draws every dial while building info is off', () => {
+    const dials = [dial(1), dial(2)];
+    expect(skipHudOwnedDials(dials, null, 5_000)).toBe(dials);
+    expect(skipHudOwnedDials(dials, new Set(), 5_000)).toBe(dials);
+  });
+
+  it('skips the running upgrade the marker shows and keeps the other dials', () => {
+    const owned = dial(1);
+    const newBuild = dial(2);
+    const queued = dial(3, { startMs: null, endMs: null, state: 'queued', queuePosition: 1 });
+    expect(skipHudOwnedDials([owned, newBuild, queued], new Set(['1,0']), 5_000)).toEqual([newBuild, queued]);
+  });
+
+  it('still plays the finish animation of an owned hex once its end has passed', () => {
+    const finishing = dial(1, { endMs: 4_000 });
+    expect(skipHudOwnedDials([finishing], new Set(['1,0']), 5_000)).toEqual([finishing]);
   });
 });

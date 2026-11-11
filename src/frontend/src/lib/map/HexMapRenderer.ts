@@ -55,6 +55,7 @@ import {
   DIAL_REJECT_MS,
   polylinePartial,
   retainFinishingDials,
+  skipHudOwnedDials,
   dialProgress,
   dialRemainingSeconds,
   hexPerimeterPath,
@@ -2254,6 +2255,8 @@ export class HexMapRenderer {
   // Construction progress dials — just stores data, drawn every tick into
   // `highlightLayer` (above the buildings) in settlement mode only.
   private constructionDials: ConstructionDial[] | null = null;
+  /** Hex keys whose running-upgrade dial the building HUD draws instead (`setHudOwnedDials`); null = building info off. */
+  private hudOwnedDials: ReadonlySet<string> | null = null;
   // Fog v2 (docs/design/map-fog-v2.md §2.4/§4): two screen-space Pixi Mesh
   // layers sampling the fetched mask texture through a shared GLSL shader —
   // see fog/FogMaskLayer.ts. blackFogLayer (out-of-sight tint) sits between
@@ -3938,7 +3941,7 @@ export class HexMapRenderer {
   private handleDialTap(screen: { x: number; y: number }): boolean {
     const nowMs = Date.now();
     const mapScale = this.dialMapScale;
-    const targets = (this.constructionDials ?? [])
+    const targets = skipHudOwnedDials(this.constructionDials ?? [], this.hudOwnedDials, nowMs)
       .filter((d) => d.rejectedAtMs === undefined)
       .filter((d) => !this.isDialOccluded(this.dialScreenPoint(d.coord), mapScale))
       .map((d) => {
@@ -5933,7 +5936,7 @@ export class HexMapRenderer {
     const pointer = this.hoverPointer;
     const seen = new Set<string>();
     if (this.tapRevealKey !== null && nowMs - this.tapRevealAtMs >= DIAL_TAP_REVEAL_MS) this.tapRevealKey = null;
-    const placed = live.map((dial) => {
+    const placed = skipHudOwnedDials(live, this.hudOwnedDials, nowMs).map((dial) => {
       const anchor = this.dialScreenPoint(dial.coord);
       // A refused build's dial shakes, flashes red with a cross, then shrinks and fades (dialRejectFrame).
       const reject = dial.rejectedAtMs !== undefined ? dialRejectFrame(nowMs - dial.rejectedAtMs, reduced) : null;
@@ -6465,6 +6468,20 @@ export class HexMapRenderer {
   setConstructionDials(dials: ConstructionDial[] | null) {
     const merged = retainFinishingDials(this.constructionDials ?? [], dials ?? [], Date.now());
     this.constructionDials = merged.length > 0 ? merged : null;
+  }
+
+  /**
+   * While the building HUD is on, its marker dial is the upgrade dial of an existing building: `keys` (`coordKey`) are the
+   * hexes whose running upgrade the canvas must not draw too. New builds, queued, pending, refused and finishing dials still
+   * draw. `null` (building info off) restores every dial.
+   */
+  setHudOwnedDials(keys: ReadonlySet<string> | null) {
+    this.hudOwnedDials = keys;
+  }
+
+  /** The open ring menu's footprint (`setMarkerOcclusion`), read by HTML markers that fade out beneath it like the dials do. */
+  get markerOcclusionCircle(): OcclusionCircle | null {
+    return this.markerOcclusion;
   }
 
   /**
