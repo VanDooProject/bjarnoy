@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { createPinia, setActivePinia } from 'pinia';
 import { computed } from 'vue';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDispatchUnitPicker } from './useDispatchUnitPicker';
 import { useWorldStore } from '../stores/world';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
@@ -46,5 +46,54 @@ describe('useDispatchUnitPicker for a founding convoy', () => {
     world.setDispatchUnitCount('spearman', 6);
     expect(picker.overCapacity.value).toBe(true);
     expect(picker.selectionSendable.value).toBe(false);
+  });
+});
+
+describe('useDispatchUnitPicker for a hunt', () => {
+  function startHuntAt(family: string) {
+    setActivePinia(createPinia());
+    useUnitCatalogueStore().definitions = [
+      unit({ type: 'settler' }),
+      unit({ type: 'spearman' }),
+      unit({ type: 'karve', class: 'ship', cargoSlots: 0, shipSlots: 10 }),
+    ];
+    const world = useWorldStore();
+    vi.spyOn(world.model, 'campAt').mockReturnValue({ family } as ReturnType<typeof world.model.campAt>);
+    world.startDispatchAt({ q: 4, r: -1 }, { mission: 'hunt' });
+    return world;
+  }
+
+  it('a sand camp leaves ships selectable as carriers but needs land troops aboard and enough slots', () => {
+    const world = startHuntAt('sealhaulout');
+    const picker = useDispatchUnitPicker(rows);
+    expect(picker.huntOnSand.value).toBe(true);
+    expect(picker.isRowSelectable('karve')).toBe(true);
+    expect(picker.hasLockedOutUnits.value).toBe(false);
+
+    world.setDispatchUnitCount('karve', 1);
+    expect(picker.sandHuntLacksTroops.value).toBe(true);
+    expect(picker.selectionSendable.value).toBe(false);
+
+    world.setDispatchUnitCount('spearman', 10);
+    expect(picker.sandHuntLacksTroops.value).toBe(false);
+    expect(picker.selectionSendable.value).toBe(true);
+    world.setDispatchUnitCount('spearman', 11);
+    expect(picker.selectionSendable.value).toBe(false);
+  });
+
+  it('a land troop alone may hunt a sand camp', () => {
+    const world = startHuntAt('walrushaulout');
+    const picker = useDispatchUnitPicker(rows);
+    world.setDispatchUnitCount('spearman', 3);
+    expect(picker.selectionSendable.value).toBe(true);
+  });
+
+  it('a land camp other than sand keeps the ships greyed out', () => {
+    startHuntAt('wolfden');
+    const picker = useDispatchUnitPicker(rows);
+    expect(picker.huntOnSand.value).toBe(false);
+    expect(picker.isRowSelectable('karve')).toBe(false);
+    expect(picker.isRowSelectable('spearman')).toBe(true);
+    expect(picker.hasLockedOutUnits.value).toBe(true);
   });
 });

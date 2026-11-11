@@ -54,7 +54,7 @@ const garrisonRows = computed(() =>
 );
 
 const picker = useDispatchUnitPicker(garrisonRows);
-const { isRowSelectable, hasLockedOutUnits } = picker;
+const { isRowSelectable, hasLockedOutUnits, sandHuntLacksTroops } = picker;
 
 function quantityFor(unit: string): number {
   return draft.value?.unitCounts[unit] ?? 0;
@@ -430,6 +430,7 @@ async function confirmFieldOrderClick() {
         </div>
 
         <p v-if="hasLockedOutUnits" class="status-subtext fleet-note">{{ t('hud.armyPanel.huntLandOnlyNote') }}</p>
+        <p v-if="sandHuntLacksTroops" class="status-subtext fleet-note" role="alert">{{ t('apiErrors.rejections.HuntRequiresLandUnits') }}</p>
         <div class="unit-picker">
           <div
             v-for="row in garrisonRows"
