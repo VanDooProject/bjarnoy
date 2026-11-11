@@ -49,8 +49,8 @@
   refinement and review every render
 
 # my gameplay wishes and requirements
-- collect the game wishes, requirements and mechanics I state (e.g. "a realm is taken by destroying its Longhouse", "ships can hit
-  the buildings on a target's shore") in the MD design docs under `docs/design/` — the doc for that topic, or a new one if none fits
+- collect the game wishes, requirements and mechanics I state (e.g. "a realm is taken by destroying its Longhouse", "ships do no
+  damage to buildings on land") in the MD design docs under `docs/design/` — the doc for that topic, or a new one if none fits
 - only things that make sense and are settled (a closed rule, not a half-thought or a question still being discussed)
 - ask me before saving: name the doc and the exact text, and write it only after I say yes
 - write down only what I asked for or decided: no "not planned" / "won't do" entries unless I explicitly list something as a
