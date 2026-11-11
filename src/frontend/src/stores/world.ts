@@ -1414,12 +1414,15 @@ export const useWorldStore = defineStore('world', {
       // Rival buildings ride the same cadence: the settlement list is data-only, so this is the only way the client learns which
       // buildings of another player stand on explored ground (to draw them, offer Siege on their walls and route around them).
       // A failed read keeps the last set.
-      const [summaries, rivalBuildings] = await Promise.all([
+      // The player's own settlements other than the open one come from the same cadence: only the open one's buildings are loaded
+      // with its snapshot, so without this the others stay empty until the player switches to them.
+      const [summaries, rivalBuildings, ownBuildings] = await Promise.all([
         api.listSettlements(this.worldId, this.ownerId ?? undefined),
         api.listRivalBuildings(this.worldId, this.ownerId ?? undefined).catch(() => null),
+        api.listOwnBuildings(this.worldId, this.ownerId ?? undefined).catch(() => null),
       ]);
       this.registerSettlementSummaries(summaries);
-      if (rivalBuildings) this.model.applyRivalBuildings(rivalBuildings);
+      if (rivalBuildings && ownBuildings) this.model.applyRivalBuildings([...rivalBuildings, ...ownBuildings]);
       if (this.worldMapActive) {
         this.model.claimAllTerritory();
       } else {

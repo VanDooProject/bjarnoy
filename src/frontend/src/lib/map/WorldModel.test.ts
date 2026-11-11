@@ -2689,6 +2689,31 @@ describe('WorldModel.applyRivalBuildings', () => {
     expect(model.getTile(own.q, own.r)).toMatchObject({ buildingType: 'palisade', ownerId: settlement.id });
     expect(model.rivalBuildingOwner(own.q, own.r)).toBeUndefined();
   });
+
+  // Regression: the buildings of the player's other settlements were only drawn after the player had opened (switched to) them.
+  it('draws the buildings of an own settlement that was never opened, without treating them as a rival\'s', () => {
+    const model = new WorldModel(20260825);
+    const { settlement: opened } = foundLandedSettlement(model);
+    const other = model.registerSettlement({
+      id: 'own-2', ownerId: 'p1', ownerName: 'Tester', name: 'Second',
+      q: opened.q + 40, r: opened.r, level: 1,
+      resources: { ...opened.resources }, rates: { ...opened.rates },
+      foundedAt: 0, realmId: 'own-2', islandId: opened.islandId,
+    });
+    const at = { q: other.q + 1, r: other.r };
+
+    model.applyRivalBuildings([
+      { ...at, type: 'palisade', level: 2, settlementId: other.id, ownerUserId: null },
+    ]);
+
+    expect(model.getTile(at.q, at.r)).toMatchObject({ buildingType: 'palisade', buildingLevel: 2, ownerId: other.id });
+    // Own, not a rival's: no siege target, and routed as the player's own wall.
+    expect(model.rivalBuildingOwner(at.q, at.r)).toBeUndefined();
+    expect(model.standingPalisadeWalls().get(`${at.q},${at.r}`)?.owner).toBe('p1');
+
+    model.applyRivalBuildings([]);
+    expect(model.getTile(at.q, at.r).buildingType).toBeUndefined();
+  });
 });
 
 // The renderer caches each bog hex's edge geometry, which depends on its neighbours, and throws the cache away when

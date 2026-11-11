@@ -150,6 +150,21 @@ public sealed class RivalBuildingsEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Own_buildings_lists_every_building_of_the_callers_settlements_and_no_rivals()
+    {
+        var (worldId, own, _, client) = await SetUpAsync();
+        using var _ = client;
+        await PlantAsync(worldId, own.IslandId, SystemUserIds.Abandoned, own.Q + 5, own.R, (own.Q + 4, own.R, BuildingType.Farm, 1));
+
+        var buildings = (await client.GetFromJsonAsync<List<RivalBuildingResponse>>(
+            $"/api/v1/worlds/{worldId}/own-buildings", SqliteApiFixture.StrictJson, Ct))!;
+
+        Assert.NotEmpty(buildings);
+        Assert.All(buildings, b => Assert.Equal(own.Id, b.SettlementId));
+        Assert.Contains(buildings, b => b.Type == "longhouse" && b.Q == own.Q && b.R == own.R);
+    }
+
+    [Fact]
     public async Task Is_empty_for_a_caller_with_no_realm()
     {
         var (worldId, own, _, client) = await SetUpAsync();
