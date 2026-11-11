@@ -22,6 +22,7 @@ const getMyTradeOffers = vi.fn();
 const getShipments = vi.fn();
 const getSettlement = vi.fn();
 const claimQuest = vi.fn();
+const renameSettlement = vi.fn();
 const getSettlementView = vi.fn();
 const getFogChunks = vi.fn();
 const decodeChunkPng = vi.fn();
@@ -86,6 +87,7 @@ async function loadStoreModule(demoMode: boolean) {
       getShipments: (...args: unknown[]) => getShipments(...args),
       getSettlement: (...args: unknown[]) => getSettlement(...args),
       claimQuest: (...args: unknown[]) => claimQuest(...args),
+      renameSettlement: (...args: unknown[]) => renameSettlement(...args),
       getSettlementView: (...args: unknown[]) => getSettlementView(...args),
       getFogChunks: (...args: unknown[]) => getFogChunks(...args),
       getPlotSuggestion: (...args: unknown[]) => getPlotSuggestion(...args),
@@ -1530,7 +1532,7 @@ describe('useWorldStore restoreLiveSettlement', () => {
   // Regression: observed live on a preview deployment — a page reload with a
   // stale persisted settlement id (stores/player.ts's bjarnoy.settlementId,
   // for a world/settlement that no longer exists) crashed MapView/
-  // LandingView/ExpansionPanel's mount, because this call had no try/catch
+  // LandingView's mount, because this call had no try/catch
   // at all, unlike refreshLiveSettlement right above.
   it('deselects the settlement and resets onboarding when the backend reports settlement_not_found', async () => {
     const store = await loadStoreModule(false);
@@ -3218,5 +3220,57 @@ describe('useWorldStore confirmFieldOrder from the send picker', () => {
 
     expect(store.fieldOrderDraft?.error).toBe("No land route: mountains and wide rivers can't be crossed.");
     expect(store.sendPicker).not.toBeNull();
+  });
+});
+
+describe('useWorldStore renameSettlement', () => {
+  function register(store: Awaited<ReturnType<typeof loadStoreModule>>) {
+    store.model.registerSettlement({
+      id: 'settlement-1',
+      ownerId: 'player-1',
+      ownerName: 'Astrid',
+      name: "Astrid's realm",
+      q: 0,
+      r: 0,
+      level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: Date.now(),
+    });
+    store.selectedSettlementId = 'settlement-1';
+    store.ownerId = 'player-1';
+    store.syncHud();
+  }
+
+  it('live: puts the name to the backend and shows the name it stored, in the model and the bar', async () => {
+    renameSettlement.mockReset().mockResolvedValue({ name: 'Nyhavn' });
+    const store = await loadStoreModule(false);
+    register(store);
+
+    await store.renameSettlement('  Nyhavn ');
+
+    expect(renameSettlement).toHaveBeenCalledWith('settlement-1', 'Nyhavn', 'player-1');
+    expect(store.model.getSettlement('settlement-1')?.name).toBe('Nyhavn');
+    expect(store.hud.settlementName).toBe('Nyhavn');
+  });
+
+  it('live: a refusal propagates and leaves the name alone', async () => {
+    renameSettlement.mockReset().mockRejectedValue(new Error('nope'));
+    const store = await loadStoreModule(false);
+    register(store);
+
+    await expect(store.renameSettlement('Nyhavn')).rejects.toThrow('nope');
+    expect(store.hud.settlementName).toBe("Astrid's realm");
+  });
+
+  it('demo: renames the local model without a backend call', async () => {
+    renameSettlement.mockReset();
+    const store = await loadStoreModule(true);
+    register(store);
+
+    await store.renameSettlement(' Nyhavn ');
+
+    expect(renameSettlement).not.toHaveBeenCalled();
+    expect(store.hud.settlementName).toBe('Nyhavn');
   });
 });

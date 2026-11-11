@@ -1016,6 +1016,23 @@ export const useWorldStore = defineStore('world', {
       await this.loadRenownLive();
     },
     /**
+     * Renames the selected settlement (free, any time, names need not be unique). Live mode puts the new name to the
+     * backend and takes back the name it stored (trimmed); demo mode has no backend and renames the local model. Either
+     * way the model's name is what `syncHud` reads into `hud.settlementName`, so it changes there too. Throws `ApiError`
+     * on rejection; the caller decides how to surface it.
+     */
+    async renameSettlement(name: string) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      let stored = name.trim();
+      if (!DEMO_MODE) {
+        const response = await api.renameSettlement(this.selectedSettlementId, stored, this.ownerId ?? undefined);
+        stored = response.name;
+      }
+      const settlement = this.model.getSettlement(this.selectedSettlementId);
+      if (settlement) settlement.name = stored;
+      this.syncHud();
+    },
+    /**
      * Claims a completed onboarding quest's resource reward, exactly once
      * (economy.md section 7). Live mode posts to the backend and refreshes the
      * settlement; throws `ApiError` on rejection (not completed, already
@@ -1223,7 +1240,7 @@ export const useWorldStore = defineStore('world', {
       );
     },
     /**
-     * The one settlement switch: the switcher in `ExpansionPanel.vue` and the redirect from a newer member of a linked realm to
+     * The one settlement switch: the realm list in the top bar's settlement menu and the redirect from a newer member of a linked realm to
      * its oldest member both go through it. Points the persisted "current settlement" at `settlementId` and reloads the model.
      */
     async switchToSettlement(settlementId: string) {
