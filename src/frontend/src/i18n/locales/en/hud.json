@@ -557,7 +557,6 @@
   },
   "buildingHud": {
     "upgrade": "Upgrade",
-    "premiumHint": "Premium shows when you can afford it",
     "needsLonghouse": "Longhouse {level}",
     "needsBuilding": "{building} {level}",
     "storage": "Storage full",
@@ -567,7 +566,6 @@
     "perHour": "/h",
     "each": "each",
     "feast": "Feast",
-    "upgradingTo": "To level {level}",
     "markerLabel": "{building}, level {level}",
     "toggle": {
       "label": "Building info (H)",

@@ -2450,6 +2450,8 @@ export class HexMapRenderer {
   private hoveredKey: string | null = null;
   /** Mouse position in canvas px while hovering the canvas (never set for touch/pen); null otherwise. */
   private hoverPointer: { x: number; y: number } | null = null;
+  /** Told of every touch/pen tap on the map (canvas px) without taking it over; see `setTapObserver`. */
+  private tapObserver: ((screen: { x: number; y: number }) => void) | null = null;
   /** Per-dial hover tween progress 0..1 (`dialHoverStep`), keyed by `coordKey`; absent = 0. */
   private dialHover = new Map<string, number>();
   /** Dial revealed by a touch/pen tap (acts as hovered); see `handleDialTap`. */
@@ -3887,6 +3889,7 @@ export class HexMapRenderer {
     if (!screen) return;
     // Touch/pen has no hover: a tap on a construction dial reveals it instead
     // of reaching the tile below. Mouse clicks always go to the tile.
+    if (e.pointerType !== 'mouse') this.tapObserver?.(screen);
     if (e.pointerType !== 'mouse' && this.handleDialTap(screen)) return;
     // While the send picker is open an army's marker is a button: the tap picks (or explains) that army instead of the tile below.
     const armyId = this.pickedArmyAt(screen);
@@ -6434,6 +6437,24 @@ export class HexMapRenderer {
    */
   setRangeOverlay(hexes: AxialCoord[] | null) {
     this.rangeOverlay = hexes && hexes.length > 0 ? hexes : null;
+  }
+
+  /** The mouse in canvas px while it is over the map itself (not over a panel); null for touch and pen. HTML markers hit-test with it. */
+  get mousePoint(): { x: number; y: number } | null {
+    return this.hoverPointer;
+  }
+
+  /** `coordKey` of the hex under the mouse, null when none. */
+  get hoveredHexKey(): string | null {
+    return this.hoveredKey;
+  }
+
+  /**
+   * HTML markers over the map take no pointer input (they would block the map's own hover, taps and ring), so a tap on one
+   * reaches the map as on any tile; this observer is told of the tap's point meanwhile to reveal the marker there.
+   */
+  setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null) {
+    this.tapObserver = fn;
   }
 
   /**

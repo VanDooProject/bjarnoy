@@ -57,11 +57,11 @@ const pct = (fraction: number) => `${(Math.min(1, Math.max(0, fraction)) * 100).
           <span v-if="row.state === 'ready'" class="hud-chip hud-chip--ready"><BuildingHudIcon name="up" />{{ t('hud.buildingHud.upgrade') }}</span>
           <span v-else-if="row.state === 'short'" class="hud-chip hud-chip--short">
             <BuildingHudIcon name="up" />
-            <span v-if="row.premiumHint" class="hud-premium" :title="t('hud.buildingHud.premiumHint')"><BuildingHudIcon name="premium" /></span>
+            <span v-if="row.premiumHint" class="hud-premium"><BuildingHudIcon name="premium" /></span>
             <span v-else class="hud-num">{{ eta(row.affordableInSeconds) }}</span>
           </span>
           <span v-else-if="row.state === 'storage'" class="hud-chip hud-chip--blocked"><BuildingHudIcon name="lock" />{{ t('hud.buildingHud.storage') }}</span>
-          <span v-else-if="row.state === 'upgrading'" class="hud-chip hud-chip--work" :title="t('hud.buildingHud.upgradingTo', { level: row.targetLevel ?? 0 })">{{ `→${row.targetLevel}` }}</span>
+          <span v-else-if="row.state === 'upgrading'" class="hud-chip hud-chip--work">{{ `→${row.targetLevel}` }}</span>
           <span v-else-if="row.state === 'max'" class="hud-chip hud-chip--max"><BuildingHudIcon v-if="row.crown" name="crown" />{{ t('hud.buildingHud.max') }}</span>
         </div>
       </template>
@@ -161,11 +161,6 @@ const pct = (fraction: number) => `${(Math.min(1, Math.max(0, fraction)) * 100).
 .hud-chip--blocked { color: #93a3ae; }
 .hud-chip--work { color: #6fb0e0; }
 .hud-chip--max { color: #ffc55c; }
-.hud-premium,
-.hud-chip--work {
-  /* The box lets the pointer through to the map; these two carry a tooltip. */
-  pointer-events: auto;
-}
 .hud-premium {
   display: inline-flex;
   color: #c79bff;

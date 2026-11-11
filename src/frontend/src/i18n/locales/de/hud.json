@@ -557,7 +557,6 @@
   },
   "buildingHud": {
     "upgrade": "Ausbauen",
-    "premiumHint": "Premium zeigt dir, wann du es dir leisten kannst",
     "needsLonghouse": "Langhaus {level}",
     "needsBuilding": "{building} {level}",
     "storage": "Lager zu klein",
@@ -567,7 +566,6 @@
     "perHour": "/h",
     "each": "je",
     "feast": "Fest",
-    "upgradingTo": "Auf Stufe {level}",
     "markerLabel": "{building}, Stufe {level}",
     "toggle": {
       "label": "Gebäudeinfo (H)",

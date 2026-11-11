@@ -17,3 +17,6 @@
   enlarged.
 - The building info can be switched off (icon button at the top left of the map, or H). While it is on, it replaces the construction dial for upgrades
   of existing buildings.
+- Markers never take mouse or touch input: hover, taps, wheel and drags go to the map under them like on any tile. A marker
+  grows when the mouse is on its dial or its hex, or when a touch taps its dial (the tap still reaches the map). The box
+  text stands on its own, there are no tooltips on it.

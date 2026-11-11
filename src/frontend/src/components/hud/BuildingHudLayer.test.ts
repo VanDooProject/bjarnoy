@@ -31,9 +31,22 @@ function fakeRenderer(overrides: Partial<BuildingHudRenderer> = {}) {
     // The progress dial's map scale: 1 is the size at the settlement's default zoom.
     dialMapScale: 1,
     keyDrivesMap: vi.fn(() => true),
+    // The mouse over the map and the hex under it; a test sets them to hover a marker.
+    mousePoint: null as { x: number; y: number } | null,
+    hoveredHexKey: null as string | null,
+    tapObserver: null as ((screen: { x: number; y: number }) => void) | null,
+    setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null) {
+      this.tapObserver = fn;
+    },
     ...overrides,
   };
-  return renderer as BuildingHudRenderer & { dialMapScale: number; keyDrivesMap: ReturnType<typeof vi.fn> };
+  return renderer as BuildingHudRenderer & {
+    dialMapScale: number;
+    keyDrivesMap: ReturnType<typeof vi.fn>;
+    mousePoint: { x: number; y: number } | null;
+    hoveredHexKey: string | null;
+    tapObserver: ((screen: { x: number; y: number }) => void) | null;
+  };
 }
 
 function mountLayer(renderer: BuildingHudRenderer) {
@@ -158,7 +171,8 @@ describe('BuildingHudLayer', () => {
     expect(el().element.style.transform).toContain('scale(0.500)');
     expect(el().attributes('data-tier')).toBe('far');
 
-    await el().get('.hud-marker__dial').trigger('pointerenter', { pointerType: 'mouse' });
+    // The mouse is on the dial (the marker's dial sits at x 180, y 300): no DOM event, the map's own pointer decides.
+    renderer.mousePoint = { x: 182, y: 302 };
     // Frames are 0 ms apart in the test; the tween needs real time, so step the clock.
     vi.useFakeTimers({ toFake: ['Date'] });
     for (let i = 0; i < 4; i++) {
@@ -173,7 +187,7 @@ describe('BuildingHudLayer', () => {
     // Left-most by x, yet above the markers to its right.
     expect(Number(el().element.style.zIndex)).toBe(3);
 
-    await el().get('.hud-marker__dial').trigger('pointerleave', { pointerType: 'mouse' });
+    renderer.mousePoint = null;
     vi.useFakeTimers({ toFake: ['Date'] });
     for (let i = 0; i < 4; i++) {
       vi.advanceTimersByTime(60);
@@ -189,19 +203,43 @@ describe('BuildingHudLayer', () => {
     wrapper = mountLayer(renderer);
     runFrame();
     vi.useFakeTimers({ toFake: ['Date'] });
-    await wrapper.get('[data-coord="1,0"] .hud-marker__dial').trigger('pointerdown', { pointerType: 'touch' });
+    renderer.tapObserver!({ x: 181, y: 301 });
     for (let i = 0; i < 4; i++) {
       vi.advanceTimersByTime(60);
       runFrame();
     }
     expect(wrapper.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain('scale(1.000)');
-    window.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch' }));
+    renderer.tapObserver!({ x: 600, y: 50 });
     for (let i = 0; i < 4; i++) {
       vi.advanceTimersByTime(60);
       runFrame();
     }
     vi.useRealTimers();
     expect(wrapper.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain('scale(0.500)');
+  });
+
+  it('grows the marker of the hex the mouse is over, even beside its dial', async () => {
+    seedBuildings();
+    const renderer = fakeRenderer({ dialMapScale: 0.5 });
+    wrapper = mountLayer(renderer);
+    renderer.hoveredHexKey = '1,0';
+    vi.useFakeTimers({ toFake: ['Date'] });
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(60);
+      runFrame();
+    }
+    vi.useRealTimers();
+    expect(wrapper.get<HTMLElement>('[data-coord="1,0"]').element.style.transform).toContain('scale(1.000)');
+  });
+
+  it('takes no pointer events itself and stops listening to the map when it goes away', () => {
+    seedBuildings();
+    const renderer = fakeRenderer();
+    wrapper = mountLayer(renderer);
+    expect(renderer.tapObserver).toBeTypeOf('function');
+    wrapper.unmount();
+    wrapper = undefined;
+    expect(renderer.tapObserver).toBeNull();
   });
 
   it('stacks markers by screen x, right-most on top', () => {

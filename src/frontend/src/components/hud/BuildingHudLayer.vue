@@ -4,7 +4,7 @@
 // the stores, keeps the markers on their buildings frame by frame (CSS transforms written straight to the elements, like
 // composables/useMapAnchor.ts, no Vue re-render per frame) and owns the toggle (icon button and the H key). A marker is sized
 // like the Pixi progress dial (`dialScale`): it scales with the map, grows to its default-zoom size on hover / tap.
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { buildingName } from '../../i18n/catalogueNames';
@@ -18,7 +18,7 @@ import type { AxialCoord } from '../../lib/hex/coords';
 import { buildingHudViewModel, rowsFor, stackOrder, tierFor, type BuildingHudViewModel, type HudTier } from '../../lib/hud/buildingHud';
 import { formatCountdownShort } from '../../lib/hud/countdown';
 import { boostContextAt, type BuildingKind } from '../../lib/map/buildingEconomy';
-import { DIAL_TAP_REVEAL_MS, dialHoverStep, dialRadiusPx, dialScale, nextTapReveal } from '../../lib/map/constructionDial';
+import { DIAL_TAP_REVEAL_MS, dialHoverStep, dialRadiusPx, dialScale, nextTapReveal, pickTappedDial } from '../../lib/map/constructionDial';
 import { isWallBuilding } from '../../lib/map/ringCatalogue';
 import { animationPreference } from '../../lib/perf/animationPreference';
 import BuildingHudBox from './BuildingHudBox.vue';
@@ -32,6 +32,11 @@ export interface BuildingHudRenderer {
   readonly dialMapScale: number;
   /** The renderer's own "may this key drive the map" guard (no Ctrl/Meta/Alt, not typing, not covered or locked). */
   keyDrivesMap(e: KeyboardEvent): boolean;
+  /** The mouse over the map in canvas px (null: touch, or over a panel) and the hex under it: what a marker hovers by. */
+  readonly mousePoint: { x: number; y: number } | null;
+  readonly hoveredHexKey: string | null;
+  /** Touch taps on the map, which still reach the map itself: a tap on a marker's dial reveals it. */
+  setTapObserver(fn: ((screen: { x: number; y: number }) => void) | null): void;
 }
 
 const props = defineProps<{ renderer: BuildingHudRenderer | null | undefined }>();
@@ -143,25 +148,18 @@ function labelOf(m: Marker): string {
 
 // ---- hover / tap (like the progress dial: grows to its default-zoom size, comes to the front) --------------------------------
 
-const hoveredKey = ref<string | null>(null);
+// The markers take no pointer input (like the canvas dials they never block the map's hover, tap and ring): hover is the
+// mouse position the map tracks, a tap is reported by the map. Both hit-test the dial's disc.
 let tapKey: string | null = null;
 let tapAtMs = 0;
 const hoverT = new Map<string, number>();
+/** Where each marker's dial is drawn right now (canvas px, radius), for the tap hit test. */
+const dialDiscs = new Map<string, { key: string; cx: number; cy: number; r: number }>();
 
-function onPointerEnter(key: string, e: PointerEvent) {
-  if (e.pointerType !== 'touch') hoveredKey.value = key;
-}
-function onPointerLeave(key: string, e: PointerEvent) {
-  if (e.pointerType !== 'touch' && hoveredKey.value === key) hoveredKey.value = null;
-}
-function onPointerDown(key: string, e: PointerEvent) {
-  if (e.pointerType !== 'touch') return;
-  tapKey = nextTapReveal(tapKey, key);
+/** A tap on a dial reveals it (a second one closes it); a tap elsewhere closes a revealed one. */
+function onMapTap(screen: { x: number; y: number }) {
+  tapKey = nextTapReveal(tapKey, pickTappedDial(screen, [...dialDiscs.values()]));
   tapAtMs = Date.now();
-}
-/** A touch anywhere else closes a tap-revealed marker. */
-function onWindowPointerDown(e: PointerEvent) {
-  if (e.pointerType === 'touch' && !(e.target as Element | null)?.closest?.('.hud-marker')) tapKey = null;
 }
 
 // ---- per-frame placement --------------------------------------------------------------------------------------------------
@@ -176,6 +174,7 @@ function setElement(key: string, el: unknown) {
   else {
     elements.delete(key);
     lastZ.delete(key);
+    dialDiscs.delete(key);
   }
 }
 
@@ -198,7 +197,13 @@ function tick() {
   for (const marker of markers.value) {
     const el = elements.get(marker.key);
     if (!el) continue;
-    const hovered = hoveredKey.value === marker.key || tapKey === marker.key;
+    const { x, y } = renderer.dialScreenPoint(marker.coord);
+    const mouse = renderer.mousePoint;
+    const disc = dialRadiusPx(dialScale(mapScale, hoverT.get(marker.key) ?? 0).zs);
+    const hovered =
+      tapKey === marker.key ||
+      (mouse !== null && Math.hypot(mouse.x - x, mouse.y - y) <= disc) ||
+      renderer.hoveredHexKey === marker.key;
     const t = dialHoverStep(hoverT.get(marker.key) ?? 0, hovered, dtMs, animationPreference.reducedMotion);
     if (t > 0) hoverT.set(marker.key, t);
     else hoverT.delete(marker.key);
@@ -206,7 +211,7 @@ function tick() {
     const tier = tierFor(zs, tiers.value[marker.key] ?? null);
     nextTiers[marker.key] = tier;
     if (tier !== tiers.value[marker.key]) tiersChanged = true;
-    const { x, y } = renderer.dialScreenPoint(marker.coord);
+    dialDiscs.set(marker.key, { key: marker.key, cx: x, cy: y, r: dialRadiusPx(zs) });
     el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${zs.toFixed(3)})`;
     // A marker well off screen is not worth compositing.
     const reach = 320 * zs;
@@ -239,12 +244,19 @@ function onKeyDown(e: KeyboardEvent) {
 onMounted(() => {
   frame = requestAnimationFrame(tick);
   window.addEventListener('keydown', onKeyDown);
-  window.addEventListener('pointerdown', onWindowPointerDown);
+  props.renderer?.setTapObserver(onMapTap);
 });
+watch(
+  () => props.renderer,
+  (next, previous) => {
+    previous?.setTapObserver(null);
+    next?.setTapObserver(onMapTap);
+  },
+);
 onUnmounted(() => {
   cancelAnimationFrame(frame);
   window.removeEventListener('keydown', onKeyDown);
-  window.removeEventListener('pointerdown', onWindowPointerDown);
+  props.renderer?.setTapObserver(null);
 });
 </script>
 
@@ -254,12 +266,7 @@ onUnmounted(() => {
       <div v-if="prefs.buildingInfo" class="building-hud__markers">
         <div v-for="m in markers" :key="m.key" :ref="(el) => setElement(m.key, el)" class="hud-marker" :data-coord="m.key" :data-tier="tierOf(m.key)">
           <div class="hud-marker__inner" :style="innerStyle" role="img" :aria-label="t('hud.buildingHud.markerLabel', { building: m.name, level: m.level })">
-            <span
-              class="hud-marker__dial"
-              @pointerenter="onPointerEnter(m.key, $event)"
-              @pointerleave="onPointerLeave(m.key, $event)"
-              @pointerdown="onPointerDown(m.key, $event)"
-            >
+            <span class="hud-marker__dial">
               <BuildingHudDial
                 :radius="DIAL_RADIUS"
                 :ring="m.vm.dial.ring"
@@ -295,7 +302,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* Fills the map view; only the markers and the switch take the pointer. */
+/* Fills the map view; only the switch takes the pointer. */
 .building-hud {
   position: absolute;
   inset: 0;
@@ -330,11 +337,10 @@ onUnmounted(() => {
   position: absolute;
   display: flex;
   align-items: center;
-  /* Only the dial takes the pointer (like the progress dial); the box lets wheel zoom and drags through to the map. */
+  /* No marker takes the pointer (like the canvas dials): hover, taps, wheel and drags all reach the map. */
   pointer-events: none;
 }
 .hud-marker__dial {
-  pointer-events: auto;
   position: relative;
   z-index: 2;
   display: inline-block;
