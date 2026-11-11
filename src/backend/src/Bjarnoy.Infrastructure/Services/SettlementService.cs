@@ -492,19 +492,7 @@ public sealed class SettlementService(
         double speedFactor,
         CancellationToken cancellationToken = default)
     {
-        // No tile-membership index exists per hex (see IslandEntity's
-        // remarks) — the nearest island by centre is a reasonable, purely
-        // decorative approximation (island name/grouping only; nothing
-        // gameplay-relevant reads a settlement's IslandId today beyond that).
-        var islands = await _dbContext.Islands
-            .Where(i => i.WorldId == worldId)
-            .Select(i => new { i.Id, i.CentreQ, i.CentreR })
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-
-        var islandId = islands
-            .OrderBy(i => coord.DistanceTo(new HexCoord(i.CentreQ, i.CentreR)))
-            .Select(i => i.Id)
-            .FirstOrDefault();
+        var islandId = await NearestIslandIdAsync(worldId, coord, cancellationToken).ConfigureAwait(false);
 
         var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
         production *= speedFactor;
@@ -539,6 +527,82 @@ public sealed class SettlementService(
 
         _logger.LogInformation(
             "Settlement {Name} ({Id}) founded at {Coord} by settler convoy for user {UserId}.",
+            name, settlement.Id, coord, userId);
+
+        return settlement;
+    }
+
+    /// <summary>
+    /// The island whose centre is nearest <paramref name="coord"/>: no tile-membership index exists per hex (see IslandEntity's
+    /// remarks), so a settlement founded off a start position gets the nearest island by centre — a purely decorative
+    /// approximation (island name/grouping only; nothing gameplay-relevant reads a settlement's IslandId beyond that).
+    /// </summary>
+    private async Task<Guid> NearestIslandIdAsync(Guid worldId, HexCoord coord, CancellationToken cancellationToken)
+    {
+        var islands = await _dbContext.Islands
+            .Where(i => i.WorldId == worldId)
+            .Select(i => new { i.Id, i.CentreQ, i.CentreR })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return islands
+            .OrderBy(i => coord.DistanceTo(new HexCoord(i.CentreQ, i.CentreR)))
+            .Select(i => i.Id)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Sets up a beach camp from a camp-builder army that has stood on its site for the whole build time
+    /// (<c>ArmyService.ResolveCampAsync</c> has re-checked the site): a one-hex settlement with a <see cref="BuildingType.BeachCamp"/>
+    /// at its centre and no Longhouse. <paramref name="garrison"/> is what came along (the camp builders are used up) and
+    /// <paramref name="food"/> the army's leftover provisions, which become the camp's food pile (clamped to its capacity). The
+    /// camp's cost was in the army's loot and is consumed. Like a founded settlement it joins the player's linked realm.
+    /// </summary>
+    public async Task<SettlementEntity> FoundCampFromConvoyAsync(
+        Guid worldId,
+        HexCoord coord,
+        Guid userId,
+        string ownerName,
+        string ownerId,
+        string name,
+        IReadOnlyList<UnitStack> garrison,
+        double food,
+        DateTimeOffset completedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var islandId = await NearestIslandIdAsync(worldId, coord, cancellationToken).ConfigureAwait(false);
+
+        // A camp produces nothing, so no speed factor on the (zero) production; it stores BuildingCatalogue.BeachCampStorage of each.
+        var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.BeachCamp, 1)]);
+
+        var settlement = new SettlementEntity
+        {
+            WorldId = worldId,
+            IslandId = islandId,
+            Name = name,
+            OwnerName = ownerName,
+            OwnerId = ownerId,
+            UserId = userId,
+            FoundedAt = completedAt,
+        };
+
+        settlement.ApplyDomain(new Settlement
+        {
+            Id = settlement.Id,
+            Name = name,
+            Centre = coord,
+            Buildings = [new PlacedBuilding(coord, BuildingType.BeachCamp, 1)],
+            Garrison = garrison,
+            Resources = ResourcePool.Create(new ResourceAmounts(0, 0, Math.Max(0, food), 0), production, capacity, completedAt),
+        });
+
+        _dbContext.Settlements.Add(settlement);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // The camp may touch one of the player's realms: it then joins their shared stock.
+        await ReconcileRealmAsync(settlement.Id, cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Beach camp {Name} ({Id}) set up at {Coord} for user {UserId}.",
             name, settlement.Id, coord, userId);
 
         return settlement;

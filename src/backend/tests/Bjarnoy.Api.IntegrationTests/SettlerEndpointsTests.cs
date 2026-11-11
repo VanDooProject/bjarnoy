@@ -5,6 +5,7 @@ using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Settlers;
+using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
@@ -274,10 +275,11 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// The closest sand hex on a shore (a sea neighbour) that a land army can walk to from <paramref name="settlement"/> (a real BFS
-    /// over the world's generated terrain) and nothing stands on yet.
+    /// The closest sand hex on a shore (a sea neighbour), at least <paramref name="minDistance"/> hexes from <paramref name="settlement"/>,
+    /// that a land army can walk to from it (a real BFS over the world's generated terrain) and nothing stands on yet.
     /// </summary>
-    private async Task<TileCoordinate> FindSandShoreTargetAsync(HttpClient client, Guid worldId, SettlementResponse settlement)
+    private async Task<TileCoordinate> FindSandShoreTargetAsync(
+        HttpClient client, Guid worldId, SettlementResponse settlement, int minDistance = 0)
     {
         const int Window = 40;
         var chunk = await client.GetFromJsonAsync<TileChunkResponse>(
@@ -295,6 +297,7 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         {
             var (q, r) = queue.Dequeue();
             if (terrainAt[(q, r)] == "sand" && !occupied.Contains((q, r))
+                && HexDistance(settlement.Q, settlement.R, q, r) >= minDistance
                 && AxialNeighbourOffsets.Any(o => terrainAt.TryGetValue((q + o.Dq, r + o.Dr), out var t) && t == "sea"))
             {
                 return new TileCoordinate(q, r);
@@ -317,15 +320,18 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         return default!;
     }
 
-    /// <summary>Trains the camp builders and dispatches them (with food for the trip and the build wait) at the closest free sand shore.</summary>
+    /// <summary>
+    /// Trains the camp builders and dispatches them (with food for the trip and the build wait) at the closest free sand shore at
+    /// least <paramref name="siteMinDistance"/> hexes away (far enough, and the camp stands alone instead of joining the home realm).
+    /// </summary>
     private async Task<(Guid WorldId, SettlementResponse Settlement, AuthResponse Player, TileCoordinate Site, ArmyResponse Army, AuthResponse Tokens,
         SettlementResponse Before, SettlementResponse After)>
-        DispatchCampBuildersAsync(HttpClient client)
+        DispatchCampBuildersAsync(HttpClient client, int siteMinDistance = 0)
     {
         var (worldId, settlement, player, _) = await SetUpPlayerReadyToExpandAsync(client);
         Authorize(client, player.AccessToken);
         var tokens = await TrainCampBuildersAsync(client, settlement.Id, player.RefreshToken);
-        var site = await FindSandShoreTargetAsync(client, worldId, settlement);
+        var site = await FindSandShoreTargetAsync(client, worldId, settlement, siteMinDistance);
         var before = await client.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
 
@@ -729,5 +735,164 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Contains("WrongCampBuilderCount", await response.Content.ReadAsStringAsync(Ct));
+    }
+
+    /// <summary>Game hours the camp army walks to its site, from the dispatch response.</summary>
+    private static TimeSpan OutboundTime(ArmyResponse army) => army.Movement!.ArrivesAt - army.Movement.DepartedAt;
+
+    /// <summary>Far enough from the home settlement that a camp there does not touch its realm (the biggest claim radius plus the touching ring).</summary>
+    private static readonly int UnlinkedSiteDistance = Settlement.MaxClaimRadius + 3;
+
+    private async Task<int> SettlementCountAsync(Guid worldId)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<GameDbContext>().Settlements.CountAsync(s => s.WorldId == worldId, Ct);
+    }
+
+    private async Task<List<SettlementSummary>> MySettlementsAsync(HttpClient client, Guid worldId) =>
+        (await client.GetFromJsonAsync<List<SettlementSummary>>(
+            $"/api/v1/worlds/{worldId}/settlements/mine", SqliteApiFixture.StrictJson, Ct))!;
+
+    [Fact]
+    public async Task Camp_builders_standing_on_their_site_for_the_build_time_set_up_a_camp_with_the_troops_and_the_leftover_food()
+    {
+        using var client = Client();
+        var (worldId, home, _, site, army, tokens, _, _) = await DispatchCampBuildersAsync(client, siteMinDistance: UnlinkedSiteDistance);
+        var outbound = OutboundTime(army);
+
+        // Arrived, but the camp is not up yet: the army still stands on the site and no settlement exists.
+        _factory.Time.Advance(outbound + TimeSpan.FromMinutes(5));
+        tokens = await RefreshAsync(client, tokens.RefreshToken);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/v1/armies/{army.Id}", Ct)).StatusCode);
+        Assert.Equal(1, await SettlementCountAsync(worldId));
+
+        // Arrival plus the 10 minute build time: the camp is up and the army is consumed.
+        _factory.Time.Advance(TimeSpan.FromMinutes(6));
+        await RefreshAsync(client, tokens.RefreshToken);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/armies/{army.Id}", Ct)).StatusCode);
+
+        var mine = await MySettlementsAsync(client, worldId);
+        Assert.Equal(2, mine.Count);
+        var summary = Assert.Single(mine, s => s.Q == site.Q && s.R == site.R);
+        Assert.Equal(0, summary.LonghouseLevel);
+
+        var camp = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{summary.Id}", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal($"{home.OwnerName}'s Camp", camp!.Name);
+        var centre = Assert.Single(camp.Buildings);
+        Assert.Equal("beachcamp", centre.Type);
+        Assert.Equal((site.Q, site.R), (centre.Q, centre.R));
+        // The two builders are used up; nothing else came along.
+        Assert.Empty(camp.Garrison);
+
+        // The camp's food is what the army had left when the camp was finished: what it set out with, minus what it ate on the
+        // way out and while the camp was built. The 200 wood / 100 brick were spent on the camp, not deposited.
+        var upkeep = army.TotalUpkeepPerHour;
+        var expectedFood = army.Provisions - upkeep * (outbound + BeachCamp.BuildDuration).TotalHours;
+        Assert.InRange(camp.Resources.Stock.Food, expectedFood - 1, expectedFood + 1);
+        Assert.Equal(0, camp.Resources.Stock.Wood);
+        Assert.Equal(0, camp.Resources.Stock.Stone);
+    }
+
+    [Fact]
+    public async Task A_beach_camps_food_pile_is_capped_at_two_thousand()
+    {
+        using var client = Client();
+        var (worldId, home, _, _, _, _, _, _) = await DispatchCampBuildersAsync(client);
+        // Far from the home realm, so the camp keeps a stock of its own.
+        var site = new HexCoord(home.Q + 40, home.R);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var settlements = scope.ServiceProvider.GetRequiredService<SettlementService>();
+        var owner = await scope.ServiceProvider.GetRequiredService<GameDbContext>().Settlements.AsNoTracking().SingleAsync(s => s.Id == home.Id, Ct);
+
+        var camp = await settlements.FoundCampFromConvoyAsync(
+            worldId, site, owner.UserId, owner.OwnerName, owner.OwnerId, "Camp", [], food: 5_000, _factory.Time.GetUtcNow(), Ct);
+
+        Assert.Equal(BuildingCatalogue.BeachCampStorage, camp.ToDomain().Resources.At(_factory.Time.GetUtcNow()).Food);
+    }
+
+    [Fact]
+    public async Task A_camp_touching_the_players_realm_joins_it_like_any_settlement_and_shares_its_stock()
+    {
+        using var client = Client();
+        var (worldId, home, _, site, army, tokens, _, _) = await DispatchCampBuildersAsync(client);
+
+        _factory.Time.Advance(OutboundTime(army) + BeachCamp.BuildDuration + TimeSpan.FromMinutes(1));
+        await RefreshAsync(client, tokens.RefreshToken);
+        // Reading the army settles it (lazy resolve on read).
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/armies/{army.Id}", Ct)).StatusCode);
+
+        Assert.Equal(2, await SettlementCountAsync(worldId));
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var campId = await scope.ServiceProvider.GetRequiredService<GameDbContext>().Settlements.AsNoTracking()
+            .Where(s => s.WorldId == worldId && s.CentreQ == site.Q && s.CentreR == site.R).Select(s => s.Id).SingleAsync(Ct);
+        var camp = await client.GetFromJsonAsync<SettlementResponse>($"/api/v1/settlements/{campId}", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.Equal(home.Id, camp!.RealmId);
+        Assert.Equal(2, camp.LinkedMemberIds.Count);
+        // One entry in the realm switcher: the oldest member's.
+        Assert.Single(await MySettlementsAsync(client, worldId));
+    }
+
+    /// <summary>The army is gone, no camp stands, the builders are home again and the camp's cost is back in the stock.</summary>
+    private async Task AssertCampCancelledAndCostHomeAsync(
+        HttpClient client, Guid worldId, SettlementResponse home, ArmyResponse army, SettlementResponse afterDispatch)
+    {
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/armies/{army.Id}", Ct)).StatusCode);
+        Assert.Equal(1, await SettlementCountAsync(worldId));
+
+        var back = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{home.Id}", SqliteApiFixture.StrictJson, Ct);
+        Assert.Contains(back!.Garrison, g => g.Unit == "campbuilder" && g.Count == BeachCamp.RequiredBuilders);
+        // Production only adds to the stock and the storage cap only clamps it, so "the 200 / 100 are back" holds either way.
+        Assert.True(back.Resources.Stock.Wood >= afterDispatch.Resources.Stock.Wood + 199, "the 200 wood did not come home");
+        Assert.True(back.Resources.Stock.Stone >= afterDispatch.Resources.Stock.Stone + 99, "the 100 brick did not come home");
+    }
+
+    [Fact]
+    public async Task A_camp_site_taken_while_the_army_stands_there_means_no_camp_and_the_army_brings_the_cost_home()
+    {
+        using var client = Client();
+        var (worldId, home, _, site, army, tokens, _, afterDispatch) = await DispatchCampBuildersAsync(client);
+
+        // Someone builds on the hex before the camp is up.
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var owner = await db.Settlements.SingleAsync(s => s.Id == home.Id, Ct);
+            owner.Buildings.Add(new PlacedBuildingEntity { Q = site.Q, R = site.R, Type = BuildingType.Farm, Level = 1 });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        _factory.Time.Advance(OutboundTime(army) + TimeSpan.FromMinutes(11));
+        tokens = await RefreshAsync(client, tokens.RefreshToken);
+        var standing = await client.GetAsync($"/api/v1/armies/{army.Id}", Ct);
+        Assert.Equal(HttpStatusCode.OK, standing.StatusCode);
+        Assert.Equal(1, await SettlementCountAsync(worldId));
+
+        // It stands, auto-returns when its provisions demand it, and comes home.
+        _factory.Time.Advance(TimeSpan.FromDays(10));
+        await RefreshAsync(client, tokens.RefreshToken);
+
+        await AssertCampCancelledAndCostHomeAsync(client, worldId, home, army, afterDispatch);
+    }
+
+    [Fact]
+    public async Task Recalling_the_army_during_the_build_cancels_the_camp_and_the_cost_comes_home()
+    {
+        using var client = Client();
+        var (worldId, home, _, _, army, tokens, _, afterDispatch) = await DispatchCampBuildersAsync(client);
+
+        _factory.Time.Advance(OutboundTime(army) + TimeSpan.FromMinutes(4));
+        tokens = await RefreshAsync(client, tokens.RefreshToken);
+        var recalled = await client.PostAsync($"/api/v1/armies/{army.Id}/recall", null, Ct);
+        Assert.True(recalled.IsSuccessStatusCode, await recalled.Content.ReadAsStringAsync(Ct));
+
+        // Well past arrival plus the build time and the way home: the recalled army never builds.
+        _factory.Time.Advance(TimeSpan.FromDays(10));
+        await RefreshAsync(client, tokens.RefreshToken);
+
+        await AssertCampCancelledAndCostHomeAsync(client, worldId, home, army, afterDispatch);
     }
 }

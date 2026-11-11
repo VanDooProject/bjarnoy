@@ -1010,6 +1010,15 @@ public sealed class ArmyService(
             return await ResolveHuntAsync(army, domain, now, cancellationToken).ConfigureAwait(false);
         }
 
+        // A camp army stands on its site while the camp is built: nothing is due before arrival plus the build time (then it
+        // falls through to the ordinary settle below, which only turns it around once its provisions demand it).
+        if (domain.Mission == ArmyMission.SetUpCamp
+            && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } campTransit
+            && now >= campTransit.Movement.ArrivesAt + BeachCamp.ScaledBuildDuration(army.Settlement!.World!.SpeedFactor))
+        {
+            return await ResolveCampAsync(army, domain, now, cancellationToken).ConfigureAwait(false);
+        }
+
         if (domain.Mission == ArmyMission.Found
             && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } foundTransit
             && now >= foundTransit.Movement.ArrivesAt)
@@ -1364,6 +1373,55 @@ public sealed class ArmyService(
         _logger.LogInformation(
             "Settler convoy (army {ArmyId}) founded settlement {NewSettlementId} at {Coord} for user {UserId}.",
             armyEntity.Id, newSettlement.Id, targetHex, originSettlement.UserId);
+
+        return ArmySettleOutcome.FoldedHome;
+    }
+
+    /// <summary>
+    /// Settles an <see cref="ArmyMission.SetUpCamp"/> army once it has stood on its site for the whole build time: re-checks the
+    /// site as of now (<see cref="BeachCamp.CheckSite"/>, the same facts as at dispatch) and either sets the camp up
+    /// (<see cref="SettlementService.FoundCampFromConvoyAsync"/>, consuming the army: the builders are used up, the cost in its
+    /// <see cref="Army.Loot"/> is spent, the rest garrisons the camp and the leftover provisions fill its food pile) or — when the
+    /// site was taken in the meantime — settles it like <see cref="ResolveFoundingAsync"/>'s fallback: it stands, auto-returns
+    /// and can be recalled, and its loot (the cost) comes home with it.
+    /// </summary>
+    private async Task<ArmySettleOutcome> ResolveCampAsync(
+        ArmyEntity armyEntity, Army domain, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var originSettlement = armyEntity.Settlement!;
+        var world = originSettlement.World!;
+        var site = ((ArmyLocation.InTransit)domain.Location).Movement.Path[^1];
+
+        var sampler = await WorldTerrain.SamplerAsync(_dbContext, world, cancellationToken).ConfigureAwait(false);
+        var giants = await LoadGiantIndexAsync(world.Id, cancellationToken).ConfigureAwait(false);
+        var occupied = await IsCampSiteOccupiedAsync(world.Id, site, now, cancellationToken).ConfigureAwait(false);
+        var siteStillFree = BeachCamp.CheckSite(site, sampler.TerrainAt, giants, hex => occupied && hex == site) == DispatchRejection.None;
+
+        var plan = Army.PlanCampBuild(domain, now, world.SpeedFactor, siteStillFree);
+        if (!plan.ShouldBuild)
+        {
+            // The site was taken: the ordinary Move-shaped settle, never lost.
+            return await ApplyArmyOutcomeAsync(armyEntity, domain, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        var camp = await _settlementService.FoundCampFromConvoyAsync(
+            world.Id,
+            plan.Site,
+            originSettlement.UserId,
+            originSettlement.OwnerName,
+            originSettlement.OwnerId,
+            $"{originSettlement.OwnerName}'s Camp",
+            plan.GarrisonForCamp,
+            plan.FoodForCamp,
+            plan.CompletesAt,
+            cancellationToken).ConfigureAwait(false);
+
+        armyEntity.RecordWalkedToEnd();
+        _dbContext.Armies.Remove(armyEntity);
+
+        _logger.LogInformation(
+            "Camp builders (army {ArmyId}) set up beach camp {CampId} at {Coord} for user {UserId}.",
+            armyEntity.Id, camp.Id, plan.Site, originSettlement.UserId);
 
         return ArmySettleOutcome.FoldedHome;
     }
