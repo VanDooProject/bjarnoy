@@ -246,7 +246,7 @@
       "water": "Water"
     },
     "lore": {
-      "longhouse": "The heart of the settlement. Its level sets the claim radius, the build slots and which buildings unlock, and it produces a little of every resource and adds storage of its own. Every settlement starts with one, standing on grass.",
+      "longhouse": "The heart of the settlement. Its level sets the claim radius, the build slots and which buildings unlock, and it produces a little of every resource and adds storage of its own. Every settlement starts with one, standing on grass or, if it was founded from the sea, on the sand of the shore.",
       "lumberjack": "Fells timber on forested ground — the wood behind every wall and roof.",
       "quarry": "Cuts stone from a mountain ridge — the bones of every keep.",
       "odinstatue": "Odin's statue on grass, at Longhouse 25 behind a level-10 Druid Hut. Wisdom: every build in this settlement takes 2% less time per level (10% at level 5). Ravens: its claim, its towers and its armies see 2 more rings per level (10 at level 5). Counts as the settlement's one shrine.",
