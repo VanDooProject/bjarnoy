@@ -1269,6 +1269,20 @@ export class WorldModel {
     return [...types];
   }
 
+  /** Every building standing on a settlement's claimed hexes (coord, type, level) — the demo's counterpart of the live building list. */
+  listBuildings(settlementId: string): { q: number; r: number; type: string; level: number }[] {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return [];
+    const buildings: { q: number; r: number; type: string; level: number }[] = [];
+    for (const c of this.claimedHexes(settlement)) {
+      const tile = this.getTile(c.q, c.r);
+      if (tile.ownerId === settlementId && tile.buildingType) {
+        buildings.push({ q: c.q, r: c.r, type: tile.buildingType, level: tile.buildingLevel ?? 1 });
+      }
+    }
+    return buildings;
+  }
+
   /**
    * How many of each building type a settlement has standing (by wire name) —
    * `listPlacedBuildings` keeps only the distinct types, but the onboarding
@@ -1440,6 +1454,12 @@ export class WorldModel {
    */
   private isRivalSettlement(settlement: Settlement): boolean {
     return settlement.ownerId === settlement.id;
+  }
+
+  /** Whether the id is one of the player's own registered settlements; false for a rival and for an unknown id. */
+  private isOwnRealm(settlementId: string): boolean {
+    const settlement = this.settlements.get(settlementId);
+    return settlement !== undefined && !this.isRivalSettlement(settlement);
   }
 
   /** `isRivalSettlement` by id; false for an unknown id. */
@@ -1909,21 +1929,24 @@ export class WorldModel {
   }
 
   /** The rival buildings `applyRivalBuildings` last placed, by hex: who owns each (a user id, null for an anonymous settlement) and its settlement. */
-  private rivalBuildings = new Map<string, { settlementId: string; ownerUserId: string | null }>();
+  private rivalBuildings = new Map<string, { settlementId: string; ownerUserId: string | null; own: boolean }>();
 
   /**
-   * Replaces the set of other players' buildings this model knows (live mode: `GET /worlds/{id}/rival-buildings`, which is fog-gated
-   * per hex and leaves the player's own buildings out). Each building is put on its tile the way an own one is (type, level, owning
+   * Replaces the set of buildings this model learns from the world read rather than from an opened settlement (live mode:
+   * `GET /worlds/{id}/rival-buildings`: other players' buildings, fog-gated per hex, plus every building of the player's own
+   * settlements, so one they have not opened yet is drawn too; the hexes of the open settlement, `openSettlementId`, are skipped). Each building is put on its tile the way an own one is (type, level, owning
    * settlement), so the piece it draws, the hit-test and the route rules need nothing special. A building of the previous call that
    * is missing now is cleared; a hex one of the player's own settlements renders is never touched.
    */
   applyRivalBuildings(
     buildings: { q: number; r: number; type: string; level: number; settlementId: string; ownerUserId: string | null; outsideRealm?: boolean }[],
+    openSettlementId: string | null = null,
   ) {
-    const ownRendered = new Set<string>();
-    for (const keys of this.renderedBuildingCoords.values()) for (const key of keys) ownRendered.add(key);
+    // Only the open settlement's snapshot is polled, so only its hexes are left to it; a settlement the player opened earlier and left
+    // is kept current by these rows like any other.
+    const ownRendered = new Set<string>(openSettlementId ? this.renderedBuildingCoords.get(openSettlementId) : []);
 
-    const next = new Map<string, { settlementId: string; ownerUserId: string | null }>();
+    const next = new Map<string, { settlementId: string; ownerUserId: string | null; own: boolean }>();
     const towers = new Map<string, { q: number; r: number; level: number }[]>();
     for (const building of buildings) {
       const key = coordKey({ q: building.q, r: building.r });
@@ -1938,7 +1961,7 @@ export class WorldModel {
       tile.buildingType = building.type as Tile['buildingType'];
       tile.buildingLevel = building.level;
       tile.buildingOutsideRealm = building.outsideRealm === true || undefined;
-      next.set(key, { settlementId: building.settlementId, ownerUserId: building.ownerUserId });
+      next.set(key, { settlementId: building.settlementId, ownerUserId: building.ownerUserId, own: this.isOwnRealm(building.settlementId) });
     }
 
     for (const [key, previous] of this.rivalBuildings) {
@@ -1991,7 +2014,8 @@ export class WorldModel {
    * a rival building `applyRivalBuildings` placed (the player's own, or none). What the siege action's own/friendly check reads.
    */
   rivalBuildingOwner(q: number, r: number): string | null | undefined {
-    return this.rivalBuildings.get(coordKey({ q, r }))?.ownerUserId;
+    const building = this.rivalBuildings.get(coordKey({ q, r }));
+    return building && !building.own ? building.ownerUserId : undefined;
   }
 
   /**
@@ -2050,7 +2074,8 @@ export class WorldModel {
     for (const [key, wall] of this.palisadeIndex()) {
       if (wall.level < 1) continue;
       // A rival wall's owner key is the one the server's PalisadeIndex uses: the account, or the settlement for an anonymous one.
-      const rival = this.rivalBuildings.get(key);
+      const rivalEntry = this.rivalBuildings.get(key);
+      const rival = rivalEntry && !rivalEntry.own ? rivalEntry : undefined;
       const owner = rival
         ? (rival.ownerUserId ?? rival.settlementId)
         : wall.tileOwner

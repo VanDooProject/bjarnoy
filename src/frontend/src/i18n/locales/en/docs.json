@@ -250,7 +250,7 @@
       "lumberjack": "Fells timber on forested ground — the wood behind every wall and roof.",
       "quarry": "Cuts stone from a mountain ridge — the bones of every keep.",
       "odinstatue": "Odin's statue on grass, at Longhouse 25 behind a level-10 Druid Hut. Wisdom: every build in this settlement takes 2% less time per level (10% at level 5). Ravens: its claim, its towers and its armies see 2 more rings per level (10 at level 5). Counts as the settlement's one shrine.",
-      "palisade": "One hex of the settlement's wall, on grass, forest or sand inside its claim, from Longhouse 7 behind a level-5 Tower (the Palisade and its Gate share one tech-tree card). Walls never branch: no hex may end up with three wall neighbours. Which piece draws, a straight, a bend or an end, follows the neighbouring wall hexes. Every wall hex stops every land army, its owner's included; a lone end of a wall (one wall neighbour) is only half open, any army crosses it, only slower, unless it touches a mountain or a wide river. At the coast the wall ends on a shallow-water hex, the sea end, which stays sea. A won siege that targets a wall hex takes one level off it, however many rams survive (on land only rams damage a wall; a fleet sent at the sea end does too); fire will too, later.",
+      "palisade": "One hex of the settlement's wall, on grass, forest or sand inside its claim, from Longhouse 7 behind a level-5 Tower (the Palisade and its Gate share one tech-tree card). Walls never branch: no hex may end up with three wall neighbours. Which piece draws, a straight, a bend or an end, follows the neighbouring wall hexes. Every wall hex stops every land army, its owner's included; a lone end of a wall (one wall neighbour) is only half open, any army crosses it, only slower, unless it touches a mountain or a wide river. At the coast the wall ends on a shallow-water hex, the sea end, which stays sea. A won siege that targets a wall hex takes one level off it, however many rams survive (on land only rams damage a wall; at the sea end a Fire Ship does); fire will too, later.",
       "palisadegate": "A wall hex with a gate, only where the wall runs straight between two opposite wall hexes. Its owner's armies and their friends' (the same guild, or a guild at peace with it) pass it as quickly as the ground under it; every other army is stopped like at any wall hex. Same unlock, prerequisite, levels and cost as the Palisade, on one tech-tree card.",
       "bridge": "Opens a wide river to land armies. A causeway first, then a footbridge, the king's bridge, and a guarded bridge with forts that only you and your friends may cross. Attackers burn a guarded bridge down a level at a time.",
       "siegeworkshop": "Trains the siege engines on grass: catapults, once a Barracks-trained berserker line stands, and battering rams. Unlocks at Longhouse 18 behind a level-3 Archery range. Rams are the only engine that breaches walls (they hit towers too); catapults burn towers and every other building.",
@@ -567,7 +567,7 @@
       "respawn": "A cleared camp refills only while its hex lies outside every realm. An empty camp inside a realm stays empty; when the building on it is gone and the hex is outside every realm, the camp comes back.",
       "neverBuilt": "The eagle's eyrie on its sea stack and Fenrir's brood in the wastes are never built on: the empty nest stays on the map, and Fenrir's brood keeps coming back.",
       "atSea": "The whale road lies on open sea, far off the coast. It holds no land and burns no towers. A fleet that sails onto its hex while it is not calm is ambushed there, and only ships can hunt it. It pays food only, as much as your surviving ships can carry, and always comes back after you clear it.",
-      "hunting": "Hunting: send land units (ships for the whale road) to a camp's hex with the Hunt order. Your army attack is fought against the beasts' defense, a tie goes to the camp. The loser loses everything, the winner part of its force. A win clears the camp and pays its loot.",
+      "hunting": "Hunting: send land units (ships for the whale road) to a camp's hex with the Hunt order. A fleet can hunt a seal or walrus haul-out on the beach only with land troops aboard: they do the fighting. Your army attack is fought against the beasts' defense, a tie goes to the camp. The loser loses everything, the winner part of its force. A win clears the camp and pays its loot.",
       "regrowth": "Regrowth: a damaged camp regrows its beasts evenly over 4 hours (weak camps) or 8 hours (strong camps).",
       "calm": "Calm: after any fight a camp is calm for 24 hours. It regrows but does not attack.",
       "leveling": "Leveling: every 10th clear of a camp, by any player, raises its level by 1, up to 100. It never drops back. Its guard range stays as rolled, so a farmed camp gets tougher but does not claim more land.",
@@ -924,10 +924,10 @@
     },
     "sieges": {
       "heading": "Sieges",
-      "body": "A wall can be breached, one level at a time. Battering rams do it, and so does a fleet, but only as part of an attack on the settlement the wall belongs to. Catapults cannot damage a wall; they burn towers and every other building.",
+      "body": "A wall can be breached, one level at a time. Battering rams do it, and so does a Fire Ship at a wall's sea end, but only as part of an attack on the settlement the wall belongs to. Catapults cannot damage a wall; they burn towers and every other building.",
       "rules": {
         "who": "Send an attack (or a raid) with rams at the settlement and name the wall hex as the target when you send it. On a rival's wall, the Siege action in the ring menu does this for you (it needs a ram at home). If your army wins the battle, the rams that survived strike that hex. One surviving ram is enough; an army that loses the battle strikes nothing. Rams are trained at the Siege Workshop.",
-        "ships": "A fleet's won fight damages the building it was sent at in the same way, the sea end of a wall included. It takes one level off a wall hex then too.",
+        "ships": "Ships do no damage to buildings on land. A Fire Ship sent at a wall's sea end burns up there if your ships win the ship fight, and takes one level off it.",
         "target": "If you name no target, or the building you named is gone by the time your army arrives, the siege hits a random building of that settlement instead, chosen among the buildings your surviving siege engines can damage. A wall named for catapults alone takes no damage.",
         "level": "A won siege takes exactly one level off a wall hex, the gate included, however many rams survive. Most buildings lose several levels at once to a strong army; a wall is breached a level at a time. A palisade or gate has {levels} levels, so a fully built wall hex takes {levels} won sieges. A damaged wall still stops armies until its last level is gone.",
         "gone": "At level 0 the wall hex is gone: its hex is free ground again and armies walk through it. Any build order still queued for that hex is dropped.",
@@ -1083,7 +1083,7 @@
     },
     "sea": {
       "heading": "Founding by sea",
-      "body": "Add ships from your home garrison to the five settlers and the convoy sails. It leaves from your {dockyard} and lands on the hex you chose: a land hex next to the sea, usually a beach. On the map, tap a free hex on the coast and choose Land here.",
+      "body": "Add ships from your home garrison to the five settlers and the convoy sails. It leaves from your {dockyard} and lands on the hex you chose: a sand hex next to the sea. On the map, tap a free hex on the coast and choose Land here.",
       "slots": "Each settler takes 1 slot aboard, so one Karve carries all five and still has room for escorts. If the troops need more slots than the ships have, the convoy cannot set out. The slots of every unit are on the {ships} page.",
       "speed": "At sea the convoy moves at the speed of its slowest ship. The settlers do not slow it down.",
       "camps": "Land camps never ambush a convoy at sea. The whale road does (see {camps}).",
@@ -1262,7 +1262,7 @@
     },
     "sendOut": {
       "heading": "Sending an army that is already out",
-      "orders": "Tap Send army here, Attack, Support or Hunt on a hex and pick the army to send: your garrison or an army that is already out. A standing army can move, attack, support or hunt. An army still on the march can be redirected with Premium. While you pick, tap another hex to aim at that one instead.",
+      "orders": "Tap Send army here, Attack, Support or Hunt on a hex and pick the army to send: your garrison or an army that is already out. A standing army can move, attack, support or hunt. An army still on the march can be redirected with Premium. While you pick, tap another hex to aim at that one instead. Attacking a settlement means attacking a building in its realm: a building with a garrison is defended by it. Supporting a settlement means joining one of its garrisons.",
       "split": "You can send only part of a standing army. The rest keeps standing where it is. An army on the march always goes whole.",
       "reach": "An army only goes if it can get there and still has the food for the way home. The ones that cannot stay in the list, greyed out, with the reason.",
       "support": "An army that is supporting another settlement has to be recalled first."
@@ -1326,7 +1326,7 @@
     "sailing": {
       "heading": "At sea",
       "sea": "Ships sail on the sea only. Coastal and open water cost the same, and bog lakes are closed to them.",
-      "targets": "A fleet can attack, raid or support settlements that hold shoreline.",
+      "targets": "A fleet can attack, raid or support settlements that hold shoreline. Attacking a settlement means attacking a building in its realm; supporting it means joining one of its garrisons.",
       "walls": "{walls} do not stop fleets.",
       "wallsLink": "Walls",
       "camps": "Land camps never ambush a fleet. The whale road, a camp on open sea, ambushes a fleet that sails onto its hex (see {camps}).",
@@ -1337,17 +1337,17 @@
       "slots": "Ships carry land troops in slots. Each ship has room for a number of slots (see the table above) and every unit takes some (table below).",
       "anyTrip": "A fleet can take troops on any trip: attack, raid, support, founding or hunting. If the troops need more slots than the ships have, the fleet cannot set out.",
       "speed": "A fleet moves at the speed of its slowest ship. The troops aboard do not slow it, and they eat from the fleet's provisions.",
-      "fight": "Troops aboard do not fight, neither in a fleet attack nor in an ambush at sea.",
-      "drown": "When ships are lost, the troops the remaining ships cannot carry drown. The biggest units go first.",
+      "fight": "Troops aboard do not take part in the ship fight. In the land fight that follows, they fight from on board, siege engines included. In an ambush at sea only the ships fight. Troops leave the ships only at a beach camp or at your own Dockyard.",
+      "drown": "When ships are lost, the troops the remaining ships cannot carry drown. The biggest units go first. After a ship fight this happens before the land fight.",
       "unit": "Unit",
       "unitSlots": "Slots"
     },
     "battles": {
       "heading": "Battles",
       "same": "Fleets fight by the same rules as armies on land: attack against defence, and a tie goes to the defender.",
-      "shipsOnly": "Only ships fight, and only the ones at the spot you attack. On both sides, land troops stay out of it: the troops aboard your ships, and the land garrison of the settlement you attack. Your ships at home defend your Dockyard (or your Longhouse, if it stands on the shore); allied fleets defend your Longhouse. Anywhere else on your shore, an attacking fleet meets no ships: there is no fight, the fleet wins and goes straight for the building.",
-      "shore": "You send a fleet at one building on the enemy's shore: a building on a shoreline hex or on coastal water, inside the settlement's claim. The fleet sails to that building and the fight happens there. The settlement's Longhouse can stand inland.",
-      "damage": "If the fleet wins, it damages that building, and the more of your ships survive the fight, the more levels it loses. Nothing else of the settlement is hit. If the building is gone when the fleet arrives, nothing is damaged.",
+      "shipsOnly": "An attack is two fights: first ships against ships, then land troops against land troops. Ships and land troops never fight each other. Your ships at home defend your Dockyard (or your Longhouse, if it stands on sand at the shore), and allied fleets fight alongside them. If the target has no ships, the ship fight is skipped and counts as won. If you lose the ship fight, there is no land fight.",
+      "shore": "Ships do no damage to buildings on land. Only the Fire Ship damages buildings, and only those in the water: a Dockyard, a Fishing Hut, the Shrine of Njörd and a wall's sea end. It burns up doing so: 10 Fire Ships take one level off, and a building never loses more levels than a won siege allows.",
+      "damage": "Loot needs a won land fight: an attack on a building in the water (a Dockyard, a Fishing Hut, the Shrine of Njörd, a wall's sea end) is a ship fight only and takes no loot, since the troops aboard can't reach it. Buildings on land are damaged only by the siege engines aboard (catapults, rams), in the land fight.",
       "tower": "A defending settlement's {tower} adds {percent}% defence per level.",
       "njord": "The {shrine} raises your ships' attack by {low}% at level 1, up to {high}% at level 5. See {shrines}.",
       "shrinesLink": "Shrines"

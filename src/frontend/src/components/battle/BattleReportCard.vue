@@ -6,7 +6,15 @@
 // shape deliberately mirrors BattleReportResponse's.
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { BattleReportAttackerLine, BattleReportDefenderLine, BattleReportSiege, ResourceLine } from '../../api/types';
+import type {
+  ArmyUnitStackResponse,
+  BattleReportAttackerLine,
+  BattleReportDefenderLine,
+  BattleReportShipFight,
+  BattleReportSiege,
+  ResourceLine,
+} from '../../api/types';
+import BattleFightSection from './BattleFightSection.vue';
 import type { MessageSchema } from '../../i18n/schema';
 import { resourceName, unitName } from '../../i18n/catalogueNames';
 import { isVictoryFor, missionLabel, outcomeLabel, siegeSummaryLine, totalLoot } from '../../lib/units/battleReports';
@@ -25,6 +33,12 @@ export interface BattleReportCardData {
   attackerLines: BattleReportAttackerLine[];
   defenderLines: BattleReportDefenderLine[];
   siege: BattleReportSiege | null;
+  /** A fleet's fight at sea; absent or null for a land army, a target without ships and older reports. */
+  shipFight?: BattleReportShipFight | null;
+  /** The passengers the surviving ships could not carry. */
+  drowned?: ArmyUnitStackResponse[];
+  fireShipsBurned?: number;
+  fireSiege?: BattleReportSiege | null;
 }
 
 const props = defineProps<{
@@ -41,6 +55,12 @@ const victory = computed(() => isVictoryFor(props.report, props.side));
 const outcome = computed(() => outcomeLabel(props.report, props.side));
 const loot = computed(() => totalLoot(props.report.lootTaken));
 const siegeSummary = computed(() => (props.report.siege ? siegeSummaryLine(props.report.siege) : null));
+const fireSiegeSummary = computed(() => (props.report.fireSiege ? siegeSummaryLine(props.report.fireSiege) : null));
+const drowned = computed(() => props.report.drowned ?? []);
+const fireShipsBurned = computed(() => props.report.fireShipsBurned ?? 0);
+// A fleet's report names its fights; a land army's one fight needs no heading (and an older report reads exactly as before).
+const isFleet = computed(() => !!props.report.shipFight || drowned.value.length > 0 || fireShipsBurned.value > 0 || !!props.report.fireSiege);
+const hasLandFight = computed(() => !isFleet.value || props.report.attackerLines.length > 0 || props.report.defenderLines.length > 0);
 </script>
 
 <template>
@@ -51,69 +71,22 @@ const siegeSummary = computed(() => (props.report.siege ? siegeSummaryLine(props
     </div>
     <p v-if="occurredAt" class="occurred">{{ d(new Date(occurredAt), 'long') }}</p>
 
-    <div class="power-row">
-      <div class="power">
-        <span class="power-label">{{ t('hud.battleReport.attackPower') }}</span>
-        <span class="power-value">{{ Math.round(report.attackPower) }}</span>
-      </div>
-      <div class="power">
-        <span class="power-label">{{ t('hud.battleReport.defensePower') }}</span>
-        <span class="power-value">{{ Math.round(report.defensePower) }}</span>
-      </div>
-    </div>
+    <section v-if="report.shipFight" class="fight-block" data-testid="ship-fight">
+      <h2>{{ t('hud.battleReport.shipFight') }}</h2>
+      <BattleFightSection :fight="report.shipFight" />
+    </section>
 
-    <div class="sides">
-      <section class="side">
-        <h3>{{ t('hud.battleReport.attacker') }}</h3>
-        <div class="lines-scroll">
-          <table class="lines">
-            <thead>
-              <tr>
-                <th>{{ t('hud.battleReport.unit') }}</th>
-                <th>{{ t('hud.battleReport.sent') }}</th>
-                <th>{{ t('hud.battleReport.lost') }}</th>
-                <th>{{ t('hud.battleReport.survived') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="line in report.attackerLines" :key="line.unit">
-                <td>{{ unitName(line.unit) }}</td>
-                <td>{{ line.sent }}</td>
-                <td class="lost">{{ line.lost }}</td>
-                <td class="survived">{{ line.survived }}</td>
-              </tr>
-              <tr v-if="!report.attackerLines.length">
-                <td colspan="4" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+    <section class="fight-block" data-testid="land-fight">
+      <h2 v-if="isFleet">{{ t('hud.battleReport.landFight') }}</h2>
+      <BattleFightSection v-if="hasLandFight" :fight="report" />
+      <p v-else class="no-fight">{{ t('hud.battleReport.noLandFight') }}</p>
+    </section>
 
-      <section class="side">
-        <h3>{{ t('hud.battleReport.defender') }}</h3>
-        <div class="lines-scroll">
-          <table class="lines">
-            <thead>
-              <tr>
-                <th>{{ t('hud.battleReport.unit') }}</th>
-                <th>{{ t('hud.battleReport.lost') }}</th>
-                <th>{{ t('hud.battleReport.survived') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="line in report.defenderLines" :key="line.unit">
-                <td>{{ unitName(line.unit) }}</td>
-                <td class="lost">{{ line.lost }}</td>
-                <td class="survived">{{ line.survived }}</td>
-              </tr>
-              <tr v-if="!report.defenderLines.length">
-                <td colspan="3" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+    <div v-if="drowned.length" class="drowned" data-testid="drowned">
+      <h3>{{ t('hud.battleReport.drowned') }}</h3>
+      <div class="loot-row">
+        <span v-for="stack in drowned" :key="stack.unit">{{ unitName(stack.unit) }} {{ stack.count }}</span>
+      </div>
     </div>
 
     <div v-if="loot > 0" class="loot">
@@ -124,6 +97,15 @@ const siegeSummary = computed(() => (props.report.siege ? siegeSummaryLine(props
         <span>{{ resourceName('food') }} {{ Math.round(report.lootTaken.food) }}</span>
         <span>{{ resourceName('iron') }} {{ Math.round(report.lootTaken.iron) }}</span>
       </div>
+    </div>
+
+    <div v-if="fireShipsBurned > 0 || report.fireSiege" class="siege" data-testid="fire-damage">
+      <h3>{{ t('hud.battleReport.fireShips') }}</h3>
+      <p v-if="fireShipsBurned > 0">{{ t('hud.battleReport.fireShipsBurned', { n: fireShipsBurned }) }}</p>
+      <p v-if="fireSiegeSummary">{{ fireSiegeSummary }}</p>
+      <p v-if="report.fireSiege" class="siege-coord">
+        {{ t('hud.battleReport.hexCoord', { q: report.fireSiege.targetCoord.q, r: report.fireSiege.targetCoord.r }) }}
+      </p>
     </div>
 
     <div v-if="report.siege" class="siege" :class="{ razed: report.siege.settlementRazed }">
@@ -181,76 +163,33 @@ const siegeSummary = computed(() => (props.report.siege ? siegeSummaryLine(props
   font-size: 12px;
   color: var(--muted);
 }
-.power-row {
-  display: flex;
-  gap: 24px;
-  margin-bottom: 20px;
-}
-.power {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.power-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-}
-.power-value {
-  font-size: 20px;
+.fight-block h2 {
+  margin: 0 0 12px;
+  font-size: 14px;
   font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--text);
 }
-.sides {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 20px;
+.fight-block {
+  margin-bottom: 4px;
 }
-.side h3,
+.no-fight {
+  margin: 0 0 20px;
+  font-size: 13px;
+  color: var(--muted);
+}
 .loot h3,
-.siege h3 {
+.siege h3,
+.drowned h3 {
   margin: 0 0 8px;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
 }
-/* Mobile-readiness audit: lets a table with more/longer columns than a
-   360px-wide dialog panel can fit (e.g. German unit names) scroll
-   horizontally inside its own section, instead of overflowing the panel or
-   forcing the whole modal to scroll sideways. */
-.lines-scroll {
-  overflow-x: auto;
-}
-.lines {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.lines th {
-  text-align: left;
-  padding: 4px 6px;
-  border-bottom: 1px solid var(--panel-border);
-  color: var(--muted);
-  font-weight: 600;
-  font-size: 11px;
-  text-transform: uppercase;
-}
-.lines td {
-  padding: 4px 6px;
-  border-bottom: 1px solid var(--panel-border);
-}
-.lines .lost {
-  color: #e08a8a;
-}
-.lines .survived {
-  color: #8ac48a;
-}
-.lines .empty {
-  color: var(--muted);
-  text-align: center;
+.drowned {
+  margin-bottom: 20px;
 }
 .loot-row {
   display: flex;
@@ -284,11 +223,5 @@ const siegeSummary = computed(() => (props.report.siege ? siegeSummaryLine(props
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-}
-
-@media (max-width: 640px) {
-  .sides {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

@@ -23,6 +23,8 @@ export interface SendTarget {
   coord: AxialCoord;
   /** A hunt at a camp on the sea: ships go, land units cannot. */
   campAtSea: boolean;
+  /** A hunt at a sand camp: land units go, and a fleet carries them (the ships do not fight); `garrisonCanHunt` already needs a land unit. */
+  campOnSand?: boolean;
 }
 
 export interface SendSource {

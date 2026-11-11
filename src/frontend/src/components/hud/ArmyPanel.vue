@@ -6,10 +6,9 @@
 // `armies` comment), this one is specifically about dispatched bodies
 // (in transit / returning / supporting) plus the flow for creating a new one.
 //
-// Bottom-right HUD corner: BuildQueuePanel is top-left, TrainingQueuePanel
-// top-right (see each panel's own `position: absolute` in their <style>) —
-// bottom-left is open since RealmPanel's removal (zoom now drives
-// settlement<->world switching, so its manual override button is gone).
+// Bottom-right HUD corner by default. In the desktop settlement view the panel
+// is one of the four dockable ones (HudPanelDock.vue puts it in the corner the
+// player chose); in the world view it keeps its own `position: absolute` below.
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
@@ -54,7 +53,7 @@ const garrisonRows = computed(() =>
 );
 
 const picker = useDispatchUnitPicker(garrisonRows);
-const { isRowSelectable, hasLockedOutUnits } = picker;
+const { isRowSelectable, hasLockedOutUnits, sandHuntLacksTroops } = picker;
 
 function quantityFor(unit: string): number {
   return draft.value?.unitCounts[unit] ?? 0;
@@ -188,8 +187,8 @@ async function confirmFieldOrderClick() {
 </script>
 
 <template>
-  <div class="status-card army-panel">
-    <div class="status-card-header">
+  <div class="status-card army-panel" data-testid="army-panel">
+    <div class="status-card-header" data-dock-handle>
       <span class="status-card-title">{{ t('hud.armyPanel.title') }}</span>
       <span class="status-card-count">{{ armyRows.length }}</span>
     </div>
@@ -430,6 +429,7 @@ async function confirmFieldOrderClick() {
         </div>
 
         <p v-if="hasLockedOutUnits" class="status-subtext fleet-note">{{ t('hud.armyPanel.huntLandOnlyNote') }}</p>
+        <p v-if="sandHuntLacksTroops" class="status-subtext fleet-note" role="alert">{{ t('apiErrors.rejections.HuntRequiresLandUnits') }}</p>
         <div class="unit-picker">
           <div
             v-for="row in garrisonRows"
@@ -484,42 +484,16 @@ async function confirmFieldOrderClick() {
 </template>
 
 <style scoped>
-/* Mirrors TrainingQueuePanel.vue's `.status-card`/`.status-row` rules
-   (scoped styles don't leak across components — see that file's own comment
-   for why they're duplicated rather than shared). */
+/* The card box and header are shared (style.css `.status-card`); this panel sets its place and size. `.status-row` mirrors
+   TrainingQueuePanel.vue's. */
 .status-card {
-  position: absolute;
   right: 16px;
   /* --hud-inset-bottom only differs from 0px on a mobile-docked-bottom HUD
      bar (see MapView.vue's own hudInsetBottomPx). */
   bottom: calc(16px + var(--hud-inset-bottom, 0px));
-  z-index: 10;
   width: 260px;
   max-height: 60vh;
   overflow-y: auto;
-  padding: 14px 15px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 0;
-}
-.status-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--panel-border);
-}
-.status-card-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text);
-}
-.status-card-count {
-  font-size: 12px;
-  color: var(--muted);
 }
 .status-row {
   padding: 8px 0;

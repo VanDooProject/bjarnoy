@@ -94,7 +94,7 @@
     "NotCompleted": "Diese Aufgabe ist noch nicht erledigt.",
     "UnknownQuest": "Diese Aufgabe gibt es nicht.",
     "NoCampAtDestination": "Auf diesem Feld steht kein Wildtierlager.",
-    "HuntRequiresLandUnits": "Schiffe können kein Lager an Land jagen. Schick Landeinheiten.",
+    "HuntRequiresLandUnits": "Mit einer Flotte jagst du nur Lager am Strand, und nur mit Landtruppen an Bord.",
     "HuntRequiresFleet": "Ein Lager auf See kannst du nur mit Schiffen jagen. Landeinheiten erreichen es nicht.",
     "HexOccupiedByCamp": "Wilde Tiere halten dieses Feld noch.",
     "HexOccupiedByEndgameSite": "Auf diesem Feld steht eine Utgardmauer oder ein Jötunn-Wachturm."

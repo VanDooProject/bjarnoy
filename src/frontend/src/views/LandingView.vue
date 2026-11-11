@@ -18,6 +18,7 @@ import MapStatusOverlay from '../components/map/MapStatusOverlay.vue';
 import { useIntroTilesSignal } from '../composables/useIntroTilesSignal';
 import { useLoadFlow } from '../composables/useLoadFlow';
 import TopBar from '../components/hud/TopBar.vue';
+import BuildingHudLayer from '../components/hud/BuildingHudLayer.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import ReturningPlayerMenu from '../components/hud/ReturningPlayerMenu.vue';
@@ -46,7 +47,6 @@ import {
   snapToOfferedPlot,
   GUIDED_BUILD_TERRAIN as GUIDED_TERRAIN_FOR,
 } from '../lib/map/onboardingGuidance';
-import { constructionDialsFromQueue } from '../lib/map/constructionDial';
 import { AlreadyFoundedError, useWorldStore } from '../stores/world';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { usePlayerStore } from '../stores/player';
@@ -892,9 +892,9 @@ watch(
 // Construction progress dials over buildings still being built; the renderer
 // animates the progress itself every tick from these absolute timestamps.
 watch(
-  [() => canvasRef.value?.renderer, () => world.hud.queue, () => world.hud.queueFetchedAt],
+  [() => canvasRef.value?.renderer, () => world.constructionDials],
   ([renderer]) => {
-    renderer?.setConstructionDials(constructionDialsFromQueue(world.hud.queue, world.hud.queueFetchedAt));
+    renderer?.setConstructionDials(world.constructionDials);
   },
   { immediate: true },
 );
@@ -930,6 +930,8 @@ watch(
       background="radial-gradient(120% 100% at 68% 42%, #3b4148 0%, #262b30 55%, #15181b 100%)"
       @hex-click="onHexClick"
     />
+    <!-- The construction dials of the live preview (an order just placed): the shared HUD layer's dial-only markers, no building markers or switch. -->
+    <BuildingHudLayer v-if="landingCanvasShown" :renderer="canvasRef?.renderer" :building-markers="false" />
     <!-- landing-page-defects.md L1: a visitor with no settlement yet gets a
          village view (not a marketing page), but the header around it must
          not pretend they're already in-game. The full HudNav is

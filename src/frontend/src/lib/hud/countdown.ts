@@ -30,3 +30,15 @@ export function formatCountdownShort(seconds: number): string {
   if (hours > 0) return `${hours}h${pad(minutes)}`;
   return `${minutes}:${pad(sec)}`;
 }
+
+/**
+ * A coarse "about when" duration for a premium reader: whole hours and minutes, no seconds. The caller spells it in its own
+ * language (hours and minutes, or minutes alone), so no unit letter lives here. Under an hour at least 1 minute.
+ *   0-59m59s -> { hours: 0, minutes: 1..60 }   (e.g. 42 min)
+ *   >=1h     -> { hours: 1.., minutes: 0..59 } (e.g. 1 h 05 min)
+ */
+export function coarseDuration(seconds: number): { hours: number; minutes: number } {
+  const s = Math.max(0, seconds);
+  if (s >= 3600) return { hours: Math.floor(s / 3600), minutes: Math.floor((s % 3600) / 60) };
+  return { hours: 0, minutes: Math.max(1, Math.round(s / 60)) };
+}
