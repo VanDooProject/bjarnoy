@@ -1125,7 +1125,9 @@ public sealed class ArmyService(
         // Attack army — exactly SettleArrival's own fire condition.
         var battle = arrival.Battle!;
 
-        if (arrival.Siege is { Applied: true })
+        // The building damage of either step (the Fire Ships' fire, the siege engines) changes the realm.
+        var fireSiege = arrival.Attack!.FireSiege;
+        if (arrival.Siege is { Applied: true } || fireSiege.Applied)
         {
             _realmDirty.Add(targetId);
         }
@@ -1156,7 +1158,7 @@ public sealed class ArmyService(
 
         var report = BattleReport.From(
             Guid.CreateVersion7(), movement.ArrivesAt, armyEntity.Id, armyEntity.SettlementId, targetId,
-            domain.Stacks, battle, seed, arrival.Siege, wasRaid: domain.Mission == ArmyMission.Raid);
+            domain.Stacks, battle, seed, arrival.Siege is { Applied: true } ? arrival.Siege : fireSiege, wasRaid: domain.Mission == ArmyMission.Raid);
         _dbContext.BattleReports.Add(BattleReportEntity.FromDomain(report));
 
         if (arrival.Siege is { Applied: true } siege)

@@ -244,19 +244,17 @@ public class FleetShoreAttackTests
     }
 
     [Fact]
-    public void A_fleet_at_another_shore_building_does_not_fight_the_ships_at_the_dockyard()
+    public void A_fleet_fights_the_ships_whichever_shore_building_it_is_sent_at_and_a_lost_fight_damages_nothing()
     {
         var hut = new PlacedBuilding(CoastalWaterHex, BuildingType.FishingHut, 5);
         var defender = Found(TargetCentre, [new UnitStack(UnitType.Longship, 100)], new PlacedBuilding(ShoreHex, BuildingType.Dockyard, 3), hut);
 
         var arrival = Arrive(defender, target: CoastalWaterHex);
 
-        Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
-        Assert.Equal(0, arrival.Battle.DefensePower);
-        Assert.Empty(arrival.Battle.AttackerLosses);
-        Assert.Empty(arrival.Battle.DefenderLosses);
-        Assert.Equal(100, Count(arrival.DefenderSettlement.Garrison, UnitType.Longship));
+        Assert.Equal(BattleWinner.Defender, arrival.Battle!.Winner);
+        Assert.Equal(4000, arrival.Battle.DefensePower);
         Assert.False(arrival.Siege!.Applied);
+        Assert.False(arrival.Attack!.FireSiege.Applied);
         Assert.Equal(5, arrival.DefenderSettlement.Buildings.Single(b => b.Coord == CoastalWaterHex).Level);
         Assert.Equal(3, arrival.DefenderSettlement.Buildings.Single(b => b.Coord == ShoreHex).Level);
     }
@@ -284,45 +282,45 @@ public class FleetShoreAttackTests
     }
 
     [Fact]
-    public void Guest_ships_stay_out_of_a_fight_at_the_dockyard_and_take_no_losses()
+    public void Guest_ships_fight_with_the_home_ships_wherever_the_fleet_lands()
     {
         var defender = Found(TargetCentre, [new UnitStack(UnitType.Longship, 1)], new PlacedBuilding(ShoreHex, BuildingType.Dockyard, 3));
         UnitStack[] guests = [new(UnitType.Longship, 100)];
 
         var arrival = ArriveWith(SendLoaded([new UnitStack(UnitType.Karve, 5)]), defender, guests);
 
-        Assert.Equal(40, arrival.Battle!.DefensePower);
-        Assert.Empty(arrival.GuestLosses);
+        Assert.Equal(4040, arrival.Battle!.DefensePower);
+        Assert.Equal(BattleWinner.Defender, arrival.Battle.Winner);
     }
 
     [Fact]
-    public void Neither_home_nor_guest_ships_fight_a_fleet_at_a_shore_building_away_from_their_hexes()
+    public void All_home_and_guest_ships_fight_a_fleet_at_a_shore_building_away_from_the_dockyard_and_the_centre()
     {
-        // The Dockyard is the anchor (inland centre), the guests stand at the centre: a fleet at a third shore building
-        // meets neither home nor guest ships.
         var defender = Found(TargetCentre, [new UnitStack(UnitType.Longship, 50)], new PlacedBuilding(CoastalWaterHex, BuildingType.Dockyard, 3),
             new PlacedBuilding(ShoreHex, BuildingType.Farm, 9));
         UnitStack[] guests = [new(UnitType.Longship, 50)];
 
         var arrival = ArriveWith(SendLoaded([new UnitStack(UnitType.Karve, 5)]), defender, guests);
 
-        Assert.Equal(0, arrival.Battle!.DefensePower);
-        Assert.Empty(arrival.GuestLosses);
+        Assert.Equal(4000, arrival.Battle!.DefensePower);
         Assert.False(arrival.Siege!.Applied);
     }
 
     [Fact]
-    public void Passengers_sail_through_a_won_fight_and_come_home_with_the_ships()
+    public void Passengers_land_after_the_ship_fight_is_skipped_and_fight_the_land_units_while_the_ships_sail_home_untouched()
     {
         var army = SendLoaded([new UnitStack(UnitType.Karve, 5), new UnitStack(UnitType.Spearman, 50)]);
-        var defender = Found(TargetCentre, [new UnitStack(UnitType.Spearman, 1000)], new PlacedBuilding(ShoreHex, BuildingType.Farm, 9));
+        var defender = Found(TargetCentre, [new UnitStack(UnitType.Spearman, 10)], new PlacedBuilding(ShoreHex, BuildingType.Farm, 9));
 
         var arrival = ArriveWith(army, defender);
 
+        // No defender ships: no ship fight. 50 spearmen (attack 750) against 10 spearmen (defence 350).
+        Assert.Null(arrival.Attack!.ShipFight);
         Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
+        Assert.Equal(750, arrival.Battle.AttackPower);
         Assert.Equal(5, Count(arrival.Army!.Stacks, UnitType.Karve));
-        Assert.Equal(50, Count(arrival.Army.Stacks, UnitType.Spearman));
-        Assert.Equal(25, arrival.Battle.AttackPower);
+        Assert.Equal(50, Count(arrival.Battle.AttackerSurvivors, UnitType.Spearman) + Count(arrival.Battle.AttackerLosses, UnitType.Spearman));
+        Assert.Empty(arrival.Battle.DefenderSurvivors);
     }
 
     [Fact]
@@ -370,7 +368,7 @@ public class FleetShoreAttackTests
     }
 
     [Fact]
-    public void A_land_armys_attack_still_fights_the_whole_garrison()
+    public void A_land_armys_attack_fights_the_land_units_only_the_defenders_ships_stay_out()
     {
         UnitStack[] force = [new UnitStack(UnitType.Axeman, 20), new UnitStack(UnitType.Provisioner, 20)];
         var attacker = Found(Home, force);
@@ -382,6 +380,6 @@ public class FleetShoreAttackTests
 
         var arrival = Army.SettleArrival(decision.Army!, defender, 1.0, MovementOf(decision.Army!).ArrivesAt, seed: 1);
 
-        Assert.Equal((10 * 35) + 40, arrival.Battle!.DefensePower);
+        Assert.Equal(10 * 35, arrival.Battle!.DefensePower);
     }
 }

@@ -206,6 +206,51 @@ public static class SiegeResolver
             return SiegeOutcome.None;
         }
 
+        return LowerBuilding(buildings, index, levelsDestroyed);
+    }
+
+    /// <summary>Surviving Fire Ships it takes to burn one building level (<c>docs/design/economy.md</c>, "Fire Ship").</summary>
+    public const int FireShipsPerLevel = 10;
+
+    /// <summary>
+    /// The fire damage of <paramref name="survivingFireShips"/> against the building standing on
+    /// <paramref name="targetCoord"/>: <c>floor(survivingFireShips / 10)</c> levels, then <see cref="LevelsTakenFrom"/> (a wall hex
+    /// loses one at most), clamped to the building's level. Only a building standing on a <see cref="Terrain.Sea"/> hex burns; no
+    /// target, a target that is gone or on land, or fewer than ten ships burn nothing.
+    /// </summary>
+    /// <returns>
+    /// The outcome (<see cref="SiegeOutcome.None"/> when nothing burned) and the number of Fire Ships burned: the levels actually
+    /// taken times <see cref="FireShipsPerLevel"/>. The rest of the Fire Ships sail home.
+    /// </returns>
+    public static (SiegeOutcome Outcome, int Burned) Burn(
+        int survivingFireShips,
+        IReadOnlyList<PlacedBuilding> defenderBuildings,
+        HexCoord? targetCoord,
+        Func<HexCoord, Terrain> terrainAt)
+    {
+        ArgumentNullException.ThrowIfNull(defenderBuildings);
+        ArgumentNullException.ThrowIfNull(terrainAt);
+
+        if (targetCoord is not { } coord || survivingFireShips < FireShipsPerLevel || terrainAt(coord) != Terrain.Sea)
+        {
+            return (SiegeOutcome.None, 0);
+        }
+
+        var buildings = defenderBuildings.ToList();
+        var index = buildings.FindIndex(b => b.Coord == coord);
+        if (index < 0)
+        {
+            return (SiegeOutcome.None, 0);
+        }
+
+        var outcome = LowerBuilding(buildings, index, survivingFireShips / FireShipsPerLevel);
+        var levelsTaken = outcome.LevelBefore - outcome.LevelAfter;
+        return (outcome, levelsTaken * FireShipsPerLevel);
+    }
+
+    /// <summary>Takes <see cref="LevelsTakenFrom"/> levels off the building at <paramref name="index"/>, removing it at level 0.</summary>
+    private static SiegeOutcome LowerBuilding(List<PlacedBuilding> buildings, int index, int levelsDestroyed)
+    {
         var target = buildings[index];
         var levelAfter = Math.Max(0, target.Level - LevelsTakenFrom(target.Type, levelsDestroyed));
 

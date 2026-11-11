@@ -639,7 +639,7 @@ public sealed record Army
             || army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit
             || now < inTransit.Movement.ArrivesAt)
         {
-            return new ArmyArrivalResult(army, defenderSettlement, Fought: false, Battle: null, GuestLosses: [], Siege: null);
+            return new ArmyArrivalResult(army, defenderSettlement, Fought: false, Battle: null, GuestLosses: [], Siege: null, Attack: null);
         }
 
         guestDefenderStacks ??= [];
@@ -668,37 +668,20 @@ public sealed record Army
 
         var lootAvailable = settledDefender.Resources.At(battleInstant);
 
-        // Guest armies fight alongside the home garrison (issue #40 phase 4
-        // §3): their stacks are merged, by type, into the defense side the
-        // resolver sees, so combined defense power (and hence the win/loss
-        // outcome itself) properly reflects everyone standing on the wall.
-        //
-        // A fleet's battle is fought by the ships standing on the target hex only (docs/design/economy.md, "Fleets"): the
-        // attacker's passengers stay aboard, and the defender's land units (garrison and guests) stay out of it. The home
-        // ships stand at the fleet anchor (Dockyard, or a shoreline centre), the guests' ships at the centre. A defender
-        // with no ships on the target hex has nobody to fight: the resolver gives the fleet a costless win, and the siege
-        // below applies. The passengers the surviving ships cannot carry drown (ShipCargo.Rejoin).
-        IReadOnlyList<UnitStack> fightingGuests = guestDefenderStacks;
-        IReadOnlyList<UnitStack> fightingHome = settledDefender.Garrison;
-        if (army.IsFleet)
-        {
-            var target = army.TargetBuildingCoord;
-            var homeFights = target == FleetAnchor(settledDefender.Centre, settledDefender.Buildings, terrainAt!);
-            var guestsFight = target == settledDefender.Centre;
-            fightingHome = homeFights ? ShipCargo.Ships(settledDefender.Garrison) : [];
-            fightingGuests = guestsFight ? ShipCargo.Ships(guestDefenderStacks) : [];
-        }
-
-        var combinedDefense = MergeStacksByType(fightingHome, fightingGuests);
-        var (attackerFighters, passengers) = ShipCargo.SplitForFight(army.Stacks);
-        var plan = BattleResolver.Resolve(
-            attackerFighters, combinedDefense, defenseBonusPercent, lootAvailable, seed,
+        // Guest armies fight alongside the home garrison (issue #40 phase 4 §3): their stacks are merged, by type, into the defense
+        // side of each fight, so combined defense power (and hence the win/loss outcome itself) reflects everyone standing on the
+        // wall. A land army fights the defender's land units; a fleet fights the defender's ships first and then lands what is still
+        // aboard against the land units (AttackResolver, docs/design/economy.md "Fleets"). The defender's pooled losses are split
+        // back home/guest inside the resolver (ProportionalAllocator, see its remarks). A second split, of the guest total across
+        // the actual guest Army records, happens one layer up in ArmyService — this method only knows the pooled guest total, never
+        // individual guest armies, to keep it DB-free.
+        var attack = AttackResolver.Resolve(
+            army.Stacks, settledDefender.Garrison, guestDefenderStacks, defenseBonusPercent, lootAvailable, seed,
             raid: army.Mission == ArmyMission.Raid,
             landAttackBonusPercent: landAttackBonusPercent,
-            shipAttackBonusPercent: shipAttackBonusPercent);
-        var shipSurvivors = plan.AttackerSurvivors;
-        var (attackerLosses, attackerSurvivors) = ShipCargo.Rejoin(plan.AttackerLosses, shipSurvivors, passengers);
-        plan = plan with { AttackerLosses = attackerLosses, AttackerSurvivors = attackerSurvivors };
+            shipAttackBonusPercent: shipAttackBonusPercent,
+            army.TargetBuildingCoord, settledDefender.Buildings, terrainAt);
+        var plan = attack.Overall;
 
         // Loot leaves the defender's stock at the instant of battle even
         // though it does not reach the attacker's own stock until the
@@ -716,42 +699,25 @@ public sealed record Army
         // at this same instant, not whenever someone next looks.
         settledDefender = (settledDefender with { Resources = afterLoot }).DropUnfundedOrders(battleInstant);
 
-        // plan.DefenderLosses/DefenderSurvivors are pooled across home+guest
-        // (they were computed against combinedDefense above) — split each
-        // type's pooled loss back between "home garrison" and "the guest
-        // total", proportional to each side's own pre-battle holding of that
-        // type (ProportionalAllocator; see its remarks). A second split, of
-        // the guest total across the actual guest Army records, happens one
-        // layer up in ArmyService — this method only knows the pooled guest
-        // total, never individual guest armies, to keep it DB-free.
-        var homeLosses = SplitPooledByOwner(plan.DefenderLosses, fightingHome, fightingGuests, wantHome: true);
-        var guestLosses = SplitPooledByOwner(plan.DefenderLosses, fightingHome, fightingGuests, wantHome: false);
-        var homeSurvivors = SubtractStacks(settledDefender.Garrison, homeLosses);
+        var guestLosses = attack.DefenderGuestLosses;
+        var homeSurvivors = SubtractStacks(settledDefender.Garrison, attack.DefenderHomeLosses);
 
         var defenderPostBattle = settledDefender with { Garrison = homeSurvivors, Resources = afterLoot };
 
-        // Catapult damage (issue #40 phase 5): only ever applied on an
-        // attacker win, against whatever survived the fight. Applied to
-        // Buildings before the forward SettleTo below, so the resulting
-        // production/capacity totals (and hence any starvation the loss of a
-        // Farm/FishingHut/PumpkinFarm triggers) already reflect the damage —
-        // Settlement.SettleTo recomputes both from Buildings on every call,
-        // nothing extra is needed here for that to fall out correctly.
-        var siege = plan.Winner == BattleWinner.Attacker
-            ? Combat.SiegeResolver.Resolve(
-                // A fleet's siege is its surviving ships'; the siege engines aboard are passengers and do not fire.
-                army.IsFleet ? shipSurvivors : plan.AttackerSurvivors, defenderPostBattle.Buildings, army.TargetBuildingCoord, seed,
-                randomFallback: !army.IsFleet)
-            : Combat.SiegeOutcome.None;
-
-        if (siege.Applied)
+        // Building damage (issue #40 phase 5): the Fire Ships' fire first, then the siege engines' (only after a won land fight),
+        // both already worked out by the resolver. Applied to Buildings before the forward SettleTo below, so the resulting
+        // production/capacity totals (and hence any starvation the loss of a Farm/FishingHut/PumpkinFarm triggers) already reflect
+        // the damage — Settlement.SettleTo recomputes both from Buildings on every call, nothing extra is needed here for that
+        // to fall out correctly. Each step drops any build order still targeting a hex it destroyed outright, or the next SettleTo
+        // would find nothing standing there and silently rebuild it (issue #158 stage 1b).
+        var siege = attack.LandSiege;
+        foreach (var step in new[] { attack.FireSiege, attack.LandSiege })
         {
-            // Drops any build order still targeting the hit hex when the
-            // catapult destroyed it outright, or the next SettleTo would find
-            // nothing standing there and silently rebuild it (issue #158
-            // stage 1b).
-            defenderPostBattle = defenderPostBattle.WithSiegeDamage(
-                siege.UpdatedBuildings!, siege.TargetCoord!.Value, battleInstant, defenderSpeedFactor, guestDefenderStacks);
+            if (step.Applied)
+            {
+                defenderPostBattle = defenderPostBattle.WithSiegeDamage(
+                    step.UpdatedBuildings!, step.TargetCoord!.Value, battleInstant, defenderSpeedFactor, guestDefenderStacks);
+            }
         }
 
         var finalDefender = defenderPostBattle.SettleTo(now, defenderSpeedFactor).Settlement;
@@ -759,7 +725,7 @@ public sealed record Army
         var survivorCount = plan.AttackerSurvivors.Sum(s => s.Count);
         if (survivorCount == 0)
         {
-            return new ArmyArrivalResult(null, finalDefender, Fought: true, plan, guestLosses, siege);
+            return new ArmyArrivalResult(null, finalDefender, Fought: true, plan, guestLosses, siege, attack);
         }
 
         // Rebase provisions to what the (pre-battle, full-strength) army had
@@ -793,7 +759,7 @@ public sealed record Army
             Loot = plan.LootTaken,
         };
 
-        return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan, guestLosses, siege);
+        return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan, guestLosses, siege, attack);
     }
 
     /// <summary>
@@ -941,7 +907,7 @@ public sealed record Army
     }
 
     /// <summary>Merges two stack lists into one, aggregated by type.</summary>
-    private static IReadOnlyList<UnitStack> MergeStacksByType(
+    internal static IReadOnlyList<UnitStack> MergeStacksByType(
         IReadOnlyList<UnitStack> a, IReadOnlyList<UnitStack> b) =>
         a.Concat(b)
             .GroupBy(s => s.Type)
@@ -949,7 +915,7 @@ public sealed record Army
             .ToList();
 
     /// <summary>Subtracts <paramref name="losses"/> from <paramref name="stacks"/>, per type, dropping a type that reaches zero.</summary>
-    private static IReadOnlyList<UnitStack> SubtractStacks(
+    internal static IReadOnlyList<UnitStack> SubtractStacks(
         IReadOnlyList<UnitStack> stacks, IReadOnlyList<UnitStack> losses)
     {
         var lossByType = losses.ToDictionary(s => s.Type, s => s.Count);
@@ -965,7 +931,7 @@ public sealed record Army
     /// share, per <see cref="ProportionalAllocator"/> — see
     /// <see cref="SettleArrival"/>'s remarks.
     /// </summary>
-    private static IReadOnlyList<UnitStack> SplitPooledByOwner(
+    internal static IReadOnlyList<UnitStack> SplitPooledByOwner(
         IReadOnlyList<UnitStack> pooled,
         IReadOnlyList<UnitStack> homeStacks,
         IReadOnlyList<UnitStack> guestStacks,
@@ -2007,11 +1973,17 @@ public sealed record WalkedLeg(Movement.Movement Leg, DateTimeOffset Until)
 /// catapults survived to fire, or the defender had no buildings to hit, and
 /// <see langword="null"/> only when <paramref name="Fought"/> is
 /// <see langword="false"/> (no battle happened at all this call, so siege was
-/// never even attempted) — see <see cref="Combat.SiegeResolver.Resolve"/>.
+/// never even attempted) — see <see cref="Combat.SiegeResolver.Resolve"/>. The Fire Ships' fire damage is
+/// <see cref="Combat.AttackPlan.FireSiege"/> on <paramref name="Attack"/>.
+/// </param>
+/// <param name="Attack">
+/// The whole attack: the ship fight and the land fight, the drowned, the Fire Ships burned and both sieges (see
+/// <see cref="Combat.AttackPlan"/>). <paramref name="Battle"/> is its <see cref="Combat.AttackPlan.Overall"/> summary.
+/// <see langword="null"/> when nothing was fought.
 /// </param>
 public sealed record ArmyArrivalResult(
     Army? Army, Settlement DefenderSettlement, bool Fought, Combat.BattlePlan? Battle,
-    IReadOnlyList<UnitStack> GuestLosses, Combat.SiegeOutcome? Siege);
+    IReadOnlyList<UnitStack> GuestLosses, Combat.SiegeOutcome? Siege, Combat.AttackPlan? Attack);
 
 /// <param name="Arrived">
 /// True when this call actually brought the army to its host — the caller
