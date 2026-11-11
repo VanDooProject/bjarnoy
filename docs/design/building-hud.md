@@ -3,6 +3,7 @@
 - Every own building shows a hex dial with its level. The ring shows the upgrade state: green = can upgrade, red = cannot
   (short of resources, Longhouse cap, missing prerequisite, storage cap), yellow arc = upgrade running (time left inside),
   gold number with a full gold ring = max level.
+- When an upgrade's time is up, the dial shows no colour and no number until the new level arrives.
 - Only a maxed Longhouse shows the crown.
 - The time until a short-of-resources upgrade becomes affordable is a premium feature. Free accounts see only that
   resources are short.
@@ -15,11 +16,18 @@
 - Up to three missing prerequisites are listed; from four on, two are listed plus "+n more".
 - Overlapping markers stack left to right: the right-most is on top. Hovering or tapping a marker brings it to the front,
   enlarged.
-- The building info can be switched off (icon button: on desktop the top icon of the panel column at the map's bottom left, on
-  phones at the top left of the map; or H). While it is on, its dial replaces the construction dial for every order on an
-  existing building: running upgrade, waiting (`#place`), just clicked (sweep and dots), refused (red flash and cross), raze and
-  the finish animation, drawn the same way. New builds (no building standing yet) keep the construction dial. Switching the info
-  on or off hands each hex over marker by marker, so a hex always shows exactly one dial.
+- The building info can be switched off (icon button: on desktop the top icon of the panel icon column at the map's bottom left (it moves right of the left panel columns when they reach
+  down to it), on phones at the top left of the map; or H). While it is on, the building's own dial shows every order on an existing building:
+  running upgrade, waiting (`#place`), just clicked (sweep and dots), refused (red flash and cross), raze and the finish
+  animation. A construction dial on a hex without a marker (a new build with no building standing yet, a wall) is a dial-only
+  marker: just the dial, placed, scaled, hovered, tapped and faded under the ring menu like every marker. With the info off
+  every construction dial is a dial-only marker, and the dial-only markers do not depend on the switch. The countdown turns
+  yellow in its last minute. Switching the info on or off hands each hex over marker by marker, so a hex always shows exactly
+  one dial. The map canvas draws no construction dial itself; the landing page's live settlement preview shows its dial-only
+  markers too (no building markers there).
 - Markers never take mouse or touch input: hover, taps, wheel and drags go to the map under them like on any tile. A marker
-  grows when the mouse is on its dial or its hex, or when a touch taps its dial (the tap still reaches the map). The box
-  text stands on its own, there are no tooltips on it.
+  grows (at least 1.3x; at the smallest zoom to the size where its compact box with text shows) when the mouse is on its dial,
+  its box or its hex, or when a touch taps its dial (the tap still reaches the map; a tap on the box reveals nothing, the hex
+  under it belongs to the map). The mouse directly on a marker's dial or box wins over the hex under it: only that marker
+  grows, and where several overlap the one on top (the hovered one, else the right-most) takes it. The box text stands on its
+  own, there are no tooltips on it. While a marker is hovered, the map's tile tooltip does not show.

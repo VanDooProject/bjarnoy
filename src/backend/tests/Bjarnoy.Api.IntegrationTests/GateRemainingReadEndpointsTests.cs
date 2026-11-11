@@ -5,6 +5,7 @@ using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Combat;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
@@ -224,6 +225,12 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         };
         return await WithDbAsync(async db =>
         {
+            var host = await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == hostSettlementId, Ct);
+            army.TargetBuildingQ = host.CentreQ;
+            army.TargetBuildingR = host.CentreR;
+            var guestHome = await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == guestHomeSettlementId, Ct);
+            army.HomeSpotQ = guestHome.CentreQ;
+            army.HomeSpotR = guestHome.CentreR;
             db.Armies.Add(army);
             await db.SaveChangesAsync(Ct);
             return army.Id;
@@ -405,6 +412,54 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         SetOwner(client, rivalOwnerId);
         response = await client.GetAsync($"/api/v1/reports/{reportId}", Ct);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetBattleReport_returns_the_ship_fight_the_drowned_and_the_fire_damage_next_to_the_land_fight()
+    {
+        using var client = Client();
+        var (_, mineId, mineOwnerId, rivalId, _) = await TwoSettlementsAsync();
+        var report = new BattleReport
+        {
+            Id = Guid.CreateVersion7(),
+            OccurredAt = _factory.Time.GetUtcNow(),
+            AttackerArmyId = Guid.CreateVersion7(),
+            AttackerSettlementId = mineId,
+            DefenderSettlementId = rivalId,
+            AttackerLines = [new BattleReportAttackerLine(UnitType.Spearman, 20, 6, 14)],
+            DefenderLines = [new BattleReportDefenderLine(UnitType.Axeman, 8, 0)],
+            LootTaken = new ResourceAmounts(10, 0, 0, 0),
+            AttackPower = 300,
+            DefensePower = 200,
+            Winner = BattleWinner.Attacker,
+            Seed = 3,
+            ShipFight = new BattleReportShipFight(
+                [new BattleReportAttackerLine(UnitType.FireShip, 30, 4, 26)],
+                [new BattleReportDefenderLine(UnitType.Longship, 2, 0)],
+                120, 80, BattleWinner.Attacker),
+            Drowned = [new UnitStack(UnitType.Spearman, 20)],
+            FireShipsBurned = 20,
+            FireSiege = new BattleReportSiegeLine(new HexCoord(5, 0), BuildingType.Dockyard, 3, 1, false),
+        };
+        await WithDbAsync(async db =>
+        {
+            db.BattleReports.Add(BattleReportEntity.FromDomain(report));
+            await db.SaveChangesAsync(Ct);
+            return 0;
+        });
+
+        SetOwner(client, mineOwnerId);
+        var response = await client.GetFromJsonAsync<BattleReportResponse>($"/api/v1/reports/{report.Id}", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.Equal("fireship", response!.ShipFight!.AttackerLines.Single().Unit);
+        Assert.Equal((120d, 80d, "attacker"), (response.ShipFight.AttackPower, response.ShipFight.DefensePower, response.ShipFight.Winner));
+        Assert.Equal("longship", response.ShipFight.DefenderLines.Single().Unit);
+        Assert.Equal("spearman", response.AttackerLines.Single().Unit);
+        Assert.Equal(new ArmyUnitStackResponse("spearman", 20), response.Drowned.Single());
+        Assert.Equal(20, response.FireShipsBurned);
+        Assert.Equal("dockyard", response.FireSiege!.TargetType);
+        Assert.Equal((3, 1), (response.FireSiege.LevelBefore, response.FireSiege.LevelAfter));
+        Assert.Null(response.Siege);
     }
 
     [Fact]

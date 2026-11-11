@@ -76,7 +76,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
 
         var worldId = army.Settlement!.WorldId;
         var sampler = await WorldTerrain.SamplerAsync(_dbContext, army.Settlement.World!, cancellationToken).ConfigureAwait(false);
-        var homeA = army.Settlement.HomeHexFor(domain, sampler.TerrainAt);
+        var homeA = army.Settlement.HomeHexFor(domain);
 
         var candidates = await _dbContext.Armies
             .Include(a => a.Stacks)
@@ -107,7 +107,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
                 continue;
             }
 
-            var homeB = other.Settlement.HomeHexFor(otherDomain, sampler.TerrainAt);
+            var homeB = other.Settlement.HomeHexFor(otherDomain);
             var meeting = MovementOccupancy.EarliestMeeting(movement, otherMovement, homeA, homeB);
             if (meeting is not { } found || found.At > now)
             {
@@ -231,7 +231,8 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         var seed = BitConverter.ToInt32(ClaimId(armyA.Id, armyB.Id, at).ToByteArray(), 0);
 
         var plan = FieldBattleResolver.Resolve(
-            domainA.Stacks, claimA, domainB.Stacks, claimB, domainA.Loot, domainB.Loot, seed);
+            domainA.Stacks, claimA, domainB.Stacks, claimB, domainA.Loot, domainB.Loot,
+            domainA.ProvisionsAt(at), domainB.ProvisionsAt(at), seed);
 
         Army updatedA;
         Army updatedB;
@@ -239,13 +240,13 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         switch (plan.Winner)
         {
             case FieldBattleWinner.SideA:
-                updatedA = ApplyWin(domainA, movementA, plan.SideASurvivors, plan.LootTakenByWinner);
-                updatedB = ApplyLoss(armyB.Settlement, domainB, hex, at, plan.SideBSurvivors, plan.LootTakenByWinner, bog, rivers, walls);
+                updatedA = ApplyWin(domainA, movementA, plan.SideASurvivors, plan.LootTakenByWinner, plan.FoodRefillToWinner, at);
+                updatedB = ApplyLoss(armyB.Settlement, domainB, hex, at, plan.SideBSurvivors, TakenFromLoser(plan), bog, rivers, walls);
                 break;
 
             case FieldBattleWinner.SideB:
-                updatedA = ApplyLoss(armyA.Settlement, domainA, hex, at, plan.SideASurvivors, plan.LootTakenByWinner, bog, rivers, walls);
-                updatedB = ApplyWin(domainB, movementB, plan.SideBSurvivors, plan.LootTakenByWinner);
+                updatedA = ApplyLoss(armyA.Settlement, domainA, hex, at, plan.SideASurvivors, TakenFromLoser(plan), bog, rivers, walls);
+                updatedB = ApplyWin(domainB, movementB, plan.SideBSurvivors, plan.LootTakenByWinner, plan.FoodRefillToWinner, at);
                 break;
 
             default:
@@ -268,15 +269,23 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
             hex.Q, hex.R, armyA.Id, armyB.Id, plan.Winner, plan.SideAPower, plan.SideBPower);
     }
 
-    private static Army ApplyWin(Army domain, Movement movement, IReadOnlyList<UnitStack> survivors, ResourceAmounts lootTaken) =>
-        domain with
+    /// <summary>What the winner took from the loser's carried loot: the loot and the food that refilled its provisions.</summary>
+    private static ResourceAmounts TakenFromLoser(FieldBattlePlan plan) =>
+        plan.LootTakenByWinner + new ResourceAmounts(0, 0, plan.FoodRefillToWinner, 0);
+
+    private static Army ApplyWin(
+        Army domain, Movement movement, IReadOnlyList<UnitStack> survivors, ResourceAmounts lootTaken, double foodRefill,
+        DateTimeOffset at) =>
+        // The refill tops the provisions up, on top of the loot. The stored figure is the leg's departure baseline and the survivors
+        // burn less than the full army did, so it is rebased: what the army carried at the battle, plus the refill, from `at` on.
+        (domain with
         {
             Stacks = survivors,
             Loot = domain.Loot + lootTaken,
             // The winner's own journey is untouched — it simply continues
             // wherever it was already headed (issue #206 §3).
             Location = new ArmyLocation.InTransit(movement),
-        };
+        }).WithProvisionsAt(at, domain.ProvisionsAt(at) + foodRefill);
 
     private static Army ApplyLoss(
         SettlementEntity? loserSettlement,
@@ -285,7 +294,7 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
         IReadOnlyDictionary<HexCoord, Terrain> bog, RiverIndex rivers, LandRouteIndex walls)
     {
         var loserSampler = new TerrainSampler(loserSettlement!.World!.ToGenerationOptions()).WithBogOverlay(bog);
-        var home = loserSettlement.HomeHexFor(domain, loserSampler.TerrainAt);
+        var home = loserSettlement.HomeHexFor(domain);
 
         var afterLosses = domain with
         {

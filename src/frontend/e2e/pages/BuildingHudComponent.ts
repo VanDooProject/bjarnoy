@@ -17,14 +17,15 @@ type HudWindow = {
   };
   __settlementRenderer: () => {
     cameraZoom: number;
-    drawnConstructionDialKeys: () => string[];
   };
 };
 
 /** The building HUD of the settlement view (components/hud/BuildingHudLayer.vue): one marker per own building plus the toggle. */
 export class BuildingHudComponent {
-  /** Every marker in the DOM. */
+  /** Every building marker in the DOM (the dial-only markers of construction dials are `dialOnlyMarkers`). */
   readonly markers: Locator;
+  /** Every dial-only marker: the construction dial of a hex no building marker shows (a new build, or any dial while building info is off). */
+  readonly dialOnlyMarkers: Locator;
   /** The icon button at the map's top left (the H key does the same). */
   readonly toggle: Locator;
 
@@ -32,13 +33,24 @@ export class BuildingHudComponent {
 
   constructor(page: Page) {
     this.page = page;
-    this.markers = page.locator('.hud-marker');
+    this.markers = page.locator('.hud-marker[data-coord]');
+    this.dialOnlyMarkers = page.locator('.hud-marker[data-dial-only]');
     this.toggle = page.getByRole('button', { name: 'Building info (H)' });
   }
 
   /** The marker over the building on this hex. */
   marker(hex: HexCoord): Locator {
     return this.page.locator(`.hud-marker[data-coord="${hex.q},${hex.r}"]`);
+  }
+
+  /** The dial-only marker of the construction dial on this hex (a zero-size anchor like every marker). */
+  dialOnly(hex: HexCoord): Locator {
+    return this.page.locator(`.hud-marker[data-dial-only="${hex.q},${hex.r}"]`);
+  }
+
+  /** The dial of a dial-only marker. */
+  dialOnlyDial(hex: HexCoord): Locator {
+    return this.dialOnly(hex).locator('.hud-marker__dial');
   }
 
   /** A marker's hex dial (the marker itself is a zero-size anchor, so it is never "visible" on its own). */
@@ -107,9 +119,9 @@ export class BuildingHudComponent {
     );
   }
 
-  /** The hexes whose construction progress dial the canvas draws right now. */
-  canvasDialKeys(): Promise<string[]> {
-    return this.page.evaluate(() => (window as unknown as HudWindow).__settlementRenderer().drawnConstructionDialKeys());
+  /** The hexes ("q,r") that show a construction dial as a dial-only marker right now. */
+  dialOnlyKeys(): Promise<string[]> {
+    return this.dialOnlyMarkers.evaluateAll((els) => els.map((el) => el.getAttribute('data-dial-only') ?? ''));
   }
 
   /** The element the browser would hand a pointer event at this canvas point to (page coordinates). */

@@ -30,7 +30,7 @@ public sealed class ConcurrentWriteExecutorRetryTests
         Assert.False(ConcurrentWriteExecutor.IsRetryable(UniqueViolation("IX_guilds_WorldId_Name")));
         Assert.False(ConcurrentWriteExecutor.IsRetryable(
             new PostgresException("fk", "ERROR", "ERROR", PostgresErrorCodes.ForeignKeyViolation,
-                constraintName: "IX_unit_stacks_SettlementId_UnitType")));
+                constraintName: "IX_unit_stacks_SettlementId_SpotQ_SpotR_UnitType")));
     }
 
     [Fact]

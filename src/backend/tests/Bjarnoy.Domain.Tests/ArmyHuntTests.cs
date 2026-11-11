@@ -25,11 +25,10 @@ public class ArmyHuntTests
             Name = "Bjornstad",
             Centre = Home,
             Buildings = [new PlacedBuilding(Home, BuildingType.Longhouse, 5)],
-            Garrison = garrison ?? [new UnitStack(UnitType.Axeman, 1000), new UnitStack(UnitType.Karve, 5)],
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: food, Iron: 1_000_000),
                 production, capacity, T0),
-        };
+        }.WithGarrison(garrison ?? [new UnitStack(UnitType.Axeman, 1000), new UnitStack(UnitType.Karve, 5)]);
     }
 
     private static DispatchDecision DispatchHunt(
@@ -38,7 +37,7 @@ public class ArmyHuntTests
         IReadOnlyList<UnitStack>? requested = null,
         double provisions = 100,
         HexCoord? destination = null,
-        Func<HexCoord, Terrain>? terrain = null) => Army.PlanDispatch(
+        Func<HexCoord, Terrain>? terrain = null) => TestArmy.PlanDispatch(
             settlement, requested ?? [new UnitStack(UnitType.Axeman, 10)], provisions, [], destination ?? CampHex, T0,
             Guid.CreateVersion7(), terrain ?? AllGrass(), ArmyMission.Hunt, targetCampCoord: targetCamp);
 
@@ -81,17 +80,9 @@ public class ArmyHuntTests
     }
 
     [Fact]
-    public void Hunt_dispatch_with_ships_and_passengers_is_still_a_fleet_and_rejected_for_a_land_camp()
-    {
-        var decision = DispatchHunt(Found(), CampHex, [new UnitStack(UnitType.Axeman, 2), new UnitStack(UnitType.Karve, 2)]);
-
-        Assert.Equal(DispatchRejection.HuntRequiresLandUnits, decision.Rejection);
-    }
-
-    [Fact]
     public void Fleet_hunting_a_water_camp_carries_passengers_up_to_its_slots()
     {
-        DispatchDecision Hunt(params UnitStack[] requested) => Army.PlanDispatch(
+        DispatchDecision Hunt(params UnitStack[] requested) => TestArmy.PlanDispatch(
             Found(), requested, 100, [], CampHex, T0, Guid.CreateVersion7(), _ => Terrain.Sea, ArmyMission.Hunt,
             targetCampCoord: CampHex, targetCampIsWater: true);
 
@@ -114,7 +105,7 @@ public class ArmyHuntTests
     [Fact]
     public void Only_a_hunt_keeps_a_target_camp()
     {
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             Found(), [new UnitStack(UnitType.Axeman, 10)], 100, [], CampHex, T0, Guid.CreateVersion7(), AllGrass(),
             ArmyMission.Move, targetCampCoord: CampHex);
 
@@ -188,6 +179,19 @@ public class ArmyHuntTests
     }
 
     [Fact]
+    public void A_hunts_refill_tops_the_provisions_up_on_the_way_home()
+    {
+        var army = Hunter();
+        var outbound = ((ArmyLocation.InTransit)army.Location).Movement;
+        var battleInstant = outbound.ArrivesAt;
+        var plan = Plan(CampFightWinner.Army, [new UnitStack(UnitType.Axeman, 9)], ResourceAmounts.Zero) with { Refill = 75 };
+
+        var returning = army.SettleHuntArrival(plan, battleInstant)!;
+
+        Assert.Equal(army.ProvisionsAt(battleInstant) + 75, returning.Provisions, 6);
+    }
+
+    [Fact]
     public void A_wiped_out_army_is_gone()
     {
         var army = Hunter();
@@ -218,7 +222,7 @@ public class ArmyHuntTests
         var arrivesAt = ((ArmyLocation.InTransit)army.Location).Movement.ArrivesAt;
 
         var garrison = state.GarrisonAt(camp, arrivesAt, insideRealm: false);
-        var plan = CampBattleResolver.Hunt(army.Stacks, garrison, camp, state.EffectiveLevel(camp), seed: 3, 0, state.Leftover);
+        var plan = CampBattleResolver.Hunt(army.Stacks, garrison, camp, state.EffectiveLevel(camp), seed: 3, double.PositiveInfinity, 0, state.Leftover);
         var returning = army.SettleHuntArrival(plan, arrivesAt);
         var after = state.AfterHunt(camp, arrivesAt, plan);
 

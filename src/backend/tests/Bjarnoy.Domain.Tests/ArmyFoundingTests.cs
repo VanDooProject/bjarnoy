@@ -25,11 +25,10 @@ public class ArmyFoundingTests
             Name = "Bjornstad",
             Centre = Home,
             Buildings = [new PlacedBuilding(Home, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = garrison ?? [new UnitStack(UnitType.Settler, 5)],
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 1_000_000, Iron: 1_000_000),
                 production, capacity, T0),
-        };
+        }.WithGarrison(garrison ?? [new UnitStack(UnitType.Settler, 5)]);
     }
 
     private static DispatchDecision DispatchFound(
@@ -45,7 +44,7 @@ public class ArmyFoundingTests
         Func<HexCoord, Terrain>? terrainAt = null,
         Func<HexCoord, bool>? isHexFoundable = null,
         bool renownAndSlotAllowed = true) =>
-        Army.PlanDispatch(
+        TestArmy.PlanDispatch(
             settlement,
             requested ?? [new UnitStack(UnitType.Settler, 5)],
             provisions,
@@ -324,7 +323,7 @@ public class ArmyFoundingTests
         // 5 Spearmen carry at most 5 * 10 = 50 food (FoodCarryCapacity) —
         // must stay at or under that or the dispatch itself is rejected
         // before RetargetFounding is even reached.
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Spearman, 5)], 40, [], new HexCoord(10, 0),
             T0, Guid.CreateVersion7(), AllGrass());
 

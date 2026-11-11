@@ -67,7 +67,7 @@ const garrisonRows = computed(() =>
     .map((g) => ({ unit: g.unit, label: unitName(g.unit), available: g.count })),
 );
 const picker = useDispatchUnitPicker(garrisonRows);
-const { isRowSelectable, hasLockedOutUnits } = picker;
+const { isRowSelectable, hasLockedOutUnits, sandHuntLacksTroops, unitSourceText } = picker;
 
 function quantityFor(unit: string): number {
   return draft.value?.unitCounts[unit] ?? 0;
@@ -286,9 +286,13 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
         </div>
 
         <p v-if="hasLockedOutUnits" class="status-subtext fleet-note">{{ t('hud.armyPanel.huntLandOnlyNote') }}</p>
+        <p v-if="sandHuntLacksTroops" class="status-subtext fleet-note" role="alert">{{ t('apiErrors.rejections.HuntRequiresLandUnits') }}</p>
         <div class="unit-steppers">
           <div v-for="row in garrisonRows" :key="row.unit" class="unit-stepper-row" :class="{ 'is-locked-out': !isRowSelectable(row.unit) }">
-            <span class="unit-stepper-name">{{ row.label }}</span>
+            <span class="unit-stepper-name">
+              {{ row.label }}
+              <span v-if="unitSourceText(row.unit)" class="unit-source" data-testid="unit-source">{{ unitSourceText(row.unit) }}</span>
+            </span>
             <div class="unit-stepper-controls">
               <button type="button" class="stepper-btn" :disabled="!isRowSelectable(row.unit) || quantityFor(row.unit) === 0" @click="decrement(row.unit, row.available)">{{ t('hud.dispatchSheet.decrement') }}</button>
               <span class="stepper-count">{{ quantityFor(row.unit) }} / {{ row.available }}</span>
@@ -298,6 +302,7 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
           </div>
           <div v-if="!garrisonRows.length" class="status-subtext">{{ t('hud.armyPanel.noUnitsAvailable') }}</div>
         </div>
+        <p v-if="picker.severalSpots.value" class="status-subtext error-note" data-testid="several-spots">{{ t('hud.garrisonSpots.severalSpots') }}</p>
 
         <DispatchSlots :unit-counts="draft.unitCounts" />
 
@@ -331,6 +336,12 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
 </template>
 
 <style scoped>
+.unit-source {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+}
 .dispatch-sheet {
   position: absolute;
   left: 0;

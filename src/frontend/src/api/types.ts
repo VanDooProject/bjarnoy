@@ -323,6 +323,12 @@ export interface PlacedBuildingResponse {
   nextLevelLossInSeconds?: number | null;
 }
 
+/** Mirrors `OwnBuildOrdersResponse` (`GET /worlds/{id}/own-build-orders`): the build queue of one of the player's realms, named by its oldest member. */
+export interface OwnBuildOrders {
+  settlementId: string;
+  queue: BuildOrderResponse[];
+}
+
 export interface BuildOrderResponse {
   id: string;
   q: number;
@@ -350,6 +356,23 @@ export interface BuildOrderResponse {
 export interface UnitStackResponse {
   unit: string;
   count: number;
+}
+
+/** The places a garrison stands: the longhouse, a tower, a dock (a dockyard). */
+export type GarrisonSpotKind = 'longhouse' | 'tower' | 'dock';
+
+/**
+ * One garrison spot of a settlement (`docs/design/garrison.md`): the units standing there, the guests (supporting armies of
+ * others) and what it can hold. Every spot is listed, the longhouse first, empty ones included.
+ */
+export interface GarrisonSpotResponse {
+  kind: GarrisonSpotKind;
+  q: number;
+  r: number;
+  stacks: UnitStackResponse[];
+  guests: UnitStackResponse[];
+  holdsLand: boolean;
+  holdsShips: boolean;
 }
 
 /**
@@ -457,6 +480,8 @@ export interface SettlementResponse {
   queue: BuildOrderResponse[];
   /** Units standing at this settlement (issue #55: includes trained `settler`). */
   garrison: UnitStackResponse[];
+  /** The garrison split by the spot it stands at (longhouse first); `garrison` is the total over all of them. */
+  garrisonSpots: GarrisonSpotResponse[];
   trainingQueue: TrainingOrderResponse[];
   runes: RuneInstanceResponse[];
   /** The running feast, if any. */
@@ -495,7 +520,7 @@ export interface SettlementSummary {
 /**
  * Mirrors `RivalBuildingResponse` (`GET /worlds/{id}/rival-buildings`): one building of another player's settlement (level 0: under construction) on a
  * hex the caller has explored (every building type, the caller's own settlements left out). `ownerUserId` is null for an anonymous
- * settlement.
+ * settlement. `GET /worlds/{id}/own-buildings` answers the same shape for the caller's own settlements.
  */
 export interface RivalBuilding {
   q: number;
@@ -1082,6 +1107,8 @@ export interface PlaceBuildingRequest {
 /** Signed: a positive count creates units, a negative one removes them. */
 export interface AdjustGarrisonRequest {
   unit: string;
+  /** The garrison spot the units are created at or removed from. */
+  spot: HexPoint;
   count: number;
 }
 
@@ -1561,6 +1588,12 @@ export interface UnitCountRequest {
   count: number;
 }
 
+/** One group of a dispatch: the units that leave from one garrison spot. */
+export interface DispatchFromSpot {
+  spot: HexPoint;
+  units: UnitCountRequest[];
+}
+
 /**
  * `waypoints`: ordered intermediate hexes, empty/omitted for a direct route.
  * `destination`: required for `mission: 'move'` (the default); ignored for
@@ -1569,12 +1602,14 @@ export interface UnitCountRequest {
  * and what the settlement can afford.
  */
 export interface DispatchArmyRequest {
-  units: UnitCountRequest[];
+  /** The units split by the garrison spot each group leaves from. */
+  from: DispatchFromSpot[];
   waypoints?: HexPoint[];
   destination?: HexPoint;
   provisions: number;
   mission?: string;
   targetSettlementId?: string;
+  /** Attack: the building to hit. Support: the host's garrison spot the army joins (required). */
   targetBuildingCoord?: HexPoint;
 }
 
@@ -1732,11 +1767,28 @@ export interface BattleReportSiege {
 }
 
 /**
+ * The fight at sea of a fleet's attack: its ships against the defender's ships. Mirrors `BattleReportShipFightResponse`.
+ * `winner` is `'attacker'` or `'defender'`.
+ */
+export interface BattleReportShipFight {
+  attackerLines: BattleReportAttackerLine[];
+  defenderLines: BattleReportDefenderLine[];
+  attackPower: number;
+  defensePower: number;
+  winner: string;
+}
+
+/**
  * Mirrors `BattleReportResponse`. `mission` is `'attack'` or `'raid'`
  * (backend phase 7) — this phase's dispatch UI only offers Attack, but a
  * report can still come back as a Raid (e.g. from another player), so it's
  * rendered with its own label rather than assumed to always be an Attack.
- * `winner` is `'attacker'` or `'defender'` (no draw).
+ * `winner` is `'attacker'` or `'defender'` (no draw): the whole attack's, the attacker unless a fight was lost.
+ *
+ * A land army fights one fight, a fleet two: `attackPower`/`defensePower`/`attackerLines`/`defenderLines`/`siege` are the
+ * land fight (the only fight of a land army, empty for a fleet that fought none) and `shipFight` the fight at sea (`null` for
+ * a land army, a target without ships and reports stored before ships fought separately). `drowned` are the passengers the
+ * surviving ships could not carry, `fireShipsBurned` the Fire Ships the fire used up and `fireSiege` the building it burned.
  */
 export interface BattleReportResponse {
   id: string;
@@ -1753,6 +1805,10 @@ export interface BattleReportResponse {
   attackerLines: BattleReportAttackerLine[];
   defenderLines: BattleReportDefenderLine[];
   siege: BattleReportSiege | null;
+  shipFight: BattleReportShipFight | null;
+  drowned: ArmyUnitStackResponse[];
+  fireShipsBurned: number;
+  fireSiege: BattleReportSiege | null;
 }
 
 // Issue #206 (frontend): in-flight field battles — army-vs-army interception
@@ -1828,7 +1884,8 @@ export interface SimulatorRequest {
  * Mirrors `SimulatorResponse` — deliberately the same field shape as
  * `BattleReportResponse` minus the persistence-only identity fields no
  * simulated battle has (no `id`, `occurredAt`, army/settlement ids), so the
- * same report-rendering markup (`BattleReportCard.vue`) can display either.
+ * same report-rendering markup (`BattleReportCard.vue`) can display either —
+ * a fleet's ship fight and land fight included, from the one `AttackResolver` a real attack uses.
  */
 export interface SimulatorResponse {
   mission: string;
@@ -1840,6 +1897,14 @@ export interface SimulatorResponse {
   attackerLines: BattleReportAttackerLine[];
   defenderLines: BattleReportDefenderLine[];
   siege: BattleReportSiege | null;
+  /**
+   * A fleet's fight at sea and what followed (the drowned passengers; the Fire Ships burned and their fire damage are always
+   * zero/`null` here, a simulated attack names no building). `attackPower`/`defensePower`/the lines are the land fight.
+   */
+  shipFight: BattleReportShipFight | null;
+  drowned: ArmyUnitStackResponse[];
+  fireShipsBurned: number;
+  fireSiege: BattleReportSiege | null;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/SettlementContracts.cs's

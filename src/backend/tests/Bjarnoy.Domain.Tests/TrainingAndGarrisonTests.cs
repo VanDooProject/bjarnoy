@@ -242,13 +242,12 @@ public class TrainingAndGarrisonTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = [new UnitStack(UnitType.Berserker, 50)],
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 20, Iron: 1_000_000),
                 production with { Food = production.Food - (50 * UnitCatalogue.Get(UnitType.Berserker).UpkeepPerHour) },
                 capacity,
                 T0),
-        };
+        }.WithGarrison([new UnitStack(UnitType.Berserker, 50)]);
 
         var result = settlement.SettleTo(T0.AddDays(30));
 
@@ -332,13 +331,12 @@ public class TrainingAndGarrisonTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = [],
-            Garrison = garrison,
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 0, Stone: 0, Food: 0.5, Iron: 0),
                 new ResourceAmounts(Wood: 0, Stone: 0, Food: netFoodRate, Iron: 0),
                 ResourceAmounts.Uniform(1000),
                 T0),
-        };
+        }.WithGarrison(garrison);
 
         var result = settlement.SettleTo(T0.AddHours(1));
 
@@ -387,13 +385,12 @@ public class TrainingAndGarrisonTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = homeGarrison,
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 10, Iron: 1_000_000),
                 production with { Food = production.Food - homeUpkeep - guestUpkeep },
                 ResourceAmounts.Uniform(1_000_000),
                 T0),
-        };
+        }.WithGarrison(homeGarrison);
 
         var result = settlement.SettleTo(T0.AddHours(1), guestStacks: guestStacks);
 
@@ -424,13 +421,12 @@ public class TrainingAndGarrisonTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = homeGarrison,
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 10, Iron: 1_000_000),
                 production with { Food = netFoodRate },
                 ResourceAmounts.Uniform(1_000_000),
                 T0),
-        };
+        }.WithGarrison(homeGarrison);
 
         var result = settlement.SettleTo(T0.AddHours(1), guestStacks: guestStacks);
 
@@ -459,12 +455,11 @@ public class TrainingAndGarrisonTests
             Name = "Bjornstad",
             Centre = Centre,
             Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = garrison,
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: foodStock, Iron: 1_000_000),
                 production with { Food = netFoodRate },
                 capacity,
                 T0),
-        };
+        }.WithGarrison(garrison);
     }
 }

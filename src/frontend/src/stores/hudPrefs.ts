@@ -2,8 +2,9 @@ import { defineStore } from 'pinia';
 import {
   DEFAULT_HUD_PANELS,
   HUD_PANEL_IDS,
-  isDockCorner,
-  type DockCorner,
+  applyDrop,
+  isHudPanelPref,
+  type DropTarget,
   type HudPanelId,
   type HudPanelPref,
 } from '../lib/hud/hudPanelDock';
@@ -29,7 +30,7 @@ const PANELS_KEY = 'bjarnoy.hudPanels';
 
 type HudPanels = Record<HudPanelId, HudPanelPref>;
 
-/** The desktop panels' `{ open, corner }`, each validated on its own: a bad or missing entry falls back to its default. */
+/** The desktop panels' prefs, each validated on its own: a bad, missing or old-format entry falls back to its default. */
 function readPanels(): HudPanels {
   const panels = {} as HudPanels;
   let stored: unknown = null;
@@ -42,11 +43,7 @@ function readPanels(): HudPanels {
   const record = stored && typeof stored === 'object' ? (stored as Record<string, unknown>) : {};
   for (const id of HUD_PANEL_IDS) {
     const entry = record[id];
-    const e = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
-    panels[id] = {
-      open: typeof e.open === 'boolean' ? e.open : DEFAULT_HUD_PANELS[id].open,
-      corner: isDockCorner(e.corner) ? e.corner : DEFAULT_HUD_PANELS[id].corner,
-    };
+    panels[id] = isHudPanelPref(entry) ? { ...entry } : { ...DEFAULT_HUD_PANELS[id] };
   }
   return panels;
 }
@@ -68,7 +65,7 @@ export const useHudPrefsStore = defineStore('hudPrefs', {
     barPosition: readBarPosition() as HudBarPosition,
     // The per-building info markers over the settlement map (components/hud/BuildingHudLayer.vue); on by default.
     buildingInfo: readBuildingInfo(),
-    // The desktop settlement view's dockable panels (components/hud/HudPanelDock.vue): shown or collapsed, and their corner.
+    // The desktop settlement view's dockable panels (components/hud/HudPanelDock.vue): open or closed, collapsed to the header, and where they dock.
     panels: readPanels() as HudPanels,
   }),
   actions: {
@@ -79,8 +76,12 @@ export const useHudPrefsStore = defineStore('hudPrefs', {
       this.panels[id].open = !this.panels[id].open;
       this.savePanels();
     },
-    setPanelCorner(id: HudPanelId, corner: DockCorner) {
-      this.panels[id].corner = corner;
+    toggleCollapsed(id: HudPanelId) {
+      this.panels[id].collapsed = !this.panels[id].collapsed;
+      this.savePanels();
+    },
+    movePanel(id: HudPanelId, target: DropTarget) {
+      this.panels = applyDrop(this.panels, id, target);
       this.savePanels();
     },
     savePanels() {

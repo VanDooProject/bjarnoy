@@ -31,18 +31,22 @@ public class ArmySupportTests
             Name = "Bjornstad",
             Centre = home,
             Buildings = [new PlacedBuilding(home, BuildingType.Longhouse, longhouseLevel)],
-            Garrison = garrison ?? [],
             Resources = ResourcePool.Create(
                 new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: food, Iron: 1_000_000),
                 production, capacity, T0),
-        };
+        }.WithGarrison(garrison ?? []);
     }
+
+    /// <summary>The host's longhouse hex, a spot that holds land units.</summary>
+    private static readonly GarrisonSpot HostLonghouse = new(HostHex, GarrisonSpotKind.Longhouse, [], HoldsLand: true, HoldsShips: false);
 
     private static DispatchDecision DispatchSupport(
         Settlement settlement,
         Guid hostSettlementId,
         double provisions,
-        IReadOnlyList<UnitStack>? requested = null) => Army.PlanDispatch(
+        IReadOnlyList<UnitStack>? requested = null,
+        HexCoord? spot = null,
+        IReadOnlyList<GarrisonSpot>? hostSpots = null) => TestArmy.PlanDispatch(
             settlement,
             requested ?? [new UnitStack(UnitType.Spearman, 10)],
             provisions,
@@ -52,14 +56,16 @@ public class ArmySupportTests
             Guid.CreateVersion7(),
             AllGrass(),
             ArmyMission.Support,
-            hostSettlementId);
+            hostSettlementId,
+            targetBuildingCoord: spot ?? HostHex,
+            targetSpots: hostSpots ?? [HostLonghouse]);
 
     [Fact]
     public void Support_dispatch_is_rejected_without_a_target_settlement()
     {
         var settlement = Found(garrison: [new UnitStack(UnitType.Spearman, 10)]);
 
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Spearman, 5)], 40, [], HostHex, T0,
             Guid.CreateVersion7(), AllGrass(), ArmyMission.Support, targetSettlementId: null);
 
@@ -111,9 +117,10 @@ public class ArmySupportTests
         var settlement = Found(garrison: [new UnitStack(UnitType.Spearman, 10)]);
         Terrain TerrainAt(HexCoord c) => c == HostHex ? Terrain.Sea : Terrain.Grass;
 
-        var decision = Army.PlanDispatch(
+        var decision = TestArmy.PlanDispatch(
             settlement, [new UnitStack(UnitType.Spearman, 5)], 40, [], HostHex, T0,
-            Guid.CreateVersion7(), TerrainAt, ArmyMission.Support, Guid.CreateVersion7());
+            Guid.CreateVersion7(), TerrainAt, ArmyMission.Support, Guid.CreateVersion7(),
+            targetBuildingCoord: HostHex, targetSpots: [HostLonghouse]);
 
         Assert.Equal(DispatchRejection.DestinationNotLand, decision.Rejection);
     }
@@ -133,6 +140,74 @@ public class ArmySupportTests
         var supporting = Assert.IsType<ArmyLocation.Supporting>(arrival.Army.Location);
         Assert.Equal(hostId, supporting.HostSettlementId);
         Assert.Equal(10, arrival.Army.Stacks.Single().Count); // stacks untouched, just relocated
+    }
+
+    [Fact]
+    public void A_support_dispatch_must_name_the_garrison_spot_to_join()
+    {
+        var settlement = Found(garrison: [new UnitStack(UnitType.Spearman, 10)]);
+
+        var decision = TestArmy.PlanDispatch(
+            settlement, [new UnitStack(UnitType.Spearman, 5)], 100, [], HostHex, T0,
+            Guid.CreateVersion7(), AllGrass(), ArmyMission.Support, Guid.CreateVersion7(), targetSpots: [HostLonghouse]);
+
+        Assert.Equal(DispatchRejection.SupportSpotRequired, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_support_dispatch_is_refused_at_a_hex_that_is_no_spot_of_the_host()
+    {
+        var settlement = Found(garrison: [new UnitStack(UnitType.Spearman, 10)]);
+
+        var decision = DispatchSupport(settlement, Guid.CreateVersion7(), provisions: 100, spot: new HexCoord(5, 0));
+
+        Assert.Equal(DispatchRejection.SupportSpotCannotHold, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_support_dispatch_is_refused_at_a_spot_that_cannot_hold_the_units()
+    {
+        var settlement = Found(garrison: [new UnitStack(UnitType.Spearman, 10)]);
+        var dock = new GarrisonSpot(new HexCoord(5, 0), GarrisonSpotKind.Dock, [], HoldsLand: false, HoldsShips: true);
+
+        var landAtDock = DispatchSupport(settlement, Guid.CreateVersion7(), provisions: 100, spot: dock.Coord, hostSpots: [HostLonghouse, dock]);
+
+        Assert.Equal(DispatchRejection.SupportSpotCannotHold, landAtDock.Rejection);
+    }
+
+    [Fact]
+    public void A_fleet_cannot_support_at_a_tower()
+    {
+        var settlement = Found(garrison: [new UnitStack(UnitType.Karve, 2)]);
+        var dock = new GarrisonSpot(new HexCoord(5, 0), GarrisonSpotKind.Dock, [], HoldsLand: false, HoldsShips: true);
+        var tower = new GarrisonSpot(new HexCoord(3, 0), GarrisonSpotKind.Tower, [], HoldsLand: true, HoldsShips: false);
+        List<UnitStack> karves = [new UnitStack(UnitType.Karve, 2)];
+
+        var atTower = DispatchSupport(settlement, Guid.CreateVersion7(), provisions: 100, karves, spot: tower.Coord, hostSpots: [HostLonghouse, tower, dock]);
+
+        Assert.Equal(DispatchRejection.SupportSpotCannotHold, atTower.Rejection);
+    }
+
+    [Fact]
+    public void The_guest_walks_to_the_spot_it_joins_and_stands_there()
+    {
+        var settlement = Found(garrison: [new UnitStack(UnitType.Spearman, 10)]);
+        var tower = new GarrisonSpot(new HexCoord(3, 1), GarrisonSpotKind.Tower, [], HoldsLand: true, HoldsShips: false);
+        var hostId = Guid.CreateVersion7();
+
+        var decision = DispatchSupport(settlement, hostId, provisions: 100, spot: tower.Coord, hostSpots: [HostLonghouse, tower]);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        var army = decision.Army!;
+        Assert.Equal(tower.Coord, ((ArmyLocation.InTransit)army.Location).Movement.Path[^1]);
+        Assert.Equal(tower.Coord, army.TargetBuildingCoord);
+
+        var arrival = Army.SettleSupportArrival(army, ((ArmyLocation.InTransit)army.Location).Movement.ArrivesAt);
+
+        var supporting = Assert.IsType<ArmyLocation.Supporting>(arrival.Army.Location);
+        Assert.Equal(new ArmyLocation.Supporting(hostId, tower.Coord), supporting);
+        Assert.Equal(arrival.Army.Stacks, Army.GuestsAt([arrival.Army], hostId, tower.Coord));
+        Assert.Empty(Army.GuestsAt([arrival.Army], hostId, HostHex));
     }
 
     [Fact]
@@ -156,10 +231,11 @@ public class ArmySupportTests
         {
             Id = Guid.CreateVersion7(),
             SettlementId = Guid.CreateVersion7(),
+            HomeSpot = new HexCoord(0, 0),
             Stacks = [new UnitStack(UnitType.Spearman, 10)],
             Mission = ArmyMission.Support,
             TargetSettlementId = Guid.CreateVersion7(),
-            Location = new ArmyLocation.Supporting(Guid.CreateVersion7()),
+            Location = new ArmyLocation.Supporting(Guid.CreateVersion7(), HostHex),
         };
 
         var result = army.SettleTo(T0.AddYears(1));
@@ -177,11 +253,12 @@ public class ArmySupportTests
         {
             Id = Guid.CreateVersion7(),
             SettlementId = homeId,
+            HomeSpot = new HexCoord(0, 0),
             Stacks = [new UnitStack(UnitType.Spearman, 10)],
             Provisions = 42,
             Mission = ArmyMission.Support,
             TargetSettlementId = hostId,
-            Location = new ArmyLocation.Supporting(hostId),
+            Location = new ArmyLocation.Supporting(hostId, HostHex),
         };
 
         var recalled = army.Recall(T0, Home, AllGrass(), currentHex: HostHex);
@@ -205,10 +282,11 @@ public class ArmySupportTests
         {
             Id = Guid.CreateVersion7(),
             SettlementId = Guid.CreateVersion7(),
+            HomeSpot = new HexCoord(0, 0),
             Stacks = [new UnitStack(UnitType.Spearman, 10)],
             Mission = ArmyMission.Support,
             TargetSettlementId = Guid.CreateVersion7(),
-            Location = new ArmyLocation.Supporting(Guid.CreateVersion7()),
+            Location = new ArmyLocation.Supporting(Guid.CreateVersion7(), HostHex),
         };
 
         Assert.Null(army.Recall(T0, Home, AllGrass()));
