@@ -10,6 +10,8 @@ import {
   isHuntUnit,
   buildMoveDispatchRequest,
   buildFoundDispatchRequest,
+  buildCampDispatchRequest,
+  campReadyAtMs,
   dispatchHasDestination,
   dispatchTargetCoord,
   isRouteDestination,
@@ -148,11 +150,31 @@ describe('buildFoundDispatchRequest', () => {
   });
 });
 
+describe('buildCampDispatchRequest', () => {
+  it('returns null without units or without a route', () => {
+    expect(buildCampDispatchRequest(at({ campbuilder: 0 }), [{ q: 1, r: 1 }], 10)).toBeNull();
+    expect(buildCampDispatchRequest(at({ campbuilder: 2 }), [], 10)).toBeNull();
+  });
+
+  it('is a move-shaped request with mission setupcamp: the last hex is the camp hex', () => {
+    const route = [{ q: 0, r: 0 }, { q: 3, r: -1 }];
+    expect(buildCampDispatchRequest(at({ campbuilder: 2, karve: 1, spearman: 3 }), route, 40)).toEqual({
+      from: [{ spot: { q: 0, r: 0 }, units: [{ unit: 'campbuilder', count: 2 }, { unit: 'karve', count: 1 }, { unit: 'spearman', count: 3 }] }],
+      waypoints: [{ q: 0, r: 0 }],
+      destination: { q: 3, r: -1 },
+      provisions: 40,
+      mission: 'setupcamp',
+    });
+  });
+});
+
 describe('isRouteDestination', () => {
   it('marks the last hex of a move or found route only', () => {
     expect(isRouteDestination('move', 1, 2)).toBe(true);
     expect(isRouteDestination('found', 1, 2)).toBe(true);
     expect(isRouteDestination('found', 0, 2)).toBe(false);
+    expect(isRouteDestination('setupcamp', 1, 2)).toBe(true);
+    expect(isRouteDestination('setupcamp', 0, 2)).toBe(false);
     expect(isRouteDestination('attack', 1, 2)).toBe(false);
     expect(isRouteDestination('hunt', 1, 2)).toBe(false);
   });
@@ -161,6 +183,8 @@ describe('isRouteDestination', () => {
 describe('dispatchHasDestination', () => {
   const base = { targetSettlementId: null, targetCamp: null, route: [] };
   it('needs a route for move and found', () => {
+    expect(dispatchHasDestination({ ...base, mission: 'setupcamp' })).toBe(false);
+    expect(dispatchHasDestination({ ...base, mission: 'setupcamp', route: [{ q: 1, r: 0 }] })).toBe(true);
     expect(dispatchHasDestination({ ...base, mission: 'found' })).toBe(false);
     expect(dispatchHasDestination({ ...base, mission: 'found', route: [{ q: 1, r: 0 }] })).toBe(true);
     expect(dispatchHasDestination({ ...base, mission: 'move', route: [{ q: 1, r: 0 }] })).toBe(true);
@@ -753,6 +777,27 @@ describe('trainingSite', () => {
     expect(trainingSite(centre, [range], { spearman: 1 }, byType)).toEqual(centre);
     expect(trainingSite(centre, [barracks], {}, byType)).toEqual(centre);
     expect(trainingSite(centre, [barracks], { spearman: 0 }, byType)).toEqual(centre);
+  });
+});
+
+describe('campReadyAtMs', () => {
+  const arrivesAt = '2026-01-01T00:00:00Z';
+  const base = Date.parse(arrivesAt);
+  const standing = { mission: 'setupcamp', movement: { isReturning: false, arrivesAt } };
+
+  it('is arrival plus the 10 minute build time at world speed 1', () => {
+    expect(campReadyAtMs(standing, base + 1000, 1)).toBe(base + 10 * 60_000);
+  });
+
+  it('scales with the world speed', () => {
+    expect(campReadyAtMs(standing, base, 4)).toBe(base + 150_000);
+  });
+
+  it('is null before arrival, once recalled, and for any other mission', () => {
+    expect(campReadyAtMs(standing, base - 1, 1)).toBeNull();
+    expect(campReadyAtMs({ ...standing, movement: { isReturning: true, arrivesAt } }, base + 1, 1)).toBeNull();
+    expect(campReadyAtMs({ ...standing, mission: 'found' }, base + 1, 1)).toBeNull();
+    expect(campReadyAtMs({ mission: 'setupcamp', movement: null }, base + 1, 1)).toBeNull();
   });
 });
 

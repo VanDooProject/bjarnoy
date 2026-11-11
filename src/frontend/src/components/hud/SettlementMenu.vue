@@ -8,6 +8,7 @@ import { useWorldStore } from '../../stores/world';
 import { useAuthStore } from '../../stores/auth';
 import { api } from '../../api/client';
 import { DEMO_MODE } from '../../config';
+import { buildingName } from '../../i18n/catalogueNames';
 import { fadePopover } from '../../lib/hud/chipMotion';
 import type { SettlementSummary } from '../../api/types';
 import type { MessageSchema } from '../../i18n/schema';
@@ -152,6 +153,7 @@ watch(open, (isOpen) => {
             @click="switchTo(realm.id)"
           >
             <span class="realm-name">{{ realm.name }}</span>
+            <span v-if="realm.isBeachCamp" class="realm-kind">{{ buildingName('beachcamp') }}</span>
             <span v-if="realm.id === world.selectedSettlementId" class="realm-mark">{{ t('hud.settlementMenu.current') }}</span>
           </button>
         </template>
@@ -261,6 +263,11 @@ watch(open, (isOpen) => {
   text-transform: uppercase;
   color: var(--muted);
 }
+.realm-kind {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
 .realm-name {
   overflow: hidden;
   text-overflow: ellipsis;

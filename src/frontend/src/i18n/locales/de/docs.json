@@ -58,6 +58,11 @@
         "wildlifeCamps": "Starke Lager können Siedler unterwegs überfallen.",
         "realm": "Eine neue Siedlung hält Abstand zu deinem Gebiet, Wachtürme eingerechnet."
       },
+      "beachCamp": {
+        "founding": "Lagerbauer bildest du in derselben Wagnerei aus wie Siedler.",
+        "ships": "Das Lager entsteht vom Meer aus, und die Schiffe warten draußen auf dem Wasser.",
+        "realm": "Ein Lager beansprucht ein Feld und schließt sich deinem Gebiet an, wenn es es berührt."
+      },
       "realm": {
         "founding": "Wo eine neue Siedlung landen darf, wird von jeder Gebietsgrenze aus gemessen, Wachtürme eingerechnet.",
         "walls": "Auch Mauern stehen innerhalb deines Gebiets und brauchen einen Wachturm der Stufe 5.",
@@ -154,6 +159,10 @@
         "title": "Siedlungen gründen",
         "description": "Siedler aus der Wagnerei und wo eine neue Siedlung landen kann."
       },
+      "beachCamp": {
+        "title": "Strandlager",
+        "description": "Lagerbauer, ein Lager am Sandstrand und was es fasst."
+      },
       "realm": {
         "title": "Das Gebiet erweitern",
         "description": "Wie weit dein Anspruch reicht, wie Wachtürme die Grenze hinausschieben und wie viele du bauen darfst."
@@ -246,7 +255,7 @@
       "water": "Wasser"
     },
     "lore": {
-      "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und welche Gebäude freigeschaltet sind. Außerdem liefert es von jedem Rohstoff ein wenig und erweitert das Lager. Jede Siedlung beginnt mit einem Langhaus auf Gras.",
+      "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und welche Gebäude freigeschaltet sind. Außerdem liefert es von jedem Rohstoff ein wenig und erweitert das Lager. Jede Siedlung beginnt mit einem Langhaus auf Gras oder, wenn sie vom Meer aus gegründet wurde, auf dem Sandstrand.",
       "lumberjack": "Schlägt Holz auf bewaldetem Boden – das Holz hinter jeder Wand und jedem Dach.",
       "quarry": "Bricht Stein aus einem Bergkamm – die Knochen jeder Festung.",
       "odinstatue": "Odins Statue steht auf Gras und wird ab Langhaus 25 hinter einer Druidenhütte der Stufe 10 freigeschaltet. Weisheit: Jeder Bau in dieser Siedlung dauert pro Stufe 2 % kürzer (auf Stufe 5 sind es 10 %). Raben: Das Gebiet, die Türme und die Armeen der Siedlung sehen pro Stufe 2 Ringe weiter (auf Stufe 5 sind es 10). Sie zählt als der eine Schrein der Siedlung.",
@@ -1087,8 +1096,10 @@
       "slots": "Jeder Siedler belegt an Bord einen Platz. Eine Karve nimmt also alle fünf auf und hat noch Platz für Begleitschutz. Brauchen die Truppen mehr Plätze, als die Schiffe haben, kann der Zug nicht aufbrechen. Wie viele Plätze jede Einheit braucht, steht auf der Seite {ships}.",
       "speed": "Auf See ist der Zug so schnell wie sein langsamstes Schiff. Die Siedler bremsen ihn nicht.",
       "camps": "Lager an Land überfallen einen Zug auf See nie. Der Walweg schon (siehe {camps}).",
+      "camp": "Willst du nur einen Brückenkopf am Ufer und kein neues Gebiet, errichte stattdessen ein {camp}.",
       "ships": "Auch die Schiffe bleiben mit dem Begleitschutz in der neuen Siedlung.",
-      "shipsLink": "Schiffe und Wasser"
+      "shipsLink": "Schiffe und Wasser",
+      "campLink": "Strandlager"
     },
     "renown": {
       "heading": "Ruhm und Preis",
@@ -1121,6 +1132,48 @@
     },
     "adminNote": {
       "sea": "Ein Zug mit mindestens einem Schiff ist eine Flotte (Army.IsFleet): Er startet an der Werft (Army.FleetAnchor), nutzt für Rückruf und Rückzug die Seerouten und fährt mit dem Tempo seines langsamsten Schiffs (ShipCargo.Pace). Das Landefeld ist ein Landfeld mit einem Meer-Nachbarn (Shoreline.IsShoreline), das die Route mit dem letzten Schritt erreicht."
+    }
+  },
+  "beachCamp": {
+    "title": "Strandlager",
+    "intro": "Ein kleiner Stützpunkt an einem Sandstrand, den du vom Meer aus errichtest.",
+    "toc": {
+      "what": "Wofür",
+      "setup": "Aufbauen",
+      "holds": "Was es fasst",
+      "claim": "Gebiet",
+      "risks": "Gefahren"
+    },
+    "what": {
+      "heading": "Ein Stützpunkt für Landungen vom Meer",
+      "body": "Im Strandlager fasst ein Angriff vom Meer Fuß. Schiffe bringen die Truppen an einen Sandstrand, dort entsteht das Lager, und von ihm aus kämpfen die Truppen. Das Lager ist eine eigene Siedlung, aber nur ein Feld groß."
+    },
+    "setup": {
+      "heading": "Ein Lager errichten",
+      "body": "Du brauchst genau {count} {builders} aus der {workshop} und {cost}. Die Kosten zahlst du, sobald die Armee aufbricht. Schiffe und Truppen kannst du dazunehmen. {minutes} Minuten nach der Ankunft der Armee steht das Lager. Tipp auf der Karte ein freies Sandfeld am Ufer an und wähle „Strandlager errichten“.",
+      "rules": {
+        "site": "Du kannst es nur auf einem Sandfeld am Ufer errichten, auf dem noch nichts steht.",
+        "inside": "Es darf auch im Gebiet eines anderen Spielers stehen, selbst im Gebiet eines Feindes.",
+        "waiting": "Solange das Lager entsteht, warten die Truppen auf seinem Feld und die Schiffe ein Feld weit draußen auf dem Wasser.",
+        "garrison": "Die Lagerbauer werden dabei verbraucht. Alles andere, was du mitgeschickt hast, bleibt als Besatzung im Lager.",
+        "home": "Rufst du die Armee zurück oder besetzt jemand die Stelle, während das Lager entsteht, kommen Lagerbauer und Rohstoffe wieder heim."
+      }
+    },
+    "holds": {
+      "heading": "Was ein Lager fasst",
+      "body": "Ein Lager fasst bis zu {cap} von jedem Rohstoff: Holz, Stein, Nahrung und Eisen. Es hat eine eigene Besatzung.",
+      "nothing": "Es produziert nichts, und du kannst darin nichts bauen."
+    },
+    "claim": {
+      "heading": "Gebiet",
+      "body": "Ein Lager beansprucht nur sein eigenes Feld. Berührt dieses Feld eines deiner Gebiete, schließt sich das Lager ihm an: Beide teilen sich einen Vorrat, und das Lager erscheint unter dem Namen des Gebiets (siehe {realm}).",
+      "realmLink": "Das Gebiet erweitern",
+      "limit": "Ein Lager zählt nicht zu deiner Obergrenze an Siedlungen."
+    },
+    "risks": {
+      "heading": "Gefahren",
+      "attacked": "Ein Lager kann von Land und vom Meer aus angegriffen werden. Verteidigen keine Truppen es, kannst du es plündern.",
+      "empty": "Sind keine Truppen darin, lässt es sich auch ohne Belagerungsgerät zerstören."
     }
   },
   "realm": {
@@ -1265,8 +1318,8 @@
     },
     "sendOut": {
       "heading": "Eine Armee losschicken, die schon unterwegs ist",
-      "spots": "Deine Truppen stehen in deinem Langhaus, in deinen Wachtürmen und in deinen Werften. Schiffe liegen in den Werften, im Langhaus nur dann, wenn es am Meer auf Sand steht. Neue Einheiten ziehen an den nächstgelegenen Ort, der sie aufnehmen kann, und eine Armee kehrt dorthin zurück, wo sie losgezogen ist. Um eine andere deiner Siedlungen zu unterstützen, tippst du auf ihr Langhaus, einen ihrer Wachtürme oder eine ihrer Werften.",
-      "orders": "Tippe auf einem Feld auf „Armee hierher entsenden“, „Angreifen“, „Unterstützen“ oder „Jagen“ und wähle die Armee, die losziehen soll: deine Garnison oder eine Armee, die schon draußen ist. Eine stehende Armee kann ziehen, angreifen, unterstützen oder jagen. Eine marschierende Armee leitest du mit Premium um. Willst du lieber woandershin, tippst du währenddessen einfach auf ein anderes Feld. Greifst du eine Siedlung an, greifst du ein Gebäude in ihrem Reich an. Hat das Gebäude eine Besatzung, verteidigt sie es. Unterstützt du eine Siedlung, verstärkst du eine ihrer Besatzungen.",
+      "spots": "Deine Truppen stehen in deinem Langhaus, in deinen Wachtürmen und in deinen Werften. Schiffe liegen in den Werften, im Langhaus nur dann, wenn es am Meer auf Sand steht. Neue Einheiten ziehen an den nächstgelegenen Ort, der sie aufnehmen kann, und eine Armee kehrt dorthin zurück, wo sie losgezogen ist. Willst du Truppen in ein anderes deiner Reiche schicken, tippst du auf eines seiner Felder: Sie verstärken dort als Unterstützung die Besatzung, auf dem Feld, das du angetippt hast, oder im Langhaus.",
+      "orders": "Tippe auf einem Feld auf „Armee hierher entsenden“, „Angreifen“ oder „Jagen“ und wähle die Armee, die losziehen soll: die Garnison eines deiner Reiche oder eine Armee von dir, die schon draußen ist. Jede Zeile nennt das Reich und was seine Truppen dort tun würden: Auf einem Feld deines eigenen Reichs ziehen sie hin, Truppen deiner anderen Reiche unterstützen es. Eine stehende Armee kann ziehen, angreifen, unterstützen oder jagen. Eine marschierende Armee leitest du mit Premium um. Willst du lieber woandershin, tippst du währenddessen einfach auf ein anderes Feld. Greifst du eine Siedlung an, greifst du ein Gebäude in ihrem Reich an. Hat das Gebäude eine Besatzung, verteidigt sie es. Unterstützt du eine Siedlung, verstärkst du eine ihrer Besatzungen.",
       "split": "Von einer stehenden Armee kannst du nur einen Teil losschicken. Der Rest bleibt, wo er steht. Eine marschierende Armee zieht immer komplett los.",
       "reach": "Eine Armee zieht nur los, wenn sie das Ziel erreicht und danach noch genug Proviant für den Rückweg hat. Alle anderen siehst du ausgegraut in der Liste, zusammen mit dem Grund.",
       "support": "Eine Armee, die eine andere Siedlung unterstützt, musst du erst zurückrufen."
@@ -1331,10 +1384,12 @@
       "heading": "Auf See",
       "sea": "Schiffe fahren nur auf dem Meer. Küstenwasser und offene See kosten gleich viel, Moorseen sind für sie gesperrt.",
       "targets": "Eine Flotte kann Siedlungen angreifen, plündern oder unterstützen, die Küste beanspruchen. Greifst du eine Siedlung an, greifst du ein Gebäude in ihrem Reich an. Unterstützt du sie, verstärkst du eine ihrer Besatzungen.",
+      "camp": "Eine Flotte kann auch Lagerbauer an einen Sandstrand bringen, die dort ein {camp} errichten: einen Stützpunkt für Landungen vom Meer.",
       "walls": "{walls} halten Flotten nicht auf.",
       "wallsLink": "Mauern",
       "camps": "Lager an Land überfallen nie eine Flotte. Der Walweg liegt auf offener See und überfällt jede Flotte, die auf sein Feld segelt (siehe {camps}).",
-      "campsLink": "Wildtierlager"
+      "campsLink": "Wildtierlager",
+      "campLink": "Strandlager"
     },
     "troops": {
       "heading": "Truppen an Bord",

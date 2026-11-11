@@ -23,6 +23,7 @@ import {
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
 import { useDispatchTargetBuilding } from '../../composables/useDispatchTargetBuilding';
+import CampInstructions from './CampInstructions.vue';
 import HuntTargetSummary from './HuntTargetSummary.vue';
 import DispatchTargetBuildingPicker from './DispatchTargetBuildingPicker.vue';
 import SendArmyPicker from './SendArmyPicker.vue';
@@ -47,7 +48,7 @@ const draft = computed(() => world.dispatchDraft);
 // Only garrison units can be sent — the wire-name -> count map the quantity
 // inputs below read/write against, filtered to what's actually standing here.
 const garrisonRows = computed(() =>
-  world.hud.garrison
+  (world.dispatchSource?.garrison ?? world.hud.garrison)
     .filter((g) => g.count > 0)
     .map((g) => ({ unit: g.unit, label: unitName(g.unit), available: g.count })),
 );
@@ -69,7 +70,7 @@ function setQuantity(unit: string, value: string, max: number) {
     // Issue #158: provisions come out of `available`, not raw stock — food
     // reserved for the waiting build queue is not free to load onto an army.
     world.setDispatchProvisions(
-      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.hud.available.food),
+      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.dispatchSource?.availableFood ?? world.hud.available.food),
     );
   }
 }
@@ -352,6 +353,13 @@ async function confirmFieldOrderClick() {
           >
             {{ missionName('found') }}
           </button>
+          <button
+            v-if="draft.mission === 'setupcamp'"
+            type="button"
+            class="mission-tab active"
+          >
+            {{ missionName('setupcamp') }}
+          </button>
         </div>
 
         <template v-if="draft.mission === 'hunt'">
@@ -363,6 +371,7 @@ async function confirmFieldOrderClick() {
         <p v-else-if="draft.mission === 'found'" class="status-subtext instructions">
           {{ t('hud.armyPanel.foundInstructions') }}
         </p>
+        <CampInstructions v-else-if="draft.mission === 'setupcamp'" />
         <p v-else-if="draft.mission === 'move'" class="status-subtext instructions">
           {{ t('hud.armyPanel.dispatchInstructions', {
             count: routeLength,

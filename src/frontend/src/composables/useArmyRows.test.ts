@@ -153,6 +153,46 @@ describe('useArmyRows', () => {
     expect(r.fieldOrderLabel).toBe('Move on');
   });
 
+  it('shows an arrived camp army as building the camp, counting down to arrival plus 10 minutes, and keeps Recall', () => {
+    const world = useWorldStore();
+    // Arrived at 00:50, now 01:00: the camp is ready at 01:00 (10 minutes after arrival) at world speed 1.
+    world.armies = [
+      army({
+        mission: 'setupcamp',
+        stacks: [{ unit: 'campbuilder', count: 2 }],
+        movement: { ...army().movement!, arrivesAt: '2026-01-01T00:50:00Z' },
+      }),
+    ];
+    world.worldSpeedFactor = 1;
+    vi.setSystemTime(new Date('2026-01-01T00:55:00Z'));
+
+    const r = mountArmyRows().value[0];
+
+    expect(r.status).toMatch(/^Building the camp, ready at \d{2}:\d{2}( [AP]M)?$/);
+    expect(r.eta).toBe('5m 0s');
+    expect(r.canRecall).toBe(true);
+    expect(r.mission).toBe('Set up camp');
+  });
+
+  it('scales the camp build time by the world speed', () => {
+    const world = useWorldStore();
+    world.armies = [army({ mission: 'setupcamp', movement: { ...army().movement!, arrivesAt: '2026-01-01T00:50:00Z' } })];
+    world.worldSpeedFactor = 5; // 10 min / 5 = 2 min after arrival
+    vi.setSystemTime(new Date('2026-01-01T00:51:00Z'));
+
+    expect(mountArmyRows().value[0].eta).toBe('1m 0s');
+  });
+
+  it('still counts a camp army that has not arrived yet down to its arrival', () => {
+    const world = useWorldStore();
+    world.armies = [army({ mission: 'setupcamp' })];
+
+    const r = mountArmyRows().value[0];
+
+    expect(r.status).toBe('In transit');
+    expect(r.eta).toBe('1h 0m');
+  });
+
   it('uses the return leg once an army has turned around', () => {
     const world = useWorldStore();
     world.armies = [

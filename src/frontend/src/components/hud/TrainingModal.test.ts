@@ -96,6 +96,19 @@ describe('TrainingModal', () => {
     expect(names).not.toContain('karve');
   });
 
+  it('offers the camp builder next to the settler at the Cart Workshop, as the live catalogue lists it', () => {
+    const world = setup([placed('cartworkshop', 3, -2, 5)]);
+    const settler = definitions.find((d) => d.type === 'settler')!;
+    useUnitCatalogueStore().definitions = [
+      ...definitions,
+      { ...settler, type: 'campbuilder', trainingCost: { wood: 80, stone: 40, food: 40, iron: 20 } },
+    ];
+    expect(world.hud.buildings).toHaveLength(1);
+    const names = mountModal(placed('cartworkshop', 3, -2, 5)).findAll('.unit-name').map((n) => n.text());
+    expect(names).toContain('Settler');
+    expect(names).toContain('Camp builder');
+  });
+
   it('shows the duration with the building level factor', () => {
     setup([placed('barracks', 3, -2, 7)]);
     const thrall = definitions.find((d) => d.type === 'thrall')!;

@@ -18,6 +18,7 @@ import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { useAuthStore } from '../../stores/auth';
 import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
+import CampInstructions from './CampInstructions.vue';
 import HuntTargetSummary from './HuntTargetSummary.vue';
 import DispatchSlots from './DispatchSlots.vue';
 import { useDispatchUnitPicker } from '../../composables/useDispatchUnitPicker';
@@ -62,7 +63,7 @@ function toggleExpanded() {
 }
 
 const garrisonRows = computed(() =>
-  world.hud.garrison
+  (world.dispatchSource?.garrison ?? world.hud.garrison)
     .filter((g) => g.count > 0)
     .map((g) => ({ unit: g.unit, label: unitName(g.unit), available: g.count })),
 );
@@ -80,7 +81,7 @@ function applyQuantity(unit: string, value: number, max: number) {
   // sensible default (the player can still edit it after).
   if (draft.value) {
     world.setDispatchProvisions(
-      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.hud.available.food),
+      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.dispatchSource?.availableFood ?? world.hud.available.food),
     );
   }
 }
@@ -246,12 +247,16 @@ const errorMessage = computed(() => (isFieldOrder.value ? fieldDraft.value?.erro
           <button v-if="draft.mission === 'found'" type="button" class="mission-tab active">
             {{ missionName('found') }}
           </button>
+          <button v-if="draft.mission === 'setupcamp'" type="button" class="mission-tab active">
+            {{ missionName('setupcamp') }}
+          </button>
         </div>
 
         <HuntTargetSummary v-if="draft.mission === 'hunt'" :target="draft.targetCamp" :unit-counts="draft.unitCounts" />
         <p v-else-if="draft.mission === 'found'" class="status-subtext instructions">
           {{ t('hud.armyPanel.foundInstructions') }}
         </p>
+        <CampInstructions v-else-if="draft.mission === 'setupcamp'" />
         <template v-else-if="draft.mission !== 'move'">
           <div v-if="selectedTarget" class="target-selected">
             <span>{{ t('hud.armyPanel.target') }} <strong>{{ selectedTarget.name }}</strong> ({{ selectedTarget.ownerName }})</span>

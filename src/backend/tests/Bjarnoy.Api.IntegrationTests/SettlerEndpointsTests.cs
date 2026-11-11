@@ -406,6 +406,13 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
 
         Assert.Equal(1, renown!.SettlementCount);
         Assert.Equal(55_000, renown.RequiredForNextSettlement);
+
+        // The settlement list says which row is the camp: the flag, not the missing Longhouse level, tells.
+        var mine = await client.GetFromJsonAsync<List<SettlementSummary>>(
+            $"/api/v1/worlds/{worldId}/settlements/mine", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(2, mine!.Count);
+        Assert.True(mine.Single(r => r.Name == "Strandlager").IsBeachCamp);
+        Assert.False(mine.Single(r => r.Name != "Strandlager").IsBeachCamp);
     }
 
     [Fact]

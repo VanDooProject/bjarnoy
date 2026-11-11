@@ -1456,6 +1456,11 @@ public sealed class SettlementService(
             return new ClaimQuestResult(QuestRejection.None, WorldPaused: true);
         }
 
+        if (settlementId != session.FirstSettlementId)
+        {
+            return new ClaimQuestResult(QuestRejection.NotFirstSettlement);
+        }
+
         var now = session.Now;
         var settled = session.View(settlementId);
 
