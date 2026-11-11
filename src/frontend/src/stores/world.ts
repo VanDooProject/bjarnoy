@@ -19,6 +19,7 @@ import type {
   ForeignArmyResponse,
   QuestResponse,
   RenownResponse,
+  SettlementResponse,
   UnitStackResponse,
   GarrisonSpotResponse,
   WorldMovementResponse,
@@ -950,6 +951,7 @@ export const useWorldStore = defineStore('world', {
      */
     async queueOrderOptimistic(pending: BuildOrderResponse, send: () => Promise<unknown>, cost?: Partial<Resources>) {
       const before = { ...this.hud.resources };
+      const settlementId = this.selectedSettlementId;
       this.hud.queue = [...this.hud.queue, pending];
       try {
         await send();
@@ -966,6 +968,7 @@ export const useWorldStore = defineStore('world', {
       } finally {
         this.hud.queue = this.hud.queue.filter((o) => o.id !== pending.id);
       }
+      if (this.selectedSettlementId !== settlementId) return;
       if (cost) {
         const spent: Partial<Resources> = {};
         for (const kind of Object.keys(cost) as (keyof Resources)[]) {
@@ -1102,6 +1105,15 @@ export const useWorldStore = defineStore('world', {
         await this.switchToSettlement(response.realmId);
         return;
       }
+      this.applySettlementResponse(response);
+    },
+    /**
+     * Applies a fetched settlement response to the model and the HUD. Shared by the live poll and by a settlement switch, so
+     * both show the same state. Keeps pending optimistic orders (W3) already in `hud.queue`; a switch clears the queue first.
+     */
+    applySettlementResponse(response: SettlementResponse) {
+      // A poll that was in flight when the player switched realms answers for the old one: drop it.
+      if (response.id !== this.selectedSettlementId) return;
       this.linkedMemberIds = [...response.linkedMemberIds];
       this.model.applyServerSnapshot(response.id, {
         level: response.longhouseLevel,
@@ -1204,12 +1216,14 @@ export const useWorldStore = defineStore('world', {
      * the trade UI read `WorldModel`'s demo trade offers directly).
      */
     async refreshTradeAsync() {
-      if (DEMO_MODE || !this.selectedSettlementId) return;
+      const id = this.selectedSettlementId;
+      if (DEMO_MODE || !id) return;
       const [board, mine, shipments] = await Promise.all([
-        api.getTradeBoard(this.selectedSettlementId, this.ownerId ?? undefined),
-        api.getMyTradeOffers(this.selectedSettlementId, this.ownerId ?? undefined),
-        api.getShipments(this.selectedSettlementId, this.ownerId ?? undefined),
+        api.getTradeBoard(id, this.ownerId ?? undefined),
+        api.getMyTradeOffers(id, this.ownerId ?? undefined),
+        api.getShipments(id, this.ownerId ?? undefined),
       ]);
+      if (this.selectedSettlementId !== id) return;
       this.hud.tradeBoard = board;
       this.hud.myTradeOffers = mine;
       this.hud.shipments = shipments;
@@ -1297,9 +1311,22 @@ export const useWorldStore = defineStore('world', {
       });
       this.model.claimTerritory(response.id);
       this.selectedSettlementId = response.id;
-      this.linkedMemberIds = [...response.linkedMemberIds];
-      this.syncHud();
-      void this.refreshTradeAsync();
+      // The previous realm's queue (pending optimistic orders included) must not survive into the new one.
+      this.hud.queue = [];
+      this.applySettlementResponse(response);
+      this.armies = [];
+      this.guestArmies = [];
+      this.armiesFetchedAt = 0;
+      this.guestArmiesFetchedAt = 0;
+      this.selectedArmyId = null;
+      this.dispatchDraft = null;
+      this.fieldOrderDraft = null;
+      this.sendPicker = null;
+      this.dispatchTargetBuildings = null;
+      this.dispatchTargetBuildingsFor = null;
+      this.dispatchTargetBuildingsError = false;
+      void this.trackPoll('armies', () => this.refreshArmies());
+      void this.trackPoll('trade', () => this.refreshTradeAsync());
     },
     /**
      * "Join another world" (store half — UI comes later): switches this
@@ -1617,17 +1644,21 @@ export const useWorldStore = defineStore('world', {
       }
     },
     async refreshArmies() {
-      if (DEMO_MODE || !this.selectedSettlementId) return;
+      const id = this.selectedSettlementId;
+      if (DEMO_MODE || !id) return;
       const [summaries, guests] = await Promise.all([
-        api.getSettlementArmies(this.selectedSettlementId, this.ownerId ?? undefined),
-        api.getSettlementGuests(this.selectedSettlementId, this.ownerId ?? undefined),
+        api.getSettlementArmies(id, this.ownerId ?? undefined),
+        api.getSettlementGuests(id, this.ownerId ?? undefined),
       ]);
+      if (this.selectedSettlementId !== id) return;
       // ArmySummary (the list endpoint) omits unit composition/movement/
       // provisions — ArmyPanel needs those, so fetch each army's full detail.
       // Settlements realistically hold a handful of dispatched armies at
       // once, so N+1 here is a non-issue compared to a purpose-built bulk
       // endpoint the backend doesn't expose.
-      this.armies = await Promise.all(summaries.map((s) => api.getArmy(s.id, this.ownerId ?? undefined)));
+      const details = await Promise.all(summaries.map((s) => api.getArmy(s.id, this.ownerId ?? undefined)));
+      if (this.selectedSettlementId !== id) return;
+      this.armies = details;
       this.armiesFetchedAt = Date.now();
       this.guestArmies = guests;
       this.guestArmiesFetchedAt = Date.now();
