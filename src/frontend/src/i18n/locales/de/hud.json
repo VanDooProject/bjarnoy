@@ -149,7 +149,8 @@
       "maxLevel": "Höchste Stufe",
       "siege": "Belagern",
       "noRamAtHome": "Braucht einen Rammbock zu Hause",
-      "hexBusy": "Auf diesem Feld läuft schon ein Auftrag"
+      "hexBusy": "Auf diesem Feld läuft schon ein Auftrag",
+      "storageTooSmall": "Lager zu klein"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "STF {level} · HEX {q}, {r}",
@@ -566,6 +567,10 @@
     "perHour": "/h",
     "each": "je",
     "feast": "Fest",
+    "duration": {
+      "hoursMinutes": "{hours} Std. {minutes} Min.",
+      "minutes": "{minutes} Min."
+    },
     "markerLabel": "{building}, Stufe {level}",
     "toggle": {
       "label": "Gebäudeinfo (H)",

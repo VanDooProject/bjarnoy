@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { buildingName } from '../../i18n/catalogueNames';
 import type { HudRequirement, HudRow } from '../../lib/hud/buildingHud';
-import { formatCountdown } from '../../lib/hud/countdown';
+import { coarseDuration, formatCountdown } from '../../lib/hud/countdown';
 import { formatFullNumber } from '../../lib/hud/compactNumber';
 import { RESOURCE_TOKENS } from '../../lib/resources/resourceGlyphs';
 import BuildingHudIcon from './BuildingHudIcon.vue';
@@ -17,11 +17,13 @@ const { t, locale } = useI18n<{ message: MessageSchema }>({ useScope: 'global' }
 const num = (n: number) => formatFullNumber(n, locale.value);
 const signed = (n: number) => `+${num(n)}`;
 
-/** "1h 05m" / "42m": coarse, a premium player reads it as "about when". */
+/** "1 h 05 min" / "42 min" (the units are the locale's): coarse, a premium player reads it as "about when". */
 function eta(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined) return '–';
-  if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h ${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}m`;
-  return `${Math.max(1, Math.round(seconds / 60))}m`;
+  const { hours, minutes } = coarseDuration(seconds);
+  return hours > 0
+    ? t('hud.buildingHud.duration.hoursMinutes', { hours, minutes: String(minutes).padStart(2, '0') })
+    : t('hud.buildingHud.duration.minutes', { minutes });
 }
 
 function requirementText(req: HudRequirement): string {

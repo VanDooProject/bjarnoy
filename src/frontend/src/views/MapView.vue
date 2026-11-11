@@ -55,7 +55,7 @@ import { hudBarHeightPx, hudRailWidthPx } from '../composables/hudBarHeight';
 import { isHudRail } from '../composables/hudSettlementBubbleState';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
 import { hexTakesNoOrder, nextUpgradeLevel } from '../lib/hud/pendingBuild';
-import { resolveUpgradeTarget, upgradeBlockers } from '../lib/hud/upgradeRules';
+import { upgradeVerdict } from '../lib/hud/upgradeRules';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { closeHudDrawer, isHudDrawerOpen } from '../composables/hudDrawerOpenState';
 import { useIsMobile } from '../composables/useIsMobile';
@@ -969,23 +969,27 @@ function siegeActions(tile: Tile): RingAction[] {
 function upgradeActionFor(tile: Tile): RingAction {
   const type = tile.buildingType!;
   const label = t('hud.ringMenu.actions.upgrade');
-  // Queued behind a running upgrade, this one starts from the level that one reaches.
-  const definitions = buildingCatalogue.byType[type];
-  const { nextLevel, level, definition: upgradeDefinition, maxed } = resolveUpgradeTarget(
-    tile.buildingLevel ?? 1,
-    world.hud.queue,
-    tile,
-    definitions,
-  );
-  // A catalogue that lists the building but has no further level: nothing left to upgrade to.
-  if (maxed) {
+  // The same verdict the building HUD reads. Queued behind a running upgrade, this one starts from the level that one reaches.
+  const verdict = upgradeVerdict({
+    type,
+    builtLevel: tile.buildingLevel ?? 1,
+    queue: world.hud.queue,
+    at: tile,
+    definitions: buildingCatalogue.byType[type],
+    longhouseLevel: world.hud.level,
+    builtLevels: builtLevels(),
+    storageCap: world.hud.storageCap,
+  });
+  const { nextLevel, level, definition: upgradeDefinition, cost, blockers } = verdict;
+  // Nothing left to upgrade to: at the last level, or the last one is already ordered.
+  if (verdict.maxed || !cost) {
     return { id: 'upgrade', label, color: 'var(--gold)', disabled: true, hint: t('hud.ringMenu.actions.maxLevel') };
   }
-  const cost = upgradeDefinition?.cost ?? buildingUpgradeCost(type, nextLevel);
-  const blockers = upgradeBlockers(upgradeDefinition, world.hud.level, builtLevels());
   const locks = [
     longhouseLock(blockers.longhouse, world.hud.level),
     ...prerequisiteLocks(blockers.prerequisites, builtLevels()),
+    // The stores cannot hold the next level's price: waiting would never get there.
+    verdict.storageShort ? t('hud.ringMenu.actions.storageTooSmall') : undefined,
   ].filter((lock): lock is string => !!lock);
   const hexBusy = world.hud.queue.some((o) => o.q === tile.q && o.r === tile.r);
   const availability = availabilityFor(cost, upgradeDefinition, locks.length > 0, hexBusy);

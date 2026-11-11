@@ -14,7 +14,8 @@ import {
   type RingStock,
 } from '../map/ringAvailability';
 import { isWallBuilding } from '../map/ringCatalogue';
-import { resolveUpgradeTarget, upgradeBlockers } from './upgradeRules';
+import { MAX_TRAINING_ORDERS_PER_BUILDING } from '../units/trainingEconomy';
+import { upgradeVerdict } from './upgradeRules';
 
 // ---- zoom tiers -------------------------------------------------------------------------------------------------------
 
@@ -58,8 +59,6 @@ export function stackOrder<T extends { x: number; hovered?: boolean }>(markers: 
 
 // ---- view model -------------------------------------------------------------------------------------------------------
 
-export const TRAINING_SLOTS = 5;
-
 export type HudUpgradeState = 'ready' | 'short' | 'longhouse' | 'prereq' | 'storage' | 'upgrading' | 'queued' | 'max';
 export type HudDialKind = 'state' | 'upgrading' | 'razing' | 'queued' | 'pending' | 'rejected' | 'finishing';
 export type HudRing = 'ready' | 'blocked' | 'upgrading' | 'max';
@@ -84,6 +83,8 @@ export interface BuildingHudViewModel {
     progress?: number;
     secondsLeft?: number;
     targetLevel?: number;
+    /** Length of the running order, so `ageViewModel` can move the arc along. */
+    totalSeconds?: number;
     /** 1-based place of a queued order. */
     queuePosition?: number | null;
     /** The hex's canvas-side dial (`constructionDialsFromQueue`), whose animation frames `dialPhase` reads at draw time. */
@@ -109,7 +110,7 @@ export interface BuildingHudViewModel {
   training?: {
     slotsUsed: number;
     slotsMax: number;
-    current?: { unit: string; count: number; secondsLeft: number; progress: number };
+    current?: { unit: string; count: number; secondsLeft: number; progress: number; totalSeconds: number };
   };
 }
 
@@ -194,19 +195,51 @@ export function buildingHudViewModel(input: BuildingHudInput): BuildingHudViewMo
     case 'building': {
       // A running upgrade already is the dial; the order only lets it play its finish at the end.
       if (vm.dial.kind === 'upgrading') vm.dial.order = order;
-      else if (input.queue.some((o) => sameHex(o, input.coord) && o.kind === 'raze' && o.state === 'building')) {
-        vm.dial = {
-          kind: 'razing',
-          ring: 'upgrading',
-          progress: phase.progress,
-          secondsLeft: phase.remaining ?? undefined,
-          order,
-        };
+      else {
+        const raze = input.queue.find((o) => sameHex(o, input.coord) && o.kind === 'raze' && o.state === 'building');
+        if (raze) {
+          const left = raze.completesInSeconds ?? undefined;
+          vm.dial = {
+            kind: 'razing',
+            ring: 'upgrading',
+            secondsLeft: left,
+            totalSeconds: raze.totalSeconds,
+            progress: left !== undefined && raze.totalSeconds > 0 ? clamp01(1 - left / raze.totalSeconds) : 0,
+            order,
+          };
+        }
       }
       break;
     }
   }
   return vm;
+}
+
+/**
+ * The view model with its countdowns moved on by the seconds since the data they came from was fetched. Only a running upgrade
+ * or raze, the training order in progress and a feast tick; every other view model comes back as the same object, so the
+ * caller keeps what it worked out from it (the rows).
+ */
+export function ageViewModel(vm: BuildingHudViewModel, since: { queue: number; training: number; feast: number }): BuildingHudViewModel {
+  const left = (seconds: number, elapsed: number) => Math.max(0, seconds - elapsed);
+  const d = vm.dial;
+  const ticksDial = (d.kind === 'upgrading' || d.kind === 'razing') && d.secondsLeft !== undefined;
+  if (!ticksDial && !vm.training?.current && !vm.feast) return vm;
+  const aged: BuildingHudViewModel = { ...vm };
+  if (ticksDial) {
+    const secondsLeft = left(d.secondsLeft!, since.queue);
+    aged.dial = { ...d, secondsLeft, progress: d.totalSeconds && d.totalSeconds > 0 ? clamp01(1 - secondsLeft / d.totalSeconds) : 0 };
+  }
+  if (vm.training?.current) {
+    const current = vm.training.current;
+    const secondsLeft = left(current.secondsLeft, since.training);
+    aged.training = {
+      ...vm.training,
+      current: { ...current, secondsLeft, progress: current.totalSeconds > 0 ? clamp01(1 - secondsLeft / current.totalSeconds) : 1 },
+    };
+  }
+  if (vm.feast) aged.feast = { ...vm.feast, secondsLeft: left(vm.feast.secondsLeft, since.feast) };
+  return aged;
 }
 
 function standingViewModel(input: BuildingHudInput): BuildingHudViewModel {
@@ -240,8 +273,8 @@ function standingViewModel(input: BuildingHudInput): BuildingHudViewModel {
   if (trains || orders.length > 0) {
     const first = orders[0];
     vm.training = {
-      slotsUsed: Math.min(orders.length, TRAINING_SLOTS),
-      slotsMax: TRAINING_SLOTS,
+      slotsUsed: Math.min(orders.length, MAX_TRAINING_ORDERS_PER_BUILDING),
+      slotsMax: MAX_TRAINING_ORDERS_PER_BUILDING,
       current:
         first && first.completesInSeconds !== null
           ? {
@@ -249,6 +282,7 @@ function standingViewModel(input: BuildingHudInput): BuildingHudViewModel {
               count: first.count,
               secondsLeft: first.completesInSeconds,
               progress: first.totalSeconds > 0 ? clamp01(1 - first.completesInSeconds / first.totalSeconds) : 1,
+              totalSeconds: first.totalSeconds,
             }
           : undefined,
     };
@@ -264,34 +298,42 @@ function standingViewModel(input: BuildingHudInput): BuildingHudViewModel {
       ring: 'upgrading',
       targetLevel: running.targetLevel,
       secondsLeft: left,
+      totalSeconds: running.totalSeconds,
       progress: left !== undefined && running.totalSeconds > 0 ? clamp01(1 - left / running.totalSeconds) : 0,
     };
     return vm;
   }
 
   // Max and the crown are about the level the building stands at: an order already waiting for the last level does not make it so.
-  const catalogueTop = input.definitions?.length ? Math.max(...input.definitions.map((d) => d.level)) : undefined;
-  if (level >= maxLevel || (catalogueTop !== undefined && level >= catalogueTop)) {
+  const verdict = upgradeVerdict({
+    type,
+    builtLevel: level,
+    queue: input.queue,
+    at: coord,
+    definitions: input.definitions,
+    longhouseLevel: input.longhouseLevel,
+    builtLevels: input.builtLevels,
+    storageCap: input.storageCap,
+  });
+  if (verdict.atMax) {
     vm.upgrade = { state: 'max', crown: isLonghouse };
     vm.dial = { kind: 'state', ring: 'max', progress: 1 };
     return vm;
   }
-
-  const target = resolveUpgradeTarget(level, input.queue, coord, input.definitions);
-  if (target.maxed) {
-    // Below the last level, yet the catalogue has nothing after the level an order already waits for: nothing more to queue.
-    vm.upgrade = { state: 'queued', targetLevel: target.level, crown };
+  if (verdict.maxed) {
+    // Below the last level, yet there is nothing after the level an order already waits for: nothing more to queue.
+    vm.upgrade = { state: 'queued', targetLevel: verdict.level, crown };
     vm.dial = { kind: 'state', ring: 'upgrading' };
     return vm;
   }
 
-  const definition = target.definition;
-  const blockers = upgradeBlockers(definition, input.longhouseLevel, input.builtLevels);
+  const definition = verdict.definition;
+  const blockers = verdict.blockers;
   const requirements: HudRequirement[] = [
     ...(blockers.longhouse !== undefined ? [{ kind: 'longhouse', level: blockers.longhouse } as const] : []),
     ...blockers.prerequisites.map((p) => ({ kind: 'building', type: p.type, level: p.level }) as const),
   ];
-  const cost = definition?.cost;
+  const cost = verdict.cost;
   const hexBusy = input.queue.some((o) => sameHex(o, coord));
   const availability = computeAvailability({
     cost,
@@ -302,11 +344,11 @@ function standingViewModel(input: BuildingHudInput): BuildingHudViewModel {
     locked: requirements.length > 0,
     hexBusy,
   });
-  const base = { targetLevel: target.nextLevel, crown };
+  const base = { targetLevel: verdict.nextLevel, crown };
 
   if (requirements.length > 0) {
     vm.upgrade = { ...base, state: blockers.longhouse !== undefined ? 'longhouse' : 'prereq', requirements };
-  } else if (cost && RING_RESOURCE_KEYS.some((key) => (cost[key] ?? 0) > input.storageCap[key])) {
+  } else if (verdict.storageShort) {
     // The stores cannot hold the next level's price, so waiting would never get there.
     vm.upgrade = { ...base, state: 'storage' };
   } else if (Object.keys(availability.shortfall).length > 0) {

@@ -336,6 +336,30 @@ describe('BuildingHudLayer', () => {
     expect(wrapper.find('[data-coord="3,0"] text').exists()).toBe(false);
     expect(wrapper.find('[data-coord="3,0"] polyline').exists()).toBe(true);
   });
+  it('ages the countdown each tick without rebuilding the markers that do not tick', async () => {
+    const world = seedBuildings();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.queue = [
+      {
+        id: 'o1', q: 3, r: 0, building: 'barracks', kind: 'build', targetLevel: 3, state: 'building', slotCost: 1,
+        completesAtGameTime: null, completesInSeconds: 125, totalSeconds: 250,
+      },
+    ];
+    wrapper = mountLayer(fakeRenderer());
+    runFrame();
+    await wrapper.vm.$nextTick();
+    const tower = wrapper.get('[data-coord="2,0"] .hud-marker__box').element;
+    expect(wrapper.get('[data-coord="3,0"] text').text()).toBe('2:05');
+    vi.advanceTimersByTime(5000);
+    world.hud.tick += 1;
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('[data-coord="3,0"] text').text()).toBe('2:00');
+    // The tower's box is the same element: nothing on it changed.
+    expect(wrapper.get('[data-coord="2,0"] .hud-marker__box').element).toBe(tower);
+    vi.useRealTimers();
+  });
+
   describe('the dial draws every order state of a standing building', () => {
     const waiting = (q: number, over: Record<string, unknown> = {}) => ({
       id: `w${q}`, q, r: 0, building: 'barracks', kind: 'build' as const, targetLevel: 3, state: 'waiting' as const, slotCost: 1,

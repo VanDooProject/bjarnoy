@@ -24,6 +24,7 @@ import {
 } from '../../composables/useBuildingHudMotion';
 import type { AxialCoord } from '../../lib/hex/coords';
 import {
+  ageViewModel,
   buildingHudViewModel,
   hasHudMarker,
   rowsFor,
@@ -31,6 +32,7 @@ import {
   stackOrder,
   tierFor,
   type BuildingHudViewModel,
+  type HudRow,
   type HudTier,
 } from '../../lib/hud/buildingHud';
 import { formatCountdownShort } from '../../lib/hud/countdown';
@@ -102,32 +104,38 @@ interface Marker {
   vm: BuildingHudViewModel;
 }
 
-const markers = computed<Marker[]>(() => {
-  void world.hud.tick; // the countdowns tick every second
+/**
+ * What the building list looks like, as one string: in the demo the local model is not reactive (a placed building shows up with
+ * the next `hud.tick`), so this is how the heavy view models notice a change without being rebuilt every second.
+ */
+const buildingsKey = computed(() => {
+  void world.hud.tick;
+  return ownBuildings(world)
+    .map((b) => `${b.q},${b.r},${b.type},${b.level}`)
+    .join(';');
+});
+
+/**
+ * Every marker's view model, built from what changes only when something changed: the polled stock, queue, catalogue, the
+ * building list and the renderer's dial list. The countdowns inside it stay as fetched; `markers` below ages them each second.
+ */
+const baseMarkers = computed<Marker[]>(() => {
   void dialsVersion.value;
+  void buildingsKey.value;
   if (!rendered.value || !world.selectedSettlementId) return [];
-  const now = Date.now();
-  const sinceQueue = (now - world.hud.queueFetchedAt) / 1000;
-  const sinceTraining = (now - world.hud.trainingQueueFetchedAt) / 1000;
-  const sinceFeast = (now - world.hud.feastFetchedAt) / 1000;
-  const left = (seconds: number | null, since: number) => (seconds === null ? null : Math.max(0, seconds - since));
-  const queue = world.hud.queue.map((o) => ({ ...o, completesInSeconds: left(o.completesInSeconds, sinceQueue) }));
-  const trainingQueue = world.hud.trainingQueue.map((o) => ({
-    ...o,
-    startsInSeconds: left(o.startsInSeconds, sinceTraining),
-    completesInSeconds: left(o.completesInSeconds, sinceTraining),
-  }));
-  const feast = world.hud.feast
+  const hud = world.hud;
+  const feast = hud.feast
     ? {
-        secondsLeft: left(world.hud.feast.endsInSeconds, sinceFeast),
-        totalSeconds: (Date.parse(world.hud.feast.endsAtGameTime) - Date.parse(world.hud.feast.startedAtGameTime)) / 1000,
-        renownGain: world.hud.feast.renownGain,
+        secondsLeft: hud.feast.endsInSeconds,
+        totalSeconds: (Date.parse(hud.feast.endsAtGameTime) - Date.parse(hud.feast.startedAtGameTime)) / 1000,
+        renownGain: hud.feast.renownGain,
       }
     : null;
   const builtLevels = builtBuildingLevels(world);
   const tileAt = (q: number, r: number) => world.model.getTile(q, r);
   const orderDials = new Map<string, ConstructionDial>();
   for (const d of props.renderer?.constructionDialList ?? []) orderDials.set(`${d.coord.q},${d.coord.r}`, d);
+  const now = Date.now();
 
   return ownBuildings(world)
     .filter(hasHudMarker)
@@ -139,24 +147,59 @@ const markers = computed<Marker[]>(() => {
         type: b.type,
         level: b.level,
         definitions: catalogue.byType[b.type],
-        queue,
-        longhouseLevel: world.hud.level,
+        queue: hud.queue,
+        longhouseLevel: hud.level,
         builtLevels,
-        available: world.hud.available,
-        storageCap: world.hud.storageCap,
-        rates: world.hud.rates,
-        construction: world.hud.construction,
+        available: hud.available,
+        storageCap: hud.storageCap,
+        rates: hud.rates,
+        construction: hud.construction,
         worldSpeedFactor: world.worldSpeedFactor,
         matchingNeighbours: boost.matchingNeighbours,
         onLake: boost.onLake,
         feast,
-        garrison: world.hud.garrison,
-        trainingQueue,
+        garrison: hud.garrison,
+        trainingQueue: hud.trainingQueue,
         orderDial: orderDials.get(`${b.q},${b.r}`) ?? null,
         nowMs: now,
       });
       return { key: `${b.q},${b.r}`, coord, type: b.type, name: buildingName(b.type), level: b.level, vm };
     });
+});
+
+/** The markers with their countdowns aged to now: only the ones that tick get a new object, so the rest stay as they were. */
+const markers = computed<Marker[]>(() => {
+  void world.hud.tick; // the countdowns tick every second
+  const now = Date.now();
+  const since = {
+    queue: (now - world.hud.queueFetchedAt) / 1000,
+    training: (now - world.hud.trainingQueueFetchedAt) / 1000,
+    feast: (now - world.hud.feastFetchedAt) / 1000,
+  };
+  return baseMarkers.value.map((m) => {
+    const vm = ageViewModel(m.vm, since);
+    return vm === m.vm ? m : { ...m, vm };
+  });
+});
+
+/** Each marker's rows, worked out again only when its view model, its tier or the premium flag is not what the last ones were made from. */
+const rowMemo = new Map<string, { vm: BuildingHudViewModel; tier: HudTier; premium: boolean; rows: HudRow[] }>();
+const rowsByKey = computed<Record<string, HudRow[]>>(() => {
+  const out: Record<string, HudRow[]> = {};
+  const premium = auth.isPremium;
+  for (const m of markers.value) {
+    const tier = tierOf(m.key);
+    const hit = rowMemo.get(m.key);
+    if (hit && hit.vm === m.vm && hit.tier === tier && hit.premium === premium) {
+      out[m.key] = hit.rows;
+      continue;
+    }
+    const rows = rowsFor(m.vm, tier, { premium });
+    rowMemo.set(m.key, { vm: m.vm, tier, premium, rows });
+    out[m.key] = rows;
+  }
+  for (const key of rowMemo.keys()) if (!(key in out)) rowMemo.delete(key);
+  return out;
 });
 
 // ---- geometry (port of the design reference's dock8Html, drawn at zs = 1; the whole marker is scaled) ---------------------
@@ -177,9 +220,7 @@ function boxStyle(currentTier: HudTier) {
   };
 }
 
-function rowsOf(m: Marker) {
-  return rowsFor(m.vm, tierOf(m.key), { premium: auth.isPremium });
-}
+const rowsOf = (m: Marker): HudRow[] => rowsByKey.value[m.key] ?? [];
 
 /**
  * Inside the dial: the countdown of a running upgrade or raze, `#place` of a queued order, else the level; the far tier is the
@@ -239,6 +280,7 @@ function setElement(key: string, el: unknown) {
     elements.delete(key);
     lastZ.delete(key);
     dialDiscs.delete(key);
+    hoverT.delete(key);
     visibility.delete(key);
     placedOnce.delete(key);
     settled.delete(key);
@@ -269,6 +311,11 @@ function tick() {
   const placed: { key: string; x: number; hovered: boolean }[] = [];
   let tiersChanged = false;
   const nextTiers: Record<string, HudTier> = {};
+  // All the layout reads (box widths) first, then every style write: no read after a write for the next marker.
+  const boxWidths = new Map<string, number>();
+  for (const marker of markers.value) {
+    if (circle || (visibility.get(marker.key) ?? 1) < 1) boxWidths.set(marker.key, boxOf(marker.key)?.offsetWidth ?? 0);
+  }
   for (const marker of markers.value) {
     const el = elements.get(marker.key);
     if (!el) continue;
@@ -281,7 +328,7 @@ function tick() {
     let occluded = false;
     if (circle || vis0 < 1) {
       const zsNow = dialScale(mapScale, hoverT.get(marker.key) ?? 0).zs;
-      const boxWidth = boxOf(marker.key)?.offsetWidth ?? 0;
+      const boxWidth = boxWidths.get(marker.key) ?? 0;
       occluded =
         circle !== null &&
         circleIntersectsRect(circle, {

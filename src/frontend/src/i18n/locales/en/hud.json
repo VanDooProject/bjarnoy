@@ -149,7 +149,8 @@
       "maxLevel": "Max level",
       "siege": "Siege",
       "noRamAtHome": "Needs a battering ram at home",
-      "hexBusy": "This hex already has an order"
+      "hexBusy": "This hex already has an order",
+      "storageTooSmall": "Storage too small"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "LV {level} · HEX {q}, {r}",
@@ -559,13 +560,17 @@
     "upgrade": "Upgrade",
     "needsLonghouse": "Longhouse {level}",
     "needsBuilding": "{building} {level}",
-    "storage": "Storage full",
+    "storage": "Storage too small",
     "max": "Max",
     "more": "+{n} more",
     "moreShort": "+{n}",
     "perHour": "/h",
     "each": "each",
     "feast": "Feast",
+    "duration": {
+      "hoursMinutes": "{hours}h {minutes}m",
+      "minutes": "{minutes}m"
+    },
     "markerLabel": "{building}, level {level}",
     "toggle": {
       "label": "Building info (H)",

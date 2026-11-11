@@ -4,6 +4,7 @@ import {
   HUD_BOX_FONT_PX,
   HUD_TIER,
   affordableInSeconds,
+  ageViewModel,
   buildingHudViewModel,
   hudMarkerKeys,
   rowsSignature,
@@ -351,7 +352,7 @@ describe('order dial of a standing building', () => {
 
   it('shows a running raze with its progress arc and time', () => {
     const razing = orderDial({ state: 'building', queuePosition: null, startMs: NOW - 30_000, endMs: NOW + 90_000 });
-    const vm = vmWith(razing, { queue: [order({ kind: 'raze', targetLevel: 1 })] });
+    const vm = vmWith(razing, { queue: [order({ kind: 'raze', targetLevel: 1, completesInSeconds: 90, totalSeconds: 120 })] });
     expect(vm.dial).toMatchObject({ kind: 'razing', ring: 'upgrading', progress: 0.25, secondsLeft: 90 });
     expect(vm.upgrade.state).not.toBe('upgrading');
   });
@@ -388,7 +389,7 @@ describe('rowsSignature', () => {
   const training = (over: Partial<Extract<HudRow, { kind: 'training' }>> = {}): HudRow => ({ kind: 'training', slotsUsed: 1, slotsMax: 5, ...over });
 
   it('does not change when only a countdown or an amount ticks', () => {
-    const current = (secondsLeft: number, progress: number) => ({ unit: 'spearman', count: 5, secondsLeft, progress });
+    const current = (secondsLeft: number, progress: number) => ({ unit: 'spearman', count: 5, secondsLeft, progress, totalSeconds: 100 });
     const a = [upgrade(), training({ current: current(60, 0.1) })];
     const b = [upgrade(), training({ current: current(59, 0.12), slotsUsed: 2 })];
     expect(rowsSignature('near', a)).toBe(rowsSignature('near', b));
@@ -398,7 +399,7 @@ describe('rowsSignature', () => {
 
   it('changes when the layout does: a training order starts, the upgrade state flips, the tier differs', () => {
     const idle = [upgrade(), training()];
-    const busy = [upgrade(), training({ current: { unit: 'spearman', count: 5, secondsLeft: 60, progress: 0 } })];
+    const busy = [upgrade(), training({ current: { unit: 'spearman', count: 5, secondsLeft: 60, progress: 0, totalSeconds: 100 } })];
     expect(rowsSignature('near', idle)).not.toBe(rowsSignature('near', busy));
     expect(rowsSignature('near', [upgrade()])).not.toBe(rowsSignature('near', [upgrade({ state: 'upgrading', targetLevel: 3 })]));
     expect(rowsSignature('near', idle)).not.toBe(rowsSignature('mid', idle));
@@ -406,5 +407,42 @@ describe('rowsSignature', () => {
 
   it('is empty after the bar for a tier without a box', () => {
     expect(rowsSignature('far', [])).toBe('far|');
+  });
+});
+
+describe('ageViewModel', () => {
+  const none = { queue: 0, training: 0, feast: 0 };
+
+  it('returns the same object when nothing on the marker ticks', () => {
+    const vm = buildingHudViewModel(input());
+    expect(ageViewModel(vm, { queue: 30, training: 30, feast: 30 })).toBe(vm);
+  });
+
+  it('moves a running upgrade along: the time left falls and the arc grows, never below zero', () => {
+    const vm = buildingHudViewModel(input({ queue: [order({ completesInSeconds: 30, totalSeconds: 120 })] }));
+    expect(vm.dial).toMatchObject({ secondsLeft: 30, progress: 0.75 });
+    expect(ageViewModel(vm, { ...none, queue: 15 }).dial).toMatchObject({ secondsLeft: 15, progress: 0.875 });
+    expect(ageViewModel(vm, { ...none, queue: 99 }).dial).toMatchObject({ secondsLeft: 0, progress: 1 });
+    // The view model it was made from is not touched.
+    expect(vm.dial.secondsLeft).toBe(30);
+  });
+
+  it('ages the training order in progress and a feast on their own clocks', () => {
+    const vm = buildingHudViewModel(
+      input({
+        type: 'townsquare',
+        definitions: undefined,
+        feast: { secondsLeft: 100, totalSeconds: 200, renownGain: 5 },
+      }),
+    );
+    expect(ageViewModel(vm, { queue: 50, training: 50, feast: 40 }).feast?.secondsLeft).toBe(60);
+    const training = buildingHudViewModel(
+      input({
+        type: 'barracks',
+        definitions: undefined,
+        trainingQueue: [{ id: 't', q: 1, r: 2, unit: 'spearman', count: 5, startsInSeconds: 0, completesInSeconds: 60, totalSeconds: 120 } as TrainingOrderResponse],
+      }),
+    );
+    expect(ageViewModel(training, { queue: 0, training: 30, feast: 0 }).training?.current).toMatchObject({ secondsLeft: 30, progress: 0.75 });
   });
 });
