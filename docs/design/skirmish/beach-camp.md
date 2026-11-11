@@ -4,7 +4,7 @@ Part of [Skirmish](README.md). The base for landing from the sea (see [Conquest 
 
 - Camp builders set up the camp. They are trained like settlers (e.g. at the Cart Workshop) and ride on the fleet.
 - Building a camp costs resources and takes build time, clearly less than a Longhouse.
-- A camp can only go on a shore with no enemy buildings on it, so the enemy's shore buildings have to be destroyed first.
+- A camp can only go on a sand hex on the shore with no building on it. The buildings next to it don't matter.
 - While the camp is built, the troops wait on the camp's hex and the ships wait one hex out on the water.
 - A camp may stand inside an enemy realm. It claims only its own hex, there too.
 - A camp is a settlement of its own: a one-hex settlement with a stock, garrisons and no production. It follows the rules of a
@@ -36,4 +36,5 @@ Starting values, to be tuned.
   dispatch panel.
 - When the camp's food runs out, the troops in it starve the same way troops do in a settlement without food.
 - A camp has no levels and cannot be upgraded.
+- A camp sees as far as a level-1 Longhouse.
 - Plundering a camp takes whatever its piles hold, within the plundering army's loot capacity.
