@@ -7,6 +7,16 @@ import { defineStore } from 'pinia';
 // debug/UX-research flag that forgets itself on every reload is useless.
 const STORAGE_KEY = 'bjarnoy.hudBarPosition';
 
+const BUILDING_INFO_KEY = 'bjarnoy.hudBuildingInfo';
+
+function readBuildingInfo(): boolean {
+  try {
+    return localStorage.getItem(BUILDING_INFO_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
 export type HudBarPosition = 'top' | 'bottom';
 
 function readBarPosition(): HudBarPosition {
@@ -22,8 +32,18 @@ function readBarPosition(): HudBarPosition {
 export const useHudPrefsStore = defineStore('hudPrefs', {
   state: () => ({
     barPosition: readBarPosition() as HudBarPosition,
+    // The per-building info markers over the settlement map (components/hud/BuildingHudLayer.vue); on by default.
+    buildingInfo: readBuildingInfo(),
   }),
   actions: {
+    setBuildingInfo(on: boolean) {
+      this.buildingInfo = on;
+      try {
+        localStorage.setItem(BUILDING_INFO_KEY, on ? 'on' : 'off');
+      } catch {
+        // Best-effort persistence only — the in-memory value still applies.
+      }
+    },
     setBarPosition(position: HudBarPosition) {
       this.barPosition = position;
       try {

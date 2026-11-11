@@ -91,6 +91,30 @@ export const CATEGORY_COLORS: Record<string, string> = {
 
 const RESOURCE_KINDS: (keyof Resources)[] = ['wood', 'stone', 'food', 'iron'];
 
+type WorldStore = ReturnType<typeof useWorldStore>;
+
+/**
+ * The highest level of each building type the selected settlement has — what a building's `prerequisites` are judged
+ * against (like Settlement.HighestLevelOf on the server). Live mode reads the polled building list (reactive), demo the
+ * local model.
+ */
+export function builtBuildingLevels(world: WorldStore): Record<string, number> {
+  if (DEMO_MODE) {
+    const id = world.selectedSettlementId;
+    return id ? world.model.highestBuildingLevels(id) : {};
+  }
+  const levels: Record<string, number> = {};
+  for (const b of world.hud.buildings) levels[b.type] = Math.max(levels[b.type] ?? 0, b.level);
+  return levels;
+}
+
+/** Every building the selected settlement has: the polled list live, the local model in the demo (`hud.buildings` is empty there). */
+export function ownBuildings(world: WorldStore): { q: number; r: number; type: string; level: number }[] {
+  if (!DEMO_MODE) return world.hud.buildings;
+  const id = world.selectedSettlementId;
+  return id ? world.model.listBuildings(id) : [];
+}
+
 export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<AxialCoord | null | undefined>) {
   const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
   const world = useWorldStore();
@@ -214,13 +238,7 @@ export function useBuildRing(tile: Ref<Tile | null | undefined>, coord: Ref<Axia
   // on the server). Live mode reads the polled building list (reactive), demo the
   // local model.
   function builtLevels(): Record<string, number> {
-    if (DEMO_MODE) {
-      const id = world.selectedSettlementId;
-      return id ? world.model.highestBuildingLevels(id) : {};
-    }
-    const levels: Record<string, number> = {};
-    for (const b of world.hud.buildings) levels[b.type] = Math.max(levels[b.type] ?? 0, b.level);
-    return levels;
+    return builtBuildingLevels(world);
   }
 
   /** One sentence per prerequisite building still missing (all of them are required). */
