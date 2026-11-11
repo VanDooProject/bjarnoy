@@ -66,6 +66,7 @@ function army(overrides: Partial<ArmyResponse> & { id: string }): ArmyResponse {
       returnArrivesAt: '2026-11-10T05:00:00Z',
       isReturning: false,
       isStranded: false,
+      isFleeing: false,
     },
     starvesAt: null,
     ...overrides,

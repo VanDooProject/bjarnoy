@@ -142,6 +142,10 @@ public sealed record HexPointResponse(int Q, int R)
 /// True when the army cannot get home and stands where it is (<see cref="Movement.IsStranded"/>): <paramref name="Path"/> is the one hex it
 /// stands on, and <see cref="ArmyResponse.StarvesAt"/> is when its food runs out and the whole army dies.
 /// </param>
+/// <param name="IsFleeing">
+/// True for an army fleeing after a lost field battle (<see cref="Movement.IsFleeing"/>), on its way home or stranded: it takes field orders
+/// from where it is like a standing army, and an order ends its flee protection.
+/// </param>
 public sealed record MovementResponse(
     DateTimeOffset DepartedAt,
     IReadOnlyList<HexPointResponse> Path,
@@ -154,7 +158,8 @@ public sealed record MovementResponse(
     DateTimeOffset TurnAroundAt,
     DateTimeOffset ReturnArrivesAt,
     bool IsReturning,
-    bool IsStranded)
+    bool IsStranded,
+    bool IsFleeing)
 {
     public static MovementResponse From(Movement movement) => new(
         movement.DepartedAt,
@@ -168,7 +173,8 @@ public sealed record MovementResponse(
         movement.TurnAroundAt,
         movement.ReturnArrivesAt,
         movement.IsReturning,
-        movement.IsStranded);
+        movement.IsStranded,
+        movement.IsFleeing);
 }
 
 /// <param name="VisionRadius">

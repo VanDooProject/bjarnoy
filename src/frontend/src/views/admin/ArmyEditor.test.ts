@@ -51,6 +51,7 @@ function army(overrides: Partial<AdminArmyResponse['army']> = {}): AdminArmyResp
         returnArrivesAt: '2026-01-02T06:00:00Z',
         isReturning: false,
         isStranded: false,
+        isFleeing: false,
       },
       starvesAt: null,
       ...overrides,

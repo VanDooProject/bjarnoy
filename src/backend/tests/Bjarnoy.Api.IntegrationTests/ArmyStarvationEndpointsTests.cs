@@ -193,4 +193,55 @@ public sealed class ArmyStarvationEndpointsTests : IAsyncLifetime
         var verifyDb = verify.ServiceProvider.GetRequiredService<GameDbContext>();
         Assert.False(await verifyDb.Armies.AnyAsync(a => a.Id == loserArmyId, Ct));
     }
+    [Fact]
+    public async Task A_fleeing_army_on_its_way_home_takes_a_field_order_and_loses_its_protection()
+    {
+        Guid armyId;
+        var now = _factory.Time.GetUtcNow();
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var world = new WorldEntity { Name = $"w-{Guid.CreateVersion7():N}", MaxPlayers = 100 };
+            world.ApplyGenerationOptions(LandOptions);
+            db.Worlds.Add(world);
+            var island = new IslandEntity { WorldId = world.Id, Name = "Island", CentreQ = 0, CentreR = 0 };
+            db.Islands.Add(island);
+            var home = new HexCoord(-6, 0);
+            var settlement = MakeSettlement(world.Id, island.Id, LoserOwner, SystemUserIds.Abandoned, home.Q, home.R);
+            db.Settlements.Add(settlement);
+
+            // Fleeing home after a lost field battle on an Attack: it walks home under the 6-hour flee protection.
+            (int Q, int R)[] wayHome = [(0, 0), (-1, 0), (-2, 0), (-3, 0), (-4, 0), (-5, 0), (-6, 0)];
+            var fleeing = MakeArmy(settlement.Id, home, wayHome, wayHome, 500, UnitType.Spearman, 5);
+            fleeing.Mission = (int)ArmyMission.Attack;
+            fleeing.IsReturning = true;
+            fleeing.TurnAroundAt = now;
+            fleeing.FieldBattleImmuneUntil = now + TimeSpan.FromHours(6);
+            db.Armies.Add(fleeing);
+            await db.SaveChangesAsync(Ct);
+            armyId = fleeing.Id;
+        }
+
+        using var client = ClientOf(LoserOwner);
+        _factory.Time.Advance(TimeSpan.FromHours(1.5));
+        var before = await client.GetFromJsonAsync<ArmyResponse>($"/api/v1/armies/{armyId}", SqliteApiFixture.StrictJson, Ct);
+        Assert.True(before!.Movement!.IsFleeing);
+        Assert.True(before.Movement.IsReturning);
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/armies/{armyId}/orders", new FieldOrderRequest(null, new HexPointRequest(-1, 2)), Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var ordered = await response.ReadStrictAsync<ArmyResponse>(Ct);
+        Assert.False(ordered.Movement!.IsReturning);
+        Assert.False(ordered.Movement.IsFleeing);
+        Assert.Equal("move", ordered.Mission);
+        Assert.Equal(before.Position, ordered.Movement.Path[0]);
+        Assert.Equal(new HexPointResponse(-1, 2), ordered.Movement.Path[^1]);
+
+        await using var verify = _factory.Services.CreateAsyncScope();
+        var verifyDb = verify.ServiceProvider.GetRequiredService<GameDbContext>();
+        Assert.Null((await verifyDb.Armies.SingleAsync(a => a.Id == armyId, Ct)).FieldBattleImmuneUntil);
+    }
 }

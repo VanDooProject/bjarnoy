@@ -697,7 +697,10 @@ public sealed class ArmyService(
         }
 
         var domain = army.ToDomain();
-        if (domain.Mission is not (ArmyMission.Move or ArmyMission.Found))
+
+        // A fleeing or stranded army's mission is over: it takes orders like any army in the field (docs/design/troop-movement-range.md §2a).
+        var missionOver = domain.Location is ArmyLocation.InTransit { Movement: { IsFleeing: true } or { IsStranded: true } };
+        if (!missionOver && domain.Mission is not (ArmyMission.Move or ArmyMission.Found))
         {
             return await RejectAsync(FieldOrderRejection.MissionNotFieldOrderable).ConfigureAwait(false);
         }

@@ -43,6 +43,7 @@ function army(overrides: Partial<ArmyResponse> = {}): ArmyResponse {
       returnArrivesAt: '2026-01-01T04:00:00Z',
       isReturning: false,
       isStranded: false,
+      isFleeing: false,
     },
     starvesAt: null,
     ...overrides,

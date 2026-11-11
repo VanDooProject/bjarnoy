@@ -261,9 +261,11 @@ export function canFieldOrderArmy(army: {
   atHome: boolean;
   supporting: boolean;
   mission: string;
-  movement: { isReturning: boolean } | null;
+  movement: { isReturning: boolean; isFleeing?: boolean; isStranded?: boolean } | null;
 }): boolean {
   if (army.atHome || army.supporting) return false;
+  // A fleeing or stranded army's mission is over: it takes orders like any army in the field, even on its way home.
+  if (army.movement?.isFleeing || army.movement?.isStranded) return true;
   if (army.movement?.isReturning) return false;
   return army.mission === 'move' || army.mission === 'found';
 }
@@ -282,6 +284,7 @@ export function isFieldOrderMidMarch(
   army: { movement: { isReturning: boolean; arrivesAt: string } | null },
   now: number,
 ): boolean {
+  // A fleeing army on its way home is ordered like a standing one (a fresh leg from where it is), so it never counts as mid-march.
   return army.movement !== null && !army.movement.isReturning && Date.parse(army.movement.arrivesAt) > now;
 }
 

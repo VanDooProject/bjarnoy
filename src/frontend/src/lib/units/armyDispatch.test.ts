@@ -560,6 +560,15 @@ describe('canFieldOrderArmy', () => {
     }
   });
 
+  it('allows a fleeing or stranded army on any mission, even one fleeing home', () => {
+    for (const movement of [
+      { isReturning: true, isFleeing: true, isStranded: false },
+      { isReturning: false, isFleeing: false, isStranded: true },
+    ]) {
+      expect(canFieldOrderArmy({ atHome: false, supporting: false, mission: 'attack', movement })).toBe(true);
+    }
+  });
+
   it('allows a standing or marching move/found army', () => {
     for (const mission of ['move', 'found']) {
       expect(

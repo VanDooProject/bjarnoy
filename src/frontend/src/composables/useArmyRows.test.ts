@@ -37,6 +37,7 @@ function army(overrides: Partial<ArmyResponse> = {}): ArmyResponse {
       returnArrivesAt: '2026-01-01T04:00:00Z',
       isReturning: false,
       isStranded: false,
+      isFleeing: false,
     },
     starvesAt: null,
     ...overrides,
@@ -133,6 +134,7 @@ describe('useArmyRows', () => {
           returnArrivesAt: '2026-01-01T02:00:00Z',
           isReturning: true,
           isStranded: false,
+          isFleeing: false,
         },
       }),
     ];
@@ -144,6 +146,25 @@ describe('useArmyRows', () => {
     expect(r.eta).toBe('1h 0m'); // returnArrivesAt, not arrivesAt
     expect(r.progress).toBeCloseTo(0.5);
     expect(r.canRecall).toBe(false); // already turned around
+  });
+
+  it('offers a free "Move on" (no recall) to an army fleeing home after a lost field battle, whatever its mission', () => {
+    const world = useWorldStore();
+    const base = army();
+    world.armies = [
+      army({
+        mission: 'attack',
+        movement: { ...base.movement!, turnAroundAt: '2026-01-01T00:00:00Z', isReturning: true, isFleeing: true },
+      }),
+    ];
+
+    const rows = mountArmyRows();
+
+    const r = rows.value[0];
+    expect(r.canFieldOrder).toBe(true);
+    expect(r.fieldOrderLocked).toBe(false);
+    expect(r.fieldOrderLabel).toBe('Move on');
+    expect(r.canRecall).toBe(false); // already walking home
   });
 
   it('reports no ETA/progress and no recall for a supporting army', () => {

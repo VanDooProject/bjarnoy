@@ -91,6 +91,13 @@ public sealed record Movement
     /// <summary>How long a fleeing army is protected after the battle it lost.</summary>
     public static readonly TimeSpan FleeProtection = TimeSpan.FromHours(6);
 
+    /// <summary>
+    /// True for an army fleeing after a lost field battle (<see cref="FieldBattleImmuneUntil"/> set), on its way home or stranded. It takes
+    /// field orders from where it is like a standing army (<c>docs/design/troop-movement-range.md</c> §2a); the order's fresh movement ends
+    /// the flight and its protection.
+    /// </summary>
+    public bool IsFleeing => FieldBattleImmuneUntil is not null;
+
     /// <summary>Whether a field battle or camp ambush at <paramref name="at"/> is ruled out by the flee protection.</summary>
     public bool IsFieldBattleImmuneAt(DateTimeOffset at) => FieldBattleImmuneUntil is { } until && at < until;
 

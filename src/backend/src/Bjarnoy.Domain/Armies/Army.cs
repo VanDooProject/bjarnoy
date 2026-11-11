@@ -1773,7 +1773,10 @@ public sealed record Army
         ArgumentNullException.ThrowIfNull(waypoints);
         ArgumentNullException.ThrowIfNull(terrainAt);
 
-        if (army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit)
+        // A fleeing army (after a lost field battle) takes orders from where it is even on its way home
+        // (docs/design/troop-movement-range.md §2a); every other returning army has nothing left to extend.
+        if (army.Location is not ArmyLocation.InTransit inTransit
+            || (inTransit.Movement.IsReturning && !inTransit.Movement.IsFleeing))
         {
             return FieldOrderResult.Rejected(FieldOrderRejection.NoActiveJourney);
         }
@@ -1784,7 +1787,16 @@ public sealed record Army
         }
 
         var movement = inTransit.Movement;
-        var arrived = now >= movement.ArrivesAt;
+
+        // A fleeing army on its way home is ordered like a standing one: a fresh leg from the hex it has reached. It still marches, so it
+        // moves whole.
+        var fleeingHome = movement.IsReturning;
+        if (fleeingHome && requestedUnits is not null && SelectUnits(army.Stacks, requestedUnits) is { Remaining.Count: > 0 })
+        {
+            return FieldOrderResult.Rejected(FieldOrderRejection.SplitRequiresStandingArmy);
+        }
+
+        var arrived = fleeingHome || now >= movement.ArrivesAt;
 
         // Which units leave: everything, or the named part (a split).
         IReadOnlyList<UnitStack> leavingStacks = army.Stacks;
