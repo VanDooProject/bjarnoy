@@ -83,7 +83,8 @@ public static class WorldEndpoints
         worlds.MapGet("/{worldId:guid}/own-build-orders", GetOwnBuildOrders)
             .WithName("GetWorldOwnBuildOrders")
             .WithSummary("The active build queue of each of the caller's realms (one row per realm, its oldest member), so a client can show the construction progress of a settlement it has not opened.")
-            .RequireCallerRealm();
+            .RequireCallerRealm()
+            .WithConcurrencyRetry();
 
         worlds.MapGet("/{worldId:guid}/tiles", GetTiles)
             .WithName("GetWorldTiles")
