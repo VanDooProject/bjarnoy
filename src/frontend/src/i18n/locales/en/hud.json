@@ -464,6 +464,7 @@
   },
   "sendPicker": {
     "title": "{mission} → {target}",
+    "titleOwnRealm": "Send army → {target}",
     "close": "Close",
     "hex": "Hex ({q}, {r})",
     "units": "{count} unit | {count} units",

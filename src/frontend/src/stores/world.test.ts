@@ -3292,6 +3292,13 @@ describe('useWorldStore confirmFieldOrder from the send picker', () => {
 // The send picker lists the garrison and field armies of every realm the player owns: the store keeps them for the realms other than the
 // open one, and a dispatch from such a realm's garrison goes to that realm's own settlement.
 describe('useWorldStore other realms as send sources', () => {
+  // The own-settlements list is an authorized endpoint: the tests that read it run as a logged-in player (the module registry is reset per
+  // store load, so the auth store has to be the one loaded after it).
+  async function loggedIn() {
+    const { useAuthStore } = await import('./auth');
+    useAuthStore().user = { id: 'u1', userName: 'ragnar', role: 'player', status: 'active', displayName: null, isPremium: false, preferredLocale: null } as never;
+  }
+
   function summary(id: string, realmId: string, name: string) {
     return { id, realmId, name, mine: true };
   }
@@ -3308,6 +3315,7 @@ describe('useWorldStore other realms as send sources', () => {
 
   it('reads the garrison and army list of each other realm, one entry per realm, and skips the open one and its linked members', async () => {
     const store = await loadStoreModule(false);
+    await loggedIn();
     store.worldId = 'w1';
     store.selectedSettlementId = 'open';
     listMySettlements.mockReset().mockResolvedValue([
@@ -3340,6 +3348,7 @@ describe('useWorldStore other realms as send sources', () => {
 
   it("keeps a realm's last snapshot when its read fails, and drops a realm the player no longer has", async () => {
     const store = await loadStoreModule(false);
+    await loggedIn();
     store.worldId = 'w1';
     store.selectedSettlementId = 'open';
     listMySettlements.mockReset().mockResolvedValue([summary('a', 'a', 'A'), summary('b', 'b', 'B')]);
@@ -3359,6 +3368,18 @@ describe('useWorldStore other realms as send sources', () => {
     await store.refreshOtherRealms();
     warn.mockRestore();
     expect(store.otherRealms.map((r) => r.realmId)).toEqual(['b']);
+  });
+
+  it('reads nothing for a visitor who is not logged in (the endpoint would 401)', async () => {
+    const store = await loadStoreModule(false);
+    store.worldId = 'w1';
+    store.selectedSettlementId = 'open';
+    listMySettlements.mockReset();
+
+    await store.refreshOtherRealms();
+
+    expect(listMySettlements).not.toHaveBeenCalled();
+    expect(store.otherRealms).toEqual([]);
   });
 
   it('reads nothing in demo mode', async () => {

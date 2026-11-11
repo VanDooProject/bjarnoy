@@ -1714,7 +1714,8 @@ export const useWorldStore = defineStore('world', {
      * them as sources), on the army poll. A realm whose read fails keeps its last snapshot; one that is gone drops out.
      */
     async refreshOtherRealms() {
-      if (DEMO_MODE || !this.worldId || !this.selectedSettlementId) return;
+      // `listMySettlements` is an authorized endpoint: an anonymous player (who can own a settlement) must never attempt it, it 401s.
+      if (DEMO_MODE || !useAuthStore().isAuthenticated || !this.worldId || !this.selectedSettlementId) return;
       const open = this.selectedSettlementId;
       let mine: SettlementSummary[];
       try {

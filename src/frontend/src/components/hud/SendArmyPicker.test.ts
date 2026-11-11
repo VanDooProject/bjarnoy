@@ -177,6 +177,17 @@ describe('SendArmyPicker', () => {
       expect(rows[3]!.get('.send-row-sub').text()).toBe('Home · 3 units');
     });
 
+    it('the title names no mission on a hex of the player\'s own realm, where the rows mix Move and Support', async () => {
+      const world = withOtherRealm();
+      const wrapper = mountPicker();
+      expect(wrapper.get('.send-picker-title-text').text()).toBe('Move → Hex (4, 0)');
+
+      world.openSendPicker({ q: 4, r: 0 }, { targetRealmId: 'home-1', targetBuildingCoord: { q: 4, r: 0 } });
+      await nextTick();
+
+      expect(wrapper.get('.send-picker-title-text').text()).toBe('Send army → Hex (4, 0)');
+    });
+
     it('on a hex of the open realm the other realm supports and the open realm moves', async () => {
       const world = withOtherRealm();
       world.openSendPicker({ q: 4, r: 0 }, { targetRealmId: 'home-1', targetBuildingCoord: { q: 4, r: 0 } });

@@ -46,7 +46,13 @@ const targetName = computed(() => {
   }
   return t('hud.sendPicker.hex', { q: p.coord.q, r: p.coord.r });
 });
-const title = computed(() => t('hud.sendPicker.title', { mission: missionName(picker.value?.mission ?? 'move'), target: targetName.value }));
+// A hex of the player's own realms mixes missions between rows (Move for the realm that owns it, Support for the others), so the title
+// names no mission there; every other target has one mission for all rows.
+const title = computed(() =>
+  picker.value?.targetRealmId
+    ? t('hud.sendPicker.titleOwnRealm', { target: targetName.value })
+    : t('hud.sendPicker.title', { mission: missionName(picker.value?.mission ?? 'move'), target: targetName.value }),
+);
 
 function countUnits(stacks: ReadonlyArray<{ count: number }>): number {
   return stacks.reduce((sum, s) => sum + Math.max(0, s.count), 0);
@@ -365,6 +371,12 @@ watch(
 .send-row-title {
   font-size: 13px;
   font-weight: 700;
+}
+.send-row-title,
+.send-row-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .send-row-sub {
   font-size: 11px;
