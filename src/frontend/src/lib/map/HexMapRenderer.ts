@@ -6078,6 +6078,14 @@ export class HexMapRenderer {
     return { dials: Object.fromEntries(this.dialVisibility), badges: Object.fromEntries(this.badgeVisibility) };
   }
 
+  /**
+   * Hex keys ("q,r") whose construction progress dial the canvas draws right now (read-only, for e2e): the queue's dials minus the
+   * running upgrades the building HUD's markers show instead (`setHudOwnedDials`).
+   */
+  drawnConstructionDialKeys(): string[] {
+    return skipHudOwnedDials(this.constructionDials ?? [], this.hudOwnedDials, Date.now()).map((d) => coordKey(d.coord));
+  }
+
   private hideUnusedIcons() {
     for (let i = this.iconsUsed; i < this.iconPool.length; i++) this.iconPool[i].visible = false;
   }

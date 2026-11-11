@@ -1,6 +1,7 @@
 // See RingMenuComponent.ts for why `expect` comes from here, not `../fixtures`.
 import { expect, type Locator, type Page } from '@playwright/test';
 import { captureCanvas, claimLandfall, foundSettlement, placeGuidedBuildings, waitForMapReady } from '../helpers';
+import { BuildingHudComponent } from './BuildingHudComponent';
 import { RingMenuComponent } from './RingMenuComponent';
 
 export interface HexCoord {
@@ -86,6 +87,8 @@ export class SettlementPage {
   /** The onboarding quest tray (QuestTray.vue) shown in the settlement view. */
   readonly questTray: Locator;
   readonly ring: RingMenuComponent;
+  /** The building HUD: markers over the own buildings and its toggle. */
+  readonly hud: BuildingHudComponent;
   /** Design handoff "2a": the animated next-step arrow (GuidancePointer.vue). */
   readonly guidancePointer: Locator;
   /** The guided-onboarding checklist tray (OnboardingChecklist.vue). */
@@ -124,6 +127,7 @@ export class SettlementPage {
     this.statusCard = page.locator('.status-card');
     this.questTray = page.getByTestId('quest-tray');
     this.ring = new RingMenuComponent(page);
+    this.hud = new BuildingHudComponent(page);
     this.guidancePointer = page.getByTestId('guidance-pointer');
     this.checklist = page.getByTestId('onboarding-checklist');
     this.banner = page.getByTestId('onboarding-banner');
@@ -312,6 +316,20 @@ export class SettlementPage {
     const screen = 'screen' in target ? target.screen : target;
     const box = await this.canvasBox();
     await this.page.mouse.click(box.x + screen.x, box.y + screen.y);
+  }
+
+  /**
+   * Sets the camera zoom with one real wheel gesture at the canvas centre (the renderer zooms by `exp(-deltaY * 0.001)`), then
+   * parks the mouse in the canvas corner so no hover grows a marker or hides the tier the zoom gives it.
+   */
+  async zoomTo(target: number): Promise<void> {
+    const box = await this.canvasBox();
+    const centre = await this.canvasCentre();
+    const current = await this.hud.cameraZoom();
+    await this.page.mouse.move(centre.x, centre.y);
+    await this.page.mouse.wheel(0, -Math.log(target / current) * 1000);
+    await expect.poll(() => this.hud.cameraZoom()).toBeCloseTo(target, 1);
+    await this.page.mouse.move(box.x + 5, box.y + 5);
   }
 
   /** How many buildings this settlement has — the deterministic "did the build land" signal. */
