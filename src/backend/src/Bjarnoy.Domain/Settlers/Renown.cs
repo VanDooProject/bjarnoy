@@ -54,11 +54,7 @@ public sealed record RenownAccount
     /// after <see cref="SettledAt"/>; renown never decays, so there is nothing
     /// to roll backwards.
     /// </summary>
-    /// <param name="speedFactor">
-    /// The world's <c>SpeedFactor</c> — multiplies the accrual rate the same
-    /// way it multiplies production (economy.md, world speed).
-    /// </param>
-    public RenownAccount SettleTo(DateTimeOffset now, int totalBuildingLevels, double speedFactor = 1.0)
+    public RenownAccount SettleTo(DateTimeOffset now, int totalBuildingLevels)
     {
         if (now <= SettledAt)
         {
@@ -66,7 +62,7 @@ public sealed record RenownAccount
         }
 
         var elapsedHours = (now - SettledAt).TotalHours;
-        var accrued = totalBuildingLevels * PointsPerLevelPerHour * speedFactor * elapsedHours;
+        var accrued = totalBuildingLevels * PointsPerLevelPerHour * elapsedHours;
 
         return this with { Total = Total + accrued, SettledAt = now };
     }

@@ -1092,7 +1092,7 @@
     },
     "renown": {
       "heading": "Ruhm und Preis",
-      "body": "Jede Siedlung nach der ersten kostet Ruhm und Siedler. Ruhm sammelst du mit den Gebäuden aller deiner Siedlungen zusammen: 1 pro Gebäudestufe und Stunde, auf schnelleren Welten entsprechend schneller, und er verfällt nie. Mit jeder Siedlung, die du besitzt, verdoppelt sich der Ruhm, der für die nächste verlangt wird. Siedler kosten immer gleich viel.",
+      "body": "Jede Siedlung nach der ersten kostet Ruhm und Siedler. Ruhm sammelst du mit den Gebäuden aller deiner Siedlungen zusammen: 1 pro Gebäudestufe und Stunde, und er verfällt nie. Mit jeder Siedlung, die du besitzt, verdoppelt sich der Ruhm, der für die nächste verlangt wird. Siedler kosten immer gleich viel.",
       "columns": {
         "next": "Du gründest",
         "renown": "Nötiger Ruhm"

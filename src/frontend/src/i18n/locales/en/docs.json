@@ -1092,7 +1092,7 @@
     },
     "renown": {
       "heading": "Renown and price",
-      "body": "Every settlement after the first has a price in renown and in settlers. Your buildings earn renown in all your settlements together: 1 per building level per hour, faster on faster worlds, and it never decays. Each settlement you hold doubles the renown asked for the next one. Settlers always cost the same.",
+      "body": "Every settlement after the first has a price in renown and in settlers. Your buildings earn renown in all your settlements together: 1 per building level per hour, and it never decays. Each settlement you hold doubles the renown asked for the next one. Settlers always cost the same.",
       "columns": {
         "next": "You found",
         "renown": "Renown needed"

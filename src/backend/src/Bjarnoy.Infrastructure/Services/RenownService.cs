@@ -69,10 +69,8 @@ public sealed class RenownService(GameDbContext dbContext, TimeProvider timeProv
 
         var feastRenown = await CollectFeastRenownAsync(userId, worldId, now, cancellationToken).ConfigureAwait(false);
 
-        var speedFactor = await GetSpeedFactorAsync(worldId, cancellationToken).ConfigureAwait(false);
-
         var account = new RenownAccount { Total = user.RenownTotal, SettledAt = user.RenownSettledAt == default ? now : user.RenownSettledAt };
-        var settled = account.SettleTo(now, totalLevels, speedFactor);
+        var settled = account.SettleTo(now, totalLevels);
         settled = settled with { Total = settled.Total + feastRenown };
 
         // One SaveChanges carries both the account's new total and the
@@ -95,23 +93,14 @@ public sealed class RenownService(GameDbContext dbContext, TimeProvider timeProv
             .SelectMany(s => s.Buildings)
             .SumAsync(b => (int?)b.Level, cancellationToken).ConfigureAwait(false) ?? 0;
 
-    /// <summary>The world's <c>SpeedFactor</c>; 1.0 when the world is not found.</summary>
-    private async Task<double> GetSpeedFactorAsync(Guid worldId, CancellationToken cancellationToken) =>
-        await _dbContext.Worlds.AsNoTracking()
-            .Where(w => w.Id == worldId)
-            .Select(w => (double?)w.SpeedFactor)
-            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false) ?? 1.0;
-
     /// <summary>
     /// Renown per hour the player currently accrues from buildings in
     /// <paramref name="worldId"/> (total building levels ×
-    /// <see cref="RenownAccount.PointsPerLevelPerHour"/> × the world's
-    /// <c>SpeedFactor</c>), feasts excluded.
+    /// <see cref="RenownAccount.PointsPerLevelPerHour"/>), feasts excluded.
     /// </summary>
     public async Task<double> GetPerHourAsync(Guid userId, Guid worldId, CancellationToken cancellationToken = default) =>
         await CountBuildingLevelsAsync(userId, worldId, cancellationToken).ConfigureAwait(false)
-        * RenownAccount.PointsPerLevelPerHour
-        * await GetSpeedFactorAsync(worldId, cancellationToken).ConfigureAwait(false);
+        * RenownAccount.PointsPerLevelPerHour;
 
     /// <summary>
     /// Renown still to arrive from feasts: the gain of every feast still

@@ -25,7 +25,7 @@ formula changes, re-run the lab and check all of them.
 
 Each world has a speed factor (1 = normal). It scales:
 
-- production (×), including the renown from buildings (§6)
+- production (×)
 - build, training and feast times (÷); build times also take Odin's Wisdom
 - the decay of buildings outside the realm (÷)
 - travel time of armies and fleets (÷)
@@ -494,7 +494,7 @@ A new settlement needs:
 
 1. a Cart Workshop (LH 10, Town Square 3), so troops come first (T6);
 2. 5 Settlers, at the same price for every settlement;
-3. **renown**: +1 per building level per hour × world speed, across all settlements
+3. **renown**: +1 per building level per hour, across all settlements
    (`Renown.cs`), never spent. Thresholds: **55 000** for the 2nd, then
    ×2 per settlement.
 

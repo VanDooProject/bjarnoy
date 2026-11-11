@@ -300,29 +300,6 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Renown_hourly_rate_and_accrual_scale_with_the_world_speed_factor()
-    {
-        using var client = Client();
-        var (worldId, settlement, player, _) = await SetUpPlayerReadyToExpandAsync(client);
-        var adminToken = await CreateAdminTokenAsync(client);
-
-        var current = await client.GetFromJsonAsync<SettlementResponse>(
-            $"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
-        var levels = current!.Buildings.Sum(b => b.Level);
-
-        Authorize(client, adminToken);
-        var patched = await client.PatchJsonAsync(
-            $"/api/v1/admin/worlds/{worldId}/settings", new UpdateWorldSettingsRequest { SpeedFactor = 5.0 }, Ct);
-        Assert.Equal(HttpStatusCode.OK, patched.StatusCode);
-
-        Authorize(client, player.AccessToken);
-        var renown = await client.GetFromJsonAsync<RenownResponse>(
-            $"/api/v1/worlds/{worldId}/renown", SqliteApiFixture.StrictJson, Ct);
-
-        Assert.Equal(levels * RenownAccount.PointsPerLevelPerHour * 5.0, renown!.PerHour);
-    }
-
-    [Fact]
     public async Task Renown_reports_its_hourly_rate_and_the_renown_a_running_feast_still_owes()
     {
         using var client = Client();
