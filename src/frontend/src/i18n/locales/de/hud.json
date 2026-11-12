@@ -180,6 +180,7 @@
       "upgradeSub": "{building} · Stufe {from} → {to}",
       "givesTotal": "gesamt {amount}",
       "needResources": "Es fehlen {resources}",
+      "needResourcesIn": "Es fehlen {resources} · reicht in {time}",
       "needSlots": "Braucht {needed} Bauplatz · {free} von {total} frei | Braucht {needed} Bauplätze · {free} von {total} frei",
       "needSlotsNext": "Braucht {needed} Bauplatz · {free} von {total} frei · nächster frei in {time} | Braucht {needed} Bauplätze · {free} von {total} frei · nächster frei in {time}",
       "willQueue": "Wird hinter den laufenden Bauten eingereiht ({waiting} von {max} wartend)",

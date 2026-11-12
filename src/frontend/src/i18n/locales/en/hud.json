@@ -180,6 +180,7 @@
       "upgradeSub": "{building} · Level {from} → {to}",
       "givesTotal": "{amount} total",
       "needResources": "Need {resources}",
+      "needResourcesIn": "Need {resources} · enough in {time}",
       "needSlots": "Needs {needed} build slot · {free} of {total} free | Needs {needed} build slots · {free} of {total} free",
       "needSlotsNext": "Needs {needed} build slot · {free} of {total} free · next free in {time} | Needs {needed} build slots · {free} of {total} free · next free in {time}",
       "willQueue": "Will queue behind current builds ({waiting} of {max} waiting)",
