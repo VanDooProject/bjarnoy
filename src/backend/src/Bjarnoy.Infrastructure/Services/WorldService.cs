@@ -247,6 +247,9 @@ public sealed class WorldService(
             world.CreationError = null;
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+            // The world was readable (and its empty island list cacheable) while it was still being generated.
+            WorldIslandCaches.Invalidate(worldId);
+
             _logger.LogInformation(
                 "World {World} ({WorldId}) created with {Islands} islands and {Land} land hexes.",
                 world.Name, world.Id, generated.Islands.Count, generated.LandTileCount);
@@ -477,8 +480,8 @@ public sealed class WorldService(
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        // The old islands' bogland is gone with them.
-        WorldTerrain.Invalidate(worldId);
+        // The old islands' bog, rivers and start positions are gone with them.
+        WorldIslandCaches.Invalidate(worldId);
 
         // Every settlement this world had is now gone — RealmDirectory's
         // cached realms for it (by settlement id, by user, by owner id) would
