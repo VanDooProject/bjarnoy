@@ -131,6 +131,8 @@ const MIN_FRAME_ZOOM = 0.3;
 // carts belong to neither ownership axis, so they get their own color
 // rather than borrowing one that would otherwise read as an owner cue.
 const CART_COLOR = 0x8fd19e;
+/** On-screen height of the world-mode trade cart marker (same scale as the ship/flag army markers). */
+const CART_MARKER_SIZE = 36;
 // Issue #159 part B: a neutral white wash for the range tint — it carries no
 // colour meaning, so it never reads as GOLD (click-to-place highlight), an
 // owner colour or CART.
@@ -232,7 +234,6 @@ export const LABEL_STYLES = {
     letterSpacing: 1.5,
     dropShadow: { color: 0x000000, alpha: 0.6, blur: 3, distance: 1, angle: Math.PI / 2 },
   }),
-  cart: new TextStyle({ fill: CART_COLOR, fontFamily: 'sans-serif', fontWeight: 'normal', fontSize: 11 }),
   badgeName: new TextStyle({ fill: 0xf4f8fa, fontFamily: "'Barlow', sans-serif", fontWeight: '700', fontSize: 15 }),
   badgeSuffix: new TextStyle({ fill: 0xb9c8d1, fontFamily: "'Barlow', sans-serif", fontWeight: '600', fontSize: 13 }),
 } as const;
@@ -5763,17 +5764,22 @@ export class HexMapRenderer {
       if (fogActive && !worldModel.isExplored(cartCoord.q, cartCoord.r)) continue;
       const screen = this.toScreen(world);
 
-      this.markerLayer
-        .circle(screen.x, screen.y, 4 * this.camera.zoom + 2)
-        .fill({ color: CART_COLOR })
-        .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
-
-      const remainingMs = Math.max(0, cart.etaAt - now);
-      const label = this.acquireLabel(`cart:${cart.id}`, LABEL_STYLES.cart);
-      label.text = `${Math.round(cart.cargoAmount)} ${cart.cargoResource} · ${formatEta(remainingMs)}`;
-      label.anchor.set(0, 0);
-      label.position.set(screen.x + 8, screen.y - 8);
-      label.visible = true;
+      // cart.svg is authored with the shaft to the left and its wheels' ground line at y 50 of 64, so the cart stands
+      // on its hex and faces its direction of travel (flipped when it rolls to the right).
+      if (
+        !this.drawIcon('cart', screen.x, screen.y, {
+          size: CART_MARKER_SIZE,
+          color: CART_COLOR,
+          anchorX: 0.5,
+          anchorY: 50 / 64,
+          flipX: toGrid.x > fromGrid.x,
+        })
+      ) {
+        this.markerLayer
+          .circle(screen.x, screen.y, 4 * this.camera.zoom + 2)
+          .fill({ color: CART_COLOR })
+          .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
+      }
     }
 
     // docs/design/ship-movement.md §5: a fleet's waypoints, route, and
@@ -7071,12 +7077,4 @@ function strokeBorderEdges(g: Graphics, corners: readonly ({ x: number; y: numbe
     g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
     g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
   }
-}
-
-function formatEta(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
