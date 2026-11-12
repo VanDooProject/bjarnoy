@@ -391,8 +391,8 @@ public sealed record Settlement
 
     /// <summary>
     /// How many orders may build in parallel right now (issue #158):
-    /// <c>max(2, longhouseLevel)</c> — 2 slots at level 1–2, then one more per level
-    /// (3 at level 3, 10 at level 10, 30 at 30). A razed settlement
+    /// <c>max(2, 1 + floor(longhouseLevel / 2))</c> — level 1 has 2 slots (the exception), then one more every
+    /// second level (2, 2, 3, 3, 4, 4, 5, 5, 6 at levels 2–10; 11 at level 20, 16 at 30). A razed settlement
     /// (<see cref="LonghouseLevel"/> 0) still reads 2 — harmless, since every
     /// building needs <see cref="BuildingDefinition.RequiredLonghouseLevel"/>
     /// &gt;= 1 and nothing can be queued there anyway.
@@ -437,12 +437,12 @@ public sealed record Settlement
         }
 
         var longhouseLevel = buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
-        return Math.Max(2, longhouseLevel);
+        return Math.Max(2, 1 + (longhouseLevel / 2));
     }
 
     /// <summary>
     /// Slots a Longhouse order occupies out of <paramref name="constructionSlots"/>: 90 %, rounded down, at least 1
-    /// (level 10: 9 of 10). The rest stay free for other construction.
+    /// (level 10: 5 of 6 slots). The rest stay free for other construction.
     /// </summary>
     public static int LonghouseSlotCost(int constructionSlots) => Math.Max(1, constructionSlots * 9 / 10);
 

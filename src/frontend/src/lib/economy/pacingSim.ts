@@ -110,9 +110,9 @@ export interface PacingResult {
   series: PacingSeries;
 }
 
-/** Construction slots — mirrors Settlement.ConstructionSlotsFor in the backend: max(2, lh). */
+/** Construction slots — mirrors Settlement.ConstructionSlotsFor in the backend: max(2, 1 + floor(lh / 2)). */
 export function constructionSlotsFor(longhouseLevel: number): number {
-  return Math.max(2, longhouseLevel);
+  return Math.max(2, 1 + Math.floor(longhouseLevel / 2));
 }
 
 /** Slots a Longhouse upgrade occupies — mirrors Settlement.LonghouseSlotCost: 90 % rounded down, min 1. */
