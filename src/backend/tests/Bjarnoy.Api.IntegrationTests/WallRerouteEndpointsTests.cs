@@ -447,21 +447,13 @@ public sealed class WallRerouteEndpointsTests : IAsyncLifetime
         _factory.Time.Advance(TimeSpan.FromHours(11));
         (await client.GetAsync($"/api/v1/armies/{scene.ArmyId}", Ct)).Dispose();
 
-        var settlementId = await HomeSettlementIdAsync(scene.ArmyId);
         var reports = (await client.GetFromJsonAsync<List<CampReportResponse>>(
-            $"/api/v1/settlements/{settlementId}/camp-reports", SqliteApiFixture.StrictJson, Ct))!;
+            $"/api/v1/worlds/{scene.WorldId}/camp-reports", SqliteApiFixture.StrictJson, Ct))!;
         var ambush = Assert.Single(reports);
         Assert.Equal("ambush", ambush.Kind);
         Assert.Equal(scene.ArmyId, ambush.ArmyId);
         Assert.Equal((campHex.Q, campHex.R), (ambush.Camp.Q, ambush.Camp.R));
         Assert.True(ambush.OccurredAt > scene.Start + TimeSpan.FromHours(2));
-    }
-
-    private async Task<Guid> HomeSettlementIdAsync(Guid armyId)
-    {
-        await using var scope = _factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-        return await db.Armies.Where(a => a.Id == armyId).Select(a => a.SettlementId).SingleAsync(Ct);
     }
 
     /// <summary>A wall line across r = 0 at q = -3 (r -2..2), standing from +4 h: the army passed (-3,0) at +3 h on its way out. With a gate in the middle (another player's, hostile) when asked.</summary>

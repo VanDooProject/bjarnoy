@@ -107,9 +107,11 @@ public sealed record TradeReportResponse(
     string RequestedResource,
     double RequestedAmount,
     bool GuildTrade,
-    double TravelHours)
+    double TravelHours,
+    string? ViewerSide = null)
 {
-    public static TradeReportResponse From(TradeReportEntity entity)
+    /// <param name="viewerOwnerId">The reading player; <see cref="ViewerSide"/> is <c>"poster"</c> or <c>"acceptor"</c>, null when neither.</param>
+    public static TradeReportResponse From(TradeReportEntity entity, string? viewerOwnerId = null)
     {
         ArgumentNullException.ThrowIfNull(entity);
 
@@ -124,6 +126,10 @@ public sealed record TradeReportResponse(
             entity.RequestedResource.ToWireName(),
             entity.RequestedAmount,
             entity.GuildTrade,
-            entity.TravelHours);
+            entity.TravelHours,
+            viewerOwnerId is null ? null
+                : viewerOwnerId == entity.PosterOwnerId ? "poster"
+                : viewerOwnerId == entity.AcceptorOwnerId ? "acceptor"
+                : null);
     }
 }

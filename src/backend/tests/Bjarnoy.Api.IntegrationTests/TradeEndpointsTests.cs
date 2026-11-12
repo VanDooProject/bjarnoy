@@ -517,10 +517,10 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
             $"/api/v1/settlements/{poster.Id}/shipments", SqliteApiFixture.StrictJson, Ct);
 
         var posterReports = await client.GetFromJsonAsync<List<TradeReportResponse>>(
-            $"/api/v1/settlements/{poster.Id}/trade-reports", SqliteApiFixture.StrictJson, Ct);
+            $"/api/v1/worlds/{worldId}/trade-reports", SqliteApiFixture.StrictJson, Ct);
         SetOwner(client, acceptorOwnerId);
         var acceptorReports = await client.GetFromJsonAsync<List<TradeReportResponse>>(
-            $"/api/v1/settlements/{acceptor.Id}/trade-reports", SqliteApiFixture.StrictJson, Ct);
+            $"/api/v1/worlds/{worldId}/trade-reports", SqliteApiFixture.StrictJson, Ct);
 
         var posterReport = Assert.Single(posterReports!, r => r.OfferId == posted.Id);
         var acceptorReport = Assert.Single(acceptorReports!, r => r.OfferId == posted.Id);

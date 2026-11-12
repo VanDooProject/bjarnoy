@@ -694,6 +694,8 @@ export interface TradeReportResponse {
   requestedAmount: number;
   guildTrade: boolean;
   travelHours: number;
+  /** The side the reading player traded on (a player's reports cover all their settlements); null when neither. */
+  viewerSide: 'poster' | 'acceptor' | null;
 }
 
 export interface CreateWorldRequest {
@@ -1870,6 +1872,8 @@ export interface BattleReportResponse {
   drowned: ArmyUnitStackResponse[];
   fireShipsBurned: number;
   fireSiege: BattleReportSiege | null;
+  /** The side the reading player fought on (a player's reports cover all their settlements); null when neither. */
+  viewerSide: 'attacker' | 'defender' | null;
 }
 
 // Issue #206 (frontend): in-flight field battles — army-vs-army interception
@@ -1909,6 +1913,8 @@ export interface FieldBattleReportResponse {
   seed: number;
   lootTaken: ResourceLine;
   lines: FieldBattleReportLine[];
+  /** The side the reading player fought on (a player's reports cover all their settlements); null when neither. */
+  viewerSide: 'sidea' | 'sideb' | null;
 }
 
 // Issue #40 phase 7 (frontend): the premium fight simulator. Mirrors

@@ -83,15 +83,15 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 // see stores/reports.ts's own comment on why this isn't folded into
 // stores/world.ts's poll loop.
 function syncPolling() {
-  if (!DEMO_MODE && player.settlementId) {
-    reports.startPolling(player.settlementId, player.id, world.worldId);
+  if (!DEMO_MODE && world.worldId) {
+    reports.startPolling(world.worldId, player.id);
   } else {
     reports.stopPolling();
   }
 }
 onMounted(syncPolling);
 onUnmounted(() => reports.stopPolling());
-watch(() => [player.settlementId, world.worldId], syncPolling);
+watch(() => world.worldId, syncPolling);
 
 const initials = computed(() => {
   if (!player.nickname) return 'BJ';

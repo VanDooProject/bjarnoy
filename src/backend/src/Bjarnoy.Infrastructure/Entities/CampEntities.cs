@@ -80,7 +80,7 @@ public class CampStateEntity
 
 /// <summary>
 /// A camp fight's stored form. Immutable once written, like <see cref="BattleReportEntity"/>; lands in the inbox
-/// of <see cref="SettlementId"/> only (the camp has no owner).
+/// of <see cref="OwnerId"/> only (the camp has no owner).
 /// </summary>
 public class CampReportEntity
 {
@@ -102,7 +102,11 @@ public class CampReportEntity
 
     public int EffectiveLevel { get; set; }
 
+    /// <summary>The settlement the army (or tower) belonged to. A plain id, no foreign key: the report outlives the settlement.</summary>
     public Guid SettlementId { get; set; }
+
+    /// <summary>The player the report belongs to (<c>SettlementEntity.OwnerId</c> at fight time); the inbox lists by this.</summary>
+    public string OwnerId { get; set; } = string.Empty;
 
     public Guid? ArmyId { get; set; }
 

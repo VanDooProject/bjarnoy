@@ -55,6 +55,7 @@ import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { buildingName } from '../../i18n/catalogueNames';
 import { settlementBadgeSuffix } from './settlementBadge';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
+import { FogField } from './fog/FogField';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP, armyFogClearReachHexes, type ArmyVisionSource } from './fog/FogMaskLayer';
 import type { FogCoverageLookup } from './fog/fogCoverage';
 import { UNKNOWN_RAMP_MARGIN_HEXES } from './fog/fogRamp';
@@ -326,7 +327,7 @@ export interface FogDebugFlags {
  */
 export interface FogDebugTuning {
   /**
-   * Multiplier on the cloud field's wind speed (FogMaskLayer's WIND). 1 is
+   * Multiplier on the cloud field's wind speed (FogField's WIND). 1 is
    * the shipped rate; the panel offers a slider around it so a better one
    * can be found by eye, on a live map, instead of by rebuilding between
    * guesses. Not persisted — a reload is back to 1.
@@ -2336,16 +2337,19 @@ export class HexMapRenderer {
   // mist) sits after `markerLayer` — see mount()'s addChild order. Both are
   // genuinely screen-space (no `world`-transform syncing needed, unlike v1's
   // `fogWorld`), and both stay in sync via setCamera on every camera change.
+  // Both quads sample one shared, world-anchored field texture (fog/FogField.ts) that is rendered once, not per quad,
+  // and only when its inputs changed (fogFieldPlan.ts) — the mask/noise shader no longer runs over the screen twice a frame.
+  private fogField = new FogField();
   private blackFogLayer = new FogMaskLayer('outOfSight', {
     scoutedColor: FOG_SCOUTED,
     unexploredColor: FOG_UNEXPLORED,
     scoutedAlpha: FOG_SCOUTED_ALPHA,
-  });
+  }, this.fogField);
   private whiteMistLayer = new FogMaskLayer('unknown', {
     scoutedColor: FOG_SCOUTED,
     unexploredColor: FOG_UNEXPLORED,
     scoutedAlpha: FOG_SCOUTED_ALPHA,
-  });
+  }, this.fogField);
   // The fetched (or, before the first fetch resolves, not-yet-fetched) mask
   // texture and the world-to-mask-UV placement it was decoded with — see
   // setFogMask. Null until fetchFogMask's first call resolves (or forever in
@@ -2979,8 +2983,7 @@ export class HexMapRenderer {
     // on blackFogLayer/whiteMistLayer) — no transform to sync, just the raw
     // camera/viewport values their shader uses to invert screen -> world
     // itself (fogShader.ts's own screenToWorld-equivalent).
-    this.blackFogLayer.setCamera(this.camera, this.viewport);
-    this.whiteMistLayer.setCamera(this.camera, this.viewport);
+    this.fogField.setCamera(this.camera, this.viewport);
     this.notifyFogViewport();
     this.options.onCameraChange?.();
   }
@@ -3056,10 +3059,9 @@ export class HexMapRenderer {
       showRawMask: fogDebugFlags.showRawMask,
       showEffectiveMask: fogDebugFlags.showEffectiveMask,
     };
-    this.blackFogLayer.setDebug(debug);
-    this.whiteMistLayer.setDebug(debug);
-    this.blackFogLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed * waterDebugTuning.mapAnimationSpeed);
-    this.whiteMistLayer.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed * waterDebugTuning.mapAnimationSpeed);
+    this.fogField.setDebug(debug);
+    this.fogField.tick(now, fogDebugFlags.drift && this.fogMotion, fogDebugTuning.driftSpeed * waterDebugTuning.mapAnimationSpeed);
+    if (this.blackFogLayer.mesh.visible || this.whiteMistLayer.mesh.visible) this.fogField.update(this.app!.renderer);
     this.drawHighlight();
   };
 
@@ -3067,7 +3069,7 @@ export class HexMapRenderer {
    * Eases from the founding transition's start camera to its target (see
    * animateCameraTo) — zip 6a: the landing page's founding moment should
    * read as the camera settling into place while the fog reveals via its own
-   * cross-fade (FogMaskLayer.setMaskTexture, §2.6), not an instant jump.
+   * cross-fade (FogField.setMaskTexture, §2.6), not an instant jump.
    */
   private tickCameraAnim() {
     const anim = this.cameraAnim;
@@ -6472,7 +6474,7 @@ export class HexMapRenderer {
    * the whole demo world (`worldMaskBounds`). The placement is derived from
    * `bounds` on every call, so this is cheap to call again even when only the
    * texture itself changed, and the previous texture keeps its own placement
-   * for the cross-fade (FogMaskLayer.setMaskTexture). Ground outside `bounds`
+   * for the cross-fade (FogField.setMaskTexture). Ground outside `bounds`
    * reads as fully unknown (fogShader.ts's sampleMask) — §3's default for a
    * chunk that isn't loaded. `coverage` is the same pixels as per-hex lookups: the world model keeps it
    * (`isExplored`) and the terrain cull, borders and markers read it, so they are rebuilt when its clear set changes.
@@ -6491,11 +6493,10 @@ export class HexMapRenderer {
     const placement = fogMaskPlacement(bounds, TILE_W, TILE_H);
 
     const texture = Texture.from(bitmap);
-    this.blackFogLayer.setMaskTexture(texture, placement);
-    this.whiteMistLayer.setMaskTexture(texture, placement);
+    this.fogField.setMaskTexture(texture, placement);
 
-    // Both layers now hold `texture` as their current mask and the previous
-    // one as uMaskPrev, mid cross-fade (FogMaskLayer.setMaskTexture, §2.6).
+    // The field now holds `texture` as its current mask and the previous
+    // one as uMaskPrev, mid cross-fade (FogField.setMaskTexture, §2.6).
     // The generation *before* that is no longer referenced by either layer
     // at all, so it's safe to free now — one generation of slack rather
     // than destroying the texture still actively cross-fading out.
@@ -6972,10 +6973,9 @@ export class HexMapRenderer {
     }
 
     // §1c: pushed every tick, independent of any mask fetch — see
-    // FogMaskLayer.setArmyVisionSources's own remarks on why this stays out
+    // FogField.setArmyVisionSources's own remarks on why this stays out
     // of the cached mask texture entirely.
-    this.blackFogLayer.setArmyVisionSources(armyVisionSources, ARMY_HEX_SIZE);
-    this.whiteMistLayer.setArmyVisionSources(armyVisionSources, ARMY_HEX_SIZE);
+    this.fogField.setArmyVisionSources(armyVisionSources, ARMY_HEX_SIZE);
     this.syncArmyCullSources(armyCullSourcesOf(armyVisionLegs));
 
     // Armies that have gone away (arrived home and been folded back) would
@@ -6997,7 +6997,7 @@ export class HexMapRenderer {
    * camera to its new position/zoom over CAMERA_TRANSITION_MS. The fog
    * reveal itself needs no explicit trigger here any more: founding fetches
    * a fresh mask shortly after (stores/world.ts's fetchFogMask), and
-   * FogMaskLayer.setMaskTexture's own cross-fade (§2.6) reveals it the
+   * FogField.setMaskTexture's own cross-fade (§2.6) reveals it the
    * moment that resolves — the same mechanism that handles "newly explored"
    * generally, not a founding-specific special case.
    */
@@ -7060,8 +7060,7 @@ export class HexMapRenderer {
       this.syncSpriteLayer(this.terrainTop, new Map());
       this.syncBogEdgeGraphics([], []);
       this.topAnimState.clear();
-      this.blackFogLayer.setArmyVisionSources([], ARMY_HEX_SIZE);
-      this.whiteMistLayer.setArmyVisionSources([], ARMY_HEX_SIZE);
+      this.fogField.setArmyVisionSources([], ARMY_HEX_SIZE);
     } else {
       // Leaving world mode: drop its flat-fill polygons (rebuildTerrain's
       // settlement branch never calls rebuildTerrainFlat, so terrainFlat is
@@ -7133,6 +7132,7 @@ export class HexMapRenderer {
     this.previousFogMaskTexture = null;
     this.blackFogLayer.destroy();
     this.whiteMistLayer.destroy();
+    this.fogField.destroy();
     this.waterLayer.destroy();
     this.waterDry.destroy();
     this.riverFlow.destroy();
