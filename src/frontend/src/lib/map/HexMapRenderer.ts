@@ -105,7 +105,7 @@ import {
   type TileAnimClip,
   type TileTextures,
 } from './textures';
-import { giantCrop, giantFootprintOutline } from './giantTiles';
+import { GIANT_MAX_RISE_NATIVE, giantCrop, giantFootprintOutline } from './giantTiles';
 import type { GiantFamily } from './giantPlacement';
 import { bogEdgeShapes, bogEdgesOf, isBogGround, type BogEdgeShape } from './bogEdge';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
@@ -946,16 +946,24 @@ const TILE_TOPFACE_Y_OFFSET = TILE_W * TILE_ART_TOPFACE_Y_FRAC;
 // consider a hex "visible" — shared so the two agree on exactly the same
 // rect every rebuild.
 //
-// This also covers giant tiles (giantTiles.ts), whose top parts rise above
-// their own hex's canvas: the tallest shipped part (giantmountain, 692 native
-// px) rises 392 native px = TILE_W * 392 / 200 ≈ 329 world units, inside
-// this margin. A taller giant would need this widened.
-//
-// The terrain is only rebuilt once the camera has moved REBUILD_MOVE_THRESHOLD, so
-// the margin must stay above it or a hex at the viewport edge could be undrawn
-// right before the next rebuild (asserted in HexMapRenderer.test.ts).
+// A hex is drawn when its grid position lies in the rect, but its art reaches past
+// that box (MAX_ART_OVERHANG), and the terrain is only rebuilt once the camera has
+// moved REBUILD_MOVE_THRESHOLD. So between two rebuilds a hex the rect left out
+// can come into view: the margin minus the threshold must cover the overhang, or a
+// hex at the viewport edge could be undrawn right before the next rebuild (asserted
+// in HexMapRenderer.test.ts). This also covers giant tiles (giantTiles.ts), whose
+// top parts rise above their own hex's canvas by up to GIANT_MAX_RISE_NATIVE.
 export const VISIBLE_RECT_MARGIN = TILE_W * 4;
-export const REBUILD_MOVE_THRESHOLD = TILE_W * 1.5;
+export const REBUILD_MOVE_THRESHOLD = TILE_W * 1.25;
+/**
+ * The farthest any hex art reaches past its grid position (`isoGridPosition`'s top-left of the hex's box), per axis: sideways a whole
+ * tile width, and vertically either above it (the art starts `TILE_TOPFACE_Y_OFFSET` higher, a giant part by its extra height more)
+ * or below it (the rest of the canvas).
+ */
+export const MAX_ART_OVERHANG = {
+  x: TILE_W,
+  y: Math.max(TILE_TOPFACE_Y_OFFSET + (TILE_W * GIANT_MAX_RISE_NATIVE) / TILE_ART_NATIVE_W, TILE_CANVAS_H - TILE_TOPFACE_Y_OFFSET),
+};
 // The water mask's own bake window around the viewport (unchanged by the terrain margin above).
 const WATER_MASK_VIEW_MARGIN = TILE_W * 2;
 
@@ -2190,8 +2198,8 @@ export class HexMapRenderer {
   private bogLakeLoadStarted = false;
   // The world rect the current water mask was baked over — `null` until the
   // first bake. Re-baked only when the viewport leaves it (§2.2), not per
-  // rebuild: a rebuild happens on every 0.4-tile camera move, the mask's own
-  // margin is three tiles.
+  // rebuild: a rebuild happens on every REBUILD_MOVE_THRESHOLD of camera move, the mask's own
+  // margin is WATER_MASK_VIEW_MARGIN.
   private waterMaskRegionBuilt: WaterMaskRegion | null = null;
   /**
    * Whether `worldModel.isWastedRevealed()` was true for the bake that
@@ -3989,7 +3997,7 @@ export class HexMapRenderer {
       // and a rebuild re-syncs every visible terrain/border sprite, real
       // per-rebuild cost under software rendering, paid several times over
       // across a single gesture. visibleCoords already renders a
-      // TILE_W*2 margin past the viewport edge, so there's slack to spend:
+      // VISIBLE_RECT_MARGIN past the viewport edge, so there's slack to spend:
       // throttle rebuilds to once per DRAG_REBUILD_THROTTLE_MS instead of
       // firing on every threshold-crossing frame. Each gesture still ends
       // with one forced, fully up-to-date rebuild — onPointerUp's when a drag
@@ -5045,7 +5053,7 @@ export class HexMapRenderer {
     }
     const drawStart = performance.now();
     // Live zoom rather than the one the points were placed at: a rebuild only
-    // happens every 0.4 tiles of camera movement, so a wheel zoom crosses the
+    // happens every REBUILD_MOVE_THRESHOLD of camera movement, so a wheel zoom crosses the
     // fade band over many frames that share one placement.
     const strokePx = WAVE_STROKE * this.camera.zoom;
     const fade = Math.min(
