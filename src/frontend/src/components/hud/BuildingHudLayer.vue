@@ -378,7 +378,7 @@ const lastTransform = new Map<string, string>();
 const lastVisibility = new Map<string, string>();
 
 // The layer's size, kept up to date by the same ResizeObserver as the boxes' sizes (ensureBoxObserver) so the frame loop never reads the layout for it. Until the first
-// observation (or without a ResizeObserver) it is read once from the element and then cached the same way.
+// observation it is read once from the element and then cached the same way.
 let rootSize: { w: number; h: number } | null = null;
 
 /** Ring-menu fade per marker (`markerFadeStep`); absent = fully visible. */
@@ -396,20 +396,21 @@ const boxSizes = new Map<string, { w: number; h: number }>();
 const observedBoxes = new Map<string, HTMLElement>();
 let boxObserver: ResizeObserver | null = null;
 
-function ensureBoxObserver(): ResizeObserver | null {
-  if (boxObserver || typeof ResizeObserver === 'undefined') return boxObserver;
+function ensureBoxObserver(): ResizeObserver {
+  if (boxObserver) return boxObserver;
   boxObserver = new ResizeObserver((entries) => {
     for (const entry of entries) {
       const el = entry.target as HTMLElement;
+      // The border box (the near / mid padding change a marker's box); where the entry has no border-box size, the layout size.
+      const size = entry.borderBoxSize?.[0];
+      const measured = size ? { w: size.inlineSize, h: size.blockSize } : { w: el.offsetWidth, h: el.offsetHeight };
       if (el === root.value) {
-        rootSize = { w: Math.round(entry.contentRect.width), h: Math.round(entry.contentRect.height) };
+        rootSize = measured;
         continue;
       }
       const key = keyOf(el);
       if (!key || observedBoxes.get(key) !== el) continue;
-      // The border box: the near / mid padding change resizes it too. Where the entry has no border-box size, the layout size.
-      const size = entry.borderBoxSize?.[0];
-      boxSizes.set(key, size ? { w: size.inlineSize, h: size.blockSize } : { w: el.offsetWidth, h: el.offsetHeight });
+      boxSizes.set(key, measured);
     }
   });
   return boxObserver;
@@ -421,7 +422,7 @@ function setBox(key: string, el: unknown) {
     if (previous === el) return;
     if (previous) boxObserver?.unobserve(previous);
     observedBoxes.set(key, el);
-    ensureBoxObserver()?.observe(el, { box: 'border-box' });
+    ensureBoxObserver().observe(el, { box: 'border-box' });
     return;
   }
   if (previous) boxObserver?.unobserve(previous);
@@ -716,7 +717,7 @@ function onKeyDown(e: KeyboardEvent) {
 }
 
 onMounted(() => {
-  if (root.value) ensureBoxObserver()?.observe(root.value, { box: 'border-box' });
+  if (root.value) ensureBoxObserver().observe(root.value, { box: 'border-box' });
   window.addEventListener('keydown', onKeyDown);
   props.renderer?.setTapObserver(onMapTap);
   props.renderer?.setFrameObserver(tick);

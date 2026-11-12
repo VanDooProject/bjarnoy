@@ -118,6 +118,16 @@ describe('BuildingHudLayer', () => {
       return frames.length;
     });
     vi.stubGlobal('cancelAnimationFrame', () => {});
+    // jsdom has no ResizeObserver, which the layer requires: a silent one that never reports a size (the box tests below
+    // replace it with one a test can drive).
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
   });
 
   afterEach(() => {
