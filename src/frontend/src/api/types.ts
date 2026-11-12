@@ -1415,6 +1415,8 @@ export interface LeaderboardBoardInfoResponse {
   reason: string | null;
   computedAt: string | null;
   entryCount: number | null;
+  /** The caller's rank on this board; `null` when anonymous, the board is dark, or the caller has no entry. */
+  myRank: number | null;
 }
 
 export interface WeeklyWindowResponse {

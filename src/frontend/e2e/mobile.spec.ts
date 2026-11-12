@@ -135,9 +135,10 @@ test.describe('phone layout', { tag: '@g1' }, () => {
 
   test('the leaderboards modal keeps a side gutter instead of running its heading into the screen edge', async ({ page }) => {
     await page.goto('/leaderboards');
-    const heading = page.getByRole('heading', { level: 1 });
-    await expect(heading).toBeVisible();
-    expect((await heading.boundingBox())!.x).toBeGreaterThanOrEqual(12);
+    // On a phone the dialog title is the shared header bar's text, next to the back chevron.
+    const title = page.getByRole('dialog').locator('.mobile-title');
+    await expect(title).toBeVisible();
+    expect((await title.boundingBox())!.x).toBeGreaterThanOrEqual(12);
   });
 
   test('the compact landing column leaves the plot chip and demo badge uncovered', async ({ page }) => {
@@ -412,7 +413,7 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('heading', { name: 'Leaderboards' })).toBeVisible();
+    await expect(dialog.locator('.mobile-title')).toHaveText('Leaderboards');
     // The map underneath is still there, not unmounted/remounted.
     await expect(page.locator('canvas')).toBeVisible();
 
@@ -445,6 +446,6 @@ test.describe('leaderboards/guild open as modals on a phone', { tag: '@g1' }, ()
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('heading', { name: 'Leaderboards' })).toBeVisible();
+    await expect(dialog.locator('.mobile-title')).toHaveText('Leaderboards');
   });
 });

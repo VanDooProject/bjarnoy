@@ -8,13 +8,18 @@ namespace Bjarnoy.Api.Contracts;
 /// of "noBattleSystemYet", "noArmySystemYet", "noGuildSystemYet",
 /// "noWeeklyWindowsYet", "notComputedYet", or "unknownBoard" (issue #43 §5).
 /// </param>
+/// <param name="MyRank">
+/// The caller's rank on this board; <see langword="null"/> for an anonymous caller, a dark board, or when the
+/// caller has no entry on it.
+/// </param>
 public sealed record LeaderboardBoardInfoResponse(
     string Scope,
     string Category,
     bool Available,
     string? Reason,
     DateTimeOffset? ComputedAt,
-    int? EntryCount)
+    int? EntryCount,
+    int? MyRank)
 {
     public static LeaderboardBoardInfoResponse From(LeaderboardBoardStatus status) => new(
         status.Scope.ToWireName(),
@@ -22,7 +27,8 @@ public sealed record LeaderboardBoardInfoResponse(
         status.Available,
         status.Reason,
         status.ComputedAt,
-        status.EntryCount);
+        status.EntryCount,
+        status.MyRank);
 }
 
 /// <summary>A closed weekly window, oldest first.</summary>

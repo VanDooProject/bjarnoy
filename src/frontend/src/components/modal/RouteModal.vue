@@ -29,6 +29,13 @@ const props = defineProps<{
    * straight through to the background route.
    */
   onBack?: () => void;
+  /** `wide` is the two-pane dialog (rail + content, ~980px by ~700px); `default` is the ~720px reading column. */
+  size?: 'default' | 'wide';
+  /**
+   * The content draws its own title and × on desktop (a wide dialog whose rail carries the heading). It gets `close`
+   * as a slot prop so there is still exactly one close action. Phones always get the shared header bar.
+   */
+  contentHeader?: boolean;
 }>();
 
 const router = useRouter();
@@ -84,7 +91,7 @@ const closeLabel = computed(() => t('profile.close'));
     <div
       ref="panelEl"
       class="modal-panel"
-      :class="{ 'modal-panel--mobile': isMobile }"
+      :class="{ 'modal-panel--mobile': isMobile, 'modal-panel--wide': props.size === 'wide' }"
       role="dialog"
       aria-modal="true"
       :aria-label="props.title || undefined"
@@ -98,11 +105,11 @@ const closeLabel = computed(() => t('profile.close'));
         </button>
         <span class="mobile-title">{{ props.title }}</span>
       </div>
-      <button v-else type="button" class="close-button" :aria-label="closeLabel" @click="close">
+      <button v-else-if="!props.contentHeader" type="button" class="close-button" :aria-label="closeLabel" @click="close">
         <span aria-hidden="true">×</span>
       </button>
       <div class="modal-content">
-        <slot />
+        <slot :close="close" />
       </div>
     </div>
   </div>
@@ -157,6 +164,21 @@ const closeLabel = computed(() => t('profile.close'));
   color: var(--gold);
 }
 
+/* Wide: a fixed-height two-pane dialog; the content scrolls inside its own panes, not the panel. */
+.modal-panel--wide {
+  max-width: 980px;
+  height: min(700px, calc(100vh - 32px));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.modal-panel--wide .modal-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Mobile: the panel fills the screen instead of floating over the backdrop,
    with a header bar (back chevron + title) replacing the floating × —
    there's no backdrop left visible to click through to anyway. */
@@ -203,6 +225,7 @@ const closeLabel = computed(() => t('profile.close'));
 }
 .modal-panel--mobile .modal-content {
   flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
 }
 </style>

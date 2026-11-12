@@ -133,6 +133,8 @@
   --text: #e8f0f5;
   --muted: #8fa3af;
   --muted-2: #7d909c;
+  /* A rank that moved up (leaderboard change column); a rank that moved down is --rival. */
+  --rank-up: #4caf6a;
 
   /* Resource palette: lightness steps evenly (brick darkest, iron lightest) so
      the resources stay apart in grey and for colour-blind players; each also
