@@ -50,7 +50,8 @@ public static class WorldTerrain
     private static Task<BogData> DataAsync(GameDbContext db, Guid worldId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return Cache.GetAsync(worldId, () => LoadAsync(db, worldId), cancellationToken);
+        var options = WorldIslandCaches.OptionsOf(db);
+        return Cache.GetAsync(worldId, () => WorldIslandCaches.LoadAsync(options, loadDb => LoadAsync(loadDb, worldId)), cancellationToken);
     }
 
     private static async Task<BogData> LoadAsync(GameDbContext db, Guid worldId)

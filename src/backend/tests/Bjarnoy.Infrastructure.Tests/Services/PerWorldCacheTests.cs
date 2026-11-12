@@ -1,4 +1,8 @@
+using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Bjarnoy.Infrastructure.Tests.Services;
 
@@ -41,6 +45,79 @@ public class PerWorldCacheTests
 
         Assert.Equal("ok", await cache.GetAsync(world, Load, TestContext.Current.CancellationToken));
         Assert.Equal(2, attempts);
+    }
+
+    [Fact]
+    public async Task A_load_that_was_canceled_is_dropped_and_tried_again()
+    {
+        var cache = new PerWorldCache<string>();
+        var world = Guid.NewGuid();
+        var attempts = 0;
+
+        Task<string> Load() => ++attempts == 1 ? Task.FromCanceled<string>(new CancellationToken(canceled: true)) : Task.FromResult("ok");
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cache.GetAsync(world, Load, TestContext.Current.CancellationToken));
+        Assert.False(cache.Contains(world));
+
+        Assert.Equal("ok", await cache.GetAsync(world, Load, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task A_caller_that_stops_waiting_leaves_the_running_load_for_the_others()
+    {
+        var cache = new PerWorldCache<int>();
+        var world = Guid.NewGuid();
+        var gate = new TaskCompletionSource<int>();
+        using var giveUp = new CancellationTokenSource();
+
+        var first = cache.GetAsync(world, () => gate.Task, giveUp.Token);
+        var second = cache.GetAsync(world, () => gate.Task, TestContext.Current.CancellationToken);
+        await giveUp.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+        Assert.True(cache.Contains(world));
+
+        gate.SetResult(7);
+        Assert.Equal(7, await second);
+    }
+
+    [Fact]
+    public async Task A_cached_load_reads_through_its_own_context_not_the_first_callers()
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        var services = new ServiceCollection();
+        services.AddDbContext<GameDbContext>(o => o.UseSqlite(connection));
+        await using var provider = services.BuildServiceProvider();
+        await using (var setup = provider.CreateAsyncScope())
+        {
+            await setup.ServiceProvider.GetRequiredService<GameDbContext>().Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+        }
+
+        var cache = new PerWorldCache<int>();
+        var world = Guid.NewGuid();
+        var gate = new TaskCompletionSource();
+
+        // The first request starts the load, then its scope (and context) is gone while the load still waits.
+        Task<int> firstCall;
+        var requestScope = provider.CreateAsyncScope();
+        {
+            var options = WorldIslandCaches.OptionsOf(requestScope.ServiceProvider.GetRequiredService<GameDbContext>());
+            firstCall = cache.GetAsync(
+                world,
+                () => WorldIslandCaches.LoadAsync(options, async db =>
+                {
+                    await gate.Task;
+                    return await db.Islands.CountAsync(CancellationToken.None);
+                }),
+                TestContext.Current.CancellationToken);
+        }
+
+        var secondCall = cache.GetAsync(world, () => throw new InvalidOperationException("must reuse the first load"), TestContext.Current.CancellationToken);
+        await requestScope.DisposeAsync();
+        gate.SetResult();
+
+        Assert.Equal(0, await firstCall);
+        Assert.Equal(0, await secondCall);
     }
 
     [Fact]

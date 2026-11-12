@@ -47,7 +47,7 @@ public sealed record TerrainChunks(IReadOnlyList<GzipPayload> Chunks)
 
 /// <summary>
 /// The big, rarely changing parts of a world's islands — river and bog tiles, start positions — serialized and compressed once per
-/// world and kept (<see cref="PerWorldCache{T}"/>), so serving them costs no database read and no serialization. They only change
+/// world and kept (<see cref="PerWorldCache{T}"/>), so serving them reads no island data and does no serialization. They only change
 /// when a world is reseeded (<see cref="WorldIslandCaches.Invalidate"/>), which clears them.
 /// </summary>
 /// <remarks>
@@ -65,27 +65,24 @@ public static class IslandPayloads
     private static readonly PerWorldCache<GzipPayload> StartsRevealed = WorldIslandCaches.Register(new PerWorldCache<GzipPayload>());
 
     public static Task<TerrainChunks> TerrainAsync(
-        IServiceScopeFactory scopes, JsonSerializerOptions json, Guid worldId, bool wastedRevealed, CancellationToken cancellationToken) =>
+        DbContextOptions<GameDbContext> dbOptions, JsonSerializerOptions json, Guid worldId, bool wastedRevealed, CancellationToken cancellationToken) =>
         (wastedRevealed ? TerrainRevealed : TerrainHidden).GetAsync(
-            worldId, () => LoadTerrainAsync(scopes, json, worldId, wastedRevealed), cancellationToken);
+            worldId, () => LoadTerrainAsync(dbOptions, json, worldId, wastedRevealed), cancellationToken);
 
     public static Task<GzipPayload> StartPositionsAsync(
-        IServiceScopeFactory scopes, JsonSerializerOptions json, Guid worldId, bool wastedRevealed, CancellationToken cancellationToken) =>
+        DbContextOptions<GameDbContext> dbOptions, JsonSerializerOptions json, Guid worldId, bool wastedRevealed, CancellationToken cancellationToken) =>
         (wastedRevealed ? StartsRevealed : StartsHidden).GetAsync(
-            worldId, () => LoadStartPositionsAsync(scopes, json, worldId, wastedRevealed), cancellationToken);
+            worldId, () => LoadStartPositionsAsync(dbOptions, json, worldId, wastedRevealed), cancellationToken);
 
-    // The cached task outlives the request that started it, so it reads through a scope of its own, not the request's DbContext.
-    private static async Task<TerrainChunks> LoadTerrainAsync(IServiceScopeFactory scopes, JsonSerializerOptions json, Guid worldId, bool wastedRevealed)
+    // The cached task outlives the request that started it, so it reads through a DbContext of its own, not the request's.
+    private static async Task<TerrainChunks> LoadTerrainAsync(DbContextOptions<GameDbContext> dbOptions, JsonSerializerOptions json, Guid worldId, bool wastedRevealed)
     {
-        await using var scope = scopes.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-
-        var rows = await db.Islands
+        var rows = await WorldIslandCaches.LoadAsync(dbOptions, db => db.Islands
             .AsNoTracking()
             .Where(i => i.WorldId == worldId && (wastedRevealed || !i.IsWasted))
             .OrderBy(i => i.Index)
             .Select(i => new { i.Id, i.RiverTiles, i.BogTiles })
-            .ToListAsync(CancellationToken.None).ConfigureAwait(false);
+            .ToListAsync(CancellationToken.None)).ConfigureAwait(false);
 
         var chunks = new List<GzipPayload>((rows.Count + TerrainChunkSize - 1) / TerrainChunkSize);
         for (var from = 0; from < rows.Count; from += TerrainChunkSize)
@@ -99,17 +96,14 @@ public static class IslandPayloads
         return new TerrainChunks(chunks);
     }
 
-    private static async Task<GzipPayload> LoadStartPositionsAsync(IServiceScopeFactory scopes, JsonSerializerOptions json, Guid worldId, bool wastedRevealed)
+    private static async Task<GzipPayload> LoadStartPositionsAsync(DbContextOptions<GameDbContext> dbOptions, JsonSerializerOptions json, Guid worldId, bool wastedRevealed)
     {
-        await using var scope = scopes.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-
-        var rows = await db.Islands
+        var rows = await WorldIslandCaches.LoadAsync(dbOptions, db => db.Islands
             .AsNoTracking()
             .Where(i => i.WorldId == worldId && (wastedRevealed || !i.IsWasted))
             .OrderBy(i => i.Index)
             .Select(i => new { i.Id, i.StartPositions })
-            .ToListAsync(CancellationToken.None).ConfigureAwait(false);
+            .ToListAsync(CancellationToken.None)).ConfigureAwait(false);
 
         // The stored list as is, like the island list always carried it (not FoundableStartPositions).
         IReadOnlyList<IslandStartPositionsResponse> response =

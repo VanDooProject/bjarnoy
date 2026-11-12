@@ -11,7 +11,7 @@ public interface IPerWorldCache
 
 /// <summary>
 /// Keeps one lazily loaded value per world in memory: the first caller starts the load, everyone else awaits the same task.
-/// A load that faults is dropped again so the next call retries; at most <see cref="MaxCachedWorlds"/> worlds are kept, the
+/// A load that faults or is canceled is dropped again so the next call retries; at most <see cref="MaxCachedWorlds"/> worlds are kept, the
 /// least recently used first out.
 /// </summary>
 /// <remarks>
@@ -66,8 +66,9 @@ public sealed class PerWorldCache<T> : IPerWorldCache
         {
             return await entry.Data.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception) when (entry.Data.IsFaulted)
+        catch (Exception) when (entry.Data.IsCompleted && !entry.Data.IsCompletedSuccessfully)
         {
+            // Faulted or canceled: drop it so the next call retries. (A caller that merely stopped waiting leaves the load running: not completed.)
             _entries.TryRemove(new KeyValuePair<Guid, Entry>(worldId, entry));
             throw;
         }
